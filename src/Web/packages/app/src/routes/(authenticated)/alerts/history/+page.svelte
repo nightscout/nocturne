@@ -1,6 +1,7 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { getAlertHistory } from "$api/generated/alerts.generated.remote";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
   import type { HistoryExcursionResponse } from "$api-clients";
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
@@ -11,8 +12,9 @@
     CardTitle,
   } from "$lib/components/ui/card";
   import { ArrowLeft, History as HistoryIcon, Loader2 } from "lucide-svelte";
-  import { formatDuration } from "$lib/components/alerts/alertTime";
+  import { formatElapsedDuration } from "$lib/utils/duration";
   import { formatDateTimeCompact } from "$lib/utils/formatting";
+  import { severity, severityLabel } from "$lib/components/alerts/severity";
 
   let page = $state(1);
   const historyQuery = $derived(getAlertHistory({ page, pageSize: 25 }));
@@ -55,7 +57,7 @@
 
     {#snippet failed(error)}
       <div class="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
-        {error instanceof Error ? error.message : "Failed to load history"}
+        {remoteErrorMessage(error, "Failed to load history")}
       </div>
     {/snippet}
 
@@ -120,13 +122,22 @@
   <div class="flex items-center gap-3 rounded-md border bg-background px-3 py-2">
     <div class="min-w-0 flex-1">
       <div class="flex items-center gap-2">
+        <span
+          class="h-2 w-2 shrink-0 rounded-full {severity(h.severity, 'dot')}"
+          aria-hidden="true"
+        ></span>
         <span class="text-sm font-semibold truncate">{h.ruleName ?? "Alert"}</span>
+        <!-- Named as well as coloured, so history reads the same to a screen
+             reader as it does on screen. -->
+        <Badge variant="outline" class="text-[10px] shrink-0">
+          {severityLabel(h.severity)}
+        </Badge>
         {#if h.acknowledgedAt}
           <Badge variant="secondary" class="text-[10px]">Acknowledged</Badge>
         {/if}
       </div>
       <div class="text-xs text-muted-foreground">
-        {formatDateTimeCompact(h.startedAt) || "—"}{#if h.endedAt} → {formatDateTimeCompact(h.endedAt) || "—"}{/if} · {formatDuration(h.startedAt, h.endedAt) || "—"}
+        {formatDateTimeCompact(h.startedAt) || "—"}{#if h.endedAt} → {formatDateTimeCompact(h.endedAt) || "—"}{/if} · {formatElapsedDuration(h.startedAt, h.endedAt, "—")}
       </div>
     </div>
   </div>

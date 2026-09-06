@@ -4,6 +4,7 @@
  * reading's offset) so the glucose trace and the cluster bands stay aligned within a row.
  */
 import type { SensorGlucose, GlucoseCluster, SensorIntegrityHypoEvent } from "$lib/api";
+import { formatLocale } from "$lib/utils/formatting";
 
 const DAY_MS = 86_400_000;
 const MIN_MS = 60_000;
@@ -50,7 +51,7 @@ function resolveDisplayOffsetMinutes(entries: SensorGlucose[]): number {
 }
 
 function dayLabel(dateMs: number): string {
-  return new Date(dateMs).toLocaleDateString(undefined, {
+  return new Date(dateMs).toLocaleDateString(formatLocale(), {
     timeZone: "UTC",
     weekday: "short",
     month: "short",

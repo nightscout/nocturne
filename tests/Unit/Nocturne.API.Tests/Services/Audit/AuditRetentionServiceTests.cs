@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Nocturne.API.Services.Audit;
+using Nocturne.API.Services.BackgroundServices;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 
@@ -11,8 +13,20 @@ public class AuditRetentionServiceTests
     private readonly Mock<IDbContextFactory<NocturneDbContext>> _contextFactory = new();
     private readonly Mock<ILogger<AuditRetentionService>> _logger = new();
 
-    private AuditRetentionService CreateService() =>
-        new(_contextFactory.Object, _logger.Object);
+    /// <summary>
+    /// The tests that predate the platform default assert an exact factory call count, so they
+    /// disable the default (0) and exercise only the per-tenant config path.
+    /// </summary>
+    private AuditRetentionService CreateService() => CreateService(new Dictionary<string, string?>
+    {
+        ["Audit:DefaultReadAuditRetentionDays"] = "0",
+        ["Audit:DefaultMutationRetentionDays"] = "0"
+    });
+
+    private AuditRetentionService CreateService(Dictionary<string, string?> settings) =>
+        new(_contextFactory.Object,
+            new ConfigurationBuilder().AddInMemoryCollection(settings).Build(),
+            _logger.Object);
 
     private static NocturneDbContext CreateInMemoryContext()
     {
@@ -20,6 +34,49 @@ public class AuditRetentionServiceTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
         return new NocturneDbContext(options);
+    }
+
+    /// <summary>
+    /// Column names are relational metadata, which the InMemory provider does not build. The
+    /// connection string is never opened; only the model is read.
+    /// </summary>
+    private static NocturneDbContext CreateRelationalModelContext()
+    {
+        var options = new DbContextOptionsBuilder<NocturneDbContext>()
+            .UseNpgsql("Host=localhost;Database=model-only")
+            .Options;
+        return new NocturneDbContext(options);
+    }
+
+    /// <summary>
+    /// With the platform defaults disabled and no tenant carrying its own window, the sweep has
+    /// nothing to do — and that is precisely the state the audit-restore procedure puts the
+    /// instance into before putting rows back. The operator confirms retention is off by seeing
+    /// this line, so it must be emitted at Information and must report zero tenants, which is
+    /// what distinguishes "switched off" from "ran and found nothing".
+    /// </summary>
+    [Fact]
+    public async Task PurgeExpiredRecordsAsync_RetentionDisabledEntirely_StillLogsTheCycleSummary()
+    {
+        var configContext = CreateInMemoryContext();
+        configContext.Tenants.Add(new TenantEntity { Id = Guid.CreateVersion7(), Slug = "any" });
+        await configContext.SaveChangesAsync();
+
+        _contextFactory
+            .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(configContext);
+
+        // Both platform keys disabled, no per-tenant config rows.
+        await CreateService().PurgeExpiredRecordsAsync(CancellationToken.None);
+
+        _logger.Verify(
+            l => l.Log(
+                LogLevel.Information,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, _) => v.ToString()!.Contains("swept 0 tenants")),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
     }
 
     [Fact]
@@ -220,6 +277,124 @@ public class AuditRetentionServiceTests
             Times.Once);
     }
 
+    /// <summary>
+    /// Records the purges the service would issue instead of running raw SQL, so the effective
+    /// retention window per tenant/table is observable.
+    /// </summary>
+    private sealed class RecordingAuditRetentionService(
+        IDbContextFactory<NocturneDbContext> contextFactory,
+        IConfiguration configuration,
+        ILogger<AuditRetentionService> logger)
+        : AuditRetentionService(contextFactory, configuration, logger)
+    {
+        public List<(Guid TenantId, string Table, TimeSpan MinAge)> Purges { get; } = [];
+
+        internal override Task<int> PurgeBatchedAsync(
+            Guid tenantId, string table, TimeSpan minAge, CancellationToken ct)
+        {
+            Purges.Add((tenantId, table, minAge));
+            return Task.FromResult(0);
+        }
+    }
+
+    private RecordingAuditRetentionService CreateRecordingService(
+        Dictionary<string, string?>? settings = null) =>
+        new(_contextFactory.Object,
+            new ConfigurationBuilder().AddInMemoryCollection(settings ?? []).Build(),
+            _logger.Object);
+
+    [Fact]
+    public async Task PurgeExpiredRecordsAsync_UnconfiguredTenant_PurgesAtPlatformDefault()
+    {
+        var tenantId = Guid.CreateVersion7();
+        var configContext = CreateInMemoryContext();
+        configContext.Tenants.Add(new TenantEntity { Id = tenantId, Slug = "unconfigured" });
+        await configContext.SaveChangesAsync();
+
+        _contextFactory
+            .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(configContext);
+
+        var service = CreateRecordingService();
+
+        await service.PurgeExpiredRecordsAsync(CancellationToken.None);
+
+        service.Purges.Should().HaveCount(2);
+        service.Purges.Should().OnlyContain(p => p.TenantId == tenantId);
+        service.Purges.Select(p => p.Table).Should()
+            .BeEquivalentTo(["read_access_log", "mutation_audit_log"]);
+        service.Purges.Should().OnlyContain(p => p.MinAge == TimeSpan.FromDays(90));
+    }
+
+    [Fact]
+    public async Task PurgeExpiredRecordsAsync_TenantConfig_OverridesPlatformDefault()
+    {
+        var tenantId = Guid.CreateVersion7();
+        var configContext = CreateInMemoryContext();
+        configContext.Tenants.Add(new TenantEntity { Id = tenantId, Slug = "configured" });
+        configContext.TenantAuditConfig.Add(new TenantAuditConfigEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = tenantId,
+            // A longer window than the platform default must win too, not just a shorter one.
+            MutationAuditRetentionDays = 365,
+            ReadAuditRetentionDays = null,
+            SysCreatedAt = DateTime.UtcNow,
+            SysUpdatedAt = DateTime.UtcNow
+        });
+        await configContext.SaveChangesAsync();
+
+        _contextFactory
+            .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(configContext);
+
+        var service = CreateRecordingService();
+
+        await service.PurgeExpiredRecordsAsync(CancellationToken.None);
+
+        var mutation = service.Purges.Single(p => p.Table == "mutation_audit_log");
+        mutation.MinAge.Should().Be(TimeSpan.FromDays(365));
+
+        // The unset read window still falls back to the platform default.
+        var read = service.Purges.Single(p => p.Table == "read_access_log");
+        read.MinAge.Should().Be(TimeSpan.FromDays(90));
+    }
+
+    [Fact]
+    public async Task PurgeExpiredRecordsAsync_DefaultDisabled_PurgesOnlyConfiguredTenants()
+    {
+        var configuredTenant = Guid.CreateVersion7();
+        var configContext = CreateInMemoryContext();
+        configContext.Tenants.AddRange(
+            new TenantEntity { Id = configuredTenant, Slug = "configured" },
+            new TenantEntity { Id = Guid.CreateVersion7(), Slug = "unconfigured" });
+        configContext.TenantAuditConfig.Add(new TenantAuditConfigEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = configuredTenant,
+            MutationAuditRetentionDays = 30,
+            SysCreatedAt = DateTime.UtcNow,
+            SysUpdatedAt = DateTime.UtcNow
+        });
+        await configContext.SaveChangesAsync();
+
+        _contextFactory
+            .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(configContext);
+
+        var service = CreateRecordingService(new Dictionary<string, string?>
+        {
+            ["Audit:DefaultReadAuditRetentionDays"] = "0",
+            ["Audit:DefaultMutationRetentionDays"] = "0"
+        });
+
+        await service.PurgeExpiredRecordsAsync(CancellationToken.None);
+
+        service.Purges.Should().ContainSingle()
+            .Which.Should().Match<(Guid TenantId, string Table, TimeSpan MinAge)>(
+                p => p.TenantId == configuredTenant && p.Table == "mutation_audit_log");
+    }
+
     [Fact]
     public async Task PurgeExpiredRecordsAsync_MultipleTenants_ContinuesAfterOneFailure()
     {
@@ -275,5 +450,48 @@ public class AuditRetentionServiceTests
                 It.IsAny<Exception>(),
                 It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
             Times.Exactly(2));
+    }
+
+    /// <summary>
+    /// The age column is interpolated into raw SQL, so nothing type-checks it. A typo satisfies
+    /// the identifier validation, compiles, passes every behavioural test, and then fails at
+    /// runtime into the per-tenant catch — a warning and a purge that silently deletes nothing,
+    /// which is the exact failure this service already shipped once.
+    /// </summary>
+    [Theory]
+    [InlineData(typeof(MutationAuditLogEntity))]
+    [InlineData(typeof(ReadAccessLogEntity))]
+    public void AgeColumn_ExistsOnEveryTableThePurgeTargets(Type entityType)
+    {
+        using var context = CreateRelationalModelContext();
+
+        var columns = context.Model.FindEntityType(entityType)!
+            .GetProperties()
+            .Select(p => p.GetColumnName());
+
+        columns.Should().Contain(AuditRetentionService.AgeColumn);
+    }
+
+    /// <summary>
+    /// Same exposure on the sibling sweep, which shares the purge primitive.
+    /// </summary>
+    [Fact]
+    public void SoftDeleteAgeColumn_ExistsOnEverySoftDeletableTable()
+    {
+        using var context = CreateRelationalModelContext();
+
+        var softDeletable = context.Model.GetEntityTypes()
+            .Where(t => typeof(ISoftDeletable).IsAssignableFrom(t.ClrType)
+                        && typeof(ITenantScoped).IsAssignableFrom(t.ClrType))
+            .ToList();
+
+        softDeletable.Should().NotBeEmpty("the sweep must have tables to purge");
+
+        foreach (var entityType in softDeletable)
+        {
+            entityType.GetProperties().Select(p => p.GetColumnName())
+                .Should().Contain(SoftDeleteCleanupService.AgeColumn,
+                    $"{entityType.ClrType.Name} is purged by deleted_at");
+        }
     }
 }

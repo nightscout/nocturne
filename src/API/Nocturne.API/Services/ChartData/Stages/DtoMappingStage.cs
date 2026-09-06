@@ -18,8 +18,9 @@ namespace Nocturne.API.Services.ChartData.Stages;
 /// Base markers (offset == 0) have their label updated from the associated food names.
 /// </para>
 /// <para>
-/// Activity state spans from Sleep, Exercise, Illness, and Travel categories are merged into
-/// a single <see cref="ChartDataContext.ActivitySpans"/> list so they share one chart layer.
+/// Activity state spans from Exercise, Illness, and Travel categories plus sleep sessions
+/// are merged into a single <see cref="ChartDataContext.ActivitySpans"/> list so they share
+/// one chart layer.
 /// </para>
 /// <para>
 /// Color assignment for state spans is performed by <see cref="Helpers.ChartColorMapper"/>
@@ -53,14 +54,15 @@ internal sealed class DtoMappingStage(ITreatmentFoodService treatmentFoodService
             : [];
 
         var activitySpans = new List<ChartStateSpanDto>();
-        if (context.StateSpans.TryGetValue(StateSpanCategory.Sleep, out var sleepRaw))
-            activitySpans.AddRange(MapStateSpans(sleepRaw, StateSpanCategory.Sleep));
         if (context.StateSpans.TryGetValue(StateSpanCategory.Exercise, out var exerciseRaw))
             activitySpans.AddRange(MapStateSpans(exerciseRaw, StateSpanCategory.Exercise));
         if (context.StateSpans.TryGetValue(StateSpanCategory.Illness, out var illnessRaw))
             activitySpans.AddRange(MapStateSpans(illnessRaw, StateSpanCategory.Illness));
         if (context.StateSpans.TryGetValue(StateSpanCategory.Travel, out var travelRaw))
             activitySpans.AddRange(MapStateSpans(travelRaw, StateSpanCategory.Travel));
+
+        // Project sleep sessions into activity spans
+        activitySpans.AddRange(MapSleepSessions(context.SleepSessions));
 
         var basalDeliverySpans = ChartDataService.MapBasalDeliverySpans(context.TempBasalList.ToList());
         var tempBasalSpans = ChartDataService.MapTempBasalSpans(context.TempBasalList.ToList());
@@ -130,8 +132,7 @@ internal sealed class DtoMappingStage(ITreatmentFoodService treatmentFoodService
                     StateSpanCategory.PumpMode => ChartColorMapper.FromPumpMode(span.State ?? ""),
                     StateSpanCategory.Override => ChartColorMapper.FromOverride(span.State ?? ""),
                     StateSpanCategory.Profile => ChartColor.Profile,
-                    StateSpanCategory.Sleep
-                    or StateSpanCategory.Exercise
+                    StateSpanCategory.Exercise
                     or StateSpanCategory.Illness
                     or StateSpanCategory.Travel => ChartColorMapper.FromActivity(category),
                     _ => ChartColor.MutedForeground,
@@ -140,6 +141,37 @@ internal sealed class DtoMappingStage(ITreatmentFoodService treatmentFoodService
             })
             .ToList();
     }
+
+    /// <summary>
+    /// Projects sleep sessions into activity-span DTOs so they appear on the chart's activity layer.
+    /// Sleep is not a <see cref="StateSpanCategory"/>; each span carries
+    /// <see cref="ChartSpanKind.Sleep"/> with a null category so consumers select the sleep icon
+    /// and label without inspecting <see cref="ChartStateSpanDto.State"/>.
+    /// </summary>
+    private static List<ChartStateSpanDto> MapSleepSessions(IEnumerable<SleepSession> sessions)
+    {
+        return sessions
+            .Select(s => new ChartStateSpanDto
+            {
+                Id = s.Id ?? "",
+                Kind = ChartSpanKind.Sleep,
+                Category = null,
+                State = SleepStateLabel(s.Type),
+                StartMills = s.StartMills,
+                EndMills = s.EndMills,
+                Color = ChartColor.ActivitySleep,
+                Metadata = s.Metadata,
+            })
+            .ToList();
+    }
+
+    private static string SleepStateLabel(SleepSessionType type) =>
+        type switch
+        {
+            SleepSessionType.Nap => "Nap",
+            SleepSessionType.Rest => "Rest",
+            _ => "Sleep",
+        };
 
     private async Task ProcessFoodOffsetsAsync(
         List<CarbMarkerDto> carbMarkers,

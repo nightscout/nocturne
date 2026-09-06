@@ -1,31 +1,44 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
+using Nocturne.API.Multitenancy;
+using Nocturne.API.Services.Demo;
+using Nocturne.API.Services.Seeding;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Infrastructure.Data.Entities.V4;
 
 namespace Nocturne.API.Controllers.V4.Admin;
 
 /// <summary>
 /// Internal admin controller for demo tenant lifecycle management.
-/// Called only by the demo background service (service-to-service); not exposed through the gateway.
 /// </summary>
+/// <remarks>
+/// Called by the demo background service, which authenticates with the instance key — that
+/// yields the <c>platform_admin</c> role, so no caller change was needed to gate this. It was
+/// previously <c>[AllowAnonymous]</c> on the assumption it was unreachable from outside; it is
+/// in fact tenantless-allowed and reachable through the web app's <c>/api</c> proxy, which made
+/// demo-tenant provisioning and deletion anonymous operations.
+/// </remarks>
 [ApiController]
 [Route("api/v4/admin/demo")]
-[AllowAnonymous]
+[Authorize(Roles = "platform_admin")]
 [ApiExplorerSettings(IgnoreApi = true)]
 public class DemoAdminController : ControllerBase
 {
     private readonly ITenantService _tenantService;
+    private readonly DemoTenantService _demoTenantService;
     private readonly IDbContextFactory<NocturneDbContext> _factory;
 
-    public DemoAdminController(ITenantService tenantService, IDbContextFactory<NocturneDbContext> factory)
+    public DemoAdminController(
+        ITenantService tenantService,
+        DemoTenantService demoTenantService,
+        IDbContextFactory<NocturneDbContext> factory)
     {
         _tenantService = tenantService;
+        _demoTenantService = demoTenantService;
         _factory = factory;
     }
 
@@ -34,7 +47,9 @@ public class DemoAdminController : ControllerBase
     /// </summary>
     [HttpPost("provision")]
     [ProducesResponseType(typeof(DemoStateDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> Provision(CancellationToken ct)
+    public async Task<IActionResult> Provision(
+        [FromServices] IMemoryCache cache,
+        CancellationToken ct)
     {
         await using var db = await _factory.CreateDbContextAsync(ct);
 
@@ -43,7 +58,15 @@ public class DemoAdminController : ControllerBase
             .FirstOrDefaultAsync(t => t.IsDemo, ct);
 
         if (existing is not null)
+        {
+            // Re-apply the tenant defaults and the access grants: this runs on every demo
+            // service start, so it repairs a tenant left without roles or a demo member by a
+            // reset that failed between wiping and re-seeding.
+            DemoTenantService.ApplyTenantDefaults(existing);
+            await db.SaveChangesAsync(ct);
+            await _demoTenantService.ConfigureAccessAsync(existing.Id, ct);
             return Ok(ToDto(existing, alreadyExisted: true));
+        }
 
         var created = await _tenantService.CreateWithoutOwnerAsync("demo", "Nocturne Demo", ct);
 
@@ -51,15 +74,22 @@ public class DemoAdminController : ControllerBase
             .FirstAsync(t => t.Id == created.Id, ct);
 
         tenant.IsDemo = true;
+        DemoTenantService.ApplyTenantDefaults(tenant);
 
         var config = new TenantDemoConfigEntity { TenantId = tenant.Id };
         db.Set<TenantDemoConfigEntity>().Add(config);
 
         await db.SaveChangesAsync(ct);
 
-        // Grant the Public subject write access so the demo service can write
-        // entries/treatments without auth and visitors can use the API playground.
-        await GrantPublicWriteAccessAsync(db, created.Id, ct);
+        // TenantResolutionMiddleware caches the resolved context, IsDemo included, and
+        // CreateWithoutOwnerAsync may already have populated it. IsDemo gates the demo sign-in
+        // endpoint and the status field the login page keys off, so without this the tenant is
+        // non-demo for the cache lifetime — a login page with no passkey and no way in.
+        TenantResolutionMiddleware.EvictTenant(cache, tenant.Slug);
+
+        // Open the Public subject's share grant and create the demo member visitors are
+        // signed in as.
+        await _demoTenantService.ConfigureAccessAsync(created.Id, ct);
 
         tenant.DemoConfig = config;
         return Ok(ToDto(tenant, alreadyExisted: false));
@@ -71,7 +101,10 @@ public class DemoAdminController : ControllerBase
     [HttpPatch("status")]
     [ProducesResponseType(typeof(DemoStateDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> UpdateStatus([FromBody] DemoStatusPatchDto patch, CancellationToken ct)
+    public async Task<IActionResult> UpdateStatus(
+        [FromBody] DemoStatusPatchDto patch,
+        [FromServices] IMemoryCache cache,
+        CancellationToken ct)
     {
         await using var db = await _factory.CreateDbContextAsync(ct);
 
@@ -92,10 +125,16 @@ public class DemoAdminController : ControllerBase
         if (patch.LastResetAt.HasValue)
             config.LastResetAt = patch.LastResetAt.Value;
 
+        var activeChanged = patch.IsActive.HasValue && patch.IsActive.Value != tenant.IsActive;
         if (patch.IsActive.HasValue)
             tenant.IsActive = patch.IsActive.Value;
 
         await db.SaveChangesAsync(ct);
+
+        // IsActive is carried on the cached tenant context, same as IsDemo — so without evicting,
+        // a deactivated demo keeps being served for the cache lifetime.
+        if (activeChanged)
+            TenantResolutionMiddleware.EvictTenant(cache, tenant.Slug);
 
         return Ok(ToDto(tenant, alreadyExisted: true));
     }
@@ -136,10 +175,7 @@ public class DemoAdminController : ControllerBase
 
         db.TenantId = tenant.Id;
 
-        var deleted = 0L;
-        deleted += await db.SensorGlucose.Where(e => e.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.MeterGlucose.Where(e => e.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.Calibrations.Where(e => e.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
+        var deleted = await DemoDataPurge.PurgeEntriesAsync(db, ct);
 
         return Ok(new DemoDeleteResultDto(deleted));
     }
@@ -160,27 +196,49 @@ public class DemoAdminController : ControllerBase
 
         db.TenantId = tenant.Id;
 
-        var deleted = 0L;
-        deleted += await db.Boluses.Where(b => b.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.CarbIntakes.Where(c => c.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.BGChecks.Where(b => b.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.Notes.Where(n => n.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.DeviceEvents.Where(de => de.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.BolusCalculations.Where(bc => bc.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.TempBasals.Where(t => t.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.StateSpans.Where(s => s.Source == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.ApsSnapshots.Where(a => a.Device == DataSources.DemoService).ExecuteDeleteAsync(ct);
+        var deleted = await DemoDataPurge.PurgeTreatmentsAsync(db, ct)
+            + await DemoDataPurge.PurgeDeviceStatusAsync(db, ct);
 
         return Ok(new DemoDeleteResultDto(deleted));
     }
 
     /// <summary>
-    /// Deletes all demo data (entries + treatments) for the demo tenant.
+    /// Resets the demo tenant to a freshly provisioned state, discarding both the
+    /// generated data and every configuration change a visitor made — settings, roles,
+    /// members, connectors, alert rules, trackers and audit history. The tenant keeps
+    /// its id, slug and share token. Called by the demo background service before each
+    /// regenerate.
     /// </summary>
-    [HttpDelete("data")]
-    [ProducesResponseType(typeof(DemoDeleteResultDto), StatusCodes.Status200OK)]
+    [HttpPost("reset")]
+    [ProducesResponseType(typeof(DemoResetResultDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> DeleteAllData(CancellationToken ct)
+    public async Task<IActionResult> Reset(CancellationToken ct)
+    {
+        var tenantId = await _demoTenantService.ResetAsync(ct);
+        if (tenantId is null)
+            return NotFound();
+
+        return Ok(new DemoResetResultDto(tenantId.Value));
+    }
+
+    /// <summary>
+    /// Seeds the demo tenant with the full sample set — glucose, treatments,
+    /// device status, therapy profile, device changes, sleep, activity,
+    /// trackers, alert rules with alarm history and notifications, foods,
+    /// state spans, patient record, body weight, timezone timeline, clock
+    /// face, and a DND example. Called by the demo background service after
+    /// each reset. Idempotent — every type upserts or rebuilds rather than
+    /// duplicates, except entries/treatments which append (the demo resets
+    /// before seeding). Per-user types are owned by the demo tenant's Public
+    /// subject, which anonymous visitors browse as.
+    /// </summary>
+    [HttpPost("seed-extras")]
+    [ProducesResponseType(typeof(SampleDataSeedResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> SeedExtras(
+        [FromBody] DemoSeedExtrasDto? request,
+        [FromServices] SampleDataSeeder seeder,
+        CancellationToken ct)
     {
         await using var db = await _factory.CreateDbContextAsync(ct);
 
@@ -189,111 +247,20 @@ public class DemoAdminController : ControllerBase
             return NotFound();
 
         db.TenantId = tenant.Id;
+        var publicSubjectId = await db.TenantMembers
+            .Where(m => m.TenantId == tenant.Id && m.Subject!.IsSystemSubject && m.Subject.Name == "Public")
+            .Select(m => (Guid?)m.SubjectId)
+            .FirstOrDefaultAsync(ct);
 
-        var deleted = 0L;
+        var seeded = await seeder.SeedAsync(
+            new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive, tenant.IsDemo),
+            request?.Days ?? 7,
+            publicSubjectId,
+            DataSources.DemoService,
+            includeGlucose: request?.IncludeGlucose ?? true,
+            ct);
 
-        // Entries
-        deleted += await db.SensorGlucose.Where(e => e.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.MeterGlucose.Where(e => e.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.Calibrations.Where(e => e.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-
-        // Treatments
-        deleted += await db.Boluses.Where(b => b.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.CarbIntakes.Where(c => c.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.BGChecks.Where(b => b.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.Notes.Where(n => n.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.DeviceEvents.Where(de => de.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.BolusCalculations.Where(bc => bc.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.TempBasals.Where(t => t.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.StateSpans.Where(s => s.Source == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.ApsSnapshots.Where(a => a.Device == DataSources.DemoService).ExecuteDeleteAsync(ct);
-
-        return Ok(new DemoDeleteResultDto(deleted));
-    }
-
-    /// <summary>
-    /// Ensures a demo PatientInsulin record exists for the demo tenant.
-    /// Creates a default rapid-acting insulin (Humalog) if none exists.
-    /// </summary>
-    [HttpPost("ensure-insulin")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> EnsureInsulin(CancellationToken ct)
-    {
-        await using var db = await _factory.CreateDbContextAsync(ct);
-
-        var tenant = await db.Set<TenantEntity>().FirstOrDefaultAsync(t => t.IsDemo, ct);
-        if (tenant is null)
-            return NotFound();
-
-        db.TenantId = tenant.Id;
-
-        var exists = await db.PatientInsulins.AnyAsync(ct);
-        if (exists)
-            return Ok(new { created = false });
-
-        var insulin = new PatientInsulinEntity
-        {
-            Id = Guid.CreateVersion7(),
-            TenantId = tenant.Id,
-            InsulinCategory = "RapidActing",
-            Name = "Humalog",
-            IsCurrent = true,
-            Dia = 4.0,
-            Peak = 75,
-            Curve = "rapid-acting",
-            Concentration = 100,
-            Role = "Bolus",
-            IsPrimary = true,
-            SysCreatedAt = DateTime.UtcNow,
-            SysUpdatedAt = DateTime.UtcNow,
-        };
-
-        db.PatientInsulins.Add(insulin);
-        await db.SaveChangesAsync(ct);
-
-        return Ok(new { created = true });
-    }
-
-    /// <summary>
-    /// Assigns the Admin role to the Public system subject's membership on the demo tenant,
-    /// granting unauthenticated read/write access to glucose, treatments, and devices.
-    /// </summary>
-    private static async Task GrantPublicWriteAccessAsync(NocturneDbContext db, Guid tenantId, CancellationToken ct)
-    {
-        db.TenantId = tenantId;
-
-        var publicMember = await db.TenantMembers
-            .Include(m => m.Subject)
-            .FirstOrDefaultAsync(m => m.TenantId == tenantId && m.Subject!.IsSystemSubject && m.Subject.Name == "Public", ct);
-
-        if (publicMember is null)
-            return;
-
-        var adminRole = await db.TenantRoles
-            .FirstOrDefaultAsync(r => r.TenantId == tenantId && r.Slug == TenantPermissions.SeedRoles.Admin, ct);
-
-        if (adminRole is null)
-            return;
-
-        var alreadyAssigned = await db.TenantMemberRoles
-            .AnyAsync(mr => mr.TenantMemberId == publicMember.Id && mr.TenantRoleId == adminRole.Id, ct);
-
-        if (alreadyAssigned)
-            return;
-
-        db.TenantMemberRoles.Add(new TenantMemberRoleEntity
-        {
-            Id = Guid.CreateVersion7(),
-            TenantMemberId = publicMember.Id,
-            TenantRoleId = adminRole.Id,
-            SysCreatedAt = DateTime.UtcNow,
-        });
-
-        // Also remove the 24-hour limit so the full history is visible
-        publicMember.LimitTo24Hours = false;
-
-        await db.SaveChangesAsync(ct);
+        return Ok(seeded);
     }
 
     private static DemoStateDto ToDto(TenantEntity tenant, bool alreadyExisted) => new(
@@ -327,3 +294,7 @@ public record DemoStatusPatchDto(
     bool? IsActive = null);
 
 public record DemoDeleteResultDto(long DeletedCount);
+
+public record DemoResetResultDto(Guid TenantId);
+
+public record DemoSeedExtrasDto(int Days = 7, bool IncludeGlucose = true);

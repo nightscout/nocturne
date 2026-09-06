@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatDate, formatNumber } from "$lib/utils/formatting";
 	import {
 		Card,
 		CardContent,
@@ -23,10 +24,8 @@
 	} from 'lucide-svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import {
-		getTransitionStatus,
-		type NightscoutTransitionStatus,
-	} from './transition.remote';
+	import { getTransitionStatus } from '$api/generated/nightscoutTransitions.generated.remote';
+	import type { NightscoutTransitionStatus } from '$api';
 
 	const statusQuery = getTransitionStatus();
 	const status = $derived<NightscoutTransitionStatus | null>(
@@ -37,10 +36,10 @@
 		statusQuery.error ? 'Failed to load Nightscout transition status' : null,
 	);
 
-	function formatTimestamp(ts: string | null): string {
+	function formatTimestamp(ts: Date | string | null | undefined): string {
 		if (!ts) return 'Never';
 		try {
-			return new Date(ts).toLocaleString();
+			return formatDate(new Date(ts));
 		} catch {
 			return 'Unknown';
 		}
@@ -48,7 +47,7 @@
 
 	const recommendationColor = $derived.by(() => {
 		if (!status) return 'destructive' as const;
-		switch (status.recommendation.status) {
+		switch (status.recommendation?.status) {
 			case 'safe':
 				return 'default' as const;
 			case 'almost-ready':
@@ -61,7 +60,7 @@
 
 	const recommendationLabel = $derived.by(() => {
 		if (!status) return 'Unknown';
-		switch (status.recommendation.status) {
+		switch (status.recommendation?.status) {
 			case 'safe':
 				return 'Safe to Disconnect';
 			case 'almost-ready':
@@ -130,8 +129,8 @@
 						<Database class="h-5 w-5" />
 						Migration Status
 					</CardTitle>
-					<Badge variant={status.migration.isComplete ? 'default' : 'secondary'}>
-						{#if status.migration.isComplete}
+					<Badge variant={status.migration?.isComplete ? 'default' : 'secondary'}>
+						{#if status.migration?.isComplete}
 							<CheckCircle2 class="h-3 w-3" />
 							Complete
 						{:else}
@@ -145,12 +144,12 @@
 				</CardDescription>
 			</CardHeader>
 			<CardContent class="space-y-4">
-				{#if Object.keys(status.migration.recordCounts).length > 0}
+				{#if Object.keys(status.migration?.recordCounts ?? {}).length > 0}
 					<div class="grid grid-cols-2 gap-3 @sm:grid-cols-3">
-						{#each Object.entries(status.migration.recordCounts) as [dataType, count] (dataType)}
+						{#each Object.entries(status.migration?.recordCounts ?? {}) as [dataType, count] (dataType)}
 							<div class="rounded-lg border p-3">
 								<p class="text-sm text-muted-foreground capitalize">{dataType}</p>
-								<p class="text-xl font-semibold tabular-nums">{count.toLocaleString()}</p>
+								<p class="text-xl font-semibold tabular-nums">{formatNumber(count)}</p>
 							</div>
 						{/each}
 					</div>
@@ -162,7 +161,7 @@
 
 				<div class="flex items-center gap-2 text-sm text-muted-foreground">
 					<Clock class="h-4 w-4" />
-					<span>Last sync: {formatTimestamp(status.migration.lastSyncTime)}</span>
+					<span>Last sync: {formatTimestamp(status.migration?.lastSyncTime)}</span>
 				</div>
 			</CardContent>
 		</Card>
@@ -175,8 +174,8 @@
 						<Activity class="h-5 w-5" />
 						Write-Back Health (Last 24 Hours)
 					</CardTitle>
-					<Badge variant={status.writeBack.circuitBreakerOpen ? 'destructive' : 'default'}>
-						{#if status.writeBack.circuitBreakerOpen}
+					<Badge variant={status.writeBack?.circuitBreakerOpen ? 'destructive' : 'default'}>
+						{#if status.writeBack?.circuitBreakerOpen}
 							<ShieldAlert class="h-3 w-3" />
 							Circuit Open
 						{:else}
@@ -194,19 +193,19 @@
 					<div class="rounded-lg border p-3">
 						<p class="text-sm text-muted-foreground">Requests</p>
 						<p class="text-xl font-semibold tabular-nums">
-							{status.writeBack.requestsLast24h.toLocaleString()}
+							{formatNumber(status.writeBack?.requestsLast24h)}
 						</p>
 					</div>
 					<div class="rounded-lg border p-3">
 						<p class="text-sm text-muted-foreground">Succeeded</p>
 						<p class="text-xl font-semibold tabular-nums text-green-600 dark:text-green-400">
-							{status.writeBack.successesLast24h.toLocaleString()}
+							{formatNumber(status.writeBack?.successesLast24h)}
 						</p>
 					</div>
 					<div class="rounded-lg border p-3">
 						<p class="text-sm text-muted-foreground">Failed</p>
 						<p class="text-xl font-semibold tabular-nums text-red-600 dark:text-red-400">
-							{status.writeBack.failuresLast24h.toLocaleString()}
+							{formatNumber(status.writeBack?.failuresLast24h)}
 						</p>
 					</div>
 				</div>
@@ -216,7 +215,7 @@
 				<div class="flex items-center gap-2 text-sm text-muted-foreground">
 					<Clock class="h-4 w-4" />
 					<span>
-						Last successful write-back: {formatTimestamp(status.writeBack.lastSuccessTime)}
+						Last successful write-back: {formatTimestamp(status.writeBack?.lastSuccessTime)}
 					</span>
 				</div>
 			</CardContent>
@@ -259,13 +258,13 @@
 						<div class="rounded-lg border p-3">
 							<p class="text-sm text-muted-foreground">Comparisons</p>
 							<p class="text-xl font-semibold tabular-nums">
-								{status.compatibility.totalComparisons.toLocaleString()}
+								{formatNumber(status.compatibility.totalComparisons)}
 							</p>
 						</div>
 						<div class="rounded-lg border p-3">
 							<p class="text-sm text-muted-foreground">Discrepancies</p>
 							<p class="text-xl font-semibold tabular-nums text-red-600 dark:text-red-400">
-								{status.compatibility.discrepancies.toLocaleString()}
+								{formatNumber(status.compatibility.discrepancies)}
 							</p>
 						</div>
 					</div>
@@ -287,9 +286,9 @@
 			<CardContent class="space-y-4">
 				<div class="flex items-center gap-3">
 					<Badge variant={recommendationColor} class="text-sm px-3 py-1">
-						{#if status.recommendation.status === 'safe'}
+						{#if status.recommendation?.status === 'safe'}
 							<CheckCircle2 class="h-4 w-4" />
-						{:else if status.recommendation.status === 'almost-ready'}
+						{:else if status.recommendation?.status === 'almost-ready'}
 							<Clock class="h-4 w-4" />
 						{:else}
 							<AlertCircle class="h-4 w-4" />
@@ -297,7 +296,7 @@
 						{recommendationLabel}
 					</Badge>
 
-					{#if status.recommendation.status === 'almost-ready' && status.recommendation.stabilityDaysRemaining != null}
+					{#if status.recommendation?.status === 'almost-ready' && status.recommendation?.stabilityDaysRemaining != null}
 						<span class="text-sm text-muted-foreground">
 							{status.recommendation.stabilityDaysRemaining} stability
 							{status.recommendation.stabilityDaysRemaining === 1 ? 'day' : 'days'} remaining
@@ -305,12 +304,12 @@
 					{/if}
 				</div>
 
-				{#if status.recommendation.blockers.length > 0}
+				{#if (status.recommendation?.blockers?.length ?? 0) > 0}
 					<Separator />
 					<div class="space-y-2">
 						<p class="text-sm font-medium">Blockers</p>
 						<ul class="space-y-1.5">
-							{#each status.recommendation.blockers as blocker (blocker)}
+							{#each status.recommendation?.blockers ?? [] as blocker (blocker)}
 								<li class="flex items-start gap-2 text-sm text-muted-foreground">
 									<AlertCircle class="h-4 w-4 mt-0.5 shrink-0 text-destructive" />
 									{blocker}
@@ -320,7 +319,7 @@
 					</div>
 				{/if}
 
-				{#if status.recommendation.status === 'safe'}
+				{#if status.recommendation?.status === 'safe'}
 					<Separator />
 					<div>
 						<Button variant="outline" onclick={() => goto(resolve('/settings/connectors'))}>

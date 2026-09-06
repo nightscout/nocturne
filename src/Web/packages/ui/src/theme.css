@@ -138,6 +138,30 @@
   }
 }
 
+/* Sleep-stage colours. Components emit the SleepStageType value (lowercased) as
+   `data-lane` and read var(--lane-color). Awake sub-states share the awake
+   colour; anything undifferentiated (asleep / in-bed / unknown / the aggregate
+   "unspecified" bucket) falls back to muted via the bare [data-lane] default.
+   Values map to the active theme's --chart-* vars. */
+[data-lane] {
+  --lane-color: var(--muted-foreground);
+}
+[data-lane="deep"] {
+  --lane-color: var(--chart-3);
+}
+[data-lane="rem"] {
+  --lane-color: var(--chart-2);
+}
+[data-lane="light"] {
+  --lane-color: var(--chart-1);
+}
+[data-lane="awake"],
+[data-lane="awakeinbed"],
+[data-lane="outofbed"],
+[data-lane="restless"] {
+  --lane-color: var(--chart-5);
+}
+
 @font-face {
   font-family: "Montserrat";
   src: url("/fonts/Montserrat-VariableFont_wght.ttf")

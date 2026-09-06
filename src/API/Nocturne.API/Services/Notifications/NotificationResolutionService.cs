@@ -89,7 +89,7 @@ public class NotificationResolutionService : BackgroundService
             {
                 using var scope = _serviceProvider.CreateScope();
                 var tenantAccessor = scope.ServiceProvider.GetRequiredService<ITenantAccessor>();
-                tenantAccessor.SetTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true));
+                tenantAccessor.SetTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true, IsDemo: false));
 
                 await EvaluatePendingNotificationsAsync(scope.ServiceProvider, cancellationToken);
             }

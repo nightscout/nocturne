@@ -1,11 +1,16 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Nocturne.API.Middleware.Handlers;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Models;
+using Nocturne.Infrastructure.Data;
 using AuthRole = Nocturne.Core.Models.Authorization.Role;
 using AuthSubject = Nocturne.Core.Models.Authorization.Subject;
+using OAuthGrantTypes = Nocturne.Core.Models.Authorization.OAuthGrantTypes;
 
 namespace Nocturne.API.Services.Identity;
 
@@ -23,6 +28,7 @@ public class AuthorizationService : IAuthorizationService, IDisposable
     private readonly ISubjectService _subjectService;
     private readonly IRoleService _roleService;
     private readonly IJwtService _jwtService;
+    private readonly NocturneDbContext _dbContext;
     private readonly PermissionTrie _permissionTrie;
     private readonly Dictionary<string, Permission> _seenPermissions = new();
     private readonly object _permissionsLock = new();
@@ -31,12 +37,19 @@ public class AuthorizationService : IAuthorizationService, IDisposable
     private const int MAX_PERMISSIONS_CACHE_SIZE = 5000;
     private bool _disposed;
 
+    /// <summary>
+    /// Lifetime of JWTs minted by the token-exchange endpoint (1 hour for legacy
+    /// Nightscout compatibility; the response's Exp field reports the same value).
+    /// </summary>
+    private static readonly TimeSpan ExchangedJwtLifetime = TimeSpan.FromHours(1);
+
     public AuthorizationService(
         IConfiguration configuration,
         ILogger<AuthorizationService> logger,
         ISubjectService subjectService,
         IRoleService roleService,
-        IJwtService jwtService
+        IJwtService jwtService,
+        NocturneDbContext dbContext
     )
     {
         _configuration = configuration;
@@ -44,6 +57,7 @@ public class AuthorizationService : IAuthorizationService, IDisposable
         _subjectService = subjectService;
         _roleService = roleService;
         _jwtService = jwtService;
+        _dbContext = dbContext;
         _permissionTrie = new PermissionTrie();
 
         // Initialize with common permissions
@@ -61,11 +75,20 @@ public class AuthorizationService : IAuthorizationService, IDisposable
         {
             _logger.LogDebug("Generating JWT for access token");
 
-            // Hash the access token to look it up
-            var tokenHash = ComputeSha256Hash(accessToken);
+            // noc_ direct-grant tokens live in oauth_grants, not subjects
+            if (accessToken.StartsWith("noc_", StringComparison.Ordinal))
+            {
+                return await GenerateJwtFromDirectGrantAsync(accessToken);
+            }
 
-            // Find subject by access token hash
-            var subject = await _subjectService.GetSubjectByAccessTokenHashAsync(tokenHash);
+            // Hash the access token to look it up
+            var tokenHash = HashUtils.Sha256Hex(accessToken);
+
+            // Find subject by access token hash, falling back to legacy Nightscout digest matching
+            // for tokens migrated from a classic instance (AAPS V3 exchanges its plaintext token
+            // here via /api/v2/authorization/request/{token}).
+            var subject = await _subjectService.GetSubjectByAccessTokenHashAsync(tokenHash)
+                ?? await _subjectService.FindSubjectByLegacyTokenAsync(accessToken);
 
             if (subject == null)
             {
@@ -91,14 +114,16 @@ public class AuthorizationService : IAuthorizationService, IDisposable
                 Email = subject.Email,
             };
 
-            var jwt = _jwtService.GenerateAccessToken(subjectInfo, permissions, roles);
+            // 1 hour for legacy compatibility — explicit so the token's actual exp matches
+            // the response's Exp field (the configured default lifetime is shorter)
+            var jwt = _jwtService.GenerateAccessToken(
+                subjectInfo, permissions, roles, lifetime: ExchangedJwtLifetime);
 
             // Update last login
             _ = _subjectService.UpdateLastLoginAsync(subject.Id);
 
-            // Calculate expiration (default 1 hour from now for legacy compatibility)
             var now = DateTimeOffset.UtcNow;
-            var exp = now.AddHours(1);
+            var exp = now.Add(ExchangedJwtLifetime);
 
             return new AuthorizationResponse
             {
@@ -116,13 +141,78 @@ public class AuthorizationService : IAuthorizationService, IDisposable
     }
 
     /// <summary>
-    /// Compute SHA-256 hash of a string
+    /// Exchange a noc_ direct-grant token for a JWT. Direct grants authorize by scope,
+    /// so the minted JWT carries the grant's scopes and tenant pin rather than the
+    /// subject's roles/permissions, and downstream requests authenticate through
+    /// <see cref="Middleware.Handlers.OAuthAccessTokenHandler"/>.
+    /// The grants query relies on the tenant-pinned scoped context's global query
+    /// filter, matching how subject lookups are tenant-scoped on this endpoint.
     /// </summary>
-    private static string ComputeSha256Hash(string input)
+    private async Task<AuthorizationResponse?> GenerateJwtFromDirectGrantAsync(string accessToken)
     {
-        var bytes = System.Text.Encoding.UTF8.GetBytes(input);
-        var hash = System.Security.Cryptography.SHA256.HashData(bytes);
-        return Convert.ToHexString(hash).ToLowerInvariant();
+        var tokenHash = HashUtils.Sha256Hex(accessToken);
+
+        var grant = await _dbContext.OAuthGrants
+            .AsNoTracking()
+            .Where(g => g.TokenHash == tokenHash)
+            .Where(DirectGrantTokenHandler.IsLiveDirectGrant(DateTime.UtcNow))
+            .FirstOrDefaultAsync();
+
+        if (grant == null)
+        {
+            _logger.LogDebug("Direct grant token not found");
+            return null;
+        }
+
+        var subject = await _subjectService.GetSubjectByIdAsync(grant.SubjectId);
+
+        if (subject == null || !subject.IsActive)
+        {
+            _logger.LogDebug("Subject {SubjectId} for direct grant not found or deactivated", grant.SubjectId);
+            return null;
+        }
+
+        var subjectInfo = new SubjectInfo
+        {
+            Id = subject.Id,
+            Name = subject.Name,
+            Email = subject.Email,
+        };
+
+        var jwt = _jwtService.GenerateAccessToken(
+            subjectInfo,
+            permissions: [],
+            roles: [],
+            scopes: grant.Scopes,
+            tenantId: grant.TenantId,
+            lifetime: ExchangedJwtLifetime,
+            grantId: grant.Id
+        );
+
+        // Stamp last-used so grants exchanged for JWTs don't show as never used.
+        // Awaited (not fire-and-forget like the auth handlers) because the scoped
+        // context is disposed at request end; failure must not block the exchange.
+        try
+        {
+            await _dbContext.OAuthGrants
+                .Where(g => g.Id == grant.Id)
+                .ExecuteUpdateAsync(s => s.SetProperty(g => g.LastUsedAt, DateTime.UtcNow));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to update last used metadata for grant {GrantId}", grant.Id);
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var exp = now.Add(ExchangedJwtLifetime);
+
+        return new AuthorizationResponse
+        {
+            Token = jwt,
+            Sub = subject.Name,
+            Iat = now.ToUnixTimeSeconds(),
+            Exp = exp.ToUnixTimeSeconds(),
+        };
     }
 
     /// <summary>

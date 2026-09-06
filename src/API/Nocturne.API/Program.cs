@@ -2,22 +2,24 @@ using System.Text;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using Microsoft.Extensions.Options;
 using Nocturne.API.Authorization;
 using Nocturne.API.Configuration;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.BackgroundServices;
+using Nocturne.API.Services.DevOnly;
+using Nocturne.API.Services.Docs;
+using Nocturne.API.Services.Seeding;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.API.Extensions;
 using Nocturne.API.Filters;
 using Nocturne.API.Hubs;
 using Nocturne.API.Middleware;
 using Nocturne.API.Multitenancy;
-using OpenApi.Remote.Processors;
 using Nocturne.API.OpenApi;
 using Scalar.AspNetCore;
 using Nocturne.Aspire.Scalar;
@@ -26,6 +28,7 @@ using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Cache.Extensions;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Configuration;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Interceptors;
 using OpenTelemetry.Logs;
@@ -67,17 +70,6 @@ builder.Configuration.AddJsonFile(
 // Ensure environment variables (injected by Aspire) take precedence over appsettings.json
 builder.Configuration.AddEnvironmentVariables();
 
-if (string.IsNullOrEmpty(builder.Configuration["NocturneApiUrl"]))
-{
-    var baseUrl = builder.Configuration["BaseUrl"];
-    if (!string.IsNullOrEmpty(baseUrl))
-    {
-        builder.Configuration.AddInMemoryCollection(
-            new Dictionary<string, string?> { ["NocturneApiUrl"] = baseUrl }
-        );
-    }
-}
-
 // Configure Kestrel to allow larger request bodies for analytics endpoints
 // 90 days of demo data can exceed the 30MB default limit
 builder.WebHost.ConfigureKestrel(options =>
@@ -103,16 +95,18 @@ var aspirePostgreSqlConnection = builder.Configuration.GetConnectionString(Servi
         $"ConnectionStrings:{ServiceNames.PostgreSql} is required."));
 var migratorConnectionString = builder.Configuration.GetConnectionString($"{ServiceNames.PostgreSql}-migrator");
 
+var postgreSqlOptions = PostgreSqlConfiguration.ResolveForEnvironment(
+    aspirePostgreSqlConnection,
+    builder.Configuration,
+    builder.Environment.IsDevelopment());
+
+// Registered whether or not the pool is built, so the resolution above is observable from a test
+// host, which always runs as Testing and so never reaches the registration below.
+builder.Services.AddSingleton(postgreSqlOptions);
+
 if (!isTesting)
 {
-    builder.Services.AddPostgreSqlInfrastructure(
-        aspirePostgreSqlConnection,
-        config =>
-        {
-            config.EnableDetailedErrors = builder.Environment.IsDevelopment();
-            config.EnableSensitiveDataLogging = builder.Environment.IsDevelopment();
-        }
-    );
+    builder.Services.AddPostgreSqlInfrastructure(postgreSqlOptions);
 }
 else
 {
@@ -126,12 +120,17 @@ builder.Services.AddDiscrepancyAnalysisRepository();
 builder.Services.AddAlertRepositories();
 
 builder.Services.AddDataProtection()
+    // Never change this string. It is part of the root purpose for every payload, and TOTP secrets
+    // are persisted under it — changing it makes every stored secret permanently unreadable while
+    // DataProtectionKeys still looks healthy. Left unset, it defaults to ContentRootPath, so a
+    // changed container WORKDIR would do the same.
+    .SetApplicationName("Nocturne")
     .PersistKeysToNocturneDb();
 
 // Add compatibility proxy services
 builder.Services.AddCompatibilityProxyServices(builder.Configuration);
 
-// Use in-memory cache for single-user deployments
+// In-process, so each replica caches independently and entries are lost on restart.
 builder.Services.AddNocturneMemoryCache();
 
 builder.Logging.ClearProviders();
@@ -150,9 +149,10 @@ builder.Services.AddScoped<IAuditContext, AuditContext>();
 builder.Services.AddHostedService<AuditRetentionService>();
 builder.Services.AddHostedService<SoftDeleteCleanupService>();
 
-// Add native API services for strangler pattern
-// Note: NightscoutJsonFilter is added globally to apply null-omission and
-// NocturneOnly field exclusion to v1-v3 API responses only
+// Consumed by the dev-only admin controllers (Development) and the demo admin
+// controller's seed-extras endpoint (demo container, all environments).
+builder.Services.AddScoped<SampleDataSeeder>();
+
 builder.Services.AddScoped<ReadAccessAuditFilter>();
 builder.Services.AddControllers(options =>
 {
@@ -166,50 +166,17 @@ builder.Services.AddControllers(options =>
 builder.Services.AddFluentValidationAutoValidation();
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<ApiErrorEnvelopeHandler>();
 builder.Services.AddEndpointsApiExplorer();
 
 // ── OpenAPI document generation ──────────────────────────────────────
-// NSwag generates the "nocturne" spec at BUILD TIME for TypeScript client codegen.
-// Microsoft OpenAPI serves specs at RUNTIME for Scalar interactive docs.
+// Microsoft OpenAPI serves specs at RUNTIME for Scalar interactive docs. The build-time NSwag
+// spec that feeds TypeScript and SDK codegen is configured in NSwagDocumentConfiguration, which
+// the application host never reaches — NSwag boots the app through NSwagStartup.
 
-// NSwag (build-time only — used by nswag.json MSBuild target for TS client generation)
-builder.Services.AddOpenApiDocument(config =>
-{
-    config.DocumentName = "nocturne";
-
-    config.AddOperationFilter(ctx =>
-    {
-        var ns = ctx.ControllerType.Namespace ?? string.Empty;
-        return ns.Contains(".Controllers.V4.")
-            || ns.EndsWith(".Controllers.V4", StringComparison.Ordinal)
-            || ns.Contains(".Controllers.Authentication")
-            || ns == "Nocturne.API.Controllers";
-    });
-
-    config.OperationProcessors.Add(new RemoteFunctionOperationProcessor());
-    config.OperationProcessors.Add(new ConsumesContentTypeOperationProcessor());
-    config.OperationProcessors.Add(new ControllerNameTagOperationProcessor());
-    config.OperationProcessors.Add(new SummaryToDescriptionOperationProcessor());
-
-    config.PostProcess = document =>
-    {
-        document.Info.Version = "0.0.1";
-        document.Info.Title = "Nocturne API";
-    };
-});
-
-// Microsoft OpenAPI (runtime — serves specs for Scalar docs UI)
 builder.Services.AddOpenApi("nocturne", options =>
 {
-    options.ShouldInclude = desc =>
-    {
-        var ns = (desc.ActionDescriptor as Microsoft.AspNetCore.Mvc.Controllers.ControllerActionDescriptor)
-            ?.ControllerTypeInfo.Namespace ?? string.Empty;
-        return ns.Contains(".Controllers.V4.")
-            || ns.EndsWith(".Controllers.V4", StringComparison.Ordinal)
-            || ns.Contains(".Controllers.Authentication")
-            || ns == "Nocturne.API.Controllers";
-    };
+    options.ShouldInclude = ApiDocumentMembership.InNocturneDocument;
     options.AddOperationTransformer<SummaryToDescriptionOperationTransformer>();
     options.AddOperationTransformer<SecurityRequirementOperationTransformer>();
     options.AddDocumentTransformer<TagDescriptionDocumentTransformer>();
@@ -220,17 +187,7 @@ builder.Services.AddOpenApi("nocturne", options =>
 
 builder.Services.AddOpenApi("nightscout", options =>
 {
-    options.ShouldInclude = desc =>
-    {
-        var ns = (desc.ActionDescriptor as Microsoft.AspNetCore.Mvc.Controllers.ControllerActionDescriptor)
-            ?.ControllerTypeInfo.Namespace ?? string.Empty;
-        return ns.Contains(".Controllers.V1.")
-            || ns.EndsWith(".Controllers.V1", StringComparison.Ordinal)
-            || ns.Contains(".Controllers.V2.")
-            || ns.EndsWith(".Controllers.V2", StringComparison.Ordinal)
-            || ns.Contains(".Controllers.V3.")
-            || ns.EndsWith(".Controllers.V3", StringComparison.Ordinal);
-    };
+    options.ShouldInclude = ApiDocumentMembership.InNightscoutDocument;
     options.AddOperationTransformer<SummaryToDescriptionOperationTransformer>();
     options.AddOperationTransformer<SecurityRequirementOperationTransformer>();
     options.AddDocumentTransformer<TagDescriptionDocumentTransformer>();
@@ -280,39 +237,99 @@ builder
 
 builder.Services.AddNocturneAuthorization();
 
-// Configure CORS for frontend with credentials support
-// Note: AllowAnyOrigin() cannot be combined with AllowCredentials() per CORS spec
-// Using SetIsOriginAllowed to dynamically allow origins while supporting cookies
+// Configure CORS for frontend with credentials support.
+// AllowAnyOrigin() cannot be combined with AllowCredentials() per the CORS spec, and a
+// static allow-list can't cover the open-ended per-tenant wildcard subdomains
+// ({slug}.{BaseDomain}) or public shares ({token}.share.{BaseDomain}). Instead validate the
+// origin against the configured base domain: apex + any subdomain are allowed, loopback
+// origins only in development. See CorsOriginPolicy.
+// Normalize the configured base domain once (strip scheme/path/port/stray dots) so
+// misformatted values like "https://nocturne.run" or "nocturne.run/" still resolve to
+// a matchable host instead of silently disabling cross-origin CORS. See CorsOriginPolicy.
+const string PublicDocsCorsPolicy = "PublicDocs";
+var rawCorsBaseDomain = builder.Configuration[BaseDomainOptions.ConfigKey] ?? "";
+var corsBaseDomain = CorsOriginPolicy.NormalizeBaseHost(rawCorsBaseDomain);
+var corsAllowLocalhost = builder.Environment.IsDevelopment();
+// A credentialed CORS base must be a real multi-label domain; a bare suffix ("com") or
+// single-label/empty value would either widen the allow-list or disable it. The predicate
+// already fails closed on such values — validity is surfaced at startup below.
+var corsBaseDomainIsValid = corsBaseDomain.Length > 0 && corsBaseDomain.Contains('.');
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
         policy
-            .SetIsOriginAllowed(_ => true) // Allow any origin (development-friendly, restrict in production)
+            .SetIsOriginAllowed(origin => CorsOriginPolicy.IsAllowed(origin, corsBaseDomain, corsAllowLocalhost))
             .AllowAnyMethod()
             .AllowAnyHeader()
             .AllowCredentials(); // Required for cookies/auth to work cross-origin
     });
-});
 
-builder.Services.Configure<ForwardedHeadersOptions>(options =>
-{
-    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor
-                             | ForwardedHeaders.XForwardedProto
-                             | ForwardedHeaders.XForwardedHost;
-    // Trust any proxy — the API is only reachable through the gateway.
-    options.KnownIPNetworks.Clear();
-    options.KnownProxies.Clear();
+    // The OpenAPI specs and Scalar assets are tenantless, unauthenticated, and already
+    // readable by anyone, so they're served to any origin — this is what lets docs sites
+    // hosted off the base domain (getnocturne.dev) embed the reference. Kept as a separate
+    // policy because the default one allows credentials, which the CORS spec forbids
+    // combining with AllowAnyOrigin. No credentials here, so no tenant data is reachable.
+    options.AddPolicy(PublicDocsCorsPolicy, policy =>
+    {
+        policy
+            .AllowAnyOrigin()
+            .AllowAnyMethod()
+            .AllowAnyHeader();
+    });
 });
 
 var app = builder.Build();
 
+// Surface the effective credentialed-CORS base domain so operators can see what's active.
+// An invalid base (bare suffix, single-label, or empty) fails closed: cross-origin CORS is
+// disabled and only same-origin (plus loopback in Development) requests are admitted.
+if (corsBaseDomainIsValid)
+{
+    app.Logger.LogInformation("CORS base domain: {CorsBaseDomain}", corsBaseDomain);
+}
+else if (app.Environment.IsDevelopment())
+{
+    app.Logger.LogInformation(
+        "CORS base domain '{RawCorsBaseDomain}' is not a multi-label host; cross-origin CORS is "
+        + "disabled (loopback origins are still allowed in Development).",
+        rawCorsBaseDomain);
+}
+// The key decides more than CORS, and the rest cannot fail closed the way CORS does: the
+// WebAuthn relying-party id is fixed at startup, and a browser reports the refusal it causes as
+// an opaque security error naming nothing an operator can search for. Split by cause so each
+// names the rp.id the deployment actually ended up with.
+else if (string.IsNullOrWhiteSpace(rawCorsBaseDomain))
+{
+    app.Logger.LogError(
+        "{ConfigKey} is unset or blank. Cross-origin CORS is disabled (fail closed), passkeys "
+        + "are bound to 'localhost' so browsers will refuse to create or use one on any other "
+        + "address, and OIDC sign-in has no redirect URI to send. Set it to the address people "
+        + "browse to and restart.",
+        BaseDomainOptions.ConfigKey);
+}
+else
+{
+    app.Logger.LogError(
+        "CORS base domain '{RawCorsBaseDomain}' is not a valid multi-label host ({ConfigKey}). "
+        + "Cross-origin CORS is disabled (fail closed) — tenant and share subdomains will be "
+        + "rejected until this is corrected, and passkeys are bound to a relying-party id derived "
+        + "from the same value, so browsers will refuse them too.",
+        rawCorsBaseDomain, BaseDomainOptions.ConfigKey);
+}
+
 // Configure middleware pipeline
 app.UseExceptionHandler();
 app.UseStatusCodePages();
-app.UseCors();
+// Documentation paths get the any-origin policy, everything else the credentialed default.
+// The two branches are complementary so exactly one CORS middleware ever runs per request —
+// chaining both would emit conflicting Access-Control-Allow-Origin headers. Both sit ahead of
+// UseStaticFiles so the Scalar assets under wwwroot/scalar are covered, and ahead of
+// UseRouting so preflights short-circuit.
+app.UseWhen(PublicDocsMiddleware.IsPublicDocsPath, branch => branch.UseCors(PublicDocsCorsPolicy));
+app.UseWhen(context => !PublicDocsMiddleware.IsPublicDocsPath(context), branch => branch.UseCors());
 app.UseStaticFiles();
-app.UseForwardedHeaders();
+app.UseNocturneForwardedHeaders(builder.Configuration);
 
 // Response caching must run after UseForwardedHeaders so its cache key uses the per-tenant
 // Host (rewritten from X-Forwarded-Host) rather than the constant gateway destination host
@@ -325,29 +342,18 @@ app.UseResponseCaching();
 // UseRouting so the rewritten path is what the router sees.
 app.UseMiddleware<JsonExtensionMiddleware>();
 
-// Explicit UseRouting so TenantSetupMiddleware can read endpoint metadata
-// (e.g. [AllowDuringSetup]). Minimal hosting would insert this automatically
-// but we make it explicit for clarity.
+// Routing must run here, not where minimal hosting would insert it, so that
+// TenantSetupMiddleware below can read endpoint metadata such as [AllowDuringSetup].
 app.UseRouting();
 
-// Documentation paths (/scalar, /openapi) bypass the entire tenant/auth
-// middleware stack — they're tenantless and publicly accessible.
-app.Use(async (context, next) =>
-{
-    var path = context.Request.Path.Value ?? "";
-    if (path.StartsWith("/scalar", StringComparison.OrdinalIgnoreCase)
-        || path.StartsWith("/openapi", StringComparison.OrdinalIgnoreCase))
-    {
-        // Jump straight to the endpoint (MapOpenApi / MapScalarApiReference)
-        var endpoint = context.GetEndpoint();
-        if (endpoint != null)
-        {
-            await endpoint.RequestDelegate!(context);
-            return;
-        }
-    }
-    await next();
-});
+// Ahead of the documentation branch below, which jumps straight to its endpoint and would
+// otherwise skip the limiter entirely; the policies are attached to endpoints, so this needs
+// UseRouting to have run. Everything without a policy passes through untouched, and every
+// policy that exists partitions on pre-auth request data (the remote address or the Host),
+// so none of their accounting depends on running after UseAuthorization.
+app.UseRateLimiter();
+
+app.UseMiddleware<PublicDocsMiddleware>();
 
 // Redirect OIDC callbacks from apex to the originating tenant subdomain
 app.UseMiddleware<OidcCallbackRedirectMiddleware>();
@@ -367,15 +373,24 @@ app.UseMiddleware<MemberScopeMiddleware>();
 // Add audit context middleware (captures actor metadata for mutation audit log)
 app.UseMiddleware<AuditContextMiddleware>();
 
-// Add site security middleware (enforces authentication when site lockdown is enabled)
-app.UseMiddleware<SiteSecurityMiddleware>();
-
-// Add authentication and authorization middleware
-app.UseAuthentication();
+// There is no app.UseAuthentication() call here, and adding one would be a security regression.
+//
+// The framework's authentication middleware is NOT absent — minimal hosting auto-inserts it at the
+// HEAD of the pipeline because AddAuthentication is registered, and an explicit app.UseAuthentication()
+// is what suppresses that auto-add. So calling it here would move the JwtBearer scheme from before
+// AuthenticationMiddleware to after it, letting the scheme's principal overwrite whatever the handler
+// chain decided. That scheme validates strictly less — no issuer or audience check, no tenant pin, no
+// revocation check — while trusting the same signing key, so it would re-admit exactly the tokens the
+// chain rejects and undo the rejection in SetUnauthenticated.
+//
+// Running ahead of the chain is harmless only because AuthenticationMiddleware assigns
+// context.User on every path, success and rejection alike, so it always owns the final principal.
+// That invariant is what makes this safe; do not weaken it.
+//
+// The scheme also gives UseAuthorization a challenge scheme, so an anonymous request gets 401
+// rather than 500. No policy names an authentication scheme, so PolicyEvaluator reads context.User
+// directly.
 app.UseAuthorization();
-
-// Add rate limiting
-app.UseRateLimiter();
 
 // Add compatibility proxy middleware (background comparison against Nightscout for v1/v2/v3 GET requests)
 app.UseMiddleware<CompatibilityProxyMiddleware>();
@@ -389,14 +404,15 @@ app.MapHub<AlarmHub>("/hubs/alarms");
 app.MapHub<AlertHub>("/hubs/alerts");
 app.MapHub<ConfigHub>("/hubs/config");
 app.MapHub<HomeAssistantHub>("/hubs/home-assistant");
+app.MapHub<OverviewHub>("/hubs/overview");
 
 // Serve OpenAPI specs at /openapi/{documentName}.json
-app.MapOpenApi();
+app.MapOpenApi().RequireRateLimiting(ServiceRegistrationExtensions.DocsRateLimitPolicy);
 
 var scalarCss = app.Configuration["SCALAR_CUSTOM_CSS"];
 
 // Scalar interactive API docs at /scalar/{documentName}
-app.MapScalarApiReference(options =>
+app.MapScalarApiReference((options, httpContext) =>
 {
     options.WithTheme(ScalarTheme.Mars);
     options.WithOpenApiRoutePattern("/openapi/{documentName}.json");
@@ -407,22 +423,47 @@ app.MapScalarApiReference(options =>
         options.WithCustomCss(scalarCss);
     options.EnablePersistentAuthentication();
 
+    // Resolved per request by ScalarAuthProvider; absent when the host resolves to no
+    // tenant (a bare instance, or a share host), in which case the reference still
+    // renders and only "Send request" is unusable.
+    var scalarAuth = httpContext.Items[ScalarAuthContext.HttpContextItemKey] as ScalarAuthContext;
+
     // Pre-configure authentication so Scalar's "Authorize" UI works out of the box.
     options
         .AddPreferredSecuritySchemes("oauth2", "bearer", "apiSecret")
         .AddAuthorizationCodeFlow("oauth2", flow =>
         {
-            flow.ClientId = "scalar";
+            // The client is registered per tenant against this exact redirect URI;
+            // authorize-time matching is byte-exact. Left unset when no tenant resolved,
+            // so the flow is visibly unconfigured rather than pointing somewhere wrong.
+            if (scalarAuth is not null)
+            {
+                flow.ClientId = scalarAuth.ClientId;
+                flow.RedirectUri = scalarAuth.RedirectUri;
+            }
             flow.Pkce = Pkce.Sha256;
-            flow.SelectedScopes = ["*"];
+            flow.SelectedScopes = [Scope.FullAccess];
         })
         .AddApiKeyAuthentication("apiSecret", apiKey =>
         {
             apiKey.Value = string.Empty;
         });
-});
 
-// Add root endpoint to serve a basic info page
+    // On a demo tenant, hand Scalar a token for the shared demo member so requests work
+    // with no sign-in step. Never populated for a real tenant.
+    if (scalarAuth?.BearerToken is { Length: > 0 } demoToken)
+    {
+        options
+            .AddPreferredSecuritySchemes("bearer", "oauth2", "apiSecret")
+            .WithHttpBearerAuthentication(bearer => bearer.Token = demoToken);
+    }
+}).RequireRateLimiting(ServiceRegistrationExtensions.DocsRateLimitPolicy);
+
+// Add root endpoint to serve a basic info page. The payload includes the tenant's latest
+// entry (sgv/mbg/direction), and on an ordinary tenant host the share RLS does not restrict
+// the read (app.is_share is not 'true'), so the endpoint gate is the only protection for that
+// PHI. No AllowAnonymous: the HasPermissions fallback policy applies, as on the rest of the
+// API surface. A public info page would need the latest_entry payload stripped first.
 app.MapGet(
     "/",
     async (IEntryStore entryStore) =>
@@ -478,7 +519,7 @@ app.MapGet(
             }
         );
     }
-).AllowAnonymous();
+);
 
 app.MapDefaultEndpoints();
 
@@ -507,6 +548,13 @@ if (!isNSwagGeneration && !app.Environment.IsEnvironment("Testing"))
         // Apply the per-category public-share RLS policies, derived from the C# category map,
         // so they cannot drift from the code. Runs under the migrator role like migrations.
         await DatabaseInitializationExtensions.ReconcileShareRlsPoliciesAsync(migratorConnectionString, logger);
+
+        // Apply the tenant-table storage parameters; see TenantTableStorageParameters for why.
+        await DatabaseInitializationExtensions.ReconcileTenantTableStorageParametersAsync(migratorConnectionString, logger);
+
+        // Background job records left Pending/Running by a previous process are orphans —
+        // the detached tasks died with it. Mark them Interrupted so polls report the truth.
+        await DatabaseInitializationExtensions.MarkInterruptedJobsAsync(migratorConnectionString, logger);
     }
 
     // Validate RLS, ownership, default privileges, and NoResetOnClose under the app role.
@@ -514,6 +562,11 @@ if (!isNSwagGeneration && !app.Environment.IsEnvironment("Testing"))
 
     // Sync config-managed OIDC providers to the database (satisfies FK constraints)
     await OidcProviderService.SyncConfigProvidersAsync(app.Services);
+
+    // Bring pre-existing credential columns onto their at-rest storage format. Runs after
+    // migrations (it depends on the widened share_token column) and before the server accepts
+    // requests, so no request can read a column in the old format.
+    await CredentialAtRestStartupTask.RunAsync(app.Services);
 }
 else if (isNSwagGeneration)
 {
@@ -525,11 +578,20 @@ if (!isNSwagGeneration && !app.Environment.IsEnvironment("Testing"))
 {
     using (var scope = app.Services.CreateScope())
     {
-        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
-        var platformOptions = scope.ServiceProvider.GetRequiredService<IOptions<PlatformOptions>>();
-        var bootstrap = new PlatformAdminBootstrapService(db, platformOptions);
+        var bootstrap = scope.ServiceProvider.GetRequiredService<PlatformAdminBootstrapService>();
         await bootstrap.BootstrapAsync(CancellationToken.None);
     }
+}
+
+// Development only: re-seed the committed dev identity fixture (real WebAuthn
+// public keys) so a database wipe doesn't cost developers their passkey login.
+if (app.Environment.IsDevelopment() && !isNSwagGeneration)
+{
+    using var devSeedScope = app.Services.CreateScope();
+    var devSeedDb = devSeedScope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+    var devSeedLogger = devSeedScope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    await DevIdentityFixtureSeeder.SeedAsync(
+        devSeedDb, app.Configuration, devSeedLogger, CancellationToken.None);
 }
 
 await app.RunAsync();
@@ -587,25 +649,7 @@ internal class NSwagStartup
         services.AddControllers()
             .AddApplicationPart(typeof(Nocturne.API.Program).Assembly);
 
-        // NSwag schema extraction: register only the "nocturne" document (V4 + root controllers).
-        // nswag.json targets documentName "nocturne" so only this document is emitted.
-        services.AddOpenApiDocument(config =>
-        {
-            config.DocumentName = "nocturne";
-
-            config.AddOperationFilter(ctx =>
-            {
-                var ns = ctx.ControllerType.Namespace ?? string.Empty;
-                return ns.Contains(".Controllers.V4.")
-                    || ns.EndsWith(".Controllers.V4", StringComparison.Ordinal)
-                    || ns.Contains(".Controllers.Authentication")
-                    || ns == "Nocturne.API.Controllers";
-            });
-
-            config.OperationProcessors.Add(new RemoteFunctionOperationProcessor());
-            config.OperationProcessors.Add(new ConsumesContentTypeOperationProcessor());
-            config.OperationProcessors.Add(new ControllerNameTagOperationProcessor());
-        });
+        services.AddOpenApiDocument(NSwagDocumentConfiguration.Configure);
     }
 
     public void Configure(IApplicationBuilder app)

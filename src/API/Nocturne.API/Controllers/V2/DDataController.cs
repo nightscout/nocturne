@@ -1,9 +1,11 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
-using OpenApi.Remote.Attributes;
 using Nocturne.Core.Contracts.Legacy;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models;
+using OpenApi.Remote.Attributes;
 
 namespace Nocturne.API.Controllers.V2;
 
@@ -11,6 +13,11 @@ namespace Nocturne.API.Controllers.V2;
 /// V2 DData controller providing direct data access endpoints.
 /// Implements the legacy /api/v2/ddata endpoints with 1:1 backwards compatibility.
 /// </summary>
+/// <remarks>
+/// The actions require only <c>glucose.read</c> while the response also carries treatments,
+/// profiles and device status. This is the accepted narrowing described on
+/// <see cref="PropertiesController"/>, which names the per-category follow-up.
+/// </remarks>
 /// <seealso cref="IDDataService"/>
 [ApiController]
 [Tags("V2")]
@@ -45,6 +52,7 @@ public class DDataController : ControllerBase
     [HttpGet]
     [ProducesResponseType(typeof(DDataResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [RequireScope(Scope.GlucoseRead)]
     public async Task<ActionResult<DDataResponse>> GetDData(
         CancellationToken cancellationToken = default
     )
@@ -79,6 +87,7 @@ public class DDataController : ControllerBase
     [ProducesResponseType(typeof(DDataResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [RequireScope(Scope.GlucoseRead)]
     public async Task<ActionResult<DDataResponse>> GetDDataAt(
         string timestamp,
         CancellationToken cancellationToken = default
@@ -153,6 +162,7 @@ public class DDataController : ControllerBase
     [ProducesResponseType(typeof(DData), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [RequireScope(Scope.GlucoseRead)]
     public async Task<ActionResult<DData>> GetRawDData(
         [FromQuery] string? timestamp = null,
         CancellationToken cancellationToken = default

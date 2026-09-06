@@ -1,7 +1,9 @@
 <script lang="ts">
-  import { Area, Spline, Text } from "layerchart";
+  import { Area, Spline, getChartContext } from "layerchart";
   import { curveMonotoneX } from "d3";
   import type { PredictionData } from "$api/predictions.remote";
+  import { PREDICTIONS_UNAVAILABLE } from "$lib/api/predictions-messages";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
   import type { PredictionDisplayMode } from "$lib/stores/appearance-store.svelte";
 
   interface Props {
@@ -27,6 +29,8 @@
     chartXDomain,
     glucoseData,
   }: Props = $props();
+
+  const chartCtx = getChartContext();
 
   const predictionEndTime = $derived(chartXDomain.to.getTime());
 
@@ -123,19 +127,25 @@
       class="stroke-muted-foreground/50 stroke-1 fill-none animate-pulse"
       stroke-dasharray="4,4"
     />
-    <Text
-      x={chartXDomain.to.getTime() + 5 * 60 * 1000}
-      y={glucoseScale(glucoseData.at(-1)?.sgv ?? 100)}
+    <text
+      x={chartCtx.xScale(new Date(chartXDomain.to.getTime() + 5 * 60 * 1000))}
+      y={chartCtx.yScale(glucoseScale(glucoseData.at(-1)?.sgv ?? 100))}
+      dy="-0.355em"
       class="text-[9px] fill-muted-foreground animate-pulse"
     >
       Loading predictions...
-    </Text>
+    </text>
   {/snippet}
 
   {#snippet failed(error)}
-    <Text x={50} y={glucoseTrackTop + 20} class="text-xs fill-red-400">
-      Prediction unavailable: {error instanceof Error ? error.message : "Error"}
-    </Text>
+    <text
+      x={50}
+      y={glucoseTrackTop + 20}
+      dy="-0.355em"
+      class="text-xs fill-red-400"
+    >
+      {remoteErrorMessage(error, PREDICTIONS_UNAVAILABLE)}
+    </text>
   {/snippet}
 
   {#if showPredictions && predictionEnabled && predictionData}
@@ -267,8 +277,13 @@
     {/if}
   {/if}
   {#if showPredictions && predictionError}
-    <Text x={50} y={glucoseTrackTop + 20} class="text-xs fill-red-400">
-      Prediction unavailable
-    </Text>
+    <text
+      x={50}
+      y={glucoseTrackTop + 20}
+      dy="-0.355em"
+      class="text-xs fill-red-400"
+    >
+      {predictionError}
+    </text>
   {/if}
 </svelte:boundary>

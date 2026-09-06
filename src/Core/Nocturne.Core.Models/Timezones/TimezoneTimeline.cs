@@ -78,6 +78,26 @@ public sealed class TimezoneTimeline
     public string? ZoneAt(DateTime fakeUtc) =>
         ResolveEntry(DateTime.SpecifyKind(fakeUtc, DateTimeKind.Unspecified))?.Timezone;
 
+    /// <summary>
+    /// Converts a true UTC instant to the local wall-clock in the zone in effect at that time.
+    /// When no entry covers the instant, falls back to the fixed offset; with no offset the UTC
+    /// value is returned unchanged.
+    /// </summary>
+    /// <remarks>
+    /// Entry lookup happens in wall-clock space, so resolving from a UTC instant is off by the
+    /// zone offset within hours of a relocation entry's boundary — acceptable for day-granularity
+    /// consumers such as device usage-window matching.
+    /// </remarks>
+    public DateTime ToLocal(DateTime utc)
+    {
+        var entry = ResolveEntry(DateTime.SpecifyKind(utc, DateTimeKind.Unspecified));
+        if (entry is null)
+            return _fallbackOffsetHours is { } offset ? utc.AddHours(offset) : utc;
+
+        var tz = TimeZoneHelper.GetTimeZoneInfoFromId(entry.Timezone);
+        return TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), tz);
+    }
+
     private TimezoneTimelineEntry? ResolveEntry(DateTime wallUnspecified)
     {
         // Entries are descending by EffectiveFrom, so the first one at or before the instant wins.

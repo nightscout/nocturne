@@ -1,39 +1,12 @@
 <script lang="ts">
   import WidgetCard from "./WidgetCard.svelte";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { timeFormat } from "$lib/stores/appearance-store.svelte";
+  import { time, formatWeekdayDate } from "$lib/utils/formatting";
 
   const realtimeStore = getRealtimeStore();
 
-  // Current time formatted based on user preference
-  const currentTime = $derived.by(() => {
-    const date = new Date(realtimeStore.now);
-    const format = timeFormat.current;
-
-    if (format === "24") {
-      return date.toLocaleTimeString(undefined, {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-      });
-    }
-
-    return date.toLocaleTimeString(undefined, {
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    });
-  });
-
-  // Current date
-  const currentDate = $derived.by(() => {
-    const date = new Date(realtimeStore.now);
-    return date.toLocaleDateString(undefined, {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-    });
-  });
+  const currentTime = $derived(time(realtimeStore.now));
+  const currentDate = $derived(formatWeekdayDate(realtimeStore.now));
 
   // Seconds for optional display
   const seconds = $derived.by(() => {

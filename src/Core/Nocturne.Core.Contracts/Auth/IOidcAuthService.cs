@@ -1,4 +1,5 @@
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Configuration;
 
 namespace Nocturne.Core.Contracts.Auth;
 
@@ -16,15 +17,36 @@ public interface IOidcAuthService
     /// </summary>
     /// <param name="providerId">OIDC provider ID (null = use default)</param>
     /// <param name="returnUrl">URL to return to after login</param>
-    /// <param name="state">State parameter for CSRF protection (generated if null)</param>
+    /// <param name="tenantSlug">Tenant the login is being performed against</param>
     /// <returns>Authorization request containing URL and state</returns>
+    /// <remarks>
+    /// The state is always generated and cryptographically protected here. There is deliberately
+    /// no caller-supplied override: the callback trusts the intent and subject the state carries.
+    /// </remarks>
     /// <exception cref="InvalidOperationException">Thrown when the provider is not found, not configured, or not enabled.</exception>
     Task<OidcAuthorizationRequest> GenerateAuthorizationUrlAsync(
         Guid? providerId,
         string? returnUrl = null,
-        string? state = null,
         string? tenantSlug = null
     );
+
+    /// <summary>
+    /// Reads the tenant slug out of a protected state parameter, for routing a callback that
+    /// landed on the apex to the subdomain the login was initiated from.
+    /// </summary>
+    /// <param name="state">The state parameter as received on the callback.</param>
+    /// <returns>
+    /// The tenant slug the login was initiated against, or <c>null</c> when the state was not
+    /// issued by this instance, has been tampered with, or carries no slug (an apex login).
+    /// </returns>
+    /// <remarks>
+    /// This is the only part of the state readable before the callback is handled, and it goes
+    /// through the same protector as the rest of the payload — the redirect target is therefore
+    /// derived from data this instance signed, not from a caller-supplied value. Deliberately
+    /// exposes only the slug: nothing else in the state is safe to act on before the full
+    /// callback validation in <see cref="HandleCallbackAsync"/> has run.
+    /// </remarks>
+    string? TryReadTenantSlug(string state);
 
     /// <summary>
     /// Handle the OIDC callback - exchange code for tokens and create session
@@ -227,12 +249,19 @@ public class OidcCallbackResult
     public Guid? SubjectId { get; set; }
 
     /// <summary>
+    /// The provider that authenticated the identity. <see cref="OidcUserInfo.ProviderName"/> is
+    /// for display; this is the id the login form keys its buttons by.
+    /// </summary>
+    public Guid? ProviderId { get; set; }
+
+    /// <summary>
     /// Create a successful result
     /// </summary>
     public static OidcCallbackResult Succeeded(
         OidcTokenResponse tokens,
         OidcUserInfo userInfo,
-        string? returnUrl = null
+        string? returnUrl = null,
+        Guid? providerId = null
     ) =>
         new()
         {
@@ -241,6 +270,7 @@ public class OidcCallbackResult
             UserInfo = userInfo,
             ReturnUrl = returnUrl,
             SubjectId = tokens.SubjectId,
+            ProviderId = providerId,
         };
 
     /// <summary>
@@ -365,6 +395,11 @@ public class OidcUserInfo
     /// User's preferred language code (e.g., "en", "fr", "de")
     /// </summary>
     public string? PreferredLanguage { get; set; }
+
+    /// <summary>
+    /// Per-user display preferences (units, time format, theme, chart style, etc.).
+    /// </summary>
+    public UserDisplayPreferences? Preferences { get; set; }
 
     /// <summary>
     /// URL to the subject's uploaded avatar image

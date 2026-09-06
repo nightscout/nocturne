@@ -261,4 +261,64 @@ public class CobCalculatorTests
     }
 
     #endregion
+
+    #region CalculateTotalAsync device-value preference
+
+    [Fact]
+    public async Task CalculateTotalAsync_DeviceReportsZeroCob_ZeroIsAccepted()
+    {
+        // COB of exactly zero from the device means "no carbs on board" and must win over a
+        // local recomputation that still sees recent carb treatments decaying.
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+        _apsSnapshotRepo
+            .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[]
+            {
+                new ApsSnapshot
+                {
+                    Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now - 2 * 60 * 1000).UtcDateTime,
+                    Cob = 0.0,
+                },
+            });
+
+        var carbIntakes = new List<CarbIntake>
+        {
+            new()
+            {
+                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now - 30 * 60 * 1000).UtcDateTime,
+                Carbs = 60.0,
+            },
+        };
+
+        var result = await _calculator.CalculateTotalAsync(carbIntakes, time: now);
+
+        Assert.Equal(0.0, result.Cob);
+        Assert.NotEqual("Care Portal", result.Source);
+    }
+
+    [Fact]
+    public async Task CalculateTotalAsync_HistoricalTime_DeviceAgeMeasuredAgainstRequestedInstant()
+    {
+        // A query for a past instant must judge snapshot freshness against that instant, not the
+        // wall clock — otherwise every historical snapshot looks stale and is silently discarded.
+        var historical = DateTimeOffset.UtcNow.AddDays(-30).ToUnixTimeMilliseconds();
+
+        _apsSnapshotRepo
+            .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[]
+            {
+                new ApsSnapshot
+                {
+                    Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(historical - 5 * 60 * 1000).UtcDateTime,
+                    Cob = 25.0,
+                },
+            });
+
+        var result = await _calculator.CalculateTotalAsync(new List<CarbIntake>(), time: historical);
+
+        Assert.Equal(25.0, result.Cob);
+    }
+
+    #endregion
 }

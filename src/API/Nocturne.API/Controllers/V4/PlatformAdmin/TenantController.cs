@@ -3,10 +3,13 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.API.Extensions;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 
@@ -29,16 +32,13 @@ public class TenantController : ControllerBase
 {
     private readonly ITenantService _tenantService;
     private readonly ITenantRoleService _tenantRoleService;
-    private readonly IMemberInviteService _memberInviteService;
 
     public TenantController(
         ITenantService tenantService,
-        ITenantRoleService tenantRoleService,
-        IMemberInviteService memberInviteService)
+        ITenantRoleService tenantRoleService)
     {
         _tenantService = tenantService;
         _tenantRoleService = tenantRoleService;
-        _memberInviteService = memberInviteService;
     }
 
     [HttpGet]
@@ -66,7 +66,7 @@ public class TenantController : ControllerBase
     public async Task<IActionResult> Create(
         [FromBody] CreateTenantRequest request, CancellationToken ct)
     {
-        var authContext = HttpContext.Items["AuthContext"] as AuthContext;
+        var authContext = HttpContext.GetAuthContext();
         var tenant = authContext?.SubjectId is { } creatorId
             ? await _tenantService.CreateAsync(request.Slug, request.DisplayName, creatorId, ct)
             : await _tenantService.CreateWithoutOwnerAsync(request.Slug, request.DisplayName, ct);
@@ -106,98 +106,18 @@ public class TenantController : ControllerBase
     [HttpDelete("{id:guid}/members/{subjectId:guid}")]
     [RemoteCommand(Invalidates = ["GetById"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<IActionResult> RemoveMember(
-        Guid id, Guid subjectId,
-        [FromServices] NocturneDbContext dbContext,
-        CancellationToken ct)
+    public async Task<IActionResult> RemoveMember(Guid id, Guid subjectId, CancellationToken ct)
     {
         if (!await IsCallerTenantOwnerAsync(id, ct))
             return Forbid();
 
-        var member = await dbContext.TenantMembers
-            .Include(m => m.Subject)
-            .Where(m => m.TenantId == id && m.SubjectId == subjectId)
-            .FirstOrDefaultAsync(ct);
-
-        if (member == null)
-            return NoContent();
-
-        if (member.Subject?.IsSystemSubject == true)
-            return Problem(detail: "Cannot remove system subject memberships", statusCode: 400, title: "Bad Request");
-
-        // Prevent removing the last member with the owner role
-        var isOwner = await dbContext.TenantMemberRoles
-            .AnyAsync(mr => mr.TenantMemberId == member.Id
-                && mr.TenantRole.Slug == TenantPermissions.SeedRoles.Owner, ct);
-
-        if (isOwner)
-        {
-            var ownerCount = await dbContext.TenantMemberRoles
-                .CountAsync(mr => mr.TenantRole.TenantId == id
-                    && mr.TenantRole.Slug == TenantPermissions.SeedRoles.Owner
-                    && mr.TenantMember.RevokedAt == null, ct);
-
-            if (ownerCount <= 1)
-                return Problem(detail: "Cannot remove the last owner of a tenant", statusCode: 400, title: "Bad Request");
-        }
-
-        await _tenantService.RemoveMemberAsync(id, subjectId, ct);
-        return NoContent();
-    }
-
-    /// <inheritdoc cref="IMemberInviteService.CreateInviteAsync"/>
-    [HttpPost("{id:guid}/invites")]
-    [RemoteCommand(Invalidates = ["GetById"])]
-    [ProducesResponseType(typeof(MemberInviteResult), StatusCodes.Status201Created)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<IActionResult> CreateInvite(
-        Guid id, [FromBody] CreateMemberInviteRequest request, CancellationToken ct)
-    {
-        if (!await IsCallerTenantOwnerAsync(id, ct))
-            return Forbid();
-
-        var authContext = HttpContext.Items["AuthContext"] as AuthContext;
-        var result = await _memberInviteService.CreateInviteAsync(
-            id,
-            authContext!.SubjectId!.Value,
-            request.RoleIds,
-            request.DirectPermissions,
-            request.Label,
-            request.ExpiresInDays,
-            request.MaxUses,
-            request.LimitTo24Hours);
-
-        return StatusCode(StatusCodes.Status201Created, result);
-    }
-
-    /// <inheritdoc cref="IMemberInviteService.GetInvitesForTenantAsync"/>
-    [HttpGet("{id:guid}/invites")]
-    [RemoteQuery]
-    [ProducesResponseType(typeof(List<MemberInviteInfo>), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<IActionResult> ListInvites(Guid id, CancellationToken ct)
-    {
-        if (!await IsCallerTenantOwnerAsync(id, ct))
-            return Forbid();
-
-        var invites = await _memberInviteService.GetInvitesForTenantAsync(id);
-        return Ok(invites);
-    }
-
-    /// <inheritdoc cref="IMemberInviteService.RevokeInviteAsync"/>
-    [HttpDelete("{id:guid}/invites/{inviteId:guid}")]
-    [RemoteCommand(Invalidates = ["GetById", "ListInvites"])]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> RevokeInvite(Guid id, Guid inviteId, CancellationToken ct)
-    {
-        if (!await IsCallerTenantOwnerAsync(id, ct))
-            return Forbid();
-
-        var revoked = await _memberInviteService.RevokeInviteAsync(inviteId, id);
-        return revoked ? NoContent() : NotFound();
+        var result = await _tenantService.RemoveMemberAsync(id, subjectId, ct);
+        return result.Ok
+            ? NoContent()
+            : Problem(
+                detail: result.ErrorDescription, statusCode: 400, title: result.ErrorDescription);
     }
 
     [HttpDelete("{id:guid}")]
@@ -206,7 +126,21 @@ public class TenantController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {
-        await _tenantService.DeleteAsync(id, ct);
+        try
+        {
+            await _tenantService.DeleteAsync(id, ct);
+        }
+        catch (KeyNotFoundException)
+        {
+            // The 404 this action already advertises. ITenantService.DeleteAsync throws for an
+            // unknown id, and without this the caller gets a 500 — which reads as "the platform
+            // is broken", not "there is nothing here to delete". Callers that delete a tenant as
+            // part of a larger teardown (nocturne-cloud's retention purge) treat 404 as success
+            // so a partially-completed run can be retried; a 500 makes them fail forever on a
+            // tenant that was already removed out of band.
+            return NotFound();
+        }
+
         return NoContent();
     }
 
@@ -251,7 +185,7 @@ public class TenantController : ControllerBase
         if (!await IsCallerTenantOwnerAsync(id, ct))
             return Forbid();
 
-        var passkeys = await passkeyService.GetCredentialsAsync(subjectId, id);
+        var passkeys = await passkeyService.GetCredentialsAsync(subjectId);
         var oidcIdentities = await subjectService.GetLinkedOidcIdentitiesAsync(subjectId);
 
         return Ok(new SubjectCredentialsDto(
@@ -319,12 +253,56 @@ public class TenantController : ControllerBase
     }
 
     /// <summary>
+    /// Mints a single-use code that signs a member in on the tenant's own host, for a caller that
+    /// has already established which browser the member is at.
+    /// </summary>
+    /// <remarks>
+    /// The code is redeemed at <c>POST /api/auth/handoff</c> on that host. It grants no more than
+    /// the direct grant <see cref="TenantDirectGrantController"/> already mints for the same
+    /// member, and like that one it names the platform-admin caller as the actor in the audit
+    /// trail rather than the member.
+    /// </remarks>
+    [HttpPost("{id:guid}/members/{subjectId:guid}/login-code")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    [ProducesResponseType(typeof(LoginCode), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> IssueLoginCode(
+        Guid id, Guid subjectId,
+        [FromServices] IDbContextFactory<NocturneDbContext> dbContextFactory,
+        [FromServices] ILoginCodeService loginCodeService,
+        CancellationToken ct)
+    {
+        if (!await IsCallerTenantOwnerAsync(id, ct))
+            return Forbid();
+
+        var tenant = await _tenantService.GetByIdAsync(id, ct);
+        if (tenant is null || tenant.Members.All(m => m.SubjectId != subjectId))
+            return NotFound();
+
+        if (!tenant.IsActive)
+            return Problem(detail: "Tenant is not active", statusCode: 409, title: "Conflict");
+
+        await using var dbContext = await dbContextFactory.CreateTenantPinnedContextAsync(id, ct);
+
+        var issued = await loginCodeService.IssueAsync(
+            dbContext, subjectId,
+            HttpContext.Connection.RemoteIpAddress?.ToString(),
+            Request.Headers.UserAgent.ToString(),
+            AuthAuditActor.From(HttpContext.GetAuthContext()),
+            ct);
+
+        return Ok(issued);
+    }
+
+    /// <summary>
     /// Verifies the authenticated caller is a member of the specified tenant
     /// with the Owner role (has superuser permission).
     /// </summary>
     private async Task<bool> IsCallerTenantOwnerAsync(Guid tenantId, CancellationToken ct)
     {
-        var authContext = HttpContext.Items["AuthContext"] as AuthContext;
+        var authContext = HttpContext.GetAuthContext();
 
         // Instance-key / platform-admin callers bypass ownership checks —
         // they already passed [Authorize(Roles = "platform_admin")] and have
@@ -341,7 +319,7 @@ public class TenantController : ControllerBase
         var member = tenant.Members.FirstOrDefault(m => m.SubjectId == subjectId);
         if (member == null) return false;
 
-        return member.Roles.Any(r => r.Slug == TenantPermissions.SeedRoles.Owner);
+        return member.Roles.Any(r => r.Slug == RoleSeeds.Owner);
     }
 }
 
@@ -356,16 +334,6 @@ public record ProvisionRequest(
     string OwnerEmail,
     ProvisionCredentialData? Credential = null,
     ProvisionOidcIdentityData? OidcIdentity = null);
-
-public class CreateMemberInviteRequest
-{
-    public List<Guid> RoleIds { get; set; } = [];
-    public List<string>? DirectPermissions { get; set; }
-    public string? Label { get; set; }
-    public int ExpiresInDays { get; set; } = 7;
-    public int? MaxUses { get; set; }
-    public bool LimitTo24Hours { get; set; }
-}
 
 public record SubjectCredentialsDto(List<PasskeyCredentialDto> Passkeys, List<OidcIdentityDto> OidcIdentities);
 public record PasskeyCredentialDto(Guid Id, string? DisplayName, DateTime CreatedAt);

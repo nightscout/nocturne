@@ -7,7 +7,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Join entity linking subjects to tenants (many-to-many).
 /// </summary>
 [Table("tenant_members")]
-public class TenantMemberEntity
+public class TenantMemberEntity : ISystemTimestamped
 {
     /// <summary>
     /// Unique identifier for the tenant member link

@@ -12,8 +12,6 @@ namespace Nocturne.Connectors.MyLife;
 
 public class MyLifeConnectorInstaller : IConnectorInstaller
 {
-    public string ConnectorName => "MyLife";
-
     public void Install(IServiceCollection services, IConfiguration configuration)
     {
         var config = services.AddConnectorConfiguration<MyLifeConnectorConfiguration>(
@@ -31,9 +29,14 @@ public class MyLifeConnectorInstaller : IConnectorInstaller
         services.TryAddSingleton<IConnectorTokenCache, ConnectorTokenCache>();
         services.TryAddSingleton<IConnectorCacheInvalidator>(sp => sp.GetRequiredService<IConnectorTokenCache>());
 
-        services.AddHttpClient<MyLifeSoapClient>();
-        services.AddHttpClient<MyLifeAuthTokenProvider>();
-        services.AddHttpClient<MyLifeConnectorService>();
+        // ConfigureConnectorClient, not a bare AddHttpClient: it installs LinkLocalGuardHandler and
+        // turns off transport-level redirects. ServiceUrl is member-supplied (declared
+        // Format = "uri" on MyLifeConnectorConfiguration) and reaches the SOAP and REST calls
+        // through the session, so a bare registration let a member aim these clients at the cloud
+        // metadata endpoint and read the outcome off connector status.
+        services.AddHttpClient<MyLifeSoapClient>().ConfigureConnectorClient(null);
+        services.AddHttpClient<MyLifeAuthTokenProvider>().ConfigureConnectorClient(null);
+        services.AddHttpClient<MyLifeConnectorService>().ConfigureConnectorClient(null);
         services.AddSingleton<IMyLifeSessionCache, MyLifeSessionCache>();
         services.AddSingleton<IConnectorCacheInvalidator>(sp => sp.GetRequiredService<IMyLifeSessionCache>());
 
@@ -42,14 +45,6 @@ public class MyLifeConnectorInstaller : IConnectorInstaller
         services.AddSingleton<MyLifeSyncService>();
         services.AddSingleton<MyLifeEventProcessor>();
 
-        services.AddScoped<IConnectorSyncExecutor, MyLifeSyncExecutor>();
+        services.AddConnectorSyncExecutor<ConnectorSyncExecutor<MyLifeConnectorService, MyLifeConnectorConfiguration>>();
     }
-}
-
-public class MyLifeSyncExecutor
-    : ConnectorSyncExecutor<MyLifeConnectorService, MyLifeConnectorConfiguration>
-{
-    public override string ConnectorId => "mylife";
-
-    protected override string ConnectorName => "MyLife";
 }

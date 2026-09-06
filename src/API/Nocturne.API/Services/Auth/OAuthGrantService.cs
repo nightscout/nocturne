@@ -14,22 +14,31 @@ namespace Nocturne.API.Services.Auth;
 public class OAuthGrantService : IOAuthGrantService
 {
     private readonly NocturneDbContext _dbContext;
+    private readonly IDbContextFactory<NocturneDbContext> _dbContextFactory;
     private readonly IOAuthClientService _clientService;
+    private readonly GuestSessionCacheService _guestSessionCache;
     private readonly ILogger<OAuthGrantService> _logger;
 
     /// <summary>
     /// Initialises a new <see cref="OAuthGrantService"/>.
     /// </summary>
     /// <param name="dbContext">Database context for grant persistence.</param>
+    /// <param name="dbContextFactory">Factory used by <see cref="IsGrantRevokedAsync"/>, which runs
+    /// during authentication and so cannot rely on the scoped context being tenant-pinned yet.</param>
     /// <param name="clientService">Used to resolve client metadata (currently unused in this implementation).</param>
+    /// <param name="guestSessionCache">Cache evicted when a grant is revoked, so a revoked guest link stops resolving.</param>
     /// <param name="logger">Logger instance.</param>
     public OAuthGrantService(
         NocturneDbContext dbContext,
+        IDbContextFactory<NocturneDbContext> dbContextFactory,
         IOAuthClientService clientService,
+        GuestSessionCacheService guestSessionCache,
         ILogger<OAuthGrantService> logger)
     {
         _dbContext = dbContext;
+        _dbContextFactory = dbContextFactory;
         _clientService = clientService;
+        _guestSessionCache = guestSessionCache;
         _logger = logger;
     }
 
@@ -38,7 +47,7 @@ public class OAuthGrantService : IOAuthGrantService
         Guid clientEntityId,
         Guid subjectId,
         IEnumerable<string> scopes,
-        string grantType = OAuthScopes.GrantTypeApp,
+        string grantType = OAuthGrantTypes.App,
         string? label = null,
         CancellationToken ct = default)
     {
@@ -139,6 +148,28 @@ public class OAuthGrantService : IOAuthGrantService
     }
 
     /// <inheritdoc />
+    public async Task<OAuthGrantInfo?> GetGrantForSubjectAsync(
+        Guid grantId,
+        Guid ownerSubjectId,
+        CancellationToken ct = default)
+    {
+        var entity = await _dbContext.OAuthGrants
+            .AsNoTracking()
+            .Include(g => g.Client)
+            .Where(g => g.Id == grantId
+                     && g.SubjectId == ownerSubjectId
+                     && g.RevokedAt == null)
+            .FirstOrDefaultAsync(ct);
+
+        if (entity == null)
+        {
+            return null;
+        }
+
+        return MapToInfo(entity);
+    }
+
+    /// <inheritdoc />
     public async Task RevokeGrantAsync(Guid grantId, CancellationToken ct = default)
     {
         var grant = await _dbContext.OAuthGrants
@@ -168,9 +199,38 @@ public class OAuthGrantService : IOAuthGrantService
 
         await _dbContext.SaveChangesAsync(ct);
 
+        // Guest sessions are cached for 30 seconds, so revoking the grant is not enough on its
+        // own. Evicting here rather than in GuestLinkService covers every revoke path: a guest
+        // grant's SubjectId is the data owner, and DeleteGrant filters only on SubjectId, so the
+        // owner can revoke their own guest link through the OAuth grants API without ever
+        // entering GuestLinkService.
+        _guestSessionCache.Evict(grant.TenantId, grant.Id);
+
         _logger.LogInformation(
             "OAuthAudit: {Event} grant_id={GrantId} subject_id={SubjectId} revoked_tokens={TokenCount}",
             "grant_revoked", grantId, grant.SubjectId, refreshTokens.Count);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> IsGrantRevokedAsync(
+        Guid grantId,
+        Guid tenantId,
+        CancellationToken ct = default)
+    {
+        // A dedicated context pinned to the token's tenant: this runs inside the authentication
+        // handlers, which may hold a child scope whose context carries no tenant (and therefore no
+        // RLS tenant GUC), and an unpinned read would return nothing for every grant.
+        await using var db = await _dbContextFactory.CreateDbContextAsync(ct);
+        db.TenantId = tenantId;
+
+        var state = await db.OAuthGrants
+            .AsNoTracking()
+            .Where(g => g.Id == grantId && g.TenantId == tenantId)
+            .Select(g => new { g.RevokedAt })
+            .FirstOrDefaultAsync(ct);
+
+        // No row means the grant was deleted, belongs to another tenant, or never existed.
+        return state is null || state.RevokedAt != null;
     }
 
     /// <inheritdoc />
@@ -228,24 +288,37 @@ public class OAuthGrantService : IOAuthGrantService
     {
         var grant = await _dbContext.OAuthGrants
             .Include(g => g.Client)
-            .Where(g => g.Id == grantId)
+            .Where(g => g.Id == grantId && g.SubjectId == ownerSubjectId)
             .FirstOrDefaultAsync(ct);
 
-        // Grant not found or not owned by the specified subject
-        if (grant == null || grant.SubjectId != ownerSubjectId)
+        if (grant == null)
             return null;
+
+        // Validated before anything is assigned, so a rejected update leaves the tracked entity
+        // untouched. This method filters on the grant id and the owning subject with no GrantType
+        // filter, and a guest grant records the DATA OWNER's subject id, so the owner reaches their
+        // own guest link here; the cap is what stops a PATCH turning a read-only share into full
+        // access.
+        var validatedScopes = scopes is null
+            ? null
+            : Scope.ValidateGrantScopes(scopes, grant.GrantType);
 
         if (label != null)
         {
             grant.Label = label;
         }
 
-        if (scopes != null)
+        if (validatedScopes != null)
         {
-            grant.Scopes = scopes.Distinct().OrderBy(s => s).ToList();
+            grant.Scopes = validatedScopes;
         }
 
         await _dbContext.SaveChangesAsync(ct);
+
+        // The cached guest session carries the grant's scopes, so narrowing a guest link's scopes
+        // would otherwise leave the wider set live for the rest of the 30-second TTL. Mirrors
+        // RevokeGrantAsync, and for the same reason: this path never enters GuestLinkService.
+        _guestSessionCache.Evict(grant.TenantId, grant.Id);
 
         _logger.LogInformation(
             "OAuthAudit: {Event} grant_id={GrantId} subject_id={SubjectId}",

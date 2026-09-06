@@ -14,7 +14,9 @@
     Pencil,
     Trash2,
   } from "lucide-svelte";
+  import { describeSubmitError, errorStatus } from "$lib/forms";
   import { getCategoryIcon } from "$lib/utils/connector-display";
+  import { formatNumber, lastSeen } from "$lib/utils/formatting";
 
   let {
     open = $bindable(false),
@@ -33,6 +35,7 @@
     success?: boolean;
     totalDeleted?: number;
     error?: string;
+    alreadyGone?: boolean;
   } | null>(null);
 
   $effect(() => {
@@ -75,19 +78,6 @@
     }
   }
 
-  function formatLastSeen(date?: Date): string {
-    if (!date) return "Never";
-    const d = new Date(date);
-    const diff = Date.now() - d.getTime();
-    const minutes = Math.floor(diff / 60000);
-    if (minutes < 1) return "Just now";
-    if (minutes < 60) return `${minutes}m ago`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    if (days < 7) return `${days}d ago`;
-    return d.toLocaleDateString();
-  }
 
   async function deleteDataSource() {
     if (!selectedDataSource) return;
@@ -109,9 +99,19 @@
         }
       }
     } catch (e) {
+      // A rejected remote function throws SvelteKit's `HttpError` — a plain
+      // `{ status, body }` object, not an `Error` — so the status is what
+      // separates data that was already gone from a delete that failed.
+      const alreadyGone = errorStatus(e) === 404;
       deleteResult = {
         success: false,
-        error: e instanceof Error ? e.message : "Failed to delete data",
+        alreadyGone,
+        error: describeSubmitError(
+          e,
+          alreadyGone
+            ? "This data source has no data left to delete."
+            : "Failed to delete data"
+        ),
       };
     } finally {
       isDeletingDataSource = false;
@@ -150,19 +150,19 @@
           <div>
             <span class="text-muted-foreground">Last Record Received</span>
             <p class="mt-1 font-medium">
-              {formatLastSeen(selectedDataSource.lastSeen)}
+              {lastSeen(selectedDataSource.lastSeen)}
             </p>
           </div>
           <div>
             <span class="text-muted-foreground">Records (24h)</span>
             <p class="mt-1 font-medium">
-              {selectedDataSource.entriesLast24h?.toLocaleString() ?? 0}
+              {formatNumber(selectedDataSource.entriesLast24h)}
             </p>
           </div>
           <div>
             <span class="text-muted-foreground">Total Records</span>
             <p class="mt-1 font-medium">
-              {selectedDataSource.totalEntries?.toLocaleString() ?? 0}
+              {formatNumber(selectedDataSource.totalEntries)}
             </p>
           </div>
         </div>
@@ -235,8 +235,7 @@
               class="text-sm text-red-700 dark:text-red-300 list-disc list-inside mt-2 space-y-1"
             >
               <li>
-                All glucose records ({selectedDataSource.totalEntries?.toLocaleString() ??
-                  0} records)
+                All glucose records ({formatNumber(selectedDataSource.totalEntries)} records)
               </li>
               <li>All treatments entered by this device</li>
               <li>All device status records</li>
@@ -255,7 +254,7 @@
                   <span class="font-medium">Data deleted successfully</span>
                 </div>
                 <p class="text-sm text-green-700 dark:text-green-300 mt-1">
-                  Deleted {deleteResult.totalDeleted?.toLocaleString() ?? 0} records
+                  Deleted {formatNumber(deleteResult.totalDeleted)} records
                 </p>
               </div>
             {:else}
@@ -266,7 +265,11 @@
                   class="flex items-center gap-2 text-red-800 dark:text-red-200"
                 >
                   <AlertCircle class="h-5 w-5" />
-                  <span class="font-medium">Failed to delete data</span>
+                  <span class="font-medium">
+                    {deleteResult.alreadyGone
+                      ? "Nothing left to delete"
+                      : "Failed to delete data"}
+                  </span>
                 </div>
                 <p class="text-sm text-red-700 dark:text-red-300 mt-1">
                   {deleteResult.error}

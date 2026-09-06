@@ -123,7 +123,7 @@ public static class PortainerComposePublisherExtensions
                 {
                     await File.WriteAllTextAsync(composePath, transformed, ctx.CancellationToken);
                     ctx.Logger.LogInformation(
-                        "[compose] Inlined init script + Caddyfile, added Postgres healthcheck/service_healthy gate");
+                        "[compose] Inlined init script + Caddyfile, added Postgres healthcheck/service_healthy gate, scoped Watchtower");
                 }
             },
             dependsOn: "publish-compose",
@@ -134,15 +134,17 @@ public static class PortainerComposePublisherExtensions
 
     /// <summary>
     /// Produces a self-contained compose: inlines the init script and the Caddyfile
-    /// as Compose configs (removing the ./init and ./caddy/Caddyfile bind-mounts) and
-    /// adds the Postgres readiness healthcheck + service_healthy gate. Each transform
-    /// is idempotent and no-ops when its target isn't present, so applying it to an
-    /// already-transformed compose is safe.
+    /// as Compose configs (removing the ./init and ./caddy/Caddyfile bind-mounts),
+    /// adds the Postgres readiness healthcheck + service_healthy gate, and scopes
+    /// Watchtower to this stack's own containers. Each transform is idempotent and
+    /// no-ops when its target isn't present, so applying it to an already-transformed
+    /// compose is safe.
     /// </summary>
     private static string SelfContainCompose(string composeYaml, string initScriptPath, string caddyfilePath)
-        => InlineCaddyfile(
-            HardenPostgresStartup(InlineInitScript(composeYaml, initScriptPath)),
-            caddyfilePath);
+        => ScopeWatchtowerToStack(
+            InlineCaddyfile(
+                HardenPostgresStartup(InlineInitScript(composeYaml, initScriptPath)),
+                caddyfilePath));
 
     /// <summary>
     /// Replaces the ./init bind-mount on the postgres service with a docker compose
@@ -394,5 +396,69 @@ public static class PortainerComposePublisherExtensions
             yaml.Save(writer, assignAnchors: false);
 
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Puts Watchtower in label-only mode and stamps every service in the compose —
+    /// Watchtower included, so it still self-updates — with the enable label. Unscoped,
+    /// Watchtower updates every container on the daemon, including other stacks sharing
+    /// the host. Labelling here rather than per-resource in the AppHost covers any
+    /// service added to the bundle later. Returns the compose unchanged when Watchtower
+    /// is disabled.
+    /// </summary>
+    private static string ScopeWatchtowerToStack(string composeYaml)
+    {
+        const string enableLabel = "com.centurylinklabs.watchtower.enable";
+
+        var yaml = new YamlStream();
+        using (var reader = new StringReader(composeYaml))
+            yaml.Load(reader);
+
+        var root = (YamlMappingNode)yaml.Documents[0].RootNode;
+        var services = (YamlMappingNode)root["services"];
+
+        if (!services.Children.TryGetValue(new YamlScalarNode("watchtower"), out var watchtowerNode)
+            || watchtowerNode is not YamlMappingNode watchtower)
+            return composeYaml;
+
+        SetQuotedEntry(watchtower, "environment", "WATCHTOWER_LABEL_ENABLE", "true", "watchtower");
+
+        foreach (var entry in services)
+        {
+            if (entry.Value is not YamlMappingNode service)
+                continue;
+
+            var serviceName = ((YamlScalarNode)entry.Key).Value ?? "<unnamed>";
+            SetQuotedEntry(service, "labels", enableLabel, "true", serviceName);
+        }
+
+        var sb = new StringBuilder();
+        using (var writer = new StringWriter(sb))
+            yaml.Save(writer, assignAnchors: false);
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Sets <paramref name="key"/> to <paramref name="value"/> in the mapping under
+    /// <paramref name="section"/> of <paramref name="owner"/>, creating the section when
+    /// absent. Values are double-quoted because Compose rejects YAML booleans under
+    /// labels. Compose also accepts `environment` and `labels` in list form, which Aspire
+    /// never emits — replacing one here would silently discard its entries, so refuse.
+    /// </summary>
+    internal static void SetQuotedEntry(
+        YamlMappingNode owner, string section, string key, string value, string ownerName)
+    {
+        owner.Children.TryGetValue(new YamlScalarNode(section), out var existing);
+
+        if (existing is not null and not YamlMappingNode)
+            throw new InvalidOperationException(
+                $"[compose] {ownerName}.{section} is a {existing.NodeType} node, not a mapping; "
+                + $"setting {key} would discard its entries.");
+
+        var mapping = existing as YamlMappingNode ?? new YamlMappingNode();
+        mapping.Children[new YamlScalarNode(key)] =
+            new YamlScalarNode(value) { Style = ScalarStyle.DoubleQuoted };
+        owner.Children[new YamlScalarNode(section)] = mapping;
     }
 }

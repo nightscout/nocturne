@@ -11,9 +11,10 @@ public sealed class ShareTokenGeneratorTests
     private readonly ShareTokenGenerator _generator = new();
 
     [Fact]
-    public void Generate_returns_twelve_characters()
+    public void Generate_returns_sixteen_characters()
     {
-        _generator.Generate().Should().HaveLength(12);
+        // 16 Crockford-base32 characters = 80 bits, and a DNS label allows up to 63.
+        _generator.Generate().Should().HaveLength(16);
     }
 
     [Fact]

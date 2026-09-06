@@ -22,8 +22,7 @@ namespace Nocturne.Connectors.Tidepool.Configurations;
     SupportedDataTypes = [
         SyncDataType.Glucose,
         SyncDataType.Boluses,
-        SyncDataType.CarbIntake,
-        SyncDataType.Activity
+        SyncDataType.CarbIntake
     ]
 )]
 public class TidepoolConnectorConfiguration : BaseConnectorConfiguration

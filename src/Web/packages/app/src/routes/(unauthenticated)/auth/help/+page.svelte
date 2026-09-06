@@ -9,6 +9,9 @@
     Globe,
     ArrowLeft,
   } from "lucide-svelte";
+  // Quote the sign-in controls by name — this is the page a locked-out person
+  // reaches, so the names have to match what they're looking at.
+  import { signInMethodLabels } from "$lib/components/auth/labels";
 </script>
 
 <svelte:head>
@@ -50,9 +53,11 @@
           remember.
         </p>
         <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
-          On the login page, tap <strong>Sign in with passkey</strong> and
-          follow your device's prompt. If you have multiple accounts, choose
-          <strong>Sign in with username</strong> and enter your username first.
+          On the login page, tap
+          <strong>{signInMethodLabels.passkey}</strong> and follow your device's
+          prompt. If you have multiple accounts, choose
+          <strong>{signInMethodLabels.username}</strong> and enter your username
+          first.
         </p>
       </Card.Content>
     </Card.Root>
@@ -70,15 +75,14 @@
       </Card.Header>
       <Card.Content>
         <p class="text-sm leading-relaxed text-muted-foreground">
-          If you've set up an authenticator app (such as Google Authenticator or
-          Authy), you can sign in using a 6-digit code that refreshes every 30
-          seconds.
+          An authenticator app (such as Google Authenticator or Authy) is a
+          second step, not a way to sign in on its own. It shows a 6-digit code
+          that refreshes every 30 seconds, and each code can be used once.
         </p>
         <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
-          On the login page, choose <strong>Sign in with authenticator</strong>,
-          enter your username, then type the code shown in your authenticator
-          app. You can set up an authenticator in your account settings after
-          signing in.
+          If you've set one up, the login page asks for the code straight after
+          your passkey. You can set up an authenticator in your account settings
+          after signing in.
         </p>
       </Card.Content>
     </Card.Root>
@@ -102,9 +106,13 @@
         </p>
         <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
           On the login page, choose
-          <strong>Sign in with recovery code</strong>, enter your username and
-          one of your remaining codes. Each code can only be used once, so cross
-          it off your list after use.
+          <strong>{signInMethodLabels.recoveryCode}</strong>, enter your username
+          and one of your remaining codes. Each code can only be used once, so
+          cross it off your list after use.
+        </p>
+        <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
+          A code doesn't sign you in on its own: it gives you ten minutes to set
+          up a new passkey, and you sign in with that.
         </p>
       </Card.Content>
     </Card.Root>

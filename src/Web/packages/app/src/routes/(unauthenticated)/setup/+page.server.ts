@@ -1,9 +1,11 @@
 import { redirect } from "@sveltejs/kit";
 import type { PageServerLoad } from "./$types";
 import { SETUP_TENANT_COOKIE } from "$lib/server/request-host";
+import { isFreshInstallError } from "$lib/server/onboarding-check";
 
-export const load: PageServerLoad = async ({ locals, cookies }) => {
+export const load: PageServerLoad = async ({ locals, cookies, parent }) => {
   const setupTenantSlug = cookies.get(SETUP_TENANT_COOKIE) ?? null;
+  const { tenantless } = await parent();
 
   if (locals.isAuthenticated) {
     return { setupRequired: false, tenantExists: true, setupTenantSlug };
@@ -22,8 +24,15 @@ export const load: PageServerLoad = async ({ locals, cookies }) => {
     }
   } catch (err) {
     // 503 means zero tenants exist — setup is definitely required
-    if (err && typeof err === "object" && "status" in err && err.status === 503) {
+    if (isFreshInstallError(err)) {
       return { setupRequired: true, tenantExists: false, setupTenantSlug };
+    }
+    // On a host that serves the cross-tenant dashboard the auth-status call has no tenant to
+    // report on and fails for that reason alone, not because the instance is unconfigured. The
+    // fresh-install wizard on a deployment that already has tenants would be actively
+    // misleading, so send the visitor to the sign-in it actually needs.
+    if (tenantless) {
+      redirect(302, "/auth/login?returnUrl=/setup");
     }
     // Any other API failure (network error, 500, etc.) — also show setup,
     // since we can't confirm the instance is healthy

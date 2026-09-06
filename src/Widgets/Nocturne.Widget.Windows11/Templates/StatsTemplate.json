@@ -1,0 +1,78 @@
+{
+    "type": "AdaptiveCard",
+    "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+    "version": "1.5",
+    "body": [
+        {
+            "type": "ColumnSet",
+            "columns": [
+                {
+                    "type": "Column",
+                    "width": "stretch",
+                    "verticalContentAlignment": "Center",
+                    "items": [
+                        { "type": "TextBlock", "text": "Last 24 hours", "weight": "Bolder" }
+                    ]
+                },
+                {
+                    "type": "Column",
+                    "width": "auto",
+                    "verticalContentAlignment": "Center",
+                    "items": [
+                        {
+                            "type": "Image",
+                            "url": "${refreshIcon}",
+                            "width": "16px",
+                            "altText": "Refresh",
+                            "selectAction": { "type": "Action.Execute", "verb": "refresh" }
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "type": "ColumnSet",
+            "spacing": "Medium",
+            "$when": "${hasStats}",
+            "columns": [
+                {
+                    "type": "Column",
+                    "width": "stretch",
+                    "items": [
+                        { "type": "TextBlock", "text": "Average", "size": "Small", "isSubtle": true, "horizontalAlignment": "Center" },
+                        { "type": "TextBlock", "text": "${statAvg}", "size": "Large", "weight": "Bolder", "horizontalAlignment": "Center", "spacing": "None" }
+                    ]
+                },
+                {
+                    "type": "Column",
+                    "width": "stretch",
+                    "items": [
+                        { "type": "TextBlock", "text": "GMI", "size": "Small", "isSubtle": true, "horizontalAlignment": "Center" },
+                        { "type": "TextBlock", "text": "${statGmi}", "size": "Large", "weight": "Bolder", "horizontalAlignment": "Center", "spacing": "None" }
+                    ]
+                },
+                {
+                    "type": "Column",
+                    "width": "stretch",
+                    "items": [
+                        { "type": "TextBlock", "text": "CV", "size": "Small", "isSubtle": true, "horizontalAlignment": "Center" },
+                        { "type": "TextBlock", "text": "${statCv}", "size": "Large", "weight": "Bolder", "horizontalAlignment": "Center", "spacing": "None" }
+                    ]
+                }
+            ]
+        },
+        {
+            "type": "TextBlock",
+            "text": "Not enough recent data.",
+            "size": "Small",
+            "isSubtle": true,
+            "wrap": true,
+            "spacing": "Medium",
+            "$when": "${hasStats == false}"
+        }
+    ],
+    "selectAction": {
+        "type": "Action.Execute",
+        "verb": "openApp"
+    }
+}

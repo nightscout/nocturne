@@ -1,5 +1,13 @@
 // Alarm state management using Svelte 5 runes
 // Connects SignalR alarm events to audio playback and the existing AlarmActiveView overlay
+//
+// This state is module-level, which on the server means one copy shared by every
+// concurrent request. That is only safe because nothing writes it there: alarms
+// arrive over SignalR, which is browser-only, and every mutating entry point
+// below bails out when `browser` is false. Keep that guard on anything new — a
+// server-side write here would show one tenant's alarm to whoever else was
+// mid-render.
+import { browser } from '$app/environment';
 import { playAlarmSound, stopAlarmSound } from '$lib/audio/alarm-sounds';
 import type { AlarmEvent } from '$lib/websocket/types';
 import type { AlarmProfileConfiguration } from '$lib/types/alarm-profile';
@@ -45,6 +53,7 @@ function resolveProfile(
  * Pass the user's alarm profiles so we resolve the right sound/visual settings.
  */
 export function trigger(event: AlarmEvent, profiles: AlarmProfileConfiguration[] = []) {
+	if (!browser) return;
 	if (isSnoozed && snoozeUntil && Date.now() < snoozeUntil) {
 		return;
 	}
@@ -69,6 +78,7 @@ export function trigger(event: AlarmEvent, profiles: AlarmProfileConfiguration[]
 }
 
 export function dismiss() {
+	if (!browser) return;
 	const defaultMinutes = activeAlarm?.profile.snooze.defaultMinutes ?? 15;
 	stopAlarmSound();
 	stopFlashing();
@@ -88,6 +98,7 @@ export function dismiss() {
 }
 
 export function snooze(minutes: number) {
+	if (!browser) return;
 	stopAlarmSound();
 	stopFlashing();
 	activeAlarm = null;
@@ -103,6 +114,7 @@ export function snooze(minutes: number) {
 }
 
 export function clear() {
+	if (!browser) return;
 	stopAlarmSound();
 	stopFlashing();
 	activeAlarm = null;

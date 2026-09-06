@@ -1,26 +1,29 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
-/// Repository for managing device event records in the database.
-/// Includes support for cross-connector deduplication.
+/// Repository for managing device event records in the database. A DeduplicationService participant on
+/// top of the keyed delete of <see cref="SyncKeyedRepositoryBase{TModel,TEntity}"/>, so it keeps only
+/// the extended <c>GetAsync</c> (non-primary LinkedRecords filter), the read-visibility filter behind
+/// <c>CountAsync</c>, the post-commit dedup linking, and the event-type query helpers.
 /// </summary>
-public class DeviceEventRepository : IDeviceEventRepository
+public class DeviceEventRepository : SyncKeyedRepositoryBase<DeviceEvent, DeviceEventEntity>, IDeviceEventRepository
 {
-    private readonly ITenantDbContextFactory _contextFactory;
     private readonly IDeduplicationService _deduplicationService;
-    private readonly IAuditContext _auditContext;
     private readonly ILogger<DeviceEventRepository> _logger;
 
     /// <summary>
@@ -34,13 +37,35 @@ public class DeviceEventRepository : IDeviceEventRepository
         ITenantDbContextFactory contextFactory,
         IDeduplicationService deduplicationService,
         IAuditContext auditContext,
-        ILogger<DeviceEventRepository> logger)
+        ILogger<DeviceEventRepository> logger,
+        IV4RecordBroadcaster<DeviceEvent>? broadcaster = null)
+        : base(contextFactory, auditContext, broadcaster)
     {
-        _contextFactory = contextFactory;
         _deduplicationService = deduplicationService;
-        _auditContext = auditContext;
         _logger = logger;
     }
+
+    /// <inheritdoc />
+    protected override DeviceEventEntity ToEntity(DeviceEvent model) => DeviceEventMapper.ToEntity(model);
+
+    /// <inheritdoc />
+    protected override DeviceEvent ToDomain(DeviceEventEntity entity) => DeviceEventMapper.ToDomainModel(entity);
+
+    /// <inheritdoc />
+    protected override void ApplyUpdate(DeviceEventEntity target, DeviceEvent source) => DeviceEventMapper.UpdateEntity(target, source);
+
+    /// <inheritdoc />
+    protected internal override RecordType? DedupRecordType => RecordType.DeviceEvent;
+
+    /// <summary>
+    /// Routes the base 7-arg form through the extended device-event query (non-primary LinkedRecords
+    /// exclusion + ordering), preserving the pre-base default-interface bridge behaviour.
+    /// </summary>
+    public override Task<IEnumerable<DeviceEvent>> GetAsync(
+        DateTime? from, DateTime? to, string? device, string? source,
+        int limit = 100, int offset = 0, bool descending = true,
+        CancellationToken ct = default)
+        => GetAsync(from, to, device, source, limit, offset, descending, nativeOnly: false, patientDeviceId: null, ct: ct);
 
     /// <summary>
     /// Gets device event records based on filter criteria.
@@ -54,6 +79,7 @@ public class DeviceEventRepository : IDeviceEventRepository
     /// <param name="offset">The number of records to skip.</param>
     /// <param name="descending">Whether to sort by timestamp in descending order.</param>
     /// <param name="nativeOnly">Whether to return only native records.</param>
+    /// <param name="patientDeviceId">Optional filter restricting results to events linked to a single registered patient device.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>A collection of device events.</returns>
     public async Task<IEnumerable<DeviceEvent>> GetAsync(
@@ -65,10 +91,11 @@ public class DeviceEventRepository : IDeviceEventRepository
         int offset = 0,
         bool descending = true,
         bool nativeOnly = false,
+        Guid? patientDeviceId = null,
         CancellationToken ct = default
     )
     {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
+        await using var ctx = await ContextFactory.CreateAsync(ct);
         var query = ctx.DeviceEvents.AsNoTracking().AsQueryable();
         if (from.HasValue)
             query = query.Where(e => e.Timestamp >= from.Value);
@@ -80,165 +107,14 @@ public class DeviceEventRepository : IDeviceEventRepository
             query = query.Where(e => e.DataSource == source);
         if (nativeOnly)
             query = query.Where(e => e.LegacyId == null);
+        if (patientDeviceId.HasValue)
+            query = query.Where(e => e.PatientDeviceId == patientDeviceId.Value);
 
-        // Exclude non-primary duplicates from cross-connector deduplication
-        query = query.Where(b => !ctx.LinkedRecords
-            .Any(lr => lr.RecordType == "deviceevent" && !lr.IsPrimary && lr.RecordId == b.Id));
+        query = ApplyReadVisibility(query, ctx);
 
         query = descending ? query.OrderByDescending(e => e.Timestamp) : query.OrderBy(e => e.Timestamp);
         var entities = await query.Skip(offset).Take(limit).ToListAsync(ct);
         return entities.Select(DeviceEventMapper.ToDomainModel);
-    }
-
-    /// <summary>
-    /// Gets a device event record by its unique identifier.
-    /// </summary>
-    /// <param name="id">The unique identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The device event, or null if not found.</returns>
-    public async Task<DeviceEvent?> GetByIdAsync(Guid id, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity = await ctx.DeviceEvents.FindAsync([id], ct);
-        return entity is null ? null : DeviceEventMapper.ToDomainModel(entity);
-    }
-
-    /// <summary>
-    /// Gets a device event record by its legacy (MongoDB) identifier.
-    /// </summary>
-    /// <param name="legacyId">The legacy identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The device event, or null if not found.</returns>
-    public async Task<DeviceEvent?> GetByLegacyIdAsync(
-        string legacyId,
-        CancellationToken ct = default
-    )
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity = await ctx.DeviceEvents.FirstOrDefaultAsync(
-            e => e.LegacyId == legacyId,
-            ct
-        );
-        return entity is null ? null : DeviceEventMapper.ToDomainModel(entity);
-    }
-
-    /// <summary>
-    /// Creates a new device event record.
-    /// </summary>
-    /// <param name="model">The device event to create.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The created device event.</returns>
-    public async Task<DeviceEvent> CreateAsync(DeviceEvent model, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity = DeviceEventMapper.ToEntity(model);
-        ctx.DeviceEvents.Add(entity);
-        await ctx.SaveChangesAsync(ct);
-        return DeviceEventMapper.ToDomainModel(entity);
-    }
-
-    /// <summary>
-    /// Updates an existing device event record.
-    /// </summary>
-    /// <param name="id">The unique identifier of the record to update.</param>
-    /// <param name="model">The updated record data.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The updated device event.</returns>
-    public async Task<DeviceEvent> UpdateAsync(
-        Guid id,
-        DeviceEvent model,
-        CancellationToken ct = default
-    )
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity =
-            await ctx.DeviceEvents.FindAsync([id], ct)
-            ?? throw new KeyNotFoundException($"DeviceEvent {id} not found");
-        DeviceEventMapper.UpdateEntity(entity, model);
-        await ctx.SaveChangesAsync(ct);
-        return DeviceEventMapper.ToDomainModel(entity);
-    }
-
-    /// <summary>
-    /// Deletes a device event record by its unique identifier.
-    /// </summary>
-    /// <param name="id">The unique identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    public async Task DeleteAsync(Guid id, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity =
-            await ctx.DeviceEvents.FindAsync([id], ct)
-            ?? throw new KeyNotFoundException($"DeviceEvent {id} not found");
-        entity.DeletedAt = DateTime.UtcNow;
-        await ctx.SaveChangesAsync(ct);
-    }
-
-    /// <inheritdoc />
-    public async Task<DeviceEvent> RestoreAsync(Guid id, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity = await ctx.DeviceEvents.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && e.Id == id && e.DeletedAt != null)
-            .FirstOrDefaultAsync(ct)
-            ?? throw new KeyNotFoundException($"Soft-deleted DeviceEvent {id} not found");
-        entity.DeletedAt = null;
-        await ctx.SaveChangesAsync(ct);
-        return DeviceEventMapper.ToDomainModel(entity);
-    }
-
-    /// <inheritdoc />
-    public async Task<IEnumerable<DeviceEvent>> BulkRestoreAsync(IEnumerable<Guid> ids, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var idSet = ids.ToHashSet();
-        var entities = await ctx.DeviceEvents.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && idSet.Contains(e.Id) && e.DeletedAt != null)
-            .ToListAsync(ct);
-        foreach (var entity in entities)
-            entity.DeletedAt = null;
-        await ctx.SaveChangesAsync(ct);
-        return entities.Select(DeviceEventMapper.ToDomainModel);
-    }
-
-    /// <inheritdoc />
-    public async Task<IEnumerable<DeviceEvent>> GetDeletedAsync(int limit, int offset, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entities = await ctx.DeviceEvents.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && e.DeletedAt != null)
-            .OrderByDescending(e => e.DeletedAt)
-            .Skip(offset).Take(limit)
-            .AsNoTracking()
-            .ToListAsync(ct);
-        return entities.Select(DeviceEventMapper.ToDomainModel);
-    }
-
-    /// <inheritdoc />
-    public async Task<int> CountDeletedAsync(CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        return await ctx.DeviceEvents.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && e.DeletedAt != null)
-            .CountAsync(ct);
-    }
-
-    /// <summary>
-    /// Counts device event records within a timestamp range.
-    /// </summary>
-    /// <param name="from">Optional start timestamp filter.</param>
-    /// <param name="to">Optional end timestamp filter.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The count of matching records.</returns>
-    public async Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var query = ctx.DeviceEvents.AsNoTracking().AsQueryable();
-        if (from.HasValue)
-            query = query.Where(e => e.Timestamp >= from.Value);
-        if (to.HasValue)
-            query = query.Where(e => e.Timestamp <= to.Value);
-        return await query.CountAsync(ct);
     }
 
     /// <summary>
@@ -252,7 +128,7 @@ public class DeviceEventRepository : IDeviceEventRepository
         CancellationToken ct = default
     )
     {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
+        await using var ctx = await ContextFactory.CreateAsync(ct);
         var entities = await ctx
             .DeviceEvents.AsNoTracking()
             .Where(e => e.CorrelationId == correlationId)
@@ -261,112 +137,29 @@ public class DeviceEventRepository : IDeviceEventRepository
     }
 
     /// <summary>
-    /// Deletes a device event record by its legacy identifier.
+    /// Insert-time deduplication: link saved records to canonical groups (runs after commit).
     /// </summary>
-    /// <param name="legacyId">The legacy identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The number of deleted records.</returns>
-    public async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
+    protected override async Task PostCommitDedupAsync(
+        NocturneDbContext ctx, IReadOnlyList<DeviceEventEntity> inserted, WriteOrigin origin, CancellationToken ct)
     {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        return await ctx.AuditedSoftDeleteAsync(
-            ctx.DeviceEvents.Where(e => e.LegacyId == legacyId), _auditContext, ct);
-    }
+        if (inserted.Count == 0)
+            return;
 
-    /// <summary>
-    /// Deletes device event records matching the given data source and sync identifier.
-    /// </summary>
-    /// <param name="dataSource">The external data source name.</param>
-    /// <param name="syncIdentifier">The external sync identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The number of deleted records.</returns>
-    public async Task<int> DeleteBySyncIdentifierAsync(string dataSource, string syncIdentifier, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        return await ctx.AuditedSoftDeleteAsync(
-            ctx.DeviceEvents.Where(e => e.DataSource == dataSource && e.SyncIdentifier == syncIdentifier),
-            _auditContext, ct);
-    }
-
-    /// <summary>
-    /// Performs a bulk creation of device event records, handling deduplication.
-    /// </summary>
-    /// <param name="records">The collection of records to create.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>A collection of created records.</returns>
-    public async Task<IEnumerable<DeviceEvent>> BulkCreateAsync(
-        IEnumerable<DeviceEvent> records,
-        CancellationToken ct = default
-    )
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var strategy = ctx.Database.CreateExecutionStrategy();
-        return await strategy.ExecuteAsync(async () =>
+        try
         {
-            await using var tx = await ctx.Database.BeginTransactionAsync(ct);
-            var entities = records.Select(DeviceEventMapper.ToEntity).ToList();
-            if (entities.Count == 0)
-            {
-                await tx.CommitAsync(ct);
-                return [];
-            }
+            var dedupInputs = inserted.Select(e => new DeduplicationInput(
+                RecordId: e.Id,
+                Mills: new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                DataSource: e.DataSource ?? DeduplicationInput.UnknownDataSource,
+                Criteria: MatchCriteriaMapper.From(e)
+            )).ToList();
 
-            // Batch-level dedup: keep first occurrence per LegacyId
-            entities = entities
-                .GroupBy(e => e.LegacyId ?? e.Id.ToString())
-                .Select(g => g.First())
-                .ToList();
-
-            // DB-level dedup: filter out records whose LegacyId already exists
-            var legacyIds = entities
-                .Where(e => !string.IsNullOrEmpty(e.LegacyId))
-                .Select(e => e.LegacyId!)
-                .ToHashSet();
-
-            if (legacyIds.Count > 0)
-            {
-                var blockedLegacyIds = await ctx.GetBlockingLegacyIdsAsync<DeviceEventEntity>(legacyIds, ct);
-
-                entities = entities
-                    .Where(e => string.IsNullOrEmpty(e.LegacyId) || !blockedLegacyIds.Contains(e.LegacyId))
-                    .ToList();
-            }
-
-            if (entities.Count == 0)
-            {
-                await tx.CommitAsync(ct);
-                return [];
-            }
-
-            const int batchSize = 500;
-            foreach (var batch in entities.Chunk(batchSize))
-            {
-                ctx.DeviceEvents.AddRange(batch);
-                await ctx.SaveChangesAsync(ct);
-                ctx.ChangeTracker.Clear();
-            }
-
-            await tx.CommitAsync(ct);
-
-            // Insert-time deduplication: link saved records to canonical groups
-            try
-            {
-                var dedupInputs = entities.Select(e => new DeduplicationInput(
-                    RecordId: e.Id,
-                    Mills: new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                    DataSource: e.DataSource ?? "unknown",
-                    Criteria: new MatchCriteria { EventType = e.EventType }
-                )).ToList();
-
-                await _deduplicationService.DeduplicateBatchAsync(RecordType.DeviceEvent, dedupInputs, ct);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "DeviceEvent", entities.Count);
-            }
-
-            return entities.Select(DeviceEventMapper.ToDomainModel);
-        });
+            await _deduplicationService.DeduplicateBatchAsync(RecordType.DeviceEvent, dedupInputs, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "DeviceEvent", inserted.Count);
+        }
     }
 
     /// <summary>
@@ -378,7 +171,7 @@ public class DeviceEventRepository : IDeviceEventRepository
     /// <returns>The latest device event, or null if none found.</returns>
     public async Task<DeviceEvent?> GetLatestByEventTypeAsync(DeviceEventType eventType, DateTime? asOf, CancellationToken ct = default)
     {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
+        await using var ctx = await ContextFactory.CreateAsync(ct);
         var eventTypeString = eventType.ToString();
         var query = ctx.DeviceEvents
             .AsNoTracking()
@@ -397,18 +190,51 @@ public class DeviceEventRepository : IDeviceEventRepository
     /// Gets the latest device event from a set of event types.
     /// </summary>
     /// <param name="eventTypes">The types of device events to search for.</param>
+    /// <param name="patientDeviceId">Optional filter restricting the search to a single registered patient device.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The latest device event, or null if none found.</returns>
-    public async Task<DeviceEvent?> GetLatestByEventTypesAsync(DeviceEventType[] eventTypes, CancellationToken ct = default)
+    public async Task<DeviceEvent?> GetLatestByEventTypesAsync(
+        DeviceEventType[] eventTypes,
+        Guid? patientDeviceId = null,
+        CancellationToken ct = default)
     {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
+        await using var ctx = await ContextFactory.CreateAsync(ct);
         var eventTypeStrings = eventTypes.Select(t => t.ToString()).ToList();
-        var entity = await ctx.DeviceEvents
+        var query = ctx.DeviceEvents
             .AsNoTracking()
-            .Where(e => eventTypeStrings.Contains(e.EventType))
+            .Where(e => eventTypeStrings.Contains(e.EventType));
+
+        if (patientDeviceId.HasValue)
+            query = query.Where(e => e.PatientDeviceId == patientDeviceId.Value);
+
+        var entity = await query
             .OrderByDescending(e => e.Timestamp)
             .FirstOrDefaultAsync(ct);
 
         return entity is null ? null : DeviceEventMapper.ToDomainModel(entity);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<DeviceEvent>> GetUnattributedAsync(
+        DateTime? from,
+        DateTime? to,
+        IReadOnlyCollection<DeviceEventType> eventTypes,
+        int limit,
+        CancellationToken ct = default)
+    {
+        if (eventTypes.Count == 0) return [];
+
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var eventTypeStrings = eventTypes.Select(t => t.ToString()).ToList();
+        var entities = await ctx.GetUnattributedAsync<DeviceEventEntity>(
+            from, to, limit, ct, filter: e => eventTypeStrings.Contains(e.EventType));
+        return entities.Select(DeviceEventMapper.ToDomainModel).ToList();
+    }
+
+    /// <inheritdoc />
+    public async Task<int> SetPatientDeviceIdsAsync(IReadOnlyDictionary<Guid, Guid> patientDeviceIdByRecordId, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        return await ctx.SetPatientDeviceIdsAsync<DeviceEventEntity>(patientDeviceIdByRecordId, ct);
     }
 }

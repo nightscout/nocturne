@@ -7,7 +7,7 @@ namespace Nocturne.API.Models.Requests.V4;
 /// </summary>
 /// <seealso cref="Validators.V4.UpsertBGCheckRequestValidator"/>
 /// <seealso cref="Nocturne.API.Controllers.V4.Glucose.BGCheckController"/>
-public class UpsertBGCheckRequest
+public class UpsertBGCheckRequest : IBulkUpsertRequest
 {
     /// <summary>
     /// When the BG check was performed.

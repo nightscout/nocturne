@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatNumber, formatNumericDate } from "$lib/utils/formatting";
   import {
     Card,
     CardContent,
@@ -13,7 +14,6 @@
     Calendar,
     Info,
     TrendingUp,
-    AlertTriangle,
     ArrowRight,
     Printer,
     HelpCircle,
@@ -25,8 +25,11 @@
   import InsulinDeliveryChart from "$lib/components/reports/InsulinDeliveryChart.svelte";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
   import type { InsulinDeliveryStatistics } from "$lib/api";
-  import { getBasalReportData } from "$api/reports.remote";
-  import { getMultiPeriodStatistics, getDailyBasalBolusRatios } from "$api/generated/statistics.generated.remote";
+  import {
+    getInsulinDeliveryStatistics,
+    getDailyBasalBolusRatios,
+    getHourlyInsulinDelivery,
+  } from "$api/generated/statistics.generated.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
 
@@ -34,52 +37,49 @@
   // Default: 30 days for insulin delivery analysis (TDD and ratios benefit from more data)
   const reportsParams = requireDateParamsContext(30);
 
-  // Create primary resource with automatic layout registration
-  const reportsResource = contextResource(
-    () => getBasalReportData(reportsParams.dateRangeInput),
+  // Date args shared by every statistics query on this page.
+  // Send ISO strings, not Date objects. A Date can't be serialised as a
+  // remote-query argument ("Unknown date type"), so passing Dates left these
+  // queries erroring — empty on first load, hard error when the filter dates
+  // change. The server schema is z.coerce.date(), which parses the ISO strings
+  // back to dates; the cast satisfies the generated Date arg type.
+  // Same pattern as ReplayPanel's replay() call.
+  const statisticsDates = $derived({
+    startDate: reportsParams.startDate.toISOString() as unknown as Date,
+    endDate: reportsParams.endDate.toISOString() as unknown as Date,
+  });
+
+  // Routed through contextResource (not a bare $derived query) so a resolved
+  // response is retained across superseded query instances. A raw
+  // $derived(getDailyBasalBolusRatios(...)) stranded the value on a superseded
+  // instance (sveltejs/kit#14915), leaving .current undefined and the chart
+  // permanently showing "no insulin data available" even though the endpoint
+  // returned full daily data.
+  const dailyRatiosResource = contextResource(
+    () => getDailyBasalBolusRatios(statisticsDates),
     { errorTitle: "Error Loading Insulin Delivery Data" }
   );
 
-  const boluses = $derived(reportsResource.current?.boluses ?? []);
-  const basalSeries = $derived(reportsResource.current?.basalSeries ?? []);
-  const dateRange = $derived(
-    reportsResource.current?.dateRange ?? {
-      from: new Date().toISOString(),
-      to: new Date().toISOString(),
+  // Headline insulin figures for the selected range. The fixed-bucket
+  // multi-period endpoint was used here instead, so every number above the
+  // charts described the last 30 days no matter what the picker said.
+  const insulinResource = contextResource(
+    () => getInsulinDeliveryStatistics(statisticsDates),
+    {
+      errorTitle: "Error Loading Insulin Delivery Data",
+      dateParams: reportsParams,
     }
   );
 
-  // Daily basal/bolus breakdown for the chart
-  const dailyRatiosDates = $derived.by(() => {
-    const input = reportsParams.dateRangeInput;
-    const endDate = input?.to ? new Date(input.to) : new Date();
-    endDate.setHours(23, 59, 59, 999);
-    const startDate = input?.from
-      ? new Date(input.from)
-      : (() => {
-          const d = new Date(endDate);
-          d.setDate(d.getDate() - ((input?.days ?? 30) - 1));
-          return d;
-        })();
-    startDate.setHours(0, 0, 0, 0);
-    // Send ISO strings, not Date objects. A Date can't be serialised as a
-    // remote-query argument ("Unknown date type"), so passing Dates left this
-    // query erroring — empty on first load, hard error when the filter dates
-    // change. The server schema is z.coerce.date(), which parses the ISO
-    // strings back to dates; the cast satisfies the generated Date arg type.
-    // Same pattern as ReplayPanel's replay() call.
-    return {
-      startDate: startDate.toISOString() as unknown as Date,
-      endDate: endDate.toISOString() as unknown as Date,
-    };
-  });
-  const dailyRatiosResource = $derived(getDailyBasalBolusRatios(dailyRatiosDates));
+  // Hourly delivery pattern with automatic layout registration. Computed
+  // backend-side from pump-confirmed records, bucketed by the user's timezone.
+  const hourlyDeliveryResource = contextResource(
+    () => getHourlyInsulinDelivery(statisticsDates),
+    { errorTitle: "Error Loading Insulin Delivery Data" }
+  );
+  const hourlyDelivery = $derived(hourlyDeliveryResource.current?.hours ?? []);
 
-  // Secondary resource for multi-period statistics
-  const multiPeriodStatsResource = $derived(getMultiPeriodStatistics());
-
-  // Default statistics when loading or no data
-  const defaultStats: InsulinDeliveryStatistics = {
+  const emptyStats: InsulinDeliveryStatistics = {
     totalBolus: 0,
     totalBasal: 0,
     totalInsulin: 0,
@@ -94,56 +94,15 @@
     correctionBoluses: 0,
     icRatio: 0,
     bolusesPerDay: 0,
-    dayCount: 1,
-    startDate: new Date().toISOString(),
-    endDate: new Date().toISOString(),
     carbCount: 0,
     carbBolusCount: 0,
   };
 
-  // Get insulin stats from the appropriate period based on date range
-  // Default to 30-day stats which is most commonly used for reports
-  const insulinStats = $derived(
-    multiPeriodStatsResource.current?.lastMonth?.insulinDelivery ?? defaultStats
-  );
+  const insulinStats = $derived(insulinResource.current ?? emptyStats);
 
-  // Helper dates derived from backend stats
-  const startDate = $derived(new Date(insulinStats.startDate || dateRange.from));
-  const endDate = $derived(new Date(insulinStats.endDate || dateRange.to));
-  const dayCount = $derived(insulinStats.dayCount || 1);
-
-  // Determine if ratio is in typical range
-  const ratioAssessment = $derived.by(() => {
-    const basalPercent = insulinStats.basalPercent ?? 0;
-
-    if (basalPercent >= 40 && basalPercent <= 60) {
-      return {
-        status: "optimal",
-        message: "Your basal/bolus ratio is well-balanced.",
-        color: "text-green-600",
-      };
-    } else if (basalPercent > 60) {
-      return {
-        status: "high-basal",
-        message:
-          "Higher basal percentage — may indicate lower carb diet or need for basal rate review.",
-        color: "text-amber-600",
-      };
-    } else if (basalPercent < 40) {
-      return {
-        status: "high-bolus",
-        message:
-          "Higher bolus percentage — may indicate higher carb diet or frequent corrections.",
-        color: "text-blue-600",
-      };
-    }
-    return {
-      status: "unknown",
-      message: "Insufficient data to assess ratio.",
-      color: "text-muted-foreground",
-    };
-  });
-
+  const startDate = $derived(insulinResource.date.from);
+  const endDate = $derived(insulinResource.date.to);
+  const dayCount = $derived(insulinResource.date.dayCount);
 </script>
 
 <svelte:head>
@@ -154,21 +113,21 @@
   />
 </svelte:head>
 
-{#if reportsResource.current || multiPeriodStatsResource.current}
+{#if insulinResource.current}
 <div class="@container container mx-auto max-w-7xl space-y-8 p-3 @md:p-6">
   <!-- Header -->
   <div class="space-y-4">
     <div class="flex flex-wrap items-center justify-between gap-4">
       <div>
-        <h1 class="flex items-center gap-3 text-3xl font-bold">
-          <PieChart class="h-8 w-8 text-blue-600" />
+        <h1 class="flex items-center gap-3 text-2xl font-bold @md:text-3xl">
+          <PieChart class="h-7 w-7 text-blue-600 @md:h-8 @md:w-8" />
           Insulin Delivery Report
         </h1>
         <p class="mt-1 text-muted-foreground">
           Comprehensive analysis of your basal and bolus insulin patterns
         </p>
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 print:hidden">
         <Button
           variant="outline"
           size="sm"
@@ -194,7 +153,7 @@
     <div class="flex items-center gap-2 text-sm text-muted-foreground">
       <Calendar class="h-4 w-4" />
       <span>
-        {startDate.toLocaleDateString()} – {endDate.toLocaleDateString()}
+        {formatNumericDate(startDate)} – {formatNumericDate(endDate)}
       </span>
       <span class="text-muted-foreground/50">•</span>
       <span>{dayCount} days</span>
@@ -240,7 +199,7 @@
   </Card>
 
   <!-- Key Summary Stats -->
-  <div class="grid grid-cols-2 gap-4 @lg:grid-cols-5">
+  <div class="grid grid-cols-2 gap-4 @md:grid-cols-3 @lg:grid-cols-5">
     <Card class="border @lg:col-span-1">
       <CardContent class="pt-6 text-center">
         <div class="text-3xl font-bold tabular-nums text-primary">
@@ -298,21 +257,22 @@
     </Card>
   </div>
 
-  <!-- Ratio Assessment Banner -->
-  <Card
-    class={`border ${ratioAssessment.status === "optimal" ? "border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-950/30" : "border-muted"}`}
-  >
+  <!-- Ratio Banner -->
+  <Card class="border border-muted">
     <CardContent class="flex items-center gap-4 py-4">
       <div class="rounded-lg bg-primary/10 p-3">
         <Target class="h-6 w-6 text-primary" />
       </div>
       <div>
-        <h3 class={`font-semibold ${ratioAssessment.color}`}>
+        <h3 class="font-semibold">
           Basal/Bolus Ratio: {(insulinStats.basalPercent ?? 0).toFixed(0)}% / {(insulinStats.bolusPercent ?? 0).toFixed(
             0
           )}%
         </h3>
-        <p class="text-sm text-muted-foreground">{ratioAssessment.message}</p>
+        <p class="text-sm text-muted-foreground">
+          A typical split is around 50/50; 40/60 and 60/40 are both common. Diet,
+          activity and pump settings all move it.
+        </p>
       </div>
     </CardContent>
   </Card>
@@ -328,8 +288,6 @@
     </CardHeader>
     <CardContent>
       <BasalBolusRatioChart
-        startDate={dateRange.from}
-        endDate={dateRange.to}
         data={dailyRatiosResource.current}
         loading={dailyRatiosResource.loading}
       />
@@ -348,7 +306,7 @@
       </CardDescription>
     </CardHeader>
     <CardContent>
-      <InsulinDeliveryChart {boluses} {basalSeries} showStacked={true} />
+      <InsulinDeliveryChart data={hourlyDelivery} showStacked={true} />
     </CardContent>
   </Card>
 
@@ -413,16 +371,17 @@
           </div>
         </div>
 
-        <!-- Insights based on bolus patterns -->
+        <!-- Observations based on bolus patterns -->
         <div class="mt-4 rounded-lg border border-dashed bg-muted/30 p-4">
-          <h4 class="font-medium">Bolus Pattern Insights</h4>
+          <h4 class="font-medium">Bolus Pattern Observations</h4>
           <ul class="mt-2 space-y-1 text-sm text-muted-foreground">
             {#if (insulinStats.correctionBoluses ?? 0) > (insulinStats.mealBoluses ?? 0)}
               <li class="flex items-start gap-2">
-                <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+                <Info class="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
                 <span>
-                  More corrections than meal boluses suggests possible
-                  underbolusing for meals or basal rate adjustments needed.
+                  Correction boluses ({insulinStats.correctionBoluses ?? 0})
+                  outnumber meal boluses ({insulinStats.mealBoluses ?? 0}) in this
+                  period.
                 </span>
               </li>
             {/if}
@@ -438,9 +397,9 @@
               <li class="flex items-start gap-2">
                 <Info class="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
                 <span>
-                  High bolus frequency — may include many small corrections.
-                  Consider if larger doses with meals could reduce overall
-                  corrections.
+                  High bolus frequency — {(insulinStats.bolusesPerDay ?? 0).toFixed(
+                    1
+                  )} boluses per day, which may include many small corrections.
                 </span>
               </li>
             {/if}
@@ -483,12 +442,6 @@
         can be compared to this reference.
       </p>
       <p>
-        <strong>Basal Rate Estimation:</strong>
-        If your TDD is accurate, your hourly basal rate should be approximately
-        <strong>{(((insulinStats.tdd ?? 0) * 0.5) / 24).toFixed(2)} U/hr</strong>
-        (using 50% basal assumption).
-      </p>
-      <p>
         <strong>I:C Ratio Check:</strong>
         Your average insulin-to-carb ratio of 1:{(insulinStats.icRatio ?? 0).toFixed(
           0
@@ -503,8 +456,8 @@
   </Card>
 
   <!-- Navigation -->
-  <Separator />
-  <div class="flex flex-wrap items-center justify-center gap-2">
+  <Separator class="print:hidden" />
+  <div class="flex flex-wrap items-center justify-center gap-2 print:hidden">
     <Button href="/reports" variant="outline" size="sm">← All Reports</Button>
     <Button href="/reports/basal-analysis" size="sm" class="gap-2">
       Basal Rate Analysis
@@ -518,8 +471,8 @@
   <!-- Footer -->
   <div class="space-y-1 text-center text-xs text-muted-foreground">
     <p>
-      Report generated from {boluses.length.toLocaleString()} boluses between
-      {startDate.toLocaleDateString()} and {endDate.toLocaleDateString()}
+      Report generated from {formatNumber(insulinStats.bolusCount)} boluses between
+      {formatNumericDate(startDate)} and {formatNumericDate(endDate)}
     </p>
     <p class="text-muted-foreground/60">
       This report is for informational purposes only. Always consult your

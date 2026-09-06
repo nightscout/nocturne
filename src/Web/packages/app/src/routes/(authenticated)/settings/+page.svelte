@@ -11,10 +11,12 @@
     ShieldCheck,
     Timer,
     Plug,
+    KeyRound,
     Users,
     HeartHandshake,
     Building2,
     Shield,
+    UserPlus,
     ChevronRight,
   } from "lucide-svelte";
   import type { PageData } from "./$types";
@@ -69,6 +71,12 @@
       icon: Timer,
     },
     {
+      title: "Active Access",
+      description: "Signed-in devices, guest links, and connected apps.",
+      href: "/settings/access",
+      icon: KeyRound,
+    },
+    {
       title: "Connectors & Apps",
       description: "Connect data sources and authorized devices.",
       href: "/settings/connectors",
@@ -100,6 +108,12 @@
       description: "Tenant details and platform administrators.",
       href: "/settings/admin/tenants",
       icon: Building2,
+    },
+    {
+      title: "Access Requests",
+      description: "Review people asking to join this instance.",
+      href: "/settings/access-requests",
+      icon: UserPlus,
     },
   ];
 

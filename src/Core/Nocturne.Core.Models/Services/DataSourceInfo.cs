@@ -1,6 +1,33 @@
+using System.Runtime.Serialization;
 using System.Text.Json.Serialization;
 
 namespace Nocturne.Core.Models.Services;
+
+/// <summary>
+/// Which of the two independent origin handles a row carries — the data source stamped by connector
+/// imports, the demo seeder and the V4 write endpoints, or the device string the uploader reported
+/// for itself — a given identifier names.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter<SourceHandle>))]
+public enum SourceHandle
+{
+    /// <summary>The device string the uploader reported for itself.</summary>
+    [EnumMember(Value = "device"), JsonStringEnumMemberName("device")]
+    Device,
+
+    /// <summary>The data source stamped on the row by whatever wrote it.</summary>
+    [EnumMember(Value = "dataSource"), JsonStringEnumMemberName("dataSource")]
+    DataSource,
+
+    /// <summary>
+    /// Either handle could name it. Rows that record a single undifferentiated origin — a state
+    /// span's <c>Source</c>, which its writers populate from a device string or from a data source
+    /// depending on what produced the span — cannot say which, so a source discovered only from
+    /// those reports this rather than guessing. Match such an identifier against both handles.
+    /// </summary>
+    [EnumMember(Value = "unknown"), JsonStringEnumMemberName("unknown")]
+    Unknown,
+}
 
 /// <summary>
 /// Represents information about a data source that's been pushing data to Nocturne.
@@ -25,6 +52,13 @@ public class DataSourceInfo
     /// </summary>
     [JsonPropertyName("deviceId")]
     public string DeviceId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Which origin handle <see cref="DeviceId"/> names, so a consumer holding a list entry does not
+    /// have to guess whether it is a data source or a reported device string.
+    /// </summary>
+    [JsonPropertyName("deviceIdHandle")]
+    public SourceHandle DeviceIdHandle { get; set; } = SourceHandle.Device;
 
     /// <summary>
     /// Category of data source: cgm, pump, uploader, aid-system, connector, manual, unknown
@@ -431,4 +465,43 @@ public class DataSourceDeleteResult
     /// </summary>
     [JsonPropertyName("error")]
     public string? Error { get; set; }
+
+    /// <summary>
+    /// Failure kind for programmatic handling. <see cref="Error"/> is diagnostic only.
+    /// </summary>
+    [JsonPropertyName("errorCode")]
+    public DataSourceDeleteError? ErrorCode { get; set; }
+
+    /// <summary>
+    /// Create a failed result for the named data source.
+    /// </summary>
+    public static DataSourceDeleteResult Failed(
+        string dataSource,
+        DataSourceDeleteError errorCode,
+        string error
+    ) =>
+        new()
+        {
+            Success = false,
+            DataSource = dataSource,
+            ErrorCode = errorCode,
+            Error = error,
+        };
+}
+
+/// <summary>
+/// Why a data source deletion failed.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter<DataSourceDeleteError>))]
+public enum DataSourceDeleteError
+{
+    /// <summary>
+    /// No data source or connector matches the requested identifier.
+    /// </summary>
+    NotFound,
+
+    /// <summary>
+    /// The deletion itself failed.
+    /// </summary>
+    DeleteFailed,
 }

@@ -10,7 +10,7 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.PatientInsulin
 /// </summary>
 [Table("patient_insulins")]
-public class PatientInsulinEntity : ITenantScoped, ISoftDeletable
+public class PatientInsulinEntity : ITenantScoped, ISoftDeletable, ISystemTimestamped
 {
     /// <summary>
     /// The unique identifier of the tenant this record belongs to.
@@ -111,12 +111,14 @@ public class PatientInsulinEntity : ITenantScoped, ISoftDeletable
     /// <summary>
     /// System tracking: when record was inserted
     /// </summary>
+    [AuditIgnored]
     [Column("sys_created_at")]
     public DateTime SysCreatedAt { get; set; } = DateTime.UtcNow;
 
     /// <summary>
     /// System tracking: when record was last updated
     /// </summary>
+    [AuditIgnored]
     [Column("sys_updated_at")]
     public DateTime SysUpdatedAt { get; set; } = DateTime.UtcNow;
 
@@ -124,6 +126,7 @@ public class PatientInsulinEntity : ITenantScoped, ISoftDeletable
     /// Soft-delete timestamp. When non-null the record is treated as deleted
     /// by the global query filter and is invisible above the repository layer.
     /// </summary>
+    [AuditIgnored]
     [Column("deleted_at")]
     public DateTime? DeletedAt { get; set; }
 }

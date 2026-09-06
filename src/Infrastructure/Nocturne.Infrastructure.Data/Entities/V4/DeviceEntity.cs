@@ -68,6 +68,7 @@ public class DeviceEntity : ITenantScoped, ISoftDeletable
     /// Soft-delete timestamp. When non-null the record is treated as deleted
     /// by the global query filter and is invisible above the repository layer.
     /// </summary>
+    [AuditIgnored]
     [Column("deleted_at")]
     public DateTime? DeletedAt { get; set; }
 }

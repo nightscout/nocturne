@@ -2,6 +2,7 @@
     import SystemRequirements from "$lib/components/docs/SystemRequirements.svelte";
     import VerificationSteps from "$lib/components/docs/VerificationSteps.svelte";
     import NextSteps from "$lib/components/docs/NextSteps.svelte";
+    import SupportNocturne from "$lib/components/docs/SupportNocturne.svelte";
     import PasswordGenerator from "$lib/components/docs/PasswordGenerator.svelte";
     import CodeBlock from "$lib/components/docs/CodeBlock.svelte";
     import envExample from "$lib/release/docker-compose/.env.example?raw";
@@ -89,7 +90,15 @@
         bring-your-own-proxy override to disable the bundled Caddy and expose the
         gateway on plain HTTP port 8080 for your proxy to forward to:
     </p>
-    <CodeBlock code={"docker compose -f docker-compose.yaml -f docker-compose.byo-proxy.yaml up -d"} class="mb-8" />
+    <CodeBlock code={"docker compose -f docker-compose.yaml -f docker-compose.byo-proxy.yaml up -d"} class="mb-4" />
+    <p class="text-muted-foreground mb-8">
+        Your proxy must forward the original <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">Host</code>
+        along with <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">X-Forwarded-Proto</code> and
+        <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">X-Forwarded-Host</code>, or logins will
+        fail with a 403. See
+        <a href="/docs/installation/reverse-proxy" class="text-primary hover:underline">Bring your own reverse proxy</a>
+        for worked nginx, Traefik, and Caddy configurations.
+    </p>
 
     <h2 class="text-2xl font-bold mt-8 mb-4">Step 4: Verify the installation</h2>
     <VerificationSteps />
@@ -108,4 +117,6 @@
 
     <h2 class="text-2xl font-bold mt-8 mb-4">Next Steps</h2>
     <NextSteps />
+
+    <SupportNocturne />
 </div>

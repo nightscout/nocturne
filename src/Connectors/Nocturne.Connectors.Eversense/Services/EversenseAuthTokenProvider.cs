@@ -31,7 +31,7 @@ public class EversenseAuthTokenProvider(
     protected override async Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
         EversenseConnectorConfiguration config, CancellationToken cancellationToken)
     {
-        const int maxRetries = 3;
+        var maxRetries = LoginAttempts(config);
 
         var token = await ExecuteWithRetryAsync(
             async attempt =>

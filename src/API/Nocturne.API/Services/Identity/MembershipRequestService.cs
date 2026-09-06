@@ -14,17 +14,20 @@ public class MembershipRequestService : IMembershipRequestService
 {
     private readonly NocturneDbContext _dbContext;
     private readonly ITenantService _tenantService;
+    private readonly ITenantRoleService _tenantRoleService;
     private readonly IInAppNotificationService _notificationService;
     private readonly ILogger<MembershipRequestService> _logger;
 
     public MembershipRequestService(
         NocturneDbContext dbContext,
         ITenantService tenantService,
+        ITenantRoleService tenantRoleService,
         IInAppNotificationService notificationService,
         ILogger<MembershipRequestService> logger)
     {
         _dbContext = dbContext;
         _tenantService = tenantService;
+        _tenantRoleService = tenantRoleService;
         _notificationService = notificationService;
         _logger = logger;
     }
@@ -153,9 +156,15 @@ public class MembershipRequestService : IMembershipRequestService
     /// <inheritdoc />
     public async Task<DecideMembershipRequestResult> ApproveRequestAsync(
         Guid requestId, Guid tenantId, List<Guid> roleIds,
-        Guid decidedBySubjectId, CancellationToken ct = default)
+        Guid decidedBySubjectId, IReadOnlyCollection<string> granterScopes,
+        CancellationToken ct = default)
     {
         _dbContext.TenantId = tenantId;
+
+        var roleGrant = await _tenantRoleService.ValidateRoleGrantAsync(
+            tenantId, roleIds, granterScopes, ct);
+        if (!roleGrant.Ok)
+            return new DecideMembershipRequestResult(false, roleGrant.ErrorDescription);
 
         var request = await _dbContext.MembershipRequests
             .FirstOrDefaultAsync(r => r.Id == requestId, ct);

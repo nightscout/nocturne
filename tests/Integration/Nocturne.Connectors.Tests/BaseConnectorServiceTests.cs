@@ -11,6 +11,7 @@ using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Core.Models;
 using Xunit;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Connectors.Tests.Integration;
 
@@ -64,7 +65,7 @@ public class BaseConnectorServiceTests
                 m.PublishEntriesAsync(
                     It.IsAny<IEnumerable<Entry>>(),
                     It.IsAny<string>(),
-                    It.IsAny<CancellationToken>()
+                    It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()
                 )
             )
             .ReturnsAsync(true);
@@ -80,7 +81,7 @@ public class BaseConnectorServiceTests
                 m.PublishEntriesAsync(
                     It.Is<IEnumerable<Entry>>(e => e.Count() == 2),
                     It.Is<string>(s => s == "test-connector"),
-                    It.IsAny<CancellationToken>()
+                    It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()
                 ),
             Times.Once
         );
@@ -117,19 +118,12 @@ public class TestConnectorService : BaseConnectorService<TestConnectorConfigurat
 
     public override Task<bool> AuthenticateAsync() => Task.FromResult(true);
 
-    public override Task<IEnumerable<Entry>> FetchGlucoseDataAsync(DateTime? since = null)
-    {
-        var entries = new[]
-        {
-            new Entry { Sgv = 120, Mills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() },
-            new Entry
-            {
-                Sgv = 115,
-                Mills = DateTimeOffset.UtcNow.AddMinutes(-5).ToUnixTimeMilliseconds(),
-            },
-        };
-        return Task.FromResult<IEnumerable<Entry>>(entries);
-    }
+    // This double only exercises the publish path, never a sync run.
+    protected override Task<SyncResult> PerformSyncInternalAsync(
+        SyncRequest request,
+        TestConnectorConfiguration config,
+        CancellationToken cancellationToken)
+        => throw new NotSupportedException();
 
     // Public wrapper for testing protected method
     public Task<bool> PublishGlucoseDataAsyncPublic(

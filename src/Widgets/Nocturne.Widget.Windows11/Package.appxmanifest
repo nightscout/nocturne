@@ -70,9 +70,37 @@
                   <CreateInstance ClassId="B8E3F2A1-5C4D-4E6F-8A9B-1C2D3E4F5A6B" />
                 </Activation>
                 <Definitions>
-                  <Definition Id="NocturneSmall"
-                              DisplayName="Nocturne (Small)"
-                              Description="Displays current glucose value and trend direction"
+                  <Definition Id="NocturneGlucose"
+                              DisplayName="Nocturne"
+                              Description="Glucose and trend; resize for a sparkline and insulin/carbs on board"
+                              AllowMultiple="true"
+                              IsCustomizable="true">
+                    <Capabilities>
+                      <Capability>
+                        <Size Name="small" />
+                      </Capability>
+                      <Capability>
+                        <Size Name="medium" />
+                      </Capability>
+                      <Capability>
+                        <Size Name="large" />
+                      </Capability>
+                    </Capabilities>
+                    <ThemeResources>
+                      <Icons>
+                        <Icon Path="Images\WidgetIconLarge.png" />
+                      </Icons>
+                      <Screenshots>
+                        <Screenshot Path="Images\WidgetScreenshotLarge.png" DisplayAltText="Nocturne glucose widget" />
+                      </Screenshots>
+                      <DarkMode />
+                      <LightMode />
+                    </ThemeResources>
+                  </Definition>
+
+                  <Definition Id="NocturneStats"
+                              DisplayName="Nocturne Stats"
+                              Description="Average, GMI, and variability for the last 24 hours"
                               AllowMultiple="true"
                               IsCustomizable="true">
                     <Capabilities>
@@ -82,24 +110,24 @@
                     </Capabilities>
                     <ThemeResources>
                       <Icons>
-                        <Icon Path="Images\WidgetIconSmall.png" />
+                        <Icon Path="Images\WidgetIconMedium.png" />
                       </Icons>
                       <Screenshots>
-                        <Screenshot Path="Images\WidgetScreenshotSmall.png" DisplayAltText="Small glucose widget" />
+                        <Screenshot Path="Images\WidgetScreenshotMedium.png" DisplayAltText="Nocturne stats widget" />
                       </Screenshots>
                       <DarkMode />
                       <LightMode />
                     </ThemeResources>
                   </Definition>
 
-                  <Definition Id="NocturneMedium"
-                              DisplayName="Nocturne"
-                              Description="Displays glucose, trend, and insulin/carbs on board"
+                  <Definition Id="NocturneTir"
+                              DisplayName="Nocturne Time in Range"
+                              Description="Time-in-range bar for the last 24 hours"
                               AllowMultiple="true"
                               IsCustomizable="true">
                     <Capabilities>
                       <Capability>
-                        <Size Name="medium" />
+                        <Size Name="small" />
                       </Capability>
                     </Capabilities>
                     <ThemeResources>
@@ -107,16 +135,60 @@
                         <Icon Path="Images\WidgetIconMedium.png" />
                       </Icons>
                       <Screenshots>
-                        <Screenshot Path="Images\WidgetScreenshotMedium.png" DisplayAltText="Medium glucose widget" />
+                        <Screenshot Path="Images\WidgetScreenshotMedium.png" DisplayAltText="Nocturne time in range widget" />
                       </Screenshots>
                       <DarkMode />
                       <LightMode />
                     </ThemeResources>
                   </Definition>
 
-                  <Definition Id="NocturneLarge"
-                              DisplayName="Nocturne Dashboard"
-                              Description="Full dashboard with glucose, trend, IOB/COB, and predictions"
+                  <Definition Id="NocturneAges"
+                              DisplayName="Nocturne Device Ages"
+                              Description="Cannula, sensor, insulin, and battery ages"
+                              AllowMultiple="true"
+                              IsCustomizable="true">
+                    <Capabilities>
+                      <Capability>
+                        <Size Name="small" />
+                      </Capability>
+                    </Capabilities>
+                    <ThemeResources>
+                      <Icons>
+                        <Icon Path="Images\WidgetIconMedium.png" />
+                      </Icons>
+                      <Screenshots>
+                        <Screenshot Path="Images\WidgetScreenshotMedium.png" DisplayAltText="Nocturne device ages widget" />
+                      </Screenshots>
+                      <DarkMode />
+                      <LightMode />
+                    </ThemeResources>
+                  </Definition>
+
+                  <Definition Id="NocturneLoop"
+                              DisplayName="Nocturne Loop"
+                              Description="Loop/AID status from the latest algorithm snapshot"
+                              AllowMultiple="true"
+                              IsCustomizable="true">
+                    <Capabilities>
+                      <Capability>
+                        <Size Name="small" />
+                      </Capability>
+                    </Capabilities>
+                    <ThemeResources>
+                      <Icons>
+                        <Icon Path="Images\WidgetIconMedium.png" />
+                      </Icons>
+                      <Screenshots>
+                        <Screenshot Path="Images\WidgetScreenshotMedium.png" DisplayAltText="Nocturne loop status widget" />
+                      </Screenshots>
+                      <DarkMode />
+                      <LightMode />
+                    </ThemeResources>
+                  </Definition>
+
+                  <Definition Id="NocturneTirStacked"
+                              DisplayName="Nocturne Time in Range (Stacked)"
+                              Description="Vertical time-in-range bar with percentages"
                               AllowMultiple="true"
                               IsCustomizable="true">
                     <Capabilities>
@@ -129,7 +201,7 @@
                         <Icon Path="Images\WidgetIconLarge.png" />
                       </Icons>
                       <Screenshots>
-                        <Screenshot Path="Images\WidgetScreenshotLarge.png" DisplayAltText="Large dashboard widget" />
+                        <Screenshot Path="Images\WidgetScreenshotLarge.png" DisplayAltText="Nocturne stacked time in range widget" />
                       </Screenshots>
                       <DarkMode />
                       <LightMode />

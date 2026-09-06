@@ -72,7 +72,7 @@ public class DashboardChartData
     /// <summary>Override spans from <see cref="StateSpan"/> records with <see cref="StateSpanCategory.Override"/>.</summary>
     public List<ChartStateSpanDto> OverrideSpans { get; set; } = new();
 
-    /// <summary>Activity spans (sleep, exercise, illness, travel) from <see cref="StateSpan"/> records.</summary>
+    /// <summary>Activity spans (exercise, illness, travel, sleep sessions) merged from state spans and sleep data.</summary>
     public List<ChartStateSpanDto> ActivitySpans { get; set; } = new();
 
     /// <summary>Temporary basal spans from legacy <see cref="Treatment"/> temp basal records.</summary>
@@ -106,8 +106,15 @@ public class DashboardChartData
 }
 
 /// <summary>
-/// Glucose threshold configuration derived from the active profile.
+/// Glucose threshold configuration for the dashboard chart.
 /// </summary>
+/// <remarks>
+/// <see cref="Low"/>/<see cref="High"/>/<see cref="VeryLow"/>/<see cref="VeryHigh"/> are the fixed
+/// clinical glycemic band used to color readings (Very Low / Low / In Range / High / Very High) and
+/// draw the in-range reference lines — they are independent of the patient's personal target.
+/// <see cref="TargetLow"/>/<see cref="TargetHigh"/> carry the personal BG target from the active
+/// profile, shown as a separate reference line; null when no profile is available.
+/// </remarks>
 public record ChartThresholdsDto
 {
     public double Low { get; init; }
@@ -115,6 +122,12 @@ public record ChartThresholdsDto
     public double VeryLow { get; init; }
     public double VeryHigh { get; init; }
     public double GlucoseYMax { get; init; }
+
+    /// <summary>Personal BG target lower bound (mg/dL) from the active profile; null when no profile.</summary>
+    public double? TargetLow { get; init; }
+
+    /// <summary>Personal BG target upper bound (mg/dL) from the active profile; null when no profile.</summary>
+    public double? TargetHigh { get; init; }
 }
 
 /// <summary>
@@ -135,7 +148,13 @@ public class BasalPoint
 {
     public long Timestamp { get; set; }
     public double Rate { get; set; }
-    public double ScheduledRate { get; set; }
+
+    /// <summary>
+    /// The rate the basal schedule called for at this instant, or <c>null</c> when
+    /// there is no therapy profile to read one from. Consumers fall back to
+    /// <see cref="Rate"/> rather than substituting a placeholder.
+    /// </summary>
+    public double? ScheduledRate { get; set; }
     public BasalDeliveryOrigin Origin { get; set; }
     public ChartColor FillColor { get; set; }
     public ChartColor StrokeColor { get; set; }
@@ -233,14 +252,42 @@ public class SystemEventMarkerDto
 }
 
 /// <summary>
-/// State span DTO for chart rendering. Projected from <see cref="StateSpan"/> records.
+/// Discriminator for what a <see cref="ChartStateSpanDto"/> represents on the activity layer.
+/// State spans and sleep sessions share the activity chart layer but come from different domain
+/// sources; consumers branch on this to select icons and tooltip labels without parsing
+/// <see cref="ChartStateSpanDto.State"/> strings.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter<ChartSpanKind>))]
+public enum ChartSpanKind
+{
+    /// <summary>
+    /// A span projected from a <see cref="StateSpan"/> record. <see cref="ChartStateSpanDto.Category"/> is set.
+    /// </summary>
+    StateSpan,
+
+    /// <summary>
+    /// A span projected from a <see cref="SleepSession"/>. <see cref="ChartStateSpanDto.Category"/> is null.
+    /// </summary>
+    Sleep
+}
+
+/// <summary>
+/// State span DTO for chart rendering. Projected from <see cref="StateSpan"/> records or
+/// <see cref="SleepSession"/> records that share the activity layer.
 /// </summary>
 /// <seealso cref="StateSpanCategory"/>
+/// <seealso cref="ChartSpanKind"/>
 /// <seealso cref="ChartColor"/>
 public class ChartStateSpanDto
 {
     public string Id { get; set; } = "";
-    public StateSpanCategory Category { get; set; }
+
+    /// <summary>What this span represents. Sleep sessions use <see cref="ChartSpanKind.Sleep"/>.</summary>
+    public ChartSpanKind Kind { get; set; }
+
+    /// <summary>Source state-span category. Null when <see cref="Kind"/> is <see cref="ChartSpanKind.Sleep"/>.</summary>
+    public StateSpanCategory? Category { get; set; }
+
     public string State { get; set; } = "";
     public long StartMills { get; set; }
     public long? EndMills { get; set; }

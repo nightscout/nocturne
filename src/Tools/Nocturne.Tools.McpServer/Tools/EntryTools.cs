@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.Server;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 using Nocturne.Tools.McpServer.Services;
 
@@ -188,6 +189,9 @@ public static class EntryTools
                 return "No valid glucose values found";
             }
 
+            const double targetLow = GlucoseConstants.TargetBottomMgdl;
+            const double targetHigh = GlucoseConstants.TargetTopMgdl;
+
             var stats = new
             {
                 Period = $"Last {hours} hours",
@@ -200,9 +204,9 @@ public static class EntryTools
                 TimeInRange = new
                 {
                     VeryLow = glucoseValues.Count(g => g < 54),
-                    Low = glucoseValues.Count(g => g >= 54 && g < 70),
-                    InRange = glucoseValues.Count(g => g >= 70 && g <= 180),
-                    High = glucoseValues.Count(g => g > 180 && g <= 250),
+                    Low = glucoseValues.Count(g => g >= 54 && g < targetLow),
+                    InRange = glucoseValues.Count(g => g >= targetLow && g <= targetHigh),
+                    High = glucoseValues.Count(g => g > targetHigh && g <= 250),
                     VeryHigh = glucoseValues.Count(g => g > 250),
                 },
                 TimeInRangePercentages = new
@@ -212,19 +216,19 @@ public static class EntryTools
                         1
                     ),
                     Low = Math.Round(
-                        (double)glucoseValues.Count(g => g >= 54 && g < 70)
+                        (double)glucoseValues.Count(g => g >= 54 && g < targetLow)
                             / glucoseValues.Length
                             * 100,
                         1
                     ),
                     InRange = Math.Round(
-                        (double)glucoseValues.Count(g => g >= 70 && g <= 180)
+                        (double)glucoseValues.Count(g => g >= targetLow && g <= targetHigh)
                             / glucoseValues.Length
                             * 100,
                         1
                     ),
                     High = Math.Round(
-                        (double)glucoseValues.Count(g => g > 180 && g <= 250)
+                        (double)glucoseValues.Count(g => g > targetHigh && g <= 250)
                             / glucoseValues.Length
                             * 100,
                         1

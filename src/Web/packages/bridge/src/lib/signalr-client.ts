@@ -439,6 +439,30 @@ class SignalRClient {
 
     return dataConnected && alarmConnected && configConnected;
   }
+
+  /** Forward an alarm ack to the API's AlarmHub. The v3 `/alarm` namespace
+   *  receives positional `ack` events from AAPS and relays them here so the
+   *  silence propagates server-side. No-op when the AlarmHub connection isn't
+   *  open. Failures are logged and swallowed — a dropped ack just means the
+   *  alarm isn't silenced server-side, not a bridge failure. */
+  async invokeAlarmAck(
+    level: number,
+    group: string,
+    silenceTime: number,
+  ): Promise<void> {
+    if (!this.alarmConnection || this.alarmConnection.state !== "Connected") {
+      logger.warn("Cannot forward alarm ack: AlarmHub connection not open");
+      return;
+    }
+    try {
+      await this.alarmConnection.invoke("Ack", level, group, silenceTime);
+      logger.info(
+        `Forwarded alarm ack to AlarmHub: level=${level} group=${group} silence=${silenceTime}ms`,
+      );
+    } catch (error) {
+      logger.error("Error forwarding alarm ack to AlarmHub:", error);
+    }
+  }
 }
 
 export default SignalRClient;

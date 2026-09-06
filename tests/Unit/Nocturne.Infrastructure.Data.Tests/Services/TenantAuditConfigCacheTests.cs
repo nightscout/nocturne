@@ -151,8 +151,7 @@ public class TenantAuditConfigCacheTests : IDisposable
                 if (entityType.IsOwned())
                     continue;
 
-                modelBuilder.Entity(entityType.ClrType)
-                    .HasQueryFilter(null as System.Linq.Expressions.LambdaExpression);
+                modelBuilder.Entity(entityType.ClrType).ClearQueryFilters();
             }
         }
     }

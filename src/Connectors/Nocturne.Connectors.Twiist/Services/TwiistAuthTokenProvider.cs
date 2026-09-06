@@ -35,7 +35,7 @@ public class TwiistAuthTokenProvider(
     protected override async Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
         TwiistConnectorConfiguration config, CancellationToken cancellationToken)
     {
-        const int maxRetries = 3;
+        var maxRetries = LoginAttempts(config);
 
         // Read refresh token from previously cached session metadata
         var cached = await _tokenCache.GetAsync(ConnectorName, _tenantAccessor.TenantId);

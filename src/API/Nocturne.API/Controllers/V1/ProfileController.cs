@@ -5,6 +5,7 @@ using Nocturne.API.Authorization;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Queries;
 
 namespace Nocturne.API.Controllers.V1;
 
@@ -51,6 +52,7 @@ public class ProfileController : ControllerBase
     [NightscoutEndpoint("/api/v1/profile")]
     [ProducesResponseType(typeof(Profile[]), 200)]
     [ProducesResponseType(typeof(Profile[]), 304)] // Not Modified response
+    [RequireScope(Scope.TherapyRead)]
     public async Task<ActionResult<Profile[]>> GetProfiles(
         [FromQuery] int count = 10,
         CancellationToken cancellationToken = default
@@ -123,6 +125,51 @@ public class ProfileController : ControllerBase
     }
 
     /// <summary>
+    /// Get profile history documents (plural collection alias).
+    /// Legacy Nightscout serves /api/v1/profiles.json as a filterable collection; LoopFollow
+    /// polls it with find[startDate][$lte]=… for the profile history behind its basal rendering.
+    /// </summary>
+    /// <param name="count">Maximum number of profiles to return (default: 10)</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>List of profiles matching the find query, newest first</returns>
+    [HttpGet("/api/v1/profiles")]
+    [NightscoutEndpoint("/api/v1/profiles")]
+    [ProducesResponseType(typeof(Profile[]), 200)]
+    [RequireScope(Scope.TherapyRead)]
+    public async Task<ActionResult<Profile[]>> GetProfileHistory(
+        [FromQuery] int count = 10,
+        CancellationToken cancellationToken = default
+    )
+    {
+        try
+        {
+            var queryString = HttpContext?.Request?.QueryString.ToString() ?? string.Empty;
+            var find = FindQuery.Parse(queryString.TrimStart('?'));
+
+            count = Math.Max(1, Math.Min(count, 1000));
+
+            // Filter before limiting: a find that excludes the newest documents must still
+            // surface older matches. Profile history is small, so fetch the route's maximum.
+            var profiles = await _projectionService.GetProfilesAsync(
+                count: 1000,
+                skip: 0,
+                ct: cancellationToken
+            );
+
+            return Ok(profiles.Where(find.Matches).Take(count).ToArray());
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return StatusCode(499, Array.Empty<Profile>());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while fetching profile history");
+            return StatusCode(500, Array.Empty<Profile>());
+        }
+    }
+
+    /// <summary>
     /// Create or update a profile.
     /// Nightscout accepts either a single profile object or an array of profiles.
     /// </summary>
@@ -131,7 +178,7 @@ public class ProfileController : ControllerBase
     /// <returns>Created profiles with assigned IDs as an array</returns>
     [HttpPost]
     [Authorize]
-    [RequireScope(OAuthScopes.TherapyReadWrite)]
+    [RequireScope(Scope.TherapyReadWrite)]
     [NightscoutEndpoint("/api/v1/profile")]
     [ProducesResponseType(typeof(Profile[]), 200)]
     [ProducesResponseType(400)]
@@ -205,6 +252,7 @@ public class ProfileController : ControllerBase
     [ProducesResponseType(typeof(Profile), 200)]
     [ProducesResponseType(typeof(Profile[]), 200)] // Empty array when no profile
     [ProducesResponseType(typeof(Profile[]), 304)] // Not Modified response
+    [RequireScope(Scope.TherapyRead)]
     public async Task<ActionResult> GetCurrentProfile(
         CancellationToken cancellationToken = default
     )
@@ -267,6 +315,7 @@ public class ProfileController : ControllerBase
     [NightscoutEndpoint("/api/v1/profile/{spec}")]
     [ProducesResponseType(typeof(Profile[]), 200)]
     [ProducesResponseType(typeof(Profile[]), 304)] // Not Modified response
+    [RequireScope(Scope.TherapyRead)]
     public async Task<ActionResult<Profile[]>> GetProfile(
         string spec,
         CancellationToken cancellationToken = default
@@ -280,12 +329,10 @@ public class ProfileController : ControllerBase
 
         try
         {
-            // Check if spec is a 24-character hex string (MongoDB ObjectId)
-            bool isId =
-                spec.Length == 24
-                && System.Text.RegularExpressions.Regex.IsMatch(
+            // Accept legacy MongoDB ObjectIds and system-assigned UUID v7 ids.
+            bool isId = System.Text.RegularExpressions.Regex.IsMatch(
                     spec,
-                    "^[a-f\\d]{24}$",
+                    "^([a-f\\d]{24}|[a-f\\d]{32})$",
                     System.Text.RegularExpressions.RegexOptions.IgnoreCase
                 );
 

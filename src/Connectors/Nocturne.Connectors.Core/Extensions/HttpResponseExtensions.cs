@@ -7,26 +7,23 @@ namespace Nocturne.Connectors.Core.Extensions;
 /// </summary>
 public static class HttpResponseExtensions
 {
+    /// <summary>
+    ///     The statuses worth sending the same request again for: the source is rate-limiting us or
+    ///     is transiently unwell, so the request itself is not at fault.
+    /// </summary>
+    public static bool IsRetryableStatusCode(HttpStatusCode? statusCode) =>
+        statusCode is HttpStatusCode.TooManyRequests
+            or HttpStatusCode.ServiceUnavailable
+            or HttpStatusCode.InternalServerError
+            or HttpStatusCode.BadGateway
+            or HttpStatusCode.GatewayTimeout
+            or HttpStatusCode.RequestTimeout;
+
     /// <param name="response">The HTTP response to check</param>
     extension(HttpResponseMessage response)
     {
-        /// <summary>
-        ///     Determines if the response indicates a retryable error (rate limiting, server errors, etc.)
-        /// </summary>
-        /// <returns>True if the request should be retried</returns>
-        public bool IsRetryableError()
-        {
-            return response.StatusCode switch
-            {
-                HttpStatusCode.TooManyRequests => true,
-                HttpStatusCode.ServiceUnavailable => true,
-                HttpStatusCode.InternalServerError => true,
-                HttpStatusCode.BadGateway => true,
-                HttpStatusCode.GatewayTimeout => true,
-                HttpStatusCode.RequestTimeout => true,
-                _ => false
-            };
-        }
+        /// <inheritdoc cref="IsRetryableStatusCode"/>
+        public bool IsRetryableError() => IsRetryableStatusCode(response.StatusCode);
 
         /// <summary>
         ///     Determines if the response indicates that re-authentication is required.

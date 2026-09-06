@@ -1,5 +1,6 @@
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.API.Services.Realtime;
 
@@ -130,7 +131,7 @@ public class WriteSideEffectsService : IWriteSideEffects
 
         if (options.DecomposeToV4)
         {
-            await _pipeline.DecomposeAsync((IEnumerable<T>)records, cancellationToken);
+            await _pipeline.DecomposeAsync((IEnumerable<T>)records, WriteOrigin.Live, cancellationToken);
         }
     }
 
@@ -164,7 +165,7 @@ public class WriteSideEffectsService : IWriteSideEffects
 
         if (options.DecomposeToV4)
         {
-            await _pipeline.DecomposeAsync(record, cancellationToken);
+            await _pipeline.DecomposeAsync(record, WriteOrigin.Live, cancellationToken);
         }
     }
 
@@ -183,7 +184,7 @@ public class WriteSideEffectsService : IWriteSideEffects
 
         if (options.DecomposeToV4)
         {
-            await _pipeline.DeleteByLegacyIdAsync<T>(legacyId, cancellationToken);
+            await _pipeline.DeleteByLegacyIdAsync<T>(legacyId, WriteOrigin.Live, cancellationToken);
         }
     }
 
@@ -211,7 +212,11 @@ public class WriteSideEffectsService : IWriteSideEffects
         {
             await _broadcast.BroadcastStorageDeleteAsync(
                 collectionName,
-                new { colName = collectionName, doc = deletedRecord }
+                new StorageDeleteEvent(
+                    collectionName,
+                    (deletedRecord as IProcessableDocument)?.Id,
+                    deletedRecord
+                )
             );
         }
         catch (Exception ex)
@@ -243,7 +248,7 @@ public class WriteSideEffectsService : IWriteSideEffects
         {
             await _broadcast.BroadcastStorageDeleteAsync(
                 collectionName,
-                new { colName = collectionName, deletedCount }
+                new StorageBulkDeleteEvent(collectionName, deletedCount)
             );
         }
         catch (Exception ex)

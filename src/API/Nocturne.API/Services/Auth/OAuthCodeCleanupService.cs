@@ -4,8 +4,9 @@ using Nocturne.Infrastructure.Data;
 namespace Nocturne.API.Services.Auth;
 
 /// <summary>
-/// Background service that periodically removes expired OAuth device codes and authorisation codes
-/// to prevent database bloat. Runs every hour and removes codes that expired more than one hour ago.
+/// Background service that periodically removes expired OAuth device codes, authorisation codes and
+/// TOTP step-up tokens to prevent database bloat. Runs every hour and removes records that expired
+/// more than one hour ago.
 /// </summary>
 /// <remarks>
 /// The <see cref="RetentionBuffer"/> provides a grace window for in-flight exchanges to complete
@@ -103,12 +104,20 @@ public class OAuthCodeCleanupService : BackgroundService
             .OAuthAuthorizationCodes.Where(c => c.ExpiresAt < cutoff)
             .ExecuteDeleteAsync(ct);
 
-        if (deletedDeviceCodes > 0 || deletedAuthCodes > 0)
+        // TOTP step-up tokens are the same shape of short-lived single-use record: one row per
+        // minted token, redeemable once, kept only until it has been expired for the buffer.
+        var deletedStepUpTokens = await db
+            .TotpStepUpTokens.Where(t => t.ExpiresAt < cutoff)
+            .ExecuteDeleteAsync(ct);
+
+        if (deletedDeviceCodes > 0 || deletedAuthCodes > 0 || deletedStepUpTokens > 0)
         {
             _logger.LogInformation(
-                "OAuth code cleanup: removed {DeviceCodes} device codes and {AuthCodes} authorization codes",
+                "OAuth code cleanup: removed {DeviceCodes} device codes, {AuthCodes} authorization codes "
+                    + "and {StepUpTokens} TOTP step-up tokens",
                 deletedDeviceCodes,
-                deletedAuthCodes
+                deletedAuthCodes,
+                deletedStepUpTokens
             );
         }
     }

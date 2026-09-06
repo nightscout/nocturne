@@ -10,6 +10,7 @@
   import { Check } from "lucide-svelte";
   import { CompletionReason, TrackerCategory } from "$api";
   import * as trackersRemote from "$api/generated/trackers.generated.remote";
+  import { useToastSubmission } from "$lib/forms";
   import { create as createDeviceEventForm } from "$api/generated/deviceEvents.generated.remote";
 
   interface TrackerCompletionDialogProps {
@@ -44,7 +45,7 @@
   let completionNotes = $state("");
   let completedAt = $state("");
   let startAnother = $state(false);
-  let isSubmitting = $state(false);
+  const submission = useToastSubmission("Failed to complete tracker");
 
   // Hidden form for device event creation
   let deviceEventFormRef = $state<HTMLFormElement | null>(null);
@@ -164,8 +165,7 @@
 
   async function handleComplete() {
     if (!instanceId) return;
-    isSubmitting = true;
-    try {
+    await submission.run(async () => {
       await trackersRemote.completeInstance({
         id: instanceId,
         request: {
@@ -195,11 +195,7 @@
       open = false;
       await tick();
       onComplete?.();
-    } catch (err) {
-      console.error("Failed to complete tracker:", err);
-    } finally {
-      isSubmitting = false;
-    }
+    });
   }
 
   function handleClose() {
@@ -272,10 +268,10 @@
       {/if}
     </div>
     <Dialog.Footer>
-      <Button variant="outline" onclick={handleClose} disabled={isSubmitting}>
+      <Button variant="outline" onclick={handleClose} disabled={submission.busy}>
         Cancel
       </Button>
-      <Button onclick={handleComplete} disabled={isSubmitting}>
+      <Button onclick={handleComplete} disabled={submission.busy}>
         <Check class="h-4 w-4 mr-2" />
         Complete
       </Button>

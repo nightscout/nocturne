@@ -78,11 +78,13 @@ public class OidcProviderService : IOidcProviderService
             if (existing != null)
             {
                 existing.Name = config.Name;
+                existing.ProviderType = TypeToString(config.ProviderType);
+                existing.OAuth2SettingsJson = SerializeOAuth2(config.OAuth2);
                 existing.IssuerUrl = config.IssuerUrl.TrimEnd('/');
                 existing.ClientId = config.ClientId;
                 existing.IsEnabled = config.IsEnabled;
                 existing.DisplayOrder = config.DisplayOrder;
-                existing.Scopes = EnsureOpenIdScope(config.Scopes);
+                existing.Scopes = NormalizeScopes(config.ProviderType, config.Scopes);
                 existing.DefaultRoles = config.DefaultRoles;
                 existing.Icon = config.Icon;
                 existing.ButtonColor = config.ButtonColor;
@@ -94,11 +96,13 @@ public class OidcProviderService : IOidcProviderService
                 {
                     Id = id,
                     Name = config.Name,
+                    ProviderType = TypeToString(config.ProviderType),
+                    OAuth2SettingsJson = SerializeOAuth2(config.OAuth2),
                     IssuerUrl = config.IssuerUrl.TrimEnd('/'),
                     ClientId = config.ClientId,
                     IsEnabled = config.IsEnabled,
                     DisplayOrder = config.DisplayOrder,
-                    Scopes = EnsureOpenIdScope(config.Scopes),
+                    Scopes = NormalizeScopes(config.ProviderType, config.Scopes),
                     DefaultRoles = config.DefaultRoles,
                     Icon = config.Icon,
                     ButtonColor = config.ButtonColor,
@@ -181,12 +185,14 @@ public class OidcProviderService : IOidcProviderService
         var entity = new OidcProviderEntity
         {
             Name = provider.Name,
+            ProviderType = TypeToString(provider.ProviderType),
+            OAuth2SettingsJson = SerializeOAuth2(provider.OAuth2),
             IssuerUrl = provider.IssuerUrl.TrimEnd('/'),
             ClientId = provider.ClientId,
             ClientSecretEncrypted = !string.IsNullOrEmpty(provider.ClientSecret)
                 ? EncryptSecret(provider.ClientSecret)
                 : null,
-            Scopes = EnsureOpenIdScope(provider.Scopes),
+            Scopes = NormalizeScopes(provider.ProviderType, provider.Scopes),
             ClaimMappingsJson = JsonSerializer.Serialize(provider.ClaimMappings),
             DefaultRoles = provider.DefaultRoles,
             IsEnabled = provider.IsEnabled,
@@ -210,6 +216,8 @@ public class OidcProviderService : IOidcProviderService
             return null;
 
         entity.Name = provider.Name;
+        entity.ProviderType = TypeToString(provider.ProviderType);
+        entity.OAuth2SettingsJson = SerializeOAuth2(provider.OAuth2);
         entity.IssuerUrl = provider.IssuerUrl.TrimEnd('/');
         entity.ClientId = provider.ClientId;
 
@@ -218,7 +226,7 @@ public class OidcProviderService : IOidcProviderService
             entity.ClientSecretEncrypted = EncryptSecret(provider.ClientSecret);
         }
 
-        entity.Scopes = EnsureOpenIdScope(provider.Scopes);
+        entity.Scopes = NormalizeScopes(provider.ProviderType, provider.Scopes);
         entity.ClaimMappingsJson = JsonSerializer.Serialize(provider.ClaimMappings);
         entity.DefaultRoles = provider.DefaultRoles;
         entity.IsEnabled = provider.IsEnabled;
@@ -281,12 +289,20 @@ public class OidcProviderService : IOidcProviderService
             if (configProvider == null)
                 return null;
 
+            // OAuth2 providers publish no discovery document; endpoints come from configuration.
+            if (configProvider.ProviderType == OidcProviderType.OAuth2)
+                return DiscoveryFromOAuth2Settings(configProvider.OAuth2);
+
             return await FetchDiscoveryDocumentAsync(configProvider.IssuerUrl);
         }
 
         var entity = await _dbContext.OidcProviders.FindAsync(providerId);
         if (entity == null)
             return null;
+
+        // OAuth2 providers publish no discovery document; endpoints come from configuration.
+        if (ParseType(entity.ProviderType) == OidcProviderType.OAuth2)
+            return DiscoveryFromOAuth2Settings(DeserializeOAuth2(entity.OAuth2SettingsJson));
 
         // Check if we have a cached document that's still valid (less than 24 hours old)
         if (
@@ -331,6 +347,25 @@ public class OidcProviderService : IOidcProviderService
         {
             result.Success = false;
             result.Error = "Provider not found";
+            return result;
+        }
+
+        // OAuth2 providers expose no discovery document to fetch; validate the configured endpoints instead.
+        if (provider.ProviderType == OidcProviderType.OAuth2)
+        {
+            stopwatch.Stop();
+            result.ResponseTime = stopwatch.Elapsed;
+            var doc = DiscoveryFromOAuth2Settings(provider.OAuth2);
+            result.DiscoveryDocument = doc;
+            result.Success = doc is not null
+                && !string.IsNullOrEmpty(doc.AuthorizationEndpoint)
+                && !string.IsNullOrEmpty(doc.TokenEndpoint);
+
+            if (!result.Success)
+                result.Error = "OAuth2 provider is missing an authorization or token endpoint";
+            else if (string.IsNullOrEmpty(doc!.UserInfoEndpoint))
+                result.Warnings.Add("No userinfo endpoint configured; identity cannot be resolved");
+
             return result;
         }
 
@@ -452,14 +487,72 @@ public class OidcProviderService : IOidcProviderService
         return ["openid", ..scopes];
     }
 
+    /// <summary>
+    /// Applies the correct default and required scopes for the provider's protocol. OIDC providers
+    /// must always request <c>openid</c>; OAuth2 providers use exactly the scopes they are configured
+    /// with and must never have <c>openid</c> forced onto them.
+    /// </summary>
+    private static List<string> NormalizeScopes(OidcProviderType type, List<string> scopes)
+    {
+        if (type == OidcProviderType.OAuth2)
+            return scopes;
+
+        return scopes.Count > 0 ? EnsureOpenIdScope(scopes) : ["openid", "profile", "email"];
+    }
+
+    /// <summary>Parses the stored provider-type string, defaulting to <see cref="OidcProviderType.Oidc"/>.</summary>
+    private static OidcProviderType ParseType(string? value) =>
+        Enum.TryParse<OidcProviderType>(value, ignoreCase: true, out var type) ? type : OidcProviderType.Oidc;
+
+    /// <summary>Serializes a provider type to its lower-case storage form.</summary>
+    private static string TypeToString(OidcProviderType type) => type.ToString().ToLowerInvariant();
+
+    /// <summary>
+    /// Builds the discovery document for an OAuth2 provider from its configured endpoints. OAuth2
+    /// providers publish no discovery document, so this stands in for one using the operator-supplied
+    /// authorization, token, and userinfo endpoints.
+    /// </summary>
+    private static OidcDiscoveryDocument? DiscoveryFromOAuth2Settings(OAuth2ProviderSettings? settings)
+    {
+        if (settings is null)
+            return null;
+
+        return new OidcDiscoveryDocument
+        {
+            AuthorizationEndpoint = settings.AuthorizationEndpoint,
+            TokenEndpoint = settings.TokenEndpoint,
+            UserInfoEndpoint = settings.UserInfoEndpoint,
+            JwksUri = string.Empty,
+        };
+    }
+
+    private static string? SerializeOAuth2(OAuth2ProviderSettings? settings) =>
+        settings is null ? null : JsonSerializer.Serialize(settings);
+
+    private static OAuth2ProviderSettings? DeserializeOAuth2(string? json)
+    {
+        if (string.IsNullOrEmpty(json))
+            return null;
+        try
+        {
+            return JsonSerializer.Deserialize<OAuth2ProviderSettings>(json);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static OidcProvider MapConfigToModel(OidcProviderConfig config) => new()
     {
         Id = CreateDeterministicGuid(config.IssuerUrl),
         Name = config.Name,
+        ProviderType = config.ProviderType,
+        OAuth2 = config.OAuth2,
         IssuerUrl = config.IssuerUrl.TrimEnd('/'),
         ClientId = config.ClientId,
         ClientSecret = config.ClientSecret,
-        Scopes = EnsureOpenIdScope(config.Scopes),
+        Scopes = NormalizeScopes(config.ProviderType, config.Scopes),
         DefaultRoles = config.DefaultRoles,
         IsEnabled = config.IsEnabled,
         DisplayOrder = config.DisplayOrder,
@@ -505,6 +598,8 @@ public class OidcProviderService : IOidcProviderService
         {
             Id = entity.Id,
             Name = entity.Name,
+            ProviderType = ParseType(entity.ProviderType),
+            OAuth2 = DeserializeOAuth2(entity.OAuth2SettingsJson),
             IssuerUrl = entity.IssuerUrl,
             ClientId = entity.ClientId,
             ClientSecret =

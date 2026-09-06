@@ -10,9 +10,11 @@
   } from "$lib/components/ui/card";
   import { ExternalLink, Smartphone, Copy, Check } from "lucide-svelte";
   import { buildPreludeDeepLink } from "$lib/utils/prelude-links";
+  import { copyToClipboard } from "$lib/utils";
 
   let viewState: "redirecting" | "fallback" = $state("redirecting");
   let copied = $state(false);
+  let copyFailed = $state(false);
   let copyTimeout: ReturnType<typeof setTimeout> | null = null;
 
   const instanceUrl = typeof window !== "undefined" ? window.location.origin : "";
@@ -30,14 +32,14 @@
   });
 
   async function copyUrl() {
-    try {
-      await navigator.clipboard.writeText(instanceUrl);
-      copied = true;
-      if (copyTimeout) clearTimeout(copyTimeout);
-      copyTimeout = setTimeout(() => (copied = false), 2000);
-    } catch {
-      // Clipboard API unavailable; user can still long-press the code block.
+    if (!(await copyToClipboard(instanceUrl))) {
+      copyFailed = true;
+      return;
     }
+    copyFailed = false;
+    copied = true;
+    if (copyTimeout) clearTimeout(copyTimeout);
+    copyTimeout = setTimeout(() => (copied = false), 2000);
   }
 </script>
 
@@ -81,6 +83,12 @@
               {/if}
             </Button>
           </div>
+          {#if copyFailed}
+            <p class="text-destructive text-sm">
+              Couldn't copy to the clipboard. Select the address above and copy it
+              manually.
+            </p>
+          {/if}
           <p class="text-muted-foreground text-sm">
             Then approve the code Prelude shows you back on this site.
           </p>

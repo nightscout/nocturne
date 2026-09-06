@@ -14,7 +14,15 @@ namespace Nocturne.Desktop.Tray.Services;
 /// </summary>
 public sealed class OidcAuthService : IDisposable
 {
-    private const string ClientId = "nocturne-tray";
+    // Reverse-DNS software_id matching the bundled known-client directory entry. The
+    // server issues an opaque, per-tenant client_id for it via Dynamic Client
+    // Registration — client_ids are not stable across instances, so they can't be
+    // hardcoded.
+    private const string SoftwareId = "com.nocturne.tray";
+    private const string ClientName = "Nocturne Tray";
+    // Loopback redirect (RFC 8252) registered without a port. The actual login uses a
+    // random port; loopback redirect matching is port-agnostic at authorize time.
+    private const string RegistrationRedirectUri = "http://127.0.0.1/callback";
     private const string Scopes = "glucose.read treatments.read devices.read therapy.read";
 
     private readonly SettingsService _settingsService;
@@ -25,6 +33,7 @@ public sealed class OidcAuthService : IDisposable
     // PKCE + loopback state (live between StartLogin and callback)
     private string? _codeVerifier;
     private string? _redirectUri;
+    private string? _clientId;
     private HttpListener? _loopbackListener;
 
     /// <summary>
@@ -52,14 +61,22 @@ public sealed class OidcAuthService : IDisposable
 
     /// <summary>
     /// Starts the OAuth 2.0 Authorization Code + PKCE flow.
-    /// Opens the system browser to the OAuth authorize endpoint and starts
-    /// a loopback HTTP listener to receive the authorization code callback.
+    /// Registers the client (Dynamic Client Registration) to obtain a client_id, opens
+    /// the system browser to the OAuth authorize endpoint, and starts a loopback HTTP
+    /// listener to receive the authorization code callback.
     /// </summary>
-    public void StartLogin()
+    /// <returns><see langword="true"/> if the browser flow was launched.</returns>
+    public async Task<bool> StartLoginAsync()
     {
         var serverUrl = _settingsService.Settings.ServerUrl?.TrimEnd('/');
         if (string.IsNullOrEmpty(serverUrl))
-            return;
+            return false;
+
+        // Obtain an opaque client_id for this server. client_ids are per-tenant random
+        // values, so they can't be hardcoded — register by stable software_id instead.
+        _clientId = await RegisterClientAsync(serverUrl);
+        if (_clientId is null)
+            return false;
 
         // Generate PKCE pair
         _codeVerifier = GenerateCodeVerifier();
@@ -68,13 +85,13 @@ public sealed class OidcAuthService : IDisposable
         // Start loopback listener on a random port
         _redirectUri = StartLoopbackListener();
         if (_redirectUri is null)
-            return;
+            return false;
 
         // Build OAuth authorize URL
         var authorizeUrl =
             $"{serverUrl}/api/oauth/authorize"
             + $"?response_type=code"
-            + $"&client_id={Uri.EscapeDataString(ClientId)}"
+            + $"&client_id={Uri.EscapeDataString(_clientId)}"
             + $"&redirect_uri={Uri.EscapeDataString(_redirectUri)}"
             + $"&scope={Uri.EscapeDataString(Scopes)}"
             + $"&code_challenge={Uri.EscapeDataString(codeChallenge)}"
@@ -87,6 +104,41 @@ public sealed class OidcAuthService : IDisposable
                 UseShellExecute = true,
             }
         );
+        return true;
+    }
+
+    /// <summary>
+    /// Obtains an opaque <c>client_id</c> via RFC 7591 Dynamic Client Registration.
+    /// Registration is idempotent per tenant on <see cref="SoftwareId"/>, so reconnects
+    /// reuse the same client. Returns <see langword="null"/> on failure.
+    /// </summary>
+    private async Task<string?> RegisterClientAsync(string serverUrl)
+    {
+        try
+        {
+            var request = new ClientRegistrationRequest
+            {
+                SoftwareId = SoftwareId,
+                ClientName = ClientName,
+                RedirectUris = [RegistrationRedirectUri],
+                Scope = Scopes,
+            };
+
+            var response = await _httpClient.PostAsJsonAsync(
+                $"{serverUrl}/api/oauth/register",
+                request
+            );
+            if (!response.IsSuccessStatusCode)
+                return null;
+
+            var registration =
+                await response.Content.ReadFromJsonAsync<ClientRegistrationResponse>();
+            return string.IsNullOrEmpty(registration?.ClientId) ? null : registration.ClientId;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     /// <summary>
@@ -121,7 +173,7 @@ public sealed class OidcAuthService : IDisposable
     public async Task<bool> RefreshTokensAsync()
     {
         var creds = await _credentialStore.GetCredentialsAsync();
-        if (creds is null || string.IsNullOrEmpty(creds.RefreshToken))
+        if (creds is null || string.IsNullOrEmpty(creds.RefreshToken) || string.IsNullOrEmpty(creds.ClientId))
             return false;
 
         try
@@ -132,7 +184,7 @@ public sealed class OidcAuthService : IDisposable
                 {
                     ["grant_type"] = "refresh_token",
                     ["refresh_token"] = creds.RefreshToken,
-                    ["client_id"] = ClientId,
+                    ["client_id"] = creds.ClientId,
                 }
             );
 
@@ -308,7 +360,7 @@ public sealed class OidcAuthService : IDisposable
     private async Task ExchangeCodeForTokensAsync(string code)
     {
         var serverUrl = _settingsService.Settings.ServerUrl?.TrimEnd('/');
-        if (string.IsNullOrEmpty(serverUrl) || _codeVerifier is null || _redirectUri is null)
+        if (string.IsNullOrEmpty(serverUrl) || _codeVerifier is null || _redirectUri is null || _clientId is null)
         {
             IsAuthenticated = false;
             AuthStateChanged?.Invoke();
@@ -323,7 +375,7 @@ public sealed class OidcAuthService : IDisposable
                     ["grant_type"] = "authorization_code",
                     ["code"] = code,
                     ["redirect_uri"] = _redirectUri,
-                    ["client_id"] = ClientId,
+                    ["client_id"] = _clientId,
                     ["code_verifier"] = _codeVerifier,
                 }
             );
@@ -350,6 +402,7 @@ public sealed class OidcAuthService : IDisposable
             var credentials = new NocturneCredentials
             {
                 ApiUrl = serverUrl,
+                ClientId = _clientId,
                 AccessToken = tokenResponse.AccessToken,
                 RefreshToken = tokenResponse.RefreshToken ?? "",
                 ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(tokenResponse.ExpiresIn),
@@ -370,6 +423,7 @@ public sealed class OidcAuthService : IDisposable
         {
             _codeVerifier = null;
             _redirectUri = null;
+            _clientId = null;
         }
     }
 
@@ -429,7 +483,28 @@ public sealed class OidcAuthService : IDisposable
         _httpClient.Dispose();
     }
 
-    // ── Response model ──────────────────────────────────────────────────
+    // ── Request/response models ─────────────────────────────────────────
+
+    private sealed record ClientRegistrationRequest
+    {
+        [JsonPropertyName("software_id")]
+        public string SoftwareId { get; init; } = "";
+
+        [JsonPropertyName("client_name")]
+        public string? ClientName { get; init; }
+
+        [JsonPropertyName("redirect_uris")]
+        public List<string> RedirectUris { get; init; } = [];
+
+        [JsonPropertyName("scope")]
+        public string? Scope { get; init; }
+    }
+
+    private sealed record ClientRegistrationResponse
+    {
+        [JsonPropertyName("client_id")]
+        public string ClientId { get; init; } = "";
+    }
 
     private sealed record OAuthTokenResponse
     {

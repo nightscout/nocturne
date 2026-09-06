@@ -2,7 +2,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
+using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 
 namespace Nocturne.API.Controllers.V4.Profiles;
@@ -14,6 +16,7 @@ namespace Nocturne.API.Controllers.V4.Profiles;
 [ApiController]
 [Tags("Profiles")]
 [Route("api/v4/user/preferences")]
+[Authorize]
 public class UserPreferencesController : ControllerBase
 {
     private readonly NocturneDbContext _dbContext;
@@ -65,7 +68,8 @@ public class UserPreferencesController : ControllerBase
 
         return Ok(new UserPreferencesResponse
         {
-            PreferredLanguage = subject.PreferredLanguage
+            PreferredLanguage = subject.PreferredLanguage,
+            Preferences = UserDisplayPreferences.Deserialize(subject.Preferences)
         });
     }
 
@@ -75,7 +79,8 @@ public class UserPreferencesController : ControllerBase
     /// <param name="request">The preferences to update</param>
     /// <returns>Updated preferences</returns>
     [HttpPatch]
-    [RemoteCommand]
+    [DenyDemoSubject]
+    [RemoteCommand(Invalidates = ["GetPreferences"])]
     [ProducesResponseType(typeof(UserPreferencesResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -98,6 +103,12 @@ public class UserPreferencesController : ControllerBase
             });
         }
 
+        // Validate the constrained display-preference values if provided.
+        if (request.Preferences?.Validate() is { } validationError)
+        {
+            return BadRequest(new { error = "invalid_preference", message = validationError });
+        }
+
         var subject = await _dbContext.Subjects
             .FirstOrDefaultAsync(s => s.Id == authContext.SubjectId.Value);
 
@@ -112,6 +123,14 @@ public class UserPreferencesController : ControllerBase
             subject.PreferredLanguage = request.PreferredLanguage;
         }
 
+        // Merge the partial display preferences over the stored blob so unset fields are preserved.
+        if (request.Preferences != null)
+        {
+            var merged = UserDisplayPreferences.Deserialize(subject.Preferences);
+            merged.MergeWith(request.Preferences);
+            subject.Preferences = merged.Serialize();
+        }
+
         subject.UpdatedAt = DateTime.UtcNow;
         await _dbContext.SaveChangesAsync();
 
@@ -122,7 +141,8 @@ public class UserPreferencesController : ControllerBase
 
         return Ok(new UserPreferencesResponse
         {
-            PreferredLanguage = subject.PreferredLanguage
+            PreferredLanguage = subject.PreferredLanguage,
+            Preferences = UserDisplayPreferences.Deserialize(subject.Preferences)
         });
     }
 }
@@ -136,6 +156,12 @@ public class UserPreferencesResponse
     /// User's preferred language code (e.g., "en", "fr", "de")
     /// </summary>
     public string? PreferredLanguage { get; set; }
+
+    /// <summary>
+    /// Per-user display preferences (units, time format, theme, chart style, etc.).
+    /// Always present; unset fields are null.
+    /// </summary>
+    public UserDisplayPreferences Preferences { get; set; } = new();
 }
 
 /// <summary>
@@ -147,4 +173,9 @@ public class UpdateUserPreferencesRequest
     /// User's preferred language code (e.g., "en", "fr", "de")
     /// </summary>
     public string? PreferredLanguage { get; set; }
+
+    /// <summary>
+    /// Partial display preferences to merge over the stored value. Only non-null fields are applied.
+    /// </summary>
+    public UserDisplayPreferences? Preferences { get; set; }
 }

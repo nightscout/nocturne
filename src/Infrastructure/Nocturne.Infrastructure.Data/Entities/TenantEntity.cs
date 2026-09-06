@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Each tenant has its own subdomain and isolated clinical data.
 /// </summary>
 [Table("tenants")]
-public class TenantEntity
+public class TenantEntity : ISystemTimestamped
 {
     /// <summary>
     /// Unique identifier for the tenant
@@ -60,12 +60,22 @@ public class TenantEntity
     public bool IsDemo { get; set; }
 
     /// <summary>
-    /// Unguessable token for the tenant's public read-only dashboard, served at
-    /// {token}.share.{baseDomain}. Null when public sharing is disabled. Rotating replaces the
-    /// value and evicts the resolution cache, so the previous link stops resolving.
+    /// Whether this tenant's hosts serve the public API documentation (the Scalar reference and
+    /// the OpenAPI specs behind it). Off unless the tenant opts in: the reference registers an
+    /// OAuth client on the tenant from an unauthenticated request, and most tenants never open it.
+    /// </summary>
+    [Column("allow_public_docs")]
+    public bool AllowPublicDocs { get; set; }
+
+    /// <summary>
+    /// SHA-256 hex digest (<see cref="Security.CredentialHash.ShareToken"/>) of the unguessable
+    /// token for the tenant's public read-only dashboard, served at {token}.share.{baseDomain}.
+    /// Null when public sharing is disabled. The token itself is never stored: it is returned once
+    /// when the link is generated and resolved thereafter by digest. Rotating replaces the value
+    /// and evicts the resolution cache, so the previous link stops resolving.
     /// </summary>
     [Column("share_token")]
-    [MaxLength(32)]
+    [MaxLength(Security.CredentialHash.HexLength)]
     public string? ShareToken { get; set; }
 
     /// <summary>When <see cref="ShareToken"/> was last minted or rotated.</summary>

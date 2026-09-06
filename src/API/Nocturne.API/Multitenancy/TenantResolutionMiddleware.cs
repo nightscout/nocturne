@@ -4,6 +4,8 @@ using Microsoft.Extensions.Options;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.API.Extensions;
 
 namespace Nocturne.API.Multitenancy;
 
@@ -35,22 +37,73 @@ public class TenantResolutionMiddleware
     }
 
     /// <summary>
+    /// A path served without a resolved tenant, optionally narrowed to a single HTTP method.
+    /// </summary>
+    /// <param name="Path">The path, matched case-insensitively.</param>
+    /// <param name="Method">
+    /// The only method admitted tenantlessly, or null to admit every method. Naming a method
+    /// matters where a path carries both a cross-tenant read and a tenant-affecting write.
+    /// </param>
+    /// <param name="Prefix">
+    /// Whether <paramref name="Path"/> admits everything beneath it. Needed by controllers whose
+    /// routes carry an id segment; prefer an exact entry, which cannot admit a route added later.
+    /// </param>
+    public readonly record struct TenantlessPath(
+        string Path, string? Method = null, bool Prefix = false)
+    {
+        /// <summary>Admit every method on a path, which is the case for most of the list.</summary>
+        public static implicit operator TenantlessPath(string path) => new(path);
+
+        public bool Matches(string path, string? method) =>
+            (Prefix
+                ? path.StartsWith(Path, StringComparison.OrdinalIgnoreCase)
+                : Path.Equals(path, StringComparison.OrdinalIgnoreCase)) &&
+            (Method is null || method is null ||
+             Method.Equals(method, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// The operator's own support and billing links, read from configuration alone. Named once
+    /// because it is on both lists below and a typo would silently split them.
+    /// </summary>
+    private static readonly TenantlessPath SupportConfigPath =
+        new("/api/v4/support/config", HttpMethods.Get);
+
+    /// <summary>
     /// Paths that operate across all tenants and don't require a resolved tenant context.
     /// These are allowed through even when no matching tenant is found.
     /// </summary>
-    private static readonly string[] TenantlessAllowedPaths =
+    private static readonly TenantlessPath[] TenantlessAllowedPaths =
     [
-        // Aspire ServiceDefaults health endpoints — must never be tenant-gated;
-        // they are used by Kubernetes liveness/readiness probes and external
-        // monitoring. Returning 503 on these when no tenant exists causes
-        // liveness probes to kill the pod, preventing first-time setup.
+        // The two paths MapDefaultEndpoints maps, and the only two the deployment probes.
+        // Returning 503 on these when no tenant exists causes liveness probes to kill the pod,
+        // preventing first-time setup.
         "/health",
         "/alive",
-        "/ready",
         "/api/v4/status",
         "/api/v4/me/tenants/validate-slug",
-        "/api/v4/admin/tenants/validate-slug",
-        "/api/metadata",
+        // Cross-tenant caregiver overview: aggregates across the subject's tenants,
+        // so it must be reachable from the apex in multi-tenant deployments. The
+        // service pins each tenant itself and never uses the request-scoped context.
+        "/api/v4/me/tenants/overview",
+        // The subject's tenant list, which drives the tenantless dashboard's navigation
+        // and the tenant switcher. Keyed on SubjectId alone, like the overview above.
+        // GET only: the same path takes a POST that creates a tenant, and self-service
+        // provisioning is a tenant-affecting write with no place on a host that resolves
+        // no tenant — in the hosted deployment it goes through billing instead.
+        new TenantlessPath("/api/v4/me/tenants", HttpMethods.Get),
+        // The caller's own global subject-role scopes. Tenantless, MemberScopeMiddleware
+        // returns before applying tenant-derived scopes, so this reports whatever the JWT
+        // carries — empty for an ordinary subject, non-empty for one holding global roles.
+        // Caller-scoped either way, so nothing about a tenant is exposed.
+        "/api/v4/me/permissions",
+        // Units, time format, region, colour theme, chart style, language — stored on the subject
+        // (subjects.preferences / subjects.preferred_language) and read by SubjectId alone. Not
+        // only presentation: the dashboard tiles render glucose in the units held here, so a 404
+        // shows an mmol/L user their children's readings in mg/dL.
+        "/api/v4/user/preferences",
+        // A host that resolves no tenant still needs somewhere to send the visitor.
+        SupportConfigPath,
         "/api/v4/chat-identity/directory/resolve",
         "/api/v4/chat-identity/directory/pending-links",
         // OIDC login can be initiated from the apex (no subdomain) — e.g. the
@@ -59,33 +112,134 @@ public class TenantResolutionMiddleware
         // so login must not be tenant-gated. On a subdomain the tenant still resolves
         // normally; this only allows the apex (tenantless) case through.
         "/api/auth/oidc/login",
+        // The provider list the login page renders its buttons from. On a tenantless host the
+        // identity-provider path is the only one that can complete a sign-in, so a 404 here
+        // leaves the page with no sign-in control at all. The data is already served
+        // tenantlessly by the allow-listed login above, which reads the same enabled-provider
+        // set; the providers themselves are not tenant-scoped. GET is the only verb served.
+        new TenantlessPath("/api/auth/oidc/providers", HttpMethods.Get),
         // The OIDC callback is the registered redirect_uri (apex). For apex-initiated
         // logins the state carries no TenantSlug, so OidcCallbackRedirectMiddleware
         // can't bounce it to a subdomain and it must process here. The session it
         // issues is subject-scoped (no tenant needed). Subdomain-originated callbacks
         // are already redirected to their subdomain before reaching this point.
         "/api/auth/oidc/callback",
+        // Session introspection, called on every page load — including on the tenantless
+        // dashboard host, which would otherwise 404 before rendering anything. The session
+        // it reports is subject-scoped; the only tenant-dependent field (member roles) is
+        // already skipped when no tenant is resolved.
+        "/api/auth/oidc/session",
+        // Sign-out from the tenantless dashboard. Revokes the refresh token and clears the
+        // session cookies, neither of which is tenant-scoped.
+        "/api/auth/oidc/logout",
+        // Session refresh, driven by the client's expiry timer on every host — including the
+        // tenantless dashboard, where a 404 would flip the shell to a signed-out UI while the
+        // server-side session is still valid. Subject-scoped like the two above: it validates
+        // the refresh token, reads global subject roles, and mints an access token with no
+        // tenant pin, so it can confer no tenant-scoped authority. POST only, matching the
+        // only verb the endpoint serves.
+        new TenantlessPath("/api/auth/oidc/refresh", HttpMethods.Post),
+        // The subject's own sign-in factors and linked identities, as /settings/account manages
+        // them. Each is keyed on the caller's SubjectId, and the tables behind them
+        // (passkey_credentials, recovery_codes, totp_credentials, subject_oidc_identities,
+        // subject_avatars) carry no tenant column — one person's credential is the same credential
+        // in every tenant they belong to, so managing it from a tenant subdomain was arbitrary.
+        //
+        // The sign-in ceremonies are deliberately absent. TotpController.Login gates on membership
+        // of the resolved tenant and the passkey login/* paths likewise, so authenticating on a
+        // tenantless host remains identity-provider-only; these enrol and revoke factors for a
+        // caller who is already authenticated.
+        new TenantlessPath("/api/auth/passkey/register/options", HttpMethods.Post),
+        new TenantlessPath("/api/auth/passkey/register/complete", HttpMethods.Post),
+        new TenantlessPath("/api/auth/passkey/recovery/status", HttpMethods.Get),
+        new TenantlessPath("/api/auth/passkey/recovery/regenerate", HttpMethods.Post),
+        new TenantlessPath("/api/auth/totp/setup", HttpMethods.Post),
+        new TenantlessPath("/api/auth/totp/verify-setup", HttpMethods.Post),
+        new TenantlessPath("/api/auth/totp", HttpMethods.Get),
+        // Revoking one authenticator, whose route carries its id. Narrowed to DELETE so the sibling
+        // /login, which gates on membership of the resolved tenant, is not admitted under the POST
+        // it is served on. Asked without a method this prefix answers for its own DELETE, so a
+        // coverage sweep sees /login as reachable; routing has no DELETE there to reach.
+        new TenantlessPath("/api/auth/totp/", HttpMethods.Delete, Prefix: true),
+        // GET the list and DELETE one by id; nothing else is routed beneath either.
+        new TenantlessPath("/api/auth/passkey/credentials", Prefix: true),
+        new TenantlessPath("/api/auth/oidc/link/identities", Prefix: true),
+        // Linking an identity is a full-page navigation, so a 404 loses the page rather than
+        // failing one control. It reads its tenant slug as a nullable off HttpContext.Items purely
+        // to route the callback home, which on a tenantless host is where the caller already is —
+        // the same shape as the login/callback pair above.
+        new TenantlessPath("/api/auth/oidc/link", HttpMethods.Get),
+        new TenantlessPath("/api/auth/oidc/link/callback", HttpMethods.Get),
+        // GET is [AllowAnonymous] and serves any subject's picture by id on every tenant host
+        // already; it is admitted here because the page renders through it.
+        "/api/v4/me/avatar",
+
+        // Cross-tenant by design: these operate on arbitrary tenants by id and so cannot rely on
+        // subdomain resolution at all.
+        //
+        // Platform-admin tenant-access grant: minted at the apex (the operator is not on any
+        // tenant subdomain yet); the target tenant is resolved from the query string.
+        new TenantlessPath("/api/auth/platform-access", Prefix: true),
+        new TenantlessPath("/api/v4/admin/demo/", Prefix: true),
+        new TenantlessPath("/api/v4/admin/platform-settings", Prefix: true),
+        new TenantlessPath("/api/v4/admin/tenants", Prefix: true),
+        new TenantlessPath("/api/v4/dev-only/", Prefix: true),
+        new TenantlessPath("/api/v4/platform/", Prefix: true),
+        new TenantlessPath("/api/v4/setup/", Prefix: true),
+        // Cross-tenant overview hub: authorizes a subject in-band and joins per-tenant groups
+        // itself, so the connection is negotiated from the apex with no tenant. Prefix, not
+        // exact path: SignalR appends /negotiate to the hub path.
+        new TenantlessPath("/hubs/overview", Prefix: true),
     ];
 
     /// <summary>
-    /// Prefixes that are cross-tenant by design and must never be gated on
-    /// a resolved tenant. Admin tenant management (create, provision, member
-    /// management) operates on arbitrary tenants by ID and cannot rely on
-    /// subdomain resolution.
+    /// The slice of <see cref="TenantlessAllowedPaths"/> still served when the resolved tenant is
+    /// inactive. None of these reads tenant data.
     /// </summary>
-    private static readonly string[] TenantlessAllowedPrefixes =
+    /// <remarks>
+    /// <c>/api/v4/status</c> is deliberately not here: it answers for the tenant, and a 200 there
+    /// would have the web shell render the app over an API refusing every read.
+    /// </remarks>
+    private static readonly TenantlessPath[] InactiveTenantAllowedPaths =
     [
-        // Platform-admin tenant-access grant: minted at the apex (operator is not on
-        // any tenant subdomain yet); the target tenant is resolved from the query string.
-        "/api/auth/platform-access",
-        "/api/auth/passkey/setup/",
-        "/api/v4/admin/demo/",
-        "/api/v4/admin/platform-settings",
-        "/api/v4/admin/tenants",
-        "/api/v4/dev-only/",
-        "/api/v4/platform/",
-        "/api/v4/setup/",
+        "/health",
+        "/alive",
+        SupportConfigPath,
     ];
+
+    /// <summary>
+    /// The machine-readable code an inactive tenant's refusal carries, alongside
+    /// <c>setup_required</c> on the fresh-install 503.
+    /// </summary>
+    public const string TenantInactiveCode = "tenant_inactive";
+
+    /// <summary>
+    /// The entries themselves, for the guard that asserts each one still names a routed endpoint.
+    /// </summary>
+    public static IReadOnlyList<TenantlessPath> TenantlessPaths => TenantlessAllowedPaths;
+
+    /// <summary>The inactive-tenant slice, for the guard that asserts it is one.</summary>
+    public static IReadOnlyList<TenantlessPath> InactiveTenantPaths => InactiveTenantAllowedPaths;
+
+    /// <summary>
+    /// Whether a request is served without a resolved tenant. Public so the authorization
+    /// guard tests can enumerate the same surface rather than restating these lists.
+    /// </summary>
+    /// <param name="path">The request path.</param>
+    /// <param name="method">
+    /// The request method. Omit it to ask whether the path is reachable tenantlessly under any
+    /// method, which is what a coverage sweep over the whole surface wants.
+    /// </param>
+    public static bool IsTenantlessAllowed(string path, string? method = null) =>
+        TenantlessAllowedPaths.Any(p => p.Matches(path, method));
+
+    /// <summary>
+    /// Whether a request is served even though the resolved tenant is inactive.
+    /// </summary>
+    /// <param name="path">The request path.</param>
+    /// <param name="method">The request method, or null to ask about any method.</param>
+    public static bool IsInactiveTenantAllowed(string path, string? method = null) =>
+        InactiveTenantAllowedPaths.Any(p => p.Matches(path, method));
 
     public async Task InvokeAsync(HttpContext context)
     {
@@ -98,7 +252,7 @@ public class TenantResolutionMiddleware
         // Public share link: {token}.share.{baseDomain}. Resolve the tenant by its share token
         // and mark the request read-only-public. An unknown token returns the same 404 as an
         // unknown slug, so the share host can't be used as a tenant-existence oracle.
-        if (slug != null && TryExtractShareToken(slug, out var shareToken))
+        if (slug != null && SubdomainParser.TryExtractShareToken(slug, out var shareToken))
         {
             var shareCache = context.RequestServices.GetRequiredService<ShareTokenCacheService>();
             var shareTenant = await shareCache.ResolveByTokenAsync(shareToken);
@@ -118,8 +272,8 @@ public class TenantResolutionMiddleware
             }
 
             tenantAccessor.SetTenant(shareTenant);
-            context.Items["TenantContext"] = shareTenant;
-            context.Items["ShareAccess"] = true;
+            context.SetTenantContext(shareTenant);
+            context.SetShareAccess();
             // Mark the share before pinning the scoped context so the carrier is in place
             // for both the scoped-direct and the factory DbContext paths.
             context.RequestServices.GetRequiredService<ICategoryReadContext>().MarkShare();
@@ -129,9 +283,7 @@ public class TenantResolutionMiddleware
         }
 
         var path = context.Request.Path.Value ?? "";
-        var isTenantlessAllowedPath =
-            TenantlessAllowedPaths.Any(p => path.Equals(p, StringComparison.OrdinalIgnoreCase)) ||
-            TenantlessAllowedPrefixes.Any(p => path.StartsWith(p, StringComparison.OrdinalIgnoreCase));
+        var isTenantlessAllowedPath = IsTenantlessAllowed(path, context.Request.Method);
 
         // On the apex (no subdomain), GET /api/v4/status is tenant-scoped yet listed as
         // tenantless-allowed (so a fresh apex doesn't 404). On a single-tenant install,
@@ -145,7 +297,7 @@ public class TenantResolutionMiddleware
             if (soleStatusTenant != null)
             {
                 tenantAccessor.SetTenant(soleStatusTenant);
-                context.Items["TenantContext"] = soleStatusTenant;
+                context.SetTenantContext(soleStatusTenant);
                 PinTenantOnScopedDbContext(context, soleStatusTenant.TenantId);
                 await _next(context);
                 return;
@@ -189,7 +341,7 @@ public class TenantResolutionMiddleware
 
             // Single tenant: auto-resolve from the apex domain.
             tenantAccessor.SetTenant(soleTenant);
-            context.Items["TenantContext"] = soleTenant;
+            context.SetTenantContext(soleTenant);
             PinTenantOnScopedDbContext(context, soleTenant.TenantId);
             await _next(context);
             return;
@@ -213,13 +365,21 @@ public class TenantResolutionMiddleware
 
         if (!tenantContext.IsActive)
         {
+            if (IsInactiveTenantAllowed(path, context.Request.Method))
+            {
+                await _next(context);
+                return;
+            }
+
             _logger.LogWarning("Tenant '{Slug}' is inactive", slug);
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsJsonAsync(new { error = TenantInactiveCode });
             return;
         }
 
         tenantAccessor.SetTenant(tenantContext);
-        context.Items["TenantContext"] = tenantContext;
+        context.SetTenantContext(tenantContext);
         PinTenantOnScopedDbContext(context, tenantContext.TenantId);
 
         await _next(context);
@@ -245,28 +405,35 @@ public class TenantResolutionMiddleware
         // pre-auth) and leaves the CSV null, so a share reading PHI on this path is denied.
         db.IsShareContext = context.RequestServices.GetService<ICategoryReadContext>()?.IsShare == true;
         db.VisibleCategories = null;
+        db.ShareFullHistory = false;
     }
 
-    private const string ShareSubdomainLabel = "share";
+
+    /// <summary>Cache key holding the resolved <see cref="TenantContext"/> for a slug.</summary>
+    public static string TenantCacheKey(string slug) => $"tenant:{slug}";
+
+    /// <summary>Cache key holding the sole-tenant context used to resolve the apex.</summary>
+    public const string SoleTenantCacheKey = "tenant:__sole__";
 
     /// <summary>
-    /// Detects the public-share host form <c>{token}.share</c> (the subdomain left of the base
-    /// domain) and extracts the token. Returns false for ordinary tenant slugs, empty tokens,
-    /// or nested forms — slugs and tokens never contain dots. The token is lower-cased because
-    /// hostnames are case-insensitive and generated tokens are always lowercase.
+    /// Drops the cached <see cref="TenantContext"/> for a tenant, so the next request rebuilds it
+    /// from the row.
     /// </summary>
-    private static bool TryExtractShareToken(string subdomain, out string token)
+    /// <remarks>
+    /// Call after writing any column the context carries. <see cref="TenantContext.IsDemo"/> in
+    /// particular gates <c>GET /api/v4/demo/session</c> and the <c>isDemo</c> field on
+    /// <c>/api/v4/status</c>, so without this a tenant stays non-demo for
+    /// <see cref="CacheDuration"/> after being flagged — a login page with no passkey and no
+    /// working demo sign-in.
+    /// <para>
+    /// Both keys go: the apex resolves single-tenant installs through
+    /// <see cref="SoleTenantCacheKey"/>, which holds a copy of the same context.
+    /// </para>
+    /// </remarks>
+    public static void EvictTenant(IMemoryCache cache, string slug)
     {
-        const string suffix = "." + ShareSubdomainLabel;
-        if (subdomain.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
-        {
-            token = subdomain[..^suffix.Length].ToLowerInvariant();
-            if (token.Length > 0 && !token.Contains('.'))
-                return true;
-        }
-
-        token = string.Empty;
-        return false;
+        cache.Remove(TenantCacheKey(slug));
+        cache.Remove(SoleTenantCacheKey);
     }
 
     /// <summary>
@@ -274,7 +441,7 @@ public class TenantResolutionMiddleware
     /// </summary>
     private async Task<TenantContext?> ResolveTenantBySlugAsync(IServiceProvider services, string slug)
     {
-        var cacheKey = $"tenant:{slug}";
+        var cacheKey = TenantCacheKey(slug);
 
         if (_cache.TryGetValue(cacheKey, out TenantContext? cached))
             return cached;
@@ -294,24 +461,28 @@ public class TenantResolutionMiddleware
     }
 
     /// <summary>
-    /// Checks whether any tenant exists at all (used to distinguish "no tenants
-    /// yet" from "tenant not found" on the apex domain).
+    /// Checks whether any tenant a caller could be served exists at all (used to distinguish
+    /// "no tenants yet" from "tenant not found" on the apex domain).
     /// </summary>
     private async Task<bool> AnyTenantExistsAsync(IServiceProvider services)
     {
         var factory = services.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
         await using var context = await factory.CreateDbContextAsync();
-        return await context.Tenants.AsNoTracking().AnyAsync();
+        return await context.Tenants.AsNoTracking().ExcludeDemo().AnyAsync();
     }
 
     /// <summary>
-    /// Returns the sole active tenant if exactly one exists, enabling single-tenant
-    /// mode where the apex domain auto-resolves without a subdomain.
-    /// Returns null when zero or multiple tenants exist.
+    /// Returns the install's <see cref="SoleTenantQuery.SoleTenantAsync">sole servable tenant</see>,
+    /// enabling single-tenant mode where the apex domain auto-resolves without a subdomain, or null
+    /// when there is none or several.
     /// </summary>
+    /// <remarks>
+    /// A demo tenant is an ordinary active tenant, so it would otherwise be counted here; see
+    /// <see cref="DemoExclusionFilter"/>.
+    /// </remarks>
     private async Task<TenantContext?> GetSoleTenantAsync(IServiceProvider services)
     {
-        var cacheKey = "tenant:__sole__";
+        var cacheKey = SoleTenantCacheKey;
 
         if (_cache.TryGetValue(cacheKey, out TenantContext? cached))
             return cached;
@@ -319,16 +490,11 @@ public class TenantResolutionMiddleware
         var factory = services.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
         await using var context = await factory.CreateDbContextAsync();
 
-        var tenants = await context.Tenants.AsNoTracking()
-            .Where(t => t.IsActive)
-            .OrderBy(t => t.Id)
-            .Take(2)
-            .ToListAsync();
+        var tenant = await context.Tenants.SoleTenantAsync();
 
-        if (tenants.Count != 1)
+        if (tenant is null)
             return null;
 
-        var tenant = tenants[0];
         var tenantContext = new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive, tenant.IsDemo);
         _cache.Set(cacheKey, tenantContext, CacheDuration);
         return tenantContext;

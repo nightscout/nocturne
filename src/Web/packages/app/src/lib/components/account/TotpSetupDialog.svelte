@@ -43,7 +43,7 @@
 </script>
 
 <Dialog.Root bind:open>
-  <Dialog.Content class="max-w-md">
+  <Dialog.Content class="max-w-md" data-testid="totp-setup-dialog">
     <Dialog.Header>
       <Dialog.Title>Set up authenticator app</Dialog.Title>
       <Dialog.Description>

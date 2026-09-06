@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Represents both human users and automated devices that can authenticate
 /// </summary>
 [Table("subjects")]
-public class SubjectEntity
+public class SubjectEntity : IEntityTimestamped
 {
     /// <summary>
     /// Primary key - UUID Version 7 for time-ordered, globally unique identification
@@ -46,6 +46,23 @@ public class SubjectEntity
     public string? AccessTokenPrefix { get; set; }
 
     /// <summary>
+    /// Legacy Nightscout subject digest (40-char SHA-1 hex of <c>sha1(api_secret) + mongo _id</c>),
+    /// captured at migration time. Only ever populated for subjects imported from a legacy
+    /// Nightscout instance — natively-created subjects use the strong random token + SHA-256
+    /// <see cref="AccessTokenHash"/> scheme and leave this null.
+    /// <para>
+    /// Legacy Nightscout derives a subject's access token as <c>{name-abbrev}-{first 16 chars of
+    /// this digest}</c> and authenticates by prefix-matching the part after the last dash against
+    /// the digest. Storing the digest lets Nocturne reproduce that matching 1:1 for migrated
+    /// tokens (see the legacy fallback in the auth handlers) so existing AAPS / legacy client
+    /// setups keep working without re-issuing tokens.
+    /// </para>
+    /// </summary>
+    [MaxLength(40)]
+    [Column("legacy_token_digest")]
+    public string? LegacyTokenDigest { get; set; }
+
+    /// <summary>
     /// Email address (from OIDC claims or manually set)
     /// </summary>
     [MaxLength(255)]
@@ -69,6 +86,18 @@ public class SubjectEntity
     /// </summary>
     [Column("is_system_subject")]
     public bool IsSystemSubject { get; set; }
+
+    /// <summary>
+    /// Whether this subject is a demo tenant's shared visitor account.
+    /// </summary>
+    /// <remarks>
+    /// Anyone can obtain a session for it (see <c>DemoSessionController</c>), so it is
+    /// authenticated but stands for no one. Endpoints that treat "authenticated" as
+    /// "a person who signed up" — creating a tenant, accepting an invite, requesting
+    /// membership — must refuse it; see <c>DenyDemoSubjectAttribute</c>.
+    /// </remarks>
+    [Column("is_demo_subject")]
+    public bool IsDemoSubject { get; set; }
 
     /// <summary>
     /// System tracking: when record was created
@@ -101,6 +130,15 @@ public class SubjectEntity
     [MaxLength(10)]
     [Column("preferred_language")]
     public string? PreferredLanguage { get; set; }
+
+    /// <summary>
+    /// Per-user display preferences (glucose units, time format, theme, chart style, etc.)
+    /// serialized as a JSONB blob (<see cref="Core.Models.Configuration.UserDisplayPreferences"/>).
+    /// Stored on the subject so preferences follow the user across devices and tenants.
+    /// Null until the user first saves a preference.
+    /// </summary>
+    [Column("preferences")]
+    public string? Preferences { get; set; }
 
     /// <summary>
     /// Approval status for access requests (e.g., "Approved", "Pending", "Denied")

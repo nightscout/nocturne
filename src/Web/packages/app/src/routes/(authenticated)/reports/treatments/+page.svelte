@@ -40,13 +40,7 @@
     FileText,
     Smartphone,
   } from "lucide-svelte";
-  import {
-    formatInsulinDisplay,
-    formatCarbDisplay,
-    formatDateTimeCompact,
-    bg,
-    bgLabel,
-  } from "$lib/utils/formatting";
+  import { bg, bgLabel, formatCarbDisplay, formatDateTimeCompact, formatInsulinDisplay, formatNumber, formatNumericDate } from "$lib/utils/formatting";
   import { toast } from "svelte-sonner";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
@@ -66,7 +60,7 @@
 
   const reportsResource = contextResource(
     () => getTreatmentsData(reportsParams.dateRangeInput),
-    { errorTitle: "Error Loading Treatments" }
+    { errorTitle: "Error Loading Treatments", dateParams: reportsParams }
   );
 
   const allRows = $derived(
@@ -79,12 +73,7 @@
       basalInjections: reportsResource.current?.basalInjections,
     })
   );
-  const dateRange = $derived(
-    reportsResource.current?.dateRange ?? {
-      from: new Date().toISOString(),
-      to: new Date().toISOString(),
-    }
-  );
+  const dateInfo = $derived(reportsResource.date);
 
   const treatmentSummary = $derived(
     reportsResource.current?.treatmentSummary ??
@@ -216,27 +205,29 @@
   let filteredCounts = $derived(countEntryRecords(filteredRows));
 
   // Handlers
-  function handleCategoryChange(category: EntryCategoryId | "all") {
-    activeCategory = category;
+  // Filters are reflected in the URL via SvelteKit shallow routing, so a filtered
+  // log can be refreshed and shared and `page.url` stays authoritative (the edit
+  // dialog reads it to keep its `?edit=` param in sync).
+  function setFilterParam(name: string, value: string) {
     const url = new URL(page.url);
-    if (category === "all") {
-      url.searchParams.delete("category");
-    } else {
-      url.searchParams.set("category", category);
-    }
-    // Use SvelteKit shallow routing so `page.url` stays authoritative (the edit
-    // dialog reads it to keep its `?edit=` param in sync).
+    if (value) url.searchParams.set(name, value);
+    else url.searchParams.delete(name);
     replaceState(url, page.state);
   }
 
-  function handleSearch(e: Event) {
-    const target = e.target as HTMLInputElement;
-    searchQuery = target.value;
+  function setCategory(category: EntryCategoryId | "all") {
+    activeCategory = category;
+    setFilterParam("category", category === "all" ? "" : category);
+  }
+
+  function setSearch(value: string) {
+    searchQuery = value;
+    setFilterParam("search", value.trim());
   }
 
   function clearFilters() {
-    searchQuery = "";
-    activeCategory = "all";
+    setSearch("");
+    setCategory("all");
   }
 
   function confirmDelete(row: EntryRecord) {
@@ -373,32 +364,33 @@
     >
       <Calendar class="h-4 w-4" />
       <span>
-        {new Date(dateRange.from).toLocaleDateString()} – {new Date(
-          dateRange.to
-        ).toLocaleDateString()}
+        {formatNumericDate(dateInfo.from)} – {formatNumericDate(dateInfo.to)}
       </span>
       <span class="text-muted-foreground/50">•</span>
-      <span>{allRows.length.toLocaleString()} records</span>
+      <span>{formatNumber(allRows.length)} records</span>
     </div>
     <h1 class="text-center text-3xl font-bold">Treatment Log</h1>
     <p class="mx-auto max-w-2xl text-center text-muted-foreground">
       Review and manage your insulin doses, carb entries, BG checks, notes, and
-      device events. Use filters to find specific records.
+      device events.<span class="print:hidden"> Use filters to find specific
+        records.</span>
     </p>
   </div>
 
   <!-- Summary Stats -->
-  <TreatmentStatsCard {treatmentSummary} counts={filteredCounts} {dateRange} />
+  <TreatmentStatsCard {treatmentSummary} counts={filteredCounts} dayCount={dateInfo.dayCount} />
 
-  <!-- Category Tabs -->
-  <TreatmentCategoryTabs
-    {activeCategory}
-    categoryCounts={counts}
-    onChange={handleCategoryChange}
-  />
+  <!-- Category Tabs — view toggle, print chaff -->
+  <div class="print:hidden">
+    <TreatmentCategoryTabs
+      {activeCategory}
+      categoryCounts={counts}
+      onChange={setCategory}
+    />
+  </div>
 
-  <!-- Filters Panel -->
-  <Card.Root>
+  <!-- Filters Panel — search + add controls, print chaff -->
+  <Card.Root class="print:hidden">
     <Card.Content class="@container p-4">
       <div
         class="flex flex-col gap-4 @lg:flex-row @lg:items-end @lg:justify-between"
@@ -411,7 +403,8 @@
               type="text"
               placeholder="Search records..."
               value={searchQuery}
-              oninput={handleSearch}
+              oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
+                setSearch(e.currentTarget.value)}
             />
           </div>
         </div>
@@ -460,7 +453,7 @@
             <Badge variant="secondary" class="gap-1">
               {ENTRY_CATEGORIES[activeCategory].name}
               <button
-                onclick={() => (activeCategory = "all")}
+                onclick={() => setCategory("all")}
                 class="ml-1 hover:text-foreground"
               >
                 <X class="h-3 w-3" />
@@ -472,7 +465,7 @@
             <Badge variant="outline" class="gap-1">
               "{searchQuery}"
               <button
-                onclick={() => (searchQuery = "")}
+                onclick={() => setSearch("")}
                 class="ml-1 hover:text-foreground"
               >
                 <X class="h-3 w-3" />
@@ -487,22 +480,22 @@
   <!-- Data Table -->
   <Card.Root>
     <Card.Content class="p-0">
-      <TreatmentsDataTable
-        rows={filteredRows}
-        onDelete={confirmDelete}
-        onBulkDelete={confirmBulkDelete}
-        onRowClick={handleRowClick}
-      />
+      <div class="w-full overflow-x-auto print:overflow-visible">
+        <TreatmentsDataTable
+          rows={filteredRows}
+          onDelete={confirmDelete}
+          onBulkDelete={confirmBulkDelete}
+          onRowClick={handleRowClick}
+        />
+      </div>
     </Card.Content>
   </Card.Root>
 
   <!-- Footer -->
   <div class="text-center text-xs text-muted-foreground">
     <p>
-      Report generated from {allRows.length.toLocaleString()} records between
-      {new Date(dateRange.from).toLocaleDateString()} and {new Date(
-        dateRange.to
-      ).toLocaleDateString()}
+      Report generated from {formatNumber(allRows.length)} records between
+      {formatNumericDate(dateInfo.from)} and {formatNumericDate(dateInfo.to)}
     </p>
   </div>
 </div>

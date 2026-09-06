@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -19,7 +20,8 @@ internal sealed class AlertAcknowledgementService(
     IDbContextFactory<NocturneDbContext> contextFactory,
     ITenantAccessor tenantAccessor,
     ISignalRBroadcastService broadcastService,
-    ILogger<AlertAcknowledgementService> logger)
+    ILogger<AlertAcknowledgementService> logger,
+    IAuditContext? auditContext = null)
     : IAlertAcknowledgementService
 {
     /// <summary>
@@ -27,6 +29,9 @@ internal sealed class AlertAcknowledgementService(
     /// set from the supplied tenant or the ambient <see cref="ITenantAccessor"/>. Necessary because
     /// <see cref="IDbContextFactory{TContext}.CreateDbContextAsync"/> hands back a raw context
     /// (TenantId == Guid.Empty) which the global tenant query filter then uses to exclude every row.
+    /// The scope's audit context is carried too, as <c>ITenantDbContextFactory</c> does: the pooled
+    /// context is leased with the property cleared, and an auto-acknowledgement made during a
+    /// connector sync would otherwise fall back to the enclosing HTTP request's actor.
     /// </summary>
     private async Task<NocturneDbContext> CreateContextForAsync(Guid tenantId, CancellationToken ct)
     {
@@ -34,12 +39,15 @@ internal sealed class AlertAcknowledgementService(
         db.TenantId = tenantId == Guid.Empty
             ? (tenantAccessor.IsResolved ? tenantAccessor.TenantId : Guid.Empty)
             : tenantId;
+        db.AuditContext = auditContext;
         return db;
     }
 
     /// <inheritdoc/>
     /// <remarks>
-    /// Loads all open excursions (where <c>EndedAt IS NULL</c>), applies the
+    /// Loads all still-active excursions (<c>EndedAt</c> null or in the future — device_action
+    /// test fires carry a short future <c>EndedAt</c> so they surface in the active-intents
+    /// snapshot; see <see cref="AlertDeliveryService.TestFireAsync"/>), applies the
     /// per-excursion mutation via <see cref="ApplyAcknowledgement"/>, saves once,
     /// and broadcasts a single roll-up <c>alert_acknowledged</c> event via
     /// <see cref="ISignalRBroadcastService"/>. Broadcast failures are swallowed
@@ -50,8 +58,10 @@ internal sealed class AlertAcknowledgementService(
         await using var db = await CreateContextForAsync(tenantId, ct);
         var now = DateTime.UtcNow;
 
+        // EndedAt > now matches the active-intents snapshot filter: a device_action test fire
+        // keeps the tray flashing for its window, so it must be acknowledgeable during it.
         var excursions = await db.AlertExcursions
-            .Where(e => e.TenantId == tenantId && e.EndedAt == null)
+            .Where(e => e.TenantId == tenantId && (e.EndedAt == null || e.EndedAt > now))
             .ToListAsync(ct);
 
         if (excursions.Count == 0)
@@ -106,11 +116,12 @@ internal sealed class AlertAcknowledgementService(
 
         // Tenant filter is implicit via db.TenantId; the explicit TenantId == tenantId clause is
         // defence-in-depth so a passed tenantId of Guid.Empty (never matches a real row) cannot
-        // leak across tenants.
+        // leak across tenants. EndedAt > now matches the active-intents snapshot filter so a
+        // device_action test fire (future EndedAt) is acknowledgeable during its window.
         var excursion = await db.AlertExcursions
             .FirstOrDefaultAsync(e => e.Id == excursionId
                                        && e.TenantId == tenantId
-                                       && e.EndedAt == null, ct);
+                                       && (e.EndedAt == null || e.EndedAt > now), ct);
 
         if (excursion is null)
         {

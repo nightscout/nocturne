@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
@@ -25,16 +26,26 @@ namespace Nocturne.API.Services.Alerts.Evaluators;
 ///
 /// Legacy <see cref="AlertConditionType.OverrideActive"/> rules continue to use
 /// <see cref="OverrideActiveEvaluator"/> unchanged for back-compat.
+///
+/// A payload whose <c>category</c> no longer maps to a <see cref="StateSpanCategory"/> member
+/// (e.g. a stored <c>Sleep</c> rule left behind after that category was removed) fails to
+/// deserialize. Rather than let the <see cref="JsonException"/> propagate — which would throw on
+/// every evaluation cycle — the rule is skipped (evaluates to false) and a warning is logged.
+/// The data migration converts such <c>Sleep</c> rules to the dedicated
+/// <see cref="AlertConditionType.SleepSessionActive"/> condition; this guard covers any that
+/// predate or bypass the migration.
 /// </remarks>
 /// <seealso cref="IConditionEvaluator"/>
 public sealed class StateSpanActiveEvaluator : IConditionEvaluator
 {
     private readonly TimeProvider _timeProvider;
+    private readonly ILogger<StateSpanActiveEvaluator> _logger;
 
     /// <summary>Initialises a new <see cref="StateSpanActiveEvaluator"/>.</summary>
-    public StateSpanActiveEvaluator(TimeProvider timeProvider)
+    public StateSpanActiveEvaluator(TimeProvider timeProvider, ILogger<StateSpanActiveEvaluator> logger)
     {
         _timeProvider = timeProvider;
+        _logger = logger;
     }
 
     /// <inheritdoc/>
@@ -43,7 +54,19 @@ public sealed class StateSpanActiveEvaluator : IConditionEvaluator
     /// <inheritdoc/>
     public Task<bool> EvaluateAsync(string conditionParamsJson, SensorContext context, CancellationToken ct)
     {
-        var condition = JsonSerializer.Deserialize<StateSpanActiveCondition>(conditionParamsJson, EvaluatorJson.Options);
+        StateSpanActiveCondition? condition;
+        try
+        {
+            condition = JsonSerializer.Deserialize<StateSpanActiveCondition>(conditionParamsJson, EvaluatorJson.Options);
+        }
+        catch (JsonException ex)
+        {
+            // An unparseable/removed category (e.g. a legacy "Sleep" rule) must not throw every
+            // cycle — skip the rule and warn so the stale payload is visible in logs.
+            _logger.LogWarning(ex, "Skipping state-span-active rule with unparseable condition params");
+            return Task.FromResult(false);
+        }
+
         if (condition is null)
             return Task.FromResult(false);
 

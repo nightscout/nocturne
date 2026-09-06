@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Controllers.V4.Base;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
 
@@ -41,6 +42,9 @@ public class SystemEventsController : ControllerBase
         [FromQuery] int skip = 0,
         CancellationToken cancellationToken = default)
     {
+        count = V4ReadLimits.ClampLimit(count);
+        skip = V4ReadLimits.ClampOffset(skip);
+
         var fromMills = from.HasValue ? new DateTimeOffset(from.Value, TimeSpan.Zero).ToUnixTimeMilliseconds() : (long?)null;
         var toMills = to.HasValue ? new DateTimeOffset(to.Value, TimeSpan.Zero).ToUnixTimeMilliseconds() : (long?)null;
         var events = await _repository.GetSystemEventsAsync(

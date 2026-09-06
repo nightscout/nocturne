@@ -1,10 +1,13 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Authorization;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.API.Extensions;
 
 namespace Nocturne.API.Middleware.Handlers;
 
@@ -21,20 +24,29 @@ public class ApiKeyHandler : IAuthHandler
     public string Name => "ApiKeyHandler";
 
     private readonly IDbContextFactory<NocturneDbContext> _dbContextFactory;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<ApiKeyHandler> _logger;
 
     public ApiKeyHandler(
         IDbContextFactory<NocturneDbContext> dbContextFactory,
+        TimeProvider timeProvider,
         ILogger<ApiKeyHandler> logger)
     {
         _dbContextFactory = dbContextFactory;
+        _timeProvider = timeProvider;
         _logger = logger;
     }
 
     public async Task<AuthResult> AuthenticateAsync(HttpContext context)
     {
-        // 1. Extract value from api-secret header or ?secret= query param
+        // 1. Extract value from the api-secret header or ?secret= query param.
+        //    Accept the api_secret (underscore) spelling too — some legacy Nightscout
+        //    clients send it, and the V1 OpenAPI docs advertise it as accepted.
         var apiKey = context.Request.Headers["api-secret"].FirstOrDefault();
+        if (string.IsNullOrEmpty(apiKey))
+        {
+            apiKey = context.Request.Headers["api_secret"].FirstOrDefault();
+        }
         if (string.IsNullOrEmpty(apiKey))
         {
             apiKey = context.Request.Query["secret"].FirstOrDefault();
@@ -45,7 +57,7 @@ public class ApiKeyHandler : IAuthHandler
             return AuthResult.Skip();
 
         // 3. Resolve tenant context
-        if (context.Items["TenantContext"] is not TenantContext tenantCtx)
+        if (context.GetTenantContext() is not { } tenantCtx)
         {
             _logger.LogWarning("API key provided but no tenant context resolved");
             return AuthResult.Failure("API key requires a resolved tenant");
@@ -57,43 +69,30 @@ public class ApiKeyHandler : IAuthHandler
 
         if (apiKey.StartsWith("noc_", StringComparison.Ordinal))
         {
-            tokenHash = DirectGrantTokenHandler.ComputeSha256Hex(apiKey);
+            tokenHash = HashUtils.Sha256Hex(apiKey);
         }
         else
         {
             // Legacy path: the value sent in the header is already a SHA-1 hex hash
-            // (Nightscout clients pre-hash secrets before sending)
-            legacySecretHash = apiKey;
+            // (Nightscout clients pre-hash secrets before sending). Normalize to lowercase
+            // to match the canonical stored form (HashUtils.Sha1Hex is lowercase) — some
+            // clients (e.g. Android) emit uppercase hex, which the case-sensitive column
+            // comparison would otherwise miss.
+            legacySecretHash = apiKey.ToLowerInvariant();
         }
 
         // 5. Query for matching grant
         await using var dbContext = await _dbContextFactory.CreateDbContextAsync();
         dbContext.TenantId = tenantCtx.TenantId;
 
-        OAuthGrantEntity? grant;
+        var activeGrants = DirectGrantTokenHandler.ActiveDirectGrants(
+            dbContext.OAuthGrants.AsNoTracking(),
+            tenantCtx.TenantId,
+            _timeProvider.GetUtcNow().UtcDateTime);
 
-        if (tokenHash != null)
-        {
-            grant = await dbContext.OAuthGrants
-                .AsNoTracking()
-                .IgnoreQueryFilters()
-                .Where(g => g.TokenHash == tokenHash
-                         && g.TenantId == tenantCtx.TenantId
-                         && g.GrantType == OAuthGrantTypes.Direct
-                         && g.RevokedAt == null)
-                .FirstOrDefaultAsync();
-        }
-        else
-        {
-            grant = await dbContext.OAuthGrants
-                .AsNoTracking()
-                .IgnoreQueryFilters()
-                .Where(g => g.LegacySecretHash == legacySecretHash
-                         && g.TenantId == tenantCtx.TenantId
-                         && g.GrantType == OAuthGrantTypes.Direct
-                         && g.RevokedAt == null)
-                .FirstOrDefaultAsync();
-        }
+        var grant = tokenHash != null
+            ? await activeGrants.FirstOrDefaultAsync(g => g.TokenHash == tokenHash)
+            : await activeGrants.FirstOrDefaultAsync(g => g.LegacySecretHash == legacySecretHash);
 
         if (grant == null)
         {
@@ -101,10 +100,11 @@ public class ApiKeyHandler : IAuthHandler
             return AuthResult.Failure("Invalid API key");
         }
 
-        // 6. Fire-and-forget UpdateLastUsedAsync
+        // 6. Fire-and-forget last-used stamp
         var ipAddress = context.Connection.RemoteIpAddress?.ToString();
         var userAgent = context.Request.Headers.UserAgent.FirstOrDefault();
-        _ = UpdateLastUsedAsync(grant.Id, tenantCtx.TenantId, ipAddress, userAgent);
+        _ = DirectGrantTokenHandler.RecordLastUsedAsync(
+            _dbContextFactory, _logger, grant.Id, tenantCtx.TenantId, ipAddress, userAgent);
 
         // 7. If this is a migrated full-access secret's first use, nudge rotation to scoped keys.
         //    Minted noc_ tokens also carry a LegacySecretHash (for pre-hashing clients), so the
@@ -118,15 +118,6 @@ public class ApiKeyHandler : IAuthHandler
             }
         }
 
-        // Store hash prefix for read-access audit logging (distinguishes API key readers)
-        var hashSource = grant.TokenHash ?? grant.LegacySecretHash;
-        if (hashSource is { Length: > 0 })
-        {
-            context.Items["ApiSecretHashPrefix"] = hashSource.Length >= 8
-                ? hashSource[..8]
-                : hashSource;
-        }
-
         _logger.LogDebug("API key authentication successful for grant {GrantId}, subject {SubjectId}",
             grant.Id, grant.SubjectId);
 
@@ -137,27 +128,9 @@ public class ApiKeyHandler : IAuthHandler
             SubjectId = grant.SubjectId,
             Scopes = grant.Scopes,
             TokenId = grant.Id,
+            CredentialFingerprint = AuditFingerprint.Of(
+                AuditFingerprint.ApiSecretDomain, grant.TokenHash ?? grant.LegacySecretHash),
         });
-    }
-
-    private async Task UpdateLastUsedAsync(Guid grantId, Guid tenantId, string? ipAddress, string? userAgent)
-    {
-        try
-        {
-            await using var dbContext = await _dbContextFactory.CreateDbContextAsync();
-            dbContext.TenantId = tenantId;
-            await dbContext.OAuthGrants
-                .IgnoreQueryFilters()
-                .Where(g => g.Id == grantId)
-                .ExecuteUpdateAsync(s => s
-                    .SetProperty(g => g.LastUsedAt, DateTime.UtcNow)
-                    .SetProperty(g => g.LastUsedIp, ipAddress)
-                    .SetProperty(g => g.LastUsedUserAgent, userAgent));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to update last used metadata for grant {GrantId}", grantId);
-        }
     }
 
     private async Task SendRotationNudgeAsync(IServiceScopeFactory scopeFactory, OAuthGrantEntity grant)

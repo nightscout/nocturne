@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatLocale } from "$lib/utils/formatting";
   import * as Popover from "$lib/components/ui/popover";
   import { Button } from "$lib/components/ui/button";
   import type { TrackerInstanceDto, TrackerDefinitionDto } from "$lib/api";
@@ -210,7 +211,7 @@
       {/if}
       {#if instance.startedAt}
         <div class="text-xs text-muted-foreground mt-2">
-          Started {new Date(instance.startedAt).toLocaleString([], {
+          Started {new Date(instance.startedAt).toLocaleString(formatLocale(), {
             month: "short",
             day: "numeric",
             hour: "2-digit",

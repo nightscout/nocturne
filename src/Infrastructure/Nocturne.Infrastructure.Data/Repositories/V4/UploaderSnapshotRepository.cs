@@ -1,180 +1,49 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
-using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
 /// Repository for managing uploader snapshot records (point-in-time uploader state) in the database.
+/// Takes the sync-key upsert and keyed delete of <see cref="SyncUpsertRepositoryBase{TModel,TEntity}"/>,
+/// so it keeps only the uploader-specific queries.
 /// </summary>
-public class UploaderSnapshotRepository : IUploaderSnapshotRepository
+public class UploaderSnapshotRepository : SyncUpsertRepositoryBase<UploaderSnapshot, UploaderSnapshotEntity>, IUploaderSnapshotRepository
 {
-    private readonly ITenantDbContextFactory _contextFactory;
-    private readonly ILogger<UploaderSnapshotRepository> _logger;
-
     /// <summary>
     /// Initializes a new instance of the <see cref="UploaderSnapshotRepository"/> class.
     /// </summary>
     /// <param name="contextFactory">The tenant database context factory.</param>
+    /// <param name="auditContext">The audit context for tracking mutations (used by the base soft-delete path).</param>
     /// <param name="logger">The logger instance.</param>
-    public UploaderSnapshotRepository(ITenantDbContextFactory contextFactory, ILogger<UploaderSnapshotRepository> logger)
+    /// <param name="broadcaster">Optional native V4 broadcaster; null disables broadcasting.</param>
+    // logger is unused but retained for DI + direct test construction.
+    public UploaderSnapshotRepository(
+        ITenantDbContextFactory contextFactory,
+        IAuditContext auditContext,
+        ILogger<UploaderSnapshotRepository> logger,
+        IV4RecordBroadcaster<UploaderSnapshot>? broadcaster = null)
+        : base(contextFactory, auditContext, broadcaster)
     {
-        _contextFactory = contextFactory;
-        _logger = logger;
-    }
-
-    /// <summary>
-    /// Gets uploader snapshot records based on filter criteria.
-    /// </summary>
-    /// <param name="from">Optional start timestamp filter.</param>
-    /// <param name="to">Optional end timestamp filter.</param>
-    /// <param name="device">Optional device filter.</param>
-    /// <param name="source">Optional data source filter.</param>
-    /// <param name="limit">The maximum number of records to return.</param>
-    /// <param name="offset">The number of records to skip.</param>
-    /// <param name="descending">Whether to sort by timestamp in descending order.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>A collection of uploader snapshots.</returns>
-    public async Task<IEnumerable<UploaderSnapshot>> GetAsync(
-        DateTime? from, DateTime? to, string? device, string? source,
-        int limit = 100, int offset = 0, bool descending = true,
-        CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var query = ctx.UploaderSnapshots.AsNoTracking().AsQueryable();
-        if (from.HasValue) query = query.Where(e => e.Timestamp >= from.Value);
-        if (to.HasValue) query = query.Where(e => e.Timestamp <= to.Value);
-        if (device != null) query = query.Where(e => e.Device == device);
-        query = descending ? query.OrderByDescending(e => e.Timestamp) : query.OrderBy(e => e.Timestamp);
-        var entities = await query.Skip(offset).Take(limit).ToListAsync(ct);
-        return entities.Select(UploaderSnapshotMapper.ToDomainModel);
-    }
-
-    /// <summary>
-    /// Gets an uploader snapshot record by its unique identifier.
-    /// </summary>
-    /// <param name="id">The unique identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The uploader snapshot, or null if not found.</returns>
-    public async Task<UploaderSnapshot?> GetByIdAsync(Guid id, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity = await ctx.UploaderSnapshots.FindAsync([id], ct);
-        return entity is null ? null : UploaderSnapshotMapper.ToDomainModel(entity);
-    }
-
-    /// <summary>
-    /// Gets an uploader snapshot record by its legacy identifier.
-    /// </summary>
-    /// <param name="legacyId">The legacy identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The uploader snapshot, or null if not found.</returns>
-    public async Task<UploaderSnapshot?> GetByLegacyIdAsync(string legacyId, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity = await ctx.UploaderSnapshots.FirstOrDefaultAsync(e => e.LegacyId == legacyId, ct);
-        return entity is null ? null : UploaderSnapshotMapper.ToDomainModel(entity);
-    }
-
-    /// <summary>
-    /// Creates a new uploader snapshot record.
-    /// </summary>
-    /// <param name="model">The uploader snapshot to create.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The created uploader snapshot.</returns>
-    public async Task<UploaderSnapshot> CreateAsync(UploaderSnapshot model, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity = UploaderSnapshotMapper.ToEntity(model);
-        ctx.UploaderSnapshots.Add(entity);
-        await ctx.SaveChangesAsync(ct);
-        return UploaderSnapshotMapper.ToDomainModel(entity);
-    }
-
-    /// <summary>
-    /// Updates an existing uploader snapshot record.
-    /// </summary>
-    /// <param name="id">The unique identifier of the snapshot to update.</param>
-    /// <param name="model">The updated snapshot data.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The updated uploader snapshot.</returns>
-    public async Task<UploaderSnapshot> UpdateAsync(Guid id, UploaderSnapshot model, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity = await ctx.UploaderSnapshots.FindAsync([id], ct)
-            ?? throw new KeyNotFoundException($"UploaderSnapshot {id} not found");
-        UploaderSnapshotMapper.UpdateEntity(entity, model);
-        await ctx.SaveChangesAsync(ct);
-        return UploaderSnapshotMapper.ToDomainModel(entity);
-    }
-
-    /// <summary>
-    /// Deletes an uploader snapshot record by its unique identifier.
-    /// </summary>
-    /// <param name="id">The unique identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    public async Task DeleteAsync(Guid id, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity = await ctx.UploaderSnapshots.FindAsync([id], ct)
-            ?? throw new KeyNotFoundException($"UploaderSnapshot {id} not found");
-        entity.DeletedAt = DateTime.UtcNow;
-        await ctx.SaveChangesAsync(ct);
     }
 
     /// <inheritdoc />
-    public async Task<UploaderSnapshot> RestoreAsync(Guid id, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity = await ctx.UploaderSnapshots.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && e.Id == id && e.DeletedAt != null)
-            .FirstOrDefaultAsync(ct)
-            ?? throw new KeyNotFoundException($"Soft-deleted UploaderSnapshot {id} not found");
-        entity.DeletedAt = null;
-        await ctx.SaveChangesAsync(ct);
-        return UploaderSnapshotMapper.ToDomainModel(entity);
-    }
+    protected override UploaderSnapshotEntity ToEntity(UploaderSnapshot model) => UploaderSnapshotMapper.ToEntity(model);
 
     /// <inheritdoc />
-    public async Task<IEnumerable<UploaderSnapshot>> BulkRestoreAsync(IEnumerable<Guid> ids, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var idSet = ids.ToHashSet();
-        var entities = await ctx.UploaderSnapshots.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && idSet.Contains(e.Id) && e.DeletedAt != null)
-            .ToListAsync(ct);
-        foreach (var entity in entities)
-            entity.DeletedAt = null;
-        await ctx.SaveChangesAsync(ct);
-        return entities.Select(UploaderSnapshotMapper.ToDomainModel);
-    }
+    protected override UploaderSnapshot ToDomain(UploaderSnapshotEntity entity) => UploaderSnapshotMapper.ToDomainModel(entity);
 
     /// <inheritdoc />
-    public async Task<IEnumerable<UploaderSnapshot>> GetDeletedAsync(int limit, int offset, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entities = await ctx.UploaderSnapshots.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && e.DeletedAt != null)
-            .OrderByDescending(e => e.DeletedAt)
-            .Skip(offset).Take(limit)
-            .AsNoTracking()
-            .ToListAsync(ct);
-        return entities.Select(UploaderSnapshotMapper.ToDomainModel);
-    }
-
-    /// <inheritdoc />
-    public async Task<int> CountDeletedAsync(CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        return await ctx.UploaderSnapshots.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && e.DeletedAt != null)
-            .CountAsync(ct);
-    }
+    protected override void ApplyUpdate(UploaderSnapshotEntity target, UploaderSnapshot source) =>
+        UploaderSnapshotMapper.UpdateEntity(target, source);
 
     /// <summary>
     /// Gets uploader snapshots by correlation IDs.
@@ -188,7 +57,7 @@ public class UploaderSnapshotRepository : IUploaderSnapshotRepository
         var ids = correlationIds.ToList();
         if (ids.Count == 0) return [];
 
-        await using var ctx = await _contextFactory.CreateAsync(ct);
+        await using var ctx = await ContextFactory.CreateAsync(ct);
         var entities = await ctx.UploaderSnapshots
             .AsNoTracking()
             .Where(e => e.CorrelationId != null && ids.Contains(e.CorrelationId.Value))
@@ -197,40 +66,10 @@ public class UploaderSnapshotRepository : IUploaderSnapshotRepository
         return entities.Select(UploaderSnapshotMapper.ToDomainModel);
     }
 
-    /// <summary>
-    /// Counts uploader snapshot records within a timestamp range.
-    /// </summary>
-    /// <param name="from">Optional start timestamp filter.</param>
-    /// <param name="to">Optional end timestamp filter.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The count of matching records.</returns>
-    public async Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var query = ctx.UploaderSnapshots.AsNoTracking().AsQueryable();
-        if (from.HasValue) query = query.Where(e => e.Timestamp >= from.Value);
-        if (to.HasValue) query = query.Where(e => e.Timestamp <= to.Value);
-        return await query.CountAsync(ct);
-    }
-
-    /// <summary>
-    /// Deletes an uploader snapshot record by its legacy identifier.
-    /// </summary>
-    /// <param name="legacyId">The legacy identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The number of deleted records.</returns>
-    public async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        return await ctx.UploaderSnapshots
-            .Where(e => e.LegacyId == legacyId)
-            .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, DateTime.UtcNow), ct);
-    }
-
     /// <inheritdoc />
     public async Task<UploaderSnapshot?> GetLatestAsync(DateTime? asOf, CancellationToken ct = default)
     {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
+        await using var ctx = await ContextFactory.CreateAsync(ct);
         var query = ctx.UploaderSnapshots.AsNoTracking();
         if (asOf.HasValue) query = query.Where(e => e.Timestamp <= asOf.Value);
         var entity = await query
@@ -239,60 +78,5 @@ public class UploaderSnapshotRepository : IUploaderSnapshotRepository
             .ThenByDescending(e => e.Timestamp)     // tie-break: most recent
             .FirstOrDefaultAsync(ct);
         return entity is null ? null : UploaderSnapshotMapper.ToDomainModel(entity);
-    }
-
-    /// <inheritdoc />
-    public async Task<IEnumerable<UploaderSnapshot>> BulkCreateAsync(
-        IEnumerable<UploaderSnapshot> records,
-        CancellationToken ct = default)
-    {
-        var entities = records.Select(UploaderSnapshotMapper.ToEntity).ToList();
-        if (entities.Count == 0)
-            return [];
-
-        // Batch-level dedup: keep first occurrence per LegacyId
-        entities = entities
-            .GroupBy(e => e.LegacyId ?? e.Id.ToString())
-            .Select(g => g.First())
-            .ToList();
-
-        // DB-level dedup: filter out records whose LegacyId already exists
-        var legacyIds = entities
-            .Where(e => !string.IsNullOrEmpty(e.LegacyId))
-            .Select(e => e.LegacyId!)
-            .ToHashSet();
-
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var strategy = ctx.Database.CreateExecutionStrategy();
-        return await strategy.ExecuteAsync(async () =>
-        {
-            await using var tx = await ctx.Database.BeginTransactionAsync(ct);
-
-            if (legacyIds.Count > 0)
-            {
-                var blockedLegacyIds = await ctx.GetBlockingLegacyIdsAsync<UploaderSnapshotEntity>(legacyIds, ct);
-
-                entities = entities
-                    .Where(e => string.IsNullOrEmpty(e.LegacyId) || !blockedLegacyIds.Contains(e.LegacyId))
-                    .ToList();
-            }
-
-            if (entities.Count == 0)
-            {
-                await tx.CommitAsync(ct);
-                return [];
-            }
-
-            const int batchSize = 500;
-            foreach (var batch in entities.Chunk(batchSize))
-            {
-                ctx.UploaderSnapshots.AddRange(batch);
-                await ctx.SaveChangesAsync(ct);
-                ctx.ChangeTracker.Clear();
-            }
-
-            await tx.CommitAsync(ct);
-            return entities.Select(UploaderSnapshotMapper.ToDomainModel);
-        });
     }
 }

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -50,7 +51,7 @@ public sealed class CareLinkConnectControllerTests
         return controller;
     }
 
-    private static TenantContext Tenant() => new(TenantId, "acme", "Acme", IsActive: true);
+    private static TenantContext Tenant() => new(TenantId, "acme", "Acme", IsActive: true, IsDemo: false);
 
     private static AuthContext Auth() => new()
     {
@@ -79,9 +80,10 @@ public sealed class CareLinkConnectControllerTests
                 It.IsAny<bool>(),
                 It.IsAny<Guid?>(),
                 It.IsAny<TimeSpan?>(),
-                It.IsAny<bool>()))
+                It.IsAny<bool>(),
+                It.IsAny<Guid?>()))
             .Callback((SubjectInfo s, IEnumerable<string> p, IEnumerable<string> _, IEnumerable<string> sc,
-                string? _, bool _, Guid? t, TimeSpan? l, bool _) =>
+                string? _, bool _, Guid? t, TimeSpan? l, bool _, Guid? _) =>
             {
                 subject = s;
                 permissions = p;
@@ -115,7 +117,7 @@ public sealed class CareLinkConnectControllerTests
             .Setup(j => j.GenerateAccessToken(
                 It.IsAny<SubjectInfo>(), It.IsAny<IEnumerable<string>>(), It.IsAny<IEnumerable<string>>(),
                 It.IsAny<IEnumerable<string>>(), It.IsAny<string?>(), It.IsAny<bool>(),
-                It.IsAny<Guid?>(), It.IsAny<TimeSpan?>(), It.IsAny<bool>()))
+                It.IsAny<Guid?>(), It.IsAny<TimeSpan?>(), It.IsAny<bool>(), It.IsAny<Guid?>()))
             .Returns("t");
 
         var controller = Build(Tenant(), Auth());
@@ -141,5 +143,40 @@ public sealed class CareLinkConnectControllerTests
     {
         var result = Build(tenant: null, Auth()).DesktopToken();
         result.Result.Should().BeOfType<UnauthorizedResult>();
+    }
+
+    /// <summary>
+    /// The connect flow stores credentials, but the connector also needs a username (a required
+    /// setting) and the region those tokens belong to. The desktop companion has no settings form,
+    /// so without this the tenant ends up with credentials and a connector that never syncs.
+    /// </summary>
+    [Fact]
+    public void MergeSignedInAccount_AppliesAccountAndRegion_KeepingOtherSettings()
+    {
+        using var existing = JsonDocument.Parse(
+            """{"enabled":true,"server":"US","syncIntervalMinutes":5,"username":""}""");
+
+        using var merged = CareLinkConnectController.MergeSignedInAccount(
+            existing, "EU", "carer@example.com", "AU");
+
+        var root = merged.RootElement;
+        root.GetProperty("server").GetString().Should().Be("EU",
+            "the stored tokens belong to the region signed in to — a stale region sends every data "
+            + "request to a host that rejects them");
+        root.GetProperty("username").GetString().Should().Be("carer@example.com");
+        root.GetProperty("countryCode").GetString().Should().Be("au");
+        root.GetProperty("syncIntervalMinutes").GetInt32().Should().Be(5,
+            "SaveConfigurationAsync replaces the whole document, so unrelated settings must survive");
+        root.GetProperty("enabled").GetBoolean().Should().BeTrue();
+    }
+
+    [Fact]
+    public void MergeSignedInAccount_WithNoStoredConfiguration_StillRecordsTheRegion()
+    {
+        using var merged = CareLinkConnectController.MergeSignedInAccount(null, "EU", null, null);
+
+        merged.RootElement.GetProperty("server").GetString().Should().Be("EU");
+        merged.RootElement.TryGetProperty("username", out _).Should().BeFalse(
+            "a username the profile did not report must not be invented");
     }
 }

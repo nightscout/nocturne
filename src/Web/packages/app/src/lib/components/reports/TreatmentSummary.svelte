@@ -1,9 +1,6 @@
 <script lang="ts">
   import { Syringe, Apple, Utensils } from "lucide-svelte";
-  import {
-    formatInsulinDisplay,
-    formatCarbDisplay,
-  } from "$lib/utils/formatting";
+  import { formatCarbDisplay, formatInsulinDisplay, formatShortDate } from "$lib/utils/formatting";
   import type { DayToDayDailyData } from "./types";
 
   // Local type definition for treatment summary
@@ -65,10 +62,7 @@
       {#if day.treatmentSummary && (totalInsulin > 0 || totalCarbs > 0)}
         <div class="bg-gray-50 rounded-lg p-4">
           <h3 class="text-lg font-semibold text-gray-700 mb-3">
-            {new Date(day.date).toLocaleDateString(undefined, {
-              month: "short",
-              day: "numeric",
-            })}
+            {formatShortDate(day.date)}
           </h3>
           <div class="space-y-2 text-sm">
             {#if totalInsulin > 0}

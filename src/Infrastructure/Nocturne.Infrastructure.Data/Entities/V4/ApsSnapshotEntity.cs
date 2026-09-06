@@ -1,8 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-using Nocturne.Infrastructure.Data.Entities;
-
 namespace Nocturne.Infrastructure.Data.Entities.V4;
 
 /// <summary>
@@ -10,63 +8,16 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.ApsSnapshot
 /// </summary>
 [Table("aps_snapshots")]
-public class ApsSnapshotEntity : ITenantScoped, ISoftDeletable, IV4Entity
+public class ApsSnapshotEntity : V4TimeSeriesEntityBase, ISyncDedupable
 {
     /// <summary>
-    /// The unique identifier of the tenant this record belongs to.
+    /// Stable per-source identifier for synchronization. Unlike <see cref="V4TimeSeriesEntityBase.LegacyId"/> (insert-only),
+    /// a record matched by (DataSource, SyncIdentifier) is updated in place on re-upload — required so
+    /// uploader retries of the same loop cycle don't duplicate the snapshot.
     /// </summary>
-    [Column("tenant_id")]
-    public Guid TenantId { get; set; }
-
-    /// <summary>
-    /// Primary key - UUID Version 7 for time-ordered, globally unique identification
-    /// </summary>
-    [Key]
-    public Guid Id { get; set; }
-
-    /// <summary>
-    /// Canonical timestamp as UTC DateTime (timestamptz)
-    /// </summary>
-    [Column("timestamp")]
-    public DateTime Timestamp { get; set; }
-
-    /// <summary>
-    /// UTC offset in minutes
-    /// </summary>
-    [Column("utc_offset")]
-    public int? UtcOffset { get; set; }
-
-    /// <summary>
-    /// Device identifier that produced this snapshot
-    /// </summary>
-    [Column("device")]
+    [Column("sync_identifier")]
     [MaxLength(256)]
-    public string? Device { get; set; }
-
-    /// <summary>
-    /// Links records that were decomposed from the same legacy DeviceStatus
-    /// </summary>
-    [Column("correlation_id")]
-    public Guid? CorrelationId { get; set; }
-
-    /// <summary>
-    /// Original v1/v3 record ID for migration traceability
-    /// </summary>
-    [Column("legacy_id")]
-    [MaxLength(64)]
-    public string? LegacyId { get; set; }
-
-    /// <summary>
-    /// System tracking: when record was inserted
-    /// </summary>
-    [Column("sys_created_at")]
-    public DateTime SysCreatedAt { get; set; } = DateTime.UtcNow;
-
-    /// <summary>
-    /// System tracking: when record was last updated
-    /// </summary>
-    [Column("sys_updated_at")]
-    public DateTime SysUpdatedAt { get; set; } = DateTime.UtcNow;
+    public string? SyncIdentifier { get; set; }
 
     /// <summary>
     /// Which AID algorithm produced this snapshot (enum stored as string: Loop, Trio, ControlIQ, etc.)
@@ -225,17 +176,4 @@ public class ApsSnapshotEntity : ITenantScoped, ISoftDeletable, IV4Entity
     /// </summary>
     [Column("patient_device_id")]
     public Guid? PatientDeviceId { get; set; }
-
-    /// <summary>
-    /// Catch-all JSONB column for fields not mapped to dedicated columns
-    /// </summary>
-    [Column("additional_properties", TypeName = "jsonb")]
-    public string? AdditionalPropertiesJson { get; set; }
-
-    /// <summary>
-    /// Soft-delete timestamp. When non-null the record is treated as deleted
-    /// by the global query filter and is invisible above the repository layer.
-    /// </summary>
-    [Column("deleted_at")]
-    public DateTime? DeletedAt { get; set; }
 }

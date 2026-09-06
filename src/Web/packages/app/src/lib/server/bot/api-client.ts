@@ -3,8 +3,8 @@ import type { ApiClient } from "$lib/api";
 import {
   createServerApiClient,
   getApiBaseUrl,
-  getHashedInstanceKey,
 } from "$lib/server/api-client-factory";
+import { getHashedInstanceKey } from "$lib/server/instance-key";
 
 /**
  * Adapts a NocturneApiClient to the BotApiClient interface used by @nocturne/bot.
@@ -33,6 +33,8 @@ export function buildBotApiClient(api: ApiClient): BotApiClient {
     },
     alerts: {
       acknowledge: (request, signal) => api.alerts.acknowledge(request, signal),
+      acknowledgeExcursion: (excursionId, request, signal) =>
+        api.alerts.acknowledgeExcursion(excursionId, request, signal),
       markDelivered: (deliveryId, request, signal) =>
         api.alerts.markDelivered(deliveryId, request, signal),
       markFailed: (deliveryId, request, signal) =>
@@ -99,8 +101,13 @@ export function buildBotApiClient(api: ApiClient): BotApiClient {
  * Builds the **unscoped** (apex / cross-tenant) BotApiClient using an explicit
  * instance-key client. Pass the forwarded host/proto headers from the incoming
  * request so tenant resolution and HTTPS enforcement on the API match what the
- * caller intended (the bot dispatch route relies on X-Forwarded-Host to target
- * the correct tenant).
+ * caller intended.
+ *
+ * Only for callers whose target tenant is genuinely unknown (webhook command
+ * routing, which resolves a chat identity to a tenant first). A caller that
+ * already knows the tenant must use {@link buildScopedBotApiClient} instead —
+ * a forwarded host from an inbound request is client-controlled and would let
+ * the caller pick the tenant these admin-privileged calls act on.
  */
 export function buildUnscopedBotApiClient(
   fetchFn: typeof globalThis.fetch,
@@ -163,6 +170,7 @@ function mapCandidate(c: {
   nocturneUserId?: string;
   label?: string;
   displayName?: string;
+  isDefault?: boolean;
 }): DirectoryCandidate {
   return {
     id: c.id ?? "",
@@ -171,5 +179,6 @@ function mapCandidate(c: {
     nocturneUserId: c.nocturneUserId ?? "",
     label: c.label ?? "",
     displayName: c.displayName ?? "",
+    isDefault: c.isDefault ?? false,
   };
 }

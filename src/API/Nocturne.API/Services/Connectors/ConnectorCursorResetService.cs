@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Services.Connectors;
 
@@ -146,12 +147,11 @@ public class ConnectorCursorResetService : IConnectorCursorResetService
         // The TenantConnectionInterceptor sets the RLS GUC from NocturneDbContext.TenantId on each
         // connection open (and RESETs it on close), so the *DbContext's* TenantId is what actually
         // scopes our own queries below — updating ITenantAccessor alone does not retro-fit the
-        // already-created _db. Set it explicitly, otherwise the ConnectorConfigurations query runs
-        // under the admin's (or empty) tenant and silently finds no connectors. SetTenantGucAsync is
-        // belt-and-suspenders for the current connection; SetTenant propagates to the executor scope
+        // already-created _db. Pin it explicitly, otherwise the ConnectorConfigurations query runs
+        // under the admin's (or empty) tenant and silently finds no connectors. PinTenantAsync also
+        // sets the GUC on the current connection; SetTenant propagates to the executor scope
         // that IConnectorSyncService.TriggerSyncAsync creates.
-        _db.TenantId = tenantId;
-        await SetTenantGucAsync(tenantId, ct);
+        await _db.PinTenantAsync(tenantId, ct);
         _tenantAccessor.SetTenant(new TenantContext(
             tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive, tenant.IsDemo));
 
@@ -225,9 +225,8 @@ public class ConnectorCursorResetService : IConnectorCursorResetService
             return null;
 
         // See ResetTenantCursorsAsync: the interceptor scopes connections by DbContext.TenantId,
-        // so set it on _db before the RLS-scoped query below.
-        _db.TenantId = tenantId;
-        await SetTenantGucAsync(tenantId, ct);
+        // so pin _db before the RLS-scoped query below.
+        await _db.PinTenantAsync(tenantId, ct);
 
         var connectors = await _db.ConnectorConfigurations.AsNoTracking()
             .Where(c => c.TenantId == tenantId)
@@ -243,18 +242,4 @@ public class ConnectorCursorResetService : IConnectorCursorResetService
         return new TenantConnectorsDto(tenant.Id, tenant.Slug, connectors);
     }
 
-    /// <summary>
-    /// Sets the PostgreSQL RLS GUC for the target tenant. No-op on non-relational providers
-    /// (e.g. the EF Core in-memory provider used by unit tests), where RLS does not apply.
-    /// </summary>
-    private async Task SetTenantGucAsync(Guid tenantId, CancellationToken ct)
-    {
-        if (!_db.Database.IsRelational())
-            return;
-
-        await _db.Database.ExecuteSqlRawAsync(
-            "SELECT set_config('app.current_tenant_id', {0}, false)",
-            [tenantId.ToString()],
-            ct);
-    }
 }

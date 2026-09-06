@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatDayTime } from "$lib/utils/formatting";
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
   import { untrack } from "svelte";
@@ -10,6 +11,7 @@
     deleteRule,
     testFire,
   } from "$api/generated/alertRules.generated.remote";
+  import { describeSubmitError } from "$lib/forms/submit-error";
   import { getAlertHistory } from "$api/generated/alerts.generated.remote";
   import { AlertRuleSeverity, AlertConditionType } from "$api-clients";
   import type { HistoryExcursionResponse } from "$api-clients";
@@ -46,7 +48,7 @@
   import AutoResolveSection from "$lib/components/alerts/AutoResolveSection.svelte";
   import ChannelsSection from "$lib/components/alerts/ChannelsSection.svelte";
   import ReplayPanel from "$lib/components/alerts/ReplayPanel.svelte";
-  import { severityLabel } from "$lib/components/alerts/severity";
+  import { severity, severityLabel } from "$lib/components/alerts/severity";
   import {
     parseRule,
     flattenSingleChildRoot,
@@ -55,6 +57,7 @@
     ensureCompositeRoot,
     defaultPayload,
     buildBody,
+    validateChannels,
     type RuleEditorState,
   } from "$lib/components/alerts/types";
 
@@ -133,6 +136,11 @@
   // ---- Save ------------------------------------------------------------
 
   async function save(): Promise<void> {
+    const channelError = validateChannels(state.channels);
+    if (channelError) {
+      error = channelError;
+      return;
+    }
     saving = true;
     error = null;
     try {
@@ -145,7 +153,7 @@
         savedBody = buildBody(state);
       }
     } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
+      error = describeSubmitError(e, "Failed to save the alert rule. Please try again.");
     } finally {
       saving = false;
     }
@@ -160,7 +168,7 @@
       await deleteRule(ruleId);
       await goto("/alerts");
     } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
+      error = describeSubmitError(e, "Failed to delete the alert rule. Please try again.");
     } finally {
       deleting = false;
     }
@@ -174,7 +182,7 @@
     try {
       await testFire(ruleId);
     } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
+      error = describeSubmitError(e, "Failed to send a test alert. Please try again.");
     } finally {
       testingSaved = false;
     }
@@ -208,12 +216,7 @@
     if (!at) return "—";
     const d = at instanceof Date ? at : new Date(at);
     if (Number.isNaN(d.getTime())) return "—";
-    return d.toLocaleString(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
+    return formatDayTime(d);
   }
 
   // ---- Severity ---------------------------------------------------------
@@ -445,7 +448,10 @@
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ChannelsSection bind:channels={state.channels} />
+            <ChannelsSection
+              bind:channels={state.channels}
+              severity={state.severity}
+            />
           </CardContent>
         </Card>
 
@@ -593,7 +599,10 @@
                       title="Replay this day in the simulator"
                     >
                       <span
-                        class="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500"
+                        class="h-1.5 w-1.5 shrink-0 rounded-full {severity(
+                          h.severity,
+                          'dot'
+                        )}"
                         aria-hidden="true"
                       ></span>
                       <span class="min-w-0 flex-1 truncate tabular-nums">

@@ -10,7 +10,7 @@ public class ShareDataCategoriesTests
     [Fact]
     public void Csv_GlucoseOnlyShare_YieldsGlucoseScopeOnly()
     {
-        ShareDataCategories.ComputeVisibleCategoriesCsv(new[] { OAuthScopes.GlucoseRead })
+        ShareDataCategories.ComputeVisibleCategoriesCsv(new[] { Scope.GlucoseRead })
             .Should().Be("glucose.read");
     }
 
@@ -18,21 +18,21 @@ public class ShareDataCategoriesTests
     public void Csv_GlucoseAndTreatments_OrdinalSortedAndDeterministic()
     {
         ShareDataCategories.ComputeVisibleCategoriesCsv(
-            new[] { OAuthScopes.TreatmentsRead, OAuthScopes.GlucoseRead })
+            new[] { Scope.TreatmentsRead, Scope.GlucoseRead })
             .Should().Be("glucose.read,treatments.read");
     }
 
     [Fact]
     public void Csv_ReadWriteScope_SatisfiesTheReadCategory()
     {
-        ShareDataCategories.ComputeVisibleCategoriesCsv(new[] { OAuthScopes.TreatmentsReadWrite })
+        ShareDataCategories.ComputeVisibleCategoriesCsv(new[] { Scope.TreatmentsReadWrite })
             .Should().Be("treatments.read");
     }
 
     [Fact]
     public void Csv_FullAccess_UnlocksEveryCategorizedScope()
     {
-        var csv = ShareDataCategories.ComputeVisibleCategoriesCsv(new[] { OAuthScopes.FullAccess });
+        var csv = ShareDataCategories.ComputeVisibleCategoriesCsv(new[] { Scope.FullAccess });
 
         csv.Split(',').Should().BeEquivalentTo(ShareDataCategories.GoverningScopes);
     }
@@ -49,14 +49,14 @@ public class ShareDataCategoriesTests
     {
         // therapy.read is a real scope but not publicly shareable; it must not
         // unlock any categorized table for a share.
-        ShareDataCategories.ComputeVisibleCategoriesCsv(new[] { OAuthScopes.TherapyRead })
+        ShareDataCategories.ComputeVisibleCategoriesCsv(new[] { Scope.TherapyRead })
             .Should().BeEmpty();
     }
 
     [Fact]
     public void GoverningScopeFor_GovernedTable_ReturnsItsScope()
     {
-        ShareDataCategories.GoverningScopeFor("boluses").Should().Be(OAuthScopes.TreatmentsRead);
+        ShareDataCategories.GoverningScopeFor("boluses").Should().Be(Scope.TreatmentsRead);
     }
 
     [Fact]
@@ -71,5 +71,44 @@ public class ShareDataCategoriesTests
     {
         var allTables = ShareDataCategories.GovernedTables.Values.SelectMany(t => t).ToList();
         allTables.Should().OnlyHaveUniqueItems();
+    }
+
+    [Fact]
+    public void RecencyColumnFor_TimeSeriesTable_ReturnsItsColumn()
+    {
+        ShareDataCategories.RecencyColumnFor("boluses").Should().Be("timestamp");
+        ShareDataCategories.RecencyColumnFor("temp_basals").Should().Be("start_timestamp");
+        ShareDataCategories.RecencyColumnFor("connector_food_entries").Should().Be("consumed_at");
+    }
+
+    [Fact]
+    public void RecencyColumnFor_CatalogTable_ReturnsNull()
+    {
+        // The food database is catalog data with no per-row time — deliberately unclamped.
+        ShareDataCategories.RecencyColumnFor("foods").Should().BeNull();
+    }
+
+    [Fact]
+    public void RecencyColumnFor_UngovernedTable_ReturnsNull()
+    {
+        ShareDataCategories.RecencyColumnFor("therapy_settings").Should().BeNull();
+    }
+
+    [Fact]
+    public void EveryGovernedTable_HasARecencyClassification()
+    {
+        // The type initializer enforces this too; the test states the invariant where a
+        // reviewer will see it: a governed table must decide its clamp column (or opt out
+        // with an explicit null) — it cannot be forgotten.
+        var governed = ShareDataCategories.GovernedTables.Values.SelectMany(t => t);
+        governed.Should().OnlyContain(t => ShareDataCategories.RecencyColumns.ContainsKey(t));
+    }
+
+    [Fact]
+    public void RecencyColumns_ReferenceOnlyGovernedTables()
+    {
+        var governed = ShareDataCategories.GovernedTables.Values.SelectMany(t => t).ToHashSet();
+        ShareDataCategories.RecencyColumns.Keys.Should().OnlyContain(t => governed.Contains(t),
+            "a recency entry for an ungoverned table is stale and would mislead");
     }
 }

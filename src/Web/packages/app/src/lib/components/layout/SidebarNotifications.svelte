@@ -178,9 +178,7 @@
         </div>
       </div>
 
-      <div class="border-b">
-        <DndPanel onNavigate={() => (isOpen = false)} />
-      </div>
+      <DndPanel onNavigate={() => (isOpen = false)} />
 
       {#if totalCount === 0}
         <div class="flex flex-col items-center justify-center py-8 text-center">

@@ -8,6 +8,12 @@ public record NocturneCredentials
     /// <summary>The base URL of the Nocturne API</summary>
     public required string ApiUrl { get; init; }
 
+    /// <summary>
+    /// The server-assigned OAuth client_id (from Dynamic Client Registration).
+    /// Empty for clients that authenticate with a fixed client_id.
+    /// </summary>
+    public string ClientId { get; init; } = string.Empty;
+
     /// <summary>The OAuth access token (JWT)</summary>
     public required string AccessToken { get; init; }
 
@@ -35,6 +41,9 @@ public record DeviceAuthorizationState
 {
     /// <summary>The base URL of the Nocturne API</summary>
     public required string ApiUrl { get; init; }
+
+    /// <summary>The server-assigned OAuth client_id (from Dynamic Client Registration)</summary>
+    public required string ClientId { get; init; }
 
     /// <summary>The device code to poll with</summary>
     public required string DeviceCode { get; init; }

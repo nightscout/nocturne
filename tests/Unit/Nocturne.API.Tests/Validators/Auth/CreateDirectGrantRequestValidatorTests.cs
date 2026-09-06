@@ -13,13 +13,40 @@ public class CreateDirectGrantRequestValidatorTests
     private static CreateDirectGrantRequest ValidRequest() => new()
     {
         Label = "My API Token",
-        Scopes = [OAuthScopes.GlucoseRead],
+        Scopes = [Scope.GlucoseRead],
     };
 
     [Fact]
     public void Valid_request_passes()
     {
         var result = _validator.TestValidate(ValidRequest());
+        result.ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Fact]
+    public void Future_expiry_passes()
+    {
+        var request = ValidRequest();
+        request.ExpiresAt = DateTime.UtcNow.AddHours(1);
+        var result = _validator.TestValidate(request);
+        result.ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Fact]
+    public void Past_expiry_fails()
+    {
+        var request = ValidRequest();
+        request.ExpiresAt = DateTime.UtcNow.AddMinutes(-1);
+        var result = _validator.TestValidate(request);
+        result.ShouldHaveValidationErrorFor(x => x.ExpiresAt);
+    }
+
+    [Fact]
+    public void Absent_expiry_passes()
+    {
+        var request = ValidRequest();
+        request.ExpiresAt = null;
+        var result = _validator.TestValidate(request);
         result.ShouldNotHaveAnyValidationErrors();
     }
 
@@ -75,7 +102,7 @@ public class CreateDirectGrantRequestValidatorTests
     public void Valid_scopes_pass()
     {
         var request = ValidRequest();
-        request.Scopes = [OAuthScopes.GlucoseRead, OAuthScopes.TreatmentsReadWrite, OAuthScopes.FullAccess];
+        request.Scopes = [Scope.GlucoseRead, Scope.TreatmentsReadWrite, Scope.FullAccess];
         var result = _validator.TestValidate(request);
         result.ShouldNotHaveAnyValidationErrors();
     }

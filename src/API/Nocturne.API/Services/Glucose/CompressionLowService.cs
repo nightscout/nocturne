@@ -1,4 +1,7 @@
 using Microsoft.Extensions.Logging;
+using Nocturne.API.Services.BackgroundServices;
+using Nocturne.Core.Contracts.Identity;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
@@ -24,6 +27,8 @@ public class CompressionLowService : ICompressionLowService
     private readonly IInAppNotificationService _notificationService;
     private readonly ITherapySettingsResolver _therapySettingsResolver;
     private readonly IUISettingsService _uiSettingsService;
+    private readonly ITenantOwnerResolver _tenantOwnerResolver;
+    private readonly ITenantAccessor _tenantAccessor;
     private readonly ILogger<CompressionLowService> _logger;
 
     public CompressionLowService(
@@ -34,6 +39,8 @@ public class CompressionLowService : ICompressionLowService
         IInAppNotificationService notificationService,
         ITherapySettingsResolver therapySettingsResolver,
         IUISettingsService uiSettingsService,
+        ITenantOwnerResolver tenantOwnerResolver,
+        ITenantAccessor tenantAccessor,
         ILogger<CompressionLowService> logger)
     {
         _repository = repository;
@@ -43,6 +50,8 @@ public class CompressionLowService : ICompressionLowService
         _notificationService = notificationService;
         _therapySettingsResolver = therapySettingsResolver;
         _uiSettingsService = uiSettingsService;
+        _tenantOwnerResolver = tenantOwnerResolver;
+        _tenantAccessor = tenantAccessor;
         _logger = logger;
     }
 
@@ -206,21 +215,32 @@ public class CompressionLowService : ICompressionLowService
         CancellationToken cancellationToken)
     {
         var pendingCount = await _repository.CountPendingForNightAsync(nightOf, cancellationToken);
-        if (pendingCount == 0)
+        if (pendingCount != 0)
+            return;
+
+        try
         {
-            try
+            var ownerId = await _tenantOwnerResolver.GetOwnerSubjectIdAsync(
+                _tenantAccessor.TenantId, cancellationToken);
+
+            if (ownerId == null)
             {
-                await _notificationService.ArchiveBySourceAsync(
-                    userId: "default",
-                    type: "glucose.compression_low_review",
-                    sourceId: nightOf.ToString("yyyy-MM-dd"),
-                    reason: NotificationArchiveReason.Completed,
-                    cancellationToken: cancellationToken);
+                _logger.LogWarning(
+                    "No owner found for tenant {TenantId}; leaving the compression low notification for {NightOf} active",
+                    _tenantAccessor.TenantId, nightOf);
+                return;
             }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to archive compression low notification for {NightOf}", nightOf);
-            }
+
+            await _notificationService.ArchiveBySourceAsync(
+                userId: ownerId,
+                type: CompressionLowDetectionService.NotificationType,
+                sourceId: CompressionLowDetectionService.NotificationSourceId(nightOf),
+                reason: NotificationArchiveReason.Completed,
+                cancellationToken: cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to archive compression low notification for {NightOf}", nightOf);
         }
     }
 

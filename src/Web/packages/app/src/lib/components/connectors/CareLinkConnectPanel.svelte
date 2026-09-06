@@ -9,6 +9,7 @@
     complete as completeCareLinkConnect,
     desktopToken as mintDesktopLinkCode,
   } from "$lib/api/generated/careLinkConnects.generated.remote";
+  import { describeSubmitError } from "$lib/forms/submit-error";
   import {
     Card,
     CardContent,
@@ -20,6 +21,7 @@
   import { Textarea } from "$lib/components/ui/textarea";
   import { Label } from "$lib/components/ui/label";
   import { CheckCircle2, Copy, Download, ExternalLink, KeyRound, Monitor } from "lucide-svelte";
+  import { copyToClipboard } from "$lib/utils";
 
   // Stable rolling release that always holds the current installers (see desktop-release.yml).
   const DESKTOP_DOWNLOAD_URL =
@@ -43,8 +45,13 @@
   let {
     onConnected,
   }: {
-    // Called after a refresh token is stored, with the auto-detected profile (if any).
-    onConnected?: (info: { username?: string | null; country?: string | null }) => void;
+    // Called after a refresh token is stored, with the region signed in to and the
+    // auto-detected profile (if any).
+    onConnected?: (info: {
+      server: "EU" | "US";
+      username?: string | null;
+      country?: string | null;
+    }) => void;
   } = $props();
 
   type Phase = "idle" | "awaiting-code" | "done";
@@ -74,7 +81,7 @@
       // Open Medtronic's login in a new tab; the user signs in + solves the captcha there.
       window.open(res.authorizeUrl, "_blank", "noopener");
     } catch (e) {
-      error = e instanceof Error ? e.message : "Could not start CareLink sign-in.";
+      error = describeSubmitError(e, "Could not start CareLink sign-in.");
     } finally {
       busy = false;
     }
@@ -95,9 +102,9 @@
       }
       connectedUsername = res.username ?? null;
       phase = "done";
-      onConnected?.({ username: res.username, country: res.country });
+      onConnected?.({ server: region, username: res.username, country: res.country });
     } catch (e) {
-      error = e instanceof Error ? e.message : "Could not complete CareLink sign-in.";
+      error = describeSubmitError(e, "Could not complete CareLink sign-in.");
     } finally {
       busy = false;
     }
@@ -125,7 +132,7 @@
       desktopLinkCode = res.linkCode ?? null;
       desktopExpiresMinutes = Math.max(1, Math.round((res.expiresInSeconds ?? 600) / 60));
     } catch (e) {
-      error = e instanceof Error ? e.message : "Could not create a link code.";
+      error = describeSubmitError(e, "Could not create a link code.");
     } finally {
       busy = false;
     }
@@ -133,7 +140,10 @@
 
   async function copyDesktopLinkCode() {
     if (!desktopLinkCode) return;
-    await navigator.clipboard.writeText(desktopLinkCode);
+    if (!(await copyToClipboard(desktopLinkCode))) {
+      error = "Couldn't copy the code to the clipboard. Copy it manually instead.";
+      return;
+    }
     desktopCopied = true;
     setTimeout(() => (desktopCopied = false), 2000);
   }
@@ -188,7 +198,7 @@
         </p>
         <p class="text-xs text-muted-foreground">
           The desktop app opens the CareLink sign-in in its own window and captures the code
-          automatically — no developer tools needed. Generate a link code and paste it into the app.
+          automatically — no developer tools needed. Generate a link code and open it in the app.
         </p>
         <a
           href={DESKTOP_DOWNLOAD_URL}
@@ -205,7 +215,11 @@
           </Button>
         {:else}
           <div class="rounded bg-muted px-2 py-1 font-mono text-xs break-all">{desktopLinkCode}</div>
-          <div class="flex items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2">
+            <Button size="sm" href={desktopLinkCode}>
+              <Monitor class="h-3.5 w-3.5 mr-1" />
+              Open in the desktop app
+            </Button>
             <Button variant="outline" size="sm" onclick={copyDesktopLinkCode}>
               <Copy class="h-3.5 w-3.5 mr-1" />
               {desktopCopied ? "Copied" : "Copy"}
@@ -214,6 +228,10 @@
               Expires in {desktopExpiresMinutes} minutes.
             </span>
           </div>
+          <p class="text-xs text-muted-foreground">
+            If nothing opens, the app isn't installed yet — copy the code and paste it into the app
+            instead.
+          </p>
         {/if}
       </div>
     {/if}

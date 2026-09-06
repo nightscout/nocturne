@@ -350,4 +350,116 @@ public class IobCalculatorTests
     }
 
     #endregion
+
+    #region CalculateTotalAsync device-value merge
+
+    [Fact]
+    public async Task CalculateTotalAsync_DeviceReportsZeroIob_ZeroIsAccepted()
+    {
+        // IOB of exactly zero from the device is a real value (e.g. after a long suspend) and
+        // must win over a local recomputation that still sees recent boluses decaying.
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+        _apsSnapshotRepo
+            .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[]
+            {
+                new ApsSnapshot
+                {
+                    Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now - 2 * 60 * 1000).UtcDateTime,
+                    Iob = 0.0,
+                },
+            });
+
+        var boluses = new List<Bolus>
+        {
+            new()
+            {
+                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now - 30 * 60 * 1000).UtcDateTime,
+                Insulin = 2.0,
+            },
+        };
+
+        var result = await _calculator.CalculateTotalAsync(boluses, time: now);
+
+        Assert.Equal(0.0, result.Iob);
+        Assert.Equal("OpenAPS", result.Source);
+        Assert.NotNull(result.TreatmentIob);
+    }
+
+    [Fact]
+    public async Task CalculateTotalAsync_DeviceReportsBasalIob_LocalBasalIobNotAdded()
+    {
+        // The device's basal IOB already covers its own temp basals; the locally-computed value
+        // must not be added on top of it.
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+        _apsSnapshotRepo
+            .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[]
+            {
+                new ApsSnapshot
+                {
+                    Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now - 2 * 60 * 1000).UtcDateTime,
+                    Iob = 2.0,
+                    BasalIob = 0.3,
+                },
+            });
+
+        // An active high temp basal that yields a non-zero local basal IOB.
+        var tempBasals = new List<TempBasal>
+        {
+            new()
+            {
+                StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(now - 60 * 60 * 1000).UtcDateTime,
+                EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(now).UtcDateTime,
+                Rate = 3.0,
+                ScheduledRate = DefaultBasalRate,
+                Origin = TempBasalOrigin.Algorithm,
+            },
+        };
+
+        var result = await _calculator.CalculateTotalAsync(new List<Bolus>(), tempBasals, now);
+
+        Assert.Equal(2.0, result.Iob);
+        Assert.Equal(0.3, result.BasalIob);
+    }
+
+    [Fact]
+    public async Task CalculateTotalAsync_DeviceReportsNoBasalIob_LocalBasalIobSubstituted()
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+        _apsSnapshotRepo
+            .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[]
+            {
+                new ApsSnapshot
+                {
+                    Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now - 2 * 60 * 1000).UtcDateTime,
+                    Iob = 2.0,
+                    BasalIob = null,
+                },
+            });
+
+        var tempBasals = new List<TempBasal>
+        {
+            new()
+            {
+                StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(now - 60 * 60 * 1000).UtcDateTime,
+                EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(now).UtcDateTime,
+                Rate = 3.0,
+                ScheduledRate = DefaultBasalRate,
+                Origin = TempBasalOrigin.Algorithm,
+            },
+        };
+
+        var result = await _calculator.CalculateTotalAsync(new List<Bolus>(), tempBasals, now);
+
+        Assert.Equal(2.0, result.Iob);
+        Assert.NotNull(result.BasalIob);
+        Assert.True(result.BasalIob > 0, "local basal IOB should fill in when the device reports none");
+    }
+
+    #endregion
 }

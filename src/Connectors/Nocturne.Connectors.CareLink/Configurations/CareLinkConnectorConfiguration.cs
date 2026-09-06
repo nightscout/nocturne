@@ -11,7 +11,7 @@ namespace Nocturne.Connectors.CareLink.Configurations;
     "Medtronic CareLink",
     SupportsHistoricalSync = false,
     SupportsManualSync = true,
-    SupportedDataTypes = [SyncDataType.Glucose, SyncDataType.DeviceStatus, SyncDataType.Boluses, SyncDataType.CarbIntake, SyncDataType.TempBasals, SyncDataType.StateSpans],
+    SupportedDataTypes = [SyncDataType.Glucose, SyncDataType.DeviceStatus, SyncDataType.Boluses, SyncDataType.CarbIntake, SyncDataType.TempBasals, SyncDataType.StateSpans, SyncDataType.DeviceEvents],
     DefaultActiveThresholdMinutes = 10,
     DefaultStaleThresholdMinutes = 30
 )]

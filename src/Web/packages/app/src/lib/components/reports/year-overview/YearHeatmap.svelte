@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { Chart, Calendar, Layer, Rect, Tooltip } from "layerchart";
+  import { Chart, Calendar, Layer, Tooltip } from "layerchart";
   import { scaleThreshold } from "d3-scale";
   import { timeWeek, timeMonths } from "d3-time";
   import { Loader2 } from "lucide-svelte";
   import { fly } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
-  import { formatGlucoseValue } from "$lib/utils/formatting";
+  import { formatGlucoseValue, formatMonthLabel, formatWeekdayDate } from "$lib/utils/formatting";
   import type { GlucoseUnits } from "$lib/utils/formatting";
   import { getDataTypeLabel } from "$lib/utils/data-type-labels";
 
@@ -50,6 +50,7 @@
 </script>
 
 <div
+  class="@container"
   in:fly={{
     y: 30,
     duration: 500,
@@ -80,7 +81,7 @@
   <!-- Calendar Heatmap -->
   {#if chartData.length > 0}
     <div
-      class="w-full overflow-x-clip overflow-y-visible rounded-lg border border-border bg-card p-4"
+      class="w-full overflow-x-auto overflow-y-visible rounded-lg border border-border bg-card p-4 print:overflow-visible"
     >
       <div class="min-w-[900px] h-60">
         <Chart
@@ -96,7 +97,7 @@
             "var(--glucose-high)",
             "var(--glucose-very-high)",
           ]}
-          tooltip={{ mode: "manual" }}
+          tooltipContext={{ mode: "manual" }}
         >
           {#snippet children({ context })}
             <Layer type="svg">
@@ -106,7 +107,6 @@
                 cellSize={24}
                 monthPath
                 monthLabel={false}
-                tooltipContext={context.tooltip}
               >
                 {#snippet children({ cells, cellSize })}
                   <!-- Month labels (clickable → calendar) -->
@@ -126,23 +126,29 @@
                         font-size="12"
                         class="fill-muted-foreground hover:fill-primary cursor-pointer"
                       >
-                        {monthDate.toLocaleString(undefined, {
-                          month: "short",
-                        })}
+                        {formatMonthLabel(monthDate)}
                       </text>
                     </a>
                   {/each}
+                  <!-- Native <rect> per cell: layerchart marks each call
+                       registerMark() on mount and every registration re-runs the
+                       chart's mark deriveds over all marks, so ~365 cells/year
+                       (x multiple stacked years) cost O(N^2) and stalled the page.
+                       Cells carry pre-scaled pixel coords and per-cell handlers,
+                       so native <rect> keeps behaviour while registering nothing. -->
                   {#each cells as cell}
                     {@const padding = 1}
                     {@const cellDate = cell.data?.dateString}
-                    <Rect
+                    <!-- svelte-ignore a11y_click_events_have_key_events -->
+                    <!-- svelte-ignore a11y_no_static_element_interactions -->
+                    <rect
                       x={cell.x + padding}
                       y={cell.y + padding}
                       width={cellSize[0] - padding * 2}
                       height={cellSize[1] - padding * 2}
                       rx={4}
                       fill={getCellFill(cell.data)}
-                      onpointermove={(e) =>
+                      onpointermove={(e: PointerEvent) =>
                         context.tooltip?.show(e, cell.data)}
                       onpointerleave={() => context.tooltip?.hide()}
                       onclick={() => {
@@ -182,11 +188,7 @@
                   <div class="text-xs min-w-40">
                     <!-- Date header -->
                     <div class="mb-1.5 font-semibold">
-                      {d.date.toLocaleDateString(undefined, {
-                        weekday: "short",
-                        month: "short",
-                        day: "numeric",
-                      })}
+                      {formatWeekdayDate(d.date)}
                     </div>
 
                     <!-- Average glucose -->

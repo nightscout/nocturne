@@ -11,6 +11,10 @@
     <NoWarn>$(NoWarn);1591;NU1608;NU1701</NoWarn>
     <!-- Container publishing configuration for Aspire -->
     <EnableSdkContainerSupport>true</EnableSdkContainerSupport>
+    <!-- Restore RID-specific assets for both container architectures so a
+         multi-arch publish (ContainerRuntimeIdentifiers) can run inner
+         per-RID publishes without a separate restore. -->
+    <RuntimeIdentifiers>linux-x64;linux-arm64</RuntimeIdentifiers>
     <ContainerRepository>nocturne-api</ContainerRepository>
     <ContainerBaseImage>mcr.microsoft.com/dotnet/aspnet:10.0</ContainerBaseImage>
     <ContainerWorkingDirectory>/app/</ContainerWorkingDirectory>
@@ -63,6 +67,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\Aspire\Nocturne.Aspire.ServiceDefaults\Nocturne.Aspire.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\..\Core\Nocturne.Core.Alerts.Native\Nocturne.Core.Alerts.Native.csproj" />
     <ProjectReference Include="..\..\Core\Nocturne.Core.Constants\Nocturne.Core.Constants.csproj" />
     <ProjectReference Include="..\..\Core\Nocturne.Core.Contracts\Nocturne.Core.Contracts.csproj" />
     <ProjectReference Include="..\..\Core\Nocturne.Core.Models\Nocturne.Core.Models.csproj" />
@@ -84,6 +89,8 @@
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.NocturneRemote\Nocturne.Connectors.NocturneRemote.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Twiist\Nocturne.Connectors.Twiist.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.CareLink\Nocturne.Connectors.CareLink.csproj" />
+    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Tandem\Nocturne.Connectors.Tandem.csproj" />
+    <ProjectReference Include="..\..\Services\Nocturne.Services.Demo.Generation\Nocturne.Services.Demo.Generation.csproj" />
   </ItemGroup>
   <!-- Diagram sources — published to wwwroot/diagrams/ so the OpenAPI document
        transformers can find them in Docker (where the source tree isn't available). -->
@@ -91,6 +98,23 @@
     <DiagramSource Include="..\..\..\docs\diagrams\diagrams.yaml;..\..\..\docs\diagrams\*.mmd" />
     <Content Include="@(DiagramSource)" Link="wwwroot\diagrams\%(Filename)%(Extension)" CopyToOutputDirectory="Never" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
+  <!-- API tag descriptions — folder-based markdown published to wwwroot/api-descriptions/
+       (preserving subfolders) so TagDescriptionDocumentTransformer can find them in Docker
+       where the source tree isn't available. -->
+  <ItemGroup>
+    <ApiDescriptionSource Include="..\..\..\docs\api-descriptions\**\*.md" />
+    <Content Include="@(ApiDescriptionSource)" Link="wwwroot\api-descriptions\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="Never" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+  <!-- dotnet watch (.NET 10) attaches a FileSystemWatcher to each linked Content item's
+       destination directory under wwwroot\. Those dirs don't exist in dev (the .md/.mmd files
+       are only copied at publish, for Docker), and FileSystemWatcher throws on a missing
+       directory — crashing the AppHost on `aspire start`. Create the destination dirs (derived
+       from the source items, so new doc subfolders are covered automatically) before the build
+       that precedes the watch loop; they stay empty in dev. -->
+  <Target Name="EnsureLinkedContentDirsExist" BeforeTargets="BeforeBuild">
+    <MakeDir Directories="$(MSBuildProjectDirectory)\wwwroot\diagrams" />
+    <MakeDir Directories="@(ApiDescriptionSource->'$(MSBuildProjectDirectory)\wwwroot\api-descriptions\%(RecursiveDir)')" />
+  </Target>
   <!-- NSwag TypeScript Client Generation -->
   <!-- Runs on `dotnet build` and on initial Aspire startup (first build before watch loop). -->
   <!-- Skipped on subsequent `dotnet watch` rebuilds (DOTNET_WATCH_ITERATION is set from -->

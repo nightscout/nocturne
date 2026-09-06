@@ -1,6 +1,6 @@
 {
   "name": "@nocturne/desktop",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Nocturne desktop companion — connects native-OAuth data sources (CareLink) without browser DevTools",
   "type": "module",

@@ -42,6 +42,25 @@ public class ConnectorServerResolverTests
         result!.Host.Should().Be("shareous1.dexcom.com");
     }
 
+    /// <summary>
+    /// A server constant whose name opens with the scheme's letters is still a host, and a
+    /// constant that carries its own scheme keeps it.
+    /// </summary>
+    [Theory]
+    [InlineData("httpbin.example.com", "https", "httpbin.example.com")]
+    [InlineData("http://api.example.com", "http", "api.example.com")]
+    public void Resolve_ClassifiesTheServerConstantByItsScheme(
+        string server, string expectedScheme, string expectedHost)
+    {
+        var resolver = new ConnectorServerResolver<TestConfig>(null, null, server);
+
+        var result = resolver.Resolve(CreateConfig());
+
+        result.Should().NotBeNull();
+        result!.Scheme.Should().Be(expectedScheme);
+        result.Host.Should().Be(expectedHost);
+    }
+
     [Fact]
     public void Resolve_ReturnsNull_WhenNoMappingConfigured()
     {

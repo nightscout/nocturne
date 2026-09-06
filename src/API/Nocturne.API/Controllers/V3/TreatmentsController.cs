@@ -61,6 +61,8 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(304)]
     [ProducesResponseType(500)]
+    [RequireScope(Scope.TreatmentsRead)]
+    [ErrorEnvelope]
     public async Task<ActionResult> GetTreatments(CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
@@ -99,9 +101,8 @@ public class TreatmentsController : BaseV3Controller<Treatment>
 
             // Check for conditional requests (304 Not Modified)
             var lastModified = GetLastModified(treatmentsList);
-            var etag = GenerateETag(treatmentsList);
 
-            if (ShouldReturn304(etag, lastModified, parameters))
+            if (ShouldReturn304(lastModified, parameters))
             {
                 return StatusCode(304);
             }
@@ -119,11 +120,6 @@ public class TreatmentsController : BaseV3Controller<Treatment>
             _logger.LogWarning(ex, "Invalid V3 treatments request parameters");
             return CreateV3ErrorResponse(400, "Invalid request parameters", ex.Message);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving V3 treatments");
-            return CreateV3ErrorResponse(500, "Internal server error", "An unexpected error occurred");
-        }
     }
 
     /// <summary>
@@ -137,6 +133,8 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     [ProducesResponseType(typeof(Treatment), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(500)]
+    [RequireScope(Scope.TreatmentsRead)]
+    [ErrorEnvelope]
     public async Task<ActionResult<Treatment>> GetTreatment(
         string id,
         CancellationToken cancellationToken = default
@@ -144,31 +142,22 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     {
         _logger.LogDebug("V3 treatment by ID requested: {Id}", id);
 
-        try
+        var treatment = await _treatmentService.GetTreatmentByIdAsync(id, cancellationToken);
+
+        if (treatment == null)
         {
-            var treatment = await _treatmentService.GetTreatmentByIdAsync(id, cancellationToken);
-
-            if (treatment == null)
-            {
-                return CreateV3ErrorResponse(
-                    404,
-                    "Treatment not found",
-                    $"No treatment found with ID: {id}"
-                );
-            }
-
-            // Set appropriate headers
-            var etag = GenerateETag(new[] { treatment });
-            Response.Headers["ETag"] = $"\"{etag}\"";
-            Response.Headers["Cache-Control"] = "public, max-age=60";
-
-            return Ok(treatment);
+            return CreateV3ErrorResponse(
+                404,
+                "Treatment not found",
+                $"No treatment found with ID: {id}"
+            );
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving V3 treatment {Id}", id);
-            return CreateV3ErrorResponse(500, "Internal server error", "An unexpected error occurred");
-        }
+
+        // Set appropriate headers
+        Response.Headers["ETag"] = FormatCursorETag(treatment.SrvModified ?? treatment.Mills);
+        Response.Headers["Cache-Control"] = "public, max-age=60";
+
+        return Ok(treatment);
     }
 
     /// <summary>
@@ -189,11 +178,12 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     /// <response code="500">Internal server error.</response>
     [HttpPost]
     [Authorize]
-    [RequireScope(OAuthScopes.TreatmentsReadWrite)]
+    [RequireScope(Scope.TreatmentsReadWrite)]
     [NightscoutEndpoint("/api/v3/treatments")]
     [ProducesResponseType(typeof(Treatment), 201)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<Treatment>> CreateTreatment(
         [FromBody] Treatment treatment,
         CancellationToken cancellationToken = default
@@ -222,13 +212,14 @@ public class TreatmentsController : BaseV3Controller<Treatment>
                 );
                 if (existingTreatment != null)
                 {
+                    var existingIdentifier = MongoObjectId.Coerce(existingTreatment.Id);
                     return Ok(
                         new
                         {
                             status = 200,
-                            identifier = existingTreatment.Id,
+                            identifier = existingIdentifier,
                             isDeduplication = true,
-                            deduplicatedIdentifier = existingTreatment.Id,
+                            deduplicatedIdentifier = existingIdentifier,
                         }
                     );
                 }
@@ -255,12 +246,10 @@ public class TreatmentsController : BaseV3Controller<Treatment>
 
             _logger.LogDebug("Successfully created V3 treatment {Id}", createdTreatment.Id);
 
-            // Set location header for created resource
-            Response.Headers["Location"] = $"/api/v3/treatments/{Uri.EscapeDataString(createdTreatment.Id ?? string.Empty)}";
-
+            // Location resolves to the 24-hex ObjectId that matches the response body identifier.
             return CreatedAtAction(
                 nameof(GetTreatment),
-                new { id = createdTreatment.Id },
+                new { id = MongoObjectId.Coerce(createdTreatment.Id) },
                 createdTreatment
             );
         }
@@ -268,11 +257,6 @@ public class TreatmentsController : BaseV3Controller<Treatment>
         {
             _logger.LogWarning(ex, "Invalid V3 treatment data");
             return CreateV3ErrorResponse(400, "Invalid treatment data", ex.Message);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating V3 treatment");
-            return CreateV3ErrorResponse(500, "Internal server error", "An unexpected error occurred");
         }
     }
 
@@ -284,11 +268,12 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     /// <returns>Created treatments</returns>
     [HttpPost("bulk")]
     [Authorize]
-    [RequireScope(OAuthScopes.TreatmentsReadWrite)]
+    [RequireScope(Scope.TreatmentsReadWrite)]
     [NightscoutEndpoint("/api/v3/treatments/bulk")]
     [ProducesResponseType(typeof(Treatment[]), 201)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<Treatment[]>> CreateTreatments(
         [FromBody] Treatment[] treatments,
         CancellationToken cancellationToken = default
@@ -344,11 +329,6 @@ public class TreatmentsController : BaseV3Controller<Treatment>
             _logger.LogWarning(ex, "Invalid V3 bulk treatment data");
             return CreateV3ErrorResponse(400, "Invalid treatments data", ex.Message);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating V3 bulk treatments");
-            return CreateV3ErrorResponse(500, "Internal server error", "An unexpected error occurred");
-        }
     }
 
     /// <summary>
@@ -360,12 +340,13 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     /// <returns>Updated treatment</returns>
     [HttpPut("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.TreatmentsReadWrite)]
+    [RequireScope(Scope.TreatmentsReadWrite)]
     [NightscoutEndpoint("/api/v3/treatments/:id")]
     [ProducesResponseType(typeof(Treatment), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<Treatment>> UpdateTreatment(
         string id,
         [FromBody] Treatment treatment,
@@ -416,11 +397,6 @@ public class TreatmentsController : BaseV3Controller<Treatment>
             _logger.LogWarning(ex, "Invalid V3 treatment update data for {Id}", id);
             return CreateV3ErrorResponse(400, "Invalid treatment data", ex.Message);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error updating V3 treatment {Id}", id);
-            return CreateV3ErrorResponse(500, "Internal server error", "An unexpected error occurred");
-        }
     }
 
     /// <summary>
@@ -431,11 +407,12 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     /// <returns>No content on success</returns>
     [HttpDelete("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.FullAccess)]
+    [RequireScope(Scope.TreatmentsReadWrite)]
     [NightscoutEndpoint("/api/v3/treatments/:id")]
     [ProducesResponseType(204)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult> DeleteTreatment(
         string id,
         CancellationToken cancellationToken = default
@@ -443,28 +420,20 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     {
         _logger.LogDebug("V3 treatment deletion requested for {Id}", id);
 
-        try
+        var deleted = await _treatmentService.DeleteTreatmentAsync(id, cancellationToken);
+
+        if (!deleted)
         {
-            var deleted = await _treatmentService.DeleteTreatmentAsync(id, cancellationToken);
-
-            if (!deleted)
-            {
-                return CreateV3ErrorResponse(
-                    404,
-                    "Treatment not found",
-                    $"No treatment found with ID: {id}"
-                );
-            }
-
-            _logger.LogDebug("Successfully deleted V3 treatment {Id}", id);
-
-            return NoContent();
+            return CreateV3ErrorResponse(
+                404,
+                "Treatment not found",
+                $"No treatment found with ID: {id}"
+            );
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting V3 treatment {Id}", id);
-            return CreateV3ErrorResponse(500, "Internal server error", "An unexpected error occurred");
-        }
+
+        _logger.LogDebug("Successfully deleted V3 treatment {Id}", id);
+
+        return NoContent();
     }
 
     /// <summary>
@@ -480,6 +449,8 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     [NightscoutEndpoint("/api/v3/treatments/history/{lastModified}")]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(500)]
+    [RequireScope(Scope.TreatmentsRead)]
+    [ErrorEnvelope]
     public async Task<ActionResult> GetTreatmentHistory(
         long lastModified,
         [FromQuery] int limit = 1000,
@@ -492,22 +463,21 @@ public class TreatmentsController : BaseV3Controller<Treatment>
             limit
         );
 
-        try
-        {
-            limit = Math.Min(Math.Max(limit, 1), 1000);
+        limit = Math.Min(Math.Max(limit, 1), 1000);
 
-            var treatments = await _treatmentService.GetTreatmentsModifiedSinceAsync(
-                lastModified,
-                limit,
-                cancellationToken
-            );
-            return CreateV3SuccessResponse(treatments);
-        }
-        catch (Exception ex)
+        var treatments = await _treatmentService.GetTreatmentsModifiedSinceAsync(
+            lastModified,
+            limit,
+            cancellationToken
+        );
+
+        var treatmentsList = treatments.ToList();
+        if (treatmentsList.Count > 0)
         {
-            _logger.LogError(ex, "Error retrieving treatment history");
-            return CreateV3ErrorResponse(500, "Internal server error", "An unexpected error occurred");
+            SetHistoryCursorHeaders(treatmentsList.Max(t => t.SrvModified ?? t.Mills));
         }
+
+        return CreateV3SuccessResponse(treatmentsList);
     }
 
     /// <summary>
@@ -527,11 +497,12 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     /// <response code="500">Internal server error.</response>
     [HttpPatch("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.TreatmentsReadWrite)]
+    [RequireScope(Scope.TreatmentsReadWrite)]
     [NightscoutEndpoint("/api/v3/treatments/:id")]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult> PatchTreatment(
         string id,
         [FromBody] JsonElement patchData,
@@ -540,39 +511,31 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     {
         _logger.LogDebug("V3 treatment PATCH requested for {Id}", id);
 
-        try
-        {
-            var result = await _treatmentService.PatchTreatmentAsync(
-                id,
-                patchData,
-                cancellationToken
-            );
+        var result = await _treatmentService.PatchTreatmentAsync(
+            id,
+            patchData,
+            cancellationToken
+        );
 
-            if (result == null)
+        if (result == null)
+        {
+            return CreateV3ErrorResponse(
+                404,
+                "Treatment not found",
+                $"No treatment found with ID: {id}"
+            );
+        }
+
+        _logger.LogDebug("Successfully patched V3 treatment {Id}", id);
+
+        return Ok(
+            new
             {
-                return CreateV3ErrorResponse(
-                    404,
-                    "Treatment not found",
-                    $"No treatment found with ID: {id}"
-                );
+                status = 200,
+                result,
+                identifier = MongoObjectId.Coerce(result.Id),
             }
-
-            _logger.LogDebug("Successfully patched V3 treatment {Id}", id);
-
-            return Ok(
-                new
-                {
-                    status = 200,
-                    result,
-                    identifier = result.Id,
-                }
-            );
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error patching V3 treatment {Id}", id);
-            return CreateV3ErrorResponse(500, "Internal server error", "An unexpected error occurred");
-        }
+        );
     }
 
     #region Helper Methods

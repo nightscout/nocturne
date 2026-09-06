@@ -274,15 +274,58 @@ public class TrackerRepository : ITrackerRepository
             .ToListAsync(cancellationToken);
     }
 
+    /// <inheritdoc />
+    public virtual async Task<Dictionary<Guid, DateTime>> GetActiveTrackerReferencesAsync(
+        IReadOnlySet<Guid> definitionIds,
+        DateTime at,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (definitionIds.Count == 0)
+            return new Dictionary<Guid, DateTime>();
+
+        var ids = definitionIds.ToList();
+        var instances = await _context
+            .TrackerInstances.AsNoTracking()
+            .Where(i => ids.Contains(i.DefinitionId)
+                && i.StartedAt <= at
+                && (i.CompletedAt == null || i.CompletedAt > at))
+            .OrderByDescending(i => i.StartedAt)
+            .Select(i => new
+            {
+                i.DefinitionId,
+                i.StartedAt,
+                i.ScheduledAt,
+                i.Definition!.Mode,
+            })
+            .ToListAsync(cancellationToken);
+
+        var references = new Dictionary<Guid, DateTime>();
+        foreach (var instance in instances)
+        {
+            // Newest-first ordering: the first instance seen per definition wins.
+            if (references.ContainsKey(instance.DefinitionId))
+                continue;
+
+            var reference = instance.Mode == TrackerMode.Event
+                ? instance.ScheduledAt
+                : instance.StartedAt;
+            if (reference is { } referenceAt)
+                references[instance.DefinitionId] = referenceAt;
+        }
+
+        return references;
+    }
+
     /// <summary>
     /// Get completed tracker instances for history
     /// </summary>
-    /// <param name="userId">The user ID.</param>
+    /// <param name="userId">Optional user ID filter.</param>
     /// <param name="limit">The maximum number of instances to return.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>An array of completed tracker instances.</returns>
     public virtual async Task<TrackerInstanceEntity[]> GetCompletedInstancesAsync(
-        string userId,
+        string? userId,
         int limit = 100,
         CancellationToken cancellationToken = default
     )
@@ -290,7 +333,7 @@ public class TrackerRepository : ITrackerRepository
         return await _context
             .TrackerInstances.AsNoTracking()
             .Include(i => i.Definition)
-            .Where(i => i.UserId == userId && i.CompletedAt != null)
+            .Where(i => ((userId != null && i.UserId == userId) || i.Definition.Visibility == TrackerVisibility.Public) && i.CompletedAt != null)
             .OrderByDescending(i => i.CompletedAt)
             .Take(limit)
             .ToArrayAsync(cancellationToken);

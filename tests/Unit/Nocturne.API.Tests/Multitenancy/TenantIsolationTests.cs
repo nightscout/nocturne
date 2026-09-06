@@ -29,9 +29,9 @@ public class TenantIsolationTests
 {
     private static readonly Guid TenantAId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
     private static readonly Guid TenantBId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
-    private static readonly TenantContext TenantA = new(TenantAId, "alice", "Alice", true);
-    private static readonly TenantContext TenantB = new(TenantBId, "bob", "Bob", true);
-    private static readonly TenantContext InactiveTenant = new(TenantAId, "alice", "Alice", false);
+    private static readonly TenantContext TenantA = new(TenantAId, "alice", "Alice", true, IsDemo: false);
+    private static readonly TenantContext TenantB = new(TenantBId, "bob", "Bob", true, IsDemo: false);
+    private static readonly TenantContext InactiveTenant = new(TenantAId, "alice", "Alice", false, IsDemo: false);
 
     /// <summary>
     /// Creates a mock HubCallerContext backed by a real HttpContext.
@@ -47,6 +47,7 @@ public class TenantIsolationTests
         var mock = new Mock<HubCallerContext>();
         mock.Setup(c => c.Features).Returns(features);
         mock.Setup(c => c.ConnectionId).Returns(connectionId);
+        mock.Setup(c => c.Items).Returns(new Dictionary<object, object?>());
         return mock;
     }
 
@@ -217,15 +218,16 @@ public class TenantIsolationTests
         if (tenantContext != null)
             httpContext.Items["TenantContext"] = tenantContext;
 
+        var mockCallerContext = CreateMockHubCallerContext(httpContext, Guid.NewGuid().ToString());
+
+        // The accessor goes on the invocation's own provider, not the handshake request's: SignalR
+        // builds a fresh DI scope per invocation and that is the one the hub method resolves from.
         var services = new ServiceCollection();
         services.AddSingleton(accessor);
-        httpContext.RequestServices = services.BuildServiceProvider();
-
-        var mockCallerContext = CreateMockHubCallerContext(httpContext, Guid.NewGuid().ToString());
 
         var invocationContext = new HubInvocationContext(
             mockCallerContext.Object,
-            Mock.Of<IServiceProvider>(),
+            services.BuildServiceProvider(),
             Mock.Of<Hub>(),
             typeof(Hub).GetMethod(nameof(Hub.OnConnectedAsync))!,
             Array.Empty<object>());
@@ -240,13 +242,13 @@ public class TenantIsolationTests
         if (tenantContext != null)
             httpContext.Items["TenantContext"] = tenantContext;
 
-        var services = new ServiceCollection();
-        services.AddSingleton(accessor);
-        httpContext.RequestServices = services.BuildServiceProvider();
-
         var mockCallerContext = CreateMockHubCallerContext(httpContext, Guid.NewGuid().ToString());
 
-        return new HubLifetimeContext(mockCallerContext.Object, Mock.Of<IServiceProvider>(), Mock.Of<Hub>());
+        var services = new ServiceCollection();
+        services.AddSingleton(accessor);
+
+        return new HubLifetimeContext(
+            mockCallerContext.Object, services.BuildServiceProvider(), Mock.Of<Hub>());
     }
 
     #endregion
@@ -303,9 +305,16 @@ public class TenantIsolationTests
         mockHaHub.Setup(x => x.Clients).Returns(haClients.Object);
         haClients.Setup(x => x.Group(It.IsAny<string>())).Returns(haProxy.Object);
 
+        var mockOverviewHub = new Mock<IHubContext<OverviewHub>>();
+        var overviewClients = new Mock<IHubClients>();
+        var overviewProxy = new Mock<IClientProxy>();
+        mockOverviewHub.Setup(x => x.Clients).Returns(overviewClients.Object);
+        overviewClients.Setup(x => x.Group(It.IsAny<string>())).Returns(overviewProxy.Object);
+
         var service = new SignalRBroadcastService(
             mockDataHub.Object, mockAlarmHub.Object, mockConfigHub.Object, mockAlertHub.Object,
-            mockHaHub.Object, mockAccessor.Object, mockLogger.Object);
+            mockHaHub.Object, mockOverviewHub.Object, mockAccessor.Object,
+            Options.Create(new JsonHubProtocolOptions()), mockLogger.Object);
 
         return (service, dataClients, alarmClients, configClients, dataProxy, alarmProxy, configProxy);
     }
@@ -424,7 +433,7 @@ public class TenantIsolationTests
     }
 
     [Fact]
-    public async Task Broadcast_NotificationCreated_TargetsTenantSpecificUserAndAuthorizedGroups()
+    public async Task Broadcast_NotificationCreated_TargetsTenantSpecificUserAndRelayGroups()
     {
         var (service, dataClients, _, _, _, _, _) = CreateBroadcastService(TenantA);
         var notification = new InAppNotificationDto { Id = Guid.NewGuid() };
@@ -432,8 +441,12 @@ public class TenantIsolationTests
         await service.BroadcastNotificationCreatedAsync("user-123", notification);
 
         dataClients.Verify(c => c.Group($"{TenantAId}:user-user-123"), Times.Once);
-        dataClients.Verify(c => c.Group($"{TenantAId}:authorized"), Times.Once);
+        // The tenant-wide copy goes to the infrastructure relay, which only the bridge joins — not
+        // to the data group, which any member holding glucose read joins.
+        dataClients.Verify(c => c.Group($"{TenantAId}:relay"), Times.Once);
+        dataClients.Verify(c => c.Group($"{TenantAId}:authorized"), Times.Never);
         dataClients.Verify(c => c.Group("user-user-123"), Times.Never);
+        dataClients.Verify(c => c.Group("relay"), Times.Never);
     }
 
     [Fact]
@@ -705,6 +718,24 @@ public class TenantIsolationTests
     }
 
     [Fact]
+    public async Task TenantResolutionMiddleware_OverviewHubNegotiate_ApexDomain_PassesThrough()
+    {
+        // The cross-tenant overview hub is negotiated from the apex with no tenant;
+        // SignalR appends /negotiate to the hub path, so the prefix must match.
+        var nextCalled = false;
+        var middleware = CreateMiddlewareWithNext(
+            _ => { nextCalled = true; return Task.CompletedTask; },
+            tenants: new[] { ("alice", TenantAId, true) });
+
+        var context = CreateMiddlewareHttpContext("nocturnecgm.com");
+        context.Request.Path = "/hubs/overview/negotiate";
+        await middleware.InvokeAsync(context);
+
+        nextCalled.Should().BeTrue();
+        context.Items.ContainsKey("TenantContext").Should().BeFalse();
+    }
+
+    [Fact]
     public async Task TenantResolutionMiddleware_SetupPrefix_ApexDomain_PassesThrough()
     {
         // /api/v4/setup/ prefix is tenantless-allowed
@@ -744,7 +775,7 @@ public class TenantIsolationTests
         {
             foreach (var (slug, id, active) in tenants)
             {
-                var ctx = new TenantContext(id, slug, slug, active);
+                var ctx = new TenantContext(id, slug, slug, active, IsDemo: false);
                 cache.Set($"tenant:{slug}", ctx, TimeSpan.FromMinutes(5));
             }
 
@@ -753,7 +784,7 @@ public class TenantIsolationTests
             if (string.IsNullOrEmpty(baseDomain) && activeTenants.Length == 1)
             {
                 var (slug, id, _) = activeTenants[0];
-                var singleCtx = new TenantContext(id, slug, slug, true);
+                var singleCtx = new TenantContext(id, slug, slug, true, IsDemo: false);
                 cache.Set("tenant:__sole__", singleCtx, TimeSpan.FromMinutes(5));
             }
         }
@@ -851,8 +882,8 @@ public class TenantIsolationTests
     private static (DataHub hub, Mock<IGroupManager> groups) CreateDataHub(TenantContext tenantContext)
     {
         var mockLogger = new Mock<ILogger<DataHub>>();
-        var mockAuthService = new Mock<Core.Contracts.Identity.IAuthorizationService>();
-        var hub = new DataHub(mockLogger.Object, mockAuthService.Object);
+        var mockTokenAuthorizer = new Mock<Nocturne.API.Services.Identity.IHubTokenAuthorizer>();
+        var hub = new DataHub(mockLogger.Object, mockTokenAuthorizer.Object);
 
         var httpContext = new DefaultHttpContext();
         httpContext.Items["TenantContext"] = tenantContext;
@@ -862,6 +893,16 @@ public class TenantIsolationTests
         httpContext.RequestServices = services.BuildServiceProvider();
 
         var mockCallerContext = CreateMockHubCallerContext(httpContext);
+
+        // Subscribe requires an authorized connection; these tests are about group naming, so grant
+        // full access on the connection's own tenant.
+        Nocturne.API.Hubs.HubAuthorizationState.Grant(
+            mockCallerContext.Object,
+            new Nocturne.API.Hubs.HubAuthorization(
+                tenantContext.TenantId,
+                new HashSet<string> { Nocturne.Core.Models.Authorization.Scope.FullAccess },
+                Nocturne.API.Hubs.HubCredentialKind.Subject,
+                Guid.NewGuid()));
 
         var mockGroups = new Mock<IGroupManager>();
         var mockClients = new Mock<IHubCallerClients>();
@@ -912,8 +953,8 @@ public class TenantIsolationTests
     private static (AlarmHub hub, Mock<IGroupManager> groups) CreateAlarmHub(TenantContext tenantContext)
     {
         var mockLogger = new Mock<ILogger<AlarmHub>>();
-        var mockAuthService = new Mock<Core.Contracts.Identity.IAuthorizationService>();
-        var hub = new AlarmHub(mockLogger.Object, mockAuthService.Object);
+        var mockAuthorizer = new Mock<Nocturne.API.Services.Identity.IHubTokenAuthorizer>();
+        var hub = new AlarmHub(mockLogger.Object, mockAuthorizer.Object);
 
         var httpContext = new DefaultHttpContext();
         httpContext.Items["TenantContext"] = tenantContext;

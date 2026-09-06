@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Multitenancy;
 
 namespace Nocturne.Infrastructure.Data.Services;
@@ -22,13 +23,21 @@ public interface ITenantDbContextFactory
 internal sealed class TenantDbContextFactory(
     IDbContextFactory<NocturneDbContext> pool,
     ITenantAccessor? tenantAccessor,
-    ICategoryReadContext? categoryReadContext) : ITenantDbContextFactory
+    ICategoryReadContext? categoryReadContext,
+    IAuditContext? auditContext = null) : ITenantDbContextFactory
 {
     public async ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default)
     {
         var ctx = await pool.CreateDbContextAsync(ct);
         if (tenantAccessor?.IsResolved == true)
             ctx.TenantId = tenantAccessor.TenantId;
+
+        // Carry the scope's audit context. The MutationAuditInterceptor resolves the
+        // audit context via IHttpContextAccessor, which is null in background services
+        // (connector syncs), where it falls back to this property — without it, every
+        // V4 repository write from a background scope is audited as a null-attributed
+        // user mutation instead of being skipped as a system one.
+        ctx.AuditContext = auditContext;
 
         // Carry the real share flag and category CSV for this request; the CSV is resolved
         // post-auth and is carried only on this factory path. Carrier defaults are already set by
@@ -37,6 +46,7 @@ internal sealed class TenantDbContextFactory(
         var isShare = categoryReadContext?.IsShare == true;
         ctx.IsShareContext = isShare;
         ctx.VisibleCategories = isShare ? categoryReadContext!.VisibleCategoriesCsv : null;
+        ctx.ShareFullHistory = isShare && categoryReadContext!.FullHistory;
 
         return ctx;
     }

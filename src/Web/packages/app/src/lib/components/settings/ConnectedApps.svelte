@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog";
+  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import { Badge } from "$lib/components/ui/badge";
   import { Separator } from "$lib/components/ui/separator";
   import {
@@ -141,44 +141,33 @@
                 </Card.Description>
               {/if}
             </div>
-            <AlertDialog.Root>
-              <AlertDialog.Trigger>
-                {#snippet child({ props }: { props: Record<string, unknown> })}
-                  <Button
-                    {...props}
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    class="text-destructive border-destructive/30 hover:bg-destructive/10 shrink-0"
-                    disabled={isRevoking === app.grantId}
-                  >
-                    {#if isRevoking === app.grantId}
-                      <LoaderCircle class="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                    {:else}
-                      <Trash2 class="mr-1.5 h-3.5 w-3.5" />
-                    {/if}
-                    Revoke
-                  </Button>
-                {/snippet}
-              </AlertDialog.Trigger>
-              <AlertDialog.Content>
-                <AlertDialog.Header>
-                  <AlertDialog.Title>Revoke access</AlertDialog.Title>
-                  <AlertDialog.Description>
-                    Revoke {app.clientName ?? "this app"}'s access to your data?
-                    The app will need to be re-authorized to regain access.
-                  </AlertDialog.Description>
-                </AlertDialog.Header>
-                <AlertDialog.Footer>
-                  <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-                  <AlertDialog.Action
-                    onclick={() => handleRevoke(app.grantId!)}
-                  >
-                    Revoke
-                  </AlertDialog.Action>
-                </AlertDialog.Footer>
-              </AlertDialog.Content>
-            </AlertDialog.Root>
+            <ConfirmDialog
+              title="Revoke access"
+              confirmLabel="Revoke"
+              onConfirm={() => handleRevoke(app.grantId!)}
+            >
+              {#snippet trigger(props)}
+                <Button
+                  {...props}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  class="text-destructive border-destructive/30 hover:bg-destructive/10 shrink-0"
+                  disabled={isRevoking === app.grantId}
+                >
+                  {#if isRevoking === app.grantId}
+                    <LoaderCircle class="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  {:else}
+                    <Trash2 class="mr-1.5 h-3.5 w-3.5" />
+                  {/if}
+                  Revoke
+                </Button>
+              {/snippet}
+              {#snippet description()}
+                Revoke {app.clientName ?? "this app"}'s access to your data?
+                The app will need to be re-authorized to regain access.
+              {/snippet}
+            </ConfirmDialog>
           </div>
         </Card.Header>
         <Card.Content class="space-y-4">

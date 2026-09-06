@@ -5,6 +5,7 @@
   import { Checkbox } from "$lib/components/ui/checkbox";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
+  import { Select, SelectContent, SelectItem, SelectTrigger } from "$lib/components/ui/select";
   import {
     Check,
     ChevronDown,
@@ -14,23 +15,37 @@
   } from "lucide-svelte";
   import PermissionCategorySelector from "$lib/components/rbac/PermissionCategorySelector.svelte";
   import { coachmark } from "@nocturne/coach";
-  import { createInvite } from "$api/generated/tenants.generated.remote";
+  import { createInvite } from "$api/generated/memberInvites.generated.remote";
   import type { TenantRoleDto } from "$lib/api/generated/nocturne-api-client";
+  import { copyToClipboard } from "$lib/utils";
+  import { describeSubmitError } from "$lib/forms";
 
   interface Props {
     roles: TenantRoleDto[];
-    tenantId: string;
     onCreated: (url: string) => void;
     onCancel: () => void;
   }
 
   let {
     roles = [],
-    tenantId,
     onCreated,
     onCancel,
   }: Props = $props();
 
+  // The API refuses anything past 90 days: the token is a bearer credential for tenant
+  // membership, so its lifetime is bounded rather than free-form.
+  const EXPIRY_OPTIONS = [
+    { value: 1, label: "1 day" },
+    { value: 7, label: "7 days" },
+    { value: 14, label: "14 days" },
+    { value: 30, label: "30 days" },
+    { value: 90, label: "90 days" },
+  ];
+
+  let expiresInDays = $state(7);
+  const expiryLabel = $derived(
+    EXPIRY_OPTIONS.find((o) => o.value === expiresInDays)?.label ?? `${expiresInDays} days`,
+  );
   let inviteLabel = $state("");
   let inviteRoleIds = $state<string[]>([]);
   let inviteDirectPermissions = $state<string[]>([]);
@@ -52,7 +67,10 @@
 
   async function copyInviteUrl() {
     if (createdInviteUrl) {
-      await navigator.clipboard.writeText(createdInviteUrl);
+      if (!(await copyToClipboard(createdInviteUrl))) {
+        errorMessage = "Couldn't copy the link to the clipboard. Copy it manually instead.";
+        return;
+      }
       copiedInvite = true;
       setTimeout(() => (copiedInvite = false), 2000);
     }
@@ -63,18 +81,15 @@
     errorMessage = null;
     try {
       const result = await createInvite({
-        id: tenantId,
-        request: {
-          roleIds: inviteRoleIds.length > 0 ? inviteRoleIds : undefined,
-          directPermissions:
-            inviteDirectPermissions.length > 0
-              ? inviteDirectPermissions
-              : undefined,
-          label: inviteLabel || undefined,
-          expiresInDays: 7,
-          maxUses: allowMultipleUses ? undefined : 1,
-          limitTo24Hours,
-        },
+        roleIds: inviteRoleIds.length > 0 ? inviteRoleIds : undefined,
+        directPermissions:
+          inviteDirectPermissions.length > 0
+            ? inviteDirectPermissions
+            : undefined,
+        label: inviteLabel || undefined,
+        expiresInDays,
+        maxUses: allowMultipleUses ? undefined : 1,
+        limitTo24Hours,
       });
       if (result.inviteUrl) {
         createdInviteUrl = result.inviteUrl.startsWith("http")
@@ -82,8 +97,8 @@
           : `${window.location.origin}${result.inviteUrl}`;
         onCreated(createdInviteUrl);
       }
-    } catch {
-      errorMessage = "Failed to create invite. Please try again.";
+    } catch (e) {
+      errorMessage = describeSubmitError(e, "Failed to create invite. Please try again.");
     } finally {
       isCreatingInvite = false;
     }
@@ -100,6 +115,7 @@
   }
 
   function resetForm() {
+    expiresInDays = 7;
     inviteLabel = "";
     inviteRoleIds = [];
     inviteDirectPermissions = [];
@@ -111,7 +127,7 @@
   }
 </script>
 
-<Card.Root>
+<Card.Root data-testid="create-invite-card">
   <Card.Header>
     <Card.Title class="text-lg">Create Invite Link</Card.Title>
     <Card.Description>
@@ -136,7 +152,7 @@
         <div class="flex gap-2" {@attach coachmark({
           key: "setup-invite.copy-link",
           title: "Send the link",
-          description: "The link expires in 7 days. They'll need to sign in or create an account to accept.",
+          description: `The link expires in ${expiryLabel}. They'll need to sign in or create an account to accept.`,
         })}>
           <Input
             type="text"
@@ -193,6 +209,27 @@
               </div>
             {/each}
           </div>
+        </div>
+
+        <div class="space-y-2">
+          <Label for="invite-expiry">Link expires</Label>
+          <Select
+            type="single"
+            value={String(expiresInDays)}
+            onValueChange={(value) => (expiresInDays = Number(value))}
+          >
+            <SelectTrigger id="invite-expiry" class="w-full">
+              {expiryLabel}
+            </SelectTrigger>
+            <SelectContent>
+              {#each EXPIRY_OPTIONS as option (option.value)}
+                <SelectItem value={String(option.value)}>{option.label}</SelectItem>
+              {/each}
+            </SelectContent>
+          </Select>
+          <p class="text-xs text-muted-foreground">
+            After this the link stops working. Anyone who already joined keeps their access.
+          </p>
         </div>
 
         <!-- Direct permissions (collapsible) -->

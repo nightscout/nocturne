@@ -10,7 +10,7 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.TempBasal
 /// </summary>
 [Table("temp_basals")]
-public class TempBasalEntity : ITenantScoped, IAuditable, ISoftDeletable, IV4Entity
+public class TempBasalEntity : ITenantScoped, IAuditable, ISoftDeletable, IV4Entity, ISourcedEntity, IDeviceAttributedEntity, ISystemTimestamped
 {
     /// <summary>
     /// The unique identifier of the tenant this record belongs to.
@@ -66,6 +66,7 @@ public class TempBasalEntity : ITenantScoped, IAuditable, ISoftDeletable, IV4Ent
     /// <summary>
     /// Links records that were split from the same legacy Treatment
     /// </summary>
+    [AuditIgnored]
     [Column("correlation_id")]
     public Guid? CorrelationId { get; set; }
 
@@ -73,7 +74,7 @@ public class TempBasalEntity : ITenantScoped, IAuditable, ISoftDeletable, IV4Ent
     /// Original v1/v3 record ID for migration traceability
     /// </summary>
     [Column("legacy_id")]
-    [MaxLength(64)]
+    [MaxLength(255)]
     public string? LegacyId { get; set; }
 
     /// <summary>
@@ -120,6 +121,15 @@ public class TempBasalEntity : ITenantScoped, IAuditable, ISoftDeletable, IV4Ent
     /// </summary>
     [Column("patient_device_id")]
     public Guid? PatientDeviceId { get; set; }
+
+    /// <summary>
+    /// Stable per-source identifier for synchronization. Unlike <see cref="LegacyId"/> (insert-only),
+    /// a record matched by (DataSource, SyncIdentifier) is updated in place on re-upload — required so
+    /// uploader retries of the same pump event don't duplicate the span.
+    /// </summary>
+    [Column("sync_identifier")]
+    [MaxLength(256)]
+    public string? SyncIdentifier { get; set; }
 
     /// <summary>
     /// Pump-specific record identifier for deduplication

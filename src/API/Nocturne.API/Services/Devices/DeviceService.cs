@@ -3,6 +3,7 @@ using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Services.Devices;
 
@@ -47,7 +48,7 @@ public class DeviceService : IDeviceService
             if (timestamp > existing.LastSeenTimestamp)
             {
                 existing.LastSeenTimestamp = timestamp;
-                await _repository.UpdateAsync(existing.Id, existing, ct);
+                await _repository.UpdateAsync(existing.Id, existing, WriteOrigin.Live, ct);
             }
             _cache[key] = existing.Id;
             return existing.Id;
@@ -62,7 +63,7 @@ public class DeviceService : IDeviceService
             FirstSeenTimestamp = timestamp,
             LastSeenTimestamp = timestamp
         };
-        var created = await _repository.CreateAsync(device, ct);
+        var created = await _repository.CreateAsync(device, WriteOrigin.Live, ct);
         _cache[key] = created.Id;
         return created.Id;
     }

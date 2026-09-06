@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -21,7 +22,7 @@ public class UploaderSnapshotRepositoryTests : IDisposable
     {
         _context = TestDbContextFactory.CreateInMemoryContext();
         _context.TenantId = TenantA;
-        _repository = new UploaderSnapshotRepository(new TestTenantDbContextFactory(_context), NullLogger<UploaderSnapshotRepository>.Instance);
+        _repository = new UploaderSnapshotRepository(new TestTenantDbContextFactory(_context), new SystemAuditContext(), NullLogger<UploaderSnapshotRepository>.Instance);
     }
 
     public void Dispose()
@@ -47,6 +48,59 @@ public class UploaderSnapshotRepositoryTests : IDisposable
             });
         }
         await _context.SaveChangesAsync();
+    }
+
+    private async Task SeedSourceAsync(Guid tenantId, params (DateTime ts, string? source)[] rows)
+    {
+        foreach (var (ts, source) in rows)
+        {
+            _context.UploaderSnapshots.Add(new UploaderSnapshotEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = tenantId,
+                Timestamp = ts,
+                UtcOffset = 0,
+                DataSource = source,
+                SysCreatedAt = DateTime.UtcNow,
+                SysUpdatedAt = DateTime.UtcNow,
+            });
+        }
+        await _context.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task GetAsync_FiltersBySource()
+    {
+        // The list read advertises a source filter on GET /api/v4/device-status/uploader; dropping the
+        // predicate returned every connector's snapshots under a single connector's name.
+        var t1 = new DateTime(2026, 4, 30, 10, 0, 0, DateTimeKind.Utc);
+        var t2 = new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc);
+        await SeedSourceAsync(TenantA,
+            (t1, "carelink"),
+            (t2, "nightscout"));
+
+        var carelink = await _repository.GetAsync(null, null, device: null, source: "carelink");
+        carelink.Should().ContainSingle().Which.Timestamp.Should().Be(t1);
+
+        var unfiltered = await _repository.GetAsync(null, null, device: null, source: null);
+        unfiltered.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task GetLatestTimestampAsync_FiltersBySource()
+    {
+        // Regression: the device-status resume watermark is source-scoped — a 2nd connector's first
+        // sync must not inherit a 1st connector's later timestamp (which would skip its backfill).
+        var t1 = new DateTime(2026, 4, 30, 10, 0, 0, DateTimeKind.Utc);
+        var t2 = new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc);
+        await SeedSourceAsync(TenantA,
+            (t1, "carelink"),
+            (t2, "nightscout"));
+
+        (await _repository.GetLatestTimestampAsync("carelink")).Should().Be(t1);
+        (await _repository.GetLatestTimestampAsync("nightscout")).Should().Be(t2);
+        (await _repository.GetLatestTimestampAsync("never-synced")).Should().BeNull();
+        (await _repository.GetLatestTimestampAsync(null)).Should().Be(t2);
     }
 
     [Fact]

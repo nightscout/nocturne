@@ -1,7 +1,5 @@
 using FluentAssertions;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Audit;
@@ -11,10 +9,12 @@ using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models.Services;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Connectors;
@@ -34,8 +34,7 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
     private const string ConnectorId = "nightscout";
     private const string AuthType = "OAuthAccessToken";
 
-    private readonly SqliteConnection _connection;
-    private readonly DbContextOptions<NocturneDbContext> _dbOptions;
+    private readonly SqliteTestDatabase _db;
     private readonly string _deviceId;
 
     private readonly Mock<ISensorGlucoseRepository> _sensorGlucose = new();
@@ -58,23 +57,16 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
         _deviceId = ConnectorMetadataService.GetByConnectorId(ConnectorId)?.DataSourceId
             ?? throw new InvalidOperationException("Nightscout connector metadata failed to load");
 
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
-
-        _dbOptions = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .Options;
+        _db = TestDbContextFactory.CreateSqlite();
 
         using var db = NewContext();
-        db.Database.EnsureCreated();
         db.Tenants.Add(new TenantEntity { Id = TenantId, Slug = "test" });
         db.SaveChanges();
     }
 
-    public void Dispose() => _connection.Dispose();
+    public void Dispose() => _db.Dispose();
 
-    private NocturneDbContext NewContext() => new(_dbOptions) { TenantId = TenantId };
+    private NocturneDbContext NewContext() => _db.CreateContext(TenantId);
 
     private DataSourceService CreateService(NocturneDbContext context) => new(
         context,
@@ -109,7 +101,6 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
             Carbs = 20,
         });
 
-        // Auditable but not soft-deletable: audited hard delete.
         db.StateSpans.Add(new StateSpanEntity
         {
             Id = Guid.CreateVersion7(),
@@ -120,7 +111,6 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
             StartTimestamp = DateTime.UtcNow,
         });
 
-        // Soft-deletable but not auditable: soft-delete without an audit row.
         db.BGChecks.Add(new BGCheckEntity
         {
             Id = Guid.CreateVersion7(),
@@ -130,12 +120,24 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
             Timestamp = DateTime.UtcNow,
             Glucose = 100,
         });
+        db.Notes.Add(new NoteEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = TenantId,
+            LegacyId = "note-1",
+            DataSource = _deviceId,
+            Timestamp = DateTime.UtcNow,
+            Text = "hello",
+        });
+        // An imported snapshot's Device is the rig string the uploader reported, so only DataSource
+        // ties it back to the connector.
         db.ApsSnapshots.Add(new ApsSnapshotEntity
         {
             Id = Guid.CreateVersion7(),
             TenantId = TenantId,
             LegacyId = "aps-1",
-            Device = _deviceId,
+            DataSource = _deviceId,
+            Device = "openaps://rig",
             Timestamp = DateTime.UtcNow,
             AidAlgorithm = "Loop",
         });
@@ -163,42 +165,50 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
             .SingleAsync(b => b.LegacyId == "bolus-1");
         bolus.DeletedAt.Should().NotBeNull();
 
-        // ...and carry a user-attributed delete audit row.
-        (await assertCtx.MutationAuditLog.SingleAsync(a =>
-            a.EntityType == "Bolus" && a.EntityId == bolus.Id && a.Action == "delete"))
-            .AuthType.Should().Be(AuthType);
+        // ...and are covered by one user-attributed bulk_delete summary row naming the purged source.
+        var bolusSummary = await assertCtx.MutationAuditLog.SingleAsync(a =>
+            a.EntityType == "Bolus" && a.Action == "bulk_delete");
+        bolusSummary.AuthType.Should().Be(AuthType);
+        bolusSummary.EntityId.Should().BeNull();
+        bolusSummary.ChangesJson.Should().Contain($"data_source={_deviceId}");
 
-        // StateSpan is hard-deleted but still leaves a user-attributed delete audit row.
-        (await assertCtx.StateSpans.IgnoreQueryFilters().AnyAsync(s => s.Source == _deviceId))
-            .Should().BeFalse();
-        (await assertCtx.MutationAuditLog.Where(a => a.EntityType == "StateSpan" && a.Action == "delete")
-            .ToListAsync())
-            .Should().ContainSingle().Which.AuthType.Should().Be(AuthType);
+        (await assertCtx.StateSpans.IgnoreQueryFilters().SingleAsync(s => s.Source == _deviceId))
+            .DeletedAt.Should().NotBeNull();
 
-        // Non-auditable types are soft-deleted with no audit row.
-        var bgCheck = await assertCtx.BGChecks.IgnoreQueryFilters()
-            .SingleAsync(b => b.LegacyId == "bgcheck-1");
-        bgCheck.DeletedAt.Should().NotBeNull();
+        (await assertCtx.BGChecks.IgnoreQueryFilters().SingleAsync(b => b.LegacyId == "bgcheck-1"))
+            .DeletedAt.Should().NotBeNull();
         (await assertCtx.ApsSnapshots.IgnoreQueryFilters().SingleAsync(a => a.LegacyId == "aps-1"))
             .DeletedAt.Should().NotBeNull();
-        (await assertCtx.MutationAuditLog.AnyAsync(a => a.EntityType == "BGCheck"))
-            .Should().BeFalse();
+        (await assertCtx.MutationAuditLog.Where(a => a.Action == "bulk_delete")
+            .Select(a => a.EntityType).ToListAsync())
+            .Should().Contain(["BGCheck", "Note", "ApsSnapshot", "StateSpan"]);
     }
 
     [Fact]
-    public async Task DeleteConnectorData_BlocksReimportOfAuditableTreatments()
+    public async Task DeleteConnectorData_BlocksReimportOfEveryAuditableType()
     {
         SeedOneOfEachType();
 
         await using (var ctx = NewContext())
             await CreateService(ctx).DeleteConnectorDataAsync(ConnectorId);
 
-        // The dedup that guards bulk-create now treats the user-deleted bolus as blocking, so the
-        // next sync cannot re-import it.
         await using var assertCtx = NewContext();
-        var blocked = await assertCtx.GetBlockingLegacyIdsAsync<BolusEntity>(
-            new HashSet<string> { "bolus-1" });
-        blocked.Should().Contain("bolus-1");
+
+        // An active row blocks re-import too, so each row must be shown deleted before "blocking"
+        // says anything about attribution.
+        (await assertCtx.Boluses.IgnoreQueryFilters().SingleAsync(b => b.LegacyId == "bolus-1")).DeletedAt.Should().NotBeNull();
+        (await assertCtx.CarbIntakes.IgnoreQueryFilters().SingleAsync(c => c.LegacyId == "carb-1")).DeletedAt.Should().NotBeNull();
+        (await assertCtx.BGChecks.IgnoreQueryFilters().SingleAsync(b => b.LegacyId == "bgcheck-1")).DeletedAt.Should().NotBeNull();
+        (await assertCtx.Notes.IgnoreQueryFilters().SingleAsync(n => n.LegacyId == "note-1")).DeletedAt.Should().NotBeNull();
+        (await assertCtx.ApsSnapshots.IgnoreQueryFilters().SingleAsync(a => a.LegacyId == "aps-1")).DeletedAt.Should().NotBeNull();
+
+        // The dedup that guards bulk-create treats every user-deleted row as blocking, so the next
+        // sync cannot re-import them.
+        (await assertCtx.GetBlockingLegacyIdsAsync<BolusEntity>(["bolus-1"])).Should().Contain("bolus-1");
+        (await assertCtx.GetBlockingLegacyIdsAsync<CarbIntakeEntity>(["carb-1"])).Should().Contain("carb-1");
+        (await assertCtx.GetBlockingLegacyIdsAsync<BGCheckEntity>(["bgcheck-1"])).Should().Contain("bgcheck-1");
+        (await assertCtx.GetBlockingLegacyIdsAsync<NoteEntity>(["note-1"])).Should().Contain("note-1");
+        (await assertCtx.GetBlockingLegacyIdsAsync<ApsSnapshotEntity>(["aps-1"])).Should().Contain("aps-1");
     }
 
     [Fact]
@@ -220,6 +230,9 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
         var result = await CreateService(ctx).DeleteConnectorDataAsync("not-a-connector");
 
         result.Success.Should().BeFalse();
+        result.ErrorCode.Should().Be(
+            DataSourceDeleteError.NotFound,
+            "the controller maps the 404 off the error code, not the message text");
         _connectorConfig.Verify(c => c.SetActiveAsync(
             It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()),
             Times.Never);

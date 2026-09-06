@@ -2,6 +2,9 @@
   StatusCode: 200,
   ContentType: application/json; charset=utf-8,
   Body: {
-    serverTime: {Scrubbed}
+    status: 200,
+    result: {
+      srvDate: {Scrubbed}
+    }
   }
 }

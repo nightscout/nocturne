@@ -7,6 +7,7 @@ using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
@@ -33,6 +34,10 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<CompressionLowDetectionService> _logger;
+
+    public const string NotificationType = "glucose.compression_low_review";
+
+    public static string NotificationSourceId(DateOnly nightOf) => nightOf.ToString("yyyy-MM-dd");
 
     // Detection configuration - sleep hours are now read from settings
     private const int DetectionDelayMinutes = 15;
@@ -115,7 +120,7 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
             {
                 using var scope = _serviceProvider.CreateScope();
                 var tenantAccessor = scope.ServiceProvider.GetRequiredService<ITenantAccessor>();
-                tenantAccessor.SetTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true));
+                tenantAccessor.SetTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true, IsDemo: false));
 
                 var uiSettingsService = scope.ServiceProvider.GetRequiredService<IUISettingsService>();
                 var therapySettingsResolver = scope.ServiceProvider.GetRequiredService<ITherapySettingsResolver>();
@@ -181,7 +186,7 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
             {
                 using var scope = _serviceProvider.CreateScope();
                 var tenantAccessor = scope.ServiceProvider.GetRequiredService<ITenantAccessor>();
-                tenantAccessor.SetTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true));
+                tenantAccessor.SetTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true, IsDemo: false));
 
                 // Determine "last night" in the user's local timezone
                 var therapySettingsResolver = scope.ServiceProvider.GetRequiredService<ITherapySettingsResolver>();
@@ -574,10 +579,10 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
         // The metadata contains the count and nightOf for interpolation.
         await notificationService.CreateNotificationAsync(
             userId: userId,
-            type: "glucose.compression_low_review",
+            type: NotificationType,
             title: "compression_low_detected",
             subtitle: "compression_low_detected_subtitle",
-            sourceId: nightOf.ToString("yyyy-MM-dd"),
+            sourceId: NotificationSourceId(nightOf),
             actions: new List<NotificationActionDto>
             {
                 new()
@@ -724,20 +729,10 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
     /// <param name="scopedProvider">Scoped service provider for database access.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The owner's subject ID as a string, or <see langword="null"/>.</returns>
-    private async Task<string?> GetTenantOwnerSubjectIdAsync(
+    private static Task<string?> GetTenantOwnerSubjectIdAsync(
         Guid tenantId,
         IServiceProvider scopedProvider,
-        CancellationToken cancellationToken)
-    {
-        var factory = scopedProvider.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
-        await using var context = await factory.CreateDbContextAsync(cancellationToken);
-
-        var ownerSubjectId = await context.TenantMembers.AsNoTracking()
-            .Where(tm => tm.TenantId == tenantId
-                && tm.MemberRoles.Any(mr => mr.TenantRole.Slug == TenantPermissions.SeedRoles.Owner))
-            .Select(tm => tm.SubjectId)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        return ownerSubjectId == Guid.Empty ? null : ownerSubjectId.ToString();
-    }
+        CancellationToken cancellationToken) =>
+        scopedProvider.GetRequiredService<ITenantOwnerResolver>()
+            .GetOwnerSubjectIdAsync(tenantId, cancellationToken);
 }

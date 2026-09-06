@@ -1,0 +1,75 @@
+{
+    "type": "AdaptiveCard",
+    "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+    "version": "1.5",
+    "body": [
+        {
+            "type": "ColumnSet",
+            "columns": [
+                {
+                    "type": "Column",
+                    "width": "stretch",
+                    "verticalContentAlignment": "Center",
+                    "items": [
+                        { "type": "TextBlock", "text": "Device Ages", "weight": "Bolder" }
+                    ]
+                },
+                {
+                    "type": "Column",
+                    "width": "auto",
+                    "verticalContentAlignment": "Center",
+                    "items": [
+                        {
+                            "type": "Image",
+                            "url": "${refreshIcon}",
+                            "width": "16px",
+                            "altText": "Refresh",
+                            "selectAction": { "type": "Action.Execute", "verb": "refresh" }
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "type": "Container",
+            "spacing": "Medium",
+            "$when": "${count(ages) > 0}",
+            "items": [
+                {
+                    "type": "ColumnSet",
+                    "$data": "${ages}",
+                    "spacing": "Small",
+                    "columns": [
+                        {
+                            "type": "Column",
+                            "width": "stretch",
+                            "items": [
+                                { "type": "TextBlock", "text": "${label}", "size": "Small" }
+                            ]
+                        },
+                        {
+                            "type": "Column",
+                            "width": "auto",
+                            "items": [
+                                { "type": "TextBlock", "text": "${value}", "weight": "Bolder", "color": "${color}" }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "type": "TextBlock",
+            "text": "No device ages tracked.",
+            "size": "Small",
+            "isSubtle": true,
+            "wrap": true,
+            "spacing": "Medium",
+            "$when": "${count(ages) == 0}"
+        }
+    ],
+    "selectAction": {
+        "type": "Action.Execute",
+        "verb": "openApp"
+    }
+}

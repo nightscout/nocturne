@@ -22,6 +22,7 @@ public static class PatientRecordMapper
             DiabetesTypeOther = model.DiabetesTypeOther,
             DiagnosisDate = model.DiagnosisDate,
             DateOfBirth = model.DateOfBirth,
+            Sex = model.Sex?.ToString(),
             PreferredName = model.PreferredName,
             Pronouns = model.Pronouns,
             AvatarUrl = model.AvatarUrl,
@@ -48,6 +49,10 @@ public static class PatientRecordMapper
             DiabetesTypeOther = entity.DiabetesTypeOther,
             DiagnosisDate = entity.DiagnosisDate,
             DateOfBirth = entity.DateOfBirth,
+            Sex = entity.Sex is not null
+                && Enum.TryParse<BiologicalSex>(entity.Sex, ignoreCase: true, out var parsedSex)
+                    ? parsedSex
+                    : null,
             PreferredName = entity.PreferredName,
             Pronouns = entity.Pronouns,
             AvatarUrl = entity.AvatarUrl,
@@ -68,10 +73,10 @@ public static class PatientRecordMapper
         entity.DiabetesTypeOther = model.DiabetesTypeOther;
         entity.DiagnosisDate = model.DiagnosisDate;
         entity.DateOfBirth = model.DateOfBirth;
+        entity.Sex = model.Sex?.ToString();
         entity.PreferredName = model.PreferredName;
         entity.Pronouns = model.Pronouns;
         entity.AvatarUrl = model.AvatarUrl;
         entity.Timezone = model.Timezone;
-        entity.SysUpdatedAt = DateTime.UtcNow;
     }
 }

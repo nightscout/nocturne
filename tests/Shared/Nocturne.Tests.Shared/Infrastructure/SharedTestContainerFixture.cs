@@ -18,8 +18,7 @@ public class SharedTestContainerFixture : IAsyncLifetime
     public async Task InitializeAsync()
     {
         // Start PostgreSQL container
-        _postgreSqlContainer = new PostgreSqlBuilder()
-            .WithImage("postgres:16")
+        _postgreSqlContainer = new PostgreSqlBuilder("postgres:16")
             .WithDatabase("nocturne_test")
             .WithUsername("postgres")
             .WithPassword("password")

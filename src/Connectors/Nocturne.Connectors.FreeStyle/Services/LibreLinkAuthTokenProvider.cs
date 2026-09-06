@@ -40,7 +40,7 @@ public class LibreLinkAuthTokenProvider(
     protected override async Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
         LibreLinkUpConnectorConfiguration config, CancellationToken cancellationToken)
     {
-        const int maxRetries = LibreLinkUpConstants.Configuration.MaxRetries;
+        var maxRetries = LoginAttempts(config);
 
         var token = await ExecuteWithRetryAsync(
             async attempt =>

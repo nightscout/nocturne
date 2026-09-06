@@ -3,8 +3,10 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Helpers;
+using Nocturne.API.Multitenancy;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Configuration;
@@ -29,8 +31,10 @@ public class OidcAuthService : IOidcAuthService
     private readonly IRefreshTokenService _refreshTokenService;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ITenantMemberService _tenantMemberService;
+    private readonly IMemberInviteService _memberInviteService;
+    private readonly IDataProtector _stateProtector;
     private readonly OidcOptions _options;
-    private readonly IConfiguration _configuration;
+    private readonly BaseDomainOptions _baseDomain;
     private readonly ILogger<OidcAuthService> _logger;
 
     /// <summary>
@@ -43,8 +47,10 @@ public class OidcAuthService : IOidcAuthService
     /// <param name="refreshTokenService">Service for validating refresh tokens (non-rotation refresh path only).</param>
     /// <param name="httpClientFactory">Factory for the <c>OidcProvider</c> named HTTP client.</param>
     /// <param name="tenantMemberService">Service for verifying tenant membership before issuing a login session.</param>
+    /// <param name="memberInviteService">Service for accepting an invite named by the login's return URL.</param>
+    /// <param name="dataProtectionProvider">Provider for the protector that authenticates the state parameter.</param>
     /// <param name="options">OIDC session and state configuration options.</param>
-    /// <param name="configuration">Application configuration for reading the base URL.</param>
+    /// <param name="baseDomainOptions">Base domain configuration for building the public redirect URIs.</param>
     /// <param name="logger">Logger instance.</param>
     public OidcAuthService(
         IOidcProviderService providerService,
@@ -54,8 +60,10 @@ public class OidcAuthService : IOidcAuthService
         IRefreshTokenService refreshTokenService,
         IHttpClientFactory httpClientFactory,
         ITenantMemberService tenantMemberService,
+        IMemberInviteService memberInviteService,
+        IDataProtectionProvider dataProtectionProvider,
         IOptions<OidcOptions> options,
-        IConfiguration configuration,
+        IOptions<BaseDomainOptions> baseDomainOptions,
         ILogger<OidcAuthService> logger
     )
     {
@@ -66,8 +74,10 @@ public class OidcAuthService : IOidcAuthService
         _refreshTokenService = refreshTokenService;
         _httpClientFactory = httpClientFactory;
         _tenantMemberService = tenantMemberService;
+        _memberInviteService = memberInviteService;
+        _stateProtector = dataProtectionProvider.CreateProtector("Nocturne.Oidc.State");
         _options = options.Value;
-        _configuration = configuration;
+        _baseDomain = baseDomainOptions.Value;
         _logger = logger;
     }
 
@@ -75,7 +85,6 @@ public class OidcAuthService : IOidcAuthService
     public async Task<OidcAuthorizationRequest> GenerateAuthorizationUrlAsync(
         Guid? providerId,
         string? returnUrl = null,
-        string? state = null,
         string? tenantSlug = null
     )
     {
@@ -119,14 +128,13 @@ public class OidcAuthService : IOidcAuthService
             TenantSlug = tenantSlug,
         };
 
-        return await BuildAuthorizationUrlAsync(provider, stateData, returnUrl, state);
+        return await BuildAuthorizationUrlAsync(provider, stateData, returnUrl);
     }
 
     private async Task<OidcAuthorizationRequest> BuildAuthorizationUrlAsync(
         OidcProvider provider,
         OidcStateData stateData,
         string? returnUrl,
-        string? state = null,
         string callbackPath = LoginCallbackPath
     )
     {
@@ -136,7 +144,7 @@ public class OidcAuthService : IOidcAuthService
                 $"Could not fetch OIDC discovery document for {provider.Name}"
             );
 
-        state ??= EncodeState(stateData);
+        var state = EncodeState(stateData);
 
         var redirectUri = GetRedirectUri(callbackPath);
         var authUrl = BuildAuthorizationUrl(
@@ -191,7 +199,8 @@ public class OidcAuthService : IOidcAuthService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to decode OIDC state");
+            // Also the forgery path: an unprotectable state was not issued by this instance.
+            _logger.LogWarning(ex, "Rejected an OIDC state that failed to decode");
             return CallbackParseResult.Fail("invalid_state", "Invalid state format");
         }
 
@@ -232,16 +241,26 @@ public class OidcAuthService : IOidcAuthService
         OidcIdTokenClaims idTokenClaims;
         try
         {
-            idTokenClaims = ParseIdToken(providerTokens.IdToken);
-
-            if (!string.IsNullOrEmpty(stateData.Nonce) && idTokenClaims.Nonce != stateData.Nonce)
+            if (provider.ProviderType == OidcProviderType.OAuth2)
             {
-                return CallbackParseResult.Fail("invalid_nonce", "ID token nonce mismatch");
+                // OAuth2 providers issue no ID token (and no nonce); identity comes from the userinfo endpoint.
+                idTokenClaims = await FetchOAuth2UserClaimsAsync(provider, discoveryDoc, providerTokens.AccessToken);
+            }
+            else
+            {
+                idTokenClaims = ParseIdToken(providerTokens.IdToken);
+
+                // Required, not conditional: every state this service issues carries a nonce, so
+                // an absent one means the ID token cannot be bound to this authorization request.
+                if (string.IsNullOrEmpty(stateData.Nonce) || idTokenClaims.Nonce != stateData.Nonce)
+                {
+                    return CallbackParseResult.Fail("invalid_nonce", "ID token nonce mismatch");
+                }
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "ID token parsing failed");
+            _logger.LogError(ex, "Failed to resolve identity from provider response");
             return CallbackParseResult.Fail("invalid_id_token", ex.Message);
         }
 
@@ -276,6 +295,12 @@ public class OidcAuthService : IOidcAuthService
     /// issued — otherwise any external identity could mint a session on any tenant's subdomain.
     /// Extracted from <see cref="HandleCallbackAsync"/> so the membership gate can be unit-tested
     /// without exercising the OIDC code exchange.
+    /// <para>
+    /// No TOTP second-factor gate here. <c>PasskeyController.LoginComplete</c> withholds the session
+    /// when the subject has an authenticator enrolled; this path issues one regardless, so a subject
+    /// with TOTP and a linked provider signs in through the provider without a code. Adding the gate
+    /// needs a pending-second-factor state that survives the provider redirect.
+    /// </para>
     /// </summary>
     internal async Task<OidcCallbackResult> CompleteLoginAsync(
         OidcStateData stateData,
@@ -296,17 +321,42 @@ public class OidcAuthService : IOidcAuthService
         );
 
         // Cross-tenant guard: deny — without issuing a session — when the authenticated
-        // identity is not a member of the tenant being logged into. The per-request
-        // membership gate in AuthenticationMiddleware would block this subject's data
-        // access anyway, but only after a session (and a "logged in" UI) already existed.
-        if (currentTenantId is { } tenantId
-            && !await _tenantMemberService.IsMemberAsync(subject.Id, tenantId))
+        // identity is not a member of the tenant being logged into, and holds no invite to it.
+        // The per-request membership gate in AuthenticationMiddleware would block this subject's
+        // data access anyway, but only after a session (and a "logged in" UI) already existed.
+        //
+        // Two conditions, because either one alone leaves a gap.
+        //
+        // A resolved tenant always requires membership. A callback delivered to a tenant
+        // subdomain resolves that tenant wherever the login started, so an apex-minted state
+        // (no slug) replayed at {tenant}.{basedomain} arrives here with a tenant resolved;
+        // keying only off the slug would skip the check for exactly that case.
+        //
+        // A state that names a tenant also requires one to have resolved. Such a state was
+        // minted by a tenant login and must have been bounced to that subdomain, so an
+        // unresolved tenant means something upstream failed — and treating that as "nothing to
+        // check" is how the gate silently disappeared when the state encoding changed.
+        if (currentTenantId is { } tenantId)
         {
-            _logger.LogWarning(
-                "OIDC login denied: subject {SubjectId} is not a member of tenant {TenantId}",
-                subject.Id,
-                tenantId);
-            return OidcCallbackResult.NotAMember(subject.Id, stateData.ReturnUrl);
+            if (!await _tenantMemberService.IsMemberAsync(subject.Id, tenantId)
+                && !await IsInvitedByReturnUrlAsync(stateData.ReturnUrl, tenantId))
+            {
+                _logger.LogWarning(
+                    "OIDC login denied: subject {SubjectId} is not a member of tenant {TenantId}",
+                    subject.Id,
+                    tenantId);
+                return OidcCallbackResult.NotAMember(subject.Id, stateData.ReturnUrl);
+            }
+        }
+        else if (!string.IsNullOrEmpty(stateData.TenantSlug))
+        {
+            _logger.LogError(
+                "OIDC login denied: state was minted for tenant '{TenantSlug}' but no tenant "
+                    + "resolved on the callback, so membership could not be verified",
+                stateData.TenantSlug);
+            return OidcCallbackResult.Failed(
+                "invalid_state",
+                "The login could not be completed against the tenant it was started from.");
         }
 
         // Update last login
@@ -355,7 +405,64 @@ public class OidcAuthService : IOidcAuthService
             provider.Name
         );
 
-        return OidcCallbackResult.Succeeded(tokens, userInfo, stateData.ReturnUrl);
+        return OidcCallbackResult.Succeeded(tokens, userInfo, stateData.ReturnUrl, provider.Id);
+    }
+
+    /// <summary>
+    /// Whether the login was started from a join link whose invite is still valid for
+    /// <paramref name="tenantId"/>, and so should be allowed to complete for a non-member.
+    /// </summary>
+    /// <param name="returnUrl">The return URL carried in the (data-protected) state.</param>
+    /// <param name="tenantId">The tenant the callback resolved to.</param>
+    /// <remarks>
+    /// A first-time OIDC identity is a member of nothing, so the membership guard alone sends the
+    /// invitee back to a login page that cannot help them. This only issues the session; the join
+    /// itself stays behind the Accept button on the join page, which the invite-token exemption
+    /// makes reachable for a signed-in non-member.
+    /// <para>
+    /// Joining here instead would be a forced join: the login endpoint is anonymous and takes the
+    /// return URL from the query string, so anyone could navigate a victim to a join link of their
+    /// choosing and have the silent IdP round-trip write the membership without a gesture.
+    /// </para>
+    /// </remarks>
+    private async Task<bool> IsInvitedByReturnUrlAsync(string? returnUrl, Guid tenantId)
+    {
+        var token = InviteTokenFromReturnUrl(returnUrl);
+        if (token == null)
+            return false;
+
+        var invite = await _memberInviteService.GetInviteByTokenAsync(token, tenantId);
+        return invite is { IsValid: true };
+    }
+
+    /// <summary>
+    /// Reads the invite token out of a join link (<c>/join?token=...</c>), the only return URL
+    /// that carries one. Returns null for any other return URL.
+    /// </summary>
+    /// <param name="returnUrl">The return URL carried in the state.</param>
+    /// <returns>The invite token, or null.</returns>
+    private static string? InviteTokenFromReturnUrl(string? returnUrl)
+    {
+        if (string.IsNullOrEmpty(returnUrl))
+            return null;
+
+        var queryStart = returnUrl.IndexOf('?');
+        if (queryStart < 0)
+            return null;
+
+        if (!returnUrl.AsSpan(0, queryStart)
+                .Equals(IMemberInviteService.JoinPath, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var token = Microsoft.AspNetCore.WebUtilities.QueryHelpers
+            .ParseQuery(returnUrl[queryStart..])
+            .TryGetValue(IMemberInviteService.TokenQueryParameter, out var values)
+                ? values.ToString()
+                : null;
+
+        return string.IsNullOrEmpty(token) ? null : token;
     }
 
     /// <inheritdoc />
@@ -465,7 +572,7 @@ public class OidcAuthService : IOidcAuthService
                     var logoutUrl = new UriBuilder(discoveryDoc.EndSessionEndpoint);
                     var query = System.Web.HttpUtility.ParseQueryString(string.Empty);
                     query["client_id"] = provider.ClientId;
-                    query["post_logout_redirect_uri"] = _configuration[ServiceNames.ConfigKeys.BaseUrl] ?? "";
+                    query["post_logout_redirect_uri"] = _baseDomain.PublicOrigin ?? "";
                     logoutUrl.Query = query.ToString();
                     providerLogoutUrl = logoutUrl.ToString();
                 }
@@ -504,6 +611,7 @@ public class OidcAuthService : IOidcAuthService
             ProviderName = providerName,
             LastLoginAt = subject.LastLoginAt,
             PreferredLanguage = subject.PreferredLanguage,
+            Preferences = UserDisplayPreferences.Deserialize(subject.Preferences),
             AvatarUrl = subject.AvatarUrl,
         };
     }
@@ -706,14 +814,19 @@ public class OidcAuthService : IOidcAuthService
     private const string SetupCallbackPath = "/api/v4/setup/oidc/callback";
 
     /// <summary>
-    /// Builds the absolute redirect URI by combining the configured base URL with the specified callback path.
+    /// Builds the absolute redirect URI by combining the deployment's public origin
+    /// (derived from <c>BASE_DOMAIN</c>) with the specified callback path.
     /// </summary>
     /// <param name="callbackPath">The server-relative callback path (default: <see cref="LoginCallbackPath"/>).</param>
     /// <returns>The fully qualified redirect URI.</returns>
     private string GetRedirectUri(string callbackPath = LoginCallbackPath)
     {
-        var baseUrl = _configuration[ServiceNames.ConfigKeys.BaseUrl]?.TrimEnd('/') ?? "http://localhost:5000";
-        return $"{baseUrl}{callbackPath}";
+        var origin =
+            _baseDomain.PublicOrigin
+            ?? throw new InvalidOperationException(
+                $"Cannot build an OIDC redirect URI: {BaseDomainOptions.ConfigKey} is not configured"
+            );
+        return $"{origin}{callbackPath}";
     }
 
     /// <summary>
@@ -773,6 +886,11 @@ public class OidcAuthService : IOidcAuthService
     )
     {
         var httpClient = _httpClientFactory.CreateClient("OidcProvider");
+
+        // GitHub's token endpoint returns form-encoded by default; request JSON so the same
+        // deserializer handles every provider. Standards-compliant OIDC providers already return JSON.
+        httpClient.DefaultRequestHeaders.Accept.Add(
+            new MediaTypeWithQualityHeaderValue("application/json"));
 
         var content = new FormUrlEncodedContent(
             new Dictionary<string, string>
@@ -848,6 +966,164 @@ public class OidcAuthService : IOidcAuthService
         return claims ?? throw new InvalidOperationException("Invalid ID token claims");
     }
 
+    private const string SubClaim = "sub";
+    private const string EmailClaim = "email";
+    private const string NameClaim = "name";
+    private const string PreferredUsernameClaim = "preferred_username";
+    private const string PictureClaim = "picture";
+
+    /// <summary>
+    /// Resolves identity claims for an OAuth2 provider from its configured userinfo endpoint, standing
+    /// in for the ID token that plain OAuth2 does not issue. The userinfo response fields are mapped to
+    /// standard claims via <see cref="OAuth2ProviderSettings.ClaimMappings"/>. When the response carries
+    /// no email and an emails endpoint is configured, the primary verified address is fetched from it.
+    /// </summary>
+    /// <param name="provider">The OAuth2 provider whose settings drive endpoint and claim resolution.</param>
+    /// <param name="discoveryDoc">The synthesized discovery document (carries the userinfo endpoint).</param>
+    /// <param name="accessToken">The OAuth2 access token returned by the token endpoint.</param>
+    /// <returns>Claims mapped into the same <see cref="OidcIdTokenClaims"/> shape used by the OIDC path.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the userinfo call fails or yields no subject.</exception>
+    internal async Task<OidcIdTokenClaims> FetchOAuth2UserClaimsAsync(
+        OidcProvider provider, OidcDiscoveryDocument? discoveryDoc, string accessToken)
+    {
+        var settings = provider.OAuth2
+            ?? throw new InvalidOperationException($"OAuth2 provider {provider.Name} has no settings configured");
+
+        var userInfoEndpoint = discoveryDoc?.UserInfoEndpoint ?? settings.UserInfoEndpoint;
+        if (string.IsNullOrEmpty(userInfoEndpoint))
+            throw new InvalidOperationException($"OAuth2 provider {provider.Name} has no userinfo endpoint");
+
+        var map = settings.ClaimMappings ?? new();
+
+        using var user = await GetJsonAsync(userInfoEndpoint, accessToken);
+        var root = user.RootElement;
+
+        var sub = GetMappedClaim(root, map, SubClaim);
+        if (string.IsNullOrWhiteSpace(sub))
+            throw new InvalidOperationException("Userinfo response did not include a subject identifier");
+
+        // An email taken straight from the userinfo response carries no verification signal; only the
+        // dedicated email endpoint reports verification, so EmailVerified is asserted only for that source.
+        var email = GetMappedClaim(root, map, EmailClaim);
+        bool? emailVerified = null;
+        if (string.IsNullOrEmpty(email) && !string.IsNullOrEmpty(settings.UserInfoEmailEndpoint))
+        {
+            email = await FetchPrimaryVerifiedEmailAsync(settings.UserInfoEmailEndpoint, accessToken);
+            emailVerified = email is not null ? true : null;
+        }
+
+        return new OidcIdTokenClaims
+        {
+            Sub = sub,
+            Email = email,
+            EmailVerified = emailVerified,
+            Name = GetMappedClaim(root, map, NameClaim),
+            PreferredUsername = GetMappedClaim(root, map, PreferredUsernameClaim),
+            Picture = GetMappedClaim(root, map, PictureClaim),
+        };
+    }
+
+    /// <summary>
+    /// Fetches the primary, verified email from a provider's email-list endpoint. Used when the userinfo
+    /// response carries no email (some providers expose email separately). The endpoint is expected to
+    /// return a JSON array of objects with <c>email</c>, <c>primary</c>, and <c>verified</c> fields.
+    /// Returns null when no verified email is available.
+    /// </summary>
+    private async Task<string?> FetchPrimaryVerifiedEmailAsync(string emailEndpoint, string accessToken)
+    {
+        using var emails = await GetJsonAsync(emailEndpoint, accessToken);
+        if (emails.RootElement.ValueKind != JsonValueKind.Array)
+            return null;
+
+        string? firstVerified = null;
+        foreach (var entry in emails.RootElement.EnumerateArray())
+        {
+            if (entry.ValueKind != JsonValueKind.Object || !GetJsonBool(entry, "verified"))
+                continue;
+
+            var address = GetStringProperty(entry, "email");
+            if (address is null)
+                continue;
+
+            firstVerified ??= address;
+            if (GetJsonBool(entry, "primary"))
+                return address;
+        }
+
+        return firstVerified;
+    }
+
+    /// <summary>
+    /// Reads a flag from a JSON object, tolerating providers that express booleans as a JSON bool,
+    /// the string <c>"true"</c>, or the number <c>1</c>. Missing or any other value is treated as false.
+    /// </summary>
+    private static bool GetJsonBool(JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var prop))
+            return false;
+
+        return prop.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.String => string.Equals(prop.GetString(), "true", StringComparison.OrdinalIgnoreCase),
+            JsonValueKind.Number => prop.TryGetInt64(out var n) && n != 0,
+            _ => false,
+        };
+    }
+
+    /// <summary>
+    /// Issues an authenticated bearer-token GET and returns the parsed JSON. A <c>User-Agent</c> is
+    /// always sent because some providers (e.g. GitHub) reject API requests without one.
+    /// </summary>
+    private async Task<JsonDocument> GetJsonAsync(string url, string accessToken)
+    {
+        var httpClient = _httpClientFactory.CreateClient("OidcProvider");
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        request.Headers.UserAgent.Add(new ProductInfoHeaderValue("Nocturne", "1.0"));
+
+        var response = await httpClient.SendAsync(request);
+        var body = await response.Content.ReadAsStringAsync();
+
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogError("OAuth2 userinfo call to {Url} failed: {StatusCode}", url, response.StatusCode);
+            throw new InvalidOperationException($"OAuth2 userinfo request failed: {response.StatusCode}");
+        }
+
+        return JsonDocument.Parse(body);
+    }
+
+    /// <summary>
+    /// Reads a standard claim from a userinfo response using the provider's field mapping, falling back
+    /// to the standard claim name itself. String values pass through; numeric values are stringified so
+    /// numeric subject identifiers map cleanly to the string <c>sub</c> claim.
+    /// </summary>
+    private static string? GetMappedClaim(JsonElement root, Dictionary<string, string> map, string standardClaim)
+    {
+        var field = map.TryGetValue(standardClaim, out var mapped) && !string.IsNullOrEmpty(mapped)
+            ? mapped
+            : standardClaim;
+
+        if (!root.TryGetProperty(field, out var prop))
+            return null;
+
+        return prop.ValueKind switch
+        {
+            JsonValueKind.String => prop.GetString(),
+            JsonValueKind.Number => prop.ToString(),
+            _ => null,
+        };
+    }
+
+    private static string? GetStringProperty(JsonElement element, string propertyName) =>
+        element.TryGetProperty(propertyName, out var prop) && prop.ValueKind == JsonValueKind.String
+            ? prop.GetString()
+            : null;
+
     /// <summary>
     /// Generates a cryptographically secure URL-safe Base64 random string of the specified byte length.
     /// </summary>
@@ -860,30 +1136,53 @@ public class OidcAuthService : IOidcAuthService
     }
 
     /// <summary>
-    /// Serialises an <see cref="OidcStateData"/> object to a URL-safe Base64 string.
+    /// Serialises an <see cref="OidcStateData"/> object to an authenticated, URL-safe state string.
     /// </summary>
     /// <param name="data">The state data to encode.</param>
-    /// <returns>URL-safe Base64-encoded JSON state string.</returns>
-    private static string EncodeState(OidcStateData data)
-    {
-        var json = JsonSerializer.Serialize(data);
-        var bytes = Encoding.UTF8.GetBytes(json);
-        return Base64Url.Encode(bytes);
-    }
+    /// <returns>A data-protected state string.</returns>
+    /// <remarks>
+    /// The payload is protected rather than plain-encoded because the callback trusts what it
+    /// carries. <c>Intent</c> selects which flow runs and <c>SubjectId</c> names the account an
+    /// identity is bound to, so an unauthenticated blob lets a caller mint state for any subject.
+    /// The state cookie is a CSRF defence, not an integrity one — a caller acting as its own HTTP
+    /// client supplies both halves of the double-submit.
+    /// </remarks>
+    private string EncodeState(OidcStateData data) =>
+        _stateProtector.Protect(JsonSerializer.Serialize(data));
 
     /// <summary>
-    /// Deserialises an <see cref="OidcStateData"/> object from a URL-safe Base64 string.
+    /// Deserialises an <see cref="OidcStateData"/> object from a protected state string.
     /// </summary>
-    /// <param name="encoded">URL-safe Base64-encoded state string produced by <see cref="EncodeState"/>.</param>
+    /// <param name="encoded">State string produced by <see cref="EncodeState"/>.</param>
     /// <returns>The decoded <see cref="OidcStateData"/>.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the state cannot be deserialised.</exception>
-    private static OidcStateData DecodeState(string encoded)
+    /// <exception cref="System.Security.Cryptography.CryptographicException">
+    /// Thrown when the state was not produced by this instance's key ring, including any attempt
+    /// to forge or tamper with it.
+    /// </exception>
+    private OidcStateData DecodeState(string encoded)
     {
-        var bytes = Base64Url.Decode(encoded);
-        var json = Encoding.UTF8.GetString(bytes);
+        var json = _stateProtector.Unprotect(encoded);
 
         return JsonSerializer.Deserialize<OidcStateData>(json)
             ?? throw new InvalidOperationException("Invalid state data");
+    }
+
+    /// <inheritdoc />
+    public string? TryReadTenantSlug(string state)
+    {
+        if (string.IsNullOrEmpty(state))
+            return null;
+
+        try
+        {
+            return DecodeState(state).TenantSlug;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Could not read a tenant slug from the OIDC state");
+            return null;
+        }
     }
 
     /// <summary>

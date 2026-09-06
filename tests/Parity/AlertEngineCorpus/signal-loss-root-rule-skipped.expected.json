@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "scenario": "signal-loss-root-rule-skipped",
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "skipped": true
+        }
+      ]
+    }
+  ]
+}

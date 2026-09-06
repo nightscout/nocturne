@@ -20,6 +20,7 @@ public enum ConnectorPropertyKey
     SyncGlucose,
     SyncManualBG,
     SyncBoluses,
+    SyncBasalInjections,
     SyncCarbIntake,
     SyncBolusCalculations,
     SyncNotes,
@@ -68,6 +69,7 @@ public enum ConnectorPropertyKey
 
     // MyFitnessPal-specific
     LookbackDays,
+    LastFullWalkAt,
 
     // Write-back
     WriteBackEnabled,
@@ -85,4 +87,9 @@ public enum ConnectorPropertyKey
     RefreshToken,
     CountryCode,
     LanguageCode,
+
+    // Tandem-specific
+    PumpSerialNumber,
+    FetchAllEventTypes,
+    IgnoreZeroUnitBasal,
 }

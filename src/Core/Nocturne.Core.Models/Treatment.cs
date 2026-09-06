@@ -28,6 +28,7 @@ public class Treatment : ProcessableDocumentBase
     /// Gets or sets the MongoDB ObjectId
     /// </summary>
     [JsonPropertyName("_id")]
+    [JsonConverter(typeof(ObjectIdJsonConverter))]
     public override string? Id { get; set; }
 
     /// <summary>
@@ -35,31 +36,32 @@ public class Treatment : ProcessableDocumentBase
     /// Nightscout V3 API returns both _id and identifier fields with the same value.
     /// </summary>
     [JsonPropertyName("identifier")]
+    [JsonConverter(typeof(ObjectIdJsonConverter))]
     public string? Identifier => Id;
 
     /// <summary>
     /// Gets the server-modified timestamp for V3 compatibility.
-    /// Returns Mills as Nightscout V3 uses this to track server-side modifications.
+    /// Falls back to Mills, which already resolves every other timestamp this document
+    /// carries. See <see cref="V3Timestamps"/> for why it may never serialize as null.
     /// </summary>
     private long? _srvModified;
 
     [JsonPropertyName("srvModified")]
     public long? SrvModified
     {
-        get => _srvModified ?? (Mills > 0 ? Mills : null);
+        get => _srvModified ?? V3Timestamps.Resolve(Mills);
         set => _srvModified = value;
     }
 
     /// <summary>
     /// Gets the server-created timestamp for V3 compatibility.
-    /// Returns Mills as Nightscout V3 uses this to track server-side creation time.
     /// </summary>
     private long? _srvCreated;
 
     [JsonPropertyName("srvCreated")]
     public long? SrvCreated
     {
-        get => _srvCreated ?? (Mills > 0 ? Mills : null);
+        get => _srvCreated ?? V3Timestamps.Resolve(Mills);
         set => _srvCreated = value;
     }
 
@@ -129,12 +131,16 @@ public class Treatment : ProcessableDocumentBase
     /// Gets or sets the protein content in grams
     /// </summary>
     [JsonPropertyName("protein")]
+    // AAPS parses protein as an Int; a fractional value crashes its sync loop
+    [JsonConverter(typeof(RoundedNullableDoubleConverter))]
     public double? Protein { get; set; }
 
     /// <summary>
     /// Gets or sets the fat content in grams
     /// </summary>
     [JsonPropertyName("fat")]
+    // AAPS parses fat as an Int; a fractional value crashes its sync loop
+    [JsonConverter(typeof(RoundedNullableDoubleConverter))]
     public double? Fat { get; set; }
 
     /// <summary>
@@ -170,7 +176,7 @@ public class Treatment : ProcessableDocumentBase
     /// </summary>
     private long ResolveMills()
     {
-        if (_mills > 0)
+        if (_mills != 0)
             return _mills;
 
         if (TryParseIsoMills(_created_at, out var mills))
@@ -180,8 +186,8 @@ public class Treatment : ProcessableDocumentBase
         if (TryParseIsoMills(Timestamp, out mills))
             return mills;
 
-        if (Date is > 0)
-            return Date.Value;
+        if (_date is > 0)
+            return _date.Value;
 
         return 0;
     }
@@ -239,6 +245,9 @@ public class Treatment : ProcessableDocumentBase
     /// </summary>
     [JsonPropertyName("duration")]
     [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
+    // Serializes rounded to whole minutes (AAPS parses duration as a Long); the getter keeps the
+    // exact value so in-memory duration math (e.g. temp-basal cutting) is not corrupted.
+    [JsonConverter(typeof(RoundedNullableDoubleConverter))]
     public double? Duration
     {
         get
@@ -320,11 +329,21 @@ public class Treatment : ProcessableDocumentBase
     [JsonPropertyName("split")]
     public string? Split { get; set; }
 
+    private long? _date;
+
     /// <summary>
-    /// Gets or sets when this treatment was created
+    /// Gets or sets when this treatment was created (Unix milliseconds).
+    /// Falls back to Mills — which already resolves <c>created_at</c>, <c>eventTime</c> and
+    /// <c>timestamp</c> — so a broadcast treatment carries the same <c>date</c> the V3 REST
+    /// layer projects. <see cref="ResolveMills"/> reads the backing field directly to avoid
+    /// recursing back into this getter.
     /// </summary>
     [JsonPropertyName("date")]
-    public long? Date { get; set; }
+    public long? Date
+    {
+        get => _date ?? V3Timestamps.Resolve(Mills);
+        set => _date = value;
+    }
 
     /// <summary>
     /// Gets or sets the carb time offset
@@ -408,6 +427,8 @@ public class Treatment : ProcessableDocumentBase
     /// Gets or sets the pre-bolus time in minutes (used by Glooko connector)
     /// </summary>
     [JsonPropertyName("preBolus")]
+    // AAPS parses preBolus as an Int; a fractional value crashes its sync loop
+    [JsonConverter(typeof(RoundedNullableDoubleConverter))]
     public double? PreBolus { get; set; }
 
     /// <summary>
@@ -507,12 +528,16 @@ public class Treatment : ProcessableDocumentBase
     /// Gets or sets the percentage of combo bolus delivered immediately
     /// </summary>
     [JsonPropertyName("splitNow")]
+    // AAPS parses splitNow as an Int; a fractional value crashes its sync loop
+    [JsonConverter(typeof(RoundedNullableDoubleConverter))]
     public double? SplitNow { get; set; }
 
     /// <summary>
     /// Gets or sets the percentage of combo bolus delivered extended
     /// </summary>
     [JsonPropertyName("splitExt")]
+    // AAPS parses splitExt as an Int; a fractional value crashes its sync loop
+    [JsonConverter(typeof(RoundedNullableDoubleConverter))]
     public double? SplitExt { get; set; }
 
     /// <summary>
@@ -573,12 +598,16 @@ public class Treatment : ProcessableDocumentBase
     /// Gets or sets the percentage for CircadianPercentageProfile
     /// </summary>
     [JsonPropertyName("percentage")]
+    // AAPS parses percentage as an Int; a fractional value crashes its sync loop
+    [JsonConverter(typeof(RoundedNullableDoubleConverter))]
     public double? Percentage { get; set; }
 
     /// <summary>
     /// Gets or sets the timeshift for CircadianPercentageProfile (in hours)
     /// </summary>
     [JsonPropertyName("timeshift")]
+    // AAPS parses timeshift as a Long; a fractional value crashes its sync loop
+    [JsonConverter(typeof(RoundedNullableDoubleConverter))]
     public double? Timeshift { get; set; }
 
     /// <summary>
@@ -813,14 +842,6 @@ public class Treatment : ProcessableDocumentBase
     [JsonPropertyName("canonicalId")]
     [NocturneOnly]
     public Guid? CanonicalId { get; set; }
-
-    /// <summary>
-    /// Gets or sets the PostgreSQL database ID.
-    /// This is the actual UUID primary key in the treatments table.
-    /// </summary>
-    [JsonPropertyName("dbId")]
-    [NocturneOnly]
-    public Guid? DbId { get; set; }
 
     /// <summary>
     /// Gets or sets the list of data sources that contributed to this unified record.

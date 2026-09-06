@@ -25,6 +25,7 @@ namespace Nocturne.API.Services.Alerts;
 /// <seealso cref="IAlertTrackerRepository"/>
 public class ExcursionTracker(
     IAlertTrackerRepository repository,
+    AlertRuleEvaluationGate gate,
     TimeProvider timeProvider,
     ILogger<ExcursionTracker> logger)
     : IExcursionTracker
@@ -47,6 +48,11 @@ public class ExcursionTracker(
         bool conditionMet,
         CancellationToken ct)
     {
+        // Load, decide, persist and open/close the excursion under one per-rule lease, so a
+        // concurrent evaluation of the same rule re-reads the committed state instead of
+        // racing it to a second excursion (and a second dispatch off the opened transition).
+        using var lease = await gate.AcquireAsync(alertRuleId, ct);
+
         var rule = await repository.GetRuleAsync(alertRuleId, ct);
         if (rule == null)
         {
@@ -217,6 +223,8 @@ public class ExcursionTracker(
         ExcursionCloseReason reason,
         CancellationToken ct)
     {
+        using var lease = await gate.AcquireAsync(alertRuleId, ct);
+
         var state = await repository.GetTrackerStateAsync(alertRuleId, ct);
         if (state?.ActiveExcursionId is null)
         {

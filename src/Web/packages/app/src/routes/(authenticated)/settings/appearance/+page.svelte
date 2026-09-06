@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { time } from "$lib/utils/formatting";
   import { getSettingsStore } from "$lib/stores/settings-store.svelte";
   import {
     getColorTheme,
@@ -12,8 +13,6 @@
     setColorScheme,
     userPrefersMode,
     dashboardTopWidgets,
-    sidebarWidget,
-    haloDialConfig,
     chartLineColorMode,
     chartLineColor,
     chartPointColorMode,
@@ -21,9 +20,13 @@
     chartShowPoints,
     chartAreaMode,
     chartAreaOpacity,
+    chartAlwaysShowPatterns,
+    regionFormat,
+    regionFormatLabel,
+    REGION_FORMATS,
     type ColorScheme,
+    type RegionFormat,
   } from "$lib/stores/appearance-store.svelte";
-  import HaloDialConfigurator from "$lib/components/settings/HaloDialConfigurator.svelte";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import TitleFaviconSettings from "$lib/components/settings/TitleFaviconSettings.svelte";
   import DashboardWidgetConfigurator from "$lib/components/settings/DashboardWidgetConfigurator.svelte";
@@ -36,6 +39,9 @@
     setSourceDefaults,
   } from "$api/generated/glucoseProcessingSettings.generated.remote";
   import GlucoseSourceDefaultsDialog from "$lib/components/settings/GlucoseSourceDefaultsDialog.svelte";
+  import type { FeatureSettings } from "$lib/api/generated/nocturne-api-client";
+  import { getUiSettings, saveFeatureSettings } from "$api/ui-settings.remote";
+  import { toast } from "svelte-sonner";
   import {
     Card,
     CardContent,
@@ -67,7 +73,6 @@
     AlertCircle,
     Timer,
     Eye,
-    PanelLeft,
   } from "lucide-svelte";
   import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
   import { browser } from "$app/environment";
@@ -75,6 +80,7 @@
   import { WidgetId } from "$lib/api/generated/nocturne-api-client";
   import { page } from "$app/state";
   import { coachmark } from "@nocturne/coach";
+  import { describeSubmitError } from "$lib/forms/submit-error";
 
   const store = getSettingsStore();
   const realtimeStore = getRealtimeStore();
@@ -123,31 +129,62 @@
     }
   });
 
-  // Current time in timezone for display
-  const currentTime = $derived(
-    new Date(realtimeStore.now).toLocaleTimeString(undefined, {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    })
-  );
+  // Follows the 12/24 preference, which the selector two cards below sets: this
+  // field is the only place a reader sees that choice take effect.
+  const currentTime = $derived(time(realtimeStore.now, { seconds: true }));
+
+  /**
+   * This page carries two scopes: units, formats, theme, chart style, widgets and language live on
+   * the subject, while chart range, glucose processing and tracker pills are the tenant's. The
+   * endpoints behind the tenant half are not served on a host that resolves none, so its queries
+   * are never created rather than left to 404.
+   */
+  const tenantless = page.data.tenantless === true;
 
   // Glucose processing settings
-  const preferenceQuery = getPreference();
-  const sourceDefaultsQuery = getSourceDefaults();
+  const preferenceQuery = tenantless ? null : getPreference();
+  const sourceDefaultsQuery = tenantless ? null : getSourceDefaults();
   let glucoseProcessingPreference: string | null = $derived(
-    preferenceQuery.current?.preferredGlucoseProcessing ?? null,
+    preferenceQuery?.current?.preferredGlucoseProcessing ?? null,
   );
   let sourceDefaults: Array<{ match: string; field: string; processing: string }> =
     $derived(
       // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- zod types the rule fields as optional, but the API always returns them populated
-      (sourceDefaultsQuery.current?.rules ?? []) as Array<{
+      (sourceDefaultsQuery?.current?.rules ?? []) as Array<{
         match: string;
         field: string;
         processing: string;
       }>,
     );
   let sourceDefaultsDialogOpen = $state(false);
+
+  // Chart range and tracker pills persist server-side. They used to only mutate
+  // the in-memory settings store, which nothing ever saved, so the dashboard
+  // picked the change up live and then lost it on reload.
+  const uiSettingsQuery = tenantless ? null : getUiSettings();
+  const featureSettings = $derived(uiSettingsQuery?.current?.features);
+  const focusHours = $derived(featureSettings?.display?.focusHours ?? 12);
+  const trackerPillsEnabled = $derived(featureSettings?.trackerPills?.enabled ?? true);
+
+  /** Persists the whole features section, merging the patch over what's stored. */
+  async function saveFeatures(patch: Partial<FeatureSettings>) {
+    const current = featureSettings ?? {};
+    try {
+      await saveFeatureSettings({
+        ...current,
+        display: { ...current.display, ...patch.display },
+        trackerPills: { ...current.trackerPills, ...patch.trackerPills },
+      });
+      // The dashboard still reads these through the shared settings store; reload
+      // it so the change it renders matches what was persisted.
+      await store.reload();
+    } catch (err) {
+      toast.error(
+        describeSubmitError(err, "Could not save. Check your connection and try again.")
+      );
+      await uiSettingsQuery?.refresh();
+    }
+  }
 </script>
 
 <svelte:head>
@@ -172,10 +209,7 @@
     <Card class="border-destructive">
       <CardContent class="flex items-center gap-3 py-6">
         <AlertCircle class="h-5 w-5 text-destructive" />
-        <div>
-          <p class="font-medium">Failed to load settings</p>
-          <p class="text-sm text-muted-foreground">{store.error}</p>
-        </div>
+        <p class="font-medium">{store.error}</p>
       </CardContent>
     </Card>
   {:else}
@@ -491,7 +525,8 @@
           Units & Formats
         </CardTitle>
         <CardDescription>
-          Configure measurement units and display formats
+          Configure measurement units and display formats. These preferences sync
+          across your devices.
         </CardDescription>
       </CardHeader>
       <CardContent class="space-y-4">
@@ -540,6 +575,33 @@
             </Select>
           </div>
         </div>
+
+        <div class="space-y-2">
+          <Label>Regional format</Label>
+          <Select
+            type="single"
+            value={regionFormat.current}
+            onValueChange={(value) => {
+              // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- value is constrained to REGION_FORMATS by the sibling SelectItems
+              regionFormat.current = value as RegionFormat;
+            }}
+          >
+            <SelectTrigger>
+              <span>{regionFormatLabel(regionFormat.current)}</span>
+            </SelectTrigger>
+            <SelectContent>
+              {#each REGION_FORMATS as region (region)}
+                <SelectItem value={region}>{regionFormatLabel(region)}</SelectItem>
+              {/each}
+            </SelectContent>
+          </Select>
+          <p class="text-xs text-muted-foreground">
+            Sets date order, month and weekday names, and the day your calendars
+            start on. Each option shows the date it writes and the day its weeks
+            begin, so pick whichever matches how you read a calendar. Your
+            interface stays in the language above.
+          </p>
+        </div>
       </CardContent>
     </Card>
 
@@ -586,37 +648,33 @@
         <CardDescription>Configure chart display preferences</CardDescription>
       </CardHeader>
       <CardContent>
-        <div class="grid gap-4 @sm:grid-cols-2">
-          <div class="space-y-2">
-            <FormLabel>Default chart range</FormLabel>
-            <Select
-              type="single"
-              value={String(store.features?.display?.focusHours ?? 12)}
-              onValueChange={(value: string) => {
-                if (!store.features) return;
-                if (!store.features.display) {
-                  store.features.display = {};
-                }
-                store.features.display.focusHours = parseInt(value);
-                store.markChanged();
-              }}
-            >
-              <SelectTrigger>
-                <span>{store.features?.display?.focusHours ?? 12} hours</span>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="2">2 hours</SelectItem>
-                <SelectItem value="3">3 hours</SelectItem>
-                <SelectItem value="4">4 hours</SelectItem>
-                <SelectItem value="6">6 hours</SelectItem>
-                <SelectItem value="12">12 hours</SelectItem>
-                <SelectItem value="24">24 hours</SelectItem>
-              </SelectContent>
-            </Select>
+        {#if !tenantless}
+          <div class="grid gap-4 @sm:grid-cols-2">
+            <div class="space-y-2">
+              <FormLabel>Default chart range</FormLabel>
+              <Select
+                type="single"
+                value={String(focusHours)}
+                onValueChange={(value: string) =>
+                  saveFeatures({ display: { focusHours: parseInt(value) } })}
+              >
+                <SelectTrigger>
+                  <span>{focusHours} hours</span>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="2">2 hours</SelectItem>
+                  <SelectItem value="3">3 hours</SelectItem>
+                  <SelectItem value="4">4 hours</SelectItem>
+                  <SelectItem value="6">6 hours</SelectItem>
+                  <SelectItem value="12">12 hours</SelectItem>
+                  <SelectItem value="24">24 hours</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-        </div>
 
-        <Separator class="my-4" />
+          <Separator class="my-4" />
+        {/if}
 
         <!-- Glucose line visual style -->
         <div class="grid gap-4 @sm:grid-cols-2">
@@ -759,6 +817,25 @@
             />
           </div>
         {/if}
+
+        <Separator class="my-4" />
+
+        <!-- Always show patterns (accessibility) -->
+        <div class="flex items-center justify-between gap-4">
+          <div class="space-y-0.5">
+            <FormLabel>Always show chart patterns</FormLabel>
+            <p class="text-sm text-muted-foreground">
+              Add textures to chart colors so series stay distinguishable for
+              color-blind and low-vision readers. Patterns always appear when printing.
+            </p>
+          </div>
+          <Switch
+            checked={chartAlwaysShowPatterns.current}
+            onCheckedChange={(checked: boolean) => {
+              chartAlwaysShowPatterns.current = checked;
+            }}
+          />
+        </div>
       </CardContent>
     </Card>
 
@@ -776,65 +853,8 @@
       />
     </div>
 
-    <!-- Sidebar Widget -->
-    <Card>
-      <CardHeader>
-        <CardTitle class="flex items-center gap-2">
-          <PanelLeft class="h-5 w-5" />
-          Sidebar Widget
-        </CardTitle>
-        <CardDescription>
-          Choose what to display in the sidebar above the navigation
-        </CardDescription>
-      </CardHeader>
-      <CardContent class="space-y-4">
-        <div class="grid gap-4 @xl:grid-cols-2">
-          <button
-            type="button"
-            class="relative flex flex-col items-start gap-2 rounded-lg border-2 p-4 text-left transition-colors hover:bg-accent/50 {sidebarWidget.current === 'graph'
-              ? 'border-primary bg-accent/30'
-              : 'border-border'}"
-            onclick={() => (sidebarWidget.current = "graph")}
-          >
-            {#if sidebarWidget.current === "graph"}
-              <Badge class="absolute right-2 top-2" variant="default">Active</Badge>
-            {/if}
-            <div class="font-semibold">Glucose Chart</div>
-            <p class="text-sm text-muted-foreground">
-              Compact glucose chart showing recent readings
-            </p>
-          </button>
 
-          <button
-            type="button"
-            class="relative flex flex-col items-start gap-2 rounded-lg border-2 p-4 text-left transition-colors hover:bg-accent/50 {sidebarWidget.current === 'halo-dial'
-              ? 'border-primary bg-accent/30'
-              : 'border-border'}"
-            onclick={() => (sidebarWidget.current = "halo-dial")}
-          >
-            {#if sidebarWidget.current === "halo-dial"}
-              <Badge class="absolute right-2 top-2" variant="default">Active</Badge>
-            {/if}
-            <div class="font-semibold">Halo Dial</div>
-            <p class="text-sm text-muted-foreground">
-              Circular dial with glucose history, predictions, and data-at-a-glance
-            </p>
-          </button>
-        </div>
-
-        <p class="text-xs text-muted-foreground">
-          Changes take effect immediately
-        </p>
-      </CardContent>
-    </Card>
-
-    {#if sidebarWidget.current === "halo-dial"}
-      <HaloDialConfigurator
-        value={haloDialConfig.current}
-        onchange={(config) => (haloDialConfig.current = config)}
-      />
-    {/if}
-
+    {#if !tenantless}
     <!-- Glucose Processing -->
     <Card>
       <CardHeader>
@@ -934,17 +954,9 @@
             </p>
           </div>
           <Switch
-            checked={store.features?.trackerPills?.enabled ?? true}
-            onCheckedChange={(checked: boolean) => {
-              if (!store.features) return;
-              if (!store.features.trackerPills) {
-                store.features.trackerPills = {
-                  enabled: true,
-                };
-              }
-              store.features.trackerPills.enabled = checked;
-              store.markChanged();
-            }}
+            checked={trackerPillsEnabled}
+            onCheckedChange={(checked: boolean) =>
+              saveFeatures({ trackerPills: { enabled: checked } })}
           />
         </div>
 
@@ -956,6 +968,7 @@
         </p>
       </CardContent>
     </Card>
+    {/if}
 
     <!-- Browser Tab Settings (Favicon) -->
     <TitleFaviconSettings />

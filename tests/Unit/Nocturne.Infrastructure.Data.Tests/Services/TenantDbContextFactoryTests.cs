@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Moq;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
 namespace Nocturne.Infrastructure.Data.Tests.Services;
@@ -22,17 +24,16 @@ public class TenantDbContextFactoryTests
 
     private static Mock<ITenantAccessor> ResolvedAccessor(Guid tenantId)
     {
-        var accessor = new Mock<ITenantAccessor>();
-        accessor.Setup(a => a.IsResolved).Returns(true);
-        accessor.Setup(a => a.TenantId).Returns(tenantId);
+        var accessor = MockTenantAccessor.Create(tenantId);
         return accessor;
     }
 
-    private static Mock<ICategoryReadContext> Category(bool isShare, string? csv)
+    private static Mock<ICategoryReadContext> Category(bool isShare, string? csv, bool fullHistory = false)
     {
         var category = new Mock<ICategoryReadContext>();
         category.Setup(c => c.IsShare).Returns(isShare);
         category.Setup(c => c.VisibleCategoriesCsv).Returns(csv);
+        category.Setup(c => c.FullHistory).Returns(fullHistory);
         return category;
     }
 
@@ -68,6 +69,29 @@ public class TenantDbContextFactoryTests
 
         result.IsShareContext.Should().BeTrue();
         result.VisibleCategories.Should().Be("glucose.read");
+        result.ShareFullHistory.Should().BeFalse("a share whose window was never resolved stays clamped to 24 hours");
+    }
+
+    [Fact]
+    public async Task CreateAsync_CarriesFullHistory_WhenShareAllowsIt()
+    {
+        var factory = new TenantDbContextFactory(
+            NewPool().Object, ResolvedAccessor(Guid.NewGuid()).Object,
+            Category(isShare: true, csv: "glucose.read", fullHistory: true).Object);
+        await using var result = await factory.CreateAsync();
+
+        result.ShareFullHistory.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task CreateAsync_NonShare_DoesNotCarryFullHistory()
+    {
+        var factory = new TenantDbContextFactory(
+            NewPool().Object, ResolvedAccessor(Guid.NewGuid()).Object,
+            Category(isShare: false, csv: null, fullHistory: true).Object);
+        await using var result = await factory.CreateAsync();
+
+        result.ShareFullHistory.Should().BeFalse();
     }
 
     [Fact]
@@ -105,6 +129,46 @@ public class TenantDbContextFactoryTests
     }
 
     [Fact]
+    public async Task CreateAsync_StampsScopedAuditContext()
+    {
+        // The MutationAuditInterceptor resolves the audit context via IHttpContextAccessor,
+        // which is null in background services (connector syncs), where it falls back to
+        // NocturneDbContext.AuditContext. Without this stamping, every V4 repository write
+        // from a background scope was audited as a null-attributed user mutation (~1.5M
+        // mutation_audit_log rows/day in production) instead of being skipped as system.
+        var auditContext = Mock.Of<IAuditContext>(a => a.IsSystem == true);
+
+        var factory = new TenantDbContextFactory(
+            NewPool().Object, ResolvedAccessor(Guid.NewGuid()).Object, categoryReadContext: null,
+            auditContext: auditContext);
+        await using var result = await factory.CreateAsync();
+
+        result.AuditContext.Should().BeSameAs(auditContext);
+    }
+
+    [Fact]
+    public async Task CreateAsync_NoAuditContext_ClearsStaleAuditContextFromPooledContext()
+    {
+        // Pooling does not reset custom properties: assign unconditionally so a context that
+        // last served an attributed scope cannot leak that attribution into the next lease.
+        var options = new DbContextOptionsBuilder<NocturneDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        var pooled = new NocturneDbContext(options)
+        {
+            AuditContext = Mock.Of<IAuditContext>(),
+        };
+        var pool = new Mock<IDbContextFactory<NocturneDbContext>>();
+        pool.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>())).ReturnsAsync(pooled);
+
+        var factory = new TenantDbContextFactory(
+            pool.Object, ResolvedAccessor(Guid.NewGuid()).Object, categoryReadContext: null);
+        await using var result = await factory.CreateAsync();
+
+        result.AuditContext.Should().BeNull();
+    }
+
+    [Fact]
     public async Task CreateAsync_NonShare_ClearsStaleShareCarrierFromPooledContext()
     {
         // Pooling does not reset custom properties: a context that last served a share arrives
@@ -117,6 +181,7 @@ public class TenantDbContextFactoryTests
         {
             IsShareContext = true,
             VisibleCategories = "glucose.read,treatments.read",
+            ShareFullHistory = true,
         };
         var pool = new Mock<IDbContextFactory<NocturneDbContext>>();
         pool.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>())).ReturnsAsync(pooled);
@@ -127,5 +192,6 @@ public class TenantDbContextFactoryTests
 
         result.IsShareContext.Should().BeFalse("a non-share lease must clear a prior share's marker");
         result.VisibleCategories.Should().BeNull("a non-share lease must clear a prior share's CSV");
+        result.ShareFullHistory.Should().BeFalse("a non-share lease must clear a prior share's history window");
     }
 }

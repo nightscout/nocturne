@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using Nocturne.Core.Models.Widget;
 using Nocturne.Desktop.Tray.Extensions;
+using TimeAgoHelper = Nocturne.Widget.Contracts.Helpers.TimeAgoHelper;
 
 namespace Nocturne.Desktop.Tray.Services;
 
@@ -88,7 +89,7 @@ public sealed partial class GlucoseStateService : ObservableObject, IDisposable
         if (latest is not null)
         {
             CurrentReading = latest;
-            IsStale = Helpers.TimeAgoHelper.IsStale(latest.GetTimestamp());
+            IsStale = TimeAgoHelper.IsStale(latest.GetTimestamp());
         }
 
         StateChanged?.Invoke();
@@ -125,7 +126,7 @@ public sealed partial class GlucoseStateService : ObservableObject, IDisposable
             if (latest is not null && (CurrentReading is null || latest.Mills >= CurrentReading.Mills))
             {
                 CurrentReading = latest;
-                IsStale = Helpers.TimeAgoHelper.IsStale(latest.GetTimestamp());
+                IsStale = TimeAgoHelper.IsStale(latest.GetTimestamp());
             }
 
             StateChanged?.Invoke();
@@ -146,7 +147,7 @@ public sealed partial class GlucoseStateService : ObservableObject, IDisposable
         if (CurrentReading is not null)
         {
             var wasStale = IsStale;
-            IsStale = Helpers.TimeAgoHelper.IsStale(CurrentReading.GetTimestamp());
+            IsStale = TimeAgoHelper.IsStale(CurrentReading.GetTimestamp());
 
             if (IsStale != wasStale)
             {

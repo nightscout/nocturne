@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Nocturne.Core.Contracts.V4;
 using Moq;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
@@ -164,8 +165,10 @@ public class GlookoSsv2SyncTests
         var publisher = new Mock<IConnectorPublisher>();
         publisher.Setup(p => p.IsAvailable).Returns(true);
         publisher.Setup(p => p.Glucose.PublishSensorGlucoseAsync(
-                It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .Callback<IEnumerable<SensorGlucose>, string, CancellationToken>((g, _, _) => sink.AddRange(g))
+                It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<string>(),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<SensorGlucose>, string, WriteOrigin, CancellationToken>(
+                (g, _, _, _) => sink.AddRange(g))
             .ReturnsAsync(true);
         return publisher;
     }
@@ -227,7 +230,8 @@ public class GlookoSsv2SyncTests
         public FixedGlookoTokenProvider()
             : base(new HttpClient(), new ConnectorTokenCache(),
                    new ConnectorServerResolver<GlookoConnectorConfiguration>(null, null, null),
-                   new FakeTenantAccessor(), NullLogger<GlookoAuthTokenProvider>.Instance) { }
+                   new FakeTenantAccessor(), NullLogger<GlookoAuthTokenProvider>.Instance,
+                   Mock.Of<IRetryDelayStrategy>()) { }
 
         protected override Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
             GlookoConnectorConfiguration config, CancellationToken cancellationToken)

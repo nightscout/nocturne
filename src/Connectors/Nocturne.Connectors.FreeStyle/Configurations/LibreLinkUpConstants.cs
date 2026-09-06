@@ -39,7 +39,6 @@ public static class LibreLinkUpConstants
     {
         public const string DefaultRegion = "EU";
         public const string DeviceIdentifier = "libre-connector";
-        public const int MaxRetries = 3;
         public const string EntryType = "sgv";
     }
 }

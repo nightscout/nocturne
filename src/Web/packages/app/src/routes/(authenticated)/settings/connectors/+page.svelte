@@ -3,13 +3,13 @@
   import {
     getServicesOverview,
     getConnectorCapabilities,
+    triggerConnectorSync,
   } from "$api/generated/services.generated.remote";
   import type {
     ServicesOverview,
     UploaderApp,
     DataSourceInfo,
     ConnectorStatusDto,
-    SyncRequest,
     ConnectorCapabilities,
   } from "$lib/api/generated/nocturne-api-client";
 
@@ -43,23 +43,27 @@
   import DataSourceRow from "$lib/components/settings/DataSourceRow.svelte";
   import type { DataSourceStatus } from "$lib/components/settings/DataSourceRow.svelte";
   import ConnectedApps from "$lib/components/settings/ConnectedApps.svelte";
+  import ClientDevices from "$lib/components/settings/ClientDevices.svelte";
   import ApiTokens from "$lib/components/settings/ApiTokens.svelte";
   import DeduplicationDialog from "$lib/components/connectors/DeduplicationDialog.svelte";
   import AppLogo from "$lib/components/ui/AppLogo.svelte";
   import UploaderSetupDialog from "$lib/components/connectors/UploaderSetupDialog.svelte";
+  import { createUploaderTokenHandoff } from "./uploader-token-handoff";
   import ConnectorDetailsDialog from "$lib/components/connectors/ConnectorDetailsDialog.svelte";
   import ManualSyncDialog, { type BatchSyncResult } from "$lib/components/connectors/ManualSyncDialog.svelte";
   import DemoDataSection from "$lib/components/connectors/DemoDataSection.svelte";
   import UploaderAppsCard from "$lib/components/connectors/UploaderAppsCard.svelte";
   import ServerConnectorsCard, { type ConnectorStatusWithDescription } from "$lib/components/connectors/ServerConnectorsCard.svelte";
   import DataSourceManageDialog from "$lib/components/connectors/DataSourceManageDialog.svelte";
-  import { getApiClient } from "$lib/api";
+  import { describeSubmitError } from "$lib/forms/submit-error";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
   import { toast } from "svelte-sonner";
   import { getUploaderName } from "$lib/utils/uploader-labels";
   import { coachmark } from "@nocturne/coach";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
+  import { copyToClipboard } from "$lib/utils";
+  import { createTerminalRunTracker } from "./terminal-run-tracker";
 
   const isPlatformAdmin = $derived((page.data as { isPlatformAdmin?: boolean }).isPlatformAdmin ?? false);
 
@@ -126,13 +130,10 @@
     return entries.find((p) => p.phase === "Syncing") ?? entries.at(-1) ?? null;
   });
 
+  const terminalRuns = createTerminalRunTracker();
   $effect(() => {
-    const progress = syncProgressByConnector;
-    const hasCompleted = Object.values(progress).some(
-      (p) => p.phase === "Completed" || p.phase === "Failed"
-    );
-    if (hasCompleted) {
-      connectorStatusesQuery.refresh();
+    if (terminalRuns.hasNewlyFinishedRun(syncProgressByConnector)) {
+      void loadConnectorStatuses();
     }
   });
 
@@ -140,24 +141,59 @@
   let apiTokenCreateOpen = $state(false);
   let apiTokenPrefillLabel = $state("");
   let apiTokenPrefillScopes = $state<string[]>([]);
+  const uploaderHandoff = createUploaderTokenHandoff();
 
   // Deduplication state
   let showDeduplicationDialog = $state(false);
   let isDeduplicating = $state(false);
 
+  // Whether the user has already been told these lists are stale. The effect
+  // below refreshes once per finished run, so a batch of them and the refresh
+  // that follows are one thing going wrong reported many times over.
+  let staleListReported = false;
+
+  /**
+   * A refresh rejects when it fails, and every caller here is either a click
+   * handler or a completion callback whose own outcome must not be replaced by
+   * the refresh's, so the staleness is reported on its own and swallowed. It is
+   * reported once until a refresh gets through again.
+   */
+  async function refreshQuietly(...refreshes: Array<() => Promise<void>>) {
+    const outcomes = await Promise.allSettled(
+      refreshes.map((refresh) => refresh())
+    );
+
+    for (const outcome of outcomes) {
+      if (outcome.status !== "rejected") continue;
+
+      if (!staleListReported) {
+        staleListReported = true;
+        toast.error(
+          describeSubmitError(
+            outcome.reason,
+            "This list may be out of date. Reload the page to see the latest."
+          )
+        );
+      }
+      return;
+    }
+
+    staleListReported = false;
+  }
+
   async function refreshAll() {
-    await Promise.all([
-      servicesOverviewQuery.refresh(),
-      connectorStatusesQuery.refresh(),
-    ]);
+    await refreshQuietly(
+      () => servicesOverviewQuery.refresh(),
+      () => connectorStatusesQuery.refresh()
+    );
   }
 
   async function loadServices() {
-    await servicesOverviewQuery.refresh();
+    await refreshQuietly(() => servicesOverviewQuery.refresh());
   }
 
   async function loadConnectorStatuses() {
-    await connectorStatusesQuery.refresh();
+    await refreshQuietly(() => connectorStatusesQuery.refresh());
   }
 
   async function loadConnectorCapabilitiesFor(connectorId?: string) {
@@ -199,11 +235,9 @@
 
     const to = new Date();
     const from = new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000);
-    const request: SyncRequest = { from, to };
+    const request = { from: from.toISOString(), to: to.toISOString() };
 
     try {
-      const apiClient = getApiClient();
-
       for (const connector of connectorsToSync) {
         const connectorId = connector.id;
         if (!connectorId) continue;
@@ -213,12 +247,15 @@
         let errorMsg = undefined;
 
         try {
-          const result = await apiClient.services.triggerConnectorSync(connectorId, request);
+          const result = await triggerConnectorSync({ id: connectorId, request });
           success = result.success ?? false;
           if (!success) errorMsg = result.message || "Unknown error";
         } catch (e) {
           success = false;
-          errorMsg = e instanceof Error ? e.message : "Request failed";
+          errorMsg = describeSubmitError(
+            e,
+            "We couldn't start this sync. Please try again."
+          );
         }
 
         const durationMs = performance.now() - start;
@@ -234,7 +271,7 @@
 
       const endTime = new Date();
       manualSyncResult = {
-        success: successes > 0,
+        success: successes === connectorsToSync.length,
         totalConnectors: connectorsToSync.length,
         successfulConnectors: successes,
         failedConnectors: connectorsToSync.length - successes,
@@ -244,12 +281,15 @@
       };
 
       if (successes > 0) {
-        await Promise.all([loadServices(), loadConnectorStatuses()]);
+        await refreshAll();
       }
     } catch (e) {
       manualSyncResult = {
         success: false,
-        errorMessage: e instanceof Error ? e.message : "Failed to trigger manual sync",
+        errorMessage: describeSubmitError(
+          e,
+          "We couldn't start the sync. Please try again."
+        ),
         totalConnectors: 0,
         successfulConnectors: 0,
         failedConnectors: 0,
@@ -267,8 +307,7 @@
 
     quickSyncingById = { ...quickSyncingById, [connectorId]: true };
     try {
-      const apiClient = getApiClient();
-      const result = await apiClient.services.triggerConnectorSync(connectorId, {});
+      const result = await triggerConnectorSync({ id: connectorId, request: {} });
 
       if (result.success) {
         toast.success("Sync started");
@@ -278,7 +317,9 @@
 
       await loadConnectorStatuses();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Sync failed");
+      toast.error(
+        describeSubmitError(e, "We couldn't start the sync. Please try again.")
+      );
     } finally {
       quickSyncingById = { ...quickSyncingById, [connectorId]: false };
     }
@@ -339,8 +380,11 @@
     }
   }
 
-  async function copyToClipboard(text: string, field: string) {
-    await navigator.clipboard.writeText(text);
+  async function copyField(text: string, field: string) {
+    if (!(await copyToClipboard(text))) {
+      toast.error("Couldn't copy to the clipboard. Copy it manually instead.");
+      return;
+    }
     copiedField = field;
     setTimeout(() => {
       copiedField = null;
@@ -426,6 +470,7 @@
                 totalEntries={source.totalEntries}
                 entriesLast24h={source.entriesLast24h}
                 lastSeen={source.lastSeen}
+                subtitle={source.name !== source.deviceId ? source.deviceId : undefined}
                 onclick={() => openDataSourceDialog(source)}
               >
                 {#snippet badges()}
@@ -508,7 +553,7 @@
               <Button
                 variant="outline"
                 size="icon"
-                onclick={() => copyToClipboard(window.location.origin, "baseUrl")}
+                onclick={() => copyField(window.location.origin, "baseUrl")}
               >
                 {#if copiedField === "baseUrl"}
                   <Check class="h-4 w-4 text-green-500" />
@@ -581,6 +626,30 @@
           </div>
         </div>
 
+        <div class="flex items-start gap-4 p-4 rounded-lg border bg-card">
+          <div
+            class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10"
+          >
+            <Sparkles class="h-5 w-5 text-primary" />
+          </div>
+          <div class="flex-1">
+            <h4 class="font-medium">Remove Demo Data</h4>
+            <p class="text-sm text-muted-foreground mt-1">
+              Delete the sample readings and treatments that were generated to
+              show you around. Your own data is not affected.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              class="mt-3 gap-2"
+              onclick={() => (showDemoDataDialog = true)}
+            >
+              <Sparkles class="h-4 w-4" />
+              Remove Demo Data
+            </Button>
+          </div>
+        </div>
+
         {#if isPlatformAdmin}
           <a
             href={resolve("/settings/admin/connector-cursors")}
@@ -640,12 +709,18 @@
     <!-- Connected Apps Section -->
     <ConnectedApps />
 
+    <!-- Devices Section -->
+    <ClientDevices />
+
     <!-- API Tokens Section -->
     <div id="api-tokens-section">
       <ApiTokens
         bind:createOpen={apiTokenCreateOpen}
         prefillLabel={apiTokenPrefillLabel}
         prefillScopes={apiTokenPrefillScopes}
+        onCreateClose={() => {
+          if (uploaderHandoff.resumes()) showSetupDialog = true;
+        }}
       />
     </div>
   {/if}
@@ -658,6 +733,7 @@
   onRequestApiKey={(label, scopes) => {
     apiTokenPrefillLabel = label;
     apiTokenPrefillScopes = scopes;
+    uploaderHandoff.handOff();
     apiTokenCreateOpen = true;
   }}
 />

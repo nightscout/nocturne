@@ -1,20 +1,20 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.ConnectorPublishing;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Alerts;
-using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Xunit;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Tests.Services.ConnectorPublishing;
 
@@ -23,26 +23,24 @@ public class GlucosePublisherTests
 {
     private readonly Mock<IEntryService> _mockEntryService;
     private readonly Mock<ISensorGlucoseRepository> _mockSensorGlucoseRepository;
-    private readonly Mock<IPatientDeviceRepository> _mockPatientDeviceRepository;
-    private readonly Mock<IDataEventSink<SensorGlucose>> _mockSensorGlucoseEvents;
+    private readonly Mock<IMeterGlucoseRepository> _mockMeterGlucoseRepository;
+    private readonly Mock<IPatientDeviceStamper> _mockPatientDeviceStamper;
     private readonly GlucosePublisher _publisher;
 
     public GlucosePublisherTests()
     {
         _mockEntryService = new Mock<IEntryService>();
         _mockSensorGlucoseRepository = new Mock<ISensorGlucoseRepository>();
-        _mockPatientDeviceRepository = new Mock<IPatientDeviceRepository>();
-        _mockSensorGlucoseEvents = new Mock<IDataEventSink<SensorGlucose>>();
+        _mockMeterGlucoseRepository = new Mock<IMeterGlucoseRepository>();
+        _mockPatientDeviceStamper = new Mock<IPatientDeviceStamper>();
 
         _publisher = new GlucosePublisher(
             _mockEntryService.Object,
             _mockSensorGlucoseRepository.Object,
-            _mockPatientDeviceRepository.Object,
-            Mock.Of<IDbContextFactory<NocturneDbContext>>(),
-            Mock.Of<ITenantAccessor>(),
-            Mock.Of<IAlertOrchestrator>(),
+            _mockMeterGlucoseRepository.Object,
+            _mockPatientDeviceStamper.Object,
+            Mock.Of<ICanonicalAlertEvaluator>(),
             Mock.Of<IAuditContext>(),
-            _mockSensorGlucoseEvents.Object,
             NullLogger<GlucosePublisher>.Instance
         );
     }
@@ -52,14 +50,32 @@ public class GlucosePublisherTests
     {
         var entries = new List<Entry> { new() { Id = "1" } };
         _mockEntryService
-            .Setup(s => s.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<CancellationToken>()))
+            .Setup(s => s.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(entries);
 
-        var result = await _publisher.PublishEntriesAsync(entries, "test-source");
+        var result = await _publisher.PublishEntriesAsync(entries, "test-source", WriteOrigin.Live);
 
         result.Should().BeTrue();
         _mockEntryService.Verify(
-            s => s.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<CancellationToken>()),
+            s => s.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Once
+        );
+    }
+
+    [Fact]
+    public async Task PublishEntriesAsync_ForwardsWriteOrigin_SoBackfillsDoNotBroadcastAsLive()
+    {
+        // Regression: the publisher dropped its origin, so a first-ever full-history import
+        // decomposed everything as Live — broadcasting years of entries to connected clients.
+        var entries = new List<Entry> { new() { Id = "1" } };
+        _mockEntryService
+            .Setup(s => s.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(entries);
+
+        await _publisher.PublishEntriesAsync(entries, "test-source", WriteOrigin.Backfill);
+
+        _mockEntryService.Verify(
+            s => s.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), WriteOrigin.Backfill, It.IsAny<CancellationToken>()),
             Times.Once
         );
     }
@@ -68,53 +84,71 @@ public class GlucosePublisherTests
     public async Task PublishEntriesAsync_ReturnsFalse_OnException()
     {
         _mockEntryService
-            .Setup(s => s.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<CancellationToken>()))
+            .Setup(s => s.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("test error"));
 
-        var result = await _publisher.PublishEntriesAsync(new List<Entry>(), "test-source");
+        var result = await _publisher.PublishEntriesAsync(new List<Entry>(), "test-source", WriteOrigin.Live);
 
         result.Should().BeFalse();
     }
 
     [Fact]
-    public async Task PublishSensorGlucoseAsync_BroadcastsRealtimeEvent_ForPublishedReadings()
+    public async Task PublishSensorGlucoseAsync_WritesThroughRepository_ForPublishedReadings()
     {
-        _mockPatientDeviceRepository
-            .Setup(r => r.GetCurrentAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Enumerable.Empty<PatientDevice>());
-
         var records = new List<SensorGlucose>
         {
             new() { Mgdl = 120, Timestamp = DateTime.UtcNow.AddMinutes(-5), DataSource = DataSources.DexcomConnector },
             new() { Mgdl = 130, Timestamp = DateTime.UtcNow, DataSource = DataSources.DexcomConnector },
         };
 
-        // BulkCreateAsync dedupes by LegacyId and returns only the rows actually inserted — here a
-        // subset (the second reading); the first overlaps an already-stored reading from a prior poll.
+        // BulkCreateAsync routes through the repository chokepoint, which fires the realtime "entries"
+        // broadcast itself — the publisher no longer emits events directly.
         var inserted = new List<SensorGlucose> { records[1] };
         _mockSensorGlucoseRepository
-            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(inserted);
 
-        var result = await _publisher.PublishSensorGlucoseAsync(records, DataSources.DexcomConnector);
+        var result = await _publisher.PublishSensorGlucoseAsync(records, DataSources.DexcomConnector, WriteOrigin.Live);
 
         result.Should().BeTrue();
-        // The broadcast must be the deduped insert result, not the raw input list, so already-stored
-        // readings from overlapping connector poll windows are not re-broadcast.
-        _mockSensorGlucoseEvents.Verify(
-            e => e.OnCreatedAsync(
-                It.Is<IReadOnlyList<SensorGlucose>>(l => l.Count == 1 && l[0].Mgdl == 130),
+        _mockSensorGlucoseRepository.Verify(
+            r => r.BulkCreateAsync(
+                It.Is<IEnumerable<SensorGlucose>>(l => l.Count() == 2),
+                It.IsAny<WriteOrigin>(),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
     [Fact]
-    public async Task GetLatestEntryTimestampAsync_ReturnsDate_WhenEntryHasDate()
+    public async Task PublishSensorGlucoseAsync_StampsRecordsAsCgm_BeforeWriting()
+    {
+        var records = new List<SensorGlucose>
+        {
+            new() { Mgdl = 120, Timestamp = DateTime.UtcNow, DataSource = DataSources.DexcomConnector },
+        };
+        _mockSensorGlucoseRepository
+            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Enumerable.Empty<SensorGlucose>());
+
+        var result = await _publisher.PublishSensorGlucoseAsync(records, DataSources.DexcomConnector, WriteOrigin.Live);
+
+        result.Should().BeTrue();
+        _mockPatientDeviceStamper.Verify(
+            s => s.StampAsync(
+                It.Is<IReadOnlyList<IDeviceAttributed>>(l => l.Count == 1),
+                It.Is<IReadOnlyList<DeviceCategory>>(c => c.Single() == DeviceCategory.CGM),
+                DataSources.DexcomConnector,
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task GetLatestEntryTimestampAsync_ReturnsSensorTimestamp_WhenPresent()
     {
         var expectedDate = new DateTime(2026, 1, 15, 12, 0, 0, DateTimeKind.Utc);
-        _mockEntryService
-            .Setup(s => s.GetCurrentEntryAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Entry { Date = expectedDate });
+        _mockSensorGlucoseRepository
+            .Setup(r => r.GetLatestTimestampAsync(DataSources.NightscoutConnector, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expectedDate);
 
         var result = await _publisher.GetLatestEntryTimestampAsync(DataSources.NightscoutConnector);
 
@@ -122,294 +156,61 @@ public class GlucosePublisherTests
     }
 
     [Fact]
-    public async Task GetLatestEntryTimestampAsync_ReturnsMills_WhenDateIsDefault()
+    public async Task GetLatestEntryTimestampAsync_FallsBackToMeterTimestamp_ForManualBgOnlySource()
     {
-        var mills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        _mockEntryService
-            .Setup(s => s.GetCurrentEntryAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Entry { Mills = mills });
+        var meterDate = new DateTime(2026, 1, 15, 12, 0, 0, DateTimeKind.Utc);
+        _mockSensorGlucoseRepository
+            .Setup(r => r.GetLatestTimestampAsync(DataSources.NightscoutConnector, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DateTime?)null);
+        _mockMeterGlucoseRepository
+            .Setup(r => r.GetLatestTimestampAsync(DataSources.NightscoutConnector, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(meterDate);
 
         var result = await _publisher.GetLatestEntryTimestampAsync(DataSources.NightscoutConnector);
 
-        result.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime);
+        result.Should().Be(meterDate);
     }
 
     [Fact]
-    public async Task GetLatestEntryTimestampAsync_ReturnsNull_WhenNoEntry()
+    public async Task GetLatestEntryTimestampAsync_ReturnsLatestOfSensorAndMeter()
     {
+        var sensorDate = new DateTime(2026, 1, 15, 12, 0, 0, DateTimeKind.Utc);
+        var meterDate = new DateTime(2026, 1, 20, 8, 0, 0, DateTimeKind.Utc);
+        _mockSensorGlucoseRepository
+            .Setup(r => r.GetLatestTimestampAsync(DataSources.NightscoutConnector, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(sensorDate);
+        _mockMeterGlucoseRepository
+            .Setup(r => r.GetLatestTimestampAsync(DataSources.NightscoutConnector, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(meterDate);
+
+        var result = await _publisher.GetLatestEntryTimestampAsync(DataSources.NightscoutConnector);
+
+        result.Should().Be(meterDate);
+    }
+
+    [Fact]
+    public async Task GetLatestEntryTimestampAsync_ReturnsNull_WhenSourceHasNoData_EvenIfAnotherSourceIsLive()
+    {
+        // Regression: a tenant migrating from Nightscout while their uploader (e.g. Trio)
+        // already pushes glucose directly. The connector has never written a row, so its
+        // watermark must be null — a cross-source fallback here made the first sync look
+        // incremental and permanently skipped the full-history backfill.
+        _mockSensorGlucoseRepository
+            .Setup(r => r.GetLatestTimestampAsync(DataSources.NightscoutConnector, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DateTime?)null);
+        _mockMeterGlucoseRepository
+            .Setup(r => r.GetLatestTimestampAsync(DataSources.NightscoutConnector, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DateTime?)null);
         _mockEntryService
             .Setup(s => s.GetCurrentEntryAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Entry?)null);
+            .ReturnsAsync(new Entry { Date = DateTime.UtcNow });
 
-        var result = await _publisher.GetLatestEntryTimestampAsync("test-source");
+        var result = await _publisher.GetLatestEntryTimestampAsync(DataSources.NightscoutConnector);
 
         result.Should().BeNull();
-    }
-
-    // =========================================================================
-    // PatientDeviceId stamping tests
-    // =========================================================================
-
-    [Fact]
-    public async Task PublishSensorGlucoseAsync_StampsPatientDeviceId_WhenMatchingCgmDeviceExists()
-    {
-        var deviceId = Guid.NewGuid();
-        _mockPatientDeviceRepository
-            .Setup(r => r.GetCurrentAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new[]
-            {
-                new PatientDevice
-                {
-                    Id = deviceId,
-                    DeviceCategory = DeviceCategory.CGM,
-                    Manufacturer = "Dexcom",
-                    Model = "Dexcom G7",
-                    IsCurrent = true,
-                },
-            });
-
-        List<SensorGlucose>? captured = null;
-        _mockSensorGlucoseRepository
-            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<CancellationToken>()))
-            .Callback<IEnumerable<SensorGlucose>, CancellationToken>((records, _) => captured = records.ToList())
-            .ReturnsAsync(Enumerable.Empty<SensorGlucose>());
-
-        var records = new List<SensorGlucose>
-        {
-            new() { Mgdl = 120, Timestamp = DateTime.UtcNow, DataSource = DataSources.DexcomConnector },
-        };
-
-        var result = await _publisher.PublishSensorGlucoseAsync(records, DataSources.DexcomConnector);
-
-        result.Should().BeTrue();
-        captured.Should().NotBeNull();
-        captured![0].PatientDeviceId.Should().Be(deviceId);
-    }
-
-    [Fact]
-    public async Task PublishSensorGlucoseAsync_LeavesPatientDeviceIdNull_WhenNoCgmDeviceExists()
-    {
-        _mockPatientDeviceRepository
-            .Setup(r => r.GetCurrentAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Enumerable.Empty<PatientDevice>());
-
-        List<SensorGlucose>? captured = null;
-        _mockSensorGlucoseRepository
-            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<CancellationToken>()))
-            .Callback<IEnumerable<SensorGlucose>, CancellationToken>((records, _) => captured = records.ToList())
-            .ReturnsAsync(Enumerable.Empty<SensorGlucose>());
-
-        var records = new List<SensorGlucose>
-        {
-            new() { Mgdl = 120, Timestamp = DateTime.UtcNow, DataSource = DataSources.DexcomConnector },
-        };
-
-        var result = await _publisher.PublishSensorGlucoseAsync(records, DataSources.DexcomConnector);
-
-        result.Should().BeTrue();
-        captured.Should().NotBeNull();
-        captured![0].PatientDeviceId.Should().BeNull();
-    }
-
-    [Fact]
-    public async Task PublishSensorGlucoseAsync_MatchesByManufacturer_AbbottToLibreConnector()
-    {
-        var deviceId = Guid.NewGuid();
-        _mockPatientDeviceRepository
-            .Setup(r => r.GetCurrentAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new[]
-            {
-                new PatientDevice
-                {
-                    Id = deviceId,
-                    DeviceCategory = DeviceCategory.CGM,
-                    Manufacturer = "Abbott",
-                    Model = "FreeStyle Libre 3",
-                    IsCurrent = true,
-                },
-            });
-
-        List<SensorGlucose>? captured = null;
-        _mockSensorGlucoseRepository
-            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<CancellationToken>()))
-            .Callback<IEnumerable<SensorGlucose>, CancellationToken>((records, _) => captured = records.ToList())
-            .ReturnsAsync(Enumerable.Empty<SensorGlucose>());
-
-        var records = new List<SensorGlucose>
-        {
-            new() { Mgdl = 95, Timestamp = DateTime.UtcNow, DataSource = DataSources.LibreConnector },
-        };
-
-        var result = await _publisher.PublishSensorGlucoseAsync(records, DataSources.LibreConnector);
-
-        result.Should().BeTrue();
-        captured![0].PatientDeviceId.Should().Be(deviceId);
-    }
-
-    [Fact]
-    public async Task PublishSensorGlucoseAsync_FallsBackToSourceParameter_WhenRecordHasNoDataSource()
-    {
-        var deviceId = Guid.NewGuid();
-        _mockPatientDeviceRepository
-            .Setup(r => r.GetCurrentAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new[]
-            {
-                new PatientDevice
-                {
-                    Id = deviceId,
-                    DeviceCategory = DeviceCategory.CGM,
-                    Manufacturer = "Dexcom",
-                    Model = "Dexcom G7",
-                    IsCurrent = true,
-                },
-            });
-
-        List<SensorGlucose>? captured = null;
-        _mockSensorGlucoseRepository
-            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<CancellationToken>()))
-            .Callback<IEnumerable<SensorGlucose>, CancellationToken>((records, _) => captured = records.ToList())
-            .ReturnsAsync(Enumerable.Empty<SensorGlucose>());
-
-        var records = new List<SensorGlucose>
-        {
-            new() { Mgdl = 110, Timestamp = DateTime.UtcNow, DataSource = null },
-        };
-
-        var result = await _publisher.PublishSensorGlucoseAsync(records, DataSources.DexcomConnector);
-
-        result.Should().BeTrue();
-        captured![0].PatientDeviceId.Should().Be(deviceId);
-    }
-
-    [Fact]
-    public async Task PublishSensorGlucoseAsync_DoesNotOverwrite_ExistingPatientDeviceId()
-    {
-        var existingDeviceId = Guid.NewGuid();
-        var cgmDeviceId = Guid.NewGuid();
-
-        _mockPatientDeviceRepository
-            .Setup(r => r.GetCurrentAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new[]
-            {
-                new PatientDevice
-                {
-                    Id = cgmDeviceId,
-                    DeviceCategory = DeviceCategory.CGM,
-                    Manufacturer = "Dexcom",
-                    Model = "Dexcom G7",
-                    IsCurrent = true,
-                },
-            });
-
-        List<SensorGlucose>? captured = null;
-        _mockSensorGlucoseRepository
-            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<CancellationToken>()))
-            .Callback<IEnumerable<SensorGlucose>, CancellationToken>((records, _) => captured = records.ToList())
-            .ReturnsAsync(Enumerable.Empty<SensorGlucose>());
-
-        var records = new List<SensorGlucose>
-        {
-            new() { Mgdl = 100, Timestamp = DateTime.UtcNow, DataSource = DataSources.DexcomConnector, PatientDeviceId = existingDeviceId },
-        };
-
-        var result = await _publisher.PublishSensorGlucoseAsync(records, DataSources.DexcomConnector);
-
-        result.Should().BeTrue();
-        captured![0].PatientDeviceId.Should().Be(existingDeviceId);
-    }
-
-    [Fact]
-    public async Task PublishSensorGlucoseAsync_UsesCatalogManufacturer_WhenCatalogIdIsSet()
-    {
-        var deviceId = Guid.NewGuid();
-        _mockPatientDeviceRepository
-            .Setup(r => r.GetCurrentAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new[]
-            {
-                new PatientDevice
-                {
-                    Id = deviceId,
-                    DeviceCategory = DeviceCategory.CGM,
-                    Manufacturer = "SomeOldValue",
-                    Model = "Dexcom G7",
-                    CatalogId = "dexcom-g7",
-                    IsCurrent = true,
-                },
-            });
-
-        List<SensorGlucose>? captured = null;
-        _mockSensorGlucoseRepository
-            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<CancellationToken>()))
-            .Callback<IEnumerable<SensorGlucose>, CancellationToken>((records, _) => captured = records.ToList())
-            .ReturnsAsync(Enumerable.Empty<SensorGlucose>());
-
-        var records = new List<SensorGlucose>
-        {
-            new() { Mgdl = 130, Timestamp = DateTime.UtcNow, DataSource = DataSources.DexcomConnector },
-        };
-
-        var result = await _publisher.PublishSensorGlucoseAsync(records, DataSources.DexcomConnector);
-
-        result.Should().BeTrue();
-        captured![0].PatientDeviceId.Should().Be(deviceId);
-    }
-
-    [Fact]
-    public async Task PublishSensorGlucoseAsync_IgnoresNonCgmDevices()
-    {
-        var pumpId = Guid.NewGuid();
-        _mockPatientDeviceRepository
-            .Setup(r => r.GetCurrentAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new[]
-            {
-                new PatientDevice
-                {
-                    Id = pumpId,
-                    DeviceCategory = DeviceCategory.InsulinPump,
-                    Manufacturer = "Insulet",
-                    Model = "Omnipod 5",
-                    IsCurrent = true,
-                },
-            });
-
-        List<SensorGlucose>? captured = null;
-        _mockSensorGlucoseRepository
-            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<CancellationToken>()))
-            .Callback<IEnumerable<SensorGlucose>, CancellationToken>((records, _) => captured = records.ToList())
-            .ReturnsAsync(Enumerable.Empty<SensorGlucose>());
-
-        var records = new List<SensorGlucose>
-        {
-            new() { Mgdl = 100, Timestamp = DateTime.UtcNow, DataSource = DataSources.DexcomConnector },
-        };
-
-        var result = await _publisher.PublishSensorGlucoseAsync(records, DataSources.DexcomConnector);
-
-        result.Should().BeTrue();
-        captured![0].PatientDeviceId.Should().BeNull();
-    }
-
-    [Fact]
-    public async Task PublishSensorGlucoseAsync_ContinuesOnDeviceResolutionFailure()
-    {
-        _mockPatientDeviceRepository
-            .Setup(r => r.GetCurrentAsync(It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("DB error"));
-
-        _mockSensorGlucoseRepository
-            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Enumerable.Empty<SensorGlucose>());
-
-        var records = new List<SensorGlucose>
-        {
-            new() { Mgdl = 100, Timestamp = DateTime.UtcNow, DataSource = DataSources.DexcomConnector },
-        };
-
-        var result = await _publisher.PublishSensorGlucoseAsync(records, DataSources.DexcomConnector);
-
-        result.Should().BeTrue();
-        _mockSensorGlucoseRepository.Verify(
-            r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<CancellationToken>()),
-            Times.Once);
+        _mockEntryService.Verify(
+            s => s.GetCurrentEntryAsync(It.IsAny<CancellationToken>()),
+            Times.Never,
+            "the watermark must never consult cross-source data");
     }
 }

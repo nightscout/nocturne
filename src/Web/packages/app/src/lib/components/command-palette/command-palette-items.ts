@@ -5,7 +5,6 @@ import {
 	BarChart3,
 	Battery,
 	Bell,
-	BellRing,
 	Building,
 	Calendar,
 	CalendarDays,
@@ -43,11 +42,13 @@ import {
 	TrendingUp,
 	TriangleAlert,
 	User,
+	UserPlus,
 	Users,
 	UtensilsCrossed,
 	Wrench,
 	ZoomIn,
 } from "lucide-svelte";
+import { filterTenantlessNav } from "$lib/navigation/tenantless-navigation";
 
 export type CommandPaletteGroup =
 	| "stats"
@@ -368,6 +369,15 @@ export const items: CommandPaletteItem[] = [
 		href: "/settings/admin/tenants",
 		role: "platform_admin",
 	},
+	{
+		id: "page-access-requests",
+		label: "Access Requests",
+		group: "settings",
+		keywords: ["access requests", "join", "approve", "pending users"],
+		icon: UserPlus,
+		href: "/settings/access-requests",
+		role: "platform_admin",
+	},
 
 	// ─── Settings ────────────────────────────────────────────────────────
 	{
@@ -395,18 +405,10 @@ export const items: CommandPaletteItem[] = [
 		href: "/settings/appearance",
 	},
 	{
-		id: "settings-alarms",
-		label: "Alarms",
-		group: "settings",
-		keywords: ["alarms", "urgent", "glucose alerts"],
-		icon: BellRing,
-		href: "/settings/alarms",
-	},
-	{
 		id: "settings-alerts",
 		label: "Alerts",
 		group: "settings",
-		keywords: ["alerts", "warnings", "notifications"],
+		keywords: ["alerts", "alarms", "urgent", "warnings", "notifications"],
 		icon: TriangleAlert,
 		href: "/alerts",
 	},
@@ -549,3 +551,11 @@ export const items: CommandPaletteItem[] = [
 		icon: RefreshCw,
 	},
 ];
+
+/**
+ * The entries a host can actually use. Narrowed on a tenantless host from the same list of hrefs
+ * the sidebar narrows from, rather than a second one. See tenantless-navigation.
+ */
+export function paletteItemsFor(tenantless: boolean): CommandPaletteItem[] {
+	return tenantless ? filterTenantlessNav(items) : items;
+}

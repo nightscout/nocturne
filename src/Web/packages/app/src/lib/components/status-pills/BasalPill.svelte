@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatDate } from "$lib/utils/formatting";
   import StatusPill from "./StatusPill.svelte";
   import type {
     BasalPillData,
@@ -51,7 +52,7 @@
       if (data.tempBasal.startTime) {
         items.push({
           label: "Active Temp Basal Start",
-          value: new Date(data.tempBasal.startTime).toLocaleString(),
+          value: formatDate(data.tempBasal.startTime),
         });
       }
 

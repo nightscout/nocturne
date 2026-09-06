@@ -3,12 +3,17 @@
   import { page } from "$app/state";
   import * as Card from "$lib/components/ui/card";
   import { getPunchCardData } from "$api/generated/statistics.generated.remote";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
   import { getActiveInstances, getDefinitions, getInstanceHistory } from "$api/generated/trackers.generated.remote";
   import type { TrackerInstanceDto, TrackerDefinitionDto } from "$api";
   import { NotificationUrgency as NotificationUrgencyEnum } from "$api";
   import { Button } from "$lib/components/ui/button";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import { getUnitLabel } from "$lib/utils/formatting";
+  import { getUnitLabel, formatLocale, formatDate, time } from "$lib/utils/formatting";
+  import {
+    leadingBlankDays,
+    weekdayLabels,
+  } from "$lib/components/calendar/calendar-date";
   import CalendarSkeleton from "$lib/components/calendar/CalendarSkeleton.svelte";
   import { TrackerCompletionDialog } from "$lib/components/trackers";
   import CalendarHeader from "$lib/components/calendar/CalendarHeader.svelte";
@@ -123,21 +128,14 @@
   const units = $derived(glucoseUnits.current);
   const unitLabel = $derived(getUnitLabel(units));
 
-  const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  const MONTH_NAMES = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-  ];
+  // Column headings and month names follow the regional format, so a European
+  // format renders Monday-first weeks with its own weekday and month names.
+  // 3 chars keeps the seven columns even; English already abbreviates to that.
+  const DAY_NAMES = $derived(weekdayLabels(formatLocale(), "short", 3));
+  const MONTH_NAMES = $derived.by(() => {
+    const format = new Intl.DateTimeFormat(formatLocale(), { month: "long" });
+    return Array.from({ length: 12 }, (_, m) => format.format(new Date(2026, m, 1)));
+  });
 
   // Reactive loading/error states for query results
   const punchCardLoading = $derived(punchCardQuery.loading);
@@ -173,10 +171,9 @@
   });
 
   const calendarGrid = $derived.by(() => {
-    const firstDay = new Date(currentYear, currentMonth, 1);
     const lastDay = new Date(currentYear, currentMonth + 1, 0);
     const daysInMonth = lastDay.getDate();
-    const startDayOfWeek = firstDay.getDay();
+    const startDayOfWeek = leadingBlankDays(currentYear, currentMonth, formatLocale());
 
     const grid: (DayStats | null | { empty: true; dayNumber?: number })[][] =
       [];
@@ -221,20 +218,28 @@
     );
     const summary = monthData?.summary;
     const days = monthData?.days ?? [];
-    const daysWithData = days.filter((d) => d.totalReadings || 0 > 0);
-    const totalCarbs = days.reduce((sum, d) => sum + (d.totalCarbs ?? 0), 0);
-    const totalInsulin = days.reduce(
-      (sum, d) => sum + (d.totalInsulin ?? 0),
-      0
-    );
-    const dayCount = daysWithData.length;
+
+    // Each per-day average divides by the days that carry that kind of data.
+    // Dividing both by the days with CGM readings overstated TDD and carbs by the
+    // whole sensor-outage share of the month — a month with 10 outage days but
+    // complete pump data read about 50% high.
+    const withCarbs = days.filter((d) => (d.totalCarbs ?? 0) > 0);
+    const withInsulin = days.filter((d) => (d.totalInsulin ?? 0) > 0);
+    const sum = (
+      entries: typeof days,
+      read: (day: (typeof days)[number]) => number | undefined
+    ) => entries.reduce((total, day) => total + (read(day) ?? 0), 0);
 
     return {
       totalReadings: summary?.totalReadings ?? 0,
       inRangePercent: summary?.inRangePercent ?? 0,
       avgGlucose: summary?.avgGlucose ?? 0,
-      avgDailyCarbs: dayCount > 0 ? totalCarbs / dayCount : 0,
-      tdd: dayCount > 0 ? totalInsulin / dayCount : 0,
+      avgDailyCarbs:
+        withCarbs.length > 0 ? sum(withCarbs, (d) => d.totalCarbs) / withCarbs.length : 0,
+      tdd:
+        withInsulin.length > 0
+          ? sum(withInsulin, (d) => d.totalInsulin) / withInsulin.length
+          : 0,
     };
   });
 
@@ -309,31 +314,21 @@
     return events;
   }
 
-  function getTrackerIconColor(eventType: string, level: string): string {
-    if (eventType === "completed") return "text-muted-foreground";
-    if (eventType === "start") return "text-green-500 dark:text-green-400";
-    switch (level) {
-      case "urgent":
-        return "text-red-500 dark:text-red-400";
-      case "hazard":
-        return "text-orange-500 dark:text-orange-400";
-      case "warn":
-        return "text-yellow-500 dark:text-yellow-400";
-      case "info":
-        return "text-blue-500 dark:text-blue-400";
-      default:
-        return "text-muted-foreground";
-    }
+  /**
+   * The tone a tracker icon is drawn in, emitted as a data attribute so the
+   * colour itself lives in CSS (see CalendarDayCell).
+   */
+  function getTrackerTone(eventType: string, level: string): string {
+    if (eventType === "completed") return "completed";
+    if (eventType === "start") return "start";
+    return level;
   }
 
   function formatTrackerStartTime(startedAt: Date | undefined): string | null {
     if (!startedAt) return null;
     const date = new Date(startedAt);
     if (Number.isNaN(date.getTime())) return null;
-    return date.toLocaleTimeString(undefined, {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return time(date);
   }
 
   let isCompletionDialogOpen = $state(false);
@@ -385,7 +380,7 @@
             Failed to load calendar data
           </p>
           <p class="text-sm text-muted-foreground mt-1">
-            {punchCardError instanceof Error ? punchCardError.message : "An error occurred"}
+            {remoteErrorMessage(punchCardError, "An error occurred")}
           </p>
           <Button class="mt-4" onclick={() => window.location.reload()}>
             Try Again
@@ -395,8 +390,19 @@
     </Card.Root>
   </div>
 {:else}
-  <div class="flex flex-col h-full">
+  <div class="@container flex flex-col h-full">
+    <div class="hidden print:block border-b pb-3 mb-4">
+      <h1 class="text-xl font-bold">
+        Month-to-Month Report — {MONTH_NAMES[currentMonth]}
+        {currentYear}
+      </h1>
+      <p class="text-sm text-muted-foreground">
+        Generated {formatDate(new Date())}
+      </p>
+    </div>
+
     <div
+      class="print:hidden"
       {@attach coachmark({
         key: "feature-intro.calendar-views",
         title: "View modes",
@@ -425,53 +431,41 @@
           </Card.Content>
         </Card.Root>
       </div>
-    {:else if trackersError}
-      <div class="flex-1 p-3 sm:p-4">
-        <Card.Root class="h-full">
-          <Card.Content class="p-2 sm:p-4 h-full flex flex-col">
-            <div class="grid grid-cols-7 gap-1 mb-2">
-              {#each DAY_NAMES as dayName}
-                <div
-                  class="text-center text-sm font-medium text-muted-foreground py-2"
-                >
-                  {dayName}
-                </div>
-              {/each}
-            </div>
-            <div class="text-center text-muted-foreground py-8">
-              <p>Could not load tracker data</p>
-              <p class="text-sm">Calendar view is still available</p>
-            </div>
-          </Card.Content>
-        </Card.Root>
-      </div>
     {:else}
       <div class="flex-1 p-3 sm:p-4">
         <Card.Root class="h-full">
           <Card.Content class="p-2 sm:p-4 h-full flex flex-col">
-            <div class="grid grid-cols-7 gap-1 mb-2">
-              {#each DAY_NAMES as dayName}
-                <div
-                  class="text-center text-sm font-medium text-muted-foreground py-2"
-                >
-                  {dayName}
-                </div>
-              {/each}
-            </div>
+            {#if trackersError}
+              <!-- Trackers overlay the calendar; losing them must not take the glucose
+                   calendar with them, which is served by a separate query. -->
+              <p class="text-sm text-muted-foreground pb-2">
+                Tracker data is unavailable, so site and sensor changes are not shown.
+              </p>
+            {/if}
+            <div class="flex-1 overflow-x-auto print:overflow-visible flex flex-col">
+              <div class="grid grid-cols-7 gap-1 mb-2 min-w-[28rem] @md:min-w-0">
+                {#each DAY_NAMES as dayName}
+                  <div
+                    class="text-center text-sm font-medium text-muted-foreground py-2"
+                  >
+                    {dayName}
+                  </div>
+                {/each}
+              </div>
 
-            <div
-              class="flex-1 grid grid-rows-6 gap-1"
-              {@attach coachmark({
-                key: "feature-intro.calendar-trackers",
-                title: "Tracker events",
-                description:
-                  "Tracker events appear on your calendar \u2014 colored by urgency.",
-              })}
-            >
-              {#each calendarGrid as week}
-                <div class="grid grid-cols-7 gap-1">
-                  {#each week as day}
-                    <CalendarDayCell
+              <div
+                class="flex-1 grid grid-rows-6 gap-1 min-w-[28rem] @md:min-w-0"
+                {@attach coachmark({
+                  key: "feature-intro.calendar-trackers",
+                  title: "Tracker events",
+                  description:
+                    "Tracker events appear on your calendar \u2014 colored by urgency.",
+                })}
+              >
+                {#each calendarGrid as week}
+                  <div class="grid grid-cols-7 gap-1">
+                    {#each week as day}
+                      <CalendarDayCell
                       {day}
                       {viewMode}
                       {currentYear}
@@ -484,7 +478,7 @@
                       {handleDayClick}
                       {getDefinition}
                       {getTrackerLevel}
-                      {getTrackerIconColor}
+                      {getTrackerTone}
                       {formatTrackerStartTime}
                       {formatTrackerAge}
                       {openCompletionDialog}
@@ -492,6 +486,7 @@
                   {/each}
                 </div>
               {/each}
+              </div>
             </div>
 
             <CalendarMonthSummary {monthSummary} {units} {unitLabel} />

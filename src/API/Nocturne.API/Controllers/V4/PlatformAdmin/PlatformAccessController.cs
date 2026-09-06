@@ -8,6 +8,7 @@ using Nocturne.API.Multitenancy;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 
@@ -53,8 +54,6 @@ public class PlatformAccessController(
     /// <summary>Lifetime of a platform-access grant. A time-boxed "visit", not a standing credential.</summary>
     private static readonly TimeSpan GrantLifetime = TimeSpan.FromMinutes(30);
 
-    private const string AuditEventType = "platform_admin_tenant_access";
-
     /// <summary>
     /// Mint a platform-access grant for the given tenant slug and redirect the operator into the
     /// tenant. Bounces through OIDC login if there is no session yet; 403s if the session is not a
@@ -66,7 +65,7 @@ public class PlatformAccessController(
     public async Task<IActionResult> Access([FromQuery] string? tenant, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(tenant))
-            return BadRequest(new { error = "missing_tenant" });
+            return Problem(detail: "No tenant slug was given.", statusCode: StatusCodes.Status400BadRequest, title: "Bad Request");
 
         var auth = HttpContext.GetAuthContext();
 
@@ -79,13 +78,13 @@ public class PlatformAccessController(
 
         if (!auth.IsPlatformAdmin)
         {
-            await authAudit.LogAsync(AuditEventType, auth.SubjectId, success: false,
+            await authAudit.LogAsync(AuthAuditEventType.PlatformAdminTenantAccess, auth.SubjectId, success: false,
                 ipAddress: GetClientIp(), userAgent: GetUserAgent(),
                 errorMessage: "not_platform_admin",
                 detailsJson: JsonSerializer.Serialize(new { slug = tenant }));
             logger.LogWarning("Subject {SubjectId} attempted platform access to '{Slug}' without platform_admin",
                 auth.SubjectId, tenant);
-            return StatusCode(StatusCodes.Status403Forbidden, new { error = "forbidden" });
+            return Problem(detail: "Platform access requires a platform administrator session.", statusCode: StatusCodes.Status403Forbidden, title: "Forbidden");
         }
 
         // The tenants table is not RLS-scoped, so this resolves any tenant by slug.
@@ -95,10 +94,10 @@ public class PlatformAccessController(
             .FirstOrDefaultAsync(ct);
 
         if (target is null)
-            return NotFound(new { error = "tenant_not_found" });
+            return Problem(detail: $"No tenant is registered under the slug '{tenant}'.", statusCode: StatusCodes.Status404NotFound, title: "Not Found");
 
         if (!target.IsActive)
-            return StatusCode(StatusCodes.Status403Forbidden, new { error = "tenant_inactive" });
+            return Problem(detail: $"Tenant '{tenant}' is deactivated.", statusCode: StatusCodes.Status403Forbidden, title: "Forbidden");
 
         // Mint a tenant-pinned, platform-access-marked grant for the operator's real subject.
         var subject = new SubjectInfo
@@ -130,9 +129,10 @@ public class PlatformAccessController(
             Expires = DateTimeOffset.UtcNow.Add(GrantLifetime),
         });
 
-        await authAudit.LogAsync(AuditEventType, auth.SubjectId, success: true,
+        await authAudit.LogAsync(AuthAuditEventType.PlatformAdminTenantAccess, auth.SubjectId, success: true,
             ipAddress: GetClientIp(), userAgent: GetUserAgent(),
-            detailsJson: JsonSerializer.Serialize(new { tenantId = target.Id, slug = target.Slug }));
+            detailsJson: JsonSerializer.Serialize(new { slug = target.Slug }),
+            tenantId: target.Id);
 
         logger.LogInformation(
             "Platform-admin {SubjectId} was granted access to tenant {TenantId} ({Slug})",
@@ -146,9 +146,7 @@ public class PlatformAccessController(
         return Redirect(redirectUrl);
     }
 
-    private string? GetClientIp() =>
-        Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim()
-        ?? HttpContext.Connection.RemoteIpAddress?.ToString();
+    private string? GetClientIp() => HttpContext.Connection.RemoteIpAddress?.ToString();
 
     private string? GetUserAgent() => Request.Headers.UserAgent.FirstOrDefault();
 }

@@ -1,11 +1,14 @@
 using System.Net;
+using System.Reflection;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Connectors.Core.Services;
 
@@ -20,6 +23,22 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     protected readonly IConnectorServerResolver<TConfig> _serverResolver;
     protected readonly ILogger _logger;
     private readonly IConnectorPublisher? _publisher;
+
+    /// <summary>The API publisher, or <c>null</c> when running detached (e.g. dry-run tooling).</summary>
+    protected IConnectorPublisher? Publisher => _publisher;
+
+    // Broadcast origin for this run's glucose / care (treatment-family) publishes, resolved once from the
+    // pre-run resume watermark and memoized so every batch and granular publish in the run agrees — a
+    // paginated or multi-call first sync can't flip to Live mid-backfill. The connector service is
+    // resolved fresh per sync run, so these are naturally per-run.
+    private WriteOrigin? _glucosePublishOrigin;
+    private WriteOrigin? _treatmentPublishOrigin;
+    private WriteOrigin? _devicePublishOrigin;
+
+    // Carried on the instance rather than through PerformSyncInternalAsync's callees so the shared
+    // publish path can report without every connector threading it; safe for the same reason the
+    // publish-origin memos above are.
+    private ISyncProgressReporter? _progressReporter;
 
     /// <summary>
     ///     Base constructor for connector services using IHttpClientFactory pattern
@@ -48,18 +67,35 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
     public abstract string ServiceName { get; }
 
-    /// <inheritdoc />
-    public virtual List<SyncDataType> SupportedDataTypes => [SyncDataType.Glucose];
+    /// <summary>
+    /// The data types this connector fetches, read from the <see cref="ConnectorRegistrationAttribute"/>
+    /// on <typeparamref name="TConfig"/>. The attribute drives the tenant-facing toggle schema and
+    /// this property drives the sync loop, so stating them separately lets a connector advertise a
+    /// toggle it never acts on, or act on data the tenant has no way to turn off.
+    /// </summary>
+    public virtual List<SyncDataType> SupportedDataTypes => [.. RegisteredDataTypes];
 
-    public abstract Task<bool> AuthenticateAsync();
+    /// <remarks>
+    ///     Not <see cref="ConnectorRegistrationAttribute.DeclaredOn"/>: a connector service may be
+    ///     closed over a configuration carrying no registration at all, which defaults to glucose
+    ///     rather than failing. The inherit rule is the same one.
+    /// </remarks>
+    private static readonly SyncDataType[] RegisteredDataTypes =
+        typeof(TConfig).GetCustomAttribute<ConnectorRegistrationAttribute>(inherit: false)?.SupportedDataTypes
+        ?? [SyncDataType.Glucose];
 
     /// <summary>
-    ///     Fetch glucose entries from the data source.
-    ///     Connectors that write V4 models directly via <see cref="PerformSyncInternalAsync"/> do
-    ///     not need to override this — the default returns empty.
+    ///     The pre-flight <see cref="RunBackgroundSyncAsync"/> runs before it fetches anything.
+    ///     It carries no configuration, so a connector whose credentials are per-tenant has nothing
+    ///     to authenticate against here and admits the run: it resolves and checks the tenant's
+    ///     credential inside <see cref="PerformSyncInternalAsync"/>, where the config is in hand.
+    ///     Only a connector holding a process-wide credential overrides this.
     /// </summary>
-    public virtual Task<IEnumerable<Entry>> FetchGlucoseDataAsync(DateTime? since = null) =>
-        Task.FromResult(Enumerable.Empty<Entry>());
+    public virtual Task<bool> AuthenticateAsync()
+    {
+        TrackSuccessfulRequest();
+        return Task.FromResult(true);
+    }
 
     /// <inheritdoc />
     public virtual async Task<SyncResult> SyncDataAsync(
@@ -69,7 +105,112 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         ISyncProgressReporter? progressReporter = null
     )
     {
-        return await PerformSyncInternalAsync(request, config, cancellationToken, progressReporter);
+        return await RunWithProgressAsync(
+            progressReporter,
+            cancellationToken,
+            async () => await EnsureAuthenticatedAsync(config, cancellationToken)
+                ? await PerformSyncInternalAsync(request, config, cancellationToken)
+                : AuthenticationFailedResult());
+    }
+
+    /// <summary>
+    ///     Hand-shake run before <see cref="PerformSyncInternalAsync"/> on the requested-range entry
+    ///     point. Connectors that must authenticate before they can fetch override this instead of the
+    ///     <see cref="SyncRequest"/> overload, so a rejected credential still passes through
+    ///     <see cref="RunWithProgressAsync"/> and produces the run's one terminal progress message.
+    ///     The background entry point authenticates through <see cref="AuthenticateAsync"/> in
+    ///     <see cref="RunBackgroundSyncAsync"/> and never reaches this overload, so a connector
+    ///     overriding both is not authenticated twice for one run.
+    /// </summary>
+    protected virtual Task<bool> EnsureAuthenticatedAsync(
+        TConfig config,
+        CancellationToken cancellationToken) => Task.FromResult(true);
+
+    /// <summary>
+    ///     The result of a run that never got past authentication. Carries the detail in
+    ///     <see cref="SyncResult.Errors"/> and the summary in <see cref="SyncResult.Message"/>
+    ///     because the terminal progress message reads the former and the tenant's sync card the latter.
+    /// </summary>
+    protected SyncResult AuthenticationFailedResult()
+    {
+        var now = DateTimeOffset.UtcNow;
+        return new SyncResult
+        {
+            Success = false,
+            StartTime = now,
+            EndTime = now,
+            Message = "Authentication failed",
+            Errors = { $"Authentication failed for {ConnectorSource}" },
+        };
+    }
+
+    /// <summary>
+    ///     Runs one sync for the lifetime of <paramref name="progressReporter"/> and emits the
+    ///     run's terminal progress message. Owned here rather than by each connector so every
+    ///     sync reaches a terminal <see cref="SyncPhase"/> and the tenant's in-progress indicator
+    ///     always resolves — including when the run never got as far as fetching data.
+    /// </summary>
+    private async Task<SyncResult> RunWithProgressAsync(
+        ISyncProgressReporter? progressReporter,
+        CancellationToken cancellationToken,
+        Func<Task<SyncResult>> body
+    )
+    {
+        _progressReporter = progressReporter;
+        try
+        {
+            var result = await body();
+            StandInFailureMessage(result);
+            await ReportSyncOutcomeAsync(result.Success, FailureMessage(result), cancellationToken);
+            return result;
+        }
+        // A cancelled run has no outcome to report — the caller withdrew it. The background
+        // entry point's own catch-all converts its timeout into a failed result first, so that
+        // path still reports a terminal message through the success path above.
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            await ReportSyncOutcomeAsync(false, ex.Message, cancellationToken);
+            throw;
+        }
+        finally
+        {
+            _progressReporter = null;
+        }
+    }
+
+    private Task ReportSyncOutcomeAsync(bool success, string? errorMessage, CancellationToken cancellationToken) =>
+        ReportSyncMessageAsync(
+            success ? SyncMessageType.SyncComplete : SyncMessageType.SyncFailed,
+            null, cancellationToken, errorMessage);
+
+    /// <summary>
+    ///     Gives a failed run that recorded only <see cref="SyncResult.Errors"/> a
+    ///     <see cref="SyncResult.Message"/>, standing in the failure that started it.
+    /// </summary>
+    /// <remarks>
+    ///     The manual-sync dialog shows <see cref="SyncResult.Message"/> and nothing else about a
+    ///     failure — not <see cref="SyncResult.Errors"/> — so a run that recorded its reason only in
+    ///     the errors puts that reason out of the tenant's reach entirely. Owned here because every
+    ///     connector's failure paths converge on this wrapper, unlike the per-type catch blocks that
+    ///     raise most of them: those sit in each connector separately and can hold no shared rule.
+    ///     A message an inner path chose stands, because <see cref="AuthenticationFailedResult"/>
+    ///     and <see cref="RecordFailure"/> both summarise what the raw error text only implies; as
+    ///     in the latter, the first recorded failure names the run.
+    /// </remarks>
+    private static void StandInFailureMessage(SyncResult result)
+    {
+        if (result.Success || result.Errors.Count == 0) return;
+
+        if (string.IsNullOrWhiteSpace(result.Message))
+            result.Message = result.Errors[0];
+    }
+
+    private static string? FailureMessage(SyncResult result)
+    {
+        if (result.Success) return null;
+        return result.Errors.Count > 0
+            ? string.Join("; ", result.Errors)
+            : string.IsNullOrWhiteSpace(result.Message) ? null : result.Message;
     }
 
     public void Dispose()
@@ -110,12 +251,16 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(
+            // Do not swallow: a null watermark means "no prior data", which triggers an
+            // initial backfill — unbounded for connectors with a null InitialSyncFloor.
+            // A transient read failure must fail this cycle (retried next interval), not
+            // be amplified into a full-history recrawl and republish.
+            _logger.LogError(
                 ex,
                 "Failed to fetch latest entry timestamp for {ConnectorSource}",
                 ConnectorSource
             );
-            return null;
+            throw;
         }
     }
 
@@ -151,12 +296,14 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(
+            // See FetchLatestEntryTimestampAsync: a swallowed failure reads as "no prior
+            // data" and triggers an unbounded initial backfill for null-floor connectors.
+            _logger.LogError(
                 ex,
                 "Failed to fetch latest treatment timestamp for {ConnectorSource}",
                 ConnectorSource
             );
-            return null;
+            throw;
         }
     }
 
@@ -219,36 +366,24 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     }
 
     /// <summary>
-    ///     Calculate the optimal "since" timestamp for fetching glucose entries
-    ///     Uses catch-up logic to fetch from the most recent entry, or falls back to default lookback
+    ///     The glucose family's resume point: the most recent stored entry (minus the catch-up
+    ///     overlap), or <see cref="InitialSyncFloor"/> when none is stored. Combine it with a
+    ///     caller's bound through <see cref="ResumeFrom(DateTime?, DateTime?)"/> rather than
+    ///     choosing between the two.
     /// </summary>
-    protected async Task<DateTime?> CalculateSinceTimestampAsync(
-        TConfig config,
-        DateTime? defaultSince = null
-    )
+    protected async Task<DateTime?> CalculateSinceTimestampAsync(TConfig config)
     {
-        if (defaultSince.HasValue)
-            return defaultSince.Value;
-
-        // Get the most recent entry timestamp from Nocturne API
         var latestEntryTimestamp = await FetchLatestEntryTimestampAsync(config);
 
         return CalculateSinceFromTimestamp(latestEntryTimestamp, "entries");
     }
 
     /// <summary>
-    ///     Calculate the optimal "since" timestamp for fetching treatments
-    ///     Uses catch-up logic to fetch from the most recent treatment, or falls back to default lookback
+    ///     The treatment family's resume point: the most recent stored treatment (minus the
+    ///     catch-up overlap), or <see cref="InitialSyncFloor"/> when none is stored.
     /// </summary>
-    protected async Task<DateTime?> CalculateTreatmentSinceTimestampAsync(
-        TConfig config,
-        DateTime? defaultSince = null
-    )
+    protected async Task<DateTime?> CalculateTreatmentSinceTimestampAsync(TConfig config)
     {
-        if (defaultSince.HasValue)
-            return defaultSince.Value;
-
-        // Get the most recent treatment timestamp from Nocturne API
         var latestTreatmentTimestamp = await FetchLatestTreatmentTimestampAsync(config);
 
         return CalculateSinceFromTimestamp(latestTreatmentTimestamp, "treatments");
@@ -276,6 +411,60 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         var latest = await FetchLatestActivityTimestampAsync(config);
         return TryCalculateCatchUpSince(latest, "activity");
     }
+
+    /// <summary>
+    ///     The lower bound a family crawls from, given the caller's bound and the family's own
+    ///     resume point: whichever of the two reaches further back, where an open resume point
+    ///     reaches back without limit and an absent caller bound leaves the resume point standing.
+    /// </summary>
+    /// <remarks>
+    ///     Neither bound may narrow the other. The resume point cannot narrow the caller's, because
+    ///     an explicit <c>from</c> with no <c>to</c> is the shape an admin repairing a gap sends, and
+    ///     answering that from the watermark returns nothing and reports it as a success. The
+    ///     caller's cannot narrow the resume point either, because on a background catch-up the
+    ///     caller's bound is the glucose watermark, and honouring it alone is what strands the other
+    ///     families behind glucose — a resume point left open by an unbounded
+    ///     <see cref="InitialSyncFloor"/> included, since that is a family with nothing stored at
+    ///     all asking for the source's whole history.
+    ///     <para>
+    ///     A caller that supplies no bound is not asking for everything: a background cycle whose
+    ///     glucose watermark is null reaches here, as does the tenant's own sync button, and a
+    ///     family with a resume point still stands on it. A resume point that is absent rather than
+    ///     open is resolved by the caller before it gets here — see
+    ///     <see cref="CalculateDeviceStatusCatchUpSinceAsync"/> for the two that answer that way.
+    ///     </para>
+    /// </remarks>
+    protected static DateTime? ResumeFrom(DateTime? requested, DateTime? resumePoint)
+    {
+        if (requested is null)
+            return resumePoint;
+
+        if (resumePoint is null)
+            return null;
+
+        return requested < resumePoint ? requested : resumePoint;
+    }
+
+    /// <summary>
+    ///     The lower bound for a source that cannot crawl from an open one: as
+    ///     <see cref="ResumeFrom(DateTime?, DateTime?)"/>, over a resume point already resolved to
+    ///     a concrete timestamp.
+    /// </summary>
+    protected static DateTime ResumeFrom(DateTime? requested, DateTime resumePoint) =>
+        ResumeFrom(requested, (DateTime?)resumePoint) ?? resumePoint;
+
+    /// <summary>
+    ///     The lower bound a whole request crawls from, for a source that cannot crawl from an open
+    ///     one. An explicit range is answered as asked: it is the shape a manual re-import of one
+    ///     window sends, and widening it back to a resume point below re-crawls everything in
+    ///     between. A range naming no lower bound is asking for everything available, so it starts
+    ///     at <paramref name="historyFloor"/> — as far back as the connector reaches, which is the
+    ///     reading the reset-cursor endpoint documents and the only one under which it resets
+    ///     anything.
+    /// </summary>
+    protected static DateTime ResumeFrom(
+        SyncRequest request, DateTime resumePoint, DateTime historyFloor) =>
+        request.To is null ? ResumeFrom(request.From, resumePoint) : request.From ?? historyFloor;
 
     /// <summary>
     ///     Applies the catch-up overlap to a latest-record timestamp: returns the timestamp
@@ -344,179 +533,34 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     protected static DateTime DefaultInitialSyncFloor() => DateTime.UtcNow.AddMonths(-6);
 
     /// <summary>
-    ///     Core synchronization logic that processes data types sequentially.
-    ///     Shared between manual and background sync flows.
+    ///     Core synchronization logic: fetches and publishes the data types
+    ///     <see cref="ResolveActiveTypes"/> resolves for the run. Shared between the manual and
+    ///     background sync flows. There is deliberately no default implementation: a connector that
+    ///     advertises data types it does not sync would fail silently, so the omission is a compile
+    ///     error instead.
     /// </summary>
-    protected virtual async Task<SyncResult> PerformSyncInternalAsync(
+    protected abstract Task<SyncResult> PerformSyncInternalAsync(
         SyncRequest request,
         TConfig config,
-        CancellationToken cancellationToken,
-        ISyncProgressReporter? progressReporter = null
-    )
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     The data types one run of <see cref="PerformSyncInternalAsync"/> may touch: what the
+    ///     caller asked for, narrowed to what the tenant has switched on. An empty
+    ///     <see cref="SyncRequest.DataTypes"/> asks for everything, which is how an unfiltered cursor
+    ///     reset arrives; a narrowed one is an operator re-pulling a single type and must not drag
+    ///     the rest of the connector's history back with it.
+    /// </summary>
+    /// <remarks>
+    ///     Answered rather than written back into <paramref name="request"/>: a tenant-wide cursor
+    ///     reset builds one <see cref="SyncRequest"/> and hands the same instance to every connector
+    ///     it fans out to, so a connector recording its own answer there would narrow the next
+    ///     connector's run to its own supported types.
+    /// </remarks>
+    protected HashSet<SyncDataType> ResolveActiveTypes(SyncRequest request, TConfig config)
     {
-        var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
-
-        if (!request.DataTypes.Any())
-            request.DataTypes = SupportedDataTypes;
-
-        var enabledTypes = config.GetEnabledDataTypes(SupportedDataTypes);
-        var disabledTypes = SupportedDataTypes.Except(enabledTypes).ToList();
-        if (disabledTypes.Count > 0)
-            _logger.LogInformation(
-                "Skipping disabled data types for {Connector}: {DisabledTypes}",
-                ConnectorSource,
-                string.Join(", ", disabledTypes));
-
-        var typesToSync = request.DataTypes.Where(type => enabledTypes.Contains(type)).ToList();
-        var completedTypes = new List<SyncDataType>();
-        var itemsSoFar = new Dictionary<SyncDataType, int>();
-
-        foreach (var type in typesToSync)
-        {
-            if (progressReporter != null)
-            {
-                await progressReporter.ReportProgressAsync(new SyncProgressEvent
-                {
-                    ConnectorId = ConnectorSource,
-                    ConnectorName = ServiceName,
-                    Phase = SyncPhase.Syncing,
-                    CurrentDataType = type,
-                    CompletedDataTypes = [.. completedTypes],
-                    TotalDataTypes = typesToSync.Count,
-                    ItemsSyncedSoFar = new(itemsSoFar),
-                    MessageType = SyncMessageType.FetchingDataType,
-                    MessageParams = new() { ["dataType"] = type.ToString() },
-                }, cancellationToken);
-            }
-
-            try
-            {
-                var count = 0;
-                DateTime? lastTime = null;
-                var publishSuccess = true;
-
-                switch (type)
-                {
-                    case SyncDataType.Glucose:
-                        var entries = await FetchGlucoseDataRangeAsync(
-                            request.From,
-                            request.To
-                        );
-                        var entryList = entries.ToList();
-                        count = entryList.Count;
-                        if (count > 0)
-                            lastTime = entryList.Max(e => e.Date);
-                        publishSuccess = await PublishGlucoseDataInBatchesAsync(
-                            entryList,
-                            config,
-                            cancellationToken
-                        );
-                        break;
-
-                    case SyncDataType.Profiles:
-                        var profiles = await FetchProfilesAsync();
-                        var profileList = profiles.ToList();
-                        count = profileList.Count;
-                        if (count > 0)
-                            lastTime = profileList
-                                .Where(p => p.Mills > 0)
-                                .Select(p => DateTimeOffset.FromUnixTimeMilliseconds(p.Mills).UtcDateTime)
-                                .DefaultIfEmpty()
-                                .Max();
-                        publishSuccess = await PublishProfileDataAsync(
-                            profileList,
-                            config,
-                            cancellationToken
-                        );
-                        break;
-
-                    default:
-                        _logger.LogDebug(
-                            "Data type {DataType} not supported by this connector",
-                            type
-                        );
-                        break;
-                }
-
-                result.ItemsSynced[type] = count;
-                result.LastEntryTimes[type] = lastTime;
-                if (!publishSuccess)
-                {
-                    result.Success = false;
-                    result.Errors.Add($"{type} publish failed");
-                }
-
-                if (progressReporter != null && count > 0)
-                {
-                    await progressReporter.ReportProgressAsync(new SyncProgressEvent
-                    {
-                        ConnectorId = ConnectorSource,
-                        ConnectorName = ServiceName,
-                        Phase = SyncPhase.Syncing,
-                        CurrentDataType = type,
-                        CompletedDataTypes = [.. completedTypes],
-                        TotalDataTypes = typesToSync.Count,
-                        ItemsSyncedSoFar = new(itemsSoFar) { [type] = count },
-                        MessageType = SyncMessageType.PublishingDataType,
-                        MessageParams = new() { ["dataType"] = type.ToString(), ["count"] = count.ToString() },
-                    }, cancellationToken);
-                }
-
-                completedTypes.Add(type);
-                itemsSoFar[type] = count;
-            }
-            catch (Exception ex)
-            {
-                result.Success = false;
-                result.Errors.Add($"Failed to sync {type}: {ex.Message}");
-
-                _logger.LogError(
-                    ex,
-                    "Failed to sync {DataType} for {Connector}",
-                    type,
-                    ConnectorSource
-                );
-
-                completedTypes.Add(type);
-                itemsSoFar[type] = 0;
-            }
-        }
-
-        result.EndTime = DateTimeOffset.UtcNow;
-
-        if (progressReporter != null)
-        {
-            await progressReporter.ReportProgressAsync(new SyncProgressEvent
-            {
-                ConnectorId = ConnectorSource,
-                ConnectorName = ServiceName,
-                Phase = result.Success ? SyncPhase.Completed : SyncPhase.Failed,
-                CurrentDataType = null,
-                CompletedDataTypes = [.. completedTypes],
-                TotalDataTypes = typesToSync.Count,
-                ItemsSyncedSoFar = new(itemsSoFar),
-                ErrorMessage = result.Success ? null : string.Join("; ", result.Errors),
-                MessageType = result.Success ? SyncMessageType.SyncComplete : SyncMessageType.SyncFailed,
-            }, cancellationToken);
-        }
-
-        return result;
-    }
-
-    protected virtual Task<IEnumerable<Entry>> FetchGlucoseDataRangeAsync(
-        DateTime? from,
-        DateTime? to
-    )
-    {
-        return FetchGlucoseDataAsync(from);
-    }
-
-    protected virtual Task<IEnumerable<Treatment>> FetchTreatmentsAsync(
-        DateTime? from,
-        DateTime? to
-    )
-    {
-        return Task.FromResult(Enumerable.Empty<Treatment>());
+        var enabled = config.GetEnabledDataTypes(SupportedDataTypes).ToHashSet();
+        return request.DataTypes.Count == 0 ? enabled : [.. request.DataTypes.Where(enabled.Contains)];
     }
 
     protected virtual Task<IEnumerable<Profile>> FetchProfilesAsync()
@@ -527,6 +571,54 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     /// <summary>
     ///     Submits glucose data directly to the API via HTTP
     /// </summary>
+    /// <summary>
+    ///     The broadcast origin for this run's glucose-family publishes: <see cref="WriteOrigin.Backfill"/>
+    ///     on the source's first-ever glucose sync (no prior data — suppress so a first sync of history
+    ///     doesn't flood clients), else <see cref="WriteOrigin.Live"/>. Memoized for the run.
+    /// </summary>
+    protected async Task<WriteOrigin> GlucosePublishOriginAsync()
+    {
+        _glucosePublishOrigin ??= await ResolvePublishOriginAsync(
+            () => _publisher!.Glucose.GetLatestEntryTimestampAsync(ConnectorSource));
+        return _glucosePublishOrigin.Value;
+    }
+
+    /// <summary>
+    ///     The broadcast origin for this run's care-family (treatment) publishes — Bolus, CarbIntake,
+    ///     BG check, calculations, basal, notes, device events. Backfill on the source's first-ever
+    ///     treatment sync, else Live. Memoized for the run.
+    /// </summary>
+    protected async Task<WriteOrigin> TreatmentPublishOriginAsync()
+    {
+        _treatmentPublishOrigin ??= await ResolvePublishOriginAsync(
+            () => _publisher!.Treatments.GetLatestTreatmentTimestampAsync(ConnectorSource));
+        return _treatmentPublishOrigin.Value;
+    }
+
+    /// <summary>
+    ///     The broadcast origin for this run's device-status (snapshot) publishes — APS, pump, and uploader
+    ///     snapshots. Backfill on the source's first-ever device-status sync (suppress so a first sync of
+    ///     history doesn't flood the device category), else Live. Memoized for the run.
+    /// </summary>
+    protected async Task<WriteOrigin> DevicePublishOriginAsync()
+    {
+        _devicePublishOrigin ??= await ResolvePublishOriginAsync(
+            () => _publisher!.Device.GetLatestDeviceStatusTimestampAsync(ConnectorSource));
+        return _devicePublishOrigin.Value;
+    }
+
+    /// <summary>
+    ///     Resolves a publish origin from a resume watermark: Backfill when no prior data exists (initial
+    ///     full-history sync), else Live. When the publisher is unavailable the publish will fail anyway,
+    ///     so the origin is irrelevant and defaults to Live.
+    /// </summary>
+    private async Task<WriteOrigin> ResolvePublishOriginAsync(Func<Task<DateTime?>> latestTimestamp)
+    {
+        if (_publisher is not { IsAvailable: true })
+            return WriteOrigin.Live;
+        return await latestTimestamp() is null ? WriteOrigin.Backfill : WriteOrigin.Live;
+    }
+
     protected virtual async Task<bool> PublishGlucoseDataAsync(
         IEnumerable<Entry> entries,
         TConfig config,
@@ -539,7 +631,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             return false;
         }
 
-        return await _publisher.Glucose.PublishEntriesAsync(entries, ConnectorSource, cancellationToken);
+        return await _publisher.Glucose.PublishEntriesAsync(entries, ConnectorSource, await GlucosePublishOriginAsync(), cancellationToken);
     }
 
     /// <summary>
@@ -559,7 +651,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
         return await _publisher.Treatments.PublishTreatmentsAsync(
             treatments,
-            ConnectorSource,
+            ConnectorSource, await TreatmentPublishOriginAsync(),
             cancellationToken
         );
     }
@@ -581,7 +673,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
         return await _publisher.Device.PublishDeviceStatusAsync(
             deviceStatuses,
-            ConnectorSource,
+            ConnectorSource, await DevicePublishOriginAsync(),
             cancellationToken
         );
     }
@@ -601,7 +693,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             return false;
         }
 
-        return await _publisher.Metadata.PublishProfilesAsync(profiles, ConnectorSource, cancellationToken);
+        return await _publisher.Metadata.PublishProfilesAsync(profiles, ConnectorSource, WriteOrigin.Live, cancellationToken); // Dormant broadcast category (snapshots off-base / no V4 category yet) — origin irrelevant until wired.
     }
 
     /// <summary>
@@ -619,7 +711,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             return false;
         }
 
-        return await _publisher.Metadata.PublishFoodAsync(foods, ConnectorSource, cancellationToken);
+        return await _publisher.Metadata.PublishFoodAsync(foods, ConnectorSource, WriteOrigin.Live, cancellationToken); // Dormant broadcast category (snapshots off-base / no V4 category yet) — origin irrelevant until wired.
     }
 
     /// <summary>
@@ -639,9 +731,9 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
         return await _publisher.Metadata.PublishActivityAsync(
             activities,
-            ConnectorSource,
+            ConnectorSource, WriteOrigin.Live,
             cancellationToken
-        );
+        ); // Dormant broadcast category (snapshots off-base / no V4 category yet) — origin irrelevant until wired.
     }
 
     /// <summary>
@@ -661,13 +753,16 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
         return await _publisher.Metadata.PublishStateSpansAsync(
             stateSpans,
-            ConnectorSource,
+            ConnectorSource, WriteOrigin.Live,
             cancellationToken
-        );
+        ); // Dormant broadcast category (snapshots off-base / no V4 category yet) — origin irrelevant until wired.
     }
 
     /// <summary>
-    ///     Submits system event data directly to the API via HTTP
+    ///     Submits system event data directly to the API via HTTP. System events have no
+    ///     <see cref="SyncDataType"/> of their own, so a connector routing them through
+    ///     <see cref="PublishRecordTypeAsync{T}"/> gates and counts them under
+    ///     <see cref="SyncDataType.DeviceEvents"/>.
     /// </summary>
     protected virtual async Task<bool> PublishSystemEventDataAsync(
         IEnumerable<SystemEvent> systemEvents,
@@ -683,16 +778,25 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
         return await _publisher.Metadata.PublishSystemEventsAsync(
             systemEvents,
-            ConnectorSource,
+            ConnectorSource, WriteOrigin.Live,
             cancellationToken
-        );
+        ); // Dormant broadcast category (snapshots off-base / no V4 category yet) — origin irrelevant until wired.
     }
 
     /// <summary>
-    ///     Reusable helper that checks whether a data type is active, publishes a batch of records,
-    ///     updates the <see cref="SyncResult"/> counts, and logs the outcome.
+    ///     Reusable helper that checks whether a data type is active, reports publish progress,
+    ///     publishes a batch of records, and records the outcome through
+    ///     <see cref="RecordPublishOutcome"/>.
     /// </summary>
-    protected async Task PublishRecordTypeAsync<T>(
+    /// <param name="context">
+    ///     Detail about this batch — where it came from, or what it held — appended to the success log
+    ///     in parentheses.
+    /// </param>
+    /// <returns>
+    ///     Whether the batch reached the tenant. An inactive type, an empty batch and a rejected
+    ///     publish are alike <c>false</c>: no record was accepted in any of them.
+    /// </returns>
+    protected async Task<bool> PublishRecordTypeAsync<T>(
         SyncResult result,
         SyncDataType dataType,
         HashSet<SyncDataType> activeTypes,
@@ -702,23 +806,166 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         CancellationToken cancellationToken,
         string? context = null) where T : class
     {
-        if (!activeTypes.Contains(dataType) || records.Count == 0) return;
+        if (!activeTypes.Contains(dataType)) return false;
+
+        if (records.Count == 0)
+        {
+            RecordPublishOutcome(result, dataType, 0, success: true);
+            return false;
+        }
+
+        await ReportSyncMessageAsync(SyncMessageType.PublishingDataType,
+            new() { ["count"] = records.Count.ToString(), ["dataType"] = dataType.ToString() },
+            cancellationToken);
 
         var success = await publishFunc(records, config, cancellationToken);
-        result.ItemsSynced.TryGetValue(dataType, out var prev);
-        result.ItemsSynced[dataType] = prev + records.Count;
+        RecordPublishOutcome(result, dataType, records.Count, success, context);
+        return success;
+    }
+
+    /// <summary>
+    ///     The bookkeeping every published record type owes the run: the per-type count the tenant's
+    ///     sync card renders, the canonical failure string, and the success log. Connectors whose
+    ///     publish shape does not fit <see cref="PublishRecordTypeAsync{T}"/> — a streaming crawl that
+    ///     publishes page by page, or one fetch feeding several types — record through this instead of
+    ///     writing the three by hand.
+    /// </summary>
+    /// <remarks>
+    ///     A type the sync looked at records a count even when it came back empty: the card renders a
+    ///     badge per key, so a missing key reads as "never checked" rather than "checked, found
+    ///     nothing". Counts accumulate, so a paginated crawl can report each page and a later empty
+    ///     page cannot erase what an earlier one landed. Callers report the count once the publish has
+    ///     returned, so a publish that throws records nothing while one that reports failure records
+    ///     the batch it handed over — the count is what reached the publisher, not what the publisher
+    ///     accepted.
+    /// </remarks>
+    /// <param name="context">
+    ///     Detail about this batch — where it came from, or what it held — appended to the success log
+    ///     in parentheses.
+    /// </param>
+    protected void RecordPublishOutcome(
+        SyncResult result,
+        SyncDataType dataType,
+        int count,
+        bool success,
+        string? context = null)
+    {
+        result.ItemsSynced.TryGetValue(dataType, out var previous);
+        result.ItemsSynced[dataType] = previous + count;
+
         if (!success)
         {
-            result.Success = false;
-            result.Errors.Add($"{dataType} publish failed");
+            RecordFailure(result, $"{dataType} publish failed", PublishFailedMessage);
         }
-        else
+        else if (count > 0)
         {
-            var ctx = context != null ? $" from {context}" : "";
-            _logger.LogInformation("Synced {Count} {Type} records{Context}",
-                records.Count, dataType, ctx);
+            _logger.LogInformation("[{ConnectorSource}] Synced {Count} {Type} records{Context}",
+                ConnectorSource, count, dataType, context != null ? $" ({context})" : "");
         }
     }
+
+    /// <summary>
+    ///     The counterpart of <see cref="RecordPublishOutcome"/> one level up: a fetch that came back
+    ///     with nothing because it failed, reported as a failure of the run but only for a type the
+    ///     tenant enabled. Records no count — the source was never reached, and a count is a claim it
+    ///     was (see the remarks on <see cref="RecordPublishOutcome"/>).
+    /// </summary>
+    /// <remarks>
+    ///     A failed run withholds the connector's last-successful-sync stamp and shows the tenant a
+    ///     red connector, so a fetch issued only to support another type — a bolus fetch feeding a
+    ///     carb correlation — must not be able to fail the sync. Losing it costs that correlation and
+    ///     nothing else. The failure is sticky rather than fatal: whatever the run already fetched
+    ///     still publishes.
+    /// </remarks>
+    protected void RecordFetchFailure(
+        SyncResult result,
+        SyncDataType dataType,
+        HashSet<SyncDataType> activeTypes)
+    {
+        if (!activeTypes.Contains(dataType))
+        {
+            _logger.LogDebug(
+                "[{ConnectorSource}] {DataType} fetch failed for a type that is switched off",
+                ConnectorSource, dataType);
+            return;
+        }
+
+        RecordFailure(result, $"Failed to fetch {dataType}", FetchFailedMessage);
+    }
+
+    /// <summary>
+    ///     The failure a connector raises when the source did not answer, for the fetches whose
+    ///     caller cannot tell a failure from a result by its shape.
+    /// </summary>
+    /// <remarks>
+    ///     A fetch that failed is not an answer, and must never be read as one. Standing in an empty
+    ///     result ends a paginated crawl at the page that broke and reports the truncation as a
+    ///     successful sync, and it advances whatever the connector resumes from next cycle — a
+    ///     persisted backfill low-water mark, or the newest record now stored locally — past history
+    ///     that was never read, so the gap outlives the failure instead of being repaired. A source
+    ///     with nothing left to give answers with an empty payload; that is what ends a crawl.
+    /// </remarks>
+    /// <param name="detail">
+    ///     What the source did, when the caller knows it and the reader would otherwise have to read
+    ///     the connector logs to find out — which a hosted tenant cannot do.
+    /// </param>
+    protected static Exception FetchFailed(string operationName, string? detail = null) =>
+        new HttpRequestException(detail is null
+            ? $"{operationName} fetch failed; see preceding connector logs"
+            : $"{operationName} fetch failed: {detail}");
+
+    /// <summary>
+    ///     What a run says for itself when it failed and the reader has no <see cref="SyncResult.Errors"/>
+    ///     to go on. The first recorded failure names the run, so a fetch that fell over followed by a
+    ///     publish rejection still reads as the fetch failure that started it.
+    /// </summary>
+    protected const string FetchFailedMessage = "Sync failed while fetching data";
+
+    /// <inheritdoc cref="FetchFailedMessage"/>
+    protected const string PublishFailedMessage = "Sync failed while publishing data";
+
+    private static void RecordFailure(SyncResult result, string error, string message)
+    {
+        if (result.Errors.Count == 0)
+            result.Message = message;
+
+        result.Success = false;
+
+        // A windowed sync meets the same failure once per chunk, and the terminal progress message
+        // joins every entry, so the tenant reads one line per distinct failure rather than per chunk.
+        if (!result.Errors.Contains(error))
+            result.Errors.Add(error);
+    }
+
+    /// <summary>
+    ///     Reports a sync-progress message to the reporter supplied for this run, if any. The
+    ///     message type carries the phase, so a terminal message cannot be emitted as in-progress.
+    /// </summary>
+    protected Task ReportSyncMessageAsync(
+        SyncMessageType messageType,
+        Dictionary<string, string>? messageParams,
+        CancellationToken cancellationToken,
+        string? errorMessage = null)
+    {
+        if (_progressReporter is null) return Task.CompletedTask;
+
+        return _progressReporter.ReportProgressAsync(new SyncProgressEvent
+        {
+            ConnectorId = ConnectorSource,
+            ConnectorName = ServiceName,
+            Phase = PhaseOf(messageType),
+            ErrorMessage = errorMessage,
+            MessageType = messageType,
+            MessageParams = messageParams,
+        }, cancellationToken);
+    }
+
+    private static SyncPhase PhaseOf(SyncMessageType messageType) => messageType switch
+    {
+        SyncMessageType.SyncComplete => SyncPhase.Completed,
+        SyncMessageType.SyncFailed => SyncPhase.Failed,
+        _ => SyncPhase.Syncing,
+    };
 
     #region V4 Publishing Methods
 
@@ -747,7 +994,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
         return await _publisher.Glucose.PublishSensorGlucoseAsync(
             records,
-            ConnectorSource,
+            ConnectorSource, await GlucosePublishOriginAsync(),
             cancellationToken
         );
     }
@@ -767,25 +1014,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             return false;
         }
 
-        return await _publisher.Treatments.PublishBolusesAsync(records, ConnectorSource, cancellationToken);
-    }
-
-    /// <summary>
-    ///     Submits DecompositionBatch records before their V4 siblings (FK ordering)
-    /// </summary>
-    protected virtual async Task<bool> PublishDecompositionBatchesAsync(
-        IEnumerable<DecompositionBatch> batches,
-        TConfig config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (_publisher == null || !_publisher.IsAvailable)
-        {
-            _logger?.LogWarning("Publisher not available for DecompositionBatch submission");
-            return false;
-        }
-
-        return await _publisher.Treatments.PublishDecompositionBatchesAsync(batches, ConnectorSource, cancellationToken);
+        return await _publisher.Treatments.PublishBolusesAsync(records, ConnectorSource, await TreatmentPublishOriginAsync(), cancellationToken);
     }
 
     /// <summary>
@@ -805,7 +1034,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
         return await _publisher.Treatments.PublishCarbIntakesAsync(
             records,
-            ConnectorSource,
+            ConnectorSource, await TreatmentPublishOriginAsync(),
             cancellationToken
         );
     }
@@ -825,7 +1054,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             return false;
         }
 
-        return await _publisher.Treatments.PublishBGChecksAsync(records, ConnectorSource, cancellationToken);
+        return await _publisher.Treatments.PublishBGChecksAsync(records, ConnectorSource, await TreatmentPublishOriginAsync(), cancellationToken);
     }
 
     /// <summary>
@@ -845,7 +1074,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
         return await _publisher.Treatments.PublishBolusCalculationsAsync(
             records,
-            ConnectorSource,
+            ConnectorSource, await TreatmentPublishOriginAsync(),
             cancellationToken
         );
     }
@@ -865,7 +1094,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             return false;
         }
 
-        return await _publisher.Metadata.PublishNotesAsync(records, ConnectorSource, cancellationToken);
+        return await _publisher.Metadata.PublishNotesAsync(records, ConnectorSource, await TreatmentPublishOriginAsync(), cancellationToken);
     }
 
     /// <summary>
@@ -939,7 +1168,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
         return await _publisher.Device.PublishDeviceEventsAsync(
             records,
-            ConnectorSource,
+            ConnectorSource, await TreatmentPublishOriginAsync(),
             cancellationToken
         );
     }
@@ -961,7 +1190,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
         return await _publisher.Treatments.PublishTempBasalsAsync(
             records,
-            ConnectorSource,
+            ConnectorSource, await TreatmentPublishOriginAsync(),
             cancellationToken
         );
     }
@@ -983,7 +1212,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
         return await _publisher.Treatments.PublishBasalInjectionsAsync(
             records,
-            ConnectorSource,
+            ConnectorSource, await TreatmentPublishOriginAsync(),
             cancellationToken
         );
     }
@@ -1091,11 +1320,21 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     ///     Main sync method for background synchronization.
     ///     Uses PerformSyncInternalAsync for sequential processing.
     /// </summary>
-    public virtual async Task<SyncResult> SyncDataAsync(
+    public virtual Task<SyncResult> SyncDataAsync(
         TConfig config,
         CancellationToken cancellationToken = default,
         DateTime? since = null,
         ISyncProgressReporter? progressReporter = null
+    ) =>
+        RunWithProgressAsync(
+            progressReporter,
+            cancellationToken,
+            () => RunBackgroundSyncAsync(config, cancellationToken, since));
+
+    private async Task<SyncResult> RunBackgroundSyncAsync(
+        TConfig config,
+        CancellationToken cancellationToken,
+        DateTime? since
     )
     {
         _logger.LogInformation(
@@ -1108,13 +1347,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             if (!await AuthenticateAsync())
             {
                 _logger.LogError("Authentication failed for {ConnectorSource}", ConnectorSource);
-                return new SyncResult
-                {
-                    Success = false,
-                    StartTime = DateTimeOffset.UtcNow,
-                    EndTime = DateTimeOffset.UtcNow,
-                    Errors = { $"Authentication failed for {ConnectorSource}" }
-                };
+                return AuthenticationFailedResult();
             }
 
             // Determine catch-up timestamp
@@ -1127,7 +1360,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
                 DataTypes = SupportedDataTypes,
             };
 
-            var result = await PerformSyncInternalAsync(request, config, cancellationToken, progressReporter);
+            var result = await PerformSyncInternalAsync(request, config, cancellationToken);
 
             if (result.Success)
             {
@@ -1178,59 +1411,21 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         // HttpClient is managed by IHttpClientFactory - do not dispose
     }
 
-    #region Health Tracking
+    #region Failure Tracking
 
-    /// <summary>
-    ///     Tracks consecutive failed requests for health monitoring.
-    ///     Automatically incremented on failures and reset on success.
-    /// </summary>
     private int _failedRequestCount;
 
-    /// <summary>
-    ///     Maximum failed requests before connector is considered unhealthy.
-    ///     Override in derived classes to customize threshold.
-    /// </summary>
-    protected virtual int MaxFailedRequestsBeforeUnhealthy => 5;
-
-    /// <summary>
-    ///     Gets whether the connector is in a healthy state based on recent request failures.
-    ///     Returns false if consecutive failures exceed MaxFailedRequestsBeforeUnhealthy.
-    /// </summary>
-    public virtual bool IsHealthy =>
-        Volatile.Read(ref _failedRequestCount) < MaxFailedRequestsBeforeUnhealthy;
-
-    /// <summary>
-    ///     Gets the number of consecutive failed requests.
-    /// </summary>
-    public int FailedRequestCount => Volatile.Read(ref _failedRequestCount);
-
-    /// <summary>
-    ///     Resets the failed request counter. Call this after successful recovery.
-    /// </summary>
-    public virtual void ResetFailedRequestCount()
-    {
-        Interlocked.Exchange(ref _failedRequestCount, 0);
-        _logger.LogInformation("[{ConnectorSource}] Failed request count reset", ConnectorSource);
-    }
-
-    /// <summary>
-    ///     Increments the failed request count and logs the failure.
-    /// </summary>
     protected void TrackFailedRequest(string? reason = null)
     {
         var newCount = Interlocked.Increment(ref _failedRequestCount);
         _logger.LogWarning(
-            "[{ConnectorSource}] Request failed (count: {FailedCount}/{MaxAllowed}){Reason}",
+            "[{ConnectorSource}] Request failed (consecutive: {FailedCount}){Reason}",
             ConnectorSource,
             newCount,
-            MaxFailedRequestsBeforeUnhealthy,
             reason != null ? $": {reason}" : ""
         );
     }
 
-    /// <summary>
-    ///     Resets the failed request count on success.
-    /// </summary>
     protected void TrackSuccessfulRequest()
     {
         var previousCount = Volatile.Read(ref _failedRequestCount);
@@ -1250,18 +1445,15 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     #region Retry and HTTP Helpers
 
     /// <summary>
-    ///     Executes an async operation with retry logic and exponential backoff.
-    ///     Automatically tracks success/failure for health monitoring.
+    ///     Executes an async operation under the shared connector retry loop, tracking success and
+    ///     failure. See <see cref="ConnectorRetryLoop.RunAsync{T}"/> for the attempt-budget and
+    ///     delay contract.
     /// </summary>
     /// <typeparam name="T">The return type of the operation</typeparam>
     /// <param name="operation">The async operation to execute</param>
     /// <param name="retryStrategy">Strategy for calculating retry delays</param>
     /// <param name="reAuthenticateOnUnauthorized">Optional callback to re-authenticate on 401 responses</param>
-    /// <param name="maxRetries">
-    ///     Maximum number of attempts (default: 3). Clamped to a floor of 1 so a connector's
-    ///     configured MaxRetryAttempts of 0 still makes a single attempt instead of skipping
-    ///     the operation entirely.
-    /// </param>
+    /// <param name="maxRetries">Total attempts, not retries on top of a first try; clamped to a floor of one (default: 3).</param>
     /// <param name="operationName">Name of the operation for logging</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>The result of the operation, or default(T) on failure</returns>
@@ -1274,131 +1466,128 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         CancellationToken cancellationToken = default
     )
     {
-        // Connectors pass their configured MaxRetryAttempts, which allows 0; the loop needs at
-        // least one attempt for the operation to run.
-        maxRetries = Math.Max(1, maxRetries);
-
         var opName = operationName ?? "operation";
         HttpRequestException? lastException = null;
 
-        for (var attempt = 0; attempt < maxRetries; attempt++)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            try
+        return await ConnectorRetryLoop.RunAsync<T>(
+            async (attempt, attempts) =>
             {
-                _logger.LogDebug(
-                    "[{ConnectorSource}] Executing {Operation} (attempt {Attempt}/{MaxRetries})",
-                    ConnectorSource,
-                    opName,
-                    attempt + 1,
-                    maxRetries
-                );
-
-                var result = await operation();
-
-                // Success - track it and return
-                TrackSuccessfulRequest();
-                return result;
-            }
-            catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Unauthorized)
-            {
-                _logger.LogWarning(
-                    "[{ConnectorSource}] Unauthorized response during {Operation}, attempting re-authentication",
-                    ConnectorSource,
-                    opName
-                );
-
-                if (reAuthenticateOnUnauthorized != null)
+                try
                 {
-                    var reAuthSuccess = await reAuthenticateOnUnauthorized();
-                    if (reAuthSuccess)
-                    {
-                        _logger.LogInformation(
-                            "[{ConnectorSource}] Re-authentication successful, retrying {Operation}",
-                            ConnectorSource,
-                            opName
-                        );
-                        continue; // Retry with new credentials
-                    }
+                    _logger.LogDebug(
+                        "[{ConnectorSource}] Executing {Operation} (attempt {Attempt}/{MaxRetries})",
+                        ConnectorSource,
+                        opName,
+                        attempt + 1,
+                        attempts
+                    );
+
+                    var result = await operation();
+
+                    TrackSuccessfulRequest();
+                    return RetryStep<T>.Complete(result);
                 }
+                catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Unauthorized)
+                {
+                    _logger.LogWarning(
+                        "[{ConnectorSource}] Unauthorized response during {Operation}, attempting re-authentication",
+                        ConnectorSource,
+                        opName
+                    );
 
-                TrackFailedRequest("Unauthorized and re-authentication failed");
-                return default;
-            }
-            catch (HttpRequestException ex) when (IsRetryableStatusCode(ex.StatusCode))
+                    if (reAuthenticateOnUnauthorized != null)
+                    {
+                        var reAuthSuccess = await reAuthenticateOnUnauthorized();
+                        if (reAuthSuccess)
+                        {
+                            _logger.LogInformation(
+                                "[{ConnectorSource}] Re-authentication successful, retrying {Operation}",
+                                ConnectorSource,
+                                opName
+                            );
+                            return RetryStep<T>.RetryImmediately;
+                        }
+                    }
+
+                    TrackFailedRequest("Unauthorized and re-authentication failed");
+                    return RetryStep<T>.Complete(default);
+                }
+                catch (HttpRequestException ex) when (HttpResponseExtensions.IsRetryableStatusCode(ex.StatusCode))
+                {
+                    lastException = ex;
+                    _logger.LogWarning(
+                        "[{ConnectorSource}] Retryable error during {Operation} (attempt {Attempt}): {StatusCode}",
+                        ConnectorSource,
+                        opName,
+                        attempt + 1,
+                        ex.StatusCode
+                    );
+
+                    return RetryStep<T>.RetryAfterDelay;
+                }
+                catch (HttpRequestException ex)
+                {
+                    _logger.LogError(
+                        ex,
+                        "[{ConnectorSource}] Non-retryable HTTP error during {Operation}: {StatusCode}",
+                        ConnectorSource,
+                        opName,
+                        ex.StatusCode
+                    );
+                    TrackFailedRequest($"HTTP {ex.StatusCode}");
+                    return RetryStep<T>.Complete(default);
+                }
+                catch (JsonException ex)
+                {
+                    _logger.LogError(
+                        ex,
+                        "[{ConnectorSource}] JSON parsing error during {Operation}",
+                        ConnectorSource,
+                        opName
+                    );
+                    TrackFailedRequest("JSON parsing error");
+                    return RetryStep<T>.Complete(default);
+                }
+                catch (OperationCanceledException)
+                {
+                    _logger.LogInformation(
+                        "[{ConnectorSource}] {Operation} was cancelled",
+                        ConnectorSource,
+                        opName
+                    );
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(
+                        ex,
+                        "[{ConnectorSource}] Unexpected error during {Operation}",
+                        ConnectorSource,
+                        opName
+                    );
+                    TrackFailedRequest($"Unexpected error: {ex.Message}");
+                    return RetryStep<T>.Complete(default);
+                }
+            },
+            retryStrategy,
+            maxRetries,
+            attempts =>
             {
-                lastException = ex;
-                _logger.LogWarning(
-                    "[{ConnectorSource}] Retryable error during {Operation} (attempt {Attempt}): {StatusCode}",
+                TrackFailedRequest($"All {attempts} attempts failed");
+                _logger.LogError(
+                    "[{ConnectorSource}] {Operation} failed after {MaxRetries} attempts",
                     ConnectorSource,
                     opName,
-                    attempt + 1,
-                    ex.StatusCode
+                    attempts
                 );
 
-                if (attempt < maxRetries - 1)
-                    await retryStrategy.ApplyRetryDelayAsync(attempt);
-            }
-            catch (HttpRequestException ex)
-            {
-                // Non-retryable HTTP error
-                _logger.LogError(
-                    ex,
-                    "[{ConnectorSource}] Non-retryable HTTP error during {Operation}: {StatusCode}",
-                    ConnectorSource,
-                    opName,
-                    ex.StatusCode
-                );
-                TrackFailedRequest($"HTTP {ex.StatusCode}");
-                return default;
-            }
-            catch (JsonException ex)
-            {
-                _logger.LogError(
-                    ex,
-                    "[{ConnectorSource}] JSON parsing error during {Operation}",
-                    ConnectorSource,
-                    opName
-                );
-                TrackFailedRequest("JSON parsing error");
-                return default;
-            }
-            catch (OperationCanceledException)
-            {
-                _logger.LogInformation(
-                    "[{ConnectorSource}] {Operation} was cancelled",
-                    ConnectorSource,
-                    opName
-                );
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(
-                    ex,
-                    "[{ConnectorSource}] Unexpected error during {Operation}",
-                    ConnectorSource,
-                    opName
-                );
-                TrackFailedRequest($"Unexpected error: {ex.Message}");
-                return default;
-            }
-        }
+                if (lastException != null)
+                    throw lastException;
 
-        // All retries exhausted
-        TrackFailedRequest($"All {maxRetries} attempts failed");
-        _logger.LogError(
-            "[{ConnectorSource}] {Operation} failed after {MaxRetries} attempts",
-            ConnectorSource,
-            opName,
-            maxRetries
+                return default;
+            },
+            cancellationToken
         );
-
-        if (lastException != null)
-            throw lastException;
-
-        return default;
     }
 
     /// <summary>
@@ -1466,20 +1655,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             content,
             cancellationToken
         );
-    }
-
-    /// <summary>
-    ///     Determines if an HTTP status code is retryable.
-    /// </summary>
-    private static bool IsRetryableStatusCode(HttpStatusCode? statusCode)
-    {
-        return statusCode
-            is HttpStatusCode.TooManyRequests
-                or HttpStatusCode.ServiceUnavailable
-                or HttpStatusCode.InternalServerError
-                or HttpStatusCode.BadGateway
-                or HttpStatusCode.GatewayTimeout
-                or HttpStatusCode.RequestTimeout;
     }
 
     /// <summary>

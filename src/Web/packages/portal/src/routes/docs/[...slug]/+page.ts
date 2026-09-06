@@ -5,7 +5,7 @@ export const prerender = true;
 
 // Every standard docs page is a markdown (.svx) file under content/docs, named to mirror its
 // URL: content/docs/bots/discord.svx -> /docs/bots/discord, content/docs/bots/index.svx ->
-// /docs/bots, content/docs/sharing.svx -> /docs/sharing.
+// /docs/bots, content/docs/configuration.svx -> /docs/configuration.
 const pages = import.meta.glob<{ default: typeof import('svelte').SvelteComponent }>(
   '../../../content/docs/**/*.svx',
 );

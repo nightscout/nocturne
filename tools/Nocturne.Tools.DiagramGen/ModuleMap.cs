@@ -26,7 +26,7 @@ public static class ModuleMap
             "UploaderSnapshotEntity", "DeviceStatusExtrasEntity",
         ],
         ["treatments-events"] = [
-            "TreatmentEntity", "TreatmentFoodEntity", "DecompositionBatchEntity",
+            "TreatmentEntity", "TreatmentFoodEntity",
             "BolusEntity", "TempBasalEntity", "CarbIntakeEntity", "BGCheckEntity",
             "BolusCalculationEntity", "NoteEntity", "DeviceEventEntity",
         ],

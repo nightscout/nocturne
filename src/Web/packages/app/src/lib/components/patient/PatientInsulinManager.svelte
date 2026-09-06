@@ -1,9 +1,10 @@
 <script lang="ts">
+  import { formatMediumDate } from "$lib/utils/formatting";
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
   import * as Card from "$lib/components/ui/card";
   import * as Dialog from "$lib/components/ui/dialog";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog";
+  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import {
     Syringe,
     Plus,
@@ -39,11 +40,7 @@
   function formatDate(date: Date | string | undefined): string {
     if (!date) return "";
     const d = new Date(date);
-    return d.toLocaleDateString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
+    return formatMediumDate(d);
   }
 
   /** Get formulations matching the selected category */
@@ -140,6 +137,9 @@
 
   const activeForm = $derived(editing?.id ? insulinList.updateForm : insulinList.createForm);
   const dialogSaving = $derived(!!insulinList.createForm.pending || !!insulinList.updateForm.pending);
+  // updateInsulin's schema is { id, request: PatientInsulinSchema } — fields must nest under
+  // "request." for SvelteKit's dot-path form parsing; createInsulin's schema is flat.
+  const namePrefix = $derived(editing?.id ? "request." : "");
 
   function onDialogCategoryChange() {
     insulinFormulationId = "";
@@ -295,7 +295,7 @@
             <input type="hidden" name="formulationId" value={inlineFormulationId} />
           {/if}
 
-          {#each insulinList.createForm.fields.allIssues() as issue}
+          {#each insulinList.createForm.fields.allIssues() ?? [] as issue}
             <p class="text-sm text-destructive">{issue.message}</p>
           {/each}
         </Card.Content>
@@ -426,6 +426,7 @@
         {/if}
         <div class="space-y-4 py-4">
           <InsulinFormFields
+            {namePrefix}
             bind:category={insulinCategory}
             bind:formulationId={insulinFormulationId}
             bind:name={insulinName}
@@ -446,13 +447,17 @@
           />
 
           <!-- Hidden fields for form submission -->
-          <input type="hidden" name="n:dia" value={insulinDia} />
-          <input type="hidden" name="n:peak" value={insulinPeak} />
-          <input type="hidden" name="curve" value={insulinCurve} />
-          <input type="hidden" name="n:concentration" value={insulinConcentration} />
+          <input type="hidden" name="n:{namePrefix}dia" value={insulinDia} />
+          <input type="hidden" name="n:{namePrefix}peak" value={insulinPeak} />
+          <input type="hidden" name="{namePrefix}curve" value={insulinCurve} />
+          <input type="hidden" name="n:{namePrefix}concentration" value={insulinConcentration} />
           {#if insulinFormulationId}
-            <input type="hidden" name="formulationId" value={insulinFormulationId} />
+            <input type="hidden" name="{namePrefix}formulationId" value={insulinFormulationId} />
           {/if}
+
+          {#each activeForm.fields.allIssues() ?? [] as issue}
+            <p class="text-sm text-destructive">{issue.message}</p>
+          {/each}
         </div>
 
         <Dialog.Footer>
@@ -477,29 +482,19 @@
   </Dialog.Root>
 
   <!-- Insulin Delete Confirmation -->
-  <AlertDialog.Root
+  <ConfirmDialog
     open={deleteId !== null}
     onOpenChange={(open) => {
       if (!open) deleteId = null;
     }}
+    title="Delete Insulin"
+    confirmLabel="Delete"
+    destructive
+    onConfirm={handleDelete}
   >
-    <AlertDialog.Content>
-      <AlertDialog.Header>
-        <AlertDialog.Title>Delete Insulin</AlertDialog.Title>
-        <AlertDialog.Description>
-          Are you sure you want to delete this insulin? This action cannot be
-          undone.
-        </AlertDialog.Description>
-      </AlertDialog.Header>
-      <AlertDialog.Footer>
-        <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-        <AlertDialog.Action
-          class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-          onclick={handleDelete}
-        >
-          Delete
-        </AlertDialog.Action>
-      </AlertDialog.Footer>
-    </AlertDialog.Content>
-  </AlertDialog.Root>
+    {#snippet description()}
+      Are you sure you want to delete this insulin? This action cannot be
+      undone.
+    {/snippet}
+  </ConfirmDialog>
 {/if}

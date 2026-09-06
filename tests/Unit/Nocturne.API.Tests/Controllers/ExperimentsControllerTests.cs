@@ -61,9 +61,9 @@ public class ExperimentsControllerTests : IClassFixture<AuthenticationTestFactor
                 IsMigrated = false,
                 Scopes =
                 [
-                    OAuthScopes.GlucoseReadWrite,
-                    OAuthScopes.TreatmentsReadWrite,
-                    OAuthScopes.DevicesReadWrite,
+                    Scope.GlucoseReadWrite,
+                    Scope.TreatmentsReadWrite,
+                    Scope.DevicesReadWrite,
                 ],
                 Label = "Loop",
                 CreatedAt = DateTime.UtcNow,

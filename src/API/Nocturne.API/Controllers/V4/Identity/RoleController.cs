@@ -1,5 +1,7 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 
@@ -17,6 +19,7 @@ namespace Nocturne.API.Controllers.V4.Identity;
 [Tags("Identity")]
 [Route("api/v4/roles")]
 [Produces("application/json")]
+[Authorize]
 public class RoleController : ControllerBase
 {
     private readonly ITenantRoleService _roleService;
@@ -38,7 +41,7 @@ public class RoleController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetRoles(CancellationToken ct)
     {
-        if (!HasPermission(TenantPermissions.RolesManage))
+        if (!HttpContext.HasScope(Scope.RolesManage))
             return Forbid();
 
         var roles = await _roleService.GetRolesAsync(_tenantAccessor.TenantId, ct);
@@ -55,8 +58,12 @@ public class RoleController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> CreateRole([FromBody] CreateRoleRequest request, CancellationToken ct)
     {
-        if (!HasPermission(TenantPermissions.RolesManage))
+        if (!HttpContext.HasScope(Scope.RolesManage))
             return Forbid();
+
+        var violation = Scope.ValidateGrant(request.Permissions, HttpContext.GetGrantedScopes());
+        if (violation != null)
+            return GrantProblem(violation);
 
         var role = await _roleService.CreateRoleAsync(
             _tenantAccessor.TenantId, request.Name, request.Description, request.Permissions, ct);
@@ -71,14 +78,23 @@ public class RoleController : ControllerBase
     [RemoteCommand(Invalidates = ["GetRoles"])]
     [ProducesResponseType(typeof(TenantRoleDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpdateRole(Guid id, [FromBody] UpdateRoleRequest request, CancellationToken ct)
     {
-        if (!HasPermission(TenantPermissions.RolesManage))
+        if (!HttpContext.HasScope(Scope.RolesManage))
             return Forbid();
+
+        var violation = Scope.ValidateGrant(request.Permissions, HttpContext.GetGrantedScopes());
+        if (violation != null)
+            return GrantProblem(violation);
 
         try
         {
-            var role = await _roleService.UpdateRoleAsync(id, request.Name, request.Description, request.Permissions, ct);
+            var role = await _roleService.UpdateRoleAsync(
+                _tenantAccessor.TenantId, id, request.Name, request.Description, request.Permissions, ct);
+            if (role == null)
+                return NotFound();
+
             return Ok(role);
         }
         catch (InvalidOperationException ex)
@@ -98,22 +114,24 @@ public class RoleController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> DeleteRole(Guid id, CancellationToken ct)
     {
-        if (!HasPermission(TenantPermissions.RolesManage))
+        if (!HttpContext.HasScope(Scope.RolesManage))
             return Forbid();
 
-        var result = await _roleService.DeleteRoleAsync(id, ct);
+        var result = await _roleService.DeleteRoleAsync(_tenantAccessor.TenantId, id, ct);
         if (!result.Success)
             return Problem(detail: result.ErrorDescription, statusCode: 400, title: result.ErrorCode);
 
         return NoContent();
     }
 
-    private bool HasPermission(string permission)
-    {
-        var grantedScopes = HttpContext.Items["GrantedScopes"] as IReadOnlySet<string>;
-        if (grantedScopes == null) return false;
-        return TenantPermissions.HasPermission(grantedScopes, permission);
-    }
+    /// <summary>
+    /// An unknown permission is malformed input; exceeding the ceiling is a refusal.
+    /// </summary>
+    private ObjectResult GrantProblem(GrantCeilingViolation violation) =>
+        violation.Code == GrantCeilingViolation.UnknownPermission
+            ? Problem(detail: violation.Description, statusCode: 400, title: "Bad Request")
+            : Problem(detail: violation.Description, statusCode: 403, title: "Forbidden");
+
 }
 
 public record CreateRoleRequest(string Name, string? Description, List<string> Permissions);

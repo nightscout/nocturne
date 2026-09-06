@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatNumber } from "$lib/utils/formatting";
   import { onMount } from "svelte";
   import WidgetCard from "./WidgetCard.svelte";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
@@ -7,6 +8,7 @@
   import { MediaQuery } from "svelte/reactivity";
   import { Button } from "$lib/components/ui/button";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
 
   // Toggle between today and 90-day average
   let showAverage = $state(false);
@@ -115,7 +117,7 @@
           {/if}
         </div>
         <span class="text-xs text-muted-foreground">
-          {totalReadings.toLocaleString()} readings
+          {formatNumber(totalReadings)} readings
         </span>
       </div>
 
@@ -137,7 +139,7 @@
     {:catch err}
       <div class="flex flex-col items-center justify-center text-muted-foreground py-4">
         <p class="text-xs">Failed to load data</p>
-        <p class="text-xs text-destructive">{err?.message ?? JSON.stringify(err)}</p>
+        <p class="text-xs text-destructive">{remoteErrorMessage(err, "Please try again.")}</p>
       </div>
     {/await}
   {/if}

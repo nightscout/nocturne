@@ -13,7 +13,7 @@ public interface IDiscrepancyAnalysisRepository
     /// Stores the results of a discrepancy analysis between Nightscout and Nocturne responses
     /// </summary>
     Task<Guid> StoreAnalysisAsync(
-        string correlationId,
+        string traceId,
         DateTimeOffset analysisTimestamp,
         string requestMethod,
         string requestPath,
@@ -44,6 +44,14 @@ public interface IDiscrepancyAnalysisRepository
         DateTimeOffset? toDate = null,
         int count = 100,
         int skip = 0,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Retrieves a single discrepancy analysis by identifier, with its detailed discrepancies
+    /// loaded, or <c>null</c> when the current tenant has no analysis with that identifier
+    /// </summary>
+    Task<DiscrepancyAnalysisEntity?> GetAnalysisByIdAsync(
+        Guid id,
         CancellationToken cancellationToken = default);
 
     /// <summary>

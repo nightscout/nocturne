@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatLocale } from "$lib/utils/formatting";
   import StatusPill from "./StatusPill.svelte";
   import type {
     IOBPillData,
@@ -21,10 +22,13 @@
 
     // Last bolus info
     if (data.lastBolus) {
-      const when = new Date(data.lastBolus.mills).toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
+      const when = new Date(data.lastBolus.mills).toLocaleTimeString(
+        formatLocale(),
+        {
+          hour: "2-digit",
+          minute: "2-digit",
+        }
+      );
       const amount = `${data.lastBolus.insulin.toFixed(2)}U`;
       items.push({ label: "Last Bolus", value: `${amount} @ ${when}` });
 

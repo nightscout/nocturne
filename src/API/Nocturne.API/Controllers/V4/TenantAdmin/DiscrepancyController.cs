@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Attributes;
 using Nocturne.API.Configuration;
+using Nocturne.API.Controllers.V4.Base;
+using Nocturne.API.Extensions;
 using Nocturne.API.Services.Compatibility;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Abstractions;
@@ -124,7 +126,7 @@ public class DiscrepancyController : ControllerBase
     /// <param name="overallMatch">Filter by overall match type (optional)</param>
     /// <param name="fromDate">Start date for filter (optional)</param>
     /// <param name="toDate">End date for filter (optional)</param>
-    /// <param name="count">Number of results to return (default: 100, max: 1000)</param>
+    /// <param name="count">Number of results to return (default: 100, capped at <see cref="V4ReadLimits.MaxPageSize"/>)</param>
     /// <param name="skip">Number of results to skip for pagination (default: 0)</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>List of detailed discrepancy analyses</returns>
@@ -153,6 +155,8 @@ public class DiscrepancyController : ControllerBase
                 return Problem(detail: "Skip must be non-negative", statusCode: 400, title: "Bad Request");
             }
 
+            count = V4ReadLimits.ClampLimit(count);
+
             _logger.LogDebug(
                 "Retrieving discrepancy analyses: path={RequestPath}, match={OverallMatch}, count={Count}, skip={Skip}",
                 requestPath,
@@ -175,7 +179,7 @@ public class DiscrepancyController : ControllerBase
             var analysisResults = analyses.Select(a => new DiscrepancyAnalysisDto
             {
                 Id = a.Id,
-                CorrelationId = a.CorrelationId,
+                TraceId = a.TraceId,
                 AnalysisTimestamp = a.AnalysisTimestamp,
                 RequestMethod = a.RequestMethod,
                 RequestPath = a.RequestPath,
@@ -235,13 +239,7 @@ public class DiscrepancyController : ControllerBase
     {
         try
         {
-            var analyses = await _discrepancyRepository.GetAnalysesAsync(
-                count: 1,
-                skip: 0,
-                cancellationToken: cancellationToken
-            );
-
-            var analysis = analyses.FirstOrDefault(a => a.Id == id);
+            var analysis = await _discrepancyRepository.GetAnalysisByIdAsync(id, cancellationToken);
             if (analysis == null)
             {
                 return NotFound($"Discrepancy analysis with ID {id} not found");
@@ -250,7 +248,7 @@ public class DiscrepancyController : ControllerBase
             var result = new DiscrepancyAnalysisDto
             {
                 Id = analysis.Id,
-                CorrelationId = analysis.CorrelationId,
+                TraceId = analysis.TraceId,
                 AnalysisTimestamp = analysis.AnalysisTimestamp,
                 RequestMethod = analysis.RequestMethod,
                 RequestPath = analysis.RequestPath,
@@ -396,12 +394,12 @@ public class DiscrepancyController : ControllerBase
             }
 
             var sourceId = request.SourceId;
-            var correlationId = request.Analysis.CorrelationId;
+            var traceId = request.Analysis.TraceId;
 
             _logger.LogInformation(
                 "Received forwarded discrepancy from {SourceId}: {CorrelationId}",
                 sourceId,
-                correlationId
+                traceId
             );
 
             // Store the forwarded discrepancy in the database
@@ -419,7 +417,7 @@ public class DiscrepancyController : ControllerBase
                 .ToList();
 
             await _discrepancyRepository.StoreAnalysisAsync(
-                correlationId,
+                traceId,
                 request.Analysis.AnalysisTimestamp,
                 request.Analysis.RequestMethod,
                 request.Analysis.RequestPath,
@@ -444,14 +442,14 @@ public class DiscrepancyController : ControllerBase
             _logger.LogDebug(
                 "Stored forwarded discrepancy from {SourceId}: {CorrelationId}",
                 sourceId,
-                correlationId
+                traceId
             );
 
             return Ok(new
             {
                 status = 200,
                 message = "Discrepancy received and stored",
-                correlationId,
+                correlationId = traceId,
                 sourceId,
             });
         }
@@ -477,14 +475,20 @@ public class DiscrepancyController : ControllerBase
             return false;
         }
 
-        var header = Request.Headers.Authorization.ToString();
-        const string scheme = "Bearer ";
-        if (!header.StartsWith(scheme, StringComparison.OrdinalIgnoreCase))
+        // A repeated Authorization header is ambiguous about which credential was meant, and this
+        // is a private shared secret rather than a user credential, so it is refused rather than
+        // resolved. The shared reader takes the first value; the rest of the auth chain accepts
+        // that because a bearer token names its own subject.
+        if (Request.Headers.Authorization.Count > 1)
         {
             return false;
         }
 
-        var provided = header[scheme.Length..].Trim();
+        if (Request.GetAuthorizationCredential() is not { } provided)
+        {
+            return false;
+        }
+
         return CryptographicOperations.FixedTimeEquals(
             Encoding.UTF8.GetBytes(provided),
             Encoding.UTF8.GetBytes(expectedKey));

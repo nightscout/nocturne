@@ -1,0 +1,57 @@
+---
+title: Temporary guest links
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+  import Screenshot from '$lib/components/docs/Screenshot.svelte';
+</script>
+
+# Temporary guest links
+
+A guest link gives someone a **read-only view of your data without an account**.
+You create it, hand over the link (or the short code inside it), and it lets them
+look — they can't change anything. It **expires on its own 48 hours after you make
+it** and can only be used **once**, so there's nothing to remember to switch off
+afterwards.
+
+You create and manage guest links from **Settings > Sharing & Privacy**. The same
+list also appears on your **Active Access** page, alongside everything else that
+currently reaches your data:
+
+<Screenshot id="sharing-guest-links" />
+
+## Handing one over
+
+Each guest link carries a short code. You can send the whole link, or read the
+code out over the phone — the person enters it on the guest page of your instance:
+
+<Screenshot id="guest-code-entry" />
+
+Once they enter it, the code is spent. That's the point: a link that has already
+been used can't be forwarded on and opened again by somebody else.
+
+You can have **five** active guest links at once — one per person you're sharing
+with — and give each one a label so you can tell them apart.
+
+<Callout type="tip" title="When to use it: a specialist appointment">
+  You're seeing your specialist on Tuesday and want them to look at your recent
+  data on their own screen. Create a guest link labelled
+  <strong>"Dr. Smith"</strong>, send it ahead of the appointment, and forget about
+  it — it stops working on its own two days later. No account to set up
+  for a one-off visit, and nothing left switched on afterwards.
+</Callout>
+
+## Revoking and re-issuing
+
+- **Revoke** a guest link at any time before it's used and it dies immediately.
+- **New code** re-issues one that expired before the appointment happened, or whose
+  code went to the wrong person. It produces a fresh code; the old one is no longer
+  valid.
+
+Once a link has been opened you can see when it was used, which is a useful check
+that it reached the person you meant.
+
+If you see the same clinician regularly, give them a
+[member account](/docs/sharing/members) with the Clinician role instead, so they
+always have access without a new link each visit.

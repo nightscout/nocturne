@@ -7,6 +7,7 @@ using Nocturne.Core.Models.Widget;
 using Nocturne.Desktop.Tray.Extensions;
 using Nocturne.Desktop.Tray.Models;
 using Windows.Storage.Streams;
+using TimeAgoHelper = Nocturne.Widget.Contracts.Helpers.TimeAgoHelper;
 
 namespace Nocturne.Desktop.Tray.TrayIcon;
 

@@ -61,11 +61,6 @@
     if (!copy.schedule.activeDays) {
       copy.schedule.activeDays = [];
     }
-    // Ensure visual.showEmergencyContacts is initialized
-    if (copy.visual.showEmergencyContacts === undefined) {
-      copy.visual.showEmergencyContacts =
-        p.alarmType === "UrgentLow" || p.alarmType === "UrgentHigh";
-    }
     return copy;
   }
 

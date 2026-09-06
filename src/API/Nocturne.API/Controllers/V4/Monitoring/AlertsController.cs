@@ -1,11 +1,15 @@
+using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Attributes;
+using Nocturne.API.Controllers.V4.Base;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Alerts;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Services;
 
@@ -14,6 +18,13 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 /// <summary>
 /// Controller for active alert state, history, and acknowledgement.
 /// </summary>
+/// <remarks>
+/// Acknowledging, snoozing and recording a delivery outcome all silence or close an excursion, so
+/// every write action here requires <see cref="Scope.AlertsReadWrite"/>; the class-level
+/// <c>[Authorize]</c> alone is satisfied by read-only credentials such as a guest-link session,
+/// which holds <c>alerts.read</c>. <see cref="AcknowledgeExcursion"/> additionally accepts
+/// <see cref="Scope.DeviceNotify"/> — see the note on that action.
+/// </remarks>
 /// <seealso cref="IAlertAcknowledgementService"/>
 /// <seealso cref="IAlertDeliveryService"/>
 [ApiController]
@@ -98,6 +109,11 @@ public class AlertsController : ControllerBase
     /// Get paginated history of resolved excursions. Test fires are excluded
     /// by default; pass <paramref name="includeTest"/> = true to include them.
     /// </summary>
+    /// <remarks>
+    /// <paramref name="pageSize"/> is capped at <see cref="V4ReadLimits.MaxOrdinalPageSize"/> and
+    /// <paramref name="page"/> at the page that reaches the last record within
+    /// <see cref="V4ReadLimits.MaxPageSize"/>; both are clamped rather than rejected.
+    /// </remarks>
     [HttpGet("history")]
     [RemoteQuery]
     [ProducesResponseType(typeof(AlertHistoryResponse), StatusCodes.Status200OK)]
@@ -108,16 +124,19 @@ public class AlertsController : ControllerBase
         [FromQuery] bool includeTest = false,
         CancellationToken ct = default)
     {
-        if (page < 1) page = 1;
-        if (pageSize < 1) pageSize = 1;
-        if (pageSize > 100) pageSize = 100;
+        pageSize = V4ReadLimits.ClampPageSize(pageSize);
+        page = V4ReadLimits.ClampPageNumber(page, pageSize);
 
         await using var db = await _contextFactory.CreateAsync(ct);
 
+        // EndedAt <= now: history is completed excursions only. device_action test fires carry
+        // a short future EndedAt (AlertDeliveryService.TestFireAsync) so they read as live in
+        // the active-intents snapshot; they join history once that window lapses.
+        var now = DateTime.UtcNow;
         var query = db.AlertExcursions
             .AsNoTracking()
             .Include(e => e.AlertRule)
-            .Where(e => e.EndedAt != null);
+            .Where(e => e.EndedAt != null && e.EndedAt <= now);
 
         if (alertRuleId.HasValue)
             query = query.Where(e => e.AlertRuleId == alertRuleId.Value);
@@ -140,6 +159,7 @@ public class AlertsController : ControllerBase
                 e.AlertRuleId,
                 RuleName = e.AlertRule != null ? e.AlertRule.Name : string.Empty,
                 ConditionType = e.AlertRule != null ? e.AlertRule.ConditionType : AlertConditionType.Threshold,
+                Severity = e.AlertRule != null ? e.AlertRule.Severity : AlertRuleSeverity.Warning,
                 e.StartedAt,
                 EndedAt = e.EndedAt!.Value,
                 e.AcknowledgedAt,
@@ -160,6 +180,7 @@ public class AlertsController : ControllerBase
                 AlertRuleId = e.AlertRuleId,
                 RuleName = e.RuleName,
                 ConditionType = e.ConditionType,
+                Severity = e.Severity,
                 StartedAt = e.StartedAt,
                 EndedAt = e.EndedAt,
                 AcknowledgedAt = e.AcknowledgedAt,
@@ -171,8 +192,36 @@ public class AlertsController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// Who to record as having acknowledged an alert.
+    /// </summary>
+    /// <remarks>
+    /// Taken from the authenticated principal, not from the request. The web app
+    /// used to send a fixed "web_user", which made "who silenced the 3am low?"
+    /// unanswerable on a tenant with more than one caregiver — and any caller
+    /// could have claimed to be anyone. The request field is honoured only for
+    /// callers with no name claim at all (a machine token), where it is the only
+    /// information available.
+    /// </remarks>
+    private string ResolveAcknowledger(AcknowledgeRequest request)
+    {
+        var name = User.FindFirstValue(ClaimTypes.Name);
+        if (!string.IsNullOrWhiteSpace(name))
+            return name;
+
+        var subjectId = User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("sub");
+        if (!string.IsNullOrWhiteSpace(subjectId))
+            return subjectId;
+
+        return string.IsNullOrWhiteSpace(request.AcknowledgedBy)
+            ? "unknown"
+            : request.AcknowledgedBy;
+    }
+
     /// <inheritdoc cref="IAlertAcknowledgementService.AcknowledgeAllAsync"/>
     [HttpPost("acknowledge")]
+    [RequireScope(Scope.AlertsReadWrite)]
     [RemoteCommand(Invalidates = ["GetActiveAlerts"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<ActionResult> Acknowledge(
@@ -182,7 +231,7 @@ public class AlertsController : ControllerBase
 
         await _acknowledgementService.AcknowledgeAllAsync(
             tenantId,
-            request.AcknowledgedBy ?? "unknown",
+            ResolveAcknowledger(request),
             ct);
 
         return NoContent();
@@ -194,8 +243,22 @@ public class AlertsController : ControllerBase
     /// or already closed is a no-op. Returns 404 when the excursion does not
     /// exist for the current tenant.
     /// </summary>
+    /// <remarks>
+    /// Accepts <see cref="Scope.DeviceNotify"/> as well as
+    /// <see cref="Scope.AlertsReadWrite"/>: this is the endpoint behind the Acknowledge
+    /// action on a device toast, and a registered client device's grant carries the device
+    /// capability scopes rather than the alert data scope. A scoped credential is intersected with
+    /// membership (<see cref="MemberScopeResolver"/>), so even a tenant owner's Companion token
+    /// resolves to <c>device.notify</c> without <c>alerts.readwrite</c>. A guest link reaches
+    /// neither scope, its grant being capped at <see cref="Scope.AllowedGuestScopes"/>, but a
+    /// member does: the Clinician and Viewer seed roles hold <c>device.notify</c> outright (and the
+    /// resolver grants it to any member holding at least one permission), so both acknowledge here
+    /// while holding no <c>alerts.readwrite</c> — Clinician holding <c>alerts.read</c>, Viewer no
+    /// alert scope at all.
+    /// </remarks>
     /// <seealso cref="IAlertAcknowledgementService.AcknowledgeExcursionAsync"/>
     [HttpPost("excursions/{excursionId:guid}/acknowledge")]
+    [RequireScope(Scope.AlertsReadWrite, Scope.DeviceNotify)]
     [RemoteCommand(Invalidates = ["GetActiveAlerts"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -218,7 +281,7 @@ public class AlertsController : ControllerBase
         await _acknowledgementService.AcknowledgeExcursionAsync(
             tenantId,
             excursionId,
-            request.AcknowledgedBy ?? "unknown",
+            ResolveAcknowledger(request),
             broadcast: true,
             ct);
 
@@ -229,6 +292,7 @@ public class AlertsController : ControllerBase
     /// Snooze an alert instance for the specified duration.
     /// </summary>
     [HttpPost("instances/{instanceId:guid}/snooze")]
+    [RequireScope(Scope.AlertsReadWrite)]
     [RemoteCommand(Invalidates = ["GetActiveAlerts"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -272,6 +336,7 @@ public class AlertsController : ControllerBase
 
     /// <inheritdoc cref="IAlertDeliveryService.MarkDeliveredAsync"/>
     [HttpPost("deliveries/{deliveryId:guid}/delivered")]
+    [RequireScope(Scope.AlertsReadWrite)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<ActionResult> MarkDelivered(
         Guid deliveryId, [FromBody] MarkDeliveredRequest request, CancellationToken ct)
@@ -283,6 +348,7 @@ public class AlertsController : ControllerBase
 
     /// <inheritdoc cref="IAlertDeliveryService.MarkFailedAsync"/>
     [HttpPost("deliveries/{deliveryId:guid}/failed")]
+    [RequireScope(Scope.AlertsReadWrite)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<ActionResult> MarkFailed(
         Guid deliveryId, [FromBody] MarkFailedRequest request, CancellationToken ct)
@@ -368,6 +434,13 @@ public class HistoryExcursionResponse
     public Guid AlertRuleId { get; set; }
     public string RuleName { get; set; } = string.Empty;
     public AlertConditionType ConditionType { get; set; } = AlertConditionType.Threshold;
+
+    /// <summary>
+    /// The rule's severity, so a history row can be read the same way as a live
+    /// one rather than showing every past fire identically.
+    /// </summary>
+    public AlertRuleSeverity Severity { get; set; } = AlertRuleSeverity.Warning;
+
     public DateTime StartedAt { get; set; }
     public DateTime EndedAt { get; set; }
     public DateTime? AcknowledgedAt { get; set; }

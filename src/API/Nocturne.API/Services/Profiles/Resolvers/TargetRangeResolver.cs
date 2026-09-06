@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -14,18 +15,20 @@ internal sealed class TargetRangeResolver : ITargetRangeResolver
 {
     private readonly ITargetRangeScheduleRepository _repo;
     private readonly ITherapySettingsRepository _therapyRepo;
+    private readonly IPatientRecordRepository _patientRecordRepo;
     private readonly IActiveProfileResolver _activeProfileResolver;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly IMemoryCache _cache;
     private readonly ILogger<TargetRangeResolver> _logger;
 
     private const int CacheTtlSeconds = 5;
-    private const double DefaultLow = 70.0;
-    private const double DefaultHigh = 180.0;
+    private const double DefaultLow = GlucoseConstants.TargetBottomMgdl;
+    private const double DefaultHigh = GlucoseConstants.TargetTopMgdl;
 
     public TargetRangeResolver(
         ITargetRangeScheduleRepository repo,
         ITherapySettingsRepository therapyRepo,
+        IPatientRecordRepository patientRecordRepo,
         IActiveProfileResolver activeProfileResolver,
         ITenantAccessor tenantAccessor,
         IMemoryCache cache,
@@ -33,6 +36,7 @@ internal sealed class TargetRangeResolver : ITargetRangeResolver
     {
         _repo = repo;
         _therapyRepo = therapyRepo;
+        _patientRecordRepo = patientRecordRepo;
         _activeProfileResolver = activeProfileResolver;
         _tenantAccessor = tenantAccessor;
         _cache = cache;
@@ -68,7 +72,7 @@ internal sealed class TargetRangeResolver : ITargetRangeResolver
         var shiftedMills = timeMills + (adjustment?.TimeshiftMs ?? 0);
 
         var secondsFromMidnight = await ScheduleTimeHelper.GetSecondsFromMidnightAsync(
-            shiftedMills, profileName, timestamp, _therapyRepo, ct);
+            shiftedMills, profileName, timestamp, _therapyRepo, _patientRecordRepo, ct);
 
         var range = ScheduleResolution.FindRangeAtTime(schedule.Entries, secondsFromMidnight);
         return range ?? (DefaultLow, DefaultHigh);

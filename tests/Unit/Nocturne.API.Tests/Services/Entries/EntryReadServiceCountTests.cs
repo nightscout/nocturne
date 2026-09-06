@@ -22,6 +22,7 @@ public class EntryReadServiceCountTests
             _sgRepo.Object,
             _mgRepo.Object,
             _calRepo.Object,
+            TestDoubles.CanonicalGlucosePassThrough.Create(),
             _demoMode.Object,
             Mock.Of<ILogger<EntryReadService>>());
     }

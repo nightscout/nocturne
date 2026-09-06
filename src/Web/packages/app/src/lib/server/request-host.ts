@@ -7,6 +7,10 @@
  * (e.g. the realtime handshake-ticket endpoint).
  */
 
+// Imported from the shared (non-server) module, and re-exported below, so the client 401
+// interceptor and these server hooks share one definition of the share-host shape.
+import { isShareHost } from "$lib/share-host";
+
 /**
  * Get the original client-facing host from the request.
  * YARP suppresses the original Host header when transforms are configured,
@@ -29,6 +33,35 @@ export function getOriginalProto(request: Request): string {
 }
 
 /**
+ * Extract the tenant slug from a request host, mirroring the API's
+ * SubdomainParser: strip the base domain suffix, whatever its label count.
+ * `nocturne.example.com` is as valid a base domain as `example.com`, so the
+ * number of labels carries no meaning — only the suffix does.
+ *
+ * Returns null on the apex, on an unrelated host, or when BASE_DOMAIN is unset.
+ * Ports are ignored on both sides, and the slug keeps the host's own casing
+ * because tenant slugs are looked up case-sensitively.
+ *
+ * A share host ({token}.share.{baseDomain}) yields "{token}.share" rather than a
+ * tenant, so callers that can be reached on one must filter it with isShareHost.
+ */
+export function extractTenantSlug(
+  host: string | null | undefined,
+  baseDomain: string | null | undefined,
+): string | null {
+  if (!host || !baseDomain) return null;
+
+  const hostname = host.split(":")[0]!;
+  const baseHostname = baseDomain.split(":")[0]!;
+  if (!baseHostname) return null;
+
+  const suffix = `.${baseHostname}`;
+  if (!hostname.toLowerCase().endsWith(suffix.toLowerCase())) return null;
+
+  return hostname.slice(0, -suffix.length) || null;
+}
+
+/**
  * Cookie set during setup to carry the tenant slug while the user is still
  * on the apex domain. httpOnly, 1-hour TTL, cleaned up by markSetupComplete.
  * Read by hooks that create API clients so they can prepend the slug to
@@ -39,17 +72,21 @@ export const SETUP_TENANT_COOKIE = "nocturne-setup-tenant";
 /**
  * Returns the effective host for API calls, prepending the setup tenant slug
  * when available so the apex domain resolves to the correct tenant.
+ *
+ * Never on a share host: the cookie is a leftover of whoever last ran setup in this browser, and
+ * prepending a slug to {token}.share.{baseDomain} yields a host the API resolves no share from,
+ * so a stale cookie would decide whether the shared view renders or the visitor is bounced to
+ * sign-in.
  */
 export function getEffectiveHost(
   request: Request,
   cookies: { get(name: string): string | undefined },
 ): string | null {
   const host = getOriginalHost(request);
+  if (isShareHost(host)) return host;
   const slug = cookies.get(SETUP_TENANT_COOKIE);
   if (slug && host && !host.startsWith(`${slug}.`)) return `${slug}.${host}`;
   return host;
 }
 
-// Re-exported from the shared (non-server) module so the client 401 interceptor and these server
-// hooks share one definition of the share-host shape. See $lib/share-host.
-export { isShareHost } from "$lib/share-host";
+export { isShareHost };

@@ -7,6 +7,7 @@
     getActiveDataSources,
     getServicesOverview,
   } from "$api/generated/services.generated.remote";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
   import type {
     UploaderApp,
     UploaderSetupResponse,
@@ -62,6 +63,8 @@
       const result = app.id ? await getUploaderSetup(app.id).run() : null;
       setupResponse = result ?? null;
     } catch {
+      // The view renders its own "no setup available" state from a null response,
+      // and there is nowhere on this step to put a reason.
       setupResponse = null;
     }
   }
@@ -110,7 +113,7 @@
           uploaderApps={[]}
           dataSources={[]}
           isLoading={false}
-          loadError={error instanceof Error ? error.message : "Failed to load data sources"}
+          loadError={remoteErrorMessage(error, "Failed to load data sources")}
           onSelectConnector={() => {}}
           onSelectUploader={() => {}}
           onSkip={handleSkip}
@@ -148,7 +151,7 @@
         showToggle={false}
         showDangerZone={false}
         showCapabilities={false}
-        primaryAction="save-and-sync"
+        primaryAction="save-and-finish"
       />
     </div>
 

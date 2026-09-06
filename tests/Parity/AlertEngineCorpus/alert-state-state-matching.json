@@ -1,0 +1,118 @@
+{
+  "schema_version": 1,
+  "name": "alert-state-state-matching",
+  "description": "firing matches state == firing; unacknowledged additionally requires a null AcknowledgedAt; acknowledged only requires a non-null AcknowledgedAt; missing snapshot and unknown state are false",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "alert_state",
+      "condition_params": {
+        "alert_id": "00000000-0000-0000-0000-000000000900",
+        "state": "firing",
+        "for_minutes": null
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "alert_state",
+      "condition_params": {
+        "alert_id": "00000000-0000-0000-0000-000000000900",
+        "state": "unacknowledged",
+        "for_minutes": null
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000003",
+      "name": "rule-3",
+      "condition_type": "alert_state",
+      "condition_params": {
+        "alert_id": "00000000-0000-0000-0000-000000000900",
+        "state": "acknowledged",
+        "for_minutes": null
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000004",
+      "name": "rule-4",
+      "condition_type": "alert_state",
+      "condition_params": {
+        "alert_id": "00000000-0000-0000-0000-000000000900",
+        "state": "escalated",
+        "for_minutes": null
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "active_alerts": [
+          {
+            "alert_id": "00000000-0000-0000-0000-000000000900",
+            "state": "firing",
+            "triggered_at": "2026-01-05T11:50:00Z"
+          }
+        ],
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:05:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:05:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:05:00Z",
+        "active_alerts": [
+          {
+            "alert_id": "00000000-0000-0000-0000-000000000900",
+            "state": "firing",
+            "triggered_at": "2026-01-05T11:45:00Z",
+            "acknowledged_at": "2026-01-05T11:58:00Z"
+          }
+        ],
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:10:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:10:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:10:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    }
+  ]
+}

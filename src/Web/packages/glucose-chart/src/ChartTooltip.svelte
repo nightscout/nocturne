@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Tooltip } from "layerchart";
   import { cn } from "./utils/formatting.js";
-  import { BasalDeliveryOrigin } from "./enums.js";
+  import { BasalDeliveryOrigin, ChartSpanKind } from "./enums.js";
   import { bg, bgLabel } from "./utils/formatting.js";
 
   // Local types for tooltip data shapes
@@ -23,6 +23,7 @@
 
   interface StateSpan {
     id?: string;
+    kind?: string;
     category?: string;
     state?: string;
     startTime: Date;
@@ -310,7 +311,9 @@
       {#if showActivitySpans}
         {#each activeActivities as activity (activity.id)}
           <Tooltip.Item
-            label={activity.category ?? ""}
+            label={activity.kind === ChartSpanKind.Sleep
+              ? "Sleep"
+              : (activity.category ?? "")}
             value={activity.state}
             color={activity.color}
             class="font-medium"

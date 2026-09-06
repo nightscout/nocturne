@@ -1,6 +1,7 @@
 <script lang="ts">
   import { BarChart } from "layerchart";
   import { PieChart } from "lucide-svelte";
+  import { categoryPatternClass } from "$lib/components/charts/print/chart-print-patterns";
 
   // Local type definitions matching the backend response structure
   interface DailyBasalBolusData {
@@ -17,22 +18,13 @@
   }
 
   interface Props {
-    /** Start date for the report (ISO string or Date) - for future data fetching */
-    startDate?: string | Date;
-    /** End date for the report (ISO string or Date) - for future data fetching */
-    endDate?: string | Date;
     /** Optional pre-loaded ratio data */
     data?: DailyBasalBolusRatioResponse | null;
     /** Whether data is currently loading */
     loading?: boolean;
   }
 
-  let {
-    startDate: _startDate,
-    endDate: _endDate,
-    data = null,
-    loading = false,
-  }: Props = $props();
+  let { data = null, loading = false }: Props = $props();
 
   // Extract data from prop
   const ratioData = $derived(data as DailyBasalBolusRatioResponse | null);
@@ -64,18 +56,18 @@
             key: "basal",
             color: "var(--insulin-scheduled-basal)",
             label: "Basal (U)",
+            props: { class: categoryPatternClass(1) },
           },
           {
             key: "bolus",
             color: "var(--insulin-bolus)",
             label: "Bolus (U)",
+            props: { class: categoryPatternClass(3) },
           },
         ]}
         seriesLayout="stack"
         legend
-        tooltip={{
-          mode: "band",
-        }}
+        tooltipContext={{ mode: "band" }}
         props={{
           xAxis: {
             tickMultiline: true,

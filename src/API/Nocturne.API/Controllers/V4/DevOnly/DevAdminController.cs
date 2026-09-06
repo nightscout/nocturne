@@ -1,16 +1,22 @@
+using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Nocturne.API.Authorization;
 using Nocturne.API.Models.DevOnly;
+using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Connectors;
+using Nocturne.API.Services.DevOnly;
+using Nocturne.API.Services.Seeding;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Controllers.V4.DevOnly;
 
@@ -82,7 +88,7 @@ public class DevAdminController : ControllerBase
         foreach (var tenant in tenants)
         {
             // Set RLS GUC for tenant-scoped queries
-            await SetTenantGuc(tenant.Id, ct);
+            await _db.PinTenantAsync(tenant.Id, ct);
 
             // Query tenant-scoped entities
             var roles = await _db.TenantRoles
@@ -305,7 +311,7 @@ public class DevAdminController : ControllerBase
                 foreach (var ts in snapshot.Tenants)
                 {
                     var tenantId = ts.Tenant.Id;
-                    await SetTenantGuc(tenantId, ct);
+                    await _db.PinTenantAsync(tenantId, ct);
 
                     // Delete in FK-safe order: member-roles -> members -> roles -> OAuth clients -> connector configs
                     var existingMemberRoles = await _db.TenantMemberRoles
@@ -438,7 +444,7 @@ public class DevAdminController : ControllerBase
                 foreach (var ts in snapshot.Tenants)
                 {
                     var tenantId = ts.Tenant.Id;
-                    await SetTenantGuc(tenantId, ct);
+                    await _db.PinTenantAsync(tenantId, ct);
 
                     // Insert roles
                     foreach (var r in ts.Roles)
@@ -582,7 +588,7 @@ public class DevAdminController : ControllerBase
 
         foreach (var tenant in tenants)
         {
-            await SetTenantGuc(tenant.Id, ct);
+            await _db.PinTenantAsync(tenant.Id, ct);
 
             var configs = await _db.ConnectorConfigurations
                 .AsNoTracking()
@@ -593,7 +599,7 @@ public class DevAdminController : ControllerBase
             {
                 // Set tenant context so the sync service operates in the right tenant
                 _tenantAccessor.SetTenant(new TenantContext(
-                    tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive));
+                    tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive, tenant.IsDemo));
 
                 try
                 {
@@ -650,7 +656,7 @@ public class DevAdminController : ControllerBase
 
         foreach (var tenant in tenants)
         {
-            await SetTenantGuc(tenant.Id, ct);
+            await _db.PinTenantAsync(tenant.Id, ct);
 
             var entryCount = (long)await _db.SensorGlucose.CountAsync(ct)
                 + await _db.MeterGlucose.CountAsync(ct)
@@ -715,7 +721,7 @@ public class DevAdminController : ControllerBase
 
         var validation = await _tenantService.ValidateSlugAsync(request.Slug, ct);
         if (!validation.IsValid)
-            return BadRequest(new { error = validation.Message });
+            return await SlugRejectionAsync(request.Slug, validation.Message, ct);
 
         var result = await _tenantService.CreateWithoutOwnerAsync(
             request.Slug, request.DisplayName, ct: ct);
@@ -773,7 +779,7 @@ public class DevAdminController : ControllerBase
         try
         {
             // Phase 1: Clean existing scoped data for this tenant
-            await SetTenantGuc(id, ct);
+            await _db.PinTenantAsync(id, ct);
 
             var existingMemberRoles = await _db.TenantMemberRoles
                 .Where(mr => _db.TenantMembers
@@ -932,14 +938,25 @@ public class DevAdminController : ControllerBase
     // ── Seed Tenant (E2E test bootstrap) ────────────────────────────────
 
     /// <summary>
-    /// Create a tenant, owner subject, owner membership, and a session in one call.
-    /// Used exclusively by the E2E test suite to bypass passkey/OIDC ceremonies.
+    /// Create a tenant, owner subject, synthetic passkey, owner membership, and a session
+    /// in one call. The synthetic passkey satisfies the TenantSetupMiddleware credential
+    /// check so the returned session can immediately call tenant APIs.
+    /// Subjects from the committed dev identity fixture (docs/seed/dev-identities.json)
+    /// are added as additional owners, so a developer's real passkey signs in too.
+    /// With sampleData: true the tenant is populated with realistic history across
+    /// the board — glucose/treatments, device changes, sleep, heart rate, steps,
+    /// consumable trackers, and alert rules with alarm history — making the
+    /// returned loginLink a browser tab with visible data on every dashboard.
+    /// Used by E2E tests and headless dev tooling to bypass passkey/OIDC ceremonies.
     /// </summary>
     [HttpPost("seed-tenant")]
     public async Task<ActionResult<DevSeedTenantResponse>> SeedTenant(
         [FromBody] DevSeedTenantRequest request,
         [FromServices] ISessionService sessionService,
         [FromServices] ISubjectService subjectService,
+        [FromServices] SampleDataSeeder sampleDataService,
+        [FromServices] IConfiguration configuration,
+        [FromServices] IOptions<BaseDomainOptions> baseDomainOptions,
         CancellationToken ct)
     {
         var sanitizedSlugForLog = (request.Slug ?? string.Empty)
@@ -949,7 +966,7 @@ public class DevAdminController : ControllerBase
 
         var validation = await _tenantService.ValidateSlugAsync(request.Slug, ct);
         if (!validation.IsValid)
-            return BadRequest(new { error = validation.Message });
+            return await SlugRejectionAsync(request.Slug, validation.Message, ct);
 
         // 1. Tenant (seeds roles, public subject, OAuth clients)
         var tenant = await _tenantService.CreateWithoutOwnerAsync(
@@ -965,16 +982,62 @@ public class DevAdminController : ControllerBase
             CreatedAt = DateTime.UtcNow,
         });
 
-        // 3. Owner membership with full permissions
-        await SetTenantGuc(tenant.Id, ct);
+        // 3. Synthetic passkey credential. TenantSetupMiddleware returns 503 until a
+        // member holds a passkey or OIDC identity, so without this the session issued
+        // below cannot call any tenant API. The credential is fake bytes — it can never
+        // complete a WebAuthn assertion — it exists only to mark setup as complete.
+        _db.PasskeyCredentials.Add(new()
+        {
+            Id = Guid.CreateVersion7(),
+            SubjectId = subjectResult.Subject.Id,
+            CredentialId = Encoding.UTF8.GetBytes($"dev-seed-{subjectResult.Subject.Id:N}"),
+            PublicKey = Encoding.UTF8.GetBytes($"dev-seed-pk-{subjectResult.Subject.Id:N}"),
+            SignCount = 0,
+            Label = "dev-seed (synthetic)",
+        });
+        await _db.SaveChangesAsync(ct);
+
+        // 4. Owner membership with full permissions
+        await _db.PinTenantAsync(tenant.Id, ct);
         var ownerRole = await _db.TenantRoles
-            .Where(r => r.TenantId == tenant.Id && r.IsSystem && r.Slug == TenantPermissions.SeedRoles.Owner)
+            .Where(r => r.TenantId == tenant.Id && r.IsSystem && r.Slug == RoleSeeds.Owner)
             .FirstAsync(ct);
 
         await _tenantService.AddMemberAsync(
             tenant.Id, subjectResult.Subject.Id, [ownerRole.Id], ct: ct);
 
-        // 4. Session
+        // 5. Dev identity fixture subjects as additional owners: their real
+        // passkeys (re-seeded from docs/seed/dev-identities.json) can then sign
+        // in to this tenant with the developer's actual authenticator.
+        var fixtureSubjectIds = await DevIdentityFixtureSeeder.SeedAsync(
+            _db, configuration, _logger, ct);
+        foreach (var fixtureSubjectId in fixtureSubjectIds)
+        {
+            if (fixtureSubjectId == subjectResult.Subject.Id)
+                continue;
+            await _tenantService.AddMemberAsync(
+                tenant.Id, fixtureSubjectId, [ownerRole.Id], label: "dev fixture", ct: ct);
+        }
+
+        // 6. Mark onboarding complete. The web layout redirects every page to
+        // /setup until Tenant.OnboardingCompletedAt is set; a seeded dev tenant
+        // has nothing left to onboard.
+        var tenantEntity = await _db.Tenants.FirstAsync(t => t.Id == tenant.Id, ct);
+        tenantEntity.OnboardingCompletedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+
+        // 7. Sample data
+        SampleDataSeedResult? seeded = null;
+        if (request.SampleData)
+        {
+            seeded = await sampleDataService.SeedAsync(
+                new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive, tenantEntity.IsDemo),
+                request.SampleDataDays,
+                subjectResult.Subject.Id,
+                ct: ct);
+        }
+
+        // 8. Session
         var sessionContext = new SessionContext(
             DeviceDescription: "e2e-test",
             IpAddress: "127.0.0.1",
@@ -982,35 +1045,224 @@ public class DevAdminController : ControllerBase
         var tokens = await sessionService.IssueSessionAsync(
             subjectResult.Subject.Id, sessionContext, ct);
 
+        var baseDomain = baseDomainOptions.Value.BaseDomain;
+        string? url = null;
+        string? loginLink = null;
+        if (!string.IsNullOrEmpty(baseDomain))
+        {
+            url = $"https://{tenant.Slug}.{baseDomain}";
+            loginLink = $"{url}/api/v4/dev-only/auth/login?redirect=%2F";
+        }
+
         return Ok(new DevSeedTenantResponse(
             tenant.Id,
             subjectResult.Subject.Id,
             tokens.AccessToken,
             tokens.RefreshToken,
-            tokens.ExpiresInSeconds));
+            tokens.ExpiresInSeconds,
+            url,
+            loginLink,
+            seeded?.Entries ?? 0,
+            seeded?.Treatments ?? 0,
+            seeded?.SleepSessions ?? 0,
+            seeded));
+    }
+
+    // ── Sample data ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Populate an existing tenant with realistic sample data (oref-simulated
+    /// CGM entries and treatments, device changes, sleep, heart rate, steps,
+    /// trackers, and alert rules with alarm history), written through the
+    /// normal ingestion services so device attribution and the v4 canonical
+    /// stream are correct. Trackers are owned by the first owner-role member.
+    /// </summary>
+    [HttpPost("tenants/{id:guid}/seed-sample-data")]
+    public async Task<ActionResult<SampleDataSeedResult>> SeedSampleData(
+        Guid id,
+        [FromBody] DevSeedSampleDataRequest? request,
+        [FromServices] SampleDataSeeder sampleDataService,
+        CancellationToken ct)
+    {
+        var tenant = await _db.Tenants.AsNoTracking().FirstOrDefaultAsync(t => t.Id == id, ct);
+        if (tenant is null)
+            return NotFound(new { error = $"Tenant {id} not found" });
+
+        await _db.PinTenantAsync(tenant.Id, ct);
+        var members = await _db.TenantMembers
+            .AsNoTracking()
+            .Include(m => m.Subject)
+            .Include(m => m.MemberRoles).ThenInclude(mr => mr.TenantRole)
+            .Where(m => m.TenantId == tenant.Id)
+            .ToListAsync(ct);
+        var candidates = DevTenantMemberSelection.Candidates(members);
+        var owner = candidates.Count > 0
+            ? DevTenantMemberSelection.PickOwnerOrFirst(candidates, tenant.Id)
+            : null;
+
+        var seeded = await sampleDataService.SeedAsync(
+            new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive, tenant.IsDemo),
+            request?.Days ?? 7,
+            owner?.SubjectId,
+            ct: ct);
+
+        return Ok(seeded);
+    }
+
+    // ── Recovery mode ───────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Put a tenant into recovery mode in one call: strips the target subject's
+    /// credentials (passkeys and OIDC identities — a global operation, so a
+    /// fixture subject shared with other tenants loses them everywhere until the
+    /// next startup re-seed) and, if no other credentialed member remains,
+    /// creates a synthetic "keeper" member so the tenant reports
+    /// recovery_mode_active instead of setup_required. Defaults to the first
+    /// owner-role member.
+    /// </summary>
+    [HttpPost("tenants/{id:guid}/recovery-mode")]
+    public async Task<ActionResult> EnterRecoveryMode(
+        Guid id,
+        [FromBody] DevRecoveryModeRequest? request,
+        [FromServices] ISubjectService subjectService,
+        CancellationToken ct)
+    {
+        var tenant = await _db.Tenants.AsNoTracking().FirstOrDefaultAsync(t => t.Id == id, ct);
+        if (tenant is null)
+            return NotFound(new { error = $"Tenant {id} not found" });
+
+        await _db.PinTenantAsync(tenant.Id, ct);
+
+        var members = await _db.TenantMembers
+            .Include(m => m.Subject)
+            .Include(m => m.MemberRoles).ThenInclude(mr => mr.TenantRole)
+            .Where(m => m.TenantId == tenant.Id)
+            .ToListAsync(ct);
+
+        var candidates = DevTenantMemberSelection.Candidates(members);
+        if (candidates.Count == 0)
+            return BadRequest(new { error = $"Tenant '{tenant.Slug}' has no members to orphan" });
+
+        var target = request?.SubjectId is { } subjectId
+            ? candidates.FirstOrDefault(m => m.SubjectId == subjectId)
+            : DevTenantMemberSelection.PickOwnerOrFirst(candidates, tenant.Id);
+        if (target is null)
+            return NotFound(new { error = $"Subject {request?.SubjectId} is not a member of '{tenant.Slug}'" });
+
+        await _db.PasskeyCredentials
+            .Where(c => c.SubjectId == target.SubjectId)
+            .ExecuteDeleteAsync(ct);
+        await _db.SubjectOidcIdentities
+            .Where(i => i.SubjectId == target.SubjectId)
+            .ExecuteDeleteAsync(ct);
+
+        // Recovery mode requires at least one remaining credentialed member;
+        // without one the tenant reports setup_required instead.
+        var otherSubjectIds = candidates
+            .Where(m => m.SubjectId != target.SubjectId)
+            .Select(m => m.SubjectId)
+            .ToList();
+        var hasCredentialedMember = await _db.PasskeyCredentials
+                .AnyAsync(c => otherSubjectIds.Contains(c.SubjectId), ct)
+            || await _db.SubjectOidcIdentities
+                .AnyAsync(i => otherSubjectIds.Contains(i.SubjectId), ct);
+
+        Guid? keeperSubjectId = null;
+        if (!hasCredentialedMember)
+        {
+            var keeper = await subjectService.CreateSubjectAsync(new Subject
+            {
+                Id = Guid.CreateVersion7(),
+                Name = "recovery-keeper",
+                Type = SubjectType.User,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow,
+            });
+            keeperSubjectId = keeper.Subject.Id;
+
+            _db.PasskeyCredentials.Add(new()
+            {
+                Id = Guid.CreateVersion7(),
+                SubjectId = keeper.Subject.Id,
+                CredentialId = Encoding.UTF8.GetBytes($"dev-seed-{keeper.Subject.Id:N}"),
+                PublicKey = Encoding.UTF8.GetBytes($"dev-seed-pk-{keeper.Subject.Id:N}"),
+                SignCount = 0,
+                Label = "recovery keeper (synthetic)",
+            });
+            await _db.SaveChangesAsync(ct);
+
+            await _tenantService.AddMemberAsync(
+                tenant.Id, keeper.Subject.Id, [], label: "recovery keeper", ct: ct);
+        }
+
+        _logger.LogInformation(
+            "Dev recovery-mode: orphaned subject {SubjectId} on tenant {Slug} (keeper: {Keeper})",
+            target.SubjectId, tenant.Slug, keeperSubjectId);
+
+        return Ok(new
+        {
+            recoveryMode = true,
+            orphanedSubjectId = target.SubjectId,
+            keeperSubjectId,
+        });
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────
 
-    private async Task SetTenantGuc(Guid tenantId, CancellationToken ct)
+    /// <summary>
+    /// 400 for a rejected slug, with up to three valid alternatives so callers
+    /// (and their scripts) don't have to guess around the reserved-slug list.
+    /// </summary>
+    private async Task<ActionResult> SlugRejectionAsync(
+        string? slug, string? message, CancellationToken ct)
     {
-        await _db.Database.ExecuteSqlRawAsync(
-            "SELECT set_config('app.current_tenant_id', {0}, false)",
-            [tenantId.ToString()],
-            ct);
+        var normalized = (slug ?? string.Empty).Trim().ToLowerInvariant();
+        var candidates = string.IsNullOrEmpty(normalized)
+            ? ["sleepy", "dev-tenant", "sandbox"]
+            : new[]
+            {
+                $"{normalized}-tenant", $"{normalized}-local", $"my-{normalized}",
+                $"{normalized}1", $"{normalized}2",
+            };
+
+        var suggestions = new List<string>();
+        foreach (var candidate in candidates)
+        {
+            if (suggestions.Count >= 3)
+                break;
+            if ((await _tenantService.ValidateSlugAsync(candidate, ct)).IsValid)
+                suggestions.Add(candidate);
+        }
+
+        return BadRequest(new { error = message, suggestions });
     }
 }
 
 public record DevCreateTenantRequest(string Slug, string DisplayName);
 
-public record DevSeedTenantRequest(string Slug, string DisplayName, string OwnerUsername);
+public record DevSeedTenantRequest(
+    string Slug,
+    string DisplayName,
+    string OwnerUsername,
+    bool SampleData = false,
+    int SampleDataDays = 7);
 
 public record DevSeedTenantResponse(
     Guid TenantId,
     Guid SubjectId,
     string AccessToken,
     string RefreshToken,
-    int ExpiresInSeconds);
+    int ExpiresInSeconds,
+    string? Url = null,
+    string? LoginLink = null,
+    int EntriesSeeded = 0,
+    int TreatmentsSeeded = 0,
+    int SleepSessionsSeeded = 0,
+    SampleDataSeedResult? Seeded = null);
+
+public record DevSeedSampleDataRequest(int Days = 7);
+
+public record DevRecoveryModeRequest(Guid? SubjectId);
 
 public record DevTenantSummaryDto(
     Guid Id,

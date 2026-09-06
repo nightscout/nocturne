@@ -83,24 +83,21 @@ public class TrackerNotificationThresholdEntity : ITenantScoped
     public bool VibrateEnabled { get; set; } = false;
 
     /// <summary>
-    /// Repeat interval in minutes (0 = no repeat)
-    /// </summary>
-    [Column("repeat_interval_mins")]
-    public int RepeatIntervalMins { get; set; } = 0;
-
-    /// <summary>
-    /// Maximum number of repeats (0 = unlimited until acknowledged)
-    /// </summary>
-    [Column("max_repeats")]
-    public int MaxRepeats { get; set; } = 3;
-
-    /// <summary>
     /// Whether this notification respects quiet hours
     /// </summary>
     [Column("respect_quiet_hours")]
     public bool RespectQuietHours { get; set; } = true;
 
     #endregion
+
+    /// <summary>
+    /// The managed alert rule synthesised from this threshold (condition
+    /// <c>tracker_age</c>, delivered through the alert engine's channel pipeline).
+    /// Null until the sync service has run; SET NULL on rule deletion so a lost rule
+    /// is re-synthesised by the startup backfill.
+    /// </summary>
+    [Column("alert_rule_id")]
+    public Guid? AlertRuleId { get; set; }
 
     /// <summary>
     /// Navigation property to the parent tracker definition

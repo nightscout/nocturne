@@ -15,15 +15,10 @@
     HeartHandshake,
   } from "@lucide/svelte";
   import { onMount } from "svelte";
+  import { LINKS } from "$lib/data/links";
+  import SupportNocturne from "$lib/components/docs/SupportNocturne.svelte";
 
   const ACCENT = "oklch(0.6 0.118 184.704)";
-
-  const LINKS = {
-    discord: "https://discord.gg/sKEhtHeb2z",
-    donate: "https://www.nightscoutfoundation.org/donate",
-    githubLabel: "https://github.com/nightscout/nocturne/labels/get-involved",
-    github: "https://github.com/nightscout/nocturne",
-  };
 
   const STATS = [
     { value: "100%", label: "Built by volunteers" },
@@ -50,9 +45,10 @@
       icon: Globe,
       accent: "oklch(0.65 0.16 250)",
       title: "Translate Nocturne",
-      desc: "Help people read Nocturne in their own language. Pick a locale, translate the interface strings — no code, no build tools, just words.",
-      cta: "Start translating",
-      href: "#tasks",
+      desc: "Every interface string lives in a gettext .po file, one per language, and most languages are barely started. Edit one on GitHub and open a pull request — no build tools, just words.",
+      cta: "Open the translation files",
+      href: LINKS.translationFiles,
+      external: true,
     },
     {
       id: "support",
@@ -69,10 +65,9 @@
       icon: Heart,
       accent: "oklch(0.62 0.2 18)",
       title: "Donate",
-      desc: "Nocturne is free and always will be. Donations to the Nightscout Foundation cover servers, testing devices, and keep the project independent.",
-      cta: "Donate via the Foundation",
-      href: LINKS.donate,
-      external: true,
+      desc: "Nocturne is free and always will be. One-off gifts to the Nightscout Foundation and monthly subscriptions from US$10 both cover servers, testing devices, and keep the project independent.",
+      cta: "See the ways to give",
+      href: "#donate",
       highlight: true,
     },
     {
@@ -82,7 +77,7 @@
       title: "Improve the docs",
       desc: "Spotted a gap, a stale screenshot, or a typo? Clear docs save everyone hours. Fix a page or write a guide for the setup you wish you'd had.",
       cta: "Browse the docs",
-      href: "#tasks",
+      href: "/docs",
     },
     {
       id: "peer",
@@ -90,17 +85,29 @@
       accent: "oklch(0.66 0.15 70)",
       title: "Peer support",
       desc: 'Plenty of people start in the "CGM in the Cloud" Facebook group and community forums. Share what you\'ve learned where newcomers actually ask.',
-      cta: "Visit the forums",
-      href: "#tasks",
+      cta: "Open CGM in the Cloud",
+      href: LINKS.facebook,
+      external: true,
     },
     {
       id: "spread",
       icon: Megaphone,
       accent: "oklch(0.68 0.16 40)",
       title: "Spread the word",
-      desc: "Write up your setup, post your time-in-range win, give a talk at your clinic. Word of mouth is how most people find Nightscout in the first place.",
-      cta: "Share your story",
-      href: "#tasks",
+      desc: "Write up your setup, post your time-in-range win, give a talk at your clinic. Word of mouth is how most people find Nightscout in the first place. Send us your story and we'll help share it.",
+      cta: "Email testimonials@nocturne.run",
+      href: LINKS.testimonials,
+      external: true,
+    },
+    {
+      id: "sponsor",
+      icon: HeartHandshake,
+      accent: "oklch(0.64 0.19 330)",
+      title: "Sponsor Hack Diabetes",
+      desc: "Hack Diabetes brings the open-source diabetes community together to build and test tools like Nocturne. Sponsors fund the events and get their name in front of the people who build this software.",
+      cta: "Sponsor an event",
+      href: LINKS.hackDiabetes,
+      external: true,
     },
     {
       id: "data",
@@ -108,8 +115,9 @@
       accent: "oklch(0.6 0.13 200)",
       title: "Donate anonymized data",
       desc: "Opt in to share de-identified glucose data so connectors and reports can be tested against real-world patterns — not just synthetic samples.",
-      cta: "Learn how it works",
-      href: "#tasks",
+      cta: "Email research-data@nocturne.run",
+      href: LINKS.researchData,
+      external: true,
     },
   ];
 
@@ -118,7 +126,7 @@
       fg: "oklch(0.62 0.118 184.7)",
       bg: "oklch(0.62 0.118 184.7 / 0.16)",
     },
-    translation: {
+    i18n: {
       fg: "oklch(0.65 0.16 250)",
       bg: "oklch(0.65 0.16 250 / 0.16)",
     },
@@ -213,8 +221,9 @@
     return `${Math.floor(days / 30)}mo`;
   }
 
-  function resolveHref(href: string): string {
-    return (LINKS as Record<string, string>)[href] || href;
+  // mailto: hands off to the mail client, so a new tab would just be left orphaned.
+  function opensNewTab(lane: Lane): boolean {
+    return Boolean(lane.external) && !lane.href.startsWith("mailto:");
   }
 </script>
 
@@ -292,15 +301,15 @@
         Ways to help
       </p>
       <h2 class="text-[28px] font-bold tracking-tight">
-        Seven ways to contribute
+        Ways to contribute
       </h2>
     </div>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
       {#each LANES as lane}
         <a
-          href={resolveHref(lane.href)}
-          target={lane.external ? "_blank" : undefined}
-          rel={lane.external ? "noopener noreferrer" : undefined}
+          href={lane.href}
+          target={opensNewTab(lane) ? "_blank" : undefined}
+          rel={opensNewTab(lane) ? "noopener noreferrer" : undefined}
           class="gi-lane-card flex flex-row items-start gap-4 bg-card border border-border rounded-xl p-5 transition-[border-color,transform] duration-200 no-underline text-inherit"
           class:gi-lane-highlight={lane.highlight}
           style="--lane-accent: {lane.accent}"
@@ -486,7 +495,8 @@
         <p class="text-muted-foreground m-0 max-w-[52ch]">
           There is no company behind Nocturne — just volunteers and the
           Nightscout Foundation, a registered non-profit. Donations cover
-          servers, test devices, and the work that keeps your data yours.
+          servers, test devices, and the work that keeps your data yours. Give
+          once, or subscribe monthly.
         </p>
       </div>
       <div class="flex flex-col gap-2.5">
@@ -504,6 +514,8 @@
         >
       </div>
     </div>
+
+    <SupportNocturne />
   </section>
 </div>
 

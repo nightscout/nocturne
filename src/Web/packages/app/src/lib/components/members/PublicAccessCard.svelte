@@ -1,8 +1,10 @@
 <script lang="ts">
+  import { formatDayTime } from "$lib/utils/formatting";
   import { page } from "$app/state";
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
   import { Switch } from "$lib/components/ui/switch";
+  import { copyToClipboard } from "$lib/utils";
   import {
     Globe,
     Lock,
@@ -25,6 +27,8 @@
     publicDataCategories,
     formatList,
   } from "./public-data-categories";
+  import { retainQuery } from "$lib/api/retain-query.svelte";
+  import { describeSubmitError } from "$lib/forms/submit-error";
 
   const effectivePermissions: string[] = $derived(
     (page.data as any).effectivePermissions ?? [],
@@ -35,6 +39,7 @@
   );
 
   const shareQuery = $derived(canManageSharing ? getShareLink() : null);
+  retainQuery(() => shareQuery);
   const share = $derived(shareQuery?.current ?? null);
 
   // Optimistic overrides held only while a mutation is in flight; null = use server truth.
@@ -52,6 +57,10 @@
   let errorMessage = $state<string | null>(null);
   let scopeWritesInFlight = $state(0);
 
+  // The server stores only a fingerprint of the link, so it can return the URL once — when the
+  // link is created. Held here for the rest of the visit; a reload shows the hidden state.
+  let revealedUrl = $state<string | null>(null);
+
   const sharedLabels = $derived(
     publicDataCategories.filter((c) => scopes.includes(c.scope)).map((c) => c.name.toLowerCase()),
   );
@@ -65,12 +74,18 @@
     errorMessage = null;
     pendingEnabled = on;
     try {
-      if (on) await rotateShareLink();
-      else await disableShareLink();
-    } catch {
-      errorMessage = on
-        ? "Couldn't create the link. Please try again."
-        : "Couldn't turn off public access. Please try again.";
+      if (on) revealedUrl = (await rotateShareLink()).url ?? null;
+      else {
+        await disableShareLink();
+        revealedUrl = null;
+      }
+    } catch (err) {
+      errorMessage = describeSubmitError(
+        err,
+        on
+          ? "Couldn't create the link. Please try again."
+          : "Couldn't turn off public access. Please try again."
+      );
     } finally {
       busy = false;
       pendingEnabled = null;
@@ -82,9 +97,9 @@
     errorMessage = null;
     confirmingRotate = false;
     try {
-      await rotateShareLink();
-    } catch {
-      errorMessage = "Couldn't regenerate the link. Please try again.";
+      revealedUrl = (await rotateShareLink()).url ?? null;
+    } catch (err) {
+      errorMessage = describeSubmitError(err, "Couldn't regenerate the link. Please try again.");
     } finally {
       busy = false;
     }
@@ -100,8 +115,8 @@
     scopeWritesInFlight++;
     try {
       await setShareLinkScopes({ scopes: list });
-    } catch {
-      errorMessage = "Couldn't update what's shared. Please try again.";
+    } catch (err) {
+      errorMessage = describeSubmitError(err, "Couldn't update what's shared. Please try again.");
     } finally {
       // Hold the optimistic value until every concurrent toggle settles, then fall back to
       // server truth — the generated command already refreshed getShareLink.
@@ -115,16 +130,19 @@
     errorMessage = null;
     try {
       await setShareLinkFullHistory({ fullHistory: fh });
-    } catch {
-      errorMessage = "Couldn't update the time window. Please try again.";
+    } catch (err) {
+      errorMessage = describeSubmitError(err, "Couldn't update the time window. Please try again.");
     } finally {
       pendingFullHistory = null;
     }
   }
 
   async function copyLink() {
-    if (!share?.url) return;
-    await navigator.clipboard.writeText(share.url);
+    if (!revealedUrl) return;
+    if (!(await copyToClipboard(revealedUrl))) {
+      errorMessage = "Couldn't copy the link to the clipboard. Copy it manually instead.";
+      return;
+    }
     copied = true;
     setTimeout(() => (copied = false), 2000);
   }
@@ -132,17 +150,12 @@
   function formatDate(date: Date | string | undefined | null): string {
     if (!date) return "never";
     const d = date instanceof Date ? date : new Date(date);
-    return d.toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
+    return formatDayTime(d);
   }
 </script>
 
 {#if canManageSharing}
-  <Card.Root>
+  <Card.Root data-testid="public-access-card">
     <!-- Hero header: globe/lock + master toggle -->
     <div class="flex items-start gap-4 p-5 @md:p-6">
       <div
@@ -164,6 +177,7 @@
         </p>
       </div>
       <Switch
+        data-testid="public-access-toggle"
         checked={enabled}
         disabled={busy}
         onCheckedChange={(v: boolean) => setEnabled(v)}
@@ -186,17 +200,25 @@
               class="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-lg border border-border bg-background px-3 font-mono text-sm"
             >
               <LinkIcon class="h-4 w-4 shrink-0 text-muted-foreground" />
-              <span class="truncate">{share?.url ?? ""}</span>
+              {#if revealedUrl}
+                <span class="truncate">{revealedUrl}</span>
+              {:else}
+                <span class="truncate font-sans text-muted-foreground">
+                  Your link is only shown when you create it
+                </span>
+              {/if}
             </div>
             <div class="flex gap-2">
-              <Button variant="outline" class="shrink-0" onclick={copyLink}>
-                {#if copied}
-                  <Check class="mr-1.5 h-4 w-4 text-green-600" />
-                {:else}
-                  <Copy class="mr-1.5 h-4 w-4" />
-                {/if}
-                Copy
-              </Button>
+              {#if revealedUrl}
+                <Button variant="outline" class="shrink-0" onclick={copyLink}>
+                  {#if copied}
+                    <Check class="mr-1.5 h-4 w-4 text-green-600" />
+                  {:else}
+                    <Copy class="mr-1.5 h-4 w-4" />
+                  {/if}
+                  Copy
+                </Button>
+              {/if}
               <Button
                 variant="ghost"
                 class="shrink-0"
@@ -228,10 +250,19 @@
                 </Button>
               </div>
             </div>
-          {:else}
+          {:else if revealedUrl}
             <p class="text-xs text-muted-foreground">
               Anyone you send this link to can open the read-only view — no sign-in
-              needed. Last viewed {formatDate(share?.lastAccessedAt)}.
+              needed. Copy it now: it isn't shown again after you leave this page.
+              Last viewed {formatDate(share?.lastAccessedAt)}.
+            </p>
+          {:else}
+            <p class="text-xs text-muted-foreground">
+              Anyone who already has your link can open the read-only view — no
+              sign-in needed. To get a link you can send, regenerate it; that also
+              stops the previous one from working. Last viewed {formatDate(
+                share?.lastAccessedAt,
+              )}.
             </p>
           {/if}
         </div>
@@ -278,7 +309,7 @@
               Limit public viewers to recent data only. Older history stays private.
             </div>
           </div>
-          <div class="inline-flex shrink-0 rounded-lg bg-muted p-1">
+          <div class="inline-flex shrink-0 rounded-lg bg-muted p-1" data-testid="public-access-window">
             <button
               type="button"
               onclick={() => setWindow(true)}

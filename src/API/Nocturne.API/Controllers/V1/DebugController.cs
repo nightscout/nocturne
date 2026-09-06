@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Models;
 
@@ -9,9 +10,14 @@ namespace Nocturne.API.Controllers.V1;
 /// Provides basic database connectivity tests against the PostgreSQL data store.
 /// </summary>
 /// <seealso cref="IEntryStore"/>
+/// <remarks>
+/// Admin-only: the responses carry real glucose rows and raw exception/inner-exception text from
+/// the data layer, so this is a diagnostics surface rather than a data API.
+/// </remarks>
 [ApiController]
 [Tags("V1")]
 [Route("api/v1/[controller]")]
+[RequireAdmin]
 public class DebugController : ControllerBase
 {
     private readonly IEntryStore _store;

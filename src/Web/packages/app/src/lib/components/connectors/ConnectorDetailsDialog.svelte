@@ -5,7 +5,8 @@
   import { Separator } from "$lib/components/ui/separator";
   import * as Tooltip from "$lib/components/ui/tooltip";
   import { getDataTypeLabel } from "$lib/utils/data-type-labels";
-  import { getApiClient } from "$lib/api";
+  import { triggerConnectorSync } from "$api/generated/services.generated.remote";
+  import { describeSubmitError } from "$lib/forms/submit-error";
   import {
     Cloud,
     Loader2,
@@ -20,10 +21,11 @@
   } from "lucide-svelte";
   import type {
     ConnectorCapabilities,
-    SyncRequest,
     SyncResult,
   } from "$lib/api/generated/nocturne-api-client";
+  import type { SyncRequest } from "$lib/api/generated/schemas";
   import type { ConnectorStatusWithDescription } from "./ServerConnectorsCard.svelte";
+  import { formatNumber, lastSeen } from "$lib/utils/formatting";
 
   let {
     open = $bindable(false),
@@ -59,16 +61,44 @@
   });
 
 
-  function formatLastSeen(date?: Date): string {
-    if (!date) return "Never";
-    const d = new Date(date);
-    const diff = Date.now() - d.getTime();
-    const minutes = Math.floor(diff / 60000);
-    if (minutes < 1) return "Just now";
-    if (minutes < 60) return `${minutes}m ago`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
-    return `${Math.floor(hours / 24)}d ago`;
+
+  const selectedRange = () => ({
+    from: new Date(granularSyncFrom).toISOString(),
+    to: new Date(granularSyncTo).toISOString(),
+  });
+
+  /**
+   * The sync's own result stands whatever the callback does, so a refresh the
+   * caller could not complete is left to the caller to report.
+   */
+  async function notifyComplete() {
+    if (!onSyncComplete) return;
+    try {
+      await onSyncComplete();
+    } catch (e) {
+      console.error("Failed to refresh after a connector sync", e);
+    }
+  }
+
+  /**
+   * A refused sync reports itself through the same result panel as a partial
+   * one, so a rejection becomes a result rather than propagating.
+   */
+  async function requestSync(
+    connectorId: string,
+    request: SyncRequest,
+    fallback: string
+  ): Promise<SyncResult> {
+    try {
+      return await triggerConnectorSync({ id: connectorId, request });
+    } catch (e) {
+      return {
+        success: false,
+        message: describeSubmitError(e, fallback),
+        errors: [],
+        itemsSynced: {},
+      };
+    }
   }
 
   async function triggerGranularSync() {
@@ -78,34 +108,16 @@
     const supportsHistoricalSync =
       selectedConnectorCapabilities?.supportsHistoricalSync ?? true;
 
-    // Fast-feedback UI
     isGranularSyncing = true;
     granularSyncResult = null;
 
     try {
-      const apiClient = getApiClient();
-      const request: SyncRequest = supportsHistoricalSync
-        ? {
-            from: new Date(granularSyncFrom),
-            to: new Date(granularSyncTo),
-          }
-        : {};
-
-      const result = await apiClient.services.triggerConnectorSync(
+      granularSyncResult = await requestSync(
         connectorId,
-        request
+        supportsHistoricalSync ? selectedRange() : {},
+        "We couldn't start the sync. Please try again."
       );
-
-      granularSyncResult = result;
-      if (onSyncComplete) await onSyncComplete();
-    } catch (e) {
-      granularSyncResult = {
-        success: false,
-        message: e instanceof Error ? e.message : "Failed to trigger sync",
-        errors: [],
-        itemsSynced: {},
-      };
-      if (onSyncComplete) await onSyncComplete();
+      await notifyComplete();
     } finally {
       isGranularSyncing = false;
     }
@@ -118,34 +130,27 @@
     foodOnlySyncResult = null;
 
     try {
-      const apiClient = getApiClient();
-      const request: SyncRequest = {
-        from: new Date(granularSyncFrom),
-        to: new Date(granularSyncTo),
-        dataTypes: ["Food" as any],
-      };
-
-      const result = await apiClient.services.triggerConnectorSync(
+      foodOnlySyncResult = await requestSync(
         connectorId,
-        request
+        { ...selectedRange(), dataTypes: ["Food"] },
+        "We couldn't download the food data. Please try again."
       );
-
-      foodOnlySyncResult = result;
-      if (result.success && onSyncComplete) {
-        await onSyncComplete();
-      }
-    } catch (e) {
-      foodOnlySyncResult = {
-        success: false,
-        message: e instanceof Error ? e.message : "Failed to sync food data",
-        errors: [],
-        itemsSynced: {},
-      };
+      if (foodOnlySyncResult.success) await notifyComplete();
     } finally {
       isFoodOnlySyncing = false;
     }
   }
 </script>
+
+<!--
+  A failed sync is usually a partial one, so this total is the only thing that says how much of the
+  run still landed.
+-->
+{#snippet syncedTotal(items: SyncResult["itemsSynced"])}
+  {#if items}
+    ({Object.values(items).reduce((a, b) => (a || 0) + (b || 0), 0)} items)
+  {/if}
+{/snippet}
 
 <Dialog.Root bind:open>
   <Dialog.Content class="max-w-md">
@@ -251,7 +256,7 @@
               <Tooltip.Root>
                 <Tooltip.Trigger>
                   <span class="font-mono font-medium cursor-help underline decoration-dotted decoration-muted-foreground/50">
-                    {selectedConnector.totalEntries?.toLocaleString() ?? 0}
+                    {formatNumber(selectedConnector.totalEntries)}
                   </span>
                 </Tooltip.Trigger>
                 <Tooltip.Portal>
@@ -265,7 +270,7 @@
                           <div class="flex justify-between gap-4 text-xs">
                             <span>{getDataTypeLabel(type)}</span>
                             <span class="font-mono">
-                              {count?.toLocaleString()}
+                              {formatNumber(count)}
                             </span>
                           </div>
                         {/each}
@@ -284,7 +289,7 @@
               <Tooltip.Root>
                 <Tooltip.Trigger>
                   <span class="font-mono font-medium cursor-help underline decoration-dotted decoration-muted-foreground/50">
-                    {selectedConnector.entriesLast24Hours?.toLocaleString() ?? 0}
+                    {formatNumber(selectedConnector.entriesLast24Hours)}
                   </span>
                 </Tooltip.Trigger>
                 <Tooltip.Portal>
@@ -298,7 +303,7 @@
                           <div class="flex justify-between gap-4 text-xs">
                             <span>{getDataTypeLabel(type)}</span>
                             <span class="font-mono">
-                              {count?.toLocaleString()}
+                              {formatNumber(count)}
                             </span>
                           </div>
                         {/each}
@@ -316,7 +321,7 @@
                   Last record received
                 </span>
                 <span class="font-medium">
-                  {formatLastSeen(selectedConnector.lastEntryTime)}
+                  {lastSeen(selectedConnector.lastEntryTime)}
                 </span>
               </div>
             {/if}
@@ -326,7 +331,7 @@
                   Last successful sync
                 </span>
                 <span class="font-medium">
-                  {formatLastSeen(selectedConnector.lastSuccessfulSync)}
+                  {lastSeen(selectedConnector.lastSuccessfulSync)}
                 </span>
               </div>
             {/if}
@@ -336,7 +341,7 @@
                   Last sync attempt
                 </span>
                 <span class="font-medium text-destructive">
-                  {formatLastSeen(selectedConnector.lastSyncAttempt)}
+                  {lastSeen(selectedConnector.lastSyncAttempt)}
                 </span>
               </div>
             {/if}
@@ -403,12 +408,11 @@
                 {#if granularSyncResult.success}
                   <CheckCircle class="inline h-3 w-3 mr-1" />
                   Sync initiated successfully
-                  {#if granularSyncResult.itemsSynced}
-                    ({Object.values(granularSyncResult.itemsSynced || {}).reduce((a, b) => (a || 0) + (b || 0), 0)} items)
-                  {/if}
+                  {@render syncedTotal(granularSyncResult.itemsSynced)}
                 {:else}
                   <AlertCircle class="inline h-3 w-3 mr-1" />
                   {granularSyncResult.message || "Sync failed"}
+                  {@render syncedTotal(granularSyncResult.itemsSynced)}
                 {/if}
               </div>
             {/if}

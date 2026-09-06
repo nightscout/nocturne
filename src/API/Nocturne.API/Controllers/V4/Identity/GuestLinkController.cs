@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Nocturne.API.Authorization;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Extensions;
 using Nocturne.API.Middleware.Handlers;
@@ -37,10 +38,11 @@ public class GuestLinkController : ControllerBase
     /// </summary>
     [HttpPost]
     [Authorize]
-    [RemoteCommand]
+    [DenyDemoSubject]
+    [RemoteCommand(Invalidates = ["GetGuestLinks"])]
     [ProducesResponseType(typeof(GuestLinkCreationResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> CreateGuestLink(
         [FromBody] CreateGuestLinkRequest request,
         CancellationToken ct)
@@ -49,7 +51,7 @@ public class GuestLinkController : ControllerBase
         if (auth is not { IsAuthenticated: true, SubjectId: not null })
             return Unauthorized();
 
-        if (!HasPermission(TenantPermissions.SharingGuest)
+        if (!HttpContext.HasScope(Scope.SharingGuest)
             && auth.SubjectId != auth.EffectiveSubjectId)
             return Forbid();
 
@@ -70,11 +72,11 @@ public class GuestLinkController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest, title: "Bad Request");
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest, title: "Bad Request");
         }
     }
 
@@ -83,14 +85,17 @@ public class GuestLinkController : ControllerBase
     /// </summary>
     [HttpGet]
     [Authorize]
+    [DenyDemoSubject]
     [RemoteQuery]
     [ProducesResponseType(typeof(IReadOnlyList<GuestLinkInfo>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetGuestLinks(
         [FromQuery] bool includeDismissed = false,
         CancellationToken ct = default)
     {
+        // SubjectId excludes a guest session, whose EffectiveSubjectId resolves to the data owner
+        // and would otherwise list the owner's links — labels, scopes and each guest's ActivatedIp.
         var auth = HttpContext.GetAuthContext();
-        if (auth is not { IsAuthenticated: true })
+        if (auth is not { IsAuthenticated: true, SubjectId: not null })
             return Unauthorized();
 
         var effectiveSubjectId = auth.EffectiveSubjectId;
@@ -106,6 +111,7 @@ public class GuestLinkController : ControllerBase
     /// </summary>
     [HttpDelete("{grantId:guid}")]
     [Authorize]
+    [DenyDemoSubject]
     [RemoteCommand(Invalidates = ["GetGuestLinks"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -127,6 +133,7 @@ public class GuestLinkController : ControllerBase
     /// </summary>
     [HttpPatch("{grantId:guid}/dismiss")]
     [Authorize]
+    [DenyDemoSubject]
     [RemoteCommand(Invalidates = ["GetGuestLinks"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -150,7 +157,7 @@ public class GuestLinkController : ControllerBase
     [AllowAnonymous]
     [EnableRateLimiting("guest-activate")]
     [ProducesResponseType(typeof(ActivateGuestLinkResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ActivateGuestLinkResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ActivateGuestLink(
         [FromBody] ActivateGuestLinkRequest request,
         CancellationToken ct)
@@ -161,22 +168,19 @@ public class GuestLinkController : ControllerBase
         var result = await _guestLinkService.ActivateAsync(request.Code, ip, userAgent, ct);
 
         if (!result.Success || result.Session is null)
-            return BadRequest(new ActivateGuestLinkResponse(null, result.Error));
+            return Problem(
+                detail: result.Error ?? "That code could not be redeemed.",
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Bad Request");
 
         _guestSessionHandler.SetGuestSessionCookie(
             HttpContext,
             result.Session.GrantId,
             result.Session.ExpiresAt);
 
-        return Ok(new ActivateGuestLinkResponse(result.Session.ExpiresAt, null));
+        return Ok(new ActivateGuestLinkResponse(result.Session.ExpiresAt));
     }
 
-    private bool HasPermission(string permission)
-    {
-        var grantedScopes = HttpContext.Items["GrantedScopes"] as IReadOnlySet<string>;
-        if (grantedScopes == null) return false;
-        return TenantPermissions.HasPermission(grantedScopes, permission);
-    }
 }
 
 /// <summary>
@@ -190,6 +194,8 @@ public record CreateGuestLinkRequest(string Label, List<string>? Scopes = null);
 public record ActivateGuestLinkRequest(string Code);
 
 /// <summary>
-/// Response from guest link activation.
+/// Response from a successful guest link activation. A refusal answers with
+/// <see cref="ProblemDetails"/>, so the caller reads the status rather than
+/// sniffing this shape for an error field.
 /// </summary>
-public record ActivateGuestLinkResponse(DateTime? ExpiresAt, string? Error);
+public record ActivateGuestLinkResponse(DateTime? ExpiresAt);

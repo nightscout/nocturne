@@ -38,7 +38,6 @@ public static class CareLinkConstants
     }
 
     public const int StaleDataThresholdMinutes = 20;
-    public const double MmolToMgdlFactor = 18.0182;
 
     /// <summary>
     /// BLE endpoint versions to try in order. Cached after first success.

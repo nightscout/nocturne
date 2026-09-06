@@ -2,7 +2,10 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.API.Extensions;
+using Nocturne.API.Helpers;
 using Nocturne.Core.Contracts.Health;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 
@@ -22,20 +25,25 @@ namespace Nocturne.API.Controllers.V1;
 public class ActivityController : ControllerBase
 {
     private readonly IActivityService _activityService;
+    private readonly IActivityDecomposer _activityDecomposer;
     private readonly ILogger<ActivityController> _logger;
 
     /// <summary>
     /// Initializes a new instance of <see cref="ActivityController"/>.
     /// </summary>
     /// <param name="activityService">Service handling activity data operations.</param>
+    /// <param name="activityDecomposer">Classifier mapping each activity to its required write scope.</param>
     /// <param name="logger">Logger instance.</param>
     public ActivityController(
         IActivityService activityService,
+        IActivityDecomposer activityDecomposer,
         ILogger<ActivityController> logger
     )
     {
         _activityService =
             activityService ?? throw new ArgumentNullException(nameof(activityService));
+        _activityDecomposer =
+            activityDecomposer ?? throw new ArgumentNullException(nameof(activityDecomposer));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -43,9 +51,21 @@ public class ActivityController : ControllerBase
     /// Get all activities with optional filtering and pagination.
     /// Returns regular activities, heart rate, and step count data merged by timestamp.
     /// </summary>
+    /// <remarks>
+    /// The scope requirement is an OR because the response merges four storages, each with its own
+    /// read scope. Admission means the caller holds at least one of those categories;
+    /// <see cref="ActivityReadScopeGuard"/> then removes the records whose category the caller does
+    /// not hold. Pagination is applied by the service before the filter, so a caller holding a
+    /// subset of the categories can receive fewer than <paramref name="count"/> records.
+    /// </remarks>
     [HttpGet]
     [ProducesResponseType(typeof(IEnumerable<Activity>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [RequireScope(
+        Scope.TreatmentsRead,
+        Scope.HeartRateRead,
+        Scope.StepCountRead,
+        Scope.SleepRead)]
     public async Task<ActionResult<IEnumerable<Activity>>> GetActivities(
         [FromQuery] int count = 10,
         [FromQuery] int skip = 0,
@@ -54,13 +74,28 @@ public class ActivityController : ControllerBase
     {
         try
         {
+            // Normalize skip parameter (negative is not valid)
+            if (skip < 0)
+            {
+                skip = 0; // Normalize to 0 for Nightscout compatibility
+            }
+
+            // An empty array covers both a 0-or-negative count (Nightscout behavior) and a page
+            // starting past the merged paging window.
+            var pageCount = LegacyReadLimits.ClampMergedPage(count, skip);
+            if (pageCount <= 0)
+            {
+                return Ok(Array.Empty<Activity>());
+            }
+
             var activities = await _activityService.GetActivitiesAsync(
-                count: count,
+                count: pageCount,
                 skip: skip,
                 cancellationToken: cancellationToken
             );
 
-            var activitiesList = activities.ToList();
+            var activitiesList = ActivityReadScopeGuard.Filter(
+                activities, _activityDecomposer, HttpContext.GetGrantedScopes());
             if (activitiesList.Count > 0)
             {
                 var latestActivity = activitiesList.FirstOrDefault();
@@ -86,12 +121,23 @@ public class ActivityController : ControllerBase
     }
 
     /// <summary>
-    /// Get a specific activity by ID (checks StateSpans, heart_rates, and step_counts)
+    /// Get a specific activity by ID (checks StateSpans, sleep_sessions, heart_rates, and step_counts)
     /// </summary>
+    /// <remarks>
+    /// The scope requirement is an OR over the four storages this route resolves against, and
+    /// <see cref="ActivityReadScopeGuard"/> then checks the resolved record's own category. A record
+    /// in a category the caller does not hold answers 404 rather than 403, so the response does not
+    /// disclose that the record exists.
+    /// </remarks>
     [HttpGet("{id}")]
     [ProducesResponseType(typeof(Activity), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [RequireScope(
+        Scope.TreatmentsRead,
+        Scope.HeartRateRead,
+        Scope.StepCountRead,
+        Scope.SleepRead)]
     public async Task<ActionResult<Activity>> GetActivity(
         string id,
         CancellationToken cancellationToken = default
@@ -101,6 +147,10 @@ public class ActivityController : ControllerBase
         {
             var activity = await _activityService.GetActivityByIdAsync(id, cancellationToken);
             if (activity == null)
+                return NotFound(new { error = $"Activity with ID {id} not found" });
+
+            if (!ActivityReadScopeGuard.CanRead(
+                activity, _activityDecomposer, HttpContext.GetGrantedScopes()))
                 return NotFound(new { error = $"Activity with ID {id} not found" });
 
             return Ok(activity);
@@ -121,7 +171,7 @@ public class ActivityController : ControllerBase
     /// </summary>
     [HttpPost]
     [Authorize]
-    [RequireScope(OAuthScopes.TreatmentsReadWrite)]
+    [RequireScope(Scope.TreatmentsReadWrite)]
     [ProducesResponseType(typeof(IEnumerable<Activity>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -162,6 +212,11 @@ public class ActivityController : ControllerBase
             if (activityList.Count == 0)
                 return BadRequest(new { error = "At least one activity is required" });
 
+            var missingScope = ActivityWriteScopeGuard.FindMissingScope(
+                activityList, _activityDecomposer, HttpContext.GetGrantedScopes());
+            if (missingScope is not null)
+                return ForbiddenForScope(missingScope);
+
             // ActivityService handles document processing, routing, and broadcasting
             var result = await _activityService.CreateActivitiesAsync(
                 activityList,
@@ -186,7 +241,7 @@ public class ActivityController : ControllerBase
     /// </summary>
     [HttpPut("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.TreatmentsReadWrite)]
+    [RequireScope(Scope.TreatmentsReadWrite)]
     [ProducesResponseType(typeof(Activity), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -201,6 +256,17 @@ public class ActivityController : ControllerBase
         {
             if (activity == null)
                 return BadRequest(new { error = "Activity data is required" });
+
+            // Gate on both the payload's destination and the existing record's destination so a
+            // caller cannot write or edit sleep/heart-rate/step data without its category scope.
+            var existing = await _activityService.GetActivityByIdAsync(id, cancellationToken);
+            var toCheck = new List<Activity> { activity };
+            if (existing is not null)
+                toCheck.Add(existing);
+            var missingScope = ActivityWriteScopeGuard.FindMissingScope(
+                toCheck, _activityDecomposer, HttpContext.GetGrantedScopes());
+            if (missingScope is not null)
+                return ForbiddenForScope(missingScope);
 
             var updatedActivity = await _activityService.UpdateActivityAsync(
                 id,
@@ -228,7 +294,7 @@ public class ActivityController : ControllerBase
     /// </summary>
     [HttpDelete("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.FullAccess)]
+    [RequireScope(Scope.FullAccess)]
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -254,4 +320,9 @@ public class ActivityController : ControllerBase
             );
         }
     }
+
+    private ObjectResult ForbiddenForScope(string scope) => StatusCode(
+        StatusCodes.Status403Forbidden,
+        new { error = $"This operation requires the '{scope}' scope." }
+    );
 }

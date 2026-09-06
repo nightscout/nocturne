@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "name": "time-of-day-bad-timezones",
+  "description": "an unknown per-rule timezone fails closed (false); an unknown tenant timezone falls back to UTC",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "time_of_day",
+      "condition_params": {
+        "from": "12:00",
+        "to": "13:00",
+        "timezone": "Mars/Olympus_Mons"
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "time_of_day",
+      "condition_params": {
+        "from": "12:00",
+        "to": "13:00",
+        "timezone": null
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "tenant_time_zone_id": "Atlantis/Lost_City",
+        "sleep_session_active": false
+      }
+    }
+  ]
+}

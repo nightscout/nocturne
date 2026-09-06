@@ -15,6 +15,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Xunit;
+using Microsoft.Extensions.Logging;
 
 namespace Nocturne.API.Tests.Middleware.Handlers;
 
@@ -32,6 +33,7 @@ public class OAuthAccessTokenHandlerTests
     private readonly Guid _subjectId = Guid.CreateVersion7();
 
     private readonly IJwtService _jwt;
+    private readonly Mock<IOAuthGrantService> _grantService = new();
     private readonly OAuthAccessTokenHandler _handler;
 
     public OAuthAccessTokenHandlerTests()
@@ -54,6 +56,12 @@ public class OAuthAccessTokenHandlerTests
         var services = new ServiceCollection();
         services.AddSingleton(_jwt);
         services.AddSingleton(revocationCache.Object);
+        services.AddSingleton(_grantService.Object);
+        // The real chain, matching the composition root: stubbing it here would stop these tests
+        // covering the grant and revocation links the handler now delegates.
+        services.AddScoped<IJwtCredentialValidator, JwtCredentialValidator>();
+        services.AddSingleton<ILogger<JwtCredentialValidator>>(
+            NullLogger<JwtCredentialValidator>.Instance);
         var scopeFactory = services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
 
         _handler = new OAuthAccessTokenHandler(scopeFactory, NullLogger<OAuthAccessTokenHandler>.Instance);
@@ -67,6 +75,16 @@ public class OAuthAccessTokenHandlerTests
             scopes: ["connectors:carelink:connect"],
             tenantId: _tenantId,
             lifetime: TimeSpan.FromMinutes(10));
+
+    /// <summary>An app token as the OAuth token endpoint mints it: scoped, pinned, grant-bound.</summary>
+    private string MintGrantBoundToken(Guid grantId) =>
+        _jwt.GenerateAccessToken(
+            new SubjectInfo { Id = _subjectId, Name = "Acme User" },
+            permissions: [],
+            roles: [],
+            scopes: [Scope.GlucoseRead],
+            tenantId: _tenantId,
+            grantId: grantId);
 
     /// <summary>JwtService refuses to mint already-expired tokens, so build one by hand.</summary>
     private string MintExpiredToken()
@@ -97,8 +115,18 @@ public class OAuthAccessTokenHandlerTests
         return context;
     }
 
+    /// <summary>A request carrying the token on the query string as a SignalR client does.</summary>
+    private static DefaultHttpContext QueryRequest(string path, string token, TenantContext tenant)
+    {
+        var context = new DefaultHttpContext();
+        context.Request.Path = path;
+        context.Request.QueryString = QueryString.Create("access_token", token);
+        context.Items["TenantContext"] = tenant;
+        return context;
+    }
+
     private TenantContext Tenant(Guid? id = null) =>
-        new(id ?? _tenantId, "acme", "Acme", IsActive: true);
+        new(id ?? _tenantId, "acme", "Acme", IsActive: true, IsDemo: false);
 
     [Fact]
     public async Task Accepts_a_scoped_tenant_pinned_token_on_the_issuing_tenant()
@@ -148,6 +176,39 @@ public class OAuthAccessTokenHandlerTests
     }
 
     [Fact]
+    public async Task Accepts_a_grant_bound_token_while_its_grant_is_active()
+    {
+        var grantId = Guid.CreateVersion7();
+        _grantService
+            .Setup(g => g.IsGrantRevokedAsync(grantId, _tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var context = Request(MintGrantBoundToken(grantId), Tenant());
+
+        var result = await _handler.AuthenticateAsync(context);
+
+        result.Succeeded.Should().BeTrue(result.Error);
+    }
+
+    [Fact]
+    public async Task Rejects_a_grant_bound_token_once_its_grant_is_revoked()
+    {
+        // Disconnecting a connected app revokes the grant; the app's still-valid access token must
+        // stop working on its next request rather than at natural expiry.
+        var grantId = Guid.CreateVersion7();
+        _grantService
+            .Setup(g => g.IsGrantRevokedAsync(grantId, _tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var context = Request(MintGrantBoundToken(grantId), Tenant());
+
+        var result = await _handler.AuthenticateAsync(context);
+
+        result.Succeeded.Should().BeFalse();
+        result.ShouldSkip.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task Skips_a_non_jwt_bearer_token()
     {
         var context = Request("noc_an-opaque-api-token", Tenant());
@@ -155,5 +216,37 @@ public class OAuthAccessTokenHandlerTests
         var result = await _handler.AuthenticateAsync(context);
 
         result.ShouldSkip.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("/hubs/data")]
+    [InlineData("/hubs")]
+    public async Task Accepts_an_access_token_query_parameter_on_a_hub_path(string path)
+    {
+        // A WebSocket or SSE upgrade cannot carry an Authorization header, so every SignalR client
+        // puts the token in access_token. Without this the hub connection is anonymous and every
+        // method HubAuthorizationFilter gates is denied.
+        var context = QueryRequest(path, MintDesktopStyleToken(), Tenant());
+
+        var result = await _handler.AuthenticateAsync(context);
+
+        result.Succeeded.Should().BeTrue(result.Error);
+        result.AuthContext!.AuthType.Should().Be(AuthType.OAuthAccessToken);
+        result.AuthContext.SubjectId.Should().Be(_subjectId);
+    }
+
+    [Theory]
+    [InlineData("/api/v1/entries")]
+    [InlineData("/hubsomething")]
+    public async Task Ignores_an_access_token_query_parameter_off_a_hub_path(string path)
+    {
+        // A query-string credential lands in access logs and referrers, so it is honoured only where
+        // the transport leaves no alternative.
+        var context = QueryRequest(path, MintDesktopStyleToken(), Tenant());
+
+        var result = await _handler.AuthenticateAsync(context);
+
+        result.ShouldSkip.Should().BeTrue();
+        result.Succeeded.Should().BeFalse();
     }
 }

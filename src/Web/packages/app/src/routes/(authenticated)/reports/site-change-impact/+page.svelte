@@ -8,6 +8,7 @@
   } from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import { Separator } from "$lib/components/ui/separator";
+  import { formatShortDate } from "$lib/utils/formatting";
   import {
     Calendar,
     Info,
@@ -17,7 +18,9 @@
     Printer,
     HelpCircle,
     Clock,
+    Lightbulb,
     RefreshCw,
+    Target,
   } from "lucide-svelte";
   import SiteChangeIcon from "$lib/components/icons/SiteChangeIcon.svelte";
   import SiteChangeImpactChart from "$lib/components/reports/SiteChangeImpactChart.svelte";
@@ -29,41 +32,22 @@
   // Default: 30 days to capture multiple site changes for meaningful analysis
   const reportsParams = requireDateParamsContext(30);
 
-  // Create resource with automatic layout registration
+  // Create resource with automatic layout registration; `date` carries the
+  // selected range so the header matches the window that was queried.
   const siteChangeResource = contextResource(
     () => getSiteChangeImpact(reportsParams.dateRangeInput),
-    { errorTitle: "Error Loading Site Change Data" }
+    { errorTitle: "Error Loading Site Change Data", dateParams: reportsParams }
   );
 
   const isLoading = $derived(siteChangeResource.loading);
-  const queryData = $derived(siteChangeResource.current);
-  const analysis = $derived(queryData?.analysis ?? null);
-  const dateRange = $derived(
-    queryData?.dateRange ?? {
-      from: new Date().toISOString(),
-      to: new Date().toISOString(),
-    }
-  );
-
-  // Helper dates
-  const startDate = $derived(new Date(dateRange.from));
-  const endDate = $derived(new Date(dateRange.to));
-  const dayCount = $derived(
-    Math.max(
-      1,
-      Math.round(
-        (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)
-      )
-    )
-  );
+  const analysis = $derived(siteChangeResource.current?.analysis ?? null);
+  const startDate = $derived(siteChangeResource.date.from);
+  const endDate = $derived(siteChangeResource.date.to);
+  const dayCount = $derived(siteChangeResource.date.dayCount);
 
   // Format date for display
   function formatDate(date: Date): string {
-    return date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
+    return formatShortDate(date, true);
   }
 </script>
 
@@ -81,15 +65,15 @@
   <div class="space-y-4">
     <div class="flex flex-wrap items-center justify-between gap-4">
       <div>
-        <h1 class="flex items-center gap-3 text-3xl font-bold">
-          <SiteChangeIcon class="h-8 w-8 text-rose-600" />
+        <h1 class="flex items-center gap-3 text-2xl font-bold @md:text-3xl">
+          <SiteChangeIcon class="h-6 w-6 text-rose-600 @md:h-8 @md:w-8" />
           Site Change Impact
         </h1>
         <p class="mt-1 text-muted-foreground">
           Analyze glucose patterns before and after pump site changes
         </p>
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 print:hidden">
         <Button
           variant="outline"
           onclick={() => window.print()}
@@ -160,7 +144,9 @@
           </div>
         </div>
       {:else if analysis !== null && analysis !== undefined}
-        <SiteChangeImpactChart {analysis} />
+        <div class="w-full">
+          <SiteChangeImpactChart {analysis} />
+        </div>
       {/if}
     </CardContent>
   </Card>
@@ -204,11 +190,13 @@
       </div>
 
       <div class="rounded-md bg-blue-100/50 p-3 dark:bg-blue-900/30">
-        <p class="font-medium">💡 Tip</p>
+        <p class="flex items-center gap-2 font-medium">
+          <Lightbulb class="h-4 w-4" />
+          What to look for
+        </p>
         <p class="text-blue-700/80 dark:text-blue-300/80">
-          If you see consistently higher glucose before site changes, consider
-          changing your site more frequently or investigating potential site
-          issues.
+          A consistent rise in the hours before site changes is a pattern worth
+          discussing with your care team.
         </p>
       </div>
     </CardContent>
@@ -224,78 +212,59 @@
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <Info class="h-5 w-5" />
-          Key Insights
+          What the Averages Show
         </CardTitle>
       </CardHeader>
       <CardContent class="space-y-4">
         <div class="grid gap-4 @lg:grid-cols-2">
-          {#if percentImprovement > 5}
-            <div
-              class="flex items-start gap-3 rounded-lg bg-green-50 p-4 dark:bg-green-950/30"
-            >
-              <TrendingDown class="h-5 w-5 shrink-0 text-green-600" />
+          <div class="flex items-start gap-3 rounded-lg bg-muted/50 p-4">
+            {#if percentImprovement > 5}
+              <TrendingDown class="h-5 w-5 shrink-0 text-muted-foreground" />
               <div>
-                <p class="font-medium text-green-800 dark:text-green-400">
-                  Significant Improvement
-                </p>
-                <p class="text-sm text-green-700 dark:text-green-300">
-                  Your glucose improves by {percentImprovement.toFixed(1)}%
-                  after site changes. Consider more frequent changes if site age
-                  affects control.
+                <p class="font-medium">Average glucose after a site change</p>
+                <p class="text-sm text-muted-foreground">
+                  {percentImprovement.toFixed(1)}% lower than in the hours
+                  before.
                 </p>
               </div>
-            </div>
-          {:else if percentImprovement < -5}
-            <div
-              class="flex items-start gap-3 rounded-lg bg-amber-50 p-4 dark:bg-amber-950/30"
-            >
-              <TrendingUp class="h-5 w-5 shrink-0 text-amber-600" />
+            {:else if percentImprovement < -5}
+              <TrendingUp class="h-5 w-5 shrink-0 text-muted-foreground" />
               <div>
-                <p class="font-medium text-amber-800 dark:text-amber-400">
-                  Post-Change Rise
-                </p>
-                <p class="text-sm text-amber-700 dark:text-amber-300">
-                  Your glucose is {Math.abs(percentImprovement).toFixed(1)}%
-                  higher after site changes. This might indicate insertion
-                  issues or site location sensitivity.
+                <p class="font-medium">Average glucose after a site change</p>
+                <p class="text-sm text-muted-foreground">
+                  {Math.abs(percentImprovement).toFixed(1)}% higher than in the
+                  hours before. This can reflect insertion or site-location
+                  factors.
                 </p>
               </div>
-            </div>
-          {:else}
-            <div
-              class="flex items-start gap-3 rounded-lg bg-blue-50 p-4 dark:bg-blue-950/30"
-            >
-              <Info class="h-5 w-5 shrink-0 text-blue-600" />
+            {:else}
+              <Info class="h-5 w-5 shrink-0 text-muted-foreground" />
               <div>
-                <p class="font-medium text-blue-800 dark:text-blue-400">
-                  Stable Control
-                </p>
-                <p class="text-sm text-blue-700 dark:text-blue-300">
-                  Your glucose control is relatively stable around site changes.
-                  Site age doesn't appear to significantly affect your control.
+                <p class="font-medium">Average glucose after a site change</p>
+                <p class="text-sm text-muted-foreground">
+                  Differs by {Math.abs(percentImprovement).toFixed(1)}% from the
+                  hours before; differences under 5% are counted as no material
+                  change.
                 </p>
               </div>
-            </div>
-          {/if}
+            {/if}
+          </div>
 
-          {#if tirAfter > tirBefore + 5}
-            <div
-              class="flex items-start gap-3 rounded-lg bg-green-50 p-4 dark:bg-green-950/30"
-            >
-              <TrendingUp class="h-5 w-5 shrink-0 text-green-600" />
-              <div>
-                <p class="font-medium text-green-800 dark:text-green-400">
-                  TIR Improvement
-                </p>
-                <p class="text-sm text-green-700 dark:text-green-300">
-                  Time in range improves from {tirBefore.toFixed(0)}% to {tirAfter.toFixed(
-                    0
-                  )}% after site changes.
-                </p>
-              </div>
+          <div class="flex items-start gap-3 rounded-lg bg-muted/50 p-4">
+            <Target class="h-5 w-5 shrink-0 text-muted-foreground" />
+            <div>
+              <p class="font-medium">Time in range around a site change</p>
+              <p class="text-sm text-muted-foreground">
+                {tirBefore.toFixed(0)}% before, {tirAfter.toFixed(0)}% after.
+              </p>
             </div>
-          {/if}
+          </div>
         </div>
+        <p class="text-xs text-muted-foreground">
+          These are averages across {analysis.siteChangeCount ?? 0} site changes
+          in this window, not a per-change result. Discuss any patterns with your
+          care team.
+        </p>
       </CardContent>
     </Card>
   {/if}

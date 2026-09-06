@@ -1,3 +1,4 @@
+using Nocturne.API.Services.Audit;
 using Nocturne.Core.Contracts.Connectors;
 
 namespace Nocturne.API.Services.BackgroundServices;
@@ -42,6 +43,8 @@ public class DemoServiceConfiguration
 /// </remarks>
 public class DemoServiceHealthMonitor : BackgroundService
 {
+    internal const string AuditEndpoint = "service:demo-health-monitor";
+
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<DemoServiceHealthMonitor> _logger;
     private readonly DemoServiceConfiguration _config;
@@ -185,6 +188,12 @@ public class DemoServiceHealthMonitor : BackgroundService
         try
         {
             using var scope = _serviceProvider.CreateScope();
+
+            // Attribute the cleanup to the monitor rather than to whoever last ran a request, so the
+            // demo data it soft-deletes stays re-seedable after the service recovers.
+            using var systemScope = SystemAuditScope.PushForScope(
+                scope.ServiceProvider, AuditEndpoint);
+
             var dataSourceService = scope.ServiceProvider.GetRequiredService<IDataSourceService>();
 
             _logger.LogInformation("Cleaning up demo data...");

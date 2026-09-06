@@ -11,7 +11,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// No RLS policy on this table.
 /// </summary>
 [Table("tenant_audit_config")]
-public class TenantAuditConfigEntity
+public class TenantAuditConfigEntity : ISystemTimestamped
 {
     /// <summary>Primary key (UUID v7).</summary>
     [Key]

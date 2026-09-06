@@ -4,6 +4,7 @@ using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.API.Services.Realtime;
 
 namespace Nocturne.API.Services.Legacy;
@@ -11,8 +12,10 @@ namespace Nocturne.API.Services.Legacy;
 /// <summary>
 /// Abstract base for simple entity CRUD services that use <see cref="NocturneDbContext"/> directly
 /// with document processing and SignalR broadcasting via <see cref="ISignalRBroadcastService"/>.
-/// Eliminates boilerplate for services like <see cref="HeartRateService"/> and <see cref="StepCountService"/>
-/// that follow the same get/create/update/delete + broadcast pattern.
+/// Eliminates boilerplate for services like <see cref="BodyWeightService"/> that follow the same
+/// get/create/update/delete + broadcast pattern. Services whose entity carries an observation
+/// timestamp derive from <see cref="TimeSeriesEntityService{TDomain,TEntity}"/> instead, which
+/// adds the reads that timestamp makes possible.
 /// </summary>
 /// <typeparam name="TDomain">The domain model type (must implement <see cref="IProcessableDocument"/>).</typeparam>
 /// <typeparam name="TEntity">The EF Core entity type stored in the database.</typeparam>
@@ -20,7 +23,7 @@ namespace Nocturne.API.Services.Legacy;
 /// <seealso cref="IDocumentProcessingService"/>
 public abstract class SimpleEntityService<TDomain, TEntity>
     where TDomain : class, IProcessableDocument
-    where TEntity : class
+    where TEntity : class, IOriginalIdentified
 {
     protected readonly NocturneDbContext DbContext;
     protected readonly IDocumentProcessingService DocumentProcessingService;
@@ -81,14 +84,18 @@ public abstract class SimpleEntityService<TDomain, TEntity>
     /// <returns>An <see cref="IOrderedQueryable{TEntity}"/> sorted by timestamp descending.</returns>
     protected abstract IOrderedQueryable<TEntity> OrderByTimestamp(IQueryable<TEntity> query);
 
-    /// <summary>Finds a single entity by its string ID, returning <see langword="null"/> if not found.</summary>
-    /// <param name="id">The string ID to look up.</param>
+    /// <summary>
+    /// Resolves the id in a route to a row. A GUID addresses the primary key; anything else is
+    /// taken for the MongoDB ObjectId the row carried into the migration, so links minted against
+    /// the legacy database keep resolving.
+    /// </summary>
+    /// <param name="id">The route id to look up.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The matching entity, or <see langword="null"/>.</returns>
-    protected abstract Task<TEntity?> FindByIdAsync(
-        string id,
-        CancellationToken cancellationToken
-    );
+    private Task<TEntity?> FindByIdAsync(string id, CancellationToken cancellationToken) =>
+        Guid.TryParse(id, out var guid)
+            ? EntitySet.FirstOrDefaultAsync(e => e.Id == guid, cancellationToken)
+            : EntitySet.FirstOrDefaultAsync(e => e.OriginalId == id, cancellationToken);
 
     /// <summary>
     /// Retrieves a page of entities ordered by timestamp descending.
@@ -183,10 +190,78 @@ public abstract class SimpleEntityService<TDomain, TEntity>
 
             var processed = DocumentProcessingService.ProcessDocuments(itemList).ToList();
             var entities = processed.Select(ToEntity).ToList();
-            await EntitySet.AddRangeAsync(entities, cancellationToken);
+
+            // Intra-batch dedup on the sync key (keep the last occurrence) so a
+            // batch that repeats a (DataSource, SyncIdentifier) doesn't try to
+            // insert two rows that collide on the partial unique index.
+            entities = entities
+                .Select((entity, index) => (entity, index))
+                .GroupBy(item => item.entity is ISyncDedupable dedup
+                        && !string.IsNullOrEmpty(dedup.DataSource)
+                        && !string.IsNullOrEmpty(dedup.SyncIdentifier)
+                    ? $"sync|{dedup.DataSource}|{dedup.SyncIdentifier}"
+                    : $"idx|{item.index}")
+                .Select(group => group.Last().entity)
+                .ToList();
+
+            // Sync-identifier upsert: an entity whose (DataSource, SyncIdentifier)
+            // matches an existing non-deleted row (the global query filter scopes
+            // the lookup to this tenant) updates it in place; the rest are inserted.
+            // This makes repeated uploads of the same measurement idempotent.
+            //
+            // The existing rows for the whole batch are pre-loaded in ONE query
+            // keyed on the sync identifiers present (the
+            // (tenant_id, data_source, sync_identifier) index keeps it cheap) —
+            // one round trip instead of one per record, which matters for the
+            // historical backfill on a first permission grant.
+            var syncIdentifiers = entities
+                .Select(e => (e as ISyncDedupable)?.SyncIdentifier)
+                .Where(id => !string.IsNullOrEmpty(id))
+                .Distinct()
+                .ToList();
+
+            var existingByKey = new Dictionary<string, TEntity>(StringComparer.Ordinal);
+            if (syncIdentifiers.Count > 0)
+            {
+                var candidates = await EntitySet
+                    .Where(e => syncIdentifiers.Contains(
+                        EF.Property<string>(e, nameof(ISyncDedupable.SyncIdentifier))))
+                    .ToListAsync(cancellationToken);
+                foreach (var candidate in candidates)
+                {
+                    if (candidate is ISyncDedupable d
+                        && !string.IsNullOrEmpty(d.DataSource)
+                        && !string.IsNullOrEmpty(d.SyncIdentifier))
+                    {
+                        existingByKey[$"{d.DataSource}|{d.SyncIdentifier}"] = candidate;
+                    }
+                }
+            }
+
+            var resultEntities = new List<TEntity>(entities.Count);
+            var toInsert = new List<TEntity>();
+            foreach (var entity in entities)
+            {
+                if (entity is ISyncDedupable dedup
+                    && !string.IsNullOrEmpty(dedup.DataSource)
+                    && !string.IsNullOrEmpty(dedup.SyncIdentifier)
+                    && existingByKey.TryGetValue($"{dedup.DataSource}|{dedup.SyncIdentifier}", out var existing))
+                {
+                    UpdateEntity(existing, ToDomainModel(entity));
+                    resultEntities.Add(existing);
+                }
+                else
+                {
+                    toInsert.Add(entity);
+                    resultEntities.Add(entity);
+                }
+            }
+
+            if (toInsert.Count > 0)
+                await EntitySet.AddRangeAsync(toInsert, cancellationToken);
             await DbContext.SaveChangesAsync(cancellationToken);
 
-            var result = entities.Select(ToDomainModel).ToList();
+            var result = resultEntities.Select(ToDomainModel).ToList();
 
             await SignalRBroadcastService.BroadcastStorageCreateAsync(
                 CollectionName,
@@ -290,12 +365,15 @@ public abstract class SimpleEntityService<TDomain, TEntity>
                 return false;
             }
 
-            EntitySet.Remove(entity);
+            if (entity is ISoftDeletable softDeletable)
+                softDeletable.DeletedAt = DateTime.UtcNow;
+            else
+                EntitySet.Remove(entity);
             await DbContext.SaveChangesAsync(cancellationToken);
 
             await SignalRBroadcastService.BroadcastStorageDeleteAsync(
                 CollectionName,
-                new { collection = CollectionName, id }
+                new StorageDeleteEvent(CollectionName, id)
             );
 
             Logger.LogDebug(

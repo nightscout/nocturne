@@ -1,9 +1,11 @@
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Controllers.V4.Treatments;
 
@@ -23,11 +25,18 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 [ApiController]
 [Tags("Treatments")]
 [Route("api/v4/observations/notes")]
-[Authorize]
+[RequireScope(Scope.TreatmentsRead)]
 [Produces("application/json")]
 public class NoteController(INoteRepository repo)
     : V4CrudControllerBase<Note, UpsertNoteRequest, UpsertNoteRequest, INoteRepository>(repo)
 {
+    /// <inheritdoc/>
+    /// <remarks>Notes are the V4 form of a legacy text treatment (Note/Announcement/Question).</remarks>
+    public override string WriteScope => Scope.TreatmentsReadWrite;
+
+    /// <inheritdoc/>
+    protected override V4BulkNaming BulkNaming => new("Note", "note", "notes");
+
     protected override Note MapCreateToModel(UpsertNoteRequest request) => new()
     {
         Timestamp = request.Timestamp.UtcDateTime,
@@ -63,7 +72,9 @@ public class NoteController(INoteRepository repo)
     /// Delete a note by its external sync identifier (dataSource + syncIdentifier pair).
     /// </summary>
     [HttpDelete("by-sync-id")]
+    [RequireDeclaredWriteScope]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult> DeleteBySyncIdentifier(
@@ -74,7 +85,7 @@ public class NoteController(INoteRepository repo)
         if (string.IsNullOrEmpty(dataSource) || string.IsNullOrEmpty(syncIdentifier))
             return BadRequest("dataSource and syncIdentifier are required");
 
-        var deleted = await ((INoteRepository)Repository).DeleteBySyncIdentifierAsync(dataSource, syncIdentifier, ct);
+        var deleted = await ((INoteRepository)Repository).DeleteBySyncIdentifierAsync(dataSource, syncIdentifier, WriteOrigin.Live, ct);
         return deleted > 0 ? NoContent() : NotFound();
     }
 }

@@ -67,7 +67,7 @@ const rule = {
     schema: [],
     messages: {
       useRun:
-        "Remote query '{{name}}' is called imperatively — use {{name}}(...).run() (or .current / .refresh()). Awaiting it directly throws outside a reactive context; defer .run() out of render via queueMicrotask if needed (see HaloDial.svelte).",
+        "Remote query '{{name}}' is called imperatively — use {{name}}(...).run() (or .current / .refresh()). Awaiting it directly throws outside a reactive context; defer .run() out of render via queueMicrotask if needed.",
     },
   },
   create(context) {

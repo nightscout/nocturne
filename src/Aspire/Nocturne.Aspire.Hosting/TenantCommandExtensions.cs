@@ -40,7 +40,7 @@ public static class TenantCommandExtensions
     {
         postgres.WithCommand(
             name: "delete-tenant",
-            displayName: "Delete / Reset Tenant",
+            displayName: "Delete Tenants",
             executeCommand: context => OnDeleteTenantAsync(api, context),
             commandOptions: new CommandOptions
             {
@@ -64,6 +64,24 @@ public static class TenantCommandExtensions
             {
                 UpdateState = OnHealthyState,
                 IconName = "PersonAdd",
+                IconVariant = IconVariant.Filled,
+            });
+
+        return postgres;
+    }
+
+    public static IResourceBuilder<PostgresServerResource> WithSeedTenantCommand(
+        this IResourceBuilder<PostgresServerResource> postgres,
+        IResourceBuilder<ProjectResource> api)
+    {
+        postgres.WithCommand(
+            name: "seed-tenant",
+            displayName: "Seed Tenant (loginable)",
+            executeCommand: context => OnSeedTenantAsync(api, context),
+            commandOptions: new CommandOptions
+            {
+                UpdateState = OnHealthyState,
+                IconName = "PersonKey",
                 IconVariant = IconVariant.Filled,
             });
 
@@ -186,76 +204,75 @@ public static class TenantCommandExtensions
             if (tenants is null or { Count: 0 })
                 return CommandResults.Failure("No tenants found.");
 
-            // Step 1: Pick a tenant
-            var inputs = new List<InteractionInput>
+            // One checkbox per tenant. Selection order matches `tenants`, so the
+            // result is read back positionally.
+            var inputs = tenants.Select(t => new InteractionInput
             {
-                new()
-                {
-                    Name = "Tenant",
-                    InputType = InputType.Choice,
-                    Required = true,
-                    Options = tenants.Select(t =>
-                    {
-                        var label = $"{t.Slug} — {t.Entries:N0} entries, {t.Treatments:N0} treatments";
-                        return KeyValuePair.Create(t.Id.ToString(), label);
-                    }).ToList(),
-                },
-            };
+                Name = $"{t.Slug} — {t.Entries:N0} entries, {t.Treatments:N0} treatments",
+                InputType = InputType.Boolean,
+                Required = false,
+            }).ToList();
 
             var pickResult = await interactionService.PromptInputsAsync(
-                "Delete Tenant",
-                "Select a tenant to permanently delete.",
+                "Delete Tenants",
+                "Check the tenants to permanently delete, then confirm. This destroys all of their data.",
                 inputs);
 
             if (pickResult.Canceled)
                 return CommandResults.Canceled();
 
-            var selectedId = Guid.Parse(pickResult.Data[0].Value!);
-            var selected = tenants.First(t => t.Id == selectedId);
+            var selected = tenants
+                .Where((_, i) => bool.TryParse(pickResult.Data[i].Value, out var check) && check)
+                .ToList();
 
-            // Step 2: Confirm by typing the slug
-            var confirmInputs = new List<InteractionInput>
+            if (selected.Count == 0)
+                return CommandResults.Success("No tenants selected", "");
+
+            var deleted = new List<string>();
+            var failed = new List<string>();
+
+            foreach (var t in selected)
             {
-                new()
+                logger.LogInformation("Deleting tenant '{Slug}' ({Id})...", t.Slug, t.Id);
+
+                var deleteResponse = await http.DeleteAsync(
+                    $"api/v4/dev-only/admin/tenants/{t.Id}",
+                    context.CancellationToken);
+
+                if (deleteResponse.IsSuccessStatusCode)
                 {
-                    Name = "Slug",
-                    InputType = InputType.Text,
-                    Required = true,
-                    Placeholder = selected.Slug,
-                },
-            };
-
-            var confirmResult = await interactionService.PromptInputsAsync(
-                "Confirm Deletion",
-                $"**{selected.DisplayName}** (`{selected.Slug}`) will be permanently deleted.\n\n" +
-                $"This will destroy **{selected.Entries:N0}** entries, **{selected.Treatments:N0}** treatments, " +
-                $"**{selected.DeviceStatuses:N0}** device statuses, and all other tenant data.\n\n" +
-                $"Type **{selected.Slug}** to confirm:",
-                confirmInputs);
-
-            if (confirmResult.Canceled)
-                return CommandResults.Canceled();
-
-            var typedSlug = confirmResult.Data[0].Value?.Trim();
-            if (!string.Equals(typedSlug, selected.Slug, StringComparison.OrdinalIgnoreCase))
-                return CommandResults.Failure($"Slug mismatch: expected \"{selected.Slug}\", got \"{typedSlug}\". Aborted.");
-
-            // Step 3: Delete
-            logger.LogInformation("Deleting tenant '{Slug}' ({Id})...", selected.Slug, selected.Id);
-
-            var deleteResponse = await http.DeleteAsync(
-                $"api/v4/dev-only/admin/tenants/{selected.Id}",
-                context.CancellationToken);
-
-            if (!deleteResponse.IsSuccessStatusCode)
-            {
-                var error = await deleteResponse.Content.ReadAsStringAsync(context.CancellationToken);
-                return CommandResults.Failure($"{deleteResponse.StatusCode}: {error}");
+                    logger.LogInformation("Tenant '{Slug}' deleted successfully", t.Slug);
+                    deleted.Add(t.Slug);
+                }
+                else
+                {
+                    var error = await deleteResponse.Content.ReadAsStringAsync(context.CancellationToken);
+                    logger.LogError("Failed to delete tenant '{Slug}': {Status} {Error}",
+                        t.Slug, deleteResponse.StatusCode, error);
+                    failed.Add($"{t.Slug} ({deleteResponse.StatusCode})");
+                }
             }
 
-            logger.LogInformation("Tenant '{Slug}' deleted successfully", selected.Slug);
+            var md = new StringBuilder();
+            if (deleted.Count > 0)
+                md.AppendLine($"Deleted: {string.Join(", ", deleted)}");
+            if (failed.Count > 0)
+                md.AppendLine($"Failed: {string.Join(", ", failed)}");
 
-            return CommandResults.Success($"Tenant '{selected.Slug}' deleted", "");
+            var summary = failed.Count == 0
+                ? $"{deleted.Count} tenant(s) deleted"
+                : $"{deleted.Count} deleted, {failed.Count} failed";
+
+            return failed.Count > 0 && deleted.Count == 0
+                ? CommandResults.Failure(md.ToString())
+                : CommandResults.Success(
+                    summary,
+                    new CommandResultData
+                    {
+                        Value = md.ToString(),
+                        Format = CommandResultFormat.Markdown,
+                        DisplayImmediately = true,
+                    });
         }
         catch (Exception ex)
         {
@@ -378,6 +395,140 @@ public static class TenantCommandExtensions
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to create tenant");
+            return CommandResults.Failure(ex.Message);
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // Seed Tenant (loginable + optional sample data)
+    // -----------------------------------------------------------------
+
+    private static async Task<ExecuteCommandResult> OnSeedTenantAsync(
+        IResourceBuilder<ProjectResource> api,
+        ExecuteCommandContext context)
+    {
+        var logger = context.ServiceProvider.GetRequiredService<ILogger<PostgresServerResource>>();
+        var interactionService = context.ServiceProvider.GetRequiredService<IInteractionService>();
+
+        var inputs = new List<InteractionInput>
+        {
+            new()
+            {
+                Name = "Slug",
+                InputType = InputType.Text,
+                Required = true,
+                Value = "test123",
+            },
+            new()
+            {
+                Name = "Display Name",
+                InputType = InputType.Text,
+                Required = true,
+                Value = "Test",
+            },
+            new()
+            {
+                Name = "Owner Username",
+                InputType = InputType.Text,
+                Required = true,
+                Value = "dev",
+            },
+            new()
+            {
+                Name = "Sample data",
+                Description = "Populate with realistic history (glucose, treatments, sleep, trackers, alerts).",
+                InputType = InputType.Boolean,
+                Required = false,
+                Value = "true",
+            },
+            new()
+            {
+                Name = "Sample data days",
+                Description = "Days of history to generate when sample data is enabled.",
+                InputType = InputType.Number,
+                Required = false,
+                Value = "90",
+            },
+        };
+
+        var result = await interactionService.PromptInputsAsync(
+            "Seed Tenant",
+            "Create a loginable tenant with an owner and (optionally) sample data. " +
+            "Returns a login link that signs in as the owner.",
+            inputs);
+
+        if (result.Canceled)
+            return CommandResults.Canceled();
+
+        var slug = result.Data[0].Value?.Trim();
+        var displayName = result.Data[1].Value?.Trim();
+        var ownerUsername = result.Data[2].Value?.Trim();
+        var sampleData = bool.TryParse(result.Data[3].Value, out var sd) && sd;
+        var sampleDataDays = int.TryParse(result.Data[4].Value, out var days) && days > 0 ? days : 90;
+
+        if (string.IsNullOrWhiteSpace(slug)
+            || string.IsNullOrWhiteSpace(displayName)
+            || string.IsNullOrWhiteSpace(ownerUsername))
+            return CommandResults.Failure("Slug, display name, and owner username are required.");
+
+        try
+        {
+            var endpoint = api.GetEndpoint("http");
+            if (!endpoint.IsAllocated)
+                return CommandResults.Failure("API endpoint is not yet allocated.");
+
+            using var http = new HttpClient { BaseAddress = new Uri(endpoint.Url) };
+
+            logger.LogInformation(
+                "Seeding tenant '{Slug}' (owner={Owner}, sampleData={SampleData})...",
+                slug, ownerUsername, sampleData);
+
+            var response = await http.PostAsJsonAsync(
+                "api/v4/dev-only/admin/seed-tenant",
+                new { slug, displayName, ownerUsername, sampleData, sampleDataDays },
+                context.CancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync(context.CancellationToken);
+                return CommandResults.Failure($"{response.StatusCode}: {error}");
+            }
+
+            var seeded = await response.Content.ReadFromJsonAsync<SeedTenantResult>(
+                JsonOptions, context.CancellationToken);
+
+            logger.LogInformation("Tenant '{Slug}' seeded successfully", slug);
+
+            var md = new StringBuilder();
+            md.AppendLine($"### {slug} seeded");
+            md.AppendLine();
+            if (!string.IsNullOrEmpty(seeded?.LoginLink))
+            {
+                md.AppendLine($"**Login link:** [{seeded.LoginLink}]({seeded.LoginLink})");
+                md.AppendLine();
+                md.AppendLine("Opens the tenant UI signed in as the owner.");
+                md.AppendLine();
+            }
+            if (sampleData && seeded is not null)
+            {
+                md.AppendLine($"| Entries | Treatments | Sleep sessions |");
+                md.AppendLine($"|---------|------------|----------------|");
+                md.AppendLine(
+                    $"| {seeded.EntriesSeeded:N0} | {seeded.TreatmentsSeeded:N0} | {seeded.SleepSessionsSeeded:N0} |");
+            }
+
+            return CommandResults.Success(
+                $"Tenant '{slug}' seeded",
+                new CommandResultData
+                {
+                    Value = md.ToString(),
+                    Format = CommandResultFormat.Markdown,
+                    DisplayImmediately = true,
+                });
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to seed tenant");
             return CommandResults.Failure(ex.Message);
         }
     }
@@ -507,4 +658,8 @@ public static class TenantCommandExtensions
 
     private sealed record ConnectorSummary(
         string Name, bool IsHealthy, DateTime? LastSuccessfulSync, string? LastError);
+
+    private sealed record SeedTenantResult(
+        Guid TenantId, string? Url, string? LoginLink,
+        int EntriesSeeded, int TreatmentsSeeded, int SleepSessionsSeeded);
 }

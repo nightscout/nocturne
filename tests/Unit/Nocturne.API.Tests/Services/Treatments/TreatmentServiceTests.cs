@@ -135,7 +135,7 @@ public class TreatmentServiceTests
     [Fact]
     public async Task DeleteTreatmentsAsync_ShouldInvalidateCacheWhenDeleted()
     {
-        _mockDecomposer.Setup(x => x.BulkDeleteAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(5);
+        _mockDecomposer.Setup(x => x.BulkDeleteAsync(It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())).ReturnsAsync(5);
         var result = await _treatmentService.DeleteTreatmentsAsync("q", CancellationToken.None);
         result.Should().Be(5);
         _mockCache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Once);
@@ -144,7 +144,7 @@ public class TreatmentServiceTests
     [Fact]
     public async Task DeleteTreatmentsAsync_WhenNoneDeleted_ShouldNotInvalidateCache()
     {
-        _mockDecomposer.Setup(x => x.BulkDeleteAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(0);
+        _mockDecomposer.Setup(x => x.BulkDeleteAsync(It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())).ReturnsAsync(0);
         var result = await _treatmentService.DeleteTreatmentsAsync("q", CancellationToken.None);
         result.Should().Be(0);
         _mockCache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Never);
@@ -155,7 +155,7 @@ public class TreatmentServiceTests
     {
         var existing = new Treatment { Id = "t1", Mills = 1000, EventType = "Note", Notes = "old" };
         _mockStore.Setup(x => x.GetByIdAsync("t1", It.IsAny<CancellationToken>())).ReturnsAsync(existing);
-        _mockDecomposer.Setup(x => x.DecomposeAsync(It.IsAny<Treatment>(), It.IsAny<CancellationToken>()))
+        _mockDecomposer.Setup(x => x.DecomposeAsync(It.IsAny<Treatment>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DecompositionResult());
 
         var patchJson = JsonSerializer.Deserialize<JsonElement>("{\"notes\":\"updated\"}");
@@ -163,7 +163,7 @@ public class TreatmentServiceTests
 
         result.Should().NotBeNull();
         result!.Notes.Should().Be("updated");
-        _mockDecomposer.Verify(x => x.DecomposeAsync(It.IsAny<Treatment>(), It.IsAny<CancellationToken>()), Times.Once);
+        _mockDecomposer.Verify(x => x.DecomposeAsync(It.IsAny<Treatment>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Once);
         _mockCache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Once);
         _mockEvents.Verify(x => x.OnUpdatedAsync(It.IsAny<Treatment>(), It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -177,7 +177,7 @@ public class TreatmentServiceTests
         var result = await _treatmentService.PatchTreatmentAsync("x", patchJson, CancellationToken.None);
 
         result.Should().BeNull();
-        _mockDecomposer.Verify(x => x.DecomposeAsync(It.IsAny<Treatment>(), It.IsAny<CancellationToken>()), Times.Never);
+        _mockDecomposer.Verify(x => x.DecomposeAsync(It.IsAny<Treatment>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     #region Insulin Context Auto-Population

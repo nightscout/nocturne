@@ -17,6 +17,11 @@ public interface IDemoModeService
     /// Whether demo mode is configured (even if the service is not yet healthy).
     /// </summary>
     bool IsConfigured { get; }
+
+    /// <summary>
+    /// Base URL of the external demo data service as configured, or null when none was injected.
+    /// </summary>
+    string? ServiceUrl { get; }
 }
 
 /// <summary>
@@ -45,6 +50,7 @@ public class DemoModeService : IDemoModeService
 {
     private readonly bool _isEnabled;
     private readonly bool _isConfigured;
+    private readonly string? _serviceUrl;
     private readonly ILogger<DemoModeService> _logger;
 
     public DemoModeService(IConfiguration configuration, ILogger<DemoModeService> logger)
@@ -65,7 +71,8 @@ public class DemoModeService : IDemoModeService
 
         // Demo mode is enabled if either source says so
         _isEnabled = demoServiceConfig.Enabled || parametersDemoModeEnabled;
-        _isConfigured = _isEnabled && !string.IsNullOrWhiteSpace(demoServiceConfig.Url);
+        _serviceUrl = demoServiceConfig.Url;
+        _isConfigured = _isEnabled && !string.IsNullOrWhiteSpace(_serviceUrl);
 
         // Log all demo service configuration for debugging
         _logger.LogInformation(
@@ -81,4 +88,7 @@ public class DemoModeService : IDemoModeService
 
     /// <inheritdoc />
     public bool IsConfigured => _isConfigured;
+
+    /// <inheritdoc />
+    public string? ServiceUrl => _serviceUrl;
 }

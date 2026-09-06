@@ -1,3 +1,4 @@
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 
 namespace Nocturne.Core.Contracts.Glucose;
@@ -74,10 +75,15 @@ public interface IEntryService
     /// Create new entries with WebSocket broadcasting
     /// </summary>
     /// <param name="entries">Entries to create</param>
+    /// <param name="origin">
+    /// Write origin for the decomposed records. <see cref="WriteOrigin.Backfill"/> suppresses
+    /// the real-time broadcast so a historical import doesn't flood connected clients.
+    /// </param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Created entries with assigned IDs</returns>
     Task<IEnumerable<Entry>> CreateEntriesAsync(
         IEnumerable<Entry> entries,
+        WriteOrigin origin = WriteOrigin.Live,
         CancellationToken cancellationToken = default
     );
 

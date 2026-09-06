@@ -9,8 +9,7 @@
     selectedMetric = $bindable("avgGlucose"),
     units,
     METRIC_OPTIONS,
-    HEATMAP_DOMAIN,
-    HEATMAP_COLORS,
+    HEATMAP_STOPS,
     LEGEND_W,
     LEGEND_THRESHOLDS,
     legendX,
@@ -20,8 +19,7 @@
     selectedMetric: HeatmapMetric;
     units: GlucoseUnits;
     METRIC_OPTIONS: { value: HeatmapMetric; label: string }[];
-    HEATMAP_DOMAIN: number[];
-    HEATMAP_COLORS: string[];
+    HEATMAP_STOPS: ReadonlyArray<{ mgdl: number; color: string }>;
     LEGEND_W: number;
     LEGEND_THRESHOLDS: number[];
     legendX: (mgdl: number) => number;
@@ -41,7 +39,7 @@
           if (v) selectedMetric = v as HeatmapMetric;
         }}
       >
-        <Select.Trigger class="w-[150px] h-8 text-xs">
+        <Select.Trigger class="w-[150px] h-8 text-xs print:hidden">
           <span class="truncate">
             {METRIC_OPTIONS.find((o: { value: HeatmapMetric; label: string }) => o.value === selectedMetric)?.label ?? "Avg Glucose"}
           </span>
@@ -63,10 +61,10 @@
       >
         <defs>
           <linearGradient id="heatmap-grad">
-            {#each HEATMAP_DOMAIN as v, i}
+            {#each HEATMAP_STOPS as heatmapStop}
               <stop
-                offset="{((v - 40) / 310) * 100}%"
-                stop-color={HEATMAP_COLORS[i]}
+                offset="{(legendX(heatmapStop.mgdl) / LEGEND_W) * 100}%"
+                stop-color={heatmapStop.color}
               />
             {/each}
           </linearGradient>
@@ -106,7 +104,7 @@
       <div class="flex items-center gap-1.5 text-xs text-muted-foreground">
         <span
           class="inline-block h-3 w-3 rounded-sm"
-          style="background: hsl(var(--muted))"
+          style="background: var(--muted)"
         ></span>
         Other Data (no glucose)
       </div>
@@ -125,7 +123,7 @@
           if (v) selectedMetric = v as HeatmapMetric;
         }}
       >
-        <Select.Trigger class="w-[150px] h-8 text-xs">
+        <Select.Trigger class="w-[150px] h-8 text-xs print:hidden">
           <span class="truncate">
             {METRIC_OPTIONS.find((o: { value: HeatmapMetric; label: string }) => o.value === selectedMetric)?.label ?? "Avg Glucose"}
           </span>
@@ -164,7 +162,7 @@
         {/if}
       </svg>
       <div class="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <span class="inline-block h-3 w-3 rounded-sm" style="background: hsl(var(--muted))"></span>
+        <span class="inline-block h-3 w-3 rounded-sm" style="background: var(--muted)"></span>
         No {metricLabel.toLowerCase()} data
       </div>
     </div>

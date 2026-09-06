@@ -1,3 +1,4 @@
+using Nocturne.API.Authorization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
@@ -25,7 +26,8 @@ public class MembershipRequestController(
     /// </summary>
     [HttpPost]
     [Authorize]
-    [RemoteCommand]
+    [DenyDemoSubject]
+    [RemoteCommand(Invalidates = ["GetMyRequest"])]
     [ProducesResponseType(typeof(CreateMembershipRequestResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> CreateRequest(
@@ -76,7 +78,7 @@ public class MembershipRequestController(
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetPendingRequests(CancellationToken ct)
     {
-        if (!HasPermission(TenantPermissions.MembersManage))
+        if (!HttpContext.HasScope(Scope.MembersManage))
             return Forbid();
 
         var tenantId = tenantAccessor.TenantId;
@@ -90,7 +92,7 @@ public class MembershipRequestController(
     /// </summary>
     [HttpPost("{id:guid}/approve")]
     [Authorize]
-    [RemoteCommand]
+    [RemoteCommand(Invalidates = ["GetPendingRequests"])]
     [ProducesResponseType(typeof(DecideMembershipRequestResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -99,7 +101,7 @@ public class MembershipRequestController(
         [FromBody] ApproveMembershipRequestRequest request,
         CancellationToken ct)
     {
-        if (!HasPermission(TenantPermissions.MembersManage))
+        if (!HttpContext.HasScope(Scope.MembersManage))
             return Forbid();
 
         var tenantId = tenantAccessor.TenantId;
@@ -108,7 +110,7 @@ public class MembershipRequestController(
             return Unauthorized();
 
         var result = await membershipRequestService.ApproveRequestAsync(
-            id, tenantId, request.RoleIds, subjectId.Value, ct);
+            id, tenantId, request.RoleIds, subjectId.Value, HttpContext.GetGrantedScopes(), ct);
 
         if (!result.Success)
             return BadRequest(result);
@@ -121,13 +123,13 @@ public class MembershipRequestController(
     /// </summary>
     [HttpPost("{id:guid}/deny")]
     [Authorize]
-    [RemoteCommand]
+    [RemoteCommand(Invalidates = ["GetPendingRequests"])]
     [ProducesResponseType(typeof(DecideMembershipRequestResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> DenyRequest(Guid id, CancellationToken ct)
     {
-        if (!HasPermission(TenantPermissions.MembersManage))
+        if (!HttpContext.HasScope(Scope.MembersManage))
             return Forbid();
 
         var tenantId = tenantAccessor.TenantId;
@@ -154,7 +156,7 @@ public class MembershipRequestController(
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetMembershipRequestSettings(CancellationToken ct)
     {
-        if (!HasPermission(TenantPermissions.MembersManage))
+        if (!HttpContext.HasScope(Scope.MembersManage))
             return Forbid();
 
         var allow = await membershipRequestService.GetAllowRequestsAsync(tenantAccessor.TenantId, ct);
@@ -173,7 +175,7 @@ public class MembershipRequestController(
         [FromBody] UpdateMembershipRequestSettingsRequest request,
         CancellationToken ct)
     {
-        if (!HasPermission(TenantPermissions.MembersManage))
+        if (!HttpContext.HasScope(Scope.MembersManage))
             return Forbid();
 
         var allow = await membershipRequestService.SetAllowRequestsAsync(
@@ -181,12 +183,6 @@ public class MembershipRequestController(
         return Ok(new MembershipRequestSettingsDto(allow));
     }
 
-    private bool HasPermission(string permission)
-    {
-        var grantedScopes = HttpContext.Items["GrantedScopes"] as IReadOnlySet<string>;
-        if (grantedScopes == null) return false;
-        return TenantPermissions.HasPermission(grantedScopes, permission);
-    }
 }
 
 public record CreateMembershipRequestRequest(string? Message);

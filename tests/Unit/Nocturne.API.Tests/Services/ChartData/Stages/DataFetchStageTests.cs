@@ -8,6 +8,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories.V4;
@@ -28,12 +29,14 @@ public class DataFetchStageTests
     private readonly Mock<IBGCheckRepository> _mockBgCheckRepo = new();
     private readonly Mock<IDeviceEventRepository> _mockDeviceEventRepo = new();
     private readonly Mock<ITempBasalRepository> _mockTempBasalRepo = new();
+    private readonly Mock<IApsSnapshotRepository> _mockApsSnapshotRepo = new();
     private readonly Mock<IStateSpanRepository> _mockStateSpanRepo;
     private readonly Mock<ISystemEventRepository> _mockSystemEventRepo;
     private readonly Mock<ITrackerRepository> _mockTrackerRepo;
     private readonly Mock<IBasalInjectionRepository> _mockBasalInjectionRepo = new();
     private readonly Mock<IHeartRateService> _mockHeartRateService = new();
     private readonly Mock<IStepCountService> _mockStepCountService = new();
+    private readonly Mock<ISleepService> _mockSleepService = new();
     private readonly DataFetchStage _stage;
 
     public DataFetchStageTests()
@@ -46,18 +49,21 @@ public class DataFetchStageTests
 
         _stage = new DataFetchStage(
             _mockSensorGlucoseRepo.Object,
+            TestDoubles.CanonicalGlucosePassThrough.Create(),
             _mockBolusRepo.Object,
             _mockCarbIntakeRepo.Object,
             _mockBgCheckRepo.Object,
             _mockDeviceEventRepo.Object,
             _mockTempBasalRepo.Object,
+            _mockApsSnapshotRepo.Object,
             _mockStateSpanRepo.Object,
             _mockSystemEventRepo.Object,
             _mockTrackerRepo.Object,
             _mockBasalInjectionRepo.Object,
             NullLogger<DataFetchStage>.Instance,
             _mockHeartRateService.Object,
-            _mockStepCountService.Object
+            _mockStepCountService.Object,
+            _mockSleepService.Object
         );
     }
 
@@ -99,13 +105,13 @@ public class DataFetchStageTests
                 It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<BGCheck>());
 
-        // IDeviceEventRepository.GetAsync: (DateTime?, DateTime?, string?, string?, int, int, bool, bool, CancellationToken)
+        // IDeviceEventRepository.GetAsync: (DateTime?, DateTime?, string?, string?, int, int, bool, bool, Guid?, CancellationToken)
         _mockDeviceEventRepo
             .Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
                 It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
-                It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                It.IsAny<bool>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<DeviceEvent>());
 
         // ITempBasalRepository.GetAsync: (DateTime?, DateTime?, string?, string?, int, int, bool, CancellationToken) — no nativeOnly
@@ -116,6 +122,13 @@ public class DataFetchStageTests
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<TempBasal>());
+
+        // IApsSnapshotRepository.GetIobCobPointsAsync
+        _mockApsSnapshotRepo
+            .Setup(r => r.GetIobCobPointsAsync(
+                It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<ApsIobCobPoint>());
 
         // IBasalInjectionRepository.GetAsync
         _mockBasalInjectionRepo
@@ -131,7 +144,6 @@ public class DataFetchStageTests
             [StateSpanCategory.PumpMode] = [],
             [StateSpanCategory.Profile] = [],
             [StateSpanCategory.Override] = [],
-            [StateSpanCategory.Sleep] = [],
             [StateSpanCategory.Exercise] = [],
             [StateSpanCategory.Illness] = [],
             [StateSpanCategory.Travel] = [],
@@ -167,13 +179,23 @@ public class DataFetchStageTests
 
         _mockHeartRateService
             .Setup(s => s.GetHeartRatesByDateRangeAsync(
-                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int?>(), It.IsAny<int>(),
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<HeartRate>());
 
         _mockStepCountService
             .Setup(s => s.GetStepCountsByDateRangeAsync(
-                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int?>(), It.IsAny<int>(),
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<StepCount>());
+
+        _mockSleepService
+            .Setup(s => s.GetSessionsAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<SleepSessionType?>(), It.IsAny<SleepSource?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<SleepSession>());
 
     }
 
@@ -206,11 +228,10 @@ public class DataFetchStageTests
         result.TrackerInstances.Should().NotBeNull();
         result.StateSpans.Should().NotBeNull();
 
-        // Assert — all 7 state span categories are present in the result
+        // Assert — all 6 state span categories are present in the result
         result.StateSpans.Should().ContainKey(StateSpanCategory.PumpMode);
         result.StateSpans.Should().ContainKey(StateSpanCategory.Profile);
         result.StateSpans.Should().ContainKey(StateSpanCategory.Override);
-        result.StateSpans.Should().ContainKey(StateSpanCategory.Sleep);
         result.StateSpans.Should().ContainKey(StateSpanCategory.Exercise);
         result.StateSpans.Should().ContainKey(StateSpanCategory.Illness);
         result.StateSpans.Should().ContainKey(StateSpanCategory.Travel);

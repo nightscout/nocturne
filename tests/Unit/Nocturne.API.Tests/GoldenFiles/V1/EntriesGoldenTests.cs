@@ -188,6 +188,20 @@ public class EntriesGoldenTests : GoldenFileTestBase
         await Verify(captured);
     }
 
+    [Fact]
+    public async Task GetEntries_WithCacheBustingRrParam_StillReturnsNewestFirst()
+    {
+        // xDrip+ appends ?rr=<timestamp> purely to bypass cached server responses; legacy
+        // Nightscout ignores it, so the sort order must remain newest-first.
+        var entries = Enumerable.Range(0, 5).Select(i => CreateSgvEntry(i, sgv: 100 + i * 10)).ToArray();
+        await SeedSensorGlucose(entries);
+
+        var response = await Client.GetAsync("/api/v1/entries?rr=1711454400000");
+        var captured = await CaptureResponse(response);
+
+        await Verify(captured);
+    }
+
     #endregion
 
     #region GET /api/v1/entries/sgv (type filter)

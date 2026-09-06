@@ -2,14 +2,13 @@
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
   import * as Card from "$lib/components/ui/card";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog";
+  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import { Checkbox } from "$lib/components/ui/checkbox";
   import { Label } from "$lib/components/ui/label";
   import { Separator } from "$lib/components/ui/separator";
   import PermissionCategorySelector from "$lib/components/rbac/PermissionCategorySelector.svelte";
   import PermissionSummary from "$lib/components/rbac/PermissionSummary.svelte";
   import * as Collapsible from "$lib/components/ui/collapsible";
-  import * as Tooltip from "$lib/components/ui/tooltip";
   import {
     Trash2,
     Clock,
@@ -48,6 +47,13 @@
     onSaveLimitTo24Hours,
     onRemove,
   }: Props = $props();
+
+  /**
+   * The server refuses role and permission changes to the caller's own membership, so the
+   * editor is not offered on your own row. Without this the card still rendered every
+   * checkbox and a Save that always failed.
+   */
+  const isSelf = $derived(!!currentSubjectId && member.subjectId === currentSubjectId);
 
   let editingRoleIds = $state<string[]>([]);
   let editingPermissions = $state<string[]>([]);
@@ -145,82 +151,59 @@
           </Button>
         {/if}
         {#if canManage}
-          <AlertDialog.Root>
-            <AlertDialog.Trigger>
-              {#snippet child({ props }: { props: Record<string, unknown> })}
-                <Button
-                  {...props}
-                  variant="outline"
-                  size="sm"
-                  class="text-destructive border-destructive/30 hover:bg-destructive/10"
-                  disabled={isSaving}
-                >
-                  {#if isSaving}
-                    <Loader2 class="h-3.5 w-3.5 animate-spin" />
-                  {:else}
-                    <Trash2 class="h-3.5 w-3.5" />
-                  {/if}
-                </Button>
-              {/snippet}
-            </AlertDialog.Trigger>
-            <AlertDialog.Content>
-              <AlertDialog.Header>
-                <AlertDialog.Title>Remove member</AlertDialog.Title>
-                <AlertDialog.Description>
-                  Remove {member.name ?? "this member"} from the tenant? They
-                  will lose access to all tenant data.
-                </AlertDialog.Description>
-              </AlertDialog.Header>
-              <AlertDialog.Footer>
-                <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-                <AlertDialog.Action onclick={onRemove}>
-                  Remove
-                </AlertDialog.Action>
-              </AlertDialog.Footer>
-            </AlertDialog.Content>
-          </AlertDialog.Root>
+          <ConfirmDialog
+            title="Remove member"
+            confirmLabel="Remove"
+            onConfirm={onRemove}
+          >
+            {#snippet trigger(props)}
+              <Button
+                {...props}
+                variant="outline"
+                size="sm"
+                class="text-destructive border-destructive/30 hover:bg-destructive/10"
+                disabled={isSaving}
+              >
+                {#if isSaving}
+                  <Loader2 class="h-3.5 w-3.5 animate-spin" />
+                {:else}
+                  <Trash2 class="h-3.5 w-3.5" />
+                {/if}
+              </Button>
+            {/snippet}
+            {#snippet description()}
+              Remove {member.name ?? "this member"} from the tenant? They
+              will lose access to all tenant data.
+            {/snippet}
+          </ConfirmDialog>
         {/if}
       </div>
     </div>
   </Card.Header>
 
-  {#if isExpanded && canEditRoles}
+  {#if isExpanded && canEditRoles && isSelf}
+    <Card.Content class="border-t pt-4">
+      <p class="text-sm text-muted-foreground">
+        You cannot change your own roles or permissions. Ask another member who can manage
+        members to change them for you.
+      </p>
+    </Card.Content>
+  {:else if isExpanded && canEditRoles}
     <Card.Content class="space-y-4 border-t pt-4">
       <!-- Role selection -->
       <div class="space-y-2">
         <Label>Roles</Label>
         <div class="grid gap-2 @sm:grid-cols-2">
           {#each roles as role (role.id)}
-            {@const isOwnerSelf = role.slug === "owner" && member.subjectId === currentSubjectId}
-            {@const isOwnerRole = editingRoleIds.includes(role.id ?? '')}
             <div class="flex items-center gap-2">
-              {#if isOwnerSelf}
-                <Tooltip.Provider>
-                  <Tooltip.Root>
-                    <Tooltip.Trigger>
-                      <Checkbox
-                        id="member-role-{member.subjectId}-{role.id}"
-                        checked={isOwnerRole}
-                        disabled
-                      />
-                    </Tooltip.Trigger>
-                    <Tooltip.Content>
-                      The owner role cannot be removed from yourself
-                    </Tooltip.Content>
-                  </Tooltip.Root>
-                </Tooltip.Provider>
-              {:else}
-                <Checkbox
-                  id="member-role-{member.subjectId}-{role.id}"
-                  checked={editingRoleIds.includes(role.id ?? '')}
-                  onCheckedChange={() => toggleRole(role.id ?? '')}
-                />
-              {/if}
+              <Checkbox
+                id="member-role-{member.subjectId}-{role.id}"
+                checked={editingRoleIds.includes(role.id ?? '')}
+                onCheckedChange={() => toggleRole(role.id ?? '')}
+              />
               <label
                 for="member-role-{member.subjectId}-{role.id}"
-                class="text-sm text-foreground select-none"
-                class:cursor-pointer={!isOwnerSelf}
-                class:opacity-60={isOwnerSelf}
+                class="cursor-pointer text-sm text-foreground select-none"
               >
                 {role.name}
               </label>

@@ -1,7 +1,10 @@
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Nocturne.API.Configuration;
 using Nocturne.API.Services.Profiles;
 using Nocturne.API.Services.Treatments;
+using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Glucose;
@@ -20,6 +23,7 @@ public class PropertiesServiceTests
 {
     private readonly Mock<IDDataService> _mockDDataService;
     private readonly Mock<ILogger<PropertiesService>> _mockLogger;
+    private readonly Mock<IDeviceAgeService> _mockDeviceAgeService;
     private readonly PropertiesService _service;
 
     public PropertiesServiceTests()
@@ -33,6 +37,20 @@ public class PropertiesServiceTests
         var mockTempBasalRepo = new Mock<ITempBasalRepository>();
         var mockAr2Service = new Mock<IAr2Service>();
 
+        _mockDeviceAgeService = new Mock<IDeviceAgeService>();
+        _mockDeviceAgeService
+            .Setup(x => x.GetCannulaAgeAsync(It.IsAny<DeviceAgePreferences>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DeviceAgeInfo { Found = true, Age = 10, Days = 0, Hours = 10 });
+        _mockDeviceAgeService
+            .Setup(x => x.GetSensorAgeAsync(It.IsAny<DeviceAgePreferences>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SensorAgeInfo());
+        _mockDeviceAgeService
+            .Setup(x => x.GetInsulinAgeAsync(It.IsAny<DeviceAgePreferences>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DeviceAgeInfo { Found = true, Age = 30, Days = 1, Hours = 6 });
+        _mockDeviceAgeService
+            .Setup(x => x.GetBatteryAgeAsync(It.IsAny<DeviceAgePreferences>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DeviceAgeInfo());
+
         _service = new PropertiesService(
             _mockDDataService.Object,
             _mockLogger.Object,
@@ -41,7 +59,8 @@ public class PropertiesServiceTests
             mockBolusRepo.Object,
             mockCarbIntakeRepo.Object,
             mockTempBasalRepo.Object,
-            mockAr2Service.Object
+            mockAr2Service.Object,
+            _mockDeviceAgeService.Object
         );
     }
 
@@ -87,6 +106,185 @@ public class PropertiesServiceTests
         Assert.True(result.ContainsKey("bgnow"));
         Assert.True(result.ContainsKey("delta"));
         Assert.False(result.ContainsKey("direction"));
+    }
+
+    [Fact]
+    public async Task GetAllPropertiesAsync_EmitsIobAndCobAtZero_WithDisplayFields()
+    {
+        // Legacy clients (LoopFollow, Trio) treat a missing `iob`/`cob` as "unsupported"
+        // rather than "zero", so both must be present even with no insulin/carbs on board.
+        _mockDDataService
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateTestDData());
+
+        var result = await _service.GetAllPropertiesAsync(CancellationToken.None);
+
+        var iob = Assert.IsType<Dictionary<string, object?>>(result["iob"]);
+        Assert.Equal(0d, iob["iob"]);
+        Assert.Equal("0", iob["display"]);
+        Assert.Equal("IOB: 0U", iob["displayLine"]);
+
+        var cob = Assert.IsType<Dictionary<string, object?>>(result["cob"]);
+        Assert.Equal(0d, cob["cob"]);
+        Assert.Equal("0", cob["display"]);
+        Assert.Equal("COB: 0g", cob["displayLine"]);
+    }
+
+    [Fact]
+    public async Task GetAllPropertiesAsync_EmitsDeviceAgeProperties()
+    {
+        _mockDDataService
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateTestDData());
+
+        var result = await _service.GetAllPropertiesAsync(CancellationToken.None);
+
+        Assert.True(result.ContainsKey("cage"));
+        Assert.True(result.ContainsKey("sage"));
+        Assert.True(result.ContainsKey("iage"));
+        Assert.True(result.ContainsKey("bage"));
+
+        var cage = Assert.IsType<Dictionary<string, object?>>(result["cage"]);
+        Assert.Equal(true, cage["found"]);
+        Assert.Equal(10, cage["age"]);
+
+        var sage = Assert.IsType<Dictionary<string, object?>>(result["sage"]);
+        Assert.True(sage.ContainsKey("Sensor Start"));
+        Assert.True(sage.ContainsKey("Sensor Change"));
+        Assert.Equal("Sensor Start", sage["min"]);
+    }
+
+    [Fact]
+    public async Task GetAllPropertiesAsync_DeviceAgeFields_SurviveNightscoutSerialization()
+    {
+        // The Nightscout response filter serializes with WhenWritingDefault, which strips
+        // zero/false members from typed objects. Age fields are legitimately zero right
+        // after a site change, so they must be projected as dictionaries to reach clients.
+        _mockDeviceAgeService
+            .Setup(x => x.GetCannulaAgeAsync(It.IsAny<DeviceAgePreferences>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DeviceAgeInfo { Found = false, Age = 0, Days = 0, Hours = 0, Level = 0 });
+        _mockDDataService
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateTestDData());
+
+        var result = await _service.GetAllPropertiesAsync(CancellationToken.None);
+
+        var json = JsonSerializer.Serialize(result, NightscoutJsonOptions.Create());
+        using var doc = JsonDocument.Parse(json);
+        var cage = doc.RootElement.GetProperty("cage");
+
+        Assert.False(cage.GetProperty("found").GetBoolean());
+        Assert.Equal(0, cage.GetProperty("age").GetInt32());
+        Assert.Equal(0, cage.GetProperty("days").GetInt32());
+        Assert.Equal(0, cage.GetProperty("level").GetInt32());
+    }
+
+    [Fact]
+    public async Task GetPropertiesAsync_WithoutAgeNames_SkipsDeviceAgeLookups()
+    {
+        // Clients poll single properties (e.g. /api/v2/properties/iob); those requests
+        // shouldn't pay for the device-age queries.
+        _mockDDataService
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateTestDData());
+
+        await _service.GetPropertiesAsync(new[] { "iob" }, CancellationToken.None);
+
+        _mockDeviceAgeService.Verify(
+            x => x.GetCannulaAgeAsync(It.IsAny<DeviceAgePreferences>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+
+        await _service.GetPropertiesAsync(new[] { "cage" }, CancellationToken.None);
+
+        _mockDeviceAgeService.Verify(
+            x => x.GetCannulaAgeAsync(It.IsAny<DeviceAgePreferences>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task GetAllPropertiesAsync_EmitsPerDeviceUploaderBatteries()
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var ddata = CreateTestDData();
+        ddata.DeviceStatus = new List<DeviceStatus>
+        {
+            // Two reports from the same phone: only the newest should be listed.
+            new DeviceStatus
+            {
+                Device = "phone-a",
+                Mills = now - 60_000,
+                Uploader = new UploaderStatus { Battery = 90, IsCharging = false },
+            },
+            new DeviceStatus
+            {
+                Device = "phone-a",
+                Mills = now,
+                Uploader = new UploaderStatus { Battery = 85, IsCharging = true, BatteryVoltage = 4.1 },
+            },
+            new DeviceStatus
+            {
+                Device = "phone-b",
+                Mills = now - 30_000,
+                Uploader = new UploaderStatus { Battery = 40, IsCharging = false },
+            },
+        };
+
+        _mockDDataService
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ddata);
+
+        var result = await _service.GetAllPropertiesAsync(CancellationToken.None);
+
+        var upbat = Assert.IsType<Dictionary<string, object>>(result["upbat"]);
+        var devices = Assert.IsType<List<Dictionary<string, object?>>>(upbat["devices"]);
+
+        Assert.Equal(2, devices.Count);
+
+        // Weakest battery first.
+        Assert.Equal("phone-b", devices[0]["device"]);
+        Assert.Equal(40, devices[0]["value"]);
+
+        Assert.Equal("phone-a", devices[1]["device"]);
+        Assert.Equal(85, devices[1]["value"]);
+        Assert.Equal(true, devices[1]["isCharging"]);
+        Assert.Equal(4.1, devices[1]["voltage"]);
+    }
+
+    [Fact]
+    public async Task GetAllPropertiesAsync_EmitsUpbat_WhenNewestStatusHasNoUploaderBattery()
+    {
+        // AID systems interleave pump-only device statuses; the newest record often has
+        // no uploader battery, which must not suppress the whole property.
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var ddata = CreateTestDData();
+        ddata.DeviceStatus = new List<DeviceStatus>
+        {
+            new DeviceStatus
+            {
+                Device = "phone-a",
+                Mills = now - 60_000,
+                Uploader = new UploaderStatus { Battery = 72 },
+            },
+            new DeviceStatus
+            {
+                Device = "pump",
+                Mills = now,
+                Pump = new PumpStatus { Reservoir = 120 },
+            },
+        };
+
+        _mockDDataService
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ddata);
+
+        var result = await _service.GetAllPropertiesAsync(CancellationToken.None);
+
+        var upbat = Assert.IsType<Dictionary<string, object>>(result["upbat"]);
+        Assert.Equal(72, upbat["level"]);
+
+        var devices = Assert.IsType<List<Dictionary<string, object?>>>(upbat["devices"]);
+        Assert.Single(devices);
+        Assert.Equal("phone-a", devices[0]["device"]);
     }
 
     [Fact]

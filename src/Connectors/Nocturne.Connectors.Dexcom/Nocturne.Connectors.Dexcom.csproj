@@ -8,6 +8,9 @@
         <Product>Nocturne Connectors</Product>
     </PropertyGroup>
     <ItemGroup>
+        <InternalsVisibleTo Include="Nocturne.Connectors.Dexcom.Tests" />
+    </ItemGroup>
+    <ItemGroup>
         <ProjectReference Include="..\..\Core\Nocturne.Core.Models\Nocturne.Core.Models.csproj"/>
         <ProjectReference Include="..\Nocturne.Connectors.Core\Nocturne.Connectors.Core.csproj"/>
         <ProjectReference Include="..\..\Infrastructure\Nocturne.Infrastructure.Data\Nocturne.Infrastructure.Data.csproj"/>

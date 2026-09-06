@@ -1,4 +1,7 @@
-FROM node:24-alpine AS builder
+# The builder output (SvelteKit/Vite build) is architecture-independent JS, so
+# run it natively on the build host instead of under QEMU emulation; only the
+# runtime stage below is per-target-arch.
+FROM --platform=$BUILDPLATFORM node:24-alpine AS builder
 WORKDIR /app
 # Increase Node.js heap size to avoid "JavaScript heap out of memory" in CI
 ENV NODE_OPTIONS="--max-old-space-size=8192"
@@ -54,11 +57,12 @@ WORKDIR /app/packages/app
 # Copy built artifacts
 COPY --from=builder /app/packages/app/build ./build
 
-# Copy custom server that integrates WebSocket bridge
+# Copy custom server that integrates WebSocket bridge, and the modules it imports
 COPY --from=builder /app/packages/app/server.js ./server.js
+COPY --from=builder /app/packages/app/server-origin-warning.js ./server-origin-warning.js
 
 # Smoke test critical runtime imports used by SvelteKit server chunks.
-RUN node -e "import('zod'); import('@nocturne/bridge')"
+RUN node -e "import('zod'); import('@nocturne/bridge'); import('./server-origin-warning.js')"
 
 ENV NODE_ENV=production
 ENV PORT=5173

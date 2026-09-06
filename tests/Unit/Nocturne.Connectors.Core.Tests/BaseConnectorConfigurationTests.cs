@@ -93,6 +93,23 @@ public class BaseConnectorConfigurationTests
     }
 
     [Fact]
+    public void SyncBasalInjections_IsEnabledByDefault()
+    {
+        var config = new TestConnectorConfiguration();
+
+        Assert.True(config.SyncBasalInjections);
+        Assert.True(config.IsDataTypeEnabled(SyncDataType.BasalInjections));
+    }
+
+    [Fact]
+    public void IsDataTypeEnabled_BasalInjections_FollowsToggle()
+    {
+        var config = new TestConnectorConfiguration { SyncBasalInjections = false };
+
+        Assert.False(config.IsDataTypeEnabled(SyncDataType.BasalInjections));
+    }
+
+    [Fact]
     public void GetEnabledDataTypes_IncludesTempBasals_WhenSupportedAndEnabled()
     {
         var config = new TestConnectorConfiguration();

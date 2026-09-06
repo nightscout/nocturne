@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "name": "time-of-day-dst-fall-back",
+  "description": "Europe/London on 2026-10-25: the 01:00-02:00 local window is hit twice (00:30 UTC = 01:30 BST, 01:30 UTC = 01:30 GMT)",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "time_of_day",
+      "condition_params": {
+        "from": "01:00",
+        "to": "02:00",
+        "timezone": "Europe/London"
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-10-25T00:30:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-10-25T00:30:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-10-25T00:30:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-10-25T01:30:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-10-25T01:30:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-10-25T01:30:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-10-25T02:30:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-10-25T02:30:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-10-25T02:30:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    }
+  ]
+}

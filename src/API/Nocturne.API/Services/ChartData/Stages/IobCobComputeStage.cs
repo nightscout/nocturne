@@ -7,6 +7,7 @@ using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 
@@ -16,6 +17,12 @@ namespace Nocturne.API.Services.ChartData.Stages;
 /// Chart data pipeline stage that computes IOB/COB time series and the basal delivery series.
 /// </summary>
 /// <remarks>
+/// <para>
+/// At each interval step, ticks covered by a recent APS snapshot take the device-reported IOB/COB
+/// verbatim — the AID system's own numbers are the values it acted on, and matching them keeps the
+/// chart consistent with the uploader and with the status pill. Ticks with no recent snapshot
+/// (pre-AID history, upload gaps, care-portal-only tenants) fall back to local recomputation.
+/// </para>
 /// <para>
 /// IOB and COB are computed at each interval step across the requested time window.
 /// Treatments are kept in time-sorted arrays and the active window is tracked with two-pointer
@@ -74,7 +81,8 @@ internal sealed class IobCobComputeStage(
         var timeline = await therapyTimelineResolver.BuildAsync(startTime, endTime + 1, ct: cancellationToken);
 
         var (iobSeries, cobSeries, maxIob, maxCob) = BuildIobCobSeries(
-            bolusList, carbIntakeList, startTime, endTime, intervalMinutes, tempBasalList, timeline, cancellationToken
+            bolusList, carbIntakeList, startTime, endTime, intervalMinutes, tempBasalList, timeline,
+            context.ApsSnapshotList, cancellationToken
         );
 
         var basalSeries = await basalSeriesBuilder.BuildAsync(tempBasalList, startTime, endTime, defaultBasalRate, timeline, cancellationToken);
@@ -108,12 +116,13 @@ internal sealed class IobCobComputeStage(
         int intervalMinutes,
         List<TempBasal>? tempBasals,
         TherapyTimeline timeline,
+        IReadOnlyList<ApsIobCobPoint>? apsSnapshots = null,
         CancellationToken ct = default
     )
     {
 
         // Generate cache key based on data hash and time range
-        var cacheKey = GenerateIobCobCacheKey(boluses, carbIntakes, startTime, endTime, intervalMinutes, tempBasals);
+        var cacheKey = GenerateIobCobCacheKey(boluses, carbIntakes, startTime, endTime, intervalMinutes, tempBasals, apsSnapshots);
 
         // Try to get from cache
         if (
@@ -163,12 +172,25 @@ internal sealed class IobCobComputeStage(
             .ToList();
         var sortedTempBasals = tempBasals?.OrderBy(tb => tb.StartMills).ToList();
 
+        // Device-reported IOB/COB, preferred over local recomputation at any tick with a recent
+        // snapshot. Sorted with precomputed mills so the tick loop can track the newest snapshot
+        // at-or-before t with a single advancing pointer.
+        var sortedSnapshots = (apsSnapshots ?? [])
+            .Select(s => (
+                Mills: new DateTimeOffset(DateTime.SpecifyKind(s.Timestamp, DateTimeKind.Utc), TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                s.Iob,
+                s.Cob
+            ))
+            .OrderBy(s => s.Mills)
+            .ToList();
+
         int insulinHi = 0,
             insulinLo = 0;
         int carbHi = 0,
             carbLo = 0;
         int basalHi = 0,
             basalLo = 0;
+        int snapshotHi = 0;
 
         for (long t = startTime; t <= endTime; t += intervalMs)
         {
@@ -200,42 +222,68 @@ internal sealed class IobCobComputeStage(
                     basalLo++;
             }
 
-            var insulinCount = insulinHi - insulinLo;
-            var iobResult = insulinCount > 0
-                ? iobCalculator.FromBoluses(sortedBoluses.GetRange(insulinLo, insulinCount), snapshot, t)
-                : new IobResult { Iob = 0 };
+            // Newest snapshot at-or-before t; usable while it is within the recency window.
+            while (snapshotHi < sortedSnapshots.Count && sortedSnapshots[snapshotHi].Mills <= t)
+                snapshotHi++;
+            var deviceValues = snapshotHi > 0
+                && t - sortedSnapshots[snapshotHi - 1].Mills <= DeviceReportedValues.RecencyThresholdMs
+                    ? sortedSnapshots[snapshotHi - 1]
+                    : default((long Mills, double? Iob, double? Cob)?);
 
-            var basalIob = 0.0;
+            var insulinCount = insulinHi - insulinLo;
             var basalCount = basalHi - basalLo;
-            if (sortedTempBasals is not null && basalCount > 0)
+
+            double iob;
+            if (deviceValues?.Iob is { } deviceIob)
             {
-                var basalResult = iobCalculator.FromTempBasals(
-                    sortedTempBasals.GetRange(basalLo, basalCount),
-                    snapshot,
-                    t
-                );
-                basalIob = basalResult.BasalIob ?? 0;
+                // Device IOB is the total the AID system acted on (bolus + temp-basal delta).
+                iob = deviceIob;
+            }
+            else
+            {
+                var iobResult = insulinCount > 0
+                    ? iobCalculator.FromBoluses(sortedBoluses.GetRange(insulinLo, insulinCount), snapshot, t)
+                    : new IobResult { Iob = 0 };
+
+                var basalIob = 0.0;
+                if (sortedTempBasals is not null && basalCount > 0)
+                {
+                    var basalResult = iobCalculator.FromTempBasals(
+                        sortedTempBasals.GetRange(basalLo, basalCount),
+                        snapshot,
+                        t
+                    );
+                    basalIob = basalResult.BasalIob ?? 0;
+                }
+
+                iob = iobResult.Iob + basalIob;
             }
 
-            var iob = iobResult.Iob + basalIob;
             iobSeries.Add(new TimeSeriesPoint { Timestamp = t, Value = iob });
             if (iob > maxIob)
                 maxIob = iob;
 
-            var carbCount = carbHi - carbLo;
-            var cobResult = carbCount > 0
-                ? cobCalculator.FromCarbIntakes(
-                    sortedCarbs.GetRange(carbLo, carbCount),
-                    sortedBoluses.GetRange(insulinLo, insulinCount),
-                    sortedTempBasals is not null && basalCount > 0
-                        ? sortedTempBasals.GetRange(basalLo, basalCount)
-                        : null,
-                    snapshot,
-                    t
-                )
-                : new CobResult { Cob = 0 };
-
-            var cob = cobResult.Cob;
+            double cob;
+            if (deviceValues?.Cob is { } deviceCob)
+            {
+                cob = deviceCob;
+            }
+            else
+            {
+                var carbCount = carbHi - carbLo;
+                var cobResult = carbCount > 0
+                    ? cobCalculator.FromCarbIntakes(
+                        sortedCarbs.GetRange(carbLo, carbCount),
+                        sortedBoluses.GetRange(insulinLo, insulinCount),
+                        sortedTempBasals is not null && basalCount > 0
+                            ? sortedTempBasals.GetRange(basalLo, basalCount)
+                            : null,
+                        snapshot,
+                        t
+                    )
+                    : new CobResult { Cob = 0 };
+                cob = cobResult.Cob;
+            }
             cobSeries.Add(new TimeSeriesPoint { Timestamp = t, Value = cob });
             if (cob > maxCob)
                 maxCob = cob;
@@ -259,7 +307,8 @@ internal sealed class IobCobComputeStage(
         long startTime,
         long endTime,
         int intervalMinutes,
-        List<TempBasal>? tempBasals = null
+        List<TempBasal>? tempBasals = null,
+        IReadOnlyList<ApsIobCobPoint>? apsSnapshots = null
     )
     {
         // Round start/end times to interval boundaries for better cache hits
@@ -288,6 +337,22 @@ internal sealed class IobCobComputeStage(
                     .Append(tb.Rate)
                     .Append(':')
                     .Append(tb.EndMills ?? 0)
+                    .Append('|');
+            }
+        }
+
+        // Include APS snapshot data in cache key — a new snapshot changes the series. Null and 0
+        // fingerprint differently ("~" vs "0"): null falls back to computed while 0 is a device
+        // value, and sync-id upserts can flip one to the other without changing the timestamp.
+        if (apsSnapshots != null)
+        {
+            foreach (var s in apsSnapshots)
+            {
+                sb.Append(s.Timestamp.Ticks)
+                    .Append(':')
+                    .Append(s.Iob?.ToString() ?? "~")
+                    .Append(':')
+                    .Append(s.Cob?.ToString() ?? "~")
                     .Append('|');
             }
         }

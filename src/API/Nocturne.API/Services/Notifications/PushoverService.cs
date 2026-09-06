@@ -1,5 +1,7 @@
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Options;
+using Nocturne.API.Multitenancy;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
@@ -18,6 +20,7 @@ public class PushoverService : IPushoverService
     private readonly ILogger<PushoverService> _logger;
     private readonly INotificationV1Service _notificationService;
     private readonly IConfiguration _configuration;
+    private readonly BaseDomainOptions _baseDomain;
 
     private const string PUSHOVER_API_URL = "https://api.pushover.net/1/messages.json";
 
@@ -25,13 +28,15 @@ public class PushoverService : IPushoverService
         HttpClient httpClient,
         ILogger<PushoverService> logger,
         INotificationV1Service notificationService,
-        IConfiguration configuration
+        IConfiguration configuration,
+        IOptions<BaseDomainOptions> baseDomainOptions
     )
     {
         _httpClient = httpClient;
         _logger = logger;
         _notificationService = notificationService;
         _configuration = configuration;
+        _baseDomain = baseDomainOptions.Value;
     }
 
     /// <summary>
@@ -82,13 +87,12 @@ public class PushoverService : IPushoverService
                 };
             }
 
-            // Build callback URL for receipt acknowledgment if priority is 2 (emergency)
+            // Build callback URL for receipt acknowledgment if priority is 2 (emergency).
+            // Requires a public origin — Pushover's servers must be able to reach it.
             string? callbackUrl = null;
-            if (request.Priority == 2)
+            if (request.Priority == 2 && _baseDomain.PublicOrigin is { } origin)
             {
-                var baseUrl =
-                    _configuration[ServiceNames.ConfigKeys.BaseUrl] ?? "http://localhost:5000";
-                callbackUrl = $"{baseUrl}/api/v1/notifications/pushovercallback";
+                callbackUrl = $"{origin}/api/v1/notifications/pushovercallback";
             }
 
             // Build form data for Pushover API

@@ -1,9 +1,12 @@
+using Nocturne.API.Extensions;
+using Nocturne.API.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Services.Legacy;
 using Nocturne.API.Services.Platform;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Controllers.V1;
 
@@ -12,11 +15,24 @@ namespace Nocturne.API.Controllers.V1;
 /// Supports bash-style brace expansion for complex time pattern matching.
 /// </summary>
 /// <seealso cref="ITimeQueryService"/>
+/// <remarks>
+/// The <c>slice</c> and <c>echo</c> actions take the collection as a route or query value, so
+/// their governing scope is resolved per request through <see cref="LegacyStorageReadScopes"/>; a
+/// class-level OR would let a caller holding one category read another's records. The <c>times</c>
+/// actions always read entries, so they carry <c>glucose.read</c> directly.
+/// </remarks>
 [ApiController]
 [Tags("V1")]
 [Route("api/v1")]
 public class TimeQueryController : ControllerBase
 {
+    /// <summary>
+    /// The collections <c>slice</c> and <c>times/echo</c> dispatch on. Every one must be classified
+    /// in <see cref="LegacyStorageReadScopes"/>, which <c>SliceableStorage_IsFullyClassified</c>
+    /// asserts.
+    /// </summary>
+    internal static readonly string[] SliceableStorage = ["entries", "treatments", "devicestatus"];
+
     private readonly ITimeQueryService _timeQueryService;
     private readonly ILogger<TimeQueryController> _logger;
 
@@ -36,11 +52,13 @@ public class TimeQueryController : ControllerBase
 
     /// <summary>
     /// /api/v1/times without prefix is not a valid Nightscout endpoint.
-    /// Nightscout returns 404 for this path. We match that behavior for parity.
+    /// Nightscout returns 404 for this path. We match that behavior for parity, behind the same
+    /// scope the prefixed routes carry so the 404 is not itself readable without a grant.
     /// </summary>
     /// <returns>404 Not Found to match Nightscout behavior</returns>
     [HttpGet("times")]
     [ApiExplorerSettings(IgnoreApi = true)] // Hide from OpenAPI as it's not a real endpoint
+    [RequireScope(Scope.GlucoseRead)]
     public ActionResult GetTimeBasedEntries()
     {
         return NotFound();
@@ -56,6 +74,7 @@ public class TimeQueryController : ControllerBase
     /// <returns>Entries matching the time patterns</returns>
     [HttpGet("times/{prefix}")]
     [NightscoutEndpoint("/api/v1/times/{prefix}")]
+    [RequireScope(Scope.GlucoseRead)]
     [ProducesResponseType(typeof(Entry[]), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]
@@ -80,6 +99,7 @@ public class TimeQueryController : ControllerBase
     /// <returns>Entries matching the time patterns</returns>
     [HttpGet("times/{prefix}/{regex}")]
     [NightscoutEndpoint("/api/v1/times/{prefix}/{regex}")]
+    [RequireScope(Scope.GlucoseRead)]
     [ProducesResponseType(typeof(Entry[]), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]
@@ -206,6 +226,9 @@ public class TimeQueryController : ControllerBase
         [FromQuery] string field = "dateString"
     )
     {
+        if (RefuseUnsupportedStorage(storage) is { } unsupported) return unsupported;
+        if (LegacyStorageReadScopes.RefuseRead(HttpContext, storage) is { } refusal) return refusal;
+
         return GetTimeQueryEchoInternal(null, null, storage, field);
     }
 
@@ -228,6 +251,9 @@ public class TimeQueryController : ControllerBase
         [FromQuery] string field = "dateString"
     )
     {
+        if (RefuseUnsupportedStorage(storage) is { } unsupported) return unsupported;
+        if (LegacyStorageReadScopes.RefuseRead(HttpContext, storage) is { } refusal) return refusal;
+
         return GetTimeQueryEchoInternal(prefix, null, storage, field);
     }
 
@@ -252,6 +278,9 @@ public class TimeQueryController : ControllerBase
         [FromQuery] string field = "dateString"
     )
     {
+        if (RefuseUnsupportedStorage(storage) is { } unsupported) return unsupported;
+        if (LegacyStorageReadScopes.RefuseRead(HttpContext, storage) is { } refusal) return refusal;
+
         return GetTimeQueryEchoInternal(prefix, regex, storage, field);
     }
 
@@ -348,6 +377,9 @@ public class TimeQueryController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
+        if (RefuseUnsupportedStorage(storage) is { } unsupported) return unsupported;
+        if (LegacyStorageReadScopes.RefuseRead(HttpContext, storage) is { } refusal) return refusal;
+
         return await GetSlicedDataInternal(
             storage,
             field,
@@ -384,6 +416,9 @@ public class TimeQueryController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
+        if (RefuseUnsupportedStorage(storage) is { } unsupported) return unsupported;
+        if (LegacyStorageReadScopes.RefuseRead(HttpContext, storage) is { } refusal) return refusal;
+
         return await GetSlicedDataInternal(
             storage,
             field,
@@ -422,6 +457,9 @@ public class TimeQueryController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
+        if (RefuseUnsupportedStorage(storage) is { } unsupported) return unsupported;
+        if (LegacyStorageReadScopes.RefuseRead(HttpContext, storage) is { } refusal) return refusal;
+
         return await GetSlicedDataInternal(
             storage,
             field,
@@ -462,6 +500,9 @@ public class TimeQueryController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
+        if (RefuseUnsupportedStorage(storage) is { } unsupported) return unsupported;
+        if (LegacyStorageReadScopes.RefuseRead(HttpContext, storage) is { } refusal) return refusal;
+
         return await GetSlicedDataInternal(
             storage,
             field,
@@ -509,16 +550,6 @@ public class TimeQueryController : ControllerBase
             {
                 _logger.LogWarning("Storage and field parameters are required");
                 return BadRequest("Storage and field parameters are required");
-            }
-
-            // Validate storage type
-            var validStorageTypes = new[] { "entries", "treatments", "devicestatus" };
-            if (!validStorageTypes.Contains(storage.ToLowerInvariant()))
-            {
-                _logger.LogWarning("Invalid storage type: {Storage}", storage);
-                return BadRequest(
-                    $"Storage must be one of: {string.Join(", ", validStorageTypes)}"
-                );
             }
 
             // Extract query parameters for additional filtering
@@ -593,5 +624,19 @@ public class TimeQueryController : ControllerBase
                 }
             );
         }
+    }
+
+    /// <summary>
+    /// Refuses a collection these routes do not dispatch on. Checked ahead of the scope gate so the
+    /// answer is the same whatever the caller holds, rather than 403 for one grant and 400 for
+    /// another on a collection the route never served.
+    /// </summary>
+    private ActionResult? RefuseUnsupportedStorage(string storage)
+    {
+        if (SliceableStorage.Contains(storage, StringComparer.OrdinalIgnoreCase))
+            return null;
+
+        _logger.LogWarning("Invalid storage type requested: {Storage}", storage);
+        return BadRequest($"Storage must be one of: {string.Join(", ", SliceableStorage)}");
     }
 }

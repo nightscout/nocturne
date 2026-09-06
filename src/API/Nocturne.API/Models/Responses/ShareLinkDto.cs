@@ -8,7 +8,11 @@ public class ShareLinkDto
     /// <summary>Whether a public share link is currently active.</summary>
     public bool Enabled { get; set; }
 
-    /// <summary>The full share URL when enabled; null otherwise. The raw token is never returned separately.</summary>
+    /// <summary>
+    /// The full share URL, returned only by the call that generates the link. Null on every other
+    /// call, including when <see cref="Enabled"/> is true: only the token's digest is stored, so the
+    /// URL cannot be reproduced afterwards. Generating a new link is the only way to see one again.
+    /// </summary>
     public string? Url { get; set; }
 
     /// <summary>When true the public view shows full history; when false, only the last 24 hours.</summary>
@@ -16,7 +20,7 @@ public class ShareLinkDto
 
     /// <summary>
     /// The data categories anonymous viewers can see, as read-permission atoms (e.g. glucose.read).
-    /// A subset of <see cref="Nocturne.Core.Models.Authorization.TenantPermissions.PublicShareScopes"/>.
+    /// A subset of <see cref="Nocturne.Core.Models.Authorization.Scope.PublicShareScopes"/>.
     /// Empty means the link is live but nothing is shared yet.
     /// </summary>
     public List<string> Scopes { get; set; } = [];

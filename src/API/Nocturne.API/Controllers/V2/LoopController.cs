@@ -48,7 +48,7 @@ public class LoopController : ControllerBase
     /// <response code="500">Internal server error</response>
     [HttpPost("loop/send")]
     [Authorize]
-    [RequireScope(OAuthScopes.AlertsReadWrite)]
+    [RequireScope(Scope.AlertsReadWrite)]
     [ProducesResponseType(typeof(LoopNotificationResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(LoopNotificationResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(
@@ -134,6 +134,8 @@ public class LoopController : ControllerBase
     /// <response code="200">Configuration status retrieved successfully</response>
     [HttpGet("loop/status")]
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    // APNS configuration diagnostics, not alert data. Gated like DebugController.
+    [RequireAdmin]
     public ActionResult<object> GetLoopStatus()
     {
         var status = _loopService.GetConfigurationStatus();

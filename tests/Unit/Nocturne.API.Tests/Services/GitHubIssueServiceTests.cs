@@ -1,3 +1,6 @@
+using System.Net;
+using System.Text;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -187,5 +190,189 @@ public class GitHubIssueServiceTests
         body.Should().Contain("some ` ` `code` ` ` here");
         // The wrapping code fence should still be intact
         body.Should().Contain("```json");
+    }
+
+    [Fact]
+    public void BuildIssueBody_ImagesAttachedButNotUploaded_NotesTheCount()
+    {
+        var request = new CreateIssueRequest
+        {
+            Template = "bug",
+            Title = "Visual bug",
+            Description = "Chart looks wrong",
+            DiagnosticInfo = "{}",
+        };
+
+        var body = GitHubIssueService.BuildIssueBody(request, [], attachedImageCount: 2);
+
+        body.Should().NotContain("## Screenshots");
+        body.Should().Contain("2 screenshot(s) were attached but could not be uploaded.");
+    }
+
+    [Fact]
+    public void BuildIssueBody_AllImagesUploaded_HasNoUploadFailureNote()
+    {
+        var request = new CreateIssueRequest
+        {
+            Template = "bug",
+            Title = "Visual bug",
+            Description = "Chart looks wrong",
+            DiagnosticInfo = "{}",
+        };
+
+        var body = GitHubIssueService.BuildIssueBody(
+            request,
+            ["https://example.com/image1.png"],
+            attachedImageCount: 1);
+
+        body.Should().Contain("## Screenshots");
+        body.Should().NotContain("could not be uploaded");
+    }
+
+    [Theory]
+    [InlineData("Screenshot 2026-07-16 at 15.54.43.png", "Screenshot2026-07-16at15.54.43.png")]
+    [InlineData("../../evil.png", "....evil.png")]
+    [InlineData("...", "screenshot")]
+    [InlineData("", "screenshot")]
+    public void SanitizeFileName_RestrictsToSafeCharacters(string input, string expected)
+    {
+        GitHubIssueService.SanitizeFileName(input).Should().Be(expected);
+    }
+
+    [Fact]
+    public async Task CreateIssueAsync_WithImages_CommitsToAssetsBranchAndEmbedsUrls()
+    {
+        var requests = new List<(HttpRequestMessage Message, string Body)>();
+        var handler = new StubHttpMessageHandler(async request =>
+        {
+            var body = request.Content is null ? "" : await request.Content.ReadAsStringAsync();
+            requests.Add((request, body));
+
+            if (request.Method == HttpMethod.Put)
+            {
+                return Respond(HttpStatusCode.Created,
+                    """{"content":{"download_url":"https://raw.githubusercontent.com/nightscout/nocturne/support-assets/screenshots/test.png"}}""");
+            }
+
+            return Respond(HttpStatusCode.Created,
+                """{"number":123,"html_url":"https://github.com/nightscout/nocturne/issues/123"}""");
+        });
+
+        var service = CreateService(handler);
+        var imageBytes = "fake-png-bytes"u8.ToArray();
+        using var imageStream = new MemoryStream(imageBytes);
+        var images = new List<(string, string, Stream)>
+        {
+            ("Screenshot 2026-07-16 at 15.54.43.png", "image/png", imageStream),
+        };
+
+        var result = await service.CreateIssueAsync(BugRequest(), images, CancellationToken.None);
+
+        result.IssueNumber.Should().Be(123);
+        result.IssueUrl.Should().Be("https://github.com/nightscout/nocturne/issues/123");
+
+        var upload = requests.Should().ContainSingle(r => r.Message.Method == HttpMethod.Put).Subject;
+        upload.Message.RequestUri!.AbsolutePath.Should().StartWith("/repos/nightscout/nocturne/contents/screenshots/");
+        upload.Message.RequestUri.AbsolutePath.Should().EndWith("-Screenshot2026-07-16at15.54.43.png");
+        using (var doc = JsonDocument.Parse(upload.Body))
+        {
+            doc.RootElement.GetProperty("branch").GetString().Should().Be("support-assets");
+            doc.RootElement.GetProperty("content").GetString().Should()
+                .Be(Convert.ToBase64String(imageBytes));
+        }
+
+        var issue = requests.Should().ContainSingle(r => r.Message.Method == HttpMethod.Post).Subject;
+        issue.Message.RequestUri!.AbsolutePath.Should().Be("/repos/nightscout/nocturne/issues");
+        issue.Body.Should().Contain(
+            "https://raw.githubusercontent.com/nightscout/nocturne/support-assets/screenshots/test.png");
+    }
+
+    [Fact]
+    public async Task CreateIssueAsync_AssetsBranchUnset_SkipsUploadAndNotesAttachments()
+    {
+        var requests = new List<(HttpMethod Method, string Body)>();
+        var handler = new StubHttpMessageHandler(async request =>
+        {
+            var body = request.Content is null ? "" : await request.Content.ReadAsStringAsync();
+            requests.Add((request.Method, body));
+            return Respond(HttpStatusCode.Created,
+                """{"number":7,"html_url":"https://github.com/nightscout/nocturne/issues/7"}""");
+        });
+
+        var service = CreateService(handler, opts => opts.AssetsBranch = null);
+        using var imageStream = new MemoryStream([1, 2, 3]);
+        var images = new List<(string, string, Stream)>
+        {
+            ("shot.png", "image/png", imageStream),
+        };
+
+        var result = await service.CreateIssueAsync(BugRequest(), images, CancellationToken.None);
+
+        result.IssueNumber.Should().Be(7);
+        var issue = requests.Should().ContainSingle().Subject;
+        issue.Method.Should().Be(HttpMethod.Post);
+        issue.Body.Should().Contain("1 screenshot(s) were attached but could not be uploaded.");
+    }
+
+    [Fact]
+    public async Task CreateIssueAsync_UploadFails_StillCreatesIssueWithNote()
+    {
+        var handler = new StubHttpMessageHandler(request =>
+        {
+            if (request.Method == HttpMethod.Put)
+            {
+                return Task.FromResult(Respond(HttpStatusCode.NotFound, """{"message":"Branch not found"}"""));
+            }
+            return Task.FromResult(Respond(HttpStatusCode.Created,
+                """{"number":8,"html_url":"https://github.com/nightscout/nocturne/issues/8"}"""));
+        });
+
+        var service = CreateService(handler);
+        using var imageStream = new MemoryStream([1, 2, 3]);
+        var images = new List<(string, string, Stream)>
+        {
+            ("shot.png", "image/png", imageStream),
+        };
+
+        var result = await service.CreateIssueAsync(BugRequest(), images, CancellationToken.None);
+
+        result.IssueNumber.Should().Be(8);
+    }
+
+    private static CreateIssueRequest BugRequest() => new()
+    {
+        Template = "bug",
+        Title = "Visual bug",
+        Description = "Chart looks wrong",
+        DiagnosticInfo = "{}",
+    };
+
+    private static HttpResponseMessage Respond(HttpStatusCode status, string json) => new(status)
+    {
+        Content = new StringContent(json, Encoding.UTF8, "application/json"),
+    };
+
+    private static GitHubIssueService CreateService(
+        HttpMessageHandler handler,
+        Action<GitHubIssueOptions>? configure = null)
+    {
+        var options = new GitHubIssueOptions { IssuesPat = "ghp_test123" };
+        configure?.Invoke(options);
+
+        var factory = new Mock<IHttpClientFactory>();
+        factory.Setup(f => f.CreateClient(It.IsAny<string>()))
+            .Returns(() => new HttpClient(handler, disposeHandler: false));
+
+        return new GitHubIssueService(
+            factory.Object,
+            Options.Create(options),
+            NullLogger<GitHubIssueService>.Instance);
+    }
+
+    private sealed class StubHttpMessageHandler(
+        Func<HttpRequestMessage, Task<HttpResponseMessage>> respond) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken) => respond(request);
     }
 }

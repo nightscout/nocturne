@@ -36,12 +36,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: macos-latest
-            args: "--target universal-apple-darwin"
-            rust-targets: "aarch64-apple-darwin,x86_64-apple-darwin"
-          - platform: ubuntu-22.04
-            args: ""
-            rust-targets: ""
+          # Windows-only: the companion is a Windows app (taskbar widget, Credential Manager,
+          # WinRT toasts, tray-icon glucose rendering). macOS/Linux artifacts would be
+          # non-functional, and tauri-winrt-notification's `windows` dep pulls windows-future,
+          # which does not compile off-Windows.
           - platform: windows-latest
             args: ""
             rust-targets: ""

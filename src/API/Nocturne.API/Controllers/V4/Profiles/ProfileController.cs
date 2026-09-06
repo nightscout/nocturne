@@ -1,10 +1,14 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Attributes;
+using Nocturne.API.Controllers.V4.Base;
 using Nocturne.Core.Contracts.Profiles;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Controllers.V4.Profiles;
 
@@ -22,8 +26,17 @@ namespace Nocturne.API.Controllers.V4.Profiles;
 [Route("api/v4/profile")]
 [Authorize]
 [Produces("application/json")]
-public class ProfileController : ControllerBase
+public class ProfileController : ControllerBase, IWriteScopedController
 {
+    /// <summary>
+    /// The OAuth scope every write action on this controller requires. Therapy settings, basal,
+    /// carb ratio, sensitivity and target range schedules are the therapy category — governed by
+    /// <c>therapy.read</c> for reads, and gated with <c>therapy.readwrite</c> on the V1 and V3
+    /// profile write endpoints. The class-level <c>[Authorize]</c> alone is satisfied by read-only
+    /// credentials such as a guest-link session.
+    /// </summary>
+    public string WriteScope => Scope.TherapyReadWrite;
+
     private readonly ITherapySettingsRepository _therapyRepo;
     private readonly IBasalScheduleRepository _basalRepo;
     private readonly ICarbRatioScheduleRepository _carbRatioRepo;
@@ -65,7 +78,13 @@ public class ProfileController : ControllerBase
     /// </summary>
     [HttpGet("summary")]
     [RemoteQuery]
-    [ResponseCache(Duration = 300, VaryByQueryKeys = new[] { "*" })]
+    // Never cached: UseResponseCaching keys only on host + query + Cookie, so a mutation that
+    // correctly invalidates its client-side query can still have the refetch answered from a body
+    // up to the cache duration old — an edited target range, the active-profile badge, or a
+    // just-entered record reads as unchanged. Every per-user therapy and glucose read that a
+    // caller can mutate carries this attribute for that reason.
+    // Matches PredictionController.GetProfileSnapshot.
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [ProducesResponseType(typeof(ProfileSummary), StatusCodes.Status200OK)]
     public async Task<ActionResult<ProfileSummary>> GetProfileSummary(
         [FromQuery] DateTime? from = null,
@@ -147,6 +166,7 @@ public class ProfileController : ControllerBase
     /// Set a profile as the active (default) profile. Clears IsDefault on all other profiles.
     /// </summary>
     [HttpPost("set-default/{profileName}")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetProfileSummary", "GetTherapySettings"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -163,13 +183,13 @@ public class ProfileController : ControllerBase
         foreach (var ts in all.Where(ts => ts.IsDefault && ts.Id != target.Id))
         {
             ts.IsDefault = false;
-            await _therapyRepo.UpdateAsync(ts.Id, ts, ct);
+            await _therapyRepo.UpdateAsync(ts.Id, ts, WriteOrigin.Live, ct);
         }
 
         if (!target.IsDefault)
         {
             target.IsDefault = true;
-            await _therapyRepo.UpdateAsync(target.Id, target, ct);
+            await _therapyRepo.UpdateAsync(target.Id, target, WriteOrigin.Live, ct);
         }
 
         return NoContent();
@@ -233,6 +253,10 @@ public class ProfileController : ControllerBase
             return BadRequest(
                 new { error = $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'." }
             );
+
+        limit = V4ReadLimits.ClampLimit(limit);
+        offset = V4ReadLimits.ClampOffset(offset);
+
         var descending = sort == "timestamp_desc";
         var data = await _therapyRepo.GetAsync(
             from,
@@ -289,6 +313,7 @@ public class ProfileController : ControllerBase
     /// Create a new therapy settings record
     /// </summary>
     [HttpPost("settings")]
+    [RequireDeclaredWriteScope]
     [RemoteForm(Invalidates = ["GetProfileSummary", "GetTherapySettings"])]
     [ProducesResponseType(typeof(TherapySettings), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -299,7 +324,7 @@ public class ProfileController : ControllerBase
     {
         if (model.Timestamp == default)
             return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
-        var created = await _therapyRepo.CreateAsync(model, ct);
+        var created = await _therapyRepo.CreateAsync(model, WriteOrigin.Live, ct);
         return CreatedAtAction(nameof(GetTherapySettingsById), new { id = created.Id }, created);
     }
 
@@ -307,6 +332,7 @@ public class ProfileController : ControllerBase
     /// Update an existing therapy settings record
     /// </summary>
     [HttpPut("settings/{id:guid}")]
+    [RequireDeclaredWriteScope]
     [RemoteForm(
         Invalidates = ["GetProfileSummary", "GetTherapySettings", "GetTherapySettingsById"]
     )]
@@ -323,7 +349,7 @@ public class ProfileController : ControllerBase
             return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
         try
         {
-            var updated = await _therapyRepo.UpdateAsync(id, model, ct);
+            var updated = await _therapyRepo.UpdateAsync(id, model, WriteOrigin.Live, ct);
             return Ok(updated);
         }
         catch (KeyNotFoundException)
@@ -336,6 +362,7 @@ public class ProfileController : ControllerBase
     /// Delete a therapy settings record
     /// </summary>
     [HttpDelete("settings/{id:guid}")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetProfileSummary", "GetTherapySettings"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -343,7 +370,7 @@ public class ProfileController : ControllerBase
     {
         try
         {
-            await _therapyRepo.DeleteAsync(id, ct);
+            await _therapyRepo.DeleteAsync(id, WriteOrigin.Live, ct);
             return NoContent();
         }
         catch (KeyNotFoundException)
@@ -391,6 +418,7 @@ public class ProfileController : ControllerBase
     /// Create a new basal schedule
     /// </summary>
     [HttpPost("basal")]
+    [RequireDeclaredWriteScope]
     [RemoteForm(Invalidates = ["GetProfileSummary", "GetBasalSchedulesByName"])]
     [ProducesResponseType(typeof(BasalSchedule), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -401,7 +429,7 @@ public class ProfileController : ControllerBase
     {
         if (model.Timestamp == default)
             return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
-        var created = await _basalRepo.CreateAsync(model, ct);
+        var created = await _basalRepo.CreateAsync(model, WriteOrigin.Live, ct);
         return CreatedAtAction(nameof(GetBasalScheduleById), new { id = created.Id }, created);
     }
 
@@ -409,6 +437,7 @@ public class ProfileController : ControllerBase
     /// Update an existing basal schedule
     /// </summary>
     [HttpPut("basal/{id:guid}")]
+    [RequireDeclaredWriteScope]
     [RemoteForm(
         Invalidates = ["GetProfileSummary", "GetBasalSchedulesByName", "GetBasalScheduleById"]
     )]
@@ -425,7 +454,7 @@ public class ProfileController : ControllerBase
             return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
         try
         {
-            var updated = await _basalRepo.UpdateAsync(id, model, ct);
+            var updated = await _basalRepo.UpdateAsync(id, model, WriteOrigin.Live, ct);
             return Ok(updated);
         }
         catch (KeyNotFoundException)
@@ -438,6 +467,7 @@ public class ProfileController : ControllerBase
     /// Delete a basal schedule
     /// </summary>
     [HttpDelete("basal/{id:guid}")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetProfileSummary", "GetBasalSchedulesByName"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -445,7 +475,7 @@ public class ProfileController : ControllerBase
     {
         try
         {
-            await _basalRepo.DeleteAsync(id, ct);
+            await _basalRepo.DeleteAsync(id, WriteOrigin.Live, ct);
             return NoContent();
         }
         catch (KeyNotFoundException)
@@ -493,6 +523,7 @@ public class ProfileController : ControllerBase
     /// Create a new carb ratio schedule
     /// </summary>
     [HttpPost("carb-ratio")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetProfileSummary", "GetCarbRatioSchedulesByName"])]
     [ProducesResponseType(typeof(CarbRatioSchedule), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -503,7 +534,7 @@ public class ProfileController : ControllerBase
     {
         if (model.Timestamp == default)
             return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
-        var created = await _carbRatioRepo.CreateAsync(model, ct);
+        var created = await _carbRatioRepo.CreateAsync(model, WriteOrigin.Live, ct);
         return CreatedAtAction(nameof(GetCarbRatioScheduleById), new { id = created.Id }, created);
     }
 
@@ -511,6 +542,7 @@ public class ProfileController : ControllerBase
     /// Update an existing carb ratio schedule
     /// </summary>
     [HttpPut("carb-ratio/{id:guid}")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(
         Invalidates = [
             "GetProfileSummary",
@@ -531,7 +563,7 @@ public class ProfileController : ControllerBase
             return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
         try
         {
-            var updated = await _carbRatioRepo.UpdateAsync(id, model, ct);
+            var updated = await _carbRatioRepo.UpdateAsync(id, model, WriteOrigin.Live, ct);
             return Ok(updated);
         }
         catch (KeyNotFoundException)
@@ -544,6 +576,7 @@ public class ProfileController : ControllerBase
     /// Delete a carb ratio schedule
     /// </summary>
     [HttpDelete("carb-ratio/{id:guid}")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetProfileSummary", "GetCarbRatioSchedulesByName"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -551,7 +584,7 @@ public class ProfileController : ControllerBase
     {
         try
         {
-            await _carbRatioRepo.DeleteAsync(id, ct);
+            await _carbRatioRepo.DeleteAsync(id, WriteOrigin.Live, ct);
             return NoContent();
         }
         catch (KeyNotFoundException)
@@ -599,6 +632,7 @@ public class ProfileController : ControllerBase
     /// Create a new sensitivity schedule
     /// </summary>
     [HttpPost("sensitivity")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetProfileSummary", "GetSensitivitySchedulesByName"])]
     [ProducesResponseType(typeof(SensitivitySchedule), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -609,7 +643,7 @@ public class ProfileController : ControllerBase
     {
         if (model.Timestamp == default)
             return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
-        var created = await _sensitivityRepo.CreateAsync(model, ct);
+        var created = await _sensitivityRepo.CreateAsync(model, WriteOrigin.Live, ct);
         return CreatedAtAction(
             nameof(GetSensitivityScheduleById),
             new { id = created.Id },
@@ -621,6 +655,7 @@ public class ProfileController : ControllerBase
     /// Update an existing sensitivity schedule
     /// </summary>
     [HttpPut("sensitivity/{id:guid}")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(
         Invalidates = [
             "GetProfileSummary",
@@ -641,7 +676,7 @@ public class ProfileController : ControllerBase
             return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
         try
         {
-            var updated = await _sensitivityRepo.UpdateAsync(id, model, ct);
+            var updated = await _sensitivityRepo.UpdateAsync(id, model, WriteOrigin.Live, ct);
             return Ok(updated);
         }
         catch (KeyNotFoundException)
@@ -654,6 +689,7 @@ public class ProfileController : ControllerBase
     /// Delete a sensitivity schedule
     /// </summary>
     [HttpDelete("sensitivity/{id:guid}")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetProfileSummary", "GetSensitivitySchedulesByName"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -664,7 +700,7 @@ public class ProfileController : ControllerBase
     {
         try
         {
-            await _sensitivityRepo.DeleteAsync(id, ct);
+            await _sensitivityRepo.DeleteAsync(id, WriteOrigin.Live, ct);
             return NoContent();
         }
         catch (KeyNotFoundException)
@@ -712,6 +748,7 @@ public class ProfileController : ControllerBase
     /// Create a new target range schedule
     /// </summary>
     [HttpPost("target-range")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetProfileSummary", "GetTargetRangeSchedulesByName"])]
     [ProducesResponseType(typeof(TargetRangeSchedule), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -722,7 +759,7 @@ public class ProfileController : ControllerBase
     {
         if (model.Timestamp == default)
             return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
-        var created = await _targetRangeRepo.CreateAsync(model, ct);
+        var created = await _targetRangeRepo.CreateAsync(model, WriteOrigin.Live, ct);
         return CreatedAtAction(
             nameof(GetTargetRangeScheduleById),
             new { id = created.Id },
@@ -734,6 +771,7 @@ public class ProfileController : ControllerBase
     /// Update an existing target range schedule
     /// </summary>
     [HttpPut("target-range/{id:guid}")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(
         Invalidates = [
             "GetProfileSummary",
@@ -754,7 +792,7 @@ public class ProfileController : ControllerBase
             return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
         try
         {
-            var updated = await _targetRangeRepo.UpdateAsync(id, model, ct);
+            var updated = await _targetRangeRepo.UpdateAsync(id, model, WriteOrigin.Live, ct);
             return Ok(updated);
         }
         catch (KeyNotFoundException)
@@ -767,6 +805,7 @@ public class ProfileController : ControllerBase
     /// Delete a target range schedule
     /// </summary>
     [HttpDelete("target-range/{id:guid}")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetProfileSummary", "GetTargetRangeSchedulesByName"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -777,7 +816,7 @@ public class ProfileController : ControllerBase
     {
         try
         {
-            await _targetRangeRepo.DeleteAsync(id, ct);
+            await _targetRangeRepo.DeleteAsync(id, WriteOrigin.Live, ct);
             return NoContent();
         }
         catch (KeyNotFoundException)

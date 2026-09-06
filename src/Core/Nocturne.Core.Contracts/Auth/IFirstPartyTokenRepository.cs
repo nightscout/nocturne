@@ -22,6 +22,18 @@ public interface IFirstPartyTokenRepository
     Task<bool> TryMarkRotatedAsync(Guid tokenId, Guid replacedByTokenId, CancellationToken ct = default);
     Task<int> RevokeAllForSubjectAsync(Guid subjectId, string reason, CancellationToken ct = default);
     Task<int> RevokeByOidcSessionAsync(string oidcSessionId, string reason, CancellationToken ct = default);
+
+    /// <summary>
+    /// Revokes all active tokens of one session belonging to the subject. The session key is
+    /// an OIDC session ID, or a token ID for legacy tokens issued before sessions were tagged.
+    /// Subject-scoped so a client-supplied key cannot touch another subject's tokens.
+    /// </summary>
+    Task<int> RevokeSessionForSubjectAsync(Guid subjectId, string sessionId, string reason, CancellationToken ct = default);
+
+    /// <summary>
+    /// Revokes all of the subject's active tokens except those in the given session.
+    /// </summary>
+    Task<int> RevokeOtherSessionsForSubjectAsync(Guid subjectId, string currentSessionId, string reason, CancellationToken ct = default);
     Task UpdateLastUsedAsync(string tokenHash, CancellationToken ct = default);
     Task<int> PruneExpiredAsync(DateTime cutoff, CancellationToken ct = default);
     Task<List<RefreshTokenInfo>> GetActiveSessionsAsync(Guid subjectId, CancellationToken ct = default);

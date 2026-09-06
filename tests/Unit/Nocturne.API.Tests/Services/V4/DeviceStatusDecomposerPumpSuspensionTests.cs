@@ -12,6 +12,7 @@ using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 using V4Models = Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Tests.Services.V4;
 
@@ -63,22 +64,21 @@ public class DeviceStatusDecomposerPumpSuspensionTests : IDisposable
 
         // CreateAsync echoes the model with an Id assigned, like a real repo.
         _pumpRepoMock
-            .Setup(r => r.CreateAsync(It.IsAny<V4Models.PumpSnapshot>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((V4Models.PumpSnapshot m, CancellationToken _) =>
+            .Setup(r => r.CreateAsync(It.IsAny<V4Models.PumpSnapshot>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((V4Models.PumpSnapshot m, WriteOrigin origin, CancellationToken _) =>
             {
                 if (m.Id == Guid.Empty) m.Id = Guid.NewGuid();
                 return m;
             });
         _pumpRepoMock
-            .Setup(r => r.UpdateAsync(It.IsAny<Guid>(), It.IsAny<V4Models.PumpSnapshot>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Guid id, V4Models.PumpSnapshot m, CancellationToken _) =>
+            .Setup(r => r.UpdateAsync(It.IsAny<Guid>(), It.IsAny<V4Models.PumpSnapshot>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid id, V4Models.PumpSnapshot m, WriteOrigin origin, CancellationToken _) =>
             {
                 m.Id = id;
                 return m;
             });
 
         _decomposer = new DeviceStatusDecomposer(
-            _context,
             _apsRepoMock.Object,
             _pumpRepoMock.Object,
             _uploaderRepoMock.Object,
@@ -123,7 +123,7 @@ public class DeviceStatusDecomposerPumpSuspensionTests : IDisposable
         var ds = MakeDeviceStatus("legacy1", 1704110400000 /* 2024-01-01T12:00:00Z */, suspended: true);
 
         // Act
-        await _decomposer.DecomposeAsync(ds);
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert
         _stateSpanServiceMock.Verify(s => s.UpsertStateSpanAsync(
@@ -162,7 +162,7 @@ public class DeviceStatusDecomposerPumpSuspensionTests : IDisposable
         var ds = MakeDeviceStatus("legacy2", 1704110400000, suspended: false);
 
         // Act
-        await _decomposer.DecomposeAsync(ds);
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert: upsert called with EndTimestamp populated on the same span
         _stateSpanServiceMock.Verify(s => s.UpsertStateSpanAsync(
@@ -181,7 +181,7 @@ public class DeviceStatusDecomposerPumpSuspensionTests : IDisposable
             .ReturnsAsync(prior);
 
         var ds = MakeDeviceStatus("legacy3", 1704110400000, suspended: true);
-        await _decomposer.DecomposeAsync(ds);
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         _stateSpanServiceMock.Verify(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -194,7 +194,7 @@ public class DeviceStatusDecomposerPumpSuspensionTests : IDisposable
             .ReturnsAsync(prior);
 
         var ds = MakeDeviceStatus("legacy4", 1704110400000, suspended: false);
-        await _decomposer.DecomposeAsync(ds);
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         _stateSpanServiceMock.Verify(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -207,7 +207,7 @@ public class DeviceStatusDecomposerPumpSuspensionTests : IDisposable
             .ReturnsAsync((V4Models.PumpSnapshot?)null);
 
         var ds = MakeDeviceStatus("legacy5", 1704110400000, suspended: true);
-        await _decomposer.DecomposeAsync(ds);
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         _stateSpanServiceMock.Verify(s => s.UpsertStateSpanAsync(
             It.Is<StateSpan>(span =>
@@ -225,7 +225,7 @@ public class DeviceStatusDecomposerPumpSuspensionTests : IDisposable
             .ReturnsAsync((V4Models.PumpSnapshot?)null);
 
         var ds = MakeDeviceStatus("legacy6", 1704110400000, suspended: false);
-        await _decomposer.DecomposeAsync(ds);
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         _stateSpanServiceMock.Verify(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -243,7 +243,7 @@ public class DeviceStatusDecomposerPumpSuspensionTests : IDisposable
 
         var ds = MakeDeviceStatus("legacy7", 1704110400000 /* 12:00 ingest */, suspended: true, clockIso: pumpClock);
 
-        await _decomposer.DecomposeAsync(ds);
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         _stateSpanServiceMock.Verify(s => s.UpsertStateSpanAsync(
             It.Is<StateSpan>(span =>
@@ -286,7 +286,7 @@ public class DeviceStatusDecomposerPumpSuspensionTests : IDisposable
         // 2024-01-01T11:00:00Z = 1704106800000 mills
         var ds = MakeDeviceStatus("legacy-ooo", 1704106800000, suspended: false);
 
-        await _decomposer.DecomposeAsync(ds);
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Strict-`<` filter selected the T=10:00 row, both sides false → no transition, no upsert.
         _stateSpanServiceMock.Verify(
@@ -309,8 +309,8 @@ public class DeviceStatusDecomposerPumpSuspensionTests : IDisposable
         // Pin the snapshot id on the second call so OriginalId is deterministic across both invocations.
         var pinnedId = Guid.NewGuid();
         _pumpRepoMock
-            .Setup(r => r.CreateAsync(It.IsAny<V4Models.PumpSnapshot>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((V4Models.PumpSnapshot m, CancellationToken _) =>
+            .Setup(r => r.CreateAsync(It.IsAny<V4Models.PumpSnapshot>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((V4Models.PumpSnapshot m, WriteOrigin origin, CancellationToken _) =>
             {
                 m.Id = pinnedId;
                 return m;
@@ -318,8 +318,8 @@ public class DeviceStatusDecomposerPumpSuspensionTests : IDisposable
 
         var ds = MakeDeviceStatus("legacy8", 1704110400000, suspended: true);
 
-        await _decomposer.DecomposeAsync(ds);
-        await _decomposer.DecomposeAsync(ds);
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         var expectedOriginalId = $"pump-suspended:{pinnedId}";
         _stateSpanServiceMock.Verify(s => s.UpsertStateSpanAsync(
@@ -360,7 +360,7 @@ public class DeviceStatusDecomposerPumpSuspensionTests : IDisposable
 
         var ds = MakeDeviceStatus("legacy-dup", 1704110400000, suspended: true);
 
-        await _decomposer.DecomposeAsync(ds);
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // A suspension is already active; no new span should be opened.
         _stateSpanServiceMock.Verify(
@@ -403,7 +403,7 @@ public class DeviceStatusDecomposerPumpSuspensionTests : IDisposable
 
         var ds = MakeDeviceStatus("legacy-close-all", 1704110400000, suspended: false);
 
-        await _decomposer.DecomposeAsync(ds);
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         _stateSpanServiceMock.Verify(s => s.UpsertStateSpanAsync(
             It.Is<StateSpan>(span => span.Id == "open-1" && span.EndTimestamp != null),

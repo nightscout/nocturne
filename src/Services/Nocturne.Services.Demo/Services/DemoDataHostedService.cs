@@ -212,13 +212,13 @@ public class DemoDataHostedService : BackgroundService
     }
 
     /// <summary>
-    /// Wipes all demo data via the API.
+    /// Resets the demo tenant via the API, clearing its data and configuration.
     /// </summary>
     public async Task WipeAsync(CancellationToken ct)
     {
-        _logger.LogInformation("Wiping all demo data");
-        await _apiClient.WipeAllAsync(ct);
-        _logger.LogInformation("Demo data wipe complete");
+        _logger.LogInformation("Resetting demo tenant");
+        await _apiClient.ResetAsync(ct);
+        _logger.LogInformation("Demo tenant reset complete");
     }
 
     /// <summary>
@@ -245,105 +245,50 @@ public class DemoDataHostedService : BackgroundService
     }
 
     /// <summary>
-    /// Clears all demo data and regenerates historical data via the API using streaming pattern.
+    /// Resets the tenant and seeds the full sample set server-side — glucose,
+    /// treatments, device status, therapy profile, and every lifestyle type —
+    /// through the demo admin endpoint (the same seeder the dev tools use).
     /// </summary>
     public async Task RegenerateDataAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Regenerating demo data - clearing existing data first");
+        _logger.LogInformation("Regenerating demo data - resetting the tenant first");
 
-        // Clear existing demo data via API
+        // Reset the tenant via API: clears data and any configuration a visitor changed
         try
         {
-            await _apiClient.WipeAllAsync(cancellationToken);
+            await _apiClient.ResetAsync(cancellationToken);
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogWarning(ex, "Failed to wipe existing data (may not exist yet), continuing with regeneration");
+            _logger.LogWarning(ex, "Failed to reset the demo tenant (may not exist yet), continuing with regeneration");
         }
 
-        // Ensure demo PatientInsulin record exists
-        try
-        {
-            await _apiClient.EnsurePatientInsulinAsync(cancellationToken);
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogWarning(ex, "Failed to ensure PatientInsulin (endpoint may not exist yet)");
-        }
-
-        // Generate and post data using streaming pattern to minimize memory usage
         var startTime = DateTime.UtcNow;
-        const int batchSize = 1000;
 
-        // Stream and post entries in batches
-        var entryCount = 0;
-        var entryBatch = new List<Entry>(batchSize);
-        Entry? latestEntry = null;
-
-        foreach (var entry in _generator.GenerateHistoricalEntries())
+        // Seeding failure is non-fatal — realtime ticks keep building a live
+        // chart even without history. The filter keeps real shutdown
+        // cancellation propagating, but an HttpClient timeout
+        // (TaskCanceledException with an uncancelled stoppingToken) must not
+        // fault ExecuteAsync or be mistaken for shutdown by the reset loop's
+        // OperationCanceledException handler.
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            entryBatch.Add(entry);
-            latestEntry = entry;
-
-            if (entryBatch.Count >= batchSize)
-            {
-                await _apiClient.PostEntriesAsync(entryBatch, cancellationToken);
-                entryCount += entryBatch.Count;
-                entryBatch.Clear();
-            }
+            await _apiClient.SeedAsync(_config.BackfillDays, cancellationToken);
+        }
+        catch (Exception ex) when (
+            ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogError(ex, "Failed to seed the demo sample set");
         }
 
-        // Post remaining entries
-        if (entryBatch.Count > 0)
-        {
-            await _apiClient.PostEntriesAsync(entryBatch, cancellationToken);
-            entryCount += entryBatch.Count;
-            entryBatch.Clear();
-        }
+        // Continue the realtime stream from the seeded history's latest value.
+        var latestGlucose = await _apiClient.GetLatestGlucoseAsync(cancellationToken);
+        if (latestGlucose is { } glucose)
+            _generator.SeedCurrentGlucose(glucose);
 
-        if (latestEntry is not null)
-        {
-            var seedGlucose = latestEntry.Sgv ?? latestEntry.Mgdl;
-            _generator.SeedCurrentGlucose(seedGlucose);
-        }
-
-        _logger.LogInformation("Posted {Count} entries using streaming pattern", entryCount);
-
-        // Stream and post treatments in batches
-        var treatmentCount = 0;
-        var treatmentBatch = new List<Treatment>(batchSize);
-
-        foreach (var treatment in _generator.GenerateHistoricalTreatments())
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            treatmentBatch.Add(treatment);
-
-            if (treatmentBatch.Count >= batchSize)
-            {
-                await _apiClient.PostTreatmentsAsync(treatmentBatch, cancellationToken);
-                treatmentCount += treatmentBatch.Count;
-                treatmentBatch.Clear();
-            }
-        }
-
-        // Post remaining treatments
-        if (treatmentBatch.Count > 0)
-        {
-            await _apiClient.PostTreatmentsAsync(treatmentBatch, cancellationToken);
-            treatmentCount += treatmentBatch.Count;
-            treatmentBatch.Clear();
-        }
-
-        _logger.LogInformation("Posted {Count} treatments using streaming pattern", treatmentCount);
-
-        var duration = DateTime.UtcNow - startTime;
         _logger.LogInformation(
-            "Completed demo data regeneration: {Entries} entries, {Treatments} treatments in {Duration}",
-            entryCount,
-            treatmentCount,
-            duration
-        );
+            "Completed demo data regeneration in {Duration}",
+            DateTime.UtcNow - startTime);
     }
 
     private async Task GenerateAndPostEntryAsync(CancellationToken cancellationToken)
@@ -358,13 +303,16 @@ public class DemoDataHostedService : BackgroundService
                 entry.Direction
             );
 
-            await _apiClient.PostEntriesAsync(new[] { entry }, cancellationToken);
+            await _apiClient.PostCurrentEntryAsync(entry, cancellationToken);
 
             var treatments = _generator.GenerateCurrentTreatments(entry).ToList();
             if (treatments.Count > 0)
             {
-                await _apiClient.PostTreatmentsAsync(treatments, cancellationToken);
+                await _apiClient.PostCurrentTreatmentsAsync(treatments, cancellationToken);
             }
+
+            var deviceStatus = _generator.GenerateCurrentDeviceStatus(entry, treatments);
+            await _apiClient.PostDeviceStatusAsync(deviceStatus, cancellationToken);
         }
         catch (Exception ex)
         {

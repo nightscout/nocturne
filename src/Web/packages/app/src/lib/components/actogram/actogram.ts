@@ -1,8 +1,15 @@
 import type { ScaleTime } from 'd3-scale';
 
 export const MS_PER_HOUR = 3_600_000;
+export const MS_PER_DAY = 86_400_000;
 export const HOURS_PER_DAY = 24;
 export const HOURS_PER_ROW = 48;
+
+/**
+ * Days either side of the selected range that actogram pages fetch, so each row's
+ * next-day double plot has data and scrolling back has context.
+ */
+export const ACTOGRAM_PADDING_DAYS = 14;
 
 export interface ActogramPoint {
 	mills: number;
@@ -61,6 +68,46 @@ export function findNearestPoint<T extends ActogramPoint>(
 	}
 
 	return minDist <= maxDistanceHours ? nearest : undefined;
+}
+
+/** Every local-midnight Date between `fromMs` and `toMs`, inclusive. */
+export function buildDayRange(fromMs: number, toMs: number): Date[] {
+	const start = new Date(fromMs);
+	const end = new Date(toMs);
+	const startMidnight = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+	const endMidnight = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+	const dayCount =
+		Math.round((endMidnight.getTime() - startMidnight.getTime()) / MS_PER_DAY) + 1;
+	return Array.from({ length: Math.max(1, dayCount) }, (_, i) => {
+		const day = new Date(startMidnight);
+		day.setDate(day.getDate() + i);
+		return day;
+	});
+}
+
+/** Points whose `mills` fall inside the inclusive window. */
+export function pointsInRange<T extends ActogramPoint>(points: T[], from: number, to: number): T[] {
+	return points.filter((point) => point.mills >= from && point.mills <= to);
+}
+
+/**
+ * Lowest and highest `read` value across `items`, or null when there are none.
+ * Reduces rather than spreading into `Math.min`/`Math.max`, which is passed one
+ * argument per reading and throws RangeError on a long window of per-minute data.
+ */
+export function extentOf<T>(
+	items: readonly T[],
+	read: (item: T) => number,
+): { min: number; max: number } | null {
+	if (items.length === 0) return null;
+	let min = Infinity;
+	let max = -Infinity;
+	for (const item of items) {
+		const value = read(item);
+		if (value < min) min = value;
+		if (value > max) max = value;
+	}
+	return { min, max };
 }
 
 function slicePoints<T extends ActogramPoint>(data: T[], days: Date[]): { day: Date; data: RowDataPoint<T>[] }[] {

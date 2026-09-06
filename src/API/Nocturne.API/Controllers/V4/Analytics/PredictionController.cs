@@ -1,7 +1,12 @@
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Attributes;
+using Nocturne.API.Authorization;
+using Nocturne.API.Extensions;
 using Nocturne.API.Services.Glucose;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Controllers.V4.Analytics;
 
@@ -28,16 +33,19 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 public class PredictionController : ControllerBase
 {
     private readonly IPredictionService? _predictionService;
+    private readonly IProfileSnapshotService _profileSnapshotService;
     private readonly PredictionSource _source;
     private readonly ILogger<PredictionController> _logger;
 
     public PredictionController(
         ILogger<PredictionController> logger,
         IConfiguration configuration,
+        IProfileSnapshotService profileSnapshotService,
         IPredictionService? predictionService = null)
     {
         _predictionService = predictionService;
-        _source = configuration.GetValue<PredictionSource>("Predictions:Source", PredictionSource.None);
+        _profileSnapshotService = profileSnapshotService;
+        _source = PredictionOptions.ResolveSource(configuration);
         _logger = logger;
     }
 
@@ -50,10 +58,10 @@ public class PredictionController : ControllerBase
     /// <returns>Glucose predictions including IOB, UAM, COB, and zero-temp curves</returns>
     [HttpGet]
     [RemoteQuery]
+    [RequireScope(Scope.GlucoseRead, Scope.TreatmentsRead)]
     [ProducesResponseType(typeof(GlucosePredictionResponse), 200)]
-    [ProducesResponseType(typeof(PredictionErrorResponse), 400)]
-    [ProducesResponseType(typeof(PredictionErrorResponse), 404)]
-    [ProducesResponseType(typeof(PredictionErrorResponse), 500)]
+    [ProducesResponseType(typeof(ProblemDetails), 404)]
+    [ProducesResponseType(typeof(ProblemDetails), 500)]
     public async Task<ActionResult<GlucosePredictionResponse>> GetPredictions(
         [FromQuery] string? profileId = null,
         CancellationToken cancellationToken = default)
@@ -69,12 +77,14 @@ public class PredictionController : ControllerBase
         try
         {
             var result = await _predictionService.GetPredictionsAsync(profileId, asOf: null, cancellationToken);
-            return Ok(result);
+            return Ok(PredictionReadScopeGuard.Redact(result, HttpContext.GetGrantedScopes()));
         }
         catch (InvalidOperationException ex)
         {
-            _logger.LogWarning(ex, "Invalid operation for predictions");
-            return Problem(detail: ex.Message, statusCode: 400, title: "Bad Request");
+            // No recent device-status prediction data — the normal state for care-portal-only
+            // tenants now that DeviceStatus is the default source, so not a client fault.
+            _logger.LogWarning(ex, "No prediction data available");
+            return Problem(detail: ex.Message, statusCode: 404, title: "Not Found");
         }
         catch (Exception ex)
         {
@@ -89,6 +99,7 @@ public class PredictionController : ControllerBase
     /// <returns>Status of the prediction service including configured source</returns>
     [HttpGet("status")]
     [RemoteQuery]
+    [RequireScope(Scope.GlucoseRead, Scope.TreatmentsRead)]
     [ProducesResponseType(typeof(PredictionStatusResponse), 200)]
     public ActionResult<PredictionStatusResponse> GetStatus()
     {
@@ -97,6 +108,45 @@ public class PredictionController : ControllerBase
             Available = _predictionService != null && _source != PredictionSource.None,
             Source = _source.ToString(),
         });
+    }
+
+    /// <summary>
+    /// Get the pre-resolved therapy profile for the next 24 hours, flattened into contiguous
+    /// absolute-time segments, for an offline on-device <c>oref</c> prediction run.
+    /// </summary>
+    /// <remarks>
+    /// Unlike <see cref="GetPredictions"/>, this action is intentionally available regardless of
+    /// <c>Predictions:Source</c>: the client runs oref on-device and needs its therapy profile
+    /// precisely when server-side prediction is off (the offline case). It depends only on the
+    /// unconditionally-registered profile resolvers, not on <see cref="IPredictionService"/>, so it
+    /// carries no <c>_predictionService</c>/<c>_source</c> guard.
+    ///
+    /// Clients must additionally apply the fixed oref constants <c>max_iob=10</c>, <c>max_basal=4</c>,
+    /// <c>max_daily_basal=2</c> (which <c>PredictionService.GetProfileAsync</c> hardcodes) to match a
+    /// server-side oref run; they are not part of this payload.
+    /// </remarks>
+    /// <param name="profileId">Optional profile name. The device omits it (resolves the active profile).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    [HttpGet("profile-snapshot")]
+    [RemoteQuery]
+    [RequireScope(Scope.TherapyRead)]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    [ProducesResponseType(typeof(ProfileSnapshotResponse), 200)]
+    [ProducesResponseType(typeof(ProblemDetails), 500)]
+    public async Task<ActionResult<ProfileSnapshotResponse>> GetProfileSnapshot(
+        [FromQuery] string? profileId = null,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var result = await _profileSnapshotService.BuildAsync(profileId, cancellationToken);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error building profile snapshot for profile: {ProfileId}", profileId ?? "default");
+            return Problem(detail: "Failed to build profile snapshot", statusCode: 500, title: "Internal Server Error");
+        }
     }
 }
 
@@ -167,10 +217,59 @@ public class PredictionStatusResponse
 }
 
 /// <summary>
-/// Error response for prediction failures.
+/// Pre-resolved therapy profile flattened into contiguous absolute-time segments covering
+/// <c>[now, now+24h)</c> for on-device oref prediction. Property names are pinned to snake_case
+/// with <see cref="JsonPropertyNameAttribute"/> so the wire contract is independent of any ambient
+/// serializer naming policy, and every field is emitted (including zeros) so the client's strict
+/// decoder never sees a missing key.
 /// </summary>
-public class PredictionErrorResponse
+/// <remarks>
+/// Clients must additionally apply the fixed oref constants <c>max_iob=10</c>, <c>max_basal=4</c>,
+/// <c>max_daily_basal=2</c> (see <c>PredictionService.GetProfileAsync</c>) to match a server-side run.
+/// </remarks>
+public sealed class ProfileSnapshotResponse
 {
-    /// <summary>Error message</summary>
-    public string Error { get; set; } = string.Empty;
+    /// <summary>When the snapshot was resolved (Unix ms); equals the window start.</summary>
+    [JsonPropertyName("fetched_at_mills")]
+    public long FetchedAtMills { get; set; }
+
+    /// <summary>Ascending, contiguous, gap/overlap-free segments covering [now, now+24h).</summary>
+    [JsonPropertyName("segments")]
+    public List<ProfileSnapshotSegment> Segments { get; set; } = new();
+}
+
+/// <summary>
+/// One flat segment of the resolved profile: all scalars are constant over <c>[start, end)</c>.
+/// </summary>
+public sealed class ProfileSnapshotSegment
+{
+    /// <summary>Segment start (Unix ms, inclusive).</summary>
+    [JsonPropertyName("start_mills")] public long StartMills { get; set; }
+
+    /// <summary>Segment end (Unix ms, exclusive).</summary>
+    [JsonPropertyName("end_mills")] public long EndMills { get; set; }
+
+    /// <summary>Duration of insulin action (hours).</summary>
+    [JsonPropertyName("dia")] public double Dia { get; set; }
+
+    /// <summary>Scheduled basal rate (U/hr).</summary>
+    [JsonPropertyName("basal")] public double Basal { get; set; }
+
+    /// <summary>Insulin sensitivity (mg/dL per U).</summary>
+    [JsonPropertyName("sens")] public double Sens { get; set; }
+
+    /// <summary>Carb ratio (g/U).</summary>
+    [JsonPropertyName("carb_ratio")] public double CarbRatio { get; set; }
+
+    /// <summary>Low BG target (mg/dL).</summary>
+    [JsonPropertyName("min_bg")] public double MinBg { get; set; }
+
+    /// <summary>High BG target (mg/dL).</summary>
+    [JsonPropertyName("max_bg")] public double MaxBg { get; set; }
+
+    /// <summary>Insulin activity peak (minutes).</summary>
+    [JsonPropertyName("peak")] public int Peak { get; set; }
+
+    /// <summary>Insulin activity curve model name (e.g. "rapid-acting").</summary>
+    [JsonPropertyName("curve")] public string Curve { get; set; } = "rapid-acting";
 }

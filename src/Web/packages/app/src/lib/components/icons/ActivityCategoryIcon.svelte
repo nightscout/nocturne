@@ -1,12 +1,14 @@
 <script lang="ts">
-  import { StateSpanCategory } from "$lib/api";
-  import SleepModeIcon from "./SleepModeIcon.svelte";
+  import { StateSpanCategory, ChartSpanKind } from "$lib/api";
   import ExerciseModeIcon from "./ExerciseModeIcon.svelte";
+  import SleepModeIcon from "./SleepModeIcon.svelte";
   import ThermometerIcon from "lucide-svelte/icons/thermometer";
   import PlaneIcon from "lucide-svelte/icons/plane";
   import CircleHelp from "lucide-svelte/icons/circle-help";
 
   interface Props {
+    /** Discriminator distinguishing sleep spans (category is null) from state spans. */
+    kind?: ChartSpanKind;
     category?: StateSpanCategory;
     class?: string;
     size?: number;
@@ -15,6 +17,7 @@
   }
 
   let {
+    kind,
     category,
     class: className = "",
     size = 16,
@@ -23,7 +26,7 @@
   }: Props = $props();
 </script>
 
-{#if category === StateSpanCategory.Sleep}
+{#if kind === ChartSpanKind.Sleep}
   <SleepModeIcon class={className} {size} {strokeWidth} {color} />
 {:else if category === StateSpanCategory.Exercise}
   <ExerciseModeIcon class={className} {size} {strokeWidth} {color} />

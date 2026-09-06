@@ -1,11 +1,12 @@
-using System.Text;
-using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Moq;
 using Nocturne.API.Middleware;
 using Nocturne.API.Multitenancy;
+using Nocturne.Core.Contracts.Auth;
 using Xunit;
 
 namespace Nocturne.API.Tests.Middleware;
@@ -13,6 +14,7 @@ namespace Nocturne.API.Tests.Middleware;
 public class OidcCallbackRedirectMiddlewareTests
 {
     private readonly BaseDomainOptions _config = new() { BaseDomain = "nocturne.run" };
+    private readonly Mock<IOidcAuthService> _oidcAuthService = new();
 
     private OidcCallbackRedirectMiddleware CreateMiddleware(RequestDelegate? next = null)
     {
@@ -23,19 +25,32 @@ public class OidcCallbackRedirectMiddlewareTests
             Options.Create(_config));
     }
 
-    private static string EncodeState(object data)
+    /// <summary>
+    /// Returns an opaque state token that the auth service resolves to <paramref name="tenantSlug"/>.
+    /// The real state is data-protected, so the middleware cannot read it directly — it asks the
+    /// service, and these tests stub that. A token with no mapping resolves to <c>null</c>, which
+    /// is what the service returns for a state this instance did not issue.
+    /// </summary>
+    private string StateFor(string? tenantSlug)
     {
-        var json = JsonSerializer.Serialize(data);
-        return Convert.ToBase64String(Encoding.UTF8.GetBytes(json))
-            .Replace("+", "-").Replace("/", "_").TrimEnd('=');
+        var token = Guid.NewGuid().ToString("N");
+        _oidcAuthService.Setup(s => s.TryReadTenantSlug(token)).Returns(tenantSlug);
+        return token;
+    }
+
+    private DefaultHttpContext NewContext()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(_oidcAuthService.Object);
+        return new DefaultHttpContext { RequestServices = services.BuildServiceProvider() };
     }
 
     [Fact]
     public async Task Redirects_apex_oidc_callback_to_tenant_subdomain()
     {
         var middleware = CreateMiddleware();
-        var state = EncodeState(new { TenantSlug = "ryceg" });
-        var context = new DefaultHttpContext();
+        var state = StateFor("ryceg");
+        var context = NewContext();
         context.Request.Scheme = "https";
         context.Request.Host = new HostString("nocturne.run");
         context.Request.Path = "/api/auth/oidc/link/callback";
@@ -55,8 +70,8 @@ public class OidcCallbackRedirectMiddlewareTests
     public async Task Redirects_apex_login_callback_to_tenant_subdomain()
     {
         var middleware = CreateMiddleware();
-        var state = EncodeState(new { TenantSlug = "alice" });
-        var context = new DefaultHttpContext();
+        var state = StateFor("alice");
+        var context = NewContext();
         context.Request.Scheme = "https";
         context.Request.Host = new HostString("nocturne.run");
         context.Request.Path = "/api/auth/oidc/callback";
@@ -75,8 +90,8 @@ public class OidcCallbackRedirectMiddlewareTests
     {
         var called = false;
         var middleware = CreateMiddleware(_ => { called = true; return Task.CompletedTask; });
-        var state = EncodeState(new { TenantSlug = "ryceg" });
-        var context = new DefaultHttpContext();
+        var state = StateFor("ryceg");
+        var context = NewContext();
         context.Request.Host = new HostString("ryceg.nocturne.run");
         context.Request.Path = "/api/auth/oidc/link/callback";
         context.Request.QueryString = new QueryString($"?code=abc&state={state}");
@@ -91,7 +106,7 @@ public class OidcCallbackRedirectMiddlewareTests
     {
         var called = false;
         var middleware = CreateMiddleware(_ => { called = true; return Task.CompletedTask; });
-        var context = new DefaultHttpContext();
+        var context = NewContext();
         context.Request.Host = new HostString("nocturne.run");
         context.Request.Path = "/api/v4/entries";
 
@@ -105,11 +120,28 @@ public class OidcCallbackRedirectMiddlewareTests
     {
         var called = false;
         var middleware = CreateMiddleware(_ => { called = true; return Task.CompletedTask; });
-        var state = EncodeState(new { Intent = "login" });
-        var context = new DefaultHttpContext();
+        var state = StateFor(null);
+        var context = NewContext();
         context.Request.Host = new HostString("nocturne.run");
         context.Request.Path = "/api/auth/oidc/callback";
         context.Request.QueryString = new QueryString($"?code=abc&state={state}");
+
+        await middleware.InvokeAsync(context);
+
+        called.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Passes_through_when_state_was_not_issued_by_this_instance()
+    {
+        // No mapping registered: the service refuses to unprotect it and returns null, so the
+        // middleware must not derive a redirect target from it.
+        var called = false;
+        var middleware = CreateMiddleware(_ => { called = true; return Task.CompletedTask; });
+        var context = NewContext();
+        context.Request.Host = new HostString("nocturne.run");
+        context.Request.Path = "/api/auth/oidc/callback";
+        context.Request.QueryString = new QueryString("?code=abc&state=eyJUZW5hbnRTbHVnIjoiZXZpbCJ9");
 
         await middleware.InvokeAsync(context);
 
@@ -125,7 +157,7 @@ public class OidcCallbackRedirectMiddlewareTests
             _ => { called = true; return Task.CompletedTask; },
             NullLogger<OidcCallbackRedirectMiddleware>.Instance,
             Options.Create(config));
-        var context = new DefaultHttpContext();
+        var context = NewContext();
         context.Request.Host = new HostString("nocturne.run");
         context.Request.Path = "/api/auth/oidc/callback";
 
@@ -139,7 +171,7 @@ public class OidcCallbackRedirectMiddlewareTests
     {
         var called = false;
         var middleware = CreateMiddleware(_ => { called = true; return Task.CompletedTask; });
-        var context = new DefaultHttpContext();
+        var context = NewContext();
         context.Request.Host = new HostString("nocturne.run");
         context.Request.Path = "/api/auth/oidc/callback";
         context.Request.QueryString = new QueryString("?code=abc");
@@ -154,8 +186,8 @@ public class OidcCallbackRedirectMiddlewareTests
     {
         var called = false;
         var middleware = CreateMiddleware(_ => { called = true; return Task.CompletedTask; });
-        var state = EncodeState(new { TenantSlug = "ryceg" });
-        var context = new DefaultHttpContext();
+        var state = StateFor("ryceg");
+        var context = NewContext();
         context.Request.Host = new HostString("nocturne-api");
         context.Request.Headers["X-Forwarded-Host"] = "ryceg.nocturne.run";
         context.Request.Path = "/api/auth/oidc/link/callback";
@@ -171,8 +203,8 @@ public class OidcCallbackRedirectMiddlewareTests
     {
         var called = false;
         var middleware = CreateMiddleware(_ => { called = true; return Task.CompletedTask; });
-        var state = EncodeState(new { TenantSlug = "evil.attacker.com" });
-        var context = new DefaultHttpContext();
+        var state = StateFor("evil.attacker.com");
+        var context = NewContext();
         context.Request.Host = new HostString("nocturne.run");
         context.Request.Path = "/api/auth/oidc/callback";
         context.Request.QueryString = new QueryString($"?code=abc&state={state}");

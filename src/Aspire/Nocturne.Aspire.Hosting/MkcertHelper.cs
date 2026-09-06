@@ -39,10 +39,36 @@ public static class MkcertHelper
     }
 
     /// <summary>
+    /// Like <see cref="EnsureCertificate"/>, but returns null instead of throwing when
+    /// mkcert is not installed. Used for the default local domain, where the caller can
+    /// fall back to the ASP.NET developer certificate.
+    /// </summary>
+    public static X509Certificate2? TryEnsureCertificate(string domain)
+    {
+        try
+        {
+            return EnsureCertificate(domain);
+        }
+        // CryptographicException: a corrupt/truncated cached PEM (e.g. a run
+        // killed mid-generation) must not brick every subsequent start.
+        catch (Exception ex) when (ex is InvalidOperationException
+            or System.Security.Cryptography.CryptographicException)
+        {
+            Console.WriteLine($"[Nocturne.Aspire] {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Checks whether the domain resolves to a loopback address and prints a warning if not.
+    /// Subdomains of .localhost are exempt: browsers resolve them to loopback themselves,
+    /// so an OS-resolver miss is not actionable.
     /// </summary>
     public static void WarnIfDomainUnresolvable(string domain, int port)
     {
+        if (domain == "localhost" || domain.EndsWith(".localhost", StringComparison.OrdinalIgnoreCase))
+            return;
+
         try
         {
             var addresses = Dns.GetHostAddresses(domain);

@@ -5,6 +5,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.Tests.Shared.Mocks;
 using Xunit;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Tests.Services.Devices;
 
@@ -81,8 +82,8 @@ public class DeviceServiceTests
             .ReturnsAsync((Device?)null);
 
         _mockRepository
-            .Setup(r => r.CreateAsync(It.IsAny<Device>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Device device, CancellationToken _) => device);
+            .Setup(r => r.CreateAsync(It.IsAny<Device>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Device device, WriteOrigin _, CancellationToken _) => device);
 
         // Act
         var result = await _service.ResolveAsync(category, type, serial, mills);
@@ -97,7 +98,7 @@ public class DeviceServiceTests
                     d.Serial == serial &&
                     d.FirstSeenTimestamp == DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime &&
                     d.LastSeenTimestamp == DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime),
-                It.IsAny<CancellationToken>()),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -132,7 +133,7 @@ public class DeviceServiceTests
         // Assert
         result.Should().Be(existingId);
         _mockRepository.Verify(
-            r => r.CreateAsync(It.IsAny<Device>(), It.IsAny<CancellationToken>()),
+            r => r.CreateAsync(It.IsAny<Device>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -163,8 +164,8 @@ public class DeviceServiceTests
             .ReturnsAsync(existingDevice);
 
         _mockRepository
-            .Setup(r => r.UpdateAsync(existingId, It.IsAny<Device>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Guid _, Device d, CancellationToken _) => d);
+            .Setup(r => r.UpdateAsync(existingId, It.IsAny<Device>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid _, Device d, WriteOrigin _, CancellationToken _) => d);
 
         // Act
         var result = await _service.ResolveAsync(category, type, serial, newerMills);
@@ -175,7 +176,7 @@ public class DeviceServiceTests
             r => r.UpdateAsync(
                 existingId,
                 It.Is<Device>(d => d.LastSeenTimestamp == DateTimeOffset.FromUnixTimeMilliseconds(newerMills).UtcDateTime),
-                It.IsAny<CancellationToken>()),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -211,7 +212,7 @@ public class DeviceServiceTests
         // Assert
         result.Should().Be(existingId);
         _mockRepository.Verify(
-            r => r.UpdateAsync(It.IsAny<Guid>(), It.IsAny<Device>(), It.IsAny<CancellationToken>()),
+            r => r.UpdateAsync(It.IsAny<Guid>(), It.IsAny<Device>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 

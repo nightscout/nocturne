@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -37,7 +38,7 @@ namespace Nocturne.API.Controllers.Authentication;
 ///   <item><description>RFC 7591 Dynamic Client Registration via <c>POST /oauth/register</c>.</description></item>
 /// </list>
 ///
-/// Scopes are validated via <see cref="OAuthScopes.IsValid"/> and normalized via <see cref="OAuthScopes.Normalize"/>.
+/// Scopes are validated via <see cref="Scope.IsValid"/> and normalized via <see cref="Scope.Normalize"/>.
 /// </remarks>
 /// <seealso cref="IOAuthClientService"/>
 /// <seealso cref="IOAuthGrantService"/>
@@ -130,7 +131,7 @@ public class OAuthController : ControllerBase
 
         // Validate scopes
         var requestedScopes = scope?.Split(' ', StringSplitOptions.RemoveEmptyEntries) ?? [];
-        var invalidScopes = requestedScopes.Where(s => !OAuthScopes.IsValid(s)).ToList();
+        var invalidScopes = requestedScopes.Where(s => !Scope.IsValid(s)).ToList();
         if (invalidScopes.Count > 0)
         {
             return BadRequest(new OAuthError
@@ -178,32 +179,27 @@ public class OAuthController : ControllerBase
             return Redirect($"/auth/login?returnUrl={Uri.EscapeDataString(returnUrl)}");
         }
 
-        var subjectId = HttpContext.GetSubjectId();
-        if (subjectId == null)
+        if (!TryGetSubject(out var subjectId, out var subjectError))
         {
-            return Unauthorized(new OAuthError
-            {
-                Error = "access_denied",
-                ErrorDescription = "Could not determine authenticated user.",
-            });
+            return subjectError;
         }
 
         // Normalize the requested scopes
-        var normalizedScopes = OAuthScopes.Normalize(requestedScopes);
+        var normalizedScopes = Scope.Normalize(requestedScopes);
 
         // Check if an active grant exists with sufficient scopes
-        var existingGrant = await _grantService.GetActiveGrantAsync(client.Id, subjectId.Value);
+        var existingGrant = await _grantService.GetActiveGrantAsync(client.Id, subjectId);
         if (existingGrant != null)
         {
             var existingSet = new HashSet<string>(existingGrant.Scopes);
-            var allSatisfied = normalizedScopes.All(s => OAuthScopes.SatisfiesScope(existingSet, s));
+            var allSatisfied = normalizedScopes.All(s => Scope.Satisfies(existingSet, s));
 
             if (allSatisfied)
             {
                 // Silent approval: existing grant covers all requested scopes
                 return await IssueAuthorizationCode(
                     client.Id,
-                    subjectId.Value,
+                    subjectId,
                     normalizedScopes,
                     redirect_uri,
                     code_challenge,
@@ -230,50 +226,14 @@ public class OAuthController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult> ApproveConsent([FromForm] ConsentApprovalRequest request)
     {
-        if (!HttpContext.IsAuthenticated())
+        if (!TryGetSubject(out var subjectId, out var subjectError))
         {
-            return Unauthorized(new OAuthError
-            {
-                Error = "access_denied",
-                ErrorDescription = "User is not authenticated.",
-            });
+            return subjectError;
         }
 
-        var subjectId = HttpContext.GetSubjectId();
-        if (subjectId == null)
-        {
-            return Unauthorized(new OAuthError
-            {
-                Error = "access_denied",
-                ErrorDescription = "Could not determine authenticated user.",
-            });
-        }
-
-        // If user denied
-        if (!request.Approved)
-        {
-            return RedirectWithError(
-                request.RedirectUri,
-                "access_denied",
-                "The user denied the authorization request.",
-                request.State
-            );
-        }
-
-        // Validate scopes
-        var scopes = request.Scope?.Split(' ', StringSplitOptions.RemoveEmptyEntries) ?? [];
-        var normalizedScopes = OAuthScopes.Normalize(scopes);
-
-        if (normalizedScopes.Count == 0)
-        {
-            return BadRequest(new OAuthError
-            {
-                Error = "invalid_scope",
-                ErrorDescription = "No valid scopes were approved.",
-            });
-        }
-
-        // Find the client
+        // Find the client. Resolved before the approval decision is read: every exit from this
+        // action that redirects to request.RedirectUri needs the URI proven to belong to the client
+        // first, or the endpoint is an open redirect off a first-party origin.
         var client = await _clientService.GetClientAsync(request.ClientId);
         if (client == null)
         {
@@ -294,10 +254,56 @@ public class OAuthController : ControllerBase
             });
         }
 
+        // If user denied
+        if (!request.Approved)
+        {
+            return RedirectWithError(
+                request.RedirectUri,
+                "access_denied",
+                "The user denied the authorization request.",
+                request.State
+            );
+        }
+
+        // Validate scopes
+        var scopes = request.Scope?.Split(' ', StringSplitOptions.RemoveEmptyEntries) ?? [];
+        var normalizedScopes = Scope.Normalize(scopes);
+
+        if (normalizedScopes.Count == 0)
+        {
+            return BadRequest(new OAuthError
+            {
+                Error = "invalid_scope",
+                ErrorDescription = "No valid scopes were approved.",
+            });
+        }
+
+        // A user cannot delegate more than they hold. Without this cap, approving a consent
+        // screen that asked for "*" issued a token with full access regardless of the
+        // approver's own permissions on the tenant — turning any authenticated member into a
+        // superuser by way of their own browser. The ceiling is the caller's resolved scopes on
+        // this tenant, which MemberScopeMiddleware has already narrowed to their membership.
+        var approverScopes = HttpContext.GetGrantedScopes();
+        if (!Scope.Satisfies(approverScopes, Scope.FullAccess))
+        {
+            normalizedScopes = normalizedScopes
+                .Where(scope => Scope.Satisfies(approverScopes, scope))
+                .ToHashSet();
+
+            if (normalizedScopes.Count == 0)
+            {
+                return BadRequest(new OAuthError
+                {
+                    Error = "invalid_scope",
+                    ErrorDescription = "None of the requested scopes are available to this account.",
+                });
+            }
+        }
+
         // Generate authorization code
         return await IssueAuthorizationCode(
             client.Id,
-            subjectId.Value,
+            subjectId,
             normalizedScopes,
             request.RedirectUri,
             request.CodeChallenge,
@@ -432,7 +438,7 @@ public class OAuthController : ControllerBase
     )
     {
         var requestedScopes = scope?.Split(' ', StringSplitOptions.RemoveEmptyEntries) ?? [];
-        var invalidScopes = requestedScopes.Where(s => !OAuthScopes.IsValid(s)).ToList();
+        var invalidScopes = requestedScopes.Where(s => !Scope.IsValid(s)).ToList();
         if (invalidScopes.Count > 0)
         {
             return BadRequest(new OAuthError
@@ -463,7 +469,7 @@ public class OAuthController : ControllerBase
         }
 
         // Normalize scopes
-        var normalizedScopes = OAuthScopes.Normalize(requestedScopes);
+        var normalizedScopes = Scope.Normalize(requestedScopes);
 
         // Create device code pair
         var result = await _deviceCodeService.CreateDeviceCodeAsync(client_id, normalizedScopes);
@@ -552,23 +558,9 @@ public class OAuthController : ControllerBase
         [FromForm] DeviceApprovalRequest request
     )
     {
-        if (!HttpContext.IsAuthenticated())
+        if (!TryGetSubject(out var subjectId, out var subjectError))
         {
-            return Unauthorized(new OAuthError
-            {
-                Error = "access_denied",
-                ErrorDescription = "User is not authenticated.",
-            });
-        }
-
-        var subjectId = HttpContext.GetSubjectId();
-        if (subjectId == null)
-        {
-            return Unauthorized(new OAuthError
-            {
-                Error = "access_denied",
-                ErrorDescription = "Could not determine authenticated user.",
-            });
+            return subjectError;
         }
 
         if (string.IsNullOrEmpty(request.UserCode))
@@ -581,7 +573,7 @@ public class OAuthController : ControllerBase
         }
 
         var success = request.Approved
-            ? await _deviceCodeService.ApproveDeviceCodeAsync(request.UserCode, subjectId.Value)
+            ? await _deviceCodeService.ApproveDeviceCodeAsync(request.UserCode, subjectId)
             : await _deviceCodeService.DenyDeviceCodeAsync(request.UserCode);
 
         if (!success)
@@ -600,6 +592,11 @@ public class OAuthController : ControllerBase
     /// Token revocation endpoint (RFC 7009). Per the specification, always returns <c>200 OK</c>
     /// regardless of whether the token was found or already revoked.
     /// </summary>
+    /// <remarks>
+    /// Anonymous, unlike the introspection endpoint below: the response carries nothing about the
+    /// token, and a client whose token has already stopped working still needs to be able to
+    /// retire it.
+    /// </remarks>
     /// <param name="token">The access token or refresh token to revoke.</param>
     /// <param name="token_type_hint">Optional hint: <c>access_token</c> or <c>refresh_token</c>.</param>
     [HttpPost("revoke")]
@@ -647,6 +644,46 @@ public class OAuthController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// Resolves the subject the request is authenticated as.
+    /// </summary>
+    /// <param name="subjectId">The caller's subject, set only when this returns <c>true</c>.</param>
+    /// <param name="error">The response to return in place of the action's own, set only when this returns <c>false</c>.</param>
+    /// <remarks>
+    /// Authentication and a subject are separate questions: a guest, instance-key or dev-auth
+    /// principal is authenticated but carries no subject of its own, and the public share subject is
+    /// the reverse — a subject id on an unauthenticated context. Both are refused here.
+    /// </remarks>
+    private bool TryGetSubject(out Guid subjectId, [NotNullWhen(false)] out ActionResult? error)
+    {
+        subjectId = default;
+
+        if (!HttpContext.IsAuthenticated())
+        {
+            error = Unauthorized(new OAuthError
+            {
+                Error = "access_denied",
+                ErrorDescription = "User is not authenticated.",
+            });
+            return false;
+        }
+
+        var authenticatedSubjectId = HttpContext.GetSubjectId();
+        if (authenticatedSubjectId == null)
+        {
+            error = Unauthorized(new OAuthError
+            {
+                Error = "access_denied",
+                ErrorDescription = "Could not determine authenticated user.",
+            });
+            return false;
+        }
+
+        subjectId = authenticatedSubjectId.Value;
+        error = null;
+        return true;
+    }
+
     private async Task<ActionResult> IssueAuthorizationCode(
         Guid clientEntityId,
         Guid subjectId,
@@ -677,6 +714,12 @@ public class OAuthController : ControllerBase
         return Redirect(redirectUrl);
     }
 
+    /// <summary>
+    /// Redirects to the client's registered <paramref name="redirectUri"/> with an OAuth error.
+    /// Performs no validation of its own: callers must have already proven the URI is registered to
+    /// the client (<see cref="IOAuthClientService.ValidateRedirectUriAsync"/>), otherwise this
+    /// redirects wherever the request asked.
+    /// </summary>
     private ActionResult RedirectWithError(
         string redirectUri,
         string error,
@@ -730,26 +773,12 @@ public class OAuthController : ControllerBase
     [ProducesResponseType(typeof(OAuthGrantListResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<OAuthGrantListResponse>> GetGrants()
     {
-        if (!HttpContext.IsAuthenticated())
+        if (!TryGetSubject(out var subjectId, out var subjectError))
         {
-            return Unauthorized(new OAuthError
-            {
-                Error = "access_denied",
-                ErrorDescription = "User is not authenticated.",
-            });
+            return subjectError;
         }
 
-        var subjectId = HttpContext.GetSubjectId();
-        if (subjectId == null)
-        {
-            return Unauthorized(new OAuthError
-            {
-                Error = "access_denied",
-                ErrorDescription = "Could not determine authenticated user.",
-            });
-        }
-
-        var grants = await _grantService.GetGrantsForSubjectAsync(subjectId.Value);
+        var grants = await _grantService.GetGrantsForSubjectAsync(subjectId);
         var dtos = grants.Select(MapToDto).ToList();
 
         return Ok(new OAuthGrantListResponse { Grants = dtos });
@@ -765,28 +794,12 @@ public class OAuthController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> DeleteGrant(Guid grantId)
     {
-        if (!HttpContext.IsAuthenticated())
+        if (!TryGetSubject(out var subjectId, out var subjectError))
         {
-            return Unauthorized(new OAuthError
-            {
-                Error = "access_denied",
-                ErrorDescription = "User is not authenticated.",
-            });
+            return subjectError;
         }
 
-        var subjectId = HttpContext.GetSubjectId();
-        if (subjectId == null)
-        {
-            return Unauthorized(new OAuthError
-            {
-                Error = "access_denied",
-                ErrorDescription = "Could not determine authenticated user.",
-            });
-        }
-
-        // Verify ownership: load all grants for the subject and check if grantId is among them
-        var grants = await _grantService.GetGrantsForSubjectAsync(subjectId.Value);
-        if (grants.All(g => g.Id != grantId))
+        if (await _grantService.GetGrantForSubjectAsync(grantId, subjectId) is null)
         {
             return NotFound(new OAuthError
             {
@@ -808,36 +821,23 @@ public class OAuthController : ControllerBase
     [HttpPatch("grants/{grantId}")]
     [Consumes("application/json")]
     [ProducesResponseType(typeof(OAuthGrantDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(OAuthError), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<OAuthGrantDto>> UpdateGrant(
         Guid grantId,
         [FromBody] UpdateGrantRequest request
     )
     {
-        if (!HttpContext.IsAuthenticated())
+        if (!TryGetSubject(out var subjectId, out var subjectError))
         {
-            return Unauthorized(new OAuthError
-            {
-                Error = "access_denied",
-                ErrorDescription = "User is not authenticated.",
-            });
-        }
-
-        var subjectId = HttpContext.GetSubjectId();
-        if (subjectId == null)
-        {
-            return Unauthorized(new OAuthError
-            {
-                Error = "access_denied",
-                ErrorDescription = "Could not determine authenticated user.",
-            });
+            return subjectError;
         }
 
         try
         {
             var updated = await _grantService.UpdateGrantAsync(
                 grantId,
-                subjectId.Value,
+                subjectId,
                 request.Label,
                 request.Scopes
             );
@@ -855,6 +855,8 @@ public class OAuthController : ControllerBase
         }
         catch (ArgumentException ex)
         {
+            // Scope.ValidateGrantScopes rejects a scope outside the vocabulary, and a scope
+            // wider than the grant type may hold — a guest link is capped at read.
             return BadRequest(new OAuthError
             {
                 Error = "invalid_scope",
@@ -866,26 +868,42 @@ public class OAuthController : ControllerBase
     /// <summary>
     /// Token introspection endpoint (RFC 7662).
     /// Returns metadata about a token including its active status, scopes, and subject.
-    /// Per RFC 7662, always returns 200 OK; invalid tokens get <c>active=false</c>.
+    /// Per RFC 7662, an authenticated caller always gets 200 OK; invalid tokens get <c>active=false</c>.
     /// </summary>
+    /// <remarks>
+    /// RFC 7662 section 2.1 requires the endpoint to authenticate its caller. Every client here is
+    /// public (no client secrets), so the caller authenticates as a subject the same way the other
+    /// credential-bearing endpoints on this controller do, and a request with no identity is
+    /// refused rather than answered.
+    /// <para>
+    /// The response is bounded by that identity: a token issued to another subject reads as
+    /// inactive, so the endpoint resolves only tokens the caller already holds an identity for.
+    /// </para>
+    /// </remarks>
     /// <param name="token">The token to introspect (access token or refresh token).</param>
     /// <param name="token_type_hint">Optional hint: <c>access_token</c> or <c>refresh_token</c>.</param>
     /// <returns>A <see cref="TokenIntrospectionResponse"/> with <c>active=false</c> for invalid, expired, or revoked tokens.</returns>
     [HttpPost("introspect")]
-    [AllowAnonymous]
     [EnableRateLimiting("oauth-token")]
     [Consumes("application/x-www-form-urlencoded")]
     [ProducesResponseType(typeof(TokenIntrospectionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(OAuthError), StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<TokenIntrospectionResponse>> Introspect(
         [FromForm] string token,
         [FromForm] string? token_type_hint = null)
     {
+        if (!TryGetSubject(out var callerSubjectId, out var subjectError))
+        {
+            return subjectError;
+        }
+
         if (string.IsNullOrEmpty(token))
         {
             return Ok(new TokenIntrospectionResponse { Active = false });
         }
 
-        // Try as JWT access token
+        // Deliberately looser than TokenFormat.IsJwt: introspection reports on whatever it is
+        // handed, so a malformed JWT is answered here rather than looked up as an opaque token.
         if (token.Contains('.'))
         {
             var validation = _jwtService.ValidateAccessToken(token);
@@ -896,6 +914,25 @@ public class OAuthController : ControllerBase
                 // Check revocation cache
                 if (!string.IsNullOrEmpty(claims.JwtId) &&
                     await _revocationCache.IsRevokedAsync(claims.JwtId))
+                {
+                    return Ok(new TokenIntrospectionResponse { Active = false });
+                }
+
+                // A revoked grant takes its outstanding access tokens with it
+                if (claims is { GrantId: not null, TenantId: not null } &&
+                    await _grantService.IsGrantRevokedAsync(claims.GrantId.Value, claims.TenantId.Value))
+                {
+                    return Ok(new TokenIntrospectionResponse { Active = false });
+                }
+
+                // A token belonging to someone else is reported as inactive rather than resolved
+                // to its subject and scopes. Subjects are global across tenants, so a tenant-pinned
+                // token is bound to the caller's tenant too — the same subject in tenant A cannot
+                // resolve its tenant-B token here. A non-pinned token (legacy session JWT, no
+                // TenantId claim) carries no such restriction and is matched on subject alone.
+                var callerTenantId = HttpContext.GetAuthContext()?.TenantId;
+                if (claims.SubjectId != callerSubjectId
+                    || (claims.TenantId.HasValue && claims.TenantId != callerTenantId))
                 {
                     return Ok(new TokenIntrospectionResponse { Active = false });
                 }
@@ -947,28 +984,25 @@ public class OAuthController : ControllerBase
             });
         }
 
-        // RFC 7591 Section 2.0.1: redirect_uris is REQUIRED for native apps
-        if (request.RedirectUris is null || request.RedirectUris.Count == 0)
+        // redirect_uris is only needed for the authorization-code flow. Device-flow
+        // (RFC 8628) and refresh-only clients register without any; a client with no
+        // registered redirect URI simply cannot use the authorization-code flow, which
+        // ValidateRedirectUriAsync already fails closed on. When present, every URI must
+        // pass RFC 8252 validation.
+        if (request.RedirectUris is { Count: > 0 })
         {
-            return BadRequest(new OAuthError
+            var invalidUris = request.RedirectUris
+                .Where(u => !redirectUriValidator.IsValidForRegistration(u))
+                .ToList();
+            if (invalidUris.Count > 0)
             {
-                Error = "invalid_redirect_uri",
-                ErrorDescription = "At least one redirect_uri is required.",
-            });
-        }
-
-        // Validate every redirect URI per RFC 8252
-        var invalidUris = request.RedirectUris
-            .Where(u => !redirectUriValidator.IsValidForRegistration(u))
-            .ToList();
-        if (invalidUris.Count > 0)
-        {
-            return BadRequest(new OAuthError
-            {
-                Error = "invalid_redirect_uri",
-                ErrorDescription =
-                    $"The following redirect_uris are not allowed: {string.Join(", ", invalidUris)}.",
-            });
+                return BadRequest(new OAuthError
+                {
+                    Error = "invalid_redirect_uri",
+                    ErrorDescription =
+                        $"The following redirect_uris are not allowed: {string.Join(", ", invalidUris)}.",
+                });
+            }
         }
 
         // Strict scope validation against the canonical registry

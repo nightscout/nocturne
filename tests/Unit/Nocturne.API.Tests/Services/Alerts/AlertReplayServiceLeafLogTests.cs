@@ -49,6 +49,11 @@ public class AlertReplayServiceLeafLogTests
     {
         _tenantAccessor.Setup(t => t.TenantId).Returns(_tenantId);
 
+        // The repo never returns null; default the DND-window fetch to empty (no DND).
+        _alertRepository
+            .Setup(r => r.GetDndWindowsAsOfAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<DndWindowSnapshot>());
+
         var enricherDeps = new SensorContextEnricherDependencies(
             _iobCalculator.Object,
             _cobCalculator.Object,
@@ -65,6 +70,9 @@ public class AlertReplayServiceLeafLogTests
             new Mock<Nocturne.Core.Contracts.V4.Repositories.ITargetRangeScheduleRepository>().Object,
             new Mock<Nocturne.Core.Contracts.Profiles.Resolvers.IActiveProfileResolver>().Object,
             new Mock<Nocturne.Core.Contracts.Profiles.Resolvers.ITherapySettingsResolver>().Object,
+            new Mock<Nocturne.Core.Contracts.Sleep.ISleepService>().Object,
+            new Mock<Nocturne.Infrastructure.Data.Abstractions.ITrackerRepository>().Object,
+            new Mock<Nocturne.API.Services.Devices.IReservoirEstimationService>().Object,
             Options.Create(new AlertEvaluationOptions()));
         var enricher = new SensorContextEnricher(
             enricherDeps,
@@ -75,8 +83,10 @@ public class AlertReplayServiceLeafLogTests
         _sut = new AlertReplayService(
             _alertRepository.Object,
             _glucoseRepository.Object,
+            TestDoubles.CanonicalGlucosePassThrough.Create(),
             enricher,
             _tenantAccessor.Object,
+            Options.Create(new AlertEvaluationOptions()),
             NullLogger<AlertReplayService>.Instance);
     }
 

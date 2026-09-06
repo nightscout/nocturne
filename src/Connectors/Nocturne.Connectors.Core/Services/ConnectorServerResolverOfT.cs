@@ -1,4 +1,5 @@
 using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Utilities;
 
@@ -33,10 +34,5 @@ public class ConnectorServerResolver<TConfig>(
     }
 
     private static Uri BuildUri(string server)
-    {
-        var url = server.StartsWith("http", StringComparison.OrdinalIgnoreCase)
-            ? server
-            : $"https://{server}";
-        return new Uri(url);
-    }
+        => new(ConnectorUrl.ResolveBase(server, ConnectorRegistrationAttribute.NameFor(typeof(TConfig))));
 }

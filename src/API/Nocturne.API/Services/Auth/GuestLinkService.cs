@@ -5,6 +5,7 @@ using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Security;
 
 namespace Nocturne.API.Services.Auth;
 
@@ -20,25 +21,20 @@ public class GuestLinkService : IGuestLinkService
     private const string CodeAlphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
     private const int CodeLength = 7;
 
-    private static readonly HashSet<string> AllowedGuestScopes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        OAuthScopes.GlucoseRead, OAuthScopes.TreatmentsRead, OAuthScopes.DevicesRead,
-        OAuthScopes.TherapyRead, OAuthScopes.HeartRateRead, OAuthScopes.StepCountRead,
-        OAuthScopes.AlertsRead, OAuthScopes.ReportsRead, OAuthScopes.IdentityRead,
-        OAuthScopes.HealthRead,
-    };
-
     private static readonly List<string> DefaultScopes =
-        [OAuthScopes.HealthRead, OAuthScopes.TherapyRead, OAuthScopes.ReportsRead];
+        [Scope.HealthRead, Scope.TherapyRead, Scope.ReportsRead];
 
     private readonly NocturneDbContext _dbContext;
+    private readonly GuestSessionCacheService _sessionCache;
     private readonly ILogger<GuestLinkService> _logger;
 
     public GuestLinkService(
         NocturneDbContext dbContext,
+        GuestSessionCacheService sessionCache,
         ILogger<GuestLinkService> logger)
     {
         _dbContext = dbContext;
+        _sessionCache = sessionCache;
         _logger = logger;
     }
 
@@ -51,16 +47,8 @@ public class GuestLinkService : IGuestLinkService
         IEnumerable<string>? scopes = null,
         CancellationToken ct = default)
     {
-        var scopeList = (scopes ?? DefaultScopes).ToList();
-
-        foreach (var scope in scopeList)
-        {
-            if (!AllowedGuestScopes.Contains(scope))
-            {
-                throw new ArgumentException(
-                    $"Scope '{scope}' is not allowed for guest links. Only read scopes are permitted.");
-            }
-        }
+        var scopeList = Scope.ValidateGrantScopes(
+            scopes ?? DefaultScopes, OAuthGrantTypes.Guest);
 
         var activeCount = await GetActiveCountAsync(dataOwnerSubjectId, ct);
         if (activeCount >= MaxActiveLinks)
@@ -70,7 +58,7 @@ public class GuestLinkService : IGuestLinkService
         }
 
         var code = GenerateCode();
-        var hash = HashCode(code);
+        var hash = CredentialHash.GuestCode(code);
         var now = DateTime.UtcNow;
 
         var entity = new OAuthGrantEntity
@@ -108,7 +96,7 @@ public class GuestLinkService : IGuestLinkService
         CancellationToken ct = default)
     {
         var normalized = code.Replace("-", "").ToUpperInvariant();
-        var hash = HashCode(normalized);
+        var hash = CredentialHash.GuestCode(normalized);
         var now = DateTime.UtcNow;
 
         var grant = await _dbContext.OAuthGrants
@@ -131,6 +119,7 @@ public class GuestLinkService : IGuestLinkService
 
         var session = new GuestSessionInfo(
             grant.Id,
+            grant.TenantId,
             grant.SubjectId,
             grant.Scopes.AsReadOnly(),
             grant.Label,
@@ -159,6 +148,7 @@ public class GuestLinkService : IGuestLinkService
 
         return new GuestSessionInfo(
             grant.Id,
+            grant.TenantId,
             grant.SubjectId,
             grant.Scopes.AsReadOnly(),
             grant.Label,
@@ -206,6 +196,8 @@ public class GuestLinkService : IGuestLinkService
         grant.RevokedAt = DateTime.UtcNow;
         await _dbContext.SaveChangesAsync(ct);
 
+        _sessionCache.Evict(grant.TenantId, grant.Id);
+
         _logger.LogInformation("Guest link {GrantId} revoked by {RequestingSubjectId}", grantId, requestingSubjectId);
         return true;
     }
@@ -243,6 +235,8 @@ public class GuestLinkService : IGuestLinkService
         grant.DismissedAt = now;
         await _dbContext.SaveChangesAsync(ct);
 
+        _sessionCache.Evict(grant.TenantId, grant.Id);
+
         _logger.LogInformation("Guest link {GrantId} dismissed by {RequestingSubjectId}", grantId, requestingSubjectId);
         return true;
     }
@@ -277,12 +271,6 @@ public class GuestLinkService : IGuestLinkService
     private static string FormatCode(string code)
     {
         return $"{code[..3]}-{code[3..]}";
-    }
-
-    private static string HashCode(string code)
-    {
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(code.ToUpperInvariant()));
-        return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 
     private static GuestLinkInfo MapToInfo(OAuthGrantEntity entity)

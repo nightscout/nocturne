@@ -64,6 +64,7 @@
         { name: "Device Status", description: "Pump, CGM, and phone status reports", levels: rw("devices") },
         { name: "Heart Rate", description: "Heart rate data from wearables", levels: rw("heartrate") },
         { name: "Step Count", description: "Daily step counts from activity trackers", levels: rw("stepcount") },
+        { name: "Sleep", description: "Sleep sessions, stages, and overnight biometrics", levels: rw("sleep") },
         { name: "Food & Meals", description: "Food database entries and nutritional information", levels: rw("food") },
         { name: "Statistics", description: "Time-in-range, A1c estimates, and averages", levels: readOnly("statistics") },
         { name: "Reports", description: "Generated reports and data exports", levels: readOnly("reports") },

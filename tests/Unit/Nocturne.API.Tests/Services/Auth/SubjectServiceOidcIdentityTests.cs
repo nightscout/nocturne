@@ -24,7 +24,12 @@ public class SubjectServiceOidcIdentityTests : IDisposable
     public SubjectServiceOidcIdentityTests()
     {
         _db = TestDbContextFactory.CreateInMemoryContext();
-        _service = new SubjectService(_db, _audit.Object, NullLogger<SubjectService>.Instance);
+        _service = new SubjectService(
+            _db,
+            _audit.Object,
+            Mock.Of<IRecoveryCodeService>(),
+            NullLogger<SubjectService>.Instance
+        );
     }
 
     public void Dispose() => _db.Dispose();

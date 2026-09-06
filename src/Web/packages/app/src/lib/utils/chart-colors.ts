@@ -51,9 +51,7 @@ export type GlucoseColorMode = 'single' | 'threshold' | 'continuous';
  *
  * This is the only frontend-computed colour in the codebase. It's a
  * documented exception to the "backend computes colours" rule because the
- * spectrum is presentation, not categorisation. Originally lived in
- * halo-dial/colors.ts; moved here to be the single source of truth for
- * both the halo dial and glucose chart.
+ * spectrum is presentation, not categorisation.
  */
 const SPECTRUM_STOPS: ReadonlyArray<readonly [number, number, number, number]> = [
 	[40, 25, 0.22, 0.58],
@@ -102,6 +100,50 @@ export function getGlucoseColorContinuous(mgdl: number): string {
 	const c = lo[2] + (hi[2] - lo[2]) * t;
 	const l = lo[3] + (hi[3] - lo[3]) * t;
 	return `oklch(${l.toFixed(3)} ${c.toFixed(3)} ${h.toFixed(2)})`;
+}
+
+/**
+ * Anchors of the year-overview heatmap ramp: [mgdl, theme variable]. Ordered low
+ * to high, and kept in step with `--glucose-heatmap-*`, which owns the colours.
+ *
+ * Distinct from SPECTRUM_STOPS above: this ramp runs blue-low to red-high, where
+ * the glucose chart runs red-low to blue-high in step with the `--glucose-*`
+ * buckets.
+ */
+const GLUCOSE_HEATMAP_STOPS: ReadonlyArray<readonly [number, string]> = [
+	[40, '--glucose-heatmap-1'],
+	[54, '--glucose-heatmap-2'],
+	[70, '--glucose-heatmap-3'],
+	[100, '--glucose-heatmap-4'],
+	[140, '--glucose-heatmap-5'],
+	[180, '--glucose-heatmap-6'],
+	[220, '--glucose-heatmap-7'],
+	[260, '--glucose-heatmap-8'],
+	[350, '--glucose-heatmap-9']
+];
+
+/** The heatmap ramp as legend stops: each anchor and the colour drawn at it. */
+export const GLUCOSE_HEATMAP_LEGEND_STOPS: ReadonlyArray<{ mgdl: number; color: string }> =
+	GLUCOSE_HEATMAP_STOPS.map(([mgdl, cssVar]) => ({ mgdl, color: `var(${cssVar})` }));
+
+/**
+ * Blend the two heatmap stops bracketing `mgdl`, clamping outside the anchors.
+ *
+ * Mixes in sRGB rather than interpolating in JS so the stops can stay theme
+ * variables: interpolation would have to read their computed values back out of
+ * the document and re-read them on every theme change.
+ */
+export function getGlucoseHeatmapFill(mgdl: number): string {
+	const upper = GLUCOSE_HEATMAP_STOPS.findIndex(([anchor]) => mgdl <= anchor);
+
+	// Above every anchor (no match) or at/below the first one — clamp to an end stop.
+	if (upper === -1) return `var(${GLUCOSE_HEATMAP_STOPS[GLUCOSE_HEATMAP_STOPS.length - 1][1]})`;
+	if (upper === 0) return `var(${GLUCOSE_HEATMAP_STOPS[0][1]})`;
+
+	const [loAnchor, loVar] = GLUCOSE_HEATMAP_STOPS[upper - 1];
+	const [hiAnchor, hiVar] = GLUCOSE_HEATMAP_STOPS[upper];
+	const loShare = ((hiAnchor - mgdl) / (hiAnchor - loAnchor)) * 100;
+	return `color-mix(in srgb, var(${loVar}) ${loShare.toFixed(2)}%, var(${hiVar}))`;
 }
 
 /**

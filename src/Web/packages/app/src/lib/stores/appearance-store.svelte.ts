@@ -1,22 +1,37 @@
 /**
  * Appearance Store - Unified store for all appearance settings
  *
- * Uses runed's PersistedState for automatic localStorage persistence with
- * instant reactivity and cross-tab sync. Consolidates:
- * - Color theme (Nocturne vs Trio)
- * - Color scheme (light/dark/system mode via mode-watcher)
- * - Glucose units (mg/dL vs mmol/L)
- * - Time format (12h vs 24h)
- * - Night mode schedule
- * - Language preference
+ * Per-user display preferences (units, time format, theme, prediction, chart
+ * style, widgets) are backed by a `SyncedPref`: it keeps the reactive `.current`
+ * API of runed's PersistedState, but additionally
+ *  - hydrates from the `nocturne-prefs` cookie / legacy per-key localStorage,
+ *  - mirrors every change into one `nocturne-prefs` cookie so a returning device
+ *    hydrates synchronously at module load (before first paint), avoiding a wait
+ *    on the session/API round-trip, and
+ *  - writes through to the backend user-preferences endpoint (injected callback)
+ *    so a user's choices follow them across devices and tenants.
+ *
+ * SSR note: this module's `$state` is shared across requests on the server, so it
+ * is NEVER mutated server-side — the cookie is read and applied only in the browser
+ * (`if (browser)` at module load). Server-side reads instead resolve from the
+ * per-request preference context the root layout provides (see
+ * `setPreferencesContext`), so SSR emits the same units/formats hydration will.
+ *
+ * Language keeps its own dedicated cookie + backend path (used by SSR locale
+ * resolution), so it travels in the request context's own slot rather than as a
+ * field of the preferences blob.
  */
 
 import { browser } from "$app/environment";
+import { getContext, setContext } from "svelte";
 import { PersistedState } from "runed";
 import { setMode, mode, userPrefersMode } from "mode-watcher";
 import supportedLocales from "../../../../../supportedLocales.json";
-import { WidgetId } from "../api/generated/nocturne-api-client";
-import { type HaloDialConfig, defaultHaloDialConfig } from "../components/dashboard/halo-dial/config";
+import type { WidgetId } from "../api/generated/nocturne-api-client";
+import { DEFAULT_TOP_WIDGETS } from "../components/dashboard/widget-registry";
+import type { UserDisplayPreferences } from "$lib/api";
+import { weekStartName } from "../components/calendar/calendar-date";
+import { resolveCookieDomain } from "../utils/tenant-host";
 
 // ==========================================
 // Type Definitions
@@ -34,11 +49,198 @@ export type GlucoseUnits = "mg/dl" | "mmol";
 /** Time format preference */
 export type TimeFormat = "12" | "24";
 
-/** Sidebar widget preference */
-export type SidebarWidget = "graph" | "halo-dial";
+/**
+ * Regional format: a BCP-47 tag driving date ordering, month/weekday names and the
+ * first day of the week. Empty string follows the display language.
+ */
+export type RegionFormat = (typeof REGION_FORMATS)[number];
+
+/**
+ * Regional formats offered in settings, mirroring the backend allow-list. Labels are
+ * derived at render time from `Intl.DisplayNames` plus a sample date, so a new region
+ * only needs its tag added here (and to `AllowedRegionFormats` server-side).
+ */
+export const REGION_FORMATS = [
+  "",
+  "en-US", "en-GB", "en-AU", "en-CA", "en-IE", "en-NZ", "en-ZA",
+  "de-DE", "fr-FR", "es-ES", "it-IT", "nl-NL", "pl-PL", "pt-PT", "pt-BR",
+  "sv-SE", "nb-NO", "da-DK", "fi-FI", "cs-CZ", "ru-RU", "ja-JP",
+] as const;
 
 /** Supported locale type - derived from supportedLocales.json */
 export type SupportedLocale = (typeof supportedLocales)[number];
+
+// ==========================================
+// Synced preference infrastructure
+// ==========================================
+
+/** Cookie mirroring the per-user synced preferences, written and read client-side for synchronous hydration. */
+export const PREFS_COOKIE_NAME = "nocturne-prefs";
+const PREFS_COOKIE_MAX_AGE = 31536000; // 1 year
+
+/** Registry of synced prefs by their localStorage key — powers cross-tab sync. */
+const syncedRegistry = new Map<string, SyncedPref<unknown>>();
+
+const PREFERENCES_CONTEXT_KEY = Symbol("nocturne-display-preferences");
+
+/**
+ * One request's preference sources: the display-preference payloads, highest
+ * precedence first and each contributing only the fields it defines, plus the
+ * display language, which is stored apart from the blob and so gets its own slot.
+ */
+export interface RequestPreferences {
+  layers: UserDisplayPreferences[];
+  language?: SupportedLocale;
+}
+
+/**
+ * Publish this request's preference sources for the duration of one server render.
+ * The store's `$state` is module-scoped and so shared by every concurrent SSR
+ * request; reading preferences from component context instead is what keeps one
+ * user's units out of another's HTML. Every source mirrors the browser's own
+ * resolution order, so SSR output equals the first client render.
+ */
+export function setPreferencesContext(preferences: () => RequestPreferences): void {
+  setContext(PREFERENCES_CONTEXT_KEY, preferences);
+}
+
+function requestPreferences(): RequestPreferences | null {
+  try {
+    return (
+      getContext<(() => RequestPreferences) | undefined>(PREFERENCES_CONTEXT_KEY)?.() ??
+      null
+    );
+  } catch {
+    // getContext throws outside a component — server loads and module scope have no request.
+    return null;
+  }
+}
+
+/**
+ * Backend write-through callback, injected by the app (kept out of this module so
+ * the store never imports a server remote directly — mirrors setLanguage's design).
+ */
+let writeThrough: ((prefs: UserDisplayPreferences) => unknown) | null = null;
+
+/** Register the backend write-through used to persist synced preferences per-user. */
+export function registerPreferencesWriteThrough(
+  fn: (prefs: UserDisplayPreferences) => unknown
+): void {
+  writeThrough = fn;
+}
+
+/** Injected rather than derived: BASE_DOMAIN reaches the browser only through layout data. */
+let preferenceCookieDomain: string | null = null;
+
+/**
+ * Scope preference cookies to the base domain, and rewrite the ones this document already wrote
+ * host-scoped: cookies are written at module load, before the layout can supply the domain.
+ */
+export function registerPreferenceCookieDomain(
+  baseDomain: string | null | undefined
+): void {
+  if (!browser) return;
+
+  const domain = resolveCookieDomain(baseDomain);
+  if (domain === preferenceCookieDomain) return;
+  preferenceCookieDomain = domain;
+
+  const prefs = readPrefsCookie();
+  if (prefs) writePrefsCookie(prefs);
+  syncLanguageCookie(preferredLanguage.current);
+}
+
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Mirror to cookie immediately and debounce the backend write-through. */
+function schedulePersist(): void {
+  if (!browser) return;
+  const prefs = collectPreferences();
+  writePrefsCookie(prefs);
+  if (persistTimer) clearTimeout(persistTimer);
+  persistTimer = setTimeout(() => {
+    persistTimer = null;
+    writeThrough?.(prefs);
+  }, 400);
+}
+
+function readInitial<T>(key: string, fallback: T): T {
+  if (!browser) return fallback;
+  const raw = localStorage.getItem(key);
+  if (raw === null) return fallback;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function persistLocal<T>(key: string, value: T): void {
+  if (!browser) return;
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Ignore quota / disabled-storage errors — the cookie + backend remain sources of truth.
+  }
+}
+
+/**
+ * A per-user preference with the same reactive `.current` surface as runed's
+ * PersistedState, so no consumer changes. Writes propagate to localStorage (cache),
+ * the shared cookie, and the backend. `hydrate` sets the value without a
+ * backend/cookie echo (used when applying server- or cross-tab-sourced values).
+ * `read` locates this preference inside a `UserDisplayPreferences` payload, and is
+ * the single mapping used for both hydration and server-side resolution.
+ */
+class SyncedPref<T> {
+  private _value = $state<T>(undefined as T);
+  private _key: string;
+  private _read: (prefs: UserDisplayPreferences) => T | undefined;
+
+  constructor(
+    key: string,
+    initial: T,
+    read: (prefs: UserDisplayPreferences) => T | undefined
+  ) {
+    this._key = key;
+    this._read = read;
+    this._value = readInitial(key, initial);
+    syncedRegistry.set(key, this as SyncedPref<unknown>);
+  }
+
+  get current(): T {
+    if (!browser) {
+      for (const prefs of requestPreferences()?.layers ?? []) {
+        const value = this._read(prefs);
+        if (value !== undefined && value !== null) return value;
+      }
+    }
+    return this._value;
+  }
+
+  set current(value: T) {
+    this._value = value;
+    persistLocal(this._key, value);
+    schedulePersist();
+  }
+
+  /**
+   * Apply an externally-sourced value (server/cross-tab) without re-persisting outward.
+   * INVARIANT: browser-only. Callers (reconcilePreferences, module-load cookie hydration,
+   * the storage listener) are all `if (browser)`-gated; never call this during SSR — the
+   * `$state` is shared across requests and would leak one user's value into another's render.
+   */
+  hydrate(value: T): void {
+    this._value = value;
+    persistLocal(this._key, value);
+  }
+
+  /** Hydrate from a preference payload, leaving the current value alone when unset. */
+  hydrateFrom(prefs: UserDisplayPreferences): void {
+    const value = this._read(prefs);
+    if (value !== undefined && value !== null) this.hydrate(value);
+  }
+}
 
 // ==========================================
 // Persisted State Instances
@@ -48,63 +250,60 @@ export type SupportedLocale = (typeof supportedLocales)[number];
  * Color theme preference (Nocturne vs Trio)
  * Controls the CSS class applied to the document root
  */
-export const colorTheme = new PersistedState<ColorTheme>(
+export const colorTheme = new SyncedPref<ColorTheme>(
   "nocturne-color-theme",
-  "nocturne"
+  "nocturne",
+  (p) => p.colorTheme as ColorTheme | undefined
 );
 
 /**
- * Blood glucose units preference
- * Automatically persists to localStorage and syncs across tabs
+ * Blood glucose units preference. Per-user: syncs across devices/tenants.
  */
-export const glucoseUnits = new PersistedState<GlucoseUnits>(
+export const glucoseUnits = new SyncedPref<GlucoseUnits>(
   "nocturne-glucose-units",
-  "mg/dl"
+  "mg/dl",
+  (p) => p.glucoseUnits as GlucoseUnits | undefined
 );
 
 /**
  * Time format preference (12-hour or 24-hour)
  */
-export const timeFormat = new PersistedState<TimeFormat>(
+export const timeFormat = new SyncedPref<TimeFormat>(
   "nocturne-time-format",
-  "12"
+  "12",
+  (p) => p.timeFormat as TimeFormat | undefined
+);
+
+/**
+ * Regional format preference. Empty (the default) means "follow the display language",
+ * which is what a user who never opens this setting gets. Set it to e.g. "en-GB" or
+ * "de-DE" for European date ordering and Monday-first calendars while keeping the
+ * interface in another language.
+ */
+export const regionFormat = new SyncedPref<RegionFormat>(
+  "nocturne-region-format",
+  "",
+  (p) => p.regionFormat as RegionFormat | undefined
 );
 
 /**
  * Night mode schedule toggle
  * When enabled, automatically switches to dark mode at night
  */
-export const nightModeSchedule = new PersistedState<boolean>(
+export const nightModeSchedule = new SyncedPref<boolean>(
   "nocturne-night-mode-schedule",
-  false
+  false,
+  (p) => p.nightModeSchedule
 );
 
 /**
  * Dashboard top widgets configuration
  * Stores the ordered list of widget IDs displayed in the top widget grid
- * Default: BgDelta (includes connection + last updated), TirChart, Tdd
  */
-export const dashboardTopWidgets = new PersistedState<WidgetId[]>(
+export const dashboardTopWidgets = new SyncedPref<WidgetId[]>(
   "nocturne-dashboard-top-widgets",
-  [WidgetId.BgDelta, WidgetId.TirChart, WidgetId.Tdd]
-);
-
-/**
- * Sidebar widget preference — graph or halo dial
- * Default: graph (compact glucose chart)
- */
-export const sidebarWidget = new PersistedState<SidebarWidget>(
-  "nocturne-sidebar-widget",
-  "graph"
-);
-
-/**
- * Halo dial configuration
- * Full config for the halo dial sidebar widget
- */
-export const haloDialConfig = new PersistedState<HaloDialConfig>(
-  "nocturne-halo-dial-config",
-  defaultHaloDialConfig()
+  DEFAULT_TOP_WIDGETS,
+  (p) => p.dashboardTopWidgets
 );
 
 // ==========================================
@@ -220,18 +419,20 @@ export function setGlucoseUnits(units: GlucoseUnits): void {
  * Prediction time horizon in minutes
  * Controls how far into the future predictions are shown
  */
-export const predictionMinutes = new PersistedState<number>(
+export const predictionMinutes = new SyncedPref<number>(
   "nocturne-prediction-minutes",
-  30
+  30,
+  (p) => p.prediction?.minutes
 );
 
 /**
  * Prediction enabled state
  * Controls whether prediction lines are shown on charts
  */
-export const predictionEnabled = new PersistedState<boolean>(
+export const predictionEnabled = new SyncedPref<boolean>(
   "nocturne-prediction-enabled",
-  true
+  true,
+  (p) => p.prediction?.enabled
 );
 
 /**
@@ -254,10 +455,6 @@ export function getPredictionEnabled(): boolean {
 export function setPredictionMinutes(minutes: number): void {
   predictionMinutes.current = minutes;
 }
-
-/**
- * Set prediction enabled state
- */
 
 /**
  * Set prediction enabled state
@@ -285,9 +482,10 @@ export type AreaMode = "off" | "baseline" | "deviation";
 /**
  * Prediction display mode preference
  */
-export const predictionDisplayMode = new PersistedState<PredictionDisplayMode>(
+export const predictionDisplayMode = new SyncedPref<PredictionDisplayMode>(
   "nocturne-prediction-display-mode",
-  "cone"
+  "cone",
+  (p) => p.prediction?.displayMode as PredictionDisplayMode | undefined
 );
 
 // ==========================================
@@ -301,9 +499,10 @@ export type TimeRangeOption = "2" | "4" | "6" | "12" | "24" | "48";
  * This controls the span of time shown, always ending at "now"
  * Can be a preset value or a custom number from brush selection
  */
-export const glucoseChartLookback = new PersistedState<number>(
+export const glucoseChartLookback = new SyncedPref<number>(
   "nocturne-glucose-chart-lookback",
-  12
+  12,
+  (p) => p.chart?.lookback
 );
 
 /**
@@ -316,40 +515,251 @@ export const GLUCOSE_CHART_FETCH_HOURS = 48;
 // Glucose Chart Visual Style
 // ==========================================
 
-export const chartLineColorMode = new PersistedState<LineColorMode>(
+export const chartLineColorMode = new SyncedPref<LineColorMode>(
   "nocturne-chart-line-color-mode",
-  "threshold"
+  "threshold",
+  (p) => p.chart?.lineColorMode as LineColorMode | undefined
 );
 
-export const chartLineColor = new PersistedState<string>(
+export const chartLineColor = new SyncedPref<string>(
   "nocturne-chart-line-color",
-  "#22c55e"
+  "#22c55e",
+  (p) => p.chart?.lineColor
 );
 
-export const chartPointColorMode = new PersistedState<LineColorMode>(
+export const chartPointColorMode = new SyncedPref<LineColorMode>(
   "nocturne-chart-point-color-mode",
-  "threshold"
+  "threshold",
+  (p) => p.chart?.pointColorMode as LineColorMode | undefined
 );
 
-export const chartPointColor = new PersistedState<string>(
+export const chartPointColor = new SyncedPref<string>(
   "nocturne-chart-point-color",
-  "#22c55e"
+  "#22c55e",
+  (p) => p.chart?.pointColor
 );
 
-export const chartShowPoints = new PersistedState<boolean>(
+export const chartShowPoints = new SyncedPref<boolean>(
   "nocturne-chart-show-points",
-  true
+  true,
+  (p) => p.chart?.showPoints
 );
 
-export const chartAreaMode = new PersistedState<AreaMode>(
+export const chartAreaMode = new SyncedPref<AreaMode>(
   "nocturne-chart-area-mode",
-  "off"
+  "off",
+  (p) => p.chart?.areaMode as AreaMode | undefined
 );
 
-export const chartAreaOpacity = new PersistedState<number>(
+export const chartAreaOpacity = new SyncedPref<number>(
   "nocturne-chart-area-opacity",
-  0.5
+  0.5,
+  (p) => p.chart?.areaOpacity
 );
+
+/**
+ * Always render chart range/category patterns on screen, not just in print.
+ * An accessibility aid for colour-blind and low-vision users — textures
+ * distinguish series that otherwise rely on colour alone.
+ */
+export const chartAlwaysShowPatterns = new SyncedPref<boolean>(
+  "nocturne-chart-always-show-patterns",
+  false,
+  (p) => p.chart?.alwaysShowPatterns
+);
+
+// ==========================================
+// Collect / apply the synced preference set
+// ==========================================
+
+/**
+ * Assemble the full per-user preference payload from the current store values.
+ * Shape mirrors the backend `UserDisplayPreferences` (nested prediction/chart).
+ */
+export function collectPreferences(): UserDisplayPreferences {
+  return {
+    glucoseUnits: glucoseUnits.current,
+    timeFormat: timeFormat.current,
+    regionFormat: regionFormat.current,
+    colorTheme: colorTheme.current,
+    nightModeSchedule: nightModeSchedule.current,
+    dashboardTopWidgets: dashboardTopWidgets.current,
+    prediction: {
+      enabled: predictionEnabled.current,
+      minutes: predictionMinutes.current,
+      displayMode: predictionDisplayMode.current,
+    },
+    chart: {
+      lineColorMode: chartLineColorMode.current,
+      lineColor: chartLineColor.current,
+      pointColorMode: chartPointColorMode.current,
+      pointColor: chartPointColor.current,
+      showPoints: chartShowPoints.current,
+      areaMode: chartAreaMode.current,
+      areaOpacity: chartAreaOpacity.current,
+      alwaysShowPatterns: chartAlwaysShowPatterns.current,
+      lookback: glucoseChartLookback.current,
+    },
+  } as UserDisplayPreferences;
+}
+
+/**
+ * Apply a server- (or cookie-) sourced preference payload to the store without
+ * echoing back to the backend. Only fields present in `prefs` are applied.
+ * Optionally refreshes the cookie mirror so it matches the applied state.
+ */
+export function applyPreferences(
+  prefs: UserDisplayPreferences | null | undefined,
+  options: { refreshCookie?: boolean } = {}
+): void {
+  if (!prefs) return;
+
+  for (const pref of syncedRegistry.values()) pref.hydrateFrom(prefs);
+
+  if (browser) applyColorTheme(colorTheme.current);
+  if (options.refreshCookie) writePrefsCookie(collectPreferences());
+}
+
+/** True when a server preference payload carries at least one saved value. */
+export function hasStoredPreferences(prefs: UserDisplayPreferences | null | undefined): boolean {
+  if (!prefs) return false;
+  return Object.values(prefs).some((v) => v !== undefined && v !== null);
+}
+
+/** Ensures reconciliation happens once per document load, not on every client navigation. */
+let preferencesReconciled = false;
+
+/**
+ * Reconcile the store against the authenticated user's server preferences on load.
+ * - server has values -> apply them (server wins across devices)
+ * - server empty AND this device has customizations -> seed the backend from them once
+ * Generalizes the language reconciliation previously inlined in +layout.ts.
+ *
+ * Runs at most once per document load: `+layout.ts`'s universal `load` re-runs on every
+ * client navigation, but `data.user` is derived only from `locals` (no url/params dependency),
+ * so it stays frozen at the initial snapshot. Re-applying it on each navigation would revert a
+ * preference the user just changed in-session, so we guard with `preferencesReconciled`.
+ */
+export function reconcilePreferences(serverPrefs: UserDisplayPreferences | null | undefined): void {
+  if (!browser || preferencesReconciled) return;
+  preferencesReconciled = true;
+
+  if (hasStoredPreferences(serverPrefs)) {
+    applyPreferences(serverPrefs, { refreshCookie: true });
+  } else if (hasAnyLocalPreference()) {
+    // No server blob yet, but this device carries customizations (existing user or a device
+    // that already synced): seed the backend from them once. Gated on local customization so an
+    // uncustomized device never seeds all-defaults over another device's real preferences.
+    const prefs = collectPreferences();
+    writePrefsCookie(prefs);
+    writeThrough?.(prefs);
+  }
+}
+
+/** True if any synced preference has a stored value on this device (legacy localStorage / prior sync). */
+function hasAnyLocalPreference(): boolean {
+  if (!browser) return false;
+  for (const key of syncedRegistry.keys()) {
+    if (localStorage.getItem(key) !== null) return true;
+  }
+  return false;
+}
+
+// ==========================================
+// Preference cookie helpers
+// ==========================================
+
+/**
+ * The `document.cookie` assignments storing one preference cookie, in the order they must be made.
+ * Pure so the scoping rules are testable without a DOM.
+ *
+ * A browser that stored the cookie before it was widened presents both variants under one `Cookie`
+ * header with no way to tell them apart, so a widened write expires the host-scoped one first.
+ * Unwidened there is only one cookie, and that expiry would delete the value being written.
+ */
+export function preferenceCookieWrites(
+  name: string,
+  value: string,
+  maxAge: number,
+  domain: string | null
+): string[] {
+  const write = `${name}=${value};path=/;max-age=${maxAge};SameSite=Lax`;
+  if (!domain) return [write];
+
+  return [`${name}=;path=/;max-age=0;SameSite=Lax`, `${write};domain=${domain}`];
+}
+
+/** The one writer for every preference cookie, so a scope can never drift between them. */
+function writePreferenceCookie(name: string, value: string, maxAge: number): void {
+  if (!browser) return;
+  for (const assignment of preferenceCookieWrites(name, value, maxAge, preferenceCookieDomain)) {
+    document.cookie = assignment;
+  }
+}
+
+function writePrefsCookie(prefs: UserDisplayPreferences): void {
+  writePreferenceCookie(
+    PREFS_COOKIE_NAME,
+    encodeURIComponent(JSON.stringify(prefs)),
+    PREFS_COOKIE_MAX_AGE
+  );
+}
+
+/** Decode a raw `nocturne-prefs` cookie value; also used server-side by the root layout load. */
+export function parsePrefsCookie(
+  value: string | null | undefined
+): UserDisplayPreferences | null {
+  if (!value) return null;
+  try {
+    const parsed: unknown = JSON.parse(decodeURIComponent(value));
+    return parsed && typeof parsed === "object" ? (parsed as UserDisplayPreferences) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The value of a named cookie in a `document.cookie` header, taking the LAST of same-name rows.
+ *
+ * Through the widening transition a browser can hold both a host-scoped and a base-domain variant,
+ * indistinguishable in the header. RFC 6265 orders equal-path cookies oldest first, so the last is
+ * the newer of the two — taking the first would let a stale value win and then be written back as
+ * the widened one.
+ */
+export function readCookieFrom(header: string, name: string): string | null {
+  const match = header
+    .split("; ")
+    .findLast((row) => row.startsWith(`${name}=`));
+  return match ? match.slice(name.length + 1) : null;
+}
+
+function readCookie(name: string): string | null {
+  return browser ? readCookieFrom(document.cookie, name) : null;
+}
+
+function readPrefsCookie(): UserDisplayPreferences | null {
+  return parsePrefsCookie(readCookie(PREFS_COOKIE_NAME));
+}
+
+// Hydrate synchronously from the cookie on load (before first paint) so a known
+// device renders the user's units/theme immediately; server reconciliation
+// (via reconcilePreferences in +layout) then confirms/corrects.
+if (browser) {
+  applyPreferences(readPrefsCookie());
+
+  // Cross-tab sync: mirror another tab's change into this tab's store.
+  window.addEventListener("storage", (event) => {
+    if (!event.key || event.newValue === null) return;
+    const pref = syncedRegistry.get(event.key);
+    if (!pref) return;
+    try {
+      pref.hydrate(JSON.parse(event.newValue));
+    } catch {
+      // Ignore malformed cross-tab payloads.
+    }
+    if (event.key === "nocturne-color-theme") applyColorTheme(colorTheme.current);
+  });
+}
 
 // ==========================================
 // Language Preference
@@ -358,16 +768,50 @@ export const chartAreaOpacity = new PersistedState<number>(
 /** Re-export supported locales for external use */
 export { supportedLocales };
 
+const DEFAULT_LANGUAGE: SupportedLocale = "en";
+
 /**
- * Language preference - stored in localStorage and synced to cookie for SSR
+ * Language preference - stored in localStorage and synced to cookie for SSR.
+ * Kept out of the display-preferences blob because server-side locale resolution
+ * reads its own cookie + subject column; server-side reads therefore take the
+ * request context's language slot rather than a `UserDisplayPreferences` field.
  */
-export const preferredLanguage = new PersistedState<SupportedLocale>(
-  "nocturne-language",
-  "en"
-);
+class LanguagePref {
+  private _persisted = new PersistedState<SupportedLocale>(
+    "nocturne-language",
+    DEFAULT_LANGUAGE
+  );
+
+  get current(): SupportedLocale {
+    if (!browser) return requestPreferences()?.language ?? DEFAULT_LANGUAGE;
+    return this._persisted.current;
+  }
+
+  set current(locale: SupportedLocale) {
+    this._persisted.current = locale;
+  }
+}
+
+export const preferredLanguage = new LanguagePref();
 
 /** Cookie name for language preference - used by SSR */
 export const LANGUAGE_COOKIE_NAME = "nocturne-language";
+
+const LANGUAGE_COOKIE_MAX_AGE = 31536000; // 1 year
+
+/**
+ * The language the browser will settle on, from the same sources in the same order:
+ * a saved subject preference outranks the cookie that mirrors localStorage. SSR
+ * output only matches hydration while this order matches the client's.
+ */
+export function resolveLanguage(
+  ...candidates: (string | null | undefined)[]
+): SupportedLocale {
+  for (const candidate of candidates) {
+    if (candidate && isSupportedLocale(candidate)) return candidate;
+  }
+  return DEFAULT_LANGUAGE;
+}
 
 /**
  * Check if user has explicitly set a language preference
@@ -382,8 +826,23 @@ export function hasLanguagePreference(): boolean {
  * Sync language preference to cookie for server-side access
  */
 function syncLanguageCookie(locale: SupportedLocale): void {
-  if (!browser) return;
-  document.cookie = `${LANGUAGE_COOKIE_NAME}=${locale};path=/;max-age=31536000;SameSite=Lax`;
+  writePreferenceCookie(LANGUAGE_COOKIE_NAME, locale, LANGUAGE_COOKIE_MAX_AGE);
+}
+
+/**
+ * The language to start from, given what this origin stored and what the shared cookie carries.
+ *
+ * localStorage is per-origin while the cookie spans the base domain, so a first visit to a sibling
+ * subdomain has no stored value and must adopt the cookie's. Writing the default back instead
+ * would destroy the choice on every host, not merely fail to honour it on this one. A stored value
+ * is this device's own answer and wins; an unrecognised cookie is ignored.
+ */
+export function resolveInitialLanguage(
+  stored: string | null,
+  cookie: string | null
+): SupportedLocale | null {
+  if (stored !== null) return null;
+  return cookie && isSupportedLocale(cookie) ? cookie : null;
 }
 
 /**
@@ -402,6 +861,34 @@ export function getLanguageLabel(
   } catch {
     return code;
   }
+}
+
+/** A date whose day, month and year are all unambiguous, so a sample shows the real ordering. */
+const REGION_SAMPLE_DATE = new Date(2026, 11, 31);
+
+/**
+ * Label for a regional format: the region's name in the user's own language, then the
+ * date it produces and the day its weeks start on. Both samples are spelled out because
+ * neither is guessable from a country name — Portugal writes 31/12/2026 but still starts
+ * its weeks on Sunday — and nobody picks a calendar style by its BCP-47 tag.
+ */
+export function regionFormatLabel(tag: RegionFormat): string {
+  if (!tag) return "Match my language";
+
+  const region = tag.split("-")[1];
+  let name: string = tag;
+  try {
+    name =
+      new Intl.DisplayNames([preferredLanguage.current], { type: "region" }).of(
+        region
+      ) ?? tag;
+  } catch {
+    // Unknown region subtag: the tag itself is still a usable label.
+  }
+
+  const sample = REGION_SAMPLE_DATE.toLocaleDateString(tag);
+  const weekStart = weekStartName(tag, preferredLanguage.current);
+  return `${name} — ${sample}, weeks start ${weekStart}`;
 }
 
 /**
@@ -457,7 +944,12 @@ export function getLanguage(): SupportedLocale {
   return preferredLanguage.current;
 }
 
-// Sync cookie on initial load in browser
 if (browser) {
+  const adopted = resolveInitialLanguage(
+    localStorage.getItem(LANGUAGE_COOKIE_NAME),
+    readCookie(LANGUAGE_COOKIE_NAME)
+  );
+  if (adopted) preferredLanguage.current = adopted;
+
   syncLanguageCookie(preferredLanguage.current);
 }

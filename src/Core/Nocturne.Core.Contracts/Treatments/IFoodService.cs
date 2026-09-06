@@ -9,17 +9,17 @@ namespace Nocturne.Core.Contracts.Treatments;
 public interface IFoodService
 {
     /// <summary>
-    /// Get food records with optional filtering and pagination
+    /// Get a page of food records, ordered by name
     /// </summary>
-    /// <param name="find">Optional MongoDB query filter</param>
+    /// <param name="find">Optional text matched against name, category, and subcategory</param>
     /// <param name="count">Maximum number of records to return</param>
     /// <param name="skip">Number of records to skip for pagination</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Collection of food records</returns>
     Task<IEnumerable<Food>> GetFoodAsync(
         string? find = null,
-        int? count = null,
-        int? skip = null,
+        int count = 100,
+        int skip = 0,
         CancellationToken cancellationToken = default
     );
 

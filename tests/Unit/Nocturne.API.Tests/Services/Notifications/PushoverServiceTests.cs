@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Moq;
+using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Notifications;
 using Nocturne.Core.Contracts.Notifications;
 using Xunit;
@@ -30,13 +32,13 @@ public class PushoverServiceTests
         // Setup configuration
         _mockConfiguration.Setup(c => c["Pushover:ApiToken"]).Returns("test-api-token");
         _mockConfiguration.Setup(c => c["Pushover:UserKey"]).Returns("test-user-key");
-        _mockConfiguration.Setup(c => c["BaseUrl"]).Returns("http://localhost:5000");
 
         _service = new PushoverService(
             _mockHttpClient.Object,
             _mockLogger.Object,
             _mockNotificationService.Object,
-            _mockConfiguration.Object
+            _mockConfiguration.Object,
+            Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example.com" })
         );
     }
 

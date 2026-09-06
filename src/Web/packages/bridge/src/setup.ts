@@ -106,6 +106,8 @@ export async function setupBridge(
     );
   }
 
+  const apiBaseUrl = apiBaseFromHubUrl(config.signalr.hubUrl);
+
   // Start the Socket.IO server eagerly — it doesn't need tenant info to accept
   // browser connections. Tenant room assignment uses the Host header; the slug
   // list is only needed for the apex-domain single-tenant case and is filled in
@@ -116,10 +118,29 @@ export async function setupBridge(
     baseDomain,
     [],
     config.instanceKey,
+    apiBaseUrl,
   );
 
   await socketIOServer.start();
   logger.info('Socket.IO server started');
+
+  const clients: SignalRClient[] = [];
+  /** slug → client, so the v3 `/alarm` ack forwarder can reach the right
+   *  tenant's AlarmHub connection without scanning the clients array. */
+  const clientsBySlug = new Map<string, SignalRClient>();
+
+  // Forward v3 `/alarm` ack events (AAPS silencing an alarm) to the API's
+  // AlarmHub via the matching tenant's SignalR client.
+  socketIOServer.onAlarmAck = (tenantSlug, level, group, silenceTime) => {
+    const client = clientsBySlug.get(tenantSlug);
+    if (client) {
+      void client.invokeAlarmAck(level, group, silenceTime);
+    } else {
+      logger.warn(
+        `/alarm ack for tenant ${tenantSlug} has no connected SignalR client`,
+      );
+    }
+  };
 
   // Discover tenants and connect their SignalR clients in the background so a
   // slow or temporarily-unavailable API doesn't prevent the Socket.IO server
@@ -131,8 +152,6 @@ export async function setupBridge(
     .digest('hex')
     .toLowerCase();
 
-  const apiBaseUrl = apiBaseFromHubUrl(config.signalr.hubUrl);
-  const clients: SignalRClient[] = [];
   let cancelled = false;
 
   const connectWithRetry = async () => {
@@ -148,6 +167,7 @@ export async function setupBridge(
           if (cancelled) return;
           const client = createTenantClient(socketIOServer, config, slug, baseDomain);
           clients.push(client);
+          clientsBySlug.set(slug, client);
           await client.connect();
           logger.info(`SignalR client connected for tenant: ${slug}`);
         }
@@ -160,6 +180,7 @@ export async function setupBridge(
           try { await client.disconnect(); } catch { /* ignore cleanup errors */ }
         }
         clients.length = 0;
+        clientsBySlug.clear();
 
         if (cancelled) return;
         const message = error instanceof Error ? error.message : String(error);

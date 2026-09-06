@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Storage;
 using SixLabors.ImageSharp;
@@ -26,6 +27,7 @@ public class AvatarController(IAvatarStore avatarStore, ILogger<AvatarController
     /// Upload or replace the current subject's avatar. Image is resized to 256x256 WebP.
     /// </summary>
     [HttpPost]
+    [DenyDemoSubject]
     [RemoteCommand]
     [RequestSizeLimit(MaxUploadBytes)]
     [ProducesResponseType(typeof(AvatarUploadResponse), StatusCodes.Status200OK)]
@@ -89,6 +91,7 @@ public class AvatarController(IAvatarStore avatarStore, ILogger<AvatarController
     /// Delete the current subject's avatar.
     /// </summary>
     [HttpDelete]
+    [DenyDemoSubject]
     [RemoteCommand]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<ActionResult> Delete(CancellationToken ct)

@@ -6,7 +6,6 @@
     ConnectorStatusInfo,
     ConnectorDataSummary,
     ConnectorCapabilities,
-    SyncResult,
   } from "$lib/api/generated/nocturne-api-client";
   import {
     getAllConnectorStatus,
@@ -25,6 +24,7 @@
     getConnectorCapabilities,
     getConnectorDataSummary,
   } from "$lib/api/generated/services.generated.remote";
+  import { describeSubmitError } from "$lib/forms/submit-error";
   import {
     Card,
     CardContent,
@@ -40,20 +40,16 @@
   import CareLinkConnectPanel from "$lib/components/connectors/CareLinkConnectPanel.svelte";
   import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
 
-  import {
-    AlertCircle,
-    Loader2,
-    ExternalLink,
-  } from "lucide-svelte";
+  import { AlertCircle, ExternalLink } from "lucide-svelte";
   import ConnectorSelectionGrid from "$lib/components/connectors/ConnectorSelectionGrid.svelte";
   import ConnectorDangerZone from "$lib/components/connectors/ConnectorDangerZone.svelte";
-  import SyncResultCard from "$lib/components/connectors/SyncResultCard.svelte";
+  import { retainQuery } from "$lib/api/retain-query.svelte";
 
   interface Props {
     /** Pre-select a specific connector (skips selection grid) */
     connectorId?: string;
-    /** Called after successful sync or user clicks "done" */
-    onComplete?: (result: SyncResult) => void;
+    /** Called once a setup-mode save (and the activation that follows it) succeeds. */
+    onComplete?: () => void;
     /** Called on back/cancel */
     onCancel?: () => void;
     /** Show enable/disable toggle. Default: false for setup, true when connectorId set */
@@ -62,17 +58,13 @@
     showDangerZone?: boolean;
     /** Show capabilities card. Default: false */
     showCapabilities?: boolean;
-    /** Override primary action. Default: "save-and-sync" for setup, "save-only" for manage */
-    primaryAction?: "save-and-sync" | "save-only";
+    /** Default: "save-and-finish" when picking from the grid, "save-only" when a connector is given */
+    primaryAction?: "save-and-finish" | "save-only";
     /** Whether to show .env variable name hints in the config form. False for non-platform-admin users. */
     showEnvVarHints?: boolean;
     /** Extra UI after config form */
     extras?: Snippet<
       [{ connector: AvailableConnector; isActive: boolean; isSaving: boolean }]
-    >;
-    /** Extra UI after results */
-    resultActions?: Snippet<
-      [{ result: SyncResult; reset: () => void }]
     >;
   }
 
@@ -83,14 +75,13 @@
     showToggle = connectorId !== undefined,
     showDangerZone = false,
     showCapabilities = false,
-    primaryAction = connectorId ? "save-only" : "save-and-sync",
+    primaryAction = connectorId ? "save-only" : "save-and-finish",
     showEnvVarHints = true,
     extras,
-    resultActions,
   }: Props = $props();
 
   // --- State machine ---
-  type Step = "selection" | "configuring" | "syncing" | "results";
+  type Step = "selection" | "configuring";
   let step = $state<Step>(connectorId != null ? "configuring" : "selection");
 
   // --- User-selected connector (when picking from the grid) ---
@@ -104,6 +95,11 @@
   const effectiveConfigQuery = $derived(activeId ? getConnectorEffectiveConfig(activeId) : null);
   const dataSummaryQuery = $derived(activeId ? getConnectorDataSummary(activeId) : null);
   const capabilitiesQuery = $derived(activeId ? getConnectorCapabilities(activeId) : null);
+  retainQuery(() => schemaQuery);
+  retainQuery(() => configQuery);
+  retainQuery(() => effectiveConfigQuery);
+  retainQuery(() => dataSummaryQuery);
+  retainQuery(() => capabilitiesQuery);
   const statusQuery = getAllConnectorStatus();
 
   // --- Derived data from queries ---
@@ -143,7 +139,15 @@
   // CareLink uses a browser-based sign-in (manual-paste OAuth) instead of a stored password.
   const isCareLink = $derived(connectorInfo?.id?.toLowerCase() === "carelink");
 
-  function onCareLinkConnected(info: { username?: string | null; country?: string | null }) {
+  function onCareLinkConnected(info: {
+    server: "EU" | "US";
+    username?: string | null;
+    country?: string | null;
+  }) {
+    // The region is not a preference here — it is the CareLink cloud the stored tokens belong to,
+    // and the server has already recorded it. Leaving a stale value in the form would let a save
+    // put it back, pointing every data request at a host that rejects those tokens.
+    configuration = { ...configuration, server: info.server };
     // Auto-fill identity the sign-in discovered, without clobbering anything already set.
     if (info.username && !configuration.username) {
       configuration = { ...configuration, username: info.username };
@@ -152,7 +156,6 @@
       configuration = { ...configuration, countryCode: info.country.toLowerCase() };
     }
   }
-  let syncResult = $state<SyncResult | null>(null);
 
   // --- UI state ---
   let isSaving = $state(false);
@@ -190,12 +193,18 @@
   );
   const hasData = $derived(dataSummary && (dataSummary.total ?? 0) > 0);
 
-  // --- Initialize configuration when server data loads or changes ---
-  $effect(() => {
-    const config = existingConfig;
-    const s = schema;
-    if (!s) return;
+  /** The connector whose stored config has already been loaded into the form. */
+  let seededConnectorId = $state<string | undefined>(undefined);
 
+  // --- Seed the form from the stored config, once per connector ---
+  // setActive invalidates GetConfiguration, so this runs again after the enable/disable
+  // toggle; re-seeding then would discard edits the user hasn't saved yet.
+  $effect(() => {
+    const s = schema;
+    const id = activeId;
+    if (!s || !id || configQuery?.loading || seededConnectorId === id) return;
+
+    const config = existingConfig;
     const configData = config?.configuration?.rootElement ?? config?.configuration;
     if (configData && typeof configData === "object" && Object.keys(configData).length > 0) {
       configuration = { ...configData };
@@ -203,6 +212,7 @@
       configuration = getDefaultsFromSchema(s);
     }
     secrets = {};
+    seededConnectorId = id;
   });
 
   function getDefaultsFromSchema(s: JsonSchema): Record<string, unknown> {
@@ -242,18 +252,22 @@
       }
 
       // In wizard/setup mode, activate the connector after saving
-      if (primaryAction === "save-and-sync") {
+      if (primaryAction === "save-and-finish") {
         await setConnectorActive({
           connectorName: connectorInfo.id,
           request: { isActive: true },
         });
       }
 
+      // Secrets are write-only — drop the entered values once they're stored.
+      secrets = {};
       saveMessage = { type: "success", text: "Configuration saved" };
+
+      if (primaryAction === "save-and-finish") onComplete?.();
     } catch (e) {
       saveMessage = {
         type: "error",
-        text: e instanceof Error ? e.message : "Failed to save configuration",
+        text: describeSubmitError(e, "Failed to save configuration"),
       };
       throw e;
     }
@@ -279,7 +293,7 @@
     } catch (e) {
       saveMessage = {
         type: "error",
-        text: e instanceof Error ? e.message : "Failed to update connector state",
+        text: describeSubmitError(e, "Failed to update connector state"),
       };
     }
 
@@ -298,9 +312,9 @@
     step = "selection";
     manuallySelectedId = undefined;
     // Reactive queries auto-clean when activeId becomes undefined
+    seededConnectorId = undefined;
     configuration = {};
     secrets = {};
-    syncResult = null;
     saveMessage = null;
   }
 </script>
@@ -332,14 +346,14 @@
   {:else if connectorInfo && schema}
     <div class="space-y-6">
       <!-- Header -->
-      <div class="flex items-start justify-between">
-        <div>
+      <div class="flex items-start justify-between gap-4">
+        <div class="min-w-0">
           <h2 class="text-2xl font-bold tracking-tight">{displayName}</h2>
           {#if connectorInfo.description}
             <p class="text-muted-foreground">{connectorInfo.description}</p>
           {/if}
         </div>
-        <Badge variant={isActive ? "default" : "secondary"}>
+        <Badge variant={isActive ? "default" : "secondary"} class="shrink-0">
           {isActive ? "Active" : "Inactive"}
         </Badge>
       </div>
@@ -380,9 +394,9 @@
 
       <!-- Enable/Disable Toggle -->
       {#if showToggle}
-        <Card>
-          <CardContent class="flex items-center justify-between py-4">
-            <div class="space-y-0.5">
+        <Card data-testid="connector-enable">
+          <CardContent class="flex items-center justify-between gap-4 py-4">
+            <div class="space-y-0.5 min-w-0">
               <Label class="text-base">Enable Connector</Label>
               <p class="text-sm text-muted-foreground">
                 When enabled, the connector will actively sync data
@@ -454,8 +468,8 @@
             </CardDescription>
           </CardHeader>
           <CardContent class="space-y-3">
-            <div class="flex items-center justify-between">
-              <span class="text-sm text-muted-foreground"
+            <div class="flex items-center justify-between gap-4">
+              <span class="shrink-0 text-sm text-muted-foreground"
                 >Supported data types</span
               >
               <div class="flex flex-wrap gap-1 justify-end">
@@ -470,7 +484,7 @@
                 {/if}
               </div>
             </div>
-            <div class="flex items-center justify-between">
+            <div class="flex items-center justify-between gap-4">
               <span class="text-sm text-muted-foreground"
                 >Historical sync</span
               >
@@ -486,7 +500,7 @@
               </Badge>
             </div>
             {#if connectorCapabilities.maxHistoricalDays}
-              <div class="flex items-center justify-between">
+              <div class="flex items-center justify-between gap-4">
                 <span class="text-sm text-muted-foreground"
                   >Max historical days</span
                 >
@@ -495,7 +509,7 @@
                 </span>
               </div>
             {/if}
-            <div class="flex items-center justify-between">
+            <div class="flex items-center justify-between gap-4">
               <span class="text-sm text-muted-foreground">Manual sync</span>
               <Badge
                 variant={connectorCapabilities.supportsManualSync
@@ -552,31 +566,5 @@
       {/if}
     </div>
   {/if}
-
-<!-- SYNCING STEP -->
-{:else if step === "syncing"}
-  <div class="flex flex-col items-center justify-center py-16 space-y-4">
-    <Loader2 class="h-12 w-12 animate-spin text-primary" />
-    <div class="text-center">
-      <p class="text-lg font-medium">Syncing {displayName}...</p>
-      <p class="text-sm text-muted-foreground">
-        This may take a moment depending on the amount of data.
-      </p>
-    </div>
-  </div>
-
-<!-- RESULTS STEP -->
-{:else if step === "results" && syncResult}
-  <SyncResultCard
-    {syncResult}
-    {displayName}
-    onComplete={() => {
-      if (syncResult) {
-        onComplete?.(syncResult);
-      }
-    }}
-    {resultActions}
-    onReset={resetToSelection}
-  />
 {/if}
 

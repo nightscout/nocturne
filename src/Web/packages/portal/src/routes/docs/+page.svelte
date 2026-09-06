@@ -1,5 +1,6 @@
 <script lang="ts">
     import Content from "../../content/docs/index.svx";
+    import SupportNocturne from "$lib/components/docs/SupportNocturne.svelte";
     import {
         ArrowRight,
         Book,
@@ -121,6 +122,8 @@
             </div>
         </a>
     </div>
+
+    <SupportNocturne />
 
     <div class="mt-12 p-6 rounded-xl border border-amber-500/30 bg-amber-500/5">
         <div class="flex items-start gap-3">

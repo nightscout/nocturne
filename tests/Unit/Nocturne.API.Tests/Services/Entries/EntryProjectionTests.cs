@@ -1,5 +1,5 @@
 using FluentAssertions;
-using Nocturne.API.Services.Entries;
+using Nocturne.Core.Models.Projections;
 using Nocturne.Core.Models.V4;
 using Xunit;
 
@@ -79,6 +79,23 @@ public class EntryProjectionTests
         var entry = EntryProjection.FromSensorGlucose(sg);
 
         entry.Direction.Should().Be("FortyFiveUp");
+    }
+
+    [Theory]
+    [InlineData(GlucoseDirection.None, "NONE")]
+    [InlineData(GlucoseDirection.NotComputable, "NOT COMPUTABLE")]
+    [InlineData(GlucoseDirection.RateOutOfRange, "RATE OUT OF RANGE")]
+    public void FromSensorGlucose_MapsDirectionToLegacyWireSpelling(
+        GlucoseDirection direction,
+        string expected
+    )
+    {
+        var sg = CreateSensorGlucose();
+        sg.Direction = direction;
+
+        var entry = EntryProjection.FromSensorGlucose(sg);
+
+        entry.Direction.Should().Be(expected);
     }
 
     [Fact]

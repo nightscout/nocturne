@@ -241,18 +241,14 @@ public abstract class BaseV3Controller<T> : ControllerBase
     }
 
     /// <summary>
-    /// Generate ETag for a collection of data
+    /// Format a V3 ETag from a record timestamp. AAPS parses every V3 ETag by stripping the
+    /// first three characters (<c>W/"</c>) and the trailing quote, then calling
+    /// <c>toLong()</c> — so the value between the quotes MUST be a bare Unix-milliseconds
+    /// number. Any other shape (e.g. a content hash) crashes the AAPS sync loop with
+    /// <c>NumberFormatException</c> (#522).
     /// </summary>
-    /// <param name="data">Data to generate ETag for</param>
-    /// <returns>ETag value</returns>
-    protected string GenerateETag<TItem>(IEnumerable<TItem> data)
-    {
-        var json = JsonSerializer.Serialize(data);
-        var hash = System.Security.Cryptography.SHA256.HashData(
-            System.Text.Encoding.UTF8.GetBytes(json)
-        );
-        return Convert.ToHexString(hash)[..16]; // Use first 16 characters
-    }
+    /// <param name="maxMills">Highest record timestamp in the response, in Unix milliseconds.</param>
+    protected static string FormatCursorETag(long maxMills) => $"W/\"{maxMills}\"";
 
     /// <summary>
     /// Set V3 response headers including pagination, ETag, and caching
@@ -260,15 +256,24 @@ public abstract class BaseV3Controller<T> : ControllerBase
     /// <param name="data">Response data</param>
     /// <param name="parameters">Query parameters</param>
     /// <param name="totalCount">Total count of items (for pagination)</param>
+    /// <param name="lastModified">
+    /// Newest record timestamp when the caller already knows it (e.g. computed from domain
+    /// models before mapping to DTOs the timestamp reflection can't read).
+    /// </param>
     protected void SetV3ResponseHeaders<TItem>(
         IEnumerable<TItem> data,
         V3QueryParameters parameters,
-        long totalCount
+        long totalCount,
+        DateTimeOffset? lastModified = null
     )
     {
-        // Set ETag header
-        var etag = GenerateETag(data);
-        Response.Headers["ETag"] = $"\"{etag}\"";
+        // Cursor-style ETag from the newest record; falls back to the current time for
+        // collections whose items carry no recognizable timestamp.
+        var effectiveLastModified =
+            lastModified ?? GetLastModified(data.Cast<object>()) ?? DateTimeOffset.UtcNow;
+        Response.Headers["ETag"] = FormatCursorETag(
+            effectiveLastModified.ToUnixTimeMilliseconds()
+        );
 
         // Set pagination headers
         Response.Headers["X-Total-Count"] = totalCount.ToString();
@@ -298,28 +303,28 @@ public abstract class BaseV3Controller<T> : ControllerBase
 
         // Set cache control headers
         Response.Headers["Cache-Control"] = "public, max-age=60";
-        Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R");
+        Response.Headers["Last-Modified"] = effectiveLastModified.UtcDateTime.ToString("R");
         Response.Headers["Vary"] = "Accept, If-Modified-Since, If-None-Match";
     }
 
     /// <summary>
-    /// Check if the request can return a 304 Not Modified response
+    /// Check if the request can return a 304 Not Modified response.
+    /// The current ETag is derived from <paramref name="lastModified"/> with
+    /// <see cref="FormatCursorETag"/>, matching what the response headers carry.
     /// </summary>
-    /// <param name="etag">Current ETag</param>
-    /// <param name="lastModified">Last modified timestamp</param>
+    /// <param name="lastModified">Last modified timestamp of the response data</param>
     /// <param name="parameters">Query parameters</param>
     /// <returns>True if 304 should be returned</returns>
-    protected bool ShouldReturn304(
-        string etag,
-        DateTimeOffset lastModified,
-        V3QueryParameters parameters
-    )
+    protected bool ShouldReturn304(DateTimeOffset lastModified, V3QueryParameters parameters)
     {
-        // Check If-None-Match header
+        // Check If-None-Match header (tolerate weak markers and quoting variations)
         if (!string.IsNullOrEmpty(parameters.IfNoneMatch))
         {
-            var clientETag = parameters.IfNoneMatch.Trim('"');
-            if (clientETag == etag)
+            var clientETag = NormalizeETag(parameters.IfNoneMatch);
+            var currentETag = NormalizeETag(
+                FormatCursorETag(lastModified.ToUnixTimeMilliseconds())
+            );
+            if (clientETag == currentETag)
             {
                 return true;
             }
@@ -335,6 +340,34 @@ public abstract class BaseV3Controller<T> : ControllerBase
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Parse a legacy <c>created_at</c> string into Unix milliseconds.
+    /// </summary>
+    protected static long? ParseCreatedAtMills(string? createdAt)
+    {
+        if (string.IsNullOrEmpty(createdAt))
+            return null;
+
+        return DateTimeOffset.TryParse(
+            createdAt,
+            System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.AssumeUniversal,
+            out var parsed
+        )
+            ? parsed.ToUnixTimeMilliseconds()
+            : null;
+    }
+
+    private static string NormalizeETag(string etag)
+    {
+        var value = etag.Trim();
+        if (value.StartsWith("W/", StringComparison.OrdinalIgnoreCase))
+        {
+            value = value[2..];
+        }
+        return value.Trim('"');
     }
 
     /// <summary>
@@ -369,6 +402,19 @@ public abstract class BaseV3Controller<T> : ControllerBase
     }
 
     /// <summary>
+    /// Set <c>Last-Modified</c> and <c>ETag</c> on a V3 <c>history/{lastModified}</c> response.
+    /// AAPS advances its incremental-sync cursor from these headers; without them the cursor
+    /// stays put and the same page is requested repeatedly.
+    /// </summary>
+    /// <param name="maxMills">Highest record timestamp in the response, in Unix milliseconds.</param>
+    protected void SetHistoryCursorHeaders(long maxMills)
+    {
+        var lastModified = DateTimeOffset.FromUnixTimeMilliseconds(maxMills).UtcDateTime;
+        Response.Headers["Last-Modified"] = lastModified.ToString("R");
+        Response.Headers["ETag"] = FormatCursorETag(maxMills);
+    }
+
+    /// <summary>
     /// Create a standardized V3 success response with metadata including pagination headers.
     /// Returns the Nightscout V3-compatible envelope: <c>{"status": 200, "result": [...]}</c>.
     /// </summary>
@@ -380,7 +426,8 @@ public abstract class BaseV3Controller<T> : ControllerBase
     protected IActionResult CreateV3CollectionResponse<TItem>(
         IEnumerable<TItem> data,
         V3QueryParameters parameters,
-        long totalCount
+        long totalCount,
+        DateTimeOffset? lastModified = null
     )
     {
         // Apply field selection
@@ -403,7 +450,7 @@ public abstract class BaseV3Controller<T> : ControllerBase
         };
 
         // Set response headers
-        SetV3ResponseHeaders(data, parameters, totalCount);
+        SetV3ResponseHeaders(data, parameters, totalCount, lastModified);
 
         // Nightscout V3 API returns {"status": 200, "result": [...]}
         return Ok(
@@ -603,15 +650,18 @@ public abstract class BaseV3Controller<T> : ControllerBase
                     itemModified = srvModified;
                 }
 
-                // Check for CreatedAt property
+                // Check for CreatedAt property (DateTimeOffset or ISO-8601 string)
                 var createdAtProperty = itemType.GetProperty("CreatedAt");
-                if (
-                    createdAtProperty != null
-                    && createdAtProperty.GetValue(item) is DateTimeOffset createdAt
-                )
+                var createdAt = createdAtProperty?.GetValue(item) switch
                 {
-                    if (itemModified == null || createdAt > itemModified)
-                        itemModified = createdAt;
+                    DateTimeOffset dto => dto,
+                    string s when ParseCreatedAtMills(s) is long createdAtMills =>
+                        DateTimeOffset.FromUnixTimeMilliseconds(createdAtMills),
+                    _ => (DateTimeOffset?)null,
+                };
+                if (createdAt != null && (itemModified == null || createdAt > itemModified))
+                {
+                    itemModified = createdAt;
                 }
 
                 if (itemModified != null && (lastModified == null || itemModified > lastModified))

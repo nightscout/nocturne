@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Models;
@@ -59,8 +60,11 @@ public class AlexaController : ControllerBase
             {
                 _logger.LogWarning("Invalid Alexa request received - missing request details");
                 return BadRequest("Invalid Alexa request format");
-            } // Check authorization - requires read permission as per legacy implementation
-            if (!await _authorizationService.CheckPermissionAsync("api", "api:*:read"))
+            }
+            // Legacy code passed "api" where CheckPermissionAsync expects a subject GUID, so
+            // every request failed Guid.TryParse and got 401. Ask the request's own trie instead,
+            // which the auth middleware built from the caller's scopes.
+            if (!HttpContext.CanRead())
             {
                 _logger.LogWarning(
                     "Unauthorized Alexa request from {RemoteIpAddress}",

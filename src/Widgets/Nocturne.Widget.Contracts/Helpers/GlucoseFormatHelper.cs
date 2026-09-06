@@ -1,3 +1,5 @@
+using Nocturne.Core.Constants;
+
 namespace Nocturne.Widget.Contracts.Helpers;
 
 /// <summary>
@@ -5,11 +7,6 @@ namespace Nocturne.Widget.Contracts.Helpers;
 /// </summary>
 public static class GlucoseFormatHelper
 {
-    /// <summary>
-    /// Standard conversion factor from mg/dL to mmol/L (molecular weight of glucose / 10).
-    /// </summary>
-    public const double MgdlToMmolFactor = 18.01559;
-
     /// <summary>
     /// Formats a glucose value in mg/dL to the appropriate display string for the given unit.
     /// </summary>
@@ -20,7 +17,7 @@ public static class GlucoseFormatHelper
     {
         return unit switch
         {
-            GlucoseUnit.MmolL => (mgdl / MgdlToMmolFactor).ToString("F1"),
+            GlucoseUnit.MmolL => (mgdl / GlucoseConstants.MgdlPerMmol).ToString("F1"),
             _ => ((int)mgdl).ToString(),
         };
     }
@@ -28,12 +25,12 @@ public static class GlucoseFormatHelper
     /// <summary>
     /// Converts a glucose value from mg/dL to mmol/L.
     /// </summary>
-    public static double ToMmol(double mgdl) => mgdl / MgdlToMmolFactor;
+    public static double ToMmol(double mgdl) => mgdl / GlucoseConstants.MgdlPerMmol;
 
     /// <summary>
     /// Converts a glucose value from mmol/L to mg/dL.
     /// </summary>
-    public static double ToMgdl(double mmol) => mmol * MgdlToMmolFactor;
+    public static double ToMgdl(double mmol) => mmol * GlucoseConstants.MgdlPerMmol;
 
     /// <summary>
     /// Formats a glucose delta value with sign prefix for the given unit.
@@ -45,7 +42,8 @@ public static class GlucoseFormatHelper
     {
         if (delta is null)
             return "";
-        var value = unit == GlucoseUnit.MmolL ? delta.Value / MgdlToMmolFactor : delta.Value;
+        var value =
+            unit == GlucoseUnit.MmolL ? delta.Value / GlucoseConstants.MgdlPerMmol : delta.Value;
         var formatted =
             unit == GlucoseUnit.MmolL ? value.ToString("+0.0;-0.0;0.0") : value.ToString("+0;-0;0");
         return formatted;

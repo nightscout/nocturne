@@ -25,11 +25,26 @@ public interface IHeartRateService
     /// </summary>
     /// <param name="from">Start of date range (inclusive)</param>
     /// <param name="to">End of date range (exclusive)</param>
+    /// <param name="count">Maximum number of records to return; <see langword="null"/> for every record in the range</param>
+    /// <param name="skip">Number of records to skip for pagination</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Collection of heart rate records ordered by timestamp ascending</returns>
     Task<IEnumerable<HeartRate>> GetHeartRatesByDateRangeAsync(
         DateTime from,
         DateTime to,
+        int? count = null,
+        int skip = 0,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
+    /// Returns the latest heart rate timestamp written by <paramref name="source"/> (a connector's
+    /// resume watermark), or <c>null</c> when that source has written none.
+    /// </summary>
+    /// <param name="source">The data source to scope to.</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task<DateTime?> GetLatestTimestampAsync(
+        string source,
         CancellationToken cancellationToken = default
     );
 

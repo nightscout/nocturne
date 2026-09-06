@@ -2,11 +2,18 @@ using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Attributes;
+using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Extensions;
+using Nocturne.API.Services.Monitoring;
+using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Abstractions;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.API.Services.Realtime;
 
 namespace Nocturne.API.Controllers.V4.Monitoring;
@@ -19,10 +26,26 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 [ApiController]
 [Tags("Monitoring")]
 [Route("api/v4/trackers")]
-public class TrackersController : ControllerBase
+public class TrackersController : ControllerBase, IWriteScopedController
 {
+    /// <summary>
+    /// The OAuth scope every write action on this controller requires. The <c>tracker_*</c> tables
+    /// are not in <see cref="ShareDataCategories.GovernedTables"/> and have no V1/V3 data
+    /// equivalent: a tracker is monitoring state, not a patient observation. A definition's
+    /// notification thresholds are synthesised into managed alert rules
+    /// (<see cref="ITrackerAlertRuleSyncService"/>), an instance is keyed to the treatment that
+    /// triggered it rather than storing one, and acknowledging an instance acknowledges an alert
+    /// excursion (<see cref="IAlertAcknowledgementService"/>). V1 and V2 gate their notification
+    /// writes on <c>alerts.readwrite</c>. The per-action <c>[Authorize]</c> alone is satisfied by
+    /// read-only credentials such as a guest-link session, which holds <c>alerts.read</c>.
+    /// </summary>
+    public string WriteScope => Scope.AlertsReadWrite;
+
     private readonly ITrackerRepository _repository;
     private readonly ISignalRBroadcastService _broadcast;
+    private readonly ITrackerAlertRuleSyncService _ruleSync;
+    private readonly ITenantDbContextFactory _contextFactory;
+    private readonly IAlertAcknowledgementService _acknowledgementService;
     private readonly ILogger<TrackersController> _logger;
 
     /// <summary>
@@ -30,15 +53,24 @@ public class TrackersController : ControllerBase
     /// </summary>
     /// <param name="repository">Repository for tracker definition and log persistence.</param>
     /// <param name="broadcast">Service for broadcasting real-time tracker updates via SignalR.</param>
+    /// <param name="ruleSync">Synthesises managed alert rules from notification thresholds.</param>
+    /// <param name="contextFactory">Tenant-scoped database context factory (managed-rule lookups).</param>
+    /// <param name="acknowledgementService">Acknowledges alert excursions when a tracker is acked.</param>
     /// <param name="logger">Logger instance.</param>
     public TrackersController(
         ITrackerRepository repository,
         ISignalRBroadcastService broadcast,
+        ITrackerAlertRuleSyncService ruleSync,
+        ITenantDbContextFactory contextFactory,
+        IAlertAcknowledgementService acknowledgementService,
         ILogger<TrackersController> logger
     )
     {
         _repository = repository;
         _broadcast = broadcast;
+        _ruleSync = ruleSync;
+        _contextFactory = contextFactory;
+        _acknowledgementService = acknowledgementService;
         _logger = logger;
     }
 
@@ -57,12 +89,18 @@ public class TrackersController : ControllerBase
         if (tracker.Visibility == TrackerVisibility.Public)
             return true;
 
-        // Private trackers only visible to owner
+        // The owner sees their own tracker at every visibility, not just Private, so that a
+        // visibility value with no view rule of its own can never hide a tracker from the person
+        // who set it. RoleRestricted is rejected on write and migrated to Private, so this is
+        // belt-and-braces rather than the only thing standing between an owner and their data.
+        // An unattributed tracker (UserId defaulted to "") must not match a caller carrying no
+        // subject, so an empty id matches nothing.
         var currentUserId = HttpContext.GetSubjectIdString();
-        if (tracker.Visibility == TrackerVisibility.Private && tracker.UserId == currentUserId)
+        if (!string.IsNullOrEmpty(currentUserId) && tracker.UserId == currentUserId)
             return true;
 
-        // TODO: RoleRestricted visibility check
+        // RoleRestricted has no check yet, so it falls through to hidden — including from
+        // the tracker's own owner.
         return false;
     }
 
@@ -95,16 +133,61 @@ public class TrackersController : ControllerBase
         return null;
     }
 
+    /// <summary>
+    /// Validate the low-reservoir level threshold for a definition
+    /// </summary>
+    private static string? ValidateLowReservoirUnits(double? units, TrackerCategory category)
+    {
+        if (units is not { } value) return null;
+        if (category != TrackerCategory.Reservoir)
+            return "Low reservoir units apply only to Reservoir category trackers";
+        if (value <= 0)
+            return "Low reservoir units must be greater than zero";
+        if (value > 1000)
+            return "Low reservoir units must be at most 1000";
+        return null;
+    }
+
+    /// <summary>
+    /// Acknowledges every open, unacknowledged excursion belonging to the managed alert
+    /// rules synthesised from <paramref name="definitionId"/>'s thresholds.
+    /// </summary>
+    private async Task AcknowledgeManagedRuleExcursionsAsync(
+        Guid definitionId, string userId, CancellationToken ct)
+    {
+        await using var db = await _contextFactory.CreateAsync(ct);
+        var tag = TrackerAlertRuleSyncService.ManagedByTag(definitionId);
+
+        var excursions = await db.AlertExcursions
+            .AsNoTracking()
+            .Where(e => e.EndedAt == null && e.AcknowledgedAt == null)
+            .Join(
+                db.AlertRules.Where(r => r.ManagedBy == tag),
+                e => e.AlertRuleId,
+                r => r.Id,
+                (e, r) => e.Id)
+            .ToListAsync(ct);
+
+        foreach (var excursionId in excursions)
+        {
+            await _acknowledgementService.AcknowledgeExcursionAsync(
+                db.TenantId, excursionId, userId, broadcast: true, ct);
+        }
+    }
+
     #endregion
 
     #region Definitions
 
     /// <summary>
-    /// Get all tracker definitions. Returns public trackers for unauthenticated users,
-    /// or all visible trackers for authenticated users.
+    /// Get all tracker definitions: the caller's own plus any Public-visibility tracker.
+    /// Gated by the fallback authorization policy (no <c>[AllowAnonymous]</c>): a bare
+    /// unauthenticated request on a tenant subdomain carries an empty permission trie and is
+    /// rejected, so a private tenant exposes no tracker anonymously. A public-share subject is
+    /// admitted by the policy but reads nothing here — tracker tables are not in
+    /// <see cref="ShareDataCategories"/>, so the share RLS policy hides them.
     /// </summary>
     [HttpGet("definitions")]
-    [AllowAnonymous]
     [RemoteQuery]
     [ProducesResponseType(typeof(TrackerDefinitionDto[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<TrackerDefinitionDto[]>> GetDefinitions(
@@ -143,7 +226,6 @@ public class TrackersController : ControllerBase
     /// Get a specific tracker definition
     /// </summary>
     [HttpGet("definitions/{id:guid}")]
-    [AllowAnonymous]
     [RemoteQuery]
     [ProducesResponseType(typeof(TrackerDefinitionDto), StatusCodes.Status200OK)]
     public async Task<ActionResult<TrackerDefinitionDto>> GetDefinition(Guid id)
@@ -163,6 +245,7 @@ public class TrackersController : ControllerBase
     /// Create a new tracker definition
     /// </summary>
     [HttpPost("definitions")]
+    [RequireDeclaredWriteScope]
     [Authorize]
     [RemoteForm(Invalidates = ["GetDefinitions"])]
     [ProducesResponseType(typeof(TrackerDefinitionDto), StatusCodes.Status201Created)]
@@ -184,6 +267,10 @@ public class TrackersController : ControllerBase
         if (request.Mode == TrackerMode.Event && request.LifespanHours.HasValue)
             return Problem(detail: "Event mode trackers should not have a lifespan", statusCode: 400, title: "Bad Request");
 
+        var lowReservoirError = ValidateLowReservoirUnits(request.LowReservoirUnits, request.Category);
+        if (lowReservoirError != null)
+            return Problem(detail: lowReservoirError, statusCode: 400, title: "Bad Request");
+
         var entity = new TrackerDefinitionEntity
         {
             UserId = userId,
@@ -194,6 +281,8 @@ public class TrackersController : ControllerBase
             TriggerEventTypes = JsonSerializer.Serialize(request.TriggerEventTypes ?? []),
             TriggerNotesContains = request.TriggerNotesContains,
             LifespanHours = request.LifespanHours,
+            LowReservoirUnits = request.LowReservoirUnits,
+            LowReservoirUrgency = request.LowReservoirUrgency,
             IsFavorite = request.IsFavorite,
             DashboardVisibility = request.DashboardVisibility,
             Visibility = request.Visibility,
@@ -219,8 +308,6 @@ public class TrackersController : ControllerBase
                         AudioEnabled = threshold.AudioEnabled,
                         AudioSound = threshold.AudioSound,
                         VibrateEnabled = threshold.VibrateEnabled,
-                        RepeatIntervalMins = threshold.RepeatIntervalMins,
-                        MaxRepeats = threshold.MaxRepeats,
                         RespectQuietHours = threshold.RespectQuietHours,
                     }
                 );
@@ -228,6 +315,11 @@ public class TrackersController : ControllerBase
         }
 
         var created = await _repository.CreateDefinitionAsync(entity, HttpContext.RequestAborted);
+
+        // CancellationToken.None: the definition is already committed, so a client
+        // disconnect must not leave it without its managed rules until the next startup
+        // backfill.
+        await _ruleSync.SyncDefinitionAsync(created.Id, CancellationToken.None);
 
         _logger.LogInformation(
             "Created tracker definition {Id} for user {UserId}",
@@ -246,6 +338,7 @@ public class TrackersController : ControllerBase
     /// Update a tracker definition
     /// </summary>
     [HttpPut("definitions/{id:guid}")]
+    [RequireDeclaredWriteScope]
     [Authorize]
     [RemoteForm(Invalidates = ["GetDefinitions", "GetDefinition"])]
     [ProducesResponseType(typeof(TrackerDefinitionDto), StatusCodes.Status200OK)]
@@ -276,6 +369,11 @@ public class TrackersController : ControllerBase
         if (mode == TrackerMode.Event && lifespan.HasValue)
             return Problem(detail: "Event mode trackers should not have a lifespan", statusCode: 400, title: "Bad Request");
 
+        var category = request.Category ?? existing.Category;
+        var lowReservoirError = ValidateLowReservoirUnits(request.LowReservoirUnits, category);
+        if (lowReservoirError != null)
+            return Problem(detail: lowReservoirError, statusCode: 400, title: "Bad Request");
+
         existing.Name = request.Name ?? existing.Name;
         existing.Description = request.Description ?? existing.Description;
         existing.Category = request.Category ?? existing.Category;
@@ -287,6 +385,12 @@ public class TrackersController : ControllerBase
         existing.TriggerNotesContains =
             request.TriggerNotesContains ?? existing.TriggerNotesContains;
         existing.LifespanHours = request.LifespanHours ?? existing.LifespanHours;
+        // Applied as-is (not null-means-keep): the tracker editor posts the whole
+        // definition, and null must clear the level rule. Forced null for any
+        // non-Reservoir category.
+        existing.LowReservoirUnits =
+            category == TrackerCategory.Reservoir ? request.LowReservoirUnits : null;
+        existing.LowReservoirUrgency = request.LowReservoirUrgency ?? existing.LowReservoirUrgency;
         existing.IsFavorite = request.IsFavorite ?? existing.IsFavorite;
         existing.DashboardVisibility = request.DashboardVisibility ?? existing.DashboardVisibility;
         existing.Visibility = request.Visibility ?? existing.Visibility;
@@ -312,8 +416,6 @@ public class TrackersController : ControllerBase
                         AudioEnabled = t.AudioEnabled,
                         AudioSound = t.AudioSound,
                         VibrateEnabled = t.VibrateEnabled,
-                        RepeatIntervalMins = t.RepeatIntervalMins,
-                        MaxRepeats = t.MaxRepeats,
                         RespectQuietHours = t.RespectQuietHours,
                     })
                     .ToList(),
@@ -327,6 +429,12 @@ public class TrackersController : ControllerBase
             HttpContext.RequestAborted
         );
 
+        // Lifespan/mode/name changes shift the synthesised conditions even when the
+        // threshold list itself didn't change, so re-sync unconditionally.
+        // CancellationToken.None: the threshold writes are already committed; aborting
+        // here would leave stale rules firing at the old minutes.
+        await _ruleSync.SyncDefinitionAsync(id, CancellationToken.None);
+
         return Ok(TrackerDefinitionDto.FromEntity(updated!));
     }
 
@@ -334,6 +442,7 @@ public class TrackersController : ControllerBase
     /// Delete a tracker definition
     /// </summary>
     [HttpDelete("definitions/{id:guid}")]
+    [RequireDeclaredWriteScope]
     [Authorize]
     [RemoteCommand(Invalidates = ["GetDefinitions"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -347,7 +456,12 @@ public class TrackersController : ControllerBase
         if (existing.UserId != userId && !HttpContext.IsAdmin())
             return Forbid();
 
+        // Definition first, rules second: if the definition delete fails the tracker
+        // keeps its rules; if the rule cleanup is interrupted the leftover rules fail
+        // closed (no active instance for a deleted definition) rather than a live
+        // tracker losing its alerts. CancellationToken.None for the same reason.
         await _repository.DeleteDefinitionAsync(id, HttpContext.RequestAborted);
+        await _ruleSync.DeleteRulesForDefinitionAsync(id, CancellationToken.None);
 
         _logger.LogInformation("Deleted tracker definition {Id}", id);
 
@@ -362,7 +476,6 @@ public class TrackersController : ControllerBase
     /// Get active tracker instances
     /// </summary>
     [HttpGet("instances")]
-    [AllowAnonymous]
     [RemoteQuery]
     [ProducesResponseType(typeof(TrackerInstanceDto[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<TrackerInstanceDto[]>> GetActiveInstances()
@@ -377,17 +490,23 @@ public class TrackersController : ControllerBase
     }
 
     /// <summary>
-    /// Get completed tracker instances (history)
+    /// Get completed tracker instances (history). Matches <see cref="GetActiveInstances"/> and
+    /// <see cref="GetUpcomingInstances"/>: a caller carrying no subject reads the public-visibility
+    /// instances only, and the fallback authorization policy (no <c>[AllowAnonymous]</c>) rejects a
+    /// bare unauthenticated request, so a private tenant exposes no history anonymously. The public
+    /// share subject is still admitted by the policy, so the calendar keeps rendering history
+    /// alongside the active and upcoming instances — <c>[Authorize]</c> is what 401'd it.
     /// </summary>
     [HttpGet("instances/history")]
-    [Authorize]
     [RemoteQuery]
     [ProducesResponseType(typeof(TrackerInstanceDto[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<TrackerInstanceDto[]>> GetInstanceHistory(
         [FromQuery] int limit = 100
     )
     {
-        var userId = HttpContext.GetSubjectIdString()!;
+        limit = V4ReadLimits.ClampLimit(limit);
+
+        var userId = HttpContext.GetSubjectIdString();
         var instances = await _repository.GetCompletedInstancesAsync(
             userId,
             limit,
@@ -401,7 +520,6 @@ public class TrackersController : ControllerBase
     /// Get upcoming tracker expirations for calendar
     /// </summary>
     [HttpGet("instances/upcoming")]
-    [AllowAnonymous]
     [RemoteQuery]
     [ProducesResponseType(typeof(TrackerInstanceDto[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<TrackerInstanceDto[]>> GetUpcomingInstances(
@@ -427,6 +545,7 @@ public class TrackersController : ControllerBase
     /// Start a new tracker instance
     /// </summary>
     [HttpPost("instances")]
+    [RequireDeclaredWriteScope]
     [Authorize]
     [RemoteCommand(Invalidates = ["GetActiveInstances"])]
     [ProducesResponseType(typeof(TrackerInstanceDto), StatusCodes.Status201Created)]
@@ -482,6 +601,7 @@ public class TrackersController : ControllerBase
     /// Complete a tracker instance
     /// </summary>
     [HttpPut("instances/{id:guid}/complete")]
+    [RequireDeclaredWriteScope]
     [Authorize]
     [RemoteCommand(Invalidates = ["GetActiveInstances", "GetInstanceHistory"])]
     [ProducesResponseType(typeof(TrackerInstanceDto), StatusCodes.Status200OK)]
@@ -526,9 +646,13 @@ public class TrackersController : ControllerBase
     }
 
     /// <summary>
-    /// Acknowledge/snooze a tracker notification
+    /// Acknowledge a tracker notification. <c>SnoozeMins</c> is stored on the instance
+    /// (pill display/legacy clients); the alert-engine side is a plain acknowledgement of
+    /// the managed rules' open excursions — re-notification is the threshold ladder's and
+    /// alert_state escalation rules' job, not a snooze re-fire.
     /// </summary>
     [HttpPost("instances/{id:guid}/ack")]
+    [RequireDeclaredWriteScope]
     [Authorize]
     [RemoteCommand(Invalidates = ["GetActiveInstances"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -543,6 +667,11 @@ public class TrackersController : ControllerBase
             return Forbid();
 
         await _repository.AckInstanceAsync(id, request.SnoozeMins, HttpContext.RequestAborted);
+
+        // Acknowledge the active excursions of this definition's managed alert rules so
+        // the alert surface (history, escalation via alert_state, device intents) agrees
+        // with the tracker ack instead of showing a still-unacknowledged alert.
+        await AcknowledgeManagedRuleExcursionsAsync(existing.DefinitionId, userId, HttpContext.RequestAborted);
 
         // Broadcast ack if global
         if (request.Global)
@@ -564,6 +693,7 @@ public class TrackersController : ControllerBase
     /// Delete a tracker instance
     /// </summary>
     [HttpDelete("instances/{id:guid}")]
+    [RequireDeclaredWriteScope]
     [Authorize]
     [RemoteCommand(Invalidates = ["GetActiveInstances"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -610,6 +740,7 @@ public class TrackersController : ControllerBase
     /// Create a new preset
     /// </summary>
     [HttpPost("presets")]
+    [RequireDeclaredWriteScope]
     [Authorize]
     [RemoteCommand(Invalidates = ["GetPresets"])]
     [ProducesResponseType(typeof(TrackerPresetDto), StatusCodes.Status201Created)]
@@ -652,6 +783,7 @@ public class TrackersController : ControllerBase
     /// Apply a preset (starts a new instance)
     /// </summary>
     [HttpPost("presets/{id:guid}/apply")]
+    [RequireDeclaredWriteScope]
     [Authorize]
     [RemoteCommand(Invalidates = ["GetActiveInstances"])]
     [ProducesResponseType(typeof(TrackerInstanceDto), StatusCodes.Status200OK)]
@@ -685,6 +817,7 @@ public class TrackersController : ControllerBase
     /// Delete a preset
     /// </summary>
     [HttpDelete("presets/{id:guid}")]
+    [RequireDeclaredWriteScope]
     [Authorize]
     [RemoteCommand(Invalidates = ["GetPresets"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -721,9 +854,13 @@ public class NotificationThresholdDto
     public bool AudioEnabled { get; set; }
     public string? AudioSound { get; set; }
     public bool VibrateEnabled { get; set; }
-    public int RepeatIntervalMins { get; set; }
-    public int MaxRepeats { get; set; }
     public bool RespectQuietHours { get; set; }
+
+    /// <summary>
+    /// The managed alert rule that delivers this threshold. Null until the sync service
+    /// has run, so callers must treat it as optional.
+    /// </summary>
+    public Guid? AlertRuleId { get; set; }
 
     public static NotificationThresholdDto FromEntity(TrackerNotificationThresholdEntity entity) =>
         new()
@@ -738,9 +875,8 @@ public class NotificationThresholdDto
             AudioEnabled = entity.AudioEnabled,
             AudioSound = entity.AudioSound,
             VibrateEnabled = entity.VibrateEnabled,
-            RepeatIntervalMins = entity.RepeatIntervalMins,
-            MaxRepeats = entity.MaxRepeats,
             RespectQuietHours = entity.RespectQuietHours,
+            AlertRuleId = entity.AlertRuleId,
         };
 }
 
@@ -755,6 +891,17 @@ public class TrackerDefinitionDto
     public string? TriggerNotesContains { get; set; }
     public int? LifespanHours { get; set; }
 
+    /// <summary>
+    /// Reservoir category only: units level below which the synced managed reservoir
+    /// rule fires. Null = no level rule.
+    /// </summary>
+    public double? LowReservoirUnits { get; set; }
+
+    /// <summary>
+    /// Urgency of the low-reservoir level rule.
+    /// </summary>
+    public NotificationUrgency LowReservoirUrgency { get; set; } = NotificationUrgency.Warn;
+
     // Notification thresholds (many-to-one relationship)
     public List<NotificationThresholdDto> NotificationThresholds { get; set; } = [];
 
@@ -766,7 +913,7 @@ public class TrackerDefinitionDto
     public DashboardVisibility DashboardVisibility { get; set; } = DashboardVisibility.Always;
 
     /// <summary>
-    /// Visibility level for this tracker (Public, Private, RoleRestricted)
+    /// Visibility level for this tracker: Public or Private
     /// </summary>
     public TrackerVisibility Visibility { get; set; } = TrackerVisibility.Public;
 
@@ -800,6 +947,8 @@ public class TrackerDefinitionDto
                 JsonSerializer.Deserialize<List<string>>(entity.TriggerEventTypes) ?? [],
             TriggerNotesContains = entity.TriggerNotesContains,
             LifespanHours = entity.LifespanHours,
+            LowReservoirUnits = entity.LowReservoirUnits,
+            LowReservoirUrgency = entity.LowReservoirUrgency,
             // Notification thresholds
             NotificationThresholds =
                 entity
@@ -894,6 +1043,17 @@ public class CreateTrackerDefinitionRequest
     public string? TriggerNotesContains { get; set; }
     public int? LifespanHours { get; set; }
 
+    /// <summary>
+    /// Reservoir category only: units level below which the synced managed reservoir
+    /// rule fires. Null = no level rule.
+    /// </summary>
+    public double? LowReservoirUnits { get; set; }
+
+    /// <summary>
+    /// Urgency of the low-reservoir level rule.
+    /// </summary>
+    public NotificationUrgency LowReservoirUrgency { get; set; } = NotificationUrgency.Warn;
+
     // Notification thresholds (many-to-one relationship)
     public List<CreateNotificationThresholdRequest>? NotificationThresholds { get; set; }
     public bool IsFavorite { get; set; }
@@ -904,9 +1064,11 @@ public class CreateTrackerDefinitionRequest
     public DashboardVisibility DashboardVisibility { get; set; } = DashboardVisibility.Always;
 
     /// <summary>
-    /// Visibility level for this tracker (Public, Private, RoleRestricted)
+    /// Visibility level for this tracker: Public or Private. Defaults to Private so a tracker is
+    /// never made Public by omission; the owner opts into Public explicitly. RoleRestricted is
+    /// rejected.
     /// </summary>
-    public TrackerVisibility Visibility { get; set; } = TrackerVisibility.Public;
+    public TrackerVisibility Visibility { get; set; } = TrackerVisibility.Private;
 
     /// <summary>
     /// Event type to create when tracker is started (for Nightscout compatibility)
@@ -934,6 +1096,19 @@ public class UpdateTrackerDefinitionRequest
     public string? TriggerNotesContains { get; set; }
     public int? LifespanHours { get; set; }
 
+    /// <summary>
+    /// Reservoir category only: units level below which the synced managed reservoir
+    /// rule fires. The tracker editor posts the whole definition, so for a Reservoir
+    /// definition this value is applied as-is on every update — null clears the rule
+    /// (null-means-keep cannot express clearing).
+    /// </summary>
+    public double? LowReservoirUnits { get; set; }
+
+    /// <summary>
+    /// Urgency of the low-reservoir level rule. Null keeps the current value.
+    /// </summary>
+    public NotificationUrgency? LowReservoirUrgency { get; set; }
+
     // Notification thresholds (if provided, replaces all existing thresholds)
     public List<CreateNotificationThresholdRequest>? NotificationThresholds { get; set; }
     public bool? IsFavorite { get; set; }
@@ -944,7 +1119,8 @@ public class UpdateTrackerDefinitionRequest
     public DashboardVisibility? DashboardVisibility { get; set; }
 
     /// <summary>
-    /// Visibility level for this tracker (Public, Private, RoleRestricted)
+    /// Visibility level for this tracker: Public or Private. Null keeps the current value, so an
+    /// update never defaults a tracker to Public by omission. RoleRestricted is rejected.
     /// </summary>
     public TrackerVisibility? Visibility { get; set; }
 
@@ -976,8 +1152,6 @@ public class CreateNotificationThresholdRequest
     public bool AudioEnabled { get; set; }
     public string? AudioSound { get; set; }
     public bool VibrateEnabled { get; set; }
-    public int RepeatIntervalMins { get; set; }
-    public int MaxRepeats { get; set; } = 3;
     public bool RespectQuietHours { get; set; } = true;
 }
 

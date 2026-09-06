@@ -67,7 +67,6 @@ public static class ChartColorMapper
     public static ChartColor FromActivity(StateSpanCategory category) =>
         category switch
         {
-            StateSpanCategory.Sleep => ChartColor.ActivitySleep,
             StateSpanCategory.Exercise => ChartColor.ActivityExercise,
             StateSpanCategory.Illness => ChartColor.ActivityIllness,
             StateSpanCategory.Travel => ChartColor.ActivityTravel,

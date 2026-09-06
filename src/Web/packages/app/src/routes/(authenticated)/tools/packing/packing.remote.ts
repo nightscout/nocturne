@@ -19,21 +19,29 @@ export const getPackingHints = query(async () => {
 
   const { apiClient } = locals;
   const now = new Date();
-  const year = now.getFullYear();
   let avgTdd: number | null = null;
 
   // Fetch 14-day daily summary for TDD average
   try {
-    const summary = await apiClient.dataOverview.getDailySummary(year);
     const fourteenDaysAgo = new Date(now);
     fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
 
-    const recentDays =
-      summary.days?.filter((d) => {
+    // The summary is fetched per calendar year, so in the first two weeks of
+    // January the window straddles two of them.
+    const years = [
+      ...new Set([fourteenDaysAgo.getFullYear(), now.getFullYear()]),
+    ];
+    const summaries = await Promise.all(
+      years.map((y) => apiClient.dataOverview.getDailySummary(y))
+    );
+
+    const recentDays = summaries
+      .flatMap((summary) => summary.days ?? [])
+      .filter((d) => {
         if (!d.date) return false;
         const date = new Date(d.date);
         return date >= fourteenDaysAgo && date <= now;
-      }) ?? [];
+      });
 
     const tdds = recentDays
       .map((d) => d.totalDailyDose)

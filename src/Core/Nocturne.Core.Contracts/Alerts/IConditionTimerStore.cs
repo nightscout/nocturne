@@ -16,6 +16,14 @@ public interface IConditionTimerStore
     Task<DateTime?> GetFirstTrueAsync(Guid ruleId, string path, CancellationToken ct);
 
     /// <summary>
+    /// Returns every active timer for <paramref name="ruleId"/> as a
+    /// <c>path → first-true instant</c> map (empty when none). Used by engines that
+    /// carry timer state across an evaluation as data (the Rust FFI envelope) rather
+    /// than reading per-path during evaluation.
+    /// </summary>
+    Task<IReadOnlyDictionary<string, DateTime>> GetAllForRuleAsync(Guid ruleId, CancellationToken ct);
+
+    /// <summary>
     /// Records (or replaces) the first-true instant for <paramref name="path"/> on
     /// <paramref name="ruleId"/>. Acts as an upsert keyed by <c>(ruleId, path)</c>.
     /// </summary>

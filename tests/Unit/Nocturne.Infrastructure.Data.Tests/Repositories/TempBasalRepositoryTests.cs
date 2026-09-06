@@ -18,13 +18,16 @@ public class TempBasalRepositoryTests : IDisposable
     private static readonly Guid TenantA = Guid.Parse("00000000-0000-0000-0000-000000000001");
     private static readonly Guid TenantB = Guid.Parse("00000000-0000-0000-0000-000000000002");
 
+    private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
     private readonly TempBasalRepository _repository;
 
     public TempBasalRepositoryTests()
     {
-        _context = TestDbContextFactory.CreateInMemoryContext();
-        _context.TenantId = TenantA;
+        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantA, "tenant-a")
+            .SeedTenant(TenantB, "tenant-b");
+
+        _context = _db.CreateContext();
         _repository = new TempBasalRepository(
             new TestTenantDbContextFactory(_context),
             new Mock<IDeduplicationService>().Object,
@@ -35,6 +38,7 @@ public class TempBasalRepositoryTests : IDisposable
     public void Dispose()
     {
         _context.Dispose();
+        _db.Dispose();
         GC.SuppressFinalize(this);
     }
 

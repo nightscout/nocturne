@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Nocturne.API.Services.Alerts.Evaluators;
 using Nocturne.Core.Models;
@@ -16,7 +17,9 @@ public class StateSpanActiveEvaluatorTests
 
     public StateSpanActiveEvaluatorTests()
     {
-        _sut = new StateSpanActiveEvaluator(new FakeTimeProvider(new DateTimeOffset(FixedNow)));
+        _sut = new StateSpanActiveEvaluator(
+            new FakeTimeProvider(new DateTimeOffset(FixedNow)),
+            NullLogger<StateSpanActiveEvaluator>.Instance);
     }
 
     [Fact]
@@ -26,22 +29,22 @@ public class StateSpanActiveEvaluatorTests
     }
 
     [Fact]
-    public async Task SleepActive6h_IsActiveTrue_ReturnsTrue()
+    public async Task ExerciseActive6h_IsActiveTrue_ReturnsTrue()
     {
-        var json = """{"category": "Sleep", "is_active": true}""";
-        var ctx = MakeContext((StateSpanCategory.Sleep, null),
-            new StateSpanSnapshot(StateSpanCategory.Sleep, null, FixedNow.AddHours(-6)));
+        var json = """{"category": "Exercise", "is_active": true}""";
+        var ctx = MakeContext((StateSpanCategory.Exercise, null),
+            new StateSpanSnapshot(StateSpanCategory.Exercise, null, FixedNow.AddHours(-6)));
 
         (await _sut.EvaluateAsync(json, ctx, CancellationToken.None)).Should().BeTrue();
     }
 
     [Fact]
-    public async Task SleepActive6h_ForMinutes480_ReturnsFalse()
+    public async Task ExerciseActive6h_ForMinutes480_ReturnsFalse()
     {
         // 6h elapsed; rule asks for 8h (480 min).
-        var json = """{"category": "Sleep", "is_active": true, "for_minutes": 480}""";
-        var ctx = MakeContext((StateSpanCategory.Sleep, null),
-            new StateSpanSnapshot(StateSpanCategory.Sleep, null, FixedNow.AddHours(-6)));
+        var json = """{"category": "Exercise", "is_active": true, "for_minutes": 480}""";
+        var ctx = MakeContext((StateSpanCategory.Exercise, null),
+            new StateSpanSnapshot(StateSpanCategory.Exercise, null, FixedNow.AddHours(-6)));
 
         (await _sut.EvaluateAsync(json, ctx, CancellationToken.None)).Should().BeFalse();
     }
@@ -56,9 +59,9 @@ public class StateSpanActiveEvaluatorTests
     }
 
     [Fact]
-    public async Task NoSleepSpan_IsActiveFalse_ReturnsTrue()
+    public async Task NoExerciseSpan_IsActiveFalse_ReturnsTrue()
     {
-        var json = """{"category": "Sleep", "is_active": false}""";
+        var json = """{"category": "Exercise", "is_active": false}""";
         var ctx = MakeContext(activeSpans: new Dictionary<(StateSpanCategory, string?), StateSpanSnapshot>());
 
         (await _sut.EvaluateAsync(json, ctx, CancellationToken.None)).Should().BeTrue();
@@ -84,6 +87,20 @@ public class StateSpanActiveEvaluatorTests
             new StateSpanSnapshot(StateSpanCategory.PumpConnectivity, "Disconnected", FixedNow.AddMinutes(-3)));
 
         (await _sut.EvaluateAsync(json, ctx, CancellationToken.None)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task LegacySleepCategory_DoesNotThrow_ReturnsFalse()
+    {
+        // PR #226 removed the Sleep StateSpanCategory. A stored rule still carrying
+        // {"category":"Sleep"} must be skipped (evaluates to false) rather than throwing a
+        // JsonException every evaluation cycle.
+        var json = """{"category": "Sleep", "is_active": true}""";
+        var ctx = MakeContext(activeSpans: new Dictionary<(StateSpanCategory, string?), StateSpanSnapshot>());
+
+        var act = async () => await _sut.EvaluateAsync(json, ctx, CancellationToken.None);
+
+        (await act.Should().NotThrowAsync()).Subject.Should().BeFalse();
     }
 
     private static SensorContext MakeContext(

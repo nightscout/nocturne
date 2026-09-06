@@ -1,47 +1,16 @@
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Nocturne.Connectors.Core.Extensions;
-using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.MyFitnessPal.Configurations;
 using Nocturne.Connectors.MyFitnessPal.Services;
 
 namespace Nocturne.Connectors.MyFitnessPal;
 
-public class MyFitnessPalConnectorInstaller : IConnectorInstaller
-{
-    public string ConnectorName => "MyFitnessPal";
-
-    public void Install(IServiceCollection services, IConfiguration configuration)
-    {
-        var config = services.AddConnectorConfiguration<MyFitnessPalConnectorConfiguration>(
-            configuration,
-            "MyFitnessPal"
-        );
-        if (!config.Enabled)
-            return;
-
-        // Server resolver — MyFitnessPal has a fixed URL, not a server mapping
-        services.AddSingleton<IConnectorServerResolver<MyFitnessPalConnectorConfiguration>>(
-            new ConnectorServerResolver<MyFitnessPalConnectorConfiguration>(null, null, null));
-        services.AddScoped<IConnectorConfigurationLoader<MyFitnessPalConnectorConfiguration>,
-            ConnectorConfigurationLoader<MyFitnessPalConnectorConfiguration>>();
-        services.TryAddSingleton<IConnectorTokenCache, ConnectorTokenCache>();
-        services.TryAddSingleton<IConnectorCacheInvalidator>(sp => sp.GetRequiredService<IConnectorTokenCache>());
-
-        services
-            .AddHttpClient<MyFitnessPalConnectorService>()
-            .ConfigureConnectorClient("https://www.myfitnesspal.com");
-
-        services.AddScoped<IConnectorSyncExecutor, MyFitnessPalSyncExecutor>();
-    }
-}
-
-public class MyFitnessPalSyncExecutor
-    : ConnectorSyncExecutor<MyFitnessPalConnectorService, MyFitnessPalConnectorConfiguration>
-{
-    public override string ConnectorId => "myfitnesspal";
-
-    protected override string ConnectorName => "MyFitnessPal";
-}
+public class MyFitnessPalConnectorInstaller()
+    : ConnectorInstaller<MyFitnessPalConnectorConfiguration, MyFitnessPalConnectorService, MyFitnessPalAuthTokenProvider>(
+        new ConnectorOptions
+        {
+            ConnectorName = "MyFitnessPal",
+            // Fixed hosts rather than a region mapping; both call sites use absolute URLs.
+            DefaultServer = MyFitnessPalConstants.Servers.GraphQl,
+            UserAgent = $"MyFitnessPal/{MyFitnessPalConstants.AppVersion} Android",
+        });

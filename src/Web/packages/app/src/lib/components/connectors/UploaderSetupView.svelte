@@ -30,6 +30,10 @@
   import { Separator } from "$lib/components/ui/separator";
   import QRCode from "qrcode";
 
+  import { copyToClipboard } from "$lib/utils";
+
+  import { toast } from "svelte-sonner";
+  import { describeSubmitError } from "$lib/forms/submit-error";
   interface Props {
     app: UploaderApp | null;
     setupResponse: UploaderSetupResponse | null;
@@ -78,15 +82,21 @@
         scopes: ["health.readwrite"],
       });
       apiToken = result.token ?? null;
-    } catch {
-      apiTokenError = "Failed to generate API key. You can create one manually in Settings.";
+    } catch (err) {
+      apiTokenError = describeSubmitError(
+        err,
+        "Failed to generate API key. You can create one manually in Settings."
+      );
     } finally {
       apiTokenLoading = false;
     }
   }
 
-  async function copyToClipboard(text: string, field: string) {
-    await navigator.clipboard.writeText(text);
+  async function copyField(text: string, field: string) {
+    if (!(await copyToClipboard(text))) {
+      toast.error("Couldn't copy to the clipboard. Copy it manually instead.");
+      return;
+    }
     copiedField = field;
     setTimeout(() => {
       copiedField = null;
@@ -112,6 +122,7 @@
         color: { dark: "#000000", light: "#ffffff" },
       });
     } catch {
+      // Local rendering, not a request — there is no server reason to surface.
       qrCodeDataUrl = null;
     }
   }
@@ -136,8 +147,11 @@
         isKnown: info.isKnownClient ?? false,
         scopes: (info.scopes ?? []).filter(Boolean),
       };
-    } catch {
-      deviceLookupError = "Invalid or expired device code. Please check and try again.";
+    } catch (err) {
+      deviceLookupError = describeSubmitError(
+        err,
+        "Invalid or expired device code. Please check and try again."
+      );
     } finally {
       deviceLookupLoading = false;
     }
@@ -150,8 +164,8 @@
       await deviceApprove({ user_code: deviceInfo.userCode, approved: true });
       deviceApproved = true;
       startPolling();
-    } catch {
-      deviceLookupError = "Failed to approve. The code may have expired.";
+    } catch (err) {
+      deviceLookupError = describeSubmitError(err, "Failed to approve. The code may have expired.");
     } finally {
       deviceApproveLoading = false;
     }
@@ -163,8 +177,8 @@
     try {
       await deviceApprove({ user_code: deviceInfo.userCode, approved: false });
       deviceDenied = true;
-    } catch {
-      deviceLookupError = "Failed to deny the request.";
+    } catch (err) {
+      deviceLookupError = describeSubmitError(err, "Failed to deny the request.");
     } finally {
       deviceApproveLoading = false;
     }
@@ -481,7 +495,7 @@
               <Button
                 variant="outline"
                 size="icon"
-                onclick={() => setupResponse?.baseUrl && copyToClipboard(setupResponse.baseUrl, 'url')}
+                onclick={() => setupResponse?.baseUrl && copyField(setupResponse.baseUrl, 'url')}
               >
                 {#if copiedField === 'url'}
                   <Check class="h-4 w-4 text-green-500" />
@@ -508,7 +522,7 @@
                 <Button
                   variant="outline"
                   size="icon"
-                  onclick={() => apiToken && copyToClipboard(apiToken, 'token')}
+                  onclick={() => apiToken && copyField(apiToken, 'token')}
                 >
                   {#if copiedField === 'token'}
                     <Check class="h-4 w-4 text-green-500" />

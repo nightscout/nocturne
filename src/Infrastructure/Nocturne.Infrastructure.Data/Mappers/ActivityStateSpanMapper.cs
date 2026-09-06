@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Nocturne.Core.Models;
 
 namespace Nocturne.Infrastructure.Data.Mappers;
@@ -41,15 +42,103 @@ public static class ActivityStateSpanMapper
     private static readonly string[] TravelTypes = ["travel", "timezone", "flight", "trip", "vacation"];
 
     /// <summary>
-    /// Categories that represent Activity records in StateSpan storage
+    /// Categories that represent Activity records in StateSpan storage.
+    /// Sleep is excluded because sleep data lives in the dedicated sleep_sessions table.
     /// </summary>
     public static readonly StateSpanCategory[] ActivityCategories =
     [
         StateSpanCategory.Exercise,
-        StateSpanCategory.Sleep,
         StateSpanCategory.Illness,
         StateSpanCategory.Travel
     ];
+
+    /// <summary>
+    /// Returns true when the activity type string equals one of the sleep types
+    /// (case-insensitive exact match). Sleep activities are routed to the dedicated
+    /// sleep_sessions table instead of StateSpans. Types that merely contain a sleep
+    /// word ("restaurant", "rest day", "snap") do not match.
+    /// </summary>
+    public static bool IsSleepType(string? activityType)
+    {
+        if (string.IsNullOrEmpty(activityType))
+            return false;
+
+        return SleepTypes.Contains(activityType.ToLowerInvariant());
+    }
+
+    /// <summary>
+    /// Projects a v1 Activity with a sleep-type into a <see cref="SleepSession"/>.
+    /// </summary>
+    public static SleepSession ToSleepSession(Activity activity)
+    {
+        ArgumentNullException.ThrowIfNull(activity);
+
+        var start = DateTimeOffset.FromUnixTimeMilliseconds(activity.Mills).UtcDateTime;
+        var end = activity.Duration is > 0
+            ? start.AddMinutes(activity.Duration.Value)
+            : start.AddHours(8); // default 8-hour session when no duration provided
+
+        var durationMs = (long)(end - start).TotalMilliseconds;
+
+        var isNap = string.Equals(activity.Type, "nap", StringComparison.OrdinalIgnoreCase);
+
+        return new SleepSession
+        {
+            StartTime = start,
+            EndTime = end,
+            Type = isNap ? SleepSessionType.Nap : SleepSessionType.Overnight,
+            DetectionMethod = SleepDetectionMethod.Manual,
+            Source = SleepSource.Manual,
+            // Dedup key half for UpsertSessionAsync (Source + OriginalId); mirrors
+            // ToStateSpan, which sets OriginalId = activity.Id on the StateSpan path
+            OriginalId = activity.Id,
+            DurationMs = durationMs,
+            TotalSleepMs = durationMs,
+            Metadata = BuildSleepMetadata(activity),
+        };
+    }
+
+    /// <summary>
+    /// Projects a <see cref="SleepSession"/> back to a v1 <see cref="Activity"/>.
+    /// </summary>
+    public static Activity SleepSessionToActivity(SleepSession session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+
+        var durationMinutes = (session.EndTime - session.StartTime).TotalMinutes;
+
+        return new Activity
+        {
+            Id = session.Id ?? session.OriginalId,
+            Mills = session.StartMills,
+            Type = session.Type == SleepSessionType.Nap ? "nap" : "sleep",
+            Duration = durationMinutes,
+            Description = MetadataString(session, "description"),
+            Notes = MetadataString(session, "notes"),
+            Name = MetadataString(session, "name"),
+            EnteredBy = MetadataString(session, "enteredBy") ?? session.SourceApp ?? "nocturne",
+            CreatedAt = session.CreatedAt?.ToString("o"),
+        };
+    }
+
+    /// <summary>
+    /// Reads a string field stashed in <see cref="SleepSession.Metadata"/> by
+    /// <see cref="BuildSleepMetadata"/>. Tolerates the value arriving either as a
+    /// raw string (pre-persist) or a <see cref="JsonElement"/> (after a DB round-trip).
+    /// </summary>
+    private static string? MetadataString(SleepSession session, string key)
+    {
+        if (session.Metadata is null || !session.Metadata.TryGetValue(key, out var value))
+            return null;
+
+        return value switch
+        {
+            string s => s,
+            JsonElement { ValueKind: JsonValueKind.String } e => e.GetString(),
+            null => null,
+            _ => value.ToString(),
+        };
+    }
 
     /// <summary>
     /// Determines the StateSpanCategory for an activity type string
@@ -62,9 +151,6 @@ public static class ActivityStateSpanMapper
             return StateSpanCategory.Exercise;
 
         var lowerType = activityType.ToLowerInvariant();
-
-        if (SleepTypes.Any(t => lowerType.Contains(t)))
-            return StateSpanCategory.Sleep;
 
         if (IllnessTypes.Any(t => lowerType.Contains(t)))
             return StateSpanCategory.Illness;
@@ -106,7 +192,9 @@ public static class ActivityStateSpanMapper
             State = activity.Type ?? category.ToString().ToLowerInvariant(),
             StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(activity.Mills).UtcDateTime,
             EndTimestamp = CalculateEndTimestamp(activity),
-            Source = activity.EnteredBy ?? "nightscout",
+            // DataSource is the connector a resume watermark is scoped by; EnteredBy is the
+            // uploader name, and stays the fallback for activities posted through the v1 API.
+            Source = activity.DataSource ?? activity.EnteredBy ?? "nightscout",
             OriginalId = activity.Id,
             Metadata = BuildMetadata(activity)
         };
@@ -139,6 +227,7 @@ public static class ActivityStateSpanMapper
             activity.Description = GetMetadataString(stateSpan.Metadata, "description");
             activity.Notes = GetMetadataString(stateSpan.Metadata, "notes");
             activity.Name = GetMetadataString(stateSpan.Metadata, "name");
+            activity.EnteredBy = GetMetadataString(stateSpan.Metadata, "enteredBy") ?? stateSpan.Source;
             activity.Intensity = GetMetadataString(stateSpan.Metadata, "intensity");
             activity.DateString = GetMetadataString(stateSpan.Metadata, "dateString");
             activity.CreatedAt = GetMetadataString(stateSpan.Metadata, "createdAt");
@@ -202,6 +291,11 @@ public static class ActivityStateSpanMapper
 
         if (!string.IsNullOrEmpty(activity.Name))
             metadata["name"] = activity.Name;
+
+        // Source holds the connector for connector-published activities, so EnteredBy round-trips
+        // through metadata instead. Mirrors BuildSleepMetadata.
+        if (!string.IsNullOrEmpty(activity.EnteredBy))
+            metadata["enteredBy"] = activity.EnteredBy;
 
         if (!string.IsNullOrEmpty(activity.Intensity))
             metadata["intensity"] = activity.Intensity;
@@ -327,5 +421,26 @@ public static class ActivityStateSpanMapper
                 System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(je.GetRawText()),
             _ => null
         };
+    }
+
+    /// <summary>
+    /// Preserves v1 Activity metadata fields on the SleepSession for round-tripping.
+    /// </summary>
+    private static Dictionary<string, object>? BuildSleepMetadata(Activity activity)
+    {
+        var metadata = new Dictionary<string, object>();
+
+        if (!string.IsNullOrEmpty(activity.Description))
+            metadata["description"] = activity.Description;
+        if (!string.IsNullOrEmpty(activity.Notes))
+            metadata["notes"] = activity.Notes;
+        if (!string.IsNullOrEmpty(activity.Name))
+            metadata["name"] = activity.Name;
+        if (!string.IsNullOrEmpty(activity.EnteredBy))
+            metadata["enteredBy"] = activity.EnteredBy;
+        if (!string.IsNullOrEmpty(activity.Type))
+            metadata["v1ActivityType"] = activity.Type;
+
+        return metadata.Count > 0 ? metadata : null;
     }
 }

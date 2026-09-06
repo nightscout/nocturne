@@ -1,9 +1,10 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
-  import { Chart, Svg, Spline, Points, Tooltip } from 'layerchart';
+  import { Chart, Svg, Spline, Circle, Tooltip } from 'layerchart';
   import { scaleTime } from 'd3-scale';
   import type { ScaleTime } from 'd3-scale';
   import { curveMonotoneX } from 'd3';
+  import { bg, bgLabel, time } from '$lib/utils/formatting';
   import {
     MS_PER_HOUR,
     HOURS_PER_DAY,
@@ -54,7 +55,7 @@
   xDomain={[day, xDomainEnd]}
   yDomain={[0, thresholds?.glucoseYMax ?? 300]}
   padding={{ left: 0, top: 0, bottom: 0, right: 0 }}
-  tooltip={{ mode: "manual" }}
+  tooltipContext={{ mode: "manual" }}
 >
   {#snippet children({ context })}
     {@const rowContext: ActogramRowContext = {
@@ -79,16 +80,19 @@
           class="stroke-muted-foreground/50 fill-none"
           strokeWidth={1.5}
         />
-        {#each bgChartData as point (point.time)}
-          <Points
-            data={[point]}
-            x={(d) => d.time}
-            y={(d) => d.sgv}
-            r={2}
-            fill={point.color}
-            class="opacity-80"
-          />
-        {/each}
+        <!-- One data-mode Circle for the whole row, not a Circle per reading:
+             each layerchart mark registers with the chart and every
+             registration re-runs the chart's mark deriveds, so N points cost
+             O(N^2). Data mode renders all points from a single mark. -->
+        <Circle
+          data={bgChartData}
+          key={(d) => d.time}
+          cx={(d) => d.time}
+          cy={(d) => d.sgv}
+          r={2}
+          fill={(d) => d.color}
+          class="opacity-80"
+        />
       {/if}
 
       <!-- Dimming overlay for the extended (24–48h) half (top layer) -->
@@ -124,20 +128,20 @@
     </Svg>
 
     <Tooltip.Root
-      class="bg-popover/95 text-popover-foreground rounded-lg border border-border px-2.5 py-1.5 shadow-xl"
+      class="print:hidden bg-popover/95 text-popover-foreground rounded-lg border border-border px-2.5 py-1.5 shadow-xl"
     >
       {#snippet children({ data: tooltipData })}
         {@const d = tooltipData as ActogramTooltipData}
         {#if d}
           <div class="space-y-1 text-xs">
             <div class="font-medium tabular-nums">
-              {d.time.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+              {time(d.time)}
             </div>
             {#if d.bgPoint}
               <div class="flex items-center gap-1.5">
                 <div class="size-2 rounded-full" style:background={d.bgPoint.point.color}></div>
                 <span class="text-muted-foreground">Glucose</span>
-                <span class="ml-auto font-mono font-medium tabular-nums">{Math.round(d.bgPoint.point.sgv)}</span>
+                <span class="ml-auto font-mono font-medium tabular-nums">{bg(d.bgPoint.point.sgv)} {bgLabel()}</span>
               </div>
             {/if}
             {#if d.dataPoint && tooltipValue}

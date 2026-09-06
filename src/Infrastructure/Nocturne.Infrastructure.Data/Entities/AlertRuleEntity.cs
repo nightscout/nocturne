@@ -91,6 +91,29 @@ public class AlertRuleEntity : ITenantScoped, IAuditable
     public bool AllowThroughDnd { get; set; }
 
     /// <summary>
+    /// Low/high classification for scoped Do Not Disturb (ADR 0004), derived by the
+    /// shared engine's <c>classify</c> from the directional leaves of
+    /// <see cref="ConditionParams"/>. Computed on create/update (and backfilled once
+    /// for pre-existing rules); a scoped <c>lows</c>/<c>highs</c> window silences a
+    /// rule only when its class matches. Defaults to <see cref="RuleScopeClass.Undirected"/>
+    /// (all-only) until classified.
+    /// </summary>
+    [Column("scope_class")]
+    public RuleScopeClass ScopeClass { get; set; } = RuleScopeClass.Undirected;
+
+    /// <summary>
+    /// Owner tag for rules synthesised from another feature's configuration, e.g.
+    /// <c>tracker:{definitionId}</c> for tracker notification thresholds. Null for
+    /// user-authored rules. The owning feature overwrites the condition/name/severity
+    /// on every sync and deletes the rule with its source config; deletion through the
+    /// alert-rules API is rejected so the source config stays authoritative. Channels
+    /// and client configuration are user-editable and survive syncs.
+    /// </summary>
+    [Column("managed_by")]
+    [MaxLength(64)]
+    public string? ManagedBy { get; set; }
+
+    /// <summary>
     /// Order in which the rule should be processed or displayed
     /// </summary>
     [Column("sort_order")]

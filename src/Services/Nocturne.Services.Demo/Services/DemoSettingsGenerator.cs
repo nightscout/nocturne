@@ -51,7 +51,9 @@ public class DemoSettingsGenerator
                 new()
                 {
                     Id = "demo-pump-1",
-                    Name = "Omnipod 5",
+                    // Matches the seeded patient-device roster: Trio driving an
+                    // Omnipod DASH.
+                    Name = "Omnipod DASH",
                     Type = "pump",
                     Status = "connected",
                     Battery = 72,
@@ -108,28 +110,7 @@ public class DemoSettingsGenerator
     {
         return new FeatureSettings
         {
-            Display = new DisplaySettings
-            {
-                NightMode = false,
-                Theme = "system",
-                TimeFormat = "12",
-                Units = "mg/dl",
-                ShowRawBG = false,
-                FocusHours = 3,
-            },
-            Widgets = new List<WidgetConfig>
-            {
-                // Top widgets
-                new() { Id = WidgetId.BgDelta, Enabled = true, Placement = WidgetPlacement.Top },
-                new() { Id = WidgetId.LastUpdated, Enabled = true, Placement = WidgetPlacement.Top },
-                new() { Id = WidgetId.ConnectionStatus, Enabled = true, Placement = WidgetPlacement.Top },
-                // Main sections
-                new() { Id = WidgetId.GlucoseChart, Enabled = true, Placement = WidgetPlacement.Main },
-                new() { Id = WidgetId.Statistics, Enabled = true, Placement = WidgetPlacement.Main },
-                new() { Id = WidgetId.Predictions, Enabled = true, Placement = WidgetPlacement.Main },
-                new() { Id = WidgetId.DailyStats, Enabled = true, Placement = WidgetPlacement.Main },
-                new() { Id = WidgetId.Treatments, Enabled = true, Placement = WidgetPlacement.Main },
-            },
+            Widgets = WidgetCatalog.Defaults(),
             Plugins = new Dictionary<string, PluginSettings>
             {
                 {

@@ -45,20 +45,12 @@ public class BodyWeightService
     protected override void UpdateEntity(BodyWeightEntity entity, BodyWeight model) =>
         BodyWeightMapper.UpdateEntity(entity, model);
 
+    /// <remarks>Body weight keys on epoch milliseconds rather than a <see cref="DateTime"/>
+    /// column, which is why it stays on <see cref="SimpleEntityService{TModel,TEntity}"/> rather
+    /// than <see cref="TimeSeriesEntityService{TModel,TEntity}"/>.</remarks>
     protected override IOrderedQueryable<BodyWeightEntity> OrderByTimestamp(
         IQueryable<BodyWeightEntity> query
     ) => query.OrderByDescending(b => b.Mills);
-
-    protected override Task<BodyWeightEntity?> FindByIdAsync(
-        string id,
-        CancellationToken cancellationToken
-    ) =>
-        Guid.TryParse(id, out var guid)
-            ? DbContext.BodyWeights.FirstOrDefaultAsync(b => b.Id == guid, cancellationToken)
-            : DbContext.BodyWeights.FirstOrDefaultAsync(
-                b => b.OriginalId == id,
-                cancellationToken
-            );
 
     public Task<IEnumerable<BodyWeight>> GetBodyWeightsAsync(
         int count = 10,

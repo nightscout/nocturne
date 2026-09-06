@@ -39,6 +39,7 @@ public class AlertReplayServiceTests
     private readonly Mock<ITempBasalRepository> _tempBasalRepository = new();
     private readonly Mock<IUploaderSnapshotRepository> _uploaderSnapshotRepository = new();
     private readonly Mock<IStateSpanService> _stateSpanService = new();
+    private readonly Mock<Nocturne.API.Services.Devices.IReservoirEstimationService> _reservoirEstimation = new();
     private readonly AlertReplayService _sut;
 
     private readonly Guid _tenantId = Guid.NewGuid();
@@ -46,6 +47,15 @@ public class AlertReplayServiceTests
     public AlertReplayServiceTests()
     {
         _tenantAccessor.Setup(t => t.TenantId).Returns(_tenantId);
+
+        // The repo never returns null; default the DND-window fetches to empty (no DND).
+        // Tests that exercise scoped suppression override GetDndWindowsAsOfAsync.
+        _alertRepository
+            .Setup(r => r.GetDndWindowsAsOfAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<DndWindowSnapshot>());
+        _alertRepository
+            .Setup(r => r.GetUnexpiredDndWindowsAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<DndWindowSnapshot>());
 
         var enricherDeps = new SensorContextEnricherDependencies(
             _iobCalculator.Object,
@@ -63,6 +73,9 @@ public class AlertReplayServiceTests
             new Mock<Nocturne.Core.Contracts.V4.Repositories.ITargetRangeScheduleRepository>().Object,
             new Mock<Nocturne.Core.Contracts.Profiles.Resolvers.IActiveProfileResolver>().Object,
             new Mock<Nocturne.Core.Contracts.Profiles.Resolvers.ITherapySettingsResolver>().Object,
+            new Mock<Nocturne.Core.Contracts.Sleep.ISleepService>().Object,
+            new Mock<Nocturne.Infrastructure.Data.Abstractions.ITrackerRepository>().Object,
+            _reservoirEstimation.Object,
             Options.Create(new AlertEvaluationOptions()));
         var enricher = new SensorContextEnricher(
             enricherDeps,
@@ -73,8 +86,10 @@ public class AlertReplayServiceTests
         _sut = new AlertReplayService(
             _alertRepository.Object,
             _glucoseRepository.Object,
+            TestDoubles.CanonicalGlucosePassThrough.Create(),
             enricher,
             _tenantAccessor.Object,
+            Options.Create(new AlertEvaluationOptions()),
             NullLogger<AlertReplayService>.Instance);
     }
 
@@ -168,6 +183,115 @@ public class AlertReplayServiceTests
         var result = await _sut.ReplayAsync(date, "UTC", null, null, CancellationToken.None);
 
         result.Events.Should().HaveCount(1);
+        result.Events[0].At.Should().Be(dayStart.AddHours(2));
+    }
+
+    [Fact]
+    public async Task ScopedDnd_LowsWindow_SuppressesALowRuleInReplay()
+    {
+        var rule = new AlertRuleSnapshot(Guid.NewGuid(), _tenantId, "low", AlertConditionType.Threshold,
+            """{"direction":"below","value":70}""", AlertRuleSeverity.Warning, "{}", 0,
+            AutoResolveEnabled: false, AutoResolveParams: null, AllowThroughDnd: false,
+            ScopeClass: RuleScopeClass.Low);
+        var date = new DateOnly(2026, 4, 28);
+        var dayStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
+
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { rule });
+
+        // A lows window received before the fire tick (created_at <= tick) and active across it.
+        _alertRepository.Setup(r => r.GetDndWindowsAsOfAsync(_tenantId, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[]
+            {
+                new DndWindowSnapshot(DndScope.Lows, StartedAt: dayStart, EndsAt: null, ClearedAt: null, CreatedAt: dayStart),
+            });
+
+        var readings = Enumerable.Range(0, 12)
+            .Select(i => Reading(dayStart.AddHours(2).AddMinutes(i * 5), 60))
+            .ToArray();
+        _glucoseRepository.Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
+                It.IsAny<int>(), It.IsAny<int>(), false, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(readings);
+
+        var result = await _sut.ReplayAsync(date, "UTC", null, null, CancellationToken.None);
+
+        result.Events.Should().HaveCount(1);
+        result.Events[0].Kind.Should().Be(AlertReplayEventKind.SuppressedByDnd);
+    }
+
+    [Fact]
+    public async Task ScopedDnd_WindowReceivedAfterTheFire_DoesNotSuppress_ReceiptGating()
+    {
+        var rule = new AlertRuleSnapshot(Guid.NewGuid(), _tenantId, "low", AlertConditionType.Threshold,
+            """{"direction":"below","value":70}""", AlertRuleSeverity.Warning, "{}", 0,
+            AutoResolveEnabled: false, AutoResolveParams: null, AllowThroughDnd: false,
+            ScopeClass: RuleScopeClass.Low);
+        var date = new DateOnly(2026, 4, 28);
+        var dayStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
+
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { rule });
+
+        // The window's intent (StartedAt) covers the fire, but it was *received* an hour after
+        // the fire tick — receipt gating (created_at <= tick) must NOT retroactively suppress.
+        _alertRepository.Setup(r => r.GetDndWindowsAsOfAsync(_tenantId, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[]
+            {
+                new DndWindowSnapshot(DndScope.Lows, StartedAt: dayStart, EndsAt: null, ClearedAt: null,
+                    CreatedAt: dayStart.AddHours(3)),
+            });
+
+        var readings = Enumerable.Range(0, 12)
+            .Select(i => Reading(dayStart.AddHours(2).AddMinutes(i * 5), 60))
+            .ToArray();
+        _glucoseRepository.Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
+                It.IsAny<int>(), It.IsAny<int>(), false, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(readings);
+
+        var result = await _sut.ReplayAsync(date, "UTC", null, null, CancellationToken.None);
+
+        result.Events.Should().HaveCount(1);
+        result.Events[0].Kind.Should().Be(AlertReplayEventKind.Fired);
+    }
+
+    [Fact]
+    public async Task DoNotDisturbLeaf_EvaluatesTrueAtTicksWhereAnAllWindowWasActive()
+    {
+        // A do_not_disturb(is_active=true) rule with AllowThroughDnd so the fire is not
+        // itself suppressed by the same all-window that makes the leaf true.
+        var ruleId = Guid.NewGuid();
+        var rule = new AlertRuleSnapshot(ruleId, _tenantId, "dnd-on", AlertConditionType.DoNotDisturb,
+            """{"is_active":true}""", AlertRuleSeverity.Info, "{}", 0,
+            AutoResolveEnabled: false, AutoResolveParams: null, AllowThroughDnd: true);
+        var date = new DateOnly(2026, 4, 28);
+        var dayStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
+
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { rule });
+
+        // A scope=all window active (and received) 02:00-03:00; replay must reconstruct
+        // ActiveDoNotDisturb from it so the leaf evaluates true across exactly that span.
+        _alertRepository.Setup(r => r.GetDndWindowsAsOfAsync(_tenantId, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[]
+            {
+                new DndWindowSnapshot(DndScope.All, StartedAt: dayStart.AddHours(2),
+                    EndsAt: dayStart.AddHours(3), ClearedAt: null, CreatedAt: dayStart.AddHours(2)),
+            });
+
+        // The leaf needs no glucose; replay still walks the day on no-data ticks.
+        _glucoseRepository.Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
+                It.IsAny<int>(), It.IsAny<int>(), false, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<SensorGlucose>());
+
+        var result = await _sut.ReplayAsync(date, "UTC", null, null, CancellationToken.None);
+
+        // One leading-edge fire at the window start; the leaf goes false again at expiry.
+        result.Events.Should().ContainSingle();
+        result.Events[0].RuleId.Should().Be(ruleId);
+        result.Events[0].Kind.Should().Be(AlertReplayEventKind.Fired);
         result.Events[0].At.Should().Be(dayStart.AddHours(2));
     }
 
@@ -289,7 +413,7 @@ public class AlertReplayServiceTests
         // The enricher uses GetLatestTimestampAsync(asOf) — pinned to each replay tick. We
         // emulate "no cycle ever happened before lastCycle, then lastCycle is the only one"
         // by returning lastCycle when asOf >= lastCycle and null otherwise.
-        _apsSnapshotRepository.Setup(r => r.GetLatestTimestampAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+        _apsSnapshotRepository.Setup(r => r.GetLatestTimestampAsOfAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((DateTime? asOf, CancellationToken _) =>
                 asOf is not null && asOf.Value >= lastCycle ? lastCycle : null);
 
@@ -383,6 +507,36 @@ public class AlertReplayServiceTests
         result.FactTimelines.Should().ContainKey("latest_glucose");
         var glucosePoints = result.FactTimelines["latest_glucose"];
         glucosePoints.Select(p => p.Value).Should().ContainInOrder(65m, 95m, 60m);
+    }
+
+    /// <summary>
+    /// <c>ReservoirIsLowerBound</c> is a bool fact projected to 0/1 by the Direct conversion.
+    /// A capped reading ("50+") must surface in the <c>reservoir_is_lower_bound</c> timeline
+    /// so the FE can distinguish it from an exact 50.0.
+    /// </summary>
+    [Fact]
+    public async Task FactTimelines_ReservoirIsLowerBound_EmitsBoolAsOne()
+    {
+        var rule = new AlertRuleSnapshot(
+            Guid.NewGuid(), Guid.NewGuid(), "reservoir-low", AlertConditionType.Reservoir,
+            """{"operator":"<","value":10}""", AlertRuleSeverity.Warning, "{}", 0,
+            AutoResolveEnabled: false, AutoResolveParams: null);
+        var date = new DateOnly(2026, 4, 28);
+
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { rule });
+        _glucoseRepository.Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
+                It.IsAny<int>(), It.IsAny<int>(), false, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<SensorGlucose>());
+        _reservoirEstimation.Setup(s => s.GetEstimateAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Nocturne.API.Services.Devices.ReservoirEstimate(
+                50m, IsLowerBound: true, IsEstimated: false));
+
+        var result = await _sut.ReplayAsync(date, "UTC", null, null, CancellationToken.None);
+
+        result.FactTimelines.Should().ContainKey("reservoir_is_lower_bound");
+        result.FactTimelines["reservoir_is_lower_bound"].Select(p => p.Value).Should().Equal(1m);
     }
 
     /// <summary>

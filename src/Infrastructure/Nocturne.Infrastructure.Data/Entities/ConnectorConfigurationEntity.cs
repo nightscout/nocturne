@@ -9,7 +9,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Secret properties (passwords, API keys) are stored encrypted in SecretsJson.
 /// </summary>
 [Table("connector_configurations")]
-public class ConnectorConfigurationEntity : ITenantScoped
+public class ConnectorConfigurationEntity : ITenantScoped, ISystemTimestamped
 {
     /// <summary>
     /// Identifier of the tenant this connector configuration belongs to
@@ -91,10 +91,19 @@ public class ConnectorConfigurationEntity : ITenantScoped
     public DateTime? LastSuccessfulSync { get; set; }
 
     /// <summary>
+    /// Maximum stored length of <see cref="LastErrorMessage"/>. Writers must fit the message to it,
+    /// and must not cut inside a surrogate pair: a connector reports one error per failing type per
+    /// chunk, so a long backfill against a persistently failing publisher joins a multi-KB string,
+    /// and either an over-length value or a lone surrogate fails the very write that was recording
+    /// the failure.
+    /// </summary>
+    public const int LastErrorMessageMaxLength = 1000;
+
+    /// <summary>
     /// The error message from the most recent failure
     /// </summary>
     [Column("last_error_message")]
-    [MaxLength(1000)]
+    [MaxLength(LastErrorMessageMaxLength)]
     public string? LastErrorMessage { get; set; }
 
     /// <summary>
@@ -116,4 +125,14 @@ public class ConnectorConfigurationEntity : ITenantScoped
     /// </summary>
     [Column("sync_cursors", TypeName = "jsonb")]
     public string? SyncCursorsJson { get; set; }
+
+    /// <summary>
+    /// Per-collection backfill low-water marks, serialized as a JSON map of collection key
+    /// (e.g. "Glucose") to the oldest successfully published record time. A key means an
+    /// earlier backfill crawl of that collection stopped before reaching the source's
+    /// beginning; the connector resumes below the mark on its next sync. Runtime sync state
+    /// like <see cref="LastSuccessfulSync"/> — never part of the user-editable configuration.
+    /// </summary>
+    [Column("backfill_low_water_marks", TypeName = "jsonb")]
+    public string? BackfillLowWaterMarks { get; set; }
 }

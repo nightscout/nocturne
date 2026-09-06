@@ -20,7 +20,7 @@ public interface IActivityDecomposer
     /// Returns a result with created/updated records for heart rate or step count data.
     /// Returns an empty result for regular activities (caller should proceed with StateSpan storage).
     /// </summary>
-    Task<DecompositionResult> DecomposeAsync(Activity activity, CancellationToken ct = default);
+    Task<DecompositionResult> DecomposeAsync(Activity activity, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
     /// Decomposes a batch of legacy Activities into dedicated v4 models, using bulk insert.
@@ -33,13 +33,13 @@ public interface IActivityDecomposer
     /// A <see cref="DecompositionResult"/> containing all created V4 records across all activities.
     /// </returns>
     Task<DecompositionResult> DecomposeBatchAsync(
-        IReadOnlyList<Activity> activities, CancellationToken ct = default);
+        IReadOnlyList<Activity> activities, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
     /// Deletes all dedicated records that were decomposed from a legacy Activity with the given ID.
     /// </summary>
     /// <returns>Total number of records deleted across heart_rates and step_counts tables</returns>
-    Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default);
+    Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
     /// Determines whether an activity represents heart rate data (has "bpm" in AdditionalProperties).
@@ -56,4 +56,20 @@ public interface IActivityDecomposer
     /// rather than stored as a StateSpan.
     /// </summary>
     bool IsSensorData(Activity activity);
+
+    /// <summary>
+    /// Returns the OAuth write scope required to persist the activity, based on the dedicated
+    /// table it routes to (heart rate, step count, or sleep), or <see langword="null"/> for a
+    /// regular activity that routes to StateSpans and carries no category scope.
+    /// </summary>
+    string? RequiredWriteScope(Activity activity);
+
+    /// <summary>
+    /// Returns the OAuth read scope required to see the activity, based on the storage it came
+    /// from (heart rate, step count, sleep, or StateSpans). Unlike
+    /// <see cref="RequiredWriteScope"/> this is never <see langword="null"/>: the merged activity
+    /// read endpoints return records from all four storages in one response, so every record
+    /// needs a category to be filtered on.
+    /// </summary>
+    string RequiredReadScope(Activity activity);
 }

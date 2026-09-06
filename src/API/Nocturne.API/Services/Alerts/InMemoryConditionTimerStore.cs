@@ -14,6 +14,11 @@ internal sealed class InMemoryConditionTimerStore : IConditionTimerStore
     public Task<DateTime?> GetFirstTrueAsync(Guid ruleId, string path, CancellationToken ct) =>
         Task.FromResult(_store.TryGetValue((ruleId, path), out var v) ? v : (DateTime?)null);
 
+    public Task<IReadOnlyDictionary<string, DateTime>> GetAllForRuleAsync(Guid ruleId, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyDictionary<string, DateTime>>(
+            _store.Where(kv => kv.Key.RuleId == ruleId)
+                .ToDictionary(kv => kv.Key.Path, kv => kv.Value));
+
     public Task SetFirstTrueAsync(Guid ruleId, string path, DateTime at, CancellationToken ct)
     {
         _store[(ruleId, path)] = at;

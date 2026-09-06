@@ -4,7 +4,6 @@
   import { Button } from "$lib/components/ui/button";
   import { User, LogOut, Settings, Shield, ChevronDown, UserPlus } from "lucide-svelte";
   import { goto } from "$app/navigation";
-  import { browser } from "$app/environment";
   import type { AuthUser } from "$lib/stores/auth-store.svelte";
   import RequestMembershipDialog from "$lib/components/members/RequestMembershipDialog.svelte";
 
@@ -18,19 +17,17 @@
     isPlatformAdmin?: boolean;
     /** Whether the current session is a guest link session */
     isGuestSession?: boolean;
+    /**
+     * Whether this host serves the cross-tenant dashboard rather than one tenant. Hides the
+     * /settings/* entries below, which the route guard bounces back to "/" there.
+     */
+    tenantless?: boolean;
   }
 
-  const { user, collapsed = false, class: className = "", isPlatformAdmin = false, isGuestSession = false }: Props = $props();
+  const { user, collapsed = false, class: className = "", isPlatformAdmin = false, isGuestSession = false, tenantless = false }: Props = $props();
 
   let isOpen = $state(false);
   let showRequestDialog = $state(false);
-
-  let tenantSlug = $state<string | undefined>(undefined);
-  $effect(() => {
-    if (!browser) return;
-    const parts = window.location.hostname.split(".");
-    if (parts.length > 2) tenantSlug = parts[0];
-  });
 
   /** Get initials from user name */
   function getInitials(name: string): string {
@@ -42,10 +39,6 @@
       .slice(0, 2);
   }
 
-  /** Handle logout */
-  function handleLogout() {
-    goto("/auth/logout");
-  }
 </script>
 
 {#if user}
@@ -118,22 +111,24 @@
           <DropdownMenu.Separator />
         {/if}
 
-        <DropdownMenu.Group>
-          <DropdownMenu.Item onSelect={() => goto("/settings/account")}>
-            <User class="mr-2 h-4 w-4" />
-            <span>Account</span>
-          </DropdownMenu.Item>
-          <DropdownMenu.Item onSelect={() => goto("/settings")}>
-            <Settings class="mr-2 h-4 w-4" />
-            <span>Settings</span>
-          </DropdownMenu.Item>
-          {#if isPlatformAdmin}
-            <DropdownMenu.Item onSelect={() => goto("/settings/admin")}>
-              <Shield class="mr-2 h-4 w-4" />
-              <span>Admin</span>
+        {#if !tenantless}
+          <DropdownMenu.Group>
+            <DropdownMenu.Item onSelect={() => goto("/settings/account")}>
+              <User class="mr-2 h-4 w-4" />
+              <span>Account</span>
             </DropdownMenu.Item>
-          {/if}
-        </DropdownMenu.Group>
+            <DropdownMenu.Item onSelect={() => goto("/settings")}>
+              <Settings class="mr-2 h-4 w-4" />
+              <span>Settings</span>
+            </DropdownMenu.Item>
+            {#if isPlatformAdmin}
+              <DropdownMenu.Item onSelect={() => goto("/settings/admin")}>
+                <Shield class="mr-2 h-4 w-4" />
+                <span>Admin</span>
+              </DropdownMenu.Item>
+            {/if}
+          </DropdownMenu.Group>
+        {/if}
       {:else}
         <DropdownMenu.Group>
           <DropdownMenu.Item onSelect={() => (showRequestDialog = true)}>
@@ -145,22 +140,27 @@
 
       <DropdownMenu.Separator />
 
-      <DropdownMenu.Item
-        onclick={handleLogout}
-        class="text-destructive focus:text-destructive"
-      >
-        <LogOut class="mr-2 h-4 w-4" />
-        <span>Log out</span>
-      </DropdownMenu.Item>
+      <!-- display:contents keeps the form out of the menu's layout box -->
+      <form method="POST" action="/auth/logout" class="contents">
+        <DropdownMenu.Item class="w-full text-destructive focus:text-destructive">
+          {#snippet child({ props }: { props: Record<string, unknown> })}
+            <button {...props} type="submit">
+              <LogOut class="mr-2 h-4 w-4" />
+              <span>Log out</span>
+            </button>
+          {/snippet}
+        </DropdownMenu.Item>
+      </form>
     </DropdownMenu.Content>
   </DropdownMenu.Root>
   {#if isGuestSession}
-    <RequestMembershipDialog bind:open={showRequestDialog} {tenantSlug} />
+    <RequestMembershipDialog bind:open={showRequestDialog} />
   {/if}
 {:else}
   <!-- Not logged in - show login button -->
   <Button
     variant="ghost"
+    data-testid="sign-in-link"
     href="/auth/login"
     class="w-full justify-start gap-2 px-2 {collapsed
       ? 'justify-center'

@@ -160,7 +160,7 @@ public class BodyWeightMapperTests
 
     [Fact]
     [Trait("Category", "Unit")]
-    public void UpdateEntity_UpdatesAllFieldsAndSetsSysUpdatedAt()
+    public void UpdateEntity_UpdatesAllFields()
     {
         var originalId = Guid.CreateVersion7();
         var originalCreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
@@ -171,8 +171,6 @@ public class BodyWeightMapperTests
             Mills = 1000,
             WeightKg = 70m,
         };
-
-        var beforeUpdate = DateTime.UtcNow;
 
         var model = new BodyWeight
         {
@@ -198,25 +196,26 @@ public class BodyWeightMapperTests
         entity.EnteredBy.Should().Be("admin");
         entity.CreatedAt.Should().Be("2024-11-14T22:13:20.000Z");
         entity.UtcOffset.Should().Be(60);
-        entity.SysUpdatedAt.Should().BeOnOrAfter(beforeUpdate);
     }
 
     [Fact]
     [Trait("Category", "Unit")]
-    public void UpdateEntity_SetsUpdatedAtTimestamp()
+    public void UpdateEntity_DoesNotTouchSysUpdatedAt()
     {
+        var stale = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         var entity = new BodyWeightEntity
         {
             Id = Guid.CreateVersion7(),
-            SysCreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-            SysUpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            SysCreatedAt = stale,
+            SysUpdatedAt = stale,
         };
-        var beforeUpdate = DateTime.UtcNow;
 
         var model = new BodyWeight { WeightKg = 80m };
         BodyWeightMapper.UpdateEntity(entity, model);
 
-        entity.SysUpdatedAt.Should().BeOnOrAfter(beforeUpdate);
+        // NocturneDbContext.UpdateTimestamps stamps sys_updated_at, and only for rows with a
+        // real modification; a mapper stamp would force an UPDATE on no-op upserts.
+        entity.SysUpdatedAt.Should().Be(stale);
     }
 
     [Fact]

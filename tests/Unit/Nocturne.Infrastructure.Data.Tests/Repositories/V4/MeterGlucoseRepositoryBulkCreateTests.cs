@@ -1,9 +1,11 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Infrastructure.Data.Tests.Repositories.V4;
 
@@ -21,7 +23,7 @@ public class MeterGlucoseRepositoryBulkCreateTests : IDisposable
         var dbName = $"meter_glucose_bulk_tests_{Guid.NewGuid()}";
         _context = TestDbContextFactory.CreateInMemoryContext(dbName);
         _context.TenantId = TenantA;
-        _repository = new MeterGlucoseRepository(new TestTenantDbContextFactory(_context), NullLogger<MeterGlucoseRepository>.Instance);
+        _repository = new MeterGlucoseRepository(new TestTenantDbContextFactory(_context), new SystemAuditContext(), NullLogger<MeterGlucoseRepository>.Instance);
     }
 
     public void Dispose()
@@ -51,7 +53,7 @@ public class MeterGlucoseRepositoryBulkCreateTests : IDisposable
             CreateRecord("legacy-3", new DateTime(2026, 5, 1, 12, 0, 0, DateTimeKind.Utc)),
         };
 
-        var result = (await _repository.BulkCreateAsync(records)).ToList();
+        var result = (await _repository.BulkCreateAsync(records, WriteOrigin.Live)).ToList();
 
         result.Should().HaveCount(3);
         var dbCount = _context.MeterGlucose.Count();
@@ -62,7 +64,7 @@ public class MeterGlucoseRepositoryBulkCreateTests : IDisposable
     public async Task BulkCreateAsync_DeduplicatesByLegacyId_SkipsExisting()
     {
         // Pre-insert a record with legacy-1
-        await _repository.CreateAsync(CreateRecord("legacy-1", new DateTime(2026, 5, 1, 10, 0, 0, DateTimeKind.Utc)));
+        await _repository.CreateAsync(CreateRecord("legacy-1", new DateTime(2026, 5, 1, 10, 0, 0, DateTimeKind.Utc)), WriteOrigin.Live);
 
         var records = new[]
         {
@@ -70,7 +72,7 @@ public class MeterGlucoseRepositoryBulkCreateTests : IDisposable
             CreateRecord("legacy-new", new DateTime(2026, 5, 1, 11, 0, 0, DateTimeKind.Utc)),
         };
 
-        var result = (await _repository.BulkCreateAsync(records)).ToList();
+        var result = (await _repository.BulkCreateAsync(records, WriteOrigin.Live)).ToList();
 
         result.Should().HaveCount(1);
         result[0].LegacyId.Should().Be("legacy-new");
@@ -87,7 +89,7 @@ public class MeterGlucoseRepositoryBulkCreateTests : IDisposable
             CreateRecord("legacy-dup", new DateTime(2026, 5, 1, 11, 0, 0, DateTimeKind.Utc)),
         };
 
-        var result = (await _repository.BulkCreateAsync(records)).ToList();
+        var result = (await _repository.BulkCreateAsync(records, WriteOrigin.Live)).ToList();
 
         result.Should().HaveCount(1);
         var dbCount = _context.MeterGlucose.Count();
@@ -97,7 +99,7 @@ public class MeterGlucoseRepositoryBulkCreateTests : IDisposable
     [Fact]
     public async Task BulkCreateAsync_EmptyInput_ReturnsEmpty()
     {
-        var result = (await _repository.BulkCreateAsync([])).ToList();
+        var result = (await _repository.BulkCreateAsync([], WriteOrigin.Live)).ToList();
 
         result.Should().BeEmpty();
         var dbCount = _context.MeterGlucose.Count();

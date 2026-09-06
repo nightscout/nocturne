@@ -92,10 +92,22 @@ public interface ITrackerRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Gets completed tracker instances for a user, with an optional limit
+    /// Gets, per tracker definition, the reference timestamp of the instance active at
+    /// <paramref name="at"/>: start time for Duration mode, scheduled time for Event mode.
+    /// When several instances of a definition are active, the most recently started wins.
+    /// Definitions with no active instance are absent from the result. Feeds the
+    /// <c>tracker_age</c> alert condition (live evaluation passes now; replay passes the tick).
+    /// </summary>
+    Task<Dictionary<Guid, DateTime>> GetActiveTrackerReferencesAsync(
+        IReadOnlySet<Guid> definitionIds,
+        DateTime at,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets completed tracker instances, optionally filtered by user, with an optional limit
     /// </summary>
     Task<TrackerInstanceEntity[]> GetCompletedInstancesAsync(
-        string userId,
+        string? userId,
         int limit = 100,
         CancellationToken cancellationToken = default);
 

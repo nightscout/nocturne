@@ -7,8 +7,13 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// <summary>
 /// Represents an invitation for a subject to join a tenant with specific roles and permissions.
 /// </summary>
+/// <remarks>
+/// Tenant-scoped: the row holds a bearer credential that grants membership of exactly one tenant,
+/// so it carries the global query filter and the <c>tenant_isolation</c> RLS policy rather than
+/// relying on every call site remembering its own tenant predicate.
+/// </remarks>
 [Table("member_invites")]
-public class MemberInviteEntity
+public class MemberInviteEntity : ITenantScoped
 {
     /// <summary>
     /// Unique identifier for the member invite
@@ -17,10 +22,7 @@ public class MemberInviteEntity
     public Guid Id { get; set; }
 
     /// <summary>
-    /// Identifier of the tenant the invite is for
-    /// </summary>
-    /// <summary>
-    /// The unique identifier of the tenant this record belongs to.
+    /// The unique identifier of the tenant this invite grants membership of.
     /// </summary>
     [Column("tenant_id")]
     public Guid TenantId { get; set; }

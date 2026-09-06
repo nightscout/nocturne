@@ -12,7 +12,7 @@ public sealed class SystemAuditContext : IAuditContext
     public string? AuthType { get; init; }
     public string? IpAddress => null;
     public Guid? TokenId => null;
-    public string? CorrelationId { get; init; }
+    public string? TraceId { get; init; }
     public string? Endpoint { get; init; }
     public bool IsSystem => true;
 
@@ -24,6 +24,6 @@ public sealed class SystemAuditContext : IAuditContext
     {
         AuthType = "system",
         Endpoint = endpoint,
-        CorrelationId = Guid.CreateVersion7().ToString()
+        TraceId = Guid.CreateVersion7().ToString()
     };
 }

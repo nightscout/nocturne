@@ -146,29 +146,26 @@ public class StatusService : IStatusService
             settings["runtimeState"] = "demo";
         }
 
-        // Populate demo fields if this tenant is a demo instance
+        // Populate demo fields if this tenant is a demo instance. Demo-ness is a property of
+        // the tenant, carried on the resolved tenant context, rather than of _demoModeService,
+        // which is a server-wide toggle for the bundled generator: a deployment that runs the
+        // generator as a separate service leaves the API's toggle off. The web app keys the
+        // demo banner and demo sign-in off these fields. Only a demo tenant pays for the
+        // reset-time lookup; every other tenant answers from the context alone.
         bool? isDemo = null;
         DateTime? nextResetAt = null;
 
-        if (_demoModeService.IsEnabled)
+        var tenantContext = _tenantAccessor.Context;
+        if (tenantContext is { IsDemo: true })
         {
-            var tenantId = _tenantAccessor.Context?.TenantId;
-            if (tenantId.HasValue)
-            {
-                await using var ctx = await _dbContextFactory.CreateDbContextAsync();
-                var tenant = await ctx.Tenants
-                    .AsNoTracking()
-                    .Include(t => t.DemoConfig)
-                    .Where(t => t.Id == tenantId.Value)
-                    .Select(t => new { t.IsDemo, NextResetAt = t.DemoConfig != null ? t.DemoConfig.NextResetAt : null })
-                    .FirstOrDefaultAsync();
+            isDemo = true;
 
-                if (tenant is { IsDemo: true })
-                {
-                    isDemo = true;
-                    nextResetAt = tenant.NextResetAt;
-                }
-            }
+            await using var ctx = await _dbContextFactory.CreateDbContextAsync();
+            nextResetAt = await ctx.Tenants
+                .AsNoTracking()
+                .Where(t => t.Id == tenantContext.TenantId)
+                .Select(t => t.DemoConfig != null ? t.DemoConfig.NextResetAt : null)
+                .FirstOrDefaultAsync();
         }
 
         // Resolve whether this tenant grants anonymous read access (its public subject carries a
@@ -437,15 +434,20 @@ public class StatusService : IStatusService
 
         // Auth settings
         settings["authDefaultRoles"] = _configuration["Auth:DefaultRoles"] ?? "readable";
-        settings["requireAuthentication"] = _configuration.GetValue<bool>("Security:RequireAuthentication", false);
+        // Always false, and kept only because it is part of the Nightscout status document a
+        // legacy client parses. Nocturne has no site-wide lockdown to report: the default-deny
+        // fallback policy already denies every unauthenticated request, and the anonymous public
+        // subject is granted only on a share host (AuthenticationMiddleware), so authentication is
+        // required for tenant data unconditionally rather than by setting.
+        settings["requireAuthentication"] = false;
 
         // Threshold values
         settings["thresholds"] = new Dictionary<string, object>
         {
-            ["bgHigh"] = _configuration.GetValue<int>("Thresholds:BgHigh", 260),
-            ["bgTargetTop"] = _configuration.GetValue<int>("Thresholds:BgTargetTop", 180),
-            ["bgTargetBottom"] = _configuration.GetValue<int>("Thresholds:BgTargetBottom", 80),
-            ["bgLow"] = _configuration.GetValue<int>("Thresholds:BgLow", 55),
+            ["bgHigh"] = _configuration.GetValue("Thresholds:BgHigh", ApplicationConstants.Web.Thresholds.BgHigh),
+            ["bgTargetTop"] = _configuration.GetValue("Thresholds:BgTargetTop", ApplicationConstants.Web.Thresholds.BgTargetTop),
+            ["bgTargetBottom"] = _configuration.GetValue("Thresholds:BgTargetBottom", ApplicationConstants.Web.Thresholds.BgTargetBottom),
+            ["bgLow"] = _configuration.GetValue("Thresholds:BgLow", ApplicationConstants.Web.Thresholds.BgLow),
         };
 
         // Security settings
@@ -751,8 +753,16 @@ public class StatusService : IStatusService
     }
 
     /// <summary>
-    /// Get per-collection CRUD permission strings matching legacy Nightscout apiPermissions format
+    /// Get per-collection CRUD permission strings matching legacy Nightscout apiPermissions format.
     /// </summary>
+    /// <remarks>
+    /// Deliberately caller-independent. AAPS reduces this map to a single boolean — every one of the
+    /// six collections must read "crud" or <c>hasWritePermission</c> is false and its uploader stops
+    /// syncing entirely — so a token scoped to the categories AAPS actually uses would be answered
+    /// with a narrower map and lose upload, not just delete. The per-action
+    /// <see cref="Attributes.RequireScopeAttribute"/> remains the enforcement point; this map
+    /// advertises the collections the API serves, not one credential's grant.
+    /// </remarks>
     private static Dictionary<string, string> GetV3ApiPermissions()
     {
         return new Dictionary<string, string>

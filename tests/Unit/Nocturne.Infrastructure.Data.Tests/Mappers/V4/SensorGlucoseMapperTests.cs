@@ -237,25 +237,26 @@ public class SensorGlucoseMapperTests
         entity.DataSource.Should().Be("glooko");
         entity.CorrelationId.Should().Be(model.CorrelationId);
         entity.LegacyId.Should().Be("xyz789");
-        entity.SysUpdatedAt.Should().BeAfter(originalCreatedAt);
     }
 
     [Fact]
     [Trait("Category", "Unit")]
-    public void UpdateEntity_SetsUpdatedAtTimestamp()
+    public void UpdateEntity_DoesNotTouchSysUpdatedAt()
     {
+        var stale = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         var entity = new SensorGlucoseEntity
         {
             Id = Guid.CreateVersion7(),
-            SysCreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-            SysUpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+            SysCreatedAt = stale,
+            SysUpdatedAt = stale
         };
-        var beforeUpdate = DateTime.UtcNow;
 
         var model = new SensorGlucose { Mgdl = 100 };
         SensorGlucoseMapper.UpdateEntity(entity, model);
 
-        entity.SysUpdatedAt.Should().BeOnOrAfter(beforeUpdate);
+        // NocturneDbContext.UpdateTimestamps stamps sys_updated_at, and only for rows with a
+        // real modification; a mapper stamp would force an UPDATE on no-op upserts.
+        entity.SysUpdatedAt.Should().Be(stale);
     }
 
     [Fact]

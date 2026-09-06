@@ -164,14 +164,14 @@ public class EntryService : IEntryService
 
     /// <inheritdoc />
     /// <remarks>
-    /// Validates entry types, decomposes each entry directly to V4 tables via
-    /// <see cref="IEntryDecomposer.DecomposeAsync"/>, then fires
-    /// <see cref="IDataEventSink{T}.OnCreatedAsync(IReadOnlyList{T}, CancellationToken)"/>
-    /// to trigger cache invalidation and SignalR broadcasting.
+    /// Validates entry types, then decomposes the batch to V4 tables via
+    /// <see cref="IEntryDecomposer.DecomposeBatchAsync"/>. The repository chokepoint fires the
+    /// real-time <c>entries</c> broadcast per-type-batch, so this service no longer emits events directly.
     /// Entries with unrecognised types are silently filtered out.
     /// </remarks>
     public async Task<IEnumerable<Entry>> CreateEntriesAsync(
         IEnumerable<Entry> entries,
+        WriteOrigin origin = WriteOrigin.Live,
         CancellationToken cancellationToken = default)
     {
         var validEntries = entries
@@ -181,12 +181,7 @@ public class EntryService : IEntryService
         if (validEntries.Count == 0)
             return [];
 
-        foreach (var entry in validEntries)
-        {
-            await _decomposer.DecomposeAsync(entry, cancellationToken);
-        }
-
-        await _events.OnCreatedAsync(validEntries, cancellationToken);
+        await _decomposer.DecomposeBatchAsync(validEntries, origin, cancellationToken);
 
         return validEntries;
     }
@@ -196,6 +191,7 @@ public class EntryService : IEntryService
     /// <remarks>
     /// Verifies the entry exists via the store, then performs an idempotent upsert through
     /// <see cref="IEntryDecomposer.DecomposeAsync"/> which matches on <c>LegacyId</c>.
+    /// The repository chokepoint fires the real-time <c>entries</c> update.
     /// </remarks>
     public async Task<Entry?> UpdateEntryAsync(
         string id,
@@ -207,31 +203,23 @@ public class EntryService : IEntryService
 
         // Ensure the entry carries the correct ID for LegacyId-based upsert
         entry.Id = id;
-        await _decomposer.DecomposeAsync(entry, cancellationToken);
-
-        await _events.OnUpdatedAsync(entry, cancellationToken);
+        await _decomposer.DecomposeAsync(entry, WriteOrigin.Live, cancellationToken);
 
         return entry;
     }
 
     /// <inheritdoc />
     /// <remarks>
-    /// Deletes the entry's V4 records directly via <see cref="IEntryDecomposer.DeleteByLegacyIdAsync"/>,
-    /// then broadcasts the deletion event for cache invalidation and SignalR.
+    /// Deletes the entry's V4 records via <see cref="IEntryDecomposer.DeleteByLegacyIdAsync"/>,
+    /// which routes through the repository chokepoint that fires the deletion broadcast.
     /// </remarks>
     public async Task<bool> DeleteEntryAsync(
         string id,
         CancellationToken cancellationToken = default)
     {
-        var entryToDelete = await _store.GetByIdAsync(id, cancellationToken);
-        var deletedCount = await _decomposer.DeleteByLegacyIdAsync(id, cancellationToken);
+        var deletedCount = await _decomposer.DeleteByLegacyIdAsync(id, WriteOrigin.Live, cancellationToken);
 
         var deleted = deletedCount > 0;
-        if (deleted)
-        {
-            await _events.OnDeletedAsync(entryToDelete, cancellationToken);
-        }
-
         return deleted;
     }
 
@@ -241,7 +229,7 @@ public class EntryService : IEntryService
         string? find = null,
         CancellationToken cancellationToken = default)
     {
-        var deletedCount = await _decomposer.BulkDeleteAsync(find, cancellationToken);
+        var deletedCount = await _decomposer.BulkDeleteAsync(find, WriteOrigin.Live, cancellationToken);
 
         await _events.OnBulkDeletedAsync(deletedCount, cancellationToken);
 

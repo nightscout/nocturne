@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatDayTime } from "$lib/utils/formatting";
   import { page } from "$app/state";
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
@@ -7,7 +8,18 @@
   import { Label } from "$lib/components/ui/label";
   import { slide } from "svelte/transition";
   import { flip } from "svelte/animate";
-  import { Clock, Copy, Check, X, Loader2, Link, EyeOff } from "lucide-svelte";
+  import { copyToClipboard } from "$lib/utils";
+  import { toast } from "svelte-sonner";
+  import {
+    Clock,
+    Copy,
+    Check,
+    X,
+    Loader2,
+    Link,
+    EyeOff,
+    RotateCcw,
+  } from "lucide-svelte";
   import {
     getGuestLinks,
     createGuestLink,
@@ -18,6 +30,8 @@
     type GuestLinkInfo,
     GuestLinkStatus,
   } from "$api/generated/nocturne-api-client";
+  import { retainQuery } from "$lib/api/retain-query.svelte";
+  import { describeSubmitError } from "$lib/forms";
 
   const effectivePermissions: string[] = $derived(
     (page.data as any).effectivePermissions ?? []
@@ -29,17 +43,16 @@
 
   // UI state
   let showDismissed = $state(false);
-  let removingIds = $state(new Set<string>());
+  let pendingIds = $state(new Set<string>());
 
   // Query
   const guestLinksQuery = $derived(
     canCreateGuestLinks ? getGuestLinks({ includeDismissed: true }) : null
   );
+  retainQuery(() => guestLinksQuery);
   const allLinks = $derived(guestLinksQuery?.current ?? []);
   const guestLinks = $derived(
-    (showDismissed ? allLinks : allLinks.filter((l) => !l.dismissedAt)).filter(
-      (l) => !removingIds.has(l.id!)
-    )
+    showDismissed ? allLinks : allLinks.filter((l) => !l.dismissedAt)
   );
   const dismissedCount = $derived(allLinks.filter((l) => l.dismissedAt).length);
   let showCreateForm = $state(false);
@@ -95,12 +108,7 @@
   function formatDate(date: Date | undefined | null): string {
     if (!date) return "";
     const d = date instanceof Date ? date : new Date(date);
-    return d.toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
+    return formatDayTime(d);
   }
 
   function formatRelativeExpiry(date: Date | undefined | null): string {
@@ -138,6 +146,20 @@
     );
   }
 
+  /** The backend may report http behind a reverse proxy; use the browser's origin */
+  function normalizeCreatedUrl(url: string): string {
+    try {
+      const backendUrl = new URL(url);
+      const originUrl = new URL(window.location.origin);
+      backendUrl.protocol = originUrl.protocol;
+      backendUrl.host = originUrl.host;
+      return backendUrl.toString();
+    } catch {
+      // Fallback: treat as relative path
+      return url.startsWith("http") ? url : `${window.location.origin}${url}`;
+    }
+  }
+
   async function handleCreate() {
     if (!label.trim()) return;
     isCreating = true;
@@ -145,32 +167,23 @@
     try {
       const result = await createGuestLink({ label: label.trim() });
       createdCode = result.code ?? null;
-      createdUrl = result.fullUrl ?? null;
-      if (createdUrl) {
-        // The backend may report http behind a reverse proxy; use the browser's origin
-        try {
-          const backendUrl = new URL(createdUrl);
-          const originUrl = new URL(window.location.origin);
-          backendUrl.protocol = originUrl.protocol;
-          backendUrl.host = originUrl.host;
-          createdUrl = backendUrl.toString();
-        } catch {
-          // Fallback: treat as relative path
-          if (!createdUrl.startsWith("http")) {
-            createdUrl = `${window.location.origin}${createdUrl}`;
-          }
-        }
-      }
+      createdUrl = result.fullUrl ? normalizeCreatedUrl(result.fullUrl) : null;
       await guestLinksQuery?.refresh();
-    } catch {
-      createError = "Failed to create guest link. Please try again.";
+    } catch (err) {
+      createError = describeSubmitError(
+        err,
+        "Failed to create guest link. Please try again."
+      );
     } finally {
       isCreating = false;
     }
   }
 
   async function copyText(text: string, type: "code" | "url") {
-    await navigator.clipboard.writeText(text);
+    if (!(await copyToClipboard(text))) {
+      toast.error("Couldn't copy to the clipboard. Copy it manually instead.");
+      return;
+    }
     if (type === "code") {
       copiedCode = true;
       setTimeout(() => (copiedCode = false), 2000);
@@ -180,23 +193,56 @@
     }
   }
 
-  async function handleDismiss(id: string) {
-    removingIds = new Set([...removingIds, id]);
+  /**
+   * Run a guest-link mutation and pull the updated list. The commands' declared
+   * GetGuestLinks invalidation refreshes `getGuestLinks(undefined)`, which is a
+   * different cache key from the `{ includeDismissed: true }` this component
+   * subscribes with, so the refresh has to be issued here.
+   */
+  async function mutateLink(id: string, run: (id: string) => Promise<unknown>) {
+    pendingIds = new Set([...pendingIds, id]);
     try {
-      await dismissGuestLink(id);
-    } catch {
-      // Restore on failure
-      removingIds = new Set([...removingIds].filter((x) => x !== id));
+      await run(id);
+      await guestLinksQuery?.refresh();
+    } finally {
+      pendingIds = new Set([...pendingIds].filter((x) => x !== id));
     }
   }
 
+  async function handleDismiss(id: string) {
+    await mutateLink(id, dismissGuestLink);
+  }
+
   async function handleRevoke(id: string) {
-    removingIds = new Set([...removingIds, id]);
+    await mutateLink(id, revokeGuestLink);
+  }
+
+  let reissuingId = $state<string | null>(null);
+
+  /**
+   * Issue a new code with the same label and scopes. Codes are single-use, so
+   * this is how a guest gets access on another device or after expiry.
+   */
+  async function handleReissue(link: GuestLinkInfo) {
+    reissuingId = link.id!;
+    createError = null;
     try {
-      await revokeGuestLink(id);
-    } catch {
-      // Restore on failure
-      removingIds = new Set([...removingIds].filter((x) => x !== id));
+      const result = await createGuestLink({
+        label: link.label || "Untitled",
+        scopes: link.scopes,
+      });
+      createdCode = result.code ?? null;
+      createdUrl = result.fullUrl ? normalizeCreatedUrl(result.fullUrl) : null;
+      showCreateForm = true;
+      await guestLinksQuery?.refresh();
+    } catch (err) {
+      createError = describeSubmitError(
+        err,
+        "Failed to create a new code. Active links are limited to 5 at a time."
+      );
+      showCreateForm = true;
+    } finally {
+      reissuingId = null;
     }
   }
 
@@ -216,7 +262,7 @@
 </script>
 
 {#if canCreateGuestLinks}
-  <div class="space-y-4">
+  <div class="space-y-4" data-testid="guest-links">
     <div class="flex items-center justify-between gap-4">
       <div>
         <h2 class="text-lg font-semibold flex items-center gap-2">
@@ -245,8 +291,9 @@
         <Card.Header>
           <Card.Title class="text-lg">Create Guest Link</Card.Title>
           <Card.Description>
-            Generate a temporary link for read-only access to reports. It
-            expires in 48 hours and can only be used once.
+            Generate a temporary link for read-only access to reports. The
+            code works once: the first device to enter it stays signed in for
+            48 hours. For another device, issue a new code.
           </Card.Description>
         </Card.Header>
         <Card.Content>
@@ -315,8 +362,9 @@
               {/if}
 
               <p class="text-sm text-muted-foreground">
-                Share this code or link. It expires in 48 hours and can only be
-                used once.
+                Share this code or link. The code works once: the first device
+                to enter it stays signed in for 48 hours. Use "New code" on the
+                link below to add another device.
               </p>
 
               <Button variant="outline" class="w-full" onclick={handleDone}>
@@ -422,11 +470,28 @@
                     {/if}
                   </div>
                 </div>
+                {#if link.status === GuestLinkStatus.Active || (isTerminal(link) && !link.dismissedAt)}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    class="text-muted-foreground hover:text-foreground shrink-0"
+                    disabled={reissuingId === link.id}
+                    onclick={() => handleReissue(link)}
+                  >
+                    {#if reissuingId === link.id}
+                      <Loader2 class="mr-1 h-3.5 w-3.5 animate-spin" />
+                    {:else}
+                      <RotateCcw class="mr-1 h-3.5 w-3.5" />
+                    {/if}
+                    New code
+                  </Button>
+                {/if}
                 {#if canRevoke(link)}
                   <Button
                     variant="ghost"
                     size="sm"
                     class="text-destructive hover:text-destructive shrink-0"
+                    disabled={pendingIds.has(link.id!)}
                     onclick={() => handleRevoke(link.id!)}
                   >
                     <X class="mr-1 h-3.5 w-3.5" />
@@ -437,6 +502,7 @@
                     variant="ghost"
                     size="sm"
                     class="text-muted-foreground hover:text-foreground shrink-0"
+                    disabled={pendingIds.has(link.id!)}
                     onclick={() => handleDismiss(link.id!)}
                   >
                     <EyeOff class="mr-1 h-3.5 w-3.5" />

@@ -1,0 +1,15 @@
+[package]
+name = "nocturne-alerts-core"
+version = "0.1.0"
+edition = "2024"
+description = "Pure-Rust port of the Nocturne leaf/node alert evaluation engine (behaviourally exact, corpus-pinned)"
+license = "AGPL-3.0-only"
+publish = false
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["arbitrary_precision", "preserve_order"] }
+rust_decimal = { version = "1", features = ["serde"] }
+chrono = { version = "0.4", default-features = false, features = ["std", "serde"] }
+chrono-tz = "0.10"
+uuid = { version = "1", features = ["serde"] }

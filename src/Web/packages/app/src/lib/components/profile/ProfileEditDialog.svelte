@@ -1,6 +1,7 @@
 <script lang="ts">
   import * as Dialog from "$lib/components/ui/dialog";
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
+  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import * as Tabs from "$lib/components/ui/tabs";
   import * as Table from "$lib/components/ui/table";
   import * as Select from "$lib/components/ui/select";
@@ -527,23 +528,21 @@
   </Dialog.Content>
 </Dialog.Root>
 
-<AlertDialog.Root bind:open={showExternalWarning}>
-  <AlertDialog.Content>
-    <AlertDialog.Header>
-      <AlertDialog.Title>Externally Managed Profile</AlertDialog.Title>
-      <AlertDialog.Description>
-        This profile is managed by an external source (e.g., Glooko). <br />
-        Any changes made here will
-        <strong>NOT</strong>
-        be reflected on your device (pump/CGM). They will only affect how data is
-        viewed in Nocturne.
-      </AlertDialog.Description>
-    </AlertDialog.Header>
-    <AlertDialog.Footer>
-      <AlertDialog.Action>I Understand</AlertDialog.Action>
-    </AlertDialog.Footer>
-  </AlertDialog.Content>
-</AlertDialog.Root>
+<ConfirmDialog bind:open={showExternalWarning} title="Externally Managed Profile">
+  {#snippet footer()}
+    <AlertDialog.Action onclick={() => (showExternalWarning = false)}>
+      I Understand
+    </AlertDialog.Action>
+  {/snippet}
+
+  {#snippet description()}
+    This profile is managed by an external source (e.g., Glooko). <br />
+    Any changes made here will
+    <strong>NOT</strong>
+    be reflected on your device (pump/CGM). They will only affect how data is
+    viewed in Nocturne.
+  {/snippet}
+</ConfirmDialog>
 
 <!-- Time Value Editor Snippet -->
 {#snippet TimeValueEditor({

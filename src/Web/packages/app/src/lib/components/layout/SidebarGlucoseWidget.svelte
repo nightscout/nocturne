@@ -5,21 +5,15 @@
     formatGlucoseValue,
     formatGlucoseDelta,
   } from "$lib/utils/formatting";
-  import {
-    glucoseUnits,
-    sidebarWidget,
-    haloDialConfig,
-  } from "$lib/stores/appearance-store.svelte";
+  import { deltaColorClass, trendAngle } from "@nocturne/ui/glucose";
+  import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import { GlucoseValueIndicator } from "$lib/components/shared";
-  import HaloDial from "$lib/components/dashboard/halo-dial/HaloDial.svelte";
   import { createChartDataEngine } from "$lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte";
   import GlucoseChartShell from "$lib/components/dashboard/glucose-chart/GlucoseChartShell.svelte";
   import GlucoseTrack from "$lib/components/dashboard/glucose-chart/tracks/GlucoseTrack.svelte";
   import ThresholdRules from "$lib/components/dashboard/glucose-chart/tracks/ThresholdRules.svelte";
-  import { trendAngle } from "$lib/components/dashboard/halo-dial/geometry";
-  import { Tween } from "svelte/motion";
+  import { Tween, prefersReducedMotion } from "svelte/motion";
   import { cubicOut } from "svelte/easing";
-  import { browser } from "$app/environment";
   import ArrowRight from "lucide-svelte/icons/arrow-right";
 
   const realtimeStore = tryGetRealtimeStore();
@@ -29,6 +23,7 @@
   const sidebarEngine = createChartDataEngine({
     enablePredictions: false,
     focusHours: 3,
+    dataWindow: "display",
   });
 
   // Glucose-only layout — no space reserved for basal/IOB/swim lanes
@@ -77,99 +72,73 @@
   );
   const units = $derived(glucoseUnits.current);
   const displayBG = $derived(formatGlucoseValue(rawCurrentBG, units));
-  const widget = $derived(sidebarWidget.current);
 
   // Trend metadata
   const bgDelta = $derived(realtimeStore?.bgDelta ?? 0);
-  const direction = $derived(realtimeStore?.direction ?? "Flat");
+  const direction = $derived(realtimeStore?.direction ?? "");
   const timeSinceReading = $derived(realtimeStore?.timeSinceReading ?? "");
   const displayDelta = $derived(formatGlucoseDelta(bgDelta, units));
   const hasData = $derived(!isLoading && rawCurrentBG > 0);
 
-  // Respect reduced motion preference
-  const reducedMotion =
-    browser &&
-    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
   // Smoothly animate the trend arrow rotation
   const arrowAngle = Tween.of(() => trendAngle(bgDelta), {
-    duration: reducedMotion ? 0 : 600,
+    // Reactive, so toggling the OS setting takes effect without a reload.
+    duration: prefersReducedMotion.current ? 0 : 600,
     easing: cubicOut,
   });
-
-  // Delta color based on direction severity
-  function getDeltaColor(dir: string): string {
-    switch (dir) {
-      case "DoubleUp":
-      case "DoubleDown":
-        return "text-red-500";
-      case "SingleUp":
-      case "SingleDown":
-        return "text-orange-500";
-      case "FortyFiveUp":
-      case "FortyFiveDown":
-        return "text-yellow-500";
-      case "Flat":
-        return "text-green-500";
-      default:
-        return "text-muted-foreground";
-    }
-  }
 </script>
 
-<!-- Expanded state: widget based on preference -->
+<!-- Expanded state -->
 <div class="group-data-[collapsible=icon]:hidden">
-  {#if widget === "halo-dial"}
-    <div class="flex justify-center">
-      <HaloDial configOverride={haloDialConfig.current} />
-    </div>
-  {:else}
-    <div class="flex flex-col justify-center gap-2">
-      <div class="flex items-center justify-center gap-2">
-        <GlucoseValueIndicator
-          displayValue={displayBG}
-          rawBgMgdl={rawCurrentBG}
-          {isLoading}
-          {isStale}
-          {isDisconnected}
-          size="lg"
-          class="text-lg"
-        />
-        {#if hasData && !isStale}
-          <div class="flex flex-col items-center gap-0.5">
-            <div class="flex items-center gap-0.5 {getDeltaColor(direction)}">
-              <ArrowRight
-                class="size-4"
-                style="transform: rotate({arrowAngle.current}deg)"
-              />
-              <span class="text-sm font-medium">{displayDelta}</span>
-            </div>
-            <span class="text-[10px] text-muted-foreground leading-tight">
-              {timeSinceReading}
-            </span>
+  <div class="flex flex-col justify-center gap-2">
+    <div class="flex items-center justify-center gap-2">
+      <GlucoseValueIndicator
+        displayValue={displayBG}
+        rawBgMgdl={rawCurrentBG}
+        {isLoading}
+        {isStale}
+        {isDisconnected}
+        size="lg"
+        class="text-lg"
+      />
+      {#if hasData && !isStale}
+        <div class="flex flex-col items-center gap-0.5">
+          <div class="flex items-center gap-0.5 {deltaColorClass(direction)}">
+            <ArrowRight
+              class="size-4"
+              style="transform: rotate({arrowAngle.current}deg)"
+            />
+            <span class="text-sm font-medium">{displayDelta}</span>
           </div>
-        {/if}
-      </div>
-      <div
-        class="px-2 border border-sidebar-border hover:border-sidebar-ring rounded"
-      >
-        <a href="/">
-          <GlucoseChartShell
-            engine={sidebarEngine}
-            legend={sidebarLegend}
-            heightClass="h-[120px]"
-            showTimeAxis={false}
-            padding={{ left: 0, right: 0, top: 8, bottom: 0 }}
-          >
-            {#snippet tracks(_ctx)}
-              <ThresholdRules />
-              <GlucoseTrack showAxis={false} />
-            {/snippet}
-          </GlucoseChartShell>
-        </a>
-      </div>
+          <span class="text-[10px] text-muted-foreground leading-tight">
+            {timeSinceReading}
+          </span>
+        </div>
+      {/if}
     </div>
-  {/if}
+    <div
+      class="px-2 border border-sidebar-border hover:border-sidebar-ring rounded"
+    >
+      <a href="/">
+        <GlucoseChartShell
+          engine={sidebarEngine}
+          legend={sidebarLegend}
+          heightClass="h-[120px]"
+          showTimeAxis={false}
+          padding={{ left: 0, right: 0, top: 8, bottom: 0 }}
+        >
+          {#snippet tracks(_ctx)}
+            <ThresholdRules />
+            <!-- The density heuristic would show a dot per reading now that the
+                 series is the displayed window rather than the 48-hour buffer.
+                 A 120px sparkline reads as a line. -->
+            <GlucoseTrack showAxis={false} showPoints={false} />
+          {/snippet}
+        </GlucoseChartShell>
+      </a>
+    </div>
+  </div>
 </div>
 
 <!-- Collapsed state: BG + small arrow + delta -->
@@ -184,7 +153,7 @@
     class="text-lg"
   />
   {#if hasData && !isStale}
-    <div class="flex items-center gap-0.5 {getDeltaColor(direction)}">
+    <div class="flex items-center gap-0.5 {deltaColorClass(direction)}">
       <ArrowRight
         class="size-3"
         style="transform: rotate({arrowAngle.current}deg)"

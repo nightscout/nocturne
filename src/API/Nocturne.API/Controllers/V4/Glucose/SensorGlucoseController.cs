@@ -1,61 +1,108 @@
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Models.Requests.V4;
+using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Alerts;
-using Nocturne.Core.Contracts.Events;
+using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Controllers.V4.Glucose;
 
 /// <summary>
 /// Controller for managing CGM sensor glucose readings.
 /// Provides CRUD operations and bulk creation for <see cref="SensorGlucose"/> records.
-/// After creation, evaluates glucose alerts via <see cref="IAlertOrchestrator"/>.
+/// After creation, evaluates glucose alerts against the canonical stream via
+/// <see cref="ICanonicalAlertEvaluator"/>.
 /// </summary>
 /// <seealso cref="ISensorGlucoseRepository"/>
 /// <seealso cref="SensorGlucose"/>
 /// <seealso cref="UpsertSensorGlucoseRequest"/>
-/// <seealso cref="IAlertOrchestrator"/>
+/// <seealso cref="ICanonicalAlertEvaluator"/>
+/// <seealso cref="PatientDeviceAttribution"/>
 /// <seealso cref="V4CrudControllerBase{TModel, TCreateRequest, TUpdateRequest, TRepository}"/>
 [ApiController]
 [Tags("Glucose")]
 [Route("api/v4/glucose/sensor")]
-[Authorize]
+[RequireScope(Scope.GlucoseRead)]
 [Produces("application/json")]
 public class SensorGlucoseController(
     ISensorGlucoseRepository repo,
     IGlucoseProcessingResolver glucoseResolver,
-    IAlertOrchestrator alertOrchestrator,
-    IDataEventSink<SensorGlucose> glucoseEvents,
+    ICanonicalAlertEvaluator alertEvaluator,
+    IPatientDeviceRepository patientDevices,
+    IPatientDeviceStamper deviceStamper,
     ILogger<SensorGlucoseController> logger)
     : V4CrudControllerBase<SensorGlucose, UpsertSensorGlucoseRequest, UpsertSensorGlucoseRequest, ISensorGlucoseRepository>(repo)
 {
-    [ResponseCache(Duration = 90, VaryByQueryKeys = new[] { "*" })]
-    public override Task<ActionResult<PaginatedResponse<SensorGlucose>>> GetAll(
+    /// <inheritdoc/>
+    /// <remarks>CGM readings are glucose data; the legacy equivalent is a v1 entry.</remarks>
+    public override string WriteScope => Scope.GlucoseReadWrite;
+
+    /// <inheritdoc/>
+    protected override V4BulkNaming BulkNaming => new("Sensor glucose", "reading", "readings");
+
+    /// <summary>
+    /// Lists sensor glucose readings. Adds an optional <c>patientDeviceId</c> query filter on top of the base
+    /// list surface: when set, results are that registered device's raw readings (canonical stream selection is
+    /// bypassed); when unset, the caller sees every stored reading. Pagination totals match the base
+    /// device/source behaviour (the count is unscoped by the device filters).
+    /// </summary>
+    /// <remarks>
+    /// The <c>patientDeviceId</c> query parameter is read directly from the request because the base list
+    /// signature (shared by every V4 read controller) has no device-attribution concept — binding it here keeps
+    /// a single <c>GET</c> action while adding the sensor-glucose-only filter.
+    /// <para>
+    /// Never cached, per <see cref="Profiles.ProfileController.GetProfileSummary"/>: a newly arrived or
+    /// corrected reading must not be invisible until a cached list body expires.
+    /// </para>
+    /// </remarks>
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    public override async Task<ActionResult<PaginatedResponse<SensorGlucose>>> GetAll(
         [FromQuery] DateTime? from, [FromQuery] DateTime? to,
         [FromQuery] int limit = 100, [FromQuery] int offset = 0,
         [FromQuery] string sort = "timestamp_desc",
         [FromQuery] string? device = null, [FromQuery] string? source = null,
         CancellationToken ct = default)
-        => base.GetAll(from, to, limit, offset, sort, device, source, ct);
-
-    public override async Task<ActionResult<SensorGlucose>> Create([FromBody] UpsertSensorGlucoseRequest request, CancellationToken ct = default)
     {
-        var model = MapCreateToModel(request);
+        if (PrepareListQuery(from, to, sort, ref limit, ref offset, out var descending) is { } error)
+            return error;
 
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
+        Guid? patientDeviceId = null;
+        if (Request.Query.TryGetValue("patientDeviceId", out var raw) && Guid.TryParse(raw, out var parsed))
+            patientDeviceId = parsed;
 
-        await glucoseResolver.ResolveAsync(model, request.GlucoseProcessing, request.SmoothedMgdl, request.UnsmoothedMgdl, ct);
+        var data = await Repository.GetAsync(from, to, device, source, limit, offset, descending,
+            nativeOnly: false, afterTimestamp: null, afterId: null, patientDeviceId: patientDeviceId, ct: ct);
+        var total = await Repository.CountAsync(from, to, ct);
+        return Ok(new PaginatedResponse<SensorGlucose> { Data = data, Pagination = new PaginationInfo(limit, offset, total) });
+    }
 
-        var created = await Repository.CreateAsync(model, ct);
-        created = await OnAfterCreateAsync(created, ct);
-        return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+    /// <inheritdoc/>
+    /// <remarks>
+    /// V4 REST writes bypass the connector/decomposer ingest paths, so attribution happens here —
+    /// otherwise direct API records stay unstamped and only ever surface as pseudo-devices. The
+    /// canonical stream still governs reads.
+    /// </remarks>
+    protected override async Task<ObjectResult?> OnBeforeCreateAsync(
+        SensorGlucose model, UpsertSensorGlucoseRequest request, CancellationToken ct)
+    {
+        await ResolveGlucoseAsync(model, request, ct);
+        return await ApplyAttributionAsync(model, request, existing: null, ct);
+    }
+
+    /// <inheritdoc/>
+    protected override async Task<ObjectResult?> OnBeforeUpdateAsync(
+        SensorGlucose model, UpsertSensorGlucoseRequest request, SensorGlucose existing, CancellationToken ct)
+    {
+        await ResolveGlucoseAsync(model, request, ct);
+        return await ApplyAttributionAsync(model, request, existing.PatientDeviceId, ct);
     }
 
     protected override SensorGlucose MapCreateToModel(UpsertSensorGlucoseRequest request) => new()
@@ -95,117 +142,54 @@ public class SensorGlucoseController(
         AdditionalProperties = existing.AdditionalProperties,
     };
 
-    public override async Task<ActionResult<SensorGlucose>> Update(Guid id, [FromBody] UpsertSensorGlucoseRequest request, CancellationToken ct = default)
+    /// <inheritdoc/>
+    protected override async Task<ObjectResult?> OnBeforeBulkCreateAsync(
+        IReadOnlyList<SensorGlucose> models, IReadOnlyList<UpsertSensorGlucoseRequest> requests, CancellationToken ct)
     {
-        var existing = await Repository.GetByIdAsync(id, ct);
-        if (existing is null)
-            return NotFound();
+        for (var i = 0; i < models.Count; i++)
+            await ResolveGlucoseAsync(models[i], requests[i], ct);
 
-        var model = MapUpdateToModel(id, request, existing);
+        var error = await PatientDeviceAttribution.ApplyManyAsync(
+            [.. models.Select((m, i) => ((IDeviceAttributed)m, requests[i].PatientDeviceId))],
+            patientDevices, deviceStamper, DeviceAttributionCategories.SensorGlucose, batchSource: null, ct);
 
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
-
-        await glucoseResolver.ResolveAsync(model, request.GlucoseProcessing, request.SmoothedMgdl, request.UnsmoothedMgdl, ct);
-
-        try
-        {
-            var updated = await Repository.UpdateAsync(id, model, ct);
-
-            // V4 writes bypass the legacy entry sink; emit the realtime "entries" update here.
-            await glucoseEvents.OnUpdatedAsync(updated, ct);
-
-            return Ok(updated);
-        }
-        catch (KeyNotFoundException)
-        {
-            return NotFound();
-        }
+        return error is null ? null : Problem(detail: error, statusCode: 400, title: "Bad Request");
     }
 
-    /// <summary>
-    /// Create multiple sensor glucose readings in bulk (max 1000).
-    /// </summary>
-    [HttpPost("bulk")]
-    [ProducesResponseType(typeof(SensorGlucose[]), StatusCodes.Status201Created)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<SensorGlucose[]>> CreateSensorGlucoseBulk(
-        [FromBody] UpsertSensorGlucoseRequest[] requests,
-        CancellationToken ct = default)
+    /// <inheritdoc/>
+    /// <remarks>
+    /// One pass for the whole batch: alarms evaluate against the canonical stream rather than the
+    /// records just written, so a per-record pass would repeat the same evaluation.
+    /// </remarks>
+    protected override async Task<SensorGlucose[]> OnAfterBulkCreateAsync(SensorGlucose[] written, CancellationToken ct)
     {
-        if (requests is not { Length: > 0 })
-            return Problem(detail: "Sensor glucose data is required", statusCode: 400, title: "Bad Request");
+        if (written.Any(r => r.Mgdl > 0))
+            await alertEvaluator.EvaluateAsync(ct);
 
-        if (requests.Length > 1000)
-            return Problem(detail: "Bulk operations are limited to 1000 readings per request", statusCode: 400, title: "Bad Request");
+        return written;
+    }
 
-        var models = requests.Select(MapCreateToModel).ToList();
+    private Task ResolveGlucoseAsync(SensorGlucose model, UpsertSensorGlucoseRequest request, CancellationToken ct) =>
+        glucoseResolver.ResolveAsync(model, request.GlucoseProcessing, request.SmoothedMgdl, request.UnsmoothedMgdl, ct);
 
-        for (var i = 0; i < models.Count; i++)
-            await glucoseResolver.ResolveAsync(models[i], requests[i].GlucoseProcessing, requests[i].SmoothedMgdl, requests[i].UnsmoothedMgdl, ct);
+    /// <summary>
+    /// Settles the reading's device attribution from the request. Returns a 400 result when an explicit
+    /// id doesn't resolve (tenant scoping makes a cross-tenant id indistinguishable from a nonexistent
+    /// one), or <c>null</c> on success.
+    /// </summary>
+    private async Task<ObjectResult?> ApplyAttributionAsync(SensorGlucose model, UpsertSensorGlucoseRequest request, Guid? existing, CancellationToken ct)
+    {
+        var error = await PatientDeviceAttribution.ApplyAsync(
+            model, request.PatientDeviceId, existing, patientDevices, deviceStamper, DeviceAttributionCategories.SensorGlucose, ct);
 
-        var created = await Repository.BulkCreateAsync(models, ct);
-        var createdArray = created.ToArray();
-
-        // Evaluate alerts for the most recent reading only (not every historical reading during backfill)
-        var mostRecent = createdArray.OrderByDescending(r => r.Timestamp).FirstOrDefault();
-        if (mostRecent is { Mgdl: > 0 })
-        {
-            try
-            {
-                var context = new SensorContext
-                {
-                    LatestValue = (decimal)mostRecent.Mgdl,
-                    LatestTimestamp = mostRecent.Timestamp,
-                    TrendRate = (decimal?)mostRecent.TrendRate,
-                    LastReadingAt = mostRecent.Timestamp,
-                };
-                await alertOrchestrator.EvaluateAsync(context, ct);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Alert evaluation failed after bulk SensorGlucose creation");
-            }
-        }
-
-        // V4 writes bypass the legacy entry sink; emit the realtime "entries" create here.
-        await glucoseEvents.OnCreatedAsync(createdArray, ct);
-
-        return StatusCode(201, createdArray);
+        return error is null ? null : Problem(detail: error, statusCode: 400, title: "Bad Request");
     }
 
     protected override async Task<SensorGlucose> OnAfterCreateAsync(SensorGlucose created, CancellationToken ct)
     {
-        try
-        {
-            if (created.Mgdl > 0)
-            {
-                var context = new SensorContext
-                {
-                    LatestValue = (decimal)created.Mgdl,
-                    LatestTimestamp = created.Timestamp,
-                    TrendRate = (decimal?)created.TrendRate,
-                    LastReadingAt = created.Timestamp,
-                };
-
-                await alertOrchestrator.EvaluateAsync(context, ct);
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Alert evaluation failed after V4 SensorGlucose creation");
-        }
-
-        // V4 writes bypass the legacy entry sink; emit the realtime "entries" create here.
-        await glucoseEvents.OnCreatedAsync(new[] { created }, ct);
+        if (created.Mgdl > 0)
+            await alertEvaluator.EvaluateAsync(ct);
 
         return created;
-    }
-
-    protected override async Task OnAfterRestoreAsync(SensorGlucose restored, CancellationToken ct)
-    {
-        // A restored reading reappears in the dataset; broadcast it as an "entries" create so the
-        // web client re-adds it. V4 restores bypass the legacy entry sink.
-        await glucoseEvents.OnCreatedAsync(new[] { restored }, ct);
     }
 }

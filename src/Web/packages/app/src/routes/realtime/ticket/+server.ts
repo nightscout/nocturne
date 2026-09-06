@@ -4,9 +4,9 @@ import { env } from "$env/dynamic/private";
 import { signHandshakeTicket } from "@nocturne/bridge/ticket";
 import {
   getApiBaseUrl,
-  getHashedInstanceKey,
   createServerHttpClient,
 } from "$lib/server/api-client-factory";
+import { getHashedInstanceKey } from "$lib/server/instance-key";
 import { getEffectiveHost, getOriginalProto } from "$lib/server/request-host";
 import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
 
@@ -46,7 +46,7 @@ export const GET: RequestHandler = async (event) => {
   const httpClient = createServerHttpClient(event.fetch, {
     accessToken: event.cookies.get(AUTH_COOKIE_NAMES.accessToken),
     refreshToken: event.cookies.get(AUTH_COOKIE_NAMES.refreshToken),
-    guestSessionToken: event.cookies.get("nocturne-guest-session"),
+    guestSessionToken: event.cookies.get(AUTH_COOKIE_NAMES.guestSession),
     platformAccessToken: event.cookies.get(AUTH_COOKIE_NAMES.platformAccess),
     hashedInstanceKey: getHashedInstanceKey(),
     extraHeaders: {
@@ -58,6 +58,7 @@ export const GET: RequestHandler = async (event) => {
       "Cache-Control": "no-cache, no-store",
     },
     responseCookies: event.cookies,
+    rawSetCookies: event.locals.rawSetCookies,
     signal: event.request.signal,
   });
 

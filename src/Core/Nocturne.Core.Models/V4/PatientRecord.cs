@@ -41,6 +41,13 @@ public class PatientRecord
     public DateOnly? DateOfBirth { get; set; }
 
     /// <summary>
+    /// Patient's biological (natal) sex. Optional. Drives sex-specific normative reference ranges
+    /// (e.g. sleep-stage composition). Distinct from gender identity / <see cref="Pronouns"/>.
+    /// </summary>
+    /// <seealso cref="V4.BiologicalSex"/>
+    public BiologicalSex? Sex { get; set; }
+
+    /// <summary>
     /// Patient's preferred display name.
     /// </summary>
     public string? PreferredName { get; set; }

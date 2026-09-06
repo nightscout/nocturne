@@ -5,8 +5,13 @@ import {
 	nodeFromApi,
 	nodeToApi,
 	parseRule,
+	applyChannelDestination,
 	buildBody,
+	parseChannelMetadata,
+	validateChannels,
+	type ChannelDef,
 } from "./types";
+import { ChannelType } from "$api-clients";
 
 describe("defaultClientConfig", () => {
 	it("returns valid audio defaults", () => {
@@ -64,6 +69,16 @@ describe("defaultPayload", () => {
 		const expected = Intl.DateTimeFormat().resolvedOptions().timeZone;
 		expect(node.time_of_day?.timezone).toBe(expected);
 		expect(expected).toBeTruthy();
+	});
+
+	it("tracker_age default has an empty definition id, >= operator, and 0 minutes", () => {
+		const node = defaultPayload("tracker_age");
+		expect(node.type).toBe("tracker_age");
+		expect(node.tracker_age).toEqual({
+			tracker_definition_id: "",
+			operator: ">=",
+			minutes: 0,
+		});
 	});
 });
 
@@ -253,6 +268,76 @@ describe("parseRule", () => {
 
 });
 
+describe("applyChannelDestination", () => {
+	function webhookChannel(over: Partial<ChannelDef> = {}): ChannelDef {
+		return {
+			channelType: ChannelType.Webhook,
+			destination: "https://receiver.example.com/hook",
+			destinationLabel: "",
+			...over,
+		};
+	}
+
+	it("stops reporting a saved secret once the destination is edited", () => {
+		const channel = webhookChannel({ hasSecret: true });
+		applyChannelDestination(channel, "https://elsewhere.example.com/hook");
+		expect(channel.hasSecret).toBe(false);
+		expect(channel.destination).toBe("https://elsewhere.example.com/hook");
+	});
+
+	it("keeps reporting a saved secret while the destination is unchanged", () => {
+		const channel = webhookChannel({ hasSecret: true });
+		applyChannelDestination(channel, channel.destination);
+		expect(channel.hasSecret).toBe(true);
+	});
+
+	it("leaves the indicator alone when a replacement secret has been typed", () => {
+		const channel = webhookChannel({ hasSecret: true, secret: "typed" });
+		applyChannelDestination(channel, "https://elsewhere.example.com/hook");
+		expect(channel.hasSecret).toBe(true);
+	});
+
+	it("sends no secret for the new destination after the URL is edited", () => {
+		const state = parseRule(null);
+		state.channels = [webhookChannel({ hasSecret: true })];
+		applyChannelDestination(state.channels[0], "https://elsewhere.example.com/hook");
+		expect(
+			(buildBody(state).channels[0] as { secret?: string }).secret
+		).toBe("");
+	});
+});
+
+describe("buildBody webhook secret", () => {
+	function webhookState(over: Partial<ChannelDef>) {
+		const state = parseRule(null);
+		state.channels = [
+			{
+				channelType: ChannelType.Webhook,
+				destination: "https://receiver.example.com/hook",
+				destinationLabel: "",
+				...over,
+			},
+		];
+		return state;
+	}
+
+	function sentSecret(over: Partial<ChannelDef>) {
+		return (buildBody(webhookState(over)).channels[0] as { secret?: string }).secret;
+	}
+
+	it("omits the secret when the channel already has one, so the save keeps it", () => {
+		expect(sentSecret({ hasSecret: true })).toBeUndefined();
+	});
+
+	it("sends an empty secret once the editor has removed the stored one", () => {
+		expect(sentSecret({ hasSecret: false })).toBe("");
+	});
+
+	it("sends a typed secret over the stored one", () => {
+		expect(sentSecret({ hasSecret: true, secret: "typed" })).toBe("typed");
+	});
+});
+
 describe("buildBody", () => {
 	it("produces no _uid fields in any part of the output", () => {
 		const state = parseRule(null);
@@ -315,5 +400,133 @@ describe("buildBody", () => {
 		const body = buildBody(state);
 		const json = JSON.stringify(body.channels);
 		expect(json).not.toContain("_uid");
+	});
+
+	it("serialises a device_action channel as {channelType, destination, metadata}", () => {
+		const state = parseRule({
+			name: "Test",
+			conditionType: "threshold",
+			conditionParams: { direction: "below", value: 70 },
+			channels: [
+				{
+					channelType: "device_action",
+					destination: "companion",
+					metadata: { capabilities: ["notify", "tray_flash"] },
+					sortOrder: 0,
+				},
+			],
+		} as never);
+		const body = buildBody(state);
+		const ch = body.channels[0];
+		expect(ch.channelType).toBe("device_action");
+		expect(ch.destination).toBe("companion");
+		// Metadata is a JSON object (not a pre-stringified string) — the server
+		// serialises it to JSONB.
+		expect(ch.metadata).toEqual({ capabilities: ["notify", "tray_flash"] });
+	});
+
+	it("omits metadata for channels without it", () => {
+		const state = parseRule({
+			name: "Test",
+			conditionType: "threshold",
+			conditionParams: { direction: "below", value: 70 },
+			channels: [{ channelType: "web_push", destination: "", sortOrder: 0 }],
+		} as never);
+		const body = buildBody(state);
+		expect(body.channels[0].metadata).toBeUndefined();
+	});
+});
+
+describe("parseChannelMetadata", () => {
+	it("returns null for null/undefined", () => {
+		expect(parseChannelMetadata(null)).toBeNull();
+		expect(parseChannelMetadata(undefined)).toBeNull();
+	});
+
+	it("reads capabilities from a deserialised object", () => {
+		expect(parseChannelMetadata({ capabilities: ["notify", "torch"] })).toEqual({
+			capabilities: ["notify", "torch"],
+		});
+	});
+
+	it("parses a JSON string form defensively", () => {
+		expect(
+			parseChannelMetadata('{"capabilities":["notify"]}'),
+		).toEqual({ capabilities: ["notify"] });
+	});
+
+	it("returns null for malformed input", () => {
+		expect(parseChannelMetadata("not json")).toBeNull();
+		expect(parseChannelMetadata({ capabilities: "nope" })).toBeNull();
+	});
+
+	it("drops non-string capability entries", () => {
+		expect(
+			parseChannelMetadata({ capabilities: ["notify", 5, null, "torch"] }),
+		).toEqual({ capabilities: ["notify", "torch"] });
+	});
+
+	it("round-trips a device_action channel through parseRule", () => {
+		const state = parseRule({
+			name: "Test",
+			conditionType: "threshold",
+			conditionParams: { direction: "below", value: 70 },
+			channels: [
+				{
+					channelType: "device_action",
+					destination: "companion",
+					metadata: { capabilities: ["notify"] },
+					sortOrder: 0,
+				},
+			],
+		} as never);
+		const device = state.channels.find(
+			(c) => c.channelType === "device_action",
+		);
+		expect(device?.destination).toBe("companion");
+		expect(device?.metadata).toEqual({ capabilities: ["notify"] });
+	});
+});
+
+describe("validateChannels", () => {
+	function channel(over: Partial<ChannelDef> = {}): ChannelDef {
+		return {
+			channelType: ChannelType.WebPush,
+			destination: "",
+			destinationLabel: "",
+			...over,
+		};
+	}
+
+	it("rejects a device_action channel with an empty destination", () => {
+		const result = validateChannels([
+			channel({ channelType: ChannelType.DeviceAction, destination: "" }),
+		]);
+		expect(result).toMatch(/device kind/i);
+	});
+
+	it("accepts a device_action channel with a kind selected", () => {
+		expect(
+			validateChannels([
+				channel({
+					channelType: ChannelType.DeviceAction,
+					destination: "companion",
+					metadata: { capabilities: ["notify"] },
+				}),
+			]),
+		).toBeNull();
+	});
+
+	it("does not require a destination for non-device channels", () => {
+		expect(
+			validateChannels([
+				channel({ channelType: ChannelType.WebPush, destination: "" }),
+				channel({ channelType: ChannelType.InApp, destination: "" }),
+			]),
+		).toBeNull();
+	});
+
+	it("accepts an empty channel list", () => {
+		expect(validateChannels([])).toBeNull();
 	});
 });

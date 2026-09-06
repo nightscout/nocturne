@@ -16,9 +16,7 @@ public static class StepCountMapper
     {
         return new StepCountEntity
         {
-            Id = string.IsNullOrEmpty(stepCount.Id)
-                ? Guid.CreateVersion7()
-                : ParseIdToGuid(stepCount.Id),
+            Id = MapperHelpers.ParseIdToGuid(stepCount.Id),
             OriginalId = MongoIdUtils.IsValidMongoId(stepCount.Id) ? stepCount.Id : null,
             Timestamp = stepCount.Timestamp,
             Metric = stepCount.Metric,
@@ -26,6 +24,8 @@ public static class StepCountMapper
             Device = stepCount.Device,
             EnteredBy = stepCount.EnteredBy,
             UtcOffset = stepCount.UtcOffset,
+            DataSource = stepCount.DataSource,
+            SyncIdentifier = stepCount.SyncIdentifier,
         };
     }
 
@@ -43,6 +43,8 @@ public static class StepCountMapper
             Device = entity.Device,
             EnteredBy = entity.EnteredBy,
             UtcOffset = entity.UtcOffset,
+            DataSource = entity.DataSource,
+            SyncIdentifier = entity.SyncIdentifier,
         };
     }
 
@@ -57,25 +59,7 @@ public static class StepCountMapper
         entity.Device = stepCount.Device;
         entity.EnteredBy = stepCount.EnteredBy;
         entity.UtcOffset = stepCount.UtcOffset;
-        entity.SysUpdatedAt = DateTime.UtcNow;
-    }
-
-    /// <summary>
-    /// Parse string ID to GUID, or generate a deterministic GUID via hash if invalid
-    /// </summary>
-    private static Guid ParseIdToGuid(string id)
-    {
-        if (string.IsNullOrEmpty(id))
-            return Guid.CreateVersion7();
-
-        if (Guid.TryParse(id, out var guid))
-            return guid;
-
-        var hash = System.Security.Cryptography.SHA1.HashData(
-            System.Text.Encoding.UTF8.GetBytes(id)
-        );
-        var guidBytes = new byte[16];
-        Array.Copy(hash, guidBytes, 16);
-        return new Guid(guidBytes);
+        entity.DataSource = stepCount.DataSource;
+        entity.SyncIdentifier = stepCount.SyncIdentifier;
     }
 }

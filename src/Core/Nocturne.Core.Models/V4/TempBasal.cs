@@ -22,8 +22,13 @@ namespace Nocturne.Core.Models.V4;
 /// <seealso cref="ApsSnapshot"/>
 /// <seealso cref="BasalSchedule"/>
 /// <seealso cref="Device"/>
-public class TempBasal
+public class TempBasal : IDeviceAttributed
 {
+    /// <summary>
+    /// Attribution timestamp for device matching — the span start.
+    /// </summary>
+    DateTime IDeviceAttributed.Timestamp => StartTimestamp;
+
     /// <summary>
     /// UUID v7 primary key
     /// </summary>
@@ -121,6 +126,12 @@ public class TempBasal
     /// Pump-specific record identifier for deduplication.
     /// </summary>
     public string? PumpRecordId { get; set; }
+
+    /// <summary>
+    /// Stable per-source identifier. Records matched on (DataSource, SyncIdentifier) are updated in
+    /// place on re-upload instead of duplicated, so uploader retries are idempotent.
+    /// </summary>
+    public string? SyncIdentifier { get; set; }
 
     /// <summary>
     /// FK to the <see cref="ApsSnapshot"/> whose algorithm decision set this temp basal.

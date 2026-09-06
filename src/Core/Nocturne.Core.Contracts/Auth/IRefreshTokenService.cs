@@ -66,11 +66,40 @@ public interface IRefreshTokenService
     Task<int> RevokeRefreshTokensByOidcSessionAsync(string oidcSessionId, string reason);
 
     /// <summary>
-    /// Get all active refresh tokens for a subject (for session management UI)
+    /// Get all active sessions for a subject (for session management UI).
+    /// Tokens are grouped by OIDC session ID — one entry per login/device,
+    /// since a rotation chain shares a single session ID.
     /// </summary>
     /// <param name="subjectId">Subject identifier</param>
     /// <returns>List of active sessions</returns>
     Task<List<RefreshTokenInfo>> GetActiveSessionsForSubjectAsync(Guid subjectId);
+
+    /// <summary>
+    /// Resolve the session key (OIDC session ID, or token ID for legacy tokens
+    /// issued before sessions were tagged) for a presented refresh token.
+    /// </summary>
+    /// <param name="refreshToken">Plain refresh token string</param>
+    /// <returns>Session key, or null if the token is unknown</returns>
+    Task<string?> GetSessionIdForTokenAsync(string refreshToken);
+
+    /// <summary>
+    /// Revoke a single session belonging to a subject. The subject scope makes
+    /// this safe to call with a client-supplied session ID.
+    /// </summary>
+    /// <param name="subjectId">Subject identifier (ownership guard)</param>
+    /// <param name="sessionId">Session key as returned by <see cref="GetActiveSessionsForSubjectAsync"/></param>
+    /// <param name="reason">Reason for revocation</param>
+    /// <returns>Number of tokens revoked</returns>
+    Task<int> RevokeSessionForSubjectAsync(Guid subjectId, string sessionId, string reason);
+
+    /// <summary>
+    /// Revoke every session of a subject except the given one (log out everywhere else).
+    /// </summary>
+    /// <param name="subjectId">Subject identifier</param>
+    /// <param name="currentSessionId">Session key to keep</param>
+    /// <param name="reason">Reason for revocation</param>
+    /// <returns>Number of tokens revoked</returns>
+    Task<int> RevokeOtherSessionsForSubjectAsync(Guid subjectId, string currentSessionId, string reason);
 
     /// <summary>
     /// Update last used timestamp for a refresh token
@@ -95,6 +124,12 @@ public class RefreshTokenInfo
     /// Token ID (not the token itself)
     /// </summary>
     public Guid Id { get; set; }
+
+    /// <summary>
+    /// Session key: the OIDC session ID shared by the token's rotation chain,
+    /// or the token ID for legacy tokens issued before sessions were tagged.
+    /// </summary>
+    public string? OidcSessionId { get; set; }
 
     /// <summary>
     /// Device description

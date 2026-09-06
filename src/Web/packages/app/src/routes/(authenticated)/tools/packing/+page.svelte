@@ -17,6 +17,7 @@
   import SupplyCategory from "$lib/components/tools/packing/supply-category.svelte";
   import { categories } from "$lib/components/tools/packing/packing-config";
   import { getPackingHints } from "./packing.remote";
+  import { encodeBase64Utf8 } from "$lib/utils";
 
   const hintsQuery = getPackingHints();
   const hints = $derived(hintsQuery.current);
@@ -53,7 +54,7 @@
       });
     });
 
-    const encoded = btoa(JSON.stringify(items));
+    const encoded = encodeBase64Utf8(JSON.stringify(items));
     goto(`/tools/packing/list?d=${encodeURIComponent(encoded)}`);
   }
 

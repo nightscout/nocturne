@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Text.Json;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Legacy;
@@ -36,9 +37,6 @@ public class DDataService : IDDataService
         "loop",
         "xdripjs",
     };
-
-    // Constant for mmol/L to mg/dL conversion
-    private const double MMOL_TO_MGDL = 18.0182;
 
     public DDataService(
         IEntryStore store,
@@ -378,9 +376,9 @@ public class DDataService : IDDataService
             if (!string.IsNullOrEmpty(treatment.Units) && treatment.Units == "mmol")
             {
                 if (treatment.TargetTop.HasValue)
-                    treatment.TargetTop = treatment.TargetTop * MMOL_TO_MGDL;
+                    treatment.TargetTop = treatment.TargetTop * GlucoseConstants.MgdlPerMmol;
                 if (treatment.TargetBottom.HasValue)
-                    treatment.TargetBottom = treatment.TargetBottom * MMOL_TO_MGDL;
+                    treatment.TargetBottom = treatment.TargetBottom * GlucoseConstants.MgdlPerMmol;
                 treatment.Units = "mg/dl";
                 converted = true;
             }
@@ -395,9 +393,9 @@ public class DDataService : IDDataService
             )
             {
                 if (treatment.TargetTop.HasValue)
-                    treatment.TargetTop = treatment.TargetTop * MMOL_TO_MGDL;
+                    treatment.TargetTop = treatment.TargetTop * GlucoseConstants.MgdlPerMmol;
                 if (treatment.TargetBottom.HasValue)
-                    treatment.TargetBottom = treatment.TargetBottom * MMOL_TO_MGDL;
+                    treatment.TargetBottom = treatment.TargetBottom * GlucoseConstants.MgdlPerMmol;
                 treatment.Units = "mg/dl";
             }
         }

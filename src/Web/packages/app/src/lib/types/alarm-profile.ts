@@ -74,7 +74,7 @@ export interface AlarmVisualSettings {
   /** Whether to show emergency contacts during alarm overlay */
   showEmergencyContacts: boolean;
   /** Custom instructions for emergency contacts */
-  emergencyInstructions?: string;
+  emergencyInstructions?: string | null;
 }
 
 /** Snooze settings for an alarm */
@@ -248,20 +248,8 @@ export interface UserAlarmConfiguration {
   customSounds: CustomSoundReference[];
   /** Emergency contacts to notify for urgent alarms */
   emergencyContacts: EmergencyContactConfig[];
-  /** Quiet hours configuration */
-  quietHours: QuietHoursConfig;
   /** Notification channels configuration */
   channels: NotificationChannelsConfig;
-}
-
-/** Quiet hours configuration for reducing alarm volume during sleep */
-export interface QuietHoursConfig {
-  enabled: boolean;
-  startTime: string;
-  endTime: string;
-  allowCritical: boolean;
-  reduceVolume: boolean;
-  quietVolume: number;
 }
 
 /** Built-in sound presets */
@@ -603,14 +591,6 @@ export function createDefaultUserAlarmConfiguration(): UserAlarmConfiguration {
       createDefaultAlarmProfile("Low"),
       createDefaultAlarmProfile("UrgentLow"),
     ],
-    quietHours: {
-      enabled: false,
-      startTime: "22:00",
-      endTime: "07:00",
-      allowCritical: true,
-      reduceVolume: true,
-      quietVolume: 30,
-    },
     customSounds: [],
     emergencyContacts: [],
     channels: {

@@ -27,18 +27,18 @@ namespace Nocturne.API.Controllers.V3;
 public class EntriesController : BaseV3Controller<Entry>
 {
     private readonly IEntryService _entryService;
-    private readonly IAlertOrchestrator _alertOrchestrator;
+    private readonly ICanonicalAlertEvaluator _alertEvaluator;
 
     public EntriesController(
         IDocumentProcessingService documentProcessingService,
         IEntryService entryService,
-        IAlertOrchestrator alertOrchestrator,
+        ICanonicalAlertEvaluator alertEvaluator,
         ILogger<EntriesController> logger
     )
         : base(documentProcessingService, logger)
     {
         _entryService = entryService;
-        _alertOrchestrator = alertOrchestrator;
+        _alertEvaluator = alertEvaluator;
     }
 
     /// <summary>
@@ -65,6 +65,8 @@ public class EntriesController : BaseV3Controller<Entry>
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(304)]
     [ProducesResponseType(500)]
+    [RequireScope(Scope.GlucoseRead)]
+    [ErrorEnvelope]
     public async Task<ActionResult> GetEntries(CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
@@ -105,9 +107,8 @@ public class EntriesController : BaseV3Controller<Entry>
 
             // Check for conditional requests (304 Not Modified)
             var lastModified = GetLastModified(entriesList);
-            var etag = GenerateETag(entriesList);
 
-            if (ShouldReturn304(etag, lastModified, parameters))
+            if (ShouldReturn304(lastModified, parameters))
             {
                 return StatusCode(304);
             }
@@ -128,11 +129,6 @@ public class EntriesController : BaseV3Controller<Entry>
             _logger.LogWarning(ex, "Invalid V3 entries request parameters");
             return CreateV3ErrorResponse(400, "Invalid request parameters", ex.Message);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving V3 entries");
-            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
-        }
     }
 
     /// <summary>
@@ -146,6 +142,8 @@ public class EntriesController : BaseV3Controller<Entry>
     [ProducesResponseType(typeof(Entry), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(500)]
+    [RequireScope(Scope.GlucoseRead)]
+    [ErrorEnvelope]
     public async Task<ActionResult<Entry>> GetEntry(
         string id,
         CancellationToken cancellationToken = default
@@ -153,31 +151,22 @@ public class EntriesController : BaseV3Controller<Entry>
     {
         _logger.LogDebug("V3 entry by ID requested: {Id}", id);
 
-        try
+        var entry = await _entryService.GetEntryByIdAsync(id, cancellationToken);
+
+        if (entry == null)
         {
-            var entry = await _entryService.GetEntryByIdAsync(id, cancellationToken);
-
-            if (entry == null)
-            {
-                return CreateV3ErrorResponse(
-                    404,
-                    "Entry not found",
-                    $"No entry found with ID: {id}"
-                );
-            }
-
-            // Set appropriate headers
-            var etag = GenerateETag(new[] { entry });
-            Response.Headers["ETag"] = $"\"{etag}\"";
-            Response.Headers["Cache-Control"] = "public, max-age=60";
-
-            return Ok(entry.ToV3Response());
+            return CreateV3ErrorResponse(
+                404,
+                "Entry not found",
+                $"No entry found with ID: {id}"
+            );
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving V3 entry {Id}", id);
-            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
-        }
+
+        // Set appropriate headers
+        Response.Headers["ETag"] = FormatCursorETag(entry.Mills);
+        Response.Headers["Cache-Control"] = "public, max-age=60";
+
+        return Ok(entry.ToV3Response());
     }
 
     /// <summary>
@@ -198,11 +187,12 @@ public class EntriesController : BaseV3Controller<Entry>
     /// <response code="500">Internal server error.</response>
     [HttpPost]
     [Authorize]
-    [RequireScope(OAuthScopes.GlucoseReadWrite)]
+    [RequireScope(Scope.GlucoseReadWrite)]
     [NightscoutEndpoint("/api/v3/entries")]
     [ProducesResponseType(typeof(Entry), 201)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<Entry>> CreateEntry(
         [FromBody] Entry entry,
         CancellationToken cancellationToken = default
@@ -234,13 +224,14 @@ public class EntriesController : BaseV3Controller<Entry>
                 );
                 if (existingEntry != null)
                 {
+                    var existingIdentifier = MongoObjectId.Coerce(existingEntry.Id);
                     return Ok(
                         new
                         {
                             status = 200,
-                            identifier = existingEntry.Id,
+                            identifier = existingIdentifier,
                             isDeduplication = true,
-                            deduplicatedIdentifier = existingEntry.Id,
+                            deduplicatedIdentifier = existingIdentifier,
                         }
                     );
                 }
@@ -250,7 +241,7 @@ public class EntriesController : BaseV3Controller<Entry>
             var processedEntry = _documentProcessingService.ProcessEntry(entry); // Save to database
             var createdEntries = await _entryService.CreateEntriesAsync(
                 new[] { processedEntry },
-                cancellationToken
+                cancellationToken: cancellationToken
             );
             var createdEntry = createdEntries.FirstOrDefault();
 
@@ -267,12 +258,10 @@ public class EntriesController : BaseV3Controller<Entry>
 
             await EvaluateAlertsAsync(new[] { createdEntry }, cancellationToken);
 
-            // Set location header for created resource
-            Response.Headers["Location"] = $"/api/v3/entries/{createdEntry.Id}";
-
+            // Location resolves to the 24-hex ObjectId that matches the response body identifier.
             return CreatedAtAction(
                 nameof(GetEntry),
-                new { id = createdEntry.Id },
+                new { id = MongoObjectId.Coerce(createdEntry.Id) },
                 createdEntry.ToV3Response()
             );
         }
@@ -280,11 +269,6 @@ public class EntriesController : BaseV3Controller<Entry>
         {
             _logger.LogWarning(ex, "Invalid V3 entry data");
             return CreateV3ErrorResponse(400, "Invalid entry data", ex.Message);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating V3 entry");
-            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
         }
     }
 
@@ -296,11 +280,12 @@ public class EntriesController : BaseV3Controller<Entry>
     /// <returns>Created entries</returns>
     [HttpPost("bulk")]
     [Authorize]
-    [RequireScope(OAuthScopes.GlucoseReadWrite)]
+    [RequireScope(Scope.GlucoseReadWrite)]
     [NightscoutEndpoint("/api/v3/entries/bulk")]
     [ProducesResponseType(typeof(Entry[]), 201)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<Entry[]>> CreateEntries(
         [FromBody] Entry[] entries,
         CancellationToken cancellationToken = default
@@ -340,7 +325,7 @@ public class EntriesController : BaseV3Controller<Entry>
             // Save to database
             var createdEntries = await _entryService.CreateEntriesAsync(
                 processedEntries,
-                cancellationToken
+                cancellationToken: cancellationToken
             );
 
             _logger.LogDebug(
@@ -357,11 +342,6 @@ public class EntriesController : BaseV3Controller<Entry>
             _logger.LogWarning(ex, "Invalid V3 bulk entry data");
             return CreateV3ErrorResponse(400, "Invalid entries data", ex.Message);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating V3 bulk entries");
-            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
-        }
     }
 
     /// <summary>
@@ -373,12 +353,13 @@ public class EntriesController : BaseV3Controller<Entry>
     /// <returns>Updated entry</returns>
     [HttpPut("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.GlucoseReadWrite)]
+    [RequireScope(Scope.GlucoseReadWrite)]
     [NightscoutEndpoint("/api/v3/entries/:id")]
     [ProducesResponseType(typeof(Entry), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<Entry>> UpdateEntry(
         string id,
         [FromBody] Entry entry,
@@ -429,11 +410,6 @@ public class EntriesController : BaseV3Controller<Entry>
             _logger.LogWarning(ex, "Invalid V3 entry update data for {Id}", id);
             return CreateV3ErrorResponse(400, "Invalid entry data", ex.Message);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error updating V3 entry {Id}", id);
-            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
-        }
     }
 
     /// <summary>
@@ -444,11 +420,12 @@ public class EntriesController : BaseV3Controller<Entry>
     /// <returns>No content on success</returns>
     [HttpDelete("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.FullAccess)]
+    [RequireScope(Scope.GlucoseReadWrite)]
     [NightscoutEndpoint("/api/v3/entries/:id")]
     [ProducesResponseType(204)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult> DeleteEntry(
         string id,
         CancellationToken cancellationToken = default
@@ -456,28 +433,20 @@ public class EntriesController : BaseV3Controller<Entry>
     {
         _logger.LogDebug("V3 entry deletion requested for {Id}", id);
 
-        try
+        var deleted = await _entryService.DeleteEntryAsync(id, cancellationToken);
+
+        if (!deleted)
         {
-            var deleted = await _entryService.DeleteEntryAsync(id, cancellationToken);
-
-            if (!deleted)
-            {
-                return CreateV3ErrorResponse(
-                    404,
-                    "Entry not found",
-                    $"No entry found with ID: {id}"
-                );
-            }
-
-            _logger.LogDebug("Successfully deleted V3 entry {Id}", id);
-
-            return NoContent();
+            return CreateV3ErrorResponse(
+                404,
+                "Entry not found",
+                $"No entry found with ID: {id}"
+            );
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting V3 entry {Id}", id);
-            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
-        }
+
+        _logger.LogDebug("Successfully deleted V3 entry {Id}", id);
+
+        return NoContent();
     }
 
     /// <summary>
@@ -493,6 +462,8 @@ public class EntriesController : BaseV3Controller<Entry>
     [NightscoutEndpoint("/api/v3/entries/history/{lastModified}")]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(500)]
+    [RequireScope(Scope.GlucoseRead)]
+    [ErrorEnvelope]
     public async Task<ActionResult> GetEntryHistory(
         long lastModified,
         [FromQuery] int limit = 1000,
@@ -505,29 +476,32 @@ public class EntriesController : BaseV3Controller<Entry>
             limit
         );
 
-        try
-        {
-            limit = Math.Min(Math.Max(limit, 1), 1000);
+        limit = Math.Min(Math.Max(limit, 1), 1000);
 
-            // Build a find query for entries since the given timestamp
-            var findQuery = $"{{\"date\":{{\"$gte\":{lastModified}}}}}";
-            var entries = await _entryService.GetEntriesWithAdvancedFilterAsync(
-                type: null,
-                count: limit,
-                skip: 0,
-                findQuery: findQuery,
-                dateString: null,
-                reverseResults: false,
-                cancellationToken: cancellationToken
-            );
-            var v3Entries = entries.ToV3Responses().ToList();
-            return CreateV3SuccessResponse(v3Entries);
-        }
-        catch (Exception ex)
+        // Build a find query for entries strictly newer than the cursor. Strictly-greater
+        // (not $gte) so the cursor record AAPS already holds is not re-returned, which
+        // would otherwise loop the incremental sync.
+        var findQuery = $"{{\"date\":{{\"$gt\":{lastModified}}}}}";
+        // Page oldest-first (reverseResults: true -> ascending) so a backlog larger than one
+        // page advances the cursor forward record by record. Newest-first would set the
+        // cursor to the newest of the first page and skip every older unsynced entry.
+        var entries = (await _entryService.GetEntriesWithAdvancedFilterAsync(
+            type: null,
+            count: limit,
+            skip: 0,
+            findQuery: findQuery,
+            dateString: null,
+            reverseResults: true,
+            cancellationToken: cancellationToken
+        )).ToList();
+
+        if (entries.Count > 0)
         {
-            _logger.LogError(ex, "Error retrieving entry history");
-            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
+            SetHistoryCursorHeaders(entries.Max(e => e.Mills));
         }
+
+        var v3Entries = entries.ToV3Responses().ToList();
+        return CreateV3SuccessResponse(v3Entries);
     }
 
     #region Helper Methods
@@ -653,39 +627,12 @@ public class EntriesController : BaseV3Controller<Entry>
         return DateTimeOffset.FromUnixTimeMilliseconds(latestMills);
     }
 
-    private string GetUserId()
-    {
-        var authContext = HttpContext.GetAuthContext();
-        return authContext?.SubjectId?.ToString()
-            ?? HttpContext.GetSubjectIdString()
-            ?? "00000000-0000-0000-0000-000000000001";
-    }
-
     private async Task EvaluateAlertsAsync(Entry[] entries, CancellationToken ct)
     {
-        try
-        {
-            var latest = entries
-                .Where(e => e.Sgv.HasValue && e.Sgv.Value > 0)
-                .OrderByDescending(e => e.Mills)
-                .FirstOrDefault();
-
-            if (latest is null) return;
-
-            var context = new SensorContext
-            {
-                LatestValue = (decimal?)latest.Sgv,
-                LatestTimestamp = latest.Date ?? DateTimeOffset.FromUnixTimeMilliseconds(latest.Mills).UtcDateTime,
-                TrendRate = (decimal?)latest.TrendRate,
-                LastReadingAt = latest.Date ?? DateTimeOffset.FromUnixTimeMilliseconds(latest.Mills).UtcDateTime,
-            };
-
-            await _alertOrchestrator.EvaluateAsync(context, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Alert evaluation failed after V3 entry creation");
-        }
+        // Alarms evaluate against the canonical stream, not the just-uploaded batch — a losing
+        // CGM's readings must not trigger or suppress an alarm.
+        if (entries.Any(e => e.Sgv is > 0))
+            await _alertEvaluator.EvaluateAsync(ct);
     }
 
     #endregion

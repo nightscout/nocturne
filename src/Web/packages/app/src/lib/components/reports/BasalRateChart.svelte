@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Chart, Svg, Area, Text, Rule } from "layerchart";
+  import { Chart, Svg, Area, Rule } from "layerchart";
   import { scaleTime, scaleLinear } from "d3-scale";
   import { curveStepAfter } from "d3-shape";
 
@@ -45,37 +45,44 @@
       yDomain={[0, maxRate]}
       padding={{ top: 4, right: 30, bottom: 0, left: 50 }}
     >
-      <Svg>
-        {#if showDefaultLine}
-          <Rule
-            y={defaultRate}
-            class="stroke-muted-foreground/50"
-            stroke-dasharray="4,4"
+      {#snippet children({ context })}
+        <Svg>
+          {#if showDefaultLine}
+            <Rule
+              y={defaultRate}
+              class="stroke-muted-foreground/50"
+              stroke-dasharray="4,4"
+            />
+          {/if}
+
+          <Area
+            y0={0}
+            curve={curveStepAfter}
+            class="fill-cyan-500/30 stroke-cyan-400 stroke-1"
           />
-        {/if}
 
-        <Area
-          y0={0}
-          curve={curveStepAfter}
-          class="fill-cyan-500/30 stroke-cyan-400 stroke-1"
-        />
-
-        <Text x={4} y={4} class="text-[10px] fill-muted-foreground font-medium">
-          BASAL
-        </Text>
-
-        {#if showDefaultLine}
-          <Text
-            x={98}
-            y={defaultRate}
-            textAnchor="end"
-            dy={-2}
-            class="text-[8px] fill-muted-foreground"
+          <text
+            x={4}
+            y={4}
+            dy="-0.355em"
+            class="text-[10px] fill-muted-foreground font-medium"
           >
-            {defaultRate.toFixed(2)} U/hr
-          </Text>
-        {/if}
-      </Svg>
+            BASAL
+          </text>
+
+          {#if showDefaultLine}
+            <text
+              x={98}
+              y={context.yScale(defaultRate) - 2}
+              dy="-0.355em"
+              text-anchor="end"
+              class="text-[8px] fill-muted-foreground"
+            >
+              {defaultRate.toFixed(2)} U/hr
+            </text>
+          {/if}
+        </Svg>
+      {/snippet}
     </Chart>
   {:else}
     <div

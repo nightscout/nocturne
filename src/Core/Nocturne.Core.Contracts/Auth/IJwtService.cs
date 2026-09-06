@@ -39,6 +39,10 @@ public interface IJwtService
     /// <param name="platformAccess">When true, marks this token as a platform-admin tenant-access
     /// grant. Combined with <paramref name="tenantId"/>, this is what authorizes out-of-tenant
     /// superuser access — a marker that no ordinary tenant-pinned token carries.</param>
+    /// <param name="grantId">The OAuth grant this token was minted from. Access tokens are
+    /// stateless, so this is what lets a grant revocation invalidate them: the authenticating
+    /// handler rejects a token whose grant is revoked. Omit only for tokens that have no grant
+    /// behind them (platform access, recovery, connector link tokens).</param>
     /// <returns>JWT access token string</returns>
     string GenerateAccessToken(
         SubjectInfo subject,
@@ -49,7 +53,8 @@ public interface IJwtService
         bool limitTo24Hours = false,
         Guid? tenantId = null,
         TimeSpan? lifetime = null,
-        bool platformAccess = false
+        bool platformAccess = false,
+        Guid? grantId = null
     );
 
     /// <summary>
@@ -209,6 +214,12 @@ public class JwtClaims
     /// last 24 hours (rolling window from current request time).
     /// </summary>
     public bool LimitTo24Hours { get; set; }
+
+    /// <summary>
+    /// The OAuth grant this token was minted from, if any. Null for tokens with no grant behind
+    /// them. When set, the grant's revocation state decides whether the token is still usable.
+    /// </summary>
+    public Guid? GrantId { get; set; }
 
     /// <summary>
     /// JWT ID (jti claim)

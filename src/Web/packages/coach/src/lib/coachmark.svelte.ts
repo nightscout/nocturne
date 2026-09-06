@@ -79,7 +79,9 @@ export function coachmark(options: CoachMarkOptions | CoachMarkOptions[]) {
     dot.setAttribute("type", "button");
     dot.addEventListener("click", (e) => {
       e.stopPropagation();
-      // Delegate to whichever key is currently active/eligible
+      // Delegate to whichever key is currently active/eligible. A dot with no such key raises
+      // nothing: the alternative is a fallback that shows a tip the marks are switched off, or
+      // the reader has already finished or dismissed.
       for (const { opts, reg } of registrations) {
         const status = ctx.getStatus(opts.key);
         if (status === "completed" || status === "dismissed") continue;
@@ -87,8 +89,6 @@ export function coachmark(options: CoachMarkOptions | CoachMarkOptions[]) {
         ctx.activate(opts.key, reg.step);
         return;
       }
-      // Fallback: activate first key
-      ctx.activate(registrations[0].opts.key, registrations[0].reg.step);
     });
 
     // Position the element relatively if needed

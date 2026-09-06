@@ -4,6 +4,7 @@
 import { getRequestEvent, query, form } from "$app/server";
 import { z } from "zod";
 import { error, invalid, redirect } from "@sveltejs/kit";
+import { deviceApprove } from "$api/generated/oAuths.generated.remote";
 
 // ============================================================================
 // Query Functions
@@ -97,60 +98,11 @@ const deviceApproveSchema = z.object({
 });
 
 /**
- * Call the device-approve endpoint with application/x-www-form-urlencoded.
- *
- * The NSwag-generated client sends FormData (multipart/form-data), but the
- * OAuth endpoint requires application/x-www-form-urlencoded per RFC 8628.
- * This helper sends the correct content type and forwards the Host/Cookie
- * headers needed for tenant resolution and authentication.
- */
-async function callDeviceApprove(
-  event: ReturnType<typeof getRequestEvent>,
-  userCode: string,
-  approved: boolean
-): Promise<void> {
-  const { apiClient } = event.locals;
-
-  const body = new URLSearchParams();
-  body.set("user_code", userCode);
-  body.set("approved", approved.toString());
-
-  const headers: Record<string, string> = {
-    "Content-Type": "application/x-www-form-urlencoded",
-  };
-  const originalHost = event.request.headers.get("host");
-  if (originalHost) {
-    headers["X-Forwarded-Host"] = originalHost;
-  }
-  const cookie = event.request.headers.get("cookie");
-  if (cookie) {
-    headers["Cookie"] = cookie;
-  }
-
-  const response = await event.fetch(`${apiClient.baseUrl}/api/oauth/device-approve`, {
-    method: "POST",
-    headers,
-    body: body.toString(),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error("Device approve failed:", response.status, errorText);
-    throw new Error(`Device approval failed: ${response.status}`);
-  }
-}
-
-/**
  * Form handler to approve a device authorization request
  */
 export const approveDeviceForm = form(deviceApproveSchema, async (data, issue) => {
-  const event = getRequestEvent();
-  if (!event) {
-    throw new Error("Request event not available");
-  }
-
   try {
-    await callDeviceApprove(event, data.user_code, true);
+    await deviceApprove({ user_code: data.user_code, approved: true });
     return { success: true };
   } catch (err) {
     console.error("Error approving device:", err);
@@ -162,13 +114,8 @@ export const approveDeviceForm = form(deviceApproveSchema, async (data, issue) =
  * Form handler to deny a device authorization request
  */
 export const denyDeviceForm = form(deviceApproveSchema, async (data, issue) => {
-  const event = getRequestEvent();
-  if (!event) {
-    throw new Error("Request event not available");
-  }
-
   try {
-    await callDeviceApprove(event, data.user_code, false);
+    await deviceApprove({ user_code: data.user_code, approved: false });
     return { denied: true };
   } catch (err) {
     console.error("Error denying device:", err);

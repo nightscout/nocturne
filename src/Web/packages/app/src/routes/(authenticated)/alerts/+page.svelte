@@ -1,5 +1,10 @@
 <script lang="ts">
+  import { formatClock } from "$lib/utils/formatting";
   import { goto } from "$app/navigation";
+  import { page } from "$app/state";
+  import { toast } from "svelte-sonner";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
+  import { permissionGatedMutationError } from "$lib/forms";
   import {
     getRules,
     deleteRule,
@@ -17,10 +22,8 @@
   } from "$api/generated/tenantAlertSettings.generated.remote";
   import type {
     AlertRuleResponse,
-    ActiveExcursionResponse,
     TenantAlertSettingsResponse,
   } from "$api-clients";
-  import { AlertRuleSeverity } from "$api-clients";
 
   import { Button } from "$lib/components/ui/button";
   import {
@@ -34,7 +37,24 @@
   import { Bell, Plus, AlertTriangle, Check, Loader2 } from "lucide-svelte";
 
   import AlertRuleRow from "$lib/components/alerts/AlertRuleRow.svelte";
-  import ArmedStatusStrip from "$lib/components/alerts/ArmedStatusStrip.svelte";
+  import DndNoticeStrip from "$lib/components/alerts/DndNoticeStrip.svelte";
+  import { isDndActiveNow } from "$lib/components/alerts/dnd";
+  import { severity, severityLabel } from "$lib/components/alerts/severity";
+
+  const effectivePermissions: string[] = $derived(
+    (page.data as any).effectivePermissions ?? [],
+  );
+  // Every write on this page — rule toggle/delete/test-fire, acknowledge, and
+  // clearing the manual mute — is gated on alerts.readwrite server-side.
+  const canManageAlerts = $derived(
+    effectivePermissions.includes("*") ||
+      effectivePermissions.includes("alerts.readwrite"),
+  );
+  const NEEDS_ALERTS_READWRITE =
+    "Changing alerts requires the alerts.readwrite permission.";
+
+  const mutationError = (err: unknown) =>
+    permissionGatedMutationError(err, NEEDS_ALERTS_READWRITE);
 
   // ---- Queries ----
   const rulesQuery = getRules();
@@ -49,26 +69,14 @@
   let acknowledging = $state(false);
   let disablingDnd = $state(false);
 
-  function deriveArmedState(
-    s: TenantAlertSettingsResponse | null,
-    active: ActiveExcursionResponse[],
-  ): "ok" | "warn" | "bad" | "dnd" {
-    // Lightweight heuristic — we don't (yet) have a per-channel health
-    // probe surfaced through the API, so this is currently driven entirely
-    // by DND state and active-alert count. Wire to channel health when the
-    // backend exposes it.
-    if (s?.dndManualActive || s?.dndScheduleEnabled) return "dnd";
-    if (active.length === 0) return "ok";
-    if (active.some((a) => a.severity === AlertRuleSeverity.Critical)) return "bad";
-    return "warn";
-  }
-
   // ---- Mutations ----
   async function handleToggleRule(ruleId: string): Promise<void> {
     togglingRuleId = ruleId;
     try {
       await toggleRule(ruleId);
       await rulesQuery.refresh();
+    } catch (err) {
+      toast.error(mutationError(err));
     } finally {
       togglingRuleId = null;
     }
@@ -79,6 +87,8 @@
     try {
       await deleteRule(ruleId);
       await rulesQuery.refresh();
+    } catch (err) {
+      toast.error(mutationError(err));
     } finally {
       deletingRuleId = null;
     }
@@ -88,6 +98,8 @@
     testingRuleId = ruleId;
     try {
       await testFire(ruleId);
+    } catch (err) {
+      toast.error(mutationError(err));
     } finally {
       testingRuleId = null;
     }
@@ -98,14 +110,18 @@
   ): Promise<void> {
     disablingDnd = true;
     try {
+      // Clears the manual mute only; the configured quiet-hours window is left
+      // in place.
       await updateTenantAlertSettings({
         dndManualActive: false,
         dndManualUntil: undefined,
-        dndScheduleEnabled: false,
+        dndScheduleEnabled: current.dndScheduleEnabled,
         dndScheduleStart: current.dndScheduleStart,
         dndScheduleEnd: current.dndScheduleEnd,
       });
       await dndQuery.refresh();
+    } catch (err) {
+      toast.error(mutationError(err));
     } finally {
       disablingDnd = false;
     }
@@ -114,8 +130,18 @@
   async function handleAcknowledge(): Promise<void> {
     acknowledging = true;
     try {
-      await acknowledge({ acknowledgedBy: "web_user" });
-      await activeAlertsQuery.refresh();
+      // Optimistically badge every unacknowledged excursion so the card updates
+      // at once; the command's GetActiveAlerts invalidation reconciles it in the
+      // same round-trip (same pattern as AlertBanner/FiringToast).
+      await acknowledge({}).updates(
+        activeAlertsQuery.withOverride((current) =>
+          (current ?? []).map((a) =>
+            a.acknowledgedAt ? a : { ...a, acknowledgedAt: new Date() },
+          ),
+        ),
+      );
+    } catch (err) {
+      toast.error(mutationError(err));
     } finally {
       acknowledging = false;
     }
@@ -146,11 +172,13 @@
         <p class="text-sm text-muted-foreground">Rules that decide when, how, and where you're notified.</p>
       </div>
     </div>
-    <div class="flex items-center gap-2">
-      <Button onclick={newRule}>
-        <Plus class="h-4 w-4 mr-2" /> New rule
-      </Button>
-    </div>
+    {#if canManageAlerts}
+      <div class="flex items-center gap-2">
+        <Button onclick={newRule}>
+          <Plus class="h-4 w-4 mr-2" /> New rule
+        </Button>
+      </div>
+    {/if}
   </div>
 
   <svelte:boundary>
@@ -165,7 +193,7 @@
           <div>
             <p class="font-medium">Failed to load alerts</p>
             <p class="text-sm text-muted-foreground">
-              {error instanceof Error ? error.message : "Unknown error"}
+              {remoteErrorMessage(error, "Unknown error")}
             </p>
           </div>
         </CardContent>
@@ -178,21 +206,26 @@
     {@const dnd = (await dndQuery) ?? null}
     {@const enabledCount = rules.filter((r) => r.isEnabled).length}
     {@const totalCount = rules.length}
-    {@const armedState = deriveArmedState(dnd, activeAlerts)}
     {@const ruleNamesById = new Map(
       rules.map((r) => [r.id ?? "", r.name ?? "(unnamed)"]),
     )}
     {@const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000}
-    {@const firedThisWeek = (history?.items ?? []).filter((h) => {
+    {@const fetchedHistory = history?.items ?? []}
+    {@const firedThisWeek = fetchedHistory.filter((h) => {
       const t = h.startedAt ? new Date(h.startedAt).getTime() : NaN;
       return Number.isFinite(t) && t >= cutoff;
     }).length}
+    <!-- The endpoint has no date filter, so the week is counted within one page
+         of history. When every row on that page is inside the week and the
+         server holds more, the real total is higher than we can see. -->
+    {@const firedThisWeekIsFloor =
+      firedThisWeek === fetchedHistory.length &&
+      (history?.totalCount ?? 0) > fetchedHistory.length}
 
-    <!-- Armed status strip — only meaningful once at least one rule exists. -->
-    {#if totalCount > 0}
-      <ArmedStatusStrip
-        state={armedState}
-        onDisableDnd={armedState === "dnd" && dnd ? () => handleDisableDnd(dnd) : undefined}
+    <!-- Do Not Disturb notice, shown only while a manual mute is in effect. -->
+    {#if dnd && isDndActiveNow(dnd)}
+      <DndNoticeStrip
+        onDisableDnd={canManageAlerts ? () => handleDisableDnd(dnd) : undefined}
         {disablingDnd}
       />
     {/if}
@@ -220,7 +253,9 @@
         <Card class="transition-colors hover:bg-muted/40">
           <CardContent>
             <p class="text-xs uppercase tracking-wider text-muted-foreground">Fired this week</p>
-            <p class="mt-1 text-2xl font-bold tabular-nums">{firedThisWeek}</p>
+            <p class="mt-1 text-2xl font-bold tabular-nums">
+              {firedThisWeek}{firedThisWeekIsFloor ? "+" : ""}
+            </p>
           </CardContent>
         </Card>
       </a>
@@ -236,24 +271,40 @@
               <AlertTriangle class="h-5 w-5 shrink-0" />
               <span class="truncate">Active alerts ({activeAlerts.length})</span>
             </CardTitle>
-            <Button class="@sm:shrink-0" variant="outline" size="sm" onclick={handleAcknowledge} disabled={acknowledging}>
-              {#if acknowledging}
-                <Loader2 class="h-4 w-4 mr-2 animate-spin" />
-              {:else}
-                <Check class="h-4 w-4 mr-2" />
-              {/if}
-              Acknowledge all
-            </Button>
+            {#if canManageAlerts}
+              <Button
+                class="@sm:shrink-0"
+                variant="outline"
+                size="sm"
+                onclick={handleAcknowledge}
+                disabled={acknowledging || activeAlerts.every((a) => a.acknowledgedAt)}
+              >
+                {#if acknowledging}
+                  <Loader2 class="h-4 w-4 mr-2 animate-spin" />
+                {:else}
+                  <Check class="h-4 w-4 mr-2" />
+                {/if}
+                Acknowledge all
+              </Button>
+            {/if}
           </div>
         </CardHeader>
         <CardContent class="space-y-2">
           {#each activeAlerts as a (a.id)}
             <div class="flex items-center gap-3 rounded-md border bg-background p-3">
-              <span class="h-2 w-2 rounded-full bg-status-critical" aria-hidden="true"></span>
+              <span
+                class="h-2 w-2 shrink-0 rounded-full {severity(a.severity, 'dot')}"
+                aria-hidden="true"
+              ></span>
               <div class="flex-1 min-w-0">
-                <p class="text-sm font-medium truncate">{a.ruleName ?? "Alert"}</p>
+                <p class="text-sm font-medium truncate">
+                  <span class="text-muted-foreground text-xs uppercase tracking-wider">
+                    {severityLabel(a.severity)}
+                  </span>
+                  {a.ruleName ?? "Alert"}
+                </p>
                 <p class="text-xs text-muted-foreground">
-                  Since {a.startedAt ? new Date(a.startedAt).toLocaleTimeString() : "—"}
+                  Since {a.startedAt ? formatClock(a.startedAt, { seconds: true }) : "—"}
                 </p>
               </div>
               {#if a.acknowledgedAt}
@@ -276,15 +327,18 @@
             <Bell class="mx-auto h-8 w-8 opacity-50" />
             <p class="mt-2 text-sm font-medium">No alert rules yet</p>
             <p class="mt-1 text-xs">Add a rule so Nocturne can notify you when glucose goes out of range.</p>
-            <Button class="mt-3" size="sm" onclick={newRule}>
-              <Plus class="h-4 w-4 mr-2" /> New rule
-            </Button>
+            {#if canManageAlerts}
+              <Button class="mt-3" size="sm" onclick={newRule}>
+                <Plus class="h-4 w-4 mr-2" /> New rule
+              </Button>
+            {/if}
           </div>
         {:else}
           <div class="space-y-2">
             {#each rules as rule (rule.id)}
               <AlertRuleRow
                 {rule}
+                canManage={canManageAlerts}
                 isToggling={togglingRuleId === rule.id}
                 isDeleting={deletingRuleId === rule.id}
                 isTesting={testingRuleId === rule.id}

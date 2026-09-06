@@ -12,6 +12,8 @@
         <PackageReference Include="Npgsql"/>
         <PackageReference Include="Testcontainers.PostgreSql"/>
         <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory"/>
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite"/>
+        <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3"/>
         <PackageReference Include="xunit"/>
         <PackageReference Include="xunit.abstractions"/>
     </ItemGroup>

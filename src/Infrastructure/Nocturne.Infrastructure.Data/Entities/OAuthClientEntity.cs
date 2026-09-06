@@ -9,7 +9,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// this table records clients that have been authorized at least once.
 /// </summary>
 [Table("oauth_clients")]
-public class OAuthClientEntity : ITenantScoped
+public class OAuthClientEntity : ITenantScoped, IEntityTimestamped
 {
     /// <summary>
     /// Primary key - UUID Version 7
@@ -35,7 +35,7 @@ public class OAuthClientEntity : ITenantScoped
 
     /// <summary>
     /// RFC 7591 software_id — reverse-DNS identifier that is stable across installs of the
-    /// same product (e.g., "org.trio.diabetes"). Used to match self-registering clients
+    /// same product (e.g., "org.nightscout.trio"). Used to match self-registering clients
     /// against the bundled known app directory for idempotent DCR.
     /// </summary>
     [MaxLength(255)]

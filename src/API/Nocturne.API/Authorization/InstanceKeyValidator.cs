@@ -1,4 +1,3 @@
-using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Constants;
 
 namespace Nocturne.API.Authorization;
@@ -39,6 +38,12 @@ public interface IInstanceKeyValidator
     /// Classifies the request's instance-key credential without mutating the request.
     /// </summary>
     InstanceKeyRequestKind Classify(HttpContext context);
+
+    /// <summary>
+    /// Audit identity of the configured instance key, or null when none is configured.
+    /// </summary>
+    /// <seealso cref="InstanceKeyDigest.ResolveFingerprint"/>
+    string? KeyFingerprint { get; }
 }
 
 /// <inheritdoc />
@@ -48,12 +53,12 @@ public class InstanceKeyValidator : IInstanceKeyValidator
 
     public InstanceKeyValidator(IConfiguration configuration)
     {
-        var instanceKey =
-            configuration[$"Parameters:{ServiceNames.Parameters.InstanceKey}"]
-            ?? configuration[ServiceNames.ConfigKeys.InstanceKey]
-            ?? "";
-        _instanceKeyHash = !string.IsNullOrEmpty(instanceKey) ? HashUtils.Sha256Hex(instanceKey) : "";
+        _instanceKeyHash = InstanceKeyDigest.Resolve(configuration);
+        KeyFingerprint = InstanceKeyDigest.ResolveFingerprint(configuration);
     }
+
+    /// <inheritdoc />
+    public string? KeyFingerprint { get; }
 
     /// <inheritdoc />
     public InstanceKeyRequestKind Classify(HttpContext context)

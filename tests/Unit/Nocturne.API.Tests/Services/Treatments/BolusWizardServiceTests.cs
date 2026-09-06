@@ -1,5 +1,6 @@
 using Moq;
 using Nocturne.API.Services.Treatments;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Xunit;
@@ -347,7 +348,10 @@ public class BolusWizardServiceTests
         // Create concrete Entry object instead of mocking
         var entry = new Entry
         {
-            Mgdl = (int)Math.Round(currentBG * (profileData.Units == "mmol" ? 18.01559 : 1)),
+            Mgdl = (int)
+                Math.Round(
+                    currentBG * (profileData.Units == "mmol" ? GlucoseConstants.MgdlPerMmol : 1)
+                ),
             Mills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
         };
 

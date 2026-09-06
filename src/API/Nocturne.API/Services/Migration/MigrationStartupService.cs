@@ -84,15 +84,18 @@ public class MigrationStartupService : IHostedService
 
     private string? GetSourceIdentifier(string migrationMode)
     {
+        // Must produce byte-identical identifiers to MigrationJob.UpsertSourceAsync, or the
+        // "was this source ever migrated?" check can never match and the pending-migration
+        // notification reappears on every boot.
         if (migrationMode.Equals("MongoDb", StringComparison.OrdinalIgnoreCase))
         {
-            // For MongoDB, we use the database name as identifier (don't want to hash connection string on every check)
-            return _configuration["MIGRATION_MONGO_DATABASE_NAME"];
+            var connectionString = _configuration["MIGRATION_MONGO_CONNECTION_STRING"];
+            return string.IsNullOrEmpty(connectionString)
+                ? null
+                : MigrationJob.MongoSourceIdentifier(connectionString);
         }
-        else
-        {
-            // For API mode, use the Nightscout URL as identifier
-            return _configuration["MIGRATION_NS_URL"];
-        }
+
+        var url = _configuration["MIGRATION_NS_URL"];
+        return string.IsNullOrEmpty(url) ? null : MigrationJob.ApiSourceIdentifier(url);
     }
 }

@@ -20,7 +20,6 @@ import type {
   Note,
   DeviceEvent,
   ApsSnapshot,
-  PumpModeState,
   ProfileSummary,
   SensorGlucose,
 } from "$lib/api";
@@ -75,6 +74,16 @@ export class RealtimeStore {
   private websocketClient!: WebSocketClient;
   private _initStarted = false;
 
+  /**
+   * Storage creates can arrive as hundreds of individual Socket.IO messages
+   * during connector catch-up. Applying each one immediately replaces and
+   * sorts the full entries array, which also recomputes every chart derived
+   * from it. Buffer a short burst and commit it as one reactive update.
+   */
+  private pendingEntryCreates = new Map<string, Entry>();
+  private entryCreateFlushTimeout: ReturnType<typeof setTimeout> | null = null;
+  private static readonly ENTRY_CREATE_BATCH_MS = 100;
+
   /** Loading state - false until initial data is loaded */
   isReady = $state(false);
 
@@ -91,6 +100,9 @@ export class RealtimeStore {
   /** Live sync progress by connector ID (from SignalR sync progress events) */
   syncProgressByConnector = $state<Record<string, SyncProgressEvent>>({});
 
+  /** How long a completed/failed sync stays on screen before the entry is dropped. */
+  private static readonly TERMINAL_SYNC_PROGRESS_LINGER_MS = 2_000;
+
   /** Bound event handlers for cleanup */
   private handleVisibilityChange: (() => void) | null = null;
   private handleWindowFocus: (() => void) | null = null;
@@ -99,11 +111,26 @@ export class RealtimeStore {
   private backgroundPollInterval: ReturnType<typeof setInterval> | null = null;
   private static readonly BACKGROUND_POLL_MS = 30_000; // 30s — browsers throttle setInterval to ~60s in hidden tabs, so aim for ~1 poll per minute worst-case
 
+  /** Whether a working socket has ever been established this session, so the
+   *  expected first connect isn't announced as a recovery. */
+  private hasEverConnected = false;
+  /** Whether the user has been told the connection is down, so the recovery
+   *  notice only appears if there was a loss to recover from. */
+  private announcedDisconnect = false;
+  private disconnectNoticeTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Socket.io disconnects on transport churn and page teardown, so wait to see
+   *  whether the loss is real before interrupting the user. */
+  private static readonly DISCONNECT_NOTICE_DELAY_MS = 10_000;
+
   /** Foreground safety-net poll: runs while the tab is visible to recover from a
    *  silently-stalled ("zombie") socket the browser still believes is connected. */
   private foregroundPollInterval: ReturnType<typeof setInterval> | null = null;
   private static readonly FOREGROUND_POLL_MS = 60_000; // re-check staleness every 60s while visible
   private static readonly FOREGROUND_STALE_MS = 5 * 60_000; // refetch if no data for 5 min while visible
+
+  /** Pending refetch of the records the backend derives from devicestatus. */
+  private decompositionRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+  private static readonly DECOMPOSITION_REFRESH_MS = 3_000;
 
   /** Reactive state using Svelte 5 runes - using $state.raw for arrays to avoid deep proxy issues */
   entries = $state.raw<Entry[]>([]);
@@ -121,11 +148,8 @@ export class RealtimeStore {
   deviceEvents = $state.raw<DeviceEvent[]>([]);
   apsSnapshots = $state.raw<ApsSnapshot[]>([]);
 
-  /** Current pump operational mode. Fetched once at init; not yet pushed via the realtime channel. */
-  currentPumpMode = $state<PumpModeState | null>(null);
-
-  /** Current ISF as % of profile baseline (null when no CCP adjustment is active). Fetched once at init. */
-  currentSensitivityPercent = $state<number | null>(null);
+  /** Latest pump reservoir (units), null when the pump reports no numeric level. */
+  currentReservoir = $state<number | null>(null);
 
   /** Connection state (with safe initialization) */
   connectionStatus = $derived(
@@ -174,8 +198,12 @@ export class RealtimeStore {
     return this.currentBG - this.previousBG;
   });
 
-  /** Direction and trend */
-  direction = $derived(this.currentEntry?.direction || "Flat");
+  /**
+   * Trend direction exactly as the reading carried it, empty when it carried none.
+   * Consumers render the unknown state; substituting a drawable direction here would
+   * report a trend the CGM never sent.
+   */
+  direction = $derived(this.currentEntry?.direction ?? "");
 
   /** Time since last update */
   lastUpdated = $derived(this.currentEntry?.mills || Date.now());
@@ -416,8 +444,7 @@ export class RealtimeStore {
         }
 
         if (currentTherapyState) {
-          this.currentPumpMode = currentTherapyState.currentPumpMode ?? null;
-          this.currentSensitivityPercent = currentTherapyState.sensitivityPercent ?? null;
+          this.currentReservoir = currentTherapyState.reservoir ?? null;
         }
 
         this.isReady = true;
@@ -435,14 +462,27 @@ export class RealtimeStore {
   /** Setup WebSocket event handlers */
   private setupEventHandlers(): void {
     this.websocketClient.on("connect", () => {
-      toast.success("Connected to real-time data");
+      this.clearDisconnectNotice();
+      // Connecting on page load is expected and needs no announcement; only
+      // report a recovery from a loss the user was actually told about.
+      if (this.announcedDisconnect) {
+        toast.success("Reconnected to real-time data");
+        this.announcedDisconnect = false;
+      }
+      this.hasEverConnected = true;
       // Always force backfill on reconnection — any disconnection may have
       // caused missed data, even if the gap was under 5 minutes.
       this.performBackfillIfNeeded(true);
     });
 
     this.websocketClient.on("disconnect", () => {
-      toast.warning("Real-time data disconnected");
+      if (!this.hasEverConnected || this.announcedDisconnect) return;
+      if (this.disconnectNoticeTimer) return;
+      this.disconnectNoticeTimer = setTimeout(() => {
+        this.disconnectNoticeTimer = null;
+        this.announcedDisconnect = true;
+        toast.warning("Real-time data disconnected");
+      }, RealtimeStore.DISCONNECT_NOTICE_DELAY_MS);
     });
 
     this.websocketClient.on("connect_error", () => {
@@ -495,16 +535,16 @@ export class RealtimeStore {
     });
 
     this.websocketClient.on("syncProgress", (event: SyncProgressEvent) => {
-      if (event.phase === "Syncing") {
-        this.syncProgressByConnector = { ...this.syncProgressByConnector, [event.connectorId]: event };
-      } else {
-        // Show completed/failed state briefly, then clear
-        this.syncProgressByConnector = { ...this.syncProgressByConnector, [event.connectorId]: event };
-        setTimeout(() => {
-          const { [event.connectorId]: _, ...rest } = this.syncProgressByConnector;
-          this.syncProgressByConnector = rest;
-        }, 2000);
-      }
+      this.syncProgressByConnector = { ...this.syncProgressByConnector, [event.connectorId]: event };
+      if (event.phase === "Syncing") return;
+
+      // Show the completed/failed state briefly, then clear — unless a new run for the same
+      // connector has already replaced it.
+      setTimeout(() => {
+        if (this.syncProgressByConnector[event.connectorId] !== event) return;
+        const { [event.connectorId]: _, ...rest } = this.syncProgressByConnector;
+        this.syncProgressByConnector = rest;
+      }, RealtimeStore.TERMINAL_SYNC_PROGRESS_LINGER_MS);
     });
 
   }
@@ -539,18 +579,7 @@ export class RealtimeStore {
     this.updateLastDataReceived();
 
     if (colName === "entries" && this.isEntry(doc)) {
-      // Check for duplicates
-      const exists = this.entries.some(
-        (entry) =>
-          entry._id === doc._id ||
-          (entry.mills === doc.mills && entry.sgv === doc.sgv)
-      );
-
-      if (!exists) {
-        this.entries = [doc, ...this.entries]
-          .sort((a, b) => (b.mills || 0) - (a.mills || 0))
-          .slice(0, 1000);
-      }
+      this.queueEntryCreate(doc);
     } else if (colName === "devicestatus" && this.isDeviceStatus(doc)) {
       const exists = this.deviceStatuses.some(
         (ds) => ds._id === doc._id
@@ -562,9 +591,67 @@ export class RealtimeStore {
           .slice(0, 100);
       }
 
-      // The backend decomposes devicestatus into an ApsSnapshot asynchronously.
-      // Wait briefly then fetch the latest snapshot so pills update in real time.
-      setTimeout(() => this.refreshLatestApsSnapshot(), 3000);
+      this.scheduleDecompositionRefresh();
+    }
+  }
+
+  private entryIdentity(entry: Entry): string {
+    return entry._id
+      ? `id:${entry._id}`
+      : this.entryReadingIdentity(entry);
+  }
+
+  private entryReadingIdentity(entry: Entry): string {
+    return `reading:${entry.mills ?? ""}:${entry.sgv ?? ""}`;
+  }
+
+  private queueEntryCreate(entry: Entry): void {
+    // A later event with the same identity wins. This also makes an update that
+    // arrives before the batch flush replace the pending create cleanly.
+    this.pendingEntryCreates.set(this.entryIdentity(entry), entry);
+    if (this.entryCreateFlushTimeout !== null) {
+      clearTimeout(this.entryCreateFlushTimeout);
+    }
+
+    this.entryCreateFlushTimeout = setTimeout(
+      () => this.flushPendingEntryCreates(),
+      RealtimeStore.ENTRY_CREATE_BATCH_MS,
+    );
+  }
+
+  private flushPendingEntryCreates(): void {
+    this.entryCreateFlushTimeout = null;
+    if (this.pendingEntryCreates.size === 0) return;
+
+    const pending = [...this.pendingEntryCreates.values()];
+    this.pendingEntryCreates.clear();
+
+    const knownIds = new Set(
+      this.entries
+        .map((entry) => entry._id)
+        .filter((id): id is string => typeof id === "string"),
+    );
+    const knownReadings = new Set(
+      this.entries.map((entry) => this.entryReadingIdentity(entry)),
+    );
+    const additions = pending.filter((entry) => {
+      const readingIdentity = this.entryReadingIdentity(entry);
+      if (
+        (typeof entry._id === "string" && knownIds.has(entry._id)) ||
+        knownReadings.has(readingIdentity)
+      ) {
+        return false;
+      }
+
+      if (typeof entry._id === "string") knownIds.add(entry._id);
+      knownReadings.add(readingIdentity);
+      return true;
+    });
+
+    if (additions.length > 0) {
+      this.entries = [...additions.reverse(), ...this.entries]
+        .sort((a, b) => (b.mills || 0) - (a.mills || 0))
+        .slice(0, 1000);
     }
   }
 
@@ -592,6 +679,7 @@ export class RealtimeStore {
     const { colName, doc } = event;
 
     if (colName === "entries") {
+      this.pendingEntryCreates.delete(this.entryIdentity(doc));
       this.entries = this.entries.filter((entry) => entry._id !== doc._id);
     }
   }
@@ -647,7 +735,7 @@ export class RealtimeStore {
         break;
 
       case "update":
-      case "ack":
+      case "ack": {
         // Update existing instance
         const updateIndex = this.trackerInstances.findIndex((i) => i.id === instance.id);
         if (updateIndex !== -1) {
@@ -661,6 +749,7 @@ export class RealtimeStore {
           ];
         }
         break;
+      }
 
       case "complete":
       case "delete":
@@ -839,8 +928,20 @@ export class RealtimeStore {
     }
   }
 
+  private clearDisconnectNotice(): void {
+    if (this.disconnectNoticeTimer) {
+      clearTimeout(this.disconnectNoticeTimer);
+      this.disconnectNoticeTimer = null;
+    }
+  }
+
   /** Cleanup */
   destroy(): void {
+    this.clearDisconnectNotice();
+    if (this.decompositionRefreshTimer) {
+      clearTimeout(this.decompositionRefreshTimer);
+      this.decompositionRefreshTimer = null;
+    }
     if (this.timeInterval) {
       clearInterval(this.timeInterval);
     }
@@ -857,6 +958,12 @@ export class RealtimeStore {
       }
     }
     this.websocketClient.destroy();
+
+    if (this.entryCreateFlushTimeout !== null) {
+      clearTimeout(this.entryCreateFlushTimeout);
+      this.entryCreateFlushTimeout = null;
+    }
+    this.pendingEntryCreates.clear();
 
     // Clear the module-level singleton so the next createRealtimeStore() builds
     // a fresh store rather than resurrecting this torn-down instance with stale
@@ -885,6 +992,32 @@ export class RealtimeStore {
     if (this.backgroundPollInterval) {
       clearInterval(this.backgroundPollInterval);
       this.backgroundPollInterval = null;
+    }
+  }
+
+  /**
+   * Queue a refetch of the records the backend derives from a devicestatus write
+   * (APS snapshots, pump snapshots), which it decomposes asynchronously. Uploaders
+   * post devicestatus in bursts, so an already-pending refresh absorbs the burst
+   * rather than firing once per document.
+   */
+  private scheduleDecompositionRefresh(): void {
+    if (this.decompositionRefreshTimer) return;
+
+    this.decompositionRefreshTimer = setTimeout(() => {
+      this.decompositionRefreshTimer = null;
+      void this.refreshLatestApsSnapshot();
+      void this.refreshCurrentReservoir();
+    }, RealtimeStore.DECOMPOSITION_REFRESH_MS);
+  }
+
+  /** Re-read the pump reservoir from the current therapy state. */
+  private async refreshCurrentReservoir(): Promise<void> {
+    try {
+      const therapyState = await getApiClient().currentTherapyState.getCurrentTherapyState();
+      this.currentReservoir = therapyState?.reservoir ?? null;
+    } catch {
+      // Non-critical — the reservoir pill keeps its last value until the next refresh.
     }
   }
 
@@ -943,6 +1076,7 @@ export class RealtimeStore {
       // Fetch all data types since last received using existing API methods
       const backfillFromDate = new Date(backfillFrom);
       const nowDate = new Date();
+      const reservoirRefresh = this.refreshCurrentReservoir();
       const [entries, deviceStatuses, boluses, carbIntakes, bgChecks, notes, devEvents, newApsSnapshots] = await Promise.all([
         apiClient.sensorGlucose.getAll(backfillFromDate, nowDate, 1000).then((r) => (r.data ?? []).map(sensorGlucoseToEntry)).catch(() => [] as Entry[]),
         Promise.resolve([] as DeviceStatus[]),
@@ -953,6 +1087,7 @@ export class RealtimeStore {
         apiClient.deviceEvent.getAll(backfillFromDate, nowDate, 500).then((r) => r.data ?? []).catch(() => []),
         apiClient.apsSnapshot.getAll(backfillFromDate, nowDate, 20).then((r) => r.data ?? []).catch(() => []),
       ]);
+      await reservoirRefresh;
 
       let backfilledCount = 0;
 
@@ -1112,17 +1247,72 @@ export function tryGetRealtimeStore(): RealtimeStore | null {
 }
 
 /**
- * The minimal live-glucose surface a clock face renders. Satisfied by the full
- * {@link RealtimeStore} (authenticated views) and by the lightweight polling
- * `PublicClockStore` (anonymous public clock links), so `ClockFaceRenderer`
- * works with either without knowing which one it has.
+ * The minimal live-glucose surface a clock face renders. Satisfied by the
+ * lightweight polling `PublicClockStore` (anonymous public clock links) and by
+ * {@link clockGlucoseSourceOf} over the full {@link RealtimeStore}
+ * (authenticated views), so `ClockFaceRenderer` works with either without
+ * knowing which one it has.
  */
 export interface ClockGlucoseSource {
-  readonly currentBG: number;
-  readonly bgDelta: number;
+  /** Null when there is no reading; a face must not present a stand-in as one. */
+  readonly currentBG: number | null;
+  /** Null when nothing measures a change, so no rise or fall can be claimed. */
+  readonly bgDelta: number | null;
+  /** Empty when the reading carried no direction. */
   readonly direction: string;
-  readonly lastUpdated: number;
+  /** Null when there is no reading, so age and staleness have nothing to measure. */
+  readonly lastUpdated: number | null;
   readonly demoMode: boolean;
+}
+
+/**
+ * The change a face may show: the reading's own delta, else the gap to the
+ * previous reading. Null when there is neither — a lone reading is not a rise
+ * from zero.
+ */
+export function clockGlucoseDelta(
+  carried: number | null | undefined,
+  currentBG: number | null | undefined,
+  previousBG: number | null | undefined
+): number | null {
+  if (carried != null) return carried;
+  if (currentBG == null || previousBG == null) return null;
+  return currentBG - previousBG;
+}
+
+/**
+ * The store's own `currentBG`/`lastUpdated`/`bgDelta` fall back to 0 and the
+ * current time for the dashboard tiles, which cannot tell an absent reading
+ * from a real one.
+ */
+export function clockGlucoseSourceOf(
+  store: Pick<
+    RealtimeStore,
+    "currentEntry" | "previousEntry" | "direction" | "demoMode"
+  >
+): ClockGlucoseSource {
+  const mgdlOf = (entry: Entry | null) => entry?.sgv ?? entry?.mgdl ?? null;
+  return {
+    get currentBG() {
+      return mgdlOf(store.currentEntry);
+    },
+    get bgDelta() {
+      return clockGlucoseDelta(
+        store.currentEntry?.delta,
+        mgdlOf(store.currentEntry),
+        mgdlOf(store.previousEntry)
+      );
+    },
+    get direction() {
+      return store.direction;
+    },
+    get lastUpdated() {
+      return store.currentEntry?.mills ?? null;
+    },
+    get demoMode() {
+      return store.demoMode;
+    },
+  };
 }
 
 const CLOCK_GLUCOSE_SOURCE_KEY = Symbol("clock-glucose-source");
@@ -1138,5 +1328,8 @@ export function setClockGlucoseSource(source: ClockGlucoseSource): void {
  * so authenticated clock previews keep working unchanged.
  */
 export function getClockGlucoseSource(): ClockGlucoseSource {
-  return getContext<ClockGlucoseSource>(CLOCK_GLUCOSE_SOURCE_KEY) ?? getRealtimeStore();
+  return (
+    getContext<ClockGlucoseSource>(CLOCK_GLUCOSE_SOURCE_KEY) ??
+    clockGlucoseSourceOf(getRealtimeStore())
+  );
 }

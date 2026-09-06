@@ -52,7 +52,7 @@ public class NotificationsController : ControllerBase
     /// <response code="500">Internal server error</response>
     [HttpPost("loop")]
     [Authorize]
-    [RequireScope(OAuthScopes.AlertsReadWrite)]
+    [RequireScope(Scope.AlertsReadWrite)]
     [NightscoutEndpoint("/api/v2/notifications/loop")]
     [ProducesResponseType(typeof(NotificationV2Response), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(NotificationV2Response), StatusCodes.Status400BadRequest)]
@@ -139,7 +139,7 @@ public class NotificationsController : ControllerBase
     /// <response code="500">Internal server error</response>
     [HttpPost]
     [Authorize]
-    [RequireScope(OAuthScopes.AlertsReadWrite)]
+    [RequireScope(Scope.AlertsReadWrite)]
     [NightscoutEndpoint("/api/v2/notifications")]
     [ProducesResponseType(typeof(NotificationV2Response), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(NotificationV2Response), StatusCodes.Status400BadRequest)]
@@ -222,6 +222,9 @@ public class NotificationsController : ControllerBase
     [NightscoutEndpoint("/api/v2/notifications/status")]
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    // Operator diagnostics, not alert data: alerts.read would be the wrong category, and no
+    // production grant carries it. Gated like DebugController.
+    [RequireAdmin]
     public async Task<ActionResult<object>> GetNotificationStatus(
         CancellationToken cancellationToken = default
     )

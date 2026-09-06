@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Models;
 
@@ -312,8 +313,8 @@ public class Ar2Service : IAr2Service
             var in20mins = properties.Forecast.Predicted[3].Mgdl;
 
             // Get thresholds from settings
-            var bgTargetTop = GetNumericValue(settings, "bgTargetTop", 180);
-            var bgTargetBottom = GetNumericValue(settings, "bgTargetBottom", 80);
+            var bgTargetTop = GetNumericValue(settings, "bgTargetTop", ApplicationConstants.Web.Thresholds.BgTargetTop);
+            var bgTargetBottom = GetNumericValue(settings, "bgTargetBottom", ApplicationConstants.Web.Thresholds.BgTargetBottom);
             var alarmHigh = GetBooleanValue(settings, "alarmHigh", true);
             var alarmLow = GetBooleanValue(settings, "alarmLow", true);
 

@@ -2,7 +2,7 @@
   import {
     Spline,
     Area,
-    Points,
+    Circle,
     Axis,
     LinearGradient,
     ChartClipPath,
@@ -162,15 +162,19 @@
   {/if}
 
   {#if effectiveShowPoints}
-    {#each glucoseData as point (point.time.getTime())}
-      <Points
-        data={[point]}
-        x={(d) => d.time}
-        y={(d) => glucoseScale(d.sgv)}
-        r={3}
-        fill={pointFill(point.sgv)}
-        class="opacity-90"
-      />
-    {/each}
+    <!-- Single data-mode Circle instead of one <Points> per reading: layerchart
+         marks each register with the chart on mount and every registration
+         re-runs the chart's mark-dependent deriveds over all marks, so N points
+         cost O(N^2) synchronous work. Data mode renders the whole series from
+         one mark with a per-point fill accessor. -->
+    <Circle
+      data={glucoseData}
+      key={(d) => d.time.getTime()}
+      cx={(d) => d.time}
+      cy={(d) => glucoseScale(d.sgv)}
+      r={3}
+      fill={(d) => pointFill(d.sgv)}
+      class="opacity-90"
+    />
   {/if}
 </ChartClipPath>

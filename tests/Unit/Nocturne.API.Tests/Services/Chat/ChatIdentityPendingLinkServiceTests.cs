@@ -1,13 +1,12 @@
-using System.Data.Common;
 using System.Text.RegularExpressions;
 using FluentAssertions;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Services.Chat;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Chat;
@@ -18,40 +17,21 @@ public class ChatIdentityPendingLinkServiceTests : IDisposable
     private const string Platform = "discord";
     private const string UserA = "discord-user-a";
 
-    private readonly DbConnection _connection;
-    private readonly DbContextOptions<NocturneDbContext> _options;
-    private readonly TestDbContextFactory _factory;
+    private readonly SqliteTestDatabase _db;
+    private readonly IDbContextFactory<NocturneDbContext> _factory;
     private readonly ChatIdentityPendingLinkService _service;
 
     public ChatIdentityPendingLinkServiceTests()
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
+        _db = TestDbContextFactory.CreateSqlite();
 
-        _options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .Options;
-
-        using (var db = new NocturneDbContext(_options))
-        {
-            db.Database.EnsureCreated();
-        }
-
-        _factory = new TestDbContextFactory(_options);
+        _factory = _db.ContextFactory;
         _service = new ChatIdentityPendingLinkService(
             _factory,
             Mock.Of<ILogger<ChatIdentityPendingLinkService>>());
     }
 
-    public void Dispose() => _connection.Dispose();
-
-    private sealed class TestDbContextFactory(DbContextOptions<NocturneDbContext> options)
-        : IDbContextFactory<NocturneDbContext>
-    {
-        public NocturneDbContext CreateDbContext() => new(options);
-        public Task<NocturneDbContext> CreateDbContextAsync(CancellationToken ct = default)
-            => Task.FromResult(CreateDbContext());
-    }
+    public void Dispose() => _db.Dispose();
 
     // ---- CreateAsync ----
 

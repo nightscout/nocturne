@@ -1,7 +1,8 @@
 <script lang="ts">
+  import { formatNumericDate } from "$lib/utils/formatting";
   import { goto } from "$app/navigation";
   import * as Card from "$lib/components/ui/card";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog";
+  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import { Button } from "$lib/components/ui/button";
   import {
     Clock as ClockIcon,
@@ -10,19 +11,20 @@
     Loader2,
   } from "lucide-svelte";
   import { toast } from "svelte-sonner";
+  import { useToastSubmission } from "$lib/forms";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
   import {
     list as listClockFaces,
     create as createClockFace,
-    getById as getClockFaceById,
     remove as removeClockFace,
   } from "$api/generated/clockFaces.generated.remote";
-  import ClockFaceRenderer from "$lib/components/clock/ClockFaceRenderer.svelte";
+  import ClockFacePreview from "$lib/components/clock/ClockFacePreview.svelte";
   import type { ClockFaceConfig } from "$lib/api";
 
   const clockFacesQuery = listClockFaces();
 
   let creating = $state(false);
-  let deleting = $state(false);
+  const deletion = useToastSubmission("Failed to delete clock face");
   let deleteDialogOpen = $state(false);
   let clockFaceToDelete = $state<{ id: string; name: string } | null>(null);
 
@@ -113,21 +115,16 @@
   }
 
   async function confirmDelete() {
-    if (!clockFaceToDelete) return;
+    const target = clockFaceToDelete;
+    if (!target) return;
 
-    deleting = true;
-    try {
-      await removeClockFace(clockFaceToDelete.id);
+    await deletion.run(async () => {
+      await removeClockFace(target.id);
       await clockFacesQuery.refresh();
       toast.success("Clock face deleted");
       deleteDialogOpen = false;
       clockFaceToDelete = null;
-    } catch (err) {
-      console.error("Failed to delete clock face:", err);
-      toast.error("Failed to delete clock face");
-    } finally {
-      deleting = false;
-    }
+    });
   }
 </script>
 
@@ -164,7 +161,7 @@
         <Card.Root class="border-destructive">
           <Card.Content class="py-8 text-center space-y-3">
             <p class="text-destructive">
-              {error instanceof Error ? error.message : "Failed to load clock faces"}
+              {remoteErrorMessage(error, "Failed to load clock faces")}
             </p>
             <Button variant="outline" onclick={reset}>Retry</Button>
           </Card.Content>
@@ -202,33 +199,11 @@
             <Card.Root
               class="group cursor-pointer transition-all hover:-translate-y-1 hover:shadow-lg"
             >
-              <!-- Preview Area -->
+              <!-- Each preview reads its own query's state rather than awaiting it: an await here
+                   is work the enclosing boundary has to finish before it can show the list at all,
+                   and one preview that never resolves holds the whole page on its placeholder. -->
               <div class="h-32 overflow-hidden">
-                <svelte:boundary>
-                  {#snippet pending()}
-                    <div class="flex h-full items-center justify-center bg-neutral-950">
-                      <Loader2 class="size-6 animate-spin text-muted-foreground" />
-                    </div>
-                  {/snippet}
-                  {#snippet failed()}
-                    <div class="flex h-full items-center justify-center bg-neutral-950">
-                      <ClockIcon class="size-6 text-muted-foreground" />
-                    </div>
-                  {/snippet}
-                  {@const fullFace = face.id ? await getClockFaceById(face.id) : null}
-                  {#if fullFace?.config}
-                    <ClockFaceRenderer
-                      config={fullFace.config}
-                      scale={0.4}
-                      showCharts={false}
-                      class="h-full w-full"
-                    />
-                  {:else}
-                    <div class="flex h-full items-center justify-center bg-neutral-950">
-                      <ClockIcon class="size-6 text-muted-foreground" />
-                    </div>
-                  {/if}
-                </svelte:boundary>
+                <ClockFacePreview faceId={face.id} />
               </div>
 
             <Card.Content class="p-4">
@@ -237,9 +212,9 @@
                   <Card.Title class="font-semibold">{face.name}</Card.Title>
                   <Card.Description class="text-xs">
                     {#if face.updatedAt}
-                      Updated {new Date(face.updatedAt).toLocaleDateString()}
+                      Updated {formatNumericDate(new Date(face.updatedAt))}
                     {:else if face.createdAt}
-                      Created {new Date(face.createdAt).toLocaleDateString()}
+                      Created {formatNumericDate(new Date(face.createdAt))}
                     {/if}
                   </Card.Description>
                 </div>
@@ -283,26 +258,15 @@
 </div>
 
 <!-- Delete Confirmation Dialog -->
-<AlertDialog.Root bind:open={deleteDialogOpen}>
-  <AlertDialog.Content>
-    <AlertDialog.Header>
-      <AlertDialog.Title>Delete Clock Face</AlertDialog.Title>
-      <AlertDialog.Description>
-        Are you sure you want to delete "{clockFaceToDelete?.name}"? This action cannot be undone.
-      </AlertDialog.Description>
-    </AlertDialog.Header>
-    <AlertDialog.Footer>
-      <AlertDialog.Cancel disabled={deleting}>Cancel</AlertDialog.Cancel>
-      <AlertDialog.Action
-        onclick={confirmDelete}
-        disabled={deleting}
-        class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-      >
-        {#if deleting}
-          <Loader2 class="mr-2 size-4 animate-spin" />
-        {/if}
-        Delete
-      </AlertDialog.Action>
-    </AlertDialog.Footer>
-  </AlertDialog.Content>
-</AlertDialog.Root>
+<ConfirmDialog
+  bind:open={deleteDialogOpen}
+  title="Delete Clock Face"
+  confirmLabel="Delete"
+  destructive
+  busy={deletion.busy}
+  onConfirm={confirmDelete}
+>
+  {#snippet description()}
+    Are you sure you want to delete "{clockFaceToDelete?.name}"? This action cannot be undone.
+  {/snippet}
+</ConfirmDialog>

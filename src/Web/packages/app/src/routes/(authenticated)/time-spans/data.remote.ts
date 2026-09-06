@@ -102,7 +102,6 @@ function getOverrideColor(state: string): string {
  */
 function getActivityColor(category: StateSpanCategory): string {
   const categoryColors: Partial<Record<StateSpanCategory, string>> = {
-    [StateSpanCategory.Sleep]: "var(--pump-mode-sleep)",
     [StateSpanCategory.Exercise]: "var(--pump-mode-exercise)",
     [StateSpanCategory.Illness]: "var(--system-event-warning)",
     [StateSpanCategory.Travel]: "var(--chart-3)",
@@ -291,11 +290,11 @@ export const getTimeSpansData = query(
           })
           .map((span: StateSpan) => ({
             id: span.id ?? randomUUID(),
-            category: span.category ?? StateSpanCategory.Sleep,
+            category: span.category ?? StateSpanCategory.Exercise,
             state: span.state ?? "Unknown",
             startTime: new Date(Math.max(span.startMills ?? 0, startTime)),
             endTime: new Date(Math.min(span.endMills ?? endTime, endTime)),
-            color: getActivityColor(span.category ?? StateSpanCategory.Sleep),
+            color: getActivityColor(span.category ?? StateSpanCategory.Exercise),
             metadata: span.metadata,
             rate: null,
             percent: null,

@@ -17,7 +17,7 @@
   import { CarbBreakdownBar, FoodEntryDetails } from "./index";
 
   interface Props {
-    treatmentId?: string;
+    carbIntakeId?: string;
     /**
      * Total carbs from the treatment - shown so user knows what they're working
      * toward
@@ -25,7 +25,7 @@
     totalCarbs?: number;
   }
 
-  let { treatmentId, totalCarbs = 0 }: Props = $props();
+  let { carbIntakeId, totalCarbs = 0 }: Props = $props();
 
   let breakdown = $state<TreatmentFoodBreakdown | null>(null);
   let isLoading = $state(false);
@@ -36,12 +36,12 @@
   let editEntry = $state<TreatmentFood | null>(null);
 
   $effect(() => {
-    if (!treatmentId) {
+    if (!carbIntakeId) {
       breakdown = null;
       return;
     }
     // `.run()` rejects during the render/effect flush, so defer out of it.
-    const id = treatmentId;
+    const id = carbIntakeId;
     queueMicrotask(() => loadBreakdown(id));
   });
 
@@ -59,9 +59,9 @@
   }
 
   async function handleAddFood(request: CarbIntakeFoodRequest) {
-    if (!treatmentId) return;
+    if (!carbIntakeId) return;
     try {
-      const updated = await addCarbIntakeFood({ id: treatmentId!, request });
+      const updated = await addCarbIntakeFood({ id: carbIntakeId!, request });
       breakdown = updated;
       showAddFood = false;
     } catch (err) {
@@ -75,22 +75,22 @@
   }
 
   async function handleDelete(entry: TreatmentFood) {
-    if (!treatmentId || !entry.id) return;
+    if (!carbIntakeId || !entry.id) return;
     try {
       await deleteCarbIntakeFood({
-        id: treatmentId!,
+        id: carbIntakeId!,
         foodEntryId: entry.id!,
       });
       // Reload the breakdown after deletion
-      await loadBreakdown(treatmentId);
+      await loadBreakdown(carbIntakeId);
     } catch (err) {
       console.error("Failed to delete food entry:", err);
     }
   }
 
   async function handleEditSaved() {
-    if (treatmentId) {
-      await loadBreakdown(treatmentId);
+    if (carbIntakeId) {
+      await loadBreakdown(carbIntakeId);
     }
   }
 
@@ -212,7 +212,7 @@
     if (!value) editEntry = null;
   }}
   entry={editEntry}
-  {treatmentId}
+  {carbIntakeId}
   {totalCarbs}
   {remainingCarbs}
   onSave={handleEditSaved}

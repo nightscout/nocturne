@@ -167,20 +167,59 @@ public class TreatmentReadServiceTests
         });
 
         _decomposer
-            .Setup(d => d.DecomposeAsync(treatment, It.IsAny<CancellationToken>()))
+            .Setup(d => d.DecomposeAsync(treatment, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(decompositionResult);
 
         var result = await _service.CreateAsync([treatment]);
 
         result.Should().HaveCount(1);
-        _decomposer.Verify(d => d.DecomposeAsync(treatment, It.IsAny<CancellationToken>()), Times.Once);
+        _decomposer.Verify(d => d.DecomposeAsync(treatment, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenDecompositionCanceled_PropagatesWithoutTouchingRemaining()
+    {
+        var canceled = new Treatment { Id = "t1", Mills = 1000, EventType = "Note" };
+        var next = new Treatment { Id = "t2", Mills = 2000, EventType = "Note" };
+
+        _decomposer
+            .Setup(d => d.DecomposeAsync(canceled, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new OperationCanceledException());
+
+        var act = () => _service.CreateAsync([canceled, next]);
+
+        // Cancellation must abort the batch, not be swallowed as a per-record failure.
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        _decomposer.Verify(
+            d => d.DecomposeAsync(next, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenDecompositionFailsForOneRecord_SkipsItAndContinues()
+    {
+        var bad = new Treatment { Id = "t1", Mills = 1000, EventType = "Note" };
+        var good = new Treatment { Id = "t2", Mills = 2000, EventType = "Note" };
+
+        _decomposer
+            .Setup(d => d.DecomposeAsync(bad, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("boom"));
+        _decomposer
+            .Setup(d => d.DecomposeAsync(good, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DecompositionResult { CorrelationId = Guid.NewGuid() });
+
+        var result = await _service.CreateAsync([bad, good]);
+
+        // A genuine per-record failure is still isolated: the bad record is dropped,
+        // the good one is kept.
+        result.Should().ContainSingle().Which.Id.Should().Be("t2");
     }
 
     [Fact]
     public async Task DeleteAsync_CallsPipelineAndChecksTemp()
     {
         _pipeline
-            .Setup(p => p.DeleteByLegacyIdAsync<Treatment>("t1", It.IsAny<CancellationToken>()))
+            .Setup(p => p.DeleteByLegacyIdAsync<Treatment>("t1", It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(3);
         _tempBasalRepo
             .Setup(r => r.GetByLegacyIdAsync("t1", It.IsAny<CancellationToken>()))
@@ -189,6 +228,57 @@ public class TreatmentReadServiceTests
         var result = await _service.DeleteAsync("t1");
 
         result.Should().BeTrue();
-        _pipeline.Verify(p => p.DeleteByLegacyIdAsync<Treatment>("t1", It.IsAny<CancellationToken>()), Times.Once);
+        _pipeline.Verify(p => p.DeleteByLegacyIdAsync<Treatment>("t1", It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_ByDerivedObjectId_DeletesViaLegacyIdToRemoveSiblings()
+    {
+        // A meal bolus + its carb share one LegacyId; deleting by the derived wire ObjectId must
+        // route through DeleteByLegacyId (removes both) rather than the single-row range delete
+        // (which would orphan the carb into a phantom correction).
+        var uuid = Guid.CreateVersion7();
+        var wireId = MongoObjectId.FromGuid(uuid);
+        var bolus = new Bolus { Id = uuid, LegacyId = "syn-meal-1" };
+
+        _pipeline
+            .Setup(p => p.DeleteByLegacyIdAsync<Treatment>(wireId, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(0); // the ObjectId is not a stored LegacyId
+        _bolusRepo
+            .Setup(r => r.GetByGuidRangeAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(bolus);
+        _pipeline
+            .Setup(p => p.DeleteByLegacyIdAsync<Treatment>("syn-meal-1", It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(2); // both siblings
+
+        var result = await _service.DeleteAsync(wireId);
+
+        result.Should().BeTrue();
+        _pipeline.Verify(
+            p => p.DeleteByLegacyIdAsync<Treatment>("syn-meal-1", It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task ResolveCanonicalIdAsync_BackfillsNullLegacyId_SoUpdateUpsertsInPlace()
+    {
+        // A native V4 row (LegacyId == null) resolved by a derived ObjectId must be backfilled with
+        // that ObjectId so the decomposer upserts it in place instead of inserting a duplicate.
+        var uuid = Guid.CreateVersion7();
+        var wireId = MongoObjectId.FromGuid(uuid);
+        var note = new Note { Id = uuid, LegacyId = null };
+
+        _noteRepo
+            .Setup(r => r.GetByGuidRangeAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(note);
+
+        var canonical = await _service.ResolveCanonicalIdAsync(wireId);
+
+        canonical.Should().Be(wireId);
+        // The backfill goes through IV4Repository<Note>.UpdateAsync (the base slot the generic
+        // helper is typed against), which INoteRepository new-shadows — verify the base slot.
+        _noteRepo.As<IV4Repository<Note>>().Verify(
+            r => r.UpdateAsync(uuid, It.Is<Note>(n => n.LegacyId == wireId), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 }

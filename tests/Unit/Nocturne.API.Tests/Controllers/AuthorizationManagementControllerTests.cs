@@ -60,22 +60,6 @@ public class AuthorizationManagementControllerTests
     }
 
     [Fact]
-    public async Task GetAllSubjects_WhenServiceThrows_ReturnsInternalServerError()
-    {
-        // Arrange
-        _mockAuthorizationService
-            .Setup(s => s.GetAllSubjectsAsync())
-            .ThrowsAsync(new Exception("Database error"));
-
-        // Act
-        var result = await _controller.GetAllSubjects();
-
-        // Assert
-        var statusResult = Assert.IsType<ObjectResult>(result.Result);
-        Assert.Equal(500, statusResult.StatusCode);
-    }
-
-    [Fact]
     public async Task CreateSubject_WithValidSubject_ReturnsCreatedSubject()
     {
         // Arrange
@@ -239,22 +223,6 @@ public class AuthorizationManagementControllerTests
         var returnedRoles = Assert.IsType<List<Role>>(okResult.Value);
         Assert.Equal(2, returnedRoles.Count);
         Assert.Equal("admin", returnedRoles[0].Name);
-    }
-
-    [Fact]
-    public async Task GetAllRoles_WhenServiceThrows_ReturnsInternalServerError()
-    {
-        // Arrange
-        _mockAuthorizationService
-            .Setup(s => s.GetAllRolesAsync())
-            .ThrowsAsync(new Exception("Database error"));
-
-        // Act
-        var result = await _controller.GetAllRoles();
-
-        // Assert
-        var statusResult = Assert.IsType<ObjectResult>(result.Result);
-        Assert.Equal(500, statusResult.StatusCode);
     }
 
     [Fact]

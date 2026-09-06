@@ -55,8 +55,7 @@ public class NightscoutContainer : IAsyncDisposable
 
         // Start MongoDB first (Nightscout's backend)
         // Use plain mongo container without authentication (MongoDbBuilder adds auth which breaks Nightscout)
-        _mongoContainer = new ContainerBuilder()
-            .WithImage("mongo:7")
+        _mongoContainer = new ContainerBuilder("mongo:7")
             .WithNetwork(_network)
             .WithNetworkAliases(MongoNetworkAlias)
             .WithPortBinding(27017, true)
@@ -76,8 +75,7 @@ public class NightscoutContainer : IAsyncDisposable
         var internalMongoUri = $"mongodb://{MongoNetworkAlias}:27017/nightscout";
 
         // Start Nightscout connected to MongoDB via internal network
-        _nightscoutContainer = new ContainerBuilder()
-            .WithImage(NightscoutImage)
+        _nightscoutContainer = new ContainerBuilder(NightscoutImage)
             .WithNetwork(_network)
             .WithPortBinding(NightscoutPort, true)
             .WithEnvironment("MONGODB_URI", internalMongoUri)

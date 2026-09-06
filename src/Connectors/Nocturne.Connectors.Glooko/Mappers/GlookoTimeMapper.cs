@@ -41,6 +41,9 @@ public class GlookoTimeMapper
     /// </summary>
     public DateTime ToGlookoTime(DateTime utcTime)
     {
+        if (_timeline is { } timeline)
+            return timeline.ToLocal(utcTime);
+
         return utcTime.AddHours(_config.TimezoneOffset);
     }
 

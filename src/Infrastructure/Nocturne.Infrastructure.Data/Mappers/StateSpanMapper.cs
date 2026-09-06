@@ -16,9 +16,7 @@ public static class StateSpanMapper
     {
         return new StateSpanEntity
         {
-            Id = string.IsNullOrEmpty(stateSpan.Id)
-                ? Guid.CreateVersion7()
-                : ParseIdToGuid(stateSpan.Id),
+            Id = MapperHelpers.ParseIdToGuid(stateSpan.Id),
             Category = stateSpan.Category.ToString(),
             State = stateSpan.State ?? string.Empty,
             StartTimestamp = stateSpan.StartTimestamp,
@@ -29,7 +27,7 @@ public static class StateSpanMapper
                 : null,
             OriginalId = stateSpan.OriginalId,
             SupersededById = !string.IsNullOrEmpty(stateSpan.SupersededById)
-                ? ParseIdToGuid(stateSpan.SupersededById)
+                ? MapperHelpers.ParseIdToGuid(stateSpan.SupersededById)
                 : null,
             CreatedAt = stateSpan.CreatedAt ?? DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
@@ -51,7 +49,7 @@ public static class StateSpanMapper
             StartTimestamp = entity.StartTimestamp,
             EndTimestamp = entity.EndTimestamp,
             Source = entity.Source,
-            Metadata = DeserializeJsonProperty<Dictionary<string, object>>(entity.MetadataJson),
+            Metadata = MapperHelpers.DeserializeJson<Dictionary<string, object>>(entity.MetadataJson),
             OriginalId = entity.OriginalId,
             SupersededById = entity.SupersededById?.ToString(),
             CreatedAt = entity.CreatedAt,
@@ -73,50 +71,5 @@ public static class StateSpanMapper
             ? JsonSerializer.Serialize(stateSpan.Metadata)
             : null;
         entity.OriginalId = stateSpan.OriginalId;
-        entity.UpdatedAt = DateTime.UtcNow;
-    }
-
-    /// <summary>
-    /// Parse string ID to GUID, or generate new GUID if invalid
-    /// </summary>
-    private static Guid ParseIdToGuid(string id)
-    {
-        if (string.IsNullOrEmpty(id))
-            return Guid.CreateVersion7();
-
-        if (Guid.TryParse(id, out var guidId))
-            return guidId;
-
-        // Hash the ID to get a deterministic GUID
-        try
-        {
-            using var sha1 = System.Security.Cryptography.SHA1.Create();
-            var hashBytes = sha1.ComputeHash(System.Text.Encoding.UTF8.GetBytes(id));
-            var guidBytes = new byte[16];
-            Array.Copy(hashBytes, guidBytes, 16);
-            return new Guid(guidBytes);
-        }
-        catch
-        {
-            return Guid.CreateVersion7();
-        }
-    }
-
-    /// <summary>
-    /// Safely deserialize JSON property
-    /// </summary>
-    private static T? DeserializeJsonProperty<T>(string? json)
-    {
-        if (string.IsNullOrEmpty(json) || json == "null")
-            return default;
-
-        try
-        {
-            return JsonSerializer.Deserialize<T>(json);
-        }
-        catch
-        {
-            return default;
-        }
     }
 }

@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Npgsql;
 using Xunit;
@@ -291,7 +292,7 @@ public class OAuthPkceFlowIntegrationTests : AspireIntegrationTestBase
         var clientId = await AuthTestHelpers.RegisterOAuthClientAsync(authClient);
 
         var expiredCode = $"expired-code-{Guid.NewGuid():N}";
-        var codeHash = AuthTestHelpers.ComputeSha256Hex(expiredCode);
+        var codeHash = HashUtils.Sha256Hex(expiredCode);
         var (codeVerifier, codeChallenge) = AuthTestHelpers.GeneratePkceChallenge();
 
         var connStr = await GetPostgresConnectionStringAsync();

@@ -66,11 +66,11 @@ web:
     minAvailable: 1
     maxUnavailable: 0
 
-# Public base URL the deployment is reachable at (e.g. https://nocturne.example.com).
-# Used by the API for OIDC redirects, invite links, and the BaseUrl config key.
-# Also used as the web container's NOCTURNE_API_URL when ingress.enabled=true and
-# api.externalUrl is empty.
-baseUrl: ""
+# Public base domain the deployment is reachable at, as a bare host without a
+# scheme (e.g. nocturne.example.com). HTTPS is assumed at the edge — WebAuthn
+# (passkeys) requires it. The API derives everything from this: tenant subdomain
+# resolution, the WebAuthn RP ID, OIDC redirect URIs, and invite links.
+baseDomain: ""
 
 # Shared instance key (HMAC for JWT signing, shared between API and Web).
 # Provide either an existing Secret OR a literal value (NOT both).
@@ -126,7 +126,7 @@ ingress:
   enabled: false
   className: ""
   annotations: {}
-  host: ""                      # required when enabled=true; defaults to baseUrl host
+  host: ""                      # required when enabled=true; typically equals baseDomain
   # By default, only the web service is exposed at the host. The API is reached
   # internally via cluster DNS. Set api.externalPath to expose API at /api etc.
   api:

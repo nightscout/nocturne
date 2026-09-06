@@ -6,7 +6,9 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Controllers.V1;
 using Nocturne.Core.Contracts.Health;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers;
@@ -19,22 +21,45 @@ namespace Nocturne.API.Tests.Controllers;
 public class ActivityControllerTests
 {
     private readonly Mock<IActivityService> _mockActivityService;
+    private readonly Mock<IActivityDecomposer> _mockActivityDecomposer;
     private readonly Mock<ILogger<ActivityController>> _mockLogger;
     private readonly ActivityController _controller;
 
     public ActivityControllerTests()
     {
         _mockActivityService = new Mock<IActivityService>();
+        _mockActivityDecomposer = new Mock<IActivityDecomposer>();
         _mockLogger = new Mock<ILogger<ActivityController>>();
         _controller = new ActivityController(
             _mockActivityService.Object,
+            _mockActivityDecomposer.Object,
             _mockLogger.Object
         );
 
         // Set up HttpContext for the controller
         var httpContext = new DefaultHttpContext();
         _controller.ControllerContext = new ControllerContext() { HttpContext = httpContext };
+
+        // Default read classification: a regular StateSpan-backed activity, read under treatments.
+        // Tests that exercise a dedicated category override this per record.
+        _mockActivityDecomposer
+            .Setup(d => d.RequiredReadScope(It.IsAny<Activity>()))
+            .Returns(Scope.TreatmentsRead);
+        GrantScopes(Scope.TreatmentsRead);
     }
+
+    /// <summary>Populates the request's granted scopes, as the auth middleware does at runtime.</summary>
+    private void GrantScopes(params string[] scopes) =>
+        _controller.HttpContext.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string>(scopes);
+
+    /// <summary>
+    /// Classifies each activity's read scope by its <see cref="Activity.Type"/>, standing in for the
+    /// real decomposer's routing.
+    /// </summary>
+    private void ClassifyReadScopesByType(Dictionary<string, string> typeToReadScope) =>
+        _mockActivityDecomposer
+            .Setup(d => d.RequiredReadScope(It.IsAny<Activity>()))
+            .Returns((Activity a) => typeToReadScope.GetValueOrDefault(a.Type ?? "", Scope.TreatmentsRead));
 
     [Fact]
     public async Task GetActivities_WhenActivitiesExist_ShouldReturnActivities()
@@ -181,6 +206,102 @@ public class ActivityControllerTests
         result.Result.Should().BeOfType<NotFoundObjectResult>();
     }
 
+    /// <summary>
+    /// The merged activity read serves four storages. A caller holding one category must see that
+    /// category and nothing else, which is the cross-category read the per-action scope gate on its
+    /// own could not close.
+    /// </summary>
+    [Fact]
+    public async Task GetActivities_HeartRateOnlyGrant_ReturnsOnlyHeartRateRecords()
+    {
+        var merged = new List<Activity>
+        {
+            new() { Id = "hr", Type = "HeartRate", Mills = 4 },
+            new() { Id = "sc", Type = "StepCount", Mills = 3 },
+            new() { Id = "sleep", Type = "Sleep", Mills = 2 },
+            new() { Id = "ex", Type = "Exercise", Mills = 1 },
+        };
+        ClassifyReadScopesByType(new()
+        {
+            ["HeartRate"] = Scope.HeartRateRead,
+            ["StepCount"] = Scope.StepCountRead,
+            ["Sleep"] = Scope.SleepRead,
+            ["Exercise"] = Scope.TreatmentsRead,
+        });
+        GrantScopes(Scope.HeartRateRead);
+        _mockActivityService
+            .Setup(x => x.GetActivitiesAsync(It.IsAny<string?>(), 10, 0, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(merged);
+
+        var result = await _controller.GetActivities(cancellationToken: CancellationToken.None);
+
+        var returned = (result.Result as OkObjectResult)!.Value as List<Activity>;
+        returned!.Select(a => a.Id).Should().Equal("hr");
+    }
+
+    [Fact]
+    public async Task GetActivities_TreatmentsOnlyGrant_DropsHeartRateStepsAndSleep()
+    {
+        var merged = new List<Activity>
+        {
+            new() { Id = "hr", Type = "HeartRate", Mills = 4 },
+            new() { Id = "sc", Type = "StepCount", Mills = 3 },
+            new() { Id = "sleep", Type = "Sleep", Mills = 2 },
+            new() { Id = "ex", Type = "Exercise", Mills = 1 },
+        };
+        ClassifyReadScopesByType(new()
+        {
+            ["HeartRate"] = Scope.HeartRateRead,
+            ["StepCount"] = Scope.StepCountRead,
+            ["Sleep"] = Scope.SleepRead,
+            ["Exercise"] = Scope.TreatmentsRead,
+        });
+        GrantScopes(Scope.TreatmentsRead);
+        _mockActivityService
+            .Setup(x => x.GetActivitiesAsync(It.IsAny<string?>(), 10, 0, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(merged);
+
+        var result = await _controller.GetActivities(cancellationToken: CancellationToken.None);
+
+        var returned = (result.Result as OkObjectResult)!.Value as List<Activity>;
+        returned!.Select(a => a.Id).Should().Equal("ex");
+    }
+
+    /// <summary>
+    /// A record whose category the caller does not hold answers 404, the same as a record that does
+    /// not exist, so the response does not disclose the record.
+    /// </summary>
+    [Fact]
+    public async Task GetActivity_RecordInUnheldCategory_ReturnsNotFound()
+    {
+        var activityId = "hr-1";
+        ClassifyReadScopesByType(new() { ["HeartRate"] = Scope.HeartRateRead });
+        GrantScopes(Scope.TreatmentsRead);
+        _mockActivityService
+            .Setup(x => x.GetActivityByIdAsync(activityId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Activity { Id = activityId, Type = "HeartRate", Mills = 1 });
+
+        var result = await _controller.GetActivity(activityId, CancellationToken.None);
+
+        result.Result.Should().BeOfType<NotFoundObjectResult>();
+    }
+
+    [Fact]
+    public async Task GetActivity_RecordInHeldCategory_IsReturned()
+    {
+        var activityId = "hr-1";
+        var record = new Activity { Id = activityId, Type = "HeartRate", Mills = 1 };
+        ClassifyReadScopesByType(new() { ["HeartRate"] = Scope.HeartRateRead });
+        GrantScopes(Scope.HeartRateRead);
+        _mockActivityService
+            .Setup(x => x.GetActivityByIdAsync(activityId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(record);
+
+        var result = await _controller.GetActivity(activityId, CancellationToken.None);
+
+        (result.Result as OkObjectResult)!.Value.Should().BeEquivalentTo(record);
+    }
+
     [Fact]
     public async Task CreateActivities_WithSingleActivity_ShouldCreateAndReturnActivity()
     {
@@ -224,6 +345,74 @@ public class ActivityControllerTests
         var returnedActivities = okResult!.Value as List<Activity>;
         returnedActivities.Should().ContainSingle();
         returnedActivities![0].Should().BeEquivalentTo(createdActivity);
+    }
+
+    [Fact]
+    public async Task CreateActivities_SleepRecordWithoutSleepScope_ReturnsForbidden()
+    {
+        // A caller holding only treatments.readwrite (enough to pass the endpoint's RequireScope)
+        // must still be blocked from writing sleep data through the merged activity endpoint.
+        GrantScopes(Scope.TreatmentsReadWrite);
+        _mockActivityDecomposer
+            .Setup(d => d.RequiredWriteScope(It.IsAny<Activity>()))
+            .Returns(Scope.SleepReadWrite);
+
+        var jsonElement = JsonSerializer.SerializeToElement(
+            new Activity { Type = "sleep", Duration = 480 });
+
+        var result = await _controller.CreateActivities(jsonElement, CancellationToken.None);
+
+        var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        _mockActivityService.Verify(
+            x => x.CreateActivitiesAsync(It.IsAny<IEnumerable<Activity>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task CreateActivities_SleepRecordWithSleepScope_Proceeds()
+    {
+        GrantScopes(Scope.SleepReadWrite);
+        _mockActivityDecomposer
+            .Setup(d => d.RequiredWriteScope(It.IsAny<Activity>()))
+            .Returns(Scope.SleepReadWrite);
+        _mockActivityService
+            .Setup(x => x.CreateActivitiesAsync(It.IsAny<IEnumerable<Activity>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<Activity> { new() { Id = "s1", Type = "sleep" } });
+
+        var jsonElement = JsonSerializer.SerializeToElement(
+            new Activity { Type = "sleep", Duration = 480 });
+
+        var result = await _controller.CreateActivities(jsonElement, CancellationToken.None);
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+        _mockActivityService.Verify(
+            x => x.CreateActivitiesAsync(It.IsAny<IEnumerable<Activity>>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task UpdateActivity_ExistingRecordIsSleep_WithoutSleepScope_ReturnsForbidden()
+    {
+        // The id addresses an existing sleep session; even an exercise-typed payload edits sleep
+        // data, so a caller lacking sleep.readwrite must be blocked on the existing-record branch.
+        const string id = "sleep-session-1";
+        GrantScopes(Scope.TreatmentsReadWrite);
+        _mockActivityService
+            .Setup(x => x.GetActivityByIdAsync(id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Activity { Id = id, Type = "sleep" });
+        _mockActivityDecomposer
+            .Setup(d => d.RequiredWriteScope(It.Is<Activity>(a => a.Type == "sleep")))
+            .Returns(Scope.SleepReadWrite);
+
+        var result = await _controller.UpdateActivity(
+            id, new Activity { Type = "exercise" }, CancellationToken.None);
+
+        var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        _mockActivityService.Verify(
+            x => x.UpdateActivityAsync(It.IsAny<string>(), It.IsAny<Activity>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]

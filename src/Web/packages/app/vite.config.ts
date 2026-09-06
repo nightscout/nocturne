@@ -45,8 +45,22 @@ export default defineConfig(({ mode }) => {
     ssr: {
       // Bundle the Resend adapter (and its React deps) into the SSR output so
       // there is no bare `react` import left for Node to resolve from pnpm's
-      // store path at prerender/runtime.
-      noExternal: ["@resend/chat-sdk-adapter"],
+      // store path at prerender/runtime. Same reason for layerchart and its
+      // @layerstack/* utilities: their dist emits bare `svelte` imports that
+      // Node can't resolve from pnpm's isolated store, so bundle them for SSR.
+      noExternal: ["@resend/chat-sdk-adapter", "layerchart", /^@layerstack\//],
+    },
+    optimizeDeps: {
+      // sveltekit-search-params is only imported by the dashboard's
+      // date-range-picker, so Vite doesn't discover it during startup crawl
+      // and re-optimizes mid-navigation on first dashboard load — a multi-second
+      // stall followed by a forced full reload. Pre-bundle it at server start.
+      //
+      // layerchart is the glucose chart's rendering library and only loads once
+      // the dashboard mounts. Left to on-demand discovery it re-optimizes the
+      // client graph mid-navigation on first dashboard load. Pre-bundle it (and
+      // its transitive @layerstack/* utilities come with it) at server start.
+      include: ["sveltekit-search-params", "layerchart"],
     },
     plugins: [
       tailwindcss(),

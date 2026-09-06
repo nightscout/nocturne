@@ -5,7 +5,7 @@
 # Build: docker build -t nocturne-web:local -f src/Web/Dockerfile .
 
 FROM node:24-alpine AS build
-RUN corepack enable && corepack prepare pnpm@9 --activate
+RUN corepack enable && corepack prepare pnpm@11.5.0 --activate
 WORKDIR /app
 
 # Install dependencies (layer cached when lockfile unchanged)
@@ -29,9 +29,12 @@ RUN NODE_OPTIONS="--max-old-space-size=7168" pnpm --filter @nocturne/app run bui
 
 # -- Production --
 FROM node:24-alpine AS runtime
-RUN corepack enable && corepack prepare pnpm@9 --activate
+RUN corepack enable && corepack prepare pnpm@11.5.0 --activate
 WORKDIR /app
 ENV NODE_ENV=production
+# adapter-node caps request bodies at 512K by default, which rejects support
+# issue screenshot uploads (up to 4 x 10 MB) before they reach the app.
+ENV BODY_SIZE_LIMIT=44M
 
 # Copy workspace structure — server.js must stay in packages/app for pnpm resolution
 COPY --from=build /app/pnpm-workspace.yaml ./

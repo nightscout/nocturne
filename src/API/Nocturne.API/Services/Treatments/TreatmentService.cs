@@ -4,6 +4,7 @@ using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.Treatments;
@@ -187,11 +188,15 @@ public class TreatmentService : ITreatmentService
         var existing = await _store.GetByIdAsync(id, cancellationToken);
         if (existing is null) return null;
 
+        // Re-key to the stored LegacyId so re-decomposition upserts this record in place instead
+        // of creating a duplicate when AAPS patches by a derived ObjectId.
+        existing.Id = await _store.ResolveCanonicalIdAsync(id, cancellationToken) ?? existing.Id;
+
         // Apply patch fields to existing treatment
         ApplyJsonPatch(existing, patchData);
 
         // Re-decompose (idempotent upsert via LegacyId matching)
-        await _decomposer.DecomposeAsync(existing, cancellationToken);
+        await _decomposer.DecomposeAsync(existing, WriteOrigin.Live, cancellationToken);
 
         await _cache.InvalidateAsync(cancellationToken);
         await _events.OnUpdatedAsync(existing, cancellationToken);
@@ -201,6 +206,11 @@ public class TreatmentService : ITreatmentService
 
     private static void ApplyJsonPatch(Treatment treatment, JsonElement patchData)
     {
+        // The identity used to upsert (LegacyId matching) must survive the round-trip. Serializing
+        // rewrites _id to its 24-hex ObjectId form, so capture the real Id and restore it after the
+        // merge unless the patch explicitly changes _id.
+        var originalId = treatment.Id;
+
         // JSON merge-patch: serialize existing, overlay patch properties, deserialize back
         var existingJson = JsonSerializer.Serialize(treatment);
         using var existingDoc = JsonDocument.Parse(existingJson);
@@ -226,6 +236,11 @@ public class TreatmentService : ITreatmentService
             }
             catch { /* skip computed properties that throw on set */ }
         }
+
+        // A PATCH updates the record identified by the URL; it never changes identity. Restore the
+        // upsert key even if the client echoed an _id in the body (AAPS sends the derived ObjectId,
+        // which would otherwise defeat the re-key and duplicate the record).
+        treatment.Id = originalId;
     }
 
     /// <inheritdoc />
@@ -250,10 +265,37 @@ public class TreatmentService : ITreatmentService
     public async Task<long> DeleteTreatmentsAsync(
         string? find = null, CancellationToken cancellationToken = default)
     {
-        var count = await _decomposer.BulkDeleteAsync(find, cancellationToken);
+        // Field filters (eventType, enteredBy, …) don't survive the decomposer's coarse by-time
+        // sweep — it would delete every record type in the window. Resolve the matching
+        // treatments through the filtered read path instead and delete them individually, which
+        // also removes correlated siblings (e.g. a meal bolus's carb) via LegacyId.
+        if (FindQuery.Parse(find).HasFieldFilters)
+            return await DeleteMatchingTreatmentsAsync(find, cancellationToken);
+
+        var count = await _decomposer.BulkDeleteAsync(find, WriteOrigin.Live, cancellationToken);
         if (count > 0)
             await _cache.InvalidateAsync(cancellationToken);
         return count;
+    }
+
+    private async Task<long> DeleteMatchingTreatmentsAsync(string? find, CancellationToken ct)
+    {
+        var matching = await _store.QueryAsync(
+            new TreatmentQuery { Find = find, Count = int.MaxValue }, ct);
+
+        long deleted = 0;
+        foreach (var treatment in matching.Where(t => !string.IsNullOrEmpty(t.Id)))
+        {
+            if (await _store.DeleteAsync(treatment.Id!, ct))
+            {
+                deleted++;
+                await _events.OnDeletedAsync(treatment, ct);
+            }
+        }
+
+        if (deleted > 0)
+            await _cache.InvalidateAsync(ct);
+        return deleted;
     }
 
     /// <summary>

@@ -27,6 +27,8 @@ namespace Nocturne.Connectors.Glooko.Configurations;
         SyncDataType.Boluses,
         SyncDataType.BasalInjections,
         SyncDataType.CarbIntake,
+        SyncDataType.Food,
+        SyncDataType.TempBasals,
         SyncDataType.StateSpans,
         SyncDataType.TempBasals,
         SyncDataType.DeviceEvents,

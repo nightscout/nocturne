@@ -1,6 +1,7 @@
 import { Card, CardText, Fields, Field, Actions, Button } from "chat";
 import type { AlertPayload } from "../types.js";
 import { formatGlucose, trendArrow } from "../lib/format.js";
+import { encodeActionValue } from "../lib/action-value.js";
 
 export function AlertCard(props: {
   payload: AlertPayload;
@@ -12,6 +13,10 @@ export function AlertCard(props: {
       ? formatGlucose(payload.glucoseValue, unit)
       : "N/A";
   const arrow = payload.trend ? trendArrow(payload.trend) : "";
+  const target = encodeActionValue({
+    tenantId: payload.tenantId,
+    excursionId: payload.excursionId,
+  });
 
   return (
     <Card title={`Alert: ${payload.ruleName}`}>
@@ -29,10 +34,10 @@ export function AlertCard(props: {
         )}
       </Fields>
       <Actions>
-        <Button id="ack_alert" value={payload.tenantId} style="primary">
+        <Button id="ack_alert" value={target} style="primary">
           Acknowledge
         </Button>
-        <Button id="mute_30" value={payload.tenantId}>
+        <Button id="mute_30" value={target}>
           Mute 30 min
         </Button>
       </Actions>

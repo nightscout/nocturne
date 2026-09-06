@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "name": "time-of-day-midnight-wrap",
+  "description": "from \u003E to wraps midnight: 22:00-06:00 covers both legs, excludes the daytime gap",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "time_of_day",
+      "condition_params": {
+        "from": "22:00",
+        "to": "06:00",
+        "timezone": null
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T23:00:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T23:00:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T23:00:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-06T05:00:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-06T05:00:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-06T05:00:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-06T06:00:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-06T06:00:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-06T06:00:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    }
+  ]
+}

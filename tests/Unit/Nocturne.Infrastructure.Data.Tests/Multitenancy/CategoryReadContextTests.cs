@@ -12,6 +12,7 @@ public class CategoryReadContextTests
 
         ctx.IsShare.Should().BeFalse();
         ctx.VisibleCategoriesCsv.Should().BeNull();
+        ctx.FullHistory.Should().BeFalse("an unresolved share must stay clamped to 24 hours (fail-closed)");
     }
 
     [Fact]
@@ -46,6 +47,27 @@ public class CategoryReadContextTests
 
         ctx.IsShare.Should().BeFalse();
         ctx.VisibleCategoriesCsv.Should().BeNull();
+    }
+
+    [Fact]
+    public void SetFullHistory_OnShare_LiftsTheClamp()
+    {
+        var ctx = new CategoryReadContext();
+        ctx.MarkShare();
+
+        ctx.SetFullHistory(true);
+
+        ctx.FullHistory.Should().BeTrue();
+    }
+
+    [Fact]
+    public void SetFullHistory_OnNonShare_IsIgnored()
+    {
+        var ctx = new CategoryReadContext();
+
+        ctx.SetFullHistory(true);
+
+        ctx.FullHistory.Should().BeFalse();
     }
 
     [Fact]

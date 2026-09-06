@@ -6,6 +6,9 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Alerts.Providers;
+using Nocturne.Connectors.Core.Utilities;
+using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Xunit;
@@ -31,10 +34,15 @@ public class ChatBotProviderTests
         Severity = AlertRuleSeverity.Critical,
     };
 
+    private const string TestInstanceKey = "test-instance-key";
+    private const string TestTenantSlug = "acme";
+
     private static ChatBotProvider CreateProvider(
         MockHttpMessageHandler handler,
         string? webUrl = "https://web.example.com",
-        string? baseUrl = null)
+        string? baseDomain = null,
+        string? instanceKey = TestInstanceKey,
+        string? tenantSlug = TestTenantSlug)
     {
         var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
 
@@ -45,11 +53,24 @@ public class ChatBotProviderTests
 
         var configMock = new Mock<IConfiguration>();
         configMock.Setup(c => c["WEB_URL"]).Returns(webUrl);
-        configMock.Setup(c => c["BaseUrl"]).Returns(baseUrl);
+        configMock.Setup(c => c["BASE_DOMAIN"]).Returns(baseDomain);
+        configMock.Setup(c => c["INSTANCE_KEY"]).Returns(instanceKey);
+
+        var tenantAccessorMock = new Mock<ITenantAccessor>();
+        if (tenantSlug is not null)
+        {
+            tenantAccessorMock
+                .Setup(a => a.Context)
+                .Returns(new TenantContext(Guid.NewGuid(), tenantSlug, "Acme", true, IsDemo: false));
+        }
 
         var logger = NullLoggerFactory.Instance.CreateLogger<ChatBotProvider>();
 
-        return new ChatBotProvider(httpClientFactoryMock.Object, configMock.Object, logger);
+        return new ChatBotProvider(
+            httpClientFactoryMock.Object,
+            configMock.Object,
+            tenantAccessorMock.Object,
+            logger);
     }
 
     [Fact]
@@ -93,33 +114,127 @@ public class ChatBotProviderTests
     }
 
     [Fact]
-    public async Task SendAsync_FallsBackToBaseUrl_WhenWebUrlNotConfigured()
+    public async Task SendAsync_SendsInstanceKeyServiceCredential()
     {
-        // Arrange -- no WEB_URL (the nocturne-cloud deployment shape), only the
-        // public base URL, which routes /api/v4/bot/dispatch to web via the gateway.
+        // Arrange -- the dispatch route is internet-reachable through the gateway and
+        // authenticates the caller on the instance-key digest plus the service marker.
         var handler = new MockHttpMessageHandler(HttpStatusCode.OK);
-        var provider = CreateProvider(handler, webUrl: "", baseUrl: "https://nocturne.run");
+        var provider = CreateProvider(handler);
 
         // Act
         await provider.SendAsync(Guid.NewGuid(), ChannelType.DiscordDm, "u1", CreateTestPayload(), CancellationToken.None);
 
         // Assert
         handler.CapturedRequest.Should().NotBeNull();
-        handler.CapturedRequest!.RequestUri!.ToString()
-            .Should().Be("https://nocturne.run/api/v4/bot/dispatch");
+        handler.CapturedRequest!.Headers
+            .GetValues(ServiceNames.Headers.InstanceKey).Single()
+            .Should().Be(HashUtils.Sha256Hex(TestInstanceKey));
+        handler.CapturedRequest.Headers
+            .GetValues(ServiceNames.Headers.InstanceService).Single()
+            .Should().Be(ServiceNames.NocturneApi);
     }
 
     [Fact]
-    public async Task SendAsync_LogsWarning_WhenNeitherUrlConfigured()
+    public async Task SendAsync_NamesTargetTenantInBody()
     {
         // Arrange
         var handler = new MockHttpMessageHandler(HttpStatusCode.OK);
-        var provider = CreateProvider(handler, webUrl: "", baseUrl: "");
+        var provider = CreateProvider(handler);
 
-        // Act -- should return early without throwing
+        // Act
         await provider.SendAsync(Guid.NewGuid(), ChannelType.DiscordDm, "u1", CreateTestPayload(), CancellationToken.None);
 
-        // Assert -- no HTTP request was made
+        // Assert -- the route scopes its API calls to this slug rather than a forwarded host
+        handler.CapturedContent.Should().NotBeNullOrEmpty();
+        JsonDocument.Parse(handler.CapturedContent!).RootElement
+            .GetProperty("tenantSlug").GetString()
+            .Should().Be(TestTenantSlug);
+    }
+
+    [Fact]
+    public async Task SendAsync_ThrowsWithoutDispatching_WhenInstanceKeyNotConfigured()
+    {
+        // Arrange
+        var handler = new MockHttpMessageHandler(HttpStatusCode.OK);
+        var provider = CreateProvider(handler, instanceKey: null);
+
+        // Act
+        var act = () => provider.SendAsync(
+            Guid.NewGuid(), ChannelType.DiscordDm, "u1", CreateTestPayload(), CancellationToken.None);
+
+        // Assert -- an unauthenticated dispatch would be rejected, so none is sent. The throw
+        // reaches AlertDeliveryService's MarkFailedAsync; a silent return would leave the
+        // alert_deliveries row pending forever.
+        (await act.Should().ThrowAsync<InvalidOperationException>())
+            .WithMessage("*instance key*");
+        handler.CapturedRequest.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task SendAsync_ThrowsWithoutDispatching_WhenNoTenantResolved()
+    {
+        // Arrange
+        var handler = new MockHttpMessageHandler(HttpStatusCode.OK);
+        var provider = CreateProvider(handler, tenantSlug: null);
+
+        // Act
+        var act = () => provider.SendAsync(
+            Guid.NewGuid(), ChannelType.DiscordDm, "u1", CreateTestPayload(), CancellationToken.None);
+
+        // Assert
+        (await act.Should().ThrowAsync<InvalidOperationException>())
+            .WithMessage("*tenant*");
+        handler.CapturedRequest.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task SendAsync_PostsToTheInternalWebAddress()
+    {
+        // Arrange -- WEB_URL is the web app's address on the deployment's internal
+        // network, so the dispatch never leaves it.
+        var handler = new MockHttpMessageHandler(HttpStatusCode.OK);
+        var provider = CreateProvider(handler, webUrl: "http://nocturne-web:5173");
+
+        // Act
+        await provider.SendAsync(Guid.NewGuid(), ChannelType.DiscordDm, "u1", CreateTestPayload(), CancellationToken.None);
+
+        // Assert
+        handler.CapturedRequest!.RequestUri!.ToString()
+            .Should().Be("http://nocturne-web:5173/api/v4/bot/dispatch");
+    }
+
+    [Fact]
+    public async Task SendAsync_DoesNotFallBackToThePublicBaseUrl()
+    {
+        // Arrange -- only the public base domain is configured. Dispatching to the public
+        // origin would hairpin an intra-cluster call out through the CDN and edge and back
+        // in, carrying the instance-key service credential across the public internet.
+        var handler = new MockHttpMessageHandler(HttpStatusCode.OK);
+        var provider = CreateProvider(handler, webUrl: "", baseDomain: "nocturne.run");
+
+        // Act
+        var act = () => provider.SendAsync(
+            Guid.NewGuid(), ChannelType.DiscordDm, "u1", CreateTestPayload(), CancellationToken.None);
+
+        // Assert -- no request at all, rather than one to the public URL
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        handler.CapturedRequest.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task SendAsync_ThrowsWithoutDispatching_WhenWebUrlNotConfigured()
+    {
+        // Arrange
+        var handler = new MockHttpMessageHandler(HttpStatusCode.OK);
+        var provider = CreateProvider(handler, webUrl: "", baseDomain: "");
+
+        // Act
+        var act = () => provider.SendAsync(
+            Guid.NewGuid(), ChannelType.DiscordDm, "u1", CreateTestPayload(), CancellationToken.None);
+
+        // Assert -- no HTTP request, and the reason reaches the delivery row
+        (await act.Should().ThrowAsync<InvalidOperationException>())
+            .WithMessage("*WEB_URL*");
         handler.CapturedRequest.Should().BeNull();
     }
 

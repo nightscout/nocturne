@@ -16,6 +16,10 @@
   } from "./labels";
 
   interface Props {
+    /** Prefixed onto every field's `name` attribute — set to "request." when submitting to
+    updateInsulin, whose schema nests fields under `request` (SvelteKit's dot-path form parsing). */
+    namePrefix?: string;
+
     // Core fields (bindable)
     category?: string;
     formulationId?: string;
@@ -45,6 +49,7 @@
   }
 
   let {
+    namePrefix = "",
     category = $bindable(""),
     formulationId = $bindable(""),
     name = $bindable(""),
@@ -89,7 +94,7 @@
       <Label for="insulin-category">Category</Label>
       <Select.Root
         type="single"
-        name="insulinCategory"
+        name="{namePrefix}insulinCategory"
         bind:value={category}
         onValueChange={handleCategoryChange}
       >
@@ -158,7 +163,7 @@
     <div class="space-y-2">
       <Label for="insulin-name">Brand / Name</Label>
       <Input
-        name="name"
+        name="{namePrefix}name"
         id="insulin-name"
         bind:value={name}
         placeholder="e.g. Humalog, Lantus, Fiasp"
@@ -168,7 +173,7 @@
 
     <div class="space-y-2">
       <Label for="insulin-role">Role</Label>
-      <Select.Root type="single" name="role" bind:value={role}>
+      <Select.Root type="single" name="{namePrefix}role" bind:value={role}>
         <Select.Trigger id="insulin-role">
           {insulinRoleLabels[role as InsulinRole] ?? role}
         </Select.Trigger>
@@ -243,7 +248,7 @@
       <div class="space-y-2">
         <Label for="insulin-start">Start Date</Label>
         <Input
-          name="startDate"
+          name="{namePrefix}startDate"
           id="insulin-start"
           type="date"
           bind:value={startDate}
@@ -252,7 +257,7 @@
       <div class="space-y-2">
         <Label for="insulin-end">End Date</Label>
         <Input
-          name="endDate"
+          name="{namePrefix}endDate"
           id="insulin-end"
           type="date"
           bind:value={endDate}
@@ -266,7 +271,7 @@
         <input
           id="insulin-current"
           type="checkbox"
-          name="isCurrent"
+          name="{namePrefix}isCurrent"
           bind:checked={isCurrent}
           class="h-4 w-4 rounded border-input"
         />
@@ -277,7 +282,7 @@
         <input
           id="insulin-primary"
           type="checkbox"
-          name="isPrimary"
+          name="{namePrefix}isPrimary"
           bind:checked={isPrimary}
           class="h-4 w-4 rounded border-input"
         />
@@ -289,7 +294,7 @@
     <div class="space-y-2">
       <Label for="insulin-notes">Notes</Label>
       <Textarea
-        name="notes"
+        name="{namePrefix}notes"
         id="insulin-notes"
         bind:value={notes}
         placeholder="Any additional notes about this insulin"

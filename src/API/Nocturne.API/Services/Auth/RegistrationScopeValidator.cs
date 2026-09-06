@@ -9,7 +9,7 @@ public static class RegistrationScopeValidator
 {
     /// <summary>
     /// Validates a space-delimited scope string from a DCR request against the
-    /// canonical <see cref="OAuthScopes.ValidRequestScopes"/> registry.
+    /// canonical <see cref="Scope.ValidRequestScopes"/> registry.
     /// </summary>
     /// <param name="scopeString">
     /// A space-delimited list of requested scopes, or <see langword="null"/> / empty to request no specific scopes.
@@ -24,7 +24,7 @@ public static class RegistrationScopeValidator
             return null; // No scopes requested — valid (will use defaults)
 
         var requested = scopeString.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        var unknown = requested.Where(s => !OAuthScopes.ValidRequestScopes.Contains(s)).ToList();
+        var unknown = requested.Where(s => !Scope.ValidRequestScopes.Contains(s)).ToList();
 
         return unknown.Count > 0 ? unknown : null;
     }

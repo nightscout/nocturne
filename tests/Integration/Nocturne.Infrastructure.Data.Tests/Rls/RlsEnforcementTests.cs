@@ -1,7 +1,7 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
-using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Security;
 using Npgsql;
 using Xunit;
 
@@ -33,7 +33,7 @@ public class RlsEnforcementTests
     [Fact]
     public async Task AllTenantScopedTables_HaveRlsEnabledAndForcedAndPolicied()
     {
-        var tenantScopedTables = TenantScopedTableNames().ToArray();
+        var tenantScopedTables = _fx.TenantScopedTableNames.ToArray();
         tenantScopedTables.Should().NotBeEmpty(
             "the EF model should declare at least one ITenantScoped entity");
 
@@ -46,6 +46,41 @@ public class RlsEnforcementTests
 
         await act.Should().NotThrowAsync(
             "VerifyRlsAsync is the canonical schema fingerprint — failing means a tenant-scoped table is missing RLS, FORCE RLS, a policy, or correct ownership");
+    }
+
+    /// <summary>
+    /// The share-category policy is the one a partial reconcile drops, and the one a policy
+    /// count cannot miss: tenant_isolation is still there, so the table reads as policied.
+    /// </summary>
+    [Fact]
+    public async Task MissingSharePolicy_IsNamed_EvenThoughTenantIsolationRemains()
+    {
+        await using var conn = await _fx.OpenMigratorConnectionAsync();
+
+        var verify = () => DatabaseInitializationExtensions.VerifyRlsAsync(
+            conn, _fx.TenantScopedTableNames.ToArray(), NullLogger.Instance);
+
+        try
+        {
+            await using (var drop = conn.CreateCommand())
+            {
+                drop.CommandText = $"DROP POLICY {ShareRlsPolicy.PolicyName} ON {SampleTable}";
+                await drop.ExecuteNonQueryAsync();
+            }
+
+            // The policy name alone is in every failure message's fixed prefix; only the
+            // per-problem fragment shows the table was actually named.
+            (await verify.Should().ThrowAsync<InvalidOperationException>())
+                .Which.Message.Should().Contain(
+                    $"'{ShareRlsPolicy.PolicyName}' policy missing on: {SampleTable}");
+        }
+        finally
+        {
+            await DatabaseInitializationExtensions.ReconcileShareRlsPoliciesAsync(
+                _fx.MigratorConnectionString, NullLogger.Instance);
+        }
+
+        await verify.Should().NotThrowAsync("the reconciler restored the policy");
     }
 
     [Fact]
@@ -109,6 +144,30 @@ public class RlsEnforcementTests
             "FORCE ROW LEVEL SECURITY must apply to the table owner, not just non-owner roles");
     }
 
+    /// <summary>
+    /// member_invites is looked up by token hash — a globally unique bearer credential — so the
+    /// read that matters carries no tenant_id predicate of its own. The policy, not the query, is
+    /// what keeps a token minted for one tenant unreadable from another.
+    /// </summary>
+    [Fact]
+    public async Task AppRole_CannotReadAnotherTenantsInvite_ByTokenHashAlone()
+    {
+        var tenantA = Guid.NewGuid();
+        var tenantB = Guid.NewGuid();
+        var tokenHash = $"hash-{Guid.NewGuid():N}";
+        await SeedInviteAsync(tenantB, tokenHash);
+
+        await using var conn = await _fx.OpenAppConnectionAsync();
+
+        await SetCurrentTenantAsync(conn, tenantA);
+        (await CountInvitesByTokenHashAsync(conn, tokenHash)).Should().Be(0,
+            "a token minted for tenant B must read as unknown under tenant A, with no tenant predicate in the query");
+
+        await SetCurrentTenantAsync(conn, tenantB);
+        (await CountInvitesByTokenHashAsync(conn, tokenHash)).Should().Be(1,
+            "the invite must stay readable on the tenant it was minted for — the pre-auth join paths depend on it");
+    }
+
     [Fact]
     public async Task AppRole_IsNotSuperuserAndDoesNotBypassRls()
     {
@@ -125,18 +184,6 @@ public class RlsEnforcementTests
         reader.GetBoolean(2).Should().BeFalse("nocturne_app must not have BYPASSRLS");
     }
 
-    private static IEnumerable<string> TenantScopedTableNames()
-    {
-        return typeof(ITenantScoped).Assembly
-            .GetTypes()
-            .Where(t => typeof(ITenantScoped).IsAssignableFrom(t) && t is { IsAbstract: false, IsInterface: false })
-            .Select(t => (System.ComponentModel.DataAnnotations.Schema.TableAttribute?)
-                Attribute.GetCustomAttribute(t, typeof(System.ComponentModel.DataAnnotations.Schema.TableAttribute)))
-            .Where(attr => attr is not null)
-            .Select(attr => attr!.Name)
-            .Distinct(StringComparer.Ordinal);
-    }
-
     private async Task SeedRowAsync(Guid tenantId)
     {
         // body_weights.tenant_id has a foreign key to tenants.Id, so the tenant
@@ -150,6 +197,59 @@ public class RlsEnforcementTests
         await InsertRowAsync(conn, tenantId);
     }
 
+    /// <summary>
+    /// Seeds one invite, with the tenant and creating subject its foreign keys require. The
+    /// migrator obeys FORCE RLS too, so the GUC is set before the member_invites INSERT.
+    /// </summary>
+    private async Task SeedInviteAsync(Guid tenantId, string tokenHash)
+    {
+        await using var conn = await _fx.OpenMigratorConnectionAsync();
+        await InsertTenantAsync(conn, tenantId);
+
+        var subjectId = Guid.NewGuid();
+        await using (var subject = conn.CreateCommand())
+        {
+            subject.CommandText = """
+                INSERT INTO subjects (id, name, approval_status, is_active, is_platform_admin, is_system_subject)
+                VALUES (@id, 'rls-test-creator', 'approved', true, false, false)
+                """;
+            AddParameter(subject, "@id", subjectId);
+            await subject.ExecuteNonQueryAsync();
+        }
+
+        await SetCurrentTenantAsync(conn, tenantId);
+
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO member_invites
+                (id, tenant_id, created_by_subject_id, token_hash, role_ids, limit_to_24_hours,
+                 expires_at, use_count, created_at)
+            VALUES
+                (gen_random_uuid(), @tid, @sid, @hash, '[]'::jsonb, false,
+                 now() + interval '7 days', 0, now())
+            """;
+        AddParameter(cmd, "@tid", tenantId);
+        AddParameter(cmd, "@sid", subjectId);
+        AddParameter(cmd, "@hash", tokenHash);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    private static async Task<long> CountInvitesByTokenHashAsync(NpgsqlConnection conn, string tokenHash)
+    {
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*) FROM member_invites WHERE token_hash = @hash";
+        AddParameter(cmd, "@hash", tokenHash);
+        return Convert.ToInt64(await cmd.ExecuteScalarAsync());
+    }
+
+    private static void AddParameter(NpgsqlCommand cmd, string name, object value)
+    {
+        var p = cmd.CreateParameter();
+        p.ParameterName = name;
+        p.Value = value;
+        cmd.Parameters.Add(p);
+    }
+
     private static async Task InsertTenantAsync(NpgsqlConnection conn, Guid tenantId)
     {
         await using var cmd = conn.CreateCommand();
@@ -159,16 +259,8 @@ public class RlsEnforcementTests
             VALUES
                 (@id, @slug, 'rls-test', true, now(), now())
             """;
-        var idParam = cmd.CreateParameter();
-        idParam.ParameterName = "@id";
-        idParam.Value = tenantId;
-        cmd.Parameters.Add(idParam);
-
-        var slugParam = cmd.CreateParameter();
-        slugParam.ParameterName = "@slug";
-        slugParam.Value = $"rls-{tenantId:N}";
-        cmd.Parameters.Add(slugParam);
-
+        AddParameter(cmd, "@id", tenantId);
+        AddParameter(cmd, "@slug", $"rls-{tenantId:N}");
         await cmd.ExecuteNonQueryAsync();
     }
 
@@ -181,10 +273,7 @@ public class RlsEnforcementTests
             VALUES
                 (gen_random_uuid(), @tid, 0, 0, now(), now())
             """;
-        var p = cmd.CreateParameter();
-        p.ParameterName = "@tid";
-        p.Value = rowTenantId;
-        cmd.Parameters.Add(p);
+        AddParameter(cmd, "@tid", rowTenantId);
         await cmd.ExecuteNonQueryAsync();
     }
 
@@ -192,10 +281,7 @@ public class RlsEnforcementTests
     {
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = "SELECT set_config('app.current_tenant_id', @tid, false)";
-        var p = cmd.CreateParameter();
-        p.ParameterName = "@tid";
-        p.Value = tenantId.ToString();
-        cmd.Parameters.Add(p);
+        AddParameter(cmd, "@tid", tenantId.ToString());
         await cmd.ExecuteScalarAsync();
     }
 
@@ -203,11 +289,7 @@ public class RlsEnforcementTests
     {
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"SELECT COUNT(*) FROM {SampleTable} WHERE tenant_id = @tid";
-        var p = cmd.CreateParameter();
-        p.ParameterName = "@tid";
-        p.Value = tenantId;
-        cmd.Parameters.Add(p);
-        var result = await cmd.ExecuteScalarAsync();
-        return Convert.ToInt64(result);
+        AddParameter(cmd, "@tid", tenantId);
+        return Convert.ToInt64(await cmd.ExecuteScalarAsync());
     }
 }

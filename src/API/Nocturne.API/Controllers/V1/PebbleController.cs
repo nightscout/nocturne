@@ -1,8 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Services.Devices;
-using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.Treatments;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models;
 
 namespace Nocturne.API.Controllers.V1;
@@ -12,6 +13,11 @@ namespace Nocturne.API.Controllers.V1;
 /// Used by smartwatch apps, Loop, and other CGM monitoring applications.
 /// Based on the legacy pebble.js implementation.
 /// </summary>
+/// <remarks>
+/// The action requires only <c>glucose.read</c> while the response also carries IOB and COB from
+/// treatments and pump/uploader battery from device status. This is the accepted narrowing described
+/// on <see cref="V2.PropertiesController"/>, which names the per-category follow-up.
+/// </remarks>
 /// <seealso cref="IEntryService"/>
 /// <seealso cref="DeviceStatusProjectionService"/>
 /// <seealso cref="ITreatmentService"/>
@@ -57,6 +63,7 @@ public class PebbleController : ControllerBase
     [NightscoutEndpoint("/pebble")]
     [Produces("application/json")]
     [ProducesResponseType(typeof(PebbleResponse), 200)]
+    [RequireScope(Scope.GlucoseRead)]
     public async Task<ActionResult<PebbleResponse>> GetPebbleData(
         [FromQuery] string? units = null,
         [FromQuery] int count = 1,

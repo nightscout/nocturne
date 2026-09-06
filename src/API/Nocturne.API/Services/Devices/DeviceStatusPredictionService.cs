@@ -4,6 +4,7 @@ using Nocturne.API.Controllers.V4.Analytics;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.API.Services.Glucose;
+using Nocturne.API.Services.Treatments;
 
 namespace Nocturne.API.Services.Devices;
 
@@ -34,9 +35,13 @@ public class DeviceStatusPredictionService : IPredictionService
     {
         // For replay we want the snapshot active at-or-before the anchor — the AID system
         // already wrote forward predictions historically, so picking the most recent snapshot
-        // before `asOf` gives us the forecast the user actually had at that tick.
+        // before `asOf` gives us the forecast the user actually had at that tick. The lower
+        // bound rejects stale snapshots: consumers anchor the curve at the anchor instant
+        // (alert evaluation measures offsets from "now"), so a forecast from an uploader that
+        // stopped hours ago must read as "no predictions", not as a current one.
+        var anchor = asOf ?? DateTimeOffset.UtcNow;
         var snapshots = await _apsSnapshots.GetAsync(
-            from: null,
+            from: anchor.UtcDateTime.AddMilliseconds(-DeviceReportedValues.RecencyThresholdMs),
             to: asOf?.UtcDateTime,
             device: null,
             source: null,

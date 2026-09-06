@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseFrontmatter, buildManifest } from './manifest.ts';
+import { parseFrontmatter, buildManifest, listedPosts } from './manifest.ts';
 import type { BlogPostMeta } from './types.ts';
 
 describe('parseFrontmatter', () => {
@@ -27,12 +27,72 @@ summary: A test post
       summary: 'A test post',
       image: undefined,
       draft: undefined,
+      unlisted: undefined,
     });
   });
 
   it('returns null for content without frontmatter', () => {
     const meta = parseFrontmatter('# Just a heading', 'no-front.svx');
     expect(meta).toBeNull();
+  });
+
+  // A post authored on Windows arrives with CRLF. The delimiter pattern only accepted a
+  // bare newline, so such a post parsed as having no frontmatter, dropped out of the
+  // manifest and was never built — silently, with both check and build still passing, so
+  // only the live 404 revealed it.
+  it('parses frontmatter with CRLF line endings', () => {
+    const content = [
+      '---',
+      'title: Windows Post',
+      'slug: windows-post',
+      'date: 2026-04-12',
+      'tags: [announcement, release]',
+      'category: news',
+      'author: Rhys',
+      'summary: Authored with CRLF',
+      'draft: true',
+      '---',
+      '',
+      '# Content here',
+    ].join('\r\n');
+
+    const meta = parseFrontmatter(content, 'windows-post.svx');
+
+    expect(meta).toEqual({
+      title: 'Windows Post',
+      slug: 'windows-post',
+      date: '2026-04-12',
+      tags: ['announcement', 'release'],
+      category: 'news',
+      author: 'Rhys',
+      summary: 'Authored with CRLF',
+      image: undefined,
+      draft: true,
+    });
+  });
+
+  // Covers the parts a trailing trim() alone would not: the last entry of an inline array,
+  // and a boolean matched by exact value.
+  it('leaves no carriage returns in values parsed from CRLF content', () => {
+    const content = [
+      '---',
+      'title: Trailing CR',
+      'slug: trailing-cr',
+      'date: 2026-04-12',
+      'tags: [one, two]',
+      'category: news',
+      'author: Rhys',
+      'summary: No stray carriage returns',
+      'draft: true',
+      '---',
+      '# Body',
+    ].join('\r\n');
+
+    const meta = parseFrontmatter(content, 'trailing-cr.svx');
+
+    expect(meta?.tags).toEqual(['one', 'two']);
+    expect(meta?.draft).toBe(true);
+    expect(JSON.stringify(meta)).not.toContain('\\r');
   });
 
   it('handles optional image and draft fields', () => {
@@ -51,6 +111,32 @@ draft: true
     const meta = parseFrontmatter(content, 'draft-post.svx');
     expect(meta?.image).toBe('/blog/draft.png');
     expect(meta?.draft).toBe(true);
+  });
+
+  it('parses the unlisted flag', () => {
+    const content = `---
+title: Unlisted Post
+slug: unlisted-post
+date: 2026-04-12
+tags: []
+category: dev
+author: Rhys
+summary: Circulating for review
+unlisted: true
+---`;
+
+    expect(parseFrontmatter(content, 'unlisted-post.svx')?.unlisted).toBe(true);
+  });
+});
+
+describe('listedPosts', () => {
+  it('drops unlisted posts and keeps everything else', () => {
+    const posts = [
+      makeMeta({ slug: 'public' }),
+      makeMeta({ slug: 'hidden', unlisted: true }),
+      makeMeta({ slug: 'explicitly-listed', unlisted: false }),
+    ];
+    expect(listedPosts(posts).map((p) => p.slug)).toEqual(['public', 'explicitly-listed']);
   });
 });
 
@@ -92,6 +178,22 @@ describe('buildManifest', () => {
     const manifest = buildManifest(posts, false);
     expect(manifest.tags).toEqual(['a', 'b', 'c']);
     expect(manifest.categories).toEqual(['dev', 'news']);
+  });
+
+  it('keeps unlisted posts in production so their page still builds', () => {
+    const posts = [makeMeta({ slug: 'published' }), makeMeta({ slug: 'hidden', unlisted: true })];
+    const manifest = buildManifest(posts, true);
+    expect(manifest.posts.map((p) => p.slug).sort()).toEqual(['hidden', 'published']);
+  });
+
+  it('does not let an unlisted post widen the tag or category lists', () => {
+    const posts = [
+      makeMeta({ tags: ['a'], category: 'news' }),
+      makeMeta({ tags: ['secret'], category: 'skunkworks', unlisted: true }),
+    ];
+    const manifest = buildManifest(posts, true);
+    expect(manifest.tags).toEqual(['a']);
+    expect(manifest.categories).toEqual(['news']);
   });
 });
 

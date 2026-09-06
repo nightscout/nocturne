@@ -4,6 +4,7 @@ title: Sign in with any OIDC provider
 
 <script>
   import Callout from '@nocturne/cms/components/Callout.svelte';
+  import PlatformAdminNote from '$lib/components/docs/PlatformAdminNote.svelte';
 </script>
 
 # Sign in with any OIDC provider
@@ -31,7 +32,7 @@ every provider — only the credentials differ.
 Nocturne reads providers from one of two places:
 
 1. **Admin UI (database-backed)** — add and edit providers at runtime from
-   **Settings > Admin > OIDC Providers**. No restart needed. This is the default.
+   **Settings > Administration > Identity Providers**. No restart needed. This is the default.
 2. **Operator config (`appsettings` / environment)** — declare providers in configuration.
    When one or more providers are configured this way, Nocturne **bypasses the database
    entirely and hides the management UI**. Use this for declarative, infrastructure-as-code
@@ -45,10 +46,13 @@ Nocturne reads providers from one of two places:
 
 ### Option A: the admin UI
 
+<PlatformAdminNote />
+
 1. Register the callback URL (above) with your provider and obtain a **client ID** and
    **client secret**.
-2. Sign in to your Nocturne instance as an admin.
-3. Go to **Settings > Admin > OIDC Providers** and click **Add Provider**.
+2. Sign in to your Nocturne instance as a platform admin.
+3. Go to **Settings > Administration** (`/settings/admin`), open the **Identity Providers**
+   tab, and click **Add Provider**.
 4. Fill in the fields (see the field reference below) and **Save**.
 
 The new sign-in button appears on your login page immediately.

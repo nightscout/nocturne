@@ -6,6 +6,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
+using Nocturne.API.Extensions;
 
 namespace Nocturne.API.Middleware.Handlers;
 
@@ -65,7 +66,7 @@ public class PlatformAccessCookieHandler : IAuthHandler
             return AuthResult.Skip();
 
         // A grant is only meaningful on a resolved tenant subdomain.
-        if (context.Items["TenantContext"] is not TenantContext tenant)
+        if (context.GetTenantContext() is not { } tenant)
             return AuthResult.Skip();
 
         using var scope = _scopeFactory.CreateScope();

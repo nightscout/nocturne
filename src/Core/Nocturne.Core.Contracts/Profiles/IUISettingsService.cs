@@ -40,10 +40,17 @@ public interface IUISettingsService
     /// Saves a specific section of the UI settings.
     /// </summary>
     /// <typeparam name="T">The section type</typeparam>
-    /// <param name="sectionName">The section name</param>
+    /// <param name="sectionName">
+    /// A <see cref="UISettingsSections"/> name, or <c>alarms</c>/<c>alarmConfiguration</c> for the
+    /// alarm configuration. Reads only ever look under those keys, so any other name would store a
+    /// row nothing can serve.
+    /// </param>
     /// <param name="sectionSettings">The section settings to save</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>The saved section settings</returns>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="sectionName"/> names neither a section nor the alarm configuration.
+    /// </exception>
     Task<T> SaveSectionAsync<T>(
         string sectionName,
         T sectionSettings,
@@ -72,10 +79,11 @@ public interface IUISettingsService
     );
 
     /// <summary>
-    /// Gets just the alarm configuration from notification settings.
+    /// Gets just the alarm configuration from notification settings. A tenant that has never saved
+    /// one reads back an empty configuration, so null means the read itself failed.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>The alarm configuration, or null if not set</returns>
+    /// <returns>The alarm configuration, or null if it could not be read</returns>
     Task<UserAlarmConfiguration?> GetAlarmConfigurationAsync(
         CancellationToken cancellationToken = default
     );

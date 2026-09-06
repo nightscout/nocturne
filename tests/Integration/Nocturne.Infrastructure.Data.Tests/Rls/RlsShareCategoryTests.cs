@@ -1,8 +1,6 @@
-using System.ComponentModel.DataAnnotations.Schema;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Security;
 using Npgsql;
@@ -60,11 +58,11 @@ public class RlsShareCategoryTests
 
         await using var conn = await _fx.OpenAppConnectionAsync();
 
-        await SetShareContextAsync(conn, tenant, isShare: true, visibleCategories: OAuthScopes.TreatmentsRead);
+        await SetShareContextAsync(conn, tenant, isShare: true, visibleCategories: Scope.TreatmentsRead);
         (await CountAsync(conn, TreatmentTable, tenant)).Should().Be(1,
             "a share granted treatments.read must see boluses");
 
-        await SetShareContextAsync(conn, tenant, isShare: true, visibleCategories: OAuthScopes.GlucoseRead);
+        await SetShareContextAsync(conn, tenant, isShare: true, visibleCategories: Scope.GlucoseRead);
         (await CountAsync(conn, TreatmentTable, tenant)).Should().Be(0,
             "a glucose-only share must not see boluses (the original leak)");
     }
@@ -76,7 +74,7 @@ public class RlsShareCategoryTests
         await SeedAsync(tenant);
 
         await using var conn = await _fx.OpenAppConnectionAsync();
-        await SetShareContextAsync(conn, tenant, isShare: true, visibleCategories: OAuthScopes.GlucoseRead);
+        await SetShareContextAsync(conn, tenant, isShare: true, visibleCategories: Scope.GlucoseRead);
 
         (await CountAsync(conn, GovernedTable, tenant)).Should().Be(0,
             "a glucose-only share must not see stepcount data");
@@ -125,6 +123,40 @@ public class RlsShareCategoryTests
     }
 
     [Fact]
+    public async Task Share_WithoutFullHistory_IsClampedTo24Hours()
+    {
+        var tenant = Guid.NewGuid();
+        await SeedAsync(tenant);
+        await SeedOldGovernedRowAsync(tenant);
+
+        await using var conn = await _fx.OpenAppConnectionAsync();
+
+        // No app.share_full_history set — the clamp must apply (fail-closed).
+        await SetShareContextAsync(conn, tenant, isShare: true, visibleCategories: GovernedScope);
+        (await CountAsync(conn, GovernedTable, tenant)).Should().Be(1,
+            "a share without full history sees only rows from the last 24 hours");
+
+        await SetShareContextAsync(conn, tenant, isShare: false, visibleCategories: string.Empty);
+        (await CountAsync(conn, GovernedTable, tenant)).Should().Be(2,
+            "the owner is never clamped");
+    }
+
+    [Fact]
+    public async Task Share_WithFullHistory_SeesOldRows()
+    {
+        var tenant = Guid.NewGuid();
+        await SeedAsync(tenant);
+        await SeedOldGovernedRowAsync(tenant);
+
+        await using var conn = await _fx.OpenAppConnectionAsync();
+        await SetShareContextAsync(conn, tenant, isShare: true, visibleCategories: GovernedScope,
+            fullHistory: true);
+
+        (await CountAsync(conn, GovernedTable, tenant)).Should().Be(2,
+            "a full-history share sees rows older than 24 hours");
+    }
+
+    [Fact]
     public async Task EveryTenantScopedTable_HasCorrectRestrictiveSelectSharePolicy()
     {
         await using var conn = await _fx.OpenMigratorConnectionAsync();
@@ -141,7 +173,7 @@ public class RlsShareCategoryTests
                 policied[reader.GetString(0)] = (reader.GetBoolean(1), reader.GetChar(2), reader.GetString(3));
         }
 
-        foreach (var table in TenantScopedTableNames())
+        foreach (var table in _fx.TenantScopedTableNames)
         {
             policied.Should().ContainKey(table,
                 $"the reconciler must apply '{ShareRlsPolicy.PolicyName}' to every tenant-scoped table");
@@ -160,6 +192,16 @@ public class RlsShareCategoryTests
             else
             {
                 usingExpr.Should().Contain($"'{scope}'", $"{table} must gate on its governing scope {scope}");
+                if (ShareDataCategories.RecencyColumnFor(table) is not null)
+                {
+                    usingExpr.Should().Contain("share_full_history",
+                        $"{table} is time-series data, so its policy must clamp shares without full history to 24 hours");
+                }
+                else
+                {
+                    usingExpr.Should().NotContain("share_full_history",
+                        $"{table} is deliberately unclamped (no per-row time), so its policy must not carry the clamp");
+                }
             }
         }
     }
@@ -202,6 +244,15 @@ public class RlsShareCategoryTests
             "VALUES (gen_random_uuid(), @tid, now(), 1.0, false, 'Manual', now(), now())", tenantId);
     }
 
+    private async Task SeedOldGovernedRowAsync(Guid tenantId)
+    {
+        await using var conn = await _fx.OpenMigratorConnectionAsync();
+        await SetCurrentTenantAsync(conn, tenantId);
+        await ExecuteAsync(conn,
+            $"INSERT INTO {GovernedTable} (id, tenant_id, timestamp, metric, source, sys_created_at, sys_updated_at) " +
+            "VALUES (gen_random_uuid(), @tid, now() - interval '30 hours', 0, 0, now(), now())", tenantId);
+    }
+
     private static async Task InsertTenantAsync(NpgsqlConnection conn, Guid tenantId)
     {
         await using var cmd = conn.CreateCommand();
@@ -231,16 +282,18 @@ public class RlsShareCategoryTests
     }
 
     private static async Task SetShareContextAsync(
-        NpgsqlConnection conn, Guid tenantId, bool isShare, string visibleCategories)
+        NpgsqlConnection conn, Guid tenantId, bool isShare, string visibleCategories, bool fullHistory = false)
     {
         await using var cmd = conn.CreateCommand();
         cmd.CommandText =
             "SELECT set_config('app.current_tenant_id', @tid, false), " +
             "set_config('app.is_share', @share, false), " +
-            "set_config('app.visible_categories', @cats, false)";
+            "set_config('app.visible_categories', @cats, false), " +
+            "set_config('app.share_full_history', @full_history, false)";
         AddParam(cmd, "@tid", tenantId.ToString());
         AddParam(cmd, "@share", isShare ? "true" : "false");
         AddParam(cmd, "@cats", visibleCategories);
+        AddParam(cmd, "@full_history", fullHistory ? "true" : "false");
         await cmd.ExecuteNonQueryAsync();
     }
 
@@ -259,12 +312,4 @@ public class RlsShareCategoryTests
         p.Value = value;
         cmd.Parameters.Add(p);
     }
-
-    private static IEnumerable<string> TenantScopedTableNames() =>
-        typeof(ITenantScoped).Assembly.GetTypes()
-            .Where(t => typeof(ITenantScoped).IsAssignableFrom(t) && t is { IsAbstract: false, IsInterface: false })
-            .Select(t => Attribute.GetCustomAttribute(t, typeof(TableAttribute)) as TableAttribute)
-            .Where(a => a is not null)
-            .Select(a => a!.Name)
-            .Distinct(StringComparer.Ordinal);
 }

@@ -16,9 +16,7 @@ public static class HeartRateMapper
     {
         return new HeartRateEntity
         {
-            Id = string.IsNullOrEmpty(heartRate.Id)
-                ? Guid.CreateVersion7()
-                : ParseIdToGuid(heartRate.Id),
+            Id = MapperHelpers.ParseIdToGuid(heartRate.Id),
             OriginalId = MongoIdUtils.IsValidMongoId(heartRate.Id) ? heartRate.Id : null,
             Timestamp = heartRate.Timestamp,
             Bpm = heartRate.Bpm,
@@ -26,6 +24,8 @@ public static class HeartRateMapper
             Device = heartRate.Device,
             EnteredBy = heartRate.EnteredBy,
             UtcOffset = heartRate.UtcOffset,
+            DataSource = heartRate.DataSource,
+            SyncIdentifier = heartRate.SyncIdentifier,
         };
     }
 
@@ -43,6 +43,8 @@ public static class HeartRateMapper
             Device = entity.Device,
             EnteredBy = entity.EnteredBy,
             UtcOffset = entity.UtcOffset,
+            DataSource = entity.DataSource,
+            SyncIdentifier = entity.SyncIdentifier,
         };
     }
 
@@ -57,25 +59,7 @@ public static class HeartRateMapper
         entity.Device = heartRate.Device;
         entity.EnteredBy = heartRate.EnteredBy;
         entity.UtcOffset = heartRate.UtcOffset;
-        entity.SysUpdatedAt = DateTime.UtcNow;
-    }
-
-    /// <summary>
-    /// Parse string ID to GUID, or generate a deterministic GUID via hash if invalid
-    /// </summary>
-    private static Guid ParseIdToGuid(string id)
-    {
-        if (string.IsNullOrEmpty(id))
-            return Guid.CreateVersion7();
-
-        if (Guid.TryParse(id, out var guid))
-            return guid;
-
-        var hash = System.Security.Cryptography.SHA1.HashData(
-            System.Text.Encoding.UTF8.GetBytes(id)
-        );
-        var guidBytes = new byte[16];
-        Array.Copy(hash, guidBytes, 16);
-        return new Guid(guidBytes);
+        entity.DataSource = heartRate.DataSource;
+        entity.SyncIdentifier = heartRate.SyncIdentifier;
     }
 }

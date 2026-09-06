@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Tidepool.Models;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Connectors.Tidepool.Mappers;
@@ -56,7 +57,7 @@ public class TidepoolSensorGlucoseMapper(ILogger logger, string connectorSource)
         if (string.IsNullOrEmpty(units)) return value;
         return units.ToLowerInvariant() switch
         {
-            "mmol/l" or "mmol" => value * 18.0182,
+            "mmol/l" or "mmol" => value * GlucoseConstants.MgdlPerMmol,
             "mg/dl" => value,
             _ => value
         };

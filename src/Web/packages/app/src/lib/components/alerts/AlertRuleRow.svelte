@@ -3,7 +3,7 @@
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
   import { Switch } from "$lib/components/ui/switch";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog";
+  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import {
     Loader2,
@@ -22,6 +22,8 @@
 
   interface Props {
     rule: AlertRuleResponse;
+    /** Whether the viewer holds alerts.readwrite; gates the mutating actions. */
+    canManage: boolean;
     isToggling: boolean;
     isDeleting: boolean;
     isTesting: boolean;
@@ -35,6 +37,7 @@
 
   let {
     rule,
+    canManage,
     isToggling,
     isDeleting,
     isTesting,
@@ -84,6 +87,9 @@
       {#if !rule.isEnabled}
         <Badge variant="secondary" class="text-[10px]">Disabled</Badge>
       {/if}
+      {#if rule.managedBy}
+        <Badge variant="secondary" class="text-[10px]">Managed by tracker</Badge>
+      {/if}
     </div>
     <div class="truncate text-xs text-muted-foreground" title={chip}>
       {chip || "No condition configured"}
@@ -117,12 +123,14 @@
 
   <!-- Per-row actions -->
   <div class="flex items-center gap-1 shrink-0">
-    <Switch
-      checked={rule.isEnabled ?? false}
-      onCheckedChange={onToggleEnabled}
-      disabled={isToggling}
-      aria-label="Enable rule"
-    />
+    {#if canManage}
+      <Switch
+        checked={rule.isEnabled ?? false}
+        onCheckedChange={onToggleEnabled}
+        disabled={isToggling}
+        aria-label="Enable rule"
+      />
+    {/if}
     <DropdownMenu.Root>
       <DropdownMenu.Trigger>
         {#snippet child({ props }: { props: Record<string, unknown> })}
@@ -142,21 +150,31 @@
         <DropdownMenu.Item onclick={onEdit}>
           <Pencil class="h-4 w-4 mr-2" /> Edit
         </DropdownMenu.Item>
-        <DropdownMenu.Item
-          onclick={onTestFire}
-          disabled={isTesting || !rule.isEnabled}
-        >
-          {#if isTesting}
-            <Loader2 class="h-4 w-4 mr-2 animate-spin" />
-          {:else}
-            <Zap class="h-4 w-4 mr-2" />
-          {/if}
-          Test fire
-        </DropdownMenu.Item>
-        <DropdownMenu.Separator />
-        <AlertDialog.Root>
-          <AlertDialog.Trigger>
-            {#snippet child({ props }: { props: Record<string, unknown> })}
+        {#if canManage}
+          <DropdownMenu.Item
+            onclick={onTestFire}
+            disabled={isTesting || !rule.isEnabled}
+          >
+            {#if isTesting}
+              <Loader2 class="h-4 w-4 mr-2 animate-spin" />
+            {:else}
+              <Zap class="h-4 w-4 mr-2" />
+            {/if}
+            Test fire
+          </DropdownMenu.Item>
+        {/if}
+        <!-- Managed rules live and die with their tracker threshold (the server
+             returns 409 on DELETE) — hide the delete action; editing channels
+             etc. stays available. -->
+        {#if canManage && !rule.managedBy}
+          <DropdownMenu.Separator />
+          <ConfirmDialog
+            title={`Delete "${rule.name}"?`}
+            confirmLabel="Delete"
+            busy={isDeleting}
+            onConfirm={onDelete}
+          >
+            {#snippet trigger(props)}
               <DropdownMenu.Item
                 {...props}
                 class="text-destructive"
@@ -165,26 +183,12 @@
                 <Trash2 class="h-4 w-4 mr-2" /> Delete
               </DropdownMenu.Item>
             {/snippet}
-          </AlertDialog.Trigger>
-          <AlertDialog.Content>
-            <AlertDialog.Header>
-              <AlertDialog.Title>Delete "{rule.name}"?</AlertDialog.Title>
-              <AlertDialog.Description>
-                This rule will stop firing immediately. Existing alert history
-                is preserved. This action cannot be undone.
-              </AlertDialog.Description>
-            </AlertDialog.Header>
-            <AlertDialog.Footer>
-              <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-              <AlertDialog.Action onclick={onDelete} disabled={isDeleting}>
-                {#if isDeleting}
-                  <Loader2 class="h-4 w-4 mr-2 animate-spin" />
-                {/if}
-                Delete
-              </AlertDialog.Action>
-            </AlertDialog.Footer>
-          </AlertDialog.Content>
-        </AlertDialog.Root>
+            {#snippet description()}
+              This rule will stop firing immediately. Existing alert history
+              is preserved. This action cannot be undone.
+            {/snippet}
+          </ConfirmDialog>
+        {/if}
       </DropdownMenu.Content>
     </DropdownMenu.Root>
   </div>

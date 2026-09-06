@@ -1,0 +1,3 @@
+[workspace]
+resolver = "3"
+members = ["nocturne-alerts-core", "nocturne-alerts-ffi"]

@@ -2,9 +2,10 @@
   import { Tooltip, getChartContext } from "layerchart";
   import { cn } from "$lib/utils";
   import { goto } from "$app/navigation";
-  import { BasalDeliveryOrigin } from "$lib/api";
-  import { bg, bgLabel } from "$lib/utils/formatting";
+  import { BasalDeliveryOrigin, ChartSpanKind } from "$lib/api";
+  import { bg, bgLabel, time } from "$lib/utils/formatting";
   import { getGlucoseChartContext } from "./chart-context.svelte";
+  import { isBasalAdjusted } from "./engine/basal-presentation";
   import type { GlucosePoint } from "./engine/chart-data-engine.svelte";
 
   interface Props {
@@ -61,7 +62,7 @@
 
 <Tooltip.Root
   context={chartCtx}
-  class="bg-popover/95 border border-border rounded-lg shadow-xl text-xs z-50 backdrop-blur-sm"
+  class="bg-popover/95 border border-border rounded-lg shadow-xl text-xs z-50 backdrop-blur-sm print:hidden"
 >
   {#snippet children({ data })}
     {@const activeBasal = findBasal(data.time)}
@@ -80,7 +81,7 @@
 
     <Tooltip.Header
       value={data?.time}
-      format="minute"
+      format={(v) => (v instanceof Date ? time(v) : String(v))}
       class="text-popover-foreground border-b border-border pb-1 mb-1 text-sm font-semibold"
     />
     <Tooltip.List>
@@ -133,10 +134,11 @@
       {/if}
       {#if showBasal && (activeBasal || activeBasalDelivery || activeTempBasal)}
         {#if activeBasal}
-          {@const isAdjusted =
-            (activeBasal.origin === BasalDeliveryOrigin.Algorithm ||
-              activeBasal.origin === BasalDeliveryOrigin.Manual) &&
-            activeBasal.rate !== activeBasal.scheduledRate}
+          {@const isAdjusted = isBasalAdjusted(
+            activeBasal.origin,
+            activeBasal.rate,
+            activeBasal.scheduledRate
+          )}
           {@const basalLabel =
             activeBasal.origin === BasalDeliveryOrigin.Suspended
               ? "Suspended"
@@ -159,7 +161,7 @@
                 : ""
             )}
           />
-          {#if isAdjusted && activeBasal.scheduledRate !== undefined}
+          {#if isAdjusted && activeBasal.scheduledRate != null}
             <Tooltip.Item
               label="Scheduled"
               value={activeBasal.scheduledRate}
@@ -236,7 +238,9 @@
       {#if showActivitySpans}
         {#each activeActivities as activity (activity.id)}
           <Tooltip.Item
-            label={activity.category ?? ""}
+            label={activity.kind === ChartSpanKind.Sleep
+              ? "Sleep"
+              : (activity.category ?? "")}
             value={activity.state}
             color={activity.color}
             class="font-medium"
@@ -263,12 +267,12 @@
   yOffset={2}
   anchor="top"
   variant="none"
-  class="text-sm font-semibold leading-3 px-2 py-1 rounded-sm whitespace-nowrap bg-background"
+  class="text-sm font-semibold leading-3 px-2 py-1 rounded-sm whitespace-nowrap bg-background print:hidden"
 >
   {#snippet children({ data })}
     <Tooltip.Item
       value={data?.time}
-      format="minute"
+      format={(v) => (v instanceof Date ? time(v) : String(v))}
       onclick={() => goto(`/reports/day-in-review?date=${data?.time}`)}
     />
   {/snippet}

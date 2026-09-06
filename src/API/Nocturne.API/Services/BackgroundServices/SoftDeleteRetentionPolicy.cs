@@ -6,9 +6,13 @@ namespace Nocturne.API.Services.BackgroundServices;
 /// once they pass this window; the audit-config validator
 /// (<c>AuditController.UpdateAuditConfig</c>) resolves the same window so mutation-audit
 /// retention can be kept at least as long. If audit rows aged out first, a user-delete's
-/// attribution would vanish while the soft-deleted entity still lives, and the dedup
-/// discriminator (which reads that audit row) would let a connector resync silently
-/// recreate the deleted record.
+/// attribution would vanish while the soft-deleted entity was still recoverable.
+/// <para>
+/// The consequence is evidentiary only. Dedup does not consult the audit row:
+/// <c>SoftDeleteDedupExtensions</c> decides from the <c>deleted_by_user</c> flag carried on
+/// the soft-deleted row itself, so a purged audit trail cannot let a connector resync
+/// recreate a user-deleted record.
+/// </para>
 /// </summary>
 public static class SoftDeleteRetentionPolicy
 {

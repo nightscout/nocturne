@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "name": "time-of-day-dst-spring-forward",
+  "description": "Europe/London on 2026-03-29: 01:30 local does not exist; 00:30 UTC is 01:30 GMT pre-jump? No \u2014 at 00:30 UTC it is 00:30 GMT (window outside); at 01:30 UTC it is 02:30 BST (inside the 02:00-03:00 window even though only 30 utc-minutes after the 01:00-02:00 check)",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "time_of_day",
+      "condition_params": {
+        "from": "01:00",
+        "to": "02:00",
+        "timezone": "Europe/London"
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "time_of_day",
+      "condition_params": {
+        "from": "02:00",
+        "to": "03:00",
+        "timezone": "Europe/London"
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-03-29T00:30:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-03-29T00:30:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-03-29T00:30:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-03-29T01:30:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-03-29T01:30:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-03-29T01:30:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    }
+  ]
+}

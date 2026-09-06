@@ -1,0 +1,79 @@
+name: Native release (alerts)
+
+# Builds the nocturne_alerts cdylib (crates/nocturne-alerts-ffi) for linux-x64,
+# linux-arm64, win-x64, and osx-arm64 on a tag push like `alerts-v0.1.0` and
+# attaches the artifacts to the GitHub release for that tag (creating the
+# release if it doesn't exist).
+
+on:
+  push:
+    tags: ["alerts-v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            rid: linux-x64
+            artifact: libnocturne_alerts.so
+            asset: libnocturne_alerts-linux-x64.so
+          - os: ubuntu-24.04-arm
+            rid: linux-arm64
+            artifact: libnocturne_alerts.so
+            asset: libnocturne_alerts-linux-arm64.so
+          - os: windows-latest
+            rid: win-x64
+            artifact: nocturne_alerts.dll
+            asset: nocturne_alerts-win-x64.dll
+          - os: macos-latest
+            rid: osx-arm64
+            artifact: libnocturne_alerts.dylib
+            asset: libnocturne_alerts-osx-arm64.dylib
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            crates/target
+          # Sources, not just the lockfile — a restored crates/target has newer mtimes than
+          # the checkout, and cargo's path-package fingerprint is mtime-based, so a
+          # lockfile-only key can publish a release artifact built from stale sources.
+          key: cargo-release-${{ matrix.rid }}-${{ hashFiles('crates/Cargo.lock', 'crates/**/*.rs', 'crates/**/Cargo.toml') }}
+      - name: Build cdylib
+        working-directory: crates
+        run: cargo build --release -p nocturne-alerts-ffi
+      - name: Stage artifact under its release asset name
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp "crates/target/release/${{ matrix.artifact }}" "dist/${{ matrix.asset }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nocturne-alerts-${{ matrix.rid }}
+          path: dist/${{ matrix.asset }}
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Attach artifacts to the GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

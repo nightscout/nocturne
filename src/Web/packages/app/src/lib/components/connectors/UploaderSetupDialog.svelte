@@ -3,7 +3,6 @@
   import { Button } from "$lib/components/ui/button";
   import { Separator } from "$lib/components/ui/separator";
   import {
-    Loader2,
     Copy,
     Check,
     ExternalLink,
@@ -15,12 +14,10 @@
   import TabletSmartphone from "lucide-svelte/icons/tablet-smartphone";
   import XdripQuickConnect from "$lib/components/XdripQuickConnect.svelte";
   import PreludeQuickConnect from "$lib/components/PreludeQuickConnect.svelte";
-  import type {
-    UploaderApp,
-    UploaderSetupResponse,
-  } from "$lib/api/generated/nocturne-api-client";
-  import { getUploaderSetup } from "$api/generated/services.generated.remote";
+  import type { UploaderApp } from "$lib/api/generated/nocturne-api-client";
   import { KeyRound } from "lucide-svelte";
+  import { copyToClipboard } from "$lib/utils";
+  import { toast } from "svelte-sonner";
   import {
     getUploaderName,
     getUploaderDescription,
@@ -36,12 +33,6 @@
     onRequestApiKey?: (label: string, scopes: string[]) => void;
   } = $props();
 
-  const uploaderSetupQuery = $derived(
-    open && selectedUploader?.id ? getUploaderSetup(selectedUploader.id) : null,
-  );
-  const uploaderSetup = $derived<UploaderSetupResponse | null>(
-    uploaderSetupQuery?.current ?? null,
-  );
   let copiedField = $state<string | null>(null);
 
   const hasOAuthFlow = $derived(
@@ -50,11 +41,17 @@
 
   function handleRequestApiKey() {
     if (!selectedUploader) return;
+    // Dialogs layer by declaration order rather than open order, so a second one opened over
+    // this one can land underneath it and take no input. Hand off by stepping aside.
+    open = false;
     onRequestApiKey?.(getUploaderName(selectedUploader), ["health.readwrite"]);
   }
 
-  async function copyToClipboard(text: string, field: string) {
-    await navigator.clipboard.writeText(text);
+  async function copyField(text: string, field: string) {
+    if (!(await copyToClipboard(text))) {
+      toast.error("Couldn't copy to the clipboard. Copy it manually instead.");
+      return;
+    }
     copiedField = field;
     setTimeout(() => {
       copiedField = null;
@@ -78,8 +75,8 @@
 </script>
 
 <Dialog.Root bind:open>
-  <Dialog.Content class="max-w-2xl max-h-[80vh] overflow-y-auto">
-    {#if selectedUploader && uploaderSetup}
+  <Dialog.Content class="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
+    {#if selectedUploader}
       {@const PlatformIcon = getPlatformIcon(selectedUploader.platform)}
       <Dialog.Header>
         <Dialog.Title class="flex items-center gap-2">
@@ -119,7 +116,7 @@
                 size="icon"
                 onclick={() =>
                   typeof window !== "undefined" &&
-                  copyToClipboard(window.location.origin, "dialogUrl")}
+                  copyField(window.location.origin, "dialogUrl")}
               >
                 {#if copiedField === "dialogUrl"}
                   <Check class="h-4 w-4 text-green-500" />
@@ -149,20 +146,20 @@
 
         {#if selectedUploader.url}
           <div class="pt-4">
-            <Button variant="outline" class="w-full gap-2">
-              <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external uploader website URL from the API, not an internal app route -->
-              <a href={selectedUploader.url} target="_blank" rel="noopener" class="flex items-center gap-2">
-                <ExternalLink class="h-4 w-4" />
-                Visit {getUploaderName(selectedUploader)} Website
-              </a>
+            <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external uploader website URL from the API, not an internal app route -->
+            <Button
+              variant="outline"
+              class="w-full gap-2"
+              href={selectedUploader.url}
+              target="_blank"
+              rel="noopener"
+            >
+              <ExternalLink class="h-4 w-4" />
+              Visit {getUploaderName(selectedUploader)} Website
             </Button>
           </div>
         {/if}
         </div>
-      </div>
-    {:else}
-      <div class="flex items-center justify-center py-8">
-        <Loader2 class="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     {/if}
   </Dialog.Content>

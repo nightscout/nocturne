@@ -1,15 +1,18 @@
 <script lang="ts">
+  import { formatShortDate } from "$lib/utils/formatting";
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import { toast } from "svelte-sonner";
+  import { useToastSubmission } from "$lib/forms";
   import { getFoodEntry, acceptMatch, dismissMatch } from "$api/generated/mealMatchings.generated.remote";
   import type {
     InAppNotificationDto,
     ConnectorFoodEntry,
     SuggestedMealMatch,
   } from "$lib/api/generated/nocturne-api-client";
+  import { retainQuery } from "$lib/api/retain-query.svelte";
 
   interface Props {
     open: boolean;
@@ -30,19 +33,20 @@
   // Form state
   let carbs = $state<number>(0);
   let selectedTime = $state<string>(""); // HH:mm format for time input
-  let isLoading = $state(false);
+  const accept = useToastSubmission("Failed to accept meal match");
+  const dismiss = useToastSubmission("Failed to dismiss meal match");
 
   // Extract data from notification OR match
-  const treatmentId = $derived(
-    match?.treatmentId ??
-      notification?.metadata?.["treatmentId"]?.toString() ??
+  const carbIntakeId = $derived(
+    match?.carbIntakeId ??
+      notification?.metadata?.["carbIntakeId"]?.toString() ??
       ""
   );
-  const treatmentCarbs = $derived(
-    match?.treatmentCarbs ?? (Number(notification?.metadata?.["treatmentCarbs"]) || 0)
+  const carbIntakeCarbs = $derived(
+    match?.carbIntakeCarbs ?? (Number(notification?.metadata?.["carbIntakeCarbs"]) || 0)
   );
-  const treatmentMills = $derived(
-    match?.treatmentMills ?? (Number(notification?.metadata?.["treatmentMills"]) || 0)
+  const carbIntakeMills = $derived(
+    match?.carbIntakeMills ?? (Number(notification?.metadata?.["carbIntakeMills"]) || 0)
   );
   const foodEntryCarbs = $derived(
     match?.carbs ?? (Number(notification?.metadata?.["foodEntryCarbs"]) || 0)
@@ -57,6 +61,7 @@
   const foodEntryQuery = $derived(
     open && foodEntryId ? getFoodEntry(foodEntryId) : null,
   );
+  retainQuery(() => foodEntryQuery);
   const foodEntry = $derived<ConnectorFoodEntry | null>(
     foodEntryQuery?.current ?? null,
   );
@@ -89,17 +94,17 @@
   function formatDateDisplay(mills: number): string {
     if (!mills) return "";
     const date = new Date(mills);
-    return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    return formatShortDate(date);
   }
 
   // Track selected date separately
   let selectedDate = $state<string>("");
 
   // Derived times for comparison
-  const bolusTimeInput = $derived(formatTimeInput(treatmentMills));
+  const bolusTimeInput = $derived(formatTimeInput(carbIntakeMills));
   const loggedTimeInput = $derived(formatTimeInput(consumedAtMills));
-  const bolusDateInput = $derived(formatDateInput(treatmentMills));
-  const bolusDateDisplay = $derived(formatDateDisplay(treatmentMills));
+  const bolusDateInput = $derived(formatDateInput(carbIntakeMills));
+  const bolusDateDisplay = $derived(formatDateDisplay(carbIntakeMills));
 
   // Check which preset is selected (if any)
   const isBolusTime = $derived(selectedTime === bolusTimeInput);
@@ -107,19 +112,19 @@
 
   // Calculate offset minutes from selected date and time
   const timeOffsetMinutes = $derived.by(() => {
-    if (!treatmentMills || !selectedTime || !selectedDate) return 0;
+    if (!carbIntakeMills || !selectedTime || !selectedDate) return 0;
     const [hours, minutes] = selectedTime.split(":").map(Number);
     const [year, month, day] = selectedDate.split("-").map(Number);
     const customDate = new Date(year, month - 1, day, hours, minutes, 0, 0);
-    return Math.round((customDate.getTime() - treatmentMills) / 60000);
+    return Math.round((customDate.getTime() - carbIntakeMills) / 60000);
   });
 
   // Initialize form when dialog opens
   $effect(() => {
     if (open && (notification || match)) {
       carbs = foodEntryCarbs;
-      selectedTime = formatTimeInput(treatmentMills);
-      selectedDate = formatDateInput(treatmentMills);
+      selectedTime = formatTimeInput(carbIntakeMills);
+      selectedDate = formatDateInput(carbIntakeMills);
     }
   });
 
@@ -127,34 +132,27 @@
     carbs = 0;
     selectedTime = "";
     selectedDate = "";
-    isLoading = false;
     open = false;
     onOpenChange(false);
   }
 
   async function handleAccept() {
-    if (!foodEntryId || !treatmentId) {
+    if (!foodEntryId || !carbIntakeId) {
       toast.error("Missing required data");
       return;
     }
 
-    isLoading = true;
-    try {
+    await accept.run(async () => {
       await acceptMatch({
         foodEntryId,
-        treatmentId,
+        carbIntakeId,
         carbs,
         timeOffsetMinutes,
       });
       toast.success("Meal match accepted");
       onComplete?.();
       resetAndClose();
-    } catch (err) {
-      console.error("Failed to accept meal match:", err);
-      toast.error("Failed to accept meal match");
-    } finally {
-      isLoading = false;
-    }
+    });
   }
 
   async function handleDismiss() {
@@ -163,18 +161,12 @@
       return;
     }
 
-    isLoading = true;
-    try {
+    await dismiss.run(async () => {
       await dismissMatch({ foodEntryId });
       toast.success("Meal match dismissed");
       onComplete?.();
       resetAndClose();
-    } catch (err) {
-      console.error("Failed to dismiss meal match:", err);
-      toast.error("Failed to dismiss meal match");
-    } finally {
-      isLoading = false;
-    }
+    });
   }
 
   // Calculate scale factor based on carbs adjustment
@@ -259,19 +251,19 @@
             bind:value={carbs}
             class="tabular-nums"
           />
-          {#if treatmentCarbs > 0 && carbs !== treatmentCarbs}
+          {#if carbIntakeCarbs > 0 && carbs !== carbIntakeCarbs}
             <Button
               type="button"
               variant="outline"
               size="sm"
-              onclick={() => (carbs = treatmentCarbs)}
+              onclick={() => (carbs = carbIntakeCarbs)}
             >
-              Scale to {treatmentCarbs}g
+              Scale to {carbIntakeCarbs}g
             </Button>
           {/if}
         </div>
         <p class="text-xs text-muted-foreground">
-          Treatment has {treatmentCarbs}g total carbs
+          The logged carb entry has {carbIntakeCarbs}g total carbs
         </p>
       </div>
 
@@ -327,7 +319,7 @@
         type="button"
         variant="outline"
         onclick={handleDismiss}
-        disabled={isLoading}
+        disabled={dismiss.busy || accept.busy}
       >
         Dismiss
       </Button>
@@ -335,8 +327,8 @@
       <Button type="button" variant="outline" onclick={resetAndClose}>
         Cancel
       </Button>
-      <Button type="button" onclick={handleAccept} disabled={isLoading}>
-        {isLoading ? "Saving..." : "Accept"}
+      <Button type="button" onclick={handleAccept} disabled={accept.busy || dismiss.busy}>
+        {accept.busy ? "Saving..." : "Accept"}
       </Button>
     </Dialog.Footer>
   </Dialog.Content>

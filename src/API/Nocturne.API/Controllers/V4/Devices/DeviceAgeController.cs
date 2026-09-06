@@ -13,7 +13,8 @@ namespace Nocturne.API.Controllers.V4.Devices;
 /// Each endpoint accepts optional threshold parameters (<c>info</c>, <c>warn</c>, <c>urgent</c>
 /// in hours) and a <c>display</c> unit (<c>hours</c> or <c>days</c>) that are forwarded as a
 /// <see cref="DeviceAgePreferences"/> object to the service. Defaults are used when parameters
-/// are not supplied.
+/// are not supplied. An optional <c>patientDeviceId</c> scopes the underlying device events to a
+/// single registered patient device; omitting it uses the latest matching event tenant-wide.
 ///
 /// <b>CAGE</b> — cannula/site age from <c>Site Change</c> events.<br/>
 /// <b>SAGE</b> — sensor age from <c>Sensor Start</c> and <c>Sensor Change</c> events.<br/>
@@ -52,10 +53,11 @@ public class DeviceAgeController : ControllerBase
         [FromQuery] int? warn = null,
         [FromQuery] int? urgent = null,
         [FromQuery] string? display = null,
-        [FromQuery] bool? enableAlerts = null)
+        [FromQuery] bool? enableAlerts = null,
+        [FromQuery] Guid? patientDeviceId = null)
     {
         var prefs = BuildPreferences(info, warn, urgent, display, enableAlerts);
-        var result = await _deviceAgeService.GetCannulaAgeAsync(prefs, HttpContext.RequestAborted);
+        var result = await _deviceAgeService.GetCannulaAgeAsync(prefs, patientDeviceId, HttpContext.RequestAborted);
         return Ok(result);
     }
 
@@ -70,10 +72,11 @@ public class DeviceAgeController : ControllerBase
         [FromQuery] int? warn = null,
         [FromQuery] int? urgent = null,
         [FromQuery] string? display = null,
-        [FromQuery] bool? enableAlerts = null)
+        [FromQuery] bool? enableAlerts = null,
+        [FromQuery] Guid? patientDeviceId = null)
     {
         var prefs = BuildPreferences(info, warn, urgent, display, enableAlerts);
-        var result = await _deviceAgeService.GetSensorAgeAsync(prefs, HttpContext.RequestAborted);
+        var result = await _deviceAgeService.GetSensorAgeAsync(prefs, patientDeviceId, HttpContext.RequestAborted);
         return Ok(result);
     }
 
@@ -87,10 +90,11 @@ public class DeviceAgeController : ControllerBase
         [FromQuery] int? warn = null,
         [FromQuery] int? urgent = null,
         [FromQuery] string? display = null,
-        [FromQuery] bool? enableAlerts = null)
+        [FromQuery] bool? enableAlerts = null,
+        [FromQuery] Guid? patientDeviceId = null)
     {
         var prefs = BuildPreferences(info, warn, urgent, display, enableAlerts);
-        var result = await _deviceAgeService.GetInsulinAgeAsync(prefs, HttpContext.RequestAborted);
+        var result = await _deviceAgeService.GetInsulinAgeAsync(prefs, patientDeviceId, HttpContext.RequestAborted);
         return Ok(result);
     }
 
@@ -104,10 +108,11 @@ public class DeviceAgeController : ControllerBase
         [FromQuery] int? warn = null,
         [FromQuery] int? urgent = null,
         [FromQuery] string? display = null,
-        [FromQuery] bool? enableAlerts = null)
+        [FromQuery] bool? enableAlerts = null,
+        [FromQuery] Guid? patientDeviceId = null)
     {
         var prefs = BuildPreferences(info, warn, urgent, display, enableAlerts);
-        var result = await _deviceAgeService.GetBatteryAgeAsync(prefs, HttpContext.RequestAborted);
+        var result = await _deviceAgeService.GetBatteryAgeAsync(prefs, patientDeviceId, HttpContext.RequestAborted);
         return Ok(result);
     }
 
@@ -116,14 +121,14 @@ public class DeviceAgeController : ControllerBase
     /// </summary>
     [HttpGet("all")]
     [ProducesResponseType(200)]
-    public async Task<ActionResult> GetAllDeviceAges()
+    public async Task<ActionResult> GetAllDeviceAges([FromQuery] Guid? patientDeviceId = null)
     {
         var defaultPrefs = new DeviceAgePreferences();
 
-        var cannula = await _deviceAgeService.GetCannulaAgeAsync(defaultPrefs, HttpContext.RequestAborted);
-        var sensor = await _deviceAgeService.GetSensorAgeAsync(defaultPrefs, HttpContext.RequestAborted);
-        var insulin = await _deviceAgeService.GetInsulinAgeAsync(defaultPrefs, HttpContext.RequestAborted);
-        var battery = await _deviceAgeService.GetBatteryAgeAsync(defaultPrefs, HttpContext.RequestAborted);
+        var cannula = await _deviceAgeService.GetCannulaAgeAsync(defaultPrefs, patientDeviceId, HttpContext.RequestAborted);
+        var sensor = await _deviceAgeService.GetSensorAgeAsync(defaultPrefs, patientDeviceId, HttpContext.RequestAborted);
+        var insulin = await _deviceAgeService.GetInsulinAgeAsync(defaultPrefs, patientDeviceId, HttpContext.RequestAborted);
+        var battery = await _deviceAgeService.GetBatteryAgeAsync(defaultPrefs, patientDeviceId, HttpContext.RequestAborted);
 
         return Ok(new
         {

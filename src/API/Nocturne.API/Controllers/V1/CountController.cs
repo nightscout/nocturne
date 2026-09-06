@@ -6,6 +6,9 @@ using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models.Authorization;
+using Nocturne.API.Extensions;
+using Nocturne.API.Authorization;
 
 namespace Nocturne.API.Controllers.V1;
 
@@ -24,6 +27,14 @@ namespace Nocturne.API.Controllers.V1;
 [Route("api/v1/[controller]")]
 public class CountController : ControllerBase
 {
+    /// <summary>
+    /// The selectors <c>{storage}/where</c> dispatches on. Every one must be classified in
+    /// <see cref="LegacyStorageReadScopes"/> or handled by <see cref="ActivityReadScopeGuard"/>,
+    /// which <c>CountableStorage_IsFullyClassified</c> asserts.
+    /// </summary>
+    internal static readonly string[] CountableStorage =
+        ["entries", "treatments", "devicestatus", "profile", "food", "activity"];
+
     private readonly IEntryStore _entryStore;
     private readonly ITreatmentStore _treatmentStore;
     private readonly IApsSnapshotRepository _apsSnapshotRepository;
@@ -71,6 +82,7 @@ public class CountController : ControllerBase
     [HttpGet("entries/where")]
     [NightscoutEndpoint("/api/v1/count/entries/where")]
     [ProducesResponseType(typeof(CountResponse), 200)]
+    [RequireScope(Scope.GlucoseRead)]
     public async Task<ActionResult<CountResponse>> CountEntries(
         [FromQuery] string? find = null,
         [FromQuery] string? type = null,
@@ -120,6 +132,7 @@ public class CountController : ControllerBase
     [HttpGet("treatments/where")]
     [NightscoutEndpoint("/api/v1/count/treatments/where")]
     [ProducesResponseType(typeof(CountResponse), 200)]
+    [RequireScope(Scope.TreatmentsRead)]
     public async Task<ActionResult<CountResponse>> CountTreatments(
         [FromQuery] string? find = null,
         CancellationToken cancellationToken = default
@@ -162,6 +175,7 @@ public class CountController : ControllerBase
     [HttpGet("devicestatus/where")]
     [NightscoutEndpoint("/api/v1/count/devicestatus/where")]
     [ProducesResponseType(typeof(CountResponse), 200)]
+    [RequireScope(Scope.DevicesRead)]
     public async Task<ActionResult<CountResponse>> CountDeviceStatus(
         [FromQuery] string? find = null,
         CancellationToken cancellationToken = default
@@ -201,6 +215,14 @@ public class CountController : ControllerBase
     /// <param name="find">MongoDB-style find query filters (JSON format)</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Count of activity entries matching the criteria</returns>
+    /// <remarks>
+    /// <c>CountActivitiesAsync</c> sums four storages — StateSpans, heart rates, step counts and
+    /// sleep sessions — into a single number, so unlike the record-returning activity endpoints
+    /// the result cannot be filtered down to the categories the caller holds. The requirement is
+    /// therefore every category's read scope (AND), which is what the legacy admin, <c>api:*:read</c>
+    /// and <c>readable</c> grants carry. Serving a per-category count needs a source-aware count on
+    /// <c>IActivityService</c>.
+    /// </remarks>
     [HttpGet("activity/where")]
     [NightscoutEndpoint("/api/v1/count/activity/where")]
     [ProducesResponseType(typeof(CountResponse), 200)]
@@ -209,6 +231,9 @@ public class CountController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
+        if (ActivityReadScopeGuard.RefuseUnlessEveryCategory(HttpContext) is { } refusal)
+            return refusal;
+
         _logger.LogDebug(
             "Count activity endpoint requested with find: {Find} from {RemoteIpAddress}",
             find,
@@ -244,6 +269,12 @@ public class CountController : ControllerBase
     /// <param name="type">Additional type filter (for entries: sgv, mbg, cal)</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Count of records matching the criteria</returns>
+    /// <remarks>
+    /// The storage is a route parameter, so the governing scope is resolved per request through
+    /// <see cref="LegacyStorageReadScopes"/>. An attribute here would be an OR across every
+    /// collection the route serves and would let a grant scoped to one category learn a row count
+    /// for another. <c>activity</c> merges four categories and keeps the AND below.
+    /// </remarks>
     [HttpGet("{storage}/where")]
     [NightscoutEndpoint("/api/v1/count/:storage/where")]
     [ProducesResponseType(typeof(CountResponse), 200)]
@@ -256,6 +287,27 @@ public class CountController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
+        if (!CountableStorage.Contains(storage, StringComparer.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning("Invalid storage type requested: {Storage}", storage);
+            return BadRequest(
+                new
+                {
+                    status = 400,
+                    message = $"Invalid storage type: {storage}. Supported types: {string.Join(", ", CountableStorage)}",
+                    type = "client",
+                }
+            );
+        }
+
+        // "activity" reaches CountActivitiesAsync, which merges four categories into one number, so
+        // it needs every category's read scope rather than one storage's.
+        var refusal = string.Equals(storage, "activity", StringComparison.OrdinalIgnoreCase)
+            ? ActivityReadScopeGuard.RefuseUnlessEveryCategory(HttpContext)
+            : LegacyStorageReadScopes.RefuseRead(HttpContext, storage);
+        if (refusal is not null)
+            return refusal;
+
         _logger.LogDebug(
             "Generic count endpoint requested for storage: {Storage}, find: {Find}, type: {Type} from {RemoteIpAddress}",
             storage,
@@ -266,29 +318,6 @@ public class CountController : ControllerBase
 
         try
         {
-            // Validate storage type
-            var validStorageTypes = new[]
-            {
-                "entries",
-                "treatments",
-                "devicestatus",
-                "profile",
-                "food",
-                "activity",
-            };
-            if (!validStorageTypes.Contains(storage.ToLowerInvariant()))
-            {
-                _logger.LogWarning("Invalid storage type requested: {Storage}", storage);
-                return BadRequest(
-                    new
-                    {
-                        status = 400,
-                        message = $"Invalid storage type: {storage}. Supported types: {string.Join(", ", validStorageTypes)}",
-                        type = "client",
-                    }
-                );
-            }
-
             long count;
             switch (storage.ToLowerInvariant())
             {

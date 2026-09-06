@@ -64,23 +64,58 @@ public static class TotpHelper
     /// <param name="secret">The raw shared secret bytes.</param>
     /// <param name="code">The 6-digit code string provided by the user.</param>
     /// <returns><see langword="true"/> if the code matches any adjacent time step.</returns>
+    /// <remarks>
+    /// Applies no single-use floor, so it is only for verifications where no counter has been
+    /// recorded yet (initial setup) and for the constant-time dummy verification. Verifying a
+    /// stored credential uses <see cref="TryVerify"/> with the credential's recorded step.
+    /// </remarks>
     public static bool Verify(byte[] secret, string code)
+    {
+        return TryVerify(secret, code, lastUsedStep: null, out _);
+    }
+
+    /// <summary>
+    /// Verifies a TOTP code and reports which time step it matched, rejecting any step at or
+    /// below <paramref name="lastUsedStep"/>.
+    /// </summary>
+    /// <param name="secret">The raw shared secret bytes.</param>
+    /// <param name="code">The 6-digit code string provided by the user.</param>
+    /// <param name="lastUsedStep">
+    /// The most recent time step already consumed for this secret, or <see langword="null"/> if
+    /// none has been. The ±1 step window means one observed code stays computationally valid for
+    /// about 90 seconds; recording and comparing the step makes each code usable once.
+    /// </param>
+    /// <param name="matchedStep">The matched time step, or 0 when the code is rejected.</param>
+    /// <returns><see langword="true"/> if the code matches an unconsumed adjacent time step.</returns>
+    public static bool TryVerify(byte[] secret, string code, long? lastUsedStep, out long matchedStep)
     {
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var codeBytes = Encoding.UTF8.GetBytes(code);
 
+        var matched = false;
+        matchedStep = 0;
+
+        // Every candidate is compared even after a match so the running time does not reveal
+        // which step matched.
         for (var i = -1; i <= 1; i++)
         {
-            var candidate = ComputeTotp(secret, now + i * TimeStep);
-            var candidateBytes = Encoding.UTF8.GetBytes(candidate);
+            var candidateTime = now + i * TimeStep;
+            var candidateBytes = Encoding.UTF8.GetBytes(ComputeTotp(secret, candidateTime));
 
-            if (CryptographicOperations.FixedTimeEquals(codeBytes, candidateBytes))
+            if (!CryptographicOperations.FixedTimeEquals(codeBytes, candidateBytes))
             {
-                return true;
+                continue;
+            }
+
+            var step = candidateTime / TimeStep;
+            if (lastUsedStep is null || step > lastUsedStep)
+            {
+                matched = true;
+                matchedStep = step;
             }
         }
 
-        return false;
+        return matched;
     }
 
     /// <summary>

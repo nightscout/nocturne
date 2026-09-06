@@ -5,7 +5,7 @@ namespace Nocturne.API.Models.Requests.V4;
 /// </summary>
 /// <seealso cref="Validators.V4.CreateCarbIntakeRequestValidator"/>
 /// <seealso cref="Nocturne.API.Controllers.V4.Treatments.NutritionController"/>
-public class CreateCarbIntakeRequest
+public class CreateCarbIntakeRequest : IBulkUpsertRequest
 {
     /// <summary>
     /// When the carbs were consumed.
@@ -51,6 +51,17 @@ public class CreateCarbIntakeRequest
     /// Expected carb absorption duration in minutes.
     /// </summary>
     public int? AbsorptionTime { get; set; }
+
+    /// <summary>
+    /// Fat consumed in grams, when the source reports macros. Native fields replace the
+    /// synthesized FPU fake-carb series legacy uploaders emit for Nightscout.
+    /// </summary>
+    public double? FatGrams { get; set; }
+
+    /// <summary>
+    /// Protein consumed in grams, when the source reports macros.
+    /// </summary>
+    public double? ProteinGrams { get; set; }
 
     /// <summary>
     /// Correlation identifier for grouping related events (e.g. a meal bolus and carb intake).

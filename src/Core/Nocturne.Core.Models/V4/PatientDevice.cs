@@ -91,6 +91,13 @@ public class PatientDevice
     public bool IsCurrent { get; set; }
 
     /// <summary>
+    /// Explicit priority among devices of the same category whose usage windows overlap
+    /// (lower value = higher priority). Null means unranked; unranked devices order after
+    /// ranked ones, most recent <see cref="StartDate"/> first.
+    /// </summary>
+    public int? Rank { get; set; }
+
+    /// <summary>
     /// Optional free-text notes about this device (e.g., reason for switch, warranty info).
     /// </summary>
     public string? Notes { get; set; }

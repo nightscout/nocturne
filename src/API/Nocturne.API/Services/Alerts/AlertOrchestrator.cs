@@ -1,5 +1,3 @@
-using System.Text.Json;
-using Nocturne.API.Services.Alerts.Evaluators;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
@@ -9,25 +7,26 @@ using Nocturne.API.Services.Realtime;
 namespace Nocturne.API.Services.Alerts;
 
 /// <summary>
-/// Wires <see cref="ConditionEvaluatorRegistry"/>, <see cref="IExcursionTracker"/>, and
-/// <see cref="IAlertDeliveryService"/> together into a per-reading alert evaluation pass.
+/// Wires <see cref="IAlertEvaluationEngine"/> and <see cref="IAlertDeliveryService"/>
+/// together into a per-reading alert evaluation pass.
 /// Called on every new glucose reading to evaluate all enabled alert rules for the current tenant.
 /// </summary>
 /// <remarks>
-/// For each enabled rule, the orchestrator resolves the appropriate <see cref="IConditionEvaluator"/>,
-/// checks whether the condition is met, manages excursion lifecycle (open/resolve), applies
-/// engine-level DND suppression, and dispatches delivery to the rule's flat channel list.
+/// For each enabled rule, the orchestrator asks the engine seam for the rule's evaluation
+/// (root condition truth, excursion transition, auto-resolve) and applies the side effects:
+/// instance creation, engine-level DND suppression, delivery dispatch to the rule's flat
+/// channel list, info auto-ack, and close handling. The engine owns evaluation-state
+/// persistence (sustained timers, tracker state, excursion rows); which engine runs
+/// (managed C# evaluators, Rust over FFI, or shadow) is selected by <c>Alerts:Engine</c>.
 /// Errors from individual rule evaluations are caught and logged without aborting the rest of
 /// the evaluation pass. Escalation chains are no longer first-class — express delayed escalation
 /// as a separate alert rule whose tree references the parent via the <c>alert_state</c> condition.
 /// </remarks>
 /// <seealso cref="IAlertOrchestrator"/>
-/// <seealso cref="ConditionEvaluatorRegistry"/>
-/// <seealso cref="IExcursionTracker"/>
+/// <seealso cref="IAlertEvaluationEngine"/>
 /// <seealso cref="IAlertDeliveryService"/>
 internal sealed class AlertOrchestrator(
-    ConditionEvaluatorRegistry evaluatorRegistry,
-    IExcursionTracker excursionTracker,
+    IAlertEvaluationEngine evaluationEngine,
     IAlertRepository repository,
     ITenantAccessor tenantAccessor,
     IAlertDeliveryService deliveryService,
@@ -44,8 +43,14 @@ internal sealed class AlertOrchestrator(
         if (tenantId == Guid.Empty) return;
 
         var rules = await repository.GetEnabledRulesAsync(tenantId, ct);
+        await EvaluateRulesAsync(rules, context, ct);
+    }
 
-        if (rules.Count == 0) return;
+    public async Task EvaluateRulesAsync(
+        IReadOnlyList<AlertRuleSnapshot> rules, SensorContext context, CancellationToken ct)
+    {
+        var tenantId = tenantAccessor.TenantId;
+        if (tenantId == Guid.Empty || rules.Count == 0) return;
 
         // Drop chained rules whose alert_state references resolve to disabled/deleted parents.
         var evaluable = RuleReferenceResolver.FilterEvaluable(rules);
@@ -75,33 +80,20 @@ internal sealed class AlertOrchestrator(
         Guid tenantId,
         CancellationToken ct)
     {
-        var evaluator = evaluatorRegistry.GetEvaluator(rule.ConditionType);
-        if (evaluator is null)
-        {
-            logger.LogWarning("No evaluator registered for condition type '{ConditionType}'", rule.ConditionType);
-            return;
-        }
+        // The engine runs the full per-rule driver sequence (root eval → tracker →
+        // unconditional auto-resolve under the auto_resolve path root) and persists all
+        // evaluation state; this method applies the side effects its transitions call for.
+        var evaluation = await evaluationEngine.EvaluateRuleAsync(rule, context, AlertEngineOptions.Default, ct);
+        if (evaluation.Skipped) return;
 
-        // Seed CurrentRuleId / CurrentPath so stateful evaluators (sustained) can key persistent
-        // timers, and recursive evaluators (composite/not/sustained) can extend the path as they
-        // descend. Root path is the rule's condition kind, e.g. "composite" — matching the
-        // convention in ConditionPath.Walk.
-        var rootContext = context with
-        {
-            CurrentRuleId = rule.Id,
-            CurrentPath = AlertConditionTypeNames.ToWireString(rule.ConditionType),
-        };
-        var conditionMet = await evaluator.EvaluateAsync(rule.ConditionParams, rootContext, ct);
-        var transition = await excursionTracker.ProcessEvaluationAsync(rule.Id, conditionMet, ct);
-
-        switch (transition.Type)
+        switch (evaluation.Transition.Type)
         {
             case ExcursionTransitionType.ExcursionOpened:
-                await HandleExcursionOpened(rule, transition, context, tenantId, ct);
+                await HandleExcursionOpened(rule, evaluation.Transition, context, tenantId, ct);
                 break;
 
             case ExcursionTransitionType.ExcursionClosed:
-                await HandleExcursionClosed(transition, tenantId, ct);
+                await HandleExcursionClosed(evaluation.Transition, tenantId, ct);
                 return;
 
             case ExcursionTransitionType.ExcursionContinues:
@@ -110,69 +102,11 @@ internal sealed class AlertOrchestrator(
                 break;
         }
 
-        await TryAutoResolveAsync(rule, context, tenantId, ct);
-    }
-
-    /// <summary>
-    /// Out-of-band auto-resolve: evaluates <see cref="AlertRuleSnapshot.AutoResolveParams"/>
-    /// against the same enriched context used by the main rule. If true, force-closes the
-    /// active excursion via the tracker and routes the resulting transition through the
-    /// existing close pathway so <c>resolution_reason</c> is stamped and the
-    /// <c>alert_resolved</c> broadcast fires.
-    /// </summary>
-    private async Task TryAutoResolveAsync(
-        AlertRuleSnapshot rule,
-        SensorContext context,
-        Guid tenantId,
-        CancellationToken ct)
-    {
-        if (!rule.AutoResolveEnabled || string.IsNullOrWhiteSpace(rule.AutoResolveParams))
-            return;
-
-        var activeExcursionId = await excursionTracker.GetActiveExcursionIdAsync(rule.Id, ct);
-        if (activeExcursionId is null)
-            return;
-
-        ConditionNode? node;
-        try
+        // Auto-resolve close: route through the existing close pathway so
+        // resolution_reason is stamped and the alert_resolved broadcast fires.
+        if (evaluation.AutoResolveTransition is { Type: ExcursionTransitionType.ExcursionClosed } autoResolveClose)
         {
-            node = JsonSerializer.Deserialize<ConditionNode>(rule.AutoResolveParams, EvaluatorJson.Options);
-        }
-        catch (JsonException ex)
-        {
-            logger.LogWarning(ex, "Failed to parse AutoResolveParams for rule {AlertRuleId}; skipping", rule.Id);
-            return;
-        }
-
-        if (node is null) return;
-
-        // Path-prefix auto-resolve so any nested sustained timers don't collide with timers
-        // owned by the main rule body (which roots at e.g. "composite"). Both per-reading
-        // (orchestrator) and periodic (sweep) auto-resolve paths share this root — same
-        // (ruleId, path) timer row, by design.
-        var autoResolveContext = context with
-        {
-            CurrentRuleId = rule.Id,
-            CurrentPath = AlertConditionTypeNames.AutoResolvePathRoot,
-        };
-
-        bool shouldResolve;
-        try
-        {
-            shouldResolve = await evaluatorRegistry.EvaluateNodeAsync(node, autoResolveContext, ct);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Auto-resolve evaluation failed for rule {AlertRuleId}", rule.Id);
-            return;
-        }
-
-        if (!shouldResolve) return;
-
-        var transition = await excursionTracker.ForceCloseAsync(rule.Id, ExcursionCloseReason.AutoResolve, ct);
-        if (transition.Type == ExcursionTransitionType.ExcursionClosed)
-        {
-            await HandleExcursionClosed(transition, tenantId, ct);
+            await HandleExcursionClosed(autoResolveClose, tenantId, ct);
         }
     }
 
@@ -221,21 +155,20 @@ internal sealed class AlertOrchestrator(
             Severity = rule.Severity,
         };
 
-        // DND suppression: when the tenant is in Do Not Disturb, non-Critical rules without
-        // an explicit "allow through DND" opt-in still get a history row written (so Replay
-        // can show "would have fired but you were in DND"), but the dispatch is skipped.
-        // Critical rules implicitly bypass DND regardless of the per-rule flag.
-        var suppressedByDnd =
-            context.ActiveDoNotDisturb is not null
-            && rule.Severity != AlertRuleSeverity.Critical
-            && !rule.AllowThroughDnd;
+        // Scoped DND suppression (ADR 0004): when an active DND scope covers this rule's class,
+        // a non-Critical rule without an explicit "allow through DND" opt-in still gets a history
+        // row written (so Replay can show "would have fired but you were in DND"), but the
+        // dispatch is skipped. Critical rules implicitly bypass DND regardless of the per-rule
+        // flag. The suppressing scope is recorded on the instance (dnd:lows/highs/all).
+        var suppressingScope = DndSuppressionGate.SuppressingScope(rule, context.ActiveDndScopes);
 
-        if (suppressedByDnd)
+        if (suppressingScope is { } scope)
         {
-            await repository.MarkInstanceSuppressedAsync(tenantId, instance.Id, "dnd", ct);
+            await repository.MarkInstanceSuppressedAsync(
+                tenantId, instance.Id, DndSuppressionGate.SuppressionReason(scope), ct);
             logger.LogInformation(
-                "Alert instance {InstanceId} for rule {RuleName} suppressed by DND ({Source})",
-                instance.Id, rule.Name, context.ActiveDoNotDisturb!.Source);
+                "Alert instance {InstanceId} for rule {RuleName} suppressed by DND (scope {Scope})",
+                instance.Id, rule.Name, scope);
         }
         else
         {
@@ -254,7 +187,7 @@ internal sealed class AlertOrchestrator(
         // Skipped when the instance was suppressed by DND: there was no dispatch, so there is
         // no alert_dispatch event to "follow up" with an ack, and emitting an alert_acknowledged
         // for a suppressed alert would race the suppression history row.
-        if (rule.Severity == AlertRuleSeverity.Info && !suppressedByDnd)
+        if (rule.Severity == AlertRuleSeverity.Info && suppressingScope is null)
         {
             await acknowledgementService.AcknowledgeExcursionAsync(
                 tenantId, excursionId, "system:auto-ack-on-trigger", broadcast: false, ct);

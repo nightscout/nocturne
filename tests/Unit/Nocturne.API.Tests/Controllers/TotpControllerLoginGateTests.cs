@@ -14,9 +14,10 @@ using Xunit;
 namespace Nocturne.API.Tests.Controllers;
 
 /// <summary>
-/// Tests for the cross-tenant guard on TOTP login. <see cref="ITotpService.VerifyLoginAsync"/>
-/// resolves the subject by username globally, so the controller must verify the resolved
-/// subject is a member of the tenant being logged into before issuing a session.
+/// Tests for the guards on TOTP sign-in: it is a second factor reached only with a step-up token
+/// from a completed primary factor, and the resolved subject must be a member of the tenant being
+/// signed into (<see cref="ITotpService.VerifyStepUpAsync"/> resolves the subject from the token,
+/// which is not tenant-scoped).
 /// </summary>
 public class TotpControllerLoginGateTests
 {
@@ -43,12 +44,37 @@ public class TotpControllerLoginGateTests
 
     [Fact]
     [Trait("Category", "Unit")]
+    public async Task Login_WithoutAValidStepUpToken_DeniesWithoutIssuingSession()
+    {
+        // No primary factor completed, so no step-up token was ever minted for this code.
+        _totpService
+            .Setup(s => s.VerifyStepUpAsync(It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync((TotpLoginResult?)null);
+
+        var controller = CreateController();
+        var result = await controller.Login(new TotpLoginRequest
+        {
+            StepUpToken = "not-a-real-token",
+            Code = "123456",
+        });
+
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(400, "a code alone is not a sign-in method");
+
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never,
+            "TOTP must never mint a session without a completed primary factor");
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
     public async Task Login_WhenSubjectIsNotMemberOfTenant_DeniesWithoutIssuingSession()
     {
         var subjectId = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
         _totpService
-            .Setup(s => s.VerifyLoginAsync("rhys", "123456"))
+            .Setup(s => s.VerifyStepUpAsync("step-up", "123456"))
             .ReturnsAsync(new TotpLoginResult(subjectId, "rhys", "Rhys"));
         _tenantAccessor.Setup(a => a.TenantId).Returns(tenantId);
         _tenantMemberService
@@ -56,7 +82,7 @@ public class TotpControllerLoginGateTests
             .ReturnsAsync(false);
 
         var controller = CreateController();
-        var result = await controller.Login(new TotpLoginRequest { Username = "rhys", Code = "123456" });
+        var result = await controller.Login(new TotpLoginRequest { StepUpToken = "step-up", Code = "123456" });
 
         result.Result.Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(400, "a non-member must be rejected like an invalid code");
@@ -74,7 +100,7 @@ public class TotpControllerLoginGateTests
         var subjectId = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
         _totpService
-            .Setup(s => s.VerifyLoginAsync("rhys", "123456"))
+            .Setup(s => s.VerifyStepUpAsync("step-up", "123456"))
             .ReturnsAsync(new TotpLoginResult(subjectId, "rhys", "Rhys"));
         _tenantAccessor.Setup(a => a.TenantId).Returns(tenantId);
         _tenantMemberService
@@ -85,7 +111,7 @@ public class TotpControllerLoginGateTests
             .ReturnsAsync(new SessionTokenPair("access-token", "refresh-token", 3600));
 
         var controller = CreateController();
-        var result = await controller.Login(new TotpLoginRequest { Username = "rhys", Code = "123456" });
+        var result = await controller.Login(new TotpLoginRequest { StepUpToken = "step-up", Code = "123456" });
 
         result.Result.Should().BeOfType<OkObjectResult>();
         _sessionService.Verify(

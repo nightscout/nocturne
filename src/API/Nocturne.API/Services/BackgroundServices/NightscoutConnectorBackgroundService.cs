@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Connectors.Core.Interfaces;
-using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -16,10 +15,30 @@ namespace Nocturne.API.Services.BackgroundServices;
 /// Optionally connects to each tenant's Nightscout Socket.IO endpoint to trigger
 /// immediate syncs when upstream data changes.
 /// </summary>
-/// <seealso cref="ConnectorBackgroundService{TConfig}"/>
-public class NightscoutConnectorBackgroundService : ConnectorBackgroundService<NightscoutConnectorConfiguration>
+public class NightscoutConnectorBackgroundService
+    : ConnectorBackgroundService<NightscoutConnectorService, NightscoutConnectorConfiguration>
 {
     private readonly ConcurrentDictionary<Guid, SocketIO> _socketClients = new();
+
+    /// <summary>
+    /// Reconnection budget for a tenant's Socket.IO client. SocketIOClient bounds the whole
+    /// connect-with-retries operation with <c>new CancellationTokenSource(ReconnectionAttempts *
+    /// ReconnectionDelayMax)</c>, evaluated in <see cref="int"/> arithmetic: a product above
+    /// <see cref="int.MaxValue"/> wraps negative and <c>ConnectAsync</c> throws
+    /// <see cref="ArgumentOutOfRangeException"/> before it attempts a single connection. Keep
+    /// <see cref="ReconnectionAttempts"/> * <see cref="ReconnectionDelayMaxMs"/> well inside int.
+    /// </summary>
+    internal const int ReconnectionAttempts = 3;
+
+    /// <inheritdoc cref="ReconnectionAttempts"/>
+    internal const int ReconnectionDelayMaxMs = 5_000;
+
+    /// <summary>
+    /// Per-tenant cap on establishing the initial Socket.IO connection. Tenants are connected
+    /// concurrently and a failure falls back to polling, so this only bounds how long service
+    /// startup waits on unreachable Nightscout instances.
+    /// </summary>
+    private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(10);
 
     /// <param name="serviceProvider">Service provider used to create a DI scope per sync cycle.</param>
     /// <param name="logger">Logger instance for this background service.</param>
@@ -28,14 +47,6 @@ public class NightscoutConnectorBackgroundService : ConnectorBackgroundService<N
         ILogger<NightscoutConnectorBackgroundService> logger
     )
         : base(serviceProvider, logger) { }
-
-    protected override string ConnectorName => "Nightscout";
-
-    protected override async Task<SyncResult> PerformSyncAsync(IServiceProvider scopeProvider, NightscoutConnectorConfiguration config, CancellationToken cancellationToken, ISyncProgressReporter? progressReporter = null)
-    {
-        var connectorService = scopeProvider.GetRequiredService<NightscoutConnectorService>();
-        return await connectorService.SyncDataAsync(config, cancellationToken, since: null, progressReporter);
-    }
 
     /// <inheritdoc />
     protected override async Task StartRealtimeListenersAsync(CancellationToken cancellationToken)
@@ -49,75 +60,120 @@ public class NightscoutConnectorBackgroundService : ConnectorBackgroundService<N
             .Select(t => new { t.Id, t.Slug, t.DisplayName })
             .ToListAsync(cancellationToken);
 
-        foreach (var tenant in tenants)
-        {
-            try
+        // Connect tenants concurrently: each tenant waits up to ConnectTimeout, and the poll cycle
+        // does not continue until this returns, so connecting them in sequence would delay the first
+        // sync of every tenant by the sum of all unreachable instances' timeouts.
+        await Parallel.ForEachAsync(
+            tenants,
+            new ParallelOptions
             {
-                using var tenantScope = ServiceProvider.CreateScope();
-
-                var tenantAccessor = tenantScope.ServiceProvider.GetRequiredService<ITenantAccessor>();
-                tenantAccessor.SetTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true));
-
-                var loader = tenantScope.ServiceProvider
-                    .GetRequiredService<IConnectorConfigurationLoader<NightscoutConnectorConfiguration>>();
-
-                NightscoutConnectorConfiguration config;
+                MaxDegreeOfParallelism = MaxConcurrentTenantSyncs,
+                CancellationToken = cancellationToken
+            },
+            async (tenant, ct) =>
+            {
                 try
                 {
-                    config = await loader.LoadForTenantAsync(cancellationToken);
+                    await StartListenerForTenantAsync(tenant.Id, tenant.Slug, tenant.DisplayName, ct);
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not OperationCanceledException)
                 {
                     Logger.LogWarning(
                         ex,
-                        "Failed to load Nightscout config for tenant {TenantSlug}, skipping real-time listener",
+                        "Unexpected error starting real-time listener for tenant {TenantSlug}",
                         tenant.Slug);
-                    continue;
                 }
+            });
+    }
 
-                if (!config.Enabled || string.IsNullOrWhiteSpace(config.Url))
-                    continue;
+    private async Task StartListenerForTenantAsync(
+        Guid tenantId,
+        string tenantSlug,
+        string displayName,
+        CancellationToken cancellationToken)
+    {
+        if (!await ListenerNeedsStartAsync(
+                _socketClients, tenantId, tenantSlug, c => c.Connected, DisconnectAndDisposeAsync))
+            return;
 
-                var client = new SocketIO(new Uri(config.Url), new SocketIOOptions
-                {
-                    Reconnection = true,
-                    ReconnectionAttempts = int.MaxValue,
-                    ReconnectionDelayMax = 30_000,
-                });
+        using var tenantScope = ServiceProvider.CreateScope();
 
-                var tenantId = tenant.Id;
-                foreach (var evt in new[] { "dataUpdate", "create", "update" })
-                    client.On(evt, _ => { RequestImmediateSync(tenantId); return Task.CompletedTask; });
+        var tenantAccessor = tenantScope.ServiceProvider.GetRequiredService<ITenantAccessor>();
+        tenantAccessor.SetTenant(new TenantContext(tenantId, tenantSlug, displayName, true, IsDemo: false));
 
-                try
-                {
-                    await client.ConnectAsync(cancellationToken);
-                }
-                catch (Exception ex)
-                {
-                    Logger.LogWarning(
-                        ex,
-                        "Failed to connect Socket.IO for tenant {TenantSlug} at {Url}, will rely on polling",
-                        tenant.Slug, config.Url);
+        var loader = tenantScope.ServiceProvider
+            .GetRequiredService<IConnectorConfigurationLoader<NightscoutConnectorConfiguration>>();
 
-                    client.Dispose();
-                    continue;
-                }
-
-                _socketClients.TryAdd(tenantId, client);
-
-                Logger.LogInformation(
-                    "Started real-time listener for Nightscout tenant {TenantSlug}",
-                    tenant.Slug);
-            }
-            catch (Exception ex)
-            {
-                Logger.LogWarning(
-                    ex,
-                    "Unexpected error starting real-time listener for tenant {TenantSlug}",
-                    tenant.Slug);
-            }
+        NightscoutConnectorConfiguration config;
+        try
+        {
+            config = await loader.LoadForTenantAsync(cancellationToken);
         }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(
+                ex,
+                "Failed to load Nightscout config for tenant {TenantSlug}, skipping real-time listener",
+                tenantSlug);
+            return;
+        }
+
+        if (!config.Enabled || string.IsNullOrWhiteSpace(config.Url))
+            return;
+
+        // Tenants may store a bare host with no scheme. Normalise through the same helper the sync
+        // path uses so a URL that polls fine does not fail here on Uri parsing.
+        if (ResolveListenerBaseUrl(config.Url, tenantSlug) is not { } socketUrl)
+            return;
+
+        var client = new SocketIO(new Uri(socketUrl), new SocketIOOptions
+        {
+            Reconnection = true,
+            ReconnectionAttempts = ReconnectionAttempts,
+            ReconnectionDelayMax = ReconnectionDelayMaxMs,
+        });
+
+        foreach (var evt in new[] { "dataUpdate", "create", "update" })
+            client.On(evt, _ => { RequestImmediateSync(tenantId); return Task.CompletedTask; });
+
+        try
+        {
+            using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            connectCts.CancelAfter(ConnectTimeout);
+
+            await client.ConnectAsync(connectCts.Token);
+        }
+        catch (Exception ex)
+        {
+            client.Dispose();
+
+            // The service is shutting down — let the caller unwind rather than reporting a failure.
+            if (cancellationToken.IsCancellationRequested)
+                throw;
+
+            Logger.LogWarning(
+                ex,
+                "Failed to connect Socket.IO for tenant {TenantSlug} at {Url}, will rely on polling",
+                tenantSlug, socketUrl);
+
+            return;
+        }
+
+        if (!_socketClients.TryAdd(tenantId, client))
+        {
+            await DisconnectAndDisposeAsync(client);
+            return;
+        }
+
+        Logger.LogInformation(
+            "Started real-time listener for Nightscout tenant {TenantSlug}",
+            tenantSlug);
+    }
+
+    private static async Task DisconnectAndDisposeAsync(SocketIO client)
+    {
+        await client.DisconnectAsync();
+        client.Dispose();
     }
 
     /// <inheritdoc />
@@ -127,8 +183,7 @@ public class NightscoutConnectorBackgroundService : ConnectorBackgroundService<N
         {
             try
             {
-                await client.DisconnectAsync();
-                client.Dispose();
+                await DisconnectAndDisposeAsync(client);
             }
             catch (Exception ex)
             {

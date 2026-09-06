@@ -2,6 +2,7 @@ import { beforeNavigate } from "$app/navigation";
 import { Debounced } from "runed";
 import type { z, ZodIssue } from "zod";
 import { deepEqual } from "./deep-equal";
+import { describeSubmitError, GENERIC_SUBMIT_ERROR } from "./submit-error";
 
 export interface FormGuardOptions<T extends Record<string, unknown>> {
   form: any;
@@ -11,6 +12,8 @@ export interface FormGuardOptions<T extends Record<string, unknown>> {
   values: () => T;
   navBlockMessage?: string;
   onreset?: (snapshot: T) => void;
+  /** Message shown when the submission fails for a reason with no user-facing text. */
+  submitErrorMessage?: string;
 }
 
 export class FormGuard<T extends Record<string, unknown>> {
@@ -19,6 +22,7 @@ export class FormGuard<T extends Record<string, unknown>> {
   #issues: ZodIssue[] = $state([]);
   #touched: boolean = $state(false);
   #submitted: boolean = $state(false);
+  #submitError: string | null = $state(null);
   #debounced: Debounced<boolean>;
 
   constructor(options: FormGuardOptions<T>) {
@@ -85,6 +89,14 @@ export class FormGuard<T extends Record<string, unknown>> {
     return this.#submitted;
   }
 
+  /**
+   * Set when the last submission was rejected by the server. Render it next to
+   * the submit control — the form stays dirty and the entered values stay put.
+   */
+  get submitError(): string | null {
+    return this.#submitError;
+  }
+
   validate(): boolean {
     const result = this.#options.schema.safeParse(this.#options.values());
     if (result.success) {
@@ -107,6 +119,7 @@ export class FormGuard<T extends Record<string, unknown>> {
   reset(): void {
     this.#touched = false;
     this.#issues = [];
+    this.#submitError = null;
     if (this.#snapshot != null && this.#options.onreset) {
       this.#options.onreset(structuredClone(this.#snapshot));
     }
@@ -119,34 +132,58 @@ export class FormGuard<T extends Record<string, unknown>> {
     invalid?.focus();
   }
 
+  /**
+   * Wraps the form's `enhance` with client-side validation and dirty-state
+   * bookkeeping. The consumer callback runs only after a successful submission.
+   */
   enhance(
     callback?: (helpers: {
-      submit: () => Promise<void>;
+      submit: () => Promise<boolean>;
     }) => Promise<void>,
   ) {
     return this.#options.form.enhance(
-      async (helpers: { submit: () => Promise<void> }) => {
+      async (helpers: { submit: () => Promise<boolean> }) => {
+        this.#submitError = null;
+
         // 1. Validate BEFORE submit
         if (!this.validate()) {
           this.focusInvalid();
           return;
         }
 
-        // 2. Submit
-        await helpers.submit();
-
-        // 3. On success, re-snapshot and reset state
-        if (this.#options.form.result) {
-          const updated = this.#options.initial();
-          if (updated != null) {
-            this.#snapshot = structuredClone(updated);
-          }
-          this.#submitted = true;
-          this.#touched = false;
-          this.#issues = [];
+        // 2. Submit. A handler that throws (e.g. `error(400, …)`) rejects here;
+        //    letting that propagate makes SvelteKit swap in the nearest error
+        //    page, discarding everything the user typed.
+        let succeeded: boolean;
+        try {
+          succeeded = await helpers.submit();
+        } catch (err) {
+          console.error("Form submission failed:", err);
+          this.#submitError = describeSubmitError(
+            err,
+            this.#options.submitErrorMessage ?? GENERIC_SUBMIT_ERROR,
+          );
+          return;
         }
 
-        // 4. Consumer callback
+        // 3. `submit()` resolves false when the server returned validation
+        //    issues. The form stays dirty so the values aren't lost, and the
+        //    guard keeps blocking navigation.
+        if (!succeeded) {
+          this.focusInvalid();
+          return;
+        }
+
+        // 4. Success: re-snapshot as clean and clear stale issues
+        const updated = this.#options.initial();
+        if (updated != null) {
+          this.#snapshot = structuredClone(updated);
+        }
+        this.#submitted = true;
+        this.#touched = false;
+        this.#issues = [];
+
+        // 5. Consumer callback
         await callback?.(helpers);
       },
     );

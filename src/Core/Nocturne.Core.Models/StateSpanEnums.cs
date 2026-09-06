@@ -31,11 +31,6 @@ public enum StateSpanCategory
     Profile,
 
     /// <summary>
-    /// User-annotated sleep period
-    /// </summary>
-    Sleep,
-
-    /// <summary>
     /// User-annotated exercise/activity period
     /// </summary>
     Exercise,

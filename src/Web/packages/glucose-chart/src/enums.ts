@@ -87,6 +87,12 @@ export const StateSpanCategory = {
 } as const;
 export type StateSpanCategory = typeof StateSpanCategory[keyof typeof StateSpanCategory];
 
+export const ChartSpanKind = {
+	StateSpan: 'StateSpan',
+	Sleep: 'Sleep',
+} as const;
+export type ChartSpanKind = typeof ChartSpanKind[keyof typeof ChartSpanKind];
+
 export const CalculationType2 = {
 	Suggested: 'Suggested',
 	Manual: 'Manual',

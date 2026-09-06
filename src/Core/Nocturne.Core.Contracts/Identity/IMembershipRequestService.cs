@@ -23,9 +23,17 @@ public interface IMembershipRequestService
     Task<List<MembershipRequestDto>> GetPendingRequestsAsync(
         Guid tenantId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Approves the request and adds the subject as a member with <paramref name="roleIds"/>.
+    /// </summary>
+    /// <param name="granterScopes">
+    /// The approving caller's resolved scopes. Required, not optional: approving confers the
+    /// requested roles, so it is bound by the same grant ceiling as a direct permission edit.
+    /// </param>
     Task<DecideMembershipRequestResult> ApproveRequestAsync(
         Guid requestId, Guid tenantId, List<Guid> roleIds,
-        Guid decidedBySubjectId, CancellationToken ct = default);
+        Guid decidedBySubjectId, IReadOnlyCollection<string> granterScopes,
+        CancellationToken ct = default);
 
     Task<DecideMembershipRequestResult> DenyRequestAsync(
         Guid requestId, Guid tenantId,

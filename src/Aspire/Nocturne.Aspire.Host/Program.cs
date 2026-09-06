@@ -92,9 +92,9 @@ class Program
                 "PostgreSQL bootstrap password",
                 "Used only at first container start to create runtime roles");
 
-            // Non-bootstrap role passwords. The Postgres container's init
-            // script reads them via env vars and creates nocturne_migrator
-            // and nocturne_app at first container start.
+            // Non-bootstrap role passwords. The Postgres container's init script reads them via
+            // env vars and creates nocturne_migrator, nocturne_app and nocturne_web at first
+            // container start.
             postgresMigratorPassword = builder.AddParameter(
                 ServiceNames.Parameters.PostgresMigratorPassword,
                 secret: true
@@ -146,9 +146,11 @@ class Program
                     .WithDataVolume(ServiceNames.Volumes.PostgresData);
             }
 
-            if (builder.Environment.IsDevelopment() && persistence == PersistenceMode.Persistent)
+            if (builder.ExecutionContext.IsRunMode
+                && builder.Environment.IsDevelopment()
+                && persistence == PersistenceMode.Persistent)
             {
-                postgres.WithPgAdmin();
+                postgres.WithPgAdmin(pgAdmin => pgAdmin.WithHostPort(1611));
             }
 
             postgres.PublishAsDockerComposeService(
@@ -230,12 +232,22 @@ class Program
         var discordClientSecret = builder.AddParameter("discord-client-secret", "", secret: true);
 
         // Platform base domain — the single hostname all services derive URLs from.
-        // Production should set this to e.g. "nocturne.run" via user-secrets.
-        // Injected as "BaseDomain" into both the API and SvelteKit.
+        // Production should set this to e.g. "nocturne.run" via user-secrets. Reaches the API and
+        // SvelteKit as BASE_DOMAIN in publish mode only; run mode overrides it further down with a
+        // value derived from the live gateway endpoint.
         var baseDomain = builder.AddParameter("base-domain", "")
             .WithPublishMetadata(
                 "Base domain",
-                "Root domain only, e.g. example.com (not app.example.com — subdomains are generated per tenant)");
+                "The hostname tenant subdomains hang off, e.g. example.com or nocturne.example.com. At least two labels; not an IP address.");
+
+        // CDN/proxy ranges the bundled Caddy will believe a client-address header from. Empty
+        // means only the socket peer counts, which is right whenever Caddy is the outermost hop.
+        // Loopback is never the peer of a proxied request, so the default trusts nothing.
+        var trustedProxies = builder.AddParameter("trusted-proxies", "127.0.0.1/32")
+            .WithPublishMetadata(
+                "Trusted proxy ranges",
+                "Space-separated CIDRs of a CDN in front of this deployment, e.g. Cloudflare's published ranges. Decides whose CF-Connecting-IP header is believed; leave as-is unless a CDN is present, and never set it empty.",
+                defaultValue: "127.0.0.1/32");
 
         // Chat platform credentials. All optional — a deployment that only
         // uses Discord shouldn't need to supply Telegram/Slack/WhatsApp
@@ -280,14 +292,19 @@ class Program
         // Nocturne API
         // ------------------------------------------------------------------
         var api = builder
-            // Run mode: no port → Aspire assigns a dynamic one. Publish mode:
-            // pin the in-container listen port so the generated compose bakes a
+            // Run mode: pin host port 1610 (main checkout only — worktrees stay
+            // dynamic) so dev tooling and docs can target a stable
+            // http://localhost:1610 across restarts. Publish mode: pin the
+            // in-container listen port so the generated compose bakes a
             // concrete http://nocturne-api:8080 (mirrors the web service's fixed
             // internal port) instead of an empty NOCTURNE_API_PORT placeholder.
-            // This port is never host-published — YARP is the only entry point.
+            // In publish mode this port is never host-published — YARP is the
+            // only entry point.
             .AddProject<Projects.Nocturne_API>(ServiceNames.NocturneApi, launchProfileName: null)
             .WithHttpEndpoint(
                 name: "http",
+                port: builder.ExecutionContext.IsRunMode
+                    && persistence == PersistenceMode.Persistent ? 1610 : null,
                 targetPort: builder.ExecutionContext.IsPublishMode ? 8080 : null)
             .PublishAsDockerComposeService((_, _) => { })
             .WithRemoteImageName("ghcr.io/nightscout/nocturne/nocturne-api")
@@ -296,6 +313,17 @@ class Program
                 imageLabel: "API image",
                 imageDefault: "ghcr.io/nightscout/nocturne/nocturne-api:latest")
             .WithEnvironment(ServiceNames.ConfigKeys.InstanceKey, instanceKey);
+
+        // Run mode is a dev tool: force Development so the dev-only surface
+        // (api/v4/dev-only/*, seed-tenant, dashboard tenant commands) exists
+        // regardless of shell environment. launchProfileName: null skips
+        // launchSettings.json, and shell env propagation to the child process
+        // is unreliable across restarts. Publish mode (production images) is
+        // untouched and defaults to Production.
+        if (builder.ExecutionContext.IsRunMode)
+        {
+            api.WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");
+        }
 
         // Operator-supplied OTLP export (publish mode only — run mode uses
         // Aspire's auto-injected dashboard endpoint). Empty endpoint = disabled.
@@ -346,6 +374,7 @@ class Program
             postgresServer.WithDevSnapshotCommands(api);
             postgresServer.WithListTenantsCommand(api);
             postgresServer.WithCreateTenantCommand(api);
+            postgresServer.WithSeedTenantCommand(api);
             postgresServer.WithDeleteTenantCommand(api);
         }
 
@@ -362,6 +391,7 @@ class Program
             builder.AddDemoService<Projects.Nocturne_Services_Demo>(
                 api,
                 managedDatabase,
+                instanceKey,
                 options => { }
             );
         }
@@ -418,12 +448,26 @@ class Program
             var viteWeb = JavaScriptHostingExtensions
                 .AddViteApp(builder, ServiceNames.NocturneWeb, webPackagePath)
                 .WithPnpm()
-                .WithHttpHealthCheck("/")
+                .WithHttpHealthCheck("/health")
                 .WaitFor(api)
-                .WaitFor(bridge)
+                // WaitFor would deadlock a web restart: the one-shot build sits at Finished,
+                // which WaitFor (waiting for Running) never accepts.
+                .WaitForCompletion(bridge)
                 .WithReference(bridge);
 
             ConfigureWebEnvironment(viteWeb);
+
+            // Dev auto-login opt-in: when NOCTURNE_DEV_AUTO_LOGIN is true — set
+            // in apphost appsettings or the host environment (e.g.
+            // `NOCTURNE_DEV_AUTO_LOGIN=true aspire start`) — the web login page
+            // redirects through /api/v4/dev-only/auth/login instead of the
+            // passkey UI. Run mode only — the backing controller exists only in
+            // Development.
+            if (builder.Configuration.GetValue("NOCTURNE_DEV_AUTO_LOGIN", false))
+            {
+                viteWeb.WithEnvironment("NOCTURNE_DEV_AUTO_LOGIN", "true");
+            }
+
             if (postgresServer != null && postgresWebPassword != null)
             {
                 viteWeb.WithNocturneWebDatabase(postgresServer, dbName, postgresWebPassword);
@@ -451,13 +495,21 @@ class Program
 
             ConfigureWebEnvironment(dockerWeb);
 
-            // SvelteKit needs ORIGIN when running behind a reverse proxy so SSR
-            // constructs URLs with the public domain instead of the container hostname.
-            // Derive from BaseDomain (bare host or host:port).
-            dockerWeb.WithEnvironment(
-                "ORIGIN",
-                ReferenceExpression.Create($"https://{baseDomain}")
-            );
+            // SvelteKit (adapter-node) needs to reconstruct the public origin when
+            // running behind a reverse proxy. Derive it per-request from the edge's
+            // forwarded headers rather than pinning a single static ORIGIN.
+            //
+            // A static ORIGIN=https://{baseDomain} is used unconditionally by
+            // adapter-node, so its remote-function CSRF guard rejects any POST whose
+            // browser Origin differs from that exact value — every tenant subdomain
+            // (*.{baseDomain}) and any http/localhost/port access — with a 403
+            // "Cross-site remote requests are forbidden" surfaced in the UI as
+            // "Failed to execute remote function". Reading x-forwarded-proto/host
+            // (set by Caddy and required of byo-proxy operators) makes the origin
+            // match the actual host for the apex and every tenant subdomain alike.
+            dockerWeb
+                .WithEnvironment("PROTOCOL_HEADER", "x-forwarded-proto")
+                .WithEnvironment("HOST_HEADER", "x-forwarded-host");
 
             // Operator-supplied OTLP export, mirroring the API. The web's Node
             // SDK (instrumentation.server.ts) starts only when the endpoint is
@@ -501,24 +553,53 @@ class Program
             gateway.WithExternalHttpEndpoints();
         }
 
+        // Local base domain. An explicitly configured LocalDev:Domain (user-secret)
+        // keeps its dedicated behavior: mkcert required, gateway on port 443, bare
+        // domain in URLs. When unset, run mode falls back to nocturne.localhost on
+        // the normal gateway port: browsers resolve *.localhost subdomains to
+        // loopback without DNS or hosts-file setup, and the resulting WebAuthn
+        // rp.id "nocturne.localhost" is valid on tenant subdomains — unlike
+        // "localhost" itself, which browsers reject as a public suffix. That makes
+        // tenant subdomains and passkey login work on a clean checkout.
         var customDomain = builder.Configuration["LocalDev:Domain"];
+        var hasExplicitDomain = !string.IsNullOrEmpty(customDomain);
+        if (!hasExplicitDomain && builder.ExecutionContext.IsRunMode)
+        {
+            customDomain = "nocturne.localhost";
+        }
 
         if (builder.ExecutionContext.IsRunMode)
         {
-            if (!string.IsNullOrEmpty(customDomain))
+            if (hasExplicitDomain)
             {
-                var cert = MkcertHelper.EnsureCertificate(customDomain);
+                var cert = MkcertHelper.EnsureCertificate(customDomain!);
                 gateway.WithHttpsCertificate(cert);
             }
             else
             {
-                gateway.WithHttpsDeveloperCertificate();
+                // Default domain: use mkcert when available (trusted cert covering
+                // *.nocturne.localhost); otherwise fall back to the ASP.NET dev
+                // certificate, which only names localhost — tenant subdomains then
+                // show a browser name-mismatch warning but remain functional.
+                var cert = MkcertHelper.TryEnsureCertificate(customDomain!);
+                if (cert != null)
+                {
+                    gateway.WithHttpsCertificate(cert);
+                }
+                else
+                {
+                    Console.WriteLine(
+                        "[Nocturne.Aspire] mkcert not found — using the ASP.NET developer "
+                        + $"certificate. Tenant subdomains (*.{customDomain}) will show a "
+                        + "certificate warning; install mkcert for a trusted local cert.");
+                    gateway.WithHttpsDeveloperCertificate();
+                }
             }
 
             if (!isWorktree)
             {
-                // Custom domain → port 443 so URLs work without a port number.
-                gateway.WithHttpsEndpoint(port: !string.IsNullOrEmpty(customDomain) ? 443 : 1612);
+                // Explicit custom domain → port 443 so URLs work without a port number.
+                gateway.WithHttpsEndpoint(port: hasExplicitDomain ? 443 : 1612);
             }
         }
         else if (!enableCaddy)
@@ -552,53 +633,76 @@ class Program
             ? ForwardedTransformActions.Set
             : ForwardedTransformActions.Off;
 
+        // In publish mode, also keep the incoming Host on the proxied request.
+        // With X-Forwarded Off, YARP's default Host rewrite (to the destination
+        // service name) discards the only copy of the public host when nothing
+        // is in front of the gateway — e.g. the byo-proxy bundle accessed
+        // directly on :8080 before a proxy is set up — leaving the API and the
+        // web app to resolve tenants and reconstruct origins against
+        // cluster-internal hostnames. Caddy and compliant byo proxies pass the
+        // original Host through, so the preserved value always matches
+        // X-Forwarded-Host when an edge is present. In run mode YARP already
+        // Sets X-Forwarded-Host, and the Vite dev server validates Host, so the
+        // default rewrite stays.
+        var preserveOriginalHost = !builder.ExecutionContext.IsRunMode;
+
+        // X-Forwarded-For is the one the API resolves an address from, and it follows the same
+        // rule for a different reason: in run mode the gateway is the only hop, so it Sets the
+        // peer it saw; in publish mode the edge in front (bundled Caddy, or the operator's proxy
+        // in the byo bundle) has already overwritten the header with the client it resolved, and
+        // appending the gateway's own peer here would bury that entry under a container address.
+        // The API consumes one entry from the right, so whatever the edge writes must be the
+        // client — an edge that appends to the caller's chain instead needs the API's
+        // ForwardedHeaders:ForwardLimit raised to match its hop count.
+        void ApplyEdgeTransforms(YarpRoute route)
+        {
+            route.WithTransformXForwarded("X-Forwarded-", xForwardedAction);
+            if (preserveOriginalHost)
+            {
+                route.WithTransformUseOriginalHostHeader(true);
+            }
+        }
+
         gateway
             .WaitFor(api)
             .WaitFor(web)
             .WithConfiguration(yarp =>
             {
                 // OIDC callback on apex → API (must come before /api/ → web catch-all)
-                yarp.AddRoute("/api/auth/oidc/{**catch-all}", api.GetEndpoint("http"))
-                    .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
+                ApplyEdgeTransforms(yarp.AddRoute("/api/auth/oidc/{**catch-all}", api.GetEndpoint("http")));
 
                 // OAuth endpoints → API (must bypass SvelteKit CSRF for external clients)
-                yarp.AddRoute("/api/oauth/{**catch-all}", api.GetEndpoint("http"))
-                    .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
+                ApplyEdgeTransforms(yarp.AddRoute("/api/oauth/{**catch-all}", api.GetEndpoint("http")));
 
                 // Dev-only admin endpoints → API (not remote functions)
-                yarp.AddRoute("/api/v4/dev-only/{**catch-all}", api.GetEndpoint("http"))
-                    .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
+                ApplyEdgeTransforms(yarp.AddRoute("/api/v4/dev-only/{**catch-all}", api.GetEndpoint("http")));
 
                 // Platform-admin tenant-access grant → API (sets the .basedomain grant cookie on a
                 // browser navigation; must come before /api/ → web catch-all)
-                yarp.AddRoute("/api/auth/platform-access/{**catch-all}", api.GetEndpoint("http"))
-                    .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
-                yarp.AddRoute("/api/auth/platform-access", api.GetEndpoint("http"))
-                    .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
+                ApplyEdgeTransforms(yarp.AddRoute("/api/auth/platform-access/{**catch-all}", api.GetEndpoint("http")));
+                ApplyEdgeTransforms(yarp.AddRoute("/api/auth/platform-access", api.GetEndpoint("http")));
 
                 // Bot webhooks, remote functions → web
-                yarp.AddRoute("/api/{**catch-all}", webEndpoints.GetEndpoint("http"))
-                    .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
+                ApplyEdgeTransforms(yarp.AddRoute("/api/{**catch-all}", webEndpoints.GetEndpoint("http")));
 
                 // Bot account linking
-                yarp.AddRoute("/auth/bot/{**catch-all}", webEndpoints.GetEndpoint("http"))
-                    .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
+                ApplyEdgeTransforms(yarp.AddRoute("/auth/bot/{**catch-all}", webEndpoints.GetEndpoint("http")));
 
                 // API docs (Scalar UI) — served directly by the API via Scalar.AspNetCore
-                yarp.AddRoute("/scalar", api.GetEndpoint("http"))
-                    .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
-                yarp.AddRoute("/scalar/{**catch-all}", api.GetEndpoint("http"))
-                    .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
-                yarp.AddRoute("/openapi/{**catch-all}", api.GetEndpoint("http"))
-                    .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
+                ApplyEdgeTransforms(yarp.AddRoute("/scalar", api.GetEndpoint("http")));
+                ApplyEdgeTransforms(yarp.AddRoute("/scalar/{**catch-all}", api.GetEndpoint("http")));
+                ApplyEdgeTransforms(yarp.AddRoute("/openapi/{**catch-all}", api.GetEndpoint("http")));
 
                 // OAuth/OIDC discovery endpoints → API
-                yarp.AddRoute("/.well-known/{**catch-all}", api.GetEndpoint("http"))
-                    .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
+                ApplyEdgeTransforms(yarp.AddRoute("/.well-known/{**catch-all}", api.GetEndpoint("http")));
+
+                // Legacy Nightscout /pebble (watchfaces, Loop, LoopFollow) → API. It sits
+                // outside /api, so without this route the web fallback answers with the SPA
+                // 404 page instead. Authorization is the API's default-deny fallback policy.
+                ApplyEdgeTransforms(yarp.AddRoute("/pebble", api.GetEndpoint("http")));
 
                 // Fallback → web (includes Socket.IO websockets, HMR, all frontend routes)
-                yarp.AddRoute(webEndpoints.GetEndpoint("http"))
-                    .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
+                ApplyEdgeTransforms(yarp.AddRoute(webEndpoints.GetEndpoint("http")));
             });
 
         // ------------------------------------------------------------------
@@ -622,6 +726,7 @@ class Program
                 .WithVolume("caddy-data", "/data")
                 .WithVolume("caddy-config", "/config")
                 .WithEnvironment("BASE_DOMAIN", baseDomain)
+                .WithEnvironment("TRUSTED_PROXIES", trustedProxies)
                 .WaitFor(gateway)
                 .PublishAsDockerComposeService((_, service) =>
                 {
@@ -671,11 +776,15 @@ class Program
 
         if (builder.ExecutionContext.IsRunMode)
         {
+            // Explicit domain runs on 443, so URLs omit the port; the default
+            // local domain keeps the gateway port and must carry it in
+            // BASE_DOMAIN — consumers build URLs (and strip the port for the
+            // WebAuthn rp.id) from it.
             var gatewayEndpoint = gateway.GetEndpoint("https");
-            var baseDomainExpr = !string.IsNullOrEmpty(customDomain)
+            var baseDomainExpr = hasExplicitDomain
                 ? ReferenceExpression.Create($"{customDomain}")
                 : ReferenceExpression.Create(
-                    $"{gatewayEndpoint.Property(EndpointProperty.Host)}:{gatewayEndpoint.Property(EndpointProperty.Port)}"
+                    $"{customDomain}:{gatewayEndpoint.Property(EndpointProperty.Port)}"
                 );
 
             // Single source of truth for both API and web
@@ -696,7 +805,7 @@ class Program
 
             // Show the gateway URL on the web resource in the Aspire dashboard
             // so users can click through to the app via the HTTPS gateway.
-            if (!string.IsNullOrEmpty(customDomain))
+            if (hasExplicitDomain)
             {
                 web.WithUrl($"https://{customDomain}", customDomain);
             }
@@ -704,16 +813,17 @@ class Program
             {
                 web.WithUrl(
                     ReferenceExpression.Create(
-                        $"https://{gatewayEndpoint.Property(EndpointProperty.Host)}:{gatewayEndpoint.Property(EndpointProperty.Port)}"
+                        $"https://{customDomain}:{gatewayEndpoint.Property(EndpointProperty.Port)}"
                     ),
                     "Gateway"
                 );
             }
 
-            // Warn if custom domain doesn't resolve
+            // Warn if custom domain doesn't resolve (no-op for *.localhost,
+            // which browsers resolve themselves).
             if (!string.IsNullOrEmpty(customDomain))
             {
-                var port = isWorktree ? 0 : 1612;
+                var port = isWorktree ? 0 : hasExplicitDomain ? 443 : 1612;
                 MkcertHelper.WarnIfDomainUnresolvable(customDomain, port);
             }
         }

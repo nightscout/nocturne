@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { ComponentProps } from "svelte";
+  import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
@@ -9,46 +10,103 @@
     Fingerprint,
     User,
     KeyRound,
-    AlertTriangle,
     Smartphone,
     ShieldAlert,
   } from "lucide-svelte";
   import * as InputOTP from "$lib/components/ui/input-otp";
-  import { login as totpLogin } from "$lib/api/generated/totps.generated.remote";
-  import { startAuthentication } from "@simplewebauthn/browser";
-  import { getOidcProviders, setAuthCookies } from "$routes/(unauthenticated)/auth/auth.remote";
+  import { FormError, FormField, useSubmission } from "$lib/forms";
+  import { WebAuthnAbortService } from "@simplewebauthn/browser";
+  import {
+    getOidcProviders,
+    setAuthCookies,
+    signInWithAuthenticator,
+    signInWithRecoveryCode,
+  } from "$routes/(unauthenticated)/auth/auth.remote";
   import {
     discoverableLoginOptions,
     loginOptions,
     loginComplete,
-    recoveryVerify,
   } from "$lib/api/generated/passkeys.generated.remote";
   import { goto, invalidateAll } from "$app/navigation";
+  import { page } from "$app/state";
+  import { describePasskeyError } from "./passkey-errors";
+  import {
+    offerPasskeyInAutofill,
+    runPasskeyAssertion,
+    type CeremonyOptionsResponse,
+  } from "./passkey-login";
+  import { isLastUsed, withLastUsedFirst } from "./last-sign-in";
+  import { signInMethodLabels } from "./labels";
 
   interface Props {
     returnUrl?: string;
     onSuccess?: () => void;
+    /**
+     * Whether this page is served on a host that resolves no tenant. Passkeys, authenticator
+     * codes, and recovery codes are all checked against a resolved tenant's members, so on such
+     * a host only the identity-provider path can complete a sign-in and it is the only one
+     * offered.
+     */
+    tenantless?: boolean;
   }
 
-  let { returnUrl = "/", onSuccess }: Props = $props();
+  let { returnUrl = "/", onSuccess, tenantless = false }: Props = $props();
 
   const oidcQuery = getOidcProviders();
+
+  /**
+   * The method that last completed a sign-in on this browser, read from the cookie the API wrote
+   * (see `last-sign-in.ts`). It decides which control leads, so that someone who signs in with an
+   * identity provider is not shown the passkey button first every time.
+   */
+  const lastSignIn = $derived(page.data.lastSignIn ?? null);
+
+  const providers = $derived(oidcQuery.current?.providers ?? []);
+  const hasOidc = $derived(
+    (oidcQuery.current?.enabled ?? false) && providers.length > 0
+  );
+  const orderedProviders = $derived(withLastUsedFirst(providers, lastSignIn));
+  /** Whether an identity provider leads the form, ahead of the passkey controls. */
+  const providerFirst = $derived(
+    isLastUsed(lastSignIn, "oidc", orderedProviders[0]?.id)
+  );
+  const passkeyLastUsed = $derived(isLastUsed(lastSignIn, "passkey"));
 
   // UI mode
   type LoginMode = "default" | "username" | "recovery" | "totp";
   let mode = $state<LoginMode>("default");
   let isLoading = $state(false);
-  let errorMessage = $state<string | null>(null);
   let isRedirecting = $state(false);
   let selectedProvider = $state<string | null>(null);
 
+  /**
+   * Errors from the two passkey ceremonies. The code-based forms carry their own
+   * errors on the remote form's fields.
+   */
+  let passkeyError = $state<string | null>(null);
+
+  const recovery = useSubmission({
+    fallback: "We couldn't sign you in just now. Please try again.",
+  });
+  const authenticator = useSubmission({
+    fallback: "We couldn't sign you in just now. Please try again.",
+  });
+
   // Browser support
-  let passkeysSupported = $state(typeof window !== "undefined" && window.PublicKeyCredential !== undefined);
+  let passkeysSupported = $state(
+    typeof window !== "undefined" && window.PublicKeyCredential !== undefined
+  );
 
   // Form fields
   let username = $state("");
-  let recoveryCode = $state("");
   let totpCode = $state("");
+  /** Submitted from the code field's onComplete, so a full code submits itself. */
+  let totpFormEl = $state<HTMLFormElement | null>(null);
+  /**
+   * Proof from the API that the passkey step succeeded. The authenticator code is
+   * a second factor, so it is only accepted alongside this token.
+   */
+  let stepUpToken = $state("");
 
   async function handleAuthResult(result: {
     success?: boolean;
@@ -56,10 +114,27 @@
     refreshToken?: string;
     expiresIn?: number;
     refreshExpiresIn?: number;
+    totpRequired?: boolean;
+    stepUpToken?: string | null;
     error?: string;
   }) {
     if (!result.success) {
-      errorMessage = result.error || "Authentication failed";
+      passkeyError =
+        result.error ?? "We couldn't sign you in. Please try again.";
+      return;
+    }
+
+    // The passkey was accepted but this account also has an authenticator, so there is
+    // no session yet — collect the code and finish there.
+    if (result.totpRequired) {
+      if (!result.stepUpToken) {
+        passkeyError = "We couldn't sign you in. Please try again.";
+        return;
+      }
+      stepUpToken = result.stepUpToken;
+      totpCode = "";
+      authenticator.clear();
+      mode = "totp";
       return;
     }
 
@@ -82,93 +157,68 @@
     }
   }
 
-  async function handleDiscoverableLogin() {
+  /**
+   * A passkey sign-in the visitor asked for by pressing a button, so a failure is theirs to see.
+   * The WebAuthn ceremony runs in the browser, which is why neither entry point has a
+   * server-side counterpart that works without JavaScript.
+   */
+  async function signInWithPasskey(
+    requestOptions: () => Promise<CeremonyOptionsResponse>
+  ) {
     isLoading = true;
-    errorMessage = null;
+    passkeyError = null;
 
     try {
-      const response = await discoverableLoginOptions();
-      const options = JSON.parse(response.options ?? "");
-      const challengeToken = response.challengeToken ?? "";
-
-      const assertion = await startAuthentication({ optionsJSON: options });
-
-      const result = await loginComplete({
-        assertionResponseJson: JSON.stringify(assertion),
-        challengeToken,
-      });
-      await handleAuthResult(result);
+      await handleAuthResult(
+        await runPasskeyAssertion(requestOptions, loginComplete)
+      );
     } catch (err) {
-      errorMessage = err instanceof Error ? err.message : "Authentication failed";
+      console.error("Passkey sign-in failed:", err);
+      passkeyError = describePasskeyError(err, "login");
     } finally {
       isLoading = false;
     }
   }
 
-  async function handleUsernameLogin() {
-    if (!username.trim()) {
-      errorMessage = "Please enter your username";
-      return;
-    }
-
-    isLoading = true;
-    errorMessage = null;
-
-    try {
-      const response = await loginOptions({ username: username.trim() });
-      const options = JSON.parse(response.options ?? "");
-      const challengeToken = response.challengeToken ?? "";
-
-      const assertion = await startAuthentication({ optionsJSON: options });
-
-      const result = await loginComplete({
-        assertionResponseJson: JSON.stringify(assertion),
-        challengeToken,
-      });
-      await handleAuthResult(result);
-    } catch (err) {
-      errorMessage = err instanceof Error ? err.message : "Authentication failed";
-    } finally {
-      isLoading = false;
-    }
+  /** Discoverable ("just tap the button") passkey sign-in. */
+  async function handleDiscoverableLogin(event: SubmitEvent) {
+    event.preventDefault();
+    await signInWithPasskey(discoverableLoginOptions);
   }
 
-  async function handleRecoveryCode() {
-    if (!username.trim() || !recoveryCode.trim()) {
-      errorMessage = "Please enter your username and recovery code";
-      return;
-    }
-
-    isLoading = true;
-    errorMessage = null;
-
-    try {
-      const result = await recoveryVerify({ username: username.trim(), code: recoveryCode.trim() });
-      await handleAuthResult(result);
-    } catch (err) {
-      errorMessage = err instanceof Error ? err.message : "Recovery code verification failed";
-    } finally {
-      isLoading = false;
-    }
+  /** Username-first passkey sign-in. */
+  async function handleUsernameLogin(event: SubmitEvent) {
+    event.preventDefault();
+    await signInWithPasskey(() => loginOptions({ username: username.trim() }));
   }
 
-  async function handleTotpLogin() {
-    if (isLoading) return;
-    if (!username.trim() || totpCode.length !== 6) {
-      errorMessage = "Please enter your username and 6-digit code";
-      return;
-    }
-    isLoading = true;
-    errorMessage = null;
-    try {
-      const result = await totpLogin({ username: username.trim(), code: totpCode });
-      await handleAuthResult(result);
-    } catch (err) {
-      errorMessage = err instanceof Error ? err.message : "Authentication failed";
-    } finally {
-      isLoading = false;
-    }
-  }
+  /**
+   * While the username field is on screen, offer the passkey in the browser's own autofill
+   * dropdown rather than making the visitor press anything. The challenge has to be requested
+   * before they touch the field, so this starts on the way in and is abandoned on the way out:
+   * a browser allows only one WebAuthn request at a time, and a stale one would swallow the
+   * explicit buttons. Silent throughout — a browser without conditional mediation, and a
+   * dropdown nobody used, are both just the ordinary form.
+   */
+  $effect(() => {
+    if (mode !== "username" || tenantless || !passkeysSupported) return;
+
+    let abandoned = false;
+
+    void offerPasskeyInAutofill(async () => {
+      const result = await runPasskeyAssertion(
+        discoverableLoginOptions,
+        loginComplete,
+        true
+      );
+      if (!abandoned) await handleAuthResult(result);
+    }).catch(() => {});
+
+    return () => {
+      abandoned = true;
+      WebAuthnAbortService.cancelCeremony();
+    };
+  });
 
   function loginWithProvider(providerId: string) {
     isRedirecting = true;
@@ -190,7 +240,14 @@
 
   function switchMode(newMode: LoginMode) {
     mode = newMode;
-    errorMessage = null;
+    passkeyError = null;
+    recovery.clear();
+    authenticator.clear();
+    // Leaving the authenticator step abandons the passkey step it belonged to.
+    if (newMode !== "totp") {
+      stepUpToken = "";
+      totpCode = "";
+    }
   }
 </script>
 
@@ -206,137 +263,187 @@
   {/if}
 {/snippet}
 
+{#snippet lastUsedBadge()}
+  <Badge variant="secondary" class="ml-2 text-[10px] uppercase">
+    Last used
+  </Badge>
+{/snippet}
+
+{#snippet divider(label: string)}
+  <div class="relative">
+    <div class="absolute inset-0 flex items-center">
+      <span class="w-full border-t"></span>
+    </div>
+    <div class="relative flex justify-center text-xs uppercase">
+      <span class="bg-background px-2 text-muted-foreground">{label}</span>
+    </div>
+  </div>
+{/snippet}
+
+{#snippet passkeyButtons()}
+  <!-- Primary: discoverable passkey sign-in. Needs JavaScript for the
+       WebAuthn ceremony, so there is no server-side counterpart. -->
+  <form onsubmit={handleDiscoverableLogin}>
+    <Button
+      type="submit"
+      data-testid="passkey-sign-in"
+      class="w-full h-12"
+      size="lg"
+      disabled={isLoading || isRedirecting || !passkeysSupported}
+    >
+      {#if isLoading}
+        <Loader2 class="mr-2 h-5 w-5 animate-spin" />
+        Waiting for passkey...
+      {:else}
+        <Fingerprint class="mr-2 h-5 w-5" />
+        {signInMethodLabels.passkey}
+        {#if passkeyLastUsed}{@render lastUsedBadge()}{/if}
+      {/if}
+    </Button>
+  </form>
+
+  <!-- Secondary: username-based sign-in -->
+  <Button
+    variant="outline"
+    class="w-full"
+    disabled={isLoading || isRedirecting || !passkeysSupported}
+    onclick={() => switchMode("username")}
+  >
+    <User class="mr-2 h-4 w-4" />
+    {signInMethodLabels.username}
+  </Button>
+{/snippet}
+
+{#snippet providerButtons()}
+  <div class="space-y-3">
+    {#each orderedProviders as provider}
+      <Button
+        variant="outline"
+        class="w-full h-11 relative"
+        style={getButtonStyle(provider.buttonColor)}
+        disabled={isLoading || isRedirecting || !provider.id}
+        onclick={() => provider.id && loginWithProvider(provider.id)}
+      >
+        {#if isRedirecting && selectedProvider === provider.id}
+          <Loader2 class="mr-2 h-4 w-4 animate-spin" />
+          Redirecting...
+        {:else}
+          {@render providerIcon(provider.name)}
+          Sign in with {provider.name}
+          {#if isLastUsed(lastSignIn, "oidc", provider.id)}
+            {@render lastUsedBadge()}
+          {/if}
+        {/if}
+      </Button>
+    {/each}
+  </div>
+{/snippet}
+
+{#snippet otherMethodLinks()}
+  <Button
+    variant="link"
+    size="sm"
+    class="h-auto p-0 text-xs"
+    onclick={() => switchMode("recovery")}
+    disabled={isLoading}
+  >
+    {signInMethodLabels.recoveryCode}
+  </Button>
+{/snippet}
+
+{#snippet backToSignIn(label: string)}
+  <Button
+    variant="link"
+    size="sm"
+    class="h-auto p-0 text-xs"
+    onclick={() => switchMode("default")}
+    disabled={isLoading}
+  >
+    {label}
+  </Button>
+{/snippet}
+
 {#if oidcQuery.loading}
   <div class="flex items-center justify-center p-8">
     <Loader2 class="h-8 w-8 animate-spin text-primary" />
   </div>
 {:else}
-  {@const oidc = oidcQuery.current}
-  {@const hasOidc = oidc?.enabled && oidc.providers.length > 0}
-
   <div class="space-y-4">
-    {#if !passkeysSupported}
+    {#if tenantless}
+      <p class="text-sm text-muted-foreground">
+        Passkeys, authenticator codes, and recovery codes are checked against one
+        tenant, so they are used at that tenant's own web address.
+        {#if !hasOidc}
+          Open your tenant's address to sign in.
+        {/if}
+      </p>
+    {/if}
+
+    {#if !passkeysSupported && !tenantless}
       <div class="flex items-start gap-3 rounded-md border border-yellow-500/30 bg-yellow-500/5 p-3">
         <ShieldAlert class="mt-0.5 h-4 w-4 shrink-0 text-yellow-600 dark:text-yellow-500" />
         <p class="text-sm text-yellow-700 dark:text-yellow-400">
-          Your browser does not support passkeys. Use an authenticator app, a recovery code, or try a different browser.
+          Your browser does not support passkeys. Use a recovery code, or try a different browser. An authenticator app is a second step after a passkey, so it cannot get you in on its own.
         </p>
       </div>
     {/if}
 
-    {#if errorMessage}
-      <div class="flex items-start gap-3 rounded-md border border-destructive/20 bg-destructive/5 p-3">
-        <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-        <p class="text-sm text-destructive">{errorMessage}</p>
-      </div>
-    {/if}
+    <FormError issues={passkeyError} focusOnShow />
 
     {#if mode === "default"}
-      <!-- Primary: Discoverable passkey login -->
-      <Button
-        class="w-full h-12"
-        size="lg"
-        disabled={isLoading || isRedirecting || !passkeysSupported}
-        onclick={handleDiscoverableLogin}
-      >
-        {#if isLoading}
-          <Loader2 class="mr-2 h-5 w-5 animate-spin" />
-          Waiting for passkey...
-        {:else}
-          <Fingerprint class="mr-2 h-5 w-5" />
-          Sign in with passkey
+      <!-- The method that last worked leads; everything else keeps its usual place. -->
+      {#if providerFirst}
+        {@render providerButtons()}
+      {/if}
+
+      {#if !tenantless}
+        {#if providerFirst}
+          {@render divider("Or continue with a passkey")}
         {/if}
-      </Button>
+        {@render passkeyButtons()}
+      {/if}
 
-      <!-- Secondary: Username-based login -->
-      <Button
-        variant="outline"
-        class="w-full"
-        disabled={isLoading || isRedirecting || !passkeysSupported}
-        onclick={() => switchMode("username")}
-      >
-        <User class="mr-2 h-4 w-4" />
-        Sign in with username
-      </Button>
+      {#if hasOidc && !providerFirst}
+        {#if !tenantless}
+          {@render divider("Or continue with")}
+        {/if}
+        {@render providerButtons()}
+      {/if}
 
-      {#if hasOidc && oidc}
-        <div class="relative">
-          <div class="absolute inset-0 flex items-center">
-            <span class="w-full border-t"></span>
-          </div>
-          <div class="relative flex justify-center text-xs uppercase">
-            <span class="bg-background px-2 text-muted-foreground">
-              Or continue with
-            </span>
-          </div>
-        </div>
-
-        <div class="space-y-3">
-          {#each oidc.providers as provider}
-            <Button
-              variant="outline"
-              class="w-full h-11 relative"
-              style={getButtonStyle(provider.buttonColor)}
-              disabled={isLoading || isRedirecting || !provider.id}
-              onclick={() => provider.id && loginWithProvider(provider.id)}
-            >
-              {#if isRedirecting && selectedProvider === provider.id}
-                <Loader2 class="mr-2 h-4 w-4 animate-spin" />
-                Redirecting...
-              {:else}
-                {@render providerIcon(provider.name)}
-                Sign in with {provider.name}
-              {/if}
-            </Button>
-          {/each}
+      {#if !tenantless}
+        <div class="flex justify-center gap-3 text-xs">
+          {@render otherMethodLinks()}
         </div>
       {/if}
 
-      <div class="flex justify-center gap-3 text-xs">
-        <Button
-          variant="link"
-          size="sm"
-          class="h-auto p-0 text-xs"
-          onclick={() => switchMode("totp")}
-          disabled={isLoading}
-        >
-          Use authenticator app
-        </Button>
-        <Button
-          variant="link"
-          size="sm"
-          class="h-auto p-0 text-xs"
-          onclick={() => switchMode("recovery")}
-          disabled={isLoading}
-        >
-          Use a recovery code
-        </Button>
-      </div>
-
     {:else if mode === "username"}
-      <!-- Username-based passkey login -->
-      <div class="space-y-3">
-        <div class="space-y-2">
-          <Label for="username">Username</Label>
-          <div class="relative">
-            <User class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              id="username"
-              type="text"
-              placeholder="your-username"
-              class="pl-10"
-              bind:value={username}
-              disabled={isLoading}
-              onkeydown={(e: KeyboardEvent) =>
-                e.key === "Enter" && handleUsernameLogin()}
-            />
-          </div>
-        </div>
+      <!-- Username-first passkey sign-in. JavaScript-only, as above. -->
+      <form onsubmit={handleUsernameLogin} class="space-y-3">
+        <FormField label="Username" id="username" required>
+          {#snippet control(field)}
+            <div class="relative">
+              <User class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                {...field}
+                name="username"
+                type="text"
+                placeholder="your-username"
+                class="pl-10"
+                autocomplete="username webauthn"
+                autocapitalize="none"
+                spellcheck={false}
+                autofocus
+                bind:value={username}
+                disabled={isLoading}
+              />
+            </div>
+          {/snippet}
+        </FormField>
 
         <Button
+          type="submit"
           class="w-full"
           disabled={isLoading || !username.trim() || !passkeysSupported}
-          onclick={handleUsernameLogin}
         >
           {#if isLoading}
             <Loader2 class="mr-2 h-4 w-4 animate-spin" />
@@ -346,123 +453,123 @@
             Continue with passkey
           {/if}
         </Button>
-      </div>
+      </form>
 
       <div class="flex justify-between text-xs">
-        <Button
-          variant="link"
-          size="sm"
-          class="h-auto p-0 text-xs"
-          onclick={() => switchMode("default")}
-          disabled={isLoading}
-        >
-          Back
-        </Button>
+        {@render backToSignIn("Back")}
         <div class="flex gap-3">
-          <Button
-            variant="link"
-            size="sm"
-            class="h-auto p-0 text-xs"
-            onclick={() => switchMode("totp")}
-            disabled={isLoading}
-          >
-            Use authenticator app
-          </Button>
-          <Button
-            variant="link"
-            size="sm"
-            class="h-auto p-0 text-xs"
-            onclick={() => switchMode("recovery")}
-            disabled={isLoading}
-          >
-            Use a recovery code
-          </Button>
+          {@render otherMethodLinks()}
         </div>
       </div>
 
     {:else if mode === "recovery"}
-      <!-- Recovery code login -->
-      <div class="space-y-3">
-        <div class="space-y-2">
-          <Label for="recovery-username">Username</Label>
-          <div class="relative">
-            <User class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              id="recovery-username"
-              type="text"
-              placeholder="your-username"
-              class="pl-10"
-              bind:value={username}
-              disabled={isLoading}
-            />
-          </div>
-        </div>
+      <!-- Recovery-code sign-in. Verified entirely on the server, so this posts
+           and works with JavaScript disabled. -->
+      <form
+        class="space-y-3"
+        {...signInWithRecoveryCode.enhance(async ({ submit }) => {
+          await recovery.run(submit, onSuccess);
+        })}
+      >
+        <input type="hidden" name="returnUrl" value={returnUrl} />
 
-        <div class="space-y-2">
-          <Label for="recovery-code">Recovery code</Label>
-          <div class="relative">
-            <KeyRound class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              id="recovery-code"
-              type="text"
-              placeholder="XXXX-XXXX"
-              class="pl-10 font-mono"
-              bind:value={recoveryCode}
-              disabled={isLoading}
-              onkeydown={(e: KeyboardEvent) =>
-                e.key === "Enter" && handleRecoveryCode()}
-            />
-          </div>
-        </div>
+        <FormError issues={recovery.error} focusOnShow />
+
+        <FormField
+          label="Username"
+          id="recovery-username"
+          required
+          issues={signInWithRecoveryCode.fields.username.issues()}
+        >
+          {#snippet control(field)}
+            <div class="relative">
+              <User class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                {...field}
+                name="username"
+                type="text"
+                placeholder="your-username"
+                class="pl-10"
+                autocomplete="username"
+                autocapitalize="none"
+                spellcheck={false}
+                autofocus
+                bind:value={username}
+              />
+            </div>
+          {/snippet}
+        </FormField>
+
+        <FormField
+          label="Recovery code"
+          id="recovery-code"
+          required
+          issues={signInWithRecoveryCode.fields.code.issues()}
+        >
+          {#snippet control(field)}
+            <div class="relative">
+              <KeyRound class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                {...field}
+                name="code"
+                type="text"
+                placeholder="XXXX-XXXX"
+                class="pl-10 font-mono"
+                autocomplete="one-time-code"
+                autocapitalize="characters"
+                spellcheck={false}
+              />
+            </div>
+          {/snippet}
+        </FormField>
 
         <Button
+          type="submit"
           class="w-full"
-          disabled={isLoading || !username.trim() || !recoveryCode.trim()}
-          onclick={handleRecoveryCode}
+          disabled={signInWithRecoveryCode.pending > 0}
         >
-          {#if isLoading}
+          {#if signInWithRecoveryCode.pending > 0}
             <Loader2 class="mr-2 h-4 w-4 animate-spin" />
             Verifying...
           {:else}
             Verify recovery code
           {/if}
         </Button>
-      </div>
+      </form>
 
       <div class="text-center">
-        <Button
-          variant="link"
-          size="sm"
-          class="h-auto p-0 text-xs"
-          onclick={() => switchMode("default")}
-          disabled={isLoading}
-        >
-          Back to sign in
-        </Button>
+        {@render backToSignIn("Back to sign in")}
       </div>
 
     {:else if mode === "totp"}
-      <!-- TOTP authenticator login -->
-      <div class="space-y-3">
-        <div class="space-y-2">
-          <Label for="totp-username">Username</Label>
-          <div class="relative">
-            <User class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              id="totp-username"
-              type="text"
-              placeholder="your-username"
-              class="pl-10"
-              bind:value={username}
-              disabled={isLoading}
-            />
-          </div>
-        </div>
+      <!-- Second step after the passkey: the authenticator code, verified on the server. -->
+      <form
+        bind:this={totpFormEl}
+        class="space-y-3"
+        {...signInWithAuthenticator.enhance(async ({ submit }) => {
+          await authenticator.run(submit, onSuccess);
+        })}
+      >
+        <input type="hidden" name="returnUrl" value={returnUrl} />
+        <input type="hidden" name="stepUpToken" value={stepUpToken} />
+
+        <FormError issues={authenticator.error} focusOnShow />
+
+        <p class="text-sm text-muted-foreground">
+          Your passkey was accepted. Enter the current code from your authenticator
+          app to finish signing in.
+        </p>
 
         <div class="space-y-2">
-          <Label>Authenticator code</Label>
+          <Label for="totp-code-input">Authenticator code</Label>
           <div class="flex justify-center">
-            <InputOTP.Root maxlength={6} bind:value={totpCode} onComplete={handleTotpLogin}>
+            <InputOTP.Root
+              name="code"
+              inputId="totp-code-input"
+              maxlength={6}
+              bind:value={totpCode}
+              onComplete={() => totpFormEl?.requestSubmit()}
+            >
               {#snippet children({
                 cells,
               }: {
@@ -482,14 +589,21 @@
               {/snippet}
             </InputOTP.Root>
           </div>
+          {#each signInWithAuthenticator.fields.code.issues() ?? [] as issue}
+            <p role="alert" class="text-center text-sm text-destructive">
+              {issue.message}
+            </p>
+          {/each}
         </div>
 
         <Button
+          type="submit"
           class="w-full"
-          disabled={isLoading || !username.trim() || totpCode.length !== 6}
-          onclick={handleTotpLogin}
+          disabled={signInWithAuthenticator.pending > 0 ||
+            !stepUpToken ||
+            totpCode.length !== 6}
         >
-          {#if isLoading}
+          {#if signInWithAuthenticator.pending > 0}
             <Loader2 class="mr-2 h-4 w-4 animate-spin" />
             Verifying...
           {:else}
@@ -497,18 +611,10 @@
             Verify
           {/if}
         </Button>
-      </div>
+      </form>
 
       <div class="text-center">
-        <Button
-          variant="link"
-          size="sm"
-          class="h-auto p-0 text-xs"
-          onclick={() => switchMode("default")}
-          disabled={isLoading}
-        >
-          Back to sign in
-        </Button>
+        {@render backToSignIn("Back to sign in")}
       </div>
     {/if}
   </div>

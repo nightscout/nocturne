@@ -1,3 +1,4 @@
+using Nocturne.API.Services.Audit;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -95,6 +96,10 @@ public class ConnectorSyncService : IConnectorSyncService
                     Message = $"Unknown connector: {connectorId}",
                 };
             }
+
+            // Attributed as ConnectorBackgroundService attributes a scheduled sync.
+            using var systemScope = SystemAuditScope.PushForScope(
+                scope.ServiceProvider, $"connector:{executor.ConnectorId}");
 
             var result = await executor.ExecuteSyncAsync(scope.ServiceProvider, request, ct, _progressReporter);
 

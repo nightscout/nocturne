@@ -1,0 +1,5 @@
+# Passed to the generator via --ignore-file-override (the output dir is
+# created fresh in CI, so the file can't live there).
+# API files with multipart upload bugs (OpenAPI Generator native library issue)
+**/AlertCustomSoundsApi.java
+**/AlertCustomSoundsApiTest.java

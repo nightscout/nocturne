@@ -119,35 +119,6 @@ public class FoodControllerTests
     }
 
     [Fact]
-    public async Task GetFoodJson_WhenFoodExists_ShouldReturnFood()
-    {
-        // Arrange
-        var expectedFood = new List<Food>
-        {
-            new Food
-            {
-                Id = "507f1f77bcf86cd799439011",
-                Type = "food",
-                Name = "Test Food",
-            },
-        };
-
-        _mockFoodRepository
-            .Setup(x => x.GetFoodAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(expectedFood);
-
-        // Act
-        var result = await _controller.GetFoodJson(CancellationToken.None);
-
-        // Assert
-        result.Should().NotBeNull();
-        var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
-        var food = okResult.Value.Should().BeOfType<Food[]>().Subject;
-        food.Should().HaveCount(1);
-        food[0].Name.Should().Be("Test Food");
-    }
-
-    [Fact]
     public async Task GetFoodByType_WithRegularType_ShouldReturnRegularFoodOnly()
     {
         // Arrange

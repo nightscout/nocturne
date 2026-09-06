@@ -71,7 +71,7 @@ public class MyLifeSyncService(MyLifeSoapClient soapClient, ILogger<MyLifeSyncSe
         }
     }
 
-    public async Task<IReadOnlyList<MyLifePumpSettingsReadout>> FetchPumpSettingsAsync(
+    public virtual async Task<IReadOnlyList<MyLifePumpSettingsReadout>> FetchPumpSettingsAsync(
         string serviceUrl,
         string authToken,
         string patientId,

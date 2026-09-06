@@ -23,6 +23,9 @@ export default defineConfig({
       // mode-watcher only exports under "svelte" condition — stub for node tests
       "mode-watcher": new URL("./src/lib/test-stubs/mode-watcher.ts", import.meta.url).pathname,
       "$app/environment": new URL("./src/lib/test-stubs/app-environment-node.ts", import.meta.url).pathname,
+      // SvelteKit's env modules are virtual (provided by its vite plugin, which
+      // isn't loaded here) — stub so server modules can be unit tested
+      "$env/dynamic/private": new URL("./src/lib/test-stubs/env-dynamic-private.ts", import.meta.url).pathname,
     },
   },
 });

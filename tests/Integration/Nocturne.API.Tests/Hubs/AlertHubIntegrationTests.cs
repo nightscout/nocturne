@@ -18,6 +18,7 @@ namespace Nocturne.API.Tests.Integration.Hubs;
 public class AlertHubIntegrationTests : AspireIntegrationTestBase
 {
     private Guid _tenantId;
+    private Guid _subjectId;
     private string _accessToken = null!;
 
     public AlertHubIntegrationTests(
@@ -40,7 +41,11 @@ public class AlertHubIntegrationTests : AspireIntegrationTestBase
         await conn.OpenAsync();
 
         _tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
-        (_, _accessToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantId, "AlertHub Test User");
+        (_subjectId, _accessToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantId, "AlertHub Test User");
+
+        // The hub connections present the api-secret header and nothing else, and the hub's methods
+        // require a credential carrying alerts.read / alerts.readwrite.
+        await AuthTestHelpers.SeedApiSecretGrantAsync(conn, _tenantId, _subjectId, TestApiSecret);
 
         Log($"Seeded tenant {_tenantId}");
     }

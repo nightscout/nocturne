@@ -23,6 +23,13 @@
     getTrackerName,
   } from "$lib/clock-builder";
   import TextStyleControls from "./TextStyleControls.svelte";
+  import { DEFAULT_CLOCK_TIME_FORMAT } from "$lib/components/clock/clock-time";
+
+  const FORMAT_LABELS: Record<string, string> = {
+    auto: "Match my preference",
+    "12h": "12-hour",
+    "24h": "24-hour",
+  };
 
   interface Props {
     element: InternalElement;
@@ -126,13 +133,15 @@
         <Label>Format</Label>
         <Select.Root
           type="single"
-          value={element.format || "12h"}
+          value={element.format || DEFAULT_CLOCK_TIME_FORMAT}
           onValueChange={(v) => onUpdateElement({ format: v })}
         >
           <Select.Trigger>
-            {element.format === "24h" ? "24h" : "12h"}
+            {FORMAT_LABELS[element.format ?? ""] ??
+              FORMAT_LABELS[DEFAULT_CLOCK_TIME_FORMAT]}
           </Select.Trigger>
           <Select.Content>
+            <Select.Item value="auto">Match my preference</Select.Item>
             <Select.Item value="12h">12-hour</Select.Item>
             <Select.Item value="24h">24-hour</Select.Item>
           </Select.Content>

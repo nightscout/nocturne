@@ -1,6 +1,6 @@
 [package]
 name = "nocturne-companion"
-version = "0.1.0"
+version = "0.1.1"
 description = "Nocturne desktop companion"
 edition = "2021"
 
@@ -8,13 +8,30 @@ edition = "2021"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
+tauri-plugin-autostart = "2"
+tauri-plugin-deep-link = "2"
+# The "deep-link" feature makes the second instance's argv reach the deep-link plugin's
+# on_open_url handler in the first instance instead of dying with the process.
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 url = "2"
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+# rustls-tls-native-roots trusts the OS certificate store (like curl/schannel does), not just the
+# bundled Mozilla roots — so TLS interception by antivirus/VPN/corporate proxies, and any CA present
+# in the machine store but absent from webpki-roots, validates instead of failing the connection.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "rustls-tls-native-roots"] }
+keyring = { version = "3", features = ["windows-native"] }
+tokio = { version = "1", features = ["time", "rt", "macros", "sync"] }
+fontdue = "0.9"
+uuid = { version = "1", features = ["v4"] }
+# SignalR transport: hand-rolled JSON hub protocol over a WebSocket. rustls to match reqwest's TLS.
+tokio-tungstenite = { version = "0.29", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink"] }
+# Native Windows toast (actionable + persistent/alarm scenario) — not the generic tauri notification plugin.
+tauri-winrt-notification = "0.7"
 
 [profile.release]
 strip = true

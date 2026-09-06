@@ -3,15 +3,19 @@ using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Events;
+using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Services.Realtime;
+using Nocturne.Infrastructure.Data.Mappers;
 
 namespace Nocturne.API.Services.Health;
 
 /// <summary>
 /// Domain service implementation for <see cref="Activity"/> operations with WebSocket broadcasting.
 /// Regular activities are stored as <see cref="StateSpan"/> records via <see cref="IStateSpanService"/>.
+/// Sleep-typed activities are stored as <see cref="SleepSession"/> records via <see cref="ISleepService"/>.
 /// Heart rate and step count sensor data is routed to dedicated tables via <see cref="IActivityDecomposer"/>.
 /// On create, all sources are merged, sorted by <see cref="Activity.Mills"/> descending, and re-paginated.
 /// </summary>
@@ -24,6 +28,7 @@ namespace Nocturne.API.Services.Health;
 public class ActivityService : IActivityService
 {
     private readonly IStateSpanService _stateSpanService;
+    private readonly ISleepService _sleepService;
     private readonly IDocumentProcessingService _documentProcessingService;
     private readonly ISignalRBroadcastService _signalRBroadcastService;
     private readonly IDataEventSink<Activity> _events;
@@ -33,19 +38,31 @@ public class ActivityService : IActivityService
     private readonly ILogger<ActivityService> _logger;
 
     /// <summary>
+    /// Upper bound on rows pulled from each source when reads merge the four sources in memory and
+    /// re-paginate, which defeats limit pushdown. Independent of any controller-level ceiling on
+    /// what a caller may request.
+    /// </summary>
+    private const int MaxOverFetch = 100_000;
+
+    /// <summary>
+    /// Every source <see cref="CountActivitiesByCategoryAsync"/> knows how to count, named by the
+    /// read scope its records carry.
+    /// </summary>
+    private static readonly IReadOnlySet<string> CountableCategories = new HashSet<string>(
+        StringComparer.Ordinal)
+    {
+        Scope.TreatmentsRead,
+        Scope.HeartRateRead,
+        Scope.StepCountRead,
+        Scope.SleepRead,
+    };
+
+    /// <summary>
     /// Initializes a new instance of <see cref="ActivityService"/>.
     /// </summary>
-    /// <param name="stateSpanService">Service for persisting regular activities as <see cref="StateSpan"/> records.</param>
-    /// <param name="documentProcessingService">Service for HTML sanitization of activity fields.</param>
-    /// <param name="signalRBroadcastService">Service for broadcasting real-time updates to connected clients.</param>
-    /// <param name="events">The event sink for broadcasting create/update/delete events.</param>
-    /// <param name="activityDecomposer">Decomposes sensor data activities into heart rate and step count records.</param>
-    /// <param name="heartRateService">Service for reading and resolving heart rate records as activities.</param>
-    /// <param name="stepCountService">Service for reading and resolving step count records as activities.</param>
-    /// <param name="logger">The logger instance.</param>
-    /// <exception cref="ArgumentNullException">Thrown when any required parameter is <see langword="null"/>.</exception>
     public ActivityService(
         IStateSpanService stateSpanService,
+        ISleepService sleepService,
         IDocumentProcessingService documentProcessingService,
         ISignalRBroadcastService signalRBroadcastService,
         IDataEventSink<Activity> events,
@@ -57,6 +74,8 @@ public class ActivityService : IActivityService
     {
         _stateSpanService =
             stateSpanService ?? throw new ArgumentNullException(nameof(stateSpanService));
+        _sleepService =
+            sleepService ?? throw new ArgumentNullException(nameof(sleepService));
         _documentProcessingService =
             documentProcessingService
             ?? throw new ArgumentNullException(nameof(documentProcessingService));
@@ -94,10 +113,12 @@ public class ActivityService : IActivityService
                 actualSkip
             );
 
-            // Over-fetch from each source so we can merge and re-paginate
-            var fetchCount = actualCount + actualSkip;
+            // Over-fetch from each source so we can merge and re-paginate. Clamped into range: a
+            // large skip overflows the sum, and a non-positive fetch count faults every source
+            // query. Callers with no ceiling of their own rely on the upper bound here.
+            var fetchCount = (int)Math.Clamp((long)actualCount + actualSkip, 1, MaxOverFetch);
 
-            // Source 1: Regular activities from StateSpans
+            // Source 1: Regular activities from StateSpans (exercise, illness, travel — no longer sleep)
             var stateSpanActivities = await _stateSpanService.GetActivitiesAsync(
                 type: find,
                 count: fetchCount,
@@ -121,10 +142,26 @@ public class ActivityService : IActivityService
             );
             var stepCountActivities = stepCounts.Select(ActivityDecomposer.StepCountToActivity);
 
+            // Source 4: Sleep sessions projected back to Activity format.
+            // Sleep used to be a StateSpan filtered by `find`; honour that filter here
+            // so a request scoped to another type (e.g. exercise) doesn't pull in sleep.
+            var sleepActivities = Enumerable.Empty<Activity>();
+            if (string.IsNullOrEmpty(find) || ActivityStateSpanMapper.IsSleepType(find))
+            {
+                var sleepSessions = await _sleepService.GetSessionsAsync(
+                    limit: fetchCount,
+                    offset: 0,
+                    descending: true,
+                    cancellationToken: cancellationToken
+                );
+                sleepActivities = sleepSessions.Select(ActivityStateSpanMapper.SleepSessionToActivity);
+            }
+
             // Merge all sources, sort by Mills descending, apply pagination
             var merged = stateSpanActivities
                 .Concat(heartRateActivities)
                 .Concat(stepCountActivities)
+                .Concat(sleepActivities)
                 .OrderByDescending(a => a.Mills)
                 .Skip(actualSkip)
                 .Take(actualCount)
@@ -137,6 +174,24 @@ public class ActivityService : IActivityService
             _logger.LogError(ex, "Error getting activity records");
             throw;
         }
+    }
+
+    /// <inheritdoc />
+    public async Task<DateTime?> GetLatestTimestampAsync(
+        string source,
+        CancellationToken cancellationToken = default
+    )
+    {
+        // Sequential: the three services share one DbContext. Max over DateTime? skips the
+        // destinations this source has never written to, and is null when that is all of them.
+        var candidates = new[]
+        {
+            await _stateSpanService.GetLatestActivityTimestampAsync(source, cancellationToken),
+            await _heartRateService.GetLatestTimestampAsync(source, cancellationToken),
+            await _stepCountService.GetLatestTimestampAsync(source, cancellationToken),
+        };
+
+        return candidates.Max();
     }
 
     /// <inheritdoc />
@@ -153,6 +208,14 @@ public class ActivityService : IActivityService
             var activity = await _stateSpanService.GetActivityByIdAsync(id, cancellationToken);
             if (activity != null)
                 return activity;
+
+            // Try sleep session
+            if (Guid.TryParse(id, out var sleepGuid))
+            {
+                var sleepSession = await _sleepService.GetSessionByIdAsync(sleepGuid, cancellationToken);
+                if (sleepSession != null)
+                    return ActivityStateSpanMapper.SleepSessionToActivity(sleepSession);
+            }
 
             // Try heart rate
             var heartRate = await _heartRateService.GetHeartRateByIdAsync(id, cancellationToken);
@@ -188,14 +251,17 @@ public class ActivityService : IActivityService
             var processedActivities = _documentProcessingService.ProcessDocuments(activityList);
             var processedList = processedActivities.ToList();
 
-            // Separate sensor data (heart rate, step count) from regular activities
+            // Separate sensor data, sleep activities, and regular activities
             var regularActivities = new List<Activity>();
             var sensorDataActivities = new List<Activity>();
+            var sleepActivities = new List<Activity>();
 
             foreach (var activity in processedList)
             {
                 if (_activityDecomposer.IsSensorData(activity))
                     sensorDataActivities.Add(activity);
+                else if (ActivityStateSpanMapper.IsSleepType(activity.Type))
+                    sleepActivities.Add(activity);
                 else
                     regularActivities.Add(activity);
             }
@@ -207,7 +273,7 @@ public class ActivityService : IActivityService
             {
                 try
                 {
-                    await _activityDecomposer.DecomposeAsync(sensorActivity, cancellationToken);
+                    await _activityDecomposer.DecomposeAsync(sensorActivity, WriteOrigin.Live, cancellationToken);
                     results.Add(sensorActivity);
                 }
                 catch (Exception ex)
@@ -216,6 +282,29 @@ public class ActivityService : IActivityService
                         ex,
                         "Failed to decompose sensor data activity {Id}",
                         sensorActivity.Id
+                    );
+                }
+            }
+
+            // Route sleep-type activities to the dedicated sleep_sessions table
+            foreach (var sleepActivity in sleepActivities)
+            {
+                try
+                {
+                    var session = ActivityStateSpanMapper.ToSleepSession(sleepActivity);
+                    var created = await _sleepService.UpsertSessionAsync(session, cancellationToken);
+                    results.Add(ActivityStateSpanMapper.SleepSessionToActivity(created));
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception ex)
+                {
+                    // Mirror the sensor-data branch: log and skip the failed record
+                    // rather than failing the whole batch. Covers the rare upsert
+                    // unique-constraint conflict (concurrent sync of the same record).
+                    _logger.LogError(
+                        ex,
+                        "Failed to create sleep session from activity {Id}",
+                        sleepActivity.Id
                     );
                 }
             }
@@ -267,6 +356,48 @@ public class ActivityService : IActivityService
         {
             _logger.LogDebug("Updating activity record with ID: {Id}", id);
 
+            // Try sleep sessions first: GET projects sleep activities with the session Guid as id
+            if (Guid.TryParse(id, out var sleepGuid))
+            {
+                var existingSession = await _sleepService.GetSessionByIdAsync(sleepGuid, cancellationToken);
+                if (existingSession != null)
+                {
+                    var session = ActivityStateSpanMapper.ToSleepSession(activity);
+                    // Keep the stored row's dedup key (Source + OriginalId); the v1 payload
+                    // carries the session Guid, not the original source record id
+                    session.Source = existingSession.Source;
+                    session.OriginalId = existingSession.OriginalId;
+
+                    var updatedSession = await _sleepService.UpdateSessionAsync(
+                        sleepGuid,
+                        session,
+                        cancellationToken
+                    );
+                    if (updatedSession == null)
+                        return null;
+
+                    var updatedFromSession = ActivityStateSpanMapper.SleepSessionToActivity(updatedSession);
+                    await BroadcastActivityUpdateAsync(updatedFromSession, id, cancellationToken);
+                    _logger.LogDebug("Successfully updated sleep session for activity ID: {Id}", id);
+                    return updatedFromSession;
+                }
+            }
+
+            // Sleep-typed payloads whose id is not a session Guid are upserted by
+            // OriginalId, matching the row created by CreateActivitiesAsync. Falling
+            // through to the StateSpan path would recategorize the record as Exercise.
+            if (ActivityStateSpanMapper.IsSleepType(activity.Type))
+            {
+                var sleepSession = ActivityStateSpanMapper.ToSleepSession(activity);
+                sleepSession.OriginalId = id;
+
+                var upsertedSession = await _sleepService.UpsertSessionAsync(sleepSession, cancellationToken);
+                var upsertedActivity = ActivityStateSpanMapper.SleepSessionToActivity(upsertedSession);
+                await BroadcastActivityUpdateAsync(upsertedActivity, id, cancellationToken);
+                _logger.LogDebug("Successfully upserted sleep session for activity ID: {Id}", id);
+                return upsertedActivity;
+            }
+
             var updatedActivity = await _stateSpanService.UpdateActivityAsync(
                 id,
                 activity,
@@ -275,12 +406,7 @@ public class ActivityService : IActivityService
 
             if (updatedActivity != null)
             {
-                await _signalRBroadcastService.BroadcastStorageUpdateAsync(
-                    "activity",
-                    new { collection = "activity", data = updatedActivity, id = id }
-                );
-
-                await _events.OnUpdatedAsync(updatedActivity, cancellationToken);
+                await BroadcastActivityUpdateAsync(updatedActivity, id, cancellationToken);
 
                 _logger.LogDebug("Successfully updated activity record with ID: {Id}", id);
             }
@@ -292,6 +418,23 @@ public class ActivityService : IActivityService
             _logger.LogError(ex, "Error updating activity record with ID: {Id}", id);
             throw;
         }
+    }
+
+    /// <summary>
+    /// Broadcasts a storage update over SignalR and raises the updated data event.
+    /// </summary>
+    private async Task BroadcastActivityUpdateAsync(
+        Activity updatedActivity,
+        string id,
+        CancellationToken cancellationToken
+    )
+    {
+        await _signalRBroadcastService.BroadcastStorageUpdateAsync(
+            "activity",
+            new { collection = "activity", data = updatedActivity, id = id }
+        );
+
+        await _events.OnUpdatedAsync(updatedActivity, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -307,7 +450,7 @@ public class ActivityService : IActivityService
             // Attempt to delete decomposed records (heart rate / step count)
             try
             {
-                await _activityDecomposer.DeleteByLegacyIdAsync(id, cancellationToken);
+                await _activityDecomposer.DeleteByLegacyIdAsync(id, WriteOrigin.Live, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -318,13 +461,29 @@ public class ActivityService : IActivityService
                 );
             }
 
+            // Try deleting from sleep sessions
+            if (Guid.TryParse(id, out var sleepGuid))
+            {
+                var sleepDeleted = await _sleepService.DeleteSessionAsync(sleepGuid, cancellationToken);
+                if (sleepDeleted)
+                {
+                    await _signalRBroadcastService.BroadcastStorageDeleteAsync(
+                        "activity",
+                        new StorageDeleteEvent("activity", id)
+                    );
+                    await _events.OnDeletedAsync(null, cancellationToken);
+                    _logger.LogDebug("Successfully deleted sleep session for activity ID: {Id}", id);
+                    return true;
+                }
+            }
+
             var deleted = await _stateSpanService.DeleteActivityAsync(id, cancellationToken);
 
             if (deleted)
             {
                 await _signalRBroadcastService.BroadcastStorageDeleteAsync(
                     "activity",
-                    new { collection = "activity", id = id }
+                    new StorageDeleteEvent("activity", id)
                 );
 
                 await _events.OnDeletedAsync(null, cancellationToken);
@@ -372,6 +531,7 @@ public class ActivityService : IActivityService
                 {
                     await _activityDecomposer.DeleteByLegacyIdAsync(
                         activity.Id,
+                        WriteOrigin.Live,
                         cancellationToken
                     );
                 }
@@ -392,7 +552,7 @@ public class ActivityService : IActivityService
             {
                 await _signalRBroadcastService.BroadcastStorageDeleteAsync(
                     "activity",
-                    new { collection = "activity", count = deletedCount }
+                    new StorageBulkDeleteEvent("activity", deletedCount)
                 );
 
                 await _events.OnBulkDeletedAsync(deletedCount, cancellationToken);
@@ -418,43 +578,72 @@ public class ActivityService : IActivityService
         CancellationToken cancellationToken = default
     )
     {
+        var counts = await CountActivitiesByCategoryAsync(
+            CountableCategories, find, cancellationToken);
+        return counts.Values.Sum();
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<string, long>> CountActivitiesByCategoryAsync(
+        IReadOnlySet<string> categories,
+        string? find = null,
+        CancellationToken cancellationToken = default
+    )
+    {
         try
         {
-            _logger.LogDebug("Counting activity records with find: {Find}", find);
+            var sanitizedFindForLog = find?.Replace("\r", string.Empty).Replace("\n", string.Empty);
 
-            // Count from each decomposed source and sum
-            var stateSpanTask = _stateSpanService.GetActivitiesAsync(
-                type: find,
-                count: int.MaxValue,
-                skip: 0,
-                cancellationToken: cancellationToken
-            );
+            _logger.LogDebug(
+                "Counting activity records in {Categories} with find: {Find}",
+                string.Join(",", categories),
+                sanitizedFindForLog);
 
-            var heartRateTask = _heartRateService.GetHeartRatesAsync(
-                count: int.MaxValue,
-                skip: 0,
-                cancellationToken: cancellationToken
-            );
+            // Sleep sessions are merged into GetActivitiesAsync only when `find` is
+            // empty or a sleep type; the count applies the same gate
+            var countSleep = string.IsNullOrEmpty(find) || ActivityStateSpanMapper.IsSleepType(find);
 
-            var stepCountTask = _stepCountService.GetStepCountsAsync(
-                count: int.MaxValue,
-                skip: 0,
-                cancellationToken: cancellationToken
-            );
+            var pending = new Dictionary<string, Task<long>>(StringComparer.Ordinal);
+            if (categories.Contains(Scope.TreatmentsRead))
+                pending[Scope.TreatmentsRead] = CountOf(_stateSpanService.GetActivitiesAsync(
+                    type: find,
+                    count: int.MaxValue,
+                    skip: 0,
+                    cancellationToken: cancellationToken));
 
-            await Task.WhenAll(stateSpanTask, heartRateTask, stepCountTask);
+            if (categories.Contains(Scope.HeartRateRead))
+                pending[Scope.HeartRateRead] = CountOf(_heartRateService.GetHeartRatesAsync(
+                    count: int.MaxValue,
+                    skip: 0,
+                    cancellationToken: cancellationToken));
 
-            var total = stateSpanTask.Result.Count()
-                + heartRateTask.Result.Count()
-                + stepCountTask.Result.Count();
+            if (categories.Contains(Scope.StepCountRead))
+                pending[Scope.StepCountRead] = CountOf(_stepCountService.GetStepCountsAsync(
+                    count: int.MaxValue,
+                    skip: 0,
+                    cancellationToken: cancellationToken));
 
-            _logger.LogDebug("Counted {Total} activity records", total);
-            return total;
+            if (categories.Contains(Scope.SleepRead))
+                pending[Scope.SleepRead] = countSleep
+                    ? Widen(_sleepService.CountSessionsAsync(cancellationToken: cancellationToken))
+                    : Task.FromResult(0L);
+
+            await Task.WhenAll(pending.Values);
+
+            var counts = pending.ToDictionary(
+                source => source.Key, source => source.Value.Result, StringComparer.Ordinal);
+
+            _logger.LogDebug("Counted {Total} activity records", counts.Values.Sum());
+            return counts;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error counting activity records");
             throw;
         }
+
+        static async Task<long> CountOf<T>(Task<IEnumerable<T>> source) => (await source).Count();
+
+        static async Task<long> Widen(Task<int> source) => await source;
     }
 }

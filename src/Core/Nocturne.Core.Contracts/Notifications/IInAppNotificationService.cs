@@ -52,15 +52,31 @@ public interface IInAppNotificationService
     );
 
     /// <summary>
-    /// Archive a notification with a reason
+    /// Archive a notification with a reason, confined to a notification the given user owns
     /// </summary>
     /// <param name="notificationId">The notification ID to archive</param>
     /// <param name="reason">The reason for archiving</param>
+    /// <param name="userId">The user the notification must belong to</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>True if archived successfully, false if not found</returns>
+    /// <returns>True if archived successfully, false if not found or owned by another user</returns>
     Task<bool> ArchiveNotificationAsync(
         Guid notificationId,
         NotificationArchiveReason reason,
+        string userId,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
+    /// Get the type discriminator of a notification the given user owns, for a caller that must
+    /// authorize on the notification's type before executing an action on it
+    /// </summary>
+    /// <param name="notificationId">The notification ID</param>
+    /// <param name="userId">The user the notification must belong to</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>The notification type, or null if not found or owned by another user</returns>
+    Task<string?> GetNotificationTypeAsync(
+        Guid notificationId,
+        string userId,
         CancellationToken cancellationToken = default
     );
 

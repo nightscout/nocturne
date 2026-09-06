@@ -1,4 +1,5 @@
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Alerts;
 
 namespace Nocturne.Core.Contracts.Alerts;
 
@@ -126,6 +127,35 @@ public interface IAlertRepository
     Task<TenantAlertSettingsSnapshot> GetTenantAlertSettingsAsync(Guid tenantId, CancellationToken ct);
 
     /// <summary>
+    /// Returns the tenant's DND windows that can still take effect at or after
+    /// <paramref name="nowUtc"/> — uncleared (<c>cleared_at IS NULL</c>) <b>and</b> not past
+    /// their expiry — as resolver snapshots, for scoped Do Not Disturb (ADR 0004 D5). Every
+    /// <see cref="DateTime"/> is normalised to <see cref="DateTimeKind.Utc"/> so
+    /// <see cref="DndWindowSnapshot.IsActiveAt"/> (naive comparison) is sound.
+    /// </summary>
+    /// <remarks>
+    /// The expiry bound is what keeps this bounded. A window that simply runs out is never
+    /// cleared — <c>cleared_at</c> stays null for audit — so filtering on <c>cleared_at</c>
+    /// alone would return every timed mute the tenant has ever set, growing without limit on a
+    /// path that runs once per glucose reading. The partial index on
+    /// <c>(tenant_id, scope) WHERE cleared_at IS NULL</c> still serves the lookup; only rows
+    /// that can still matter come back.
+    /// </remarks>
+    Task<IReadOnlyList<DndWindowSnapshot>> GetUnexpiredDndWindowsAsync(
+        Guid tenantId, DateTime nowUtc, CancellationToken ct);
+
+    /// <summary>
+    /// Returns every DND window for the tenant received by <paramref name="asOfReceiptUtc"/>
+    /// (<c>created_at &lt;= asOfReceiptUtc</c>), <b>including cleared/expired ones</b>, for replay
+    /// (ADR 0004 D5). Replay resolves each window with
+    /// <see cref="DndWindowSnapshot.WasActiveAt"/> (receipt-gated) per tick, so cleared windows'
+    /// <c>cleared_at</c> still matters. Every <see cref="DateTime"/> is normalised to
+    /// <see cref="DateTimeKind.Utc"/>.
+    /// </summary>
+    Task<IReadOnlyList<DndWindowSnapshot>> GetDndWindowsAsOfAsync(
+        Guid tenantId, DateTime asOfReceiptUtc, CancellationToken ct);
+
+    /// <summary>
     /// Marks an alert instance as suppressed at fire time without dispatching deliveries.
     /// Writes <paramref name="reason"/> to <c>alert_instances.suppression_reason</c> so Replay
     /// and History can display "would have fired but suppressed" rows. Currently the only
@@ -141,6 +171,18 @@ public interface IAlertRepository
     /// <param name="ct">Cancellation token.</param>
     /// <returns>A read-only list of enabled signal-loss rule snapshots.</returns>
     Task<IReadOnlyList<SignalLossRuleSnapshot>> GetEnabledSignalLossRulesAsync(CancellationToken ct);
+
+    /// <summary>
+    /// Returns all enabled rules with the given root condition type across all tenants.
+    /// Used by the sweep service to periodically evaluate wall-clock-driven rules
+    /// (e.g. <c>tracker_age</c>) that must fire even when no new reading arrives.
+    /// Rules that only reference the type inside a composite tree are not returned —
+    /// those still evaluate on the per-reading path.
+    /// </summary>
+    /// <param name="conditionType">The root condition type to filter on.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<IReadOnlyList<AlertRuleSnapshot>> GetEnabledRulesByConditionTypeAsync(
+        Nocturne.Core.Models.Alerts.AlertConditionType conditionType, CancellationToken ct);
 
     /// <summary>
     /// Returns the latest glucose trend rate (mg/dL per minute) for the tenant,

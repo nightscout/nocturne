@@ -4,6 +4,7 @@ export { default as IOBPill } from './IOBPill.svelte';
 export { default as COBPill } from './COBPill.svelte';
 export { default as BasalPill } from './BasalPill.svelte';
 export { default as LoopPill } from './LoopPill.svelte';
+export { default as ReservoirPill } from './ReservoirPill.svelte';
 export { default as StatusPillBar } from './StatusPillBar.svelte';
 export { default as TrackerPill } from './TrackerPill.svelte';
 export { default as TrackerPillBar } from './TrackerPillBar.svelte';

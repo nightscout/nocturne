@@ -15,6 +15,7 @@ using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 using V4Models = Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Tests.Services.V4;
 
@@ -31,15 +32,14 @@ public class DeviceStatusDecomposerTests : IDisposable
         _context = TestDbContextFactory.CreateInMemoryContext();
         _context.TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
         var ctxFactory = new TestTenantDbContextFactory(_context);
-        var apsRepo = new ApsSnapshotRepository(ctxFactory, NullLogger<ApsSnapshotRepository>.Instance);
-        var pumpRepo = new PumpSnapshotRepository(ctxFactory, NullLogger<PumpSnapshotRepository>.Instance);
-        var uploaderRepo = new UploaderSnapshotRepository(ctxFactory, NullLogger<UploaderSnapshotRepository>.Instance);
-        _extrasRepo = new DeviceStatusExtrasRepository(ctxFactory);
+        var apsRepo = new ApsSnapshotRepository(ctxFactory, new SystemAuditContext(), NullLogger<ApsSnapshotRepository>.Instance);
+        var pumpRepo = new PumpSnapshotRepository(ctxFactory, new SystemAuditContext(), NullLogger<PumpSnapshotRepository>.Instance);
+        var uploaderRepo = new UploaderSnapshotRepository(ctxFactory, new SystemAuditContext(), NullLogger<UploaderSnapshotRepository>.Instance);
+        _extrasRepo = new DeviceStatusExtrasRepository(ctxFactory, new SystemAuditContext());
         _stateSpanServiceMock = new Mock<IStateSpanService>();
         _deviceServiceMock = new Mock<IDeviceService>();
 
         _decomposer = new DeviceStatusDecomposer(
-            _context,
             apsRepo, pumpRepo, uploaderRepo,
             _extrasRepo,
             _stateSpanServiceMock.Object,
@@ -105,7 +105,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.Should().HaveCount(1);
@@ -160,7 +160,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.Should().HaveCount(1);
@@ -204,7 +204,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.Should().HaveCount(1);
@@ -219,6 +219,57 @@ public class DeviceStatusDecomposerTests : IDisposable
         pump.Bolusing.Should().BeFalse();
         pump.Suspended.Should().BeFalse();
         pump.Clock.Should().Be("2023-11-14T12:00:00Z");
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_ReDecomposedPumpStatus_TakesAFreshResolutionOverTheStoredOne()
+    {
+        var first = Guid.CreateVersion7();
+        var second = Guid.CreateVersion7();
+        var ds = new DeviceStatus
+        {
+            Id = "pump-reattribution",
+            Mills = 1700000000000,
+            Device = "openaps://Samsung",
+            Pump = new PumpStatus { Manufacturer = "Insulet", Model = "Omnipod 5" }
+        };
+        _deviceServiceMock
+            .SetupSequence(s => s.ResolvePatientDeviceAsync(
+                It.IsAny<Guid?>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(first)
+            .ReturnsAsync(second);
+
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
+
+        _context.PumpSnapshots.Single(p => p.LegacyId == "pump-reattribution").PatientDeviceId.Should().Be(second);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_ReDecomposedPumpStatus_KeepsTheStoredPatientDeviceAttribution()
+    {
+        var patientDeviceId = Guid.CreateVersion7();
+        var ds = new DeviceStatus
+        {
+            Id = "pump-attribution",
+            Mills = 1700000000000,
+            Device = "openaps://Samsung",
+            Pump = new PumpStatus { Manufacturer = "Insulet", Model = "Omnipod 5" }
+        };
+
+        // The second resolution is ambiguous (a second pump has been registered since), so it
+        // returns nothing and the stored attribution has to survive the re-decompose.
+        _deviceServiceMock
+            .SetupSequence(s => s.ResolvePatientDeviceAsync(
+                It.IsAny<Guid?>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(patientDeviceId)
+            .ReturnsAsync((Guid?)null);
+
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
+
+        var stored = _context.PumpSnapshots.Single(p => p.LegacyId == "pump-attribution");
+        stored.PatientDeviceId.Should().Be(patientDeviceId);
     }
 
     #endregion
@@ -246,7 +297,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.Should().HaveCount(1);
@@ -256,6 +307,28 @@ public class DeviceStatusDecomposerTests : IDisposable
         uploader.BatteryVoltage.Should().Be(4.1);
         uploader.Temperature.Should().Be(32.5);
         uploader.Type.Should().Be("phone");
+        uploader.IsCharging.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_NestedUploaderIsCharging_MapsToSnapshot()
+    {
+        // Trio sends isCharging inside the uploader object, not top-level
+        var json = """
+            {
+                "_id": "trio-ischarging",
+                "mills": 1700000000000,
+                "device": "Trio",
+                "uploader": { "battery": 75, "batteryVoltage": 4.0, "isCharging": true }
+            }
+            """;
+        var ds = System.Text.Json.JsonSerializer.Deserialize<DeviceStatus>(json)!;
+
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
+
+        result.CreatedRecords.Should().HaveCount(1);
+        var uploader = result.CreatedRecords[0].Should().BeOfType<V4Models.UploaderSnapshot>().Subject;
+        uploader.Battery.Should().Be(75);
         uploader.IsCharging.Should().BeTrue();
     }
 
@@ -276,7 +349,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.Should().HaveCount(1);
@@ -319,7 +392,7 @@ public class DeviceStatusDecomposerTests : IDisposable
             .ReturnsAsync(expectedStateSpan);
 
         // Act
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.Should().HaveCount(1);
@@ -357,7 +430,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.Should().BeEmpty();
@@ -391,12 +464,12 @@ public class DeviceStatusDecomposerTests : IDisposable
         };
 
         // Act - first call creates
-        var firstResult = await _decomposer.DecomposeAsync(ds);
+        var firstResult = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
         firstResult.CreatedRecords.Should().HaveCount(1);
         firstResult.UpdatedRecords.Should().BeEmpty();
 
         // Act - second call should update
-        var secondResult = await _decomposer.DecomposeAsync(ds);
+        var secondResult = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert
         secondResult.UpdatedRecords.Should().HaveCount(1);
@@ -441,7 +514,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.Should().HaveCount(3);
@@ -485,7 +558,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert
         var aps = result.CreatedRecords[0].Should().BeOfType<V4Models.ApsSnapshot>().Subject;
@@ -523,7 +596,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert - Enacted object exists but Received is false
         var aps = result.CreatedRecords[0].Should().BeOfType<V4Models.ApsSnapshot>().Subject;
@@ -558,7 +631,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert
         var aps = result.CreatedRecords[0].Should().BeOfType<V4Models.ApsSnapshot>().Subject;
@@ -591,7 +664,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert - top-level Cob takes priority via null-coalescing
         var aps = result.CreatedRecords[0].Should().BeOfType<V4Models.ApsSnapshot>().Subject;
@@ -619,7 +692,7 @@ public class DeviceStatusDecomposerTests : IDisposable
             }
         };
 
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         var aps = result.CreatedRecords[0].Should().BeOfType<V4Models.ApsSnapshot>().Subject;
         aps.Cob.Should().Be(35.0);
@@ -649,7 +722,7 @@ public class DeviceStatusDecomposerTests : IDisposable
             }
         };
 
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         var aps = result.CreatedRecords[0].Should().BeOfType<V4Models.ApsSnapshot>().Subject;
         aps.PredictedDefaultJson.Should().BeNull();
@@ -677,7 +750,7 @@ public class DeviceStatusDecomposerTests : IDisposable
             }
         };
 
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         var aps = result.CreatedRecords[0].Should().BeOfType<V4Models.ApsSnapshot>().Subject;
         aps.PredictedStartMills.Should().BeNull();
@@ -701,7 +774,7 @@ public class DeviceStatusDecomposerTests : IDisposable
             }
         };
 
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         var aps = result.CreatedRecords[0].Should().BeOfType<V4Models.ApsSnapshot>().Subject;
         aps.PredictedStartMills.Should().BeNull();
@@ -732,7 +805,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert
         var aps = result.CreatedRecords[0].Should().BeOfType<V4Models.ApsSnapshot>().Subject;
@@ -756,7 +829,7 @@ public class DeviceStatusDecomposerTests : IDisposable
             }
         };
 
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         var aps = result.CreatedRecords[0].Should().BeOfType<V4Models.ApsSnapshot>().Subject;
         aps.CurrentBg.Should().BeNull();
@@ -783,7 +856,7 @@ public class DeviceStatusDecomposerTests : IDisposable
             }
         };
 
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         var aps = result.CreatedRecords[0].Should().BeOfType<V4Models.ApsSnapshot>().Subject;
         aps.CurrentBg.Should().Be(115.0);
@@ -809,7 +882,7 @@ public class DeviceStatusDecomposerTests : IDisposable
             }
         };
 
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         var aps = result.CreatedRecords[0].Should().BeOfType<V4Models.ApsSnapshot>().Subject;
         aps.Enacted.Should().BeFalse();
@@ -837,7 +910,7 @@ public class DeviceStatusDecomposerTests : IDisposable
             }
         };
 
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         var aps = result.CreatedRecords[0].Should().BeOfType<V4Models.ApsSnapshot>().Subject;
         aps.Enacted.Should().BeFalse();
@@ -875,7 +948,7 @@ public class DeviceStatusDecomposerTests : IDisposable
             }
         };
 
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert - only one APS snapshot, and it's OpenAps
         result.CreatedRecords.OfType<V4Models.ApsSnapshot>().Should().HaveCount(1);
@@ -903,7 +976,7 @@ public class DeviceStatusDecomposerTests : IDisposable
             }
         };
 
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         result.CreatedRecords.Should().BeEmpty();
         _stateSpanServiceMock.Verify(
@@ -926,7 +999,7 @@ public class DeviceStatusDecomposerTests : IDisposable
             }
         };
 
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         result.CreatedRecords.Should().BeEmpty();
         _stateSpanServiceMock.Verify(
@@ -955,7 +1028,7 @@ public class DeviceStatusDecomposerTests : IDisposable
             .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(expectedStateSpan);
 
-        await _decomposer.DecomposeAsync(ds);
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         _stateSpanServiceMock.Verify(
             s => s.UpsertStateSpanAsync(
@@ -986,7 +1059,7 @@ public class DeviceStatusDecomposerTests : IDisposable
             .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(expectedStateSpan);
 
-        await _decomposer.DecomposeAsync(ds);
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         _stateSpanServiceMock.Verify(
             s => s.UpsertStateSpanAsync(
@@ -1017,7 +1090,7 @@ public class DeviceStatusDecomposerTests : IDisposable
             .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(expectedStateSpan);
 
-        await _decomposer.DecomposeAsync(ds);
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         _stateSpanServiceMock.Verify(
             s => s.UpsertStateSpanAsync(
@@ -1050,7 +1123,7 @@ public class DeviceStatusDecomposerTests : IDisposable
             }
         };
 
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         var pump = result.CreatedRecords[0].Should().BeOfType<V4Models.PumpSnapshot>().Subject;
         pump.Manufacturer.Should().Be("Tandem");
@@ -1073,10 +1146,10 @@ public class DeviceStatusDecomposerTests : IDisposable
             Pump = new PumpStatus { Reservoir = 100.0 }
         };
 
-        var first = await _decomposer.DecomposeAsync(ds);
+        var first = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
         first.CreatedRecords.Should().HaveCount(1);
 
-        var second = await _decomposer.DecomposeAsync(ds);
+        var second = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
         second.UpdatedRecords.Should().HaveCount(1);
         second.CreatedRecords.Should().BeEmpty();
     }
@@ -1096,10 +1169,10 @@ public class DeviceStatusDecomposerTests : IDisposable
             Uploader = new UploaderStatus { Battery = 80 }
         };
 
-        var first = await _decomposer.DecomposeAsync(ds);
+        var first = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
         first.CreatedRecords.Should().HaveCount(1);
 
-        var second = await _decomposer.DecomposeAsync(ds);
+        var second = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
         second.UpdatedRecords.Should().HaveCount(1);
         second.CreatedRecords.Should().BeEmpty();
     }
@@ -1120,7 +1193,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         // Setting UploaderBattery when Uploader exists updates Uploader.Battery
         ds.UploaderBattery = 75;
 
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         var uploader = result.CreatedRecords[0].Should().BeOfType<V4Models.UploaderSnapshot>().Subject;
         uploader.Battery.Should().Be(75, "UploaderBattery setter updates Uploader.Battery");
@@ -1149,7 +1222,7 @@ public class DeviceStatusDecomposerTests : IDisposable
             }
         };
 
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         result.CreatedRecords.Should().HaveCount(1);
         var aps = result.CreatedRecords[0].Should().BeOfType<V4Models.ApsSnapshot>().Subject;
@@ -1173,8 +1246,8 @@ public class DeviceStatusDecomposerTests : IDisposable
             }
         };
 
-        var first = await _decomposer.DecomposeAsync(ds);
-        var second = await _decomposer.DecomposeAsync(ds);
+        var first = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
+        var second = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         first.CreatedRecords.Should().HaveCount(1);
         second.CreatedRecords.Should().HaveCount(1);
@@ -1206,10 +1279,10 @@ public class DeviceStatusDecomposerTests : IDisposable
             Uploader = new UploaderStatus { Battery = 55, Name = "Pixel 8" }
         };
 
-        var first = await _decomposer.DecomposeAsync(ds);
+        var first = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
         first.CreatedRecords.Should().HaveCount(3);
 
-        var second = await _decomposer.DecomposeAsync(ds);
+        var second = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
         second.UpdatedRecords.Should().HaveCount(3);
         second.CreatedRecords.Should().BeEmpty();
     }
@@ -1238,7 +1311,7 @@ public class DeviceStatusDecomposerTests : IDisposable
             Uploader = new UploaderStatus { Battery = 60 }
         };
 
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         result.CorrelationId.Should().NotBeNull();
         // All V4 snapshot records don't directly have CorrelationId on the DeviceStatus decomposer,
@@ -1278,7 +1351,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.Should().HaveCount(1);
@@ -1311,7 +1384,7 @@ public class DeviceStatusDecomposerTests : IDisposable
             Uploader = new UploaderStatus { Name = "AndroidAPS", Battery = 85 }
         };
 
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         var aps = result.CreatedRecords.OfType<V4Models.ApsSnapshot>().Single();
         aps.AidAlgorithm.Should().Be(V4Models.AidAlgorithm.AndroidAps);
@@ -1336,7 +1409,7 @@ public class DeviceStatusDecomposerTests : IDisposable
             Uploader = new UploaderStatus { Name = "androidaps 3.2.0" }
         };
 
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         var aps = result.CreatedRecords.OfType<V4Models.ApsSnapshot>().Single();
         aps.AidAlgorithm.Should().Be(V4Models.AidAlgorithm.AndroidAps);
@@ -1363,7 +1436,7 @@ public class DeviceStatusDecomposerTests : IDisposable
             }
         };
 
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         var aps = result.CreatedRecords.OfType<V4Models.ApsSnapshot>().Single();
         aps.AidAlgorithm.Should().Be(V4Models.AidAlgorithm.Trio);
@@ -1387,7 +1460,7 @@ public class DeviceStatusDecomposerTests : IDisposable
             }
         };
 
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         var aps = result.CreatedRecords.OfType<V4Models.ApsSnapshot>().Single();
         aps.AidAlgorithm.Should().Be(V4Models.AidAlgorithm.OpenAps);
@@ -1415,7 +1488,7 @@ public class DeviceStatusDecomposerTests : IDisposable
             Uploader = new UploaderStatus { Name = "AndroidAPS 3.2.0" }
         };
 
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         var aps = result.CreatedRecords.OfType<V4Models.ApsSnapshot>().Single();
         aps.AidAlgorithm.Should().Be(V4Models.AidAlgorithm.AndroidAps);
@@ -1467,7 +1540,7 @@ public class DeviceStatusDecomposerTests : IDisposable
             }
         };
 
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         var aps = result.CreatedRecords.OfType<V4Models.ApsSnapshot>().Single();
         aps.AidAlgorithm.Should().Be(V4Models.AidAlgorithm.Trio);
@@ -1501,7 +1574,7 @@ public class DeviceStatusDecomposerTests : IDisposable
             }
         };
 
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         var aps = result.CreatedRecords.OfType<V4Models.ApsSnapshot>().Single();
         aps.AidAlgorithm.Should().Be(V4Models.AidAlgorithm.Trio);
@@ -1545,7 +1618,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert
         var pump = result.CreatedRecords[0].Should().BeOfType<V4Models.PumpSnapshot>().Subject;
@@ -1580,7 +1653,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert
         var uploader = result.CreatedRecords[0].Should().BeOfType<V4Models.UploaderSnapshot>().Subject;
@@ -1603,7 +1676,7 @@ public class DeviceStatusDecomposerTests : IDisposable
             }
         };
 
-        await _decomposer.DecomposeAsync(ds);
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         _deviceServiceMock.Verify(s => s.ResolveAsync(
             V4Models.DeviceCategory.InsulinPump,
@@ -1629,7 +1702,7 @@ public class DeviceStatusDecomposerTests : IDisposable
             }
         };
 
-        await _decomposer.DecomposeAsync(ds);
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         _deviceServiceMock.Verify(s => s.ResolveAsync(
             V4Models.DeviceCategory.CGM,
@@ -1650,7 +1723,7 @@ public class DeviceStatusDecomposerTests : IDisposable
             Pump = new PumpStatus { Manufacturer = "Medtronic", Model = "MMT-1885" }
         };
 
-        await _decomposer.DecomposeAsync(ds);
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         _deviceServiceMock.Verify(s => s.ResolveAsync(
             V4Models.DeviceCategory.CGM,
@@ -1690,7 +1763,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert
         var aps = result.CreatedRecords[0].Should().BeOfType<V4Models.ApsSnapshot>().Subject;
@@ -1715,7 +1788,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert
         var aps = result.CreatedRecords[0].Should().BeOfType<V4Models.ApsSnapshot>().Subject;
@@ -1746,7 +1819,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         var ds = System.Text.Json.JsonSerializer.Deserialize<DeviceStatus>(json)!;
 
         // Act
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert
         var aps = result.CreatedRecords[0].Should().BeOfType<V4Models.ApsSnapshot>().Subject;
@@ -1782,7 +1855,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert — should use OpenAps.Iob.Time as fallback (most precise APS timestamp)
         var aps = result.CreatedRecords[0].Should().BeOfType<V4Models.ApsSnapshot>().Subject;
@@ -1826,7 +1899,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert
         var aps = result.CreatedRecords.OfType<V4Models.ApsSnapshot>().Single();
@@ -1861,7 +1934,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert
         var aps = result.CreatedRecords.OfType<V4Models.ApsSnapshot>().Single();
@@ -1892,7 +1965,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert
         var aps = result.CreatedRecords.OfType<V4Models.ApsSnapshot>().Single();
@@ -1923,7 +1996,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert
         var pump = result.CreatedRecords[0].Should().BeOfType<V4Models.PumpSnapshot>().Subject;
@@ -1955,7 +2028,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         var ds = JsonSerializer.Deserialize<DeviceStatus>(json)!;
 
         // Act
-        var result = await _decomposer.DecomposeAsync(ds);
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert — configuration should end up in extras
         var extrasEntities = _context.DeviceStatusExtras.ToList();
@@ -1985,7 +2058,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(ds);
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert
         var extrasEntities = _context.DeviceStatusExtras.ToList();
@@ -2007,7 +2080,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(ds);
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert
         var extrasEntities = _context.DeviceStatusExtras.ToList();
@@ -2039,7 +2112,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(ds);
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert — no extras record should be created
         var extrasEntities = _context.DeviceStatusExtras.ToList();
@@ -2062,7 +2135,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         var ds = JsonSerializer.Deserialize<DeviceStatus>(json)!;
 
         // Act
-        var result = await _decomposer.DecomposeAsync(ds);
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert
         var extrasEntities = _context.DeviceStatusExtras.ToList();
@@ -2107,7 +2180,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert
         var aps = result.CreatedRecords.OfType<V4Models.ApsSnapshot>().Single();
@@ -2134,7 +2207,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert
         var aps = result.CreatedRecords.OfType<V4Models.ApsSnapshot>().Single();
@@ -2178,7 +2251,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert
         var pump = result.CreatedRecords.OfType<V4Models.PumpSnapshot>().Single();
@@ -2215,7 +2288,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert
         var aps = result.CreatedRecords[0].Should().BeOfType<V4Models.ApsSnapshot>().Subject;
@@ -2248,7 +2321,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(ds);
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert
         var aps = result.CreatedRecords[0].Should().BeOfType<V4Models.ApsSnapshot>().Subject;
@@ -2337,9 +2410,9 @@ public class DeviceStatusDecomposerTests : IDisposable
         var minute = 60_000L;
 
         // Act — three sequential uploads: not suspended, suspended, not suspended
-        await _decomposer.DecomposeAsync(MakeDs("ds-1", t0, suspended: false));
-        await _decomposer.DecomposeAsync(MakeDs("ds-2", t0 + minute, suspended: true));
-        await _decomposer.DecomposeAsync(MakeDs("ds-3", t0 + 2 * minute, suspended: false));
+        await _decomposer.DecomposeAsync(MakeDs("ds-1", t0, suspended: false), WriteOrigin.Live);
+        await _decomposer.DecomposeAsync(MakeDs("ds-2", t0 + minute, suspended: true), WriteOrigin.Live);
+        await _decomposer.DecomposeAsync(MakeDs("ds-3", t0 + 2 * minute, suspended: false), WriteOrigin.Live);
 
         // Assert — exactly one PumpMode/Suspended span, opened then closed
         var pumpModeSpans = spans.Where(s => s.Category == StateSpanCategory.PumpMode).ToList();
@@ -2426,9 +2499,9 @@ public class DeviceStatusDecomposerTests : IDisposable
         var t0 = 1700000000000L;
         var minute = 60_000L;
 
-        await _decomposer.DecomposeAsync(MakePumpModeDs("ds-1", t0, "Manual"));
-        await _decomposer.DecomposeAsync(MakePumpModeDs("ds-2", t0 + minute, "Automatic"));
-        await _decomposer.DecomposeAsync(MakePumpModeDs("ds-3", t0 + 2 * minute, "Manual"));
+        await _decomposer.DecomposeAsync(MakePumpModeDs("ds-1", t0, "Manual"), WriteOrigin.Live);
+        await _decomposer.DecomposeAsync(MakePumpModeDs("ds-2", t0 + minute, "Automatic"), WriteOrigin.Live);
+        await _decomposer.DecomposeAsync(MakePumpModeDs("ds-3", t0 + 2 * minute, "Manual"), WriteOrigin.Live);
 
         var modeSpans = spans.Where(s => s.Category == StateSpanCategory.PumpMode).ToList();
 
@@ -2450,9 +2523,9 @@ public class DeviceStatusDecomposerTests : IDisposable
         var t0 = 1700000000000L;
         var minute = 60_000L;
 
-        await _decomposer.DecomposeAsync(MakePumpModeDs("ds-1", t0, "Automatic"));
-        await _decomposer.DecomposeAsync(MakePumpModeDs("ds-2", t0 + minute, "Automatic"));
-        await _decomposer.DecomposeAsync(MakePumpModeDs("ds-3", t0 + 2 * minute, "Automatic"));
+        await _decomposer.DecomposeAsync(MakePumpModeDs("ds-1", t0, "Automatic"), WriteOrigin.Live);
+        await _decomposer.DecomposeAsync(MakePumpModeDs("ds-2", t0 + minute, "Automatic"), WriteOrigin.Live);
+        await _decomposer.DecomposeAsync(MakePumpModeDs("ds-3", t0 + 2 * minute, "Automatic"), WriteOrigin.Live);
 
         var modeSpans = spans.Where(s => s.Category == StateSpanCategory.PumpMode).ToList();
         modeSpans.Should().ContainSingle();
@@ -2468,8 +2541,8 @@ public class DeviceStatusDecomposerTests : IDisposable
         var t0 = 1700000000000L;
         var minute = 60_000L;
 
-        await _decomposer.DecomposeAsync(MakePumpModeDs("ds-1", t0, "Manual", suspended: false));
-        await _decomposer.DecomposeAsync(MakePumpModeDs("ds-2", t0 + minute, "Automatic", suspended: true));
+        await _decomposer.DecomposeAsync(MakePumpModeDs("ds-1", t0, "Manual", suspended: false), WriteOrigin.Live);
+        await _decomposer.DecomposeAsync(MakePumpModeDs("ds-2", t0 + minute, "Automatic", suspended: true), WriteOrigin.Live);
 
         var open = spans.Where(s => s.Category == StateSpanCategory.PumpMode && s.EndTimestamp == null)
             .Select(s => s.State).ToList();
@@ -2483,7 +2556,7 @@ public class DeviceStatusDecomposerTests : IDisposable
     {
         var spans = SetupInMemoryStateSpans();
 
-        await _decomposer.DecomposeAsync(MakePumpModeDs("ds-1", 1700000000000L, pumpMode: null));
+        await _decomposer.DecomposeAsync(MakePumpModeDs("ds-1", 1700000000000L, pumpMode: null), WriteOrigin.Live);
 
         spans.Where(s => s.Category == StateSpanCategory.PumpMode
                 && (s.State == PumpModeState.Automatic.ToString() || s.State == PumpModeState.Manual.ToString()))

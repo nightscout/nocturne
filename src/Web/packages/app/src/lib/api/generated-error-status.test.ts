@@ -1,0 +1,477 @@
+import { existsSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { describe, it, expect } from "vitest";
+import { transformWithEsbuild } from "vite";
+import { error, isHttpError } from "@sveltejs/kit";
+import config from "../../../../../remote-codegen.config";
+import {
+  describeSubmitError,
+  MISSING_ITEM_ERROR,
+  RATE_LIMITED_ERROR,
+} from "../forms/submit-error";
+import { remoteErrorMessage } from "./remote-error";
+import { parseErrorBody } from "./error-body";
+import { TotpSetupFailure, type ReferencingRulesResponse } from "$api-clients";
+import {
+  describeTotpSetupError,
+  describeTotpSetupStartError,
+  TOTP_SETUP_FALLBACK,
+  TOTP_SETUP_START_FALLBACK,
+} from "../components/account/totp-errors";
+
+/**
+ * What a failed API call looks like by the time a page sees it.
+ *
+ * Every generated remote function ends in the catch block
+ * openapi-remote-codegen 0.5.0 writes: the status is read off the thrown value,
+ * 401 and 403 get a line each, and everything else falls to
+ * {@link config.errorHandling.on500} — which is ours. A status `on500` does not
+ * name is flattened to a 500 and never reaches the browser, so a page cannot
+ * tell "you were throttled" from "this failed". These run the real `on500`
+ * source, compiled the way the build compiles the generated file, over the
+ * shape NSwag actually throws — not a hand-built `{ status }`.
+ */
+async function crossTheBoundary(thrown: unknown): Promise<unknown> {
+  const compiled = await transformWithEsbuild(
+    `(err, status, error, parseErrorBody) => { ${config.errorHandling.on500("get invite info")}; }`,
+    "on500.ts",
+    { loader: "ts" }
+  );
+  const source = compiled.code.trim().replace(/;$/, "");
+
+  // The helpers are passed in because the real arm reaches them by import.
+  const flatten = new Function(`return ${source}`)() as (
+    err: unknown,
+    status: unknown,
+    error: typeof import("@sveltejs/kit").error,
+    parseErrorBody: typeof import("./error-body").parseErrorBody
+  ) => never;
+
+  try {
+    flatten(thrown, (thrown as { status?: number })?.status, error, parseErrorBody);
+  } catch (crossed) {
+    return crossed;
+  }
+
+  throw new Error("the catch block returned without throwing");
+}
+
+/**
+ * The two messages the generated client puts on an `ApiException`: the first
+ * for a status the operation declares no response type for — the rate limiter's
+ * 429 among them — and the second for one it declares but whose body came back
+ * empty or unparsed, as a bare `NotFound()` does.
+ */
+const UNDECLARED_STATUS_MESSAGE = "An unexpected server error occurred.";
+const DECLARED_STATUS_MESSAGE = "A server side error occurred.";
+
+/**
+ * NSwag's ApiException. The body arrives as unparsed text on `response`, and
+ * the message is NSwag's own rather than anything the server wrote.
+ */
+function nswagApiException(
+  status: number,
+  body: string,
+  message = UNDECLARED_STATUS_MESSAGE
+) {
+  return Object.assign(new Error(message), {
+    status,
+    response: body,
+    result: null,
+  });
+}
+
+/**
+ * An RFC-7807 body, which NSwag throws as the parsed object itself when the
+ * operation declares a typed error response. `title` is the status phrase;
+ * `detail` is the sentence saying what went wrong.
+ */
+function problemDetails(status: number, detail: string, title = "Not Found") {
+  return {
+    type: `https://tools.ietf.org/html/rfc9110#status.${status}`,
+    title,
+    status,
+    detail,
+  };
+}
+
+/**
+ * A SvelteKit `HttpError`, which is what the refresh of an invalidated query
+ * throws from inside the same `try` as the client call. Its reason lives on
+ * `body.message` and nowhere else.
+ */
+function refusal(status: number, message: string): unknown {
+  try {
+    error(status, message);
+  } catch (thrown) {
+    return thrown;
+  }
+}
+
+const RATE_LIMIT_BODY = JSON.stringify({
+  error: "rate_limit_exceeded",
+  error_description: "Too many requests. Please try again later.",
+});
+
+describe("the status a generated remote function lets through", () => {
+  it("forwards a 429 rather than flattening it to a 500", async () => {
+    const crossed = await crossTheBoundary(nswagApiException(429, RATE_LIMIT_BODY));
+
+    expect(isHttpError(crossed)).toBe(true);
+    expect((crossed as { status: number }).status).toBe(429);
+  });
+
+  it("keeps NSwag's boilerplate out of the message it carries", async () => {
+    const crossed = await crossTheBoundary(nswagApiException(429, RATE_LIMIT_BODY));
+
+    expect(JSON.stringify(crossed)).not.toContain("error occurred");
+  });
+
+  it("reads as throttled on the invite page, not as a dead invite", async () => {
+    const crossed = await crossTheBoundary(nswagApiException(429, RATE_LIMIT_BODY));
+
+    expect(
+      describeSubmitError(
+        crossed,
+        "This invite link is invalid or has expired."
+      )
+    ).toBe(RATE_LIMITED_ERROR);
+  });
+
+  it("reads as throttled where a scope refusal would name a permission", async () => {
+    const crossed = await crossTheBoundary(nswagApiException(429, RATE_LIMIT_BODY));
+
+    expect(remoteErrorMessage(crossed, "You need alerts.readwrite.")).toBe(
+      RATE_LIMITED_ERROR
+    );
+  });
+
+  it("forwards a 404 rather than flattening it to a 500", async () => {
+    const crossed = await crossTheBoundary(
+      problemDetails(404, "Data source not found: dexcom")
+    );
+
+    expect(isHttpError(crossed) && crossed.status).toBe(404);
+  });
+
+  it("forwards a 404 whose body is empty, as `NotFound()` sends it", async () => {
+    const crossed = await crossTheBoundary(
+      nswagApiException(404, "", DECLARED_STATUS_MESSAGE)
+    );
+
+    expect(isHttpError(crossed) && crossed.status).toBe(404);
+    expect(JSON.stringify(crossed)).not.toContain("error occurred");
+  });
+
+  it("leaves a dialog its own wording for a resource that is already gone", async () => {
+    const crossed = await crossTheBoundary(
+      nswagApiException(404, "", DECLARED_STATUS_MESSAGE)
+    );
+
+    expect(
+      describeSubmitError(crossed, "This data source is already gone.")
+    ).toBe("This data source is already gone.");
+  });
+
+  it("does not read as a missing permission when an id is stale", async () => {
+    const crossed = await crossTheBoundary(
+      nswagApiException(404, "", DECLARED_STATUS_MESSAGE)
+    );
+
+    expect(
+      remoteErrorMessage(crossed, "Changing alerts requires alerts.readwrite.")
+    ).toBe(MISSING_ITEM_ERROR);
+  });
+
+  it("keeps a 404 detail that echoes back an id out of what it forwards", async () => {
+    const crossed = await crossTheBoundary(
+      problemDetails(404, "Body weight record with ID 3f2a not found")
+    );
+
+    expect(JSON.stringify(crossed)).not.toContain("3f2a");
+  });
+
+  it("says why a conflict happened rather than saying 'Conflict'", async () => {
+    const crossed = await crossTheBoundary(
+      problemDetails(409, "Cannot revoke an already-redeemed invite", "Conflict")
+    );
+
+    expect(isHttpError(crossed) && crossed.status).toBe(409);
+    expect(describeSubmitError(crossed, "Couldn't revoke the invite.")).toBe(
+      "Cannot revoke an already-redeemed invite"
+    );
+  });
+
+  it("names the field a validation failure came from, not the summary above it", async () => {
+    const crossed = await crossTheBoundary({
+      ...problemDetails(
+        400,
+        "One or more validation errors occurred.",
+        "Bad Request"
+      ),
+      errors: { ids: ["The ids field is required."] },
+    });
+
+    expect(describeSubmitError(crossed, "Couldn't save your changes.")).toBe(
+      "The ids field is required."
+    );
+  });
+
+  it("forwards the message when an invalidated query's refresh is what failed", async () => {
+    const crossed = await crossTheBoundary(
+      refusal(409, "Another device changed this entry.")
+    );
+
+    expect(describeSubmitError(crossed, "Couldn't save your changes.")).toBe(
+      "Another device changed this entry."
+    );
+  });
+
+  it("recovers the reason from a body NSwag left unparsed", async () => {
+    // The reason exists only as raw text on `response`; see `$lib/api/error-body`.
+    const crossed = await crossTheBoundary(
+      nswagApiException(
+        409,
+        JSON.stringify(problemDetails(409, "Already redeemed.", "Conflict"))
+      )
+    );
+
+    expect((crossed as { status: number }).status).toBe(409);
+    expect(describeSubmitError(crossed, "Couldn't save your changes.")).toBe(
+      "Already redeemed."
+    );
+  });
+
+  it("recovers the validation map from a body NSwag left unparsed", async () => {
+    const crossed = await crossTheBoundary(
+      nswagApiException(
+        400,
+        JSON.stringify({ errors: { Label: ["The Label field is required."] } })
+      )
+    );
+
+    expect(describeSubmitError(crossed, "Couldn't save your changes.")).toBe(
+      "The Label field is required."
+    );
+  });
+
+  it("leaves NSwag's boilerplate in place when the unparsed body is not JSON", async () => {
+    const crossed = await crossTheBoundary(
+      nswagApiException(503, "<html>503 Service Unavailable</html>")
+    );
+
+    expect((crossed as { status: number }).status).toBe(500);
+  });
+
+  it("still flattens a status it does not forward", async () => {
+    const crossed = await crossTheBoundary(nswagApiException(503, "unavailable"));
+
+    expect((crossed as { status: number }).status).toBe(500);
+    expect(describeSubmitError(crossed, "Couldn't load the invite.")).toBe(
+      "Couldn't load the invite."
+    );
+  });
+});
+
+/** The settings page calls this with no fallback of its own, so the default is what ships. */
+const describeAsThePageDoes = (err: unknown) => describeTotpSetupError(err);
+
+async function wordingFor(detail: string): Promise<string> {
+  return describeAsThePageDoes(
+    await crossTheBoundary(problemDetails(400, detail, "Bad Request"))
+  );
+}
+
+describe("a refused authenticator setup", () => {
+  it("turns each failure the server can raise into its own wording", async () => {
+    const wordings = await Promise.all(
+      Object.values(TotpSetupFailure).map(wordingFor)
+    );
+
+    expect(wordings).not.toContain(TOTP_SETUP_FALLBACK);
+    expect(new Set(wordings).size).toBe(Object.values(TotpSetupFailure).length);
+  });
+
+  it("names the expiry rather than the generic refusal", async () => {
+    expect(await wordingFor(TotpSetupFailure.ChallengeExpired)).toContain(
+      "took too long"
+    );
+  });
+
+  it("shows no failure value to the user", async () => {
+    const wordings = await Promise.all(
+      Object.values(TotpSetupFailure).map(wordingFor)
+    );
+
+    for (const failure of Object.values(TotpSetupFailure)) {
+      expect(wordings.join(" ")).not.toContain(failure);
+    }
+  });
+
+  it("falls back rather than showing a failure this build does not know", async () => {
+    expect(await wordingFor("SomethingAddedLater")).toBe(TOTP_SETUP_FALLBACK);
+  });
+
+  /**
+   * `Object.prototype` answers to these; a lookup that walked the chain would hand
+   * back a function where the page expects a sentence.
+   */
+  it.each(["toString", "constructor", "hasOwnProperty"])(
+    "does not mistake %s for a failure it has copy for",
+    async (inherited) => {
+      expect(await wordingFor(inherited)).toBe(TOTP_SETUP_FALLBACK);
+    }
+  );
+
+  it("still says something when the request failed for another reason", async () => {
+    const crossed = await crossTheBoundary(nswagApiException(503, "unavailable"));
+
+    expect(describeAsThePageDoes(crossed)).toBe(TOTP_SETUP_FALLBACK);
+    expect(TOTP_SETUP_FALLBACK.trim()).not.toBe("");
+  });
+});
+
+describe("an authenticator setup that was refused before it started", () => {
+  it("says which primary factor to add rather than naming a server error", async () => {
+    const crossed = await crossTheBoundary(
+      problemDetails(400, TotpSetupFailure.NoPrimaryFactor, "Bad Request")
+    );
+
+    // What the endpoint sent before it declared a 400 response type.
+    expect(describeTotpSetupStartError(crossed)).not.toContain("error occurred");
+    expect(describeTotpSetupStartError(crossed)).toContain("passkey");
+  });
+
+  it("does not tell someone to check a code they were never asked for", async () => {
+    const crossed = await crossTheBoundary(
+      problemDetails(400, TotpSetupFailure.NoPrimaryFactor, "Bad Request")
+    );
+
+    expect(describeTotpSetupStartError(crossed)).not.toBe(TOTP_SETUP_FALLBACK);
+  });
+
+  it("falls back on its own wording, not the verify step's", async () => {
+    const crossed = await crossTheBoundary(nswagApiException(503, "unavailable"));
+
+    expect(describeTotpSetupStartError(crossed)).toBe(TOTP_SETUP_START_FALLBACK);
+    expect(TOTP_SETUP_START_FALLBACK.trim()).not.toBe("");
+  });
+});
+
+/**
+ * The 409 the alert-rule delete sends when other rules point at the target, as
+ * NSwag throws it: the parsed body itself, because the operation declares a
+ * typed schema for that status.
+ */
+const referencingRules: ReferencingRulesResponse = {
+  referencingRuleIds: ["3f2a0000-0000-0000-0000-000000000000"],
+  status: 409,
+  message:
+    "Another alert rule's condition refers to this one. Update that rule first.",
+};
+
+describe("an error body that is not RFC-7807", () => {
+  it("reaches the status arm its endpoint declares", async () => {
+    const crossed = await crossTheBoundary(referencingRules);
+
+    expect(isHttpError(crossed) && crossed.status).toBe(409);
+  });
+
+  it("says which rules are in the way rather than that the delete failed", async () => {
+    const crossed = await crossTheBoundary(referencingRules);
+
+    expect(
+      describeSubmitError(crossed, "Failed to delete the alert rule.")
+    ).toBe(referencingRules.message);
+  });
+
+  it("flattens to a 500 when it declares no status of its own", async () => {
+    const { status: _status, ...withoutStatus } = referencingRules;
+
+    const crossed = await crossTheBoundary(withoutStatus);
+
+    expect((crossed as { status: number }).status).toBe(500);
+  });
+});
+
+/**
+ * The status arms read `err.status`, so a typed error body that declares no
+ * `status` of its own is flattened to a 500 no matter what the response said.
+ * Only a remote operation is covered: a status arm is the only thing that reads
+ * these, and an endpoint the codegen does not wrap is answered by whatever
+ * calls it directly.
+ *
+ * This guards the DECLARED spec only. The generated client casts the raw wire
+ * body (`typeStyle: "Interface"`, no DTO wrapping), so an action whose real
+ * body diverges from its declaration — an anonymous `BadRequest(new { error })`
+ * under an autofilled `ProblemDetails` declaration, or an undeclared status —
+ * passes here and still flattens at runtime. Keeping declarations truthful is
+ * on the controller and its tests.
+ */
+describe("every typed error body a remote operation declares", () => {
+  const SPEC_URL = new URL("./generated/openapi.json", import.meta.url);
+  const SPEC_ABSENT =
+    "src/lib/api/generated/openapi.json is not present — run `dotnet build src/API/Nocturne.API/Nocturne.API.csproj -p:GenerateNSwagClient=true` first.";
+
+  type Spec = {
+    paths: Record<string, Record<string, RemoteOperation>>;
+    components: {
+      schemas: Record<string, { properties?: Record<string, unknown> }>;
+    };
+  };
+
+  type RemoteOperation = {
+    "x-remote-type"?: string;
+    responses?: Record<
+      string,
+      { content?: Record<string, { schema?: { $ref?: string } }> }
+    >;
+  };
+
+  /** 401 and 403 have arms of their own that never read a body's status. */
+  const READ_BY_A_STATUS_ARM = (code: string) =>
+    /^[45]/.test(code) && code !== "401" && code !== "403";
+
+  function declaredErrorBodies(spec: Spec): { where: string; schema: string }[] {
+    const found: { where: string; schema: string }[] = [];
+
+    for (const [path, methods] of Object.entries(spec.paths)) {
+      for (const [method, operation] of Object.entries(methods)) {
+        if (!operation?.["x-remote-type"]) continue;
+
+        for (const [code, response] of Object.entries(
+          operation.responses ?? {}
+        )) {
+          if (!READ_BY_A_STATUS_ARM(code)) continue;
+
+          const ref = response.content?.["application/json"]?.schema?.$ref;
+          if (!ref) continue;
+
+          found.push({
+            where: `${code} ${method.toUpperCase()} ${path}`,
+            schema: ref.split("/").pop()!,
+          });
+        }
+      }
+    }
+
+    return found;
+  }
+
+  it("declares a status, so the status arm can forward it", (ctx) => {
+    if (!existsSync(fileURLToPath(SPEC_URL))) ctx.skip(SPEC_ABSENT);
+    const spec = JSON.parse(readFileSync(SPEC_URL, "utf8")) as Spec;
+
+    const bodies = declaredErrorBodies(spec);
+    expect(bodies.length).toBeGreaterThan(0);
+
+    const missing = bodies
+      .filter(
+        ({ schema }) =>
+          !("status" in (spec.components.schemas[schema]?.properties ?? {}))
+      )
+      .map(({ where, schema }) => `${where} -> ${schema}`);
+
+    expect(missing).toEqual([]);
+  });
+});

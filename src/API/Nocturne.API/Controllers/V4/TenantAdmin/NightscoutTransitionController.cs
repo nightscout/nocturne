@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
 using Nocturne.API.Configuration;
 using Nocturne.API.Services.Compatibility;
@@ -61,35 +62,25 @@ public class NightscoutTransitionController : ControllerBase
     /// write-back health, and disconnect readiness recommendation.
     /// </summary>
     [HttpGet("status")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(NightscoutTransitionStatus), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [ErrorEnvelope]
     public async Task<ActionResult<NightscoutTransitionStatus>> GetTransitionStatus(
         CancellationToken cancellationToken = default
     )
     {
-        try
-        {
-            var compatibility = await BuildCompatibilityInfoAsync(cancellationToken);
+        var compatibility = await BuildCompatibilityInfoAsync(cancellationToken);
 
-            var status = new NightscoutTransitionStatus
-            {
-                Migration = await BuildMigrationStatusAsync(cancellationToken),
-                WriteBack = BuildWriteBackHealth(),
-                Compatibility = compatibility,
-                Recommendation = await BuildRecommendationAsync(compatibility, cancellationToken)
-            };
-
-            return Ok(status);
-        }
-        catch (Exception ex)
+        var status = new NightscoutTransitionStatus
         {
-            _logger.LogError(ex, "Error building Nightscout transition status");
-            return Problem(
-                detail: "Internal server error",
-                statusCode: 500,
-                title: "Internal Server Error"
-            );
-        }
+            Migration = await BuildMigrationStatusAsync(cancellationToken),
+            WriteBack = BuildWriteBackHealth(),
+            Compatibility = compatibility,
+            Recommendation = await BuildRecommendationAsync(compatibility, cancellationToken)
+        };
+
+        return Ok(status);
     }
 
     /// <summary>

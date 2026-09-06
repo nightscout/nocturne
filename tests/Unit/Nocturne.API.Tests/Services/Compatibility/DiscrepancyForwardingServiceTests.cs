@@ -51,7 +51,7 @@ public class DiscrepancyForwardingServiceTests
     {
         return new ResponseComparisonResult
         {
-            CorrelationId = "test-correlation-123",
+            TraceId = "test-correlation-123",
             ComparisonTimestamp = DateTimeOffset.UtcNow,
             OverallMatch = matchType,
             StatusCodeMatch = true,

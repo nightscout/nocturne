@@ -1,5 +1,8 @@
 generatorName: java
 outputDir: ./out
+# Overrides and the reason for each: sdk/java/templates/README.md.
+# Path is relative to the CI working directory (repo root).
+templateDir: sdk/java/templates
 globalProperties:
   skipFormModel: true
 additionalProperties:
@@ -16,4 +19,3 @@ additionalProperties:
   java8: false
   dateLibrary: java8
   openApiNullable: true
-  okHttpVersion: "3.12.13"

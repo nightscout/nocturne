@@ -42,6 +42,37 @@ public class Profile
     public long Mills { get; set; }
 
     /// <summary>
+    /// Gets or sets the server-modified timestamp (Unix milliseconds). V3 compatibility field.
+    /// Falls back to <see cref="FallbackTimestampMills"/> — profiles are often uploaded
+    /// without mills.
+    /// </summary>
+    private long? _srvModified;
+
+    [JsonPropertyName("srvModified")]
+    [JsonConverter(typeof(FlexibleNullableLongConverter))]
+    public long? SrvModified
+    {
+        get => _srvModified ?? FallbackTimestampMills();
+        set => _srvModified = value;
+    }
+
+    /// <summary>
+    /// Gets or sets the server-created timestamp (Unix milliseconds). V3 compatibility field.
+    /// </summary>
+    private long? _srvCreated;
+
+    [JsonPropertyName("srvCreated")]
+    [JsonConverter(typeof(FlexibleNullableLongConverter))]
+    public long? SrvCreated
+    {
+        get => _srvCreated ?? FallbackTimestampMills();
+        set => _srvCreated = value;
+    }
+
+    private long? FallbackTimestampMills() =>
+        V3Timestamps.Resolve(Mills, StartDate, CreatedAt);
+
+    /// <summary>
     /// Gets or sets when this profile was created
     /// </summary>
     [JsonPropertyName("created_at")]

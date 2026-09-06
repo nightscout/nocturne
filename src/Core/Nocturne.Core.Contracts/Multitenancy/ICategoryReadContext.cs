@@ -25,6 +25,13 @@ public interface ICategoryReadContext
     string? VisibleCategoriesCsv { get; }
 
     /// <summary>
+    /// True when the share may see full history instead of the last 24 hours. Defaults to
+    /// false, so a share whose window is never resolved is clamped (fail-closed). Only
+    /// meaningful when <see cref="IsShare"/> is true.
+    /// </summary>
+    bool FullHistory { get; }
+
+    /// <summary>
     /// Marks the request as an anonymous public share. Called by
     /// <c>TenantResolutionMiddleware</c> before the scoped context is pinned.
     /// </summary>
@@ -37,4 +44,12 @@ public interface ICategoryReadContext
     /// </summary>
     /// <param name="csv">The comma-separated governing read scopes (may be empty).</param>
     void SetVisibleCategories(string csv);
+
+    /// <summary>
+    /// Sets whether the share may see full history. Called by <c>AuthenticationMiddleware</c>
+    /// once the share's history window is known. Has no effect unless the request was marked
+    /// as a share.
+    /// </summary>
+    /// <param name="fullHistory">True to lift the 24-hour clamp for this share.</param>
+    void SetFullHistory(bool fullHistory);
 }

@@ -1,3 +1,4 @@
+using System.Globalization;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -24,7 +25,6 @@ public class IobCalculator(
 ) : IIobCalculator
 {
     // Constants from legacy implementation (identical to IobService)
-    private const long RECENCY_THRESHOLD = 30 * 60 * 1000; // 30 minutes in milliseconds
     private const double DEFAULT_DIA = 3.0;
     private const double SCALE_FACTOR_BASE = 3.0;
     private const double PEAK_MINUTES = 75.0;
@@ -40,8 +40,10 @@ public class IobCalculator(
     {
         var currentTime = time ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
-        // Get IOB from device snapshots (APS, pump) - prioritized source
-        var result = await GetLatestDeviceIobAsync(currentTime, ct);
+        // Get IOB from device snapshots (APS, pump) - prioritized source. Null means no recent
+        // snapshot carried an IOB at all; a reported IOB of zero (or negative, after a long
+        // low-temp) is a real device value and is kept.
+        var deviceResult = await GetLatestDeviceIobAsync(currentTime, ct);
 
         // Calculate IOB from boluses
         var bolusResult =
@@ -62,23 +64,26 @@ public class IobCalculator(
             bolusResult.Activity = (bolusResult.Activity ?? 0) + (tempBasalResult.Activity ?? 0);
         }
 
-        if (IsEmpty(result))
+        IobResult result;
+        if (deviceResult is null)
         {
             result = bolusResult;
         }
         else
         {
+            result = deviceResult;
             // Add bolus IOB as separate property for device status sources
             if (bolusResult.Iob > 0)
             {
                 result.TreatmentIob = RoundToThreeDecimals(bolusResult.Iob);
             }
 
-            // Add bolus basal IOB to device status basal IOB if available
-            if (bolusResult.BasalIob.HasValue)
+            // A device that reports basal IOB has already accounted for its own temp basals;
+            // adding the locally-computed value on top would count that insulin twice. Only
+            // substitute the local estimate when the device reported no basal IOB of its own.
+            if (!result.BasalIob.HasValue && bolusResult.BasalIob.HasValue)
             {
-                result.BasalIob = (result.BasalIob ?? 0) + bolusResult.BasalIob.Value;
-                result.BasalIob = RoundToThreeDecimals(result.BasalIob.Value);
+                result.BasalIob = RoundToThreeDecimals(bolusResult.BasalIob.Value);
             }
         }
 
@@ -344,12 +349,14 @@ public class IobCalculator(
 
     /// <summary>
     /// Query <see cref="IApsSnapshotRepository"/> and <see cref="IPumpSnapshotRepository"/>
-    /// for the most recent device-reported IOB within the staleness window.
+    /// for the most recent device-reported IOB within the staleness window. Returns <c>null</c>
+    /// when no recent snapshot carries an IOB value — a reported zero is a real value, not an
+    /// absence, so "device said 0" and "device said nothing" are distinct results.
     /// </summary>
-    internal async Task<IobResult> GetLatestDeviceIobAsync(long time, CancellationToken ct = default)
+    internal async Task<IobResult?> GetLatestDeviceIobAsync(long time, CancellationToken ct = default)
     {
-        var futureMills = time + 5 * 60 * 1000;
-        var recentMills = time - RECENCY_THRESHOLD;
+        var futureMills = time + DeviceReportedValues.FutureSkewToleranceMs;
+        var recentMills = time - DeviceReportedValues.RecencyThresholdMs;
 
         var recentTime = DateTimeOffset.FromUnixTimeMilliseconds(recentMills).UtcDateTime;
         var futureTime = DateTimeOffset.FromUnixTimeMilliseconds(futureMills).UtcDateTime;
@@ -367,9 +374,9 @@ public class IobCalculator(
         );
 
         var apsSnapshot = apsSnapshots.FirstOrDefault();
-        if (apsSnapshot != null)
+        if (apsSnapshot is { Iob: not null } or { BasalIob: not null })
         {
-            var source = apsSnapshot.AidAlgorithm switch
+            var source = apsSnapshot!.AidAlgorithm switch
             {
                 AidAlgorithm.Loop => "Loop",
                 _ => "OpenAPS",
@@ -398,41 +405,36 @@ public class IobCalculator(
         );
 
         var pumpSnapshot = pumpSnapshots.FirstOrDefault();
-        if (pumpSnapshot != null)
+        if (pumpSnapshot is { Iob: not null } or { BolusIob: not null })
         {
-            var iobValue = pumpSnapshot.Iob ?? pumpSnapshot.BolusIob ?? 0.0;
-
             return new IobResult
             {
-                Iob = iobValue,
+                Iob = pumpSnapshot!.Iob ?? pumpSnapshot.BolusIob ?? 0.0,
                 Source = "Pump",
                 Device = pumpSnapshot.Device,
                 Mills = new DateTimeOffset(pumpSnapshot.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
             };
         }
 
-        return new IobResult();
+        return null;
     }
 
     #region Helper Methods
 
     private static IobResult AddDisplay(IobResult iob)
     {
-        if (IsEmpty(iob) || iob.Iob <= 0)
+        if (iob.Iob <= 0)
         {
             return iob;
         }
 
-        var display = iob.Iob.ToString("F2");
+        // Invariant: these strings go out over the API, so they must not pick up the
+        // server's decimal separator.
+        var display = iob.Iob.ToString("F2", CultureInfo.InvariantCulture);
         iob.Display = display;
         iob.DisplayLine = $"IOB: {display}U";
 
         return iob;
-    }
-
-    private static bool IsEmpty(IobResult? iob)
-    {
-        return iob == null || (iob.Iob <= 0 && !iob.BasalIob.HasValue && !iob.Activity.HasValue);
     }
 
     private static double RoundToThreeDecimals(double num)

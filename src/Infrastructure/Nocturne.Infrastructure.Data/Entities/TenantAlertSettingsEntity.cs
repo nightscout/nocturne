@@ -4,11 +4,12 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace Nocturne.Infrastructure.Data.Entities;
 
 /// <summary>
-/// Tenant-level alert configuration: Do Not Disturb (manual + scheduled). One row per
-/// tenant; the row is created on first access. The scheduled DND window is interpreted
-/// in the patient's IANA timezone (<see cref="V4.PatientRecordEntity.Timezone"/>) — not
-/// stored here. DND has two activation paths that share the same allowlist semantics —
-/// the per-rule <see cref="AlertRuleEntity.AllowThroughDnd"/> bypass applies to both.
+/// Tenant-level alert configuration: scheduled Do Not Disturb. One row per tenant; the row
+/// is created on first access. The scheduled DND window is interpreted in the patient's IANA
+/// timezone (<see cref="V4.PatientRecordEntity.Timezone"/>) — not stored here. Manual DND is
+/// no longer a column here: it is a <c>scope=all</c> row in <c>dnd_windows</c> (ADR 0004 D5),
+/// the single source of truth for one-shot mutes; the per-rule
+/// <see cref="AlertRuleEntity.AllowThroughDnd"/> bypass applies to both paths.
 /// </summary>
 [Table("tenant_alert_settings")]
 public class TenantAlertSettingsEntity : ITenantScoped
@@ -20,24 +21,6 @@ public class TenantAlertSettingsEntity : ITenantScoped
     /// <summary>Identifier of the tenant this configuration belongs to.</summary>
     [Column("tenant_id")]
     public Guid TenantId { get; set; }
-
-    // ---- Manual DND ----
-
-    /// <summary>True when the user has manually toggled DND on.</summary>
-    [Column("dnd_manual_active")]
-    public bool DndManualActive { get; set; }
-
-    /// <summary>
-    /// UTC instant at which a manually-activated DND auto-expires. Null when DND is on
-    /// indefinitely. The engine treats DND as off when <c>now &gt;= dnd_manual_until</c>.
-    /// </summary>
-    [Column("dnd_manual_until")]
-    public DateTime? DndManualUntil { get; set; }
-
-    /// <summary>UTC instant at which DND was most recently activated. Used to anchor
-    /// <c>do_not_disturb</c> conditions with a sustained <c>for_minutes</c>.</summary>
-    [Column("dnd_manual_started_at")]
-    public DateTime? DndManualStartedAt { get; set; }
 
     // ---- Scheduled DND ----
 

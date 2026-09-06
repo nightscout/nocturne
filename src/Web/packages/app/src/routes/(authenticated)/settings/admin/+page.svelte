@@ -19,6 +19,8 @@
   import IntegrationsTabContent from "$lib/components/admin/IntegrationsTabContent.svelte";
   import OidcProvidersTabContent from "$lib/components/admin/OidcProvidersTabContent.svelte";
   import OidcProviderDialog from "$lib/components/admin/OidcProviderDialog.svelte";
+  import { describeSubmitError } from "$lib/forms/submit-error";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
   import type {
     TenantRoleDto,
     OidcProviderResponse,
@@ -71,11 +73,7 @@
       }
     } catch (err) {
       console.error("Failed to load OIDC providers:", err);
-      const body = (err as { body?: { message?: string; detail?: string } })?.body;
-      oidcError =
-        body?.message ??
-        body?.detail ??
-        (err instanceof Error ? err.message : "Failed to load identity providers");
+      oidcError = remoteErrorMessage(err, "Failed to load identity providers");
     } finally {
       oidcLoading = false;
     }
@@ -103,11 +101,7 @@
       await oidcRemote.remove(p.id);
       await loadOidcData();
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Failed to delete provider";
-      oidcError = message.includes("would_lock_out_users")
-        ? "Deleting this provider would lock out all users."
-        : message;
+      oidcError = describeSubmitError(err, "Failed to delete provider.");
     }
   }
 
@@ -121,11 +115,10 @@
       }
       await loadOidcData();
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Failed to toggle provider";
-      oidcError = message.includes("would_lock_out_users")
-        ? "Disabling this provider would lock out all users."
-        : message;
+      oidcError = describeSubmitError(
+        err,
+        "Failed to change whether this provider is enabled."
+      );
     }
   }
 

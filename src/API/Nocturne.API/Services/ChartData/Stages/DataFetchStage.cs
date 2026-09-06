@@ -1,9 +1,11 @@
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Infrastructure.Data.Abstractions;
 
 namespace Nocturne.API.Services.ChartData.Stages;
@@ -39,18 +41,21 @@ namespace Nocturne.API.Services.ChartData.Stages;
 /// <seealso cref="ChartDataContext"/>
 internal sealed class DataFetchStage(
     ISensorGlucoseRepository sensorGlucoseRepository,
+    ICanonicalGlucoseService canonicalGlucose,
     IBolusRepository bolusRepository,
     ICarbIntakeRepository carbIntakeRepository,
     IBGCheckRepository bgCheckRepository,
     IDeviceEventRepository deviceEventRepository,
     ITempBasalRepository tempBasalRepository,
+    IApsSnapshotRepository apsSnapshotRepository,
     IStateSpanRepository stateSpanRepository,
     ISystemEventRepository systemEventRepository,
     ITrackerRepository trackerRepository,
     IBasalInjectionRepository basalInjectionRepository,
     ILogger<DataFetchStage> logger,
     IHeartRateService heartRateService,
-    IStepCountService stepCountService
+    IStepCountService stepCountService,
+    ISleepService sleepService
 ) : IChartDataStage
 {
     public async Task<ChartDataContext> ExecuteAsync(ChartDataContext context, CancellationToken cancellationToken)
@@ -74,18 +79,21 @@ internal sealed class DataFetchStage(
         var treatmentLimit = (int)Math.Max(500, Math.Ceiling(treatmentRangeHours * 10));
         var displayRangeLimit = (int)Math.Max(500, Math.Ceiling(rangeHours * 10));
 
-        // Fetch glucose data from v4 SensorGlucose table
+        // Fetch glucose data from v4 SensorGlucose table; the dashboard renders the canonical
+        // stream, not blended concurrent CGMs.
         var sensorGlucoseList = (
-            await sensorGlucoseRepository.GetAsync(
-                from: MillsToDateTime(startTime),
-                to: MillsToDateTime(endTime),
-                device: null,
-                source: null,
-                limit: entryLimit,
-                offset: 0,
-                descending: true,
-                ct: cancellationToken
-            )
+            await canonicalGlucose.SelectAsync(
+                (await sensorGlucoseRepository.GetAsync(
+                    from: MillsToDateTime(startTime),
+                    to: MillsToDateTime(endTime),
+                    device: null,
+                    source: null,
+                    limit: entryLimit,
+                    offset: 0,
+                    descending: true,
+                    ct: cancellationToken
+                )).ToList(),
+                cancellationToken)
         ).ToList();
 
         // Fetch bolus data from v4 Bolus table — extended range for IOB calculation
@@ -170,13 +178,23 @@ internal sealed class DataFetchStage(
             ct: cancellationToken
         )).ToList();
 
+        // Fetch APS snapshot IOB/COB points (ascending) so the IOB/COB series can prefer the
+        // values the AID system actually acted on. The buffer start is used so a tick at the very
+        // left edge of the window can still resolve a snapshot uploaded just before it. The slim
+        // projection is deliberate: full snapshots carry multi-KB JSON blob columns, and a limit
+        // heuristic would truncate the newest rows for high-cadence uploaders.
+        var apsSnapshotList = await apsSnapshotRepository.GetIobCobPointsAsync(
+            from: MillsToDateTime(bufferStartTime)!.Value,
+            to: MillsToDateTime(endTime)!.Value,
+            ct: cancellationToken
+        );
+
         // Fetch all state spans in a single batched query
         var stateSpanCategories = new[]
         {
             StateSpanCategory.PumpMode,
             StateSpanCategory.Profile,
             StateSpanCategory.Override,
-            StateSpanCategory.Sleep,
             StateSpanCategory.Exercise,
             StateSpanCategory.Illness,
             StateSpanCategory.Travel,
@@ -212,14 +230,22 @@ internal sealed class DataFetchStage(
         var heartRateList = (await heartRateService.GetHeartRatesByDateRangeAsync(
             MillsToDateTime(startTime)!.Value,
             MillsToDateTime(endTime)!.Value,
-            cancellationToken
+            cancellationToken: cancellationToken
         )).ToList();
 
         // Step count data
         var stepCountList = (await stepCountService.GetStepCountsByDateRangeAsync(
             MillsToDateTime(startTime)!.Value,
             MillsToDateTime(endTime)!.Value,
-            cancellationToken
+            cancellationToken: cancellationToken
+        )).ToList();
+
+        // Sleep sessions
+        var sleepSessionList = (await sleepService.GetSessionsAsync(
+            from: MillsToDateTime(startTime),
+            to: MillsToDateTime(endTime),
+            limit: displayRangeLimit,
+            cancellationToken: cancellationToken
         )).ToList();
 
         // Display-range subsets for markers
@@ -231,7 +257,7 @@ internal sealed class DataFetchStage(
             .ToList();
 
         logger.LogDebug(
-            "DataFetchStage: fetched {Glucose} glucose, {Bolus} bolus, {Carb} carb, {BgCheck} bg-check, {DeviceEvent} device-event, {TempBasal} temp-basal, {HeartRate} heart-rate, {StepCount} step-count records",
+            "DataFetchStage: fetched {Glucose} glucose, {Bolus} bolus, {Carb} carb, {BgCheck} bg-check, {DeviceEvent} device-event, {TempBasal} temp-basal, {HeartRate} heart-rate, {StepCount} step-count, {Sleep} sleep records",
             sensorGlucoseList.Count,
             bolusList.Count,
             carbIntakeList.Count,
@@ -239,7 +265,8 @@ internal sealed class DataFetchStage(
             deviceEventList.Count,
             tempBasalList.Count,
             heartRateList.Count,
-            stepCountList.Count
+            stepCountList.Count,
+            sleepSessionList.Count
         );
 
         // Project Dictionary<K, List<V>> to IReadOnlyDictionary<K, IEnumerable<V>>
@@ -259,6 +286,7 @@ internal sealed class DataFetchStage(
             BgCheckList = bgCheckList,
             DeviceEventList = deviceEventList,
             TempBasalList = tempBasalList,
+            ApsSnapshotList = apsSnapshotList,
             BasalInjectionList = basalInjectionList,
             StateSpans = stateSpansReadOnly,
             SystemEvents = systemEventsResult?.ToList() ?? [],
@@ -266,6 +294,7 @@ internal sealed class DataFetchStage(
             TrackerInstances = trackerInstances?.ToList() ?? [],
             HeartRateList = heartRateList,
             StepCountList = stepCountList,
+            SleepSessions = sleepSessionList,
         };
     }
 }

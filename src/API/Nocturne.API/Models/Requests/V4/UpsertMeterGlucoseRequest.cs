@@ -5,7 +5,7 @@ namespace Nocturne.API.Models.Requests.V4;
 /// </summary>
 /// <seealso cref="Validators.V4.UpsertMeterGlucoseRequestValidator"/>
 /// <seealso cref="Nocturne.API.Controllers.V4.Glucose.MeterGlucoseController"/>
-public class UpsertMeterGlucoseRequest
+public class UpsertMeterGlucoseRequest : IBulkUpsertRequest
 {
     /// <summary>
     /// When the meter reading was taken.
@@ -23,6 +23,16 @@ public class UpsertMeterGlucoseRequest
     public string? Device { get; set; }
 
     /// <summary>
+    /// Optional reference to the registered <see cref="Nocturne.Core.Models.V4.PatientDevice"/> that
+    /// produced the reading. Must resolve to one of the caller's registered devices. When omitted on
+    /// create, the server attempts attribution from <see cref="Device"/> and <see cref="DataSource"/>;
+    /// when omitted on update, the existing link is preserved. Send the empty GUID
+    /// (<c>00000000-0000-0000-0000-000000000000</c>) to state that the reading came from no registered
+    /// device: the link is cleared and server-side attribution is skipped for this request.
+    /// </summary>
+    public Guid? PatientDeviceId { get; set; }
+
+    /// <summary>
     /// Name of the application that submitted this record.
     /// </summary>
     public string? App { get; set; }
@@ -36,4 +46,7 @@ public class UpsertMeterGlucoseRequest
     /// Glucose reading in mg/dL (validated 0-10,000).
     /// </summary>
     public double Mgdl { get; set; }
+
+    // Meter readings carry no sync key.
+    string? IBulkUpsertRequest.SyncIdentifier => null;
 }

@@ -15,6 +15,8 @@ public sealed class CategoryReadContext : ICategoryReadContext
 
     public string? VisibleCategoriesCsv { get; private set; }
 
+    public bool FullHistory { get; private set; }
+
     public void MarkShare() => IsShare = true;
 
     public void SetVisibleCategories(string csv)
@@ -22,6 +24,14 @@ public sealed class CategoryReadContext : ICategoryReadContext
         if (IsShare)
         {
             VisibleCategoriesCsv = csv ?? string.Empty;
+        }
+    }
+
+    public void SetFullHistory(bool fullHistory)
+    {
+        if (IsShare)
+        {
+            FullHistory = fullHistory;
         }
     }
 }

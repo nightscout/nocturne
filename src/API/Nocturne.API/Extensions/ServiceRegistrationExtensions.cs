@@ -1,10 +1,12 @@
 using System.Threading.RateLimiting;
 using Fido2NetLib;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Nocturne.API.Authorization;
 using Nocturne.API.Configuration;
 using Nocturne.API.Services;
 using Nocturne.API.Middleware.Handlers;
 using Nocturne.API.Multitenancy;
+using Nocturne.API.RateLimiting;
 using Nocturne.API.Services.AidDetection;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Evaluators;
@@ -18,10 +20,13 @@ using Nocturne.API.Services.ChartData;
 using Nocturne.API.Services.ChartData.Stages;
 using Nocturne.API.Services.ConnectorPublishing;
 using Nocturne.API.Services.Connectors;
+using Nocturne.API.Services.Demo;
 using Nocturne.API.Services.Devices;
+using Nocturne.API.Services.Docs;
 using Nocturne.API.Services.Effects;
 using Nocturne.API.Services.Entries;
 using Nocturne.API.Services.Glucose;
+using Nocturne.API.Services.Sleep;
 using Nocturne.API.Services.Health;
 using Nocturne.API.Services.Identity;
 using Nocturne.API.Services.Legacy;
@@ -50,6 +55,7 @@ using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Legacy;
@@ -63,6 +69,7 @@ using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Configuration;
+using Nocturne.Core.Models.Net;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Repositories;
@@ -81,6 +88,99 @@ namespace Nocturne.API.Extensions;
 public static class ServiceRegistrationExtensions
 {
     /// <summary>
+    /// Rate-limiting policy for the documentation endpoints, which are mapped rather than
+    /// controller actions and so cannot carry the attribute.
+    /// </summary>
+    public const string DocsRateLimitPolicy = "docs";
+
+    /// <summary>
+    /// The rate-limiting policies partitioned on the calling client, with the ceiling and window
+    /// each applies. Held as one table so all of them resolve their partition through
+    /// <see cref="ClientRateLimitKey"/> and the trust decision behind a forwarded address is taken
+    /// in exactly one place.
+    /// </summary>
+    internal static readonly (string Policy, int PermitLimit, TimeSpan Window)[] ClientAddressPolicies =
+    [
+        ("oauth-token", 30, TimeSpan.FromMinutes(1)),
+        ("oauth-device", 10, TimeSpan.FromMinutes(1)),
+        // RFC 7591 Dynamic Client Registration.
+        ("oauth-register", 10, TimeSpan.FromHours(1)),
+        ("oauth-device-approve", 20, TimeSpan.FromMinutes(1)),
+        ("totp-login", 10, TimeSpan.FromMinutes(1)),
+        // The passkey ceremonies. An assertion is phishing-resistant and its challenge is a
+        // stateless Data Protection token, so what these bound is the work each attempt costs —
+        // the credential lookup, the audit row a failure writes, and the crypto the completion
+        // step runs. Two things set the ceilings well above that work: a ceremony spends two
+        // permits (options then complete), and a household or clinic behind one NAT is a single
+        // partition, so the whole family signs in from one bucket.
+        ("passkey-login", 30, TimeSpan.FromMinutes(1)),
+        ("passkey-register", 20, TimeSpan.FromMinutes(1)),
+        // A recovery code is a one-time human-typed secret and the last way back into an account,
+        // so the ceiling has to leave room to mistype ten characters under stress. The window,
+        // not the ceiling, is what makes this an order of magnitude tighter than totp-login: an
+        // authenticator code rotates every 30 seconds, a recovery code does not.
+        ("passkey-recovery", 10, TimeSpan.FromMinutes(10)),
+        // The one anonymous ceremony that writes a row before any credential exists: each start
+        // files a pending subject under a display name not already taken, and nothing else prunes
+        // them.
+        ("passkey-access-request", 5, TimeSpan.FromMinutes(10)),
+        // First-run setup: creating the tenant, the owner ceremonies (options then complete, so two
+        // permits each) and the OIDC callback that exchanges a code with the provider. Only
+        // reachable while no member of the instance holds a credential, so the ceiling covers one
+        // operator retrying a ceremony rather than a population signing in.
+        ("setup", 20, TimeSpan.FromMinutes(1)),
+        // The "is this name free?" probes — owner username and tenant slug — which a form issues
+        // per keystroke behind a 400ms debounce, so a hunt-and-peck typist spends a permit per
+        // character. Sized for a full name typed that way plus a retry; past that the frontend
+        // carries it, treating a probe it could not complete as unverified rather than refused.
+        // The ceiling bounds what each anonymous request costs: a membership or tenant lookup,
+        // and for the username the operator's optional validation webhook.
+        ("name-availability", 60, TimeSpan.FromMinutes(1)),
+        // The anonymous invite lookups, member and alert. Their tokens are long random strings, so
+        // grinding one is infeasible at any rate; what the ceiling bounds is the database query
+        // each anonymous request costs. An invite page reads once per visit, which leaves the
+        // ceiling room for reloads and for a clinic behind one NAT.
+        ("invite-lookup", 30, TimeSpan.FromMinutes(1)),
+        ("guest-activate", 5, TimeSpan.FromMinutes(10)),
+        // Redeeming a login code. The code is a random string of refresh-token length, so grinding
+        // one is infeasible at any rate; the ceiling bounds what an anonymous attempt costs, which
+        // is one indexed lookup and the audit row a refusal writes. A browser handed a code spends
+        // one permit, and every code its holder could legitimately present was minted in the last
+        // five minutes.
+        ("login-handoff", 10, TimeSpan.FromMinutes(1)),
+        // Friction against naive abuse only — this does NOT bound the refresh_tokens table. The
+        // real ceiling is DemoSessionLimits.MaxLiveSessions, enforced on the subject id.
+        ("demo-session", 10, TimeSpan.FromMinutes(5)),
+        ("support-issues", 5, TimeSpan.FromHours(1)),
+        // The documentation surface (/scalar, /openapi) runs before tenant resolution and
+        // authentication, and the reference reads the tenants table and may write that tenant's
+        // OAuth client, so it is the one unauthenticated path that reaches the database that
+        // early. What bounds the damage is elsewhere: the row holds at most
+        // ScalarAuthProvider.MaxRedirectUris entries, and both the tenant resolution and the
+        // client id are cached, so a flood mostly costs the page render.
+        (DocsRateLimitPolicy, 30, TimeSpan.FromMinutes(1)),
+    ];
+
+    /// <summary>
+    /// Rate-limiting policy for the statistics actions that compute over a caller-supplied body.
+    /// Named here rather than inline so the guard test asserting every one of them carries it
+    /// reads the same value the registration does.
+    /// </summary>
+    public const string StatisticsComputeRateLimitPolicy = "statistics-compute";
+
+    /// <summary>
+    /// Partition key for <see cref="StatisticsComputeRateLimitPolicy"/>: the request host, lowered.
+    /// </summary>
+    /// <remarks>
+    /// A host is case-insensitive and tenant resolution lower-cases the subdomain it reads, so a
+    /// caller sending the same host in another casing reaches the same tenant. Keying on the raw
+    /// string would hand them a fresh window per variant, and the caller this policy bounds — an
+    /// anonymous share-link holder — writes the header themselves.
+    /// </remarks>
+    internal static string StatisticsComputePartitionKey(HttpContext context) =>
+        context.Request.Host.Host.ToLowerInvariant();
+
+    /// <summary>
     /// Core API utility and calculation services (status, versioning, time queries,
     /// IOB/COB, predictions, statistics, etc.)
     /// </summary>
@@ -89,6 +189,12 @@ public static class ServiceRegistrationExtensions
         IConfiguration configuration
     )
     {
+        // The clock every constructor-injected TimeProvider resolves to, stated here rather than
+        // left to AddAuthentication, which TryAdds the same instance in passing. In this host
+        // AddNocturneMemoryCache has already TryAdded it, so this is the registration for hosts
+        // that do not add the cache.
+        services.TryAddSingleton(TimeProvider.System);
+
         services.AddScoped<IStatusService, StatusService>();
         services.AddScoped<IVersionService, VersionService>();
         services.AddSingleton<IXmlDocumentationService, XmlDocumentationService>();
@@ -101,10 +207,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IPropertiesService, PropertiesService>();
         services.AddScoped<ISummaryService, SummaryService>();
         // Prediction service — configurable via Predictions:Source (None, DeviceStatus, OrefWasm)
-        var predictionSource = configuration.GetValue<PredictionSource>(
-            "Predictions:Source",
-            PredictionSource.None
-        );
+        var predictionSource = PredictionOptions.ResolveSource(configuration);
         switch (predictionSource)
         {
             case PredictionSource.DeviceStatus:
@@ -129,6 +232,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IBolusWizardService, BolusWizardService>();
 
         services.AddScoped<IAuthorizationService, AuthorizationService>();
+        services.AddScoped<IHubTokenAuthorizer, HubTokenAuthorizer>();
         services.AddScoped<IAlexaService, AlexaService>();
 
         services.AddScoped<IStatisticsService, StatisticsService>();
@@ -174,7 +278,9 @@ public static class ServiceRegistrationExtensions
         services.Configure<PlatformOptions>(configuration.GetSection(PlatformOptions.SectionName));
         // Auth services
         services.AddScoped<IAuthAuditService, AuthAuditService>();
+        services.AddScoped<IDirectGrantService, DirectGrantService>();
         services.AddScoped<IJwtService, JwtService>();
+        services.AddScoped<ILoginCodeService, LoginCodeService>();
         services.AddScoped<IRefreshTokenService, RefreshTokenService>();
         services.AddSingleton<IRotationSuccessorCache, RotationSuccessorCache>();
         services.AddScoped<IFirstPartyTokenRepository, EfFirstPartyTokenRepository>();
@@ -183,11 +289,13 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IRoleService, RoleService>();
         services.AddScoped<IOidcProviderService, OidcProviderService>();
         services.AddScoped<IOidcAuthService, OidcAuthService>();
+        services.AddScoped<PlatformAdminBootstrapService>();
 
         // OAuth services
         services.AddScoped<IOAuthClientService, OAuthClientService>();
         services.AddSingleton<RedirectUriValidator>();
         services.AddScoped<IOAuthGrantService, OAuthGrantService>();
+        services.AddScoped<IJwtCredentialValidator, JwtCredentialValidator>();
         services.AddScoped<IOAuthTokenService, OAuthTokenService>();
         services.AddScoped<IOAuthDeviceCodeService, OAuthDeviceCodeService>();
         services.AddScoped<IMemberInviteService, MemberInviteService>();
@@ -198,18 +306,28 @@ public static class ServiceRegistrationExtensions
 
         services.AddHostedService<AuthorizationSeedService>();
 
+        services.AddSingleton<GuestSessionCacheService>();
         services.AddSingleton<PublicAccessCacheService>();
         services.AddSingleton<ShareTokenCacheService>();
+        // Same instance behind the seam, so the cache is shared rather than duplicated.
+        services.AddSingleton<IShareTokenResolver>(sp => sp.GetRequiredService<ShareTokenCacheService>());
         services.AddSingleton<IShareTokenGenerator, ShareTokenGenerator>();
         services.AddScoped<IShareLinkService, ShareLinkService>();
-        services.AddHostedService<ShareTokenBackfillService>();
+        // Singleton because its consumer runs at startup outside any request scope; it creates its
+        // own scope per notification.
+        services.AddSingleton<IShareLinkRotatedNotifier, ShareLinkRotatedNotifier>();
 
         // Passkey (WebAuthn/FIDO2) services
         services.AddScoped<IPasskeyService, PasskeyService>();
         services.AddScoped<IRecoveryCodeService, RecoveryCodeService>();
         services.AddScoped<ITotpService, TotpService>();
-        // Derive WebAuthn RP config from the base domain (single source of truth)
-        var baseDomain = configuration[BaseDomainOptions.ConfigKey] ?? "localhost:1612";
+        // Derive WebAuthn RP config from the base domain (single source of truth). Blank counts as
+        // unset: it is what the shipped .env.example leaves behind, and an origin built from it is
+        // one Fido2Configuration refuses to parse.
+        var configuredBaseDomain = configuration[BaseDomainOptions.ConfigKey];
+        var baseDomain = string.IsNullOrWhiteSpace(configuredBaseDomain)
+            ? "localhost:1612"
+            : configuredBaseDomain;
         var rpId = baseDomain.Split(':')[0]; // hostname without port
         var origin = $"https://{baseDomain}";
         services.AddFido2(options =>
@@ -224,6 +342,12 @@ public static class ServiceRegistrationExtensions
             opts.BaseDomain = configuration[BaseDomainOptions.ConfigKey] ?? ""
         );
 
+        // Derive the session-, state-, and platform-access cookie Domain attributes from the base
+        // domain, in one place, so every writer and deleter of those cookies agrees on their scope.
+        services.PostConfigure<OidcOptions>(opts =>
+            SessionCookieExtensions.ApplyCookieDomainDefaults(opts, baseDomain)
+        );
+
         // Operator (SaaS platform policy)
         services.AddOptions<OperatorConfiguration>()
             .Bind(configuration.GetSection(OperatorConfiguration.SectionName))
@@ -232,12 +356,23 @@ public static class ServiceRegistrationExtensions
                 if (config.Support.AccountBilling is { } ab)
                     return !string.IsNullOrWhiteSpace(ab.Url);
                 return true;
-            }, "Operator:Support:AccountBilling:Url is required when AccountBilling is configured");
+            }, "Operator:Support:AccountBilling:Url is required when AccountBilling is configured")
+            .Validate(config =>
+            {
+                if (config.Support.AccountPortal is { } portal)
+                    return !string.IsNullOrWhiteSpace(portal.Url);
+                return true;
+            }, "Operator:Support:AccountPortal:Url is required when AccountPortal is configured");
 
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
+        services.AddScoped<ITenantOwnerResolver, TenantOwnerResolver>();
         services.AddScoped<ITenantMemberService, TenantMemberService>();
         services.AddScoped<ITenantRoleService, TenantRoleService>();
         services.AddScoped<ITenantService, TenantService>();
+        services.AddScoped<ITenantOverviewService, TenantOverviewService>();
+        services.AddScoped<IInstanceSetupState, InstanceSetupState>();
+        services.AddScoped<DemoTenantService>();
+        services.AddScoped<ScalarAuthProvider>();
 
         // Shared by InstanceKeyHandler (authentication) and TenantSetupMiddleware
         // (setup-gate bypass) so instance-key validation rules live in one place.
@@ -256,114 +391,57 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<IAuthHandler, AccessTokenHandler>(); // Priority 300
         services.AddSingleton<IAuthHandler, ApiKeyHandler>(); // Priority 400
 
-        // OIDC provider discovery HTTP client
+        // OIDC provider discovery HTTP client. The issuer URL is tenant configuration, and the
+        // unsaved-provider test button hands the caller the status of whatever it reached. Redirects
+        // stay on — an issuer that redirects its discovery path is ordinary, and the pin applies to
+        // every hop's connect anyway.
         services.AddHttpClient(
             "OidcProvider",
             client =>
             {
                 client.Timeout = TimeSpan.FromSeconds(30);
             }
-        );
+        ).ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+        {
+            ConnectCallback = new PinnedConnector(OutboundAddressPolicy.NotLinkLocal).ConnectAsync,
+        });
 
-        // Rate limiting for OAuth endpoints
+        var clientRateLimitKey = new ClientRateLimitKey(configuration);
+
         services.AddRateLimiter(options =>
         {
+            foreach (var (policy, permitLimit, window) in ClientAddressPolicies)
+            {
+                options.AddPolicy(
+                    policy,
+                    context =>
+                        RateLimitPartition.GetFixedWindowLimiter(
+                            partitionKey: clientRateLimitKey.Resolve(context),
+                            factory: _ => new FixedWindowRateLimiterOptions
+                            {
+                                PermitLimit = permitLimit,
+                                Window = window,
+                                QueueLimit = 0,
+                            }
+                        )
+                );
+            }
+
+            // Statistics compute POSTs: 60 per tenant host per minute. These actions compute over a
+            // caller-supplied body rather than over stored data, and reports.read — the scope
+            // gating them — is held by every public share link, so an anonymous viewer can post
+            // them. The partition is the Host rather than the client because what this bounds is one
+            // tenant's compute across all of its viewers, and the limiter runs before tenant
+            // resolution while the tenant (or share token) is already the subdomain.
             options.AddPolicy(
-                "oauth-token",
+                StatisticsComputeRateLimitPolicy,
                 context =>
                     RateLimitPartition.GetFixedWindowLimiter(
-                        partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                        partitionKey: StatisticsComputePartitionKey(context),
                         factory: _ => new FixedWindowRateLimiterOptions
                         {
-                            PermitLimit = 30,
+                            PermitLimit = 60,
                             Window = TimeSpan.FromMinutes(1),
-                            QueueLimit = 0,
-                        }
-                    )
-            );
-
-            options.AddPolicy(
-                "oauth-device",
-                context =>
-                    RateLimitPartition.GetFixedWindowLimiter(
-                        partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                        factory: _ => new FixedWindowRateLimiterOptions
-                        {
-                            PermitLimit = 10,
-                            Window = TimeSpan.FromMinutes(1),
-                            QueueLimit = 0,
-                        }
-                    )
-            );
-
-            // RFC 7591 Dynamic Client Registration: 10 registrations per IP per hour.
-            options.AddPolicy(
-                "oauth-register",
-                context =>
-                    RateLimitPartition.GetFixedWindowLimiter(
-                        partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                        factory: _ => new FixedWindowRateLimiterOptions
-                        {
-                            PermitLimit = 10,
-                            Window = TimeSpan.FromHours(1),
-                            QueueLimit = 0,
-                        }
-                    )
-            );
-
-            options.AddPolicy(
-                "oauth-device-approve",
-                context =>
-                    RateLimitPartition.GetFixedWindowLimiter(
-                        partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                        factory: _ => new FixedWindowRateLimiterOptions
-                        {
-                            PermitLimit = 20,
-                            Window = TimeSpan.FromMinutes(1),
-                            QueueLimit = 0,
-                        }
-                    )
-            );
-
-            options.AddPolicy(
-                "totp-login",
-                context =>
-                    RateLimitPartition.GetFixedWindowLimiter(
-                        partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                        factory: _ => new FixedWindowRateLimiterOptions
-                        {
-                            PermitLimit = 10,
-                            Window = TimeSpan.FromMinutes(1),
-                            QueueLimit = 0,
-                        }
-                    )
-            );
-
-            // Guest link activation: 5 attempts per IP per 10 minutes.
-            options.AddPolicy(
-                "guest-activate",
-                context =>
-                    RateLimitPartition.GetFixedWindowLimiter(
-                        partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                        factory: _ => new FixedWindowRateLimiterOptions
-                        {
-                            PermitLimit = 5,
-                            Window = TimeSpan.FromMinutes(10),
-                            QueueLimit = 0,
-                        }
-                    )
-            );
-
-            // Support issue creation: 5 issues per IP per hour.
-            options.AddPolicy(
-                "support-issues",
-                context =>
-                    RateLimitPartition.GetFixedWindowLimiter(
-                        partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                        factory: _ => new FixedWindowRateLimiterOptions
-                        {
-                            PermitLimit = 5,
-                            Window = TimeSpan.FromHours(1),
                             QueueLimit = 0,
                         }
                     )
@@ -395,7 +473,6 @@ public static class ServiceRegistrationExtensions
         // Demo mode
         services.AddSingleton<IDemoModeService, DemoModeService>();
 
-        // V4 projection (must be registered before EntryService/TreatmentService)
         services.AddScoped<IV4ToLegacyProjectionService, V4ToLegacyProjectionService>();
 
         // Collection effect descriptors (resolved by WriteSideEffectsService)
@@ -439,21 +516,9 @@ public static class ServiceRegistrationExtensions
                 sinks,
                 sp.GetService<ILogger<CompositeDataEventSink<Entry>>>());
         });
-        // V4-native sensor glucose writes (POST /api/v4/glucose/sensor + connector publisher)
-        // broadcast on the real-time "entries" collection, mirroring the legacy entries path.
-        services.AddScoped<SignalRSensorGlucoseEventSink>();
-        services.AddScoped<IDataEventSink<SensorGlucose>>(sp =>
-        {
-            var sinks = new List<IDataEventSink<SensorGlucose>>
-            {
-                sp.GetRequiredService<SignalRSensorGlucoseEventSink>(),
-            };
-
-            return new CompositeDataEventSink<SensorGlucose>(
-                sinks,
-                sp.GetService<ILogger<CompositeDataEventSink<SensorGlucose>>>());
-        });
         services.AddScoped<IStateSpanService, StateSpanService>();
+        services.AddScoped<ISleepService, SleepService>();
+        services.AddScoped<ISleepReportService, SleepReportService>();
         services.AddScoped<DeviceStatusProjectionService>();
         services.AddScoped<IDataEventSink<DeviceStatus>>(sp =>
         {
@@ -474,6 +539,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ITargetRangeResolver, TargetRangeResolver>();
         services.AddScoped<ITherapySettingsResolver, TherapySettingsResolver>();
         services.AddScoped<ITherapyTimelineResolver, TherapyTimelineResolver>();
+        services.AddScoped<Services.Glucose.IProfileSnapshotService, Services.Glucose.ProfileSnapshotService>();
         services.AddScoped<ITempBasalResolver, TempBasalResolver>();
         services.AddScoped<IProfileProjectionService, ProfileProjectionService>();
         services.AddScoped<IDataEventSink<Profile>>(sp =>
@@ -520,12 +586,22 @@ public static class ServiceRegistrationExtensions
 
         // Tracker services
         services.AddScoped<ITrackerTriggerService, TrackerTriggerService>();
-        services.AddScoped<ITrackerAlertService, TrackerAlertService>();
+        // Tracker notifications ride the alert engine: thresholds are synthesised into
+        // managed tracker_age alert rules, backfilled once at startup for pre-existing
+        // definitions (and self-healing if a managed rule is ever lost).
+        services.AddScoped<ITrackerAlertRuleSyncService, TrackerAlertRuleSyncService>();
+        services.AddHostedService<TrackerAlertRuleBackfillService>();
         services.AddScoped<ITrackerSuggestionService, TrackerSuggestionService>();
         services.AddScoped<IDeviceAgeService, DeviceAgeService>();
 
         // Device resolution
         services.AddScoped<IDeviceService, DeviceService>();
+        services.AddScoped<IPatientDeviceStamper, PatientDeviceStamper>();
+        services.AddScoped<IDeviceReattributionService, DeviceReattributionService>();
+
+        // Canonical glucose stream (single-stream view for v1/v3, alarms, unfiltered analytics)
+        services.AddScoped<ICanonicalGlucoseService, CanonicalGlucoseService>();
+        services.AddScoped<ICanonicalAlertEvaluator, CanonicalAlertEvaluator>();
 
         // Coach marks
         services.AddScoped<ICoachMarkService, CoachMarkService>();
@@ -544,12 +620,12 @@ public static class ServiceRegistrationExtensions
         // Basal series builder (used by chart data pipeline and reports endpoint)
         services.AddScoped<IBasalSeriesBuilder, BasalSeriesBuilder>();
 
-        // Chart data pipeline stages (order matters!)
         services.AddScoped<ProfileLoadStage>();
         services.AddScoped<DataFetchStage>();
         services.AddScoped<IobCobComputeStage>();
         services.AddScoped<DtoMappingStage>();
 
+        // The stages run in the order of this array, not the order they were registered in.
         services.AddScoped<IEnumerable<IChartDataStage>>(sp => new IChartDataStage[]
         {
             sp.GetRequiredService<ProfileLoadStage>(),
@@ -652,13 +728,27 @@ public static class ServiceRegistrationExtensions
     )
     {
         // SignalR
-        services.AddSignalR();
-        services.AddSingleton<
-            Microsoft.AspNetCore.SignalR.IHubFilter,
-            Nocturne.API.Hubs.TenantHubFilter
-        >();
+        // Global hub filters have to be added to HubOptions — SignalR reads HubOptions.HubFilters
+        // and never resolves IHubFilter from the container, so a filter registered only in DI never
+        // runs. TenantHubFilter is outermost so the invocation scope's ITenantAccessor is populated
+        // before anything inside resolves a tenant-scoped service; HubAuthorizationFilter needs none
+        // of that itself, since it reads the credential out of HttpContext.Items.
+        services.AddSignalR(options =>
+        {
+            Microsoft.AspNetCore.SignalR.HubOptionsExtensions
+                .AddFilter<Nocturne.API.Hubs.TenantHubFilter>(options);
+            Microsoft.AspNetCore.SignalR.HubOptionsExtensions
+                .AddFilter<Nocturne.API.Hubs.HubAuthorizationFilter>(options);
+        });
+        services.AddSingleton<Nocturne.API.Hubs.TenantHubFilter>();
+        services.AddSingleton<Nocturne.API.Hubs.HubAuthorizationFilter>();
         services.AddScoped<ISignalRBroadcastService, SignalRBroadcastService>();
         services.AddScoped<ISyncProgressReporter, SignalRSyncProgressReporter>();
+
+        // Native V4 record broadcasting (companion + Prelude) over the glucose/care/device/therapy
+        // categories. Open generic so every V4 model type resolves; the repository chokepoint fires it
+        // for live writes only. Additive to the legacy v1 IDataEventSink<T> projections above.
+        services.AddScoped(typeof(IV4RecordBroadcaster<>), typeof(SignalRV4RecordBroadcaster<>));
 
         // Push notifications
         services.AddScoped<INotificationV2Service, NotificationV2Service>();
@@ -687,6 +777,11 @@ public static class ServiceRegistrationExtensions
         // Notification template registry (singleton -- templates are immutable after startup)
         var templateRegistry = new NotificationTemplateRegistry().AddBuiltInTemplates();
         services.AddSingleton<INotificationTemplateRegistry>(templateRegistry);
+
+        // Client device registry (Prelude/Companion actuation targets)
+        services.AddScoped<
+            Nocturne.Core.Contracts.ClientDevices.IClientDeviceService,
+            Nocturne.API.Services.ClientDevices.ClientDeviceService>();
 
         // Notification action handlers (scoped -- they may depend on scoped services)
         services.AddScoped<INotificationActionHandler, MealMatchActionHandler>();
@@ -717,6 +812,18 @@ public static class ServiceRegistrationExtensions
         // Webhook infrastructure (reused by new alert engine)
         services.AddScoped<WebhookRequestSender>();
 
+        // Webhook targets are supplied by whoever is signed in. Nothing re-checks a hop here, so
+        // redirects are off outright rather than followed by a guard — a target answering 307 with
+        // http://169.254.169.254/ or an internal service name would otherwise be fetched from
+        // inside the deployment network.
+        services.AddHttpClient(WebhookRequestSender.HttpClientName)
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            {
+                AllowAutoRedirect = false,
+                ConnectCallback =
+                    new PinnedConnector(OutboundAddressPolicy.PubliclyRoutable).ConnectAsync,
+            });
+
         // Condition evaluators. Scoped because SustainedEvaluator depends on the scoped
         // IConditionTimerStore (DbContext-backed); the registry is also scoped because it captures
         // IEnumerable<IConditionEvaluator>.
@@ -726,13 +833,19 @@ public static class ServiceRegistrationExtensions
         // Sustained-condition timer store
         services.AddScoped<IConditionTimerStore, ConditionTimerRepository>();
 
-        // Excursion tracker
+        // Excursion tracker. Its per-rule serialisation gate is a singleton: the sweep and the
+        // per-reading path evaluate the same rule from different scopes.
+        services.AddSingleton<AlertRuleEvaluationGate>();
         services.AddScoped<IExcursionTracker, ExcursionTracker>();
+
+        // Alert evaluation engine seam (Alerts:Engine = managed | shadow | rust)
+        services.AddAlertEvaluationEngine(configuration);
 
         // Alert engine core
         services.AddScoped<IAlertRepository, AlertRepository>();
         services.Configure<AlertEvaluationOptions>(
             configuration.GetSection(AlertEvaluationOptions.SectionName));
+        services.AddScoped<IReservoirEstimationService, ReservoirEstimationService>();
         // Bundles the enricher's data-source dependencies; resolved positionally from DI.
         services.AddScoped<SensorContextEnricherDependencies>();
         services.AddScoped<ISensorContextEnricher, SensorContextEnricher>();
@@ -742,6 +855,10 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IExcursionResolutionHandler, ExcursionResolutionHandler>();
         services.AddScoped<IAlertReferenceService, AlertReferenceService>();
         services.AddScoped<IAlertReplayService, AlertReplayService>();
+        // Scope-class classification (scoped Do Not Disturb, ADR 0004): stateless over
+        // the static native engine, so a singleton. Backfilled once at startup.
+        services.AddSingleton<IRuleScopeClassifier, RuleScopeClassifier>();
+        services.AddHostedService<RuleScopeClassBackfillService>();
 
         // Delivery providers
         services.AddScoped<Nocturne.API.Services.Alerts.Providers.WebPushProvider>();
@@ -749,12 +866,14 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<Nocturne.API.Services.Alerts.Providers.WebhookProvider>();
         services.AddScoped<Nocturne.API.Services.Alerts.Providers.ChatBotProvider>();
         services.AddScoped<Nocturne.API.Services.Alerts.Providers.HomeAssistantProvider>();
+        services.AddScoped<Nocturne.API.Services.Alerts.Providers.DeviceActionProvider>();
         services.AddHttpClient("ChatBot");
 
         // Chat identity
         services.AddScoped<Nocturne.API.Services.Chat.ChatIdentityService>();
         services.AddScoped<Nocturne.API.Services.Chat.ChatIdentityDirectoryService>();
         services.AddScoped<Nocturne.API.Services.Chat.ChatIdentityPendingLinkService>();
+        services.AddHostedService<Nocturne.API.Services.Chat.ChatIdentityPendingLinkCleanupService>();
 
         // Bot health tracking
         services.AddSingleton<BotHealthService>();
@@ -798,12 +917,64 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IConnectorPublisher, InProcessConnectorPublisher>();
         services.AddConnectors(
             configuration,
-            backgroundServiceAssembly: typeof(Program).Assembly
+            pollingService: typeof(ConnectorBackgroundService<,>)
         );
 
         // Demo service health monitor
         services.AddHttpClient("DemoServiceHealth");
         services.AddHostedService<DemoServiceHealthMonitor>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the <see cref="Nocturne.Core.Contracts.Alerts.IAlertEvaluationEngine"/>
+    /// seam: all three engine implementations plus the singleton
+    /// <see cref="Nocturne.API.Services.Alerts.Engines.AlertEngineSelection"/> resolved
+    /// from the <c>Alerts:Engine</c> flag (<c>managed</c> | <c>shadow</c> | <c>rust</c>,
+    /// default <c>managed</c>). The native-library probe runs once, on first resolution;
+    /// rust/shadow degrade gracefully to managed with a logged warning when the
+    /// nocturne_alerts library can't load.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="configuration">Configuration carrying the <c>Alerts:Engine</c> flag.</param>
+    /// <param name="nativeProbe">
+    /// Native-library availability probe override for tests; defaults to
+    /// <see cref="Nocturne.Core.Alerts.Native.AlertsInterop.IsAvailable"/> (the version export).
+    /// </param>
+    public static IServiceCollection AddAlertEvaluationEngine(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        Func<bool>? nativeProbe = null)
+    {
+        services.AddScoped<Nocturne.API.Services.Alerts.Engines.ManagedAlertEngine>();
+        services.AddScoped<Nocturne.API.Services.Alerts.Engines.RustBackedAlertEngine>();
+        services.AddScoped<
+            Nocturne.API.Services.Alerts.Engines.IShadowRuleEvaluator,
+            Nocturne.API.Services.Alerts.Engines.RustShadowRuleEvaluator>();
+        services.AddScoped<Nocturne.API.Services.Alerts.Engines.ShadowAlertEngine>();
+
+        // Singleton so the configuration parse + native probe + selection log happen once
+        // (lazily, on the first scope that evaluates alerts).
+        services.AddSingleton(sp =>
+        {
+            var logger = sp.GetRequiredService<ILoggerFactory>()
+                .CreateLogger(typeof(Nocturne.API.Services.Alerts.Engines.AlertEngineSelector).FullName!);
+            return Nocturne.API.Services.Alerts.Engines.AlertEngineSelector.Select(
+                configuration[Nocturne.API.Services.Alerts.Engines.AlertEngineSelector.ConfigurationKey],
+                nativeProbe ?? Nocturne.Core.Alerts.Native.AlertsInterop.IsAvailable,
+                logger);
+        });
+
+        services.AddScoped<Nocturne.Core.Contracts.Alerts.IAlertEvaluationEngine>(sp =>
+            sp.GetRequiredService<Nocturne.API.Services.Alerts.Engines.AlertEngineSelection>().Mode switch
+            {
+                Nocturne.API.Services.Alerts.Engines.AlertEngineMode.Rust =>
+                    sp.GetRequiredService<Nocturne.API.Services.Alerts.Engines.RustBackedAlertEngine>(),
+                Nocturne.API.Services.Alerts.Engines.AlertEngineMode.Shadow =>
+                    sp.GetRequiredService<Nocturne.API.Services.Alerts.Engines.ShadowAlertEngine>(),
+                _ => sp.GetRequiredService<Nocturne.API.Services.Alerts.Engines.ManagedAlertEngine>(),
+            });
 
         return services;
     }
@@ -847,6 +1018,8 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IConditionEvaluator, DayOfWeekEvaluator>();
         services.AddScoped<IConditionEvaluator, PumpStateEvaluator>();
         services.AddScoped<IConditionEvaluator, StateSpanActiveEvaluator>();
+        services.AddScoped<IConditionEvaluator, SleepSessionActiveEvaluator>();
+        services.AddScoped<IConditionEvaluator, TrackerAgeEvaluator>();
         return services;
     }
 
@@ -860,6 +1033,13 @@ public static class ServiceRegistrationExtensions
             Nocturne.API.Services.Migration.MigrationJobService
         >();
         services.AddHostedService<Nocturne.API.Services.Migration.MigrationStartupService>();
+
+        // The Nightscout to migrate from is a tenant-admin-supplied URL, the same shape as a
+        // connector base URL, so it takes the connector client. That also puts redirects under the
+        // guard, which drops the tenant's api-secret when a hop crosses origin — .NET's own redirect
+        // handling strips Authorization but not api-secret.
+        services.AddHttpClient(Nocturne.API.Services.Migration.MigrationJobService.HttpClientName)
+            .ConfigureConnectorClient(baseUrl: null, userAgent: "Nocturne-Migration/1.0");
 
         return services;
     }

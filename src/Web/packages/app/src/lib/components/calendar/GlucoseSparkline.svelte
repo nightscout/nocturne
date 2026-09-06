@@ -2,11 +2,11 @@
   /**
    * Tiny glucose curve for embedding in calendar day cells. Uses the shared
    * GlucoseTrack component with threshold-coloured line and deviation-fill
-   * area, so the curve picks up the same visual contract as the dashboard
-   * chart (red below low, in-range with no fill, red above high).
+   * area, so the curve picks up the same visual contract as the dashboard chart
+   * (red below low, in-range with no fill, red above high).
    *
-   * Pure visual — no button, no click handling — so callers can wrap it
-   * in whatever interactive element they need without nested-button HTML.
+   * Pure visual — no button, no click handling — so callers can wrap it in
+   * whatever interactive element they need without nested-button HTML.
    */
   import { Chart, Svg } from "layerchart";
   import { scaleTime } from "d3-scale";
@@ -29,21 +29,30 @@
   interface Props {
     /** Glucose entries for the day: { mills, mgdl } */
     entries: Array<{ mills: number; mgdl: number }>;
+    /** Unix milliseconds for the start of the calendar day */
+    dayStartMills?: number;
   }
 
-  let { entries }: Props = $props();
+  let { entries, dayStartMills }: Props = $props();
 
   const glucoseData = $derived(
     entries
       .filter((e) => e.mgdl > 0)
       .map((e) => ({ time: new Date(e.mills), sgv: e.mgdl, color: "" }))
-      .sort((a, b) => a.time.getTime() - b.time.getTime()),
+      .sort((a, b) => a.time.getTime() - b.time.getTime())
   );
 
-  // Snap the x-domain to the local-day boundaries of the first entry so
-  // the curve fills the cell horizontally even when the day starts/ends
-  // with no readings.
+  // Snap the x-domain to the calendar day, not the first/last reading.
+  // Sparse days should show gaps instead of stretching partial data.
   const xDomain = $derived.by(() => {
+    const start = dayStartMills;
+    if (start !== undefined) {
+      return [new Date(start), new Date(start + 24 * 60 * 60 * 1000 - 1)] as [
+        Date,
+        Date,
+      ];
+    }
+
     if (entries.length === 0) return undefined;
     const ref = new Date(entries[0].mills);
     const y = ref.getFullYear();
@@ -75,8 +84,8 @@
       0,
       0,
       { basal: false, iob: false, cob: false },
-      { pumpMode: false, override: false, profile: false, activity: false },
-    ),
+      { pumpMode: false, override: false, profile: false, activity: false }
+    )
   );
 
   setGlucoseChartContext({
@@ -91,28 +100,28 @@
 
 {#if entries.length > 0 && xDomain}
   <div class="h-full w-full">
-  <Chart
-    data={glucoseData}
-    x={(d) => d.time}
-    y={(d) => d.sgv}
-    xScale={scaleTime()}
-    {xDomain}
-    yDomain={[0, THRESHOLDS.glucoseYMax]}
-    padding={{ top: 1, bottom: 1, left: 1, right: 1 }}
-  >
-    {#snippet children({ context })}
-      {(chartHeight = context.height, "")}
-      <Svg>
-        {#if chartHeight > 0}
-          <GlucoseTrack
-            lineColorMode="threshold"
-            areaMode="deviation"
-            showAxis={false}
-            showPoints={false}
-          />
-        {/if}
-      </Svg>
-    {/snippet}
-  </Chart>
+    <Chart
+      data={glucoseData}
+      x={(d) => d.time}
+      y={(d) => d.sgv}
+      xScale={scaleTime()}
+      {xDomain}
+      yDomain={[0, THRESHOLDS.glucoseYMax]}
+      padding={{ top: 1, bottom: 1, left: 1, right: 1 }}
+    >
+      {#snippet children({ context })}
+        {((chartHeight = context.height), "")}
+        <Svg>
+          {#if chartHeight > 0}
+            <GlucoseTrack
+              lineColorMode="threshold"
+              areaMode="deviation"
+              showAxis={false}
+              showPoints={false}
+            />
+          {/if}
+        </Svg>
+      {/snippet}
+    </Chart>
   </div>
 {/if}

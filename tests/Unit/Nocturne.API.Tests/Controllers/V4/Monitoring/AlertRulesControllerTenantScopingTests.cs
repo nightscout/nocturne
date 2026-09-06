@@ -6,6 +6,7 @@ using Moq;
 using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Services.Alerts;
 using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -105,6 +106,8 @@ public class AlertRulesControllerTenantScopingTests
             factory,
             Mock.Of<IAlertReferenceService>(),
             Mock.Of<IAlertDeliveryService>(),
+            Mock.Of<IRuleScopeClassifier>(),
+            Mock.Of<ISecretEncryptionService>(),
             Mock.Of<ILogger<AlertRulesController>>());
     }
 

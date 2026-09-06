@@ -12,6 +12,7 @@ import {
   getFoodAttributionCount,
 } from '$api/generated/foods.generated.remote';
 import { deleteFood as deleteFoodRemote } from './data.remote';
+import { describeSubmitError } from '$lib/forms/submit-error';
 
 export class FoodState {
   foods = $state<Food[]>([]);
@@ -111,8 +112,8 @@ export class FoodState {
         this.favorites = new Set(this.favorites);
         await addFavoriteRemote(foodId);
       }
-    } catch {
-      toast.error('Failed to update favorite');
+    } catch (err) {
+      toast.error(describeSubmitError(err, 'Failed to update favorite'));
       const favs = await getFavorites(undefined).run();
       this.favorites = new Set(
         (favs ?? []).map((f: Food) => f._id).filter(Boolean) as string[]
@@ -128,8 +129,8 @@ export class FoodState {
         toast.success('Food created');
       }
       return result;
-    } catch {
-      toast.error('Failed to create food');
+    } catch (err) {
+      toast.error(describeSubmitError(err, 'Failed to create food'));
       return null;
     }
   }
@@ -143,8 +144,8 @@ export class FoodState {
         this.expandedId = null;
         toast.success('Food updated');
       }
-    } catch {
-      toast.error('Failed to update food');
+    } catch (err) {
+      toast.error(describeSubmitError(err, 'Failed to update food'));
     }
   }
 
@@ -153,6 +154,7 @@ export class FoodState {
       const result = await getFoodAttributionCount(foodId).run();
       return result?.count ?? 0;
     } catch {
+      // No copy to lose: the caller renders a count, and 0 reads as "none known".
       return 0;
     }
   }
@@ -165,8 +167,8 @@ export class FoodState {
       this.favorites = new Set(this.favorites);
       this.expandedId = null;
       toast.success('Food deleted');
-    } catch {
-      toast.error('Failed to delete food');
+    } catch (err) {
+      toast.error(describeSubmitError(err, 'Failed to delete food'));
     }
   }
 

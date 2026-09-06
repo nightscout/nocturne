@@ -90,6 +90,28 @@ public class DirectionServiceTests
         }
     }
 
+    [Theory]
+    [InlineData("NotComputable", "-", "&#45;")]
+    [InlineData("RateOutOfRange", "⇕", "&#8661;")]
+    [InlineData("None", "⇼", "&#8700;")]
+    public void GetDirectionInfo_ShouldAcceptEnumMemberSpelling(
+        string direction,
+        string expectedLabel,
+        string expectedEntity
+    )
+    {
+        var entry = new Entry
+        {
+            Direction = direction,
+            Mills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+        };
+
+        var result = DirectionService.GetDirectionInfo(entry);
+
+        Assert.Equal(expectedLabel, result.Label);
+        Assert.Equal(expectedEntity, result.Entity);
+    }
+
     [Fact]
     public void GetDirectionInfo_ShouldReturnNullDisplayForNullEntry()
     {

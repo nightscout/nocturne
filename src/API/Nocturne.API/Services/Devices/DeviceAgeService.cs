@@ -34,19 +34,19 @@ public class DeviceAgeService : IDeviceAgeService
         _logger = logger;
     }
 
-    public async Task<DeviceAgeInfo> GetCannulaAgeAsync(DeviceAgePreferences prefs, CancellationToken ct = default)
+    public async Task<DeviceAgeInfo> GetCannulaAgeAsync(DeviceAgePreferences prefs, Guid? patientDeviceId = null, CancellationToken ct = default)
     {
         var effectivePrefs = MergePreferences(prefs, DefaultCannulaPrefs);
-        var latestEvent = await _repository.GetLatestByEventTypesAsync(CannulaEventTypes, ct);
+        var latestEvent = await _repository.GetLatestByEventTypesAsync(CannulaEventTypes, patientDeviceId, ct);
         return CreateDeviceAgeInfo(latestEvent, effectivePrefs, "CAGE", "Cannula");
     }
 
-    public async Task<SensorAgeInfo> GetSensorAgeAsync(DeviceAgePreferences prefs, CancellationToken ct = default)
+    public async Task<SensorAgeInfo> GetSensorAgeAsync(DeviceAgePreferences prefs, Guid? patientDeviceId = null, CancellationToken ct = default)
     {
         var effectivePrefs = MergePreferences(prefs, DefaultSensorPrefs);
 
-        var sensorStartEvent = await _repository.GetLatestByEventTypesAsync(SensorStartEventTypes, ct);
-        var sensorChangeEvent = await _repository.GetLatestByEventTypesAsync(SensorChangeEventTypes, ct);
+        var sensorStartEvent = await _repository.GetLatestByEventTypesAsync(SensorStartEventTypes, patientDeviceId, ct);
+        var sensorChangeEvent = await _repository.GetLatestByEventTypesAsync(SensorChangeEventTypes, patientDeviceId, ct);
 
         var sensorStart = CreateDeviceAgeInfo(sensorStartEvent, effectivePrefs, "SAGE", "Sensor");
         var sensorChange = CreateDeviceAgeInfo(sensorChangeEvent, effectivePrefs, "SAGE", "Sensor");
@@ -75,17 +75,17 @@ public class DeviceAgeService : IDeviceAgeService
         };
     }
 
-    public async Task<DeviceAgeInfo> GetInsulinAgeAsync(DeviceAgePreferences prefs, CancellationToken ct = default)
+    public async Task<DeviceAgeInfo> GetInsulinAgeAsync(DeviceAgePreferences prefs, Guid? patientDeviceId = null, CancellationToken ct = default)
     {
         var effectivePrefs = MergePreferences(prefs, DefaultInsulinPrefs);
-        var latestEvent = await _repository.GetLatestByEventTypesAsync(InsulinEventTypes, ct);
+        var latestEvent = await _repository.GetLatestByEventTypesAsync(InsulinEventTypes, patientDeviceId, ct);
         return CreateDeviceAgeInfo(latestEvent, effectivePrefs, "IAGE", "Insulin reservoir");
     }
 
-    public async Task<DeviceAgeInfo> GetBatteryAgeAsync(DeviceAgePreferences prefs, CancellationToken ct = default)
+    public async Task<DeviceAgeInfo> GetBatteryAgeAsync(DeviceAgePreferences prefs, Guid? patientDeviceId = null, CancellationToken ct = default)
     {
         var effectivePrefs = MergePreferences(prefs, DefaultBatteryPrefs);
-        var latestEvent = await _repository.GetLatestByEventTypesAsync(BatteryEventTypes, ct);
+        var latestEvent = await _repository.GetLatestByEventTypesAsync(BatteryEventTypes, patientDeviceId, ct);
         return CreateDeviceAgeInfo(latestEvent, effectivePrefs, "BAGE", "Pump battery");
     }
 

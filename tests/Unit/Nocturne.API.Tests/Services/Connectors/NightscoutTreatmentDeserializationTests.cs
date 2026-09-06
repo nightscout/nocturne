@@ -95,6 +95,71 @@ public class NightscoutTreatmentDeserializationTests
     }
 
     [Fact]
+    public void Treatments_WithFractionalOriginalDuration_DeserializeWholePage()
+    {
+        // AAPS types originalDuration as an Int but writes fractional values into it, so one such
+        // row used to throw and lose every other treatment in the page. duration goes out rounded,
+        // so originalDuration has to round too or AAPS reads the pair as a shortened temp basal.
+        var json = """
+        [
+            {
+                "eventType": "Temp Basal",
+                "duration": 29.999999966,
+                "originalDuration": 29.999999966,
+                "originalPercentage": 109.4,
+                "created_at": "2026-01-15T08:30:00.000Z"
+            },
+            {
+                "eventType": "Meal Bolus",
+                "insulin": 1.5,
+                "created_at": "2026-01-15T09:00:00.000Z"
+            }
+        ]
+        """;
+
+        var treatments = JsonSerializer.Deserialize<Treatment[]>(json, JsonDefaults.CaseInsensitive);
+
+        treatments.Should().HaveCount(2);
+        treatments![0].OriginalDuration.Should().Be(30);
+        treatments[0].OriginalPercentage.Should().Be(109);
+        treatments[1].Insulin.Should().Be(1.5);
+
+        var roundTripped = JsonSerializer.Deserialize<JsonElement>(
+            JsonSerializer.Serialize(treatments[0])
+        );
+
+        roundTripped.GetProperty("duration").GetDouble().Should().Be(30);
+        roundTripped.GetProperty("originalDuration").GetInt32().Should().Be(30);
+    }
+
+    [Theory]
+    [InlineData("29.999999966", 30)]
+    [InlineData("\"29.999999966\"", 30)]
+    [InlineData("109.4", 109)]
+    [InlineData("1e12", null)]
+    [InlineData("\"1e12\"", null)]
+    [InlineData("2147483648", null)]
+    [InlineData("{}", null)]
+    public void JsonDefaults_CoercesFractionalAndOutOfRangeInts(string jsonValue, int? expected)
+    {
+        var result = JsonSerializer.Deserialize<int?>(jsonValue, JsonDefaults.CaseInsensitive);
+
+        result.Should().Be(expected);
+    }
+
+    [Fact]
+    public void JsonDefaults_ReadsUnrepresentableNumbersAsMissing()
+    {
+        var options = JsonDefaults.CaseInsensitive;
+
+        JsonSerializer.Deserialize<long?>("29.999999966", options).Should().Be(30);
+        JsonSerializer.Deserialize<long?>("1e30", options).Should().BeNull();
+        JsonSerializer.Deserialize<double?>("1e400", options).Should().BeNull();
+        JsonSerializer.Deserialize<decimal?>("1e40", options).Should().BeNull();
+        JsonSerializer.Deserialize<decimal?>("29.5", options).Should().Be(29.5m);
+    }
+
+    [Fact]
     public void Treatments_WithStringOrIntBooleans_DeserializeWithoutThrowing()
     {
         // Uploaders variously send booleans as "true"/"false", 1/0, or native bools.

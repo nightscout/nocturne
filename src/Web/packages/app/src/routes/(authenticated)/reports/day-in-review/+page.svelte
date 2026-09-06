@@ -23,7 +23,7 @@
   } from "lucide-svelte";
   import { getDayInReviewData } from "./data.remote";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import { formatGlucoseValue, getUnitLabel } from "$lib/utils/formatting";
+  import { formatGlucoseValue, formatLongDate, getUnitLabel, time } from "$lib/utils/formatting";
   import {
     getRowTypeStyle,
     mergeTreatmentRows,
@@ -38,12 +38,15 @@
   import { GlucoseChartCard } from "$lib/components/dashboard/glucose-chart";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
   import { apsSnapshotToPrediction } from "$lib/utils/aps-snapshot-to-prediction";
+  import { isDayString, startOfDay, toDayString } from "$lib/utils/date-range";
 
-  // Get date from URL search params
-  const today = new Date().toISOString().split("T")[0];
-  const dateParam = $derived(
-    page.url.searchParams.get("date") ?? today
-  );
+  // Get date from URL search params. The default is the local calendar day —
+  // taking it from `toISOString()` names yesterday for anyone east of UTC.
+  const today = toDayString();
+  const dateParam = $derived.by(() => {
+    const fromUrl = page.url.searchParams.get("date");
+    return isDayString(fromUrl) ? fromUrl : today;
+  });
 
   // Create resource with automatic layout registration
   const dayDataResource = contextResource(
@@ -61,8 +64,9 @@
   const delivery = $derived(dayData?.insulinDelivery as any);
   const summary = $derived(dayData?.treatmentSummary as any);
 
-  // Parse current date from URL
-  const currentDate = $derived(new Date(dateParam));
+  // Parse current date from URL. Read as a local day, not as UTC midnight, which
+  // renders as the previous day for anyone west of UTC.
+  const currentDate = $derived(startOfDay(dateParam));
 
   // Treatments timeline filter/sort state
   let filterEventType = $state<string | null>(null);
@@ -70,37 +74,25 @@
   let sortDirection = $state<"asc" | "desc">("asc");
 
   // Date navigation
-  function goToPreviousDay() {
-    const prevDate = new Date(currentDate);
-    prevDate.setDate(prevDate.getDate() - 1);
-    goto(
-      `/reports/day-in-review?date=${prevDate.toISOString().split("T")[0]}`,
-      { invalidateAll: true }
-    );
+  function goToDayOffset(days: number) {
+    const target = new Date(currentDate);
+    target.setDate(target.getDate() + days);
+    goto(`/reports/day-in-review?date=${toDayString(target)}`, {
+      invalidateAll: true,
+      replaceState: true,
+    });
   }
 
-  function goToNextDay() {
-    const nextDate = new Date(currentDate);
-    nextDate.setDate(nextDate.getDate() + 1);
-    goto(
-      `/reports/day-in-review?date=${nextDate.toISOString().split("T")[0]}`,
-      { invalidateAll: true }
-    );
-  }
-
-  function goBackToMonthView() {
-    goto("/calendar");
+  function goBackToPreviousView() {
+    if (window.history.length > 1) {
+      window.history.back();
+    } else {
+      goto("/calendar");
+    }
   }
 
   // Format date for display
-  const dateDisplay = $derived.by(() => {
-    return currentDate.toLocaleDateString(undefined, {
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
-  });
+  const dateDisplay = $derived(formatLongDate(currentDate));
 
   // Get units preference
   const units = $derived(glucoseUnits.current);
@@ -263,12 +255,12 @@
       {label}
       {#if sortColumn === column}
         {#if sortDirection === "asc"}
-          <ArrowUp class="ml-1 h-4 w-4" />
+          <ArrowUp class="ml-1 h-4 w-4 print:hidden" />
         {:else}
-          <ArrowDown class="ml-1 h-4 w-4" />
+          <ArrowDown class="ml-1 h-4 w-4 print:hidden" />
         {/if}
       {:else}
-        <ArrowUpDown class="ml-1 h-4 w-4 opacity-50" />
+        <ArrowUpDown class="ml-1 h-4 w-4 opacity-50 print:hidden" />
       {/if}
     </Button>
   </Table.Head>
@@ -277,7 +269,7 @@
 {#if dayDataResource.current}
 <div class="@container space-y-6 p-3 @md:p-6">
   <!-- Header with Navigation -->
-  <Card.Root>
+  <Card.Root class="print:hidden">
     <Card.Content class="p-4">
       <div
         class="flex flex-col gap-3 @2xl:flex-row @2xl:flex-wrap @2xl:items-center @2xl:justify-between"
@@ -286,10 +278,10 @@
           variant="ghost"
           size="sm"
           class="self-start @2xl:self-auto"
-          onclick={goBackToMonthView}
+          onclick={goBackToPreviousView}
         >
           <ArrowLeft class="h-4 w-4 mr-2" />
-          Back to Month View
+          Back to Previous View
         </Button>
 
         <div class="flex items-center justify-center gap-2">
@@ -297,7 +289,7 @@
             variant="outline"
             size="icon"
             class="shrink-0"
-            onclick={goToPreviousDay}
+            onclick={() => goToDayOffset(-1)}
           >
             <ChevronLeft class="h-4 w-4" />
           </Button>
@@ -313,7 +305,7 @@
             variant="outline"
             size="icon"
             class="shrink-0"
-            onclick={goToNextDay}
+            onclick={() => goToDayOffset(1)}
           >
             <ChevronRight class="h-4 w-4" />
           </Button>
@@ -356,7 +348,8 @@
           <div>
             <div class="text-muted-foreground">CV</div>
             <div class="font-medium tabular-nums">
-              {(analysis?.glycemicVariability?.coefficientOfVariation ?? 0).toFixed(1)}%
+              {analysis?.glycemicVariability?.coefficientOfVariation?.toFixed(1) ??
+                "–"}%
             </div>
           </div>
           <div>
@@ -436,12 +429,14 @@
 
   <!-- Historical Prediction Scrubber + APS State -->
   {#if hasApsSnapshots}
-    <RetrospectiveTimeScrubber
-      date={currentDate}
-      bind:currentTime={scrubberTime}
-      onTimeChange={handleScrubberTimeChange}
-      stepMinutes={5}
-    />
+    <div class="print:hidden">
+      <RetrospectiveTimeScrubber
+        date={currentDate}
+        bind:currentTime={scrubberTime}
+        onTimeChange={handleScrubberTimeChange}
+        stepMinutes={5}
+      />
+    </div>
     <ApsStateCard snapshot={selectedSnapshot} />
   {/if}
 
@@ -454,7 +449,7 @@
           Treatments Timeline
         </Card.Title>
 
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 print:hidden">
           <Select.Root
             type="single"
             value={filterEventType ?? ""}
@@ -483,10 +478,11 @@
           {/if}
         </div>
       </div>
-      <Card.Description>Click on a treatment to edit it</Card.Description>
+      <Card.Description class="print:hidden">Click on a treatment to edit it</Card.Description>
     </Card.Header>
     <Card.Content>
       {#if filteredTreatments.length > 0}
+        <div class="overflow-x-auto print:overflow-visible">
         <Table.Root>
           <Table.Header>
             <Table.Row>
@@ -495,7 +491,7 @@
               {@render sortableHeader("carbs", "Carbs", true)}
               {@render sortableHeader("insulin", "Insulin", true)}
               <Table.Head>Notes</Table.Head>
-              <Table.Head class="w-[50px]"></Table.Head>
+              <Table.Head class="w-[50px] print:hidden"></Table.Head>
             </Table.Row>
           </Table.Header>
           <Table.Body>
@@ -506,12 +502,7 @@
                 onclick={() => handleTreatmentClick(row)}
               >
                 <Table.Cell class="font-medium">
-                  {row.mills
-                    ? new Date(row.mills).toLocaleTimeString(undefined, {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })
-                    : "—"}
+                  {row.mills ? time(row.mills) : "—"}
                 </Table.Cell>
                 <Table.Cell>
                   <Badge
@@ -544,7 +535,7 @@
                 >
                   —
                 </Table.Cell>
-                <Table.Cell>
+                <Table.Cell class="print:hidden">
                   <Button variant="ghost" size="icon" class="h-8 w-8">
                     <Edit class="h-4 w-4" />
                   </Button>
@@ -553,6 +544,7 @@
             {/each}
           </Table.Body>
         </Table.Root>
+        </div>
       {:else}
         <p class="text-center text-muted-foreground py-8">
           {filterEventType

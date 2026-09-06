@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.ClientDevices;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
@@ -23,6 +24,13 @@ public class InAppNotificationService : IInAppNotificationService
     private readonly INotificationTemplateRegistry _templateRegistry;
     private readonly Dictionary<string, INotificationActionHandler> _actionHandlers;
     private readonly ILogger<InAppNotificationService> _logger;
+
+    /// <summary>
+    /// Most active notifications one source may hold for a user at once. A create that would
+    /// exceed it archives the source's oldest active notifications as
+    /// <see cref="NotificationArchiveReason.Superseded"/>.
+    /// </summary>
+    public const int MaxActiveNotificationsPerSource = 10;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="InAppNotificationService"/> class.
@@ -86,16 +94,9 @@ public class InAppNotificationService : IInAppNotificationService
         var resolvedActions = actions ?? template?.DefaultActions;
         var resolvedConditions = resolutionConditions ?? template?.DefaultResolutionConditions;
 
-        var resolvedSourceForRateLimit = source ?? template?.Source;
-        if (resolvedSourceForRateLimit != null)
+        if (resolvedSource != null)
         {
-            var activeCount = await _repository.GetActiveCountBySourceAsync(
-                userId, resolvedSourceForRateLimit, cancellationToken);
-            if (activeCount >= 10)
-            {
-                throw new InvalidOperationException(
-                    $"Rate limit exceeded: source '{resolvedSourceForRateLimit}' has {activeCount} active notifications for user");
-            }
+            await SupersedeOldestOverCapAsync(userId, resolvedSource, cancellationToken);
         }
 
         var entity = new InAppNotificationEntity
@@ -138,16 +139,77 @@ public class InAppNotificationService : IInAppNotificationService
             );
         }
 
+        // Mirror qualifying non-alert notifications to the user's registered devices. Alerts reach
+        // devices via device_action channels, so alert.firing is excluded by Qualifies.
+        if (DeviceNotificationMirror.Qualifies(dto))
+        {
+            try
+            {
+                await _broadcastService.BroadcastDeviceNotificationAsync(
+                    new DeviceNotificationMirror { UserId = userId, Notification = dto });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to mirror notification {NotificationId} to devices", dto.Id);
+            }
+        }
+
         return dto;
+    }
+
+    /// <summary>
+    /// Archives a source's oldest active notifications so that one more create leaves the source
+    /// at <see cref="MaxActiveNotificationsPerSource"/>.
+    /// </summary>
+    private async Task SupersedeOldestOverCapAsync(
+        string userId,
+        string source,
+        CancellationToken cancellationToken
+    )
+    {
+        var active = await _repository.GetActiveBySourceAsync(userId, source, cancellationToken);
+        var overflow = active.Count - (MaxActiveNotificationsPerSource - 1);
+
+        for (var i = 0; i < overflow; i++)
+        {
+            await ArchiveNotificationAsync(
+                active[i].Id,
+                NotificationArchiveReason.Superseded,
+                userId,
+                cancellationToken
+            );
+        }
     }
 
     /// <inheritdoc />
     public async Task<bool> ArchiveNotificationAsync(
         Guid notificationId,
         NotificationArchiveReason reason,
+        string userId,
         CancellationToken cancellationToken = default
     )
     {
+        var notification = await _repository.GetByIdAsync(notificationId, cancellationToken);
+
+        if (notification == null)
+        {
+            _logger.LogWarning(
+                "Attempted to archive non-existent notification {NotificationId}",
+                notificationId
+            );
+            return false;
+        }
+
+        if (notification.UserId != userId)
+        {
+            _logger.LogWarning(
+                "User {UserId} attempted to archive notification {NotificationId} belonging to another user",
+                userId,
+                notificationId
+            );
+            return false;
+        }
+
         var archived = await _repository.ArchiveAsync(notificationId, reason, cancellationToken);
 
         if (archived == null)
@@ -257,6 +319,23 @@ public class InAppNotificationService : IInAppNotificationService
     }
 
     /// <inheritdoc />
+    public async Task<string?> GetNotificationTypeAsync(
+        Guid notificationId,
+        string userId,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var notification = await _repository.GetByIdAsync(notificationId, cancellationToken);
+
+        if (notification == null || notification.UserId != userId)
+        {
+            return null;
+        }
+
+        return notification.Type;
+    }
+
+    /// <inheritdoc />
     public async Task<bool> ExecuteActionAsync(
         Guid notificationId,
         string actionId,
@@ -299,6 +378,7 @@ public class InAppNotificationService : IInAppNotificationService
                 return await ArchiveNotificationAsync(
                     notificationId,
                     NotificationArchiveReason.Dismissed,
+                    userId,
                     cancellationToken
                 );
 
@@ -306,6 +386,7 @@ public class InAppNotificationService : IInAppNotificationService
                 return await ArchiveNotificationAsync(
                     notificationId,
                     NotificationArchiveReason.Completed,
+                    userId,
                     cancellationToken
                 );
 
@@ -325,7 +406,7 @@ public class InAppNotificationService : IInAppNotificationService
 
                     if (result.Archive is { } reason)
                     {
-                        await ArchiveNotificationAsync(notificationId, reason, cancellationToken);
+                        await ArchiveNotificationAsync(notificationId, reason, userId, cancellationToken);
                     }
 
                     return result.Handled;
@@ -340,6 +421,7 @@ public class InAppNotificationService : IInAppNotificationService
                 return await ArchiveNotificationAsync(
                     notificationId,
                     NotificationArchiveReason.Completed,
+                    userId,
                     cancellationToken
                 );
         }
@@ -372,7 +454,7 @@ public class InAppNotificationService : IInAppNotificationService
             return false;
         }
 
-        return await ArchiveNotificationAsync(notification.Id, reason, cancellationToken);
+        return await ArchiveNotificationAsync(notification.Id, reason, userId, cancellationToken);
     }
 
     private static readonly JsonSerializerOptions JsonOptions = new()

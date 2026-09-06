@@ -3,6 +3,7 @@
   import { createSettingsStore } from "$lib/stores/settings-store.svelte";
   import { createAuthStore } from "$lib/stores/auth-store.svelte";
   import { authInterceptorState } from "$lib/api/auth-interceptor";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
   import { onMount, onDestroy } from "svelte";
   import * as Sidebar from "$lib/components/ui/sidebar";
   import { AppSidebar, MobileHeader } from "$lib/components/layout";
@@ -11,14 +12,14 @@
   import { getDefaultSettings } from "$lib/components/settings/constants";
   import type { AlarmVisualSettings } from "$lib/types/alarm-profile";
   import type { TitleFaviconSettings } from "$lib/stores/serverSettings";
-  import { browser } from "$app/environment";
+  import { browser, dev } from "$app/environment";
   import { beforeNavigate } from "$app/navigation";
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
-  import AlertBanner from "$lib/components/alerts/AlertBanner.svelte";
-  import FiringToast from "$lib/components/alerts/FiringToast.svelte";
+  import AlertSurfaces from "$lib/components/alerts/AlertSurfaces.svelte";
   import DemoBanner from "$lib/components/layout/DemoBanner.svelte";
   import GuestBanner from "$lib/components/layout/GuestBanner.svelte";
+  import BackupSignInPrompt from "$lib/components/layout/BackupSignInPrompt.svelte";
   import MembershipRequestAutoSubmit from "$lib/components/members/MembershipRequestAutoSubmit.svelte";
   import { CommandPalette } from "$lib/components/command-palette";
   import { CoachMarkProvider } from "@nocturne/coach";
@@ -28,6 +29,7 @@
   import { sequences } from "$lib/coach-marks/sequences";
   import CoachParamHandler from "$lib/coach-marks/CoachParamHandler.svelte";
   import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
+  import ChartPrintPatterns from "$lib/components/charts/print/ChartPrintPatterns.svelte";
 
   // LocalStorage key for title/favicon settings
   const SETTINGS_STORAGE_KEY = "nocturne-title-favicon-settings";
@@ -44,6 +46,11 @@
 
   const { data, children } = $props<{ data: LayoutData; children: any }>();
 
+  // A tenantless host leaves the tenant-scoped surfaces below unmounted; see
+  // tenantless-navigation. Read once: the host cannot change without a fresh load.
+  // svelte-ignore state_referenced_locally
+  const tenantless: boolean = data.tenantless === true;
+
   const realtimeStore = createRealtimeStore(config);
   createAuthStore(); // Initialize auth store in context
 
@@ -54,19 +61,12 @@
   });
 
   // Create settings store in context for the entire app
-  // This makes feature settings available on all pages including the main dashboard
-  createSettingsStore();
+  // This makes feature settings available on all pages including the main dashboard.
+  createSettingsStore(!tenantless);
 
   let commandPaletteOpen = $state(false);
 
-  let tenantSlug = $state<string | undefined>(undefined);
-  $effect(() => {
-    if (!browser) return;
-    const parts = window.location.hostname.split(".");
-    if (parts.length > 2) tenantSlug = parts[0];
-  });
-
-  const coachMarkAdapter = createCoachMarkAdapter();
+  const coachMarkAdapter = createCoachMarkAdapter(tenantless);
 
   // Title/Favicon service for dynamic updates
   const titleFaviconService = getTitleFaviconService();
@@ -206,8 +206,9 @@
 
 <CoachMarkProvider adapter={coachMarkAdapter} {sequences} onBeforeNavigate={beforeNavigate}>
   <CoachParamHandler />
+  <ChartPrintPatterns />
   <Sidebar.Provider>
-    <AppSidebar user={data.user} isPlatformAdmin={data.isPlatformAdmin} isPlatformAccessGrant={data.isPlatformAccessGrant} isGuestSession={data.isGuestSession} />
+    <AppSidebar user={data.user} isPlatformAdmin={data.isPlatformAdmin} isPlatformAccessGrant={data.isPlatformAccessGrant} isGuestSession={data.isGuestSession} currentSlug={data.tenantSlug} baseDomain={data.baseDomain} tenantless={data.tenantless} />
     <Sidebar.Inset>
       <MobileHeader />
       {#if data.isDemo}
@@ -216,20 +217,23 @@
       {#if data.isGuestSession && data.guestExpiresAt}
         <GuestBanner expiresAt={data.guestExpiresAt} />
       {/if}
-      <MembershipRequestAutoSubmit
-        isAuthenticated={!!data.user}
-        isGuestSession={data.isGuestSession}
-        {tenantSlug}
-      />
-      <AlertBanner />
-      <FiringToast />
+      {#if !tenantless && data.user && !data.isGuestSession && !data.isDemo}
+        <BackupSignInPrompt />
+      {/if}
+      {#if !tenantless}
+        <MembershipRequestAutoSubmit
+          isAuthenticated={!!data.user}
+          isGuestSession={data.isGuestSession}
+        />
+        <AlertSurfaces />
+      {/if}
       <main class="flex-1 overflow-auto">
         <svelte:boundary>
           {@render children()}
 
           {#snippet failed(e, reset)}
-            {@const message = e instanceof Error ? e.message : typeof e === 'string' ? e : 'An unexpected error occurred'}
-            {@const stack = e instanceof Error ? e.stack : undefined}
+            {@const message = e instanceof Error ? e.message : typeof e === 'string' ? e : remoteErrorMessage(e, 'An unexpected error occurred')}
+            {@const stack = dev && e instanceof Error ? e.stack : undefined}
             <Card.Root class="mx-auto mt-10 max-w-2xl">
               <Card.Header>
                 <Card.Title>Something went wrong</Card.Title>
@@ -250,5 +254,5 @@
       </main>
     </Sidebar.Inset>
   </Sidebar.Provider>
-  <CommandPalette bind:open={commandPaletteOpen} />
+  <CommandPalette bind:open={commandPaletteOpen} {tenantless} />
 </CoachMarkProvider>

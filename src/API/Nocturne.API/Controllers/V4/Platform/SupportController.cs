@@ -23,8 +23,10 @@ public class SupportController(
     private const long MaxImageBytes = 10 * 1024 * 1024; // 10 MB per image
     private const long MaxTotalBytes = 40 * 1024 * 1024; // 40 MB total
 
+    // No [RemoteCommand]: command arguments are devalue-serialised and cannot
+    // carry File objects. The frontend submits through the hand-maintained
+    // form remote in support.remote.ts, which models the multipart upload.
     [HttpPost("issues")]
-    [RemoteCommand]
     [EnableRateLimiting("support-issues")]
     [RequestSizeLimit(MaxTotalBytes)]
     [ProducesResponseType(typeof(CreateIssueResponse), StatusCodes.Status201Created)]
@@ -159,15 +161,22 @@ public class SupportController(
 
     /// <summary>
     /// Returns operator support configuration for the frontend.
-    /// When no operator is configured, accountBilling is null and the default GitHub flow applies.
+    /// When no operator is configured, both channels are null and the default GitHub flow applies.
     /// </summary>
+    /// <remarks>
+    /// Anonymous because the hosts that most need the operator's address — an inactive tenant's,
+    /// and the apex with no tenant — are the ones no session can be established on.
+    /// </remarks>
     [HttpGet("config")]
+    [AllowAnonymous]
     [RemoteQuery]
     [ProducesResponseType(typeof(SupportConfigResponse), StatusCodes.Status200OK)]
     public ActionResult<SupportConfigResponse> GetSupportConfig()
     {
         var config = operatorOptions.Value;
         var ab = config.Support.AccountBilling;
+        var portal = config.Support.AccountPortal;
+        var operatorLabel = config.Name is not null ? $"Contact {config.Name}" : null;
 
         return Ok(new SupportConfigResponse
         {
@@ -176,7 +185,14 @@ public class SupportController(
                 {
                     Mode = ab.Mode == OperatorSupportMode.Redirect ? "redirect" : "api",
                     Url = ab.Url,
-                    Label = ab.Label ?? (config.Name is not null ? $"Contact {config.Name}" : null),
+                    Label = ab.Label ?? operatorLabel,
+                }
+                : null,
+            AccountPortal = portal is not null && !string.IsNullOrWhiteSpace(portal.Url)
+                ? new AccountPortalConfig
+                {
+                    Url = portal.Url,
+                    Label = portal.Label ?? operatorLabel,
                 }
                 : null,
         });

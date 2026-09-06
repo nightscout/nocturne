@@ -12,6 +12,12 @@ public static class TwiistConstants
     public const string FollowerServiceBaseUrl = "https://follower-service.mytwiistportal.com";
 
     /// <summary>
+    /// Endpoint listing the PWDs (people with diabetes) this follower account can see,
+    /// each with its pwdId. Used to auto-discover the patient id.
+    /// </summary>
+    public const string OverviewsPath = "/pwd/overviews";
+
+    /// <summary>
     /// User-Agent string mimicking the Twiist Insight iOS app.
     /// </summary>
     public const string UserAgent = "twiist insiight/1.0.2 CFNetwork/1568.100.1.2.3 Darwin/24.0.0";

@@ -11,7 +11,15 @@ public interface IAuditContext
     string? AuthType { get; }
     string? IpAddress { get; }
     Guid? TokenId { get; }
-    string? CorrelationId { get; }
+
+    /// <summary>
+    /// Request trace identifier, persisted to the audit logs' <c>correlation_id</c> column.
+    /// Distinct from the V4 decomposition correlation on
+    /// <c>Nocturne.Infrastructure.Data.Entities.IV4Entity.CorrelationId</c>, which links records
+    /// decomposed from one legacy record.
+    /// </summary>
+    string? TraceId { get; }
+
     string? Endpoint { get; }
 
     /// <summary>

@@ -7,6 +7,8 @@
   import type { GlucoseChartContext, LegendState } from "./chart-context.svelte";
   import { setGlucoseChartContext } from "./chart-context.svelte";
   import { computeTrackLayout } from "./engine/track-layout";
+  import { hourLabel } from "$lib/utils/formatting";
+  import { hourTicks } from "./engine/axis-ticks";
 
   interface Props {
     engine: ChartDataEngine;
@@ -90,7 +92,8 @@
   setGlucoseChartContext(ctx);
 </script>
 
-<div class="{heightClass} w-full @container">
+<!-- print:break-inside-auto lets a tall multi-day chart flow across pages instead of being clipped by the global break-inside:avoid on svg. -->
+<div class="{heightClass} w-full @container print:break-inside-auto">
   <Chart
     data={engine.glucoseData}
     x={(d) => d.time}
@@ -99,7 +102,7 @@
     xDomain={[chartXDomain.from, chartXDomain.to]}
     yDomain={[0, engine.glucoseYMax]}
     {padding}
-    tooltip={{ mode: "quadtree-x" }}
+    tooltipContext={{ mode: "quadtree-x" }}
   >
     {#snippet children({ context })}
       {(chartHeight = context.height, chartWidth = context.width, "")}
@@ -112,7 +115,8 @@
         {#if showTimeAxis}
           <Axis
             placement="bottom"
-            format="hour"
+            ticks={hourTicks}
+            format={(v) => (v instanceof Date ? hourLabel(v) : String(v))}
             tickLabelProps={{ class: "text-xs fill-muted-foreground" }}
           />
         {/if}
@@ -125,18 +129,11 @@
       {#if onSelectionChange}
         <BrushContext
           axis="x"
-          mode="separated"
-          xDomain={selectionDomain ?? [chartXDomain.from, chartXDomain.to]}
+          x={selectionDomain ?? [chartXDomain.from, chartXDomain.to]}
           onChange={(e) => {
-            if (
-              e.xDomain &&
-              Array.isArray(e.xDomain) &&
-              e.xDomain.length === 2
-            ) {
-              onSelectionChange?.([
-                new Date(e.xDomain[0]!),
-                new Date(e.xDomain[1]!),
-              ]);
+            const [start, end] = e.brush.x ?? [];
+            if (start != null && end != null) {
+              onSelectionChange?.([new Date(start), new Date(end)]);
             }
           }}
           classes={{

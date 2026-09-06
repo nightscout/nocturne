@@ -1,9 +1,13 @@
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Models.Requests.V4;
+using Nocturne.API.Services.Devices;
+using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Controllers.V4.Treatments;
 
@@ -12,8 +16,6 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 /// Exposes standard V4 CRUD operations via <see cref="V4CrudControllerBase{TModel,TCreateRequest,TUpdateRequest,TRepository}"/>.
 /// </summary>
 /// <remarks>
-/// The <c>GET /</c> list endpoint is cached for 90 seconds (varying by all query string parameters).
-///
 /// On update, immutable fields (<see cref="Bolus.BolusType"/>, <see cref="Bolus.Kind"/>,
 /// <see cref="Bolus.LegacyId"/>, <see cref="Bolus.CreatedAt"/>, <see cref="Bolus.PumpRecordId"/>,
 /// <see cref="Bolus.DeviceId"/>, and <see cref="Bolus.AdditionalProperties"/>) are preserved from the
@@ -24,17 +26,32 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 /// <seealso cref="Bolus"/>
 /// <seealso cref="CreateBolusRequest"/>
 /// <seealso cref="UpdateBolusRequest"/>
+/// <seealso cref="PatientDeviceAttribution"/>
 [ApiController]
 [Tags("Treatments")]
 [Route("api/v4/insulin/boluses")]
-[Authorize]
+[RequireScope(Scope.TreatmentsRead)]
 [Produces("application/json")]
-public class BolusController(IBolusRepository repo, IPatientInsulinRepository insulinRepo)
+public class BolusController(
+    IBolusRepository repo,
+    IPatientInsulinRepository insulinRepo,
+    IPatientDeviceRepository patientDevices,
+    IPatientDeviceStamper deviceStamper)
     : V4CrudControllerBase<Bolus, CreateBolusRequest, UpdateBolusRequest, IBolusRepository>(repo)
 {
     /// <inheritdoc/>
-    /// <remarks>Response is cached for 90 seconds, varying by all query parameters.</remarks>
-    [ResponseCache(Duration = 90, VaryByQueryKeys = new[] { "*" })]
+    /// <remarks>Boluses are treatments; the legacy equivalent is a v1 insulin treatment.</remarks>
+    public override string WriteScope => Scope.TreatmentsReadWrite;
+
+    /// <inheritdoc/>
+    protected override V4BulkNaming BulkNaming => new("Bolus", "bolus", "boluses");
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Never cached, per <see cref="Profiles.ProfileController.GetProfileSummary"/>: a just-entered
+    /// bolus must not be invisible until a cached list body expires.
+    /// </remarks>
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     public override Task<ActionResult<PaginatedResponse<Bolus>>> GetAll(
         [FromQuery] DateTime? from, [FromQuery] DateTime? to,
         [FromQuery] int limit = 100, [FromQuery] int offset = 0,
@@ -44,43 +61,22 @@ public class BolusController(IBolusRepository repo, IPatientInsulinRepository in
         => base.GetAll(from, to, limit, offset, sort, device, source, ct);
 
     /// <inheritdoc/>
-    public override async Task<ActionResult<Bolus>> Create([FromBody] CreateBolusRequest request, CancellationToken ct = default)
+    /// <remarks>
+    /// V4 REST writes bypass the connector/decomposer ingest paths, so attribution happens here —
+    /// otherwise direct API records stay unstamped and only ever surface as pseudo-devices.
+    /// </remarks>
+    protected override async Task<ObjectResult?> OnBeforeCreateAsync(Bolus model, CreateBolusRequest request, CancellationToken ct)
     {
-        var model = MapCreateToModel(request);
-
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
-
         await EnrichInsulinContextAsync(model, request.PatientInsulinId, ct);
-
-        var created = await Repository.CreateAsync(model, ct);
-        created = await OnAfterCreateAsync(created, ct);
-        return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+        return await ApplyAttributionAsync(model, request.PatientDeviceId, existing: null, ct);
     }
 
     /// <inheritdoc/>
-    public override async Task<ActionResult<Bolus>> Update(Guid id, [FromBody] UpdateBolusRequest request, CancellationToken ct = default)
+    protected override async Task<ObjectResult?> OnBeforeUpdateAsync(
+        Bolus model, UpdateBolusRequest request, Bolus existing, CancellationToken ct)
     {
-        var existing = await Repository.GetByIdAsync(id, ct);
-        if (existing is null)
-            return NotFound();
-
-        var model = MapUpdateToModel(id, request, existing);
-
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
-
         await EnrichInsulinContextAsync(model, request.PatientInsulinId, ct);
-
-        try
-        {
-            var updated = await Repository.UpdateAsync(id, model, ct);
-            return Ok(updated);
-        }
-        catch (KeyNotFoundException)
-        {
-            return NotFound();
-        }
+        return await ApplyAttributionAsync(model, request.PatientDeviceId, existing.PatientDeviceId, ct);
     }
 
     /// <summary>Maps a <see cref="CreateBolusRequest"/> to a new <see cref="Bolus"/> domain model.</summary>
@@ -141,11 +137,27 @@ public class BolusController(IBolusRepository repo, IPatientInsulinRepository in
         AdditionalProperties = existing.AdditionalProperties,
     };
 
+    /// <inheritdoc/>
+    protected override async Task<ObjectResult?> OnBeforeBulkCreateAsync(
+        IReadOnlyList<Bolus> models, IReadOnlyList<CreateBolusRequest> requests, CancellationToken ct)
+    {
+        for (var i = 0; i < models.Count; i++)
+            await EnrichInsulinContextAsync(models[i], requests[i].PatientInsulinId, ct);
+
+        var error = await PatientDeviceAttribution.ApplyManyAsync(
+            [.. models.Select((m, i) => ((IDeviceAttributed)m, requests[i].PatientDeviceId))],
+            patientDevices, deviceStamper, DeviceAttributionCategories.Bolus, batchSource: null, ct);
+
+        return error is null ? null : Problem(detail: error, statusCode: 400, title: "Bad Request");
+    }
+
     /// <summary>
     /// Delete a bolus by its external sync identifier (dataSource + syncIdentifier pair).
     /// </summary>
     [HttpDelete("by-sync-id")]
+    [RequireDeclaredWriteScope]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult> DeleteBySyncIdentifier(
@@ -156,8 +168,22 @@ public class BolusController(IBolusRepository repo, IPatientInsulinRepository in
         if (string.IsNullOrEmpty(dataSource) || string.IsNullOrEmpty(syncIdentifier))
             return BadRequest("dataSource and syncIdentifier are required");
 
-        var deleted = await ((IBolusRepository)Repository).DeleteBySyncIdentifierAsync(dataSource, syncIdentifier, ct);
+        var deleted = await ((IBolusRepository)Repository).DeleteBySyncIdentifierAsync(dataSource, syncIdentifier, WriteOrigin.Live, ct);
         return deleted > 0 ? NoContent() : NotFound();
+    }
+
+    /// <summary>
+    /// Settles the bolus's device attribution from the request. Returns a 400 result when an explicit
+    /// id doesn't resolve (tenant scoping makes a cross-tenant id indistinguishable from a nonexistent
+    /// one), or <c>null</c> on success.
+    /// </summary>
+    private async Task<ObjectResult?> ApplyAttributionAsync(Bolus model, Guid? requested, Guid? existing, CancellationToken ct)
+    {
+        var error = await PatientDeviceAttribution.ApplyAsync(
+            model, requested, existing, patientDevices, deviceStamper,
+            DeviceAttributionCategories.Bolus, ct);
+
+        return error is null ? null : Problem(detail: error, statusCode: 400, title: "Bad Request");
     }
 
     private async Task EnrichInsulinContextAsync(Bolus model, Guid? patientInsulinId, CancellationToken ct)

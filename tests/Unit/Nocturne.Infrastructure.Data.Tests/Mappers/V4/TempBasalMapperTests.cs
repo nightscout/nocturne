@@ -287,26 +287,27 @@ public class TempBasalMapperTests
         entity.Origin.Should().Be("Algorithm");
         entity.DeviceId.Should().Be(newDeviceId);
         entity.PumpRecordId.Should().Be("pump-rec-002");
-        entity.SysUpdatedAt.Should().BeAfter(originalCreatedAt);
     }
 
     [Fact]
     [Trait("Category", "Unit")]
-    public void UpdateEntity_SetsUpdatedAtTimestamp()
+    public void UpdateEntity_DoesNotTouchSysUpdatedAt()
     {
+        var stale = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         var entity = new TempBasalEntity
         {
             Id = Guid.CreateVersion7(),
-            SysCreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-            SysUpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            SysCreatedAt = stale,
+            SysUpdatedAt = stale,
             Origin = "Manual"
         };
-        var beforeUpdate = DateTime.UtcNow;
 
         var model = new TempBasal { StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime, Rate = 1.0 };
         TempBasalMapper.UpdateEntity(entity, model);
 
-        entity.SysUpdatedAt.Should().BeOnOrAfter(beforeUpdate);
+        // NocturneDbContext.UpdateTimestamps stamps sys_updated_at, and only for rows with a
+        // real modification; a mapper stamp would force an UPDATE on no-op upserts.
+        entity.SysUpdatedAt.Should().Be(stale);
     }
 
     [Fact]
@@ -428,5 +429,43 @@ public class TempBasalMapperTests
             roundTripped.Origin.Should().Be(origin,
                 because: $"TempBasalOrigin.{origin} should survive a round trip");
         }
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void ToDomainModel_MalformedAdditionalPropertiesJson_YieldsNoAdditionalProperties()
+    {
+        var entity = new TempBasalEntity
+        {
+            Id = Guid.CreateVersion7(),
+            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime,
+            Rate = 1.0,
+            Origin = "Algorithm",
+            AdditionalPropertiesJson = """{"unterminated":""",
+        };
+
+        var model = TempBasalMapper.ToDomainModel(entity);
+
+        model.AdditionalProperties.Should().BeNull(
+            "one unparseable jsonb row must not fail the read of every record around it");
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void ToDomainModel_MalformedInsulinContextJson_YieldsNoInsulinContext()
+    {
+        var entity = new TempBasalEntity
+        {
+            Id = Guid.CreateVersion7(),
+            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime,
+            Rate = 1.0,
+            Origin = "Algorithm",
+            InsulinContextJson = """{"insulinName":""",
+        };
+
+        var model = TempBasalMapper.ToDomainModel(entity);
+
+        model.InsulinContext.Should().BeNull(
+            "one unparseable jsonb row must not fail the read of every record around it");
     }
 }

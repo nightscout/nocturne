@@ -10,6 +10,8 @@ import {
 import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
 import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
 import { getChartData } from "$api/chart-data.remote";
+import { remoteErrorMessage } from "$lib/api/remote-error";
+import { PREDICTIONS_UNAVAILABLE } from "$lib/api/predictions-messages";
 import {
   getPredictions,
   getPredictionStatus,
@@ -24,6 +26,8 @@ import {
 import { mergeChartData } from "$lib/utils/chart-data-merge";
 import type { TransformedChartData } from "$lib/utils/chart-data-transform";
 import { getGlucoseColor } from "$lib/utils/chart-colors";
+import { stableBy } from "$lib/utils/stable-by";
+import { resolveGlucoseThresholds } from "$lib/constants/glucose-thresholds";
 import { bisector } from "d3";
 
 // ===== Data Point Types =====
@@ -110,6 +114,7 @@ export interface TrackerMarkerData {
 /** A state span (pump mode, override, profile, activity, temp basal, basal delivery) */
 export interface StateSpan {
   id?: string;
+  kind?: string;
   category?: StateSpanCategory;
   state?: string;
   startTime: Date;
@@ -172,6 +177,13 @@ export const TREATMENT_PROXIMITY_MS = 5 * 60 * 1000;
 // ===== Options & Interfaces =====
 
 export interface ChartDataEngineOptions {
+  /**
+   * Pass as a getter (`get dateRange() { … }`) wherever this can change while the
+   * engine lives: read into a plain object literal it is captured once, and the
+   * engine goes on fetching and drawing the window it was constructed with. A
+   * consumer that instead re-creates the engine per window — `{#key}` around an
+   * `{@const}` — may pass the value directly.
+   */
   dateRange?: { from: Date | string; to: Date | string };
   focusHours?: number;
   initialChartData?: TransformedChartData | null;
@@ -179,6 +191,18 @@ export interface ChartDataEngineOptions {
   externalPredictionData?: PredictionData | null;
   enablePredictions?: boolean;
   demoMode?: boolean;
+  /**
+   * How wide a window the consumer draws, and so how far the realtime merge may
+   * reach. `"buffer"` is `fullDataRange` — `dateRange` when one was named, the
+   * 48-hour buffer otherwise — which is what `fullXDomain` spans and therefore
+   * what anything rendering the mini overview needs, however it was fed.
+   * `"display"` is the visible window alone, for a consumer that renders nothing
+   * wider: the sidebar sparkline, the clock faces.
+   *
+   * Defaults to `"buffer"`: over-reaching costs points a chart declines to draw,
+   * where under-reaching silently drops points it is drawing.
+   */
+  dataWindow?: "buffer" | "display";
   /** Fired once when `serverChartData` first becomes non-null. */
   onDataReady?: () => void;
 }
@@ -250,6 +274,8 @@ export interface ChartDataEngine {
     veryLow: number;
     veryHigh: number;
     glucoseYMax: number;
+    targetLow: number | null;
+    targetHigh: number | null;
   };
   readonly medianGlucose: number;
 
@@ -285,11 +311,18 @@ export function createChartDataEngine(
   const isBrowser = typeof window !== "undefined";
 
   // ---- Mutable state ----
+  // `$state.raw`, not `$state`: serverChartData holds large arrays of glucose
+  // points, markers, and spans that are only ever reassigned wholesale (never
+  // deep-mutated). Deep-proxying them makes every $derived scan register a
+  // per-element dependency, turning reaction-graph reconciliation O(N^2). The
+  // realtime store uses `.raw` on its arrays for the same reason.
   // svelte-ignore state_referenced_locally
-  let serverChartData = $state<TransformedChartData | null>(
+  let serverChartData = $state.raw<TransformedChartData | null>(
     options.initialChartData ?? null
   );
-  let predictionData = $state<PredictionData | null>(null);
+  // `.raw` for the same reason as serverChartData: prediction series are
+  // reassigned wholesale, never deep-mutated.
+  let predictionData = $state.raw<PredictionData | null>(null);
   let predictionError = $state<string | null>(null);
   let predictionServiceAvailable = $state(false);
   let processedHistoricalPromise =
@@ -360,11 +393,20 @@ export function createChartDataEngine(
         : fullDataRange.to,
   });
 
+  // ---- Data range ----
+  // How far the realtime merge may reach: the window the consumer draws, per
+  // `dataWindow`. The realtime store holds the last 1000 readings — several days
+  // of them — so merging over `fullDataRange` for a consumer that draws only the
+  // visible window hands its chart points it will never render.
+  const dataRange = $derived(
+    options.dataWindow === "display" ? displayDateRange : fullDataRange
+  );
+
   // ---- Stable fetch range ----
-  // Fetch only the visible window when no dateRange or preloaded data is
-  // configured. The wider `fullDataRange` (48h) is used by the MiniOverview
-  // on the dashboard, which preloads data via SSR — so consumers that hit
-  // this fetch path (sidebar widget, clock face) don't need the full buffer.
+  // Fetch only the visible window when no dateRange is configured. The wider
+  // `fullDataRange` (48h) is used by the MiniOverview on the dashboard, which
+  // preloads data via SSR — so consumers that hit this fetch path (sidebar
+  // widget, clock face) don't need the full buffer.
   const stableFetchRange = $derived.by(() => {
     if (!isBrowser) return null;
     const range = options.dateRange ? fullDataRange : displayDateRange;
@@ -421,7 +463,7 @@ export function createChartDataEngine(
       .catch((err) => {
         if (!cancelled) {
           console.error("Failed to fetch predictions:", err);
-          predictionError = err.message;
+          predictionError = remoteErrorMessage(err, PREDICTIONS_UNAVAILABLE);
           predictionData = null;
         }
       });
@@ -526,41 +568,62 @@ export function createChartDataEngine(
   // A keyed {#each} downstream requires a unique key per point, so the same
   // mills value must never appear twice — even if base or realtimeStore
   // emit duplicates.
-  const glucoseData = $derived.by(() => {
-    const base = serverChartData?.glucoseData ?? [];
-    if (!serverChartData) return base as GlucosePoint[];
+  //
+  // Keyed on its four inputs rather than merged on each evaluation. A derived
+  // Svelte has flagged dirty stays dirty for as long as more than one batch is
+  // alive — the whole time a page-level `<svelte:boundary>` is awaiting — so it
+  // is re-executed on every read, not once per change. This is the most-read
+  // series in the app, and a fresh array from it re-dirties the chart's entire
+  // extent and scale chain, which reads it again. See the note on `stableBy`.
+  const mergeGlucose = stableBy(
+    (
+      chartData: TransformedChartData | null,
+      entries: typeof realtimeStore.entries,
+      fromMs: number,
+      toMs: number
+    ): GlucosePoint[] => {
+      const base = chartData?.glucoseData ?? [];
+      if (!chartData) return base as GlucosePoint[];
 
-    const thresholds = serverChartData.thresholds;
-    const fromMs = fullDataRange.from.getTime();
-    const toMs = fullDataRange.to.getTime();
+      const thresholds = resolveGlucoseThresholds(chartData.thresholds);
 
-    const byMills = new Map<number, GlucosePoint>();
-    for (const p of base) byMills.set(p.time.getTime(), p);
+      const byMills = new Map<number, GlucosePoint>();
+      for (const p of base) byMills.set(p.time.getTime(), p);
 
-    for (const e of realtimeStore.entries) {
-      if (
-        e.type !== "sgv" ||
-        e.mills == null ||
-        e.sgv == null ||
-        e.mills < fromMs ||
-        e.mills > toMs ||
-        byMills.has(e.mills)
-      ) {
-        continue;
+      for (const e of entries) {
+        if (
+          e.type !== "sgv" ||
+          e.mills == null ||
+          e.sgv == null ||
+          e.mills < fromMs ||
+          e.mills > toMs ||
+          byMills.has(e.mills)
+        ) {
+          continue;
+        }
+        byMills.set(e.mills, {
+          time: new Date(e.mills),
+          sgv: e.sgv,
+          direction: e.direction,
+          dataSource: e.data_source,
+          color: getGlucoseColor(e.sgv, thresholds),
+        });
       }
-      byMills.set(e.mills, {
-        time: new Date(e.mills),
-        sgv: e.sgv,
-        direction: e.direction,
-        dataSource: e.data_source,
-        color: getGlucoseColor(e.sgv, thresholds),
-      });
-    }
 
-    return [...byMills.values()].sort(
-      (a, b) => a.time.getTime() - b.time.getTime()
-    ) as GlucosePoint[];
-  });
+      return [...byMills.values()].sort(
+        (a, b) => a.time.getTime() - b.time.getTime()
+      ) as GlucosePoint[];
+    }
+  );
+
+  const glucoseData = $derived(
+    mergeGlucose(
+      serverChartData,
+      realtimeStore.entries,
+      dataRange.from.getTime(),
+      dataRange.to.getTime()
+    )
+  );
 
   // ---- Series derivations ----
   const bolusMarkers = $derived(
@@ -596,19 +659,22 @@ export function createChartDataEngine(
   );
 
   // ---- Thresholds ----
-  // `||` rather than `??` so a server-side 0 (no profile yet) falls back to
-  // the default rather than collapsing the lines onto the X axis.
-  const lowThreshold = $derived(serverChartData?.thresholds?.low || 55);
-  const highThreshold = $derived(serverChartData?.thresholds?.high || 180);
-  const veryHighThreshold = $derived(
-    serverChartData?.thresholds?.veryHigh || 250
+  // The tenant's own cut-points, with the shared fallback filling any the server
+  // omitted (it sends 0 when there is no profile yet).
+  const resolvedThresholds = $derived(
+    resolveGlucoseThresholds(serverChartData?.thresholds)
   );
-  const veryLowThreshold = $derived(
-    serverChartData?.thresholds?.veryLow || 40
-  );
+  const lowThreshold = $derived(resolvedThresholds.low);
+  const highThreshold = $derived(resolvedThresholds.high);
+  const veryHighThreshold = $derived(resolvedThresholds.veryHigh);
+  const veryLowThreshold = $derived(resolvedThresholds.veryLow);
   const glucoseYMax = $derived(
     serverChartData?.thresholds?.glucoseYMax || 300
   );
+  // Personal target reference line; `??` (not `||`) so a legitimate 0 isn't
+  // dropped, and absent target (no profile) stays null rather than rendering.
+  const targetLow = $derived(serverChartData?.thresholds?.targetLow ?? null);
+  const targetHigh = $derived(serverChartData?.thresholds?.targetHigh ?? null);
 
   const medianGlucose = $derived.by(() => {
     if (glucoseData.length === 0) return 100;
@@ -943,6 +1009,8 @@ export function createChartDataEngine(
         veryLow: veryLowThreshold,
         veryHigh: veryHighThreshold,
         glucoseYMax,
+        targetLow,
+        targetHigh,
       };
     },
     get medianGlucose() { return medianGlucose; },

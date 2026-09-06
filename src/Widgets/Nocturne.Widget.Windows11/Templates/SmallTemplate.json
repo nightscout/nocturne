@@ -12,33 +12,51 @@
                     "size": "ExtraLarge",
                     "weight": "Bolder",
                     "horizontalAlignment": "Center",
-                    "color": "Default"
+                    "color": "${if(hasAlarm, alarmColor, if(stale, 'Attention', 'Default'))}"
                 },
                 {
                     "type": "TextBlock",
-                    "text": "${direction}",
-                    "size": "Large",
+                    "text": "${direction} ${delta}",
+                    "size": "Medium",
                     "horizontalAlignment": "Center",
                     "spacing": "None"
-                },
-                {
-                    "type": "TextBlock",
-                    "text": "${lastUpdate}",
-                    "size": "Small",
-                    "horizontalAlignment": "Center",
-                    "isSubtle": true,
-                    "spacing": "Small"
                 }
             ],
             "verticalContentAlignment": "Center",
             "height": "stretch"
-        }
-    ],
-    "actions": [
+        },
         {
-            "type": "Action.Execute",
-            "title": "Refresh",
-            "verb": "refresh"
+            "type": "ColumnSet",
+            "spacing": "Small",
+            "columns": [
+                {
+                    "type": "Column",
+                    "width": "stretch",
+                    "verticalContentAlignment": "Center",
+                    "items": [
+                        {
+                            "type": "TextBlock",
+                            "text": "${lastUpdate}",
+                            "size": "Small",
+                            "isSubtle": true
+                        }
+                    ]
+                },
+                {
+                    "type": "Column",
+                    "width": "auto",
+                    "verticalContentAlignment": "Center",
+                    "items": [
+                        {
+                            "type": "Image",
+                            "url": "${refreshIcon}",
+                            "width": "16px",
+                            "altText": "Refresh",
+                            "selectAction": { "type": "Action.Execute", "verb": "refresh" }
+                        }
+                    ]
+                }
+            ]
         }
     ],
     "selectAction": {

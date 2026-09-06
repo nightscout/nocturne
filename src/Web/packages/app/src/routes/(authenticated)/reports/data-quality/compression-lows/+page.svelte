@@ -1,4 +1,7 @@
 <script lang="ts">
+	import { page } from '$app/state';
+	import { toast } from 'svelte-sonner';
+	import { permissionGatedMutationError } from '$lib/forms';
 	import { Button } from '$lib/components/ui/button';
 	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
 	import { Badge } from '$lib/components/ui/badge';
@@ -32,8 +35,23 @@
 	import AlertTriangle from 'lucide-svelte/icons/triangle-alert';
 	import History from 'lucide-svelte/icons/history';
 	import ArrowLeft from 'lucide-svelte/icons/arrow-left';
-	import { time } from '$lib/utils/formatting';
+	import { bg, bgLabel, formatShortDate, time } from "$lib/utils/formatting";
 	import type { CompressionLowSuggestion } from '$lib/api';
+
+	const effectivePermissions: string[] = $derived(
+		(page.data as any).effectivePermissions ?? []
+	);
+	// Accepting, dismissing, deleting and re-running detection all write state
+	// spans and suggestion rows, so the server gates them on glucose.readwrite.
+	const canReviewSuggestions = $derived(
+		effectivePermissions.includes('*') ||
+			effectivePermissions.includes('glucose.readwrite')
+	);
+	const NEEDS_GLUCOSE_READWRITE =
+		'Reviewing compression lows requires the glucose.readwrite permission.';
+
+	const mutationError = (err: unknown) =>
+		permissionGatedMutationError(err, NEEDS_GLUCOSE_READWRITE);
 
 	// Create resource with automatic layout registration - load ALL suggestions
 	const suggestionsResource = contextResource(
@@ -145,6 +163,8 @@
 			suggestionsResource.refresh();
 			selectedSuggestions = new Set();
 			selectNextSuggestion(firstSelectedIndex);
+		} catch (err) {
+			toast.error(mutationError(err));
 		} finally {
 			isLoading = false;
 		}
@@ -162,6 +182,8 @@
 			suggestionsResource.refresh();
 			selectedSuggestions = new Set();
 			selectNextSuggestion(firstSelectedIndex);
+		} catch (err) {
+			toast.error(mutationError(err));
 		} finally {
 			isLoading = false;
 		}
@@ -179,6 +201,8 @@
 			suggestionsResource.refresh();
 			selectedSuggestions = new Set();
 			selectNextSuggestion(firstSelectedIndex);
+		} catch (err) {
+			toast.error(mutationError(err));
 		} finally {
 			isLoading = false;
 		}
@@ -212,6 +236,8 @@
 			});
 			detectionResult = result;
 			suggestionsResource.refresh();
+		} catch (err) {
+			toast.error(mutationError(err));
 		} finally {
 			isLoading = false;
 		}
@@ -225,17 +251,6 @@
 				return X;
 			default:
 				return Clock;
-		}
-	}
-
-	function getStatusColor(status: string | undefined): string {
-		switch (status?.toLowerCase()) {
-			case 'accepted':
-				return 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400';
-			case 'dismissed':
-				return 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400';
-			default:
-				return 'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400';
 		}
 	}
 
@@ -256,9 +271,8 @@
 		const date = nightOf instanceof Date ? nightOf : new Date(nightOf);
 		const nextDay = new Date(date);
 		nextDay.setDate(nextDay.getDate() + 1);
-		const dateStr = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-		const nextDayStr = nextDay.toLocaleDateString(undefined, { day: 'numeric', year: 'numeric' });
-		return `Night of ${dateStr}-${nextDayStr}`;
+		// `{ day, year }` has no CLDR pattern; ICU renders it as "2026 (day: 30)".
+		return `Night of ${formatShortDate(date)} \u2013 ${formatShortDate(nextDay, true)}`;
 	}
 
 	const chartDateRange = $derived.by(() => {
@@ -288,7 +302,7 @@
 	<div class="@container container mx-auto space-y-6 p-3 @md:p-6">
 		<div class="flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between">
 			<div class="flex items-center gap-4">
-				<Button href="/reports/data-quality" variant="ghost" size="icon">
+				<Button href="/reports/data-quality" variant="ghost" size="icon" class="print:hidden">
 					<ArrowLeft class="h-4 w-4" />
 				</Button>
 				<div>
@@ -302,7 +316,7 @@
 					</p>
 				</div>
 			</div>
-			<div class="flex shrink-0 items-center gap-2">
+			<div class="flex shrink-0 items-center gap-2 print:hidden">
 				<span class="text-sm text-muted-foreground">Status:</span>
 				<Select
 					type="single"
@@ -338,8 +352,9 @@
 					<p class="mb-4 text-muted-foreground">
 						When compression lows are detected during your sleep, they will appear here.
 					</p>
-					<div class="flex flex-col items-center gap-4">
-						<div class="flex items-center gap-2">
+					{#if canReviewSuggestions}
+					<div class="flex flex-col items-center gap-4 print:hidden">
+						<div class="flex flex-col items-center gap-2 @sm:flex-row @sm:items-end">
 							<div class="flex flex-col gap-1">
 								<label for="start-date" class="text-sm text-muted-foreground">Start Date</label>
 								<input
@@ -364,7 +379,7 @@
 							<Button
 								onclick={handleTriggerDetection}
 								disabled={isLoading || !testStartDate}
-								class="mt-5"
+								class="@sm:mt-5"
 							>
 								<RefreshCw class="mr-2 h-4 w-4 {isLoading ? 'animate-spin' : ''}" />
 								Run Detection
@@ -377,6 +392,7 @@
 							</p>
 						{/if}
 					</div>
+					{/if}
 				</CardContent>
 			</Card>
 		{:else if filteredSuggestions.length === 0}
@@ -390,7 +406,9 @@
 		{:else}
 			<div class="grid gap-6 @3xl:grid-cols-3">
 				<!-- Suggestion List -->
-				<div class="max-h-[600px] space-y-2 overflow-y-auto pr-2">
+				<div
+					class="max-h-[600px] space-y-2 overflow-y-auto pr-2 print:max-h-none print:overflow-visible"
+				>
 					{#each filteredSuggestions as suggestion, index (suggestion.id)}
 						{@const StatusIcon = getStatusIcon(suggestion.status)}
 						{@const isSelected = suggestion.id ? selectedSuggestions.has(suggestion.id) : false}
@@ -409,9 +427,8 @@
 							>
 								<div class="flex items-center gap-3">
 									<div
-										class="flex h-8 w-8 items-center justify-center rounded-full {getStatusColor(
-											suggestion.status
-										)}"
+										class="review-status flex h-8 w-8 items-center justify-center rounded-full"
+										data-status={suggestion.status?.toLowerCase() ?? ''}
 									>
 										<StatusIcon class="h-4 w-4" />
 									</div>
@@ -446,9 +463,8 @@
 											: 'Unknown'}
 									</CardTitle>
 									<div
-										class="flex h-8 w-8 items-center justify-center rounded-full {getStatusColor(
-											suggestionDetail.suggestion?.status
-										)}"
+										class="review-status flex h-8 w-8 items-center justify-center rounded-full"
+										data-status={suggestionDetail.suggestion?.status?.toLowerCase() ?? ''}
 									>
 										<DetailStatusIcon class="h-4 w-4" />
 									</div>
@@ -462,12 +478,14 @@
 											dateRange: chartDateRange,
 											enablePredictions: false,
 										})}
-										<div class="mb-6 h-64">
+										<div class="mb-6 h-64 w-full">
 											<GlucoseChartShell
 												engine={chartEngine}
 												heightClass="h-64"
 												selectionDomain={brushDomain}
-												onSelectionChange={isPending ? handleSelectionChange : undefined}
+												onSelectionChange={isPending && canReviewSuggestions
+													? handleSelectionChange
+													: undefined}
 											>
 												{#snippet tracks(_ctx)}
 													<ThresholdRules />
@@ -487,15 +505,19 @@
 								<div class="mb-6 grid grid-cols-3 gap-4 text-center">
 									<div>
 										<p class="text-2xl font-bold">
-											{suggestionDetail.suggestion?.lowestGlucose?.toFixed(0) ?? '-'}
+											{suggestionDetail.suggestion?.lowestGlucose != null
+												? bg(suggestionDetail.suggestion.lowestGlucose)
+												: '-'}
 										</p>
-										<p class="text-sm text-muted-foreground">Lowest (mg/dL)</p>
+										<p class="text-sm text-muted-foreground">Lowest ({bgLabel()})</p>
 									</div>
 									<div>
 										<p class="text-2xl font-bold">
-											{suggestionDetail.suggestion?.dropRate?.toFixed(1) ?? '-'}
+											{suggestionDetail.suggestion?.dropRate != null
+												? bg(suggestionDetail.suggestion.dropRate)
+												: '-'}
 										</p>
-										<p class="text-sm text-muted-foreground">Drop Rate (mg/dL/min)</p>
+										<p class="text-sm text-muted-foreground">Drop Rate ({bgLabel()}/min)</p>
 									</div>
 									<div>
 										<p class="text-2xl font-bold">{suggestionDetail.suggestion?.recoveryMinutes ?? '-'}</p>
@@ -512,8 +534,8 @@
 										<p class="font-medium">
 											{time(brushDomain[0])} - {time(brushDomain[1])}
 										</p>
-										{#if isPending}
-											<p class="text-sm text-muted-foreground">
+										{#if isPending && canReviewSuggestions}
+											<p class="text-sm text-muted-foreground print:hidden">
 												Drag the handles on the chart to adjust
 											</p>
 										{/if}
@@ -521,8 +543,10 @@
 								{/if}
 
 								<!-- Bulk Selection Bar -->
-								{#if isBulkMode}
-									<div class="mb-4 flex items-center justify-between rounded-lg bg-primary/10 p-3">
+								{#if isBulkMode && canReviewSuggestions}
+									<div
+									class="mb-4 flex items-center justify-between rounded-lg bg-primary/10 p-3 print:hidden"
+								>
 										<span class="text-sm font-medium">{selectionCount} selected</span>
 										<div class="flex gap-2">
 											<Button
@@ -556,9 +580,9 @@
 								{/if}
 
 								<!-- Actions -->
-								{#if !isBulkMode}
+								{#if !isBulkMode && canReviewSuggestions}
 									{#if isPending}
-										<div class="flex gap-4">
+										<div class="flex gap-4 print:hidden">
 											<Button
 												class="flex-1"
 												onclick={handleAccept}
@@ -587,7 +611,7 @@
 											</Button>
 										</div>
 									{:else}
-										<div class="flex gap-4">
+										<div class="flex gap-4 print:hidden">
 											<Button
 												variant="destructive"
 												class="flex-1"
@@ -614,3 +638,20 @@
 		{/if}
 	</div>
 {/if}
+
+<style>
+	/* Review status is a backend enum; the colour comes from the theme's status
+	   vars keyed off data-status. Anything not yet reviewed uses the default. */
+	.review-status {
+		background: color-mix(in oklab, var(--status-warning) 15%, transparent);
+		color: var(--status-warning);
+	}
+	.review-status[data-status='accepted'] {
+		background: color-mix(in oklab, var(--status-normal) 15%, transparent);
+		color: var(--status-normal);
+	}
+	.review-status[data-status='dismissed'] {
+		background: var(--muted);
+		color: var(--muted-foreground);
+	}
+</style>

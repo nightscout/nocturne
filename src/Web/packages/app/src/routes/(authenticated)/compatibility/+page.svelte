@@ -8,7 +8,9 @@
     getCompatibilityAnalyses,
   } from "./data.remote";
   import { formatDateTimeCompact } from "$lib/utils/formatting";
+  import { formatElapsedMs } from "$lib/utils/duration";
   import type { AnalysisListItemDto } from "$lib/api";
+  import { getMatchTypeDisplay } from "$lib/utils/compatibility-match";
 
   // Get filter params from URL
   const urlParams = $derived({
@@ -71,55 +73,6 @@
     filterMethod = filters.requestMethod || "";
     filterMatch = filters.overallMatch || "";
   });
-
-  // Helper to get match type display
-  function getMatchTypeDisplay(matchType: number | undefined) {
-    const types = [
-      {
-        value: 0,
-        label: "Perfect",
-        class:
-          "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300",
-      },
-      {
-        value: 1,
-        label: "Minor Diff",
-        class: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
-      },
-      {
-        value: 2,
-        label: "Major Diff",
-        class:
-          "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300",
-      },
-      {
-        value: 3,
-        label: "Critical",
-        class: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300",
-      },
-      {
-        value: 4,
-        label: "NS Missing",
-        class: "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300",
-      },
-      {
-        value: 5,
-        label: "Nocturne Missing",
-        class: "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300",
-      },
-      {
-        value: 6,
-        label: "Both Missing",
-        class: "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300",
-      },
-      {
-        value: 7,
-        label: "Error",
-        class: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300",
-      },
-    ];
-    return types.find((t) => t.value === matchType) || types[0];
-  }
 
   // Helper to determine if analysis is compatible
   function isCompatible(matchType: number | undefined) {
@@ -208,12 +161,6 @@
       : activeAnalyses.filter((a) => !isCompatible(a.overallMatch))
   );
 
-
-  // Format duration
-  function formatDuration(ms: number) {
-    if (ms < 1000) return `${ms}ms`;
-    return `${(ms / 1000).toFixed(2)}s`;
-  }
 </script>
 
 <div class="@container container mx-auto p-6 space-y-6">
@@ -281,7 +228,7 @@
         Avg Response Time
       </h3>
       <p class="text-3xl font-bold">
-        {formatDuration(activeMetrics.averageNocturneResponseTime || 0)}
+        {formatElapsedMs(activeMetrics.averageNocturneResponseTime || 0)}
       </p>
     </div>
   </div>
@@ -466,10 +413,10 @@
               <td class="px-6 py-4 whitespace-nowrap text-sm font-mono">
                 <div class="flex gap-2">
                   <span title="Nightscout">
-                    NS: {formatDuration(analysis.nightscoutResponseTimeMs || 0)}
+                    NS: {formatElapsedMs(analysis.nightscoutResponseTimeMs || 0)}
                   </span>
                   <span title="Nocturne">
-                    NC: {formatDuration(analysis.nocturneResponseTimeMs || 0)}
+                    NC: {formatElapsedMs(analysis.nocturneResponseTimeMs || 0)}
                   </span>
                 </div>
               </td>

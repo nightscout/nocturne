@@ -8,12 +8,30 @@ namespace Nocturne.Core.Contracts.Auth;
 /// <seealso cref="ISubjectService"/>
 public interface IPasskeyService
 {
+    /// <summary>
+    /// Explains, for a person, why a ceremony started at <paramref name="requestHost"/> cannot
+    /// succeed against the configured relying-party id, or returns <c>null</c> when it can.
+    /// </summary>
+    /// <remarks>
+    /// The rp.id is derived from the deployment's base domain, so a mismatch is a server
+    /// misconfiguration the browser reports only as an opaque security error. Asking here lets a
+    /// ceremony be refused with the actual reason before options are issued.
+    /// </remarks>
+    string? DescribeRpIdMismatch(string requestHost);
+
     /// <summary>Generates registration options for creating a new passkey credential.</summary>
-    Task<PasskeyRegistrationOptions> GenerateRegistrationOptionsAsync(Guid subjectId, string username, Guid tenantId);
+    Task<PasskeyRegistrationOptions> GenerateRegistrationOptionsAsync(Guid subjectId, string username);
 
     /// <summary>Validates the attestation response and stores the new passkey credential.</summary>
+    /// <param name="expectedSubjectId">
+    /// The subject the caller's flow resolved as the one enrolling. The challenge token must
+    /// have been issued for this subject or the registration is rejected, so a challenge minted
+    /// by one flow cannot be redeemed as an enrolment in another. Required: every enrolment flow
+    /// must name its own subject, and that subject must be one the server resolved rather than
+    /// one the request supplied.
+    /// </param>
     /// <param name="label">Optional user-assigned label for the credential.</param>
-    Task<PasskeyCredentialResult> CompleteRegistrationAsync(string attestationResponseJson, string challengeToken, Guid tenantId, string? label = null);
+    Task<PasskeyCredentialResult> CompleteRegistrationAsync(string attestationResponseJson, string challengeToken, Guid tenantId, Guid expectedSubjectId, string? label = null);
 
     /// <summary>Generates assertion options for a discoverable (usernameless) login flow.</summary>
     Task<PasskeyAssertionOptions> GenerateDiscoverableAssertionOptionsAsync(Guid tenantId);
@@ -25,7 +43,7 @@ public interface IPasskeyService
     Task<PasskeyAssertionResult> CompleteAssertionAsync(string assertionResponseJson, string challengeToken, Guid tenantId);
 
     /// <summary>Returns all registered passkey credentials for the specified subject.</summary>
-    Task<List<PasskeyCredentialInfo>> GetCredentialsAsync(Guid subjectId, Guid tenantId);
+    Task<List<PasskeyCredentialInfo>> GetCredentialsAsync(Guid subjectId);
 
     /// <summary>Removes a passkey credential from the specified subject.</summary>
     Task RemoveCredentialAsync(Guid credentialId, Guid subjectId, Guid tenantId);

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
+using Nocturne.API.Authorization;
 using OpenApi.Remote.Attributes;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Models;
@@ -40,40 +41,45 @@ public class AuthorizationController : ControllerBase
     /// </summary>
     /// <param name="accessToken">Access token to exchange for JWT</param>
     /// <returns>JWT token response</returns>
+    /// <remarks>
+    /// The access token in the URL is the caller's only credential — this is the bootstrap
+    /// that exchanges it for a JWT (used by NSClientV3/AAPS). It must be anonymous: the
+    /// class-level <c>[Authorize]</c> would otherwise reject the request with 401 before the
+    /// method can validate the token. The action validates the token itself and returns 401
+    /// when it is missing or invalid.
+    ///
+    /// Accepts both legacy subject access tokens (<c>name-hexstring</c>, resolved against
+    /// subjects) and <c>noc_</c> direct-grant tokens (resolved against oauth_grants; the
+    /// minted JWT carries the grant's scopes and tenant pin).
+    /// </remarks>
+    [AllowAnonymous]
     [HttpGet("request/{accessToken}")]
     [NightscoutEndpoint("/api/v2/authorization/request/:accessToken")]
     [ProducesResponseType(typeof(AuthorizationResponse), 200)]
     [ProducesResponseType(401)]
+    [ErrorEnvelope]
     public async Task<ActionResult<AuthorizationResponse>> GenerateJwtFromAccessToken(
         string accessToken
     )
     {
         _logger.LogDebug("JWT generation requested for access token");
 
-        try
+        if (string.IsNullOrEmpty(accessToken))
         {
-            if (string.IsNullOrEmpty(accessToken))
-            {
-                _logger.LogWarning("Empty access token provided");
-                return Unauthorized();
-            }
-
-            var result = await _authorizationService.GenerateJwtFromAccessTokenAsync(accessToken);
-
-            if (result == null)
-            {
-                _logger.LogWarning("JWT generation failed - invalid access token");
-                return Unauthorized();
-            }
-
-            _logger.LogDebug("Successfully generated JWT for subject {Subject}", result.Sub);
-            return Ok(result);
+            _logger.LogWarning("Empty access token provided");
+            return Unauthorized();
         }
-        catch (Exception ex)
+
+        var result = await _authorizationService.GenerateJwtFromAccessTokenAsync(accessToken);
+
+        if (result == null)
         {
-            _logger.LogError(ex, "Error generating JWT from access token");
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
+            _logger.LogWarning("JWT generation failed - invalid access token");
+            return Unauthorized();
         }
+
+        _logger.LogDebug("Successfully generated JWT for subject {Subject}", result.Sub);
+        return Ok(result);
     }
 
     /// <summary>
@@ -84,22 +90,15 @@ public class AuthorizationController : ControllerBase
     [NightscoutEndpoint("/api/v2/authorization/permissions")]
     [RemoteQuery]
     [ProducesResponseType(typeof(PermissionsResponse), 200)]
+    [ErrorEnvelope]
     public async Task<ActionResult<PermissionsResponse>> GetAllPermissions()
     {
         _logger.LogDebug("All permissions requested");
 
-        try
-        {
-            var result = await _authorizationService.GetAllPermissionsAsync();
+        var result = await _authorizationService.GetAllPermissionsAsync();
 
-            _logger.LogDebug("Successfully returned {Count} permissions", result.Permissions.Count);
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting all permissions");
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
-        }
+        _logger.LogDebug("Successfully returned {Count} permissions", result.Permissions.Count);
+        return Ok(result);
     }
 
     /// <summary>
@@ -110,25 +109,18 @@ public class AuthorizationController : ControllerBase
     [NightscoutEndpoint("/api/v2/authorization/permissions/trie")]
     [RemoteQuery]
     [ProducesResponseType(typeof(PermissionTrieResponse), 200)]
+    [ErrorEnvelope]
     public async Task<ActionResult<PermissionTrieResponse>> GetPermissionTrie()
     {
         _logger.LogDebug("Permission trie structure requested");
 
-        try
-        {
-            var result = await _authorizationService.GetPermissionTrieAsync();
+        var result = await _authorizationService.GetPermissionTrieAsync();
 
-            _logger.LogDebug(
-                "Successfully returned permission trie with {Count} permissions",
-                result.Count
-            );
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting permission trie");
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
-        }
+        _logger.LogDebug(
+            "Successfully returned permission trie with {Count} permissions",
+            result.Count
+        );
+        return Ok(result);
     }
 
     // Subject management endpoints
@@ -143,22 +135,15 @@ public class AuthorizationController : ControllerBase
     [ProducesResponseType(typeof(List<Subject>), 200)]
     [ProducesResponseType(401)]
     [ProducesResponseType(403)]
+    [ErrorEnvelope]
     public async Task<ActionResult<List<Subject>>> GetAllSubjects()
     {
         _logger.LogDebug("Get all subjects requested");
 
-        try
-        {
-            var subjects = await _authorizationService.GetAllSubjectsAsync();
+        var subjects = await _authorizationService.GetAllSubjectsAsync();
 
-            _logger.LogDebug("Successfully returned {Count} subjects", subjects.Count);
-            return Ok(subjects);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting all subjects");
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
-        }
+        _logger.LogDebug("Successfully returned {Count} subjects", subjects.Count);
+        return Ok(subjects);
     }
 
     /// <summary>
@@ -168,40 +153,38 @@ public class AuthorizationController : ControllerBase
     /// <returns>Created subject</returns>
     [HttpPost("subjects")]
     [RequireAdmin]
+    // A subject minted here carries a plaintext access token and any global role named in
+    // the body, and its own is_demo_subject is false — so without this the shared demo
+    // account could launder itself into an unflagged credential that [DenyDemoSubject]
+    // waves through.
+    [DenyDemoSubject]
     [NightscoutEndpoint("/api/v2/authorization/subjects")]
     [RemoteForm(Invalidates = ["GetAllSubjects"])]
     [ProducesResponseType(typeof(Subject), 201)]
     [ProducesResponseType(400)]
     [ProducesResponseType(401)]
     [ProducesResponseType(403)]
+    [ErrorEnvelope]
     public async Task<ActionResult<Subject>> CreateSubject([FromBody] Subject subject)
     {
         _logger.LogDebug("Create subject requested: {Name}", subject.Name);
 
-        try
+        if (!ModelState.IsValid)
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ModelState);
-            }
-
-            // Clear ID to ensure new object
-            subject.Id = null;
-
-            var createdSubject = await _authorizationService.CreateSubjectAsync(subject);
-
-            _logger.LogDebug(
-                "Successfully created subject: {Name} with ID: {Id}",
-                createdSubject.Name,
-                createdSubject.Id
-            );
-            return CreatedAtAction(nameof(GetAllSubjects), createdSubject);
+            return BadRequest(ModelState);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating subject: {Name}", subject.Name);
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
-        }
+
+        // Clear ID to ensure new object
+        subject.Id = null;
+
+        var createdSubject = await _authorizationService.CreateSubjectAsync(subject);
+
+        _logger.LogDebug(
+            "Successfully created subject: {Name} with ID: {Id}",
+            createdSubject.Name,
+            createdSubject.Id
+        );
+        return CreatedAtAction(nameof(GetAllSubjects), createdSubject);
     }
 
     /// <summary>
@@ -218,38 +201,31 @@ public class AuthorizationController : ControllerBase
     [ProducesResponseType(401)]
     [ProducesResponseType(403)]
     [ProducesResponseType(404)]
+    [ErrorEnvelope]
     public async Task<ActionResult<Subject>> UpdateSubject([FromBody] Subject subject)
     {
         _logger.LogDebug("Update subject requested: {Id}", subject.Id);
 
-        try
+        if (!ModelState.IsValid)
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ModelState);
-            }
-
-            if (string.IsNullOrEmpty(subject.Id))
-            {
-                return Problem(detail: "Subject ID is required for update", statusCode: 400, title: "Bad Request");
-            }
-
-            var updatedSubject = await _authorizationService.UpdateSubjectAsync(subject);
-
-            if (updatedSubject == null)
-            {
-                _logger.LogDebug("Subject not found for update: {Id}", subject.Id);
-                return NotFound();
-            }
-
-            _logger.LogDebug("Successfully updated subject: {Id}", updatedSubject.Id);
-            return Ok(updatedSubject);
+            return BadRequest(ModelState);
         }
-        catch (Exception ex)
+
+        if (string.IsNullOrEmpty(subject.Id))
         {
-            _logger.LogError(ex, "Error updating subject: {Id}", subject.Id);
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
+            return Problem(detail: "Subject ID is required for update", statusCode: 400, title: "Bad Request");
         }
+
+        var updatedSubject = await _authorizationService.UpdateSubjectAsync(subject);
+
+        if (updatedSubject == null)
+        {
+            _logger.LogDebug("Subject not found for update: {Id}", subject.Id);
+            return NotFound();
+        }
+
+        _logger.LogDebug("Successfully updated subject: {Id}", updatedSubject.Id);
+        return Ok(updatedSubject);
     }
 
     /// <summary>
@@ -265,28 +241,21 @@ public class AuthorizationController : ControllerBase
     [ProducesResponseType(401)]
     [ProducesResponseType(403)]
     [ProducesResponseType(404)]
+    [ErrorEnvelope]
     public async Task<IActionResult> DeleteSubject(string id)
     {
         _logger.LogDebug("Delete subject requested: {Id}", id);
 
-        try
-        {
-            var deleted = await _authorizationService.DeleteSubjectAsync(id);
+        var deleted = await _authorizationService.DeleteSubjectAsync(id);
 
-            if (!deleted)
-            {
-                _logger.LogDebug("Subject not found for deletion: {Id}", id);
-                return NotFound();
-            }
-
-            _logger.LogDebug("Successfully deleted subject: {Id}", id);
-            return NoContent();
-        }
-        catch (Exception ex)
+        if (!deleted)
         {
-            _logger.LogError(ex, "Error deleting subject: {Id}", id);
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
+            _logger.LogDebug("Subject not found for deletion: {Id}", id);
+            return NotFound();
         }
+
+        _logger.LogDebug("Successfully deleted subject: {Id}", id);
+        return NoContent();
     }
 
     // Role management endpoints
@@ -301,22 +270,15 @@ public class AuthorizationController : ControllerBase
     [ProducesResponseType(typeof(List<Role>), 200)]
     [ProducesResponseType(401)]
     [ProducesResponseType(403)]
+    [ErrorEnvelope]
     public async Task<ActionResult<List<Role>>> GetAllRoles()
     {
         _logger.LogDebug("Get all roles requested");
 
-        try
-        {
-            var roles = await _authorizationService.GetAllRolesAsync();
+        var roles = await _authorizationService.GetAllRolesAsync();
 
-            _logger.LogDebug("Successfully returned {Count} roles", roles.Count);
-            return Ok(roles);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting all roles");
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
-        }
+        _logger.LogDebug("Successfully returned {Count} roles", roles.Count);
+        return Ok(roles);
     }
 
     /// <summary>
@@ -332,34 +294,27 @@ public class AuthorizationController : ControllerBase
     [ProducesResponseType(400)]
     [ProducesResponseType(401)]
     [ProducesResponseType(403)]
+    [ErrorEnvelope]
     public async Task<ActionResult<Role>> CreateRole([FromBody] Role role)
     {
         _logger.LogDebug("Create role requested: {Name}", role.Name);
 
-        try
+        if (!ModelState.IsValid)
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ModelState);
-            }
-
-            // Clear ID to ensure new object
-            role.Id = null;
-
-            var createdRole = await _authorizationService.CreateRoleAsync(role);
-
-            _logger.LogDebug(
-                "Successfully created role: {Name} with ID: {Id}",
-                createdRole.Name,
-                createdRole.Id
-            );
-            return CreatedAtAction(nameof(GetAllRoles), createdRole);
+            return BadRequest(ModelState);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating role: {Name}", role.Name);
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
-        }
+
+        // Clear ID to ensure new object
+        role.Id = null;
+
+        var createdRole = await _authorizationService.CreateRoleAsync(role);
+
+        _logger.LogDebug(
+            "Successfully created role: {Name} with ID: {Id}",
+            createdRole.Name,
+            createdRole.Id
+        );
+        return CreatedAtAction(nameof(GetAllRoles), createdRole);
     }
 
     /// <summary>
@@ -376,38 +331,31 @@ public class AuthorizationController : ControllerBase
     [ProducesResponseType(401)]
     [ProducesResponseType(403)]
     [ProducesResponseType(404)]
+    [ErrorEnvelope]
     public async Task<ActionResult<Role>> UpdateRole([FromBody] Role role)
     {
         _logger.LogDebug("Update role requested: {Id}", role.Id);
 
-        try
+        if (!ModelState.IsValid)
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ModelState);
-            }
-
-            if (string.IsNullOrEmpty(role.Id))
-            {
-                return Problem(detail: "Role ID is required for update", statusCode: 400, title: "Bad Request");
-            }
-
-            var updatedRole = await _authorizationService.UpdateRoleAsync(role);
-
-            if (updatedRole == null)
-            {
-                _logger.LogDebug("Role not found for update: {Id}", role.Id);
-                return NotFound();
-            }
-
-            _logger.LogDebug("Successfully updated role: {Id}", updatedRole.Id);
-            return Ok(updatedRole);
+            return BadRequest(ModelState);
         }
-        catch (Exception ex)
+
+        if (string.IsNullOrEmpty(role.Id))
         {
-            _logger.LogError(ex, "Error updating role: {Id}", role.Id);
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
+            return Problem(detail: "Role ID is required for update", statusCode: 400, title: "Bad Request");
         }
+
+        var updatedRole = await _authorizationService.UpdateRoleAsync(role);
+
+        if (updatedRole == null)
+        {
+            _logger.LogDebug("Role not found for update: {Id}", role.Id);
+            return NotFound();
+        }
+
+        _logger.LogDebug("Successfully updated role: {Id}", updatedRole.Id);
+        return Ok(updatedRole);
     }
 
     /// <summary>
@@ -423,27 +371,20 @@ public class AuthorizationController : ControllerBase
     [ProducesResponseType(401)]
     [ProducesResponseType(403)]
     [ProducesResponseType(404)]
+    [ErrorEnvelope]
     public async Task<IActionResult> DeleteRole(string id)
     {
         _logger.LogDebug("Delete role requested: {Id}", id);
 
-        try
-        {
-            var deleted = await _authorizationService.DeleteRoleAsync(id);
+        var deleted = await _authorizationService.DeleteRoleAsync(id);
 
-            if (!deleted)
-            {
-                _logger.LogDebug("Role not found for deletion: {Id}", id);
-                return NotFound();
-            }
-
-            _logger.LogDebug("Successfully deleted role: {Id}", id);
-            return NoContent();
-        }
-        catch (Exception ex)
+        if (!deleted)
         {
-            _logger.LogError(ex, "Error deleting role: {Id}", id);
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
+            _logger.LogDebug("Role not found for deletion: {Id}", id);
+            return NotFound();
         }
+
+        _logger.LogDebug("Successfully deleted role: {Id}", id);
+        return NoContent();
     }
 }

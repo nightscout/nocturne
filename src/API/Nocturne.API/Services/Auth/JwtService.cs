@@ -5,6 +5,7 @@ using System.Text;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Nocturne.API.Helpers;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Models.Configuration;
 
 namespace Nocturne.API.Services.Auth;
@@ -134,7 +135,8 @@ public class JwtService : IJwtService
         bool limitTo24Hours = false,
         Guid? tenantId = null,
         TimeSpan? lifetime = null,
-        bool platformAccess = false
+        bool platformAccess = false,
+        Guid? grantId = null
     )
     {
         var now = DateTimeOffset.UtcNow;
@@ -189,6 +191,13 @@ public class JwtService : IJwtService
         if (platformAccess)
         {
             claims.Add(new Claim("platform_access", "true", ClaimValueTypes.Boolean));
+        }
+
+        // Bind the token to the grant it was minted from. Revoking the grant invalidates every
+        // access token carrying its id, without the server tracking individual jti values.
+        if (grantId.HasValue)
+        {
+            claims.Add(new Claim("grant_id", grantId.Value.ToString()));
         }
 
         // Add OAuth scopes as space-delimited string (RFC 6749 Section 3.3)
@@ -283,6 +292,10 @@ public class JwtService : IJwtService
             // Parse platform-access marker (platform-admin tenant-access grants)
             var platformAccess = principal.FindFirst("platform_access")?.Value == "true";
 
+            // Parse the originating grant so callers can check its revocation state
+            var grantIdClaim = principal.FindFirst("grant_id")?.Value;
+            Guid? grantId = Guid.TryParse(grantIdClaim, out var gid) ? gid : null;
+
             var claims = new JwtClaims
             {
                 SubjectId = subjectId,
@@ -294,6 +307,7 @@ public class JwtService : IJwtService
                 ClientId = principal.FindFirst("client_id")?.Value,
                 TenantId = tenantId,
                 PlatformAccess = platformAccess,
+                GrantId = grantId,
                 LimitTo24Hours = limitTo24Hours,
                 JwtId = jwtToken.Id,
                 IssuedAt = new DateTimeOffset(jwtToken.IssuedAt, TimeSpan.Zero),
@@ -360,12 +374,7 @@ public class JwtService : IJwtService
     }
 
     /// <inheritdoc />
-    public string HashRefreshToken(string refreshToken)
-    {
-        var bytes = Encoding.UTF8.GetBytes(refreshToken);
-        var hash = SHA256.HashData(bytes);
-        return Convert.ToHexString(hash).ToLowerInvariant();
-    }
+    public string HashRefreshToken(string refreshToken) => HashUtils.Sha256Hex(refreshToken);
 
     /// <inheritdoc />
     public TimeSpan GetAccessTokenLifetime()

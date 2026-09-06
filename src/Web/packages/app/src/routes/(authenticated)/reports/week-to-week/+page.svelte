@@ -1,105 +1,80 @@
 <script lang="ts">
   import { LineChart } from "layerchart";
+  import { parseDate } from "@internationalized/date";
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import { ChevronLeft, ChevronRight, Calendar } from "lucide-svelte";
-  import { getReportsData } from "$api/reports.remote";
+  import { getWeekdayAverages } from "$api/reports.remote";
+  import type { DayOfWeek } from "$lib/api";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
-  import { bg } from "$lib/utils/formatting";
+  import { bg, formatShortDate } from "$lib/utils/formatting";
 
-  // Day of week series config
-  const DAY_SERIES = [
-    { key: "sun", label: "Sun", color: "#808080" },
-    { key: "mon", label: "Mon", color: "#1e90ff" },
-    { key: "tue", label: "Tue", color: "#009e73" },
-    { key: "wed", label: "Wed", color: "#ff9a00" },
-    { key: "thu", label: "Thu", color: "#f0e442" },
-    { key: "fri", label: "Fri", color: "#ec7892" },
-    { key: "sat", label: "Sat", color: "#d55e00" },
-  ] as const;
+  type Weekday = keyof typeof DayOfWeek;
+
+  /** Series keys are the API's weekday names; the theme's colour tokens use the short form. */
+  const WEEKDAYS: Weekday[] = [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+  ];
+
+  const DAY_SERIES = WEEKDAYS.map((key) => ({
+    key,
+    label: key.slice(0, 3),
+    color: `var(--weekday-${key.slice(0, 3).toLowerCase()})`,
+  }));
 
   // Get shared date params from context (set by reports layout)
   // Default: 7 days (today + last 6 days = 1 full week)
   const reportsParams = requireDateParamsContext(7);
 
   // Create resource with automatic layout registration
-  const reportsResource = contextResource(
-    () => getReportsData(reportsParams.dateRangeInput),
+  const weekdayResource = contextResource(
+    () => getWeekdayAverages(reportsParams.dateRangeInput),
     { errorTitle: "Error Loading Week Comparison" }
   );
 
   const dateRangeDisplay = $derived.by(() => {
-    const opts: Intl.DateTimeFormatOptions = {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    };
-    return `${reportsParams.startDate.toLocaleDateString(undefined, opts)} – ${reportsParams.endDate.toLocaleDateString(undefined, opts)}`;
+    return `${formatShortDate(reportsParams.startDate, true)} – ${formatShortDate(reportsParams.endDate, true)}`;
   });
 
-  // Transform entries into chart data: each row = { time, sun?, mon?, tue?, ... }
+  // One row per populated 5-minute slot, anchored on today's calendar day so the
+  // x-axis reads as a time of day; each weekday's mean is shown in the display unit.
   const chartData = $derived.by(() => {
-    const entries = reportsResource.current?.entries ?? [];
-
-    // Group by normalized time across all days in the range
-    const timeMap = new Map<number, Record<string, number | Date>>();
-
-    for (const entry of entries) {
-      const mills = entry.mills ?? 0;
-
-      const entryDate = new Date(mills);
-      const dayOfWeek = entryDate.getDay();
-      const dayKey = DAY_SERIES[dayOfWeek].key;
-
-      // Normalize to time-of-day only (minutes since midnight)
-      const minutesInDay = entryDate.getHours() * 60 + entryDate.getMinutes();
-      // Round to 5-minute buckets for grouping
-      const bucket = Math.round(minutesInDay / 5) * 5;
-
-      if (!timeMap.has(bucket)) {
-        // Create a date for x-axis (today's date + time-of-day)
-        const now = new Date();
-        const time = new Date(now.getFullYear(), now.getMonth(), now.getDate(), Math.floor(bucket / 60), bucket % 60);
-        timeMap.set(bucket, { time });
+    const today = new Date();
+    return (weekdayResource.current ?? []).map((slot) => {
+      const row: { time: Date } & Partial<Record<Weekday, number>> = {
+        time: new Date(
+          today.getFullYear(),
+          today.getMonth(),
+          today.getDate(),
+          0,
+          slot.minuteOfDay ?? 0
+        ),
+      };
+      for (const weekday of WEEKDAYS) {
+        const mgdl = slot.mean?.[weekday];
+        if (mgdl != null) row[weekday] = bg(mgdl);
       }
-
-      const row = timeMap.get(bucket)!;
-      // Average values if we already have data for this day/time slot
-      if (row[dayKey] !== undefined) {
-        row[dayKey] = ((row[dayKey] as number) + bg(entry.mgdl ?? 0)) / 2;
-      } else {
-        row[dayKey] = bg(entry.mgdl ?? 0);
-      }
-    }
-
-    // Sort by time
-    return Array.from(timeMap.values()).sort(
-      (a, b) => (a.time as Date).getTime() - (b.time as Date).getTime()
-    );
+      return row;
+    });
   });
 
-  // Navigation helpers
   function previousWeek() {
-    const newEnd = new Date(reportsParams.startDate);
-    newEnd.setDate(newEnd.getDate() - 1);
-    const newStart = new Date(newEnd);
-    newStart.setDate(newStart.getDate() - 6);
-    reportsParams.setCustomRange(
-      newStart.toISOString().split("T")[0],
-      newEnd.toISOString().split("T")[0]
-    );
+    const newEnd = parseDate(reportsParams.fromDay).subtract({ days: 1 });
+    const newStart = newEnd.subtract({ days: 6 });
+    reportsParams.setCustomRange(newStart.toString(), newEnd.toString());
   }
 
   function nextWeek() {
-    const newStart = new Date(reportsParams.endDate);
-    newStart.setDate(newStart.getDate() + 1);
-    const newEnd = new Date(newStart);
-    newEnd.setDate(newEnd.getDate() + 6);
-    reportsParams.setCustomRange(
-      newStart.toISOString().split("T")[0],
-      newEnd.toISOString().split("T")[0]
-    );
+    const newStart = parseDate(reportsParams.toDay).add({ days: 1 });
+    const newEnd = newStart.add({ days: 6 });
+    reportsParams.setCustomRange(newStart.toString(), newEnd.toString());
   }
 
   function goToCurrentWeek() {
@@ -107,12 +82,13 @@
   }
 </script>
 
-{#if reportsResource.current}
+{#if weekdayResource.current}
 <div class="@container space-y-6 p-3 @md:p-6">
-  <!-- Controls -->
-  <Card.Root>
+  <!-- Week-stepper controls — navigation chaff; the compared date range stays
+       visible in the layout's print header. -->
+  <Card.Root class="print:hidden">
     <Card.Content class="p-4">
-      <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center justify-center gap-2 @md:justify-start">
         <Button variant="outline" size="icon" onclick={previousWeek}>
           <ChevronLeft class="h-4 w-4" />
         </Button>
@@ -132,18 +108,14 @@
     </Card.Content>
   </Card.Root>
 
-  <!-- Chart -->
-  <div class="h-[400px] p-4 border rounded-sm">
+  <!-- Day-of-week comparison chart -->
+  <div class="h-[320px] w-full p-4 border rounded-sm @md:h-[400px]">
     {#if chartData.length > 0}
       <LineChart
         data={chartData}
         x="time"
         legend
-        series={DAY_SERIES.map((d) => ({
-          key: d.key,
-          label: d.label,
-          color: d.color,
-        }))}
+        series={DAY_SERIES}
       />
     {:else}
       <div

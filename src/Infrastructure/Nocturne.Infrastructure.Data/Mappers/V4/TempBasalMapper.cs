@@ -35,6 +35,7 @@ public static class TempBasalMapper
             DeviceId = model.DeviceId,
             PatientDeviceId = model.PatientDeviceId,
             PumpRecordId = model.PumpRecordId,
+            SyncIdentifier = model.SyncIdentifier,
             ApsSnapshotId = model.ApsSnapshotId,
             InsulinContextJson = model.InsulinContext is not null
                 ? JsonSerializer.Serialize(model.InsulinContext)
@@ -73,13 +74,14 @@ public static class TempBasalMapper
             DeviceId = entity.DeviceId,
             PatientDeviceId = entity.PatientDeviceId,
             PumpRecordId = entity.PumpRecordId,
+            SyncIdentifier = entity.SyncIdentifier,
             ApsSnapshotId = entity.ApsSnapshotId,
-            InsulinContext = !string.IsNullOrEmpty(entity.InsulinContextJson)
-                ? JsonSerializer.Deserialize<TreatmentInsulinContext>(entity.InsulinContextJson)
-                : null,
-            AdditionalProperties = !string.IsNullOrEmpty(entity.AdditionalPropertiesJson)
-                ? JsonSerializer.Deserialize<Dictionary<string, object?>>(entity.AdditionalPropertiesJson)
-                : null,
+            InsulinContext = MapperHelpers.DeserializeJson<TreatmentInsulinContext>(
+                entity.InsulinContextJson
+            ),
+            AdditionalProperties = MapperHelpers.DeserializeJson<Dictionary<string, object?>>(
+                entity.AdditionalPropertiesJson
+            ),
         };
     }
 
@@ -98,13 +100,13 @@ public static class TempBasalMapper
         entity.DataSource = model.DataSource;
         entity.CorrelationId = model.CorrelationId;
         entity.LegacyId = model.LegacyId;
-        entity.SysUpdatedAt = DateTime.UtcNow;
         entity.Rate = model.Rate;
         entity.ScheduledRate = model.ScheduledRate;
         entity.Origin = model.Origin.ToString();
         entity.DeviceId = model.DeviceId;
         entity.PatientDeviceId = model.PatientDeviceId;
         entity.PumpRecordId = model.PumpRecordId;
+        entity.SyncIdentifier = model.SyncIdentifier;
         entity.ApsSnapshotId = model.ApsSnapshotId;
         entity.InsulinContextJson = model.InsulinContext is not null
             ? JsonSerializer.Serialize(model.InsulinContext)

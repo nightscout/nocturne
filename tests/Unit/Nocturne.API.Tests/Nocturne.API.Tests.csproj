@@ -29,11 +29,19 @@
         <PackageReference Include="Microsoft.Extensions.Options" />
         <PackageReference Include="Microsoft.Data.Sqlite" />
         <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+        <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
+        <!-- The central 4.8.0 pin is for the source generators, which must load in Visual Studio's
+             Roslyn. Here the parser only reads test sources, and EF Core's design-time package
+             already pulls 5.0.0 in transitively, so anything older is a version conflict. -->
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" VersionOverride="5.0.0" />
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\..\..\src\API\Nocturne.API\Nocturne.API.csproj" />
         <ProjectReference Include="..\..\..\src\Connectors\Nocturne.Connectors.Glooko\Nocturne.Connectors.Glooko.csproj" />
         <ProjectReference Include="..\..\..\src\Connectors\Nocturne.Connectors.Nightscout\Nocturne.Connectors.Nightscout.csproj" />
         <ProjectReference Include="..\..\Shared\Nocturne.Tests.Shared\Nocturne.Tests.Shared.csproj" />
+        <!-- The corpus generator project carries the C# scenario harness (ScenarioModels +
+             the in-memory tracker/timer fakes) used by the engine-seam corpus tests. -->
+        <ProjectReference Include="..\..\Parity\Nocturne.Alerts.ParityCorpus.Generator\Nocturne.Alerts.ParityCorpus.Generator.csproj" />
     </ItemGroup>
 </Project>

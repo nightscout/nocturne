@@ -1,4 +1,5 @@
 using System.Text;
+using Nocturne.Core.Models.Net;
 
 namespace Nocturne.API.Services.Alerts.Webhooks;
 
@@ -8,12 +9,21 @@ namespace Nocturne.API.Services.Alerts.Webhooks;
 /// </summary>
 /// <remarks>
 /// Blank or null URLs are silently skipped. Failed URLs are collected and returned
-/// rather than raising an exception so that partial success is possible.
+/// rather than raising an exception so that partial success is possible. A URL that is
+/// not a publicly routable http(s) destination is reported as failed without being
+/// requested — see <see cref="OutboundDestination"/>.
 /// </remarks>
 public class WebhookRequestSender(
     IHttpClientFactory httpClientFactory,
     ILogger<WebhookRequestSender> logger)
 {
+    /// <summary>
+    /// Name of the HTTP client used for webhook delivery. Configured not to follow
+    /// redirects, so <see cref="OutboundDestination"/>'s verdict on the URL cannot be
+    /// walked past by the target answering 3xx.
+    /// </summary>
+    public const string HttpClientName = "Webhook";
+
     /// <summary>
     /// Posts <paramref name="payload"/> to each URL in <paramref name="urls"/>.
     /// </summary>
@@ -36,12 +46,20 @@ public class WebhookRequestSender(
         CancellationToken cancellationToken = default
     )
     {
-        var httpClient = httpClientFactory.CreateClient();
+        var httpClient = httpClientFactory.CreateClient(HttpClientName);
         var failures = new List<string>();
         var urlList = urls.Where(url => !string.IsNullOrWhiteSpace(url)).ToList();
 
         foreach (var url in urlList)
         {
+            if (!await OutboundDestination.IsPubliclyRoutableAsync(url, cancellationToken))
+            {
+                failures.Add(url);
+                logger.LogWarning(
+                    "Refusing to send webhook to {Url}: not a publicly routable http(s) destination", url);
+                continue;
+            }
+
             try
             {
                 using var content = new StringContent(

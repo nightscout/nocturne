@@ -39,8 +39,14 @@ public record GuestLinkCreationResult(string Code, string FullUrl, GuestLinkInfo
 
 public record GuestLinkActivationResult(bool Success, GuestSessionInfo? Session, string? Error);
 
+/// <summary>
+/// A validated guest session. <paramref name="TenantId"/> is the tenant the underlying grant
+/// belongs to; callers must compare it against the tenant resolved for the request before
+/// honouring the session.
+/// </summary>
 public record GuestSessionInfo(
     Guid GrantId,
+    Guid TenantId,
     Guid DataOwnerSubjectId,
     IReadOnlyList<string> Scopes,
     string? Label,

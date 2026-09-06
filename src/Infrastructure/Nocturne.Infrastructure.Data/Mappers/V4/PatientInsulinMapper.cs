@@ -88,6 +88,5 @@ public static class PatientInsulinMapper
         entity.Concentration = model.Concentration;
         entity.Role = model.Role.ToString();
         entity.IsPrimary = model.IsPrimary;
-        entity.SysUpdatedAt = DateTime.UtcNow;
     }
 }

@@ -8,70 +8,94 @@
   import GlucoseRangeCalendarPicker from "$lib/components/alerts/GlucoseRangeCalendarPicker.svelte";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import { getReportsAnalysis, type DateRangeInput } from "$api/reports.remote";
-  import { bg, bgLabel } from "$lib/utils/formatting";
-  import { getResourceContext } from "$lib/hooks/resource-context.svelte";
+  import { bg, bgDelta, bgLabel, formatShortDate } from "$lib/utils/formatting";
+  import { contextResource } from "$lib/hooks/resource-context.svelte";
+  import { parseDate } from "@internationalized/date";
+  import { untrack } from "svelte";
+  import { useSearchParams } from "runed/kit";
+  import { z } from "zod";
+  import {
+    dayCount,
+    dayPart,
+    isDayString,
+    startOfDay,
+    toDayString,
+  } from "$lib/utils/date-range";
 
-  type Preset =
-    | "last7-prior7"
-    | "last14-prior14"
-    | "last30-prior30"
-    | "thisMonth-lastMonth"
-    | "custom";
+  const PRESETS = [
+    "last7-prior7",
+    "last14-prior14",
+    "last30-prior30",
+    "thisMonth-lastMonth",
+    "custom",
+  ] as const;
+
+  type Preset = (typeof PRESETS)[number];
+  type Side = "a" | "b";
 
   type Periods = {
     a: { label: string; from: string; to: string };
     b: { label: string; from: string; to: string };
   };
 
-  function fmtIso(d: Date): string {
-    return d.toISOString().slice(0, 10);
-  }
+  const DEFAULT_PRESET: Preset = "last14-prior14";
 
-  function shiftDays(date: string, days: number): string {
-    const d = new Date(date);
-    d.setDate(d.getDate() + days);
-    return fmtIso(d);
-  }
+  /**
+   * The comparison lives in the URL, so refresh, share and Back all reproduce it,
+   * and the committed periods the queries read are the same values the labels and
+   * range lines render from — previously the header read a draft the numbers had
+   * never been loaded for, so after Swap period A's figures sat under period B's
+   * label until Load was pressed.
+   */
+  const ComparisonParamsSchema = z.object({
+    preset: z.enum(PRESETS).nullable().default(null),
+    aFrom: z.string().nullable().default(null),
+    aTo: z.string().nullable().default(null),
+    aLabel: z.string().nullable().default(null),
+    bFrom: z.string().nullable().default(null),
+    bTo: z.string().nullable().default(null),
+    bLabel: z.string().nullable().default(null),
+  });
 
-  function daysBetween(from: string, to: string): number {
-    const a = new Date(from);
-    const b = new Date(to);
-    return Math.round((b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  function shiftDays(day: string, days: number): string {
+    return parseDate(day).add({ days }).toString();
   }
 
   function rangeDisplay(from: string, to: string): string {
-    const opts: Intl.DateTimeFormatOptions = {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    };
-    const fromStr = new Date(from).toLocaleDateString(undefined, opts);
-    const toStr = new Date(to).toLocaleDateString(undefined, opts);
-    return `${fromStr} – ${toStr}`;
+    return `${formatShortDate(startOfDay(from), true)} – ${formatShortDate(startOfDay(to), true)}`;
+  }
+
+  // Presets are built on the local calendar day. Deriving "today" from
+  // `toISOString()` named yesterday for anyone east of UTC, which also excluded
+  // today from the calendar picker's maxDate.
+  function todayDay(): string {
+    return toDayString();
   }
 
   function computePreset(preset: Preset): Periods {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayIso = fmtIso(today);
+    const today = todayDay();
 
     if (preset === "thisMonth-lastMonth") {
-      const firstOfThis = new Date(today.getFullYear(), today.getMonth(), 1);
-      const firstOfLast = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-      const lastOfLast = new Date(today.getFullYear(), today.getMonth(), 0);
+      const thisMonthStart = parseDate(today).set({ day: 1 });
+      const lastMonthStart = thisMonthStart.subtract({ months: 1 });
+      const lastMonthEnd = thisMonthStart.subtract({ days: 1 });
       return {
-        a: { label: "Last Month", from: fmtIso(firstOfLast), to: fmtIso(lastOfLast) },
-        b: { label: "This Month", from: fmtIso(firstOfThis), to: todayIso },
+        a: {
+          label: "Last Month",
+          from: lastMonthStart.toString(),
+          to: lastMonthEnd.toString(),
+        },
+        b: { label: "This Month", from: thisMonthStart.toString(), to: today },
       };
     }
 
     const span = preset === "last7-prior7" ? 7 : preset === "last14-prior14" ? 14 : 30;
-    const bFrom = shiftDays(todayIso, -(span - 1));
+    const bFrom = shiftDays(today, -(span - 1));
     const aTo = shiftDays(bFrom, -1);
     const aFrom = shiftDays(aTo, -(span - 1));
     return {
       a: { label: `Prior ${span} days`, from: aFrom, to: aTo },
-      b: { label: `Last ${span} days`, from: bFrom, to: todayIso },
+      b: { label: `Last ${span} days`, from: bFrom, to: today },
     };
   }
 
@@ -83,57 +107,97 @@
     { value: "custom", label: "Custom" },
   ];
 
-  let preset = $state<Preset>("last14-prior14");
-  let openPopover = $state<"a" | "b" | null>(null);
-  let periods = $state<Periods>(computePreset("last14-prior14"));
-  /** The period values that queries are actually reading from. */
-  let committed = $state<Periods>(computePreset("last14-prior14"));
+  const urlParams = useSearchParams(ComparisonParamsSchema, {
+    showDefaults: true,
+    noScroll: true,
+  });
 
-  function applyPreset(p: Preset) {
-    preset = p;
-    if (p !== "custom") {
-      periods = computePreset(p);
-      committed = periods;
-    }
+  /**
+   * The committed comparison, read out of the URL with the preset as fallback.
+   * A day that isn't resolvable falls back to the preset's rather than being fed
+   * to the queries.
+   */
+  function readCommitted(): Periods {
+    const preset = urlParams.preset ?? DEFAULT_PRESET;
+    const fromPreset = computePreset(preset === "custom" ? DEFAULT_PRESET : preset);
+    const day = (value: string | null, fallback: string) =>
+      dayPart(isDayString(value) ? value : fallback);
+    return {
+      a: {
+        label: urlParams.aLabel ?? fromPreset.a.label,
+        from: day(urlParams.aFrom, fromPreset.a.from),
+        to: day(urlParams.aTo, fromPreset.a.to),
+      },
+      b: {
+        label: urlParams.bLabel ?? fromPreset.b.label,
+        from: day(urlParams.bFrom, fromPreset.b.from),
+        to: day(urlParams.bTo, fromPreset.b.to),
+      },
+    };
   }
 
+  const committed = $derived.by(readCommitted);
+
+  let openPopover = $state<Side | null>(null);
+  let preset = $state<Preset>(untrack(() => urlParams.preset ?? DEFAULT_PRESET));
+  /** Pending edits to the compared ranges, applied to the URL by Load. */
+  let draft = $state<Periods>(untrack(readCommitted));
+
+  /** Write a comparison to the URL, which is what the queries read. */
+  function commit(next: Periods, nextPreset: Preset) {
+    draft = next;
+    preset = nextPreset;
+    urlParams.update({
+      preset: nextPreset,
+      aFrom: next.a.from,
+      aTo: next.a.to,
+      aLabel: next.a.label,
+      bFrom: next.b.from,
+      bTo: next.b.to,
+      bLabel: next.b.label,
+    });
+  }
+
+  function applyPreset(p: Preset) {
+    if (p === "custom") {
+      preset = p;
+      return;
+    }
+    commit(computePreset(p), p);
+  }
+
+  /**
+   * Swapping is a relabelling of two windows that are already loaded, so it
+   * applies straight away rather than waiting for Load.
+   */
   function swap() {
-    periods = { a: periods.b, b: periods.a };
+    commit({ a: committed.b, b: committed.a }, "custom");
+  }
+
+  /** A label is display-only, so it commits on its own without reloading. */
+  function setLabel(side: Side, label: string) {
+    draft = { ...draft, [side]: { ...draft[side], label } };
+    urlParams.update(side === "a" ? { aLabel: label } : { bLabel: label });
   }
 
   const inputA = $derived<DateRangeInput>({ from: committed.a.from, to: committed.a.to });
   const inputB = $derived<DateRangeInput>({ from: committed.b.from, to: committed.b.to });
 
+  // Only the compared windows need reloading; labels are excluded.
   const isDirty = $derived(
-    periods.a.from !== committed.a.from ||
-    periods.a.to !== committed.a.to ||
-    periods.b.from !== committed.b.from ||
-    periods.b.to !== committed.b.to
+    draft.a.from !== committed.a.from ||
+    draft.a.to !== committed.a.to ||
+    draft.b.from !== committed.b.from ||
+    draft.b.to !== committed.b.to
   );
 
-  // Call queries directly in reactive context — SvelteKit query() returns a
-  // reactive QueryResult, not a Promise. Using $derived ensures the queries
-  // re-run when inputs change.
-  const queryA = $derived(getReportsAnalysis(inputA));
-  const queryB = $derived(getReportsAnalysis(inputB));
-
-  // Sync to layout's ResourceContext using $effect.pre (matching contextResource's
-  // approach). $effect.pre runs before DOM updates, which is critical: the layout's
-  // ResourceGuard conditionally renders children, so the context must be updated
-  // before the render pass commits.
-  const ctx = getResourceContext();
-
-  $effect.pre(() => {
-    if (ctx) {
-      ctx.loading = queryA.loading || queryB.loading;
-      ctx.error = (queryA.error ?? queryB.error) as Error | string | null | undefined;
-      ctx.hasData = !!queryA.current && !!queryB.current;
-      ctx.errorTitle = "Error Loading Comparison";
-      ctx.refetch = () => {
-        queryA.refresh();
-        queryB.refresh();
-      };
-    }
+  // Both periods register with the layout's ResourceContext, which merges them:
+  // either side's failure surfaces and Retry refetches both.
+  const queryA = contextResource(() => getReportsAnalysis(inputA), {
+    errorTitle: "Error Loading Comparison",
+  });
+  const queryB = contextResource(() => getReportsAnalysis(inputB), {
+    errorTitle: "Error Loading Comparison",
   });
 
   type MetricKey =
@@ -155,50 +219,42 @@
     MetricKey,
     {
       label: string;
-      goodWhen: "up" | "down";
       format: (v: number) => string;
       formatDelta: (delta: number) => string;
     }
   > = {
     tirTarget: {
       label: "Time in Range",
-      goodWhen: "up",
       format: (v) => `${v.toFixed(1)}%`,
       formatDelta: (d) => `${signed(d)} pp`,
     },
     gmi: {
       label: "GMI",
-      goodWhen: "down",
       format: (v) => `${v.toFixed(1)}%`,
       formatDelta: (d) => `${signed(d, 2)} pp`,
     },
     cv: {
       label: "Variability (CV)",
-      goodWhen: "down",
       format: (v) => `${v.toFixed(1)}%`,
       formatDelta: (d) => `${signed(d)} pp`,
     },
     gri: {
       label: "Glycemic Risk Index",
-      goodWhen: "down",
       format: (v) => v.toFixed(0),
       formatDelta: (d) => signed(d, 0),
     },
     mean: {
       label: "Mean Glucose",
-      goodWhen: "down",
       format: (v) => `${bg(v)} ${bgLabel()}`,
-      formatDelta: (d) => `${signed(d, 0)} mg/dL`,
+      formatDelta: (d) => `${bgDelta(d)} ${bgLabel()}`,
     },
     hyperHours: {
       label: "Hyper Duration",
-      goodWhen: "down",
       format: (v) => `${v.toFixed(1)} h`,
       formatDelta: (d) => `${signed(d)} h`,
     },
     hyperEvents: {
       label: "Hyper Events",
-      goodWhen: "down",
       format: (v) => v.toFixed(0),
       formatDelta: (d) => signed(d, 0),
     },
@@ -208,13 +264,12 @@
 
   function getMetric(a: Analysis | undefined, key: MetricKey): number | null {
     if (!a) return null;
-    const tir = a.timeInRange?.percentages;
+    const tir = a.timeInRange;
     const gv = a.glycemicVariability;
     const stats = a.basicStats;
-    const hyper = a.hyperglycemiaAnalysis;
     switch (key) {
       case "tirTarget":
-        return tir?.target ?? null;
+        return tir?.percentages?.target ?? null;
       case "gmi":
         return gv?.estimatedA1c ?? a.gmi?.value ?? null;
       case "cv":
@@ -224,11 +279,9 @@
       case "mean":
         return stats?.mean ?? null;
       case "hyperHours":
-        return hyper?.averageDurationMinutes != null && hyper?.totalEpisodes != null
-          ? (hyper.averageDurationMinutes * hyper.totalEpisodes) / 60
-          : null;
+        return tir?.durations?.aboveRange != null ? tir.durations.aboveRange / 60 : null;
       case "hyperEvents":
-        return hyper?.totalEpisodes ?? null;
+        return tir?.episodes?.aboveRange ?? null;
     }
     return null;
   }
@@ -245,15 +298,22 @@
 
   // Cap percent change at ±60 % so outliers don't blow out the bar.
   const BAR_CAP_PCT = 60;
+  const BAR_COLOR = "var(--foreground)";
+
+  // Signed percent change from the first period to the second. A zero baseline admits no
+  // proportional change, so any move off it saturates the bar in the move's direction
+  // rather than drawing a flat bar beside a non-zero delta.
+  function percentChange(from: number, to: number): number {
+    const delta = to - from;
+    if (from === 0) return delta === 0 ? 0 : Math.sign(delta) * 100;
+    return (delta / Math.abs(from)) * 100;
+  }
 
   type DiffRow = {
     key: MetricKey;
     label: string;
     av: number | null;
     bv: number | null;
-    delta: number | null;
-    pct: number | null;
-    verdict: "better" | "worse" | "neutral";
     fillStyle: string;
     deltaText: string;
   };
@@ -273,52 +333,31 @@
           label: def.label,
           av,
           bv,
-          delta: null,
-          pct: null,
-          verdict: "neutral",
-          fillStyle: "left: calc(50% - 1px); width: 2px; background: var(--muted-foreground);",
+          fillStyle: `left: calc(50% - 1px); width: 2px; background: ${BAR_COLOR};`,
           deltaText: "—",
         };
       }
 
       const delta = bv - av;
-      const pct = av === 0 ? 0 : (delta / Math.abs(av)) * 100;
       const flat =
         Math.abs(delta) < (key === "gri" || key === "hyperEvents" ? 0.5 : 0.05);
-      const direction = flat ? "flat" : delta > 0 ? "up" : "down";
-      const isImprovement =
-        direction !== "flat" &&
-        ((def.goodWhen === "up" && direction === "up") ||
-          (def.goodWhen === "down" && direction === "down"));
-      const verdict: DiffRow["verdict"] = flat
-        ? "neutral"
-        : isImprovement
-          ? "better"
-          : "worse";
 
-      const magnitude = Math.min(BAR_CAP_PCT, Math.abs(pct));
+      const magnitude = Math.min(BAR_CAP_PCT, Math.abs(percentChange(av, bv)));
       const halfWidth = (magnitude / BAR_CAP_PCT) * 50;
-      const color =
-        verdict === "better"
-          ? "var(--glucose-in-range)"
-          : verdict === "worse"
-            ? "var(--glucose-very-low)"
-            : "var(--muted-foreground)";
 
+      // The bar carries the sign of the change: it grows right when the second
+      // period is higher and left when it is lower.
       const fillStyle = flat
-        ? `left: calc(50% - 1px); width: 2px; background: ${color};`
-        : isImprovement
-          ? `left: 50%; width: ${halfWidth}%; background: ${color};`
-          : `right: 50%; width: ${halfWidth}%; background: ${color};`;
+        ? `left: calc(50% - 1px); width: 2px; background: ${BAR_COLOR};`
+        : delta > 0
+          ? `left: 50%; width: ${halfWidth}%; background: ${BAR_COLOR};`
+          : `right: 50%; width: ${halfWidth}%; background: ${BAR_COLOR};`;
 
       return {
         key,
         label: def.label,
         av,
         bv,
-        delta,
-        pct,
-        verdict,
         fillStyle,
         deltaText: def.formatDelta(delta),
       };
@@ -344,15 +383,15 @@
   const tirColumns = $derived([
     {
       tir: tirA,
-      periodLabel: periods.a.label,
-      range: rangeDisplay(periods.a.from, periods.a.to),
+      periodLabel: committed.a.label,
+      range: rangeDisplay(committed.a.from, committed.a.to),
       accent: "var(--muted-foreground)",
       key: "a",
     },
     {
       tir: tirB,
-      periodLabel: periods.b.label,
-      range: rangeDisplay(periods.b.from, periods.b.to),
+      periodLabel: committed.b.label,
+      range: rangeDisplay(committed.b.from, committed.b.to),
       accent: "var(--glucose-in-range)",
       key: "b",
     },
@@ -360,8 +399,9 @@
 </script>
 
 <div class="@container space-y-6 p-3 @md:p-6">
-  <!-- Period controls -->
-  <Card.Root>
+  <!-- Period controls — pickers/toggles are print chaff; compared period
+       labels + ranges remain visible in the diff strip and TIR cards below. -->
+  <Card.Root class="print:hidden">
     <Card.Content class="space-y-4 p-4">
       <div class="flex flex-wrap items-end gap-3">
         <div class="min-w-[220px] flex-1">
@@ -391,7 +431,7 @@
         <Button
           size="sm"
           disabled={!isDirty}
-          onclick={() => { committed = { ...periods }; }}
+          onclick={() => commit(draft, preset)}
           class="gap-2"
         >
           Load
@@ -400,7 +440,7 @@
 
       <div class="grid gap-4 @xl:grid-cols-2">
         {#each sideConfigs as cfg (cfg.side)}
-          {@const p = periods[cfg.side]}
+          {@const p = draft[cfg.side]}
           <div class="rounded-md border border-border bg-card p-3">
             <div class="mb-2 flex items-center gap-2">
               <span
@@ -410,14 +450,11 @@
               <Input
                 value={p.label}
                 oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
-                  (periods = {
-                    ...periods,
-                    [cfg.side]: { ...p, label: e.currentTarget.value },
-                  })}
+                  setLabel(cfg.side, e.currentTarget.value)}
                 class="h-7 border-0 bg-transparent px-1 text-sm font-semibold focus-visible:ring-1"
               />
               <span class="ml-auto font-mono text-[11px] text-muted-foreground">
-                {daysBetween(p.from, p.to)}d
+                {dayCount(p.from, p.to)}d
               </span>
             </div>
             <Popover.Root
@@ -441,11 +478,11 @@
                 <GlucoseRangeCalendarPicker
                   startDate={p.from}
                   endDate={p.to}
-                  maxDate={fmtIso(new Date())}
+                  maxDate={todayDay()}
                   onRangeChange={(start, end) => {
                     preset = "custom";
-                    periods = {
-                      ...periods,
+                    draft = {
+                      ...draft,
                       [cfg.side]: { ...p, from: start, to: end },
                     };
                     openPopover = null;
@@ -468,7 +505,7 @@
             class="inline-block h-2 w-2 rounded-full"
             style="background: var(--muted-foreground);"
           ></span>
-          {periods.a.label}
+          {committed.a.label}
         </span>
         <span class="font-mono text-[11px] uppercase tracking-[0.15em] text-muted-foreground">
           vs
@@ -478,12 +515,12 @@
             class="inline-block h-2 w-2 rounded-full"
             style="background: var(--glucose-in-range);"
           ></span>
-          {periods.b.label}
+          {committed.b.label}
         </span>
         <span class="ml-auto font-mono text-[11px] text-muted-foreground">
-          {rangeDisplay(periods.a.from, periods.a.to)}
+          {rangeDisplay(committed.a.from, committed.a.to)}
           <ArrowRight class="mx-1 inline h-3 w-3" />
-          {rangeDisplay(periods.b.from, periods.b.to)}
+          {rangeDisplay(committed.b.from, committed.b.to)}
         </span>
       </div>
 
@@ -508,11 +545,6 @@
             </div>
             <div
               class="ml-auto font-mono text-xs font-semibold tabular-nums @2xl:ml-0 @2xl:text-right"
-              style="color: {row.verdict === 'better'
-                ? 'var(--glucose-in-range)'
-                : row.verdict === 'worse'
-                  ? 'var(--glucose-very-low)'
-                  : 'var(--muted-foreground)'};"
             >
               {row.deltaText}
             </div>
@@ -521,9 +553,9 @@
       </div>
 
       <div class="flex justify-between font-mono text-[10px] uppercase tracking-[0.06em] text-muted-foreground">
-        <span>← worse</span>
+        <span>← lower in {committed.b.label}</span>
         <span>no change</span>
-        <span>better →</span>
+        <span>higher in {committed.b.label} →</span>
       </div>
     </Card.Content>
   </Card.Root>
@@ -550,7 +582,7 @@
                 {col.range}
               </span>
             </div>
-            <div class="h-80">
+            <div class="h-80 w-full">
               {#if col.tir}
                 <TIRStackedChart percentages={col.tir} />
               {:else}

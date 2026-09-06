@@ -6,4 +6,6 @@ export interface TrackerNotification {
   hours: number | undefined;
   description?: string;
   displayOrder?: number;
+  /** Managed alert rule delivering this threshold; absent until the server has synced one. */
+  alertRuleId?: string;
 }

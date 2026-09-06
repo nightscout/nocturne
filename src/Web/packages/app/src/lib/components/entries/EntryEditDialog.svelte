@@ -30,6 +30,7 @@
   } from "lucide-svelte";
   import { getDataSourceDisplayName } from "$lib/utils/data-source-display";
   import { toast } from "svelte-sonner";
+  import { useToastSubmission } from "$lib/forms";
   import {
     create as createBolusForm,
     update as updateBolusForm,
@@ -104,7 +105,7 @@
   });
 
   let mills = $state<number>(Date.now());
-  let isDeleting = $state(false);
+  const deletion = useToastSubmission("Failed to delete entry");
   let carbsPendingFoods = $state<PendingFood[]>([]);
 
   // Form element refs for programmatic submission
@@ -351,30 +352,32 @@
   });
 
   async function handleDelete() {
-    if (!entry?.data.id) return;
-    isDeleting = true;
-    try {
+    const target = entry;
+    const targetId = target?.data.id;
+    if (!targetId) return;
+
+    await deletion.run(async () => {
       const promises: Promise<unknown>[] = [];
 
       // Delete primary entry
-      switch (entry.kind) {
+      switch (target.kind) {
         case "bolus":
-          promises.push(deleteBolus(entry.data.id));
+          promises.push(deleteBolus(targetId));
           break;
         case "carbs":
-          promises.push(deleteCarbIntake(entry.data.id));
+          promises.push(deleteCarbIntake(targetId));
           break;
         case "bgCheck":
-          promises.push(deleteBGCheck(entry.data.id));
+          promises.push(deleteBGCheck(targetId));
           break;
         case "note":
-          promises.push(deleteNote(entry.data.id));
+          promises.push(deleteNote(targetId));
           break;
         case "deviceEvent":
-          promises.push(deleteDeviceEvent(entry.data.id));
+          promises.push(deleteDeviceEvent(targetId));
           break;
         case "basalInjection":
-          promises.push(deleteBasalInjection(entry.data.id));
+          promises.push(deleteBasalInjection(targetId));
           break;
       }
 
@@ -407,12 +410,7 @@
       toast.success("Entry deleted");
       open = false;
       onClose();
-    } catch (err) {
-      console.error("Failed to delete entry:", err);
-      toast.error("Failed to delete entry");
-    } finally {
-      isDeleting = false;
-    }
+    });
   }
 </script>
 
@@ -755,10 +753,10 @@
             type="button"
             variant="destructive"
             onclick={handleDelete}
-            disabled={isSaving || isDeleting}
+            disabled={isSaving || deletion.busy}
             class="mr-auto"
           >
-            {#if isDeleting}
+            {#if deletion.busy}
               <Loader2 class="mr-2 h-4 w-4 animate-spin" />
               Deleting...
             {:else}
@@ -771,14 +769,14 @@
           type="button"
           variant="outline"
           onclick={onClose}
-          disabled={isSaving || isDeleting}
+          disabled={isSaving || deletion.busy}
         >
           Cancel
         </Button>
         <Button
           type="button"
           onclick={handleSave}
-          disabled={isSaving || isDeleting || formsPending}
+          disabled={isSaving || deletion.busy || formsPending}
         >
           {#if isSaving || formsPending}
             <Loader2 class="mr-2 h-4 w-4 animate-spin" />

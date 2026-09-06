@@ -34,8 +34,10 @@ public sealed record DataNeedsSet(
     bool NeedsGlucoseBucket,
     bool NeedsTreatments,
     bool NeedsTenantTimeZone,
+    bool NeedsSleepSession,
     IReadOnlySet<PumpModeState> ReferencedPumpStates,
-    IReadOnlySet<(StateSpanCategory Category, string? State)> ReferencedStateSpans)
+    IReadOnlySet<(StateSpanCategory Category, string? State)> ReferencedStateSpans,
+    IReadOnlySet<Guid> ReferencedTrackerDefinitions)
 // Note: there is intentionally no `NeedsDoNotDisturb` here. DND state must be available for
 // every evaluation pass because engine-level suppression applies to every rule regardless of
 // whether the rule's condition tree references the `do_not_disturb` fact. Gating fetch on a
@@ -46,9 +48,10 @@ public sealed record DataNeedsSet(
     public static DataNeedsSet None { get; } =
         new(false, false, false, false, false, false, false, false,
             false, false, false, false, false, false, false,
-            false, false, false,
+            false, false, false, false,
             new HashSet<PumpModeState>(),
-            new HashSet<(StateSpanCategory, string?)>());
+            new HashSet<(StateSpanCategory, string?)>(),
+            new HashSet<Guid>());
 }
 
 /// <summary>
@@ -121,6 +124,13 @@ public static class RuleDataNeeds
                     if (typed is not null) b.StateSpans.Add((typed.Category, typed.State));
                     return;
                 }
+            case AlertConditionType.TrackerAge:
+                {
+                    ApplyLeaf(rule.ConditionType, b);
+                    var typed = TryDeserialize<TrackerAgeCondition>(rule.ConditionParams);
+                    if (typed is not null) b.TrackerDefinitions.Add(typed.TrackerDefinitionId);
+                    return;
+                }
             default:
                 ApplyLeaf(rule.ConditionType, b);
                 return;
@@ -145,6 +155,8 @@ public static class RuleDataNeeds
                     b.PumpStates.Add(visited.PumpState.Mode);
                 else if (kind == AlertConditionType.StateSpanActive && visited.StateSpanActive is not null)
                     b.StateSpans.Add((visited.StateSpanActive.Category, visited.StateSpanActive.State));
+                else if (kind == AlertConditionType.TrackerAge && visited.TrackerAge is not null)
+                    b.TrackerDefinitions.Add(visited.TrackerAge.TrackerDefinitionId);
             }
             return null;
         });
@@ -193,8 +205,10 @@ public static class RuleDataNeeds
             // null (the default the UI saves), so the enricher must populate it. Without
             // this co-fetch the evaluator would silently fall back to UTC.
             case AlertConditionType.TimeOfDay: b.TenantTimeZone = true; break;
+            case AlertConditionType.SleepSessionActive: b.SleepSession = true; break;
             case AlertConditionType.PumpState: /* handled in VisitTopLevel/VisitNode */ break;
             case AlertConditionType.StateSpanActive: /* handled in VisitTopLevel/VisitNode */ break;
+            case AlertConditionType.TrackerAge: /* handled in VisitTopLevel/VisitNode */ break;
             // DoNotDisturb deliberately not handled here — see DataNeedsSet docs above.
             // Threshold, RateOfChange, SignalLoss, Staleness, Composite, Not, Sustained
             // require no extra context — handled by base SensorContext or recursed by VisitNode.
@@ -237,12 +251,14 @@ public static class RuleDataNeeds
         public bool GlucoseBucket;
         public bool Treatments;
         public bool TenantTimeZone;
+        public bool SleepSession;
         public readonly HashSet<PumpModeState> PumpStates = new();
         public readonly HashSet<(StateSpanCategory Category, string? State)> StateSpans = new();
+        public readonly HashSet<Guid> TrackerDefinitions = new();
 
         public DataNeedsSet Build() =>
             new(Iob, Cob, Predicted, Reservoir, SiteAge, SensorAge, Trend, ActiveAlerts,
                 LastApsCycle, LastApsEnacted, PumpStatus, TempBasal, UploaderStatus, Override, SensitivityRatio,
-                GlucoseBucket, Treatments, TenantTimeZone, PumpStates, StateSpans);
+                GlucoseBucket, Treatments, TenantTimeZone, SleepSession, PumpStates, StateSpans, TrackerDefinitions);
     }
 }

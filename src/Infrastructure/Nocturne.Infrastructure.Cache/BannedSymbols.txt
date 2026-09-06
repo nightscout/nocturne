@@ -1,0 +1,13 @@
+P:System.DateTime.UtcNow;Inject TimeProvider and read GetUtcNow().UtcDateTime.
+P:System.DateTime.Now;Inject TimeProvider; GetLocalNow().LocalDateTime only where local time is genuinely intended.
+P:System.DateTime.Today;Inject TimeProvider; GetLocalNow().Date only where local time is genuinely intended.
+P:System.DateTimeOffset.UtcNow;Inject TimeProvider and read GetUtcNow().
+P:System.DateTimeOffset.Now;Inject TimeProvider; GetLocalNow() only where local time is genuinely intended.
+T:System.Threading.Timer;Use TimeProvider.CreateTimer so the interval is drivable from a test.
+M:System.Threading.Tasks.Task.Delay(System.Int32);Use the TimeProvider overload: Task.Delay(delay, timeProvider, cancellationToken).
+M:System.Threading.Tasks.Task.Delay(System.Int32,System.Threading.CancellationToken);Use the TimeProvider overload: Task.Delay(delay, timeProvider, cancellationToken).
+M:System.Threading.Tasks.Task.Delay(System.TimeSpan);Use the TimeProvider overload: Task.Delay(delay, timeProvider, cancellationToken).
+M:System.Threading.Tasks.Task.Delay(System.TimeSpan,System.Threading.CancellationToken);Use the TimeProvider overload: Task.Delay(delay, timeProvider, cancellationToken).
+M:System.Threading.CancellationTokenSource.CancelAfter(System.TimeSpan);Construct with new CancellationTokenSource(delay, timeProvider) so the deadline is drivable from a test.
+M:System.Threading.CancellationTokenSource.CancelAfter(System.Int32);Construct with new CancellationTokenSource(delay, timeProvider) so the deadline is drivable from a test.
+M:System.Threading.Thread.Sleep(System.Int32);Blocking sleep; await Task.Delay(delay, timeProvider, cancellationToken) instead.

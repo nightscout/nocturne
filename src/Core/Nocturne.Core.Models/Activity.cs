@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Nocturne.Core.Models.Attributes;
 
 namespace Nocturne.Core.Models;
 
@@ -118,6 +119,22 @@ public class Activity : ProcessableDocumentBase
     [JsonPropertyName("name")]
     [Sanitizable]
     public string? Name { get; set; }
+
+    /// <summary>
+    /// Gets or sets the data source identifier indicating where this activity originated from.
+    /// Use constants from <see cref="Core.Constants.DataSources"/> for consistent values.
+    /// </summary>
+    /// <remarks>
+    /// Carried through decomposition onto <see cref="StateSpan.Source"/>,
+    /// <see cref="HeartRate.DataSource"/> and <see cref="StepCount.DataSource"/> so a connector's
+    /// resume watermark can be scoped to its own records.
+    /// </remarks>
+    /// <example>
+    /// Common values: "nightscout-connector", "glooko-connector", "manual"
+    /// </example>
+    [JsonPropertyName("data_source")]
+    [NocturneOnly]
+    public string? DataSource { get; set; }
 
     /// <summary>
     /// Gets or sets additional properties as a dynamic object

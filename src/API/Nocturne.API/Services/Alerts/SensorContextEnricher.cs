@@ -3,6 +3,7 @@ using Nocturne.API.Configuration;
 using Nocturne.API.Controllers.V4.Analytics;
 using Nocturne.API.Services.Alerts.Evaluators;
 using Nocturne.API.Services.Glucose;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Models;
@@ -131,8 +132,12 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
 
         if (needs.NeedsReservoir)
         {
-            var reservoirUnits = await FetchReservoirAsync(isReplay ? now : null, ct);
-            enriched = enriched with { ReservoirUnits = reservoirUnits };
+            var estimate = await _deps.Reservoir.GetEstimateAsync(isReplay ? now : null, ct);
+            enriched = enriched with
+            {
+                ReservoirUnits = estimate?.Units,
+                ReservoirIsLowerBound = estimate?.IsLowerBound ?? false,
+            };
         }
 
         if (needs.NeedsSiteAge)
@@ -171,10 +176,11 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         // applies to every rule regardless of whether its tree references the do_not_disturb
         // condition fact. Gating on a NeedsDoNotDisturb walker flag would silently exempt
         // every typical glucose/threshold rule from suppression, which is the opposite of
-        // what users expect. The lookup is one indexed row from `tenant_alert_settings` per
-        // evaluation pass — cheap enough to make unconditional. Runs after Phase 2 so
-        // `enriched.TenantTimeZoneId` (populated from the canonical PatientRecord) is
-        // available to interpret the scheduled DND window.
+        // what users expect. The lookups are one indexed row from `tenant_alert_settings` plus
+        // the tenant's uncleared `dnd_windows` (partial-index scan) per evaluation pass — cheap
+        // enough to make unconditional. Runs after Phase 2 so `enriched.TenantTimeZoneId`
+        // (populated from the canonical PatientRecord) is available to interpret the scheduled
+        // DND window.
         if (!isReplay)
         {
             // Force the timezone fetch even when no other leaf demands it — scheduled DND
@@ -195,12 +201,23 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
 
             var settings = await _deps.Alerts.GetTenantAlertSettingsAsync(tenantId, ct);
             // No row yet means DND has never been configured for this tenant — treat as off.
-            var projection = settings?.Resolve(now, enriched.TenantTimeZoneId);
+            // Scheduled DND is tenant-wide, i.e. == scope=all (manual DND is a scope=all window,
+            // resolved below); this projects the active scheduled window if any (ADR 0004 D5).
+            var scheduled = settings?.Resolve(now, enriched.TenantTimeZoneId);
+
+            // Scoped DND windows + scheduled DND, folded into the active scope set and the
+            // tenant-wide projection by the shared resolver — the same call replay makes (there
+            // receipt-gated), so the live gate and replay cannot drift on how a window resolves.
+            // The read is bounded by expiry: a window that merely runs out is never cleared, so
+            // filtering on cleared_at alone would return every timed mute the tenant has ever set,
+            // on a path that runs once per reading.
+            var windows = await _deps.Alerts.GetUnexpiredDndWindowsAsync(tenantId, now, ct);
+            var dnd = DndWindowResolver.Resolve(windows, now, receiptGated: false, scheduled);
+
             enriched = enriched with
             {
-                ActiveDoNotDisturb = projection is null
-                    ? null
-                    : new DoNotDisturbSnapshot(projection.StartedAt, projection.Source),
+                ActiveDoNotDisturb = dnd.ActiveDoNotDisturb,
+                ActiveDndScopes = dnd.Scopes,
             };
         }
 
@@ -295,7 +312,43 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
             enriched = enriched with { ActiveStateSpans = dict };
         }
 
+        if (needs.NeedsSleepSession)
+        {
+            enriched = enriched with { SleepSessionActive = await IsSleepSessionActiveAsync(now, ct) };
+        }
+
+        if (needs.ReferencedTrackerDefinitions.Count > 0)
+        {
+            // One query for the whole referenced set. `now` is the live clock for
+            // orchestrator/sweep passes and the replay tick for replay, so the same
+            // fetch answers "active at this instant" in both paths.
+            var references = await _deps.Trackers.GetActiveTrackerReferencesAsync(
+                needs.ReferencedTrackerDefinitions, now, ct);
+            enriched = enriched with { ActiveTrackers = references };
+        }
+
         return enriched;
+    }
+
+    /// <summary>
+    /// Returns true when a sleep session has <c>StartTime &lt;= now &lt;= EndTime</c>. The sleep
+    /// service's range filter maps <c>from</c> to <c>EndTime &gt;= from</c> and <c>to</c> to
+    /// <c>StartTime &lt;= to</c>, so passing <paramref name="now"/> as both bounds selects exactly
+    /// the sessions overlapping the instant. A query failure is treated as "not active" (logged
+    /// and swallowed), matching the silent fail-mode of the other enrichment branches.
+    /// </summary>
+    private async Task<bool> IsSleepSessionActiveAsync(DateTime now, CancellationToken ct)
+    {
+        try
+        {
+            var sessions = await _deps.Sleep.GetSessionsAsync(from: now, to: now, limit: 1, cancellationToken: ct);
+            return sessions.Any();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to resolve active sleep session for alert evaluation; treating as inactive");
+            return false;
+        }
     }
 
     /// <summary>
@@ -316,10 +369,16 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         var profileName = await _deps.ActiveProfileResolver.GetActiveProfileNameAsync(atMills, ct) ?? "Default";
         var schedule = await _deps.TargetRangeSchedules.GetActiveAtAsync(profileName, at, ct);
 
-        // No schedule at all — fall back to fully default (low=70, high=180) and clinical bucket defaults.
+        // No schedule at all — fall back to the consensus in-range band and clinical bucket defaults.
         if (schedule is null || schedule.Entries.Count == 0)
         {
-            return GlucoseBucketResolver.Compute(glucoseMgdl, 70m, 180m, null, null, null);
+            return GlucoseBucketResolver.Compute(
+                glucoseMgdl,
+                (decimal)GlucoseConstants.TargetBottomMgdl,
+                (decimal)GlucoseConstants.TargetTopMgdl,
+                null,
+                null,
+                null);
         }
 
         // Pick the entry active at the tenant's local time-of-day. `at` is always UTC; the
@@ -375,7 +434,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         {
             if (needs.NeedsLastApsCycle)
             {
-                var t = await _deps.ApsSnapshots.GetLatestTimestampAsync(asOf, ct);
+                var t = await _deps.ApsSnapshots.GetLatestTimestampAsOfAsync(asOf, ct);
                 enriched = enriched with { LastApsCycleAt = t, HasEverApsCycled = t.HasValue };
             }
             if (needs.NeedsLastApsEnacted)
@@ -595,18 +654,6 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
             points.Add(new PredictedGlucosePoint(offsetMinutes, (decimal)curve[i]));
         }
         return points;
-    }
-
-    private async Task<decimal?> FetchReservoirAsync(DateTime? asOf, CancellationToken ct)
-    {
-        // Pin the upper bound to `asOf` for replay; live path leaves both bounds null and gets
-        // the absolute latest. `to: asOf` upper-bounds the read to the replay tick (inclusive).
-        var snapshots = await _deps.PumpSnapshots.GetAsync(
-            from: null, to: asOf, device: null, source: null,
-            limit: 1, offset: 0, descending: true, ct: ct);
-
-        var reservoir = snapshots.FirstOrDefault()?.Reservoir;
-        return reservoir is null ? null : (decimal)reservoir.Value;
     }
 
     private async Task<DateTime?> FetchLatestEventAsync(DeviceEventType eventType, DateTime? asOf, CancellationToken ct)

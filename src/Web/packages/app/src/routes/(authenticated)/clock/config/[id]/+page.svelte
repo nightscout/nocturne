@@ -4,14 +4,19 @@
   import { browser } from "$app/environment";
   import { page } from "$app/state";
   import { toast } from "svelte-sonner";
+  import { useToastSubmission } from "$lib/forms";
   import { X, Loader2 } from "lucide-svelte";
   import { StateHistory } from "runed";
-  import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
+  import {
+    clockGlucoseSourceOf,
+    getRealtimeStore,
+  } from "$lib/stores/realtime-store.svelte";
   import { getDefinitions } from "$api/generated/trackers.generated.remote";
   import { getByIdForEdit as getClockFaceById } from "$api/clockfaces.remote";
   import { update as updateClockFace } from "$api/generated/clockFaces.generated.remote";
   import GlucoseChartCard from "$lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte";
   import type { ClockElement, TrackerDefinitionDto } from "$lib/api";
+  import { copyToClipboard } from "$lib/utils";
 
   // Clock builder imports
   import {
@@ -24,7 +29,7 @@
     toApiConfig,
     createInternalElement,
     createInternalRow,
-    getBgColor,
+    clockBackgroundStyle,
     isTrackerBelowThreshold,
   } from "$lib/clock-builder";
 
@@ -40,7 +45,7 @@
   // State
   let config = $state<InternalConfig>(initializeInternalConfig());
   let clockName = $state("My Clock Face");
-  let saving = $state(false);
+  const save = useToastSubmission("Failed to save clock face");
   let loading = $state(true);
   let selectedElementId = $state<string | null>(null);
   let addMenuOpen = $state<"top" | "bottom" | null>(null);
@@ -62,10 +67,8 @@
   );
 
   // Realtime store for live preview
-  const realtimeStore = getRealtimeStore();
-  const currentBG = $derived(realtimeStore.currentBG);
-  const bgDelta = $derived(realtimeStore.bgDelta);
-  const direction = $derived(realtimeStore.direction);
+  const glucose = clockGlucoseSourceOf(getRealtimeStore());
+  const currentBG = $derived(glucose.currentBG);
 
   // Tracker definitions
   const definitionsQuery = getDefinitions({});
@@ -110,11 +113,7 @@
   // Computed styles
   const hasBackgroundImage = $derived(!!config.settings?.backgroundImage);
   const previewBgStyle = $derived(
-    hasBackgroundImage
-      ? `background-image: url(${config.settings.backgroundImage}); background-size: cover; background-position: center;`
-      : config.settings?.bgColor
-        ? `background-color: ${getBgColor(currentBG)};`
-        : "background-color: #0a0a0a;"
+    clockBackgroundStyle(config.settings, currentBG, "#0a0a0a")
   );
   const overlayOpacity = $derived(
     hasBackgroundImage
@@ -362,28 +361,28 @@
     goto(resolve("/(unauthenticated)/clock/[id]", { id: clockFaceId }));
   }
 
-  function copyLink() {
-    navigator.clipboard.writeText(
+  async function copyLink() {
+    const copied = await copyToClipboard(
       `${window.location.origin}/clock/${clockFaceId}`
     );
-    toast.success("Link copied to clipboard");
+    if (copied) {
+      toast.success(
+        "Link copied. Anyone with this link can see live glucose readings, with no sign-in."
+      );
+    } else {
+      toast.error("Couldn't copy to the clipboard. Copy it manually instead.");
+    }
   }
 
   async function saveConfiguration() {
     if (!browser || !clockFaceId) return;
-    saving = true;
-    try {
+    await save.run(async () => {
       await updateClockFace({
         id: clockFaceId,
         request: { name: clockName, config: toApiConfig(config) },
       });
       toast.success("Clock face saved");
-    } catch (err) {
-      console.error("Failed to save clock face:", err);
-      toast.error("Failed to save clock face");
-    } finally {
-      saving = false;
-    }
+    });
   }
 </script>
 
@@ -447,10 +446,8 @@
       {:else}
         <ClockElementPreview
           {element}
-          {currentBG}
-          {bgDelta}
-          {direction}
-          {currentTime}
+          {glucose}
+          now={currentTime}
           {trackerDefinitions}
         />
       {/if}
@@ -493,7 +490,7 @@
     <!-- Header -->
     <ClockBuilderHeader
       {clockName}
-      {saving}
+      saving={save.busy}
       canUndo={history.canUndo}
       canRedo={history.canRedo}
       onNameChange={(name) => (clockName = name)}

@@ -104,11 +104,11 @@ public class ConnectorAdminController : ControllerBase
     [RemoteQuery]
     [ProducesResponseType(typeof(ConnectorResetJobStatus), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public ActionResult<ConnectorResetJobStatus> GetResetJobStatus(Guid jobId)
+    public async Task<ActionResult<ConnectorResetJobStatus>> GetResetJobStatus(Guid jobId, CancellationToken ct)
     {
         try
         {
-            return Ok(_resetJobService.GetStatus(jobId));
+            return Ok(await _resetJobService.GetStatusAsync(jobId, ct));
         }
         catch (KeyNotFoundException)
         {
@@ -125,11 +125,11 @@ public class ConnectorAdminController : ControllerBase
     [RemoteCommand(Invalidates = ["GetResetJobStatus"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public IActionResult CancelResetJob(Guid jobId)
+    public async Task<IActionResult> CancelResetJob(Guid jobId, CancellationToken ct)
     {
         try
         {
-            _resetJobService.Cancel(jobId);
+            await _resetJobService.CancelAsync(jobId, ct);
             return NoContent();
         }
         catch (KeyNotFoundException)

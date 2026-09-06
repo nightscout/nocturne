@@ -3,6 +3,7 @@
   import { getLocalTimeZone } from "@internationalized/date";
   import { cn } from "$lib/utils";
   import GlucoseSparkline from "$lib/components/calendar/GlucoseSparkline.svelte";
+  import { formatLocale } from "$lib/utils/formatting";
 
   interface Props {
     date: DateValue;
@@ -31,9 +32,11 @@
     inRange = false,
     isStart = false,
     isEnd = false,
-    locale = "en-US",
+    locale: localeProp,
     onclick,
   }: Props = $props();
+
+  const locale = $derived(localeProp ?? formatLocale());
 
   const tz = getLocalTimeZone();
 

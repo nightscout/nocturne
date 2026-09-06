@@ -8,6 +8,8 @@
 // instruments. Without this the OTLP SDK never starts and the web emits no telemetry.
 import './build/server/instrumentation.server.js';
 
+import { warnOnOriginMismatch } from './server-origin-warning.js';
+
 // Hardcoded WebSocket bridge tuning. These were previously env vars but are
 // internal implementation details, not per-deployment knobs. Keep in sync
 // with src/lib/config/constants.ts.
@@ -32,8 +34,24 @@ async function start() {
   const { handler } = await import('./build/handler.js');
   const { setupBridge } = await import('@nocturne/bridge');
 
-  // Create HTTP server
-  const server = createServer(handler);
+  // Create HTTP server.
+  //
+  // adapter-node reconstructs the request origin from PROTOCOL_HEADER /
+  // HOST_HEADER (x-forwarded-proto / x-forwarded-host, set by the TLS edge).
+  // When no edge is in front — e.g. the byo-proxy bundle's gateway accessed
+  // directly on plain HTTP before a proxy is set up — neither header exists,
+  // and adapter-node assumes "https" for the missing protocol, so the computed
+  // origin never matches the browser's and every remote-function POST is
+  // rejected as cross-site (403), which blocks the first-run setup wizard.
+  // Default the headers from the actual connection so an edge-less request
+  // still yields the origin the browser sees; requests that arrive with the
+  // headers already set (Caddy, byo proxies) are untouched.
+  const server = createServer((req, res) => {
+    req.headers['x-forwarded-proto'] ??= req.socket.encrypted ? 'https' : 'http';
+    req.headers['x-forwarded-host'] ??= req.headers.host;
+    warnOnOriginMismatch(req, res);
+    return handler(req, res);
+  });
 
   // Initialize WebSocket bridge
   try {

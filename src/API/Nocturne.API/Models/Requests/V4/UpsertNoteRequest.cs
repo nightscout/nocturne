@@ -5,7 +5,7 @@ namespace Nocturne.API.Models.Requests.V4;
 /// </summary>
 /// <seealso cref="Validators.V4.UpsertNoteRequestValidator"/>
 /// <seealso cref="Nocturne.API.Controllers.V4.Treatments.NoteController"/>
-public class UpsertNoteRequest
+public class UpsertNoteRequest : IBulkUpsertRequest
 {
     /// <summary>
     /// When the note was created.

@@ -47,9 +47,9 @@ public static class DeviceMapper
             Serial = entity.Serial,
             FirstSeenTimestamp = entity.FirstSeenTimestamp,
             LastSeenTimestamp = entity.LastSeenTimestamp,
-            AdditionalProperties = !string.IsNullOrEmpty(entity.AdditionalPropertiesJson)
-                ? JsonSerializer.Deserialize<Dictionary<string, object?>>(entity.AdditionalPropertiesJson)
-                : null,
+            AdditionalProperties = MapperHelpers.DeserializeJson<Dictionary<string, object?>>(
+                entity.AdditionalPropertiesJson
+            ),
         };
     }
 

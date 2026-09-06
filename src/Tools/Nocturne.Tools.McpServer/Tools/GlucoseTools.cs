@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Text.Json;
 using ModelContextProtocol.Server;
+using Nocturne.Core.Constants;
 
 namespace Nocturne.Tools.McpServer.Tools;
 
@@ -106,6 +107,9 @@ public static class GlucoseTools
             var variance = sorted.Select(x => Math.Pow(x - mean, 2)).Average();
             var stdDev = Math.Sqrt(variance);
 
+            const double targetLow = GlucoseConstants.TargetBottomMgdl;
+            const double targetHigh = GlucoseConstants.TargetTopMgdl;
+
             var stats = new
             {
                 Period = $"Last {hours} hours",
@@ -119,17 +123,17 @@ public static class GlucoseTools
                 TimeInRange = new
                 {
                     VeryLow = sorted.Count(g => g < 54),
-                    Low = sorted.Count(g => g >= 54 && g < 70),
-                    InRange = sorted.Count(g => g >= 70 && g <= 180),
-                    High = sorted.Count(g => g > 180 && g <= 250),
+                    Low = sorted.Count(g => g >= 54 && g < targetLow),
+                    InRange = sorted.Count(g => g >= targetLow && g <= targetHigh),
+                    High = sorted.Count(g => g > targetHigh && g <= 250),
                     VeryHigh = sorted.Count(g => g > 250),
                 },
                 TimeInRangePercent = new
                 {
                     VeryLow = Math.Round((double)sorted.Count(g => g < 54) / values.Count * 100, 1),
-                    Low = Math.Round((double)sorted.Count(g => g >= 54 && g < 70) / values.Count * 100, 1),
-                    InRange = Math.Round((double)sorted.Count(g => g >= 70 && g <= 180) / values.Count * 100, 1),
-                    High = Math.Round((double)sorted.Count(g => g > 180 && g <= 250) / values.Count * 100, 1),
+                    Low = Math.Round((double)sorted.Count(g => g >= 54 && g < targetLow) / values.Count * 100, 1),
+                    InRange = Math.Round((double)sorted.Count(g => g >= targetLow && g <= targetHigh) / values.Count * 100, 1),
+                    High = Math.Round((double)sorted.Count(g => g > targetHigh && g <= 250) / values.Count * 100, 1),
                     VeryHigh = Math.Round((double)sorted.Count(g => g > 250) / values.Count * 100, 1),
                 },
             };

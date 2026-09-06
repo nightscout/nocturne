@@ -2,21 +2,19 @@
   import { browser } from "$app/environment";
   import { onMount } from "svelte";
   import { createRequest } from "$lib/api/generated/membershipRequests.generated.remote";
+  import { membershipRequestStorageKey } from "$lib/membership-request-storage";
 
   interface Props {
     isAuthenticated: boolean;
     isGuestSession: boolean;
-    tenantSlug: string | undefined;
   }
 
-  const { isAuthenticated, isGuestSession, tenantSlug }: Props = $props();
-
-  const STORAGE_KEY_PREFIX = "nocturne:membership-request:";
+  const { isAuthenticated, isGuestSession }: Props = $props();
 
   onMount(async () => {
-    if (!browser || !tenantSlug || !isAuthenticated || isGuestSession) return;
+    if (!browser || !isAuthenticated || isGuestSession) return;
 
-    const key = `${STORAGE_KEY_PREFIX}${tenantSlug}`;
+    const key = membershipRequestStorageKey(window.location.host);
     const message = localStorage.getItem(key);
     if (message === null) return;
 

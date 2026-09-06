@@ -113,6 +113,8 @@ public class AspireIntegrationTestFixture : IAsyncLifetime
                 alert_escalation_steps,
                 alert_schedules,
                 alert_rules,
+                dnd_windows,
+                tenant_alert_settings,
                 tracker_instances,
                 tracker_presets,
                 tracker_definitions,

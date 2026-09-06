@@ -25,17 +25,23 @@ public class MutationAuditLogEntity : ITenantScoped
     [MaxLength(100)]
     public string EntityType { get; set; } = null!;
 
-    /// <summary>Primary key of the mutated entity.</summary>
+    /// <summary>
+    /// Primary key of the mutated entity; null for a <c>bulk_delete</c>, which describes a set of rows
+    /// rather than one record.
+    /// </summary>
     [Column("entity_id")]
-    public Guid EntityId { get; set; }
+    public Guid? EntityId { get; set; }
 
-    /// <summary>Mutation kind: create, update, delete, or restore.</summary>
+    /// <summary>Mutation kind: create, update, delete, restore, or bulk_delete.</summary>
     [Required]
     [Column("action")]
-    [MaxLength(10)]
+    [MaxLength(20)]
     public string Action { get; set; } = null!;
 
-    /// <summary>JSONB diff for updates, full snapshot for deletes; null for creates.</summary>
+    /// <summary>
+    /// JSONB diff for updates, full snapshot for deletes, <c>{count, scope}</c> for a bulk_delete;
+    /// null for creates.
+    /// </summary>
     [Column("changes", TypeName = "jsonb")]
     public string? ChangesJson { get; set; }
 
@@ -62,10 +68,10 @@ public class MutationAuditLogEntity : ITenantScoped
     [Column("token_id")]
     public Guid? TokenId { get; set; }
 
-    /// <summary>Request correlation ID for cross-service tracing.</summary>
+    /// <summary>Request trace identifier for cross-service tracing.</summary>
     [Column("correlation_id")]
     [MaxLength(50)]
-    public string? CorrelationId { get; set; }
+    public string? TraceId { get; set; }
 
     /// <summary>API route that handled the mutation (e.g. "PUT /api/v1/entries").</summary>
     [Column("endpoint")]

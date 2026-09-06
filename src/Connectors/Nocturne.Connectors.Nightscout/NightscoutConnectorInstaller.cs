@@ -1,6 +1,4 @@
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
@@ -10,57 +8,33 @@ using Nocturne.Connectors.Nightscout.Services.WriteBack;
 
 namespace Nocturne.Connectors.Nightscout;
 
-public class NightscoutConnectorInstaller : IConnectorInstaller
+public class NightscoutConnectorInstaller()
+    : TenantUrlConnectorInstaller<NightscoutConnectorConfiguration, NightscoutConnectorService>(
+        new ConnectorOptions { ConnectorName = "Nightscout" },
+        config => config.Url)
 {
-    public string ConnectorName => "Nightscout";
+    /// <summary>
+    ///     A direct singleton of the startup config. The connector service and write-back sinks go
+    ///     through <see cref="IConnectorRegistration{TConfig}"/> /
+    ///     <see cref="IConnectorConfigurationLoader{TConfig}"/>, but the compatibility proxy stack —
+    ///     RequestForwardingService, NightscoutTransitionController, CompatibilityController,
+    ///     CompatibilityProxyHealthCheck — still injects
+    ///     <see cref="NightscoutConnectorConfiguration"/> directly. Migrating those to the loader
+    ///     pattern is what would let this registration go.
+    /// </summary>
+    protected override void InstallUnconditional(
+        IServiceCollection services,
+        NightscoutConnectorConfiguration config) =>
+        services.AddSingleton(config);
 
-    public void Install(IServiceCollection services, IConfiguration configuration)
+    protected override void InstallAdditional(
+        IServiceCollection services,
+        NightscoutConnectorConfiguration config)
     {
-        var nightscoutConfig = services.AddConnectorConfiguration<NightscoutConnectorConfiguration>(
-            configuration,
-            "Nightscout");
-
-        // Direct singleton of the startup config. The connector service and write-back
-        // sinks no longer take this dependency (they go through IConnectorRegistration /
-        // IConnectorConfigurationLoader), but the compatibility proxy stack —
-        // RequestForwardingService, NightscoutTransitionController, CompatibilityController,
-        // CompatibilityProxyHealthCheck — still injects NightscoutConnectorConfiguration
-        // directly. Those should be migrated to the loader pattern as a followup, at which
-        // point this registration can be removed.
-        services.AddSingleton(nightscoutConfig);
-
-        if (!nightscoutConfig.Enabled)
-            return;
-
-        // Server resolver — Nightscout URLs come from per-tenant config, not a server mapping
-        services.AddSingleton<IConnectorServerResolver<NightscoutConnectorConfiguration>>(
-            new ConnectorServerResolver<NightscoutConnectorConfiguration>(null, null, null));
-        services.AddScoped<IConnectorConfigurationLoader<NightscoutConnectorConfiguration>,
-            ConnectorConfigurationLoader<NightscoutConnectorConfiguration>>();
-        services.TryAddSingleton<IConnectorTokenCache, ConnectorTokenCache>();
-        services.TryAddSingleton<IConnectorCacheInvalidator>(sp => sp.GetRequiredService<IConnectorTokenCache>());
-
-        // URL comes from user config (possibly loaded from DB at runtime),
-        // so configure it at registration time only if already available.
-        if (!string.IsNullOrEmpty(nightscoutConfig.Url))
-            services.AddHttpClient<NightscoutConnectorService>()
-                .ConfigureConnectorClient(nightscoutConfig.Url);
-        else
-            services.AddHttpClient<NightscoutConnectorService>();
-
-        services.AddScoped<IConnectorSyncExecutor, NightscoutSyncExecutor>();
-
-        // Write-back sinks (circuit breaker is shared singleton, sinks are scoped)
         services.AddSingleton<NightscoutCircuitBreaker>();
 
-        void RegisterWriteBackClient<TSink>() where TSink : class
-        {
-            if (!string.IsNullOrEmpty(nightscoutConfig.Url))
-                services.AddHttpClient<TSink>()
-                    .ConfigureConnectorClient(nightscoutConfig.Url);
-            else
-                services.AddHttpClient<TSink>();
-        }
+        void RegisterWriteBackClient<TSink>() where TSink : class =>
+            ConfigureClient(services.AddHttpClient<TSink>(), config);
 
         RegisterWriteBackClient<NightscoutEntryWriteBackSink>();
         RegisterWriteBackClient<NightscoutTreatmentWriteBackSink>();
@@ -69,12 +43,4 @@ public class NightscoutConnectorInstaller : IConnectorInstaller
         RegisterWriteBackClient<NightscoutFoodWriteBackSink>();
         RegisterWriteBackClient<NightscoutActivityWriteBackSink>();
     }
-}
-
-public class NightscoutSyncExecutor
-    : ConnectorSyncExecutor<NightscoutConnectorService, NightscoutConnectorConfiguration>
-{
-    public override string ConnectorId => "nightscout";
-
-    protected override string ConnectorName => "Nightscout";
 }

@@ -1,8 +1,9 @@
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Controllers.V4.Glucose;
@@ -25,11 +26,22 @@ namespace Nocturne.API.Controllers.V4.Glucose;
 [ApiController]
 [Tags("Glucose")]
 [Route("api/v4/observations/bg-checks")]
-[Authorize]
+[RequireScope(Scope.GlucoseRead)]
 [Produces("application/json")]
 public class BGCheckController(IBGCheckRepository repo)
     : V4CrudControllerBase<BGCheck, UpsertBGCheckRequest, UpsertBGCheckRequest, IBGCheckRepository>(repo)
 {
+    /// <inheritdoc/>
+    /// <remarks>
+    /// BG checks hold a glucose value and sit under the <c>glucose.read</c> share category with the
+    /// other glucose tables, so they follow glucose rather than the treatments category their
+    /// legacy <c>BG Check</c> event type came from.
+    /// </remarks>
+    public override string WriteScope => Scope.GlucoseReadWrite;
+
+    /// <inheritdoc/>
+    protected override V4BulkNaming BulkNaming => new("BG check", "check", "checks");
+
     /// <summary>
     /// Maps a <see cref="UpsertBGCheckRequest"/> to a new <see cref="BGCheck"/> domain model for creation.
     /// </summary>

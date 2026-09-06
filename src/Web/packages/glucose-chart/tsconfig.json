@@ -5,6 +5,11 @@
     "moduleResolution": "bundler",
     "strict": true,
     "verbatimModuleSyntax": true,
+    // Our own sources are checked; our dependencies' shipped declarations are not. Without this
+    // the check drowns in ~50 errors from layerchart/@layerstack/d3 .d.ts files we don't own.
+    // @nocturne/app gets this for free from SvelteKit's generated tsconfig; this package has
+    // no generated config to extend.
+    "skipLibCheck": true,
     "lib": ["ESNext", "DOM", "DOM.Iterable"]
   },
   "include": ["src/**/*"]

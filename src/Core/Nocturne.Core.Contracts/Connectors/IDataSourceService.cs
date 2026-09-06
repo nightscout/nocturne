@@ -157,15 +157,4 @@ public interface IDataSourceService
         string dataSource,
         CancellationToken cancellationToken = default
     );
-
-    /// <summary>
-    /// Delete all glucose data (sensor glucose, meter glucose, calibrations) for a given data source.
-    /// </summary>
-    /// <param name="dataSource">The data source identifier.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Total number of records deleted across all glucose tables.</returns>
-    Task<long> DeleteGlucoseDataBySourceAsync(
-        string dataSource,
-        CancellationToken cancellationToken = default
-    );
 }

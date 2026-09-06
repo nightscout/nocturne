@@ -1,13 +1,15 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Nocturne.API.Authorization;
 using Nocturne.API.Middleware.Handlers;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
-using OAuthScopes = Nocturne.Core.Models.Authorization.OAuthScopes;
+using Scope = Nocturne.Core.Models.Authorization.Scope;
 using ScopeTranslator = Nocturne.Core.Models.Authorization.ScopeTranslator;
+using Nocturne.API.Extensions;
 
 namespace Nocturne.API.Middleware;
 
@@ -18,16 +20,16 @@ namespace Nocturne.API.Middleware;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Pipeline order (position 5 of 7 custom middleware):
+/// Pipeline order (position 5 of 6 custom middleware):
 /// <see cref="JsonExtensionMiddleware"/>,
 /// <see cref="OidcCallbackRedirectMiddleware"/>, <see cref="Multitenancy.TenantResolutionMiddleware"/>,
 /// <see cref="TenantSetupMiddleware"/>, <b>AuthenticationMiddleware</b>,
-/// <see cref="MemberScopeMiddleware"/>, <see cref="SiteSecurityMiddleware"/>.
+/// <see cref="MemberScopeMiddleware"/>.
 /// </para>
 /// <para>
-/// Populates <c>HttpContext.Items["AuthContext"]</c> with an <see cref="AuthContext"/>,
-/// <c>HttpContext.Items["PermissionTrie"]</c> with a <see cref="PermissionTrie"/>,
-/// and <c>HttpContext.Items["GrantedScopes"]</c> with normalized OAuth scopes.
+/// Populates <c>HttpContext.Items[AuthContextKeys.AuthContext]</c> with an <see cref="AuthContext"/>,
+/// <c>HttpContext.Items[AuthContextKeys.PermissionTrie]</c> with a <see cref="PermissionTrie"/>,
+/// and <c>HttpContext.Items[AuthContextKeys.GrantedScopes]</c> with normalized OAuth scopes.
 /// Depends on <see cref="Multitenancy.TenantResolutionMiddleware"/> having resolved a
 /// <see cref="TenantContext"/> first. For unauthenticated requests with a resolved tenant,
 /// delegates to <see cref="PublicAccessCacheService"/> for public/read-only access.
@@ -35,7 +37,6 @@ namespace Nocturne.API.Middleware;
 /// </remarks>
 /// <seealso cref="IAuthHandler"/>
 /// <seealso cref="MemberScopeMiddleware"/>
-/// <seealso cref="SiteSecurityMiddleware"/>
 /// <seealso cref="Multitenancy.TenantResolutionMiddleware"/>
 public class AuthenticationMiddleware
 {
@@ -92,10 +93,10 @@ public class AuthenticationMiddleware
             var authContext = await AuthenticateRequestAsync(context);
 
             // Set authentication context in HttpContext items
-            context.Items["AuthContext"] = authContext;
+            context.SetAuthContext(authContext);
 
             // Set tenant ID from the resolved tenant context
-            if (context.Items["TenantContext"] is TenantContext tenantCtx)
+            if (context.GetTenantContext() is { } tenantCtx)
             {
                 authContext.TenantId = tenantCtx.TenantId;
             }
@@ -106,7 +107,7 @@ public class AuthenticationMiddleware
             {
                 permissionTrie.Add(authContext.Permissions);
             }
-            context.Items["PermissionTrie"] = permissionTrie;
+            context.SetPermissionTrie(permissionTrie);
 
             // Resolve OAuth scopes from either explicit scopes (OAuth tokens) or
             // translated from legacy permissions (api-secret, access tokens, etc.)
@@ -114,7 +115,7 @@ public class AuthenticationMiddleware
             if (authContext.IsAuthenticated && authContext.Scopes.Count > 0)
             {
                 // OAuth token path: scopes came directly from the token claims
-                grantedScopes = OAuthScopes.Normalize(authContext.Scopes);
+                grantedScopes = Scope.Normalize(authContext.Scopes);
             }
             else if (authContext.IsAuthenticated && authContext.Permissions.Count > 0)
             {
@@ -125,10 +126,10 @@ public class AuthenticationMiddleware
             {
                 grantedScopes = new HashSet<string>();
             }
-            context.Items["GrantedScopes"] = grantedScopes;
+            context.SetGrantedScopes(grantedScopes);
 
             // Also set the legacy AuthenticationContext for backward compatibility
-            context.Items["AuthenticationContext"] = MapToLegacyContext(authContext);
+            context.SetLegacyAuthContext(MapToLegacyContext(authContext));
 
             // Load platform admin flag from subject before building claims,
             // so [Authorize(Roles = "platform_admin")] works correctly.
@@ -177,6 +178,21 @@ public class AuthenticationMiddleware
                 context.User = new System.Security.Claims.ClaimsPrincipal(identity);
 
             }
+            else
+            {
+                // This middleware owns the final principal on EVERY path, including rejection.
+                // The framework's authentication middleware runs ahead of this one (minimal hosting
+                // auto-inserts it at the head of the pipeline because AddAuthentication is
+                // registered), so by the time we get here context.User may already hold the
+                // JwtBearer scheme's principal — built with no issuer or audience check, no tenant
+                // pin and no revocation check. Without this else, a credential the handler chain
+                // REJECTED keeps that principal: [Authorize] reads the principal, not Items, so a
+                // revoked grant, a token pinned to another tenant, or a credential presented on a
+                // share host would still reach every bare-[Authorize] controller — including the
+                // sensor-glucose read. The membership check below cannot catch it either, since it
+                // only runs for IsAuthenticated: true.
+                SetUnauthenticated(context);
+            }
         }
         catch (Exception ex)
         {
@@ -185,7 +201,7 @@ public class AuthenticationMiddleware
         }
 
         // Verify authenticated subject is a member of the resolved tenant
-        var resolvedAuth = context.Items["AuthContext"] as AuthContext;
+        var resolvedAuth = context.GetAuthContext();
         if (resolvedAuth is { IsAuthenticated: true, SubjectId: not null, TenantId: not null })
         {
             // Skip membership check for ApiSecret and InstanceKey auth (grants admin on the resolved
@@ -200,10 +216,17 @@ public class AuthenticationMiddleware
 
                 if (!isMember)
                 {
-                    _logger.LogWarning(
-                        "Subject {SubjectId} is not a member of tenant {TenantId}",
-                        resolvedAuth.SubjectId, resolvedAuth.TenantId);
-                    SetUnauthenticated(context);
+                    // An invite-token-authorized endpoint is how a non-member joins, so reducing
+                    // the request to anonymous there leaves the accept path reachable only by
+                    // people who are already members. Identity only, and only when the route's
+                    // token is a live invite of this tenant.
+                    if (!await TryKeepIdentityForInviteAsync(context, resolvedAuth))
+                    {
+                        _logger.LogWarning(
+                            "Subject {SubjectId} is not a member of tenant {TenantId}",
+                            resolvedAuth.SubjectId, resolvedAuth.TenantId);
+                        SetUnauthenticated(context);
+                    }
                 }
             }
         }
@@ -212,10 +235,10 @@ public class AuthenticationMiddleware
         // ({token}.share.{baseDomain}); TenantResolutionMiddleware sets ShareAccess. The bare
         // {slug}.{baseDomain} host is login-only — an unauthenticated request there gets nothing,
         // even when the tenant's Public subject carries a read role.
-        resolvedAuth = context.Items["AuthContext"] as AuthContext;
+        resolvedAuth = context.GetAuthContext();
         if (resolvedAuth is { IsAuthenticated: false }
-            && context.Items["ShareAccess"] is true
-            && context.Items["TenantContext"] is TenantContext publicTenantCtx)
+            && context.IsShareAccess()
+            && context.GetTenantContext() is { } publicTenantCtx)
         {
             var publicAccess = await _publicAccessCacheService.GetPublicAccessAsync(publicTenantCtx.TenantId);
             if (publicAccess != null)
@@ -228,22 +251,43 @@ public class AuthenticationMiddleware
                     TenantId = publicTenantCtx.TenantId,
                     LimitTo24Hours = publicAccess.LimitTo24Hours,
                 };
-                context.Items["AuthContext"] = publicAuthContext;
+                context.SetAuthContext(publicAuthContext);
 
+                // The Public subject's effective permissions are stored in the OAuth scope
+                // vocabulary (glucose.read, ...) — the same vocabulary member grants use — so
+                // normalize them the way MemberScopeMiddleware does for members; the
+                // FromPermissions union also accepts legacy api:* trie strings on old rows.
+                // Then narrow to the shareable read scopes: the share host can never resolve
+                // to more than public read access, so a broader grant on the Public membership
+                // (readwrite, superuser) degrades to its read counterpart via SatisfiesScope.
+                var resolvedGrants = Scope.Normalize(publicAccess.EffectivePermissions)
+                    .Union(ScopeTranslator.FromPermissions(publicAccess.EffectivePermissions))
+                    .ToHashSet();
+                var publicScopes = Scope.PublicShareScopes
+                    .Where(scope => Scope.Satisfies(resolvedGrants, scope))
+                    .ToHashSet();
+                context.SetGrantedScopes((IReadOnlySet<string>)publicScopes);
+
+                // Legacy (HasPermissions-gated) endpoints check the trie, so derive it from the
+                // narrowed scopes; a share that resolves to zero scopes gets an empty trie and
+                // is rejected by the policy instead of passing authorization and reading nothing.
+                // The scope atoms are added alongside so a share whose categories ToPermissions has
+                // no legacy api:* string for still carries a non-empty trie. Every scope in
+                // PublicShareScopes currently maps, so this is redundant today and guards the case
+                // where a new shareable category is added without a legacy equivalent.
                 var publicPermissionTrie = new PermissionTrie();
-                publicPermissionTrie.Add(publicAccess.EffectivePermissions);
-                context.Items["PermissionTrie"] = publicPermissionTrie;
+                publicPermissionTrie.Add(ScopeTranslator.ToPermissions(publicScopes));
+                publicPermissionTrie.Add(publicScopes);
+                context.SetPermissionTrie(publicPermissionTrie);
 
-                var publicScopes = ScopeTranslator.FromPermissions(publicAccess.EffectivePermissions);
-                context.Items["GrantedScopes"] = publicScopes;
+                // Carry the share's visible categories and history window to the DbContext
+                // factory for the share RLS policies. Resolved here (post-auth); a share whose
+                // CSV is never set is denied all categorized data by the policy (fail-closed).
+                var categoryReadContext = context.RequestServices.GetService<ICategoryReadContext>();
+                categoryReadContext?.SetVisibleCategories(ShareDataCategories.ComputeVisibleCategoriesCsv(publicScopes));
+                categoryReadContext?.SetFullHistory(!publicAccess.LimitTo24Hours);
 
-                // Carry the share's visible categories to the DbContext factory for
-                // per-category RLS. Resolved here (post-auth); a share whose CSV is never
-                // set is denied all categorized data by the policy (fail-closed).
-                context.RequestServices.GetService<ICategoryReadContext>()
-                    ?.SetVisibleCategories(ShareDataCategories.ComputeVisibleCategoriesCsv(publicScopes));
-
-                context.Items["AuthenticationContext"] = MapToLegacyContext(publicAuthContext);
+                context.SetLegacyAuthContext(MapToLegacyContext(publicAuthContext));
 
                 _logger.LogDebug(
                     "Public access resolved for tenant {TenantId} with {Count} permissions",
@@ -264,7 +308,7 @@ public class AuthenticationMiddleware
         // Public share host ({token}.share.{baseDomain}): never honor credentials. The share host
         // serves only the anonymous read-only view, so a logged-in owner's session cookie must not
         // authenticate the request — the host can never resolve to more than public read access.
-        if (context.Items["ShareAccess"] is true)
+        if (context.IsShareAccess())
         {
             return AuthContext.Unauthenticated();
         }
@@ -331,6 +375,77 @@ public class AuthenticationMiddleware
     }
 
     /// <summary>
+    /// For a subject who authenticated but is not a member of the resolved tenant, keep the
+    /// identity — and only the identity — when the request targets an endpoint marked
+    /// <see cref="InviteTokenAuthorizedAttribute"/> and its <c>{token}</c> route value names a
+    /// currently valid invite of that same tenant.
+    /// </summary>
+    /// <param name="context">The current HTTP context.</param>
+    /// <param name="resolvedAuth">The authenticated context that failed the membership check.</param>
+    /// <returns><c>true</c> when the identity was kept; <c>false</c> to reject as usual.</returns>
+    /// <remarks>
+    /// The invite token is the whole of the authorization here, so it is validated before anything
+    /// is kept: the lookup is bounded by the resolved tenant, and the invite must not be expired,
+    /// revoked or exhausted. What survives is a subject id and a display name — no permissions, no
+    /// roles, no scopes and an empty <see cref="PermissionTrie"/> — so every gated endpoint still
+    /// refuses the caller, and the marked endpoints authorize on the invite itself.
+    /// </remarks>
+    private async Task<bool> TryKeepIdentityForInviteAsync(HttpContext context, AuthContext resolvedAuth)
+    {
+        var endpoint = context.GetEndpoint();
+        if (endpoint?.Metadata.GetMetadata<InviteTokenAuthorizedAttribute>() == null)
+            return false;
+
+        if (!context.Request.RouteValues.TryGetValue(
+                InviteTokenAuthorizedAttribute.TokenRouteValue, out var routeValue)
+            || routeValue is not string token
+            || string.IsNullOrEmpty(token))
+        {
+            return false;
+        }
+
+        var inviteService = context.RequestServices.GetRequiredService<IMemberInviteService>();
+        var invite = await inviteService.GetInviteByTokenAsync(token, resolvedAuth.TenantId!.Value);
+        if (invite is not { IsValid: true })
+            return false;
+
+        var identityOnly = new AuthContext
+        {
+            IsAuthenticated = true,
+            AuthType = resolvedAuth.AuthType,
+            SubjectId = resolvedAuth.SubjectId,
+            TenantId = resolvedAuth.TenantId,
+            SubjectName = resolvedAuth.SubjectName,
+            Email = resolvedAuth.Email,
+        };
+
+        context.SetAuthContext(identityOnly);
+        context.SetPermissionTrie(new PermissionTrie());
+        context.SetGrantedScopes((IReadOnlySet<string>)new HashSet<string>());
+        context.SetLegacyAuthContext(MapToLegacyContext(identityOnly));
+
+        // The principal built earlier carries the subject's roles, its platform-admin role and a
+        // claim per permission. [Authorize] reads the principal, so it is replaced rather than
+        // reused: the marked endpoints need only to know who is asking.
+        context.User = new System.Security.Claims.ClaimsPrincipal(
+            new System.Security.Claims.ClaimsIdentity(
+                [
+                    new System.Security.Claims.Claim(
+                        System.Security.Claims.ClaimTypes.NameIdentifier,
+                        identityOnly.SubjectId?.ToString() ?? ""),
+                    new System.Security.Claims.Claim(
+                        System.Security.Claims.ClaimTypes.Name, identityOnly.SubjectName ?? ""),
+                ],
+                "NocturneInvite"));
+
+        _logger.LogInformation(
+            "MemberInviteAudit: {Event} invite_id={InviteId} tenant_id={TenantId} subject_id={SubjectId}",
+            "invite_identity_kept", invite.Id, resolvedAuth.TenantId, resolvedAuth.SubjectId);
+
+        return true;
+    }
+
+    /// <summary>
     /// Set unauthenticated <see cref="AuthContext"/> on the <see cref="HttpContext"/>,
     /// clearing the <see cref="PermissionTrie"/> and granted scopes.
     /// </summary>
@@ -338,10 +453,17 @@ public class AuthenticationMiddleware
     private static void SetUnauthenticated(HttpContext context)
     {
         var authContext = AuthContext.Unauthenticated();
-        context.Items["AuthContext"] = authContext;
-        context.Items["PermissionTrie"] = new PermissionTrie();
-        context.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string>();
-        context.Items["AuthenticationContext"] = MapToLegacyContext(authContext);
+        context.SetAuthContext(authContext);
+        context.SetPermissionTrie(new PermissionTrie());
+        context.SetGrantedScopes((IReadOnlySet<string>)new HashSet<string>());
+        context.SetLegacyAuthContext(MapToLegacyContext(authContext));
+
+        // Clearing Items is not enough: this method is also the tenant-membership rejection
+        // path, and by then the principal above has already been built. [Authorize] reads
+        // HttpContext.User, not Items, so leaving a populated principal here authenticates a
+        // rejected caller against any endpoint whose only gate is [Authorize].
+        context.User = new System.Security.Claims.ClaimsPrincipal(
+            new System.Security.Claims.ClaimsIdentity());
     }
 
     /// <summary>

@@ -87,15 +87,14 @@
   const isMobile = new IsMobile();
 
   // ===== ENGINE =====
-  // svelte-ignore state_referenced_locally
   const engine = createChartDataEngine({
-    dateRange,
-    focusHours: defaultFocusHours,
-    initialChartData,
-    streamedHistoricalData,
-    externalPredictionData,
-    enablePredictions: showPredictions,
-    demoMode,
+    get dateRange() { return dateRange; },
+    get focusHours() { return defaultFocusHours; },
+    get initialChartData() { return initialChartData; },
+    get streamedHistoricalData() { return streamedHistoricalData; },
+    get externalPredictionData() { return externalPredictionData; },
+    get enablePredictions() { return showPredictions; },
+    get demoMode() { return demoMode; },
   });
 
   // ===== POINT INSPECTION =====
@@ -336,7 +335,7 @@
         {/if}
       </CardTitle>
 
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 print:hidden">
         <PredictionSettings
           showPredictions={effectiveShowPredictions}
           predictionMode={predictionModeValue}

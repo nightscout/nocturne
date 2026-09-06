@@ -181,7 +181,9 @@ public class DocumentProcessingService : IDocumentProcessingService
                 // Use existing Mills value to set CreatedAt
                 var dateFromMills = DateTimeOffset.FromUnixTimeMilliseconds(document.Mills);
                 document.CreatedAt = dateFromMills.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
-                document.UtcOffset = 0; // Assume UTC if no timezone info
+                // The timestamp carried no zone; honor an offset the client sent directly
+                // (Nightscout entries may set utcOffset independently of date), else assume UTC.
+                document.UtcOffset ??= 0;
 
                 _logger.LogDebug(
                     "Used explicit Mills timestamp: {Mills} -> {CreatedAt}",
@@ -218,7 +220,8 @@ public class DocumentProcessingService : IDocumentProcessingService
                     var dateTimeOffset = new DateTimeOffset(utcDateTime, TimeSpan.Zero);
                     document.CreatedAt = dateTimeOffset.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
                     document.Mills = dateTimeOffset.ToUnixTimeMilliseconds();
-                    document.UtcOffset = 0; // No offset for UTC
+                    // The timestamp string carried no zone; honor a client-supplied offset, else assume UTC.
+                    document.UtcOffset ??= 0;
                 }
                 else
                 {
@@ -236,7 +239,9 @@ public class DocumentProcessingService : IDocumentProcessingService
                 // Use existing Mills value to set CreatedAt
                 var dateFromMills = DateTimeOffset.FromUnixTimeMilliseconds(document.Mills);
                 document.CreatedAt = dateFromMills.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
-                document.UtcOffset = 0; // Assume UTC if no timezone info
+                // mills fixes the instant (UTC); honor an independently-supplied utcOffset
+                // (e.g. AAPS/Loop send date + utcOffset with no created_at), else assume UTC.
+                document.UtcOffset ??= 0;
             }
             else
             {

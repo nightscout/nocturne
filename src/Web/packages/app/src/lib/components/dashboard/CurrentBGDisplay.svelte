@@ -1,5 +1,4 @@
 <script lang="ts">
-  import type { Entry } from "$lib/api";
   import { TrackerCategory } from "$lib/api";
   import { Badge } from "$lib/components/ui/badge";
   import {
@@ -7,6 +6,7 @@
     BasalPill,
     IOBPill,
     LoopPill,
+    ReservoirPill,
     TrackerPillBar,
   } from "$lib/components/status-pills";
   import { GlucoseValueIndicator } from "$lib/components/shared";
@@ -19,32 +19,18 @@
   import {
     formatGlucoseValue,
     formatGlucoseDelta,
+    formatLocale,
+    minutesAgo,
+    prefersHour12,
   } from "$lib/utils/formatting";
   import { Clock } from "lucide-svelte";
 
   interface ComponentProps {
-    entries?: Entry[];
-    currentBG?: number;
-    direction?: string;
-    bgDelta?: number;
-    demoMode?: boolean;
-    /**
-     * Profile timezone (e.g., "Europe/Stockholm") - if different from local,
-     * will show offset
-     */
-    profileTimezone?: string;
     /** Show status pills (COB, IOB, CAGE, SAGE, etc.) */
     showPills?: boolean;
   }
 
-  let {
-    currentBG,
-    direction,
-    bgDelta,
-    demoMode,
-    profileTimezone,
-    showPills = true,
-  }: ComponentProps = $props();
+  let { showPills = true }: ComponentProps = $props();
 
   const realtimeStore = getRealtimeStore();
   const settingsStore = getSettingsStore();
@@ -54,12 +40,8 @@
     settingsStore.features?.trackerPills?.enabled ?? true
   );
 
-  // Use realtime store values as fallback when props not provided
-  const rawCurrentBG = $derived(currentBG ?? realtimeStore.currentBG);
-  // Direction is derived but reserved for future use
-  // svelte-ignore state_referenced_locally
-  void (direction ?? realtimeStore.direction);
-  const rawBgDelta = $derived(bgDelta ?? realtimeStore.bgDelta);
+  const rawCurrentBG = $derived(realtimeStore.currentBG);
+  const rawBgDelta = $derived(realtimeStore.bgDelta);
   const lastUpdated = $derived(realtimeStore.lastUpdated);
 
   // Connection status
@@ -70,7 +52,7 @@
   const units = $derived(glucoseUnits.current);
   const displayCurrentBG = $derived(formatGlucoseValue(rawCurrentBG, units));
   const displayBgDelta = $derived(formatGlucoseDelta(rawBgDelta, units));
-  const displayDemoMode = $derived(demoMode ?? realtimeStore.demoMode);
+  const displayDemoMode = $derived(realtimeStore.demoMode);
 
   // Current time state (updated every second) from shared store
   const currentTime = $derived(new Date(realtimeStore.now));
@@ -86,54 +68,26 @@
     rawCurrentBG === 0 && realtimeStore.entries.length === 0
   );
 
-  // Time since last reading
-  const timeSince = $derived(realtimeStore.timeSinceReading);
+  function formatTimeSinceLastReading(): string {
+    return minutesAgo(lastUpdated, currentTime.getTime());
+  }
 
   // Status text - show "Connection Error" when disconnected
-  const statusText = $derived(isDisconnected ? "Connection Error" : timeSince);
-
-  // Format current time in local timezone
-  const formattedLocalTime = $derived(
-    currentTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+  const statusText = $derived.by(() =>
+    isDisconnected ? "Connection Error" : formatTimeSinceLastReading()
   );
 
-  // Format time in profile timezone if provided and different
-  const profileTimeInfo = $derived.by(() => {
-    if (!profileTimezone) return null;
+  const statusTooltip = $derived.by(
+    () => `Last reading: ${formatTimeSinceLastReading()}`
+  );
 
-    try {
-      const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      if (localTz === profileTimezone) return null;
-
-      const profileTime = currentTime.toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-        timeZone: profileTimezone,
-      });
-
-      // Calculate offset between timezones
-      const localDate = new Date(
-        currentTime.toLocaleString("en-US", { timeZone: localTz })
-      );
-      const profileDate = new Date(
-        currentTime.toLocaleString("en-US", { timeZone: profileTimezone })
-      );
-      const diffHours = Math.round(
-        (profileDate.getTime() - localDate.getTime()) / (1000 * 60 * 60)
-      );
-      const offsetStr = diffHours >= 0 ? `+${diffHours}h` : `${diffHours}h`;
-
-      return {
-        time: profileTime,
-        timezone:
-          profileTimezone.split("/").pop()?.replace(/_/g, " ") ??
-          profileTimezone,
-        offset: offsetStr,
-      };
-    } catch {
-      return null;
-    }
-  });
+  const formattedLocalTime = $derived(
+    currentTime.toLocaleTimeString(formatLocale(), {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: prefersHour12(),
+    })
+  );
 
   // Entry Dialog State
   let showEntryDialog = $state(false);
@@ -189,6 +143,11 @@
         <BasalPill data={realtimeStore.pillsData.basal} />
         <IOBPill data={realtimeStore.pillsData.iob} />
         <LoopPill data={realtimeStore.pillsData.loop} />
+        <!-- Reservoir is optional: many pumps/pods report no numeric value
+             (e.g. Omnipod above 50 U), so only show the pill when present. -->
+        {#if realtimeStore.currentReservoir !== null}
+          <ReservoirPill reservoir={realtimeStore.currentReservoir} />
+        {/if}
       {/if}
       <!-- Tracker Pills -->
       {#if trackerPillsEnabled && realtimeStore.trackerInstances.length > 0}
@@ -212,13 +171,10 @@
           {isStale}
           {isDisconnected}
           {statusText}
-          statusTooltip="Last reading: {timeSince}"
+          {statusTooltip}
           size="lg"
         />
         <div class="text-center">
-          <div class="text-2xl">
-            <!-- Direction display placeholder -->
-          </div>
           <div class="text-sm text-muted-foreground">
             {displayBgDelta}
           </div>
@@ -230,17 +186,6 @@
       >
         <Clock class="h-4 w-4 text-muted-foreground" />
         {formattedLocalTime}
-        {#if profileTimeInfo}
-          <div
-            class="text-xs text-muted-foreground flex items-center gap-1 ml-1"
-          >
-            <span class="font-medium">{profileTimeInfo.timezone}:</span>
-            <span class="tabular-nums">{profileTimeInfo.time}</span>
-            <Badge variant="outline" class="text-[10px] px-1 py-0">
-              {profileTimeInfo.offset}
-            </Badge>
-          </div>
-        {/if}
       </div>
     </div>
   </div>

@@ -89,6 +89,43 @@ public class ConnectorTokenCacheTests
     }
 
     [Fact]
+    public async Task Invalidate_RemovesEntry_WhenCasingDiffersFromStore()
+    {
+        // Token providers store under their PascalCase ConnectorName constant ("Eversense");
+        // config-save invalidation passes the lowercase route name ("eversense"). The cache
+        // must treat them as the same key, otherwise stale credentials survive a config change.
+        var tenantId = Guid.NewGuid();
+        await _cache.SetAsync("Eversense", tenantId, new ConnectorSession("token-123", DateTime.UtcNow.AddHours(1)));
+
+        _cache.Invalidate("eversense", tenantId);
+        var result = await _cache.GetAsync("Eversense", tenantId);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetAsync_IsCaseInsensitive_ForConnectorName()
+    {
+        var tenantId = Guid.NewGuid();
+        await _cache.SetAsync("Eversense", tenantId, new ConnectorSession("token-123", DateTime.UtcNow.AddHours(1)));
+
+        var result = await _cache.GetAsync("eversense", tenantId);
+
+        result!.Token.Should().Be("token-123");
+    }
+
+    [Fact]
+    public async Task GetLockAsync_ReturnsSameSemaphore_ForConnectorNameCasingVariants()
+    {
+        var tenantId = Guid.NewGuid();
+
+        var lock1 = await _cache.GetLockAsync("Eversense", tenantId);
+        var lock2 = await _cache.GetLockAsync("eversense", tenantId);
+
+        ReferenceEquals(lock1, lock2).Should().BeTrue();
+    }
+
+    [Fact]
     public async Task GetLockAsync_ReturnsSameSemaphore_ForSameTenant()
     {
         var tenantId = Guid.NewGuid();

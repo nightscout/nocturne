@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Hubs;
 using Nocturne.API.Services.Realtime;
@@ -21,6 +22,7 @@ public class SignalRBroadcastServiceTests
     private readonly Mock<IHubContext<ConfigHub>> _mockConfigHubContext;
     private readonly Mock<IHubContext<AlertHub>> _mockAlertHubContext;
     private readonly Mock<IHubContext<HomeAssistantHub>> _mockHomeAssistantHubContext;
+    private readonly Mock<IHubContext<OverviewHub>> _mockOverviewHubContext;
     private readonly Mock<ILogger<SignalRBroadcastService>> _mockLogger;
     private readonly Mock<IHubClients> _mockDataClients;
     private readonly Mock<IHubClients> _mockAlarmClients;
@@ -30,6 +32,8 @@ public class SignalRBroadcastServiceTests
     private readonly Mock<IClientProxy> _mockAlarmGroupProxy;
     private readonly Mock<IClientProxy> _mockConfigGroupProxy;
     private readonly Mock<IClientProxy> _mockAlertGroupProxy;
+    private readonly Mock<IHubClients> _mockOverviewClients;
+    private readonly Mock<IClientProxy> _mockOverviewGroupProxy;
     private readonly SignalRBroadcastService _service;
 
     public SignalRBroadcastServiceTests()
@@ -70,13 +74,23 @@ public class SignalRBroadcastServiceTests
         _mockHomeAssistantHubContext.Setup(x => x.Clients).Returns(mockHaClients.Object);
         mockHaClients.Setup(x => x.Group(It.IsAny<string>())).Returns(mockHaProxy.Object);
 
+        _mockOverviewHubContext = new Mock<IHubContext<OverviewHub>>();
+        _mockOverviewClients = new Mock<IHubClients>();
+        _mockOverviewGroupProxy = new Mock<IClientProxy>();
+        _mockOverviewHubContext.Setup(x => x.Clients).Returns(_mockOverviewClients.Object);
+        _mockOverviewClients
+            .Setup(x => x.Group(It.IsAny<string>()))
+            .Returns(_mockOverviewGroupProxy.Object);
+
         _service = new SignalRBroadcastService(
             _mockDataHubContext.Object,
             _mockAlarmHubContext.Object,
             _mockConfigHubContext.Object,
             _mockAlertHubContext.Object,
             _mockHomeAssistantHubContext.Object,
+            _mockOverviewHubContext.Object,
             MockTenantAccessor.Create().Object,
+            Options.Create(new JsonHubProtocolOptions()),
             _mockLogger.Object
         );
     }
@@ -102,6 +116,38 @@ public class SignalRBroadcastServiceTests
                 ),
             Times.Once
         );
+    }
+
+    [Fact]
+    public async Task BroadcastDataUpdateAsync_ShouldAlsoEmitOverviewUpdateToOverviewHubGroup()
+    {
+        var testData = new { test = "data" };
+
+        await _service.BroadcastDataUpdateAsync(testData);
+
+        _mockOverviewClients.Verify(
+            x => x.Group("00000000-0000-0000-0000-000000000001:overview"),
+            Times.Once);
+        _mockOverviewGroupProxy.Verify(
+            x => x.SendCoreAsync(
+                "overviewUpdate",
+                It.Is<object[]>(args =>
+                    args.Length == 1 &&
+                    args[0]!.ToString()!.Contains("00000000-0000-0000-0000-000000000001")),
+                default),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task BroadcastDataUpdateAsync_OverviewPingFailure_DoesNotThrow()
+    {
+        _mockOverviewGroupProxy
+            .Setup(x => x.SendCoreAsync(It.IsAny<string>(), It.IsAny<object[]>(), default))
+            .ThrowsAsync(new Exception("overview hub down"));
+
+        var act = () => _service.BroadcastDataUpdateAsync(new { test = "data" });
+
+        await act();
     }
 
     [Fact]

@@ -1,4 +1,5 @@
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Core.Contracts.V4.Repositories;
 
@@ -21,5 +22,5 @@ public interface IPatientRecordRepository
     Task<PatientRecord> GetOrCreateAsync(CancellationToken ct = default);
 
     /// <summary>Updates the patient record and returns the saved result.</summary>
-    Task<PatientRecord> UpdateAsync(PatientRecord model, CancellationToken ct = default);
+    Task<PatientRecord> UpdateAsync(PatientRecord model, WriteOrigin origin, CancellationToken ct = default);
 }

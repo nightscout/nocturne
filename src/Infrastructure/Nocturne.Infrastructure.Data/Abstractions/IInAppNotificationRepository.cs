@@ -60,9 +60,9 @@ public interface IInAppNotificationRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Gets the count of active (non-archived) notifications for a user from a specific source
+    /// Gets a user's active (non-archived) notifications from a specific source, oldest first
     /// </summary>
-    Task<int> GetActiveCountBySourceAsync(
+    Task<List<InAppNotificationEntity>> GetActiveBySourceAsync(
         string userId,
         string source,
         CancellationToken cancellationToken = default);

@@ -8,7 +8,8 @@ namespace Nocturne.Infrastructure.Data.Services;
 ///
 /// <para>
 /// The context carries per-request state — <see cref="NocturneDbContext.TenantId"/>,
-/// <see cref="NocturneDbContext.AuditContext"/>, <see cref="NocturneDbContext.IsShareContext"/>
+/// <see cref="NocturneDbContext.SubjectId"/>, <see cref="NocturneDbContext.AuditContext"/>,
+/// <see cref="NocturneDbContext.IsShareContext"/>
 /// and <see cref="NocturneDbContext.VisibleCategories"/> — that the RLS policy reads. The
 /// <c>ITenantDbContextFactory</c> and scoped-context registration stamp those on acquisition;
 /// callers that take the raw factory and call <see cref="IDbContextFactory{TContext}.CreateDbContext"/>
@@ -35,9 +36,11 @@ internal sealed class CarrierResettingDbContextFactory(IDbContextFactory<Nocturn
     private static NocturneDbContext Reset(NocturneDbContext context)
     {
         context.TenantId = Guid.Empty;
+        context.SubjectId = Guid.Empty;
         context.AuditContext = null;
         context.IsShareContext = false;
         context.VisibleCategories = null;
+        context.ShareFullHistory = false;
         return context;
     }
 }

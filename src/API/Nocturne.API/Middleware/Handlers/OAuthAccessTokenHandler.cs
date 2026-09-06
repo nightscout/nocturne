@@ -1,6 +1,9 @@
 using System.IdentityModel.Tokens.Jwt;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.API.Authorization;
+using Nocturne.API.Extensions;
+using Nocturne.API.Services.Auth;
 
 namespace Nocturne.API.Middleware.Handlers;
 
@@ -39,24 +42,18 @@ public class OAuthAccessTokenHandler : IAuthHandler
         _logger = logger;
     }
 
+    /// <summary>
+    /// Path prefix of the SignalR hub endpoints, the only place the token is accepted on the query
+    /// string.
+    /// </summary>
+    private static readonly PathString HubPathPrefix = new("/hubs");
+
     /// <inheritdoc />
     public async Task<AuthResult> AuthenticateAsync(HttpContext context)
     {
-        // Check for Bearer token in Authorization header
-        var authHeader = context.Request.Headers.Authorization.FirstOrDefault();
+        var token = ExtractToken(context);
 
-        if (
-            string.IsNullOrEmpty(authHeader)
-            || !authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
-        )
-        {
-            return AuthResult.Skip();
-        }
-
-        var token = authHeader["Bearer ".Length..].Trim();
-
-        // Must be a JWT (3 dot-separated parts)
-        if (string.IsNullOrEmpty(token) || token.Count(c => c == '.') != 2)
+        if (!TokenFormat.IsJwt(token))
         {
             return AuthResult.Skip();
         }
@@ -83,45 +80,30 @@ public class OAuthAccessTokenHandler : IAuthHandler
             return AuthResult.Skip();
         }
 
-        // Validate using IJwtService (uses the correct Jwt:SecretKey, issuer, audience)
         using var scope = _scopeFactory.CreateScope();
-        var jwtService = scope.ServiceProvider.GetRequiredService<IJwtService>();
+        var credentialValidator = scope.ServiceProvider.GetRequiredService<IJwtCredentialValidator>();
+        var validationResult = await credentialValidator.ValidateAsync(token);
 
-        var validationResult = jwtService.ValidateAccessToken(token);
-
-        if (!validationResult.IsValid || validationResult.Claims is null)
+        if (!validationResult.IsValid)
         {
             _logger.LogDebug(
-                "OAuth access token validation failed: {Error}",
-                validationResult.Error
-            );
+                "OAuth access token refused ({Rejection}): {Error}",
+                validationResult.Rejection, validationResult.Error);
             return AuthResult.Failure(validationResult.Error ?? "Invalid OAuth access token");
         }
 
-        var claims = validationResult.Claims;
+        var claims = validationResult.Claims!;
 
         // Enforce tenant pin: reject tokens issued for a different tenant
         if (claims.TenantId.HasValue)
         {
-            var tenantCtx = context.Items["TenantContext"] as TenantContext;
+            var tenantCtx = context.GetTenantContext();
             if (tenantCtx is null || tenantCtx.TenantId != claims.TenantId.Value)
             {
                 _logger.LogWarning(
                     "OAuth access token tenant mismatch: token tenant {TokenTenant}, request tenant {RequestTenant}",
                     claims.TenantId, tenantCtx?.TenantId);
                 return AuthResult.Failure("Token is not valid for this tenant");
-            }
-        }
-
-        // Check revocation cache
-        if (!string.IsNullOrEmpty(claims.JwtId))
-        {
-            var revocationCache =
-                scope.ServiceProvider.GetRequiredService<IOAuthTokenRevocationCache>();
-            if (await revocationCache.IsRevokedAsync(claims.JwtId))
-            {
-                _logger.LogDebug("OAuth access token has been revoked (jti: {Jti})", claims.JwtId);
-                return AuthResult.Failure("Token has been revoked");
             }
         }
 
@@ -147,5 +129,32 @@ public class OAuthAccessTokenHandler : IAuthHandler
         );
 
         return AuthResult.Success(authContext);
+    }
+
+    /// <summary>
+    /// Extracts the bearer token from the Authorization header, or — on a SignalR hub path only —
+    /// from the <c>access_token</c> query parameter.
+    /// </summary>
+    /// <remarks>
+    /// The SignalR clients cannot set headers on a WebSocket or SSE request, so they append the token
+    /// to the query string under <c>access_token</c> (the JS <c>accessTokenFactory</c>, the .NET
+    /// <c>AccessTokenProvider</c>, and the desktop companion's hand-built URL all use that key); the
+    /// hub connection's <see cref="HttpContext"/> is that upgrade request, so without this a hub
+    /// connection carries no authentication context. Restricted to <see cref="HubPathPrefix"/>
+    /// because a query-string credential ends up in access logs and referrers.
+    /// </remarks>
+    private static string? ExtractToken(HttpContext context)
+    {
+        if (context.Request.GetAuthorizationCredential() is { } bearer)
+        {
+            return bearer;
+        }
+
+        if (context.Request.Path.StartsWithSegments(HubPathPrefix))
+        {
+            return context.Request.Query["access_token"].FirstOrDefault();
+        }
+
+        return null;
     }
 }

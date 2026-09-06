@@ -1,3 +1,4 @@
+using FluentAssertions;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Xunit;
 using Xunit.Abstractions;
@@ -40,17 +41,49 @@ public class EntriesParityTests : ParityTestBase
     }
 
     [Fact]
-    public async Task GetEntries_WithType_ReturnsSameShape()
+    public async Task GetEntries_WithFindTypeFilter_ReturnsSameShape()
     {
-        // Seed mixed entry types
+        // find[type]=xxx is the query form that actually filters by type on the bare
+        // /entries route. (Nightscout's query_models / find_options only ever read
+        // query.find.type — never a top-level query.type.)
         var entries = TestDataFactory.CreateMixedEntryTypes(
             includeBloodGlucose: true,
             includeMeterBg: true,
             includeCalibration: true);
         await SeedEntriesAsync(entries);
 
+        await AssertGetParityAsync("/api/v1/entries?find[type]=sgv");
+        await AssertGetParityAsync("/api/v1/entries?find[type]=mbg");
+    }
+
+    [Fact]
+    public async Task GetEntries_TopLevelTypeParam_IsIgnored_ReturnsSameShape()
+    {
+        // A bare ?type= query parameter is a NO-OP on Nightscout's /entries route:
+        // the bare route never calls prepReqModel, so query.find stays undefined, and
+        // neither the in-memory path nor find_options (lib/server/query.js) ever read a
+        // top-level query.type. To filter by type you must use /entries/{spec} or
+        // find[type]=xxx. This test locks in that Nocturne mirrors that quirk — the
+        // param is silently ignored, so the response equals the unfiltered one.
+        var entries = TestDataFactory.CreateMixedEntryTypes(
+            includeBloodGlucose: true,
+            includeMeterBg: true,
+            includeCalibration: true);
+        await SeedEntriesAsync(entries);
+
+        // Both systems agree on the (unfiltered) response for a bare ?type= param.
         await AssertGetParityAsync("/api/v1/entries?type=sgv");
         await AssertGetParityAsync("/api/v1/entries?type=mbg");
+        await AssertGetParityAsync("/api/v1/entries?type=nonexistent");
+
+        // Cross-check within Nocturne: a no-op type param yields the exact same payload
+        // as no param at all, proving it is not silently filtering entries out. (Same
+        // stored entries in the same order => byte-identical bodies.)
+        var unfiltered = await NocturneClient.GetStringAsync("/api/v1/entries");
+        var withTypeParam = await NocturneClient.GetStringAsync("/api/v1/entries?type=mbg");
+        withTypeParam.Should().Be(
+            unfiltered,
+            "a top-level ?type= param must be ignored on /entries, matching Nightscout");
     }
 
     [Fact]
@@ -64,11 +97,13 @@ public class EntriesParityTests : ParityTestBase
     }
 
     [Fact]
-    public async Task GetEntries_WithCountAndType_ReturnsSameShape()
+    public async Task GetEntries_WithCountAndFindType_ReturnsSameShape()
     {
         await SeedEntrySequenceAsync(count: 10);
 
-        await AssertGetParityAsync("/api/v1/entries?count=5&type=sgv");
+        // count combines with the find[type]= filter form. (A bare ?type= would be
+        // ignored — see GetEntries_TopLevelTypeParam_IsIgnored.)
+        await AssertGetParityAsync("/api/v1/entries?count=5&find[type]=sgv");
     }
 
     #endregion
@@ -96,10 +131,17 @@ public class EntriesParityTests : ParityTestBase
     [Fact]
     public async Task GetEntriesByType_ReturnsSameShape()
     {
-        await SeedEntrySequenceAsync(count: 5);
+        // The /entries/{spec} path segment is the canonical way to filter by type
+        // (prepReqModel maps the spec into query.find.type).
+        var entries = TestDataFactory.CreateMixedEntryTypes(
+            includeBloodGlucose: true,
+            includeMeterBg: true,
+            includeCalibration: true);
+        await SeedEntriesAsync(entries);
 
-        // Spec as type
         await AssertGetParityAsync("/api/v1/entries/sgv");
+        await AssertGetParityAsync("/api/v1/entries/mbg");
+        await AssertGetParityAsync("/api/v1/entries/cal");
     }
 
     #endregion
@@ -155,10 +197,15 @@ public class EntriesParityTests : ParityTestBase
     }
 
     [Fact]
-    public async Task GetEntries_InvalidType_ReturnsSameShape()
+    public async Task GetEntries_UnknownFindType_ReturnsSameShape()
     {
-        // Unknown type - both should return empty or error consistently
-        await AssertGetParityAsync("/api/v1/entries?type=nonexistent");
+        await SeedEntrySequenceAsync(count: 3);
+
+        // An unknown type via the filtering form (find[type]=) should yield an empty
+        // array on both systems. (Contrast with a bare ?type=nonexistent, which is
+        // ignored and returns the default entries — see
+        // GetEntries_TopLevelTypeParam_IsIgnored.)
+        await AssertGetParityAsync("/api/v1/entries?find[type]=nonexistent");
     }
 
     #endregion

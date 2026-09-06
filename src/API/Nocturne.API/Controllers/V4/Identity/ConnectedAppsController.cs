@@ -56,7 +56,7 @@ public class ConnectedAppsController : ControllerBase
         var grants = await _grantService.GetGrantsForSubjectAsync(subjectId.Value, ct);
 
         var result = grants
-            .Where(g => g.GrantType == OAuthScopes.GrantTypeApp && !g.IsRevoked)
+            .Where(g => g.GrantType == OAuthGrantTypes.App && !g.IsRevoked)
             .OrderByDescending(g => g.LastUsedAt ?? g.CreatedAt)
             .Select(g => new ConnectedAppDto
             {
@@ -77,9 +77,10 @@ public class ConnectedAppsController : ControllerBase
     }
 
     /// <summary>
-    /// Revoke a connected app. Soft-deletes the grant and invalidates all
-    /// associated refresh tokens; previously-issued access tokens become
-    /// unusable on next request via the revocation cache.
+    /// Revoke a connected app. Soft-deletes the grant and invalidates all associated refresh
+    /// tokens. Previously-issued access tokens carry the grant id and are rejected on their next
+    /// request, so no residual access survives the revocation. Access tokens minted before the
+    /// grant id was added to them are not covered and remain usable until they expire.
     /// </summary>
     /// <inheritdoc cref="IOAuthGrantService.RevokeGrantAsync"/>
     [HttpDelete("{grantId}")]
@@ -94,12 +95,8 @@ public class ConnectedAppsController : ControllerBase
             return Unauthorized();
         }
 
-        // Verify ownership: the grant must belong to this subject on this tenant.
-        var grants = await _grantService.GetGrantsForSubjectAsync(subjectId.Value, ct);
-        var grant = grants.FirstOrDefault(g =>
-            g.Id == grantId && g.GrantType == OAuthScopes.GrantTypeApp && !g.IsRevoked);
-
-        if (grant is null)
+        var grant = await _grantService.GetGrantForSubjectAsync(grantId, subjectId.Value, ct);
+        if (grant is null || grant.GrantType != OAuthGrantTypes.App)
         {
             return NotFound();
         }

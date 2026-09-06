@@ -33,6 +33,13 @@ public class StateSpanRepository : IStateSpanRepository
     };
 
     /// <summary>
+    /// The stored <c>Category</c> values that represent v1 Activity records, as strings for
+    /// translation into SQL.
+    /// </summary>
+    private static readonly List<string> ActivityCategories =
+        ActivityStateSpanMapper.ActivityCategories.Select(c => c.ToString()).ToList();
+
+    /// <summary>
     /// Initializes a new instance of the StateSpanRepository class
     /// </summary>
     /// <param name="context">The database context</param>
@@ -141,9 +148,7 @@ public class StateSpanRepository : IStateSpanRepository
                 query = query.Where(s => s.EndTimestamp != null);
         }
 
-        // Exclude non-primary duplicates from cross-connector deduplication
-        query = query.Where(s => !_context.LinkedRecords
-            .Any(lr => lr.RecordType == "statespan" && !lr.IsPrimary && lr.RecordId == s.Id));
+        query = query.ExcludeNonPrimary(_context, RecordType.StateSpan);
 
         return query;
     }
@@ -196,6 +201,13 @@ public class StateSpanRepository : IStateSpanRepository
                 s => s.OriginalId == stateSpan.OriginalId,
                 cancellationToken
             );
+
+            if (entity == null)
+            {
+                var blocked = await FindBlockingSpanAsync(stateSpan.OriginalId, cancellationToken);
+                if (blocked != null)
+                    return StateSpanMapper.ToDomainModel(blocked);
+            }
         }
 
         if (entity != null)
@@ -255,12 +267,8 @@ public class StateSpanRepository : IStateSpanRepository
                     new(
                         RecordId: entity.Id,
                         Mills: new DateTimeOffset(entity.StartTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                        DataSource: entity.Source ?? "unknown",
-                        Criteria: new MatchCriteria
-                        {
-                            Category = Enum.Parse<StateSpanCategory>(entity.Category, true),
-                            State = entity.State
-                        }
+                        DataSource: entity.Source ?? DeduplicationInput.UnknownDataSource,
+                        Criteria: MatchCriteriaMapper.From(entity)
                     )
                 };
 
@@ -275,6 +283,21 @@ public class StateSpanRepository : IStateSpanRepository
 
         return StateSpanMapper.ToDomainModel(entity);
     }
+
+    /// <summary>
+    /// The soft-deleted row, if any, that forbids re-creating <paramref name="originalId"/>.
+    /// State spans are keyed by <c>OriginalId</c> where the V4 tables are keyed by
+    /// <c>LegacyId</c>, so the lookup is local while the rule stays shared.
+    /// </summary>
+    /// <seealso cref="SoftDeleteDedupExtensions.WhereBlocksRecreation{TEntity}"/>
+    private Task<StateSpanEntity?> FindBlockingSpanAsync(
+        string originalId,
+        CancellationToken cancellationToken) =>
+        _context.StateSpans.AsNoTracking().IgnoreQueryFilters()
+            .Where(s => s.TenantId == _context.TenantId && s.OriginalId == originalId)
+            .WhereBlocksRecreation()
+            .OrderByDescending(s => s.DeletedAt)
+            .FirstOrDefaultAsync(cancellationToken);
 
     /// <summary>
     /// Bulk upsert state spans (for connector imports)
@@ -357,7 +380,7 @@ public class StateSpanRepository : IStateSpanRepository
         if (entity == null)
             return false;
 
-        _context.StateSpans.Remove(entity);
+        entity.DeletedAt = DateTime.UtcNow;
         var result = await _context.SaveChangesAsync(cancellationToken);
         return result > 0;
     }
@@ -373,8 +396,9 @@ public class StateSpanRepository : IStateSpanRepository
         CancellationToken cancellationToken = default
     )
     {
-        var deletedCount = await _context.AuditedExecuteDeleteAsync(
-            _context.StateSpans.Where(s => s.Source == source), _auditContext, cancellationToken);
+        var deletedCount = await _context.AuditedSoftDeleteAsync(
+            _context.StateSpans.Where(s => s.Source == source), _auditContext,
+            $"data_source={source}", cancellationToken);
         return deletedCount;
     }
 
@@ -385,8 +409,7 @@ public class StateSpanRepository : IStateSpanRepository
 
         var latest = await _context.StateSpans.AsNoTracking()
             .Where(s => s.Category == pumpModeCategory && s.EndTimestamp == null)
-            .Where(s => !_context.LinkedRecords
-                .Any(lr => lr.RecordType == "statespan" && !lr.IsPrimary && lr.RecordId == s.Id))
+            .ExcludeNonPrimary(_context, RecordType.StateSpan)
             .OrderByDescending(s => s.StartTimestamp)
             .ThenByDescending(s => s.Id)
             .Select(s => s.State)
@@ -505,11 +528,7 @@ public class StateSpanRepository : IStateSpanRepository
         CancellationToken cancellationToken = default
     )
     {
-        var activityCategories = ActivityStateSpanMapper
-            .ActivityCategories.Select(c => c.ToString())
-            .ToList();
-
-        var query = _context.StateSpans.AsNoTracking().Where(s => activityCategories.Contains(s.Category));
+        var query = _context.StateSpans.AsNoTracking().Where(s => ActivityCategories.Contains(s.Category));
 
         // Filter by type/state if provided
         if (!string.IsNullOrEmpty(type))
@@ -524,6 +543,16 @@ public class StateSpanRepository : IStateSpanRepository
         return entities.Select(StateSpanMapper.ToDomainModel);
     }
 
+    /// <inheritdoc />
+    public async Task<DateTime?> GetLatestActivityTimestampAsync(
+        string source,
+        CancellationToken cancellationToken = default
+    ) =>
+        await _context.StateSpans
+            .AsNoTracking()
+            .Where(s => ActivityCategories.Contains(s.Category) && s.Source == source)
+            .MaxAsync(s => (DateTime?)s.StartTimestamp, cancellationToken);
+
     /// <summary>
     /// Get a state span by ID that represents an Activity record
     /// </summary>
@@ -535,19 +564,15 @@ public class StateSpanRepository : IStateSpanRepository
         CancellationToken cancellationToken = default
     )
     {
-        var activityCategories = ActivityStateSpanMapper
-            .ActivityCategories.Select(c => c.ToString())
-            .ToList();
-
         var entity = await _context.StateSpans.AsNoTracking().FirstOrDefaultAsync(
-            s => s.OriginalId == id && activityCategories.Contains(s.Category),
+            s => s.OriginalId == id && ActivityCategories.Contains(s.Category),
             cancellationToken
         );
 
         if (entity == null && Guid.TryParse(id, out var guidId))
         {
             entity = await _context.StateSpans.AsNoTracking().FirstOrDefaultAsync(
-                s => s.Id == guidId && activityCategories.Contains(s.Category),
+                s => s.Id == guidId && ActivityCategories.Contains(s.Category),
                 cancellationToken
             );
         }
@@ -603,19 +628,15 @@ public class StateSpanRepository : IStateSpanRepository
         CancellationToken cancellationToken = default
     )
     {
-        var activityCategories = ActivityStateSpanMapper
-            .ActivityCategories.Select(c => c.ToString())
-            .ToList();
-
         var entity = await _context.StateSpans.FirstOrDefaultAsync(
-            s => s.OriginalId == id && activityCategories.Contains(s.Category),
+            s => s.OriginalId == id && ActivityCategories.Contains(s.Category),
             cancellationToken
         );
 
         if (entity == null && Guid.TryParse(id, out var guidId))
         {
             entity = await _context.StateSpans.FirstOrDefaultAsync(
-                s => s.Id == guidId && activityCategories.Contains(s.Category),
+                s => s.Id == guidId && ActivityCategories.Contains(s.Category),
                 cancellationToken
             );
         }
@@ -639,19 +660,15 @@ public class StateSpanRepository : IStateSpanRepository
         CancellationToken cancellationToken = default
     )
     {
-        var activityCategories = ActivityStateSpanMapper
-            .ActivityCategories.Select(c => c.ToString())
-            .ToList();
-
         var entity = await _context.StateSpans.FirstOrDefaultAsync(
-            s => s.OriginalId == id && activityCategories.Contains(s.Category),
+            s => s.OriginalId == id && ActivityCategories.Contains(s.Category),
             cancellationToken
         );
 
         if (entity == null && Guid.TryParse(id, out var guidId))
         {
             entity = await _context.StateSpans.FirstOrDefaultAsync(
-                s => s.Id == guidId && activityCategories.Contains(s.Category),
+                s => s.Id == guidId && ActivityCategories.Contains(s.Category),
                 cancellationToken
             );
         }
@@ -659,7 +676,7 @@ public class StateSpanRepository : IStateSpanRepository
         if (entity == null)
             return false;
 
-        _context.StateSpans.Remove(entity);
+        entity.DeletedAt = DateTime.UtcNow;
         var result = await _context.SaveChangesAsync(cancellationToken);
         return result > 0;
     }

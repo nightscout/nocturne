@@ -1,0 +1,83 @@
+{
+    "type": "AdaptiveCard",
+    "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+    "version": "1.5",
+    "body": [
+        {
+            "type": "ColumnSet",
+            "columns": [
+                {
+                    "type": "Column",
+                    "width": "stretch",
+                    "verticalContentAlignment": "Center",
+                    "items": [
+                        { "type": "TextBlock", "text": "Time in Range", "weight": "Bolder" },
+                        { "type": "TextBlock", "text": "Last 24 hours", "size": "Small", "isSubtle": true, "spacing": "None" }
+                    ]
+                },
+                {
+                    "type": "Column",
+                    "width": "auto",
+                    "verticalContentAlignment": "Center",
+                    "items": [
+                        {
+                            "type": "Image",
+                            "url": "${refreshIcon}",
+                            "width": "16px",
+                            "altText": "Refresh",
+                            "selectAction": { "type": "Action.Execute", "verb": "refresh" }
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "type": "ColumnSet",
+            "height": "stretch",
+            "spacing": "Medium",
+            "$when": "${hasTir}",
+            "columns": [
+                {
+                    "type": "Column",
+                    "width": "auto",
+                    "verticalContentAlignment": "Center",
+                    "items": [
+                        {
+                            "type": "Image",
+                            "url": "${tirBarVertical}",
+                            "height": "200px",
+                            "altText": "Time in range"
+                        }
+                    ]
+                },
+                {
+                    "type": "Column",
+                    "width": "stretch",
+                    "verticalContentAlignment": "Center",
+                    "spacing": "Medium",
+                    "items": [
+                        { "type": "TextBlock", "text": "${tirHigh}", "size": "Large", "weight": "Bolder", "color": "Warning" },
+                        { "type": "TextBlock", "text": "High", "size": "Small", "isSubtle": true, "spacing": "None" },
+                        { "type": "TextBlock", "text": "${tirInRange}", "size": "Large", "weight": "Bolder", "color": "Good", "spacing": "Medium" },
+                        { "type": "TextBlock", "text": "In range", "size": "Small", "isSubtle": true, "spacing": "None" },
+                        { "type": "TextBlock", "text": "${tirLow}", "size": "Large", "weight": "Bolder", "color": "Attention", "spacing": "Medium" },
+                        { "type": "TextBlock", "text": "Low", "size": "Small", "isSubtle": true, "spacing": "None" }
+                    ]
+                }
+            ]
+        },
+        {
+            "type": "TextBlock",
+            "text": "Not enough recent data.",
+            "size": "Small",
+            "isSubtle": true,
+            "wrap": true,
+            "spacing": "Medium",
+            "$when": "${hasTir == false}"
+        }
+    ],
+    "selectAction": {
+        "type": "Action.Execute",
+        "verb": "openApp"
+    }
+}

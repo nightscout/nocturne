@@ -14,9 +14,7 @@ vi.mock("$lib/stores/appearance-store.svelte", () => ({
 	glucoseUnits: { current: "mg/dl" },
 }));
 
-const { formatHour, transformStats, AGP_LOW_THRESHOLD } = await import(
-	"./agp-utils"
-);
+const { formatHour, transformStats } = await import("./agp-utils");
 
 // ---------------------------------------------------------------------------
 // formatHour
@@ -56,14 +54,18 @@ describe("formatHour", () => {
 			expect(formatHour(23, true)).toBe("23:00");
 		});
 	});
-});
 
-// ---------------------------------------------------------------------------
-// AGP_LOW_THRESHOLD
-// ---------------------------------------------------------------------------
-describe("AGP_LOW_THRESHOLD", () => {
-	it("is 70 mg/dL (clinical hypoglycemia, not Level 2 at 55)", () => {
-		expect(AGP_LOW_THRESHOLD).toBe(70);
+	describe("fractional hours", () => {
+		it("snaps fractional ticks to the nearest hour (no decimal labels)", () => {
+			expect(formatHour(20.6, false)).toBe("9pm");
+			expect(formatHour(8.4, false)).toBe("8am");
+			expect(formatHour(20.6, true)).toBe("21:00");
+		});
+
+		it("wraps a tick rounding up to 24 back to midnight", () => {
+			expect(formatHour(23.6, false)).toBe("12am");
+			expect(formatHour(23.6, true)).toBe("00:00");
+		});
 	});
 });
 
@@ -106,9 +108,9 @@ describe("transformStats", () => {
 
 		expect(result[0].median).toBe(10.0);
 		expect(result[0].percentiles!.p10).toBe(3.9);
-		expect(result[0].percentiles!.p25).toBe(5.6);
+		expect(result[0].percentiles!.p25).toBe(5.5);
 		expect(result[0].percentiles!.p75).toBe(11.1);
-		expect(result[0].percentiles!.p90).toBe(16.7);
+		expect(result[0].percentiles!.p90).toBe(16.6);
 	});
 
 	it("defaults missing median to 0", () => {

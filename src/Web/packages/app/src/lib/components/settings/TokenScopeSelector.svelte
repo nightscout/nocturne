@@ -112,6 +112,13 @@
           coveredBy: "health",
           levels: rw("stepcount"),
         },
+        {
+          name: "Sleep",
+          description: "Sleep sessions, stages, and overnight biometrics",
+          isSubItem: true,
+          coveredBy: "health",
+          levels: rw("sleep"),
+        },
       ],
     },
     {

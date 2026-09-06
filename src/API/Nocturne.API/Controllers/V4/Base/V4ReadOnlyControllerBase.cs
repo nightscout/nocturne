@@ -36,7 +36,9 @@ public abstract class V4ReadOnlyControllerBase<TModel, TRepository>(TRepository 
     /// - `timestamp_asc` — oldest records first
     /// - `timestamp_desc` — newest records first (default)
     ///
-    /// Use `limit` and `offset` together for paginated access to large result sets.
+    /// Use `limit` and `offset` together for paginated access to large result sets. `limit` is
+    /// capped at <see cref="V4ReadLimits.MaxPageSize"/>, and a `from`/`to` range wider than
+    /// <see cref="V4ReadLimits.MaxDateSpanDays"/> days is rejected with `400 Bad Request`.
     /// </remarks>
     [HttpGet]
     [RemoteQuery]
@@ -49,13 +51,38 @@ public abstract class V4ReadOnlyControllerBase<TModel, TRepository>(TRepository 
         [FromQuery] string? device = null, [FromQuery] string? source = null,
         CancellationToken ct = default)
     {
-        if (sort is not "timestamp_desc" and not "timestamp_asc")
-            return Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
+        if (PrepareListQuery(from, to, sort, ref limit, ref offset, out var descending) is { } error)
+            return error;
 
-        var descending = sort == "timestamp_desc";
         var data = await Repository.GetAsync(from, to, device, source, limit, offset, descending, ct);
         var total = await Repository.CountAsync(from, to, ct);
         return Ok(new PaginatedResponse<TModel> { Data = data, Pagination = new PaginationInfo(limit, offset, total) });
+    }
+
+    /// <summary>
+    /// Validates the shared list-query parameters and clamps the paging window to
+    /// <see cref="V4ReadLimits"/>.
+    /// </summary>
+    /// <remarks>
+    /// Overrides of <see cref="GetAll"/> that add their own filters must route through this rather
+    /// than re-deriving <paramref name="descending"/>, which is the only way to obtain it.
+    /// </remarks>
+    /// <returns>The error response to return, or <c>null</c> when the query is usable.</returns>
+    protected ActionResult? PrepareListQuery(
+        DateTime? from, DateTime? to, string sort, ref int limit, ref int offset, out bool descending)
+    {
+        descending = true;
+
+        if (sort is not "timestamp_desc" and not "timestamp_asc")
+            return Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
+
+        if (V4ReadLimits.ExceedsMaxDateSpan(from, to))
+            return Problem(detail: $"Date range must not exceed {V4ReadLimits.MaxDateSpanDays} days.", statusCode: 400, title: "Bad Request");
+
+        descending = sort == "timestamp_desc";
+        limit = V4ReadLimits.ClampLimit(limit);
+        offset = V4ReadLimits.ClampOffset(offset);
+        return null;
     }
 
     /// <summary>Retrieves a single record by its unique identifier.</summary>

@@ -62,6 +62,12 @@ public sealed record ChartDataContext
     public IReadOnlyList<BGCheck> BgCheckList { get; init; } = [];
     public IReadOnlyList<DeviceEvent> DeviceEventList { get; init; } = [];
     public IReadOnlyList<TempBasal> TempBasalList { get; init; } = [];
+
+    /// <summary>
+    /// APS snapshot IOB/COB points covering the buffer window, ascending by timestamp. Carries the
+    /// IOB/COB the AID system reported, which the IOB/COB series prefers over its own recomputation.
+    /// </summary>
+    public IReadOnlyList<ApsIobCobPoint> ApsSnapshotList { get; init; } = [];
     public IReadOnlyList<BasalInjection> BasalInjectionList { get; init; } = [];
     /// <summary>State spans keyed by category, populated from a batched repository query.</summary>
     public IReadOnlyDictionary<StateSpanCategory, IEnumerable<StateSpan>> StateSpans { get; init; }
@@ -72,6 +78,7 @@ public sealed record ChartDataContext
     public IReadOnlyList<TrackerInstanceEntity> TrackerInstances { get; init; } = [];
     public IReadOnlyList<HeartRate> HeartRateList { get; init; } = [];
     public IReadOnlyList<StepCount> StepCountList { get; init; } = [];
+    public IReadOnlyList<SleepSession> SleepSessions { get; init; } = [];
 
     // === Computed series (set by computation stages) ===
 

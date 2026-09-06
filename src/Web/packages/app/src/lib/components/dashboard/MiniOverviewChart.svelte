@@ -10,7 +10,6 @@
   } from "layerchart";
   import { scaleTime, scaleLinear } from "d3-scale";
   import { curveMonotoneX } from "d3";
-  import type { BrushContextValue } from "layerchart";
   import RotateCcw from "lucide-svelte/icons/rotate-ccw";
   import { Button } from "$lib/components/ui/button";
   import { time, formatDateTimeCompact } from "$lib/utils/formatting";
@@ -68,9 +67,6 @@
   // svelte-ignore state_referenced_locally
   void _lowThreshold;
 
-  // Track brush context for handle labels
-  let brushContext = $state<BrushContextValue | undefined>(undefined);
-
   // Whether we have an active selection (zoomed in)
   const hasSelection = $derived(
     selectedXDomain !== null &&
@@ -88,25 +84,12 @@
     return formatDateTimeCompact(date);
   }
 
-  // Handle brush end - update selection
-  function handleBrushEnd(e: { xDomain: unknown; yDomain: unknown }) {
-    if (e.xDomain && Array.isArray(e.xDomain) && e.xDomain.length === 2) {
-      const newDomain: [Date, Date] = [
-        new Date(e.xDomain[0] as number),
-        new Date(e.xDomain[1] as number),
-      ];
-      selectedXDomain = newDomain;
-      onSelectionChange?.(newDomain);
-    }
-  }
-
-  // Handle brush change for live updates
-  function handleBrushChange(e: { xDomain: unknown; yDomain: unknown }) {
-    if (e.xDomain && Array.isArray(e.xDomain) && e.xDomain.length === 2) {
-      const newDomain: [Date, Date] = [
-        new Date(e.xDomain[0] as number),
-        new Date(e.xDomain[1] as number),
-      ];
+  // layerchart 2.x brush events carry the BrushState; its x domain holds the
+  // current selection. Used for both live updates (onChange) and brush end.
+  function handleBrush(e: { brush: { x: Array<number | Date | string | null> } }) {
+    const [start, end] = e.brush.x ?? [];
+    if (start != null && end != null) {
+      const newDomain: [Date, Date] = [new Date(start), new Date(end)];
       selectedXDomain = newDomain;
       onSelectionChange?.(newDomain);
     }
@@ -119,7 +102,7 @@
   }
 </script>
 
-<div class="mini-overview-chart">
+<div class="mini-overview-chart print:hidden">
   <!-- Header with reset button -->
   <div
     class="w-full flex items-center justify-between px-3 py-1.5 text-xs text-muted-foreground"
@@ -192,27 +175,25 @@
 
           <!-- Brush context for selection -->
           <BrushContext
-            bind:brushContext
             axis="x"
-            mode="separated"
-            xDomain={selectedXDomain ?? fullXDomain}
-            onBrushEnd={handleBrushEnd}
-            onChange={handleBrushChange}
+            x={selectedXDomain ?? fullXDomain}
+            onBrushEnd={handleBrush}
+            onChange={handleBrush}
             classes={{
               range: "bg-primary/20 border border-primary/40 rounded",
               handle: "bg-primary/60 hover:bg-primary/80 rounded-sm",
             }}
           >
-            {#snippet children({ brushContext: bc })}
+            {#snippet children({ state: bc })}
               <!-- Handle labels showing time values -->
-              {#if bc.isActive && bc.xDomain}
+              {#if bc.active && bc.x?.[0] != null && bc.x?.[1] != null}
                 <!-- Left handle label -->
                 <div
                   class="absolute text-[9px] font-medium text-primary bg-background/90 px-1 py-0.5 rounded shadow-sm border border-border whitespace-nowrap pointer-events-none z-20"
                   style="left: {bc.range.x + bc.range.width / 2 - 2}px; top: {bc
                     .range.y - 18}px; transform: translateX(-100%)"
                 >
-                  {formatDateTime(new Date(bc.xDomain[0] as number))}
+                  {formatDateTime(new Date(bc.x[0]))}
                 </div>
 
                 <!-- Right handle label -->
@@ -221,7 +202,7 @@
                   style="left: {bc.range.x + bc.range.width + 2}px; top: {bc
                     .range.y - 18}px;"
                 >
-                  {formatDateTime(new Date(bc.xDomain[1] as number))}
+                  {formatDateTime(new Date(bc.x[1]))}
                 </div>
               {/if}
             {/snippet}

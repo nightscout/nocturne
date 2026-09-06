@@ -31,6 +31,9 @@ try
         ["Aspire__OptionalServices__AspireDashboard__Enabled"] = "false",
         ["Aspire__OptionalServices__Scalar__Enabled"] = "false",
         ["Aspire__OptionalServices__Watchtower__Enabled"] = "true",
+        // The AppHost defaults to ephemeral Postgres in a git worktree, which drops the
+        // named data volume — never right for a release bundle.
+        ["NOCTURNE_DB_PERSISTENCE"] = "persistent",
     };
 
     var exitCode = RunProcess("aspire", [
@@ -213,6 +216,14 @@ static string GenerateEnvExample(EnvVarGroups groups, EnvVarMeta[] metadata)
         .ToDictionary(m => m.Name, m => $"# {m.Description}");
 
     var sb = new System.Text.StringBuilder();
+
+    void AppendVar(string name, string value)
+    {
+        if (varComments.TryGetValue(name, out var comment))
+            sb.AppendLine(comment);
+        sb.AppendLine($"{name}={value}");
+    }
+
     sb.AppendLine("# Nocturne Production Environment");
     sb.AppendLine("# See: https://github.com/nightscout/nocturne/releases");
     sb.AppendLine("#");
@@ -222,18 +233,14 @@ static string GenerateEnvExample(EnvVarGroups groups, EnvVarMeta[] metadata)
     sb.AppendLine("# -- Configuration ---------------------------------------------");
     sb.AppendLine();
     foreach (var (name, value) in groups.Config)
-        sb.AppendLine($"{name}={value}");
+        AppendVar(name, value);
     sb.AppendLine();
     sb.AppendLine("# -- Required (set these before first run) ----------------------");
     sb.AppendLine();
     foreach (var (name, _) in groups.RequiredConfig)
-    {
-        if (varComments.TryGetValue(name, out var comment))
-            sb.AppendLine(comment);
-        sb.AppendLine($"{name}=");
-    }
+        AppendVar(name, "");
     foreach (var (name, _) in groups.Secrets)
-        sb.AppendLine($"{name}=");
+        AppendVar(name, "");
     sb.AppendLine();
     sb.AppendLine("# -- Optional --------------------------------------------------");
     sb.AppendLine();

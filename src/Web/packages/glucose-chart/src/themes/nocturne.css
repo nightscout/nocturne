@@ -38,7 +38,7 @@
   /* IOB (Insulin on Board) - for charts - should be more prominent than basal */
   --iob-basal: rgba(30, 150, 252, 0.7);
   --iob-bolus: rgba(30, 150, 252, 1);
-  --iob-temporary: rgba(80, 170, 255, 0.8);
+  --iob-temporary: rgba(45, 190, 175, 0.85);
 
   /* Pump Mode States */
   --pump-mode-automatic: oklch(0.6 0.118 184.704); /* Green - full automation */
@@ -89,7 +89,7 @@
   /* IOB - Dark Mode - more saturated for contrast */
   --iob-basal: rgba(60, 160, 255, 0.8);
   --iob-bolus: rgba(30, 150, 252, 1);
-  --iob-temporary: rgba(100, 180, 255, 0.85);
+  --iob-temporary: rgba(60, 215, 200, 0.9);
 
   /* Data Exclusion - Dark Mode - slightly higher opacity for visibility on dark backgrounds */
   --data-exclusion-compression-low: rgba(255, 165, 0, 0.2);

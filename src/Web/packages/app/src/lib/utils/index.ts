@@ -9,6 +9,8 @@ import {
   HelpCircle,
   AlertTriangle,
 } from "lucide-svelte";
+import { canonicalDirection } from "@nocturne/ui/glucose";
+import { formatLocale } from "$lib/utils/formatting";
 import {
   Direction,
 } from "$lib/api";
@@ -16,162 +18,96 @@ import {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SvelteComponent = any;
 
-/** Time utility functions */
-export const times = {
-  mins: (mins: number) => ({ msecs: mins * 60 * 1000 }),
-  hours: (hours: number) => ({ msecs: hours * 60 * 60 * 1000 }),
-  days: (days: number) => ({ msecs: days * 24 * 60 * 60 * 1000 }),
+type DirectionInfo = { label: string; icon: SvelteComponent; css: string };
+
+/**
+ * Shown for every direction no arrow can express — none reported, not computable, or a
+ * spelling this build does not know. A trend we do not have must never read as a stable one.
+ */
+const unknownDirectionInfo: DirectionInfo = {
+  label: "unknown",
+  icon: HelpCircle,
+  css: "text-gray-500",
 };
 
-/** Unit conversion utilities */
-export const units = {
-  mgdlToMMOL: (mgdl: number): number => {
-    return Math.round((mgdl / 18.01559) * 10) / 10;
+/** Keyed by the canonical direction name {@link canonicalDirection} yields. */
+const directionInfo: Partial<Record<string, DirectionInfo>> = {
+  [Direction.TripleUp]: {
+    label: "rising extremely fast",
+    icon: ArrowUp,
+    css: "text-red-500",
   },
-  mmolToMGDL: (mmol: number): number => {
-    return Math.round(mmol * 18.01559);
+  [Direction.DoubleUp]: {
+    label: "rising very fast",
+    icon: ArrowUp,
+    css: "text-red-500",
   },
+  [Direction.SingleUp]: {
+    label: "rising",
+    icon: ArrowUpRight,
+    css: "text-orange-500",
+  },
+  [Direction.FortyFiveUp]: {
+    label: "rising slowly",
+    icon: ArrowUpRight,
+    css: "text-yellow-500",
+  },
+  [Direction.Flat]: { label: "stable", icon: ArrowRight, css: "text-green-500" },
+  [Direction.FortyFiveDown]: {
+    label: "falling slowly",
+    icon: ArrowDownRight,
+    css: "text-yellow-500",
+  },
+  [Direction.SingleDown]: {
+    label: "falling",
+    icon: ArrowDownRight,
+    css: "text-orange-500",
+  },
+  [Direction.DoubleDown]: {
+    label: "falling very fast",
+    icon: ArrowDown,
+    css: "text-red-500",
+  },
+  [Direction.TripleDown]: {
+    label: "falling extremely fast",
+    icon: ArrowDown,
+    css: "text-red-500",
+  },
+  [Direction.RateOutOfRange]: {
+    label: "out of range",
+    icon: AlertTriangle,
+    css: "text-gray-500",
+  },
+  [Direction.CgmError]: {
+    label: "sensor error",
+    icon: AlertTriangle,
+    css: "text-gray-500",
+  },
+  [Direction.NONE]: unknownDirectionInfo,
+  [Direction.NotComputable]: unknownDirectionInfo,
 };
 
-/** Format time based on user settings */
-export function formatTime(
-  date: Date | number,
-  timeFormat: number = 12,
-  compact: boolean = false
-): string {
-  const options: Intl.DateTimeFormatOptions = {
-    hour: "numeric",
-    minute: "2-digit",
-  };
-  date = typeof date === "number" ? new Date(date) : date;
-
-  if (timeFormat === 24) {
-    options.hour12 = false;
-    return date.toLocaleTimeString(undefined, options);
-  }
-
-  if (compact) {
-    options.minute = "numeric";
-  }
-
-  return date.toLocaleTimeString(undefined, options).toLowerCase();
-}
-
-/** Calculate BG trend direction based on raw delta value */
-export function calculateDirection(delta: number): string {
-  if (delta > 8) return "DoubleUp";
-  if (delta > 5) return "SingleUp";
-  if (delta > 2) return "FortyFiveUp";
-  if (delta < -8) return "DoubleDown";
-  if (delta < -5) return "SingleDown";
-  if (delta < -2) return "FortyFiveDown";
-  return "Flat";
-}
-
-
-/** Get BG trend direction information */
-export function getDirectionInfo(direction?: Direction | string) {
-  const directions: Partial<Record<
-    Direction,
-    { label: string; icon: SvelteComponent; css: string }
-  >> = {
-    [Direction.DoubleUp]: {
-      label: "rising very fast",
-      icon: ArrowUp,
-      css: "text-red-500",
-    },
-    [Direction.SingleUp]: {
-      label: "rising",
-      icon: ArrowUpRight,
-      css: "text-orange-500",
-    },
-    [Direction.FortyFiveUp]: {
-      label: "rising slowly",
-      icon: ArrowUpRight,
-      css: "text-yellow-500",
-    },
-    [Direction.Flat]: { label: "stable", icon: ArrowRight, css: "text-green-500" },
-    [Direction.FortyFiveDown]: {
-      label: "falling slowly",
-      icon: ArrowDownRight,
-      css: "text-yellow-500",
-    },
-    [Direction.SingleDown]: {
-      label: "falling",
-      icon: ArrowDownRight,
-      css: "text-orange-500",
-    },
-    [Direction.DoubleDown]: {
-      label: "falling very fast",
-      icon: ArrowDown,
-      css: "text-red-500",
-    },
-    [Direction.NotComputable]: {
-      label: "unknown",
-      icon: HelpCircle,
-      css: "text-gray-500",
-    },
-    [Direction.RateOutOfRange]: {
-      label: "out of range",
-      icon: AlertTriangle,
-      css: "text-gray-500",
-    },
-  };
-
-  const dirValue = typeof direction === 'string' ? direction as Direction : direction;
-  return directions[dirValue || Direction.Flat] || directions[Direction.Flat]!;
-}
-
-/** Determine BG status level based on thresholds */
-export function getBGStatus(value: number, thresholds: any) {
-  if (!thresholds) {
-    thresholds = {
-      bgHigh: 180,
-      bgTargetTop: 140,
-      bgTargetBottom: 80,
-      bgLow: 55,
-    };
-  }
-
-  if (value >= thresholds.bgHigh) return "urgent-high";
-  if (value <= thresholds.bgLow) return "urgent-low";
-  if (value > thresholds.bgTargetTop) return "high";
-  if (value < thresholds.bgTargetBottom) return "low";
-  return "in-range";
-}
-
-/** Get color class for BG status */
-export function getBGColorClass(status: string) {
-  const colors: Record<string, string> = {
-    "urgent-high": "bg-red-500 text-white",
-    "urgent-low": "bg-red-500 text-white",
-    high: "bg-orange-500 text-white",
-    low: "bg-yellow-500 text-black",
-    "in-range": "bg-green-500 text-white",
-  };
-
-  return colors[status] || "bg-gray-500 text-white";
-}
-
-/** Check if data is stale based on timestamp */
-export function isDataStale(
-  timestamp: number,
-  thresholdMinutes: number = 15
-): boolean {
-  const now = Date.now();
-  const diffMinutes = (now - timestamp) / (60 * 1000);
-  return diffMinutes > thresholdMinutes;
+/**
+ * Get BG trend direction information. v1/v3 responses carry the space-separated Nightscout
+ * spellings ("NOT COMPUTABLE"); v4 carries the enum member names. Both resolve to the same
+ * entry, via the same fold the glyph and rotation tables use.
+ */
+export function getDirectionInfo(direction?: Direction | string): DirectionInfo {
+  return directionInfo[canonicalDirection(direction)] ?? unknownDirectionInfo;
 }
 
 /** Enhanced relative time formatting with internationalization support */
 const getRelativeTimeFormatter = (() => {
   let formatter: Intl.RelativeTimeFormat | null = null;
+  let cachedFor: string | null = null;
   return (locale?: string) => {
-    if (
-      !formatter ||
-      (locale && locale !== formatter.resolvedOptions().locale)
-    ) {
-      formatter = new Intl.RelativeTimeFormat(locale || "en", {
+    const wanted = locale || formatLocale();
+    // Keyed on the requested tag, not on `resolvedOptions().locale`: ICU answers
+    // "nb-NO" with "nb", so comparing against the resolved tag never matches and
+    // rebuilds the formatter on every call.
+    if (!formatter || wanted !== cachedFor) {
+      cachedFor = wanted;
+      formatter = new Intl.RelativeTimeFormat(wanted, {
         numeric: "auto",
         style: "long",
       });
@@ -180,8 +116,17 @@ const getRelativeTimeFormatter = (() => {
   };
 })();
 
-/** Generate human-readable time ago string with enhanced internationalization */
-export function timeAgo(timestamp: number | string, locale?: string): string {
+/**
+ * Generate human-readable time ago string with enhanced internationalization
+ *
+ * @param nowMs Reference time. Pass a ticking value (see `Now`) where the
+ *   result is rendered, or the text freezes at the age it had on first render.
+ */
+export function timeAgo(
+  timestamp: number | string,
+  locale?: string,
+  nowMs?: number
+): string {
   // Validate input timestamp
   const timestampNum =
     typeof timestamp === "string" ? parseInt(timestamp) : timestamp;
@@ -191,7 +136,10 @@ export function timeAgo(timestamp: number | string, locale?: string): string {
 
   // Convert to DateValue using @internationalized/date for better timezone handling
   const inputDate = fromDate(new Date(timestampNum), getLocalTimeZone());
-  const currentDate = now(getLocalTimeZone());
+  const currentDate =
+    nowMs === undefined
+      ? now(getLocalTimeZone())
+      : fromDate(new Date(nowMs), getLocalTimeZone());
 
   // Calculate difference in milliseconds
   const diffMs = currentDate.toDate().getTime() - inputDate.toDate().getTime();
@@ -235,6 +183,7 @@ export function timeAgo(timestamp: number | string, locale?: string): string {
 // Re-export UI utilities from shared package
 export {
   cn,
+  copyToClipboard,
   type WithoutChild,
   type WithoutChildren,
   type WithoutChildrenOrChild,
@@ -247,6 +196,36 @@ export interface DateRange {
   start: string;
   /** ISO 8601 */
   end: string;
+}
+
+/**
+ * Base64-encode a string of any content.
+ *
+ * `btoa` throws on code points above U+00FF, so it cannot carry text the user
+ * typed — an accented or non-Latin name is enough to break it.
+ */
+export function encodeBase64Utf8(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+/**
+ * Decode a string produced by {@link encodeBase64Utf8}.
+ *
+ * Payloads written by plain `btoa` still decode: ASCII is identical in UTF-8,
+ * and a Latin-1 payload that isn't valid UTF-8 falls back to the byte-per-char
+ * reading `atob` gives.
+ */
+export function decodeBase64Utf8(encoded: string): string {
+  const binary = atob(encoded);
+  const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return binary;
+  }
 }
 
 /**

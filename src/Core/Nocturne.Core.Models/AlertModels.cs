@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Alerts.Conditions;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.Core.Models;
 
@@ -13,7 +14,7 @@ public record SensorContext
     /// <summary>
     /// Most recent glucose value in mg/dL, or null if no reading is available.
     /// </summary>
-    [ReplayFact("latest_glucose", decimals: 0)]
+    [ReplayFact("latest_glucose", Scope.GlucoseRead, decimals: 0)]
     public required decimal? LatestValue { get; init; }
 
     /// <summary>
@@ -24,13 +25,13 @@ public record SensorContext
     /// <summary>
     /// Rate of glucose change in mg/dL per minute. Positive = rising, negative = falling.
     /// </summary>
-    [ReplayFact("trend_rate", decimals: 2)]
+    [ReplayFact("trend_rate", Scope.GlucoseRead, decimals: 2)]
     public required decimal? TrendRate { get; init; }
 
     /// <summary>
     /// Timestamp of the last reading received from the CGM, used for signal loss detection.
     /// </summary>
-    [ReplayFact("staleness_minutes", decimals: 0, conversion: ReplayFactConversion.MinutesSinceNow)]
+    [ReplayFact("staleness_minutes", Scope.GlucoseRead, decimals: 0, conversion: ReplayFactConversion.MinutesSinceNow)]
     public required DateTime? LastReadingAt { get; init; }
 
     /// <summary>
@@ -41,31 +42,39 @@ public record SensorContext
     /// <summary>
     /// Insulin on board in units, when available from the loop/pump integration.
     /// </summary>
-    [ReplayFact("iob", decimals: 2)]
+    [ReplayFact("iob", Scope.TreatmentsRead, decimals: 2)]
     public decimal? IobUnits { get; init; }
 
     /// <summary>
     /// Carbohydrates on board in grams, when available from the loop integration.
     /// </summary>
-    [ReplayFact("cob", decimals: 1)]
+    [ReplayFact("cob", Scope.TreatmentsRead, decimals: 1)]
     public decimal? CobGrams { get; init; }
 
     /// <summary>
     /// Pump reservoir level in units, when available.
     /// </summary>
-    [ReplayFact("reservoir", decimals: 1)]
+    [ReplayFact("reservoir", Scope.DevicesRead, decimals: 1)]
     public decimal? ReservoirUnits { get; init; }
+
+    /// <summary>
+    /// True when <see cref="ReservoirUnits"/> is a lower bound rather than an exact reading
+    /// (e.g. an Omnipod reports "50+" while the reservoir holds at least 50 units).
+    /// Replay emits this fact as 0/1.
+    /// </summary>
+    [ReplayFact("reservoir_is_lower_bound", Scope.DevicesRead, decimals: 0)]
+    public bool ReservoirIsLowerBound { get; init; }
 
     /// <summary>
     /// Timestamp of the most recent infusion site change. Used by the site-age condition.
     /// </summary>
-    [ReplayFact("site_age_hours", decimals: 1, conversion: ReplayFactConversion.HoursSinceNow)]
+    [ReplayFact("site_age_hours", Scope.DevicesRead, decimals: 1, conversion: ReplayFactConversion.HoursSinceNow)]
     public DateTime? LastSiteChangeAt { get; init; }
 
     /// <summary>
     /// Timestamp of the most recent CGM sensor start. Used by the sensor-age condition.
     /// </summary>
-    [ReplayFact("sensor_age_days", decimals: 2, conversion: ReplayFactConversion.DaysSinceNow)]
+    [ReplayFact("sensor_age_days", Scope.DevicesRead, decimals: 2, conversion: ReplayFactConversion.DaysSinceNow)]
     public DateTime? LastSensorStartAt { get; init; }
 
     /// <summary>
@@ -94,15 +103,15 @@ public record SensorContext
     // ----- Looping facts -----
 
     /// <summary>Timestamp of the latest APS cycle (suggested or enacted), or null when none observed.</summary>
-    [ReplayFact("loop_stale_minutes", decimals: 0, conversion: ReplayFactConversion.MinutesSinceNow)]
+    [ReplayFact("loop_stale_minutes", Scope.DevicesRead, decimals: 0, conversion: ReplayFactConversion.MinutesSinceNow)]
     public DateTime? LastApsCycleAt { get; init; }
 
     /// <summary>Timestamp of the latest enacted APS cycle, or null when none observed.</summary>
-    [ReplayFact("loop_enaction_stale_minutes", decimals: 0, conversion: ReplayFactConversion.MinutesSinceNow)]
+    [ReplayFact("loop_enaction_stale_minutes", Scope.DevicesRead, decimals: 0, conversion: ReplayFactConversion.MinutesSinceNow)]
     public DateTime? LastApsEnactedAt { get; init; }
 
     /// <summary>Latest pump battery level in percent, when available.</summary>
-    [ReplayFact("pump_battery_percent", decimals: 0)]
+    [ReplayFact("pump_battery_percent", Scope.DevicesRead, decimals: 0)]
     public decimal? PumpBatteryPercent { get; init; }
 
     /// <summary>Currently active temp basal projection, or null when no temp is active.</summary>
@@ -113,11 +122,11 @@ public record SensorContext
     /// Lives as a separate property purely so it can carry a <see cref="ReplayFactAttribute"/>;
     /// evaluators read <see cref="ActiveTempBasal"/> directly.
     /// </summary>
-    [ReplayFact("temp_basal_rate", decimals: 2)]
+    [ReplayFact("temp_basal_rate", Scope.TreatmentsRead, decimals: 2)]
     public decimal? TempBasalRate => ActiveTempBasal?.Rate;
 
     /// <summary>Latest uploader (phone) battery level in percent, when available.</summary>
-    [ReplayFact("uploader_battery_percent", decimals: 0)]
+    [ReplayFact("uploader_battery_percent", Scope.DevicesRead, decimals: 0)]
     public decimal? UploaderBatteryPercent { get; init; }
 
     /// <summary>Currently active override projection, or null when no override is active.</summary>
@@ -130,16 +139,27 @@ public record SensorContext
     public PumpSuspensionSnapshot? ActivePumpSuspension { get; init; }
 
     /// <summary>Latest non-null APS sensitivity ratio (autosens), when available.</summary>
-    [ReplayFact("sensitivity_ratio", decimals: 2)]
+    [ReplayFact("sensitivity_ratio", Scope.DevicesRead, decimals: 2)]
     public decimal? SensitivityRatio { get; init; }
 
     /// <summary>
-    /// Currently active Do Not Disturb projection, or null when DND is off. Populated from
-    /// <c>tenant_alert_settings</c> by the context enricher; collapses both manual and
-    /// scheduled DND activation paths into one snapshot, so condition evaluators don't have
-    /// to know which path is active.
+    /// Currently active Do Not Disturb projection, or null when DND is off. Drives the
+    /// <c>do_not_disturb</c> condition leaf and the tenant-wide notion of DND. Re-sourced by
+    /// the enricher from the active <c>scope=all</c> DND window and scheduled DND (ADR 0004 D5):
+    /// <c>lows</c>/<c>highs</c> windows feed <see cref="ActiveDndScopes"/> only and never trip
+    /// this. Non-null exactly when <see cref="ActiveDndScopes"/> contains <see cref="DndScope.All"/>.
     /// </summary>
     public DoNotDisturbSnapshot? ActiveDoNotDisturb { get; init; }
+
+    /// <summary>
+    /// The set of DND scopes active as of this context's evaluation instant (resolved on read
+    /// from the tenant's <c>dnd_windows</c> plus scheduled DND), for scoped Do Not Disturb
+    /// suppression (ADR 0004 D5). The shared <c>DndSuppressionGate</c> silences a rule when one
+    /// of these scopes covers the rule's <see cref="AlertRuleSnapshot.ScopeClass"/>. Empty when
+    /// no DND is active. Assembled live (<c>IsActiveAt(now)</c>) or, in replay, receipt-gated
+    /// (<c>WasActiveAt(T)</c>).
+    /// </summary>
+    public IReadOnlySet<DndScope> ActiveDndScopes { get; init; } = new HashSet<DndScope>();
 
     // ----- Cold-start null-suppression flags -----
     // These exist for facts where "no data yet" must be distinguished from "data is just
@@ -171,11 +191,11 @@ public record SensorContext
     public GlucoseBucket? GlucoseBucket { get; init; }
 
     /// <summary>Timestamp of the latest carb-bearing treatment, or null when none observed.</summary>
-    [ReplayFact("time_since_last_carb_minutes", decimals: 0, conversion: ReplayFactConversion.MinutesSinceNow)]
+    [ReplayFact("time_since_last_carb_minutes", Scope.TreatmentsRead, decimals: 0, conversion: ReplayFactConversion.MinutesSinceNow)]
     public DateTime? LastCarbAt { get; init; }
 
     /// <summary>Timestamp of the latest insulin-bearing treatment, or null when none observed.</summary>
-    [ReplayFact("time_since_last_bolus_minutes", decimals: 0, conversion: ReplayFactConversion.MinutesSinceNow)]
+    [ReplayFact("time_since_last_bolus_minutes", Scope.TreatmentsRead, decimals: 0, conversion: ReplayFactConversion.MinutesSinceNow)]
     public DateTime? LastBolusAt { get; init; }
 
     /// <summary>
@@ -198,6 +218,22 @@ public record SensorContext
     /// </summary>
     public IReadOnlyDictionary<(StateSpanCategory Category, string? State), StateSpanSnapshot> ActiveStateSpans { get; init; }
         = new Dictionary<(StateSpanCategory, string?), StateSpanSnapshot>();
+
+    /// <summary>
+    /// True when a sleep session (from the sleep_sessions tables) has
+    /// <c>StartTime &lt;= now &lt;= EndTime</c> for the tenant. Populated by the enricher only
+    /// when a rule references the <c>sleep_session_active</c> condition; false otherwise.
+    /// </summary>
+    public bool SleepSessionActive { get; init; }
+
+    /// <summary>
+    /// Reference timestamp of the active tracker instance per tracker definition: start
+    /// time for Duration trackers, scheduled time for Event trackers. Populated by the
+    /// enricher for every definition referenced by a <c>tracker_age</c> leaf in the rules
+    /// being evaluated. An absent key means no active instance — the leaf evaluates false.
+    /// </summary>
+    public IReadOnlyDictionary<Guid, DateTime> ActiveTrackers { get; init; }
+        = new Dictionary<Guid, DateTime>();
 }
 
 /// <summary>
@@ -436,6 +472,24 @@ public record StateSpanActiveCondition(
     [property: JsonPropertyName("is_active")] bool IsActive,
     [property: JsonPropertyName("for_minutes")] int? ForMinutes);
 
+/// <summary>Sleep-session-active condition. True when a sleep session (from the sleep_sessions
+/// tables) has <c>StartTime &lt;= now &lt;= EndTime</c> for the tenant. <see cref="IsActive"/>
+/// selects which side of the boolean is asserted: <c>true</c> matches while a session is active,
+/// <c>false</c> matches when none is.</summary>
+public record SleepSessionActiveCondition(
+    [property: JsonPropertyName("is_active")] bool IsActive);
+
+/// <summary>Tracker-age condition: minutes since the active tracker instance's reference
+/// timestamp (start for Duration trackers, scheduled time for Event trackers) compared
+/// against <see cref="Minutes"/>. Elapsed time is negative before a scheduled event, so a
+/// negative <see cref="Minutes"/> with <c>&gt;=</c> expresses "within N minutes before the
+/// event". No active instance for the definition evaluates false — a tracker that isn't
+/// running has no age (deliberately opposite to the time_since_last_* cold-start infinity).</summary>
+public record TrackerAgeCondition(
+    [property: JsonPropertyName("tracker_definition_id")] Guid TrackerDefinitionId,
+    string Operator,
+    int Minutes);
+
 /// <summary>Selects which TempBasal field a TempBasalCondition compares.</summary>
 [JsonConverter(typeof(JsonStringEnumConverter<TempBasalMetric>))]
 public enum TempBasalMetric
@@ -484,7 +538,9 @@ public record ConditionNode(
     [property: JsonPropertyName("time_since_last_bolus")] TimeSinceLastBolusCondition? TimeSinceLastBolus = null,
     [property: JsonPropertyName("day_of_week")] DayOfWeekCondition? DayOfWeek = null,
     [property: JsonPropertyName("pump_state")] PumpStateCondition? PumpState = null,
-    [property: JsonPropertyName("state_span_active")] StateSpanActiveCondition? StateSpanActive = null
+    [property: JsonPropertyName("state_span_active")] StateSpanActiveCondition? StateSpanActive = null,
+    [property: JsonPropertyName("sleep_session_active")] SleepSessionActiveCondition? SleepSessionActive = null,
+    [property: JsonPropertyName("tracker_age")] TrackerAgeCondition? TrackerAge = null
 );
 
 /// <summary>

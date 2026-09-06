@@ -33,6 +33,40 @@ jobs:
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
+      # No job here builds nocturne.sln — CI runs named projects only (see Test below) — so this
+      # is the only thing gating solution membership, and it has to hold in both directions.
+      # scripts/Shared is the deliberate omission: scripts/ consumes it through `#:project`.
+      - name: Solution and project tree agree
+        run: |
+          tracked=$(git -c core.quotePath=false ls-files '*.csproj' | sort)
+          listed=$(dotnet sln nocturne.sln list | { grep -E '\.csproj[[:space:]]*$' || true; } | sed 's|\\|/|g; s|[[:space:]]*$||' | sort)
+          if [ -z "$tracked" ] || [ -z "$listed" ]; then
+            echo "Nothing to compare: git found $(printf '%s' "$tracked" | grep -c .) csproj, nocturne.sln listed $(printf '%s' "$listed" | grep -c .)"
+            exit 1
+          fi
+          absent=$(comm -23 <(echo "$tracked") <(echo "$listed") | { grep -vx 'scripts/Shared/Shared.csproj' || true; })
+          dangling=$(comm -13 <(echo "$tracked") <(echo "$listed"))
+          if [ -n "$absent" ]; then
+            echo "Missing from nocturne.sln:"
+            echo "$absent"
+          fi
+          if [ -n "$dangling" ]; then
+            echo "Listed in nocturne.sln but not a tracked file:"
+            echo "$dangling"
+          fi
+          [ -z "$absent$dangling" ]
+
+      # Entering Nocturne.E2E.Tests starts the whole Aspire stack, so it must stay uncollected
+      # unless RunE2E is set; a csproj edit that re-arms it would wedge every unfiltered run.
+      - name: E2E suite stays opt-in
+        run: |
+          collected=$(dotnet msbuild tests/E2E/Nocturne.E2E.Tests/Nocturne.E2E.Tests.csproj \
+            -getProperty:IsTestProject -p:GenerateNSwagClient=false)
+          if [ "$collected" != "false" ]; then
+            echo "IsTestProject is '$collected', expected 'false' without -p:RunE2E=true"
+            exit 1
+          fi
+
       - name: Test
         run: |
           # Build per-project to avoid Windows-only projects (Desktop, Widgets)
@@ -40,7 +74,7 @@ jobs:
             csproj=$(find "$proj" -maxdepth 1 -name "*.csproj" | head -1)
             [ -z "$csproj" ] && continue
             dotnet test "$csproj" \
-              --filter "Category!=Integration&Category!=Performance&Category!=E2E" \
+              --filter "Category!=Integration&Category!=E2E" \
               --logger "trx;LogFileName=unit.trx" \
               -p:GenerateNSwagClient=false \
               || exit 1
@@ -51,9 +85,143 @@ jobs:
           name: unit-trx
           path: "**/*.trx"
 
+  # The alert-engine golden corpus (tests/Parity/AlertEngineCorpus) is the normative
+  # spec for the Rust port of the leaf/node evaluation engine. While the C# engine is
+  # authoritative, any behavioural change to the evaluators/tracker must regenerate the
+  # corpus deliberately — this job fails if the committed corpus no longer matches what
+  # the engine produces.
+  alert-corpus-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0"
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
+      - name: Verify alert engine corpus is current
+        run: |
+          dotnet run --project tests/Parity/Nocturne.Alerts.ParityCorpus.Generator \
+            -p:GenerateNSwagClient=false -- --check
+
+  # Rust alert engine FFI: lints + tests the crates workspace, builds the
+  # nocturne_alerts cdylib, then runs the three-way parity suite (C# engine vs
+  # committed corpus vs Rust engine over the C ABI). NOCTURNE_ALERTS_REQUIRE_NATIVE
+  # turns silent skips (native lib not found) into a hard failure so the parity
+  # theories can never quietly stop running here.
+  alerts-ffi-parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            crates/target
+          # Sources, not just the lockfile: actions/cache restores crates/target with
+          # mtimes newer than the checked-out sources, and cargo's path-package fingerprint
+          # is mtime-based, so a lockfile-only key lets a source change reuse a stale build.
+          key: cargo-${{ runner.os }}-${{ hashFiles('crates/Cargo.lock', 'crates/**/*.rs', 'crates/**/Cargo.toml') }}
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
+      - name: Rust tests, clippy, fmt
+        working-directory: crates
+        run: |
+          cargo test --workspace
+          cargo clippy --workspace --all-targets -- -D warnings
+          cargo fmt --check
+      - name: Build nocturne_alerts cdylib
+        working-directory: crates
+        run: cargo build --release -p nocturne-alerts-ffi
+      - name: Three-way parity tests (C# engine vs corpus vs Rust FFI)
+        env:
+          NOCTURNE_ALERTS_NATIVE_DIR: ${{ github.workspace }}/crates/target/release
+          NOCTURNE_ALERTS_REQUIRE_NATIVE: "1"
+        run: |
+          dotnet test tests/Unit/Nocturne.Alerts.Native.Tests/Nocturne.Alerts.Native.Tests.csproj \
+            --logger "trx;LogFileName=alerts-ffi-parity.trx" \
+            -p:GenerateNSwagClient=false \
+            || exit 1
+      # Engine-seam tests (IAlertEvaluationEngine): corpus parity for both the managed and
+      # rust-backed seam adapters, cross-engine timer continuity, shadow-mode divergence
+      # logging, and Alerts:Engine flag selection. The rust-backed theories require the
+      # cdylib built above; NOCTURNE_ALERTS_REQUIRE_NATIVE turns silent skips into failures.
+      - name: Engine seam tests (managed + rust adapters, shadow, flag)
+        env:
+          NOCTURNE_ALERTS_NATIVE_DIR: ${{ github.workspace }}/crates/target/release
+          NOCTURNE_ALERTS_REQUIRE_NATIVE: "1"
+          Alerts__Engine: rust
+        run: |
+          dotnet test tests/Unit/Nocturne.API.Tests/Nocturne.API.Tests.csproj \
+            --filter "FullyQualifiedName~Services.Alerts.Engines" \
+            --logger "trx;LogFileName=alerts-engine-seam.trx" \
+            -p:GenerateNSwagClient=false \
+            || exit 1
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: alerts-ffi-parity-trx
+          path: "**/*.trx"
+
   # Database integration tests: bare-Postgres Testcontainers (no Aspire), so they
   # run reliably on GitHub-hosted runners where Docker is available. Other
   # integration projects stay deferred until their fixtures/references are fixed.
+  # Typechecks the Svelte library packages that have no build step and no generated API
+  # client, and runs the pure-node vitest suites, so this needs nothing but pnpm.
+  # @nocturne/app and @nocturne/portal are excluded because their checks depend on the
+  # NSwag/Zod codegen and belong with the .NET build.
+  #
+  # Only glucose-chart and coach are listed. @nocturne/ui and @nocturne/cms still run
+  # svelte-check-native, which silently discovers zero files on Linux (see the note on their
+  # `check` scripts) — and once pointed at a checker that does read their sources they report
+  # ~880 and ~838 errors respectively. That debt has to be triaged before either can be gated.
+  web-typecheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: src/Web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          # src/Web's lockfile is v11 format, so pnpm 9 (what the unit job pins) cannot read it
+          # with --frozen-lockfile. Same pin the image build uses in docker-publish.yml.
+          version: "11.5.0"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: src/Web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck library packages
+        run: |
+          pnpm --filter @nightscout/glucose-chart                --filter @nocturne/coach                run check
+      - name: Bot unit tests
+        run: pnpm --filter @nocturne/bot run test
+      - name: Documentation screenshots
+        run: |
+          pnpm --filter @nocturne/screenshots run check
+          pnpm --filter @nocturne/screenshots run validate
+          pnpm --filter @nocturne/screenshots run check-refs
+          pnpm --filter @nocturne/screenshots run check-embeds
+
   integration-db:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -70,7 +238,7 @@ jobs:
       - name: Integration tests (Infrastructure.Data — RLS + DataProtection)
         run: |
           dotnet test tests/Integration/Nocturne.Infrastructure.Data.Tests/Nocturne.Infrastructure.Data.Tests.csproj \
-            --filter "Category!=Performance&Category!=E2E" \
+            --filter "Category!=E2E" \
             --logger "trx;LogFileName=integration-db.trx" \
             -p:GenerateNSwagClient=false \
             || exit 1

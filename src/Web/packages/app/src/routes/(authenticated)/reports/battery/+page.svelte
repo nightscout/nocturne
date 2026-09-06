@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatLocale, formatNumericDate } from "$lib/utils/formatting";
   import {
     Card,
     CardContent,
@@ -26,6 +27,7 @@
   import { getBatteryReportData } from "$api/battery.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
+  import { formatMinutesDuration } from "$lib/utils/duration";
 
   // Get shared date params from context (set by reports layout)
   // Default: 7 days is good for battery analysis (typical charge cycle period)
@@ -57,35 +59,17 @@
     batteryResource.refresh();
   }
 
-  // Helper functions
-  function formatDuration(minutes?: number | null): string {
-    if (!minutes) return "N/A";
-    const hours = Math.floor(minutes / 60);
-    const mins = Math.round(minutes % 60);
-    if (hours === 0) return `${mins}m`;
-    if (mins === 0) return `${hours}h`;
-    return `${hours}h ${mins}m`;
-  }
+  const formatDuration = (minutes?: number | null) =>
+    minutes ? formatMinutesDuration(minutes) : "N/A";
 
   function formatDateShort(mills?: number | null): string {
     if (!mills) return "Unknown";
-    return new Date(mills).toLocaleDateString([], {
+    return new Date(mills).toLocaleDateString(formatLocale(), {
       month: "short",
       day: "numeric",
       hour: "2-digit",
       minute: "2-digit",
     });
-  }
-
-  function getStatusColor(status: string | undefined): string {
-    switch (status) {
-      case "urgent":
-        return "text-red-500";
-      case "warn":
-        return "text-yellow-500";
-      default:
-        return "text-green-500";
-    }
   }
 
   function getBatteryIconComponent(
@@ -137,7 +121,12 @@
         Device battery statistics and charge cycle history
       </p>
     </div>
-    <Button variant="outline" size="sm" onclick={fetchData} class="shrink-0">
+    <Button
+      variant="outline"
+      size="sm"
+      onclick={fetchData}
+      class="shrink-0 print:hidden"
+    >
       <RefreshCw class="h-4 w-4 mr-2" />
       Refresh
     </Button>
@@ -147,9 +136,9 @@
   <div class="flex items-center gap-2 text-sm text-muted-foreground">
     <Calendar class="h-4 w-4" />
     <span>
-      {new Date(dateRange.from).toLocaleDateString()} – {new Date(
+      {formatNumericDate(new Date(dateRange.from))} – {formatNumericDate(new Date(
         dateRange.to
-      ).toLocaleDateString()}
+      ))}
     </span>
     <span class="text-muted-foreground/50">•</span>
     <span>{readings.length} readings</span>
@@ -171,7 +160,7 @@
   {:else}
     <!-- Device Filter (if multiple devices) -->
     {#if allDevices.length > 1}
-      <div class="flex gap-2 flex-wrap">
+      <div class="flex gap-2 flex-wrap print:hidden">
         <Button
           variant={selectedDevice === null ? "default" : "outline"}
           size="sm"
@@ -202,7 +191,9 @@
           <CardHeader class="pb-2">
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-2">
-                <StatIcon class="h-5 w-5 {getStatusColor(stat?.status)}" />
+                <span class="battery-status" data-status={stat?.status ?? ""}>
+                  <StatIcon class="h-5 w-5" />
+                </span>
                 <CardTitle class="text-base">{stat?.displayName}</CardTitle>
               </div>
               <Badge
@@ -386,7 +377,7 @@
           <div class="space-y-3">
             {#each cycles.slice(0, 10) as cycle}
               <div
-                class="flex items-center justify-between p-3 rounded-lg border"
+                class="flex flex-col gap-3 p-3 rounded-lg border @md:flex-row @md:items-center @md:justify-between"
               >
                 <div class="flex items-center gap-3">
                   <div class="flex flex-col items-center">
@@ -414,7 +405,7 @@
                     {/if}
                   </div>
                 </div>
-                <div class="text-right">
+                <div class="text-right @md:shrink-0">
                   {#if cycle.dischargeDurationMinutes}
                     <div class="text-lg font-bold">
                       {formatDuration(cycle.dischargeDurationMinutes)}
@@ -443,9 +434,7 @@
       <p>
         Data collected from {allDevices.length} device{allDevices.length !== 1
           ? "s"
-          : ""} over {Math.round(
-          (dateRange.to - dateRange.from) / (24 * 60 * 60 * 1000)
-        )} days
+          : ""} over {reportsParams.dayCount} days
       </p>
       <p class="text-muted-foreground/60">
         Battery statistics are calculated from device status reports sent by
@@ -455,3 +444,17 @@
   {/if}
 </div>
 {/if}
+
+<style>
+  /* Battery status is a backend enum; the colour comes from the theme's status
+     vars keyed off data-status. */
+  .battery-status {
+    color: var(--status-normal);
+  }
+  .battery-status[data-status="warn"] {
+    color: var(--status-warning);
+  }
+  .battery-status[data-status="urgent"] {
+    color: var(--status-critical);
+  }
+</style>

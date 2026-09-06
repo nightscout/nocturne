@@ -8,6 +8,7 @@
   import { scaleLinear } from "d3-scale";
   import { curveMonotoneX } from "d3-shape";
   import { ClusterConfidence } from "$lib/api";
+  import { categoryPatternClass } from "$lib/components/charts/print/chart-print-patterns";
   import type { DayBucket } from "./buckets";
 
   interface Props {
@@ -32,10 +33,14 @@
   // Hour ticks for the detailed axis: 00, 06, 12, 18, 24.
   const hourTicks = [0, 360, 720, 1080, 1440];
 
+  // Confidence bands differ only by colour; in monochrome print they collapse to
+  // near-identical greys, so each confidence gets a stable categorical texture.
   const bandStyle = (c: ClusterConfidence | undefined) => {
-    if (c === ClusterConfidence.High) return { fill: "var(--cluster-high)", opacity: 0.26 };
-    if (c === ClusterConfidence.Medium) return { fill: "var(--cluster-medium)", opacity: 0.2 };
-    return { fill: "var(--cluster-low)", opacity: 0.16 };
+    if (c === ClusterConfidence.High)
+      return { fill: "var(--cluster-high)", opacity: 0.26, patternSlot: 1 };
+    if (c === ClusterConfidence.Medium)
+      return { fill: "var(--cluster-medium)", opacity: 0.2, patternSlot: 2 };
+    return { fill: "var(--cluster-low)", opacity: 0.16, patternSlot: 3 };
   };
 </script>
 
@@ -62,6 +67,7 @@
           height={context.height}
           fill={style.fill}
           fill-opacity={style.opacity}
+          class={categoryPatternClass(style.patternSlot)}
         />
       {/each}
 

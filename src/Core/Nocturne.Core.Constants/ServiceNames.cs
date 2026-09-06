@@ -125,6 +125,13 @@ public static class ServiceNames
     public const string CareLinkConnector = "carelink-connector";
 
     /// <summary>
+    /// Aspire resource name for the Tandem Source (t:connect) connector service,
+    /// which imports t:slim X2 / Mobi pump data.
+    /// </summary>
+    /// <seealso cref="DataSources.TConnectSyncConnector"/>
+    public const string TConnectSyncConnector = "tconnectsync-connector";
+
+    /// <summary>
     /// Aspire parameter names resolved by the AppHost via <c>AddParameter</c> and
     /// by services reading <c>Parameters:&lt;name&gt;</c> from configuration.
     /// </summary>
@@ -181,6 +188,18 @@ public static class ServiceNames
         /// that request to admin and bypass per-tenant public-access controls.
         /// </summary>
         public const string InstanceService = "X-Instance-Service";
+
+        /// <summary>
+        /// Header carrying the address of the end user a service call is being made on behalf of,
+        /// for a caller (the SSR server) the API cannot see the browser behind.
+        /// </summary>
+        public const string ClientIp = "X-Nocturne-Client-Ip";
+
+        /// <summary>
+        /// Header carrying the HMAC-SHA256 of <see cref="ClientIp"/>, keyed on the shared instance
+        /// key. Without it the address is ignored, since any caller can write the address header.
+        /// </summary>
+        public const string ClientIpSignature = "X-Nocturne-Client-Ip-Signature";
     }
 
     /// <summary>
@@ -205,12 +224,6 @@ public static class ServiceNames
         /// </summary>
         /// <seealso cref="Parameters.InstanceKey"/>
         public const string InstanceKey = "INSTANCE_KEY";
-
-        /// <summary>
-        /// Public base URL of the deployment, used for OIDC redirects, invite links,
-        /// Pushover callbacks, and other external-facing URLs.
-        /// </summary>
-        public const string BaseUrl = "BaseUrl";
 
         /// <summary>
         /// Site name reported by the legacy Nightscout <c>/status</c> endpoint.

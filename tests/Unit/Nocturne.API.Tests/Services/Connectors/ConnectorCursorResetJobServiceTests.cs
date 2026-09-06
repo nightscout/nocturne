@@ -1,19 +1,24 @@
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.Connectors;
 using Nocturne.Connectors.Core.Models;
+using Nocturne.Core.Contracts.Audit;
+using Nocturne.Infrastructure.Data;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Connectors;
 
 /// <summary>
-/// Lifecycle behaviour of <see cref="ConnectorCursorResetJobService"/>: it validates the tenant up
-/// front (404 for unknown), seeds per-connector progress before any work runs, and drives the
-/// background fan-out to a terminal state while reflecting per-connector outcomes from the engine's
-/// <see cref="IConnectorResetProgress"/> callbacks. The engine itself is mocked so these tests are
-/// deterministic and need no database.
+/// Lifecycle and durability behaviour of <see cref="ConnectorCursorResetJobService"/>: it validates
+/// the tenant up front (404 for unknown), seeds per-connector progress before any work runs, drives
+/// the background fan-out to a terminal state while reflecting per-connector outcomes from the
+/// engine's <see cref="IConnectorResetProgress"/> callbacks, and persists job records so lookups
+/// survive the in-memory job map being lost (an API restart mid-run previously turned a running job
+/// into a bare 404). The engine itself is mocked so these tests are deterministic.
 /// </summary>
 public class ConnectorCursorResetJobServiceTests
 {
@@ -27,15 +32,32 @@ public class ConnectorCursorResetJobServiceTests
         ]);
 
     /// <summary>
-    /// Builds a job service whose background scope resolves the supplied engine mock.
+    /// Builds a job service whose background scope resolves the supplied engine mock, backed by an
+    /// InMemory NocturneDbContext for job record persistence. Pass an existing provider to model a
+    /// restarted process sharing the same database.
     /// </summary>
-    private static ConnectorCursorResetJobService BuildService(IConnectorCursorResetService engine)
+    private static (ConnectorCursorResetJobService Service, IServiceProvider Provider) BuildService(
+        IConnectorCursorResetService engine,
+        IServiceProvider? existingProvider = null)
+        => BuildService(_ => engine, existingProvider);
+
+    /// <inheritdoc cref="BuildService(IConnectorCursorResetService, IServiceProvider?)"/>
+    private static (ConnectorCursorResetJobService Service, IServiceProvider Provider) BuildService(
+        Func<IServiceProvider, IConnectorCursorResetService> engineFactory,
+        IServiceProvider? existingProvider = null)
     {
-        var services = new ServiceCollection();
-        services.AddScoped(_ => engine);
-        var provider = services.BuildServiceProvider();
-        return new ConnectorCursorResetJobService(
+        var dbName = $"reset-jobs-{Guid.NewGuid():N}";
+        var provider = existingProvider ?? new ServiceCollection()
+            .AddScoped(engineFactory)
+            // Mirrors the production registration: the job's background scope marks its own
+            // ambient audit context as system for the fan-out's duration.
+            .AddScoped<IAuditContext, AuditContext>()
+            .AddDbContext<NocturneDbContext>(o => o.UseInMemoryDatabase(dbName))
+            .BuildServiceProvider();
+
+        var service = new ConnectorCursorResetJobService(
             NullLogger<ConnectorCursorResetJobService>.Instance, provider);
+        return (service, provider);
     }
 
     private static async Task<ConnectorResetJobStatus> WaitForTerminalAsync(
@@ -43,7 +65,7 @@ public class ConnectorCursorResetJobServiceTests
     {
         for (var i = 0; i < 100; i++)
         {
-            var status = service.GetStatus(jobId);
+            var status = await service.GetStatusAsync(jobId);
             if (status.State is ConnectorResetJobState.Completed
                 or ConnectorResetJobState.Failed
                 or ConnectorResetJobState.Cancelled)
@@ -63,7 +85,7 @@ public class ConnectorCursorResetJobServiceTests
         engine.Setup(e => e.GetTenantConnectorsAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((TenantConnectorsDto?)null);
 
-        var service = BuildService(engine.Object);
+        var (service, _) = BuildService(engine.Object);
 
         var info = await service.StartResetAsync(_tenantId, null, null, CancellationToken.None);
 
@@ -82,7 +104,7 @@ public class ConnectorCursorResetJobServiceTests
                 It.IsAny<IConnectorResetProgress?>(), It.IsAny<CancellationToken>()))
             .Returns(new TaskCompletionSource<TenantCursorResetResult?>().Task);
 
-        var service = BuildService(engine.Object);
+        var (service, _) = BuildService(engine.Object);
 
         var info = await service.StartResetAsync(_tenantId, null, null, CancellationToken.None);
 
@@ -90,7 +112,7 @@ public class ConnectorCursorResetJobServiceTests
         info!.TenantSlug.Should().Be("erik");
         info.TotalConnectors.Should().Be(2);
 
-        var status = service.GetStatus(info.JobId);
+        var status = await service.GetStatusAsync(info.JobId);
         status.TotalConnectors.Should().Be(2);
         status.CompletedConnectors.Should().Be(0);
         status.Connectors.Select(c => c.ConnectorName).Should().ContainInOrder("nightscout", "dexcom");
@@ -119,7 +141,7 @@ public class ConnectorCursorResetJobServiceTests
                         new TenantCursorResetResult(tenantId, "erik", []));
                 });
 
-        var service = BuildService(engine.Object);
+        var (service, _) = BuildService(engine.Object);
 
         var info = await service.StartResetAsync(_tenantId, null, null, CancellationToken.None);
         info.Should().NotBeNull();
@@ -135,16 +157,104 @@ public class ConnectorCursorResetJobServiceTests
     }
 
     [Fact]
-    public void GetStatus_UnknownJob_Throws()
+    public async Task StartResetAsync_AttributesTheBackgroundScopeToTheSystem()
     {
-        var service = BuildService(Mock.Of<IConnectorCursorResetService>());
-        Assert.Throws<KeyNotFoundException>(() => service.GetStatus(Guid.CreateVersion7()));
+        // The fan-out re-ingests connector data; none of it is a person editing records. The audit
+        // interceptor reads the context-level audit context first and otherwise falls back to the
+        // ambient HTTP request's scope, so both paths of the background scope must say "system" or
+        // the job's writes are attributed to the admin who triggered it.
+        AttributionCapturingEngine? engine = null;
+        var (service, _) = BuildService(
+            sp => engine = new AttributionCapturingEngine(sp, Connectors(_tenantId)));
+
+        var info = await service.StartResetAsync(_tenantId, null, null, CancellationToken.None);
+        await WaitForTerminalAsync(service, info!.JobId);
+
+        engine!.AmbientIsSystemMutation.Should().BeTrue();
+        // A context left unstamped is not neutral: the interceptor then falls back to the
+        // triggering request's user context, so this must be a system context, not merely null.
+        engine.ContextAuditContext.Should().BeOfType<SystemAuditContext>();
+    }
+
+    /// <summary>
+    /// Stands in for the reset engine and records how the scope it was resolved from is
+    /// audit-attributed at the moment the fan-out runs.
+    /// </summary>
+    private sealed class AttributionCapturingEngine(
+        IServiceProvider scopeServices,
+        TenantConnectorsDto connectors) : IConnectorCursorResetService
+    {
+        public bool? AmbientIsSystemMutation { get; private set; }
+
+        public IAuditContext? ContextAuditContext { get; private set; }
+
+        public Task<TenantConnectorsDto?> GetTenantConnectorsAsync(Guid tenantId, CancellationToken ct)
+            => Task.FromResult<TenantConnectorsDto?>(connectors);
+
+        public Task<TenantCursorResetResult?> ResetTenantCursorsAsync(
+            Guid tenantId,
+            DateTime? from,
+            List<SyncDataType>? dataTypes,
+            IConnectorResetProgress? progress,
+            CancellationToken ct)
+        {
+            AmbientIsSystemMutation = scopeServices
+                .GetRequiredService<IAuditContext>().IsSystemMutation();
+            ContextAuditContext = scopeServices
+                .GetRequiredService<NocturneDbContext>().AuditContext;
+
+            return Task.FromResult<TenantCursorResetResult?>(
+                new TenantCursorResetResult(tenantId, connectors.TenantSlug, []));
+        }
     }
 
     [Fact]
-    public void Cancel_UnknownJob_Throws()
+    public async Task GetStatusAsync_UnknownJob_Throws()
     {
-        var service = BuildService(Mock.Of<IConnectorCursorResetService>());
-        Assert.Throws<KeyNotFoundException>(() => service.Cancel(Guid.CreateVersion7()));
+        var (service, _) = BuildService(Mock.Of<IConnectorCursorResetService>());
+        await Assert.ThrowsAsync<KeyNotFoundException>(
+            () => service.GetStatusAsync(Guid.CreateVersion7()));
+    }
+
+    [Fact]
+    public async Task CancelAsync_UnknownJob_Throws()
+    {
+        var (service, _) = BuildService(Mock.Of<IConnectorCursorResetService>());
+        await Assert.ThrowsAsync<KeyNotFoundException>(
+            () => service.CancelAsync(Guid.CreateVersion7()));
+    }
+
+    [Fact]
+    public async Task GetStatusAsync_ServesThePersistedRecord_WhenTheJobIsNotInMemory()
+    {
+        // Regression: reset jobs lived only in a ConcurrentDictionary, so an API restart mid-run
+        // made the job id answer 404 — indistinguishable from a job that never existed.
+        var engine = new Mock<IConnectorCursorResetService>();
+        engine.Setup(e => e.GetTenantConnectorsAsync(_tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Connectors(_tenantId));
+        engine.Setup(e => e.ResetTenantCursorsAsync(
+                _tenantId, It.IsAny<DateTime?>(), It.IsAny<List<SyncDataType>?>(),
+                It.IsAny<IConnectorResetProgress?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TenantCursorResetResult(_tenantId, "erik", []));
+
+        var (service, provider) = BuildService(engine.Object);
+
+        var info = await service.StartResetAsync(_tenantId, null, null, CancellationToken.None);
+
+        // A fresh service over the same store models the post-restart process: empty job map,
+        // same database.
+        var (restarted, _) = BuildService(engine.Object, provider);
+
+        // Poll the persisted view, not the in-memory one: ExecuteAsync sets the terminal state on
+        // the snapshot and only writes it in the finally that follows, so waiting on the original
+        // service would let this read the record as it stood at start.
+        var status = await WaitForTerminalAsync(restarted, info!.JobId);
+        status.JobId.Should().Be(info.JobId);
+        status.TenantId.Should().Be(_tenantId);
+        status.TenantSlug.Should().Be("erik");
+        status.State.Should().Be(ConnectorResetJobState.Completed);
+
+        // Cancel on the persisted terminal record must not 404 and must not throw.
+        await restarted.CancelAsync(info.JobId);
     }
 }

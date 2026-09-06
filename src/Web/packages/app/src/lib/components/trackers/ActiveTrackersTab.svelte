@@ -9,8 +9,9 @@
   } from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import * as Select from "$lib/components/ui/select";
-  import { Plus, Timer, Check, Trash2 } from "lucide-svelte";
+  import { Plus, Timer, Check, Trash2, Droplet } from "lucide-svelte";
   import { cn } from "$lib/utils";
+  import { TrackerCategory } from "$api";
   import type { NotificationUrgency, TrackerDefinitionDto, TrackerInstanceDto } from "$api";
 
   let {
@@ -18,6 +19,7 @@
     activeInstances,
     openStartDialog,
     openCompleteDialog,
+    openReservoirReportDialog,
     openDeleteInstanceDialog,
     getInstanceLevel,
     getTimeRemaining,
@@ -29,6 +31,7 @@
     activeInstances: TrackerInstanceDto[];
     openStartDialog: (def: TrackerDefinitionDto) => void;
     openCompleteDialog: (id: string) => void;
+    openReservoirReportDialog: () => void;
     openDeleteInstanceDialog: (id: string) => void;
     getInstanceLevel: (instance: TrackerInstanceDto) => NotificationUrgency | null;
     getTimeRemaining: (instance: TrackerInstanceDto) => number | undefined;
@@ -115,6 +118,16 @@
                 </div>
               </div>
               <div class="flex items-center gap-2">
+                {#if definitions.find((d: TrackerDefinitionDto) => d.id === instance.definitionId)?.category === TrackerCategory.Reservoir}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onclick={openReservoirReportDialog}
+                  >
+                    <Droplet class="h-4 w-4 mr-1" />
+                    Record Level
+                  </Button>
+                {/if}
                 <Button
                   variant="outline"
                   size="sm"

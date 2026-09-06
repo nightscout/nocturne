@@ -4,6 +4,7 @@
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import { formatGlucoseDelta, getUnitLabel, time } from "$lib/utils/formatting";
   import { timeAgo } from "$lib/utils";
+  import { Now } from "$lib/hooks/now.svelte";
   import {
     BatteryCharging,
     BatteryFull,
@@ -30,6 +31,11 @@
   // Use realtime store values as fallback when props not provided
   const rawBgDelta = $derived(bgDelta ?? realtimeStore.bgDelta);
   const displayLastUpdated = $derived(lastUpdated ?? realtimeStore.lastUpdated);
+
+  // `timeAgo` reads the clock once; re-derive it on a tick so the age
+  // on screen keeps up with the reading it describes.
+  const now = new Now();
+  const age = $derived(timeAgo(displayLastUpdated, undefined, now.current));
   const units = $derived(glucoseUnits.current);
   const displayBgDelta = $derived(formatGlucoseDelta(rawBgDelta, units));
   const unitLabel = $derived(getUnitLabel(units));
@@ -93,7 +99,7 @@
       class="flex items-center justify-between mt-2 pt-2 border-t border-border/50"
     >
       <span class="text-xs text-muted-foreground">
-        {timeAgo(displayLastUpdated)}
+        {age}
       </span>
       <span class="text-xs text-muted-foreground">
         {time(displayLastUpdated)}
@@ -105,7 +111,7 @@
         class="flex items-center justify-between mt-2 pt-2 border-t border-border/50"
       >
         <span class="text-xs text-muted-foreground">
-          {timeAgo(displayLastUpdated)}
+          {age}
         </span>
         <span class="text-xs text-muted-foreground">
           {time(displayLastUpdated)}
@@ -118,7 +124,7 @@
         class="flex items-center justify-between mt-2 pt-2 border-t border-border/50"
       >
         <span class="text-xs text-muted-foreground">
-          {timeAgo(displayLastUpdated)}
+          {age}
         </span>
         {#if hasDevices && currentStatus?.min}
           <span
@@ -153,7 +159,7 @@
         class="flex items-center justify-between mt-2 pt-2 border-t border-border/50"
       >
         <span class="text-xs text-muted-foreground">
-          {timeAgo(displayLastUpdated)}
+          {age}
         </span>
         <span class="text-xs text-muted-foreground">
           {time(displayLastUpdated)}

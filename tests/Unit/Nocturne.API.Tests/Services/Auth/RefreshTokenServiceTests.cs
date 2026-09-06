@@ -440,6 +440,137 @@ public class RefreshTokenServiceTests
 
     #endregion
 
+    #region GetActiveSessionsForSubjectAsync
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetActiveSessionsForSubjectAsync_GroupsTokensBySessionId()
+    {
+        // Arrange — one session with two live tokens (rotation grace overlap) and one
+        // other session.
+        var older = new RefreshTokenInfo
+        {
+            Id = Guid.CreateVersion7(),
+            OidcSessionId = "session-a",
+            DeviceDescription = "Windows",
+            IssuedAt = DateTime.UtcNow.AddHours(-2),
+            LastUsedAt = DateTime.UtcNow.AddHours(-1),
+            ExpiresAt = DateTime.UtcNow.AddDays(6),
+        };
+        var newer = new RefreshTokenInfo
+        {
+            Id = Guid.CreateVersion7(),
+            OidcSessionId = "session-a",
+            DeviceDescription = "Windows",
+            IssuedAt = DateTime.UtcNow.AddMinutes(-1),
+            LastUsedAt = null,
+            ExpiresAt = DateTime.UtcNow.AddDays(7),
+        };
+        var other = new RefreshTokenInfo
+        {
+            Id = Guid.CreateVersion7(),
+            OidcSessionId = "session-b",
+            DeviceDescription = "iPhone",
+            IssuedAt = DateTime.UtcNow.AddDays(-1),
+            LastUsedAt = DateTime.UtcNow.AddDays(-1),
+            ExpiresAt = DateTime.UtcNow.AddDays(5),
+        };
+
+        _repository.Setup(r => r.GetActiveSessionsAsync(_subjectId, default))
+            .ReturnsAsync([older, newer, other]);
+
+        var service = CreateService();
+
+        // Act
+        var sessions = await service.GetActiveSessionsForSubjectAsync(_subjectId);
+
+        // Assert — two sessions, most recently active first.
+        sessions.Should().HaveCount(2);
+        sessions[0].OidcSessionId.Should().Be("session-a");
+        sessions[0].Id.Should().Be(newer.Id);
+        sessions[0].LastUsedAt.Should().Be(newer.IssuedAt);
+        sessions[0].ExpiresAt.Should().Be(newer.ExpiresAt);
+        sessions[1].OidcSessionId.Should().Be("session-b");
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetActiveSessionsForSubjectAsync_LegacyTokensWithoutSessionId_KeyedByTokenId()
+    {
+        // Arrange
+        var legacy = new RefreshTokenInfo
+        {
+            Id = Guid.CreateVersion7(),
+            OidcSessionId = null,
+            IssuedAt = DateTime.UtcNow.AddHours(-3),
+            ExpiresAt = DateTime.UtcNow.AddDays(4),
+        };
+
+        _repository.Setup(r => r.GetActiveSessionsAsync(_subjectId, default))
+            .ReturnsAsync([legacy]);
+
+        var service = CreateService();
+
+        // Act
+        var sessions = await service.GetActiveSessionsForSubjectAsync(_subjectId);
+
+        // Assert
+        sessions.Should().ContainSingle();
+        sessions[0].OidcSessionId.Should().Be(legacy.Id.ToString());
+    }
+
+    #endregion
+
+    #region GetSessionIdForTokenAsync
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetSessionIdForTokenAsync_ReturnsOidcSessionId()
+    {
+        // Arrange
+        _jwtService.Setup(j => j.HashRefreshToken("token")).Returns("hash-token");
+        _repository.Setup(r => r.FindByHashAsync("hash-token", default))
+            .ReturnsAsync(MakeRecord(oidcSessionId: "session-a"));
+
+        var service = CreateService();
+
+        // Act & Assert
+        (await service.GetSessionIdForTokenAsync("token")).Should().Be("session-a");
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetSessionIdForTokenAsync_LegacyToken_FallsBackToTokenId()
+    {
+        // Arrange
+        var tokenId = Guid.CreateVersion7();
+        _jwtService.Setup(j => j.HashRefreshToken("legacy")).Returns("hash-legacy");
+        _repository.Setup(r => r.FindByHashAsync("hash-legacy", default))
+            .ReturnsAsync(MakeRecord(id: tokenId, oidcSessionId: null));
+
+        var service = CreateService();
+
+        // Act & Assert
+        (await service.GetSessionIdForTokenAsync("legacy")).Should().Be(tokenId.ToString());
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetSessionIdForTokenAsync_UnknownToken_ReturnsNull()
+    {
+        // Arrange
+        _jwtService.Setup(j => j.HashRefreshToken("missing")).Returns("hash-missing");
+        _repository.Setup(r => r.FindByHashAsync("hash-missing", default))
+            .ReturnsAsync((RefreshTokenRecord?)null);
+
+        var service = CreateService();
+
+        // Act & Assert
+        (await service.GetSessionIdForTokenAsync("missing")).Should().BeNull();
+    }
+
+    #endregion
+
     /// <summary>
     /// Helper to build a <see cref="RefreshTokenRecord"/> with sensible defaults.
     /// </summary>

@@ -1,6 +1,9 @@
 <script lang="ts">
+  import { formatClock } from "$lib/utils/formatting";
   import { PieChart, Text, Tooltip } from "layerchart";
   import type { Bolus, CarbIntake } from "$lib/api";
+  import { categoryPatternClass } from "$lib/components/charts/print/chart-print-patterns";
+  import { cn } from "$lib/utils";
 
   interface Props {
     boluses: Bolus[];
@@ -48,6 +51,17 @@
     bolus?: Bolus;
     linkedCarbs?: number;
     time?: string;
+    /** Forwarded to the segment's <Arc> (carries the print pattern class). */
+    props?: { class: string };
+  }
+
+  // Print-pattern slots: bolus, scheduled basal, additional basal are
+  // distinguished only by colour, so each gets a distinct mono texture. The
+  // base `transition-opacity` is merged in because per-datum props replace the
+  // chart-level arc class rather than merging it.
+  const baseArcClass = "transition-opacity";
+  function arcProps(slot: number): { class: string } {
+    return { class: cn(baseArcClass, categoryPatternClass(slot)) };
   }
 
   const segmentData = $derived.by(() => {
@@ -58,21 +72,17 @@
         ? carbByCorrelation.get(t.correlationId)
         : undefined;
 
-      const time = t.mills
-        ? new Date(t.mills).toLocaleTimeString(undefined, {
-            hour: "2-digit",
-            minute: "2-digit",
-          })
-        : undefined;
+      const bolusTime = t.mills ? formatClock(t.mills) : undefined;
 
       segments.push({
         key: `bolus-${i}`,
-        label: `Bolus${time ? ` @ ${time}` : ""}`,
+        label: `Bolus${bolusTime ? ` @ ${bolusTime}` : ""}`,
         value: t.insulin ?? 0,
         color: getBolusColor(i, bolusTreatments.length),
         bolus: t,
         linkedCarbs: linkedCarb?.carbs ?? undefined,
-        time,
+        time: bolusTime,
+        props: arcProps(3),
       });
     });
 
@@ -82,6 +92,7 @@
         label: "Scheduled Basal",
         value: scheduledBasal,
         color: "var(--insulin-scheduled-basal)",
+        props: arcProps(1),
       });
     }
 
@@ -91,6 +102,7 @@
         label: "Additional Basal",
         value: additionalBasal,
         color: "var(--insulin-additional-basal)",
+        props: arcProps(2),
       });
     }
 
@@ -124,7 +136,6 @@
         innerRadius={-30}
         cornerRadius={3}
         padAngle={0.02}
-        renderContext={"svg"}
         onArcClick={handleArcClick}
         props={{
           arc: {

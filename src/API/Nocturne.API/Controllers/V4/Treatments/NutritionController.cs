@@ -1,7 +1,8 @@
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Attributes;
+using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.API.Services.Platform;
 using Nocturne.API.Services.Treatments;
@@ -9,11 +10,13 @@ using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Mappers.V4;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Controllers.V4.Treatments;
 
@@ -41,10 +44,19 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 [ApiController]
 [Tags("Treatments")]
 [Route("api/v4/nutrition")]
-[Authorize]
+[RequireScope(Scope.TreatmentsRead)]
 [Produces("application/json")]
-public class NutritionController : ControllerBase
+public class NutritionController : ControllerBase, IWriteScopedController
 {
+    /// <summary>
+    /// The OAuth scope every write action on this controller requires. Carb intakes, and the boluses
+    /// <c>POST /meals</c> creates alongside them, are the treatments category
+    /// (<see cref="ShareDataCategories"/>), gated with <c>treatments.readwrite</c> on the V1 and V3
+    /// treatment write endpoints. The per-carb-intake food breakdown is keyed by carb intake and
+    /// reads the food catalog without mutating it, so it is gated with the treatment it describes.
+    /// </summary>
+    public string WriteScope => Scope.TreatmentsReadWrite;
+
     private readonly ICarbIntakeRepository _carbIntakeRepo;
     private readonly IBolusRepository _bolusRepo;
     private readonly ITreatmentFoodService _treatmentFoodService;
@@ -83,6 +95,10 @@ public class NutritionController : ControllerBase
     {
         if (sort is not "timestamp_desc" and not "timestamp_asc")
             return Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
+
+        limit = V4ReadLimits.ClampLimit(limit);
+        offset = V4ReadLimits.ClampOffset(offset);
+
         var descending = sort == "timestamp_desc";
         var data = await _carbIntakeRepo.GetAsync(from, to, device, source, limit, offset, descending, ct: ct);
         var total = await _carbIntakeRepo.CountAsync(from, to, ct);
@@ -106,6 +122,7 @@ public class NutritionController : ControllerBase
     /// Create a new carb intake
     /// </summary>
     [HttpPost("carbs")]
+    [RequireDeclaredWriteScope]
     [RemoteForm(Invalidates = ["GetCarbIntakes"])]
     [ProducesResponseType(typeof(CarbIntake), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -114,58 +131,60 @@ public class NutritionController : ControllerBase
         if (request.Timestamp == default)
             return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
 
-        Guid correlationId;
-        if (request.CorrelationId.HasValue)
-        {
-            var exists = await _context.DecompositionBatches.AnyAsync(b => b.Id == request.CorrelationId.Value, ct);
-            if (!exists)
-            {
-                _context.DecompositionBatches.Add(new DecompositionBatchEntity
-                {
-                    Id = request.CorrelationId.Value,
-                    TenantId = _context.TenantId,
-                    Source = "nutrition_controller",
-                    CreatedAt = DateTime.UtcNow,
-                });
-                await _context.SaveChangesAsync(ct);
-            }
-            correlationId = request.CorrelationId.Value;
-        }
-        else
-        {
-            var batch = new DecompositionBatchEntity
-            {
-                TenantId = _context.TenantId,
-                Source = "nutrition_controller",
-                CreatedAt = DateTime.UtcNow,
-            };
-            _context.DecompositionBatches.Add(batch);
-            await _context.SaveChangesAsync(ct);
-            correlationId = batch.Id;
-        }
+        var model = MapCreateToModel(request);
 
-        var model = new CarbIntake
-        {
-            Timestamp = request.Timestamp.UtcDateTime,
-            UtcOffset = request.UtcOffset,
-            Device = request.Device,
-            App = request.App,
-            DataSource = request.DataSource,
-            Carbs = request.Carbs,
-            SyncIdentifier = request.SyncIdentifier,
-            CarbTime = request.CarbTime,
-            AbsorptionTime = request.AbsorptionTime,
-            CorrelationId = correlationId,
-        };
-
-        var created = await _carbIntakeRepo.CreateAsync(model, ct);
+        var created = await _carbIntakeRepo.CreateAsync(model, WriteOrigin.Live, ct);
         return CreatedAtAction(nameof(GetCarbIntakeById), new { id = created.Id }, created);
     }
+
+    /// <summary>
+    /// Create or update carb intakes in bulk (max 1000).
+    /// </summary>
+    /// <remarks>
+    /// Array semantics are per-item upsert, not all-or-nothing: each intake carrying both
+    /// `dataSource` and `syncIdentifier` updates the row already matched by that pair; all others
+    /// insert. Validation failures reject the whole request with `400 Bad Request` before anything
+    /// is persisted.
+    /// </remarks>
+    [HttpPost("carbs/bulk")]
+    [RequireDeclaredWriteScope]
+    [ProducesResponseType(typeof(CarbIntake[]), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<CarbIntake[]>> CreateCarbIntakesBulk(
+        [FromBody] CreateCarbIntakeRequest[] requests,
+        CancellationToken ct = default)
+    {
+        if (await this.ValidateBulkAsync(requests, "Carb intake", "intake", "intakes", ct) is { } invalid)
+            return invalid;
+
+        var models = requests.Select(MapCreateToModel).ToList();
+        var persisted = await _carbIntakeRepo.BulkCreateAsync(models, WriteOrigin.Live, ct);
+        return StatusCode(201, persisted.ToArray());
+    }
+
+    private static CarbIntake MapCreateToModel(CreateCarbIntakeRequest request) => new()
+    {
+        Timestamp = request.Timestamp.UtcDateTime,
+        UtcOffset = request.UtcOffset,
+        Device = request.Device,
+        App = request.App,
+        DataSource = request.DataSource,
+        Carbs = request.Carbs,
+        SyncIdentifier = request.SyncIdentifier,
+        CarbTime = request.CarbTime,
+        AbsorptionTime = request.AbsorptionTime,
+        FatGrams = request.FatGrams,
+        ProteinGrams = request.ProteinGrams,
+        // Records split from one source share a correlation_id; it is a free-standing
+        // grouping value (no batch row to persist), so honour a client-supplied id or mint one.
+        CorrelationId = request.CorrelationId ?? Guid.CreateVersion7(),
+    };
 
     /// <summary>
     /// Update an existing carb intake
     /// </summary>
     [HttpPut("carbs/{id:guid}")]
+    [RequireDeclaredWriteScope]
     [RemoteForm(Invalidates = ["GetCarbIntakes", "GetCarbIntakeById"])]
     [ProducesResponseType(typeof(CarbIntake), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -191,6 +210,8 @@ public class NutritionController : ControllerBase
             SyncIdentifier = request.SyncIdentifier,
             CarbTime = request.CarbTime,
             AbsorptionTime = request.AbsorptionTime,
+            FatGrams = request.FatGrams,
+            ProteinGrams = request.ProteinGrams,
             CorrelationId = request.CorrelationId ?? existing.CorrelationId,
             LegacyId = existing.LegacyId,
             CreatedAt = existing.CreatedAt,
@@ -199,7 +220,7 @@ public class NutritionController : ControllerBase
 
         try
         {
-            var updated = await _carbIntakeRepo.UpdateAsync(id, model, ct);
+            var updated = await _carbIntakeRepo.UpdateAsync(id, model, WriteOrigin.Live, ct);
             return Ok(updated);
         }
         catch (KeyNotFoundException)
@@ -212,6 +233,7 @@ public class NutritionController : ControllerBase
     /// Delete a carb intake
     /// </summary>
     [HttpDelete("carbs/{id:guid}")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetCarbIntakes"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -219,7 +241,7 @@ public class NutritionController : ControllerBase
     {
         try
         {
-            await _carbIntakeRepo.DeleteAsync(id, ct);
+            await _carbIntakeRepo.DeleteAsync(id, WriteOrigin.Live, ct);
             return NoContent();
         }
         catch (KeyNotFoundException)
@@ -232,6 +254,7 @@ public class NutritionController : ControllerBase
     /// Delete a carb intake by its external sync identifier (dataSource + syncIdentifier pair).
     /// </summary>
     [HttpDelete("carbs/by-sync-id")]
+    [RequireDeclaredWriteScope]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -243,7 +266,7 @@ public class NutritionController : ControllerBase
         if (string.IsNullOrEmpty(dataSource) || string.IsNullOrEmpty(syncIdentifier))
             return BadRequest("dataSource and syncIdentifier are required");
 
-        var deleted = await _carbIntakeRepo.DeleteBySyncIdentifierAsync(dataSource, syncIdentifier, ct);
+        var deleted = await _carbIntakeRepo.DeleteBySyncIdentifierAsync(dataSource, syncIdentifier, WriteOrigin.Live, ct);
         return deleted > 0 ? NoContent() : NotFound();
     }
 
@@ -268,6 +291,7 @@ public class NutritionController : ControllerBase
     /// Add a food breakdown entry to a carb intake record.
     /// </summary>
     [HttpPost("carbs/{id:guid}/foods")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetCarbIntakeFoods"])]
     [ProducesResponseType(typeof(TreatmentFoodBreakdown), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -298,6 +322,7 @@ public class NutritionController : ControllerBase
     /// Update a food breakdown entry.
     /// </summary>
     [HttpPut("carbs/{id:guid}/foods/{foodEntryId:guid}")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetCarbIntakeFoods"])]
     [ProducesResponseType(typeof(TreatmentFoodBreakdown), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -330,6 +355,7 @@ public class NutritionController : ControllerBase
     /// Remove a food breakdown entry.
     /// </summary>
     [HttpDelete("carbs/{id:guid}/foods/{foodEntryId:guid}")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetCarbIntakeFoods"])]
     [ProducesResponseType(typeof(TreatmentFoodBreakdown), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -362,6 +388,7 @@ public class NutritionController : ControllerBase
     /// response returns 200 instead of 201.
     /// </summary>
     [HttpPost("meals")]
+    [RequireDeclaredWriteScope]
     [RemoteForm(Invalidates = ["GetCarbIntakes", "GetMeals"])]
     [ProducesResponseType(typeof(CreateMealResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(CreateMealResponse), StatusCodes.Status200OK)]
@@ -373,36 +400,9 @@ public class NutritionController : ControllerBase
         if (request.Timestamp == default)
             return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
 
-        Guid correlationId;
-        if (request.CorrelationId.HasValue)
-        {
-            // Ensure a batch record exists for the supplied CorrelationId so the FK is satisfied
-            var exists = await _context.DecompositionBatches.AnyAsync(b => b.Id == request.CorrelationId.Value, ct);
-            if (!exists)
-            {
-                _context.DecompositionBatches.Add(new DecompositionBatchEntity
-                {
-                    Id = request.CorrelationId.Value,
-                    TenantId = _context.TenantId,
-                    Source = "nutrition_controller",
-                    CreatedAt = DateTime.UtcNow,
-                });
-                await _context.SaveChangesAsync(ct);
-            }
-            correlationId = request.CorrelationId.Value;
-        }
-        else
-        {
-            var batch = new DecompositionBatchEntity
-            {
-                TenantId = _context.TenantId,
-                Source = "nutrition_controller",
-                CreatedAt = DateTime.UtcNow,
-            };
-            _context.DecompositionBatches.Add(batch);
-            await _context.SaveChangesAsync(ct);
-            correlationId = batch.Id;
-        }
+        // The meal's bolus + carb intake share a correlation_id; it is a free-standing
+        // grouping value (no batch row to persist), so honour a client-supplied id or mint one.
+        var correlationId = request.CorrelationId ?? Guid.CreateVersion7();
         var timestamp = request.Timestamp.UtcDateTime;
 
         var bolusModel = new Bolus
@@ -460,11 +460,11 @@ public class NutritionController : ControllerBase
         }
 
         var bolusBefore = await _context.Boluses.CountAsync(ct);
-        var createdBolus = await _bolusRepo.CreateAsync(bolusModel, ct);
+        var createdBolus = await _bolusRepo.CreateAsync(bolusModel, WriteOrigin.Live, ct);
         var bolusWasNew = (await _context.Boluses.CountAsync(ct)) > bolusBefore;
 
         var carbBefore = await _context.CarbIntakes.CountAsync(ct);
-        var createdCarb = await _carbIntakeRepo.CreateAsync(carbModel, ct);
+        var createdCarb = await _carbIntakeRepo.CreateAsync(carbModel, WriteOrigin.Live, ct);
         var carbWasNew = (await _context.CarbIntakes.CountAsync(ct)) > carbBefore;
 
         await tx.CommitAsync(ct);

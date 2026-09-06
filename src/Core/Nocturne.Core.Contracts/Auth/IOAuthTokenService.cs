@@ -12,8 +12,11 @@ namespace Nocturne.Core.Contracts.Auth;
 public interface IOAuthTokenService
 {
     /// <summary>
-    /// Exchange an authorization code for access + refresh tokens.
-    /// Validates PKCE, redirect URI, and code expiry.
+    /// Exchange an authorization code for access + refresh tokens. The code is claimed atomically
+    /// before anything else is validated, so concurrent exchanges of one code yield exactly one
+    /// token pair; PKCE, redirect URI and client id are then checked against the claimed code. A
+    /// code that is unknown, expired or already redeemed returns a single indistinguishable
+    /// <c>invalid_grant</c>, and a replay additionally revokes the grant the code issued.
     /// </summary>
     Task<OAuthTokenResult> ExchangeAuthorizationCodeAsync(
         string code,
@@ -34,7 +37,9 @@ public interface IOAuthTokenService
     );
 
     /// <summary>
-    /// Revoke a token (access or refresh). Per RFC 7009, always succeeds.
+    /// Revoke a token. A refresh token is marked revoked in the database; an access token is
+    /// blocklisted by its <c>jti</c> for the remainder of its lifetime. The type hint is advisory —
+    /// both types are tried. Per RFC 7009, always succeeds, including when nothing matched.
     /// </summary>
     Task RevokeTokenAsync(
         string token,

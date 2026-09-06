@@ -392,7 +392,7 @@
       xDomain={xDomain}
       yDomain={[0, glucoseYMax]}
       padding={{ left: 48, top: 8, bottom: 30, right: 48 }}
-      tooltip={{ mode: 'quadtree-x' }}
+      tooltipContext={{ mode: 'quadtree-x' }}
     >
       {#snippet children({ context })}
         {@const trackHeight = context.height}

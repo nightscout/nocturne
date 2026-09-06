@@ -1,0 +1,37 @@
+{
+  "current": { "sgv": 116, "direction": "FortyFiveDown", "trendRate": -0.5, "delta": -3, "mills": 1719300000000, "noise": 1 },
+  "history": [
+    { "sgv": 98, "direction": "Flat", "mills": 1719290700000 },
+    { "sgv": 101, "direction": "FortyFiveUp", "mills": 1719291000000 },
+    { "sgv": 108, "direction": "SingleUp", "mills": 1719291300000 },
+    { "sgv": 132, "direction": "SingleUp", "mills": 1719291600000 },
+    { "sgv": 151, "direction": "FortyFiveUp", "mills": 1719291900000 },
+    { "sgv": 162, "direction": "Flat", "mills": 1719292200000 },
+    { "sgv": 160, "direction": "Flat", "mills": 1719292500000 },
+    { "sgv": 150, "direction": "FortyFiveDown", "mills": 1719292800000 },
+    { "sgv": 138, "direction": "FortyFiveDown", "mills": 1719293100000 },
+    { "sgv": 128, "direction": "FortyFiveDown", "mills": 1719293400000 },
+    { "sgv": 122, "direction": "Flat", "mills": 1719293700000 },
+    { "sgv": 120, "direction": "Flat", "mills": 1719294000000 },
+    { "sgv": 121, "direction": "Flat", "mills": 1719294300000 },
+    { "sgv": 119, "direction": "FortyFiveDown", "mills": 1719294600000 },
+    { "sgv": 116, "direction": "FortyFiveDown", "mills": 1719300000000 }
+  ],
+  "iob": 1.23,
+  "cob": 14.0,
+  "predictions": {
+    "values": [113, 110, 107, 104, 101, 99, 97, 96, 95, 94, 94, 93],
+    "startMills": 1719300300000,
+    "intervalMills": 300000,
+    "source": "loop"
+  },
+  "alarm": {
+    "level": 0,
+    "type": "none",
+    "message": "",
+    "triggeredMills": 0,
+    "isSilenced": false,
+    "silenceExpiresMills": null
+  },
+  "serverMills": 1719300001000
+}

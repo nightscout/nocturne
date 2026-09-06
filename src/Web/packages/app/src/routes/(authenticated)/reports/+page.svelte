@@ -52,33 +52,27 @@
 
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import { cn } from "$lib/utils";
   import {
     Gauge,
     AlertTriangle,
     ArrowRight,
     BarChart3,
-    Sparkles,
     Activity,
     Calendar,
     ChevronRight,
   } from "lucide-svelte";
-  import { reportCategories } from "$lib/navigation/report-navigation";
+  import { page } from "$app/state";
+  import { visibleReportCategories } from "$lib/navigation/report-navigation";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
   import { AmbulatoryGlucoseProfile } from "$lib/components/ambulatory-glucose-profile";
-  import type { ScoreCardStatus } from "$lib/components/reports/GlucoseScoreCard.svelte";
   import { getReportsData } from "$api/reports.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import {
-    formatGlucoseValue,
-    formatGlucoseRange,
-    getUnitLabel,
-  } from "$lib/utils/formatting";
+  import { formatGlucoseRange, formatGlucoseValue, formatLocale, formatNumber, formatNumericDate, formatShortDate, getUnitLabel } from "$lib/utils/formatting";
   import ReportsSkeleton from "$lib/components/reports/ReportsSkeleton.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
   import { coachmark } from "@nocturne/coach";
   import { fly, fade, scale } from "svelte/transition";
   import { cubicOut, elasticOut } from "svelte/easing";
@@ -89,7 +83,7 @@
 
   const reportsResource = contextResource(
     () => getReportsData(reportsParams.dateRangeInput),
-    { errorTitle: "Error Loading Reports" }
+    { errorTitle: "Error Loading Reports", dateParams: reportsParams }
   );
 
   const isLoading = $derived(reportsResource.loading);
@@ -97,13 +91,9 @@
   const entries = $derived(queryData?.entries ?? []);
   const analysis = $derived(queryData?.analysis);
   const averagedStats = $derived(queryData?.averagedStats);
-  const dateRange = $derived(
-    queryData?.dateRange ?? {
-      from: new Date().toISOString(),
-      to: new Date().toISOString(),
-      lastUpdated: new Date().toISOString(),
-    }
-  );
+  const startDate = $derived(reportsResource.date.from);
+  const endDate = $derived(reportsResource.date.to);
+  const lastUpdated = $derived(queryData?.dateRange?.lastUpdated);
 
   const units = $derived(glucoseUnits.current);
   const glucoseFormatting = $derived({
@@ -115,37 +105,28 @@
   const variability = $derived(analysis?.glycemicVariability);
   const stats = $derived(analysis?.basicStats);
 
-  // Status helpers
-  function getTIRStatus(tirValue: number): ScoreCardStatus {
-    if (tirValue >= 70) return "excellent";
-    if (tirValue >= 60) return "good";
-    if (tirValue >= 50) return "fair";
-    if (tirValue >= 40) return "needs-attention";
-    return "critical";
-  }
-
-  function getStatusColor(status: ScoreCardStatus): string {
-    // Uses nocturne theme status colors where semantically relevant
-    const colors = {
-      excellent: "from-glucose-in-range to-glucose-in-range",
-      good: "from-glucose-in-range to-glucose-in-range",
-      fair: "from-status-warning to-status-warning",
-      "needs-attention": "from-status-warning to-status-critical",
-      critical: "from-status-critical to-status-critical",
+  // Personal target range schedule, shown as an overlay on the clinical TIR chart alongside —
+  // not instead of — the ATTD consensus bands. Absent when the tenant has no schedule
+  // configured or the window has no readings. Markers are only drawn for single-entry
+  // schedules: with a time-of-day-varying range, cumulative-time positions don't correspond
+  // to glucose boundaries on the value-sorted bar, so those get the caption only.
+  const personalRangeOverlay = $derived.by(() => {
+    const personalRange = queryData?.personalRange;
+    if (!personalRange?.entries?.length) return undefined;
+    const [firstEntry] = personalRange.entries;
+    const singleEntry =
+      personalRange.entries.length === 1 &&
+      firstEntry.low !== undefined &&
+      firstEntry.high !== undefined;
+    const rangeLabel = singleEntry
+      ? formatGlucoseRange(firstEntry.low!, firstEntry.high!, units)
+      : "your schedule";
+    return {
+      belowPercent: singleEntry ? personalRange.belowRangePercent : undefined,
+      abovePercent: singleEntry ? personalRange.aboveRangePercent : undefined,
+      label: `Your range: ${rangeLabel} · ${Math.round(personalRange.inRangePercent ?? 0)}% of time`,
     };
-    return colors[status ?? "good"];
-  }
-
-  function getStatusLabel(status: ScoreCardStatus): string {
-    const labels = {
-      excellent: "Excellent",
-      good: "Good",
-      fair: "Fair",
-      "needs-attention": "Needs Attention",
-      critical: "Critical",
-    };
-    return labels[status ?? "good"];
-  }
+  });
 
   // Animation delay helper
   function staggerDelay(index: number): number {
@@ -173,9 +154,7 @@
       </div>
       <h2 class="text-xl font-semibold">Unable to load reports</h2>
       <p class="text-muted-foreground">
-        {reportsResource.error instanceof Error
-          ? reportsResource.error.message
-          : "Something went wrong"}
+        {remoteErrorMessage(reportsResource.error, "Something went wrong")}
       </p>
       <Button variant="outline" onclick={() => reportsResource.refresh()}>
         Try again
@@ -210,14 +189,7 @@
             class="mb-3 inline-flex items-center gap-2 rounded-full bg-primary/5 px-4 py-1.5 text-sm font-medium text-primary"
           >
             <Calendar class="h-4 w-4" />
-            {new Date(dateRange.from).toLocaleDateString("en-US", {
-              month: "short",
-              day: "numeric",
-            })} – {new Date(dateRange.to).toLocaleDateString("en-US", {
-              month: "short",
-              day: "numeric",
-              year: "numeric",
-            })}
+            {formatShortDate(startDate)} – {formatShortDate(endDate, true)}
           </div>
           <h1
             class="bg-linear-to-r from-slate-900 via-slate-700 to-slate-800 bg-clip-text text-4xl font-bold tracking-tight text-transparent dark:from-white dark:via-slate-200 dark:to-slate-300 @lg:text-5xl"
@@ -225,13 +197,12 @@
             Your Glucose Report
           </h1>
           <p class="mt-3 text-lg text-muted-foreground">
-            {entries.length.toLocaleString()} readings analyzed
+            {formatNumber(entries.length)} readings analyzed
           </p>
         </div>
 
         {#if analysis}
-          {@const tirValue = tir?.target ?? 0}
-          {@const tirStatus = getTIRStatus(tirValue)}
+          {@const tirValue = tir?.target}
           <!-- Main Metric Hero Card -->
           <div
             class="mb-8"
@@ -240,16 +211,13 @@
             <div
               class="relative overflow-hidden rounded-3xl bg-white p-5 shadow-xl shadow-slate-200/50 @lg:p-6 @3xl:p-8 dark:bg-slate-900 dark:shadow-none dark:ring-1 dark:ring-white/10"
             >
-              <!-- Gradient accent bar -->
+              <!-- Accent bar -->
               <div
-                class={cn(
-                  "absolute left-0 top-0 h-1.5 w-full bg-linear-to-r",
-                  getStatusColor(tirStatus)
-                )}
+                class="absolute left-0 top-0 h-1.5 w-full bg-glucose-in-range"
               ></div>
 
               <div
-                class="grid items-center gap-6 @3xl:grid-cols-[1fr_auto_1fr] @3xl:gap-8"
+                class="grid items-center gap-6 @3xl:grid-cols-[1fr_1.3fr_1fr] @3xl:gap-8"
               >
                 <!-- Left: Time in Range highlight -->
                 <div class="text-center @3xl:text-left">
@@ -259,22 +227,24 @@
                   <div
                     class="flex items-baseline justify-center gap-2 @3xl:justify-start"
                   >
-                    <span
-                      class={cn(
-                        "bg-linear-to-r bg-clip-text text-6xl font-bold tabular-nums text-transparent @lg:text-7xl",
-                        getStatusColor(tirStatus)
-                      )}
-                    >
-                      {tirValue.toFixed(0)}
-                    </span>
-                    <span class="text-2xl font-medium text-muted-foreground">
-                      %
-                    </span>
+                    {#if tirValue != null}
+                      <span
+                        class="text-6xl font-bold tabular-nums @lg:text-7xl"
+                      >
+                        {tirValue.toFixed(0)}
+                      </span>
+                      <span class="text-2xl font-medium text-muted-foreground">
+                        %
+                      </span>
+                    {:else}
+                      <span class="text-2xl font-medium text-muted-foreground">
+                        No data
+                      </span>
+                    {/if}
                   </div>
-                  <Badge variant="secondary" class="mt-2 gap-1.5 px-3 py-1">
-                    <Sparkles class="h-3 w-3" />
-                    {getStatusLabel(tirStatus)}
-                  </Badge>
+                  <p class="mt-2 text-sm text-muted-foreground">
+                    Consensus target: at least 70%
+                  </p>
                 </div>
 
                 <!-- Center: TIR Chart -->
@@ -287,7 +257,7 @@
                     easing: elasticOut,
                   }}
                 >
-                  <TIRStackedChart percentages={tir} />
+                  <TIRStackedChart percentages={tir} personalRange={personalRangeOverlay} showThresholds />
                 </div>
 
                 <!-- Right: Secondary metrics -->
@@ -476,7 +446,7 @@
         description: "It combines your key metrics into a single page \u2014 great for clinic visits or sharing with your endo.",
         completeOn: { event: "click" },
       })}>
-        {#each reportCategories as category, categoryIndex}
+        {#each visibleReportCategories(!page.data.user) as category, categoryIndex}
           {@const CategoryIcon = category.icon}
           {@const styles = categoryVariants({
             category: category.id as CategoryType,
@@ -574,16 +544,16 @@
       >
         <p class="text-sm text-muted-foreground">
           <span class="font-medium">
-            {entries.length.toLocaleString()} readings
+            {formatNumber(entries.length)} readings
           </span>
-          from {new Date(dateRange.from).toLocaleDateString()} to {new Date(
-            dateRange.to
-          ).toLocaleDateString()}
-          <span class="mx-2 opacity-50">•</span>
-          Last updated {new Date(dateRange.lastUpdated).toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
+          from {formatNumericDate(startDate)} to {formatNumericDate(endDate)}
+          {#if lastUpdated}
+            <span class="mx-2 opacity-50">•</span>
+            Last updated {new Date(lastUpdated).toLocaleTimeString(formatLocale(), {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          {/if}
         </p>
         <p class="mt-1 text-xs text-muted-foreground/70">
           This report is for informational purposes. Always consult your

@@ -15,17 +15,17 @@ namespace Nocturne.Core.Models.Serializers;
 /// <seealso cref="Entry"/>
 public class FlexibleDirectionConverter : JsonConverter<string?>
 {
-    private static readonly Dictionary<int, string> NumericDirectionMap = new()
+    private static readonly Dictionary<int, Direction> NumericDirectionMap = new()
     {
-        [1] = "DoubleUp",
-        [2] = "SingleUp",
-        [3] = "FortyFiveUp",
-        [4] = "Flat",
-        [5] = "FortyFiveDown",
-        [6] = "SingleDown",
-        [7] = "DoubleDown",
-        [8] = "NOT COMPUTABLE",
-        [9] = "RATE OUT OF RANGE",
+        [1] = Direction.DoubleUp,
+        [2] = Direction.SingleUp,
+        [3] = Direction.FortyFiveUp,
+        [4] = Direction.Flat,
+        [5] = Direction.FortyFiveDown,
+        [6] = Direction.SingleDown,
+        [7] = Direction.DoubleDown,
+        [8] = Direction.NotComputable,
+        [9] = Direction.RateOutOfRange,
     };
 
     public override string? Read(
@@ -43,7 +43,7 @@ public class FlexibleDirectionConverter : JsonConverter<string?>
                 if (reader.TryGetInt32(out var intValue))
                 {
                     return NumericDirectionMap.TryGetValue(intValue, out var direction)
-                        ? direction
+                        ? direction.ToWireString()
                         : intValue.ToString();
                 }
                 return null;

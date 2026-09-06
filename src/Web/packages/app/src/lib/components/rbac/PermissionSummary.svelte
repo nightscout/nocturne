@@ -21,6 +21,7 @@
       { name: "Device Status", read: "devices.read", readwrite: "devices.readwrite" },
       { name: "Heart Rate", read: "heartrate.read", readwrite: "heartrate.readwrite" },
       { name: "Step Count", read: "stepcount.read", readwrite: "stepcount.readwrite" },
+      { name: "Sleep", read: "sleep.read", readwrite: "sleep.readwrite" },
       { name: "Food & Meals", read: "food.read", readwrite: "food.readwrite" },
       { name: "Treatment Profile", read: "therapy.read", readwrite: "therapy.readwrite" },
       { name: "Alerts", read: "alerts.read", readwrite: "alerts.readwrite" },

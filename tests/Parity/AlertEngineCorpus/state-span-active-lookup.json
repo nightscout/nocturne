@@ -1,0 +1,129 @@
+{
+  "schema_version": 1,
+  "name": "state-span-active-lookup",
+  "description": "lookup is by exact (category, state) key; null state means the any-of-category key; is_active=false asserts key absence; PumpMode category is always false",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "state_span_active",
+      "condition_params": {
+        "category": "Illness",
+        "state": null,
+        "is_active": true,
+        "for_minutes": null
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "state_span_active",
+      "condition_params": {
+        "category": "Exercise",
+        "state": "running",
+        "is_active": true,
+        "for_minutes": 20
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000003",
+      "name": "rule-3",
+      "condition_type": "state_span_active",
+      "condition_params": {
+        "category": "Illness",
+        "state": null,
+        "is_active": false,
+        "for_minutes": null
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000004",
+      "name": "rule-4",
+      "condition_type": "state_span_active",
+      "condition_params": {
+        "category": "PumpMode",
+        "state": null,
+        "is_active": true,
+        "for_minutes": null
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "active_state_spans": [
+          {
+            "category": "Illness",
+            "started_at": "2026-01-05T11:20:00Z"
+          },
+          {
+            "category": "Exercise",
+            "state": "running",
+            "started_at": "2026-01-05T11:40:00Z"
+          },
+          {
+            "category": "PumpMode",
+            "started_at": "2026-01-05T11:20:00Z"
+          }
+        ],
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:05:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:05:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:05:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "active_state_spans": [
+          {
+            "category": "Exercise",
+            "state": "running",
+            "started_at": "2026-01-05T11:50:00Z"
+          }
+        ],
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:10:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:10:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:10:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    }
+  ]
+}

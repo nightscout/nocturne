@@ -15,6 +15,7 @@
 	import ShieldCheck from 'lucide-svelte/icons/shield-check';
 	import Activity from 'lucide-svelte/icons/activity';
 	import Waves from 'lucide-svelte/icons/waves';
+	import GitCompareArrows from 'lucide-svelte/icons/git-compare-arrows';
 	import Clock from 'lucide-svelte/icons/clock';
 	import Check from 'lucide-svelte/icons/check';
 	import X from 'lucide-svelte/icons/x';
@@ -131,8 +132,8 @@
 			</Card>
 		</div>
 
-		<!-- Data Quality Categories -->
-		<div class="space-y-4">
+		<!-- Data Quality Categories: in-page navigation to sub-reports -->
+		<div class="space-y-4 print:hidden">
 			<h2 class="text-lg font-semibold">Data Quality Categories</h2>
 
 			<!-- Compression Lows Card -->
@@ -196,12 +197,36 @@
 					</CardHeader>
 				</Card>
 			</a>
+
+			<!-- CGM Comparison Card -->
+			<a href="/reports/data-quality/cgm-comparison" class="block">
+				<Card class="transition-colors hover:bg-muted/50">
+					<CardHeader class="pb-3">
+						<div class="flex items-center justify-between">
+							<div class="flex items-center gap-3">
+								<div
+									class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10"
+								>
+									<GitCompareArrows class="h-5 w-5 text-primary" />
+								</div>
+								<div>
+									<CardTitle class="text-base">CGM Comparison</CardTitle>
+									<CardDescription>
+										How far apart two sensors run over the same window
+									</CardDescription>
+								</div>
+							</div>
+							<ChevronRight class="h-5 w-5 text-muted-foreground" />
+						</div>
+					</CardHeader>
+				</Card>
+			</a>
 		</div>
 
-		<!-- Quick Actions -->
+		<!-- Quick Actions: review CTA -->
 		{#if pendingCount > 0}
 			<Card
-				class="border-amber-200 bg-amber-50/50 dark:border-amber-900/50 dark:bg-amber-900/10"
+				class="border-amber-200 bg-amber-50/50 print:hidden dark:border-amber-900/50 dark:bg-amber-900/10"
 			>
 				<CardContent class="flex flex-col gap-3 pt-6 @lg:flex-row @lg:items-center @lg:justify-between">
 					<div class="flex items-center gap-3">
@@ -222,8 +247,8 @@
 			</Card>
 		{/if}
 
-		<!-- Run Detection -->
-		<Card>
+		<!-- Run Detection: date-range controls + trigger button -->
+		<Card class="print:hidden">
 			<CardHeader>
 				<CardTitle class="text-base">Run Detection</CardTitle>
 				<CardDescription>

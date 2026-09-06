@@ -3,7 +3,6 @@
     Group,
     Area,
     Spline,
-    Text,
     Axis,
     AnnotationRange,
     ChartClipPath,
@@ -209,13 +208,14 @@
 
 <!-- Basal track label -->
 {#if showLabel}
-  <Text
+  <text
     x={4}
     y={trackTop + 12}
+    dy="-0.355em"
     class="text-[8px] fill-muted-foreground font-medium"
   >
     BASAL
-  </Text>
+  </text>
 {/if}
 
 <!-- Effective basal area - StateSpans-based rendering -->

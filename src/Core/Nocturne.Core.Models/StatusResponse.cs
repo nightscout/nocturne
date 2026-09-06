@@ -137,4 +137,14 @@ public class StatusResponse
     /// </summary>
     [JsonPropertyName("anonymousReadAccess")]
     public bool AnonymousReadAccess { get; set; }
+
+    /// <summary>
+    /// Slug of the tenant this request resolved to, or null when none did. On a tenant subdomain
+    /// this is simply that tenant. On the apex it answers the question the web app cannot answer
+    /// from the hostname alone: a single-tenant install auto-resolves its sole tenant there and so
+    /// serves the full app, while an install with none or several resolves nothing and serves the
+    /// cross-tenant dashboard instead.
+    /// </summary>
+    [JsonPropertyName("tenantSlug")]
+    public string? TenantSlug { get; set; }
 }

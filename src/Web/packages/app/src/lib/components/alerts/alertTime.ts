@@ -3,19 +3,12 @@
  *
  * All helpers accept Date | string | undefined and return "" on missing
  * or unparseable input (call sites supply their own dash fallback when
- * they want one). Generic time/date-time formatting now lives in
- * "$lib/utils/formatting"; only alert-specific relative/duration
- * formatters remain here.
+ * they want one). Generic time/date-time formatting lives in
+ * "$lib/utils/formatting" and durations in "$lib/utils/duration"; only
+ * alert-specific relative formatters remain here.
  */
 
-import { formatDateTimeCompact } from "$lib/utils/formatting";
-
-function toDate(at: Date | string | undefined): Date | null {
-  if (!at) return null;
-  const d = at instanceof Date ? at : new Date(at);
-  if (Number.isNaN(d.getTime())) return null;
-  return d;
-}
+import { formatDateTimeCompact, toDate } from "$lib/utils/formatting";
 
 /** "Mar 5, 14:32 — Mar 5, 15:00" — compact date-time range. Empty when either side missing. */
 export function formatRange(
@@ -26,32 +19,23 @@ export function formatRange(
   return `${formatDateTimeCompact(start)} — ${formatDateTimeCompact(end)}`;
 }
 
-/** Relative: "Just now", "12m ago", "3h 5m ago", "2d ago". */
-export function formatTimeSince(at: Date | string | undefined): string {
+/**
+ * Relative: "Just now", "12m ago", "3h 5m ago", "2d ago".
+ *
+ * `now` defaults to the current time; pass a reactive value to let a
+ * long-lived card age without being re-created (e.g. FiringToast).
+ */
+export function formatTimeSince(
+  at: Date | string | undefined,
+  now: number = Date.now()
+): string {
   const d = toDate(at);
   if (!d) return "Unknown";
-  const diffMs = Date.now() - d.getTime();
+  const diffMs = now - d.getTime();
   const diffMin = Math.floor(diffMs / 60000);
   if (diffMin < 1) return "Just now";
   if (diffMin < 60) return `${diffMin}m ago`;
   const diffHr = Math.floor(diffMin / 60);
   if (diffHr < 24) return `${diffHr}h ${diffMin % 60}m ago`;
   return `${Math.floor(diffHr / 24)}d ago`;
-}
-
-/** "1h 12m" / "45m" / "< 1m". When `end` is undefined, uses `Date.now()`. */
-export function formatDuration(
-  start: Date | string | undefined,
-  end: Date | string | undefined
-): string {
-  const s = toDate(start);
-  if (!s) return "";
-  const e = toDate(end);
-  const endMs = e ? e.getTime() : Date.now();
-  const ms = Math.max(0, endMs - s.getTime());
-  const min = Math.floor(ms / 60_000);
-  if (min < 1) return "< 1m";
-  if (min < 60) return `${min}m`;
-  const h = Math.floor(min / 60);
-  return `${h}h ${min % 60}m`;
 }

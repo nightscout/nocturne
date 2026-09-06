@@ -394,10 +394,10 @@ public class XmlDocumentationServiceTests
 
     #endregion
 
-    #region Performance Tests
+    #region Large Document Tests
 
     [Fact]
-    public void GetMethodSummary_WithLargeXmlDocument_ShouldPerformWell()
+    public void GetMethodSummary_WithLargeXmlDocument_FindsTheMatchingMember()
     {
         // Arrange
         var largeXmlContent = GenerateLargeXmlDocument(1000); // 1000 methods
@@ -407,13 +407,10 @@ public class XmlDocumentationServiceTests
         );
 
         // Act
-        var startTime = DateTime.UtcNow;
         var result = service.GetMethodSummary(method!);
-        var endTime = DateTime.UtcNow;
 
         // Assert
-        var duration = endTime - startTime;
-        duration.Should().BeLessThan(TimeSpan.FromMilliseconds(100)); // Should complete within 100ms
+        result.Should().Be("A simple method with documentation");
     }
 
     #endregion

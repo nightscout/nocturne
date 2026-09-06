@@ -2,6 +2,7 @@ using BenchmarkDotNet.Attributes;
 using Nocturne.API.Performance.Tests.Helpers;
 using Nocturne.API.Services.Entries;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Projections;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Mappers.V4;

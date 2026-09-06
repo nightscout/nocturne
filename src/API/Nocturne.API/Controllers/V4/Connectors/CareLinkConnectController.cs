@@ -1,3 +1,7 @@
+using Nocturne.API.Attributes;
+using Nocturne.API.Authorization;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -8,6 +12,7 @@ using Nocturne.Connectors.CareLink.Services;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Controllers.V4.Connectors;
 
@@ -21,6 +26,18 @@ namespace Nocturne.API.Controllers.V4.Connectors;
 [ApiController]
 [Route("api/v4/connectors/carelink/connect")]
 [Authorize]
+// Completing this flow writes the signed-in CareLink username and country into the tenant's
+// connector configuration, which GET returns in the clear. Every demo visitor is the same member,
+// so a visitor who signed in with their real Medtronic account would hand that identifier to every
+// later visitor and pull their CGM data into the shared tenant.
+//
+// ConnectorConfigurationService refuses the write too, and that is what makes the property hold —
+// Complete calls SaveSecretsAsync outside any try/catch and before the configuration write, so the
+// service guard aborts the flow there and nothing is stored. This attribute is about where the
+// refusal lands: it answers 403 at authorization time, before the Medtronic authorization-code
+// exchange, so a visitor is not walked through a CAPTCHA and a sign-in only to have their
+// single-use code burned by a failure at the end.
+[DenyDemoSubject]
 public partial class CareLinkConnectController : ControllerBase
 {
     private const string ConnectorName = "CareLink";
@@ -29,8 +46,9 @@ public partial class CareLinkConnectController : ControllerBase
     /// <summary>
     /// Scope carried by a desktop link token. Deliberately outside the OAuth scope vocabulary:
     /// MemberScopeMiddleware intersects member permissions with token scopes, so the resulting
-    /// PermissionTrie is empty and every permission-gated endpoint denies the token — it only
-    /// authenticates plain <c>[Authorize]</c> endpoints such as this controller's.
+    /// PermissionTrie and granted-scope set are both empty and every permission- or scope-gated
+    /// endpoint denies the token — it reaches nothing beyond the two flow actions below, which
+    /// recognise it from the credential's own scope list.
     /// </summary>
     private const string DesktopTokenScope = "connectors:carelink:connect";
     private static readonly TimeSpan DesktopTokenLifetime = TimeSpan.FromMinutes(10);
@@ -72,9 +90,13 @@ public partial class CareLinkConnectController : ControllerBase
     [RemoteCommand]
     [ProducesResponseType(typeof(CareLinkConnectStartResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<CareLinkConnectStartResponse>> Start(
         [FromBody] CareLinkConnectStartRequest request, CancellationToken ct)
     {
+        if (!CanConfigureConnectors())
+            return Forbid();
+
         var server = string.IsNullOrWhiteSpace(request.Server) ? "EU" : request.Server.Trim().ToUpperInvariant();
         if (server != "EU" && server != "US")
             return BadRequest(new { message = "Server must be 'EU' or 'US'." });
@@ -104,9 +126,13 @@ public partial class CareLinkConnectController : ControllerBase
     [RemoteCommand(Invalidates = ["GetConfiguration", "GetAllConnectorStatus"])]
     [ProducesResponseType(typeof(CareLinkConnectCompleteResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<CareLinkConnectCompleteResponse>> Complete(
         [FromBody] CareLinkConnectCompleteRequest request, CancellationToken ct)
     {
+        if (!CanConfigureConnectors())
+            return Forbid();
+
         if (string.IsNullOrWhiteSpace(request.Code) || string.IsNullOrWhiteSpace(request.State))
             return BadRequest(new { message = "Both code and state are required." });
 
@@ -150,6 +176,8 @@ public partial class CareLinkConnectController : ControllerBase
             _logger.LogDebug(ex, "CareLink connect: profile auto-fill fetch failed (non-fatal)");
         }
 
+        await PersistSignedInAccountAsync(flowState.Server, username, country, ct);
+
         _logger.LogInformation("CareLink connect completed for tenant {Tenant}", _tenantAccessor.Context?.TenantId);
 
         return Ok(new CareLinkConnectCompleteResponse
@@ -169,6 +197,7 @@ public partial class CareLinkConnectController : ControllerBase
     /// </summary>
     [HttpPost("desktop-token")]
     [RemoteCommand]
+    [RequireScope(Scope.TenantSettings)]
     [ProducesResponseType(typeof(CareLinkDesktopTokenResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public ActionResult<CareLinkDesktopTokenResponse> DesktopToken()
@@ -207,6 +236,71 @@ public partial class CareLinkConnectController : ControllerBase
             LinkCode = $"nocturne-connect://link?server={Uri.EscapeDataString(serverUrl)}&token={Uri.EscapeDataString(token)}",
             ExpiresInSeconds = (int)DesktopTokenLifetime.TotalSeconds,
         });
+    }
+
+    /// <summary>
+    /// Whether the caller may sign a CareLink account into this tenant. The flow stores a refresh
+    /// token as the connector secret and writes the signed-in account into the connector
+    /// configuration, so it takes the same <see cref="Scope.TenantSettings"/> as the
+    /// rest of the connector configuration surface — or a desktop link token, whose scope resolves
+    /// to nothing (see <see cref="DesktopTokenScope"/>) so no scope gate can admit it, and which
+    /// <see cref="DesktopToken"/> mints only for a caller that already held the permission.
+    /// </summary>
+    private bool CanConfigureConnectors() =>
+        Scope.Satisfies(
+            HttpContext.GetGrantedScopes(), Scope.TenantSettings)
+        || HttpContext.GetAuthContext()?.Scopes.Contains(DesktopTokenScope) == true;
+
+    /// <summary>
+    /// Writes what the sign-in established into the connector configuration: the region whose tokens
+    /// were just stored, and the account that authenticated. Without this the connector has
+    /// credentials but no username, which is a required setting — so it never syncs — and its region
+    /// can point at the other CareLink cloud, sending every data request to a host that rejects the
+    /// token. The desktop companion has no settings form at all, so only the server can do this.
+    /// Never fails the connect: the credentials are already stored and the user can fill the form in.
+    /// </summary>
+    private async Task PersistSignedInAccountAsync(
+        string server, string? username, string? country, CancellationToken ct)
+    {
+        try
+        {
+            var existing = await _configService.GetConfigurationAsync(ConnectorName, ct);
+            using var merged = MergeSignedInAccount(existing?.Configuration, server, username, country);
+            await _configService.SaveConfigurationAsync(
+                ConnectorName, merged, User.Identity?.Name ?? "carelink-connect", ct);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "CareLink connect: could not persist the signed-in account to the configuration");
+        }
+    }
+
+    /// <summary>
+    /// Applies the signed-in account to the stored configuration. The region is authoritative — it is
+    /// the cloud the stored tokens belong to — while a username or country the profile did not report
+    /// leaves whatever is configured alone. Merges into <paramref name="existing"/> because
+    /// <see cref="IConnectorConfigurationService.SaveConfigurationAsync"/> replaces the whole
+    /// document, and dropping the tenant's sync toggles and intervals here would be silent.
+    /// </summary>
+    public static JsonDocument MergeSignedInAccount(
+        JsonDocument? existing, string server, string? username, string? country)
+    {
+        var config = existing is not null
+            ? JsonNode.Parse(existing.RootElement.GetRawText())?.AsObject() ?? new JsonObject()
+            : new JsonObject();
+
+        config["server"] = server;
+        if (!string.IsNullOrWhiteSpace(username))
+            config["username"] = username;
+        if (!string.IsNullOrWhiteSpace(country))
+            config["countryCode"] = country.ToLowerInvariant();
+
+        return JsonDocument.Parse(config.ToJsonString());
     }
 
     private static string ExtractCode(string input)

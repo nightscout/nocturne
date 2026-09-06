@@ -11,7 +11,14 @@ namespace Nocturne.Widget.Infrastructure;
 /// </summary>
 public class OAuthService : IOAuthService
 {
-    private const string ClientId = "nocturne-widget-windows11";
+    private const string SoftwareId = "com.nocturne.widget.windows";
+    private const string ClientName = "Nocturne Windows Widget";
+    private const string ClientUri = "https://github.com/nightscout/nocturne";
+
+    // The device flow never redirects, but RFC 7591 registration requires at least
+    // one valid redirect URI. A custom scheme must contain a dot to be accepted.
+    private const string RedirectUri = "com.nocturne.widget.windows://oauth/callback";
+
     private const string DefaultScopes =
         "glucose.read treatments.read devices.read therapy.read";
 
@@ -49,10 +56,23 @@ public class OAuthService : IOAuthService
         try
         {
             var scopeString = scopes != null ? string.Join(" ", scopes) : DefaultScopes;
+
+            // RFC 7591 Dynamic Client Registration: obtain this server's client_id.
+            // Idempotent per tenant on software_id, so reconnects reuse the same client.
+            var clientId = await RegisterClientAsync(apiUrl, scopeString);
+            if (string.IsNullOrEmpty(clientId))
+            {
+                return new DeviceAuthorizationResult
+                {
+                    Success = false,
+                    Error = "Could not register with the Nocturne server",
+                };
+            }
+
             var requestUri = $"{apiUrl.TrimEnd('/')}/api/oauth/device";
 
             var content = new FormUrlEncodedContent(
-                new Dictionary<string, string> { ["client_id"] = ClientId, ["scope"] = scopeString }
+                new Dictionary<string, string> { ["client_id"] = clientId, ["scope"] = scopeString }
             );
 
             var response = await _httpClient.PostAsync(requestUri, content);
@@ -84,6 +104,7 @@ public class OAuthService : IOAuthService
             var state = new DeviceAuthorizationState
             {
                 ApiUrl = apiUrl,
+                ClientId = clientId,
                 DeviceCode = deviceResponse.DeviceCode,
                 UserCode = deviceResponse.UserCode,
                 VerificationUri = deviceResponse.VerificationUri,
@@ -106,6 +127,47 @@ public class OAuthService : IOAuthService
         {
             _logger.LogError(ex, "Error initiating device authorization");
             return new DeviceAuthorizationResult { Success = false, Error = ex.Message };
+        }
+    }
+
+    /// <summary>
+    /// Registers this widget with the Nocturne server via RFC 7591 Dynamic Client
+    /// Registration and returns the server-assigned client_id. Registration is
+    /// idempotent per tenant on <see cref="SoftwareId"/>, so the same client_id is
+    /// returned on every reconnect.
+    /// </summary>
+    private async Task<string?> RegisterClientAsync(string apiUrl, string scopeString)
+    {
+        try
+        {
+            var requestUri = $"{apiUrl.TrimEnd('/')}/api/oauth/register";
+            var payload = new
+            {
+                ClientName,
+                SoftwareId,
+                ClientUri,
+                RedirectUris = new[] { RedirectUri },
+                Scope = scopeString,
+            };
+
+            var response = await _httpClient.PostAsJsonAsync(requestUri, payload, JsonOptions);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadFromJsonAsync<OAuthErrorResponse>(JsonOptions);
+                _logger.LogWarning("Client registration failed: {Error}", error?.Error);
+                return null;
+            }
+
+            var registration = await response.Content.ReadFromJsonAsync<ClientRegistrationResponse>(
+                JsonOptions
+            );
+            return registration?.ClientId;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error registering client with {ApiUrl}", apiUrl);
+            return null;
         }
     }
 
@@ -141,7 +203,7 @@ public class OAuthService : IOAuthService
                 {
                     ["grant_type"] = "urn:ietf:params:oauth:grant-type:device_code",
                     ["device_code"] = state.DeviceCode,
-                    ["client_id"] = ClientId,
+                    ["client_id"] = state.ClientId,
                 }
             );
 
@@ -169,6 +231,7 @@ public class OAuthService : IOAuthService
                 var credentials = new NocturneCredentials
                 {
                     ApiUrl = state.ApiUrl,
+                    ClientId = state.ClientId,
                     AccessToken = tokenResponse.AccessToken,
                     RefreshToken = tokenResponse.RefreshToken ?? string.Empty,
                     ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(tokenResponse.ExpiresIn),
@@ -251,7 +314,7 @@ public class OAuthService : IOAuthService
                 {
                     ["grant_type"] = "refresh_token",
                     ["refresh_token"] = credentials.RefreshToken,
-                    ["client_id"] = ClientId,
+                    ["client_id"] = credentials.ClientId,
                 }
             );
 
@@ -339,6 +402,7 @@ public class OAuthService : IOAuthService
                         {
                             ["token"] = credentials.RefreshToken,
                             ["token_type_hint"] = "refresh_token",
+                            ["client_id"] = credentials.ClientId,
                         }
                     );
 
@@ -402,6 +466,12 @@ public class OAuthService : IOAuthService
 
         [JsonPropertyName("scope")]
         public string? Scope { get; set; }
+    }
+
+    private class ClientRegistrationResponse
+    {
+        [JsonPropertyName("client_id")]
+        public string ClientId { get; set; } = string.Empty;
     }
 
     private class OAuthErrorResponse

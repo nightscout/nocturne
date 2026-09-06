@@ -16,6 +16,7 @@
     getLinkedIdentities,
     unlinkIdentity,
   } from "$lib/api/generated/oidcs.generated.remote";
+  import { describeSubmitError } from "$lib/forms/submit-error";
   import { getProvidersInfo } from "$routes/(unauthenticated)/auth/auth.remote";
 
   interface Props {
@@ -88,8 +89,7 @@
         errorMessage =
           "Cannot remove your only sign-in method. Add another first.";
       } else {
-        errorMessage =
-          err instanceof Error ? err.message : "Failed to remove sign-in method.";
+        errorMessage = describeSubmitError(err, "Failed to remove sign-in method.");
       }
       clearMessagesSoon();
     } finally {

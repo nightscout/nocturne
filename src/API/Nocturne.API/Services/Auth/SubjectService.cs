@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -21,6 +21,7 @@ public class SubjectService : ISubjectService
 {
     private readonly NocturneDbContext _dbContext;
     private readonly IAuthAuditService _auditService;
+    private readonly IRecoveryCodeService _recoveryCodeService;
     private readonly ILogger<SubjectService> _logger;
 
     /// <summary>
@@ -28,11 +29,18 @@ public class SubjectService : ISubjectService
     /// </summary>
     /// <param name="dbContext">The EF Core database context for subject and role entity access.</param>
     /// <param name="auditService">Service for recording audit events on authentication actions.</param>
+    /// <param name="recoveryCodeService">Service for counting the subject's unused recovery codes.</param>
     /// <param name="logger">The logger instance.</param>
-    public SubjectService(NocturneDbContext dbContext, IAuthAuditService auditService, ILogger<SubjectService> logger)
+    public SubjectService(
+        NocturneDbContext dbContext,
+        IAuthAuditService auditService,
+        IRecoveryCodeService recoveryCodeService,
+        ILogger<SubjectService> logger
+    )
     {
         _dbContext = dbContext;
         _auditService = auditService;
+        _recoveryCodeService = recoveryCodeService;
         _logger = logger;
     }
 
@@ -56,6 +64,30 @@ public class SubjectService : ISubjectService
             .Include(s => s.SubjectRoles)
             .ThenInclude(sr => sr.Role)
             .FirstOrDefaultAsync(s => s.AccessTokenHash == accessTokenHash && s.IsActive);
+
+        return entity == null ? null : MapToModel(entity);
+    }
+
+    /// <inheritdoc />
+    public async Task<Subject?> FindSubjectByLegacyTokenAsync(string legacyAccessToken)
+    {
+        var prefix = LegacyNightscoutToken.ExtractDigestPrefix(legacyAccessToken);
+        if (prefix == null)
+        {
+            return null;
+        }
+
+        // Push Nightscout's digest-prefix rule to the database. The prefix is validated hex, so it
+        // is safe as a LIKE pattern; StartsWith translates to an index-friendly LIKE on PostgreSQL
+        // (against the filtered ix_subjects_legacy_token_digest) and still evaluates on the InMemory
+        // provider used in tests. Both stored digest and prefix are lowercase, so a case-sensitive
+        // match is correct. Returns at most one row rather than materialising every migrated subject.
+        var entity = await _dbContext
+            .Subjects.AsNoTracking()
+            .Include(s => s.SubjectRoles)
+            .ThenInclude(sr => sr.Role)
+            .Where(s => s.LegacyTokenDigest != null && s.IsActive && s.LegacyTokenDigest!.StartsWith(prefix))
+            .FirstOrDefaultAsync();
 
         return entity == null ? null : MapToModel(entity);
     }
@@ -192,7 +224,7 @@ public class SubjectService : ISubjectService
         if (subject.Type == SubjectType.Device || subject.Type == SubjectType.Service)
         {
             plainAccessToken = GenerateAccessToken();
-            entity.AccessTokenHash = HashAccessToken(plainAccessToken);
+            entity.AccessTokenHash = HashUtils.Sha256Hex(plainAccessToken);
             entity.AccessTokenPrefix = $"{subject.Name.ToLowerInvariant()}-{plainAccessToken[..8]}";
         }
 
@@ -308,8 +340,11 @@ public class SubjectService : ISubjectService
         }
 
         var plainAccessToken = GenerateAccessToken();
-        entity.AccessTokenHash = HashAccessToken(plainAccessToken);
+        entity.AccessTokenHash = HashUtils.Sha256Hex(plainAccessToken);
         entity.AccessTokenPrefix = $"{entity.Name.ToLowerInvariant()}-{plainAccessToken[..8]}";
+        // Rotation must revoke the legacy Nightscout token too, otherwise the old (possibly
+        // leaked) migrated token would keep authenticating through the legacy digest fallback.
+        entity.LegacyTokenDigest = null;
         entity.UpdatedAt = DateTime.UtcNow;
 
         await _dbContext.SaveChangesAsync();
@@ -471,7 +506,8 @@ public class SubjectService : ISubjectService
         );
 
         await _auditService.LogAsync(AuthAuditEventType.RoleAssigned, subjectId, success: true,
-            detailsJson: JsonSerializer.Serialize(new { role = roleName, assigned_by = assignedBy }));
+            detailsJson: JsonSerializer.Serialize(new { role = roleName }),
+            actor: assignedBy is null ? null : new AuthAuditActor(assignedBy, null));
 
         return true;
     }
@@ -772,6 +808,17 @@ public class SubjectService : ISubjectService
     }
 
     /// <inheritdoc />
+    public async Task<bool> HasSingleSignInMethodAsync(Guid subjectId)
+    {
+        if (await CountPrimaryAuthFactorsAsync(subjectId) != 1)
+        {
+            return false;
+        }
+
+        return await _recoveryCodeService.GetRemainingCountAsync(subjectId) == 0;
+    }
+
+    /// <inheritdoc />
     public async Task UpdateOidcIdentityLastUsedAsync(Guid identityId)
     {
         var row = await _dbContext.SubjectOidcIdentities.FindAsync(identityId);
@@ -792,16 +839,6 @@ public class SubjectService : ISubjectService
     }
 
     /// <summary>
-    /// Hash an access token with SHA256
-    /// </summary>
-    private static string HashAccessToken(string accessToken)
-    {
-        var bytes = Encoding.UTF8.GetBytes(accessToken);
-        var hash = SHA256.HashData(bytes);
-        return Convert.ToHexString(hash).ToLowerInvariant();
-    }
-
-    /// <summary>
     /// Map entity to domain model
     /// </summary>
     private static Subject MapToModel(SubjectEntity entity)
@@ -818,6 +855,7 @@ public class SubjectService : ISubjectService
             LastLoginAt = entity.LastLoginAt,
             Notes = entity.Notes,
             PreferredLanguage = entity.PreferredLanguage,
+            Preferences = entity.Preferences,
             AvatarUrl = entity.AvatarUrl,
             Roles = new List<Role>(),
             Permissions = new List<string>(),

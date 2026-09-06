@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Used by headless clients (CLI tools, scripts, IoT devices, pump rigs).
 /// </summary>
 [Table("oauth_device_codes")]
-public class OAuthDeviceCodeEntity : ITenantScoped
+public class OAuthDeviceCodeEntity : ITenantScoped, IEntityCreated
 {
     /// <summary>
     /// Primary key - UUID Version 7

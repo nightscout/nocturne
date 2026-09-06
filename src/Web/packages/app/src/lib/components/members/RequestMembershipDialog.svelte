@@ -4,23 +4,21 @@
   import { Textarea } from "$lib/components/ui/textarea";
   import { browser } from "$app/environment";
   import { goto } from "$app/navigation";
+  import { membershipRequestStorageKey } from "$lib/membership-request-storage";
 
   interface Props {
     open: boolean;
-    tenantSlug?: string;
   }
 
-  let { open = $bindable(false), tenantSlug }: Props = $props();
+  let { open = $bindable(false) }: Props = $props();
 
   let message = $state("");
 
-  const STORAGE_KEY_PREFIX = "nocturne:membership-request:";
-
   function handleSubmit() {
-    if (!browser || !tenantSlug) return;
+    if (!browser) return;
 
     try {
-      localStorage.setItem(`${STORAGE_KEY_PREFIX}${tenantSlug}`, message);
+      localStorage.setItem(membershipRequestStorageKey(window.location.host), message);
     } catch {
       // Storage full or unavailable
     }
@@ -33,7 +31,7 @@
 </script>
 
 <Dialog.Root bind:open>
-  <Dialog.Content class="max-w-md">
+  <Dialog.Content class="max-w-md" data-testid="request-membership-dialog">
     <Dialog.Header>
       <Dialog.Title>Request Membership</Dialog.Title>
       <Dialog.Description>

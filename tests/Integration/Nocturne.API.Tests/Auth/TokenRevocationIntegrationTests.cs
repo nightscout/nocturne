@@ -53,8 +53,9 @@ public class TokenRevocationIntegrationTests : AspireIntegrationTestBase
         using var authedClient = AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, _accessToken);
         var tokens = await AuthTestHelpers.ExecutePkceFlowAsync(authedClient, clientId);
 
-        // Verify the access token is active before revocation
-        var introspectBefore = await ApiClient.PostAsync("/api/oauth/introspect",
+        // Verify the access token is active before revocation. Introspection authenticates its
+        // caller, so it is asked as the subject the token belongs to.
+        var introspectBefore = await authedClient.PostAsync("/api/oauth/introspect",
             new FormUrlEncodedContent(new Dictionary<string, string>
             {
                 ["token"] = tokens.AccessToken,
@@ -76,7 +77,7 @@ public class TokenRevocationIntegrationTests : AspireIntegrationTestBase
         revokeResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
         // Introspect again — should now be inactive
-        var introspectAfter = await ApiClient.PostAsync("/api/oauth/introspect",
+        var introspectAfter = await authedClient.PostAsync("/api/oauth/introspect",
             new FormUrlEncodedContent(new Dictionary<string, string>
             {
                 ["token"] = tokens.AccessToken,
@@ -144,7 +145,7 @@ public class TokenRevocationIntegrationTests : AspireIntegrationTestBase
         var tokens = await AuthTestHelpers.ExecutePkceFlowAsync(authedClient, clientId);
 
         // Act
-        var introspectResponse = await ApiClient.PostAsync("/api/oauth/introspect",
+        var introspectResponse = await authedClient.PostAsync("/api/oauth/introspect",
             new FormUrlEncodedContent(new Dictionary<string, string>
             {
                 ["token"] = tokens.AccessToken
@@ -161,10 +162,35 @@ public class TokenRevocationIntegrationTests : AspireIntegrationTestBase
     }
 
     [Fact]
+    public async Task Introspect_Unauthenticated_IsRefused()
+    {
+        // Arrange — a real, live token, asked for by a caller with no identity of its own
+        using var adminClient = CreateAuthenticatedClient();
+        var clientId = await AuthTestHelpers.RegisterOAuthClientAsync(adminClient);
+        using var authedClient = AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, _accessToken);
+        var tokens = await AuthTestHelpers.ExecutePkceFlowAsync(authedClient, clientId);
+
+        // Act
+        var introspectResponse = await ApiClient.PostAsync("/api/oauth/introspect",
+            new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["token"] = tokens.AccessToken
+            }));
+
+        // Assert — RFC 7662 section 2.1: the endpoint authenticates its caller
+        introspectResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        var body = await introspectResponse.Content.ReadAsStringAsync();
+        body.Should().NotContain(_subjectId.ToString(),
+            "an unauthenticated caller must not learn the token's subject");
+    }
+
+    [Fact]
     public async Task Introspect_ExpiredToken_ReturnsInactive()
     {
+        using var authedClient = AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, _accessToken);
+
         // Act — introspect a clearly invalid JWT (expired / malformed)
-        var introspectResponse = await ApiClient.PostAsync("/api/oauth/introspect",
+        var introspectResponse = await authedClient.PostAsync("/api/oauth/introspect",
             new FormUrlEncodedContent(new Dictionary<string, string>
             {
                 ["token"] = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwiZXhwIjoxfQ.invalid-signature",
@@ -180,8 +206,10 @@ public class TokenRevocationIntegrationTests : AspireIntegrationTestBase
     [Fact]
     public async Task Introspect_GarbageToken_ReturnsInactive()
     {
+        using var authedClient = AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, _accessToken);
+
         // Act — introspect a string that is clearly not a token
-        var introspectResponse = await ApiClient.PostAsync("/api/oauth/introspect",
+        var introspectResponse = await authedClient.PostAsync("/api/oauth/introspect",
             new FormUrlEncodedContent(new Dictionary<string, string>
             {
                 ["token"] = "not-a-token"

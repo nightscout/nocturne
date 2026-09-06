@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Authorization;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 
@@ -19,6 +20,7 @@ public class OAuthTokenService : IOAuthTokenService
     private readonly IJwtService _jwtService;
     private readonly ISubjectService _subjectService;
     private readonly IOAuthGrantService _grantService;
+    private readonly IOAuthTokenRevocationCache _revocationCache;
     private readonly ILogger<OAuthTokenService> _logger;
 
     private static readonly TimeSpan AuthorizationCodeLifetime = TimeSpan.FromMinutes(10);
@@ -30,12 +32,14 @@ public class OAuthTokenService : IOAuthTokenService
     /// <param name="jwtService">Service for generating and validating JWT access tokens and refresh tokens.</param>
     /// <param name="subjectService">Service for resolving subject permissions and roles for token claims.</param>
     /// <param name="grantService">Service for persisting and querying OAuth consent grants.</param>
+    /// <param name="revocationCache">Blocklist of revoked access tokens, keyed by <c>jti</c>.</param>
     /// <param name="logger">The logger instance.</param>
     public OAuthTokenService(
         NocturneDbContext db,
         IJwtService jwtService,
         ISubjectService subjectService,
         IOAuthGrantService grantService,
+        IOAuthTokenRevocationCache revocationCache,
         ILogger<OAuthTokenService> logger
     )
     {
@@ -43,6 +47,7 @@ public class OAuthTokenService : IOAuthTokenService
         _jwtService = jwtService;
         _subjectService = subjectService;
         _grantService = grantService;
+        _revocationCache = revocationCache;
         _logger = logger;
     }
 
@@ -95,32 +100,36 @@ public class OAuthTokenService : IOAuthTokenService
     )
     {
         var codeHash = _jwtService.HashRefreshToken(code);
+        var now = DateTime.UtcNow;
+
+        // Claim the code before anything else. Redemption state is not a concurrency token and the
+        // unique index is on the hash, so a read-then-write check let two simultaneous exchanges
+        // both see redeemed_at IS NULL and both mint a token pair. This single statement is the
+        // atomic claim: exactly one caller can move redeemed_at away from NULL.
+        var claimed = await _db.OAuthAuthorizationCodes
+            .Where(c => c.CodeHash == codeHash && c.RedeemedAt == null && c.ExpiresAt > now)
+            .ExecuteUpdateAsync(s => s.SetProperty(c => c.RedeemedAt, now), ct);
+
+        if (claimed == 0)
+        {
+            // Unknown, expired and already-redeemed are one error: RFC 6749 Section 5.2 maps all
+            // three to invalid_grant, and a single message tells a caller nothing about which code
+            // hashes exist. On a genuine replay the tokens already issued from the code are revoked
+            // (RFC 6749 Section 4.1.2, OAuth 2.0 Security BCP Section 4.1.2).
+            await RevokeGrantOnCodeReplayAsync(codeHash, ct);
+            return OAuthTokenResult.Fail("invalid_grant", "Authorization code is invalid.");
+        }
 
         var authCode = await _db.OAuthAuthorizationCodes
+            .AsNoTracking()
             .Include(c => c.Client)
             .FirstOrDefaultAsync(c => c.CodeHash == codeHash, ct);
 
         if (authCode == null)
         {
-            _logger.LogWarning("Authorization code exchange failed: code not found");
+            // The row was claimed a moment ago, so this only happens if it was deleted meanwhile.
+            _logger.LogWarning("Authorization code exchange failed: claimed code no longer readable");
             return OAuthTokenResult.Fail("invalid_grant", "Authorization code is invalid.");
-        }
-
-        // Check not expired
-        if (authCode.IsExpired)
-        {
-            _logger.LogWarning("Authorization code exchange failed: code expired");
-            return OAuthTokenResult.Fail("invalid_grant", "Authorization code has expired.");
-        }
-
-        // Check not already redeemed (prevents replay)
-        if (authCode.IsRedeemed)
-        {
-            _logger.LogWarning(
-                "Authorization code replay detected for subject {SubjectId}",
-                authCode.SubjectId
-            );
-            return OAuthTokenResult.Fail("invalid_grant", "Authorization code has already been used.");
         }
 
         // Verify client_id matches
@@ -144,9 +153,6 @@ public class OAuthTokenService : IOAuthTokenService
             return OAuthTokenResult.Fail("invalid_grant", "PKCE code_verifier validation failed.");
         }
 
-        // Mark as redeemed
-        authCode.RedeemedAt = DateTime.UtcNow;
-
         // Create or update grant
         var grant = await _grantService.CreateOrUpdateGrantAsync(
             authCode.ClientEntityId,
@@ -157,6 +163,39 @@ public class OAuthTokenService : IOAuthTokenService
 
         // Mint tokens
         return await MintTokenPairAsync(grant, ct);
+    }
+
+    /// <summary>
+    /// Handles a failed claim on an authorization code. When the code exists and was already
+    /// redeemed, the exchange is a replay: whoever holds the code is racing the legitimate client or
+    /// replaying a stolen one, and the tokens issued from the first redemption can no longer be
+    /// trusted, so the grant behind them is revoked. An unknown or merely expired code is nothing to
+    /// act on.
+    /// </summary>
+    private async Task RevokeGrantOnCodeReplayAsync(string codeHash, CancellationToken ct)
+    {
+        var replayed = await _db.OAuthAuthorizationCodes
+            .AsNoTracking()
+            .Where(c => c.CodeHash == codeHash && c.RedeemedAt != null)
+            .Select(c => new { c.ClientEntityId, c.SubjectId })
+            .FirstOrDefaultAsync(ct);
+
+        if (replayed == null)
+        {
+            _logger.LogWarning("Authorization code exchange failed: code unknown or expired");
+            return;
+        }
+
+        _logger.LogWarning(
+            "Authorization code replay detected for subject {SubjectId}", replayed.SubjectId);
+
+        var grant = await _grantService.GetActiveGrantAsync(
+            replayed.ClientEntityId, replayed.SubjectId, ct);
+
+        if (grant != null)
+        {
+            await _grantService.RevokeGrantAsync(grant.Id, ct);
+        }
     }
 
     /// <inheritdoc />
@@ -260,7 +299,8 @@ public class OAuthTokenService : IOAuthTokenService
             roles,
             grant.Scopes,
             grant.Client?.ClientId,
-            tenantId: grant.TenantId
+            tenantId: grant.TenantId,
+            grantId: grant.Id
         );
 
         var expiresIn = (int)_jwtService.GetAccessTokenLifetime().TotalSeconds;
@@ -276,27 +316,76 @@ public class OAuthTokenService : IOAuthTokenService
         CancellationToken ct = default
     )
     {
-        var tokenHash = _jwtService.HashRefreshToken(token);
-
-        // Try as refresh token first (or if hinted)
-        if (tokenTypeHint is null or "refresh_token")
+        // Per RFC 7009 Section 2.1 the hint is advisory: if it doesn't resolve the token, the
+        // server extends the search to the other types. Both types are therefore always tried.
+        if (await RevokeAsRefreshTokenAsync(token, ct))
         {
-            var refreshToken = await _db.OAuthRefreshTokens
-                .FirstOrDefaultAsync(t => t.TokenHash == tokenHash && t.RevokedAt == null, ct);
+            return;
+        }
 
-            if (refreshToken != null)
-            {
-                refreshToken.RevokedAt = DateTime.UtcNow;
-                await _db.SaveChangesAsync(ct);
-                _logger.LogInformation(
-                    "OAuthAudit: {Event} token_id={TokenId} grant_id={GrantId}",
-                    "refresh_token_revoked", refreshToken.Id, refreshToken.GrantId);
-                return;
-            }
+        if (await RevokeAsAccessTokenAsync(token, ct))
+        {
+            return;
         }
 
         // Per RFC 7009: always return success even if token not found
         _logger.LogDebug("Token revocation: token not found (this is normal per RFC 7009)");
+    }
+
+    /// <summary>
+    /// Revokes <paramref name="token"/> if it is a stored refresh token. Returns whether it was.
+    /// </summary>
+    private async Task<bool> RevokeAsRefreshTokenAsync(string token, CancellationToken ct)
+    {
+        var tokenHash = _jwtService.HashRefreshToken(token);
+
+        var refreshToken = await _db.OAuthRefreshTokens
+            .FirstOrDefaultAsync(t => t.TokenHash == tokenHash && t.RevokedAt == null, ct);
+
+        if (refreshToken == null)
+        {
+            return false;
+        }
+
+        refreshToken.RevokedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+        _logger.LogInformation(
+            "OAuthAudit: {Event} token_id={TokenId} grant_id={GrantId}",
+            "refresh_token_revoked", refreshToken.Id, refreshToken.GrantId);
+        return true;
+    }
+
+    /// <summary>
+    /// Blocklists <paramref name="token"/> by its <c>jti</c> if it is a valid access-token JWT.
+    /// Returns whether it was. The blocklist entry lives only as long as the token would have,
+    /// which is all a stateless token needs.
+    /// </summary>
+    private async Task<bool> RevokeAsAccessTokenAsync(string token, CancellationToken ct)
+    {
+        if (!TokenFormat.IsJwt(token))
+        {
+            return false;
+        }
+
+        var validation = _jwtService.ValidateAccessToken(token);
+        if (!validation.IsValid || validation.Claims is null)
+        {
+            return false;
+        }
+
+        var claims = validation.Claims;
+        if (string.IsNullOrEmpty(claims.JwtId))
+        {
+            return false;
+        }
+
+        var remainingLifetime = claims.ExpiresAt - DateTimeOffset.UtcNow;
+        await _revocationCache.RevokeAsync(claims.JwtId, remainingLifetime, ct);
+
+        _logger.LogInformation(
+            "OAuthAudit: {Event} jti={Jti} grant_id={GrantId}",
+            "access_token_revoked", claims.JwtId, claims.GrantId);
+        return true;
     }
 
     /// <inheritdoc />
@@ -437,7 +526,8 @@ public class OAuthTokenService : IOAuthTokenService
             roles,
             grant.Scopes,
             grant.ClientId,
-            tenantId: grant.TenantId
+            tenantId: grant.TenantId,
+            grantId: grant.Id
         );
 
         // Generate and store refresh token

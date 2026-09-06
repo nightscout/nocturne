@@ -4,6 +4,7 @@
   import { bg } from "$lib/utils/formatting";
   import { BarChart2 } from "lucide-svelte";
   import type { AveragedStats } from "$lib/api";
+  import { glucosePatternClass } from "$lib/components/charts/print/chart-print-patterns";
 
   interface Props {
     averagedStats?: AveragedStats[];
@@ -48,13 +49,15 @@
 
   // Chart series configuration - labels respect mmol/mg/dL preference
   // Using $derived to make labels reactive to unit changes
+  // Each series' filled area is distinguished only by its glucose-range colour,
+  // so the matching print pattern keeps the stacked bands readable in mono.
   const chartSeries = $derived([
-    { key: "veryLow", label: `<${bg(54)}`, color: "var(--glucose-very-low)" },
-    { key: "low", label: `${bg(54)}-${bg(63)}`, color: "var(--glucose-low)" },
-    { key: "normal", label: `${bg(63)}-${bg(140)}`, color: "var(--glucose-tight-range)" },
-    { key: "aboveTarget", label: `${bg(140)}-${bg(180)}`, color: "var(--glucose-in-range)" },
-    { key: "high", label: `${bg(180)}-${bg(200)}`, color: "var(--glucose-high)" },
-    { key: "veryHigh", label: `>${bg(200)}`, color: "var(--glucose-very-high)" },
+    { key: "veryLow", label: `<${bg(54)}`, color: "var(--glucose-very-low)", props: { class: glucosePatternClass("very-low") } },
+    { key: "low", label: `${bg(54)}-${bg(63)}`, color: "var(--glucose-low)", props: { class: glucosePatternClass("low") } },
+    { key: "normal", label: `${bg(63)}-${bg(140)}`, color: "var(--glucose-tight-range)", props: { class: glucosePatternClass("tight-range") } },
+    { key: "aboveTarget", label: `${bg(140)}-${bg(180)}`, color: "var(--glucose-in-range)", props: { class: glucosePatternClass("in-range") } },
+    { key: "high", label: `${bg(180)}-${bg(200)}`, color: "var(--glucose-high)", props: { class: glucosePatternClass("high") } },
+    { key: "veryHigh", label: `>${bg(200)}`, color: "var(--glucose-very-high)", props: { class: glucosePatternClass("very-high") } },
   ]);
 
   // Derived chart data

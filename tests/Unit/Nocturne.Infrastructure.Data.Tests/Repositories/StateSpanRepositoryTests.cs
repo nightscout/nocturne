@@ -1,10 +1,12 @@
 using FluentAssertions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
@@ -15,22 +17,58 @@ namespace Nocturne.Infrastructure.Data.Tests.Repositories;
 [Trait("Category", "Repository")]
 public class StateSpanRepositoryTests : IDisposable
 {
+    private static readonly Guid TestTenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
+    private static readonly Guid OtherTenantId = Guid.Parse("00000000-0000-0000-0000-000000000099");
+
+    private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
     private readonly Mock<IDeduplicationService> _mockDedup;
     private readonly StateSpanRepository _repository;
 
+    /// <summary>
+    /// The one audit context both the repository and the interceptor read, so flipping
+    /// <see cref="StubAuditContext.IsSystem"/> switches a delete between user-initiated and
+    /// system sweep the way <c>SystemAuditScope</c> does in the connector pipeline.
+    /// </summary>
+    private readonly StubAuditContext _auditContext = new()
+    {
+        SubjectId = Guid.Parse("00000000-0000-0000-0000-0000000000aa"),
+        SubjectName = "tester",
+        AuthType = "SessionCookie",
+    };
+
     public StateSpanRepositoryTests()
     {
-        _context = TestDbContextFactory.CreateInMemoryContext();
-        _context.TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
+        var httpContextAccessor = new Mock<IHttpContextAccessor>();
+        httpContextAccessor.Setup(x => x.HttpContext).Returns((HttpContext)null!);
+
+        _db = TestDbContextFactory.CreateSqliteWithTenant(
+                TestTenantId, "test", new MutationAuditInterceptor(httpContextAccessor.Object))
+            .SeedTenant(OtherTenantId, "other");
+
+        _context = _db.CreateContext();
+        _context.AuditContext = _auditContext;
         _mockDedup = new Mock<IDeduplicationService>();
         _repository = new StateSpanRepository(
-            _context, _mockDedup.Object, new Mock<IAuditContext>().Object, NullLogger<StateSpanRepository>.Instance);
+            _context, _mockDedup.Object, _auditContext, NullLogger<StateSpanRepository>.Instance);
+    }
+
+    private sealed class StubAuditContext : IAuditContext
+    {
+        public Guid? SubjectId { get; init; }
+        public string? SubjectName { get; init; }
+        public string? AuthType { get; init; }
+        public string? IpAddress { get; init; }
+        public Guid? TokenId { get; init; }
+        public string? TraceId { get; init; }
+        public string? Endpoint { get; init; }
+        public bool IsSystem { get; set; }
     }
 
     public void Dispose()
     {
         _context.Dispose();
+        _db.Dispose();
         GC.SuppressFinalize(this);
     }
 
@@ -178,11 +216,11 @@ public class StateSpanRepositoryTests : IDisposable
     [Fact]
     public async Task UpsertStateSpanAsync_NonExclusiveCategory_DoesNotSupersede()
     {
-        // Arrange - Sleep is not an exclusive category
+        // Arrange - Exercise is not an exclusive category
         var existingSpan = new StateSpan
         {
-            Category = StateSpanCategory.Sleep,
-            State = "Sleeping",
+            Category = StateSpanCategory.Exercise,
+            State = "Running",
             StartTimestamp = new DateTime(2026, 1, 1, 22, 0, 0, DateTimeKind.Utc),
             EndTimestamp = null,
             Source = "manual",
@@ -193,7 +231,7 @@ public class StateSpanRepositoryTests : IDisposable
         // Act - insert another sleep span
         var newSpan = new StateSpan
         {
-            Category = StateSpanCategory.Sleep,
+            Category = StateSpanCategory.Exercise,
             State = "Sleeping",
             StartTimestamp = new DateTime(2026, 1, 2, 22, 0, 0, DateTimeKind.Utc),
             EndTimestamp = null,
@@ -204,7 +242,7 @@ public class StateSpanRepositoryTests : IDisposable
 
         // Assert - both should remain open
         var allSpans = (await _repository.GetStateSpansAsync(
-            category: StateSpanCategory.Sleep)).ToList();
+            category: StateSpanCategory.Exercise)).ToList();
 
         allSpans.Should().HaveCount(2);
         allSpans.Should().AllSatisfy(s => s.EndTimestamp.Should().BeNull());
@@ -346,23 +384,48 @@ public class StateSpanRepositoryTests : IDisposable
         duplicateEntity.Source = "duplicate";
 
         _context.StateSpans.AddRange(primaryEntity, duplicateEntity);
-        _context.LinkedRecords.Add(new LinkedRecordEntity
-        {
-            Id = Guid.NewGuid(),
-            CanonicalId = Guid.NewGuid(),
-            RecordType = "statespan",
-            RecordId = duplicateEntity.Id,
-            SourceTimestamp = 0,
-            DataSource = "duplicate",
-            IsPrimary = false,
-            SysCreatedAt = DateTime.UtcNow,
-        });
+        _context.LinkedRecords.Add(Link(Guid.NewGuid(), duplicateEntity.Id, isPrimary: false));
         await _context.SaveChangesAsync();
 
         var current = await _repository.GetCurrentPumpModeAsync();
 
         current.Should().Be(PumpModeState.Automatic);
     }
+
+    [Fact]
+    public async Task GetStateSpansAsync_ExcludesNonPrimaryDeduplicatedSpans()
+    {
+        var start = new DateTime(2026, 1, 1, 9, 0, 0, DateTimeKind.Utc);
+        var state = PumpModeState.Automatic.ToString();
+
+        var primaryEntity = SpanEntity(_context.TenantId, StateSpanCategory.PumpMode, state, start, null);
+        primaryEntity.Source = "primary";
+        var duplicateEntity = SpanEntity(_context.TenantId, StateSpanCategory.PumpMode, state, start, null);
+        duplicateEntity.Source = "duplicate";
+
+        _context.StateSpans.AddRange(primaryEntity, duplicateEntity);
+        var canonicalId = Guid.NewGuid();
+        _context.LinkedRecords.AddRange(
+            Link(canonicalId, primaryEntity.Id, isPrimary: true),
+            Link(canonicalId, duplicateEntity.Id, isPrimary: false));
+        await _context.SaveChangesAsync();
+
+        var spans = (await _repository.GetStateSpansAsync()).ToList();
+
+        spans.Should().ContainSingle().Which.Source.Should().Be("primary");
+    }
+
+    private static LinkedRecordEntity Link(Guid canonicalId, Guid recordId, bool isPrimary) => new()
+    {
+        Id = Guid.NewGuid(),
+        CanonicalId = canonicalId,
+        RecordType = "statespan",
+        RecordId = recordId,
+        SourceTimestamp = 0,
+        DataSource = isPrimary ? "primary" : "duplicate",
+        IsPrimary = isPrimary,
+        SysCreatedAt = DateTime.UtcNow,
+    };
 
     // --- GetActiveAtAsync ---
 
@@ -421,11 +484,11 @@ public class StateSpanRepositoryTests : IDisposable
         var start = new DateTime(2026, 4, 30, 9, 0, 0, DateTimeKind.Utc);
         var end = new DateTime(2026, 4, 30, 14, 0, 0, DateTimeKind.Utc);
         _context.StateSpans.Add(SpanEntity(
-            _context.TenantId, StateSpanCategory.Sleep, "Sleeping", start, end));
+            _context.TenantId, StateSpanCategory.Exercise, "Sleeping", start, end));
         await _context.SaveChangesAsync();
 
         var result = await _repository.GetActiveAtAsync(
-            StateSpanCategory.Sleep,
+            StateSpanCategory.Exercise,
             state: null,
             at: new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc),
             CancellationToken.None);
@@ -438,17 +501,17 @@ public class StateSpanRepositoryTests : IDisposable
     public async Task GetActiveAtAsync_returns_null_when_none_active()
     {
         _context.StateSpans.Add(SpanEntity(
-            _context.TenantId, StateSpanCategory.Sleep, "Sleeping",
+            _context.TenantId, StateSpanCategory.Exercise, "Sleeping",
             new DateTime(2026, 4, 30, 6, 0, 0, DateTimeKind.Utc),
             new DateTime(2026, 4, 30, 7, 0, 0, DateTimeKind.Utc)));
         _context.StateSpans.Add(SpanEntity(
-            _context.TenantId, StateSpanCategory.Sleep, "Sleeping",
+            _context.TenantId, StateSpanCategory.Exercise, "Sleeping",
             new DateTime(2026, 4, 30, 14, 0, 0, DateTimeKind.Utc),
             new DateTime(2026, 4, 30, 15, 0, 0, DateTimeKind.Utc)));
         await _context.SaveChangesAsync();
 
         var result = await _repository.GetActiveAtAsync(
-            StateSpanCategory.Sleep,
+            StateSpanCategory.Exercise,
             state: null,
             at: new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc),
             CancellationToken.None);
@@ -460,17 +523,17 @@ public class StateSpanRepositoryTests : IDisposable
     public async Task GetActiveAtAsync_picks_latest_start_when_overlapping()
     {
         _context.StateSpans.Add(SpanEntity(
-            _context.TenantId, StateSpanCategory.Sleep, "A",
+            _context.TenantId, StateSpanCategory.Exercise, "A",
             new DateTime(2026, 4, 30, 9, 0, 0, DateTimeKind.Utc),
             new DateTime(2026, 4, 30, 14, 0, 0, DateTimeKind.Utc)));
         _context.StateSpans.Add(SpanEntity(
-            _context.TenantId, StateSpanCategory.Sleep, "B",
+            _context.TenantId, StateSpanCategory.Exercise, "B",
             new DateTime(2026, 4, 30, 11, 0, 0, DateTimeKind.Utc),
             new DateTime(2026, 4, 30, 13, 0, 0, DateTimeKind.Utc)));
         await _context.SaveChangesAsync();
 
         var result = await _repository.GetActiveAtAsync(
-            StateSpanCategory.Sleep,
+            StateSpanCategory.Exercise,
             state: null,
             at: new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc),
             CancellationToken.None);
@@ -483,15 +546,15 @@ public class StateSpanRepositoryTests : IDisposable
     {
         var at = new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc);
         _context.StateSpans.Add(SpanEntity(
-            _context.TenantId, StateSpanCategory.Sleep, "A",
+            _context.TenantId, StateSpanCategory.Exercise, "A",
             new DateTime(2026, 4, 30, 9, 0, 0, DateTimeKind.Utc),
             new DateTime(2026, 4, 30, 14, 0, 0, DateTimeKind.Utc)));
         await _context.SaveChangesAsync();
 
         var matching = await _repository.GetActiveAtAsync(
-            StateSpanCategory.Sleep, state: "A", at, CancellationToken.None);
+            StateSpanCategory.Exercise, state: "A", at, CancellationToken.None);
         var nonMatching = await _repository.GetActiveAtAsync(
-            StateSpanCategory.Sleep, state: "B", at, CancellationToken.None);
+            StateSpanCategory.Exercise, state: "B", at, CancellationToken.None);
 
         matching.Should().NotBeNull();
         nonMatching.Should().BeNull();
@@ -502,23 +565,131 @@ public class StateSpanRepositoryTests : IDisposable
     {
         var end = new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc);
         _context.StateSpans.Add(SpanEntity(
-            _context.TenantId, StateSpanCategory.Sleep, "A",
+            _context.TenantId, StateSpanCategory.Exercise, "A",
             new DateTime(2026, 4, 30, 9, 0, 0, DateTimeKind.Utc),
             end));
         await _context.SaveChangesAsync();
 
         var result = await _repository.GetActiveAtAsync(
-            StateSpanCategory.Sleep, state: null, at: end, CancellationToken.None);
+            StateSpanCategory.Exercise, state: null, at: end, CancellationToken.None);
 
         result.Should().BeNull();
+    }
+
+    // --- Soft-delete re-creation guard ---
+
+    private static StateSpan ConnectorSpan() => new()
+    {
+        Category = StateSpanCategory.Exercise,
+        State = "Running",
+        StartTimestamp = new DateTime(2026, 3, 1, 9, 0, 0, DateTimeKind.Utc),
+        EndTimestamp = new DateTime(2026, 3, 1, 10, 0, 0, DateTimeKind.Utc),
+        Source = "glooko-connector",
+        OriginalId = "glooko-exercise-1"
+    };
+
+    /// <summary>Primary keys of every row carrying <paramref name="originalId"/>, deleted included.</summary>
+    private Task<List<StateSpanEntity>> RowsForAsync(string originalId) =>
+        _context.StateSpans.AsNoTracking().IgnoreQueryFilters()
+            .Where(s => s.OriginalId == originalId)
+            .ToListAsync();
+
+    [Fact]
+    public async Task UserDeletedSpan_IsNotRecreatedByTheNextConnectorSync()
+    {
+        await _repository.UpsertStateSpanAsync(ConnectorSpan());
+        var originalRowId = (await RowsForAsync("glooko-exercise-1")).Single().Id;
+
+        var deleted = await _repository.DeleteStateSpanAsync("glooko-exercise-1");
+        deleted.Should().BeTrue();
+
+        await _repository.UpsertStateSpanAsync(ConnectorSpan());
+
+        (await _repository.GetStateSpansAsync(category: StateSpanCategory.Exercise))
+            .Should().BeEmpty("the delete must survive the next sync");
+
+        var rows = await RowsForAsync("glooko-exercise-1");
+        rows.Should().ContainSingle("the resync must not insert a second row")
+            .Which.Id.Should().Be(originalRowId);
+        rows[0].DeletedAt.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task SystemSweptSpan_IsRecreatedByTheNextConnectorSync()
+    {
+        await _repository.UpsertStateSpanAsync(ConnectorSpan());
+        var originalRowId = (await RowsForAsync("glooko-exercise-1")).Single().Id;
+
+        _auditContext.IsSystem = true;
+        (await _repository.DeleteStateSpanAsync("glooko-exercise-1")).Should().BeTrue();
+        _auditContext.IsSystem = false;
+
+        await _repository.UpsertStateSpanAsync(ConnectorSpan());
+
+        (await _repository.GetStateSpansAsync(category: StateSpanCategory.Exercise))
+            .Should().ContainSingle("a system sweep leaves the span re-importable");
+
+        var rows = await RowsForAsync("glooko-exercise-1");
+        rows.Should().HaveCount(2, "the swept row stays in place for audit continuity");
+        rows.Should().ContainSingle(r => r.Id == originalRowId && r.DeletedAt != null);
+        rows.Should().ContainSingle(r => r.Id != originalRowId && r.DeletedAt == null);
+    }
+
+    [Fact]
+    public async Task DeleteActivityStateSpanAsync_SoftDeletes_AndBlocksRecreation()
+    {
+        var activity = new StateSpan
+        {
+            Category = StateSpanCategory.Illness,
+            State = "Flu",
+            StartTimestamp = new DateTime(2026, 3, 2, 8, 0, 0, DateTimeKind.Utc),
+            Source = "glooko-connector",
+            OriginalId = "glooko-illness-1",
+        };
+        await _repository.UpsertActivityAsStateSpanAsync(activity);
+        var originalRowId = (await RowsForAsync("glooko-illness-1")).Single().Id;
+
+        (await _repository.DeleteActivityStateSpanAsync("glooko-illness-1")).Should().BeTrue();
+
+        (await _repository.GetActivityStateSpansAsync()).Should().BeEmpty();
+
+        await _repository.UpsertActivityAsStateSpanAsync(activity);
+
+        (await _repository.GetActivityStateSpansAsync()).Should().BeEmpty(
+            "a user-deleted activity must not come back on the next sync");
+        (await RowsForAsync("glooko-illness-1"))
+            .Should().ContainSingle().Which.Id.Should().Be(originalRowId);
+    }
+
+    [Fact]
+    public async Task DeletedSpan_IsHiddenFromReadsAndCounts()
+    {
+        await _repository.UpsertStateSpanAsync(ConnectorSpan());
+        await _repository.DeleteStateSpanAsync("glooko-exercise-1");
+
+        (await _repository.GetStateSpanByIdAsync("glooko-exercise-1")).Should().BeNull();
+        (await _repository.CountStateSpansAsync(category: StateSpanCategory.Exercise)).Should().Be(0);
+        (await _repository.GetActiveAtAsync(
+            StateSpanCategory.Exercise, state: null,
+            at: new DateTime(2026, 3, 1, 9, 30, 0, DateTimeKind.Utc))).Should().BeNull();
+        (await _repository.GetByCategories([StateSpanCategory.Exercise]))[StateSpanCategory.Exercise]
+            .Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task DeletedSpan_DoesNotBlockASecondDelete_ButReportsNotFound()
+    {
+        await _repository.UpsertStateSpanAsync(ConnectorSpan());
+        (await _repository.DeleteStateSpanAsync("glooko-exercise-1")).Should().BeTrue();
+
+        (await _repository.DeleteStateSpanAsync("glooko-exercise-1")).Should().BeFalse();
     }
 
     [Fact]
     public async Task GetActiveAtAsync_respects_tenant_isolation()
     {
-        var otherTenant = Guid.Parse("00000000-0000-0000-0000-000000000099");
         _context.StateSpans.Add(SpanEntity(
-            otherTenant, StateSpanCategory.Override, "Custom",
+            OtherTenantId, StateSpanCategory.Override, "Custom",
             new DateTime(2026, 4, 30, 9, 0, 0, DateTimeKind.Utc),
             end: null));
         await _context.SaveChangesAsync();

@@ -9,7 +9,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// tracks which fields have values so the UI can show configuration status without exposing secrets.
 /// </summary>
 [Table("platform_settings")]
-public class PlatformSettingsEntity
+public class PlatformSettingsEntity : ISystemTimestamped
 {
     /// <summary>Primary key.</summary>
     [Key]

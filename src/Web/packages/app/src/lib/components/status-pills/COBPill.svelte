@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatLocale } from "$lib/utils/formatting";
   import StatusPill from "./StatusPill.svelte";
   import type {
     COBPillData,
@@ -21,7 +22,7 @@
     // Last carbs info
     if (data.lastCarbs) {
       const when = new Date(data.lastCarbs.mills);
-      const timeStr = when.toLocaleString([], {
+      const timeStr = when.toLocaleString(formatLocale(), {
         month: "short",
         day: "numeric",
         hour: "2-digit",

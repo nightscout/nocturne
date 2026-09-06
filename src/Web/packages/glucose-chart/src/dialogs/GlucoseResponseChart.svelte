@@ -4,8 +4,7 @@
     Svg,
     Spline,
     Rule,
-    Points,
-    Text,
+    Circle,
     Axis,
     ChartClipPath,
   } from "layerchart";
@@ -123,7 +122,7 @@
     yDomain={[yDomain[0], yDomain[1]]}
     padding={{ left: 48, bottom: 24, top: 16, right: 16 }}
   >
-    {#snippet children()}
+    {#snippet children({ context })}
       <Svg>
         <!-- High threshold line -->
         <Rule
@@ -148,15 +147,15 @@
 
         <!-- Center time label -->
         {#if label}
-          <Text
-            x={centerTime.getTime()}
-            y={yDomain[1]}
-            dy={-4}
-            textAnchor="middle"
+          <text
+            x={context.xScale(centerTime)}
+            y={context.yScale(yDomain[1]) - 4}
+            dy="-0.355em"
+            text-anchor="middle"
             class="text-[9px] fill-muted-foreground"
           >
             {label}
-          </Text>
+          </text>
         {/if}
 
         <ChartClipPath>
@@ -169,17 +168,17 @@
             curve={curveMonotoneX}
           />
 
-          <!-- Glucose points -->
-          {#each glucoseData as point}
-            <Points
-              data={[point]}
-              x={(d: GlucoseDataPoint) => d.time}
-              y="sgv"
-              r={3}
-              fill={point.color}
-              class="opacity-90"
-            />
-          {/each}
+          <!-- Glucose points: one data-mode Circle for the whole series (single
+               mark registration) instead of one <Points> per reading (O(N^2)). -->
+          <Circle
+            data={glucoseData}
+            key={(d: GlucoseDataPoint) => d.time.getTime()}
+            cx={(d: GlucoseDataPoint) => d.time}
+            cy="sgv"
+            r={3}
+            fill={(d: GlucoseDataPoint) => d.color}
+            class="opacity-90"
+          />
 
           <!-- Prediction curves (main only for mini chart) -->
           {#if predictionData && predictionCurveData.length > 0}
@@ -196,28 +195,28 @@
 
         <!-- Peak annotation -->
         {#if peakPoint}
-          <Text
-            x={peakPoint.time.getTime()}
-            y={peakPoint.sgv}
-            dy={-10}
-            textAnchor="middle"
+          <text
+            x={context.xScale(peakPoint.time)}
+            y={context.yScale(peakPoint.sgv) - 10}
+            dy="-0.355em"
+            text-anchor="middle"
             class="text-[9px] fill-foreground font-medium"
           >
             {bg(peakPoint.sgv)}
-          </Text>
+          </text>
         {/if}
 
         <!-- Nadir annotation (only if different from peak) -->
         {#if showNadir && nadirPoint}
-          <Text
-            x={nadirPoint.time.getTime()}
-            y={nadirPoint.sgv}
-            dy={14}
-            textAnchor="middle"
+          <text
+            x={context.xScale(nadirPoint.time)}
+            y={context.yScale(nadirPoint.sgv) + 14}
+            dy="-0.355em"
+            text-anchor="middle"
             class="text-[9px] fill-foreground font-medium"
           >
             {bg(nadirPoint.sgv)}
-          </Text>
+          </text>
         {/if}
 
         <!-- Left Y-axis with glucose values -->

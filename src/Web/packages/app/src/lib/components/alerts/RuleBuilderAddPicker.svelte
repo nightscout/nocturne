@@ -25,6 +25,7 @@
     CalendarClock,
     CalendarDays,
     Moon,
+    Timer,
   } from "lucide-svelte";
   import {
     LEAF_FACTS,
@@ -64,6 +65,7 @@
     "calendar-clock": CalendarClock,
     "calendar-days": CalendarDays,
     moon: Moon,
+    timer: Timer,
   };
 
   const PICKER_BTN =

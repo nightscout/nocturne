@@ -116,7 +116,6 @@ public class DtoMappingStageTests
             [StateSpanCategory.PumpMode] = [pumpModeSpan],
             [StateSpanCategory.Profile] = [],
             [StateSpanCategory.Override] = [],
-            [StateSpanCategory.Sleep] = [],
             [StateSpanCategory.Exercise] = [],
             [StateSpanCategory.Illness] = [],
             [StateSpanCategory.Travel] = [],
@@ -164,6 +163,95 @@ public class DtoMappingStageTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_SleepSessions_MapToSleepKindNotExercise()
+    {
+        // Arrange
+        var overnightStart = DateTimeOffset.FromUnixTimeMilliseconds(StartTime).UtcDateTime;
+        var overnight = new SleepSession
+        {
+            Id = "sleep-1",
+            StartTime = overnightStart,
+            EndTime = overnightStart.AddHours(8),
+            Type = SleepSessionType.Overnight,
+        };
+        var nap = new SleepSession
+        {
+            Id = "sleep-2",
+            StartTime = overnightStart.AddHours(14),
+            EndTime = overnightStart.AddHours(15),
+            Type = SleepSessionType.Nap,
+        };
+
+        _mockTreatmentFoodService
+            .Setup(s => s.GetByCarbIntakeIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
+        var context = new ChartDataContext
+        {
+            StartTime = StartTime,
+            EndTime = EndTime,
+            StateSpans = new Dictionary<StateSpanCategory, IEnumerable<StateSpan>>(),
+            SleepSessions = [overnight, nap],
+        };
+
+        // Act
+        var result = await _stage.ExecuteAsync(context, CancellationToken.None);
+
+        // Assert
+        result.ActivitySpans.Should().HaveCount(2);
+        result.ActivitySpans.Should().OnlyContain(s => s.Kind == ChartSpanKind.Sleep);
+        result.ActivitySpans.Should().OnlyContain(s => s.Category == null);
+        result.ActivitySpans.Should().NotContain(s => s.Category == StateSpanCategory.Exercise);
+        result.ActivitySpans.Should().OnlyContain(s => s.Color == ChartColor.ActivitySleep);
+
+        var overnightSpan = result.ActivitySpans.Single(s => s.Id == "sleep-1");
+        overnightSpan.State.Should().Be("Sleep");
+        var napSpan = result.ActivitySpans.Single(s => s.Id == "sleep-2");
+        napSpan.State.Should().Be("Nap");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ActivityStateSpans_MapToStateSpanKindWithCategory()
+    {
+        // Arrange
+        var now = DateTimeOffset.FromUnixTimeMilliseconds(StartTime + 3600_000).UtcDateTime;
+        var exerciseSpan = new StateSpan
+        {
+            Id = "ex-1",
+            Category = StateSpanCategory.Exercise,
+            State = "Running",
+            StartTimestamp = now,
+            EndTimestamp = now.AddHours(1),
+        };
+
+        var stateSpans = new Dictionary<StateSpanCategory, IEnumerable<StateSpan>>
+        {
+            [StateSpanCategory.Exercise] = [exerciseSpan],
+        };
+
+        _mockTreatmentFoodService
+            .Setup(s => s.GetByCarbIntakeIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
+        var context = new ChartDataContext
+        {
+            StartTime = StartTime,
+            EndTime = EndTime,
+            StateSpans = stateSpans,
+        };
+
+        // Act
+        var result = await _stage.ExecuteAsync(context, CancellationToken.None);
+
+        // Assert
+        result.ActivitySpans.Should().HaveCount(1);
+        var span = result.ActivitySpans[0];
+        span.Kind.Should().Be(ChartSpanKind.StateSpan);
+        span.Category.Should().Be(StateSpanCategory.Exercise);
+        span.State.Should().Be("Running");
+    }
+
+    [Fact]
     public async Task ExecuteAsync_WithEmptyData_ReturnsEmptyCollections()
     {
         // Arrange
@@ -172,7 +260,6 @@ public class DtoMappingStageTests
             [StateSpanCategory.PumpMode] = [],
             [StateSpanCategory.Profile] = [],
             [StateSpanCategory.Override] = [],
-            [StateSpanCategory.Sleep] = [],
             [StateSpanCategory.Exercise] = [],
             [StateSpanCategory.Illness] = [],
             [StateSpanCategory.Travel] = [],

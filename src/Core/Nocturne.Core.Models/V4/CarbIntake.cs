@@ -1,3 +1,5 @@
+using NJsonSchema.Annotations;
+
 namespace Nocturne.Core.Models.V4;
 
 /// <summary>
@@ -18,63 +20,9 @@ namespace Nocturne.Core.Models.V4;
 /// <seealso cref="IV4Record"/>
 /// <seealso cref="Bolus"/>
 /// <seealso cref="MealEvent"/>
-public class CarbIntake : IV4Record
+[JsonSchemaFlatten]
+public class CarbIntake : V4RecordBase
 {
-    /// <summary>
-    /// UUID v7 primary key
-    /// </summary>
-    public Guid Id { get; set; }
-
-    /// <summary>
-    /// Canonical timestamp as UTC DateTime
-    /// </summary>
-    public DateTime Timestamp { get; set; }
-
-    /// <summary>
-    /// Unix milliseconds (computed from Timestamp for v1/v3 compatibility)
-    /// </summary>
-    public long Mills => new DateTimeOffset(Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
-
-    /// <summary>
-    /// UTC offset in minutes
-    /// </summary>
-    public int? UtcOffset { get; set; }
-
-    /// <summary>
-    /// Device identifier that recorded this intake
-    /// </summary>
-    public string? Device { get; set; }
-
-    /// <summary>
-    /// Application that uploaded this intake
-    /// </summary>
-    public string? App { get; set; }
-
-    /// <summary>
-    /// Origin data source identifier
-    /// </summary>
-    public string? DataSource { get; set; }
-
-    /// <summary>
-    /// Links records that were split from the same legacy Treatment
-    /// </summary>
-    public Guid? CorrelationId { get; set; }
-
-    /// <summary>
-    /// Original v1/v3 record ID for migration traceability
-    /// </summary>
-    public string? LegacyId { get; set; }
-
-    /// <summary>
-    /// When this record was created
-    /// </summary>
-    public DateTime CreatedAt { get; set; }
-
-    /// <summary>
-    /// When this record was last modified
-    /// </summary>
-    public DateTime ModifiedAt { get; set; }
-
     /// <summary>
     /// Carbohydrates in grams
     /// </summary>
@@ -97,7 +45,13 @@ public class CarbIntake : IV4Record
     public int? AbsorptionTime { get; set; }
 
     /// <summary>
-    /// Catch-all for fields not mapped to dedicated columns
+    /// Fat consumed in grams, when the source reports macros. Native fields replace the
+    /// synthesized FPU fake-carb series legacy uploaders emit for Nightscout.
     /// </summary>
-    public Dictionary<string, object?>? AdditionalProperties { get; set; }
+    public double? FatGrams { get; set; }
+
+    /// <summary>
+    /// Protein consumed in grams, when the source reports macros.
+    /// </summary>
+    public double? ProteinGrams { get; set; }
 }

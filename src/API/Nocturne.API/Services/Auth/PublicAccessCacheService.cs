@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Services.Auth;
 
@@ -85,7 +86,9 @@ public sealed class PublicAccessCacheService
 
     private async Task<PublicAccessInfo?> ResolvePublicAccessAsync(Guid tenantId)
     {
-        await using var dbContext = await _dbContextFactory.CreateDbContextAsync();
+        // Pinned to the tenant being resolved: this service is a singleton on the
+        // anonymous-share request path and has no ambient tenant to inherit.
+        await using var dbContext = await _dbContextFactory.CreateTenantPinnedContextAsync(tenantId);
 
         var membership = await dbContext.TenantMembers
             .AsNoTracking()

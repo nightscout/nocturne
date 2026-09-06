@@ -9,6 +9,38 @@
   --glucose-high: oklch(0.65 0.18 270);
   --glucose-very-high: oklch(0.55 0.25 15);
 
+  /* Year-overview glucose heatmap — nine stops the report interpolates between
+     across 40–350 mg/dL. Unlike the buckets above these carry no threshold
+     meaning on their own: the hues are spread to keep neighbouring values in the
+     70–250 range distinguishable across a calendar grid. Stop-to-mg/dL mapping
+     lives with the interpolation in chart-colors.ts. */
+  --glucose-heatmap-1: #2563eb; /* blue-600 */
+  --glucose-heatmap-2: #3b82f6; /* blue-500 */
+  --glucose-heatmap-3: #06b6d4; /* cyan-500 */
+  --glucose-heatmap-4: #10b981; /* emerald-500 */
+  --glucose-heatmap-5: #84cc16; /* lime-500 */
+  --glucose-heatmap-6: #eab308; /* yellow-500 */
+  --glucose-heatmap-7: #f97316; /* orange-500 */
+  --glucose-heatmap-8: #ef4444; /* red-500 */
+  --glucose-heatmap-9: #b91c1c; /* red-700 */
+
+  /* Day-of-week series (week-to-week comparison). Qualitative: the hues separate
+     one weekday from another and say nothing about the readings. Okabe-Ito
+     derived, so the seven stay distinguishable under common colour vision
+     deficiencies. */
+  --weekday-sun: #808080;
+  --weekday-mon: #1e90ff;
+  --weekday-tue: #009e73;
+  --weekday-wed: #ff9a00;
+  --weekday-thu: #f0e442;
+  --weekday-fri: #ec7892;
+  --weekday-sat: #d55e00;
+
+  /* Sensor-integrity cluster confidence (noise detection annotation bands) */
+  --cluster-low: oklch(0.78 0.12 90);     /* muted amber */
+  --cluster-medium: oklch(0.646 0.222 41.116); /* orange, == --glucose-low */
+  --cluster-high: oklch(0.577 0.245 27.325);   /* red, == --status-critical */
+
   /* OpenAPS Prediction Lines */
   --pred-iob: oklch(0.6 0.18 258);       /* blue, was #1e88e5 */
   --pred-cob: oklch(0.7 0.18 50);        /* orange, was #FB8C00 */
@@ -33,11 +65,12 @@
   --status-warning: oklch(0.646 0.222 41.116);
   --status-critical: oklch(0.577 0.245 27.325);
   --status-normal: oklch(0.6 0.118 184.704);
+  --status-info: oklch(0.62 0.16 250);
 
   /* IOB (Insulin on Board) - for charts - should be more prominent than basal */
   --iob-basal: rgba(30, 150, 252, 0.7);
   --iob-bolus: rgba(30, 150, 252, 1);
-  --iob-temporary: rgba(80, 170, 255, 0.8);
+  --iob-temporary: rgba(45, 190, 175, 0.85);
 
   /* Pump Mode States */
   --pump-mode-automatic: oklch(0.6 0.118 184.704); /* Green - full automation */
@@ -88,7 +121,7 @@
   /* IOB - Dark Mode - more saturated for contrast */
   --iob-basal: rgba(60, 160, 255, 0.8);
   --iob-bolus: rgba(30, 150, 252, 1);
-  --iob-temporary: rgba(100, 180, 255, 0.85);
+  --iob-temporary: rgba(60, 215, 200, 0.9);
 
   /* Data Exclusion - Dark Mode - slightly higher opacity for visibility on dark backgrounds */
   --data-exclusion-compression-low: rgba(255, 165, 0, 0.2);
@@ -104,6 +137,11 @@
   --color-glucose-very-low: var(--glucose-very-low);
   --color-glucose-high: var(--glucose-high);
   --color-glucose-very-high: var(--glucose-very-high);
+
+  /* Sensor-integrity cluster confidence */
+  --color-cluster-low: var(--cluster-low);
+  --color-cluster-medium: var(--cluster-medium);
+  --color-cluster-high: var(--cluster-high);
 
   /* OpenAPS Prediction Lines */
   --color-pred-iob: var(--pred-iob);
@@ -129,6 +167,7 @@
   --color-status-warning: var(--status-warning);
   --color-status-critical: var(--status-critical);
   --color-status-normal: var(--status-normal);
+  --color-status-info: var(--status-info);
 
   /* IOB */
   --color-iob-basal: var(--iob-basal);

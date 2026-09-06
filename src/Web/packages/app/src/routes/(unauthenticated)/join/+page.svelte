@@ -7,7 +7,10 @@
     AlertTriangle,
     UserPlus,
   } from "lucide-svelte";
-  import { startRegistration } from "@simplewebauthn/browser";
+  import {
+    startRegistration,
+    type PublicKeyCredentialCreationOptionsJSON,
+  } from "@simplewebauthn/browser";
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
   import {
@@ -19,36 +22,49 @@
     inviteComplete,
   } from "$lib/api/generated/passkeys.generated.remote";
   import {
-    getAuthState,
     getOidcProviders,
     setAuthCookies,
   } from "$routes/(unauthenticated)/auth/auth.remote";
   import RecoveryCodes from "$lib/components/auth/RecoveryCodes.svelte";
   import OidcProviderButtons from "$lib/components/auth/OidcProviderButtons.svelte";
   import PasskeyRegistrationForm from "$lib/components/auth/PasskeyRegistrationForm.svelte";
+  import {
+    describePasskeyError,
+    parseCeremonyOptions,
+  } from "$lib/components/auth/passkey-errors";
+  import { FormError, describeSubmitError } from "$lib/forms";
+  import { retainQuery } from "$lib/api/retain-query.svelte";
 
   // ── URL params ────────────────────────────────────────────────────
   const token = $derived(page.url.searchParams.get("token") ?? "");
 
   // ── Remote data ───────────────────────────────────────────────────
-  const authStateQuery = getAuthState();
   const inviteInfoQuery = $derived(token ? getInviteInfo(token) : undefined);
+  retainQuery(() => inviteInfoQuery);
   const oidcQuery = getOidcProviders();
 
-  const isAuthenticated = $derived(authStateQuery.current?.isAuthenticated ?? false);
   const inviteInfo = $derived(inviteInfoQuery?.current);
   const oidc = $derived(oidcQuery.current);
   const hasOidc = $derived(oidc?.enabled && (oidc?.providers?.length ?? 0) > 0);
 
+  // Who is looking at this invite. The session cookie is domain-wide, so someone who follows
+  // another patient on this instance arrives here already signed in; the backend reports that
+  // against the invite rather than against tenant membership, which they do not yet have.
+  const viewer = $derived(inviteInfo?.viewer);
+  const isSignedIn = $derived(Boolean(viewer?.subjectId));
+  const isAlreadyMember = $derived(viewer?.isMember ?? false);
+
   // ── Invite validity ───────────────────────────────────────────────
+  // An invite that can no longer be accepted comes back as an error carrying the reason, not as a
+  // record with its validity flags set — the details of a spent invite aren't served to whoever
+  // holds the link.
   const inviteError = $derived.by(() => {
     if (!token) return "No invite token provided. Please check the link you were given.";
-    if (inviteInfoQuery?.error) return "This invite link is invalid or has expired.";
-    if (inviteInfo && !inviteInfo.isValid) {
-      if (inviteInfo.isExpired) return "This invite has expired.";
-      if (inviteInfo.isRevoked) return "This invite has been revoked.";
-      return "This invite is no longer valid.";
-    }
+    if (inviteInfoQuery?.error)
+      return describeSubmitError(
+        inviteInfoQuery.error,
+        "This invite link is invalid or has expired."
+      );
     return null;
   });
 
@@ -60,14 +76,14 @@
     isAccepting = true;
     acceptError = null;
     try {
-      const result = await acceptInvite(token);
-      if (result.success) {
-        await goto("/", { replaceState: true });
-      } else {
-        acceptError = result.errorDescription ?? "Failed to accept invite.";
-      }
+      await acceptInvite(token);
+      await goto("/", { replaceState: true });
     } catch (err) {
-      acceptError = err instanceof Error ? err.message : "Failed to accept invite.";
+      console.error("Accepting the invite failed:", err);
+      acceptError = describeSubmitError(
+        err,
+        "We couldn't add you to this instance. Please try again in a moment."
+      );
     } finally {
       isAccepting = false;
     }
@@ -102,13 +118,16 @@
         username,
         displayName,
       });
-      const options = JSON.parse(response.options ?? "");
+      const options = parseCeremonyOptions<PublicKeyCredentialCreationOptionsJSON>(
+        response.options
+      );
       const challengeToken = response.challengeToken ?? "";
 
       const attestation = await startRegistration({ optionsJSON: options });
 
       const result = await inviteComplete({
         token,
+        username,
         attestationResponseJson: JSON.stringify(attestation),
         challengeToken,
       });
@@ -124,8 +143,12 @@
       registrationComplete = true;
       recoveryCodes = result.recoveryCodes ?? [];
     } catch (err) {
-      passkeyError =
-        err instanceof Error ? err.message : "Failed to register passkey.";
+      console.error("Passkey registration from invite failed:", err);
+      passkeyError = describePasskeyError(
+        err,
+        "register",
+        "We couldn't create your account. Please try again."
+      );
     } finally {
       isRegistering = false;
     }
@@ -150,7 +173,7 @@
         >
           <AlertTriangle class="h-6 w-6 text-destructive" />
         </div>
-        <Card.Title class="text-2xl font-bold">Invalid Invite</Card.Title>
+        <Card.Title class="text-2xl font-bold">Invite Unavailable</Card.Title>
         <Card.Description>{inviteError}</Card.Description>
       </Card.Header>
     {:else if !inviteInfo}
@@ -185,8 +208,28 @@
           continueLabel="Continue to Nocturne"
         />
       </Card.Content>
-    {:else if isAuthenticated}
-      <!-- Authenticated — just accept the invite -->
+    {:else if isAlreadyMember}
+      <!-- Signed in and already a member of this site -->
+      <Card.Header class="space-y-1 text-center">
+        <div
+          class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10"
+        >
+          <Check class="h-6 w-6 text-primary" />
+        </div>
+        <Card.Title class="text-2xl font-bold">You're Already In</Card.Title>
+        <Card.Description>
+          You already have access to
+          <strong>{inviteInfo.tenantName ?? "this site"}</strong>.
+        </Card.Description>
+      </Card.Header>
+
+      <Card.Content>
+        <Button class="w-full" size="lg" onclick={goHome}>
+          Continue to Nocturne
+        </Button>
+      </Card.Content>
+    {:else if isSignedIn}
+      <!-- Signed in as someone who is not a member yet — just accept the invite -->
       <Card.Header class="space-y-1 text-center">
         <div
           class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10"
@@ -200,22 +243,16 @@
           {:else}
             You've been invited to join
           {/if}
-          <strong>{inviteInfo.tenantName ?? "a site"}</strong>.
+          <strong>{inviteInfo.tenantName ?? "a site"}</strong>
+          {#if viewer?.name}
+            as <strong>{viewer.name}</strong>
+          {/if}.
         </Card.Description>
       </Card.Header>
 
       <Card.Content>
         <div class="space-y-4">
-          {#if acceptError}
-            <div
-              class="flex items-start gap-3 rounded-md border border-destructive/20 bg-destructive/5 p-3"
-            >
-              <AlertTriangle
-                class="mt-0.5 h-4 w-4 shrink-0 text-destructive"
-              />
-              <p class="text-sm text-destructive">{acceptError}</p>
-            </div>
-          {/if}
+          <FormError issues={acceptError} focusOnShow />
 
           <Button
             class="w-full"
@@ -255,16 +292,7 @@
 
       <Card.Content>
         <div class="space-y-4">
-          {#if passkeyError}
-            <div
-              class="flex items-start gap-3 rounded-md border border-destructive/20 bg-destructive/5 p-3"
-            >
-              <AlertTriangle
-                class="mt-0.5 h-4 w-4 shrink-0 text-destructive"
-              />
-              <p class="text-sm text-destructive">{passkeyError}</p>
-            </div>
-          {/if}
+          <FormError issues={passkeyError} focusOnShow />
 
           {#if hasOidc && oidc}
             <OidcProviderButtons

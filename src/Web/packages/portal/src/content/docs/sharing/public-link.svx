@@ -1,0 +1,105 @@
+---
+title: Public share link
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+  import Screenshot from '$lib/components/docs/Screenshot.svelte';
+</script>
+
+# Public share link
+
+Public access turns on a single read-only link that **anyone you give it to can
+open — with no login and no invite**. Because there's no sign-in, treat the link
+itself as the key: anyone who has it can see whatever you've chosen to share.
+
+It is **off until you turn it on**, and you turn it on under
+**Settings > Sharing & Privacy**:
+
+<Screenshot
+  id="sharing-public-link"
+  callouts={[
+    { anchor: "enable", label: "Turn public access on or off" },
+    { anchor: "time-window", label: "How far back viewers can see" },
+  ]}
+/>
+
+The address pictured belongs to a local test instance; yours will end in your own
+domain, in the shape `https://<random>.share.<your domain>`.
+
+## The link is shown once
+
+When you first switch public access on, Nocturne creates the link and shows it to
+you **that one time**. Copy it there and then, and keep it somewhere you can get
+back to — a password manager is ideal. If you lose it, you can't ask Nocturne to
+show it again; you **Regenerate** to get a new one, which also stops the old one
+working.
+
+The address is a long random code on its own web address, along the lines of
+`k7m2p9x4q1.share.example.com`. That random part is the whole of the security:
+there's no list of shares to browse and nothing to guess your way to.
+
+## Choosing what's visible
+
+You stay in control of two things.
+
+**What's visible.** There are seven categories you can switch on or off
+independently:
+
+| Category | What it shares |
+|----------|----------------|
+| Blood Glucose | Your glucose readings and the graph of them |
+| Treatments | Logged insulin doses, carbs and other entries |
+| Device Status | The state of your pump, CGM and closed loop, including insulin on board |
+| Heart Rate | Heart rate collected from a watch or band |
+| Step Count | Step counts collected from a watch or phone |
+| Food & Meals | Your saved food items and the meals you have logged |
+| Reports | The report pages, such as the day-by-day and profile reports |
+
+When public access is first switched on, only **Blood Glucose** is shared. Every
+other category stays private until you deliberately switch it on, so a link you
+turn on and forget about never quietly widens.
+
+**How far back.** Choose _All history_ or limit viewers to the _Last 24 hours_,
+so older data is never exposed.
+
+<Callout type="tip" title="When to use it: a daycare">
+  The daycare wants to keep your child's current glucose up on a tablet at the
+  desk, and staff change shift through the day. Turn on public access, leave it on
+  <em>Blood Glucose</em> only, and set the window to <em>Last 24 hours</em>.
+  Everyone on shift sees the same screen with no logins to hand around, and they
+  never see older history. If a device goes missing or the room changes,
+  regenerate the link and the old one stops working.
+</Callout>
+
+## What the visitor sees
+
+Someone opening the link gets a read-only dashboard: the data, and a **Sign in**
+button where your own account menu would be. There is nothing on it they can edit
+or log. It shows only the categories you switched on, within the time window you
+chose:
+
+<Screenshot id="share-anonymous-view" />
+
+## Turning it off or replacing it
+
+There's no expiry — the link works until you turn public access off. Two controls
+end it:
+
+- **Switch public access off.** The link stops working immediately.
+- **Regenerate.** Nocturne issues a brand-new link and the old one stops working
+  immediately. Use this when a link has spread further than you meant it to, but
+  you still want the daycare (or whoever) to have one — you just have to hand out
+  the new address.
+
+<Callout type="warning" title="Anyone with the link can open it">
+  There's no sign-in on a public link, and you can't control who it gets forwarded
+  to once it's out. Share the minimum categories the situation actually needs,
+  keep the 24-hour window on, and regenerate the link if you ever think it has
+  spread too far.
+</Callout>
+
+If only one person needs a look, and only once, a
+[temporary guest link](/docs/sharing/guest-links) is the safer choice — it expires
+on its own. If they need ongoing access, give them their own
+[member account](/docs/sharing/members).

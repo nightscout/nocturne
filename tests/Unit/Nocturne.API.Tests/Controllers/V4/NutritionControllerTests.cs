@@ -1,10 +1,9 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Moq;
+using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Controllers.V4.Treatments;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.API.Services.Platform;
@@ -14,13 +13,15 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Xunit;
+using Nocturne.Core.Contracts.V4;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Controllers.V4;
 
 [Trait("Category", "Unit")]
 public class NutritionControllerTests : IDisposable
 {
-    private readonly SqliteConnection _connection;
+    private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _dbContext;
     private readonly Mock<ICarbIntakeRepository> _repoMock = new();
     private readonly Mock<IBolusRepository> _bolusRepoMock = new();
@@ -29,16 +30,9 @@ public class NutritionControllerTests : IDisposable
 
     public NutritionControllerTests()
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
+        _db = TestDbContextFactory.CreateSqlite();
 
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .Options;
-
-        _dbContext = new NocturneDbContext(options) { TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001") };
-        _dbContext.Database.EnsureCreated();
+        _dbContext = _db.CreateContext(Guid.Parse("00000000-0000-0000-0000-000000000001"));
         _dbContext.Tenants.Add(new Nocturne.Infrastructure.Data.Entities.TenantEntity
         {
             Id = Guid.Parse("00000000-0000-0000-0000-000000000001"),
@@ -50,7 +44,7 @@ public class NutritionControllerTests : IDisposable
     public void Dispose()
     {
         _dbContext.Dispose();
-        _connection.Dispose();
+        _db.Dispose();
     }
 
     private NutritionController CreateController()
@@ -71,9 +65,9 @@ public class NutritionControllerTests : IDisposable
     private void SetupCreatePassthrough(Action<CarbIntake> onCreate)
     {
         _repoMock
-            .Setup(r => r.CreateAsync(It.IsAny<CarbIntake>(), It.IsAny<CancellationToken>()))
-            .Callback<CarbIntake, CancellationToken>((c, _) => onCreate(c))
-            .ReturnsAsync((CarbIntake c, CancellationToken _) => c);
+            .Setup(r => r.CreateAsync(It.IsAny<CarbIntake>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<CarbIntake, WriteOrigin, CancellationToken>((c, _, _) => onCreate(c))
+            .ReturnsAsync((CarbIntake c, WriteOrigin origin, CancellationToken _) => c);
     }
 
     [Fact]
@@ -136,9 +130,9 @@ public class NutritionControllerTests : IDisposable
             .Setup(r => r.GetByIdAsync(id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(existing);
         _repoMock
-            .Setup(r => r.UpdateAsync(id, It.IsAny<CarbIntake>(), It.IsAny<CancellationToken>()))
-            .Callback<Guid, CarbIntake, CancellationToken>((_, c, _) => captured = c)
-            .ReturnsAsync((Guid _, CarbIntake c, CancellationToken _) => c);
+            .Setup(r => r.UpdateAsync(id, It.IsAny<CarbIntake>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<Guid, CarbIntake, WriteOrigin, CancellationToken>((_, c, _, _) => captured = c)
+            .ReturnsAsync((Guid _, CarbIntake c, WriteOrigin origin, CancellationToken _) => c);
 
         var controller = CreateController();
         var request = new UpdateCarbIntakeRequest
@@ -172,9 +166,9 @@ public class NutritionControllerTests : IDisposable
             .Setup(r => r.GetByIdAsync(id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(existing);
         _repoMock
-            .Setup(r => r.UpdateAsync(id, It.IsAny<CarbIntake>(), It.IsAny<CancellationToken>()))
-            .Callback<Guid, CarbIntake, CancellationToken>((_, c, _) => captured = c)
-            .ReturnsAsync((Guid _, CarbIntake c, CancellationToken _) => c);
+            .Setup(r => r.UpdateAsync(id, It.IsAny<CarbIntake>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<Guid, CarbIntake, WriteOrigin, CancellationToken>((_, c, _, _) => captured = c)
+            .ReturnsAsync((Guid _, CarbIntake c, WriteOrigin origin, CancellationToken _) => c);
 
         var controller = CreateController();
         var request = new UpdateCarbIntakeRequest
@@ -209,4 +203,24 @@ public class NutritionControllerTests : IDisposable
 
         result.Result.Should().BeOfType<NotFoundResult>();
     }
+
+    [Fact]
+    public async Task GetCarbIntakes_LimitAtCeiling_ReachesRepositoryUnchanged()
+    {
+        await CreateController().GetCarbIntakes(null, null, V4ReadLimits.MaxPageSize, 0);
+
+        VerifyCarbIntakesFetched(V4ReadLimits.MaxPageSize, 0);
+    }
+
+    [Fact]
+    public async Task GetCarbIntakes_LimitAboveCeiling_IsClamped()
+    {
+        await CreateController().GetCarbIntakes(null, null, V4ReadLimits.MaxPageSize + 1, -1);
+
+        VerifyCarbIntakesFetched(V4ReadLimits.MaxPageSize, 0);
+    }
+
+    private void VerifyCarbIntakesFetched(int limit, int offset) =>
+        _repoMock.Verify(r => r.GetAsync(
+            null, null, null, null, limit, offset, true, false, null, null, It.IsAny<CancellationToken>()), Times.Once);
 }

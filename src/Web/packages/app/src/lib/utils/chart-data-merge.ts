@@ -51,23 +51,31 @@ export function mergeChartData(
 		return [...uniqueHistorical, ...initialArr];
 	};
 
+	// Every field is listed explicitly rather than spreading `initial`. A spread
+	// satisfies the return type on its own, so a collection left out of the merge
+	// keeps only the initial window's rows instead of failing to compile.
 	return {
-		...initial,
-		// Merge time-series data
+		// Time series
 		iobSeries: mergeByTime(initial.iobSeries, historical.iobSeries),
 		cobSeries: mergeByTime(initial.cobSeries, historical.cobSeries),
 		basalSeries: mergeByTime(initial.basalSeries, historical.basalSeries, 'timestamp'),
 		glucoseData: mergeByTime(initial.glucoseData, historical.glucoseData),
+		heartRateSeries: mergeByTime(initial.heartRateSeries, historical.heartRateSeries),
+		stepSeries: mergeByTime(initial.stepSeries, historical.stepSeries),
 
 		// Merge markers (keyed by time)
 		bolusMarkers: mergeByTime(initial.bolusMarkers, historical.bolusMarkers),
 		carbMarkers: mergeByTime(initial.carbMarkers, historical.carbMarkers),
 		deviceEventMarkers: mergeByTime(initial.deviceEventMarkers, historical.deviceEventMarkers),
-		systemEventMarkers: mergeSpansById(initial.systemEventMarkers, historical.systemEventMarkers),
-		trackerMarkers: mergeSpansById(initial.trackerMarkers, historical.trackerMarkers),
 		bgCheckMarkers: mergeByTime(initial.bgCheckMarkers, historical.bgCheckMarkers),
 
-		// Merge spans (keyed by id in {#each} blocks — must dedup by id)
+		// Merge markers and spans keyed by id in {#each} blocks — must dedup by id
+		systemEventMarkers: mergeSpansById(initial.systemEventMarkers, historical.systemEventMarkers),
+		trackerMarkers: mergeSpansById(initial.trackerMarkers, historical.trackerMarkers),
+		basalInjectionMarkers: mergeSpansById(
+			initial.basalInjectionMarkers,
+			historical.basalInjectionMarkers
+		),
 		pumpModeSpans: mergeSpansById(initial.pumpModeSpans, historical.pumpModeSpans),
 		profileSpans: mergeSpansById(initial.profileSpans, historical.profileSpans),
 		overrideSpans: mergeSpansById(initial.overrideSpans, historical.overrideSpans),
@@ -77,6 +85,19 @@ export function mergeChartData(
 			initial.basalDeliverySpans,
 			historical.basalDeliverySpans
 		),
+
+		// Thresholds are profile-derived and identical across both halves, except
+		// glucoseYMax, which the server sizes to the max SGV it was asked for — the
+		// streamed half can carry a higher excursion, and the chart's yDomain clips
+		// anything above it.
+		defaultBasalRate: initial.defaultBasalRate,
+		thresholds: {
+			...initial.thresholds,
+			glucoseYMax: Math.max(
+				initial.thresholds.glucoseYMax,
+				historical.thresholds.glucoseYMax
+			),
+		},
 
 		// Take the max values from either dataset
 		maxIob: Math.max(initial.maxIob ?? 0, historical.maxIob ?? 0),

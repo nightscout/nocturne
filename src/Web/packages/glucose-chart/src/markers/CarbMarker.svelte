@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { Group, Text } from "layerchart";
-
+  // Native SVG rather than layerchart marks: each mark registers with the chart
+  // on mount and the chart's mark deriveds re-run over every mark, so one
+  // component per carb entry cost O(N^2).
   interface Props {
     xPos: number;
     yPos: number;
@@ -14,21 +15,23 @@
     $props();
 </script>
 
-<Group
-  x={xPos}
-  y={yPos}
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<g
+  transform="translate({xPos}, {yPos})"
   onclick={() => onMarkerClick(treatmentId)}
   class="cursor-pointer"
 >
   <!-- Food/meal label above the marker -->
   {#if label}
-    <Text
+    <text
       y={-18}
-      textAnchor="middle"
+      dy="-0.355em"
+      text-anchor="middle"
       class="text-[7px] fill-carbs font-medium opacity-80"
     >
       {label}
-    </Text>
+    </text>
   {/if}
   <!-- Hemisphere (bowl shape - curves below baseline) -->
   <path
@@ -36,7 +39,12 @@
     fill="var(--color-carbs)"
     class="opacity-90 hover:opacity-100 transition-opacity"
   />
-  <Text y={18} textAnchor="middle" class="text-[8px] fill-carbs font-medium">
+  <text
+    y={18}
+    dy="-0.355em"
+    text-anchor="middle"
+    class="text-[8px] fill-carbs font-medium"
+  >
     {carbs}g
-  </Text>
-</Group>
+  </text>
+</g>

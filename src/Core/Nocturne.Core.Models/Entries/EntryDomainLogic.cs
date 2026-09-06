@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Nocturne.Core.Constants;
 
 namespace Nocturne.Core.Models.Entries;
@@ -50,46 +49,17 @@ public static class EntryDomainLogic
     }
 
     /// <summary>
-    /// Parses $gte/$lte time range values from a MongoDB-style JSON find query.
-    /// Walks the document looking for numeric $gte / $lte values on any field.
+    /// Parses time range bounds from a Nightscout-style find query (querystring or JSON form,
+    /// epoch-millisecond or ISO 8601 values) on recognised timestamp fields.
     /// Returns (null, null) if the query is absent or contains no time constraints.
     /// </summary>
-    /// <param name="find">A MongoDB-style JSON query string (may be null).</param>
+    /// <param name="find">A Nightscout-style find query string (may be null).</param>
     /// <returns>A tuple of (From, To) timestamps in Unix milliseconds, either of which may be null.</returns>
+    /// <seealso cref="Queries.FindQuery"/>
     public static (long? From, long? To) ParseTimeRangeFromFind(string? find)
     {
-        if (string.IsNullOrEmpty(find))
-            return (null, null);
-
-        long? from = null;
-        long? to = null;
-
-        try
-        {
-            using var doc = JsonDocument.Parse(find);
-            foreach (var field in doc.RootElement.EnumerateObject())
-            {
-                if (field.Value.ValueKind != JsonValueKind.Object)
-                    continue;
-
-                foreach (var op in field.Value.EnumerateObject())
-                {
-                    if (op.Value.ValueKind != JsonValueKind.Number)
-                        continue;
-
-                    if ((op.Name == "$gte" || op.Name == "$gt") && op.Value.TryGetInt64(out var gte))
-                        from = gte;
-                    else if ((op.Name == "$lte" || op.Name == "$lt") && op.Value.TryGetInt64(out var lte))
-                        to = lte;
-                }
-            }
-        }
-        catch (JsonException)
-        {
-            // Malformed query — return no time bounds, which is safe.
-        }
-
-        return (from, to);
+        var query = Queries.FindQuery.Parse(find);
+        return (query.FromMills, query.ToMills);
     }
 
     /// <summary>

@@ -78,6 +78,20 @@ public class TrackerDefinitionEntity : ITenantScoped
     public int? LifespanHours { get; set; }
 
     /// <summary>
+    /// Reservoir category only: units level below which the synced managed reservoir
+    /// rule fires. Null = no level rule.
+    /// </summary>
+    [Column("low_reservoir_units")]
+    public double? LowReservoirUnits { get; set; }
+
+    /// <summary>
+    /// Urgency of the low-reservoir level rule. Only meaningful while
+    /// <see cref="LowReservoirUnits"/> is set.
+    /// </summary>
+    [Column("low_reservoir_urgency")]
+    public NotificationUrgency LowReservoirUrgency { get; set; } = NotificationUrgency.Warn;
+
+    /// <summary>
     /// Show in quick-add favorites
     /// </summary>
     [Column("is_favorite")]
@@ -113,16 +127,10 @@ public class TrackerDefinitionEntity : ITenantScoped
     public TrackerMode Mode { get; set; } = TrackerMode.Duration;
 
     /// <summary>
-    /// Visibility level for this tracker (Public, Private, RoleRestricted)
+    /// Visibility level for this tracker: Public or Private
     /// </summary>
     [Column("visibility")]
-    public TrackerVisibility Visibility { get; set; } = TrackerVisibility.Public;
-
-    /// <summary>
-    /// Required role names for RoleRestricted visibility (JSON array)
-    /// </summary>
-    [Column("required_roles", TypeName = "jsonb")]
-    public string? RequiredRoles { get; set; }
+    public TrackerVisibility Visibility { get; set; } = TrackerVisibility.Private;
 
     /// <summary>
     /// When this definition was created

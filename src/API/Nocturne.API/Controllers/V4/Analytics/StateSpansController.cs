@@ -1,28 +1,33 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Attributes;
+using Nocturne.API.Authorization;
+using Nocturne.API.Controllers.V4.Base;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Controllers.V4.Analytics;
 
 /// <summary>
 /// Controller for managing time-ranged system states such as pump modes, connectivity periods,
-/// temporary targets, overrides, and user-annotated activity periods (sleep, exercise, illness, travel).
+/// temporary targets, overrides, and user-annotated activity periods (exercise, illness, travel).
 /// </summary>
 /// <remarks>
 /// <see cref="StateSpan"/> records are created automatically by connector-based ingest pipelines
 /// but can also be created and updated manually via this API.
 ///
 /// Convenience sub-routes (<c>/pump-modes</c>, <c>/connectivity</c>, <c>/overrides</c>,
-/// <c>/temporary-targets</c>, <c>/profiles</c>, <c>/sleep</c>, <c>/exercise</c>,
+/// <c>/temporary-targets</c>, <c>/profiles</c>, <c>/exercise</c>,
 /// <c>/illness</c>, <c>/travel</c>, <c>/activities</c>) are thin wrappers that pre-filter
 /// <see cref="IStateSpanService.GetStateSpansAsync"/> by <see cref="StateSpanCategory"/>.
 ///
-/// The main <c>GET /</c> endpoint is annotated with <c>RemoteQueryAttribute</c>
-/// and cached for 120 seconds. Create, update, and delete use
-/// <c>RemoteCommandAttribute</c> with cache invalidation hints.
+/// Every read shares the caching posture argued at <see cref="GetStateSpans"/>. <c>GET /</c>, the
+/// category sub-routes and <c>GET /{id}</c> are annotated with <c>RemoteQueryAttribute</c>;
+/// create, update, and delete use <c>RemoteCommandAttribute</c> with cache invalidation hints.
 /// </remarks>
 /// <seealso cref="IStateSpanService"/>
 /// <seealso cref="StateSpan"/>
@@ -33,6 +38,16 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 [Authorize]
 public class StateSpansController : ControllerBase
 {
+    // Writes are gated per record by StateSpanWriteScopeGuard rather than by a single declared
+    // controller scope. state_spans is not in ShareDataCategories.GovernedTables and holds four
+    // different data categories behind one table: the caller picks which by setting
+    // StateSpan.Category in the body, so the required scope is not known until the body is read.
+    // A flat treatments.readwrite would let a treatments-only credential write PumpMode and
+    // PumpConnectivity spans (devices), Profile switches (therapy), and DataExclusion windows —
+    // which decide whether glucose readings count towards analytics and reports, so excluding one
+    // can hide a hypo. The class-level [Authorize] alone is satisfied by read-only credentials
+    // such as a guest-link session, which is what this closes.
+
     private readonly IStateSpanService _stateSpanService;
 
     public StateSpansController(IStateSpanService stateSpanService)
@@ -43,9 +58,15 @@ public class StateSpansController : ControllerBase
     /// <summary>
     /// Query all state spans with optional filtering
     /// </summary>
+    /// <remarks>
+    /// Never cached, per <see cref="Profiles.ProfileController.GetProfileSummary"/>: a temporary
+    /// target, override, or data-exclusion window the caller just set must not be invisible until a
+    /// cached list body expires — and an exclusion window decides whether readings count towards
+    /// analytics, so a stale one silently changes reported statistics.
+    /// </remarks>
     [HttpGet]
     [RemoteQuery]
-    [ResponseCache(Duration = 120, VaryByQueryKeys = new[] { "*" })]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [ProducesResponseType(typeof(PaginatedResponse<StateSpan>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PaginatedResponse<StateSpan>>> GetStateSpans(
@@ -63,6 +84,9 @@ public class StateSpansController : ControllerBase
         if (sort is not "timestamp_desc" and not "timestamp_asc")
             return Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
 
+        limit = V4ReadLimits.ClampLimit(limit);
+        offset = V4ReadLimits.ClampOffset(offset);
+
         var descending = sort == "timestamp_desc";
         var data = await _stateSpanService.GetStateSpansAsync(
             category, state, from, to, source, active, limit, offset, descending, cancellationToken);
@@ -75,213 +99,172 @@ public class StateSpansController : ControllerBase
     /// Get pump mode state spans
     /// </summary>
     [HttpGet("pump-modes")]
+    [RemoteQuery]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [ProducesResponseType(typeof(PaginatedResponse<StateSpan>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<PaginatedResponse<StateSpan>>> GetPumpModes(
+    public Task<ActionResult<PaginatedResponse<StateSpan>>> GetPumpModes(
         [FromQuery] DateTime? from = null,
         [FromQuery] DateTime? to = null,
         [FromQuery] int limit = 100,
         [FromQuery] int offset = 0,
         [FromQuery] string sort = "timestamp_desc",
         CancellationToken cancellationToken = default)
-    {
-        if (sort is not "timestamp_desc" and not "timestamp_asc")
-            return Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
-
-        var descending = sort == "timestamp_desc";
-        var data = await _stateSpanService.GetStateSpansAsync(StateSpanCategory.PumpMode, from: from, to: to, count: limit, skip: offset, descending: descending, cancellationToken: cancellationToken);
-        var total = await _stateSpanService.CountStateSpansAsync(StateSpanCategory.PumpMode, from: from, to: to, cancellationToken: cancellationToken);
-        return Ok(new PaginatedResponse<StateSpan> { Data = data, Pagination = new PaginationInfo(limit, offset, total) });
-    }
+        => CategoryPage(StateSpanCategory.PumpMode, from, to, limit, offset, sort, cancellationToken);
 
     /// <summary>
     /// Get connectivity state spans
     /// </summary>
     [HttpGet("connectivity")]
+    [RemoteQuery]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [ProducesResponseType(typeof(PaginatedResponse<StateSpan>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<PaginatedResponse<StateSpan>>> GetConnectivity(
+    public Task<ActionResult<PaginatedResponse<StateSpan>>> GetConnectivity(
         [FromQuery] DateTime? from = null,
         [FromQuery] DateTime? to = null,
         [FromQuery] int limit = 100,
         [FromQuery] int offset = 0,
         [FromQuery] string sort = "timestamp_desc",
         CancellationToken cancellationToken = default)
-    {
-        if (sort is not "timestamp_desc" and not "timestamp_asc")
-            return Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
-
-        var descending = sort == "timestamp_desc";
-        var data = await _stateSpanService.GetStateSpansAsync(StateSpanCategory.PumpConnectivity, from: from, to: to, count: limit, skip: offset, descending: descending, cancellationToken: cancellationToken);
-        var total = await _stateSpanService.CountStateSpansAsync(StateSpanCategory.PumpConnectivity, from: from, to: to, cancellationToken: cancellationToken);
-        return Ok(new PaginatedResponse<StateSpan> { Data = data, Pagination = new PaginationInfo(limit, offset, total) });
-    }
+        => CategoryPage(StateSpanCategory.PumpConnectivity, from, to, limit, offset, sort, cancellationToken);
 
     /// <summary>
     /// Get override state spans
     /// </summary>
     [HttpGet("overrides")]
+    [RemoteQuery]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [ProducesResponseType(typeof(PaginatedResponse<StateSpan>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<PaginatedResponse<StateSpan>>> GetOverrides(
+    public Task<ActionResult<PaginatedResponse<StateSpan>>> GetOverrides(
         [FromQuery] DateTime? from = null,
         [FromQuery] DateTime? to = null,
         [FromQuery] int limit = 100,
         [FromQuery] int offset = 0,
         [FromQuery] string sort = "timestamp_desc",
         CancellationToken cancellationToken = default)
-    {
-        if (sort is not "timestamp_desc" and not "timestamp_asc")
-            return Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
-
-        var descending = sort == "timestamp_desc";
-        var data = await _stateSpanService.GetStateSpansAsync(StateSpanCategory.Override, from: from, to: to, count: limit, skip: offset, descending: descending, cancellationToken: cancellationToken);
-        var total = await _stateSpanService.CountStateSpansAsync(StateSpanCategory.Override, from: from, to: to, cancellationToken: cancellationToken);
-        return Ok(new PaginatedResponse<StateSpan> { Data = data, Pagination = new PaginationInfo(limit, offset, total) });
-    }
+        => CategoryPage(StateSpanCategory.Override, from, to, limit, offset, sort, cancellationToken);
 
     /// <summary>
     /// Get temporary target state spans (AAPS temporary glucose targets)
     /// </summary>
     [HttpGet("temporary-targets")]
+    [RemoteQuery]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [ProducesResponseType(typeof(PaginatedResponse<StateSpan>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<PaginatedResponse<StateSpan>>> GetTemporaryTargets(
+    public Task<ActionResult<PaginatedResponse<StateSpan>>> GetTemporaryTargets(
         [FromQuery] DateTime? from = null,
         [FromQuery] DateTime? to = null,
         [FromQuery] int limit = 100,
         [FromQuery] int offset = 0,
         [FromQuery] string sort = "timestamp_desc",
         CancellationToken cancellationToken = default)
-    {
-        if (sort is not "timestamp_desc" and not "timestamp_asc")
-            return Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
-
-        var descending = sort == "timestamp_desc";
-        var data = await _stateSpanService.GetStateSpansAsync(StateSpanCategory.TemporaryTarget, from: from, to: to, count: limit, skip: offset, descending: descending, cancellationToken: cancellationToken);
-        var total = await _stateSpanService.CountStateSpansAsync(StateSpanCategory.TemporaryTarget, from: from, to: to, cancellationToken: cancellationToken);
-        return Ok(new PaginatedResponse<StateSpan> { Data = data, Pagination = new PaginationInfo(limit, offset, total) });
-    }
+        => CategoryPage(StateSpanCategory.TemporaryTarget, from, to, limit, offset, sort, cancellationToken);
 
     /// <summary>
     /// Get profile state spans
     /// </summary>
     [HttpGet("profiles")]
+    [RemoteQuery]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [ProducesResponseType(typeof(PaginatedResponse<StateSpan>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<PaginatedResponse<StateSpan>>> GetProfiles(
+    public Task<ActionResult<PaginatedResponse<StateSpan>>> GetProfiles(
         [FromQuery] DateTime? from = null,
         [FromQuery] DateTime? to = null,
         [FromQuery] int limit = 100,
         [FromQuery] int offset = 0,
         [FromQuery] string sort = "timestamp_desc",
         CancellationToken cancellationToken = default)
-    {
-        if (sort is not "timestamp_desc" and not "timestamp_asc")
-            return Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
-
-        var descending = sort == "timestamp_desc";
-        var data = await _stateSpanService.GetStateSpansAsync(StateSpanCategory.Profile, from: from, to: to, count: limit, skip: offset, descending: descending, cancellationToken: cancellationToken);
-        var total = await _stateSpanService.CountStateSpansAsync(StateSpanCategory.Profile, from: from, to: to, cancellationToken: cancellationToken);
-        return Ok(new PaginatedResponse<StateSpan> { Data = data, Pagination = new PaginationInfo(limit, offset, total) });
-    }
-
-    /// <summary>
-    /// Get sleep state spans (user-annotated sleep periods)
-    /// </summary>
-    [HttpGet("sleep")]
-    [ProducesResponseType(typeof(PaginatedResponse<StateSpan>), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<PaginatedResponse<StateSpan>>> GetSleep(
-        [FromQuery] DateTime? from = null,
-        [FromQuery] DateTime? to = null,
-        [FromQuery] int limit = 100,
-        [FromQuery] int offset = 0,
-        [FromQuery] string sort = "timestamp_desc",
-        CancellationToken cancellationToken = default)
-    {
-        if (sort is not "timestamp_desc" and not "timestamp_asc")
-            return Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
-
-        var descending = sort == "timestamp_desc";
-        var data = await _stateSpanService.GetStateSpansAsync(StateSpanCategory.Sleep, from: from, to: to, count: limit, skip: offset, descending: descending, cancellationToken: cancellationToken);
-        var total = await _stateSpanService.CountStateSpansAsync(StateSpanCategory.Sleep, from: from, to: to, cancellationToken: cancellationToken);
-        return Ok(new PaginatedResponse<StateSpan> { Data = data, Pagination = new PaginationInfo(limit, offset, total) });
-    }
+        => CategoryPage(StateSpanCategory.Profile, from, to, limit, offset, sort, cancellationToken);
 
     /// <summary>
     /// Get exercise state spans (user-annotated activity periods)
     /// </summary>
     [HttpGet("exercise")]
+    [RemoteQuery]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [ProducesResponseType(typeof(PaginatedResponse<StateSpan>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<PaginatedResponse<StateSpan>>> GetExercise(
+    public Task<ActionResult<PaginatedResponse<StateSpan>>> GetExercise(
         [FromQuery] DateTime? from = null,
         [FromQuery] DateTime? to = null,
         [FromQuery] int limit = 100,
         [FromQuery] int offset = 0,
         [FromQuery] string sort = "timestamp_desc",
         CancellationToken cancellationToken = default)
-    {
-        if (sort is not "timestamp_desc" and not "timestamp_asc")
-            return Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
-
-        var descending = sort == "timestamp_desc";
-        var data = await _stateSpanService.GetStateSpansAsync(StateSpanCategory.Exercise, from: from, to: to, count: limit, skip: offset, descending: descending, cancellationToken: cancellationToken);
-        var total = await _stateSpanService.CountStateSpansAsync(StateSpanCategory.Exercise, from: from, to: to, cancellationToken: cancellationToken);
-        return Ok(new PaginatedResponse<StateSpan> { Data = data, Pagination = new PaginationInfo(limit, offset, total) });
-    }
+        => CategoryPage(StateSpanCategory.Exercise, from, to, limit, offset, sort, cancellationToken);
 
     /// <summary>
     /// Get illness state spans (user-annotated illness periods)
     /// </summary>
     [HttpGet("illness")]
+    [RemoteQuery]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [ProducesResponseType(typeof(PaginatedResponse<StateSpan>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<PaginatedResponse<StateSpan>>> GetIllness(
+    public Task<ActionResult<PaginatedResponse<StateSpan>>> GetIllness(
         [FromQuery] DateTime? from = null,
         [FromQuery] DateTime? to = null,
         [FromQuery] int limit = 100,
         [FromQuery] int offset = 0,
         [FromQuery] string sort = "timestamp_desc",
         CancellationToken cancellationToken = default)
-    {
-        if (sort is not "timestamp_desc" and not "timestamp_asc")
-            return Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
-
-        var descending = sort == "timestamp_desc";
-        var data = await _stateSpanService.GetStateSpansAsync(StateSpanCategory.Illness, from: from, to: to, count: limit, skip: offset, descending: descending, cancellationToken: cancellationToken);
-        var total = await _stateSpanService.CountStateSpansAsync(StateSpanCategory.Illness, from: from, to: to, cancellationToken: cancellationToken);
-        return Ok(new PaginatedResponse<StateSpan> { Data = data, Pagination = new PaginationInfo(limit, offset, total) });
-    }
+        => CategoryPage(StateSpanCategory.Illness, from, to, limit, offset, sort, cancellationToken);
 
     /// <summary>
     /// Get travel state spans (user-annotated travel/timezone change periods)
     /// </summary>
     [HttpGet("travel")]
+    [RemoteQuery]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [ProducesResponseType(typeof(PaginatedResponse<StateSpan>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<PaginatedResponse<StateSpan>>> GetTravel(
+    public Task<ActionResult<PaginatedResponse<StateSpan>>> GetTravel(
         [FromQuery] DateTime? from = null,
         [FromQuery] DateTime? to = null,
         [FromQuery] int limit = 100,
         [FromQuery] int offset = 0,
         [FromQuery] string sort = "timestamp_desc",
         CancellationToken cancellationToken = default)
+        => CategoryPage(StateSpanCategory.Travel, from, to, limit, offset, sort, cancellationToken);
+
+    /// <summary>
+    /// One category's page, as every category sub-route returns it.
+    /// </summary>
+    private async Task<ActionResult<PaginatedResponse<StateSpan>>> CategoryPage(
+        StateSpanCategory category,
+        DateTime? from,
+        DateTime? to,
+        int limit,
+        int offset,
+        string sort,
+        CancellationToken cancellationToken)
     {
         if (sort is not "timestamp_desc" and not "timestamp_asc")
             return Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
 
+        limit = V4ReadLimits.ClampLimit(limit);
+        offset = V4ReadLimits.ClampOffset(offset);
+
         var descending = sort == "timestamp_desc";
-        var data = await _stateSpanService.GetStateSpansAsync(StateSpanCategory.Travel, from: from, to: to, count: limit, skip: offset, descending: descending, cancellationToken: cancellationToken);
-        var total = await _stateSpanService.CountStateSpansAsync(StateSpanCategory.Travel, from: from, to: to, cancellationToken: cancellationToken);
+        var data = await _stateSpanService.GetStateSpansAsync(category, from: from, to: to, count: limit, skip: offset, descending: descending, cancellationToken: cancellationToken);
+        var total = await _stateSpanService.CountStateSpansAsync(category, from: from, to: to, cancellationToken: cancellationToken);
         return Ok(new PaginatedResponse<StateSpan> { Data = data, Pagination = new PaginationInfo(limit, offset, total) });
     }
 
     /// <summary>
-    /// Get all activity state spans (sleep, exercise, illness, travel)
+    /// Get all activity state spans (exercise, illness, travel)
     /// </summary>
+    /// <remarks>
+    /// This read merges three categories in memory before it paginates, so the page is bounded by
+    /// <see cref="V4ReadLimits.ClampMergedPage"/> rather than the plain page-size ceiling, and each
+    /// category is fetched only as deep as the requested page reaches.
+    /// </remarks>
     [HttpGet("activities")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [ProducesResponseType(typeof(PaginatedResponse<StateSpan>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PaginatedResponse<StateSpan>>> GetActivities(
@@ -295,14 +278,22 @@ public class StateSpansController : ControllerBase
         if (sort is not "timestamp_desc" and not "timestamp_asc")
             return Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
 
+        offset = V4ReadLimits.ClampOffset(offset);
+        limit = V4ReadLimits.ClampMergedPage(limit, offset);
+
         var descending = sort == "timestamp_desc";
-        var activityCategories = new[] { StateSpanCategory.Sleep, StateSpanCategory.Exercise, StateSpanCategory.Illness, StateSpanCategory.Travel };
+        var activityCategories = new[] { StateSpanCategory.Exercise, StateSpanCategory.Illness, StateSpanCategory.Travel };
         var allSpans = new List<StateSpan>();
         var total = 0;
 
+        // Every span on the requested page is within the first offset + limit of its own category,
+        // a sum ClampMergedPage has already held inside the merged window — or driven to a zero
+        // limit, a page no category has to be read for at all.
+        var perCategoryWindow = limit == 0 ? 0 : offset + limit;
+
         foreach (var category in activityCategories)
         {
-            var spans = await _stateSpanService.GetStateSpansAsync(category, from: from, to: to, count: int.MaxValue, descending: descending, cancellationToken: cancellationToken);
+            var spans = await _stateSpanService.GetStateSpansAsync(category, from: from, to: to, count: perCategoryWindow, descending: descending, cancellationToken: cancellationToken);
             allSpans.AddRange(spans);
             total += await _stateSpanService.CountStateSpansAsync(category, from: from, to: to, cancellationToken: cancellationToken);
         }
@@ -320,6 +311,7 @@ public class StateSpansController : ControllerBase
     /// </summary>
     [HttpGet("{id}")]
     [RemoteQuery]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [ProducesResponseType(typeof(StateSpan), StatusCodes.Status200OK)]
     public async Task<ActionResult<StateSpan>> GetStateSpan(string id, CancellationToken cancellationToken = default)
     {
@@ -333,12 +325,21 @@ public class StateSpansController : ControllerBase
     /// Create a new state span (manual entry)
     /// </summary>
     [HttpPost]
-    [RemoteCommand(Invalidates = ["GetStateSpans"])]
+    [RemoteCommand(Invalidates = [
+        nameof(GetStateSpans),
+        nameof(GetPumpModes), nameof(GetConnectivity), nameof(GetOverrides), nameof(GetTemporaryTargets),
+        nameof(GetProfiles), nameof(GetExercise), nameof(GetIllness), nameof(GetTravel)])]
     [ProducesResponseType(typeof(StateSpan), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<StateSpan>> CreateStateSpan(
         [FromBody] CreateStateSpanRequest request,
         CancellationToken cancellationToken = default)
     {
+        var missingScope = StateSpanWriteScopeGuard.FindMissingScope(
+            HttpContext.GetGrantedScopes(), request.Category);
+        if (missingScope is not null)
+            return this.ForbiddenForScope(missingScope);
+
         var stateSpan = new StateSpan
         {
             Category = request.Category,
@@ -358,8 +359,12 @@ public class StateSpansController : ControllerBase
     /// Update an existing state span
     /// </summary>
     [HttpPut("{id}")]
-    [RemoteCommand(Invalidates = ["GetStateSpans", "GetStateSpan"])]
+    [RemoteCommand(Invalidates = [
+        nameof(GetStateSpans), nameof(GetStateSpan),
+        nameof(GetPumpModes), nameof(GetConnectivity), nameof(GetOverrides), nameof(GetTemporaryTargets),
+        nameof(GetProfiles), nameof(GetExercise), nameof(GetIllness), nameof(GetTravel)])]
     [ProducesResponseType(typeof(StateSpan), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<StateSpan>> UpdateStateSpan(
         string id,
         [FromBody] UpdateStateSpanRequest request,
@@ -368,6 +373,13 @@ public class StateSpansController : ControllerBase
         var existing = await _stateSpanService.GetStateSpanByIdAsync(id, cancellationToken);
         if (existing == null)
             return NotFound();
+
+        // Both categories: moving a span out of one category and into another needs write access to
+        // each, or a caller could relocate a record into a category it may not write.
+        var missingScope = StateSpanWriteScopeGuard.FindMissingScope(
+            HttpContext.GetGrantedScopes(), existing.Category, request.Category ?? existing.Category);
+        if (missingScope is not null)
+            return this.ForbiddenForScope(missingScope);
 
         var updated = new StateSpan
         {
@@ -393,10 +405,24 @@ public class StateSpansController : ControllerBase
     /// Delete a state span
     /// </summary>
     [HttpDelete("{id}")]
-    [RemoteCommand(Invalidates = ["GetStateSpans"])]
+    [RemoteCommand(Invalidates = [
+        nameof(GetStateSpans), nameof(GetStateSpan),
+        nameof(GetPumpModes), nameof(GetConnectivity), nameof(GetOverrides), nameof(GetTemporaryTargets),
+        nameof(GetProfiles), nameof(GetExercise), nameof(GetIllness), nameof(GetTravel)])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> DeleteStateSpan(string id, CancellationToken cancellationToken = default)
     {
+        // The stored record's own category decides the scope, so the span has to be read first.
+        var existing = await _stateSpanService.GetStateSpanByIdAsync(id, cancellationToken);
+        if (existing == null)
+            return NotFound();
+
+        var missingScope = StateSpanWriteScopeGuard.FindMissingScope(
+            HttpContext.GetGrantedScopes(), existing.Category);
+        if (missingScope is not null)
+            return this.ForbiddenForScope(missingScope);
+
         var deleted = await _stateSpanService.DeleteStateSpanAsync(id, cancellationToken);
         if (!deleted)
             return NotFound();

@@ -11,7 +11,6 @@ public class PasskeyRegisterOptionsRequestValidatorTests
 
     private static PasskeyRegisterOptionsRequest ValidRequest() => new()
     {
-        SubjectId = Guid.NewGuid(),
         Username = "testuser",
     };
 

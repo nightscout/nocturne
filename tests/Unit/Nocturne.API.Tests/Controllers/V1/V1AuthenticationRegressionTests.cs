@@ -60,7 +60,11 @@ public class V1AuthenticationRegressionTests : IClassFixture<AuthenticationTestF
     [InlineData("/api/v1/profile")]
     [InlineData("/api/v1/profile/current")]
     [InlineData("/api/v1/activity")]
+    [InlineData("/api/v1/count/activity/where")]
     [InlineData("/api/v1/adminnotifies")]
+    [InlineData("/api/v1/times/2026-07")]
+    [InlineData("/api/v1/times/2026-07/T13")]
+    [InlineData("/api/v1/slice/entries/dateString")]
     public async Task V1_GetEndpoints_OnBareHost_RejectUnauthenticatedRequests(string endpoint)
     {
         // Act
@@ -80,7 +84,11 @@ public class V1AuthenticationRegressionTests : IClassFixture<AuthenticationTestF
     [InlineData("/api/v1/profile")]
     [InlineData("/api/v1/profile/current")]
     [InlineData("/api/v1/activity")]
+    [InlineData("/api/v1/count/activity/where")]
     [InlineData("/api/v1/adminnotifies")]
+    [InlineData("/api/v1/times/2026-07")]
+    [InlineData("/api/v1/times/2026-07/T13")]
+    [InlineData("/api/v1/slice/entries/dateString")]
     public async Task V1_GetEndpoints_WithValidApiSecret_AreAccessible(string endpoint)
     {
         // Act

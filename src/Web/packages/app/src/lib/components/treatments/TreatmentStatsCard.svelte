@@ -28,19 +28,11 @@
   interface Props {
     treatmentSummary: TreatmentSummaryData;
     counts: Record<EntryCategoryId | "all", number>;
-    dateRange: { from: string; to: string };
+    /** Calendar days the selected range covers, counting both end days. */
+    dayCount: number;
   }
 
-  let { treatmentSummary, counts, dateRange }: Props = $props();
-
-  let daysInRange = $derived.by(() => {
-    const from = new Date(dateRange.from);
-    const to = new Date(dateRange.to);
-    return Math.max(
-      1,
-      Math.ceil((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24))
-    );
-  });
+  let { treatmentSummary, counts, dayCount }: Props = $props();
 
   const totalInsulin = $derived(
     (treatmentSummary.totals?.insulin?.bolus ?? 0) +
@@ -50,8 +42,8 @@
   const bolusCount = $derived(counts.bolus);
   const carbEntriesCount = $derived(counts.carbs);
 
-  let dailyAvgCarbs = $derived(totalCarbs / daysInRange);
-  let dailyAvgBoluses = $derived(bolusCount / daysInRange);
+  let dailyAvgCarbs = $derived(totalCarbs / dayCount);
+  let dailyAvgBoluses = $derived(bolusCount / dayCount);
 
   let avgInsulinPerBolus = $derived(
     bolusCount > 0 ? totalInsulin / bolusCount : 0

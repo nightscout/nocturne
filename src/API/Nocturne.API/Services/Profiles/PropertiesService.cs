@@ -1,4 +1,7 @@
+using System.Globalization;
 using System.Text.Json;
+using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
@@ -27,6 +30,11 @@ public class PropertiesService : IPropertiesService
     private readonly ICarbIntakeRepository _carbIntakeRepository;
     private readonly ITempBasalRepository _tempBasalRepository;
     private readonly IAr2Service _ar2Service;
+    private readonly IDeviceAgeService _deviceAgeService;
+
+    // Properties served by IDeviceAgeService, each costing its own query.
+    private static readonly HashSet<string> DeviceAgeProperties =
+        new(StringComparer.OrdinalIgnoreCase) { "cage", "sage", "iage", "bage" };
 
     // Properties that should be filtered out for security
     private static readonly string[] SecureProperties =
@@ -48,7 +56,8 @@ public class PropertiesService : IPropertiesService
         IBolusRepository bolusRepository,
         ICarbIntakeRepository carbIntakeRepository,
         ITempBasalRepository tempBasalRepository,
-        IAr2Service ar2Service
+        IAr2Service ar2Service,
+        IDeviceAgeService deviceAgeService
     )
     {
         _ddataService = ddataService;
@@ -59,6 +68,7 @@ public class PropertiesService : IPropertiesService
         _carbIntakeRepository = carbIntakeRepository;
         _tempBasalRepository = tempBasalRepository;
         _ar2Service = ar2Service;
+        _deviceAgeService = deviceAgeService;
     }
 
     /// <inheritdoc />
@@ -86,10 +96,11 @@ public class PropertiesService : IPropertiesService
     {
         try
         {
-            var allProperties = await BuildSandboxPropertiesAsync(cancellationToken);
+            var requested = propertyNames as IReadOnlyCollection<string> ?? propertyNames.ToList();
+            var allProperties = await BuildSandboxPropertiesAsync(cancellationToken, requested);
             var filteredProperties = new Dictionary<string, object>();
 
-            foreach (var propertyName in propertyNames)
+            foreach (var propertyName in requested)
             {
                 if (allProperties.TryGetValue(propertyName, out var value))
                 {
@@ -146,8 +157,13 @@ public class PropertiesService : IPropertiesService
     /// Build sandbox properties similar to the legacy JavaScript implementation
     /// This simulates the plugin system that sets properties on the sandbox
     /// </summary>
+    /// <param name="requested">
+    /// When set, only these property names were asked for. Used to skip building the
+    /// properties whose sources cost extra queries; null builds everything.
+    /// </param>
     private async Task<Dictionary<string, object>> BuildSandboxPropertiesAsync(
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        IReadOnlyCollection<string>? requested = null
     )
     {
         var properties = new Dictionary<string, object>();
@@ -186,6 +202,14 @@ public class PropertiesService : IPropertiesService
 
             // Battery properties
             SetBatteryProperties(properties, ddata);
+
+            // Device age properties (cannula / sensor / insulin / battery age). Each is a
+            // separate query, so skip them when the caller asked for other properties —
+            // clients poll single properties like /api/v2/properties/iob frequently.
+            if (requested == null || requested.Any(DeviceAgeProperties.Contains))
+            {
+                await SetDeviceAgePropertiesAsync(properties, cancellationToken);
+            }
 
             // Profile properties
             SetProfileProperties(properties, ddata);
@@ -299,28 +323,27 @@ public class PropertiesService : IPropertiesService
                 limit: 1000, offset: 0, descending: false
             )).ToList();
 
-            if (!boluses.Any() && !tempBasals.Any())
-                return;
+            // Emit the property even with no insulin on board: legacy clients treat a
+            // missing `iob` as "server doesn't support it" rather than "zero".
+            var iobResult = boluses.Any() || tempBasals.Any()
+                ? await _iobCalculator.CalculateTotalAsync(boluses, tempBasals, now)
+                : null;
 
-            var iobResult = await _iobCalculator.CalculateTotalAsync(
-                boluses,
-                tempBasals,
-                now
-            );
-
-            if (iobResult == null)
-                return;
+            var iob = Math.Round(iobResult?.Iob ?? 0, 2);
+            var display = iobResult?.Display ?? iob.ToString(CultureInfo.InvariantCulture);
 
             properties["iob"] = new Dictionary<string, object?>
             {
-                ["iob"] = Math.Round(iobResult.Iob, 2),
-                ["displayLine"] = iobResult.DisplayLine ?? $"IOB: {Math.Round(iobResult.Iob, 2)}U",
+                ["iob"] = iob,
+                ["display"] = display,
+                ["displayLine"] = iobResult?.DisplayLine ?? $"IOB: {display}U",
                 ["timestamp"] = now,
-                ["source"] = iobResult.Source ?? "Care Portal",
-                ["activity"] = iobResult.Activity,
-                ["lastBolus"] = iobResult.LastBolus?.Mills,
-                ["basalIob"] = iobResult.BasalIob,
-                ["treatmentIob"] = iobResult.TreatmentIob,
+                ["source"] = iobResult?.Source ?? "Care Portal",
+                // Legacy calcTotal reports zeros rather than nulls for the numeric parts.
+                ["activity"] = iobResult?.Activity ?? 0,
+                ["lastBolus"] = iobResult?.LastBolus?.Mills,
+                ["basalIob"] = iobResult?.BasalIob ?? 0,
+                ["treatmentIob"] = iobResult?.TreatmentIob ?? 0,
             };
         }
         catch (Exception ex)
@@ -355,31 +378,24 @@ public class PropertiesService : IPropertiesService
                 limit: 1000, offset: 0, descending: false
             )).ToList();
 
-            if (!carbIntakes.Any())
-            {
-                _logger.LogDebug("SetCobProperties: No carb intakes, returning");
-                return;
-            }
+            // Emit the property even with no carbs on board: legacy clients treat a
+            // missing `cob` as "server doesn't support it" rather than "zero".
+            var cobResult = carbIntakes.Any()
+                ? await _cobCalculator.CalculateTotalAsync(carbIntakes, boluses, tempBasals, now)
+                : null;
 
-            _logger.LogDebug("SetCobProperties: Calling COB calculator");
-            var cobResult = await _cobCalculator.CalculateTotalAsync(carbIntakes, boluses, tempBasals, now);
-            _logger.LogDebug("SetCobProperties: COB calculator returned result, is null: {IsNull}", cobResult == null);
-
-            if (cobResult == null)
-            {
-                _logger.LogDebug("SetCobProperties: COB result is null, returning");
-                return;
-            }
+            var cob = Math.Round(cobResult?.Cob ?? 0);
+            var display = cobResult?.Display ?? cob.ToString(CultureInfo.InvariantCulture);
 
             properties["cob"] = new Dictionary<string, object?>
             {
-                ["cob"] = Math.Round(cobResult.Cob),
-                ["displayLine"] = cobResult.DisplayLine ?? $"COB: {Math.Round(cobResult.Cob)}g",
+                ["cob"] = cob,
+                ["display"] = display,
+                ["displayLine"] = cobResult?.DisplayLine ?? $"COB: {display}g",
                 ["timestamp"] = now,
-                ["source"] = cobResult.Source ?? "Care Portal",
-                ["activity"] = cobResult.Activity,
+                ["source"] = cobResult?.Source ?? "Care Portal",
+                ["activity"] = cobResult?.Activity ?? 0,
             };
-            _logger.LogDebug("SetCobProperties: COB property set successfully");
         }
         catch (Exception ex)
         {
@@ -431,8 +447,8 @@ public class PropertiesService : IPropertiesService
             // Get settings for thresholds (use defaults if not available)
             var settings = new Dictionary<string, object>
             {
-                ["bgTargetTop"] = 180,
-                ["bgTargetBottom"] = 80,
+                ["bgTargetTop"] = ApplicationConstants.Web.Thresholds.BgTargetTop,
+                ["bgTargetBottom"] = ApplicationConstants.Web.Thresholds.BgTargetBottom,
                 ["alarmHigh"] = true,
                 ["alarmLow"] = true,
             };
@@ -509,18 +525,112 @@ public class PropertiesService : IPropertiesService
     /// </summary>
     private void SetBatteryProperties(Dictionary<string, object> properties, DData ddata)
     {
-        var deviceStatus = ddata.DeviceStatus?.OrderByDescending(d => d.Mills).FirstOrDefault();
-        var batteryLevel = deviceStatus?.Uploader?.Battery;
+        // Only statuses that actually carry an uploader battery: AID systems interleave
+        // pump-only device statuses, and the newest record is often one of those.
+        var batteryReports = (ddata.DeviceStatus ?? [])
+            .Where(d => d.Uploader?.Battery != null)
+            .ToList();
 
-        if (!batteryLevel.HasValue)
+        if (batteryReports.Count == 0)
             return;
+
+        // The most recent report from each uploader, weakest battery first. Legacy
+        // clients read this list to show more than one phone.
+        var latestPerDevice = batteryReports
+            .GroupBy(d => string.IsNullOrEmpty(d.Device) ? "unknown" : d.Device)
+            .Select(g => g.OrderByDescending(d => d.Mills).First())
+            .OrderBy(d => d.Uploader!.Battery)
+            .ToList();
+
+        var devices = latestPerDevice
+            .Select(d => new Dictionary<string, object?>
+            {
+                ["name"] = d.Uploader!.Name
+                    ?? (string.IsNullOrEmpty(d.Device) ? "unknown" : d.Device),
+                ["device"] = string.IsNullOrEmpty(d.Device) ? "unknown" : d.Device,
+                ["value"] = d.Uploader.Battery,
+                ["voltage"] = d.Uploader.BatteryVoltage,
+                ["isCharging"] = d.Uploader.IsCharging,
+                ["temperature"] = d.Uploader.Temperature,
+                ["mills"] = d.Mills,
+            })
+            .ToList();
+
+        // `level` stays the newest reported battery, as before — not the weakest — so
+        // single-uploader setups keep their existing reading.
+        var batteryLevel = batteryReports
+            .OrderByDescending(d => d.Mills)
+            .First()
+            .Uploader!.Battery!.Value;
 
         properties["upbat"] = new Dictionary<string, object>
         {
-            ["level"] = batteryLevel.Value,
+            ["level"] = batteryLevel,
+            ["display"] = $"{batteryLevel}%",
             ["displayLine"] = $"Battery: {batteryLevel}%",
+            ["devices"] = devices,
         };
     }
+
+    /// <summary>
+    /// Set the legacy device-age plugin properties: cannula (cage), sensor (sage),
+    /// insulin (iage) and pump battery (bage) age.
+    /// </summary>
+    private async Task SetDeviceAgePropertiesAsync(
+        Dictionary<string, object> properties,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            // Thresholds/display are per-plugin settings in legacy Nightscout; the
+            // properties endpoint reports the service defaults.
+            var prefs = new DeviceAgePreferences();
+
+            var sensor = await _deviceAgeService.GetSensorAgeAsync(prefs, ct: cancellationToken);
+
+            properties["cage"] = ToAgeDictionary(
+                await _deviceAgeService.GetCannulaAgeAsync(prefs, ct: cancellationToken));
+            properties["sage"] = new Dictionary<string, object?>
+            {
+                ["Sensor Start"] = ToAgeDictionary(sensor.SensorStart),
+                ["Sensor Change"] = ToAgeDictionary(sensor.SensorChange),
+                ["min"] = sensor.Min,
+            };
+            properties["iage"] = ToAgeDictionary(
+                await _deviceAgeService.GetInsulinAgeAsync(prefs, ct: cancellationToken));
+            properties["bage"] = ToAgeDictionary(
+                await _deviceAgeService.GetBatteryAgeAsync(prefs, ct: cancellationToken));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error setting device age properties");
+            // Don't throw, just skip setting device age properties
+        }
+    }
+
+    /// <summary>
+    /// Projects a <see cref="DeviceAgeInfo"/> into a dictionary so every field reaches the
+    /// wire. The Nightscout response filter serializes with
+    /// <see cref="System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault"/>,
+    /// which drops zero/false properties off typed objects — that would hide
+    /// <c>age</c>/<c>days</c>/<c>level</c> exactly when a site was just changed, and never
+    /// emit <c>found: false</c>. Dictionary values are exempt from that condition.
+    /// </summary>
+    private static Dictionary<string, object?> ToAgeDictionary(DeviceAgeInfo age) =>
+        new()
+        {
+            ["found"] = age.Found,
+            ["age"] = age.Age,
+            ["days"] = age.Days,
+            ["hours"] = age.Hours,
+            ["treatmentDate"] = age.TreatmentDate,
+            ["notes"] = age.Notes,
+            ["minFractions"] = age.MinFractions,
+            ["level"] = age.Level,
+            ["display"] = age.Display,
+            ["notification"] = age.Notification,
+        };
 
     /// <summary>
     /// Set profile properties

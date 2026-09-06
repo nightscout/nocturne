@@ -296,25 +296,26 @@ public class BolusMapperTests
         entity.DataSource.Should().Be("tidepool");
         entity.CorrelationId.Should().Be(model.CorrelationId);
         entity.LegacyId.Should().Be("upd456");
-        entity.SysUpdatedAt.Should().BeAfter(originalCreatedAt);
     }
 
     [Fact]
     [Trait("Category", "Unit")]
-    public void UpdateEntity_SetsUpdatedAtTimestamp()
+    public void UpdateEntity_DoesNotTouchSysUpdatedAt()
     {
+        var stale = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         var entity = new BolusEntity
         {
             Id = Guid.CreateVersion7(),
-            SysCreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-            SysUpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+            SysCreatedAt = stale,
+            SysUpdatedAt = stale
         };
-        var beforeUpdate = DateTime.UtcNow;
 
         var model = new Bolus { Insulin = 1.0 };
         BolusMapper.UpdateEntity(entity, model);
 
-        entity.SysUpdatedAt.Should().BeOnOrAfter(beforeUpdate);
+        // NocturneDbContext.UpdateTimestamps stamps sys_updated_at, and only for rows with a
+        // real modification; a mapper stamp would force an UPDATE on no-op upserts.
+        entity.SysUpdatedAt.Should().Be(stale);
     }
 
     [Fact]
@@ -552,5 +553,23 @@ public class BolusMapperTests
 
         entity.InsulinContextJson.Should().NotBeNullOrEmpty();
         entity.InsulinContextJson.Should().Contain("Lantus");
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void ToDomainModel_MalformedInsulinContextJson_YieldsNoInsulinContext()
+    {
+        var entity = new BolusEntity
+        {
+            Id = Guid.CreateVersion7(),
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime,
+            Insulin = 2.5,
+            InsulinContextJson = """{"insulinName":""",
+        };
+
+        var model = BolusMapper.ToDomainModel(entity);
+
+        model.InsulinContext.Should().BeNull(
+            "one unparseable jsonb row must not fail the read of every record around it");
     }
 }

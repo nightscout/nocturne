@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Connectors.Core.Interfaces;
-using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.NocturneRemote.Configurations;
 using Nocturne.Connectors.NocturneRemote.Services;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -16,8 +15,8 @@ namespace Nocturne.API.Services.BackgroundServices;
 /// Optionally connects to each tenant's Nocturne SignalR hub to trigger
 /// immediate syncs when upstream data changes.
 /// </summary>
-/// <seealso cref="ConnectorBackgroundService{TConfig}"/>
-public class NocturneRemoteConnectorBackgroundService : ConnectorBackgroundService<NocturneRemoteConnectorConfiguration>
+public class NocturneRemoteConnectorBackgroundService
+    : ConnectorBackgroundService<NocturneRemoteConnectorService, NocturneRemoteConnectorConfiguration>
 {
     private readonly ConcurrentDictionary<Guid, HubConnection> _hubConnections = new();
 
@@ -28,14 +27,6 @@ public class NocturneRemoteConnectorBackgroundService : ConnectorBackgroundServi
         ILogger<NocturneRemoteConnectorBackgroundService> logger
     )
         : base(serviceProvider, logger) { }
-
-    protected override string ConnectorName => "NocturneRemote";
-
-    protected override async Task<SyncResult> PerformSyncAsync(IServiceProvider scopeProvider, NocturneRemoteConnectorConfiguration config, CancellationToken cancellationToken, ISyncProgressReporter? progressReporter = null)
-    {
-        var connectorService = scopeProvider.GetRequiredService<NocturneRemoteConnectorService>();
-        return await connectorService.SyncDataAsync(config, cancellationToken, since: null, progressReporter);
-    }
 
     /// <inheritdoc />
     protected override async Task StartRealtimeListenersAsync(CancellationToken cancellationToken)
@@ -53,10 +44,16 @@ public class NocturneRemoteConnectorBackgroundService : ConnectorBackgroundServi
         {
             try
             {
+                // Reconnection is infinite, so anything short of Disconnected is still a live listener.
+                if (!await ListenerNeedsStartAsync(
+                        _hubConnections, tenant.Id, tenant.Slug,
+                        c => c.State != HubConnectionState.Disconnected, StopAndDisposeAsync))
+                    continue;
+
                 using var tenantScope = ServiceProvider.CreateScope();
 
                 var tenantAccessor = tenantScope.ServiceProvider.GetRequiredService<ITenantAccessor>();
-                tenantAccessor.SetTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true));
+                tenantAccessor.SetTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true, IsDemo: false));
 
                 var loader = tenantScope.ServiceProvider
                     .GetRequiredService<IConnectorConfigurationLoader<NocturneRemoteConnectorConfiguration>>();
@@ -78,13 +75,16 @@ public class NocturneRemoteConnectorBackgroundService : ConnectorBackgroundServi
                 if (!config.Enabled || string.IsNullOrWhiteSpace(config.Url))
                     continue;
 
-                var hubUrl = $"{config.Url.TrimEnd('/')}/hubs/data";
+                if (ResolveListenerBaseUrl(config.Url, tenant.Slug) is not { } baseUrl)
+                    continue;
+
+                var hubUrl = $"{baseUrl}/hubs/data";
                 var tenantId = tenant.Id;
 
                 var connection = new HubConnectionBuilder()
                     .WithUrl(hubUrl, options =>
                     {
-                        options.Headers.Add("Authorization", $"Bearer {config.Token}");
+                        options.Headers.Add("Authorization", $"Bearer {config.AccessToken}");
                     })
                     .WithAutomaticReconnect(new InfiniteRetryPolicy())
                     .Build();
@@ -107,7 +107,11 @@ public class NocturneRemoteConnectorBackgroundService : ConnectorBackgroundServi
                     continue;
                 }
 
-                _hubConnections.TryAdd(tenantId, connection);
+                if (!_hubConnections.TryAdd(tenantId, connection))
+                {
+                    await StopAndDisposeAsync(connection);
+                    continue;
+                }
 
                 Logger.LogInformation(
                     "Started real-time listener for NocturneRemote tenant {TenantSlug}",
@@ -123,6 +127,12 @@ public class NocturneRemoteConnectorBackgroundService : ConnectorBackgroundServi
         }
     }
 
+    private static async Task StopAndDisposeAsync(HubConnection connection)
+    {
+        await connection.StopAsync();
+        await connection.DisposeAsync();
+    }
+
     /// <inheritdoc />
     protected override async Task StopRealtimeListenersAsync()
     {
@@ -130,8 +140,7 @@ public class NocturneRemoteConnectorBackgroundService : ConnectorBackgroundServi
         {
             try
             {
-                await connection.StopAsync();
-                await connection.DisposeAsync();
+                await StopAndDisposeAsync(connection);
             }
             catch (Exception ex)
             {

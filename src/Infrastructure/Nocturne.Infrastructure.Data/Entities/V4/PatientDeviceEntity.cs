@@ -10,7 +10,7 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.PatientDevice
 /// </summary>
 [Table("patient_devices")]
-public class PatientDeviceEntity : ITenantScoped, ISoftDeletable
+public class PatientDeviceEntity : ITenantScoped, ISoftDeletable, ISystemTimestamped
 {
     /// <summary>
     /// The unique identifier of the tenant this record belongs to.
@@ -91,6 +91,12 @@ public class PatientDeviceEntity : ITenantScoped, ISoftDeletable
     public bool IsCurrent { get; set; }
 
     /// <summary>
+    /// Explicit priority among overlapping devices of the same category (lower = higher priority, null = unranked)
+    /// </summary>
+    [Column("rank")]
+    public int? Rank { get; set; }
+
+    /// <summary>
     /// Free-text notes about the device
     /// </summary>
     [Column("notes")]
@@ -100,12 +106,14 @@ public class PatientDeviceEntity : ITenantScoped, ISoftDeletable
     /// <summary>
     /// System tracking: when record was inserted
     /// </summary>
+    [AuditIgnored]
     [Column("sys_created_at")]
     public DateTime SysCreatedAt { get; set; } = DateTime.UtcNow;
 
     /// <summary>
     /// System tracking: when record was last updated
     /// </summary>
+    [AuditIgnored]
     [Column("sys_updated_at")]
     public DateTime SysUpdatedAt { get; set; } = DateTime.UtcNow;
 
@@ -113,6 +121,7 @@ public class PatientDeviceEntity : ITenantScoped, ISoftDeletable
     /// Soft-delete timestamp. When non-null the record is treated as deleted
     /// by the global query filter and is invisible above the repository layer.
     /// </summary>
+    [AuditIgnored]
     [Column("deleted_at")]
     public DateTime? DeletedAt { get; set; }
 }

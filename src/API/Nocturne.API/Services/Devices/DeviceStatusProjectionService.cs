@@ -179,6 +179,17 @@ public class DeviceStatusProjectionService
                 uploader = await _uploaderRepo.GetByLegacyIdAsync(id, ct);
         }
 
+        // Fallback to a 24-hex ObjectId derived from the record's UUID (resolved via prefix range).
+        if (aps == null && pump == null && uploader == null
+            && MongoObjectId.TryGetGuidPrefixRange(id, out var low, out var high))
+        {
+            aps = await _apsRepo.GetByGuidRangeAsync(low, high, ct);
+            if (aps == null)
+                pump = await _pumpRepo.GetByGuidRangeAsync(low, high, ct);
+            if (aps == null && pump == null)
+                uploader = await _uploaderRepo.GetByGuidRangeAsync(low, high, ct);
+        }
+
         if (aps == null && pump == null && uploader == null)
             return null;
 
@@ -438,6 +449,7 @@ public class DeviceStatusProjectionService
             Temperature = uploaderSnapshot.Temperature,
             Name = uploaderSnapshot.Name,
             Type = uploaderSnapshot.Type,
+            IsCharging = uploaderSnapshot.IsCharging,
         };
 
         ds.IsCharging = uploaderSnapshot.IsCharging;
@@ -513,6 +525,20 @@ public class DeviceStatusProjectionService
                     break;
                 case "mmtune":
                     ds.MmTune = DeserializeValue<OpenApsMmTune>(value, logger);
+                    break;
+                // Route to the typed properties: leaving these in ExtensionData would
+                // serialize the key twice (typed Mills fallback + stored extras value).
+                case "srvModified":
+                    ds.SrvModified = CoerceLong(value);
+                    break;
+                case "srvCreated":
+                    ds.SrvCreated = CoerceLong(value);
+                    break;
+                // An NS v3 uploader sends its own identifier and it is stored verbatim.
+                // DeviceStatus has no member to absorb it, so re-emitting it would put a
+                // client-supplied value where every reader takes the record's identity from —
+                // including the id of its delete event (see StorageDeleteEvent).
+                case "identifier":
                     break;
                 default:
                     // Unknown keys go into ExtensionData
@@ -697,6 +723,19 @@ public class DeviceStatusProjectionService
             return null;
         }
     }
+
+    private static long? CoerceLong(object value) =>
+        value switch
+        {
+            long l => l,
+            int i => i,
+            double d => (long)d,
+            string s when long.TryParse(s, out var parsed) => parsed,
+            JsonElement { ValueKind: JsonValueKind.Number } e when e.TryGetInt64(out var el) => el,
+            JsonElement { ValueKind: JsonValueKind.String } e
+                when long.TryParse(e.GetString(), out var es) => es,
+            _ => null,
+        };
 
     private static T? DeserializeValue<T>(object value, ILogger? logger = null) where T : class
     {

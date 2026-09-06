@@ -4,6 +4,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
@@ -78,7 +79,7 @@ public class PatientRecordRepository : IPatientRecordRepository
     /// <param name="model">The updated patient record data.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The updated patient record.</returns>
-    public async Task<PatientRecord> UpdateAsync(PatientRecord model, CancellationToken ct = default)
+    public async Task<PatientRecord> UpdateAsync(PatientRecord model, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var entity = await ctx.PatientRecords.FirstOrDefaultAsync(ct)

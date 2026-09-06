@@ -72,7 +72,7 @@ public sealed class ShareLinkControllerTests
     {
         _service.Setup(s => s.GetAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ShareLinkDto { Enabled = false });
-        var controller = BuildController(TenantPermissions.SharingManage);
+        var controller = BuildController(Scope.SharingManage);
 
         var result = await controller.GetShareLink(CancellationToken.None);
 
@@ -86,7 +86,7 @@ public sealed class ShareLinkControllerTests
         var controller = BuildController(/* no scopes */);
 
         var result = await controller.SetShareLinkScopes(
-            new SetShareScopesRequest([TenantPermissions.GlucoseRead]), CancellationToken.None);
+            new SetShareScopesRequest([Scope.GlucoseRead]), CancellationToken.None);
 
         result.Result.Should().BeOfType<ForbidResult>();
         _service.Verify(s => s.SetScopesAsync(
@@ -98,11 +98,11 @@ public sealed class ShareLinkControllerTests
     {
         _service.Setup(s => s.SetScopesAsync(
                 It.IsAny<Guid>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ShareLinkDto { Enabled = true, Scopes = [TenantPermissions.GlucoseRead] });
-        var controller = BuildController(TenantPermissions.SharingManage);
+            .ReturnsAsync(new ShareLinkDto { Enabled = true, Scopes = [Scope.GlucoseRead] });
+        var controller = BuildController(Scope.SharingManage);
 
         var result = await controller.SetShareLinkScopes(
-            new SetShareScopesRequest([TenantPermissions.GlucoseRead]), CancellationToken.None);
+            new SetShareScopesRequest([Scope.GlucoseRead]), CancellationToken.None);
 
         result.Result.Should().BeOfType<OkObjectResult>();
         _service.Verify(s => s.SetScopesAsync(
@@ -115,7 +115,7 @@ public sealed class ShareLinkControllerTests
         _service.Setup(s => s.SetScopesAsync(
                 It.IsAny<Guid>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new ArgumentException("Invalid public share scopes: bogus.read"));
-        var controller = BuildController(TenantPermissions.SharingManage);
+        var controller = BuildController(Scope.SharingManage);
 
         var result = await controller.SetShareLinkScopes(
             new SetShareScopesRequest(["bogus.read"]), CancellationToken.None);

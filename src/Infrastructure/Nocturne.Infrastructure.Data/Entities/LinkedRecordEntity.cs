@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Links records from different sources that represent the same underlying event.
 /// </summary>
 [Table("linked_records")]
-public class LinkedRecordEntity : ITenantScoped
+public class LinkedRecordEntity : ITenantScoped, ISystemCreated
 {
     /// <summary>
     /// Identifier of the tenant this linked record belongs to
@@ -32,14 +32,14 @@ public class LinkedRecordEntity : ITenantScoped
     public Guid CanonicalId { get; set; }
 
     /// <summary>
-    /// Type of record being linked: "entry", "treatment", or "statespan"
+    /// Type of record being linked, as a <see cref="Core.Models.RecordTypeKeys"/> key
     /// </summary>
     [Column("record_type")]
     [MaxLength(20)]
     public string RecordType { get; set; } = string.Empty;
 
     /// <summary>
-    /// ID of the linked record (entries.id, treatments.id, or state_spans.id)
+    /// ID of the linked record in the table named by <see cref="RecordType"/>
     /// </summary>
     [Column("record_id")]
     public Guid RecordId { get; set; }

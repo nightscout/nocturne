@@ -26,6 +26,16 @@ public interface ISubjectService
     Task<Subject?> GetSubjectByAccessTokenHashAsync(string accessTokenHash);
 
     /// <summary>
+    /// Finds an active subject by matching a legacy Nightscout access token against the stored
+    /// legacy token digest, reproducing Nightscout's prefix-based matching (the substring after
+    /// the last dash, 16–40 hex chars, matched as a prefix of the 40-char digest). Only subjects
+    /// migrated from a legacy Nightscout instance carry a digest; returns null otherwise.
+    /// </summary>
+    /// <param name="legacyAccessToken">The raw legacy access token as presented by the client.</param>
+    /// <returns>Subject if a migrated digest matches and the subject is active, null otherwise.</returns>
+    Task<Subject?> FindSubjectByLegacyTokenAsync(string legacyAccessToken);
+
+    /// <summary>
     /// Find or create a subject from OIDC claims
     /// </summary>
     /// <param name="oidcSubjectId">OIDC subject identifier (sub claim)</param>
@@ -78,6 +88,13 @@ public interface ISubjectService
     /// <summary>Returns the total number of primary authentication factors (passkeys + OIDC identities) for a subject.</summary>
     /// <param name="subjectId">Subject identifier.</param>
     Task<int> CountPrimaryAuthFactorsAsync(Guid subjectId);
+
+    /// <summary>
+    /// Returns whether the subject can sign in exactly one way — a single primary factor with no
+    /// unused recovery codes behind it — so that losing that one credential locks the account out.
+    /// </summary>
+    /// <param name="subjectId">Subject identifier.</param>
+    Task<bool> HasSingleSignInMethodAsync(Guid subjectId);
 
     /// <summary>Updates the last-used timestamp on an OIDC identity to track recent activity.</summary>
     /// <param name="identityId">The OIDC identity ID to update.</param>

@@ -52,7 +52,7 @@ public class AlertRepository : IAlertRepository
             .Select(r => new AlertRuleSnapshot(
                 r.Id, r.TenantId, r.Name, r.ConditionType,
                 r.ConditionParams, r.Severity, r.ClientConfiguration, r.SortOrder,
-                r.AutoResolveEnabled, r.AutoResolveParams, r.AllowThroughDnd))
+                r.AutoResolveEnabled, r.AutoResolveParams, r.AllowThroughDnd, r.ScopeClass))
             .ToListAsync(ct);
     }
 
@@ -69,7 +69,7 @@ public class AlertRepository : IAlertRepository
             .OrderBy(c => c.SortOrder)
             .Select(c => new AlertRuleChannelSnapshot(
                 c.Id, c.AlertRuleId, c.ChannelType,
-                c.Destination, c.DestinationLabel, c.SortOrder, c.Metadata))
+                c.Destination, c.DestinationLabel, c.SortOrder, c.Metadata, c.Secret))
             .ToListAsync(ct);
     }
 
@@ -274,7 +274,7 @@ public class AlertRepository : IAlertRepository
                     new AlertRuleSnapshot(
                         x.r.Id, x.r.TenantId, x.r.Name, x.r.ConditionType,
                         x.r.ConditionParams, x.r.Severity, x.r.ClientConfiguration, x.r.SortOrder,
-                        x.r.AutoResolveEnabled, x.r.AutoResolveParams, x.r.AllowThroughDnd)))
+                        x.r.AutoResolveEnabled, x.r.AutoResolveParams, x.r.AllowThroughDnd, x.r.ScopeClass)))
                 .ToListAsync(ct);
             results.AddRange(rows);
         }
@@ -348,15 +348,71 @@ public class AlertRepository : IAlertRepository
             .AsNoTracking()
             .Where(s => s.TenantId == tenantId)
             .Select(s => new TenantAlertSettingsSnapshot(
-                s.DndManualActive,
-                s.DndManualUntil,
-                s.DndManualStartedAt,
                 s.DndScheduleEnabled,
                 s.DndScheduleStart,
                 s.DndScheduleEnd))
             .FirstOrDefaultAsync(ct);
 
         return row ?? TenantAlertSettingsSnapshot.Empty;
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<IReadOnlyList<DndWindowSnapshot>> GetUnexpiredDndWindowsAsync(
+        Guid tenantId, DateTime nowUtc, CancellationToken ct)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        context.TenantId = tenantId;
+
+        // Project the raw columns first, then map in memory: DateTime.SpecifyKind isn't SQL-
+        // translatable, and Npgsql can read a `timestamp` column back as Unspecified, which
+        // would compare wrongly against the Utc `now` in DndWindowSnapshot's naive comparison.
+        //
+        // The ends_at bound is load-bearing rather than an optimisation: a window that simply
+        // runs out is never cleared (the row is kept for audit), so filtering on cleared_at
+        // alone returns every timed mute the tenant has ever set — on a query that runs once
+        // per glucose reading.
+        var rows = await context.DndWindows
+            .AsNoTracking()
+            .Where(w => w.TenantId == tenantId
+                        && w.ClearedAt == null
+                        && (w.EndsAt == null || w.EndsAt > nowUtc))
+            .Select(w => new { w.Scope, w.StartedAt, w.EndsAt, w.CreatedAt })
+            .ToListAsync(ct);
+
+        return rows
+            .Select(w => new DndWindowSnapshot(
+                w.Scope,
+                DateTime.SpecifyKind(w.StartedAt, DateTimeKind.Utc),
+                w.EndsAt is { } ends ? DateTime.SpecifyKind(ends, DateTimeKind.Utc) : null,
+                ClearedAt: null,
+                DateTime.SpecifyKind(w.CreatedAt, DateTimeKind.Utc)))
+            .ToList();
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<IReadOnlyList<DndWindowSnapshot>> GetDndWindowsAsOfAsync(
+        Guid tenantId, DateTime asOfReceiptUtc, CancellationToken ct)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        context.TenantId = tenantId;
+
+        // Replay needs cleared windows too (WasActiveAt reads cleared_at), so unlike the live
+        // path this does not filter cleared_at. Bound by receipt (created_at <= asOf); the
+        // per-tick WasActiveAt re-applies the tighter created_at <= tick gate.
+        var rows = await context.DndWindows
+            .AsNoTracking()
+            .Where(w => w.TenantId == tenantId && w.CreatedAt <= asOfReceiptUtc)
+            .Select(w => new { w.Scope, w.StartedAt, w.EndsAt, w.ClearedAt, w.CreatedAt })
+            .ToListAsync(ct);
+
+        return rows
+            .Select(w => new DndWindowSnapshot(
+                w.Scope,
+                DateTime.SpecifyKind(w.StartedAt, DateTimeKind.Utc),
+                w.EndsAt is { } ends ? DateTime.SpecifyKind(ends, DateTimeKind.Utc) : null,
+                w.ClearedAt is { } cleared ? DateTime.SpecifyKind(cleared, DateTimeKind.Utc) : null,
+                DateTime.SpecifyKind(w.CreatedAt, DateTimeKind.Utc)))
+            .ToList();
     }
 
     /// <summary>
@@ -378,6 +434,31 @@ public class AlertRepository : IAlertRepository
                 .AsNoTracking()
                 .Where(r => r.IsEnabled && r.ConditionType == AlertConditionType.SignalLoss)
                 .Select(r => new SignalLossRuleSnapshot(r.Id, r.TenantId, r.ConditionParams))
+                .ToListAsync(ct);
+            results.AddRange(rows);
+        }
+
+        return results;
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<IReadOnlyList<AlertRuleSnapshot>> GetEnabledRulesByConditionTypeAsync(
+        AlertConditionType conditionType, CancellationToken ct)
+    {
+        // Cross-tenant scan: iterate active tenants so RLS scopes each query correctly.
+        var results = new List<AlertRuleSnapshot>();
+        foreach (var tenantId in await GetActiveTenantIdsAsync(ct))
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync(ct);
+            context.TenantId = tenantId;
+
+            var rows = await context.AlertRules
+                .AsNoTracking()
+                .Where(r => r.IsEnabled && r.ConditionType == conditionType)
+                .Select(r => new AlertRuleSnapshot(
+                    r.Id, r.TenantId, r.Name, r.ConditionType,
+                    r.ConditionParams, r.Severity, r.ClientConfiguration, r.SortOrder,
+                    r.AutoResolveEnabled, r.AutoResolveParams, r.AllowThroughDnd, r.ScopeClass))
                 .ToListAsync(ct);
             results.AddRange(rows);
         }

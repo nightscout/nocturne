@@ -14,6 +14,7 @@
     DashboardVisibility,
     TrackerVisibility,
     TrackerMode,
+    NotificationUrgency,
     type TrackerDefinitionDto,
   } from "$api";
 
@@ -29,6 +30,8 @@
     formCategory = $bindable(TrackerCategory.Consumable),
     formIcon = $bindable("activity"),
     formLifespanHours = $bindable(undefined),
+    formLowReservoirUnits = $bindable(undefined),
+    formLowReservoirUrgency = $bindable(NotificationUrgency.Warn),
     formNotifications = $bindable([]),
     formIsFavorite = $bindable(false),
     formDashboardVisibility = $bindable(DashboardVisibility.Always),
@@ -47,6 +50,8 @@
     formCategory?: TrackerCategory;
     formIcon?: string;
     formLifespanHours?: number | undefined;
+    formLowReservoirUnits?: number | undefined;
+    formLowReservoirUrgency?: NotificationUrgency;
     formNotifications?: TrackerNotification[];
     formIsFavorite?: boolean;
     formDashboardVisibility?: DashboardVisibility;
@@ -163,6 +168,60 @@
         value={formLifespanHours ?? ""}
       />
     </div>
+  {/if}
+
+  {#if formCategory === TrackerCategory.Reservoir}
+    <div class="grid grid-cols-1 @lg:grid-cols-2 gap-4">
+      <div class="space-y-2">
+        <Label for="lowReservoirUnits">Low reservoir alert (units)</Label>
+        <Input
+          id="lowReservoirUnits"
+          type="number"
+          min="0.5"
+          max="1000"
+          step="0.5"
+          bind:value={formLowReservoirUnits}
+          placeholder="e.g., 20"
+        />
+        <p class="text-xs text-muted-foreground">
+          Alerts when the estimated reservoir level falls below this many
+          units. Leave empty for no level alert.
+        </p>
+      </div>
+      <div class="space-y-2">
+        <Label for="lowReservoirUrgency">Level alert urgency</Label>
+        <Select.Root
+          type="single"
+          bind:value={formLowReservoirUrgency}
+        >
+          <Select.Trigger>
+            {formLowReservoirUrgency === NotificationUrgency.Info
+              ? "Info"
+              : formLowReservoirUrgency === NotificationUrgency.Warn
+                ? "Warning"
+                : formLowReservoirUrgency === NotificationUrgency.Hazard
+                  ? "Hazard"
+                  : "Urgent"}
+          </Select.Trigger>
+          <Select.Content>
+            <Select.Item value={NotificationUrgency.Info} label="Info" />
+            <Select.Item value={NotificationUrgency.Warn} label="Warning" />
+            <Select.Item value={NotificationUrgency.Hazard} label="Hazard" />
+            <Select.Item value={NotificationUrgency.Urgent} label="Urgent" />
+          </Select.Content>
+        </Select.Root>
+      </div>
+    </div>
+    <input
+      type="hidden"
+      name="n:{prefix}lowReservoirUnits"
+      value={formLowReservoirUnits ?? ""}
+    />
+    <input
+      type="hidden"
+      name="{prefix}lowReservoirUrgency"
+      value={formLowReservoirUrgency}
+    />
   {/if}
 
   <TrackerNotificationEditor

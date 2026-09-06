@@ -5,41 +5,52 @@
     "body": [
         {
             "type": "Container",
+            "style": "emphasis",
+            "bleed": true,
+            "$when": "${hasAlarm}",
             "items": [
                 {
-                    "type": "ColumnSet",
-                    "columns": [
+                    "type": "TextBlock",
+                    "text": "${alarmMessage}",
+                    "weight": "Bolder",
+                    "color": "${alarmColor}",
+                    "wrap": true
+                }
+            ]
+        },
+        {
+            "type": "ColumnSet",
+            "style": "emphasis",
+            "bleed": true,
+            "columns": [
+                {
+                    "type": "Column",
+                    "width": "stretch",
+                    "verticalContentAlignment": "Center",
+                    "items": [
                         {
-                            "type": "Column",
-                            "width": "stretch",
-                            "items": [
-                                {
-                                    "type": "TextBlock",
-                                    "text": "Nocturne",
-                                    "size": "Medium",
-                                    "weight": "Bolder",
-                                    "color": "Accent"
-                                }
-                            ]
-                        },
+                            "type": "TextBlock",
+                            "text": "Updated ${lastUpdate}",
+                            "size": "Small",
+                            "isSubtle": true
+                        }
+                    ]
+                },
+                {
+                    "type": "Column",
+                    "width": "auto",
+                    "verticalContentAlignment": "Center",
+                    "items": [
                         {
-                            "type": "Column",
-                            "width": "auto",
-                            "items": [
-                                {
-                                    "type": "TextBlock",
-                                    "text": "${lastUpdate}",
-                                    "size": "Small",
-                                    "isSubtle": true
-                                }
-                            ],
-                            "verticalContentAlignment": "Center"
+                            "type": "Image",
+                            "url": "${refreshIcon}",
+                            "width": "16px",
+                            "altText": "Refresh",
+                            "selectAction": { "type": "Action.Execute", "verb": "refresh" }
                         }
                     ]
                 }
-            ],
-            "style": "emphasis",
-            "bleed": true
+            ]
         },
         {
             "type": "ColumnSet",
@@ -53,14 +64,22 @@
                             "text": "${glucose}",
                             "size": "ExtraLarge",
                             "weight": "Bolder",
-                            "color": "${if(stale, 'Attention', 'Default')}"
+                            "color": "${if(hasAlarm, alarmColor, if(stale, 'Attention', 'Default'))}"
                         },
                         {
                             "type": "TextBlock",
-                            "text": "${delta} mg/dL",
+                            "text": "${delta} ${units}",
                             "size": "Medium",
                             "isSubtle": true,
                             "spacing": "None"
+                        },
+                        {
+                            "type": "TextBlock",
+                            "text": "${trendRate}",
+                            "size": "Small",
+                            "isSubtle": true,
+                            "spacing": "None",
+                            "$when": "${trendRate != ''}"
                         }
                     ],
                     "verticalContentAlignment": "Center"
@@ -80,6 +99,13 @@
                 }
             ],
             "spacing": "Medium"
+        },
+        {
+            "type": "Image",
+            "url": "${chart}",
+            "size": "stretch",
+            "spacing": "Small",
+            "$when": "${chart != ''}"
         },
         {
             "type": "ColumnSet",
@@ -138,167 +164,6 @@
                 }
             ],
             "spacing": "Medium"
-        },
-        {
-            "type": "Container",
-            "items": [
-                {
-                    "type": "TextBlock",
-                    "text": "Trackers",
-                    "size": "Small",
-                    "weight": "Bolder",
-                    "isSubtle": true
-                },
-                {
-                    "type": "ColumnSet",
-                    "$data": "${trackers}",
-                    "columns": [
-                        {
-                            "type": "Column",
-                            "width": "stretch",
-                            "items": [
-                                {
-                                    "type": "TextBlock",
-                                    "text": "${name}",
-                                    "size": "Small"
-                                }
-                            ]
-                        },
-                        {
-                            "type": "Column",
-                            "width": "auto",
-                            "items": [
-                                {
-                                    "type": "TextBlock",
-                                    "text": "${age}",
-                                    "size": "Small",
-                                    "color": "${urgencyColor}"
-                                }
-                            ]
-                        }
-                    ],
-                    "spacing": "Small"
-                }
-            ],
-            "spacing": "Medium",
-            "$when": "${count(trackers) > 0}"
-        },
-        {
-            "type": "Container",
-            "items": [
-                {
-                    "type": "TextBlock",
-                    "text": "Predicted Glucose",
-                    "size": "Small",
-                    "weight": "Bolder",
-                    "isSubtle": true
-                },
-                {
-                    "type": "ColumnSet",
-                    "columns": [
-                        {
-                            "type": "Column",
-                            "width": "stretch",
-                            "items": [
-                                {
-                                    "type": "TextBlock",
-                                    "text": "${predictions[0].value}",
-                                    "size": "Small",
-                                    "horizontalAlignment": "Center",
-                                    "$when": "${count(predictions) > 0}"
-                                },
-                                {
-                                    "type": "TextBlock",
-                                    "text": "${predictions[0].time}",
-                                    "size": "Small",
-                                    "isSubtle": true,
-                                    "horizontalAlignment": "Center",
-                                    "$when": "${count(predictions) > 0}"
-                                }
-                            ]
-                        },
-                        {
-                            "type": "Column",
-                            "width": "stretch",
-                            "items": [
-                                {
-                                    "type": "TextBlock",
-                                    "text": "${predictions[1].value}",
-                                    "size": "Small",
-                                    "horizontalAlignment": "Center",
-                                    "$when": "${count(predictions) > 1}"
-                                },
-                                {
-                                    "type": "TextBlock",
-                                    "text": "${predictions[1].time}",
-                                    "size": "Small",
-                                    "isSubtle": true,
-                                    "horizontalAlignment": "Center",
-                                    "$when": "${count(predictions) > 1}"
-                                }
-                            ]
-                        },
-                        {
-                            "type": "Column",
-                            "width": "stretch",
-                            "items": [
-                                {
-                                    "type": "TextBlock",
-                                    "text": "${predictions[2].value}",
-                                    "size": "Small",
-                                    "horizontalAlignment": "Center",
-                                    "$when": "${count(predictions) > 2}"
-                                },
-                                {
-                                    "type": "TextBlock",
-                                    "text": "${predictions[2].time}",
-                                    "size": "Small",
-                                    "isSubtle": true,
-                                    "horizontalAlignment": "Center",
-                                    "$when": "${count(predictions) > 2}"
-                                }
-                            ]
-                        },
-                        {
-                            "type": "Column",
-                            "width": "stretch",
-                            "items": [
-                                {
-                                    "type": "TextBlock",
-                                    "text": "${predictions[3].value}",
-                                    "size": "Small",
-                                    "horizontalAlignment": "Center",
-                                    "$when": "${count(predictions) > 3}"
-                                },
-                                {
-                                    "type": "TextBlock",
-                                    "text": "${predictions[3].time}",
-                                    "size": "Small",
-                                    "isSubtle": true,
-                                    "horizontalAlignment": "Center",
-                                    "$when": "${count(predictions) > 3}"
-                                }
-                            ]
-                        }
-                    ],
-                    "spacing": "Small"
-                }
-            ],
-            "spacing": "Medium",
-            "$when": "${count(predictions) > 0}"
-        }
-    ],
-    "actions": [
-        {
-            "type": "Action.Execute",
-            "title": "Refresh",
-            "verb": "refresh"
-        },
-        {
-            "type": "Action.Execute",
-            "title": "Open Nocturne",
-            "verb": "openApp",
-            "style": "positive"
         }
     ],
     "selectAction": {

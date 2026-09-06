@@ -4,7 +4,6 @@ import { getDataTypeLabel } from "./data-type-labels";
 const MESSAGE_TEMPLATES: Record<SyncMessageType, string> = {
 	Authenticating: "Authenticating...",
 	FetchingData: "Fetching data from {from} to {to}...",
-	FetchingDataType: "Fetching {dataType}...",
 	ProcessingDataType: "Processing {dataType}...",
 	PublishingDataType: "Publishing {count} {dataType} records...",
 	SyncComplete: "Sync complete",

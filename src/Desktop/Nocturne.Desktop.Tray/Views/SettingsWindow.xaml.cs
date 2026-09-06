@@ -183,8 +183,14 @@ public sealed partial class SettingsWindow : Window
                 return;
             }
 
-            _authService.StartLogin();
-            AuthStatusText.Text = "Waiting for browser sign-in...";
+            if (await _authService.StartLoginAsync())
+            {
+                AuthStatusText.Text = "Waiting for browser sign-in...";
+            }
+            else
+            {
+                AuthStatusText.Text = "Could not start sign-in. Check the server URL and try again.";
+            }
         }
     }
 

@@ -8,15 +8,12 @@
   } from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import { Progress } from "$lib/components/ui/progress";
-  import { Badge } from "$lib/components/ui/badge";
   import {
     Gauge,
     Target,
     TrendingUp,
     Shield,
     AlertTriangle,
-    CheckCircle2,
-    Info,
     Activity,
     Zap,
     BarChart3,
@@ -27,92 +24,30 @@
   import ClinicalInsights from "$lib/components/reports/ClinicalInsights.svelte";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
   import { getReportsData } from "$api/reports.remote";
-  import { ClinicalAssessmentLevel } from "$lib/api";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
+  import { bg, bgLabel, bgRange, formatDate, formatNumber } from "$lib/utils/formatting";
+  import { formatMinutesDuration } from "$lib/utils/duration";
+
+  // Format a nullable mg/dL value in the user's preferred units, or em dash if absent.
+  const bgOr = (mgdl: number | undefined | null) =>
+    mgdl != null ? bg(mgdl) : "–";
 
   // Get shared date params from context (set by reports layout)
   // Default: 14 days is standard for executive summary reports
   const reportsParams = requireDateParamsContext(14);
 
-  // Create resource with automatic layout registration
+  // Create resource with automatic layout registration; `date` carries the
+  // selected range so per-day figures divide by the days the user picked.
   const reportsResource = contextResource(
     () => getReportsData(reportsParams.dateRangeInput),
-    { errorTitle: "Error Loading Executive Summary" }
+    { errorTitle: "Error Loading Executive Summary", dateParams: reportsParams }
   );
 
-  const dateRange = $derived(
-    reportsResource.current?.dateRange ?? {
-      from: new Date().toISOString(),
-      to: new Date().toISOString(),
-      lastUpdated: new Date().toISOString(),
-    }
-  );
   const entries = $derived(reportsResource.current?.entries ?? []);
   const analysis = $derived(reportsResource.current?.analysis);
-
-  // Helper to get date values
-  const startDate = $derived(new Date(dateRange.from));
-  const endDate = $derived(new Date(dateRange.to));
-  const dayCount = $derived(
-    Math.round(
-      (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)
-    )
-  );
-
-  // Assessment level mapping from backend
-  function getAssessmentDisplay(level: string | undefined): {
-    grade: string;
-    label: string;
-    description: string;
-    color: string;
-  } {
-    switch (level) {
-      case ClinicalAssessmentLevel.Excellent:
-        return {
-          grade: "A",
-          label: "Excellent",
-          description: "Outstanding glucose management!",
-          color: "text-green-600",
-        };
-      case ClinicalAssessmentLevel.Good:
-        return {
-          grade: "B",
-          label: "Good",
-          description: "Strong management with room for fine-tuning.",
-          color: "text-blue-600",
-        };
-      case ClinicalAssessmentLevel.NeedsAttention:
-        return {
-          grade: "C",
-          label: "Needs Attention",
-          description: "Some areas need focus. Your care team can help.",
-          color: "text-orange-600",
-        };
-      case ClinicalAssessmentLevel.NeedsSignificantImprovement:
-        return {
-          grade: "D",
-          label: "Needs Improvement",
-          description: "Please discuss with your healthcare provider soon.",
-          color: "text-red-600",
-        };
-      default:
-        return {
-          grade: "–",
-          label: "Pending",
-          description: "Calculating assessment...",
-          color: "text-gray-600",
-        };
-    }
-  }
-
-  function formatDuration(minutes: number): string {
-    const hours = Math.floor(minutes / 60);
-    const mins = Math.round(minutes % 60);
-    if (hours === 0) return `${mins}m`;
-    if (mins === 0) return `${hours}h`;
-    return `${hours}h ${mins}m`;
-  }
+  const lastUpdated = $derived(reportsResource.current?.dateRange?.lastUpdated);
+  const dayCount = $derived(reportsResource.date.dayCount);
 </script>
 
 <svelte:head>
@@ -125,14 +60,6 @@
 
 {#if reportsResource.current}
   <div class="@container container mx-auto space-y-8 p-3 @md:p-6 max-w-6xl">
-    <!-- Print-Friendly Header -->
-    <div class="print:block hidden text-center mb-8">
-      <h1 class="text-2xl font-bold">Diabetes Management Report</h1>
-      <p class="text-sm text-muted-foreground">
-        {startDate.toLocaleDateString()} – {endDate.toLocaleDateString()}
-      </p>
-    </div>
-
     {#if analysis}
       {@const tir = analysis?.timeInRange?.percentages}
       {@const durations = analysis?.timeInRange?.durations}
@@ -141,94 +68,54 @@
       {@const quality = analysis?.dataQuality}
       {@const totalLows = (tir?.low ?? 0) + (tir?.veryLow ?? 0)}
       {@const totalHighs = (tir?.high ?? 0) + (tir?.veryHigh ?? 0)}
-      {@const clinicalAssessment = analysis?.clinicalAssessment}
-      {@const assessment = getAssessmentDisplay(
-        clinicalAssessment?.overallAssessment
-      )}
 
-      <!-- Overall Grade Card - The Big Picture -->
+      <!-- A metric tile: the figure, or an explicit empty state when the window
+           has no value for it, plus the consensus target it is read against. -->
+      {#snippet metricTile(
+        label: string,
+        value: number | null | undefined,
+        digits: number,
+        target: string
+      )}
+        <div>
+          {#if value != null}
+            <div class="text-2xl font-bold tabular-nums">
+              {value.toFixed(digits)}%
+            </div>
+          {:else}
+            <div class="text-sm font-medium text-muted-foreground">No data</div>
+          {/if}
+          <div class="text-xs text-muted-foreground">{label}</div>
+          <div class="text-[10px] text-muted-foreground/70">Target {target}</div>
+        </div>
+      {/snippet}
+
+      <!-- Headline Metrics -->
       <Card
         class="border-2 border-primary/20 bg-linear-to-br from-background to-muted/30"
       >
         <CardContent class="pt-6">
-          <div class="flex flex-col @3xl:flex-row items-center gap-6">
-            <!-- Grade Circle -->
-            <div class="relative">
-              <div
-                class="w-32 h-32 rounded-full border-8 {assessment.color.replace(
-                  'text-',
-                  'border-'
-                )} flex items-center justify-center bg-background"
-              >
-                <span class="text-5xl font-bold {assessment.color}">
-                  {assessment.grade}
-                </span>
-              </div>
-            </div>
-
-            <!-- Assessment Details -->
+          <div
+            class="flex flex-col @3xl:flex-row items-center justify-between gap-6"
+          >
             <div class="flex-1 text-center @3xl:text-left space-y-2">
-              <div
-                class="flex items-center justify-center @3xl:justify-start gap-2 flex-wrap"
-              >
-                <Badge
-                  class="{assessment.color
-                    .replace('text-', 'bg-')
-                    .replace('-600', '-100')} {assessment.color}"
-                >
-                  {assessment.label}
-                </Badge>
-                <span class="text-sm text-muted-foreground">
-                  Overall Assessment
-                </span>
-              </div>
-              <p class="text-lg">{assessment.description}</p>
+              <h2 class="text-lg font-semibold">Headline metrics</h2>
               <p class="text-sm text-muted-foreground">
-                Based on Time in Range, Glucose Variability, and Hypoglycemia
-                Avoidance
+                Time in Range, glucose variability and estimated A1C over the
+                last {dayCount} days, each shown with the consensus target it is
+                read against.
               </p>
             </div>
 
-            <!-- Quick Stats -->
-            <div class="grid grid-cols-3 gap-2 @sm:gap-4 text-center shrink-0">
-              <div>
-                <div
-                  class="text-2xl font-bold {(tir?.target ?? 0) >= 70
-                    ? 'text-green-600'
-                    : (tir?.target ?? 0) >= 50
-                      ? 'text-yellow-600'
-                      : 'text-orange-600'}"
-                >
-                  {tir?.target?.toFixed(0) ?? "–"}%
-                </div>
-                <div class="text-xs text-muted-foreground">TIR</div>
-              </div>
-              <div>
-                <div
-                  class="text-2xl font-bold {(variability?.coefficientOfVariation ??
-                    40) <= 33
-                    ? 'text-green-600'
-                    : (variability?.coefficientOfVariation ?? 40) <= 36
-                      ? 'text-yellow-600'
-                      : 'text-orange-600'}"
-                >
-                  {variability?.coefficientOfVariation?.toFixed(0) ?? "–"}%
-                </div>
-                <div class="text-xs text-muted-foreground">CV</div>
-              </div>
-              <div>
-                <div
-                  class="text-2xl font-bold {(variability?.estimatedA1c ?? 8) <
-                  7
-                    ? 'text-green-600'
-                    : (variability?.estimatedA1c ?? 8) < 7.5
-                      ? 'text-yellow-600'
-                      : 'text-orange-600'}"
-                >
-                  {variability?.estimatedA1c?.toFixed(1) ?? "–"}%
-                </div>
-                <div class="text-xs text-muted-foreground">eA1C</div>
-              </div>
+            <div class="grid grid-cols-3 gap-3 @sm:gap-6 text-center shrink-0">
+              {@render metricTile("TIR", tir?.target, 0, "≥70%")}
+              {@render metricTile(
+                "CV",
+                variability?.coefficientOfVariation,
+                0,
+                "≤33%"
+              )}
+              {@render metricTile("eA1C", variability?.estimatedA1c, 1, "<7%")}
             </div>
           </div>
         </CardContent>
@@ -244,7 +131,7 @@
               Time in Range
             </CardTitle>
             <CardDescription>
-              Percentage of time in your target zone (70-180 mg/dL)
+              Percentage of time in your target zone ({bgRange(70, 180)})
             </CardDescription>
           </CardHeader>
           <CardContent class="space-y-6">
@@ -260,26 +147,26 @@
                 <div class="flex flex-col">
                   <span class="text-green-600 font-medium">In Range</span>
                   <span>
-                    {formatDuration(
-                      (durations?.target ?? 0) / Math.max(1, dayCount)
+                    {formatMinutesDuration(
+                      (durations?.target ?? 0) / dayCount
                     )}
                   </span>
                 </div>
                 <div class="flex flex-col">
                   <span class="text-red-600 font-medium">Low</span>
                   <span>
-                    {formatDuration(
+                    {formatMinutesDuration(
                       ((durations?.low ?? 0) + (durations?.veryLow ?? 0)) /
-                        Math.max(1, dayCount)
+                        dayCount
                     )}
                   </span>
                 </div>
                 <div class="flex flex-col">
                   <span class="text-orange-500 font-medium">High</span>
                   <span>
-                    {formatDuration(
+                    {formatMinutesDuration(
                       ((durations?.high ?? 0) + (durations?.veryHigh ?? 0)) /
-                        Math.max(1, dayCount)
+                        dayCount
                     )}
                   </span>
                 </div>
@@ -298,24 +185,21 @@
           </CardHeader>
           <CardContent class="space-y-4">
             <div class="text-center">
-              <div
-                class="text-5xl font-bold {(variability?.estimatedA1c ?? 8) < 7
-                  ? 'text-green-600'
-                  : (variability?.estimatedA1c ?? 8) < 7.5
-                    ? 'text-yellow-600'
-                    : 'text-orange-600'}"
-              >
-                {variability?.estimatedA1c?.toFixed(1) ?? "–"}%
-              </div>
-              <p class="text-sm text-muted-foreground mt-1">
-                {#if (variability?.estimatedA1c ?? 8) < 7}
-                  Great! Below the 7% target
-                {:else if (variability?.estimatedA1c ?? 8) < 7.5}
-                  Near target — keep it up!
-                {:else}
-                  Room for improvement
-                {/if}
-              </p>
+              {#if variability?.estimatedA1c != null}
+                <div class="text-5xl font-bold tabular-nums">
+                  {variability.estimatedA1c.toFixed(1)}%
+                </div>
+                <p class="text-sm text-muted-foreground mt-1">
+                  Target: below 7%. Your care team sets your individual target.
+                </p>
+              {:else}
+                <div class="text-lg font-medium text-muted-foreground">
+                  No estimate for this window
+                </div>
+                <p class="text-sm text-muted-foreground mt-1">
+                  An estimate needs enough readings to compute a mean glucose.
+                </p>
+              {/if}
               <ReliabilityBadge reliability={analysis?.reliability} />
             </div>
 
@@ -331,7 +215,7 @@
                 </summary>
                 <p class="mt-2 text-muted-foreground">
                   Calculated using the Nathan formula: eA1C = (GMI + 2.59) /
-                  1.59. Based on mean glucose of {stats?.mean?.toFixed(0)} mg/dL over
+                  1.59. Based on mean glucose of {bgOr(stats?.mean)} {bgLabel()} over
                   {dayCount}
                   days.
                 </p>
@@ -350,59 +234,36 @@
           </CardHeader>
           <CardContent class="space-y-4">
             <div class="text-center">
-              <div
-                class="text-5xl font-bold {(variability?.coefficientOfVariation ??
-                  40) <= 33
-                  ? 'text-green-600'
-                  : (variability?.coefficientOfVariation ?? 40) <= 36
-                    ? 'text-yellow-600'
-                    : 'text-orange-600'}"
-              >
-                {variability?.coefficientOfVariation?.toFixed(0) ?? "–"}%
-              </div>
+              {#if variability?.coefficientOfVariation != null}
+                <div class="text-5xl font-bold tabular-nums">
+                  {variability.coefficientOfVariation.toFixed(0)}%
+                </div>
+              {:else}
+                <div class="text-lg font-medium text-muted-foreground">
+                  No data for this window
+                </div>
+              {/if}
               <p class="text-sm text-muted-foreground mt-1">
                 Coefficient of Variation (CV)
               </p>
             </div>
 
-            <!-- Interpretation -->
-            <div class="space-y-2">
-              <div class="flex items-center gap-2">
-                {#if (variability?.coefficientOfVariation ?? 40) <= 33}
-                  <CheckCircle2 class="w-4 h-4 text-green-600" />
-                  <span class="text-sm text-green-600 font-medium">
-                    Stable — well done!
-                  </span>
-                {:else if (variability?.coefficientOfVariation ?? 40) <= 36}
-                  <Info class="w-4 h-4 text-blue-600" />
-                  <span class="text-sm text-blue-600 font-medium">
-                    Good stability
-                  </span>
-                {:else}
-                  <AlertTriangle class="w-4 h-4 text-orange-500" />
-                  <span class="text-sm text-orange-500 font-medium">
-                    Variable — swings present
-                  </span>
-                {/if}
-              </div>
-              <p class="text-xs text-muted-foreground">
-                Target: ≤33%. Lower means steadier glucose with fewer ups and
-                downs.
-              </p>
-            </div>
+            <p class="text-xs text-muted-foreground">
+              Target: ≤33%. Lower means steadier glucose with fewer ups and
+              downs.
+            </p>
 
             <!-- Additional variability metrics -->
             <div class="grid grid-cols-2 gap-2 text-xs border-t pt-3">
               <div>
                 <div class="font-medium">
-                  {stats?.standardDeviation?.toFixed(0) ?? "–"} mg/dL
+                  {bgOr(stats?.standardDeviation)} {bgLabel()}
                 </div>
                 <div class="text-muted-foreground">Std. Deviation</div>
               </div>
               <div>
                 <div class="font-medium">
-                  {variability?.meanAmplitudeGlycemicExcursions?.toFixed(0) ??
-                    "–"} mg/dL
+                  {bgOr(variability?.meanAmplitudeGlycemicExcursions)} {bgLabel()}
                 </div>
                 <div class="text-muted-foreground">MAGE</div>
               </div>
@@ -414,32 +275,20 @@
       <!-- Safety Metrics Row -->
       <div class="grid grid-cols-1 @3xl:grid-cols-2 gap-6">
         <!-- Hypoglycemia -->
-        <Card
-          class="border-2 {totalLows > 4
-            ? 'border-red-200 bg-red-50/30 dark:bg-red-950/30'
-            : ''}"
-        >
+        <Card class="border-2">
           <CardHeader>
             <CardTitle class="flex items-center gap-2">
-              <AlertTriangle
-                class="w-5 h-5 {totalLows > 4
-                  ? 'text-red-600'
-                  : 'text-yellow-600'}"
-              />
+              <AlertTriangle class="w-5 h-5 text-glucose-very-low" />
               Low Blood Sugar Events
             </CardTitle>
             <CardDescription>
-              Time spent below 70 mg/dL (target: &lt;4%)
+              Time spent below {bg(70)} {bgLabel()} (target: &lt;4%)
             </CardDescription>
           </CardHeader>
           <CardContent class="space-y-4">
             <div class="flex items-center justify-between">
               <div>
-                <div
-                  class="text-3xl font-bold {totalLows > 4
-                    ? 'text-red-600'
-                    : 'text-green-600'}"
-                >
+                <div class="text-3xl font-bold tabular-nums">
                   {totalLows.toFixed(1)}%
                 </div>
                 <p class="text-sm text-muted-foreground">
@@ -449,11 +298,11 @@
               <div class="text-right text-sm">
                 <div class="flex items-center gap-2">
                   <div class="w-3 h-3 rounded-full bg-red-500"></div>
-                  <span>&lt;54: {tir?.veryLow?.toFixed(1) ?? 0}%</span>
+                  <span>&lt;{bg(54)}: {tir?.veryLow?.toFixed(1) ?? 0}%</span>
                 </div>
                 <div class="flex items-center gap-2">
                   <div class="w-3 h-3 rounded-full bg-red-300"></div>
-                  <span>54-70: {tir?.low?.toFixed(1) ?? 0}%</span>
+                  <span>{bg(54)}-{bg(70)}: {tir?.low?.toFixed(1) ?? 0}%</span>
                 </div>
               </div>
             </div>
@@ -471,52 +320,28 @@
               </div>
             {/if}
 
-            {#if totalLows > 4}
-              <div
-                class="bg-red-100 dark:bg-red-900/30 rounded p-3 text-sm text-red-700 dark:text-red-300"
-              >
-                <strong>Action needed:</strong>
-                You're experiencing more lows than recommended. Discuss with your
-                care team about adjusting your treatment.
-              </div>
-            {:else}
-              <div
-                class="bg-green-100 dark:bg-green-900/30 rounded p-3 text-sm text-green-700 dark:text-green-300"
-              >
-                <CheckCircle2 class="w-4 h-4 inline mr-1" />
-                Great job keeping lows under control!
-              </div>
-            {/if}
+            <div class="bg-muted/50 rounded p-3 text-sm text-muted-foreground">
+              Target for time below {bg(70)} {bgLabel()} is under 4%. Discuss any
+              patterns with your care team.
+            </div>
           </CardContent>
         </Card>
 
         <!-- Hyperglycemia -->
-        <Card
-          class="border-2 {totalHighs > 25
-            ? 'border-orange-200 bg-orange-50/30 dark:bg-orange-950/30'
-            : ''}"
-        >
+        <Card class="border-2">
           <CardHeader>
             <CardTitle class="flex items-center gap-2">
-              <TrendingUp
-                class="w-5 h-5 {totalHighs > 25
-                  ? 'text-orange-600'
-                  : 'text-blue-600'}"
-              />
+              <TrendingUp class="w-5 h-5 text-glucose-high" />
               High Blood Sugar Events
             </CardTitle>
             <CardDescription>
-              Time spent above 180 mg/dL (target: &lt;25%)
+              Time spent above {bg(180)} {bgLabel()} (target: &lt;25%)
             </CardDescription>
           </CardHeader>
           <CardContent class="space-y-4">
             <div class="flex items-center justify-between">
               <div>
-                <div
-                  class="text-3xl font-bold {totalHighs > 25
-                    ? 'text-orange-600'
-                    : 'text-green-600'}"
-                >
+                <div class="text-3xl font-bold tabular-nums">
                   {totalHighs.toFixed(1)}%
                 </div>
                 <p class="text-sm text-muted-foreground">
@@ -526,31 +351,19 @@
               <div class="text-right text-sm">
                 <div class="flex items-center gap-2">
                   <div class="w-3 h-3 rounded-full bg-orange-400"></div>
-                  <span>180-250: {tir?.high?.toFixed(1) ?? 0}%</span>
+                  <span>{bg(180)}-{bg(250)}: {tir?.high?.toFixed(1) ?? 0}%</span>
                 </div>
                 <div class="flex items-center gap-2">
                   <div class="w-3 h-3 rounded-full bg-orange-600"></div>
-                  <span>&gt;250: {tir?.veryHigh?.toFixed(1) ?? 0}%</span>
+                  <span>&gt;{bg(250)}: {tir?.veryHigh?.toFixed(1) ?? 0}%</span>
                 </div>
               </div>
             </div>
 
-            {#if totalHighs > 25}
-              <div
-                class="bg-orange-100 dark:bg-orange-900/30 rounded p-3 text-sm text-orange-700 dark:text-orange-300"
-              >
-                <strong>Consider:</strong>
-                Look at post-meal patterns and correction doses. Your AGP report can
-                help identify when highs occur most.
-              </div>
-            {:else}
-              <div
-                class="bg-green-100 dark:bg-green-900/30 rounded p-3 text-sm text-green-700 dark:text-green-300"
-              >
-                <CheckCircle2 class="w-4 h-4 inline mr-1" />
-                Time above range is well controlled!
-              </div>
-            {/if}
+            <div class="bg-muted/50 rounded p-3 text-sm text-muted-foreground">
+              Target for time above {bg(180)} {bgLabel()} is under 25%. The AGP
+              report shows the times of day when highs occur most.
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -572,27 +385,27 @@
             <div class="grid grid-cols-2 gap-4">
               <div class="space-y-1">
                 <div class="text-2xl font-bold">
-                  {stats?.mean?.toFixed(0) ?? "–"}
+                  {bgOr(stats?.mean)}
                 </div>
-                <div class="text-xs text-muted-foreground">Average (mg/dL)</div>
+                <div class="text-xs text-muted-foreground">Average ({bgLabel()})</div>
               </div>
               <div class="space-y-1">
                 <div class="text-2xl font-bold">
-                  {stats?.median?.toFixed(0) ?? "–"}
+                  {bgOr(stats?.median)}
                 </div>
-                <div class="text-xs text-muted-foreground">Median (mg/dL)</div>
+                <div class="text-xs text-muted-foreground">Median ({bgLabel()})</div>
               </div>
               <div class="space-y-1">
                 <div class="text-2xl font-bold">
-                  {stats?.min?.toFixed(0) ?? "–"}
+                  {bgOr(stats?.min)}
                 </div>
-                <div class="text-xs text-muted-foreground">Lowest (mg/dL)</div>
+                <div class="text-xs text-muted-foreground">Lowest ({bgLabel()})</div>
               </div>
               <div class="space-y-1">
                 <div class="text-2xl font-bold">
-                  {stats?.max?.toFixed(0) ?? "–"}
+                  {bgOr(stats?.max)}
                 </div>
-                <div class="text-xs text-muted-foreground">Highest (mg/dL)</div>
+                <div class="text-xs text-muted-foreground">Highest ({bgLabel()})</div>
               </div>
             </div>
 
@@ -602,25 +415,25 @@
               <div class="grid grid-cols-4 gap-2 text-xs text-center">
                 <div>
                   <div class="font-medium">
-                    {stats?.percentiles?.p10?.toFixed(0) ?? "–"}
+                    {bgOr(stats?.percentiles?.p10)}
                   </div>
                   <div class="text-muted-foreground">10th %ile</div>
                 </div>
                 <div>
                   <div class="font-medium">
-                    {stats?.percentiles?.p25?.toFixed(0) ?? "–"}
+                    {bgOr(stats?.percentiles?.p25)}
                   </div>
                   <div class="text-muted-foreground">25th %ile</div>
                 </div>
                 <div>
                   <div class="font-medium">
-                    {stats?.percentiles?.p75?.toFixed(0) ?? "–"}
+                    {bgOr(stats?.percentiles?.p75)}
                   </div>
                   <div class="text-muted-foreground">75th %ile</div>
                 </div>
                 <div>
                   <div class="font-medium">
-                    {stats?.percentiles?.p90?.toFixed(0) ?? "–"}
+                    {bgOr(stats?.percentiles?.p90)}
                   </div>
                   <div class="text-muted-foreground">90th %ile</div>
                 </div>
@@ -651,32 +464,20 @@
               class="h-2"
             />
 
-            {#if (quality?.cgmActivePercent ?? 0) >= 90}
-              <div
-                class="bg-green-100 dark:bg-green-900/30 rounded p-2 text-sm text-green-700 dark:text-green-300"
-              >
-                <CheckCircle2 class="w-4 h-4 inline mr-1" />
-                Excellent data coverage!
-              </div>
-            {:else if (quality?.cgmActivePercent ?? 0) >= 70}
-              <div
-                class="bg-yellow-100 dark:bg-yellow-900/30 rounded p-2 text-sm text-yellow-700 dark:text-yellow-300"
-              >
-                <Info class="w-4 h-4 inline mr-1" />
-                Good coverage. For best insights, aim for 90%+
-              </div>
-            {:else}
-              <div
-                class="bg-orange-100 dark:bg-orange-900/30 rounded p-2 text-sm text-orange-700 dark:text-orange-300"
-              >
+            {#if (quality?.cgmActivePercent ?? 0) < 70}
+              <div class="bg-muted/50 rounded p-2 text-sm text-muted-foreground">
                 <AlertTriangle class="w-4 h-4 inline mr-1" />
-                Limited data may affect report accuracy
+                Limited data may affect report accuracy.
               </div>
             {/if}
+            <p class="text-xs text-muted-foreground">
+              Target: at least 70% CGM active time over 14 days; the statistics
+              on this page are most reliable at 90% or above.
+            </p>
 
             <div class="grid grid-cols-2 gap-4 text-sm pt-2 border-t">
               <div>
-                <div class="font-medium">{entries.length.toLocaleString()}</div>
+                <div class="font-medium">{formatNumber(entries.length)}</div>
                 <div class="text-xs text-muted-foreground">Total readings</div>
               </div>
               <div>
@@ -689,7 +490,7 @@
       </div>
 
       <!-- Navigation to Other Reports -->
-      <Card class="border-2 bg-muted/30">
+      <Card class="border-2 bg-muted/30 print:hidden">
         <CardHeader>
           <CardTitle class="flex items-center gap-2">
             <Zap class="w-5 h-5" />
@@ -737,9 +538,9 @@
 
     <!-- Footer -->
     <div class="text-xs text-muted-foreground text-center space-y-1 print:mt-8">
-      <p>
-        Report generated: {new Date(dateRange.lastUpdated).toLocaleString()}
-      </p>
+      {#if lastUpdated}
+        <p>Report generated: {formatDate(new Date(lastUpdated))}</p>
+      {/if}
       <p class="text-muted-foreground/60">
         This report is for informational purposes. Always consult your
         healthcare provider for medical decisions.
@@ -752,6 +553,13 @@
   @media print {
     :global(body) {
       font-size: 12px;
+    }
+    /* Collapsed <details> can't be expanded on paper; reveal content, drop the toggle. */
+    details > :not(summary) {
+      display: block;
+    }
+    summary {
+      display: none;
     }
   }
 </style>

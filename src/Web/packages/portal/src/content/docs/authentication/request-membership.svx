@@ -1,0 +1,48 @@
+---
+title: Request membership
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+  import Screenshot from '$lib/components/docs/Screenshot.svelte';
+</script>
+
+# Request membership
+
+Most access to a Nocturne instance starts with an invite: the owner sends a link and the person
+accepts it. **Membership requests** turn that around. Someone who lands on the instance can ask
+the owner for access, and the owner decides. Asking grants nothing on its own.
+
+It is **on by default**, and each instance owner can switch it off.
+
+## What the visitor sees
+
+At the foot of the sign-in card there's a **Request membership** link, under the passkey and
+social-login buttons — see the annotated sign-in screen on
+[Authentication](/docs/authentication#what-your-users-see).
+
+Following it opens a short dialog with a message box, so you can say who you are and why you
+are asking, and a **Continue to Sign Up** button:
+
+<Screenshot id="request-membership-dialog" />
+
+A useful note is short and says who you are in terms the owner will recognise — the name
+they know you by, and your connection to them. The owner sees the note next to your request
+when they decide, so a blank one is simply harder to say yes to.
+
+<Callout type="info" title="Nothing happens until the owner approves">
+  Sending a request does not create access. Until the owner approves it and picks a role,
+  you see nothing of their data.
+</Callout>
+
+## What the owner sees
+
+The toggle and the requests themselves both live on **Settings > Sharing & Privacy** — see
+[reviewing requests](/docs/sharing/members#membership-requests) for the owner's side of this,
+including what each role lets the person see and do.
+
+<Callout type="tip" title="Approve deliberately">
+  A request tells you what someone says about themselves, and nothing more. If a request is
+  unexpected, or the note doesn't match anyone you know, deny it — someone who genuinely
+  needs access can ask again, or you can send them an invite directly.
+</Callout>

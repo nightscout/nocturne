@@ -8,8 +8,9 @@
   import TrackerPopoverContent from "$lib/components/calendar/TrackerPopoverContent.svelte";
   import { TrackerCategory } from "$api";
   import type { TrackerInstanceDto, TrackerDefinitionDto } from "$api";
-  import { formatGlucoseValue } from "$lib/utils/formatting";
+  import { formatGlucoseValue, formatLocale } from "$lib/utils/formatting";
   import type { GlucoseUnits } from "$lib/utils/formatting";
+  import { formatCalendarDate, getCalendarDayNumber } from "$lib/components/calendar/calendar-date";
 
   let {
     day,
@@ -24,7 +25,7 @@
     handleDayClick,
     getDefinition,
     getTrackerLevel,
-    getTrackerIconColor,
+    getTrackerTone,
     formatTrackerStartTime,
     formatTrackerAge,
     openCompletionDialog,
@@ -41,7 +42,7 @@
     handleDayClick: (day: any) => void;
     getDefinition: (instance: TrackerInstanceDto, defs: TrackerDefinitionDto[]) => TrackerDefinitionDto | undefined;
     getTrackerLevel: (instance: TrackerInstanceDto, def: TrackerDefinitionDto | undefined) => string;
-    getTrackerIconColor: (eventType: string, level: string) => string;
+    getTrackerTone: (eventType: string, level: string) => string;
     formatTrackerStartTime: (startedAt: Date | undefined) => string | null;
     formatTrackerAge: (hours: number | undefined) => string;
     openCompletionDialog: (instance: TrackerInstanceDto, def: TrackerDefinitionDto | undefined, date: string) => void;
@@ -85,7 +86,7 @@
     <span
       class="absolute top-1 left-2 text-xs text-muted-foreground font-medium z-10"
     >
-      {new Date(day.date).getDate()}
+      {getCalendarDayNumber(day.date)}
     </span>
 
     <!-- Tracker icons in top-right corner -->
@@ -105,10 +106,8 @@
               {#snippet child({ props }: { props: Record<string, unknown> })}
                 <button
                   {...props}
-                  class={cn(
-                    "h-4 w-4 rounded-full flex items-center justify-center hover:scale-125 transition-transform",
-                    getTrackerIconColor(event.eventType, level)
-                  )}
+                  class="tracker-icon h-4 w-4 rounded-full flex items-center justify-center hover:scale-125 transition-transform"
+                  data-tone={getTrackerTone(event.eventType, level)}
                   title={event.instance.definitionName}
                 >
                   <TrackerCategoryIcon {category} class="h-3 w-3" />
@@ -151,6 +150,7 @@
             <div {...props} class="absolute inset-0">
               <DayGlucoseProfile
                 entries={day.entries}
+                dayStartMills={day.timestamp}
                 onclick={() => handleDayClick(day)}
               />
             </div>
@@ -163,7 +163,7 @@
       >
         <div class="space-y-1.5">
           <div class="font-medium text-sm">
-            {new Date(day.date).toLocaleDateString(undefined, {
+            {formatCalendarDate(day.date, formatLocale(), {
               weekday: "long",
               month: "short",
               day: "numeric",
@@ -226,10 +226,8 @@
               {#snippet child({ props }: { props: Record<string, unknown> })}
                 <button
                   {...props}
-                  class={cn(
-                    "h-4 w-4 rounded-full flex items-center justify-center hover:scale-125 transition-transform",
-                    getTrackerIconColor(event.eventType, level)
-                  )}
+                  class="tracker-icon h-4 w-4 rounded-full flex items-center justify-center hover:scale-125 transition-transform"
+                  data-tone={getTrackerTone(event.eventType, level)}
                   title={event.instance.definitionName}
                 >
                   <TrackerCategoryIcon {category} class="h-3 w-3" />
@@ -255,7 +253,7 @@
   {:else if day && "date" in day}
     <!-- Day exists in data but has no readings -->
     <span class="absolute top-1 left-2 text-xs text-muted-foreground">
-      {new Date(day.date).getDate()}
+      {getCalendarDayNumber(day.date)}
     </span>
     <!-- Tracker icons for days with no readings -->
     {#if dayTrackerEvents.length > 0}
@@ -274,10 +272,8 @@
               {#snippet child({ props }: { props: Record<string, unknown> })}
                 <button
                   {...props}
-                  class={cn(
-                    "h-4 w-4 rounded-full flex items-center justify-center hover:scale-125 transition-transform",
-                    getTrackerIconColor(event.eventType, level)
-                  )}
+                  class="tracker-icon h-4 w-4 rounded-full flex items-center justify-center hover:scale-125 transition-transform"
+                  data-tone={getTrackerTone(event.eventType, level)}
                   title={event.instance.definitionName}
                 >
                   <TrackerCategoryIcon {category} class="h-3 w-3" />
@@ -304,3 +300,26 @@
     <!-- Empty cell (before/after month) -->
   {/if}
 </div>
+
+<style>
+  /* Tracker icon tone: the tracker's event type or notification urgency comes
+     in as data-tone and picks a colour from the theme's severity vars. */
+  .tracker-icon {
+    color: var(--muted-foreground);
+  }
+  .tracker-icon[data-tone="start"] {
+    color: var(--status-normal);
+  }
+  .tracker-icon[data-tone="info"] {
+    color: var(--system-event-info);
+  }
+  .tracker-icon[data-tone="warn"] {
+    color: var(--system-event-warning);
+  }
+  .tracker-icon[data-tone="hazard"] {
+    color: var(--system-event-hazard);
+  }
+  .tracker-icon[data-tone="urgent"] {
+    color: var(--system-event-alarm);
+  }
+</style>

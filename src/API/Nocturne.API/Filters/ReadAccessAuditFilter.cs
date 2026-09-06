@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.V4;
@@ -12,10 +13,10 @@ using Nocturne.Infrastructure.Data.Entities;
 namespace Nocturne.API.Filters;
 
 /// <summary>
-/// Result filter that logs V4 PHI read access to the audit log.
-/// Runs after the action produces a result; failures are swallowed to never block requests.
+/// Logs V4 PHI read access to the audit log, whether the action produced a result or threw.
+/// Failures are swallowed to never block requests.
 /// </summary>
-public class ReadAccessAuditFilter : IAsyncResultFilter
+public class ReadAccessAuditFilter : IAsyncResultFilter, IAsyncExceptionFilter
 {
     private static readonly HashSet<string> WhitelistedParams = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -43,9 +44,25 @@ public class ReadAccessAuditFilter : IAsyncResultFilter
     {
         await next();
 
+        await AuditAsync(context.HttpContext, context.Result, context.HttpContext.Response.StatusCode);
+    }
+
+    /// <summary>
+    /// Audits a read whose action threw. MVC skips the result pipeline in that case, so this is the
+    /// only stage that still sees the request.
+    /// </summary>
+    /// <remarks>
+    /// The status is named rather than read off the response: the exception has not reached
+    /// <see cref="Middleware.ApiErrorEnvelopeHandler"/> yet, so the response still carries its
+    /// pre-action status. The exception is deliberately left unhandled so it reaches that handler.
+    /// </remarks>
+    public Task OnExceptionAsync(ExceptionContext context) =>
+        AuditAsync(context.HttpContext, result: null, StatusCodes.Status500InternalServerError);
+
+    private async Task AuditAsync(HttpContext httpContext, IActionResult? result, int statusCode)
+    {
         try
         {
-            var httpContext = context.HttpContext;
             var path = httpContext.Request.Path.Value;
             var method = httpContext.Request.Method;
 
@@ -59,12 +76,11 @@ public class ReadAccessAuditFilter : IAsyncResultFilter
                 return;
 
             // Skip auth failures — no meaningful read occurred
-            var statusCode = httpContext.Response.StatusCode;
             if (statusCode is 401 or 403)
                 return;
 
             // Resolve tenant
-            if (httpContext.Items["TenantContext"] is not TenantContext tenantContext)
+            if (httpContext.GetTenantContext() is not { } tenantContext)
                 return;
 
             // Check if read audit is enabled for this tenant
@@ -73,15 +89,10 @@ public class ReadAccessAuditFilter : IAsyncResultFilter
                 return;
 
             // Extract result metadata (best-effort)
-            var (recordCount, entityType) = ExtractResultMetadata(context.Result);
+            var (recordCount, entityType) = ExtractResultMetadata(result);
 
             // Sanitize query parameters
             var queryParams = SanitizeQueryParameters(httpContext.Request.Query);
-
-            // Get API secret hash prefix if auth type is ApiSecret
-            string? apiSecretHashPrefix = null;
-            if (string.Equals(_auditContext.AuthType, "ApiSecret", StringComparison.OrdinalIgnoreCase))
-                apiSecretHashPrefix = httpContext.Items["ApiSecretHashPrefix"] as string;
 
             var userAgent = httpContext.Request.Headers.UserAgent.ToString();
 
@@ -93,14 +104,14 @@ public class ReadAccessAuditFilter : IAsyncResultFilter
                 SubjectName = _auditContext.SubjectName,
                 AuthType = _auditContext.AuthType,
                 TokenId = _auditContext.TokenId,
-                ApiSecretHashPrefix = apiSecretHashPrefix,
+                CredentialFingerprint = httpContext.GetAuthContext()?.CredentialFingerprint,
                 IpAddress = _auditContext.IpAddress,
                 UserAgent = string.IsNullOrEmpty(userAgent) ? null : userAgent,
                 Endpoint = $"{method} {path}",
                 EntityType = entityType,
                 RecordCount = recordCount,
                 QueryParametersJson = queryParams,
-                CorrelationId = _auditContext.CorrelationId,
+                TraceId = _auditContext.TraceId,
                 StatusCode = statusCode,
                 CreatedAt = DateTime.UtcNow,
             };
@@ -117,7 +128,7 @@ public class ReadAccessAuditFilter : IAsyncResultFilter
     /// <summary>
     /// Extracts record count and entity type from the action result (best-effort).
     /// </summary>
-    internal static (int? RecordCount, string? EntityType) ExtractResultMetadata(IActionResult result)
+    internal static (int? RecordCount, string? EntityType) ExtractResultMetadata(IActionResult? result)
     {
         if (result is not ObjectResult { Value: not null } objectResult)
             return (null, null);

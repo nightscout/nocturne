@@ -215,7 +215,7 @@
     if (!value) editEntry = null;
   }}
   entry={editEntry}
-  treatmentId={carbIntakeId}
+  {carbIntakeId}
   {totalCarbs}
   {remainingCarbs}
   onSave={handleEditSaved}

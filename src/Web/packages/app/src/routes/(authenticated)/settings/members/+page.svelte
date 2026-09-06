@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import { describeSubmitError } from "$lib/forms";
   import { slide } from "svelte/transition";
   import { flip } from "svelte/animate";
   import * as Card from "$lib/components/ui/card";
@@ -15,16 +16,13 @@
     ChevronRight,
   } from "lucide-svelte";
   import { resolve } from "$app/paths";
-  import { getCurrentTenantId } from "../current-tenant.remote";
-  import { getMembers } from "$lib/api/generated/memberInvites.generated.remote";
-  import {
-    listInvites,
-    revokeInvite,
-    removeMember,
-  } from "$api/generated/tenants.generated.remote";
   import { getRoles } from "$lib/api/generated/roles.generated.remote";
   import { getShareLink } from "$api/generated/shareLinks.generated.remote";
   import {
+    getMembers,
+    listInvites,
+    revokeInvite,
+    removeMember,
     setMemberRoles,
     setMemberPermissions,
     setMemberLimitTo24Hours,
@@ -43,6 +41,7 @@
   import PublicAccessCard from "$lib/components/members/PublicAccessCard.svelte";
   import MembershipRequestsCard from "$lib/components/members/MembershipRequestsCard.svelte";
   import RolesSection from "$lib/components/members/RolesSection.svelte";
+  import { retainQuery } from "$lib/api/retain-query.svelte";
 
   const effectivePermissions: string[] = $derived(
     (page.data as any).effectivePermissions ?? [],
@@ -76,16 +75,15 @@
     hasStar || effectivePermissions.includes("sharing.guest"),
   );
 
-  // Tenant
-  const tenantIdQuery = getCurrentTenantId();
-  const tenantId = $derived(tenantIdQuery.current ?? undefined);
-
   // Queries
   const membersQuery = getMembers();
-  const invitesQuery = $derived(tenantId ? listInvites(tenantId) : null);
+  const invitesQuery = $derived(canInvite ? listInvites() : null);
   const rolesQuery = getRoles();
   const pendingRequestsQuery = $derived(canManageMembers ? getPendingRequests() : null);
   const shareQuery = $derived(canManageSharing ? getShareLink() : null);
+  retainQuery(() => invitesQuery);
+  retainQuery(() => pendingRequestsQuery);
+  retainQuery(() => shareQuery);
 
   // Data
   const allMembers = $derived(membersQuery.current ?? []);
@@ -115,24 +113,16 @@
   let showCreateInvite = $state(false);
   let errorMessage = $state<string | null>(null);
   let successMessage = $state<string | null>(null);
-  let removingMemberIds = $state(new Set<string>());
 
   // --- Member edit state ---
   let expandedMember = $state<string | null>(null);
   let isSavingMember = $state(false);
   let isRevokingInvite = $state<string | null>(null);
 
-  /** Surface a server-provided message when present, else a generic fallback. */
-  function messageFrom(e: unknown, fallback: string): string {
-    return (e as { body?: { message?: string } })?.body?.message ?? fallback;
-  }
-
   // Visible members — system subjects (e.g. Public) are managed via the
   // public access card above, not as removable/editable cards.
   const visibleMembers = $derived(
-    allMembers.filter(
-      (m) => !m.isSystemSubject && !removingMemberIds.has(m.subjectId!),
-    ),
+    allMembers.filter((m) => !m.isSystemSubject),
   );
 
   function clearMessages() {
@@ -165,7 +155,7 @@
       expandedMember = null;
       clearMessages();
     } catch (e) {
-      errorMessage = messageFrom(e, "Failed to update member. Please try again.");
+      errorMessage = describeSubmitError(e, "Failed to update member. Please try again.");
       clearMessages();
     } finally {
       isSavingMember = false;
@@ -176,10 +166,13 @@
     errorMessage = null;
     try {
       await approveRequest({ id: requestId, request: { roleIds } });
+      // The approved requester becomes a member; GetMembers is on another
+      // controller so ApproveRequest's Invalidates cannot name it.
+      await membersQuery.refresh();
       successMessage = "Membership request approved.";
       clearMessages();
-    } catch {
-      errorMessage = "Failed to approve request. Please try again.";
+    } catch (err) {
+      errorMessage = describeSubmitError(err, "Failed to approve request. Please try again.");
       clearMessages();
     }
   }
@@ -190,8 +183,8 @@
       await denyRequest(requestId);
       successMessage = "Membership request denied.";
       clearMessages();
-    } catch {
-      errorMessage = "Failed to deny request. Please try again.";
+    } catch (err) {
+      errorMessage = describeSubmitError(err, "Failed to deny request. Please try again.");
       clearMessages();
     }
   }
@@ -275,7 +268,7 @@
         />
       {/if}
 
-      {#if visibleMembers.length === 0 && removingMemberIds.size === 0}
+      {#if visibleMembers.length === 0}
         <Card.Root>
           <Card.Content class="flex flex-col items-center justify-center py-12 text-center">
             <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
@@ -307,21 +300,19 @@
                     request: { limitTo24Hours },
                   });
                 } catch (e) {
-                  errorMessage = messageFrom(e, "Failed to update member. Please try again.");
+                  errorMessage = describeSubmitError(e, "Failed to update member. Please try again.");
                   clearMessages();
                 }
               }}
               onRemove={async () => {
-                if (!tenantId || !member.subjectId) return;
-                removingMemberIds = new Set([...removingMemberIds, member.subjectId]);
+                if (!member.subjectId) return;
                 errorMessage = null;
                 try {
-                  await removeMember({ id: tenantId, subjectId: member.subjectId });
+                  await removeMember(member.subjectId);
                   successMessage = "Member removed successfully.";
                   clearMessages();
                 } catch (e) {
-                  errorMessage = messageFrom(e, "Failed to remove member. Please try again.");
-                  removingMemberIds = new Set([...removingMemberIds].filter(x => x !== member.subjectId));
+                  errorMessage = describeSubmitError(e, "Failed to remove member. Please try again.");
                   clearMessages();
                 }
               }}
@@ -333,10 +324,9 @@
 
       <!-- Create Invite Link (inline card) -->
       {#if canInvite}
-        {#if showCreateInvite && tenantId}
+        {#if showCreateInvite}
           <CreateInviteCard
             roles={allRoles}
-            tenantId={tenantId}
             onCreated={() => {
               successMessage = "Invite link created. Share it with the new member.";
               clearMessages();
@@ -367,15 +357,17 @@
           roles={allRoles}
           isRevoking={isRevokingInvite !== null}
           onRevoke={async (inviteId) => {
-            if (!tenantId) return;
             isRevokingInvite = inviteId;
             errorMessage = null;
             try {
-              await revokeInvite({ id: tenantId, inviteId });
+              await revokeInvite(inviteId);
               successMessage = "Invite revoked successfully.";
               clearMessages();
-            } catch {
-              errorMessage = "Failed to revoke invite. Please try again.";
+            } catch (err) {
+              errorMessage = describeSubmitError(
+                err,
+                "Failed to revoke invite. Please try again."
+              );
               clearMessages();
             } finally {
               isRevokingInvite = null;

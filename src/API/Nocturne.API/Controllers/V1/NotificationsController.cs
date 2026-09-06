@@ -51,7 +51,7 @@ public class NotificationsController : ControllerBase
     /// <response code="500">Internal server error</response>
     [HttpPost("notifications/ack")]
     [Authorize]
-    [RequireScope(OAuthScopes.AlertsReadWrite)]
+    [RequireScope(Scope.AlertsReadWrite)]
     [NightscoutEndpoint("/api/v1/notifications/ack")]
     [ProducesResponseType(typeof(NotificationAckResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(NotificationAckResponse), StatusCodes.Status400BadRequest)]
@@ -239,6 +239,11 @@ public class NotificationsController : ControllerBase
     [NightscoutEndpoint("/api/v1/adminnotifies")]
     [ProducesResponseType(typeof(AdminNotifiesResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    // No scope gate. NotificationV1Service.GetAdminNotifiesAsync checks *:*:admin itself and
+    // returns the notification bodies only to an admin, otherwise just notifyCount — the legacy
+    // Nightscout contract. A scope requirement would replace that degradation with a 403, and
+    // alerts.read is the wrong category for site notices in any case. Recorded in
+    // ReadEndpointScopeEnforcementTests.ExemptReadActions.
     public async Task<ActionResult<AdminNotifiesResponse>> GetAdminNotifies(
         CancellationToken cancellationToken = default
     )
@@ -297,7 +302,7 @@ public class NotificationsController : ControllerBase
     /// <response code="500">Internal server error</response>
     [HttpPost("adminnotifies")]
     [Authorize]
-    [RequireScope(OAuthScopes.AlertsReadWrite)]
+    [RequireScope(Scope.AlertsReadWrite)]
     [NightscoutEndpoint("/api/v1/adminnotifies (POST)")]
     [ProducesResponseType(typeof(NotificationAckResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(NotificationAckResponse), StatusCodes.Status400BadRequest)]
@@ -384,7 +389,7 @@ public class NotificationsController : ControllerBase
     /// <response code="500">Internal server error</response>
     [HttpDelete("adminnotifies")]
     [Authorize]
-    [RequireScope(OAuthScopes.FullAccess)]
+    [RequireScope(Scope.FullAccess)]
     [NightscoutEndpoint("/api/v1/adminnotifies (DELETE)")]
     [ProducesResponseType(typeof(NotificationAckResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(
@@ -449,7 +454,7 @@ public class NotificationsController : ControllerBase
     /// <response code="500">Internal server error</response>
     [HttpPost("notifications/pushover")]
     [Authorize]
-    [RequireScope(OAuthScopes.AlertsReadWrite)]
+    [RequireScope(Scope.AlertsReadWrite)]
     [NightscoutEndpoint("/api/v1/notifications/pushover")]
     [ProducesResponseType(typeof(NotificationAckResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(NotificationAckResponse), StatusCodes.Status400BadRequest)]

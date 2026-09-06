@@ -7,7 +7,7 @@ namespace Nocturne.API.Models.Requests.V4;
 /// </summary>
 /// <seealso cref="Validators.V4.CreateBolusRequestValidator"/>
 /// <seealso cref="Nocturne.API.Controllers.V4.Treatments.BolusController"/>
-public class CreateBolusRequest
+public class CreateBolusRequest : IBulkUpsertRequest
 {
     /// <summary>
     /// When the bolus was delivered.
@@ -23,6 +23,15 @@ public class CreateBolusRequest
     /// Identifier of the device that delivered the bolus (e.g. pump serial number).
     /// </summary>
     public string? Device { get; set; }
+
+    /// <summary>
+    /// Optional reference to the registered <see cref="PatientDevice"/> that delivered the bolus.
+    /// Must resolve to one of the caller's registered devices. When omitted, the server attempts
+    /// attribution from <see cref="Device"/> and <see cref="DataSource"/>. Send the empty GUID
+    /// (<c>00000000-0000-0000-0000-000000000000</c>) to state that the bolus came from no registered
+    /// device: the link is cleared and server-side attribution is skipped for this request.
+    /// </summary>
+    public Guid? PatientDeviceId { get; set; }
 
     /// <summary>
     /// Name of the application that submitted this record.

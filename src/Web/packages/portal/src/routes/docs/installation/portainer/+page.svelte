@@ -1,5 +1,6 @@
 <script lang="ts">
     import NextSteps from "$lib/components/docs/NextSteps.svelte";
+    import SupportNocturne from "$lib/components/docs/SupportNocturne.svelte";
     import PasswordGenerator from "$lib/components/docs/PasswordGenerator.svelte";
     import CodeBlock from "$lib/components/docs/CodeBlock.svelte";
     import { Info } from "@lucide/svelte";
@@ -146,4 +147,6 @@
 
     <h2 class="text-2xl font-bold mt-8 mb-4">Next Steps</h2>
     <NextSteps />
+
+    <SupportNocturne />
 </div>

@@ -3,8 +3,11 @@ using Microsoft.Extensions.Options;
 using Nocturne.API.Models.Responses;
 using Nocturne.API.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Security;
 
 namespace Nocturne.API.Services.Auth;
 
@@ -16,18 +19,35 @@ namespace Nocturne.API.Services.Auth;
 /// </summary>
 public interface IShareLinkService
 {
+    /// <summary>
+    /// Reports the link's state. <see cref="ShareLinkDto.Url"/> is always null — only the token's
+    /// digest is stored, so the URL is knowable only to the caller of <see cref="RotateAsync"/>.
+    /// </summary>
     Task<ShareLinkDto> GetAsync(Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Mints a new token, replacing any existing one, and returns the resulting
+    /// <see cref="ShareLinkDto.Url"/>. This is the only call that can return the URL.
+    /// </summary>
     Task<ShareLinkDto> RotateAsync(Guid tenantId, CancellationToken ct = default);
     Task<ShareLinkDto> DisableAsync(Guid tenantId, CancellationToken ct = default);
     Task<ShareLinkDto> SetFullHistoryAsync(Guid tenantId, bool fullHistory, CancellationToken ct = default);
 
     /// <summary>
     /// Replace the data categories anonymous viewers can see. <paramref name="scopes"/> must be a
-    /// subset of <see cref="TenantPermissions.PublicShareScopes"/>; an empty list leaves the link
+    /// subset of <see cref="Scope.PublicShareScopes"/>; an empty list leaves the link
     /// live but shares nothing. Any role grant on the Public subject is dropped so these scopes are
     /// authoritative.
     /// </summary>
     Task<ShareLinkDto> SetScopesAsync(Guid tenantId, IReadOnlyList<string> scopes, CancellationToken ct = default);
+
+    /// <summary>
+    /// The appearance an anonymous share viewer renders the tenant's data with: the owner's
+    /// display preferences, narrowed by <see cref="UserDisplayPreferences.ToPresentationOnly"/>.
+    /// All-null when the tenant has no owner or the owner saved nothing, which leaves the viewer
+    /// on the frontend's own defaults.
+    /// </summary>
+    Task<UserDisplayPreferences> GetSharedAppearanceAsync(Guid tenantId, CancellationToken ct = default);
 }
 
 /// <inheritdoc />
@@ -79,31 +99,32 @@ public sealed class ShareLinkService : IShareLinkService
         var member = await GetPublicMemberAsync(tenantId, ct)
             ?? throw new InvalidOperationException("Public subject membership not found");
 
-        var oldToken = tenant.ShareToken;
-        var wasEnabled = oldToken != null;
+        var oldTokenHash = tenant.ShareToken;
+        var wasEnabled = oldTokenHash != null;
         var newToken = await GenerateUniqueTokenAsync(ct);
         var now = DateTime.UtcNow;
 
-        // On first enable, seed the default public scopes (glucose + statistics) as direct
+        // On first enable, seed the default public scopes (glucose reads alone) as direct
         // permissions on the Public subject, and default to a 24-hour window. Re-rotation only
         // swaps the token — the owner's chosen scopes and window are preserved.
         if (!wasEnabled)
         {
-            member.DirectPermissions = [.. TenantPermissions.DefaultPublicShareScopes];
+            member.DirectPermissions = [.. Scope.DefaultPublicShareScopes];
             member.LimitTo24Hours = true;
         }
 
-        tenant.ShareToken = newToken;
+        tenant.ShareToken = CredentialHash.ShareToken(newToken);
         tenant.ShareTokenSetAt = now;
         member.SysUpdatedAt = now;
 
         await _dbContext.SaveChangesAsync(ct);
 
-        if (oldToken != null)
-            _shareTokenCache.Evict(oldToken);
+        if (oldTokenHash != null)
+            _shareTokenCache.EvictByHash(oldTokenHash);
         _publicAccessCache.Evict(tenantId);
 
-        return ToDto(tenant, member);
+        // The only moment the URL can be produced: the token itself is not stored.
+        return ToDto(tenant, member, newToken);
     }
 
     public async Task<ShareLinkDto> DisableAsync(Guid tenantId, CancellationToken ct = default)
@@ -111,7 +132,7 @@ public sealed class ShareLinkService : IShareLinkService
         var tenant = await _dbContext.Tenants.FirstOrDefaultAsync(t => t.Id == tenantId, ct)
             ?? throw new InvalidOperationException($"Tenant {tenantId} not found");
         var member = await GetPublicMemberAsync(tenantId, ct);
-        var oldToken = tenant.ShareToken;
+        var oldTokenHash = tenant.ShareToken;
 
         tenant.ShareToken = null;
         tenant.ShareTokenSetAt = null;
@@ -127,8 +148,8 @@ public sealed class ShareLinkService : IShareLinkService
 
         await _dbContext.SaveChangesAsync(ct);
 
-        if (oldToken != null)
-            _shareTokenCache.Evict(oldToken);
+        if (oldTokenHash != null)
+            _shareTokenCache.EvictByHash(oldTokenHash);
         _publicAccessCache.Evict(tenantId);
 
         return ToDto(tenant, member);
@@ -152,7 +173,7 @@ public sealed class ShareLinkService : IShareLinkService
 
     public async Task<ShareLinkDto> SetScopesAsync(Guid tenantId, IReadOnlyList<string> scopes, CancellationToken ct = default)
     {
-        var invalid = scopes.Where(s => !TenantPermissions.PublicShareScopes.Contains(s)).ToList();
+        var invalid = scopes.Where(s => !Scope.PublicShareScopes.Contains(s)).ToList();
         if (invalid.Count > 0)
             throw new ArgumentException($"Invalid public share scopes: {string.Join(", ", invalid)}", nameof(scopes));
 
@@ -178,6 +199,17 @@ public sealed class ShareLinkService : IShareLinkService
         return ToDto(tenant, member);
     }
 
+    /// <inheritdoc />
+    public async Task<UserDisplayPreferences> GetSharedAppearanceAsync(Guid tenantId, CancellationToken ct = default)
+    {
+        var ownerPreferences = await _dbContext.TenantMembers.AsNoTracking()
+            .OwnersOf(tenantId)
+            .Select(m => m.Subject!.Preferences)
+            .FirstOrDefaultAsync(ct);
+
+        return UserDisplayPreferences.Deserialize(ownerPreferences).ToPresentationOnly();
+    }
+
     private Task<TenantMemberEntity?> GetPublicMemberAsync(Guid tenantId, CancellationToken ct) =>
         _dbContext.TenantMembers
             .Include(m => m.MemberRoles)
@@ -186,12 +218,17 @@ public sealed class ShareLinkService : IShareLinkService
             .FirstOrDefaultAsync(m => m.TenantId == tenantId
                 && m.Subject!.IsSystemSubject && m.Subject.Name == PublicSubjectName, ct);
 
+    /// <summary>
+    /// Mints a token whose digest is not already stored. Returns the token itself; the caller
+    /// stores <see cref="CredentialHash.ShareToken"/> of it.
+    /// </summary>
     private async Task<string> GenerateUniqueTokenAsync(CancellationToken ct)
     {
         for (var attempt = 0; attempt < MaxTokenAttempts; attempt++)
         {
             var candidate = _tokenGenerator.Generate();
-            var exists = await _dbContext.Tenants.AnyAsync(t => t.ShareToken == candidate, ct);
+            var candidateHash = CredentialHash.ShareToken(candidate);
+            var exists = await _dbContext.Tenants.AnyAsync(t => t.ShareToken == candidateHash, ct);
             if (!exists)
                 return candidate;
         }
@@ -199,10 +236,15 @@ public sealed class ShareLinkService : IShareLinkService
         throw new InvalidOperationException("Unable to generate a unique share token after several attempts");
     }
 
-    private ShareLinkDto ToDto(TenantEntity tenant, TenantMemberEntity? member) => new()
+    /// <summary>
+    /// Projects the share link. <paramref name="token"/> is supplied only by the rotate path, which
+    /// has just minted it; every other path can only report that a link exists, because the stored
+    /// value is a digest and the URL cannot be reconstructed from it.
+    /// </summary>
+    private ShareLinkDto ToDto(TenantEntity tenant, TenantMemberEntity? member, string? token = null) => new()
     {
         Enabled = tenant.ShareToken != null,
-        Url = tenant.ShareToken != null ? $"https://{tenant.ShareToken}.share.{_baseDomain}" : null,
+        Url = token != null ? $"https://{token}.share.{_baseDomain}" : null,
         FullHistory = member is { LimitTo24Hours: false },
         Scopes = ComputeScopes(member),
         LastAccessedAt = tenant.ShareLastAccessedAt,
@@ -210,7 +252,7 @@ public sealed class ShareLinkService : IShareLinkService
 
     /// <summary>
     /// The public-shareable read scopes the Public subject currently resolves to — the union of any
-    /// role-granted permissions and direct permissions, narrowed to <see cref="TenantPermissions.PublicShareScopes"/>.
+    /// role-granted permissions and direct permissions, narrowed to <see cref="Scope.PublicShareScopes"/>.
     /// Requires <see cref="TenantMemberEntity.MemberRoles"/> (with their roles) to be loaded.
     /// </summary>
     private static List<string> ComputeScopes(TenantMemberEntity? member)
@@ -224,7 +266,7 @@ public sealed class ShareLinkService : IShareLinkService
 
         return rolePermissions
             .Concat(directPermissions)
-            .Where(TenantPermissions.PublicShareScopes.Contains)
+            .Where(Scope.PublicShareScopes.Contains)
             .Distinct()
             .ToList();
     }

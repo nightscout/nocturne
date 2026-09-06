@@ -1,6 +1,4 @@
-using System.Data.Common;
 using FluentAssertions;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -11,6 +9,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Infrastructure.Data.Tests.Repositories;
 
@@ -20,8 +19,7 @@ namespace Nocturne.Infrastructure.Data.Tests.Repositories;
 public class CarbIntakeRepositoryTests : IDisposable
 {
     private static readonly Guid TestTenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
-    private readonly DbConnection _connection;
-    private readonly DbContextOptions<NocturneDbContext> _contextOptions;
+    private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
     private readonly Mock<IDeduplicationService> _mockDeduplicationService;
     private readonly CarbIntakeRepository _repo;
@@ -31,43 +29,12 @@ public class CarbIntakeRepositoryTests : IDisposable
         // Create in-memory SQLite database for testing — mirrors the pattern in
         // TreatmentRepositoryTests so partial unique indexes (e.g. on
         // (tenant_id, data_source, sync_identifier)) are enforced end-to-end.
-        _connection = new SqliteConnection("Filename=:memory:");
-        _connection.Open();
+        _db = TestDbContextFactory.CreateSqliteWithTenant(TestTenantId);
 
-        _contextOptions = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .EnableSensitiveDataLogging()
-            .Options;
-
-        // Create the database schema and seed the tenant.
-        using (var seedContext = new NocturneDbContext(_contextOptions))
-        {
-            seedContext.TenantId = TestTenantId;
-            seedContext.Database.EnsureCreated();
-            seedContext.Tenants.Add(new TenantEntity { Id = TestTenantId, Slug = "test" });
-            seedContext.SaveChanges();
-        }
-
-        _context = new NocturneDbContext(_contextOptions);
+        _context = _db.CreateContext();
         _context.TenantId = TestTenantId;
 
         _mockDeduplicationService = new Mock<IDeduplicationService>();
-        _mockDeduplicationService
-            .Setup(d => d.GetOrCreateCanonicalIdAsync(
-                It.IsAny<RecordType>(),
-                It.IsAny<long>(),
-                It.IsAny<MatchCriteria>(),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Guid.NewGuid());
-        _mockDeduplicationService
-            .Setup(d => d.LinkRecordAsync(
-                It.IsAny<Guid>(),
-                It.IsAny<RecordType>(),
-                It.IsAny<Guid>(),
-                It.IsAny<long>(),
-                It.IsAny<string>(),
-                It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
 
         _repo = new CarbIntakeRepository(
             new TestTenantDbContextFactory(_context),
@@ -79,7 +46,7 @@ public class CarbIntakeRepositoryTests : IDisposable
     public void Dispose()
     {
         _context.Dispose();
-        _connection.Dispose();
+        _db.Dispose();
         GC.SuppressFinalize(this);
     }
 
@@ -93,7 +60,7 @@ public class CarbIntakeRepositoryTests : IDisposable
             DataSource = "aaps",
             SyncIdentifier = "sync-1",
             Carbs = 30.0,
-        });
+        }, WriteOrigin.Live);
 
         var second = await _repo.CreateAsync(new CarbIntake
         {
@@ -101,7 +68,7 @@ public class CarbIntakeRepositoryTests : IDisposable
             DataSource = "aaps",
             SyncIdentifier = "sync-1",
             Carbs = 42.0,
-        });
+        }, WriteOrigin.Live);
 
         second.Id.Should().Be(first.Id);
         second.Carbs.Should().Be(42.0);
@@ -113,8 +80,8 @@ public class CarbIntakeRepositoryTests : IDisposable
     public async Task CreateAsync_WithoutSyncIdentifier_DoesNotDedupe()
     {
         var timestamp = DateTime.UtcNow;
-        await _repo.CreateAsync(new CarbIntake { Timestamp = timestamp, Carbs = 30.0 });
-        await _repo.CreateAsync(new CarbIntake { Timestamp = timestamp, Carbs = 30.0 });
+        await _repo.CreateAsync(new CarbIntake { Timestamp = timestamp, Carbs = 30.0 }, WriteOrigin.Live);
+        await _repo.CreateAsync(new CarbIntake { Timestamp = timestamp, Carbs = 30.0 }, WriteOrigin.Live);
 
         var count = await _context.CarbIntakes.CountAsync();
         count.Should().Be(2);
@@ -124,8 +91,8 @@ public class CarbIntakeRepositoryTests : IDisposable
     public async Task CreateAsync_WithoutDataSource_DoesNotDedupe()
     {
         var timestamp = DateTime.UtcNow;
-        await _repo.CreateAsync(new CarbIntake { Timestamp = timestamp, SyncIdentifier = "sync-1", Carbs = 30.0 });
-        await _repo.CreateAsync(new CarbIntake { Timestamp = timestamp, SyncIdentifier = "sync-1", Carbs = 30.0 });
+        await _repo.CreateAsync(new CarbIntake { Timestamp = timestamp, SyncIdentifier = "sync-1", Carbs = 30.0 }, WriteOrigin.Live);
+        await _repo.CreateAsync(new CarbIntake { Timestamp = timestamp, SyncIdentifier = "sync-1", Carbs = 30.0 }, WriteOrigin.Live);
 
         var count = await _context.CarbIntakes.CountAsync();
         count.Should().Be(2);
@@ -141,14 +108,14 @@ public class CarbIntakeRepositoryTests : IDisposable
             DataSource = "aaps",
             SyncIdentifier = "sync-1",
             Carbs = 30.0,
-        });
+        }, WriteOrigin.Live);
         await _repo.CreateAsync(new CarbIntake
         {
             Timestamp = timestamp,
             DataSource = "loop",
             SyncIdentifier = "sync-1",
             Carbs = 30.0,
-        });
+        }, WriteOrigin.Live);
 
         var count = await _context.CarbIntakes.CountAsync();
         count.Should().Be(2);
@@ -164,13 +131,13 @@ public class CarbIntakeRepositoryTests : IDisposable
             DataSource = "aaps",
             SyncIdentifier = "sync-1",
             Carbs = 30.0,
-        });
+        }, WriteOrigin.Live);
 
         var results = (await _repo.BulkCreateAsync(new[]
         {
             new CarbIntake { Timestamp = timestamp, DataSource = "aaps", SyncIdentifier = "sync-1", Carbs = 42.0 },
             new CarbIntake { Timestamp = timestamp, DataSource = "aaps", SyncIdentifier = "sync-2", Carbs = 15.0 },
-        })).ToList();
+        }, WriteOrigin.Live)).ToList();
 
         results.Should().HaveCount(2);
         var dbCount = await _context.CarbIntakes.CountAsync();
@@ -184,16 +151,14 @@ public class CarbIntakeRepositoryTests : IDisposable
         // And the new insert
         results.Should().ContainSingle(r => r.SyncIdentifier == "sync-2" && r.Carbs == 15.0);
 
-        // LinkRecordAsync was NOT called for the updated-in-place row
+        // The updated-in-place row is not handed to deduplication; only the insert is
         _mockDeduplicationService.Verify(
-            d => d.LinkRecordAsync(
-                It.IsAny<Guid>(),
-                It.IsAny<RecordType>(),
-                existing.Id,
-                It.IsAny<long>(),
-                It.IsAny<string>(),
+            d => d.DeduplicateBatchAsync(
+                RecordType.CarbIntake,
+                It.Is<IReadOnlyList<DeduplicationInput>>(inputs =>
+                    inputs.All(i => i.RecordId != existing.Id)),
                 It.IsAny<CancellationToken>()),
-            Times.Never);
+            Times.Once);
     }
 
     [Fact]
@@ -209,14 +174,14 @@ public class CarbIntakeRepositoryTests : IDisposable
             DataSource = "mylife-connector",
             LegacyId = "mylife-1",
             Carbs = 50.0,
-        });
+        }, WriteOrigin.Live);
         var duplicate = await _repo.CreateAsync(new CarbIntake
         {
             Timestamp = timestamp,
             DataSource = "glooko-connector",
             LegacyId = "glooko-1",
             Carbs = 50.0,
-        });
+        }, WriteOrigin.Live);
 
         // Dedup links them into one canonical group; the Glooko row is non-primary.
         var canonicalId = Guid.CreateVersion7();
@@ -264,7 +229,7 @@ public class CarbIntakeRepositoryTests : IDisposable
         {
             new CarbIntake { Timestamp = timestamp, DataSource = "aaps", SyncIdentifier = "sync-1", Carbs = 30.0 },
             new CarbIntake { Timestamp = timestamp, DataSource = "aaps", SyncIdentifier = "sync-1", Carbs = 42.0 },
-        });
+        }, WriteOrigin.Live);
 
         var dbCount = await _context.CarbIntakes.CountAsync();
         dbCount.Should().Be(1);

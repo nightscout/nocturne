@@ -25,8 +25,8 @@ public class TwiistGlucoseMapper(ILogger logger)
         { "FortyFiveDown", GlucoseDirection.FortyFiveDown },
         { "NotComputable", GlucoseDirection.NotComputable },
         { "RateOutOfRange", GlucoseDirection.RateOutOfRange },
-        // Twiist also uses arrow Unicode names
-        { "FLAT", GlucoseDirection.Flat },
+        // Twiist also uses arrow Unicode names. The lookup is OrdinalIgnoreCase, so a name that
+        // differs from one above only in case is the same key and must not be repeated here.
         { "UP", GlucoseDirection.SingleUp },
         { "DOWN", GlucoseDirection.SingleDown },
         { "DOUBLE_UP", GlucoseDirection.DoubleUp },

@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// PostgreSQL entity for connector-imported food entries.
 /// </summary>
 [Table("connector_food_entries")]
-public class ConnectorFoodEntryEntity : ITenantScoped
+public class ConnectorFoodEntryEntity : ITenantScoped, ISystemTimestamped
 {
     /// <summary>
     /// Identifier of the tenant this food entry belongs to

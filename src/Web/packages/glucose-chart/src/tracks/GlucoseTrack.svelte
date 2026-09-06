@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Spline, Points, Rule, Axis, ChartClipPath, Highlight } from "layerchart";
+  import { Spline, Circle, Rule, Axis, ChartClipPath, Highlight } from "layerchart";
   import { bisector, curveMonotoneX } from "d3";
   import type { ScaleLinear } from "d3-scale";
   import { bg } from "../utils/formatting.js";
@@ -73,6 +73,24 @@
       return { time: step.time, sgv: avgSgv, radius };
     })
   );
+
+  // Group bubbles by rounded radius so each bucket renders from ONE data-mode
+  // Circle with a constant numeric r. layerchart 2.x marks each call
+  // registerMark() on mount, so one <Points>/<Circle> per bubble cost O(N^2). A
+  // per-item r accessor can't be used here: the chart configures no r scale, so
+  // resolveDataProp would route the radius through the default sqrt rScale and
+  // distort it — a numeric r bypasses scaling. Half-pixel buckets are visually
+  // indistinguishable and cap registrations at ~12.
+  const stepBubbleBuckets = $derived.by(() => {
+    const buckets = new Map<number, typeof stepBubbles>();
+    for (const bubble of stepBubbles) {
+      const r = Math.round(bubble.radius * 2) / 2;
+      const items = buckets.get(r) ?? [];
+      items.push(bubble);
+      buckets.set(r, items);
+    }
+    return [...buckets.entries()].map(([r, items]) => ({ r, items }));
+  });
 </script>
 
 <!-- High threshold line -->
@@ -107,12 +125,13 @@
 <!-- Step bubbles (behind glucose) -->
 {#if stepBubbles.length > 0}
 <ChartClipPath>
-  {#each stepBubbles as bubble}
-    <Points
-      data={[bubble]}
-      x={(d) => d.time}
-      y={(d) => glucoseScale(d.sgv)}
-      r={bubble.radius}
+  {#each stepBubbleBuckets as bucket (bucket.r)}
+    <Circle
+      data={bucket.items}
+      key={(d) => d.time.getTime()}
+      cx={(d) => d.time}
+      cy={(d) => glucoseScale(d.sgv)}
+      r={bucket.r}
       class="stroke-none"
       style="fill: var(--steps); opacity: 0.25;"
     />
@@ -131,18 +150,18 @@
     curve={curveMonotoneX}
   />
 
-  <!-- Glucose points -->
+  <!-- Glucose points: one data-mode Circle for the whole series (single mark
+       registration) instead of one <Points> per reading, which cost O(N^2). -->
   {#if showGlucosePoints}
-    {#each glucoseData as point}
-      <Points
-        data={[point]}
-        x={(d) => d.time}
-        y={(d) => glucoseScale(d.sgv)}
-        r={3}
-        fill={point.color}
-        class="opacity-90"
-      />
-    {/each}
+    <Circle
+      data={glucoseData}
+      key={(d) => d.time.getTime()}
+      cx={(d) => d.time}
+      cy={(d) => glucoseScale(d.sgv)}
+      r={3}
+      fill={(d) => d.color}
+      class="opacity-90"
+    />
   {/if}
 </ChartClipPath>
 

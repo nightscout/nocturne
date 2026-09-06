@@ -1,0 +1,112 @@
+{
+    "type": "AdaptiveCard",
+    "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+    "version": "1.5",
+    "body": [
+        {
+            "type": "ColumnSet",
+            "columns": [
+                {
+                    "type": "Column",
+                    "width": "stretch",
+                    "verticalContentAlignment": "Center",
+                    "items": [
+                        { "type": "TextBlock", "text": "Loop", "weight": "Bolder" }
+                    ]
+                },
+                {
+                    "type": "Column",
+                    "width": "auto",
+                    "verticalContentAlignment": "Center",
+                    "items": [
+                        {
+                            "type": "Image",
+                            "url": "${refreshIcon}",
+                            "width": "16px",
+                            "altText": "Refresh",
+                            "selectAction": { "type": "Action.Execute", "verb": "refresh" }
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "type": "Container",
+            "spacing": "Medium",
+            "$when": "${hasLoop}",
+            "items": [
+                {
+                    "type": "ColumnSet",
+                    "columns": [
+                        {
+                            "type": "Column",
+                            "width": "stretch",
+                            "verticalContentAlignment": "Center",
+                            "items": [
+                                { "type": "TextBlock", "text": "${algorithm}", "size": "Small", "isSubtle": true }
+                            ]
+                        },
+                        {
+                            "type": "Column",
+                            "width": "auto",
+                            "verticalContentAlignment": "Center",
+                            "items": [
+                                { "type": "TextBlock", "text": "${loopStatus}", "weight": "Bolder", "color": "${loopColor}" }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "type": "TextBlock",
+                    "text": "Updated ${lastRun}",
+                    "size": "Small",
+                    "isSubtle": true,
+                    "spacing": "None"
+                },
+                {
+                    "type": "ColumnSet",
+                    "spacing": "Medium",
+                    "columns": [
+                        {
+                            "type": "Column",
+                            "width": "stretch",
+                            "items": [
+                                { "type": "TextBlock", "text": "IOB", "size": "Small", "isSubtle": true },
+                                { "type": "TextBlock", "text": "${iob}", "weight": "Bolder", "spacing": "None" }
+                            ]
+                        },
+                        {
+                            "type": "Column",
+                            "width": "stretch",
+                            "items": [
+                                { "type": "TextBlock", "text": "Eventual", "size": "Small", "isSubtle": true },
+                                { "type": "TextBlock", "text": "${eventualBg}", "weight": "Bolder", "spacing": "None" }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "type": "TextBlock",
+                    "text": "Temp basal ${tempBasal}",
+                    "size": "Small",
+                    "isSubtle": true,
+                    "spacing": "Small",
+                    "$when": "${tempBasal != ''}"
+                }
+            ]
+        },
+        {
+            "type": "TextBlock",
+            "text": "No loop data available.",
+            "size": "Small",
+            "isSubtle": true,
+            "wrap": true,
+            "spacing": "Medium",
+            "$when": "${hasLoop == false}"
+        }
+    ],
+    "selectAction": {
+        "type": "Action.Execute",
+        "verb": "openApp"
+    }
+}

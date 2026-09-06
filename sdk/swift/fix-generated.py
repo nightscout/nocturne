@@ -32,7 +32,7 @@ def fix_file(path: str) -> None:
             return m.group(0)
         counter[0] += 1
         varname = f"_qp{counter[0]}"
-        typed = f"let {varname}: [String: (wrappedValue: Any?, isExplode: Bool)] = {entries}"
+        typed = f"let {varname}: [String: (wrappedValue: (any Sendable)?, isExplode: Bool)] = {entries}"
         assign = f"localVariableUrlComponents?.queryItems = APIHelper.mapValuesToQueryItems({varname})"
         return f"{typed}\n        {assign}"
 

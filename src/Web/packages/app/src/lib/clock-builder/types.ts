@@ -186,9 +186,33 @@ export const ELEMENT_INFO: Record<ClockElementType, ElementInfo> = {
   },
 };
 
+const ELEMENT_INFO_BY_TYPE: ReadonlyMap<string, ElementInfo> = new Map(
+  Object.entries(ELEMENT_INFO)
+);
+
+/** Palette entry for a stored element type, which the API models as a bare string. */
+export function elementInfo(type: string | undefined): ElementInfo | undefined {
+  return type === undefined ? undefined : ELEMENT_INFO_BY_TYPE.get(type);
+}
+
 export interface ElementGroup {
   name: string;
   types: ClockElementType[];
+}
+
+/**
+ * Element types with no runtime data source. They remain in ClockElementType and
+ * ELEMENT_INFO so a saved face containing one still loads and can be edited, but
+ * they are absent from ELEMENT_GROUPS (so they cannot be added) and the runtime
+ * renderer skips them instead of printing a placeholder value.
+ */
+export const UNWIRED_ELEMENT_TYPES: ReadonlySet<string> = new Set([
+  "basal",
+  "forecast",
+]);
+
+export function isUnwiredElementType(type: string | undefined): boolean {
+  return type !== undefined && UNWIRED_ELEMENT_TYPES.has(type);
 }
 
 export const ELEMENT_GROUPS: ElementGroup[] = [
@@ -198,7 +222,7 @@ export const ELEMENT_GROUPS: ElementGroup[] = [
   },
   {
     name: "Loop",
-    types: ["forecast", "iob", "cob", "basal"],
+    types: ["iob", "cob"],
   },
   { name: "Trackers", types: ["tracker", "trackers"] },
   { name: "Display", types: ["time", "text", "chart"] },
@@ -223,6 +247,15 @@ export const FONT_WEIGHT_OPTIONS: SelectOption[] = [
   { value: "bold", label: "Bold" },
 ];
 
+/** `custom` is not a stored colour — it reveals the hex picker. */
+export const CUSTOM_COLOR_OPTION = "custom";
+
+export const COLOR_OPTIONS: SelectOption[] = [
+  { value: "dynamic", label: "Dynamic (by glucose)" },
+  { value: "muted", label: "Muted" },
+  { value: CUSTOM_COLOR_OPTION, label: "Custom" },
+];
+
 export const VISIBILITY_OPTIONS: SelectOption[] = [
   { value: "always", label: "Always show" },
   { value: "info", label: "Info or higher" },
@@ -234,8 +267,6 @@ export const VISIBILITY_OPTIONS: SelectOption[] = [
 export const TRACKER_SHOW_OPTIONS: SelectOption[] = [
   { value: "name", label: "Name" },
   { value: "icon", label: "Icon" },
-  { value: "remaining", label: "Time remaining" },
-  { value: "urgency", label: "Urgency badge" },
 ];
 
 export const TRACKER_CATEGORIES = [

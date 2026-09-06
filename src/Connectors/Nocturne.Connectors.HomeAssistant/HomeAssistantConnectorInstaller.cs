@@ -8,8 +8,6 @@ namespace Nocturne.Connectors.HomeAssistant;
 
 public class HomeAssistantConnectorInstaller : IConnectorInstaller
 {
-    public string ConnectorName => "HomeAssistant";
-
     public void Install(IServiceCollection services, IConfiguration configuration)
     {
         services.AddConnectorConfiguration<HomeAssistantConnectorConfiguration>(

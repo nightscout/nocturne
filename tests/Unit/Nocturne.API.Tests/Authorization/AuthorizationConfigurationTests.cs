@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using FluentAssertions;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization.Infrastructure;
 using Microsoft.AspNetCore.Mvc.ApplicationParts;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.Extensions.DependencyInjection;
@@ -39,6 +40,28 @@ public class AuthorizationConfigurationTests
         var hasPermissions = options.GetPolicy(PolicyNames.HasPermissions);
         hasPermissions.Should().NotBeNull();
         hasPermissions!.Requirements.Should().ContainItemsAssignableTo<HasPermissionsRequirement>();
+    }
+
+    [Fact]
+    public void AddNocturneAuthorization_DefaultPolicy_DoesNotRequireAPermissionTrie()
+    {
+        var services = new ServiceCollection();
+        services.AddNocturneAuthorization();
+        using var provider = services.BuildServiceProvider();
+
+        var options = provider.GetRequiredService<IOptions<AuthorizationOptions>>().Value;
+
+        // Pins a deliberate decision that reads backwards. A bare [Authorize] resolves
+        // DefaultPolicy, and requiring a non-empty trie there is unsatisfiable on the tenantless
+        // surface: no TenantContext resolves, so MemberScopeMiddleware never rebuilds the trie and
+        // it holds only the subject's global roles — empty for anyone who joined by invite. That
+        // 403s the apex tenant list, the cross-tenant overview and first-tenant creation, none of
+        // which any existing test covers.
+        options.DefaultPolicy.Requirements.Should().NotContain(r => r is HasPermissionsRequirement,
+            "the tenantless surface cannot satisfy a trie requirement; tenant-scoped endpoints are "
+            + "gated by their own per-action scope attributes instead");
+        options.DefaultPolicy.Requirements.OfType<DenyAnonymousAuthorizationRequirement>()
+            .Should().NotBeEmpty("a bare [Authorize] must still reject anonymous callers");
     }
 
     [Theory]

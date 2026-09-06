@@ -1,11 +1,13 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Attributes;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Controllers.V4.Treatments;
 
@@ -95,9 +97,9 @@ public class MealMatchingController : ControllerBase
             MealName = s.MealName,
             Carbs = s.Carbs,
             ConsumedAt = s.ConsumedAt,
-            TreatmentId = s.TreatmentId,
-            TreatmentCarbs = s.TreatmentCarbs,
-            TreatmentMills = s.TreatmentMills,
+            CarbIntakeId = s.CarbIntakeId,
+            CarbIntakeCarbs = s.CarbIntakeCarbs,
+            CarbIntakeMills = s.CarbIntakeMills,
             MatchScore = s.MatchScore,
         }).ToArray();
 
@@ -107,7 +109,14 @@ public class MealMatchingController : ControllerBase
     /// <summary>
     /// Accept a meal match
     /// </summary>
+    /// <remarks>
+    /// Writes a <c>treatment_foods</c> row keyed by the carb intake, which
+    /// <see cref="NutritionController"/> gates on <c>treatments.readwrite</c>, and marks the
+    /// connector food entry matched. Gated on the treatments category rather than food because the
+    /// carb breakdown is a COB input.
+    /// </remarks>
     [HttpPost("accept")]
+    [RequireScope(Scope.TreatmentsReadWrite)]
     [RemoteCommand(Invalidates = ["GetSuggestions"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -123,7 +132,7 @@ public class MealMatchingController : ControllerBase
         {
             await _mealMatchingService.AcceptMatchAsync(
                 request.FoodEntryId,
-                request.TreatmentId,
+                request.CarbIntakeId,
                 request.Carbs,
                 request.TimeOffsetMinutes,
                 HttpContext.RequestAborted);
@@ -140,8 +149,8 @@ public class MealMatchingController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to accept meal match for food entry {FoodEntryId} and treatment {TreatmentId}",
-                request.FoodEntryId, request.TreatmentId);
+            _logger.LogError(ex, "Failed to accept meal match for food entry {FoodEntryId} and carb intake {CarbIntakeId}",
+                request.FoodEntryId, request.CarbIntakeId);
             return Problem(detail: ex.Message, statusCode: 500, title: "Internal Server Error");
         }
     }
@@ -149,7 +158,13 @@ public class MealMatchingController : ControllerBase
     /// <summary>
     /// Dismiss a meal match
     /// </summary>
+    /// <remarks>
+    /// Writes only the <c>connector_food_entries</c> status, which is the food category in
+    /// <see cref="ShareDataCategories.GovernedTables"/>, so this action is gated on the food
+    /// category while <see cref="AcceptMatch"/> is gated on treatments.
+    /// </remarks>
     [HttpPost("dismiss")]
+    [RequireScope(Scope.FoodReadWrite)]
     [RemoteCommand(Invalidates = ["GetSuggestions"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<ActionResult> DismissMatch([FromBody] DismissMatchRequest request)
@@ -180,7 +195,10 @@ public class MealMatchingController : ControllerBase
 public class AcceptMatchRequest
 {
     public Guid FoodEntryId { get; set; }
-    public Guid TreatmentId { get; set; }
+
+    /// <summary>The carb intake to link the food to, from <see cref="SuggestedMealMatch.CarbIntakeId"/>.</summary>
+    public Guid CarbIntakeId { get; set; }
+
     public decimal Carbs { get; set; }
     public int TimeOffsetMinutes { get; set; }
 }
@@ -194,7 +212,7 @@ public class DismissMatchRequest
 }
 
 /// <summary>
-/// A suggested meal match between a food entry and treatment
+/// A suggested meal match between a food entry and a carb intake
 /// </summary>
 public class SuggestedMealMatch
 {
@@ -203,8 +221,8 @@ public class SuggestedMealMatch
     public string? MealName { get; set; }
     public decimal Carbs { get; set; }
     public DateTimeOffset ConsumedAt { get; set; }
-    public Guid TreatmentId { get; set; }
-    public decimal TreatmentCarbs { get; set; }
-    public long TreatmentMills { get; set; }
+    public Guid CarbIntakeId { get; set; }
+    public decimal CarbIntakeCarbs { get; set; }
+    public long CarbIntakeMills { get; set; }
     public double MatchScore { get; set; }
 }

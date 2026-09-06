@@ -6,10 +6,12 @@ import type {
 	SystemEventCategory,
 	TrackerCategory,
 	StateSpanCategory,
+	ChartSpanKind,
 } from './enums.js';
 
 export interface ChartStateSpan {
 	id?: string;
+	kind?: ChartSpanKind;
 	category?: StateSpanCategory;
 	state?: string;
 	startTime: Date;

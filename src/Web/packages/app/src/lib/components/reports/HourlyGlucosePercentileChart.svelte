@@ -27,30 +27,30 @@
         series={[
           {
             key: "p10",
-            value: (d) => d.p10,
+            value: (d: HourlyPercentileData) => d.p10,
             color: "#a0a0FF",
             label: "10th-90th percentile",
           },
           {
             key: "p25",
-            value: (d) => d.p25,
+            value: (d: HourlyPercentileData) => d.p25,
             color: "#000055",
             label: "25th-75th percentile",
           },
           {
             key: "median",
-            value: (d) => d.median,
+            value: (d: HourlyPercentileData) => d.median,
             color: "#000000",
             label: "Median",
           },
           {
             key: "p75",
-            value: (d) => d.p75,
+            value: (d: HourlyPercentileData) => d.p75,
             color: "#000055",
           },
           {
             key: "p90",
-            value: (d) => d.p90,
+            value: (d: HourlyPercentileData) => d.p90,
             color: "#a0a0FF",
           },
         ]}

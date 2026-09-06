@@ -41,8 +41,8 @@ public class TreatmentDecomposerTests : IDisposable
         var ctxFactory = new TestTenantDbContextFactory(_context);
         var bolusRepo = new BolusRepository(ctxFactory, mockDedup.Object, mockAudit, NullLogger<BolusRepository>.Instance);
         var carbIntakeRepo = new CarbIntakeRepository(ctxFactory, mockDedup.Object, mockAudit, NullLogger<CarbIntakeRepository>.Instance);
-        var bgCheckRepo = new BGCheckRepository(ctxFactory, mockDedup.Object, NullLogger<BGCheckRepository>.Instance);
-        var noteRepo = new NoteRepository(ctxFactory, mockDedup.Object, NullLogger<NoteRepository>.Instance);
+        var bgCheckRepo = new BGCheckRepository(ctxFactory, mockDedup.Object, mockAudit, NullLogger<BGCheckRepository>.Instance);
+        var noteRepo = new NoteRepository(ctxFactory, mockDedup.Object, mockAudit, NullLogger<NoteRepository>.Instance);
         var deviceEventRepo = new DeviceEventRepository(ctxFactory, mockDedup.Object, mockAudit, NullLogger<DeviceEventRepository>.Instance);
         var bolusCalcRepo = new BolusCalculationRepository(ctxFactory, mockDedup.Object, mockAudit, NullLogger<BolusCalculationRepository>.Instance);
         _stateSpanServiceMock = new Mock<IStateSpanService>();
@@ -65,6 +65,7 @@ public class TreatmentDecomposerTests : IDisposable
             _stateSpanServiceMock.Object,
             _treatmentFoodServiceMock.Object,
             _deviceServiceMock.Object,
+            Mock.Of<IPatientDeviceStamper>(),
             _profileDecomposerMock.Object,
             _activeProfileResolverMock.Object,
             _insulinRepoMock.Object,
@@ -102,7 +103,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         result.CorrelationId.Should().NotBeNull();
@@ -129,6 +130,39 @@ public class TreatmentDecomposerTests : IDisposable
         bolus.CorrelationId.Should().Be(carbIntake.CorrelationId);
     }
 
+    /// <summary>
+    /// The legacy <c>foodType</c> is preserved as the carb intake's <see cref="TreatmentFood"/>
+    /// line. Create-only: those rows are also the user-editable food breakdown.
+    /// </summary>
+    [Fact]
+    public async Task DecomposeAsync_MealWithFoodType_WritesTreatmentFoodLine()
+    {
+        // Arrange
+        var treatment = new Treatment
+        {
+            Id = "meal-food-1",
+            EventType = "Meal Bolus",
+            Mills = 1700000000000,
+            Insulin = 5.0,
+            Carbs = 45,
+            FoodType = "Sandwich",
+        };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
+
+        // Assert
+        var carbIntake = result.CreatedRecords.OfType<V4Models.CarbIntake>().Single();
+        carbIntake.Id.Should().NotBeEmpty();
+
+        _treatmentFoodServiceMock.Verify(
+            x => x.AddAsync(
+                It.Is<TreatmentFood>(f =>
+                    f.CarbIntakeId == carbIntake.Id && f.Note == "Sandwich" && f.Carbs == 45m),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
     [Fact]
     public async Task DecomposeAsync_SnackBolus_CreatesBolusAndCarbIntake()
     {
@@ -143,7 +177,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.Should().HaveCount(2);
@@ -172,7 +206,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.Should().HaveCount(1);
@@ -202,7 +236,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.Should().HaveCount(1);
@@ -234,7 +268,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.Should().HaveCount(1);
@@ -269,7 +303,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.Should().HaveCount(1);
@@ -297,7 +331,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.Should().HaveCount(1);
@@ -333,11 +367,11 @@ public class TreatmentDecomposerTests : IDisposable
             .ReturnsAsync((V4Models.TempBasal?)null);
 
         _tempBasalRepoMock
-            .Setup(r => r.CreateAsync(It.IsAny<V4Models.TempBasal>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((V4Models.TempBasal tb, CancellationToken _) => tb);
+            .Setup(r => r.CreateAsync(It.IsAny<V4Models.TempBasal>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((V4Models.TempBasal tb, WriteOrigin origin, CancellationToken _) => tb);
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.Should().HaveCount(1);
@@ -349,7 +383,7 @@ public class TreatmentDecomposerTests : IDisposable
         tempBasal.Origin.Should().Be(V4Models.TempBasalOrigin.Manual);
 
         _tempBasalRepoMock.Verify(
-            r => r.CreateAsync(It.IsAny<V4Models.TempBasal>(), It.IsAny<CancellationToken>()),
+            r => r.CreateAsync(It.IsAny<V4Models.TempBasal>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -383,7 +417,7 @@ public class TreatmentDecomposerTests : IDisposable
             .ReturnsAsync(expectedStateSpan);
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.Should().HaveCount(1);
@@ -426,7 +460,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert - should produce BolusCalculation + Bolus + CarbIntake (override rule: insulin > 0 AND carbs > 0)
         result.CreatedRecords.OfType<V4Models.BolusCalculation>().Should().HaveCount(1);
@@ -459,7 +493,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.Should().HaveCount(1);
@@ -484,7 +518,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.OfType<V4Models.Bolus>().Should().HaveCount(1);
@@ -512,7 +546,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.OfType<V4Models.Bolus>().Should().HaveCount(1);
@@ -536,7 +570,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act - first call creates
-        var firstResult = await _decomposer.DecomposeAsync(treatment);
+        var firstResult = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
         firstResult.CreatedRecords.Should().HaveCount(1);
         firstResult.UpdatedRecords.Should().BeEmpty();
 
@@ -544,7 +578,7 @@ public class TreatmentDecomposerTests : IDisposable
         treatment.Insulin = 3.5;
 
         // Act - second call should update
-        var secondResult = await _decomposer.DecomposeAsync(treatment);
+        var secondResult = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         secondResult.CreatedRecords.Should().BeEmpty();
@@ -570,7 +604,7 @@ public class TreatmentDecomposerTests : IDisposable
             Units = "mg/dl"
         };
 
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         result.CreatedRecords.Should().HaveCount(1);
         var bgCheck = result.CreatedRecords[0].Should().BeOfType<V4Models.BGCheck>().Subject;
@@ -604,11 +638,11 @@ public class TreatmentDecomposerTests : IDisposable
             Units = "mg/dl"
         };
 
-        var firstResult = await _decomposer.DecomposeAsync(firstUpload);
+        var firstResult = await _decomposer.DecomposeAsync(firstUpload, WriteOrigin.Live);
         firstResult.CreatedRecords.Should().HaveCount(1);
         firstResult.UpdatedRecords.Should().BeEmpty();
 
-        var secondResult = await _decomposer.DecomposeAsync(secondUpload);
+        var secondResult = await _decomposer.DecomposeAsync(secondUpload, WriteOrigin.Live);
 
         // No duplicate row — the re-upload updates the existing BGCheck.
         secondResult.CreatedRecords.Should().BeEmpty();
@@ -634,7 +668,7 @@ public class TreatmentDecomposerTests : IDisposable
             EnteredBy = "xDrip4iOS"
         };
 
-        var firstResult = await _decomposer.DecomposeAsync(MakeUpload());
+        var firstResult = await _decomposer.DecomposeAsync(MakeUpload(), WriteOrigin.Live);
         firstResult.CreatedRecords.Should().HaveCount(1);
         firstResult.UpdatedRecords.Should().BeEmpty();
 
@@ -644,7 +678,7 @@ public class TreatmentDecomposerTests : IDisposable
         bgCheck.Mills.Should().Be(DateTimeOffset.Parse("2026-06-13T10:45:28.937Z").ToUnixTimeMilliseconds());
 
         // Re-upload (fresh deserialized object, same fields) must update, not duplicate.
-        var secondResult = await _decomposer.DecomposeAsync(MakeUpload());
+        var secondResult = await _decomposer.DecomposeAsync(MakeUpload(), WriteOrigin.Live);
         secondResult.CreatedRecords.Should().BeEmpty();
         secondResult.UpdatedRecords.Should().HaveCount(1);
     }
@@ -664,7 +698,7 @@ public class TreatmentDecomposerTests : IDisposable
             // no Mills / Created_at / EventTime / Timestamp / Date
         };
 
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         result.CreatedRecords.Should().HaveCount(1);
         result.CreatedRecords[0].Should().BeOfType<V4Models.Note>()
@@ -687,8 +721,8 @@ public class TreatmentDecomposerTests : IDisposable
             EventTime = "2026-06-13T10:45:05.000Z", Insulin = 1.0, EnteredBy = "xDrip4iOS"
         };
 
-        var r1 = await _decomposer.DecomposeAsync(first);
-        var r2 = await _decomposer.DecomposeAsync(second);
+        var r1 = await _decomposer.DecomposeAsync(first, WriteOrigin.Live);
+        var r2 = await _decomposer.DecomposeAsync(second, WriteOrigin.Live);
 
         r1.CreatedRecords.OfType<V4Models.Bolus>().Should().HaveCount(1);
         r2.CreatedRecords.OfType<V4Models.Bolus>().Should().HaveCount(1);
@@ -712,7 +746,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act - first call creates
-        var firstResult = await _decomposer.DecomposeAsync(treatment);
+        var firstResult = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
         firstResult.CreatedRecords.Should().HaveCount(2);
 
         // Modify values
@@ -720,7 +754,7 @@ public class TreatmentDecomposerTests : IDisposable
         treatment.Carbs = 50;
 
         // Act - second call should update both
-        var secondResult = await _decomposer.DecomposeAsync(treatment);
+        var secondResult = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         secondResult.CreatedRecords.Should().BeEmpty();
@@ -749,7 +783,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.Should().BeEmpty();
@@ -769,7 +803,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.Should().BeEmpty();
@@ -788,7 +822,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.Should().BeEmpty();
@@ -809,7 +843,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.Should().HaveCount(1);
@@ -831,7 +865,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         var note = result.CreatedRecords[0].Should().BeOfType<V4Models.Note>().Subject;
@@ -935,7 +969,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.OfType<V4Models.Bolus>().Should().HaveCount(1);
@@ -961,7 +995,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         var bgCheck = result.CreatedRecords[0].Should().BeOfType<V4Models.BGCheck>().Subject;
@@ -997,7 +1031,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         var bolus = result.CreatedRecords[0].Should().BeOfType<V4Models.Bolus>().Subject;
@@ -1045,7 +1079,7 @@ public class TreatmentDecomposerTests : IDisposable
             .ReturnsAsync(expectedStateSpan);
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.Should().HaveCount(1);
@@ -1245,7 +1279,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert - fallback produces a Bolus when insulin > 0
         result.CreatedRecords.Should().ContainSingle()
@@ -1267,7 +1301,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert - fallback produces a CarbIntake when carbs > 0
         result.CreatedRecords.Should().ContainSingle()
@@ -1290,7 +1324,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert - Correction Bolus sets produceBolus; override doesn't fire
         result.CreatedRecords.OfType<V4Models.Bolus>().Should().HaveCount(1);
@@ -1310,7 +1344,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.OfType<V4Models.CarbIntake>().Should().HaveCount(1);
@@ -1331,7 +1365,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert - override rule needs insulin > 0, but fallback produces CarbIntake for carbs > 0
         result.CreatedRecords.Should().ContainSingle()
@@ -1353,7 +1387,7 @@ public class TreatmentDecomposerTests : IDisposable
             EnteredBy = "Trio"
         };
 
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         var bolus = result.CreatedRecords.Should().ContainSingle()
             .Which.Should().BeOfType<V4Models.Bolus>().Subject;
@@ -1374,7 +1408,7 @@ public class TreatmentDecomposerTests : IDisposable
             EnteredBy = "Trio"
         };
 
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         var bolus = result.CreatedRecords.Should().ContainSingle()
             .Which.Should().BeOfType<V4Models.Bolus>().Subject;
@@ -1394,7 +1428,7 @@ public class TreatmentDecomposerTests : IDisposable
             EnteredBy = "Trio"
         };
 
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         var bolus = result.CreatedRecords.Should().ContainSingle()
             .Which.Should().BeOfType<V4Models.Bolus>().Subject;
@@ -1413,7 +1447,7 @@ public class TreatmentDecomposerTests : IDisposable
             EnteredBy = "manual"
         };
 
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         var note = result.CreatedRecords.Should().ContainSingle()
             .Which.Should().BeOfType<V4Models.Note>().Subject;
@@ -1433,7 +1467,7 @@ public class TreatmentDecomposerTests : IDisposable
             EnteredBy = "pump"
         };
 
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         result.CreatedRecords.OfType<V4Models.Bolus>().Should().HaveCount(1);
         result.CreatedRecords.OfType<V4Models.CarbIntake>().Should().HaveCount(1);
@@ -1452,7 +1486,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert - Meal Bolus always produces Bolus+CarbIntake by EventType match
         result.CreatedRecords.OfType<V4Models.Bolus>().Should().HaveCount(1);
@@ -1484,7 +1518,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert - Bolus Wizard sets produceBolusCalc. No insulin means no Bolus.
         // Override doesn't fire (needs both). CarbIntake not produced.
@@ -1508,7 +1542,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert - BolusCalc + Bolus (from wizard + insulin) + CarbIntake (from override rule)
         result.CreatedRecords.OfType<V4Models.BolusCalculation>().Should().HaveCount(1);
@@ -1530,7 +1564,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.Should().HaveCount(1);
@@ -1555,11 +1589,11 @@ public class TreatmentDecomposerTests : IDisposable
             Units = "mg/dl"
         };
 
-        var first = await _decomposer.DecomposeAsync(treatment);
+        var first = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
         first.CreatedRecords.Should().HaveCount(1);
 
         treatment.Glucose = 125;
-        var second = await _decomposer.DecomposeAsync(treatment);
+        var second = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         second.CreatedRecords.Should().BeEmpty();
@@ -1579,11 +1613,11 @@ public class TreatmentDecomposerTests : IDisposable
             Notes = "Original note"
         };
 
-        var first = await _decomposer.DecomposeAsync(treatment);
+        var first = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
         first.CreatedRecords.Should().HaveCount(1);
 
         treatment.Notes = "Updated note";
-        var second = await _decomposer.DecomposeAsync(treatment);
+        var second = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         second.CreatedRecords.Should().BeEmpty();
         second.UpdatedRecords.Should().HaveCount(1);
@@ -1602,11 +1636,11 @@ public class TreatmentDecomposerTests : IDisposable
             BloodGlucoseInput = 150
         };
 
-        var first = await _decomposer.DecomposeAsync(treatment);
+        var first = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
         first.CreatedRecords.Should().HaveCount(1);
 
         treatment.BloodGlucoseInput = 180;
-        var second = await _decomposer.DecomposeAsync(treatment);
+        var second = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         second.CreatedRecords.Should().BeEmpty();
         second.UpdatedRecords.Should().HaveCount(1);
@@ -1625,8 +1659,8 @@ public class TreatmentDecomposerTests : IDisposable
             Insulin = 2.0
         };
 
-        var first = await _decomposer.DecomposeAsync(Make());
-        var second = await _decomposer.DecomposeAsync(Make());
+        var first = await _decomposer.DecomposeAsync(Make(), WriteOrigin.Live);
+        var second = await _decomposer.DecomposeAsync(Make(), WriteOrigin.Live);
 
         first.CreatedRecords.Should().HaveCount(1);
         first.UpdatedRecords.Should().BeEmpty();
@@ -1651,7 +1685,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.OfType<V4Models.Bolus>().Should().HaveCount(1);
@@ -1684,7 +1718,7 @@ public class TreatmentDecomposerTests : IDisposable
             .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(expectedStateSpan);
 
-        await _decomposer.DecomposeAsync(treatment);
+        await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         _stateSpanServiceMock.Verify(
             s => s.UpsertStateSpanAsync(
@@ -1710,7 +1744,7 @@ public class TreatmentDecomposerTests : IDisposable
             .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(expectedStateSpan);
 
-        await _decomposer.DecomposeAsync(treatment);
+        await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Duration defaults to 0 in Treatment; 0 is NOT > 0, so EndMills should be null
         _stateSpanServiceMock.Verify(
@@ -1741,7 +1775,7 @@ public class TreatmentDecomposerTests : IDisposable
             .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(expectedStateSpan);
 
-        await _decomposer.DecomposeAsync(treatment);
+        await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         _stateSpanServiceMock.Verify(
             s => s.UpsertStateSpanAsync(
@@ -1858,7 +1892,7 @@ public class TreatmentDecomposerTests : IDisposable
             Mills = 1700000000000
         };
 
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         result.CreatedRecords.Should().HaveCount(1);
         var de = result.CreatedRecords[0].Should().BeOfType<V4Models.DeviceEvent>().Subject;
@@ -1882,7 +1916,7 @@ public class TreatmentDecomposerTests : IDisposable
             BloodGlucoseInput = 200
         };
 
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         var calc = result.CreatedRecords.OfType<V4Models.BolusCalculation>().Single();
         var bolus = result.CreatedRecords.OfType<V4Models.Bolus>().Single();
@@ -1914,7 +1948,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         var bolusCalc = result.CreatedRecords.OfType<V4Models.BolusCalculation>().Single();
@@ -1942,7 +1976,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         var bolus = result.CreatedRecords.OfType<V4Models.Bolus>().Single();
@@ -1970,7 +2004,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         var bolusCalc = result.CreatedRecords.OfType<V4Models.BolusCalculation>().Single();
@@ -1997,7 +2031,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         var bolus = result.CreatedRecords.OfType<V4Models.Bolus>().Single();
@@ -2023,7 +2057,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         var note = result.CreatedRecords[0].Should().BeOfType<V4Models.Note>().Subject;
@@ -2062,7 +2096,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert — DeviceEvent + Note (because Notes is non-empty)
         result.CreatedRecords.OfType<V4Models.DeviceEvent>().Should().HaveCount(1);
@@ -2095,7 +2129,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act - first call creates DeviceEvent + Note (because Notes is non-empty)
-        var firstResult = await _decomposer.DecomposeAsync(treatment);
+        var firstResult = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
         firstResult.CreatedRecords.Should().HaveCount(2);
         firstResult.CreatedRecords.OfType<V4Models.DeviceEvent>().Should().HaveCount(1);
         firstResult.CreatedRecords.OfType<V4Models.Note>().Should().HaveCount(1);
@@ -2105,7 +2139,7 @@ public class TreatmentDecomposerTests : IDisposable
         treatment.Notes = "Left arm";
 
         // Act - second call should update both
-        var secondResult = await _decomposer.DecomposeAsync(treatment);
+        var secondResult = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert — both DeviceEvent and Note updated
         secondResult.CreatedRecords.Should().BeEmpty();
@@ -2129,7 +2163,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         var deviceEvent = result.CreatedRecords[0].Should().BeOfType<V4Models.DeviceEvent>().Subject;
@@ -2167,7 +2201,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert — DeviceEvent + Note + StateSpan
         var deviceEvent = result.CreatedRecords.OfType<V4Models.DeviceEvent>().Single();
@@ -2221,7 +2255,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert — DeviceEvent created, StateSpan closed
         var deviceEvent = result.CreatedRecords.OfType<V4Models.DeviceEvent>().Single();
@@ -2257,7 +2291,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert — DeviceEvent created, no StateSpan upserted
         result.CreatedRecords.OfType<V4Models.DeviceEvent>().Should().HaveCount(1);
@@ -2300,7 +2334,7 @@ public class TreatmentDecomposerTests : IDisposable
             .ReturnsAsync(expectedStateSpan);
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.Should().HaveCount(1);
@@ -2347,7 +2381,7 @@ public class TreatmentDecomposerTests : IDisposable
             .ReturnsAsync(expectedStateSpan);
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.Should().HaveCount(1);
@@ -2386,7 +2420,7 @@ public class TreatmentDecomposerTests : IDisposable
             .ReturnsAsync(expectedStateSpan);
 
         // Act
-        await _decomposer.DecomposeAsync(treatment);
+        await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         _stateSpanServiceMock.Verify(
@@ -2438,7 +2472,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.Should().HaveCount(1);
@@ -2462,7 +2496,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.Should().HaveCount(1);
@@ -2495,7 +2529,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         var deviceEvent = result.CreatedRecords.OfType<V4Models.DeviceEvent>().Single();
@@ -2536,11 +2570,29 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         var bolus = result.CreatedRecords.OfType<V4Models.Bolus>().Single();
         bolus.PatientDeviceId.Should().Be(expectedPatientDeviceId);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_ReDecomposedBolus_TakesAFreshResolutionOverTheStoredOne()
+    {
+        var first = Guid.CreateVersion7();
+        var second = Guid.CreateVersion7();
+        _deviceServiceMock
+            .SetupSequence(s => s.ResolvePatientDeviceAsync(
+                It.IsAny<Guid?>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(first)
+            .ReturnsAsync(second);
+        var treatment = new Treatment { Id = "bolus-reattribution", EventType = "Correction Bolus", Mills = 1700000000000, Insulin = 3.0 };
+
+        await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
+
+        result.UpdatedRecords.OfType<V4Models.Bolus>().Single().PatientDeviceId.Should().Be(second);
     }
 
     #endregion
@@ -2675,7 +2727,7 @@ public class TreatmentDecomposerTests : IDisposable
             .ReturnsAsync((StateSpan ss, CancellationToken _) => ss);
 
         // Act
-        await _decomposer.DecomposeAsync(treatment);
+        await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         capturedSpan.Should().NotBeNull();
@@ -2720,11 +2772,11 @@ public class TreatmentDecomposerTests : IDisposable
         profileDecompResult.CreatedRecords.Add(new V4Models.TherapySettings { ProfileName = "Day Profile@@@@@1700000000000" });
 
         _profileDecomposerMock
-            .Setup(d => d.DecomposeAsync(It.IsAny<Profile>(), It.IsAny<CancellationToken>()))
+            .Setup(d => d.DecomposeAsync(It.IsAny<Profile>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(profileDecompResult);
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert -- StateSpan + TherapySettings from profile decomposer
         result.CreatedRecords.Should().HaveCount(2);
@@ -2748,7 +2800,7 @@ public class TreatmentDecomposerTests : IDisposable
                     && p.Mills == 1700000000000
                     && p.Store.Count == 1
                     && p.Store.ContainsKey("Day Profile@@@@@1700000000000")),
-                It.IsAny<CancellationToken>()),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -2777,11 +2829,11 @@ public class TreatmentDecomposerTests : IDisposable
             .ReturnsAsync(expectedStateSpan);
 
         // Act
-        await _decomposer.DecomposeAsync(treatment);
+        await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert -- profile decomposer should NOT be called
         _profileDecomposerMock.Verify(
-            d => d.DecomposeAsync(It.IsAny<Profile>(), It.IsAny<CancellationToken>()),
+            d => d.DecomposeAsync(It.IsAny<Profile>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -2868,8 +2920,8 @@ public class TreatmentDecomposerTests : IDisposable
             .Setup(r => r.GetByLegacyIdAsync("tb-ps-1", It.IsAny<CancellationToken>()))
             .ReturnsAsync((V4Models.TempBasal?)null);
         _tempBasalRepoMock
-            .Setup(r => r.CreateAsync(It.IsAny<V4Models.TempBasal>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((V4Models.TempBasal tb, CancellationToken _) => tb);
+            .Setup(r => r.CreateAsync(It.IsAny<V4Models.TempBasal>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((V4Models.TempBasal tb, WriteOrigin origin, CancellationToken _) => tb);
 
         var treatment = new Treatment
         {
@@ -2881,7 +2933,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         var tempBasal = result.CreatedRecords.OfType<V4Models.TempBasal>().Single();
@@ -2917,8 +2969,8 @@ public class TreatmentDecomposerTests : IDisposable
             .Setup(r => r.GetByLegacyIdAsync("tb-fallback-1", It.IsAny<CancellationToken>()))
             .ReturnsAsync((V4Models.TempBasal?)null);
         _tempBasalRepoMock
-            .Setup(r => r.CreateAsync(It.IsAny<V4Models.TempBasal>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((V4Models.TempBasal tb, CancellationToken _) => tb);
+            .Setup(r => r.CreateAsync(It.IsAny<V4Models.TempBasal>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((V4Models.TempBasal tb, WriteOrigin origin, CancellationToken _) => tb);
 
         var treatment = new Treatment
         {
@@ -2930,7 +2982,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert
         var tempBasal = result.CreatedRecords.OfType<V4Models.TempBasal>().Single();
@@ -2959,8 +3011,8 @@ public class TreatmentDecomposerTests : IDisposable
             .Setup(r => r.GetByLegacyIdAsync("tb-notiers-1", It.IsAny<CancellationToken>()))
             .ReturnsAsync((V4Models.TempBasal?)null);
         _tempBasalRepoMock
-            .Setup(r => r.CreateAsync(It.IsAny<V4Models.TempBasal>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((V4Models.TempBasal tb, CancellationToken _) => tb);
+            .Setup(r => r.CreateAsync(It.IsAny<V4Models.TempBasal>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((V4Models.TempBasal tb, WriteOrigin origin, CancellationToken _) => tb);
 
         var treatment = new Treatment
         {
@@ -2972,7 +3024,7 @@ public class TreatmentDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert — record is created but InsulinContext is null; IOB falls back to profile DIA
         var tempBasal = result.CreatedRecords.OfType<V4Models.TempBasal>().Single();
@@ -3019,12 +3071,12 @@ public class TreatmentDecomposerTests : IDisposable
             .ReturnsAsync((StateSpan ss, CancellationToken _) => ss);
 
         _tempBasalRepoMock
-            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.TempBasal>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<V4Models.TempBasal> list, CancellationToken _) => list.ToList());
+            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.TempBasal>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<V4Models.TempBasal> list, WriteOrigin origin, CancellationToken _) => list.ToList());
 
         // Act
         var result = await _decomposer.DecomposeBatchAsync(
-            new List<Treatment> { profileSwitchTreatment, tempBasalTreatment });
+            new List<Treatment> { profileSwitchTreatment, tempBasalTreatment }, WriteOrigin.Live);
 
         // Assert
         var tempBasal = result.CreatedRecords.OfType<V4Models.TempBasal>().Single();

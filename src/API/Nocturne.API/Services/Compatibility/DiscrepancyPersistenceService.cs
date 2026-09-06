@@ -96,7 +96,7 @@ public class DiscrepancyPersistenceService : IDiscrepancyPersistenceService
         {
             _logger.LogDebug(
                 "Storing discrepancy analysis for correlation {CorrelationId}",
-                comparisonResult.CorrelationId
+                comparisonResult.TraceId
             );
 
             // Convert the compatibility proxy models to simple data structures
@@ -113,7 +113,7 @@ public class DiscrepancyPersistenceService : IDiscrepancyPersistenceService
                 .ToList();
 
             var analysisId = await _repository.StoreAnalysisAsync(
-                comparisonResult.CorrelationId,
+                comparisonResult.TraceId,
                 comparisonResult.ComparisonTimestamp,
                 requestMethod,
                 requestPath,
@@ -147,7 +147,7 @@ public class DiscrepancyPersistenceService : IDiscrepancyPersistenceService
             _logger.LogDebug(
                 "Stored discrepancy analysis {AnalysisId} for correlation {CorrelationId}",
                 analysisId,
-                comparisonResult.CorrelationId
+                comparisonResult.TraceId
             );
 
             // Forward to remote endpoint if configured (fire-and-forget, don't block)
@@ -167,7 +167,7 @@ public class DiscrepancyPersistenceService : IDiscrepancyPersistenceService
                     _logger.LogWarning(
                         ex,
                         "Error forwarding discrepancy {CorrelationId} to remote endpoint",
-                        comparisonResult.CorrelationId
+                        comparisonResult.TraceId
                     );
                 }
             });
@@ -179,7 +179,7 @@ public class DiscrepancyPersistenceService : IDiscrepancyPersistenceService
             _logger.LogError(
                 ex,
                 "Error storing discrepancy analysis for correlation {CorrelationId}",
-                comparisonResult.CorrelationId
+                comparisonResult.TraceId
             );
             throw;
         }

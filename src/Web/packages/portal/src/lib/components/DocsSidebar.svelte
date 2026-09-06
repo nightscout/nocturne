@@ -1,6 +1,6 @@
 <script lang="ts">
     import { page } from "$app/state";
-    import { Rocket, Download, Settings, Shield, Share2, Bell, Bot, Code2, KeyRound, Activity, ChevronRight, ChevronDown } from "@lucide/svelte";
+    import { Rocket, Download, Settings, Shield, Share2, Bell, Bot, Code2, KeyRound, Activity, LayoutGrid, Package, ChevronRight, ChevronDown } from "@lucide/svelte";
 
     const navSections = [
         {
@@ -19,6 +19,7 @@
                 { href: "/docs/installation/docker-compose", label: "Docker Compose" },
                 { href: "/docs/installation/portainer", label: "Portainer" },
                 { href: "/docs/installation/byo-postgres", label: "Bring Your Own PostgreSQL" },
+                { href: "/docs/installation/reverse-proxy", label: "Bring Your Own Reverse Proxy" },
             ],
         },
         {
@@ -26,6 +27,8 @@
             icon: Shield,
             items: [
                 { href: "/docs/authentication", label: "Overview" },
+                { href: "/docs/authentication/passkeys", label: "Passkeys & fallbacks" },
+                { href: "/docs/authentication/request-membership", label: "Request membership" },
                 { href: "/docs/authentication/google", label: "Sign in with Google" },
                 { href: "/docs/authentication/github", label: "Sign in with GitHub" },
                 { href: "/docs/authentication/oidc", label: "Generic OIDC" },
@@ -35,7 +38,11 @@
             title: "Sharing & Privacy",
             icon: Share2,
             items: [
-                { href: "/docs/sharing", label: "Sharing your data" },
+                { href: "/docs/sharing", label: "Overview" },
+                { href: "/docs/sharing/public-link", label: "Public share link" },
+                { href: "/docs/sharing/members", label: "Member accounts & invites" },
+                { href: "/docs/sharing/guest-links", label: "Temporary guest links" },
+                { href: "/docs/sharing/clock", label: "Clocks" },
             ],
         },
         {
@@ -71,11 +78,25 @@
             ],
         },
         {
+            title: "Windows Widget",
+            icon: LayoutGrid,
+            items: [
+                { href: "/docs/windows-widget", label: "Overview & setup" },
+            ],
+        },
+        {
             title: "Connecting Apps",
             icon: KeyRound,
             items: [
                 { href: "/docs/connecting-apps", label: "App authorization (PKCE)" },
                 { href: "/docs/connecting-apps/device-flow", label: "Mobile & device flow" },
+            ],
+        },
+        {
+            title: "SDKs",
+            icon: Package,
+            items: [
+                { href: "/docs/sdks", label: "Official SDKs" },
             ],
         },
         {

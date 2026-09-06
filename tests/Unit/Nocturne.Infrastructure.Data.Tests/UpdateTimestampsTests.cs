@@ -1,0 +1,359 @@
+using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
+using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Tests.Shared.Infrastructure;
+using Xunit;
+
+namespace Nocturne.Infrastructure.Data.Tests;
+
+/// <summary>
+/// Verifies the single enforcement point for system timestamps and tenant ownership:
+/// <c>NocturneDbContext.UpdateTimestamps</c>, driven by the timestamp marker interfaces
+/// (<see cref="ISystemTimestamped"/>, <see cref="ISystemCreated"/>,
+/// <see cref="IEntityTimestamped"/>, <see cref="IEntityCreated"/>) plus a small set of
+/// entity-specific columns.
+///
+/// The store is in-memory SQLite, not EF InMemory: only a relational provider honours
+/// <c>HasDefaultValueSql</c> and store-generated value configuration, so a column that
+/// SaveChanges stamps but the provider then discards from the UPDATE is visible here.
+/// </summary>
+public class UpdateTimestampsTests : IDisposable
+{
+    // A clearly-stale sentinel so a freshly-stamped utcNow value is unambiguously newer.
+    private static readonly DateTime Stale = new(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+    private readonly List<SqliteTestDatabase> _databases = [];
+
+    [Fact]
+    public async Task SystemTimestamped_StampsBothOnInsert_AndBumpsUpdatedOnModify()
+    {
+        var tenantId = Guid.NewGuid();
+        var options = NewStore(tenantId);
+        var id = Guid.CreateVersion7();
+        var before = DateTime.UtcNow;
+
+        await using (var ctx = new NocturneDbContext(options) { TenantId = tenantId })
+        {
+            ctx.Foods.Add(new FoodEntity { Id = id, SysCreatedAt = Stale, SysUpdatedAt = Stale });
+            await ctx.SaveChangesAsync();
+        }
+
+        DateTime createdAfterInsert;
+        await using (var ctx = new NocturneDbContext(options) { TenantId = tenantId })
+        {
+            var food = await ctx.Foods.SingleAsync();
+            food.SysCreatedAt.Should().BeOnOrAfter(before, "sys_created_at is stamped on insert");
+            food.SysUpdatedAt.Should().BeOnOrAfter(before, "sys_updated_at is stamped on insert");
+            createdAfterInsert = food.SysCreatedAt;
+
+            food.Name = "changed";
+            await Task.Delay(5);
+            await ctx.SaveChangesAsync();
+        }
+
+        await using (var ctx = new NocturneDbContext(options) { TenantId = tenantId })
+        {
+            var food = await ctx.Foods.SingleAsync();
+            food.SysCreatedAt.Should().Be(createdAfterInsert, "sys_created_at is preserved across updates");
+            food.SysUpdatedAt.Should().BeAfter(createdAfterInsert, "sys_updated_at is bumped on every save");
+        }
+    }
+
+    [Fact]
+    public async Task SystemTimestamped_UnchangedTrackedRow_IsNotBumpedByAnotherRowsSave()
+    {
+        var tenantId = Guid.NewGuid();
+        var options = NewStore(tenantId);
+        var idA = Guid.CreateVersion7();
+        var idB = Guid.CreateVersion7();
+
+        await using (var ctx = new NocturneDbContext(options) { TenantId = tenantId })
+        {
+            ctx.Foods.AddRange(new FoodEntity { Id = idA }, new FoodEntity { Id = idB });
+            await ctx.SaveChangesAsync();
+        }
+
+        await using (var ctx = new NocturneDbContext(options) { TenantId = tenantId })
+        {
+            var changed = await ctx.Foods.SingleAsync(f => f.Id == idA);
+            var untouched = await ctx.Foods.SingleAsync(f => f.Id == idB);
+            var untouchedStamp = untouched.SysUpdatedAt;
+
+            changed.Name = "changed";
+            await Task.Delay(5);
+            await ctx.SaveChangesAsync();
+
+            untouched.SysUpdatedAt.Should().Be(untouchedStamp,
+                "a tracked row with no modifications is not rewritten by an unrelated save");
+        }
+    }
+
+    [Fact]
+    public async Task SystemTimestamped_TimestampOnlyModification_KeepsTheAssignedValue()
+    {
+        var tenantId = Guid.NewGuid();
+        var options = NewStore(tenantId);
+        var id = Guid.CreateVersion7();
+
+        await using (var ctx = new NocturneDbContext(options) { TenantId = tenantId })
+        {
+            ctx.Foods.Add(new FoodEntity { Id = id });
+            await ctx.SaveChangesAsync();
+        }
+
+        await using (var ctx = new NocturneDbContext(options) { TenantId = tenantId })
+        {
+            var food = await ctx.Foods.SingleAsync();
+            // A deliberate "touch": the caller-assigned value must survive, not be re-stamped.
+            food.SysUpdatedAt = Stale;
+            await ctx.SaveChangesAsync();
+        }
+
+        await using (var verify = new NocturneDbContext(options) { TenantId = tenantId })
+        {
+            var food = await verify.Foods.SingleAsync();
+            food.SysUpdatedAt.Should().Be(Stale,
+                "a modification consisting only of the update timestamp keeps the assigned value");
+        }
+    }
+
+    [Fact]
+    public async Task SystemCreated_StampsCreatedOnInsertOnly()
+    {
+        var tenantId = Guid.NewGuid();
+        var options = NewStore(tenantId);
+        var foodId = Guid.CreateVersion7();
+        var before = DateTime.UtcNow;
+
+        await using (var ctx = new NocturneDbContext(options) { TenantId = tenantId })
+        {
+            ctx.Foods.Add(new FoodEntity { Id = foodId });
+            ctx.UserFoodFavorites.Add(new UserFoodFavoriteEntity
+            {
+                Id = Guid.CreateVersion7(),
+                FoodId = foodId,
+                SysCreatedAt = Stale,
+            });
+            await ctx.SaveChangesAsync();
+        }
+
+        await using (var verify = new NocturneDbContext(options) { TenantId = tenantId })
+        {
+            var favorite = await verify.UserFoodFavorites.SingleAsync();
+            favorite.SysCreatedAt.Should().BeOnOrAfter(before, "create-only entities are stamped on insert");
+        }
+    }
+
+    [Fact]
+    public async Task EntityTimestamped_StampsCreatedAndUpdated()
+    {
+        var options = NewStore();
+        var before = DateTime.UtcNow;
+
+        await using (var ctx = new NocturneDbContext(options))
+        {
+            ctx.Subjects.Add(new SubjectEntity { Id = Guid.CreateVersion7(), CreatedAt = Stale, UpdatedAt = Stale });
+            await ctx.SaveChangesAsync();
+        }
+
+        await using (var verify = new NocturneDbContext(options))
+        {
+            var subject = await verify.Subjects.SingleAsync();
+            subject.CreatedAt.Should().BeOnOrAfter(before, "created_at is stamped on insert");
+            subject.UpdatedAt.Should().BeOnOrAfter(before, "updated_at is stamped on insert");
+        }
+    }
+
+    [Fact]
+    public async Task ClockFace_StampsAllFourConventions()
+    {
+        var tenantId = Guid.NewGuid();
+        var options = NewStore(tenantId);
+        var before = DateTime.UtcNow;
+
+        await using (var ctx = new NocturneDbContext(options) { TenantId = tenantId })
+        {
+            ctx.ClockFaces.Add(new ClockFaceEntity
+            {
+                Id = Guid.CreateVersion7(),
+                CreatedAt = Stale,
+                UpdatedAt = null,
+                SysCreatedAt = Stale,
+                SysUpdatedAt = Stale,
+            });
+            await ctx.SaveChangesAsync();
+        }
+
+        await using (var verify = new NocturneDbContext(options) { TenantId = tenantId })
+        {
+            var clockFace = await verify.ClockFaces.SingleAsync();
+            clockFace.SysCreatedAt.Should().BeOnOrAfter(before);
+            clockFace.SysUpdatedAt.Should().BeOnOrAfter(before);
+            clockFace.CreatedAt.Should().BeOnOrAfter(before);
+            clockFace.UpdatedAt.Should().NotBeNull("the nullable updated_at is stamped on every save");
+            clockFace.UpdatedAt!.Value.Should().BeOnOrAfter(before);
+        }
+    }
+
+    [Fact]
+    public async Task ConnectorConfiguration_StampsLastModifiedOnInsert()
+    {
+        var tenantId = Guid.NewGuid();
+        var options = NewStore(tenantId);
+        var before = DateTimeOffset.UtcNow;
+
+        await using (var ctx = new NocturneDbContext(options) { TenantId = tenantId })
+        {
+            ctx.ConnectorConfigurations.Add(new ConnectorConfigurationEntity
+            {
+                Id = Guid.CreateVersion7(),
+                LastModified = new DateTimeOffset(Stale),
+            });
+            await ctx.SaveChangesAsync();
+        }
+
+        DateTimeOffset stampedOnInsert;
+        await using (var verify = new NocturneDbContext(options) { TenantId = tenantId })
+        {
+            var config = await verify.ConnectorConfigurations.SingleAsync();
+            config.LastModified.Should().BeOnOrAfter(before, "last_modified is stamped on insert");
+            stampedOnInsert = config.LastModified;
+
+            // last_modified is insert-only: a later save must not bump it.
+            await Task.Delay(5);
+            verify.Entry(config).State = EntityState.Modified;
+            await verify.SaveChangesAsync();
+        }
+
+        await using (var verify = new NocturneDbContext(options) { TenantId = tenantId })
+        {
+            var config = await verify.ConnectorConfigurations.SingleAsync();
+            config.LastModified.Should().Be(stampedOnInsert, "last_modified is not re-stamped on update");
+        }
+    }
+
+    [Fact]
+    public async Task OAuthRefreshToken_StampsIssuedAtOnInsert()
+    {
+        var tenantId = Guid.NewGuid();
+        var options = NewStore(tenantId);
+        var subjectId = Guid.CreateVersion7();
+        var grantId = Guid.CreateVersion7();
+        var before = DateTime.UtcNow;
+
+        await using (var ctx = new NocturneDbContext(options) { TenantId = tenantId })
+        {
+            ctx.Subjects.Add(new SubjectEntity { Id = subjectId });
+            ctx.OAuthGrants.Add(new OAuthGrantEntity { Id = grantId, TenantId = tenantId, SubjectId = subjectId });
+            ctx.OAuthRefreshTokens.Add(new OAuthRefreshTokenEntity
+            {
+                Id = Guid.CreateVersion7(),
+                GrantId = grantId,
+                IssuedAt = Stale,
+            });
+            await ctx.SaveChangesAsync();
+        }
+
+        DateTime stampedOnInsert;
+        await using (var verify = new NocturneDbContext(options) { TenantId = tenantId })
+        {
+            var token = await verify.OAuthRefreshTokens.SingleAsync();
+            token.IssuedAt.Should().BeOnOrAfter(before, "issued_at is stamped on insert");
+            stampedOnInsert = token.IssuedAt;
+
+            // issued_at is insert-only: a later save must not bump it.
+            await Task.Delay(5);
+            verify.Entry(token).State = EntityState.Modified;
+            await verify.SaveChangesAsync();
+        }
+
+        await using (var verify = new NocturneDbContext(options) { TenantId = tenantId })
+        {
+            var token = await verify.OAuthRefreshTokens.SingleAsync();
+            token.IssuedAt.Should().Be(stampedOnInsert, "issued_at is not re-stamped on update");
+        }
+    }
+
+    [Fact]
+    public async Task TenantScoped_InheritsTenantFromContextOnInsert()
+    {
+        var tenantId = Guid.NewGuid();
+        var options = NewStore(tenantId);
+
+        await using (var ctx = new NocturneDbContext(options) { TenantId = tenantId })
+        {
+            ctx.Foods.Add(new FoodEntity { Id = Guid.CreateVersion7() });
+            await ctx.SaveChangesAsync();
+        }
+
+        await using (var verify = new NocturneDbContext(options) { TenantId = tenantId })
+        {
+            var food = await verify.Foods.SingleAsync();
+            food.TenantId.Should().Be(tenantId, "a new tenant-scoped row inherits the resolved tenant");
+        }
+    }
+
+    [Fact]
+    public async Task TenantScoped_WithoutResolvableTenant_Throws()
+    {
+        var options = NewStore();
+        await using var ctx = new NocturneDbContext(options); // TenantId left as Guid.Empty
+
+        ctx.Foods.Add(new FoodEntity { Id = Guid.CreateVersion7() });
+
+        var act = () => ctx.SaveChangesAsync();
+        await act.Should().ThrowAsync<InvalidOperationException>(
+            "saving a tenant-scoped entity without a resolvable tenant must fail closed");
+    }
+
+    [Fact]
+    public async Task TenantScoped_CrossTenantModify_Throws()
+    {
+        var ownerTenant = Guid.NewGuid();
+        var otherTenant = Guid.NewGuid();
+        var options = NewStore(ownerTenant, otherTenant);
+        var id = Guid.CreateVersion7();
+
+        await using (var ctx = new NocturneDbContext(options) { TenantId = ownerTenant })
+        {
+            ctx.Foods.Add(new FoodEntity { Id = id });
+            await ctx.SaveChangesAsync();
+        }
+
+        await using var attacker = new NocturneDbContext(options) { TenantId = otherTenant };
+        // IgnoreQueryFilters reaches the other tenant's row; the modify guard must still reject it.
+        var food = await attacker.Foods.IgnoreQueryFilters().SingleAsync();
+        food.Name = "tampered";
+
+        var act = () => attacker.SaveChangesAsync();
+        await act.Should().ThrowAsync<InvalidOperationException>(
+            "modifying a row owned by another tenant must fail closed");
+    }
+
+    /// <summary>
+    /// Creates an isolated SQLite store with the schema applied and the supplied tenants
+    /// seeded (every ITenantScoped table carries an FK to <c>tenants</c>, which a relational
+    /// provider actually enforces).
+    /// </summary>
+    private DbContextOptions<NocturneDbContext> NewStore(params Guid[] tenantIds)
+    {
+        var db = TestDbContextFactory.CreateSqlite();
+        _databases.Add(db);
+
+        foreach (var tenantId in tenantIds)
+        {
+            db.SeedTenant(tenantId, $"t{tenantId:N}"[..12]);
+        }
+
+        return db.Options;
+    }
+
+    public void Dispose()
+    {
+        foreach (var db in _databases)
+        {
+            db.Dispose();
+        }
+        GC.SuppressFinalize(this);
+    }
+}

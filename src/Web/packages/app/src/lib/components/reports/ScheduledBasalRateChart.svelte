@@ -63,7 +63,6 @@
     ]}
     xDomain={[0, 23]}
     yDomain={[0, yMax]}
-    renderContext="svg"
     padding={{ top: 4, right: 20, bottom: 2, left: 20 }}
     props={{
       area: { curve: curveStepAfter, fillOpacity: 0.2 },

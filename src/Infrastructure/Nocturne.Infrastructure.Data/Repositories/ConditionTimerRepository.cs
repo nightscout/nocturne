@@ -34,6 +34,18 @@ public class ConditionTimerRepository : IConditionTimerStore
     }
 
     /// <inheritdoc />
+    public virtual async Task<IReadOnlyDictionary<string, DateTime>> GetAllForRuleAsync(Guid ruleId, CancellationToken ct)
+    {
+        var rows = await _context.AlertConditionTimers
+            .AsNoTracking()
+            .Where(t => t.AlertRuleId == ruleId)
+            .Select(t => new { t.ConditionPath, t.FirstTrueAt })
+            .ToListAsync(ct);
+
+        return rows.ToDictionary(r => r.ConditionPath, r => r.FirstTrueAt);
+    }
+
+    /// <inheritdoc />
     public virtual async Task SetFirstTrueAsync(Guid ruleId, string path, DateTime at, CancellationToken ct)
     {
         var existing = await _context.AlertConditionTimers

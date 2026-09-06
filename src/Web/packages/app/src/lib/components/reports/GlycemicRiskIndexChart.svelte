@@ -2,8 +2,13 @@
   import { Chart, Svg, Axis, Polygon, Points, Legend, Tooltip } from "layerchart";
   import { scaleLinear, scaleOrdinal } from "d3-scale";
   import type { GlycemicRiskIndex, GriTimelinePeriod } from "$lib/api/generated/nocturne-api-client";
-  import { formatGlucoseValue, getUnitLabel } from "$lib/utils/formatting";
+  import { formatGlucoseValue, formatMonthYear, getUnitLabel } from "$lib/utils/formatting";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
+  import { categoryPatternClass } from "$lib/components/charts/print/chart-print-patterns";
+
+  // Stable categorical print-pattern slot per zone, so the same zone always
+  // carries the same monochrome texture regardless of render order.
+  const zonePrintSlot: Record<string, number> = { A: 1, B: 2, C: 3, D: 4, E: 5 };
 
   interface Props {
     gri: GlycemicRiskIndex;
@@ -52,7 +57,7 @@
   function formatPeriodLabel(periodStart?: string): string {
     if (!periodStart) return "";
     const date = new Date(periodStart);
-    return date.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+    return formatMonthYear(date);
   }
 
   // Zone boundaries: diagonal lines where hypo + hyper = GRI score threshold
@@ -195,7 +200,7 @@
           yDomain={[0, HYPER_MAX]}
           yReverse
           padding={{ top: 10, right: 10, bottom: 36, left: 46 }}
-          tooltip={{ mode: "manual" }}
+          tooltipContext={{ mode: "manual" }}
         >
           {#snippet children({ context })}
             <Svg>
@@ -210,6 +215,7 @@
                   fillOpacity={0.35}
                   stroke={zone.color}
                   strokeWidth={0.5}
+                  class={categoryPatternClass(zonePrintSlot[zone.label])}
                 />
               {/each}
 

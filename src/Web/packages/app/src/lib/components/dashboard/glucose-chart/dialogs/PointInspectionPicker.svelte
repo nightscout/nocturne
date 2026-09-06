@@ -34,7 +34,7 @@
 </script>
 
 <Dialog.Root bind:open>
-  <Dialog.Content class="max-w-md">
+  <Dialog.Content class="max-w-md print:hidden">
     <Dialog.Header>
       <Dialog.Title>Inspect Point</Dialog.Title>
       <Dialog.Description>

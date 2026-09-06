@@ -81,15 +81,14 @@
   }: Props = $props();
 
   // ---- Engine ----
-  // svelte-ignore state_referenced_locally
   const engine = createChartDataEngine({
-    dateRange,
-    focusHours,
-    initialChartData,
-    streamedHistoricalData,
-    externalPredictionData,
-    enablePredictions,
-    demoMode,
+    get dateRange() { return dateRange; },
+    get focusHours() { return focusHours; },
+    get initialChartData() { return initialChartData; },
+    get streamedHistoricalData() { return streamedHistoricalData; },
+    get externalPredictionData() { return externalPredictionData; },
+    get enablePredictions() { return enablePredictions; },
+    get demoMode() { return demoMode; },
   });
 
   // ---- Point inspection ----

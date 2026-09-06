@@ -88,50 +88,16 @@ public class ProfileProjectionService : IProfileProjectionService
 
     /// <summary>
     /// Assembles a <see cref="Profile"/> from a <see cref="TherapySettings"/> record and its
-    /// correlated schedule siblings, loading them by <see cref="TherapySettings.CorrelationId"/>
-    /// when available, or by profile name as a fallback.
+    /// schedule siblings.
     /// </summary>
     private async Task<Profile> AssembleProfileAsync(TherapySettings settings, CancellationToken ct)
     {
-        BasalSchedule? basal;
-        CarbRatioSchedule? carbRatio;
-        SensitivitySchedule? sensitivity;
-        TargetRangeSchedule? targetRange;
+        var basal = ScheduleForProfileAsync(_basalRepo, settings, ct);
+        var carbRatio = ScheduleForProfileAsync(_carbRatioRepo, settings, ct);
+        var sensitivity = ScheduleForProfileAsync(_sensitivityRepo, settings, ct);
+        var targetRange = ScheduleForProfileAsync(_targetRangeRepo, settings, ct);
 
-        if (settings.CorrelationId.HasValue)
-        {
-            var correlationId = settings.CorrelationId.Value;
-
-            var basalTask = _basalRepo.GetByCorrelationIdAsync(correlationId, ct);
-            var carbRatioTask = _carbRatioRepo.GetByCorrelationIdAsync(correlationId, ct);
-            var sensitivityTask = _sensitivityRepo.GetByCorrelationIdAsync(correlationId, ct);
-            var targetRangeTask = _targetRangeRepo.GetByCorrelationIdAsync(correlationId, ct);
-
-            await Task.WhenAll(basalTask, carbRatioTask, sensitivityTask, targetRangeTask);
-
-            basal = basalTask.Result
-                .FirstOrDefault(s => s.ProfileName == settings.ProfileName);
-            carbRatio = carbRatioTask.Result
-                .FirstOrDefault(s => s.ProfileName == settings.ProfileName);
-            sensitivity = sensitivityTask.Result
-                .FirstOrDefault(s => s.ProfileName == settings.ProfileName);
-            targetRange = targetRangeTask.Result
-                .FirstOrDefault(s => s.ProfileName == settings.ProfileName);
-        }
-        else
-        {
-            var basalTask = _basalRepo.GetByProfileNameAsync(settings.ProfileName, ct);
-            var carbRatioTask = _carbRatioRepo.GetByProfileNameAsync(settings.ProfileName, ct);
-            var sensitivityTask = _sensitivityRepo.GetByProfileNameAsync(settings.ProfileName, ct);
-            var targetRangeTask = _targetRangeRepo.GetByProfileNameAsync(settings.ProfileName, ct);
-
-            await Task.WhenAll(basalTask, carbRatioTask, sensitivityTask, targetRangeTask);
-
-            basal = basalTask.Result.FirstOrDefault();
-            carbRatio = carbRatioTask.Result.FirstOrDefault();
-            sensitivity = sensitivityTask.Result.FirstOrDefault();
-            targetRange = targetRangeTask.Result.FirstOrDefault();
-        }
+        await Task.WhenAll(basal, carbRatio, sensitivity, targetRange);
 
         var profileData = new ProfileData
         {
@@ -147,11 +113,11 @@ public class ProfileProjectionService : IProfileProjectionService
             DelayHigh = settings.DelayHigh,
             DelayMedium = settings.DelayMedium,
             DelayLow = settings.DelayLow,
-            Basal = MapScheduleEntries(basal?.Entries),
-            CarbRatio = MapScheduleEntries(carbRatio?.Entries),
-            Sens = MapScheduleEntries(sensitivity?.Entries),
-            TargetLow = MapTargetLow(targetRange?.Entries),
-            TargetHigh = MapTargetHigh(targetRange?.Entries),
+            Basal = MapScheduleEntries(basal.Result?.Entries),
+            CarbRatio = MapScheduleEntries(carbRatio.Result?.Entries),
+            Sens = MapScheduleEntries(sensitivity.Result?.Entries),
+            TargetLow = MapTargetLow(targetRange.Result?.Entries),
+            TargetHigh = MapTargetHigh(targetRange.Result?.Entries),
         };
 
         // Extract the profile record-level ID from the legacy ID prefix (before the colon)
@@ -175,6 +141,36 @@ public class ProfileProjectionService : IProfileProjectionService
                 [settings.ProfileName] = profileData
             }
         };
+    }
+
+    /// <summary>
+    /// The one schedule of its kind belonging to <paramref name="settings"/>: the correlated sibling
+    /// when the settings record carries a correlation id, otherwise the newest row filed under the
+    /// profile name, otherwise the row stored under the legacy id every sibling in the group shares.
+    /// </summary>
+    /// <remarks>
+    /// The store name is compared as a column rather than read off the legacy id: a profile name may
+    /// itself contain a colon, so the <c>"{profileId}:{storeName}"</c> composite is not unambiguously
+    /// parseable. Without the legacy-id step a schedule the correlation id does not reach — the
+    /// siblings are written in separate transactions, so a group can be read mid-convergence — leaves
+    /// an AID consumer of v1/v3 profile with an empty basal schedule rather than an error.
+    /// </remarks>
+    private static async Task<TRecord?> ScheduleForProfileAsync<TRecord>(
+        IProfileScopedRepository<TRecord> repository,
+        TherapySettings settings,
+        CancellationToken ct)
+        where TRecord : class, IV4Record, IProfileScoped
+    {
+        var found = settings.CorrelationId is { } correlationId
+            ? (await repository.GetByCorrelationIdAsync(correlationId, ct))
+                .FirstOrDefault(s => s.ProfileName == settings.ProfileName)
+            : (await repository.GetByProfileNameAsync(settings.ProfileName, ct)).FirstOrDefault();
+
+        if (found is not null || string.IsNullOrEmpty(settings.LegacyId))
+            return found;
+
+        var candidate = await repository.GetByLegacyIdAsync(settings.LegacyId, ct);
+        return candidate is not null && candidate.ProfileName == settings.ProfileName ? candidate : null;
     }
 
     private static List<TimeValue> MapScheduleEntries(List<ScheduleEntry>? entries)

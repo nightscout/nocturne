@@ -299,29 +299,39 @@ public static class ApplicationConstants
         }
 
         /// <summary>
-        /// Default glucose threshold values in mg/dL used for range categorization and alarms.
+        /// Defaults for the four legacy Nightscout <c>bg*</c> threshold settings, in mg/dL. They are
+        /// what ships when nothing else supplies a value: the status and tenant-overview services
+        /// fall back to them when the matching <c>Thresholds:Bg*</c> configuration key is absent, and
+        /// the properties and AR2 services use them for the <c>bgTarget*</c> entries of the settings
+        /// map they build and read, which never consults configuration at all. They are client alarm
+        /// settings, not a clinical range — <see cref="GlucoseConstants.TargetBottomMgdl"/> and
+        /// <see cref="GlucoseConstants.TargetTopMgdl"/> are the consensus in-range boundaries, and
+        /// <see cref="BgTargetBottom"/> deliberately differs from the former. Collapsing the two
+        /// families onto each other moves either every tenant's default alarm threshold or every
+        /// time-in-range denominator.
         /// </summary>
         public static class Thresholds
         {
             /// <summary>
-            /// Glucose level (mg/dL) at or above which readings are categorized as high.
+            /// Glucose level (mg/dL) at or above which readings are categorized as urgent-high.
             /// </summary>
-            public const int High = 260;
+            public const int BgHigh = 260;
 
             /// <summary>
-            /// Upper bound (mg/dL) of the target glucose range.
+            /// Upper bound (mg/dL) of the legacy target band.
             /// </summary>
-            public const int TargetTop = 180;
+            public const int BgTargetTop = 180;
 
             /// <summary>
-            /// Lower bound (mg/dL) of the target glucose range.
+            /// Lower bound (mg/dL) of the legacy target band. Nightscout has always shipped 80 here,
+            /// which is not the 70 that time-in-range is measured against.
             /// </summary>
-            public const int TargetBottom = 80;
+            public const int BgTargetBottom = 80;
 
             /// <summary>
-            /// Glucose level (mg/dL) at or below which readings are categorized as low.
+            /// Glucose level (mg/dL) at or below which readings are categorized as urgent-low.
             /// </summary>
-            public const int Low = 55;
+            public const int BgLow = 55;
         }
 
         /// <summary>

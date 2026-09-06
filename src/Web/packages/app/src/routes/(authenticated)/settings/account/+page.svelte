@@ -21,7 +21,10 @@
   } from "lucide-svelte";
   import QRCode from "qrcode";
   import type { PageData } from "./$types";
-  import { startRegistration } from "@simplewebauthn/browser";
+  import {
+    startRegistration,
+    type PublicKeyCredentialCreationOptionsJSON,
+  } from "@simplewebauthn/browser";
   import {
     registerOptions,
     registerComplete,
@@ -40,16 +43,21 @@
   import UserProfileCard from "$lib/components/account/UserProfileCard.svelte";
   import SecurityCredentialCard from "$lib/components/account/SecurityCredentialCard.svelte";
   import TotpSetupDialog from "$lib/components/account/TotpSetupDialog.svelte";
+  import {
+    describePasskeyError,
+    parseCeremonyOptions,
+  } from "$lib/components/auth/passkey-errors";
+  import { describeSubmitError } from "$lib/forms/submit-error";
+  import {
+    describeTotpSetupError,
+    describeTotpSetupStartError,
+  } from "$lib/components/account/totp-errors";
   import { page } from "$app/state";
+  import { copyToClipboard } from "$lib/utils";
 
   const { data }: { data: PageData } = $props();
 
   const user = $derived(data.user);
-
-  /** Handle logout */
-  function handleLogout() {
-    window.location.href = "/auth/logout";
-  }
 
   // ============================================================================
   // Security State
@@ -106,6 +114,7 @@
     credentialsQuery.current?.primaryAuthFactorCount ?? 0
   );
   const recoveryStatus = $derived(recoveryQuery.current);
+  const remainingRecoveryCodes = $derived(recoveryStatus?.remainingCodes ?? 0);
   const isSecurityLoading = $derived(credentialsQuery.loading);
   const canRemovePasskey = $derived(primaryAuthFactorCount > 1);
 
@@ -132,13 +141,17 @@
   // ============================================================================
 
   async function handleAddPasskey() {
-    if (!user?.subjectId || !user?.name) return;
+    if (!user?.name) return;
     isRegistering = true;
     errorMessage = null;
 
     try {
-      const response = await registerOptions({ subjectId: user.subjectId, username: user.name });
-      const options = JSON.parse(response.options ?? "");
+      // The account the passkey is added to comes from the session, not this call.
+      const response = await registerOptions({ username: user.name });
+      const options =
+        parseCeremonyOptions<PublicKeyCredentialCreationOptionsJSON>(
+          response.options
+        );
       const challengeToken = response.challengeToken ?? "";
 
       const attestation = await startRegistration({ optionsJSON: options });
@@ -153,7 +166,8 @@
       newPasskeyLabel = "";
       showLabelDialog = true;
     } catch (err) {
-      errorMessage = err instanceof Error ? err.message : "Failed to register passkey.";
+      console.error("Passkey registration failed:", err);
+      errorMessage = describePasskeyError(err, "register", "Failed to register passkey.");
     } finally {
       isRegistering = false;
     }
@@ -171,13 +185,14 @@
         challengeToken: pendingPasskey.challengeToken,
         label: newPasskeyLabel.trim() || undefined,
       });
+      await credentialsQuery.refresh();
       showLabelDialog = false;
       pendingPasskey = null;
       newPasskeyLabel = "";
       successMessage = "Passkey added successfully.";
       clearMessages();
     } catch (err) {
-      errorMessage = err instanceof Error ? err.message : "Failed to register passkey.";
+      errorMessage = describeSubmitError(err, "Failed to register passkey.");
     } finally {
       isSavingPasskey = false;
     }
@@ -208,8 +223,7 @@
       successMessage = "Passkey removed.";
       clearMessages();
     } catch (err) {
-      errorMessage =
-        err instanceof Error ? err.message : "Failed to remove passkey.";
+      errorMessage = describeSubmitError(err, "Failed to remove passkey.");
     } finally {
       isRemoving = null;
       removeTarget = null;
@@ -238,7 +252,10 @@
 
   async function copyRecoveryCodes() {
     const text = newRecoveryCodes.join("\n");
-    await navigator.clipboard.writeText(text);
+    if (!(await copyToClipboard(text))) {
+      errorMessage = "Couldn't copy the codes to the clipboard. Copy them manually instead.";
+      return;
+    }
     copiedCodes = true;
     setTimeout(() => (copiedCodes = false), 2000);
   }
@@ -272,7 +289,7 @@
 
       showTotpSetup = true;
     } catch (err) {
-      errorMessage = err instanceof Error ? err.message : "Failed to start authenticator setup.";
+      errorMessage = describeTotpSetupStartError(err);
     } finally {
       totpSetupLoading = false;
     }
@@ -299,7 +316,7 @@
       successMessage = "Authenticator app added successfully.";
       clearMessages();
     } catch (err) {
-      totpSetupError = err instanceof Error ? err.message : "Verification failed. Check the code and try again.";
+      totpSetupError = describeTotpSetupError(err);
     } finally {
       totpSetupLoading = false;
     }
@@ -321,7 +338,7 @@
       successMessage = "Authenticator removed.";
       clearMessages();
     } catch (err) {
-      errorMessage = err instanceof Error ? err.message : "Failed to remove authenticator.";
+      errorMessage = describeSubmitError(err, "Failed to remove authenticator.");
     } finally {
       totpRemovingId = null;
       totpRemoveTarget = null;
@@ -355,7 +372,7 @@
     </div>
 
     <!-- User Profile Card -->
-    <UserProfileCard {user} onLogout={handleLogout} />
+    <UserProfileCard {user} />
 
     {#if errorMessage}
       <div
@@ -448,25 +465,31 @@
             <div class="flex items-center justify-between">
               <div class="space-y-1">
                 <p class="text-sm font-medium">
-                  {recoveryStatus.remainingCodes} of {recoveryStatus.totalCodes} recovery
-                  codes remaining
+                  {#if remainingRecoveryCodes > 0}
+                    {remainingRecoveryCodes} of {recoveryStatus.totalCodes} recovery
+                    codes remaining
+                  {:else if recoveryStatus.hasCodes}
+                    Every recovery code has been used
+                  {:else}
+                    No recovery codes yet
+                  {/if}
                 </p>
-                <p class="text-xs text-muted-foreground">
-                  Each code can only be used once.
-                </p>
+                {#if remainingRecoveryCodes > 0}
+                  <p class="text-xs text-muted-foreground">
+                    Each code can only be used once.
+                  </p>
+                {/if}
               </div>
               <Badge
-                variant={(recoveryStatus.remainingCodes ?? 0) > 2
+                variant={remainingRecoveryCodes > 2
                   ? "secondary"
                   : "destructive"}
               >
-                {recoveryStatus.remainingCodes} remaining
+                {remainingRecoveryCodes > 0
+                  ? `${remainingRecoveryCodes} remaining`
+                  : "None"}
               </Badge>
             </div>
-          {:else}
-            <p class="text-sm text-muted-foreground">
-              No recovery codes have been generated yet.
-            </p>
           {/if}
 
           <Separator />
@@ -481,7 +504,9 @@
             {:else}
               <RefreshCw class="mr-1.5 h-4 w-4" />
             {/if}
-            Regenerate recovery codes
+            {recoveryStatus?.hasCodes
+              ? "Regenerate recovery codes"
+              : "Generate recovery codes"}
           </Button>
         </Card.Content>
       </Card.Root>

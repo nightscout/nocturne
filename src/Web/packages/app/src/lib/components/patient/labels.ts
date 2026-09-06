@@ -1,5 +1,6 @@
 import {
   DiabetesType,
+  BiologicalSex,
   DeviceCategory,
   AidAlgorithm,
   InsulinCategory,
@@ -13,6 +14,11 @@ export const diabetesTypeLabels: Record<DiabetesType, string> = {
   [DiabetesType.MODY]: "MODY",
   [DiabetesType.Gestational]: "Gestational",
   [DiabetesType.Other]: "Other",
+};
+
+export const biologicalSexLabels: Record<BiologicalSex, string> = {
+  [BiologicalSex.Female]: "Female",
+  [BiologicalSex.Male]: "Male",
 };
 
 export const deviceCategoryLabels: Record<DeviceCategory, string> = {

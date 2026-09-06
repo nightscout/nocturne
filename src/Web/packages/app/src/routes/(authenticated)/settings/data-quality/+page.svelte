@@ -1,17 +1,29 @@
 <script lang="ts">
-	import { getSettingsStore } from '$lib/stores/settings-store.svelte';
+	import type { DataQualitySettings } from '$lib/api/generated/nocturne-api-client';
+	import { getUiSettings, saveDataQualitySettings } from '$api/ui-settings.remote';
+	import { remoteErrorMessage } from '$lib/api/remote-error';
+	import { SETTINGS_LOAD_FAILED } from '$lib/api/ui-settings-messages';
 	import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '$lib/components/ui/card';
 	import { Switch } from '$lib/components/ui/switch';
 	import { Label } from '$lib/components/ui/label';
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
-	import { Moon, Activity, AlertCircle, Globe, ChevronRight } from 'lucide-svelte';
+	import { Moon, Activity, AlertCircle, Globe, Weight, ChevronRight } from 'lucide-svelte';
 	import SettingsPageSkeleton from '$lib/components/settings/SettingsPageSkeleton.svelte';
 	import { resolve } from '$app/paths';
+	import { toast } from 'svelte-sonner';
 
-	const store = getSettingsStore();
+	// Read via .current rather than an {#await} block: consuming a remote query
+	// through its thenable reads the hydration cache and throws
+	// hydratable_missing_but_required during hydration.
+	const settingsQuery = getUiSettings();
+	const dataQuality = $derived(settingsQuery.current?.dataQuality);
 
-	const detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-	const timezones = Intl.supportedValuesOf('timeZone');
+	const bedtimeHour = $derived(dataQuality?.sleepSchedule?.bedtimeHour ?? 23);
+	const wakeTimeHour = $derived(dataQuality?.sleepSchedule?.wakeTimeHour ?? 7);
+	const detectionEnabled = $derived(dataQuality?.compressionLowDetection?.enabled ?? true);
+	const excludeFromStatistics = $derived(
+		dataQuality?.compressionLowDetection?.excludeFromStatistics ?? true
+	);
 
 	// Hour options for bedtime (evening hours)
 	const bedtimeHours = [
@@ -38,6 +50,27 @@
 		const found = [...bedtimeHours, ...wakeTimeHours].find((h) => h.value === hour);
 		return found?.label ?? `${hour}:00`;
 	}
+
+	/**
+	 * Persists the whole section — the API stores it as one document, so the patch
+	 * merges over the loaded values (keeping e.g. the sleep-schedule timezone).
+	 */
+	async function save(patch: Partial<DataQualitySettings>) {
+		const current = dataQuality ?? {};
+		try {
+			await saveDataQualitySettings({
+				...current,
+				sleepSchedule: { ...current.sleepSchedule, ...patch.sleepSchedule },
+				compressionLowDetection: {
+					...current.compressionLowDetection,
+					...patch.compressionLowDetection
+				}
+			});
+		} catch {
+			toast.error('Could not save. Check your connection and try again.');
+			await settingsQuery.refresh();
+		}
+	}
 </script>
 
 <svelte:head>
@@ -56,19 +89,18 @@
 		</div>
 	</div>
 
-	{#if store.isLoading}
+	{#if settingsQuery.loading}
 		<SettingsPageSkeleton cardCount={2} />
-	{:else if store.hasError}
+	{:else if settingsQuery.error}
 		<Card class="border-destructive">
 			<CardContent class="flex items-center gap-3 py-6">
 				<AlertCircle class="h-5 w-5 text-destructive" />
-				<div>
-					<p class="font-medium">Failed to load settings</p>
-					<p class="text-sm text-muted-foreground">{store.error}</p>
-				</div>
+				<p class="font-medium">
+					{remoteErrorMessage(settingsQuery.error, SETTINGS_LOAD_FAILED)}
+				</p>
 			</CardContent>
 		</Card>
-	{:else if store.dataQuality}
+	{:else if dataQuality}
 		<!-- Sleep Schedule -->
 		<Card>
 			<CardHeader>
@@ -81,52 +113,17 @@
 				</CardDescription>
 			</CardHeader>
 			<CardContent class="space-y-6">
-				<div class="space-y-2">
-					<Label class="flex items-center gap-1.5">
-						<Globe class="h-4 w-4" />
-						Timezone
-					</Label>
-					<Select
-						type="single"
-						value={store.dataQuality.sleepSchedule?.timezone || detectedTimezone}
-						onValueChange={(value) => {
-							if (store.dataQuality?.sleepSchedule) {
-								store.dataQuality.sleepSchedule.timezone = value;
-								store.markChanged();
-							}
-						}}
-					>
-						<SelectTrigger class="w-full">
-							{store.dataQuality.sleepSchedule?.timezone || detectedTimezone}
-						</SelectTrigger>
-						<SelectContent class="max-h-60">
-							{#each timezones as tz}
-								<SelectItem value={tz}>{tz.replaceAll('_', ' ')}</SelectItem>
-							{/each}
-						</SelectContent>
-					</Select>
-					{#if !store.dataQuality.sleepSchedule?.timezone}
-						<p class="text-sm text-muted-foreground">
-							Detected from your browser. Save to confirm.
-						</p>
-					{/if}
-				</div>
-
 				<div class="grid gap-4 @sm:grid-cols-2">
 					<div class="space-y-2">
 						<Label>Typical bedtime</Label>
 						<Select
 							type="single"
-							value={String(store.dataQuality.sleepSchedule?.bedtimeHour ?? 23)}
-							onValueChange={(value) => {
-								if (store.dataQuality?.sleepSchedule) {
-									store.dataQuality.sleepSchedule.bedtimeHour = parseInt(value);
-									store.markChanged();
-								}
-							}}
+							value={String(bedtimeHour)}
+							onValueChange={(value) =>
+								save({ sleepSchedule: { bedtimeHour: parseInt(value) } })}
 						>
 							<SelectTrigger class="w-full">
-								{formatHour(store.dataQuality.sleepSchedule?.bedtimeHour ?? 23)}
+								{formatHour(bedtimeHour)}
 							</SelectTrigger>
 							<SelectContent>
 								{#each bedtimeHours as hour}
@@ -139,16 +136,12 @@
 						<Label>Typical wake time</Label>
 						<Select
 							type="single"
-							value={String(store.dataQuality.sleepSchedule?.wakeTimeHour ?? 7)}
-							onValueChange={(value) => {
-								if (store.dataQuality?.sleepSchedule) {
-									store.dataQuality.sleepSchedule.wakeTimeHour = parseInt(value);
-									store.markChanged();
-								}
-							}}
+							value={String(wakeTimeHour)}
+							onValueChange={(value) =>
+								save({ sleepSchedule: { wakeTimeHour: parseInt(value) } })}
 						>
 							<SelectTrigger class="w-full">
-								{formatHour(store.dataQuality.sleepSchedule?.wakeTimeHour ?? 7)}
+								{formatHour(wakeTimeHour)}
 							</SelectTrigger>
 							<SelectContent>
 								{#each wakeTimeHours as hour}
@@ -182,13 +175,9 @@
 						</p>
 					</div>
 					<Switch
-						checked={store.dataQuality.compressionLowDetection?.enabled ?? true}
-						onCheckedChange={(checked: boolean) => {
-							if (store.dataQuality?.compressionLowDetection) {
-								store.dataQuality.compressionLowDetection.enabled = checked;
-								store.markChanged();
-							}
-						}}
+						checked={detectionEnabled}
+						onCheckedChange={(checked: boolean) =>
+							save({ compressionLowDetection: { enabled: checked } })}
 					/>
 				</div>
 
@@ -201,13 +190,9 @@
 						</p>
 					</div>
 					<Switch
-						checked={store.dataQuality.compressionLowDetection?.excludeFromStatistics ?? true}
-						onCheckedChange={(checked: boolean) => {
-							if (store.dataQuality?.compressionLowDetection) {
-								store.dataQuality.compressionLowDetection.excludeFromStatistics = checked;
-								store.markChanged();
-							}
-						}}
+						checked={excludeFromStatistics}
+						onCheckedChange={(checked: boolean) =>
+							save({ compressionLowDetection: { excludeFromStatistics: checked } })}
 					/>
 				</div>
 
@@ -231,6 +216,26 @@
 						<p class="font-medium">Timezone History</p>
 						<p class="text-sm text-muted-foreground">
 							Where you've lived and travelled, for correct timestamps.
+						</p>
+					</div>
+					<ChevronRight
+						class="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5"
+					/>
+				</CardContent>
+			</Card>
+		</a>
+
+		<!-- Weight History (lives under Data Quality — same pattern as Timezone History) -->
+		<a href={resolve('/settings/weight')} class="group block">
+			<Card class="transition-colors hover:border-primary/40 hover:bg-muted/40">
+				<CardContent class="flex items-center gap-4 p-4">
+					<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+						<Weight class="h-5 w-5 text-primary" />
+					</div>
+					<div class="min-w-0 flex-1">
+						<p class="font-medium">Weight History</p>
+						<p class="text-sm text-muted-foreground">
+							Your recorded weights over time.
 						</p>
 					</div>
 					<ChevronRight

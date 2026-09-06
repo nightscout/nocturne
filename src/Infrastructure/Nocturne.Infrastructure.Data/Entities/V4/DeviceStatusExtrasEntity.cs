@@ -10,7 +10,7 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.DeviceStatusExtras
 /// </summary>
 [Table("device_status_extras")]
-public class DeviceStatusExtrasEntity : ITenantScoped, IAuditable, ISoftDeletable
+public class DeviceStatusExtrasEntity : ITenantScoped, IAuditable, ISoftDeletable, ISystemTimestamped
 {
     /// <summary>
     /// The unique identifier of the tenant this record belongs to.
@@ -25,8 +25,14 @@ public class DeviceStatusExtrasEntity : ITenantScoped, IAuditable, ISoftDeletabl
     public Guid Id { get; set; }
 
     /// <summary>
-    /// Links back to the originating DeviceStatus decomposition batch
+    /// Links back to the originating DeviceStatus decomposition batch. Unlike
+    /// <see cref="IV4Entity.CorrelationId"/> this is non-nullable and is the row's only identity
+    /// besides <see cref="Id"/>: an extras row is pure decomposition leftover with no legacy id,
+    /// and the decomposer skips it when the batch has no correlation, so every row has one. Reads,
+    /// deletes and both dedup passes key on it, which the nullable interface member cannot express
+    /// — hence this entity stays outside <see cref="IV4Entity"/>.
     /// </summary>
+    [AuditIgnored]
     [Column("correlation_id")]
     public Guid CorrelationId { get; set; }
 
@@ -45,12 +51,14 @@ public class DeviceStatusExtrasEntity : ITenantScoped, IAuditable, ISoftDeletabl
     /// <summary>
     /// System tracking: when record was inserted
     /// </summary>
+    [AuditIgnored]
     [Column("sys_created_at")]
     public DateTime SysCreatedAt { get; set; } = DateTime.UtcNow;
 
     /// <summary>
     /// System tracking: when record was last updated
     /// </summary>
+    [AuditIgnored]
     [Column("sys_updated_at")]
     public DateTime SysUpdatedAt { get; set; } = DateTime.UtcNow;
 

@@ -2,9 +2,11 @@ using System.Collections.Concurrent;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Nocturne.API.Services.Audit;
+using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
-using Nocturne.Core.Contracts.Audit;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
@@ -28,6 +30,9 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
 {
     protected readonly IServiceProvider ServiceProvider;
     protected readonly ILogger Logger;
+
+    private static readonly ConnectorRegistrationAttribute Registration =
+        ConnectorRegistrationAttribute.DeclaredOn(typeof(TConfig));
 
     /// <summary>
     /// Tracks the last sync time per tenant so each tenant's configured
@@ -94,16 +99,122 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
     }
 
     /// <summary>
-    /// Gets the connector name for logging
+    /// The connector's configuration-section name; must match the name its stored health state is
+    /// filed under.
     /// </summary>
-    protected abstract string ConnectorName { get; }
+    /// <seealso cref="ConnectorRegistrationAttribute.DeclaredOn"/>
+    protected static string ConnectorName => Registration.ConnectorName;
 
     /// <summary>
-    /// Called once after the initial startup delay, before the poll loop begins.
+    /// Called after the initial startup delay and again every <see cref="RealtimeSupervisionInterval"/>.
     /// Override to start real-time listeners (e.g. webhooks, SSE, WebSocket connections).
+    /// Implementations must be idempotent — a tenant that already has a live listener must be left
+    /// untouched — and should use <see cref="ListenerNeedsStartAsync{TClient}"/> to enforce that.
     /// The default implementation is a no-op.
     /// </summary>
     protected virtual Task StartRealtimeListenersAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <summary>
+    /// How often the poll loop re-runs <see cref="StartRealtimeListenersAsync"/> to replace listeners
+    /// that have died. Deliberately coarser than the poll tick so a permanently unreachable upstream is
+    /// not reconnected every minute. Overridable for tests.
+    /// </summary>
+    protected virtual TimeSpan RealtimeSupervisionInterval => TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// Delay before the first poll tick, letting the application fully start. Overridable for tests.
+    /// </summary>
+    protected virtual TimeSpan StartupDelay => TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// Interval between poll ticks. Each tenant is still only synced when its own
+    /// SyncIntervalMinutes has elapsed since its last sync. Overridable for tests.
+    /// </summary>
+    protected virtual TimeSpan PollInterval => TimeSpan.FromMinutes(1);
+
+    private DateTime _lastRealtimeSupervision = DateTime.MinValue;
+
+    private async Task SuperviseRealtimeListenersAsync(CancellationToken stoppingToken)
+    {
+        var now = DateTime.UtcNow;
+        if (now - _lastRealtimeSupervision < RealtimeSupervisionInterval)
+            return;
+
+        _lastRealtimeSupervision = now;
+
+        try
+        {
+            await StartRealtimeListenersAsync(stoppingToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Logger.LogWarning(
+                ex,
+                "Failed to start real-time listeners for {ConnectorName}, falling back to polling",
+                ConnectorName);
+        }
+    }
+
+    /// <summary>
+    /// Reports whether a real-time listener must be started for a tenant, evicting and disposing a
+    /// tracked client that <paramref name="isAlive"/> rejects so the caller can replace it. The loss of
+    /// real-time delivery is logged at the point of eviction.
+    /// </summary>
+    protected async Task<bool> ListenerNeedsStartAsync<TClient>(
+        ConcurrentDictionary<Guid, TClient> clients,
+        Guid tenantId,
+        string tenantSlug,
+        Func<TClient, bool> isAlive,
+        Func<TClient, Task> disposeAsync)
+    {
+        if (!clients.TryGetValue(tenantId, out var existing))
+            return true;
+
+        if (isAlive(existing))
+            return false;
+
+        clients.TryRemove(tenantId, out _);
+
+        Logger.LogWarning(
+            "{ConnectorName} real-time listener for tenant {TenantSlug} is no longer connected; polling only until it is re-established",
+            ConnectorName, tenantSlug);
+
+        try
+        {
+            await disposeAsync(existing);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(
+                ex,
+                "Error disposing dead {ConnectorName} real-time listener for tenant {TenantSlug}",
+                ConnectorName, tenantSlug);
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// The tenant's configured instance URL as an absolute origin, or null when the stored value
+    /// cannot be read as one. A listener cannot reach an unresolvable URL and the tenant's polling
+    /// path rejects it in the same words, so this reports it against the listener and leaves the
+    /// caller to fall back to polling rather than raising it as an unexpected failure.
+    /// </summary>
+    protected string? ResolveListenerBaseUrl(string? url, string tenantSlug)
+    {
+        try
+        {
+            return ConnectorUrl.ResolveBase(url, ConnectorName);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Logger.LogWarning(
+                "{ConnectorName} URL for tenant {TenantSlug} cannot be resolved to an absolute http(s) URL ({Reason}), will rely on polling",
+                ConnectorName, tenantSlug, ex.Message);
+
+            return null;
+        }
+    }
 
     /// <summary>
     /// Called when the service is shutting down, after the poll loop exits.
@@ -168,8 +279,8 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // Wait briefly to let the application fully start
-        await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+        if (StartupDelay > TimeSpan.Zero)
+            await Task.Delay(StartupDelay, stoppingToken);
 
         Logger.LogInformation(
             "{ConnectorName} connector background service started",
@@ -177,26 +288,13 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
 
         try
         {
-            try
-            {
-                await StartRealtimeListenersAsync(stoppingToken);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                Logger.LogWarning(
-                    ex,
-                    "Failed to start real-time listeners for {ConnectorName}, falling back to polling",
-                    ConnectorName);
-            }
-
-            // Poll every minute; each tenant is only synced when its own
-            // SyncIntervalMinutes has elapsed since its last sync.
-            using var timer = new PeriodicTimer(TimeSpan.FromMinutes(1));
+            using var timer = new PeriodicTimer(PollInterval);
 
             do
             {
                 try
                 {
+                    await SuperviseRealtimeListenersAsync(stoppingToken);
                     await SyncAllTenantsAsync(stoppingToken);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
@@ -286,11 +384,14 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
 
         // Set tenant context for this scope
         var tenantAccessor = scope.ServiceProvider.GetRequiredService<ITenantAccessor>();
-        tenantAccessor.SetTenant(new TenantContext(tenantId, tenantSlug, displayName, true));
+        tenantAccessor.SetTenant(new TenantContext(tenantId, tenantSlug, displayName, true, IsDemo: false));
 
-        // Populate audit context so mutations are attributed to this connector
+        // Attribute this connector's mutations to the connector rather than to a human actor, under
+        // the dispatch id so a scheduled sync and one ConnectorSyncService triggered agree.
+        using var systemScope = SystemAuditScope.PushForScope(
+            scope.ServiceProvider, $"connector:{Registration.ConnectorId}");
+
         var dbContext = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
-        dbContext.AuditContext = SystemAuditContext.ForService($"connector:{ConnectorName}");
 
         // Pin the RLS tenant on the scoped DbContext. NocturneDbContext is pooled and the
         // CarrierResettingDbContextFactory leases it with TenantId reset to Guid.Empty; the scoped
@@ -356,8 +457,10 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
         }
         else
         {
+            // Distinct because the same message repeats per chunk; see
+            // ConnectorConfigurationEntity.LastErrorMessageMaxLength.
             var errorMessage = result.Errors.Count > 0
-                ? string.Join("; ", result.Errors)
+                ? string.Join("; ", result.Errors.Distinct(StringComparer.Ordinal))
                 : !string.IsNullOrWhiteSpace(result.Message)
                     ? result.Message
                     : "Sync failed";
@@ -383,4 +486,25 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
         );
         await base.StopAsync(cancellationToken);
     }
+}
+
+/// <summary>
+/// Polls <typeparamref name="TService"/> on the schedule <typeparamref name="TConfig"/> configures.
+/// <c>AddConnectors</c> closes this over every connector that registers a sync executor and has no
+/// subclass of its own, so a connector needs no scheduling code to be polled.
+/// </summary>
+public class ConnectorBackgroundService<TService, TConfig>(
+    IServiceProvider serviceProvider,
+    ILogger<ConnectorBackgroundService<TService, TConfig>> logger)
+    : ConnectorBackgroundService<TConfig>(serviceProvider, logger)
+    where TService : class, IConnectorService<TConfig>
+    where TConfig : BaseConnectorConfiguration
+{
+    protected sealed override Task<SyncResult> PerformSyncAsync(
+        IServiceProvider scopeProvider,
+        TConfig config,
+        CancellationToken cancellationToken,
+        ISyncProgressReporter? progressReporter = null) =>
+        scopeProvider.GetRequiredService<TService>()
+            .SyncDataAsync(config, cancellationToken, since: null, progressReporter);
 }

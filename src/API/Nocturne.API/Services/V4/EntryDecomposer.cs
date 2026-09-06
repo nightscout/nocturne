@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Nocturne.API.Services.Audit;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -21,21 +21,22 @@ namespace Nocturne.API.Services.V4;
 /// </summary>
 /// <seealso cref="IEntryDecomposer"/>
 /// <seealso cref="IDecomposer{T}"/>
-public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
+public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Entry>
 {
     private readonly NocturneDbContext _dbContext;
     private readonly ISensorGlucoseRepository _sensorGlucoseRepository;
     private readonly IMeterGlucoseRepository _meterGlucoseRepository;
     private readonly ICalibrationRepository _calibrationRepository;
     private readonly IGlucoseProcessingResolver _glucoseResolver;
+    private readonly IPatientDeviceStamper _patientDeviceStamper;
     private readonly IAuditContext _auditContext;
-    private readonly ILogger<EntryDecomposer> _logger;
 
-    /// <param name="dbContext">EF Core context used to persist <see cref="DecompositionBatchEntity"/> records.</param>
+    /// <param name="dbContext">EF Core context used for entry bulk-delete operations.</param>
     /// <param name="sensorGlucoseRepository">Repository for <see cref="SensorGlucose"/> records.</param>
     /// <param name="meterGlucoseRepository">Repository for <see cref="MeterGlucose"/> records.</param>
     /// <param name="calibrationRepository">Repository for <see cref="Calibration"/> records.</param>
     /// <param name="glucoseResolver">Resolves glucose processing type and smoothed/unsmoothed values from v1/v3 hints or source defaults.</param>
+    /// <param name="patientDeviceStamper">Attributes decomposed records to the patient device active at their timestamp.</param>
     /// <param name="logger">Logger instance for this decomposer.</param>
     public EntryDecomposer(
         NocturneDbContext dbContext,
@@ -43,34 +44,26 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
         IMeterGlucoseRepository meterGlucoseRepository,
         ICalibrationRepository calibrationRepository,
         IGlucoseProcessingResolver glucoseResolver,
+        IPatientDeviceStamper patientDeviceStamper,
         IAuditContext auditContext,
         ILogger<EntryDecomposer> logger)
+        : base(logger)
     {
         _dbContext = dbContext;
         _sensorGlucoseRepository = sensorGlucoseRepository;
         _meterGlucoseRepository = meterGlucoseRepository;
         _calibrationRepository = calibrationRepository;
         _glucoseResolver = glucoseResolver;
+        _patientDeviceStamper = patientDeviceStamper;
         _auditContext = auditContext;
-        _logger = logger;
     }
 
     /// <inheritdoc />
-    public async Task<DecompositionResult> DecomposeAsync(Entry entry, CancellationToken ct = default)
+    public async Task<DecompositionResult> DecomposeAsync(Entry entry, WriteOrigin origin, CancellationToken ct = default)
     {
-        var batch = new DecompositionBatchEntity
-        {
-            TenantId = _dbContext.TenantId,
-            Source = "entry_decomposer",
-            SourceRecordId = entry.Id,
-            CreatedAt = DateTime.UtcNow,
-        };
-        _dbContext.DecompositionBatches.Add(batch);
-        await _dbContext.SaveChangesAsync(ct);
-
         var result = new DecompositionResult
         {
-            CorrelationId = batch.Id
+            CorrelationId = Guid.CreateVersion7()
         };
 
         var entryType = entry.Type?.ToLowerInvariant();
@@ -78,31 +71,30 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
         switch (entryType)
         {
             case "sgv":
-                await DecomposeSgvAsync(entry, result, ct);
+                await DecomposeSgvAsync(entry, result, origin, ct);
                 break;
             case "mbg":
-                await DecomposeMbgAsync(entry, result, ct);
+                await DecomposeMbgAsync(entry, result, origin, ct);
                 break;
             case "cal":
-                await DecomposeCalAsync(entry, result, ct);
+                await DecomposeCalAsync(entry, result, origin, ct);
                 break;
             default:
-                _logger.LogWarning("Unknown entry type '{Type}' for entry {Id}, skipping decomposition", entry.Type, entry.Id);
+                Logger.LogWarning("Unknown entry type '{Type}' for entry {Id}, skipping decomposition", entry.Type, entry.Id);
                 break;
         }
 
         return result;
     }
 
-    private async Task DecomposeSgvAsync(Entry entry, DecompositionResult result, CancellationToken ct)
+    /// <summary>
+    /// Glucose processing type and smoothed/unsmoothed values are resolved from the hints a v1/v3
+    /// entry carries in its additional properties.
+    /// </summary>
+    private async Task<SensorGlucose> BuildSensorGlucoseAsync(Entry entry, Guid? correlationId, CancellationToken ct)
     {
-        var existing = entry.Id != null
-            ? await _sensorGlucoseRepository.GetByLegacyIdAsync(entry.Id, ct)
-            : null;
+        var model = MapToSensorGlucose(entry, correlationId);
 
-        var model = MapToSensorGlucose(entry, result.CorrelationId);
-
-        // Extract glucose processing hints from v1/v3 additional properties
         string? gpHint = null;
         double? smoothedHint = null;
         double? unsmoothedHint = null;
@@ -118,86 +110,42 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
         }
 
         await _glucoseResolver.ResolveAsync(model, gpHint, smoothedHint, unsmoothedHint, ct);
-
-        if (existing != null)
-        {
-            model.Id = existing.Id;
-            var updated = await _sensorGlucoseRepository.UpdateAsync(existing.Id, model, ct);
-            result.UpdatedRecords.Add(updated);
-            _logger.LogDebug("Updated existing SensorGlucose {Id} from legacy entry {LegacyId}", existing.Id, entry.Id);
-        }
-        else
-        {
-            var created = await _sensorGlucoseRepository.CreateAsync(model, ct);
-            result.CreatedRecords.Add(created);
-            _logger.LogDebug("Created SensorGlucose from legacy entry {LegacyId}", entry.Id);
-        }
+        return model;
     }
 
-    private async Task DecomposeMbgAsync(Entry entry, DecompositionResult result, CancellationToken ct)
+    private async Task DecomposeSgvAsync(Entry entry, DecompositionResult result, WriteOrigin origin, CancellationToken ct)
     {
-        var existing = entry.Id != null
-            ? await _meterGlucoseRepository.GetByLegacyIdAsync(entry.Id, ct)
-            : null;
+        var model = await BuildSensorGlucoseAsync(entry, result.CorrelationId, ct);
 
+        await UpsertByLegacyIdAsync(
+            _sensorGlucoseRepository, entry.Id, model, result, origin, ct,
+            beforeWrite: existing => StampAttributionAsync(
+                _patientDeviceStamper, model, existing, DeviceAttributionCategories.SensorGlucose, ct));
+    }
+
+    private async Task DecomposeMbgAsync(Entry entry, DecompositionResult result, WriteOrigin origin, CancellationToken ct)
+    {
         var model = MapToMeterGlucose(entry, result.CorrelationId);
 
-        if (existing != null)
-        {
-            model.Id = existing.Id;
-            var updated = await _meterGlucoseRepository.UpdateAsync(existing.Id, model, ct);
-            result.UpdatedRecords.Add(updated);
-            _logger.LogDebug("Updated existing MeterGlucose {Id} from legacy entry {LegacyId}", existing.Id, entry.Id);
-        }
-        else
-        {
-            var created = await _meterGlucoseRepository.CreateAsync(model, ct);
-            result.CreatedRecords.Add(created);
-            _logger.LogDebug("Created MeterGlucose from legacy entry {LegacyId}", entry.Id);
-        }
+        await UpsertByLegacyIdAsync(
+            _meterGlucoseRepository, entry.Id, model, result, origin, ct,
+            beforeWrite: existing => StampAttributionAsync(
+                _patientDeviceStamper, model, existing, DeviceAttributionCategories.MeterGlucose, ct));
     }
 
-    private async Task DecomposeCalAsync(Entry entry, DecompositionResult result, CancellationToken ct)
-    {
-        var existing = entry.Id != null
-            ? await _calibrationRepository.GetByLegacyIdAsync(entry.Id, ct)
-            : null;
-
-        var model = MapToCalibration(entry, result.CorrelationId);
-
-        if (existing != null)
-        {
-            model.Id = existing.Id;
-            var updated = await _calibrationRepository.UpdateAsync(existing.Id, model, ct);
-            result.UpdatedRecords.Add(updated);
-            _logger.LogDebug("Updated existing Calibration {Id} from legacy entry {LegacyId}", existing.Id, entry.Id);
-        }
-        else
-        {
-            var created = await _calibrationRepository.CreateAsync(model, ct);
-            result.CreatedRecords.Add(created);
-            _logger.LogDebug("Created Calibration from legacy entry {LegacyId}", entry.Id);
-        }
-    }
+    private async Task DecomposeCalAsync(Entry entry, DecompositionResult result, WriteOrigin origin, CancellationToken ct)
+        => await UpsertByLegacyIdAsync(
+            _calibrationRepository, entry.Id, MapToCalibration(entry, result.CorrelationId), result, origin, ct);
 
     /// <inheritdoc />
     public async Task<DecompositionResult> DecomposeBatchAsync(
-        IReadOnlyList<Entry> entries, CancellationToken ct = default)
+        IReadOnlyList<Entry> entries, WriteOrigin origin, CancellationToken ct = default)
     {
         if (entries.Count == 0)
             return new DecompositionResult();
 
-        var batch = new DecompositionBatchEntity
-        {
-            TenantId = _dbContext.TenantId,
-            Source = "entry_decomposer_batch",
-            SourceRecordId = null,
-            CreatedAt = DateTime.UtcNow,
-        };
-        _dbContext.DecompositionBatches.Add(batch);
-        await _dbContext.SaveChangesAsync(ct);
-
-        var result = new DecompositionResult { CorrelationId = batch.Id };
+        var correlationId = Guid.CreateVersion7();
+        var result = new DecompositionResult { CorrelationId = correlationId };
 
         var sgvList = new List<SensorGlucose>();
         var mbgList = new List<MeterGlucose>();
@@ -208,118 +156,79 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
             switch (entry.Type?.ToLowerInvariant())
             {
                 case "sgv":
-                {
-                    var model = MapToSensorGlucose(entry, batch.Id);
-
-                    string? gpHint = null;
-                    double? smoothedHint = null;
-                    double? unsmoothedHint = null;
-
-                    if (entry.AdditionalProperties is { } props)
-                    {
-                        if (TryGetString(props, "glucoseProcessing", out var gpStr))
-                            gpHint = gpStr;
-                        if (TryGetDouble(props, "smoothedMgdl", out var sm))
-                            smoothedHint = sm;
-                        if (TryGetDouble(props, "unsmoothedMgdl", out var um))
-                            unsmoothedHint = um;
-                    }
-
-                    await _glucoseResolver.ResolveAsync(model, gpHint, smoothedHint, unsmoothedHint, ct);
-                    sgvList.Add(model);
+                    sgvList.Add(await BuildSensorGlucoseAsync(entry, correlationId, ct));
                     break;
-                }
                 case "mbg":
-                    mbgList.Add(MapToMeterGlucose(entry, batch.Id));
+                    mbgList.Add(MapToMeterGlucose(entry, correlationId));
                     break;
                 case "cal":
-                    calList.Add(MapToCalibration(entry, batch.Id));
+                    calList.Add(MapToCalibration(entry, correlationId));
                     break;
                 default:
-                    _logger.LogDebug("Skipping entry with unknown type: {Type}", entry.Type);
+                    Logger.LogDebug("Skipping entry with unknown type: {Type}", entry.Type);
                     break;
             }
         }
 
-        using (SystemAuditScope.Push(_auditContext))
+        if (sgvList.Count > 0)
+            await _patientDeviceStamper.StampAsync(sgvList, DeviceAttributionCategories.SensorGlucose, batchSource: null, ct);
+        if (mbgList.Count > 0)
+            await _patientDeviceStamper.StampAsync(mbgList, DeviceAttributionCategories.MeterGlucose, batchSource: null, ct);
+
+        using (SystemAttributedBatchWrites(_auditContext))
         {
-            if (sgvList.Count > 0)
-            {
-                var created = await _sensorGlucoseRepository.BulkCreateAsync(sgvList, ct);
-                result.CreatedRecords.AddRange(created);
-            }
-
-            if (mbgList.Count > 0)
-            {
-                var created = await _meterGlucoseRepository.BulkCreateAsync(mbgList, ct);
-                result.CreatedRecords.AddRange(created);
-            }
-
-            if (calList.Count > 0)
-            {
-                var created = await _calibrationRepository.BulkCreateAsync(calList, ct);
-                result.CreatedRecords.AddRange(created);
-            }
+            await BulkCreateAsync(_sensorGlucoseRepository, sgvList, result, origin, ct);
+            await BulkCreateAsync(_meterGlucoseRepository, mbgList, result, origin, ct);
+            await BulkCreateAsync(_calibrationRepository, calList, result, origin, ct);
         }
 
         return result;
     }
 
     /// <inheritdoc />
-    public async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
+    public async Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default)
     {
-        var strategy = _dbContext.Database.CreateExecutionStrategy();
+        var deleted = 0;
+        deleted += await _sensorGlucoseRepository.DeleteByLegacyIdAsync(legacyId, origin, ct);
+        deleted += await _meterGlucoseRepository.DeleteByLegacyIdAsync(legacyId, origin, ct);
+        deleted += await _calibrationRepository.DeleteByLegacyIdAsync(legacyId, origin, ct);
 
-        return await strategy.ExecuteAsync(async () =>
-        {
-            await using var tx = await _dbContext.Database.BeginTransactionAsync(ct);
-            var now = DateTime.UtcNow;
-            var deleted = 0;
+        if (deleted > 0)
+            Logger.LogDebug("Soft-deleted {Count} v4 records for legacy entry {LegacyId}", deleted, legacyId);
 
-            deleted += await _dbContext.SensorGlucose
-                .Where(e => e.LegacyId == legacyId)
-                .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, now), ct);
-            deleted += await _dbContext.MeterGlucose
-                .Where(e => e.LegacyId == legacyId)
-                .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, now), ct);
-            deleted += await _dbContext.Calibrations
-                .Where(e => e.LegacyId == legacyId)
-                .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, now), ct);
-
-            await tx.CommitAsync(ct);
-
-            if (deleted > 0)
-                _logger.LogDebug("Soft-deleted {Count} v4 records for legacy entry {LegacyId}", deleted, legacyId);
-
-            return deleted;
-        });
+        return deleted;
     }
 
     /// <inheritdoc />
-    public async Task<long> BulkDeleteAsync(string? find, CancellationToken ct = default)
+    public async Task<long> BulkDeleteAsync(string? find, WriteOrigin origin, CancellationToken ct = default)
     {
-        var (fromMills, toMills) = Core.Models.Entries.EntryDomainLogic.ParseTimeRangeFromFind(find);
+        // origin is accepted for interface uniformity; bulk clear-by-time-range stays a coarse op that
+        // does NOT route through the per-record chokepoint (it fires EntryService's OnBulkDeletedAsync).
+        var findQuery = Core.Models.Queries.FindQuery.Parse(find);
+        var (fromMills, toMills) = (findQuery.FromMills, findQuery.ToMills);
 
-        // ParseTimeRangeFromFind extracts $gte/$lte from any field, not just
-        // time fields. A query like {"sgv":{"$gte":180}} would parse from=180 (nonsensical as a
-        // timestamp). Reject values below year 2000 in millis as clearly not time bounds.
-        const long MinPlausibleMills = 946684800000L; // 2000-01-01T00:00:00Z
-        if (fromMills.HasValue && fromMills.Value < MinPlausibleMills)
-            fromMills = null;
-        if (toMills.HasValue && toMills.Value < MinPlausibleMills)
-            toMills = null;
+        // find is client-controlled; strip line breaks so it can't forge log entries
+        var findForLog = find?.ReplaceLineEndings(" ");
+
+        // A find[type]=x equality narrows the sweep to that record type; any other field filter
+        // cannot be honored by a by-time sweep, so refuse rather than wipe non-matching records.
+        var typeFilter = findQuery.GetEqualityValue("type");
+        if (findQuery.HasFieldFiltersExcept("type"))
+        {
+            Logger.LogWarning("BulkDelete refused: find query carries field filters the by-time sweep cannot honor. find={Find}", findForLog);
+            return 0;
+        }
 
         // NIGHTSCOUT-COMPAT: Legacy Nightscout allowed arbitrary MongoDB find queries for
-        // bulk delete (e.g. {"sgv":{"$gte":180}}). After V4 migration we only support
-        // time-range filters. If the caller passed a non-empty find query but we couldn't
-        // extract any time bounds, refuse to delete — otherwise we'd wipe all records.
+        // bulk delete. If the caller passed a non-empty find query but we couldn't extract
+        // any time bounds or a type filter, refuse to delete — otherwise we'd wipe all records.
         // Null/empty find intentionally deletes everything (matches "delete all" semantics).
         var hasFind = !string.IsNullOrEmpty(find) && find != "{}";
         var hasTimeBounds = fromMills.HasValue || toMills.HasValue;
 
-        if (hasFind && !hasTimeBounds)
+        if (hasFind && !hasTimeBounds && typeFilter is null)
         {
-            _logger.LogWarning("BulkDelete refused: find query has no parseable time range, would delete all records. find={Find}", find);
+            Logger.LogWarning("BulkDelete refused: find query has no parseable time range, would delete all records. find={Find}", findForLog);
             return 0;
         }
 
@@ -330,13 +239,16 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
             ? DateTimeOffset.FromUnixTimeMilliseconds(toMills.Value).UtcDateTime
             : null;
 
-        var sgDeleted = await _sensorGlucoseRepository.DeleteByTimeRangeAsync(from, to, ct);
-        var mgDeleted = await _meterGlucoseRepository.DeleteByTimeRangeAsync(from, to, ct);
-        var calDeleted = await _calibrationRepository.DeleteByTimeRangeAsync(from, to, ct);
+        var sgDeleted = typeFilter is null or "sgv"
+            ? await _sensorGlucoseRepository.DeleteByTimeRangeAsync(from, to, ct) : 0;
+        var mgDeleted = typeFilter is null or "mbg"
+            ? await _meterGlucoseRepository.DeleteByTimeRangeAsync(from, to, ct) : 0;
+        var calDeleted = typeFilter is null or "cal"
+            ? await _calibrationRepository.DeleteByTimeRangeAsync(from, to, ct) : 0;
 
         var total = (long)sgDeleted + mgDeleted + calDeleted;
-        _logger.LogInformation("BulkDelete: removed {Total} v4 records (sg={Sg}, mg={Mg}, cal={Cal}) for find={Find}",
-            total, sgDeleted, mgDeleted, calDeleted, find);
+        Logger.LogInformation("BulkDelete: removed {Total} v4 records (sg={Sg}, mg={Mg}, cal={Cal}) for find={Find}",
+            total, sgDeleted, mgDeleted, calDeleted, findForLog);
 
         return total;
     }
@@ -430,32 +342,13 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
     }
 
     /// <summary>
-    /// Converts a Nightscout direction string (e.g. <c>"SingleUp"</c>, <c>"Flat"</c>) to the typed
-    /// <see cref="GlucoseDirection"/> enum. Returns <see langword="null"/> for unknown or empty values.
+    /// Converts a Nightscout direction string (e.g. <c>"SingleUp"</c>, <c>"NOT COMPUTABLE"</c>) to the
+    /// typed <see cref="GlucoseDirection"/> enum. Returns <see langword="null"/> for unknown or empty
+    /// values, and for legacy values V4 does not model (triple arrows, CGM error).
     /// </summary>
     /// <param name="direction">The raw direction string from the legacy entry.</param>
     /// <returns>The corresponding <see cref="GlucoseDirection"/> value, or <see langword="null"/> if unrecognised.</returns>
-    internal static GlucoseDirection? MapDirection(string? direction)
-    {
-        if (string.IsNullOrEmpty(direction))
-            return null;
-
-        return direction switch
-        {
-            "NONE" => GlucoseDirection.None,
-            "DoubleUp" => GlucoseDirection.DoubleUp,
-            "SingleUp" => GlucoseDirection.SingleUp,
-            "FortyFiveUp" => GlucoseDirection.FortyFiveUp,
-            "Flat" => GlucoseDirection.Flat,
-            "FortyFiveDown" => GlucoseDirection.FortyFiveDown,
-            "SingleDown" => GlucoseDirection.SingleDown,
-            "DoubleDown" => GlucoseDirection.DoubleDown,
-            "NOT COMPUTABLE" => GlucoseDirection.NotComputable,
-            "RATE OUT OF RANGE" => GlucoseDirection.RateOutOfRange,
-            _ => Enum.TryParse<GlucoseDirection>(direction, ignoreCase: true, out var parsed)
-                ? parsed
-                : null
-        };
-    }
+    internal static GlucoseDirection? MapDirection(string? direction) =>
+        DirectionExtensions.TryParse(direction, out var parsed) ? parsed.ToGlucoseDirection() : null;
 
 }

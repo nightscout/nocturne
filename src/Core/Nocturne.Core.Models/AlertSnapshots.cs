@@ -8,13 +8,18 @@ namespace Nocturne.Core.Models;
 /// <seealso cref="AlertRule"/>
 public record AlertRuleSnapshot(Guid Id, Guid TenantId, string Name, AlertConditionType ConditionType,
     string ConditionParams, AlertRuleSeverity Severity, string ClientConfiguration, int SortOrder,
-    bool AutoResolveEnabled, string? AutoResolveParams, bool AllowThroughDnd = false);
+    bool AutoResolveEnabled, string? AutoResolveParams, bool AllowThroughDnd = false,
+    RuleScopeClass ScopeClass = RuleScopeClass.Undirected);
 
 /// <summary>
 /// Immutable snapshot of a single delivery channel attached to an <see cref="AlertRule"/>.
 /// Replaces the legacy schedule/escalation-step/step-channel chain — channels live directly
 /// on the rule and are dispatched in parallel when the rule fires.
 /// </summary>
+/// <param name="Secret">
+/// Webhook signing secret as ciphertext; the dispatching provider decrypts it. Null for every
+/// other channel type and for a webhook whose receiver does not verify signatures.
+/// </param>
 public record AlertRuleChannelSnapshot(
     Guid Id,
     Guid AlertRuleId,
@@ -22,7 +27,8 @@ public record AlertRuleChannelSnapshot(
     string Destination,
     string? DestinationLabel,
     int SortOrder,
-    string? Metadata = null);
+    string? Metadata = null,
+    string? Secret = null);
 
 /// <summary>
 /// Immutable snapshot of a live alert instance.
@@ -79,55 +85,36 @@ public record SnoozedInstanceSnapshot(Guid InstanceId, Guid TenantId, Guid Alert
     Guid AlertRuleId, AlertConditionType ConditionType, string ConditionParams, string ClientConfiguration);
 
 /// <summary>
-/// Snapshot of the tenant's <c>tenant_alert_settings</c> row used by the orchestrator and the
-/// <c>do_not_disturb</c> condition evaluator. Both manual and scheduled DND collapse into one
-/// effective state via <see cref="IsActive"/>.
+/// Snapshot of the tenant's <c>tenant_alert_settings</c> row used by the enricher to resolve
+/// <b>scheduled</b> DND (ADR 0004 D5: manual DND moved to a <c>scope=all</c> <c>dnd_windows</c>
+/// row, resolved separately). <see cref="Resolve"/> projects the active scheduled window, if any.
 /// </summary>
-/// <param name="DndManualActive">True when the user has manually toggled DND on.</param>
-/// <param name="DndManualUntil">UTC instant at which a manually-activated DND auto-expires; null = indefinitely.</param>
-/// <param name="DndManualStartedAt">UTC instant when manual DND was most recently activated. Used as the anchor for <c>do_not_disturb</c>'s sustained <c>for_minutes</c> when manual DND is the active path.</param>
 /// <param name="DndScheduleEnabled">True when a recurring scheduled DND window is configured.</param>
 /// <param name="DndScheduleStart">Local-time start of the scheduled window.</param>
 /// <param name="DndScheduleEnd">Local-time end (cross-midnight allowed: start &gt; end interpreted as wrapping).</param>
 public record TenantAlertSettingsSnapshot(
-    bool DndManualActive,
-    DateTime? DndManualUntil,
-    DateTime? DndManualStartedAt,
     bool DndScheduleEnabled,
     TimeOnly? DndScheduleStart,
     TimeOnly? DndScheduleEnd)
 {
     /// <summary>An "everything off" snapshot used when no row exists for the tenant.</summary>
     public static TenantAlertSettingsSnapshot Empty { get; } =
-        new(false, null, null, false, null, null);
+        new(false, null, null);
 
     /// <summary>
-    /// The active DND projection produced by <see cref="Resolve"/>. <c>null</c> when DND is off.
-    /// <see cref="StartedAt"/> is always meaningful when this projection is non-null — callers
-    /// don't need to guard against placeholder timestamps.
+    /// The active DND projection produced by <see cref="Resolve"/>. <c>null</c> when scheduled
+    /// DND is off. <see cref="StartedAt"/> is always meaningful when this projection is non-null.
     /// </summary>
     public sealed record ActiveProjection(DateTime StartedAt, string Source);
 
     /// <summary>
-    /// Computes whether DND is currently active by either path (manual with optional auto-expire,
-    /// or scheduled window). The scheduled window is interpreted in
+    /// Computes whether scheduled DND is currently active. The scheduled window is interpreted in
     /// <paramref name="timezoneId"/> (the patient's IANA timezone from
-    /// <see cref="V4.PatientRecord.Timezone"/>); null or unparseable falls back to UTC. The
-    /// manual path takes precedence for the snapshot's <c>StartedAt</c> anchor when both paths
-    /// are active simultaneously. Returns <c>null</c> when DND is off.
+    /// <see cref="V4.PatientRecord.Timezone"/>); null or unparseable falls back to UTC. Returns
+    /// <c>null</c> when scheduled DND is off (manual mutes are resolved from <c>dnd_windows</c>).
     /// </summary>
     public ActiveProjection? Resolve(DateTime nowUtc, string? timezoneId)
     {
-        // Manual path
-        var manualActive = DndManualActive
-            && (DndManualUntil is null || nowUtc < DndManualUntil.Value);
-        if (manualActive)
-        {
-            // StartedAt missing on legacy rows defaults to now — still produces a sensible
-            // ForMinutes anchor (newly-active DND has zero elapsed time).
-            return new ActiveProjection(DndManualStartedAt ?? nowUtc, "manual");
-        }
-
         // Scheduled path
         if (DndScheduleEnabled && DndScheduleStart is { } start && DndScheduleEnd is { } end)
         {

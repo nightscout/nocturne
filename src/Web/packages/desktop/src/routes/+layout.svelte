@@ -1,6 +1,10 @@
 <script lang="ts">
   import "../app.css";
   import { onMount } from "svelte";
+  import { page } from "$app/state";
+  import { goto } from "$app/navigation";
+  import { invoke } from "@tauri-apps/api/core";
+  import { listen } from "@tauri-apps/api/event";
   import { check, type Update } from "@tauri-apps/plugin-updater";
   import { relaunch } from "@tauri-apps/plugin-process";
   import { Button } from "@nocturne/ui/ui/button";
@@ -11,7 +15,26 @@
   let pending = $state<Update | null>(null);
   let installing = $state(false);
 
+  // The floating clock is a chromeless overlay window — keep the update banner off it.
+  const isOverlay = $derived(page.url.pathname.startsWith("/float"));
+
+  // The connect surface lives in Settings, so a link opened from the browser has to take the user
+  // there before it can be confirmed.
+  onMount(() => {
+    if (isOverlay) return;
+    invoke<string | null>("pending_link_server")
+      .then((server) => {
+        if (server) goto("/settings");
+      })
+      .catch(() => {});
+    const unlisten = listen("link-code-received", () => goto("/settings"));
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  });
+
   onMount(async () => {
+    if (isOverlay) return;
     try {
       // Quietly check on launch; surface a non-blocking banner if there's an update.
       const update = await check();
@@ -33,7 +56,7 @@
   }
 </script>
 
-{#if pending}
+{#if pending && !isOverlay}
   <div
     class="bg-primary/10 border-primary/20 flex items-center justify-between gap-3 border-b px-4 py-2 text-sm"
   >

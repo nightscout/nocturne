@@ -23,7 +23,7 @@ public interface IOAuthGrantService
         Guid clientEntityId,
         Guid subjectId,
         IEnumerable<string> scopes,
-        string grantType = OAuthScopes.GrantTypeApp,
+        string grantType = OAuthGrantTypes.App,
         string? label = null,
         CancellationToken ct = default
     );
@@ -46,9 +46,34 @@ public interface IOAuthGrantService
     );
 
     /// <summary>
-    /// Revoke a grant (soft delete). Invalidates all associated refresh tokens.
+    /// Get the active (non-revoked) grant with this id that this subject owns. A grant that is
+    /// revoked, absent, or owned by another subject all come back <c>null</c>, so a caller
+    /// authorizing against one cannot tell the three apart.
+    /// </summary>
+    /// <param name="grantId">The grant ID to look up</param>
+    /// <param name="ownerSubjectId">The owner subject ID (for authorization check)</param>
+    /// <param name="ct">Cancellation token</param>
+    Task<OAuthGrantInfo?> GetGrantForSubjectAsync(
+        Guid grantId,
+        Guid ownerSubjectId,
+        CancellationToken ct = default
+    );
+
+    /// <summary>
+    /// Revoke a grant (soft delete). Invalidates all associated refresh tokens, and — because
+    /// access tokens carry their grant id — every outstanding access token minted from the grant.
     /// </summary>
     Task RevokeGrantAsync(Guid grantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Whether the grant is revoked, for authenticating an access token that carries a grant id.
+    /// A grant that cannot be found is reported as revoked.
+    /// </summary>
+    /// <param name="grantId">The grant id carried by the access token.</param>
+    /// <param name="tenantId">The tenant the presented token is pinned to, already verified against
+    /// the request's tenant by the caller. Used to scope the lookup.</param>
+    /// <param name="ct">Cancellation token</param>
+    Task<bool> IsGrantRevokedAsync(Guid grantId, Guid tenantId, CancellationToken ct = default);
 
     /// <summary>
     /// Update last-used tracking on a grant.
@@ -110,7 +135,7 @@ public class OAuthGrantInfo
     public Guid SubjectId { get; set; }
 
     /// <summary>Grant type: "app" for standard OAuth apps, "follower" for follower access.</summary>
-    public string GrantType { get; set; } = OAuthScopes.GrantTypeApp;
+    public string GrantType { get; set; } = OAuthGrantTypes.App;
 
     /// <summary>OAuth scopes granted.</summary>
     public List<string> Scopes { get; set; } = new();

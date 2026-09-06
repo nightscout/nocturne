@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
+using Nocturne.API.Multitenancy;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -43,7 +44,7 @@ public class OidcController : ControllerBase
     private readonly IAuthAuditService _auditService;
     private readonly ITenantMemberService _tenantMemberService;
     private readonly OidcOptions _options;
-    private readonly IConfiguration _configuration;
+    private readonly BaseDomainOptions _baseDomain;
     private readonly ILogger<OidcController> _logger;
 
     /// <summary>
@@ -56,7 +57,7 @@ public class OidcController : ControllerBase
         IAuthAuditService auditService,
         ITenantMemberService tenantMemberService,
         IOptions<OidcOptions> options,
-        IConfiguration configuration,
+        IOptions<BaseDomainOptions> baseDomainOptions,
         ILogger<OidcController> logger
     )
     {
@@ -66,7 +67,7 @@ public class OidcController : ControllerBase
         _auditService = auditService;
         _tenantMemberService = tenantMemberService;
         _options = options.Value;
-        _configuration = configuration;
+        _baseDomain = baseDomainOptions.Value;
         _logger = logger;
     }
 
@@ -113,15 +114,14 @@ public class OidcController : ControllerBase
         [FromQuery] string? returnUrl = null
     )
     {
-        // Validate return URL to prevent open redirect attacks
-        if (!string.IsNullOrEmpty(returnUrl) && !IsValidReturnUrl(returnUrl))
+        if (!string.IsNullOrEmpty(returnUrl) && !_baseDomain.IsValidReturnUrl(returnUrl))
         {
             return BadRequest(new { error = "invalid_return_url", message = "Invalid return URL" });
         }
 
         try
         {
-            var tenantSlug = (HttpContext.Items["TenantContext"] as TenantContext)?.Slug;
+            var tenantSlug = (HttpContext.GetTenantContext())?.Slug;
             var authRequest = await _authService.GenerateAuthorizationUrlAsync(provider, returnUrl, tenantSlug: tenantSlug);
 
             // Store state in a secure cookie for verification on callback
@@ -205,7 +205,7 @@ public class OidcController : ControllerBase
         // The callback runs on the tenant subdomain (OidcCallbackRedirectMiddleware has already
         // bounced apex callbacks to {slug}.{baseDomain}), so the resolved tenant is the one being
         // logged into. Pass it through so a session is only issued to a member of that tenant.
-        var currentTenantId = (HttpContext.Items["TenantContext"] as TenantContext)?.TenantId;
+        var currentTenantId = (HttpContext.GetTenantContext())?.TenantId;
 
         // Handle the callback
         var result = await _authService.HandleCallbackAsync(
@@ -252,6 +252,10 @@ public class OidcController : ControllerBase
 
         // Set session cookies
         SetSessionCookies(result.Tokens!);
+        Response.SetLastSignInCookie(
+            SessionCookieExtensions.SignInMethods.Oidc,
+            result.ProviderId?.ToString(),
+            _options);
 
         await _auditService.LogAsync(AuthAuditEventType.Login, result.Tokens?.SubjectId, success: true,
             ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent,
@@ -274,6 +278,7 @@ public class OidcController : ControllerBase
     /// endpoint so they can attach the external identity to their current account.
     /// </summary>
     [HttpGet("link")]
+    [DenyDemoSubject]
     [ProducesResponseType(StatusCodes.Status302Found)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -285,12 +290,12 @@ public class OidcController : ControllerBase
         if (auth == null || !auth.IsAuthenticated || !auth.SubjectId.HasValue)
             return Unauthorized(new { error = "not_authenticated", message = "Authentication required" });
 
-        if (!string.IsNullOrEmpty(returnUrl) && !IsValidReturnUrl(returnUrl))
+        if (!string.IsNullOrEmpty(returnUrl) && !_baseDomain.IsValidReturnUrl(returnUrl))
             return BadRequest(new { error = "invalid_return_url", message = "Invalid return URL" });
 
         try
         {
-            var tenantSlug = (HttpContext.Items["TenantContext"] as TenantContext)?.Slug;
+            var tenantSlug = (HttpContext.GetTenantContext())?.Slug;
             var req = await _authService.GenerateLinkAuthorizationUrlAsync(
                 provider, auth.SubjectId.Value, returnUrl, tenantSlug);
             SetLinkStateCookie(req.State, req.ExpiresAt);
@@ -314,6 +319,7 @@ public class OidcController : ControllerBase
     /// Does NOT issue new session cookies.
     /// </summary>
     [HttpGet("link/callback")]
+    [DenyDemoSubject]
     [ProducesResponseType(StatusCodes.Status302Found)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> LinkCallback(
@@ -383,6 +389,7 @@ public class OidcController : ControllerBase
     /// List OIDC identities linked to the currently-authenticated subject.
     /// </summary>
     [HttpGet("link/identities")]
+    [DenyDemoSubject]
     [RemoteQuery]
     [ProducesResponseType(typeof(LinkedOidcIdentitiesResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -426,7 +433,8 @@ public class OidcController : ControllerBase
     /// <response code="404">Identity not found.</response>
     /// <response code="409">Cannot remove the last primary sign-in method.</response>
     [HttpDelete("link/identities/{identityId:guid}")]
-    [RemoteCommand]
+    [DenyDemoSubject]
+    [RemoteCommand(Invalidates = ["GetLinkedIdentities"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -644,6 +652,7 @@ public class OidcController : ControllerBase
                 Permissions = authContext.Permissions,
                 ExpiresAt = authContext.ExpiresAt,
                 PreferredLanguage = userInfo?.PreferredLanguage,
+                Preferences = userInfo?.Preferences,
                 IsPlatformAdmin = authContext.IsPlatformAdmin,
                 IsPlatformAccessGrant = authContext.AuthType == AuthType.PlatformAccess,
                 AvatarUrl = userInfo?.AvatarUrl,
@@ -653,153 +662,23 @@ public class OidcController : ControllerBase
 
     #region Private Helper Methods
 
-    /// <summary>
-    /// Validate that a return URL is safe (prevents open redirect attacks)
-    /// </summary>
-    private bool IsValidReturnUrl(string returnUrl)
-    {
-        if (Uri.TryCreate(returnUrl, UriKind.Relative, out _))
-        {
-            return true;
-        }
+    private void SetStateCookie(string state, DateTimeOffset expiresAt) =>
+        Response.SetStateCookie(_options.Cookie.StateCookieName, state, expiresAt, _options);
 
-        var baseUrl = _configuration[ServiceNames.ConfigKeys.BaseUrl];
-        if (!string.IsNullOrEmpty(baseUrl))
-        {
-            return returnUrl.StartsWith(baseUrl, StringComparison.OrdinalIgnoreCase);
-        }
+    private void ClearStateCookie() =>
+        Response.ClearStateCookie(_options.Cookie.StateCookieName, _options);
 
-        return false;
-    }
+    private void SetLinkStateCookie(string state, DateTimeOffset expiresAt) =>
+        Response.SetStateCookie(_options.Cookie.LinkStateCookieName, state, expiresAt, _options);
 
-    /// <summary>
-    /// Set the OIDC state cookie
-    /// </summary>
-    private void SetStateCookie(string state, DateTimeOffset expiresAt)
-    {
-        Response.Cookies.Append(
-            _options.Cookie.StateCookieName,
-            state,
-            new CookieOptions
-            {
-                HttpOnly = true,
-                Secure = _options.Cookie.Secure,
-                SameSite = SessionCookieExtensions.MapSameSiteMode(_options.Cookie.SameSite),
-                Path = _options.Cookie.Path,
-                Domain = _options.Cookie.Domain,
-                Expires = expiresAt,
-            }
-        );
-    }
+    private void ClearLinkStateCookie() =>
+        Response.ClearStateCookie(_options.Cookie.LinkStateCookieName, _options);
 
-    /// <summary>
-    /// Clear the OIDC state cookie
-    /// </summary>
-    private void ClearStateCookie()
-    {
-        Response.Cookies.Delete(
-            _options.Cookie.StateCookieName,
-            new CookieOptions { Path = _options.Cookie.Path, Domain = _options.Cookie.Domain }
-        );
-    }
+    private void SetSessionCookies(OidcTokenResponse tokens) =>
+        Response.SetSessionCookies(
+            tokens.AccessToken, tokens.RefreshToken, tokens.ExpiresAt, _options);
 
-    /// <summary>
-    /// Set the OIDC link state cookie
-    /// </summary>
-    private void SetLinkStateCookie(string state, DateTimeOffset expiresAt)
-    {
-        Response.Cookies.Append(
-            _options.Cookie.LinkStateCookieName,
-            state,
-            new CookieOptions
-            {
-                HttpOnly = true,
-                Secure = _options.Cookie.Secure,
-                SameSite = SessionCookieExtensions.MapSameSiteMode(_options.Cookie.SameSite),
-                Path = _options.Cookie.Path,
-                Domain = _options.Cookie.Domain,
-                Expires = expiresAt,
-            }
-        );
-    }
-
-    /// <summary>
-    /// Clear the OIDC link state cookie
-    /// </summary>
-    private void ClearLinkStateCookie()
-    {
-        Response.Cookies.Delete(
-            _options.Cookie.LinkStateCookieName,
-            new CookieOptions { Path = _options.Cookie.Path, Domain = _options.Cookie.Domain }
-        );
-    }
-
-    /// <summary>
-    /// Set session cookies (access token and refresh token)
-    /// </summary>
-    private void SetSessionCookies(OidcTokenResponse tokens)
-    {
-        // Access token cookie (short-lived)
-        Response.Cookies.Append(
-            _options.Cookie.AccessTokenName,
-            tokens.AccessToken,
-            new CookieOptions
-            {
-                HttpOnly = _options.Cookie.HttpOnly,
-                Secure = _options.Cookie.Secure,
-                SameSite = SessionCookieExtensions.MapSameSiteMode(_options.Cookie.SameSite),
-                Path = _options.Cookie.Path,
-                Domain = _options.Cookie.Domain,
-                Expires = tokens.ExpiresAt,
-            }
-        );
-
-        // Refresh token cookie (longer-lived)
-        Response.Cookies.Append(
-            _options.Cookie.RefreshTokenName,
-            tokens.RefreshToken,
-            new CookieOptions
-            {
-                HttpOnly = true, // Always HttpOnly for refresh tokens
-                Secure = _options.Cookie.Secure,
-                SameSite = SessionCookieExtensions.MapSameSiteMode(_options.Cookie.SameSite),
-                Path = _options.Cookie.Path,
-                Domain = _options.Cookie.Domain,
-                Expires = DateTimeOffset.UtcNow.Add(_options.Session.RefreshTokenLifetime),
-            }
-        );
-
-        // Also set a non-HttpOnly cookie with just auth status for JavaScript
-        Response.Cookies.Append(
-            "IsAuthenticated",
-            "true",
-            new CookieOptions
-            {
-                HttpOnly = false,
-                Secure = _options.Cookie.Secure,
-                SameSite = SessionCookieExtensions.MapSameSiteMode(_options.Cookie.SameSite),
-                Path = _options.Cookie.Path,
-                Domain = _options.Cookie.Domain,
-                Expires = DateTimeOffset.UtcNow.Add(_options.Session.RefreshTokenLifetime),
-            }
-        );
-    }
-
-    /// <summary>
-    /// Clear session cookies
-    /// </summary>
-    private void ClearSessionCookies()
-    {
-        var cookieOptions = new CookieOptions
-        {
-            Path = _options.Cookie.Path,
-            Domain = _options.Cookie.Domain,
-        };
-
-        Response.Cookies.Delete(_options.Cookie.AccessTokenName, cookieOptions);
-        Response.Cookies.Delete(_options.Cookie.RefreshTokenName, cookieOptions);
-        Response.Cookies.Delete("IsAuthenticated", cookieOptions);
-    }
+    private void ClearSessionCookies() => Response.ClearSessionCookies(_options);
 
     /// <summary>
     /// Get the refresh token from cookie or request body
@@ -814,32 +693,14 @@ public class OidcController : ControllerBase
         }
 
         // Then try from Authorization header (for API clients)
-        var authHeader = Request.Headers.Authorization.FirstOrDefault();
-        if (
-            !string.IsNullOrEmpty(authHeader)
-            && authHeader.StartsWith("Refresh ", StringComparison.OrdinalIgnoreCase)
-        )
-        {
-            return authHeader["Refresh ".Length..].Trim();
-        }
-
-        return null;
+        return Request.GetAuthorizationCredential("Refresh");
     }
 
     /// <summary>
     /// Get the client IP address
     /// </summary>
-    private string? GetClientIpAddress()
-    {
-        // Check for forwarded headers first (when behind a reverse proxy)
-        var forwarded = Request.Headers["X-Forwarded-For"].FirstOrDefault();
-        if (!string.IsNullOrEmpty(forwarded))
-        {
-            return forwarded.Split(',').First().Trim();
-        }
-
-        return HttpContext.Connection.RemoteIpAddress?.ToString();
-    }
+    private string? GetClientIpAddress() =>
+        HttpContext.Connection.RemoteIpAddress?.ToString();
 
     /// <summary>
     /// Redirect to an error page
@@ -954,6 +815,12 @@ public class SessionInfo
     /// User's preferred language code (e.g., "en", "fr", "de")
     /// </summary>
     public string? PreferredLanguage { get; set; }
+
+    /// <summary>
+    /// Per-user display preferences (units, time format, theme, chart style, etc.).
+    /// Used for server-side hydration so first paint matches the user's saved choices.
+    /// </summary>
+    public UserDisplayPreferences? Preferences { get; set; }
 
     /// <summary>
     /// Whether this subject has platform-level admin access

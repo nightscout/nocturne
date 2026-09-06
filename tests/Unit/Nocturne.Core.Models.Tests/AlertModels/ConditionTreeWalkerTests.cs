@@ -34,7 +34,7 @@ public class ConditionTreeWalkerTests
     [Fact]
     public void TopLevelStateSpanActiveWithNonPumpMode_IsAccepted()
     {
-        var tree = StateSpan(StateSpanCategory.Sleep);
+        var tree = StateSpan(StateSpanCategory.Exercise);
 
         ConditionTreeWalker.ContainsPumpModeStateSpan(tree).Should().BeFalse();
     }

@@ -10,7 +10,7 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.PatientRecord
 /// </summary>
 [Table("patient_records")]
-public class PatientRecordEntity : ITenantScoped, ISoftDeletable
+public class PatientRecordEntity : ITenantScoped, ISoftDeletable, ISystemTimestamped
 {
     /// <summary>
     /// The unique identifier of the tenant this record belongs to.
@@ -51,6 +51,14 @@ public class PatientRecordEntity : ITenantScoped, ISoftDeletable
     public DateOnly? DateOfBirth { get; set; }
 
     /// <summary>
+    /// Patient biological (natal) sex stored as string (e.g. "Female", "Male"). Optional.
+    /// Distinct from pronouns/gender; used for sex-specific normative reference ranges.
+    /// </summary>
+    [Column("sex")]
+    [MaxLength(16)]
+    public string? Sex { get; set; }
+
+    /// <summary>
     /// Patient preferred name
     /// </summary>
     [Column("preferred_name")]
@@ -85,12 +93,14 @@ public class PatientRecordEntity : ITenantScoped, ISoftDeletable
     /// <summary>
     /// System tracking: when record was inserted
     /// </summary>
+    [AuditIgnored]
     [Column("sys_created_at")]
     public DateTime SysCreatedAt { get; set; } = DateTime.UtcNow;
 
     /// <summary>
     /// System tracking: when record was last updated
     /// </summary>
+    [AuditIgnored]
     [Column("sys_updated_at")]
     public DateTime SysUpdatedAt { get; set; } = DateTime.UtcNow;
 
@@ -98,6 +108,7 @@ public class PatientRecordEntity : ITenantScoped, ISoftDeletable
     /// Soft-delete timestamp. When non-null the record is treated as deleted
     /// by the global query filter and is invisible above the repository layer.
     /// </summary>
+    [AuditIgnored]
     [Column("deleted_at")]
     public DateTime? DeletedAt { get; set; }
 }

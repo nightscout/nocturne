@@ -29,6 +29,12 @@ internal sealed class AlertDeliveryService(
     ILogger<AlertDeliveryService> logger)
     : IAlertDeliveryService
 {
+    /// <summary>
+    /// How long a test-fired excursion with a <c>device_action</c> channel stays visible in the
+    /// active-intents snapshot (via a future EndedAt) before self-withdrawing.
+    /// </summary>
+    internal static readonly TimeSpan DeviceActionTestFireWindow = TimeSpan.FromSeconds(90);
+
     public async Task DispatchAsync(
         Guid alertInstanceId,
         IReadOnlyList<AlertRuleChannelSnapshot> channels,
@@ -103,10 +109,9 @@ internal sealed class AlertDeliveryService(
         for (var i = 0; i < deliveryRows.Count; i++)
         {
             var delivery = deliveryRows[i];
-            var channelMetadata = channels[i].Metadata;
             try
             {
-                await DispatchToProviderAsync(delivery, payload, channelMetadata, ct);
+                await DispatchToProviderAsync(delivery, channels[i], payload, ct);
             }
             catch (Exception ex)
             {
@@ -131,14 +136,25 @@ internal sealed class AlertDeliveryService(
         // excursion is opened and immediately resolved — it never participates in tracker
         // state because we don't go through IExcursionTracker (which would mutate the live
         // ActiveExcursionId on AlertTrackerStateEntity and confuse the orchestrator).
+        //
+        // device_action channels are the exception: push-mode devices actuate from the
+        // active-intents snapshot, which only surfaces excursions that have not yet ended.
+        // Give the test excursion a short future end so it appears in the snapshot for the
+        // window and then self-withdraws — no background job needed. Consumers that must treat
+        // the fire as live during the window (the snapshot, AlertAcknowledgementService) filter
+        // on EndedAt == null || EndedAt > now; alert history filters on EndedAt <= now so the
+        // future end stays out of it until the window lapses.
         var now = DateTime.UtcNow;
+        var endedAt = channels.Any(c => c.ChannelType == ChannelType.DeviceAction)
+            ? now + DeviceActionTestFireWindow
+            : now;
         var excursion = new AlertExcursionEntity
         {
             Id = Guid.CreateVersion7(),
             TenantId = tenantId,
             AlertRuleId = alertRuleId,
             StartedAt = now,
-            EndedAt = now,
+            EndedAt = endedAt,
         };
         db.AlertExcursions.Add(excursion);
 
@@ -213,10 +229,9 @@ internal sealed class AlertDeliveryService(
         for (var i = 0; i < deliveryRows.Count; i++)
         {
             var delivery = deliveryRows[i];
-            var channelMetadata = channels[i].Metadata;
             try
             {
-                await DispatchToProviderAsync(delivery, payload, channelMetadata, ct);
+                await DispatchToProviderAsync(delivery, channels[i], payload, ct);
             }
             catch (Exception ex)
             {
@@ -254,7 +269,7 @@ internal sealed class AlertDeliveryService(
                     ChannelType = channel.ChannelType,
                     Destination = channel.Destination,
                 };
-                await DispatchToProviderAsync(fauxDelivery, payload, channel.Metadata, ct);
+                await DispatchToProviderAsync(fauxDelivery, channel, payload, ct);
             }
             catch (Exception ex)
             {
@@ -290,7 +305,8 @@ internal sealed class AlertDeliveryService(
         await db.SaveChangesAsync(ct);
     }
 
-    private async Task DispatchToProviderAsync(AlertDeliveryEntity delivery, AlertPayload payload, string? channelMetadata, CancellationToken ct)
+    private async Task DispatchToProviderAsync(
+        AlertDeliveryEntity delivery, AlertRuleChannelSnapshot channel, AlertPayload payload, CancellationToken ct)
     {
         switch (delivery.ChannelType)
         {
@@ -316,7 +332,7 @@ internal sealed class AlertDeliveryService(
                 var webhookProvider = serviceProvider.GetService<Providers.WebhookProvider>();
                 if (webhookProvider is not null)
                 {
-                    await webhookProvider.SendAsync(delivery.Destination, payload, ct);
+                    await webhookProvider.SendAsync(delivery.Destination, channel.Secret, payload, ct);
                     await MarkDeliveredAsync(delivery.Id, null, null, ct);
                 }
                 break;
@@ -334,11 +350,11 @@ internal sealed class AlertDeliveryService(
                 if (haProvider is not null)
                 {
                     object? channelMeta = null;
-                    if (!string.IsNullOrEmpty(channelMetadata))
+                    if (!string.IsNullOrEmpty(channel.Metadata))
                     {
                         try
                         {
-                            using var doc = System.Text.Json.JsonDocument.Parse(channelMetadata);
+                            using var doc = System.Text.Json.JsonDocument.Parse(channel.Metadata);
                             var allowAck = doc.RootElement.TryGetProperty("allow_ack", out var prop)
                                            && prop.ValueKind == System.Text.Json.JsonValueKind.True;
                             channelMeta = new { allowAck };
@@ -358,6 +374,23 @@ internal sealed class AlertDeliveryService(
                         await MarkDeliveredAsync(delivery.Id, null, null, ct);
                     else
                         await MarkFailedAsync(delivery.Id, "No Home Assistant instance connected", ct);
+                }
+                break;
+
+            case ChannelType.DeviceAction:
+                var deviceActionProvider = serviceProvider.GetService<Providers.DeviceActionProvider>();
+                if (deviceActionProvider is not null)
+                {
+                    // Destination is the target device kind. The provider suppresses local-engine
+                    // kinds and broadcasts to push-mode devices; either of those is "handled" (the
+                    // active-intents snapshot is the source of truth for reconcile). A false result
+                    // means a misconfigured channel (unknown kind) — record it as failed so History
+                    // doesn't show a silent success.
+                    var handled = await deviceActionProvider.SendAsync(delivery.Destination, payload, channel.Metadata, ct);
+                    if (handled)
+                        await MarkDeliveredAsync(delivery.Id, null, null, ct);
+                    else
+                        await MarkFailedAsync(delivery.Id, $"Unknown device_action target kind '{delivery.Destination}'", ct);
                 }
                 break;
 

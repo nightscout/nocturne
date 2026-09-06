@@ -75,7 +75,7 @@
     >
       <Redo2 class="size-4" />
     </Button>
-    <Button variant="outline" size="icon" onclick={onCopyLink}>
+    <Button variant="outline" size="icon" onclick={onCopyLink} title="Copy link">
       <Copy class="size-4" />
     </Button>
     {#if children}

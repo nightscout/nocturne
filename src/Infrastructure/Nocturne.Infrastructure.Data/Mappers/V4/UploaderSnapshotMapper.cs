@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
 
@@ -18,14 +17,7 @@ public static class UploaderSnapshotMapper
     {
         return new UploaderSnapshotEntity
         {
-            Id = model.Id == Guid.Empty ? Guid.CreateVersion7() : model.Id,
-            Timestamp = model.Timestamp,
-            UtcOffset = model.UtcOffset,
-            Device = model.Device,
-            CorrelationId = model.CorrelationId,
-            LegacyId = model.LegacyId,
-            SysCreatedAt = DateTime.UtcNow,
-            SysUpdatedAt = DateTime.UtcNow,
+            SyncIdentifier = model.SyncIdentifier,
             Name = model.Name,
             Battery = model.Battery,
             BatteryVoltage = model.BatteryVoltage,
@@ -33,10 +25,7 @@ public static class UploaderSnapshotMapper
             Temperature = model.Temperature,
             Type = model.Type,
             DeviceId = model.DeviceId,
-            AdditionalPropertiesJson = model.AdditionalProperties is { Count: > 0 }
-                ? JsonSerializer.Serialize(model.AdditionalProperties)
-                : null,
-        };
+        }.WithHeaderFrom(model);
     }
 
     /// <summary>
@@ -48,14 +37,7 @@ public static class UploaderSnapshotMapper
     {
         return new UploaderSnapshot
         {
-            Id = entity.Id,
-            Timestamp = entity.Timestamp,
-            UtcOffset = entity.UtcOffset,
-            Device = entity.Device,
-            CorrelationId = entity.CorrelationId,
-            LegacyId = entity.LegacyId,
-            CreatedAt = entity.SysCreatedAt,
-            ModifiedAt = entity.SysUpdatedAt,
+            SyncIdentifier = entity.SyncIdentifier,
             Name = entity.Name,
             Battery = entity.Battery,
             BatteryVoltage = entity.BatteryVoltage,
@@ -63,10 +45,7 @@ public static class UploaderSnapshotMapper
             Temperature = entity.Temperature,
             Type = entity.Type,
             DeviceId = entity.DeviceId,
-            AdditionalProperties = !string.IsNullOrEmpty(entity.AdditionalPropertiesJson)
-                ? JsonSerializer.Deserialize<Dictionary<string, object?>>(entity.AdditionalPropertiesJson)
-                : null,
-        };
+        }.WithHeaderFrom(entity);
     }
 
     /// <summary>
@@ -76,12 +55,8 @@ public static class UploaderSnapshotMapper
     /// <param name="model">The domain model containing updated data.</param>
     public static void UpdateEntity(UploaderSnapshotEntity entity, UploaderSnapshot model)
     {
-        entity.Timestamp = model.Timestamp;
-        entity.UtcOffset = model.UtcOffset;
-        entity.Device = model.Device;
-        entity.CorrelationId = model.CorrelationId;
-        entity.LegacyId = model.LegacyId;
-        entity.SysUpdatedAt = DateTime.UtcNow;
+        V4RecordHeaderMapper.UpdateHeader(entity, model);
+        entity.SyncIdentifier = model.SyncIdentifier;
         entity.Name = model.Name;
         entity.Battery = model.Battery;
         entity.BatteryVoltage = model.BatteryVoltage;
@@ -89,8 +64,5 @@ public static class UploaderSnapshotMapper
         entity.Temperature = model.Temperature;
         entity.Type = model.Type;
         entity.DeviceId = model.DeviceId;
-        entity.AdditionalPropertiesJson = model.AdditionalProperties is { Count: > 0 }
-            ? JsonSerializer.Serialize(model.AdditionalProperties)
-            : null;
     }
 }

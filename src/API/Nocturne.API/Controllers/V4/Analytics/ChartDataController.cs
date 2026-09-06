@@ -1,7 +1,11 @@
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Attributes;
+using Nocturne.API.Authorization;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Controllers.V4.Analytics;
 
@@ -12,8 +16,12 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 /// state spans, system events, and tracker markers.
 /// </summary>
 /// <remarks>
-/// Responses are cached for 60 seconds, varying by query keys,
-/// to avoid redundant recalculation when the browser reconnects.
+/// Responses are cached for 60 seconds in the caller's own client cache, so a browser that
+/// reconnects does not force a recalculation. The cache is deliberately private:
+/// <see cref="ChartDataReadScopeGuard"/> makes the body depend on the caller's scopes, and the
+/// shared response cache keys only on host, query and <c>Cookie</c>, so a credential that presents
+/// neither a cookie nor an <c>Authorization</c> header — the legacy <c>api-secret</c> header —
+/// would otherwise be served another credential's unredacted body.
 /// </remarks>
 /// <seealso cref="IChartDataService"/>
 /// <seealso cref="DashboardChartData"/>
@@ -49,10 +57,19 @@ public class ChartDataController : ControllerBase
     /// <exception cref="Exception">Returns HTTP 500 if chart data calculation fails.</exception>
     [HttpGet("dashboard")]
     [RemoteQuery]
-    [ResponseCache(Duration = 60, VaryByQueryKeys = new[] { "*" })]
+    [RequireScope(
+        Scope.GlucoseRead,
+        Scope.TreatmentsRead,
+        Scope.DevicesRead,
+        Scope.TherapyRead,
+        Scope.HeartRateRead,
+        Scope.StepCountRead,
+        Scope.SleepRead)]
+    [ResponseCache(Duration = 60, Location = ResponseCacheLocation.Client)]
     [ProducesResponseType(typeof(DashboardChartData), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [ErrorEnvelope]
     public async Task<ActionResult<DashboardChartData>> GetDashboardChartData(
         [FromQuery] long startTime,
         [FromQuery] long endTime,
@@ -60,28 +77,20 @@ public class ChartDataController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        try
-        {
-            if (endTime <= startTime)
-                return Problem(detail: "endTime must be greater than startTime", statusCode: 400, title: "Bad Request");
+        if (endTime <= startTime)
+            return Problem(detail: "endTime must be greater than startTime", statusCode: 400, title: "Bad Request");
 
-            if (intervalMinutes < 1 || intervalMinutes > 60)
-                return Problem(detail: "intervalMinutes must be between 1 and 60", statusCode: 400, title: "Bad Request");
+        if (intervalMinutes < 1 || intervalMinutes > 60)
+            return Problem(detail: "intervalMinutes must be between 1 and 60", statusCode: 400, title: "Bad Request");
 
-            var result = await _chartDataService.GetDashboardChartDataAsync(
-                startTime,
-                endTime,
-                intervalMinutes,
-                cancellationToken
-            );
+        var result = await _chartDataService.GetDashboardChartDataAsync(
+            startTime,
+            endTime,
+            intervalMinutes,
+            cancellationToken
+        );
 
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error calculating dashboard chart data");
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
-        }
+        return Ok(ChartDataReadScopeGuard.Redact(result, HttpContext.GetGrantedScopes()));
     }
 
     /// <summary>
@@ -96,29 +105,23 @@ public class ChartDataController : ControllerBase
     /// <returns>A list of <see cref="BasalPoint"/> representing basal delivery over time.</returns>
     [HttpGet("basal-series")]
     [RemoteQuery]
+    [RequireScope(Scope.TreatmentsRead)]
     [ResponseCache(Duration = 60, VaryByQueryKeys = new[] { "*" })]
     [ProducesResponseType(typeof(List<BasalPoint>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [ErrorEnvelope]
     public async Task<ActionResult<List<BasalPoint>>> GetBasalSeries(
         [FromQuery] long startTime,
         [FromQuery] long endTime,
         CancellationToken cancellationToken = default
     )
     {
-        try
-        {
-            if (endTime <= startTime)
-                return Problem(detail: "endTime must be greater than startTime", statusCode: 400, title: "Bad Request");
+        if (endTime <= startTime)
+            return Problem(detail: "endTime must be greater than startTime", statusCode: 400, title: "Bad Request");
 
-            var basalSeries = await _chartDataService.GetBasalSeriesAsync(startTime, endTime, cancellationToken);
+        var basalSeries = await _chartDataService.GetBasalSeriesAsync(startTime, endTime, cancellationToken);
 
-            return Ok(basalSeries);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error calculating basal series");
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
-        }
+        return Ok(basalSeries);
     }
 }

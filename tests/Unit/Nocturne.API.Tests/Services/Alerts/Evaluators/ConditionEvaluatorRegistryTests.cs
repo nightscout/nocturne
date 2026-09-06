@@ -59,6 +59,7 @@ public class ConditionEvaluatorRegistryTests
         // Drive the registration off the same extension method production uses so this
         // test fails the moment a new evaluator ships without a corresponding DI entry.
         var services = new ServiceCollection();
+        services.AddLogging();
         services.AddSingleton<TimeProvider>(new FakeTimeProvider(
             new DateTimeOffset(new DateTime(2026, 3, 22, 12, 0, 0, DateTimeKind.Utc))));
         services.AddSingleton(Mock.Of<IConditionTimerStore>());

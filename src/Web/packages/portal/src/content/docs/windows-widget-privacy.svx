@@ -1,0 +1,93 @@
+---
+title: Windows Widget Privacy Policy
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+</script>
+
+# Nocturne Windows Widget — Privacy Policy
+
+_Last updated: 21 June 2026_
+
+This policy describes how the **Nocturne Windows 11 Widget** ("the widget") handles
+your data. The widget is free, open-source software published by the Nightscout
+Foundation. Its source code is available at
+[github.com/nightscout/nocturne](https://github.com/nightscout/nocturne).
+
+<Callout type="info" title="The short version">
+  The widget talks only to the Nocturne server you choose. Your diabetes data and
+  your sign-in tokens stay on your PC and that server. The Nightscout Foundation
+  does not receive, collect, store, or have any access to your data, and there is
+  no analytics or tracking of any kind.
+</Callout>
+
+## What the widget accesses
+
+When you connect the widget to your Nocturne server, it requests **read-only**
+access to the data it displays:
+
+- Glucose readings and trend (`glucose.read`)
+- Treatments, including insulin-on-board and carbs-on-board (`treatments.read`)
+- Device and pump status (`devices.read`)
+- Therapy settings used for display (`therapy.read`)
+
+The widget never requests write access and cannot modify, add, or delete any data
+on your server.
+
+## Where your data goes
+
+The widget communicates **directly** between your PC and the Nocturne server you
+enter during setup. There are no intermediary servers. Your diabetes data is
+fetched over the network solely to render the widget and is held only transiently
+in memory for display — it is not written to disk and is not transmitted anywhere
+else.
+
+The Nightscout Foundation operates no servers in this flow and receives no data.
+If you connect to a self-hosted Nocturne instance, your data never leaves
+infrastructure you control.
+
+## Authentication and credentials
+
+The widget signs in using the OAuth 2.0 Device Authorization flow
+([RFC 8628](https://datatracker.ietf.org/doc/html/rfc8628)). You approve a short
+code on your Nocturne site; no password or long-lived token is ever entered into
+or stored by the widget.
+
+The resulting access and refresh tokens are stored locally and encrypted using the
+**Windows Credential Manager**, scoped to your Windows user account. These tokens
+are sent only to your Nocturne server, only to retrieve the data above and to
+refresh the session.
+
+## Removing access
+
+You can disconnect at any time:
+
+- Choose **Sign out** in the widget's customize panel, which revokes the tokens and
+  deletes them from Windows Credential Manager; or
+- Revoke the "Nocturne Windows Widget" authorization from your Nocturne account's
+  connected-apps settings at any time.
+
+Uninstalling the widget removes the application; signing out first ensures the
+stored tokens are also revoked on the server.
+
+## Telemetry, analytics, and advertising
+
+The widget contains **no** analytics, telemetry, crash reporting, advertising, or
+third-party tracking SDKs. It makes no network connections other than to the
+Nocturne server you configure.
+
+## Children's privacy
+
+The widget collects no data and is a display surface for a Nocturne server you
+already use. Any data handling is governed by that server's own policies.
+
+## Changes to this policy
+
+Material changes to this policy will be reflected here with an updated date. The
+current version always lives at this URL.
+
+## Contact
+
+Questions about this policy can be raised via the project's issue tracker at
+[github.com/nightscout/nocturne/issues](https://github.com/nightscout/nocturne/issues).
