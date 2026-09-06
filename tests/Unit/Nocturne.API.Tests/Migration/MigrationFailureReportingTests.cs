@@ -1,6 +1,8 @@
 using System.Net;
 using System.Text;
 using FluentAssertions;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Services.Migration;
 
 namespace Nocturne.API.Tests.Migration;
@@ -25,15 +27,27 @@ public class MigrationFailureReportingTests
             Task.FromResult(respond(request.RequestUri!.AbsolutePath));
     }
 
-    private sealed class UnreachableHost : HttpMessageHandler
+    private sealed class ThrowingHost(Func<Exception> fail) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken) =>
-            throw new HttpRequestException("No such host is known.");
+            throw fail();
     }
+
+    private static HttpMessageHandler UnreachableHost() =>
+        new ThrowingHost(() => new HttpRequestException("No such host is known."));
 
     private static HttpResponseMessage Json(HttpStatusCode status, string body = "[]") =>
         new(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
+
+    private static MigrationJobService BuildService(IServiceProvider provider) =>
+        new(NullLogger<MigrationJobService>.Instance, provider, new ConfigurationBuilder().Build());
+
+    private static TestMigrationConnectionRequest TestRequest() => new()
+    {
+        Mode = MigrationMode.Api,
+        NightscoutUrl = "https://example-nightscout.invalid",
+    };
 
     [Fact]
     public async Task A_rejected_api_secret_on_the_first_page_fails_the_run()
@@ -67,12 +81,51 @@ public class MigrationFailureReportingTests
     [Fact]
     public async Task A_host_that_never_answers_fails_the_run_as_unreachable()
     {
-        await using var provider = MigrationJobHarness.BuildProvider(new UnreachableHost());
+        await using var provider = MigrationJobHarness.BuildProvider(UnreachableHost());
         var status = await MigrationJobHarness.RunAsync(provider, "entries");
 
         status.State.Should().Be(MigrationJobState.Failed);
         status.ErrorMessage.Should().StartWith(UnreachableMessage);
         status.ErrorMessage.Should().NotContain("secret");
+    }
+
+    [Fact]
+    public async Task A_refusal_by_the_outbound_guard_keeps_its_own_wording()
+    {
+        // The migration client is a guarded connector client, so a mistyped host is refused before
+        // the socket opens. Its message says which of "not found" and "forbidden address" happened;
+        // the generic unreachable wording would throw that away.
+        var handler = new ThrowingHost(() => new Nocturne.Core.Models.Net.OutboundRefusedException(
+            "Could not find 'mynightscout.xyx'. Check the address is spelled correctly and that the site is online."));
+
+        await using var provider = MigrationJobHarness.BuildProvider(handler);
+        var status = await MigrationJobHarness.RunAsync(provider, "entries");
+
+        status.State.Should().Be(MigrationJobState.Failed);
+        status.ErrorMessage.Should().StartWith("Could not find 'mynightscout.xyx'.");
+    }
+
+    [Fact]
+    public async Task The_connection_test_reports_a_rejected_secret_in_the_same_words_as_a_run()
+    {
+        await using var provider = MigrationJobHarness.BuildProvider(
+            new RoutedNightscout(_ => Json(HttpStatusCode.Unauthorized)));
+
+        var result = await BuildService(provider).TestConnectionAsync(TestRequest());
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorMessage.Should().StartWith(ApiSecretMessage);
+    }
+
+    [Fact]
+    public async Task The_connection_test_reports_an_unreachable_host_in_the_same_words_as_a_run()
+    {
+        await using var provider = MigrationJobHarness.BuildProvider(UnreachableHost());
+
+        var result = await BuildService(provider).TestConnectionAsync(TestRequest());
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorMessage.Should().StartWith(UnreachableMessage);
     }
 
     [Fact]

@@ -168,7 +168,7 @@ public sealed class LinkLocalGuardHandler : DelegatingHandler
         {
             _logger.LogWarning("Refusing outbound request to {Host}: the name does not resolve", uri.Host);
 
-            throw new HttpRequestException(
+            throw new OutboundRefusedException(
                 $"Could not find '{uri.Host}'. Check the address is spelled correctly and that " +
                 "the site is online.");
         }
@@ -176,7 +176,7 @@ public sealed class LinkLocalGuardHandler : DelegatingHandler
         _logger.LogWarning(
             "Refusing outbound request to {Host}: resolves to a link-local address", uri.Host);
 
-        throw new HttpRequestException(
+        throw new OutboundRefusedException(
             $"Refusing to reach '{uri.Host}': the address is link-local, which no connector " +
             "target should be.");
     }

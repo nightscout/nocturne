@@ -46,9 +46,11 @@ public class LinkLocalGuardHandlerTests
 
         var act = async () => await client.GetAsync("https://mynightscout.exampl/api/v1/status");
 
-        await act.Should().ThrowAsync<HttpRequestException>()
+        // The type is load-bearing: a caller that translates fetch failures into its own wording
+        // has to be able to tell this refusal from an ordinary transport error and pass it through.
+        await act.Should().ThrowAsync<OutboundRefusedException>()
             .WithMessage("*Could not find 'mynightscout.exampl'*");
-        (await act.Should().ThrowAsync<HttpRequestException>()).Which
+        (await act.Should().ThrowAsync<OutboundRefusedException>()).Which
             .Message.Should().NotContain("link-local");
         reachedTransport().Should().BeFalse();
     }

@@ -254,15 +254,7 @@ public class MigrationJobService : IMigrationJobService
 
         try
         {
-            var response = await httpClient.GetAsync("/api/v1/status", ct);
-            if (!response.IsSuccessStatusCode)
-            {
-                return new TestMigrationConnectionResult
-                {
-                    IsSuccess = false,
-                    ErrorMessage = $"Failed to connect: {response.StatusCode}",
-                };
-            }
+            await MigrationJob.ReadFromSourceAsync(httpClient, "/api/v1/status", "status", ct);
 
             return new TestMigrationConnectionResult
             {
@@ -271,12 +263,15 @@ public class MigrationJobService : IMigrationJobService
                 AvailableCollections = ["subjects", "entries", "treatments", "profile", "devicestatus", "food", "activity"],
             };
         }
-        catch (HttpRequestException ex)
+        catch (MigrationSourceException ex)
         {
+            // The button and the run reach the same source the same way, so a test that passes and
+            // a run that then fails on the connection would be a contradiction the user has to
+            // resolve; both report the cause in the same words.
             return new TestMigrationConnectionResult
             {
                 IsSuccess = false,
-                ErrorMessage = $"Connection failed: {ex.Message}",
+                ErrorMessage = ex.Message,
             };
         }
     }
@@ -855,13 +850,17 @@ internal class MigrationJob
     /// single place a migration read decides whether a response is usable, so that no page loop can
     /// mistake a rejection for the end of the data.
     /// </summary>
-    private static async Task<string> ReadFromSourceAsync(
+    internal static async Task<string> ReadFromSourceAsync(
         HttpClient httpClient, string url, string label, CancellationToken ct)
     {
         HttpResponseMessage response;
         try
         {
             response = await httpClient.GetAsync(url, ct);
+        }
+        catch (Nocturne.Core.Models.Net.OutboundRefusedException ex)
+        {
+            throw new MigrationSourceException(ex.Message, MigrationFailureCause.Unreachable, ex);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
         {
