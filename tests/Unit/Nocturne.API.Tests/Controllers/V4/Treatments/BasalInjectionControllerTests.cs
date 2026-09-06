@@ -140,6 +140,48 @@ public class BasalInjectionControllerTests
         _repoMock.Verify(r => r.CreateAsync(It.IsAny<BasalInjection>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    /// <summary>
+    /// The ceiling is inclusive: 500 units is a legal dose, and only the next representable double
+    /// above it is not. Paired with <see cref="Create_rejects_the_smallest_step_above_the_ceiling"/>
+    /// these straddle the exact comparison, so widening or narrowing it by one step reddens one of them.
+    /// </summary>
+    [Fact]
+    public async Task Create_accepts_units_exactly_at_the_ceiling()
+    {
+        BasalInjection? captured = null;
+        SetupCreatePassthrough(b => captured = b);
+
+        var request = new CreateBasalInjectionRequest
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            Units = 500,
+        };
+
+        var result = await CreateController().Create(request);
+
+        result.Result.Should().BeOfType<CreatedAtActionResult>();
+        captured.Should().NotBeNull();
+        captured!.Units.Should().Be(500);
+    }
+
+    [Fact]
+    public async Task Create_rejects_the_smallest_step_above_the_ceiling()
+    {
+        var request = new CreateBasalInjectionRequest
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            Units = Math.BitIncrement(500),
+        };
+
+        var result = await CreateController().Create(request);
+
+        var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(400);
+        objectResult.Value.Should().BeOfType<ProblemDetails>()
+            .Which.Detail.Should().Be("Units must be > 0 and <= 500.");
+        _repoMock.Verify(r => r.CreateAsync(It.IsAny<BasalInjection>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     [Fact]
     public async Task Create_returns_400_when_timestamp_is_more_than_5_minutes_in_future()
     {
@@ -173,7 +215,6 @@ public class BasalInjectionControllerTests
         var request = new CreateBasalInjectionRequest
         {
             Timestamp = default,
-            PatientInsulinId = Guid.NewGuid(),
             Units = 12,
         };
 
