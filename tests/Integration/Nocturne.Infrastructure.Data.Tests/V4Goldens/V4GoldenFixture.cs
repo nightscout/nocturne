@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Core.Contracts.Audit;
@@ -71,13 +70,6 @@ public class V4GoldenFixture : IAsyncLifetime
             MigratorConnectionString,
             NullLogger.Instance);
 
-        var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["PostgreSql:ConnectionString"] = appConnectionString,
-            })
-            .Build();
-
         var services = new ServiceCollection();
         services.AddLogging();
         // MutationAuditInterceptor resolves IHttpContextAccessor (registered by the API in prod).
@@ -87,7 +79,7 @@ public class V4GoldenFixture : IAsyncLifetime
         // own scope to a user without leaking that attribution into the next test.
         services.AddScoped<TestAuditContext>();
         services.AddScoped<IAuditContext>(sp => sp.GetRequiredService<TestAuditContext>());
-        services.AddPostgreSqlInfrastructure(config);
+        services.AddPostgreSqlInfrastructure(appConnectionString, configuration: null);
         // Capturing broadcaster: the V4 repos resolve IV4RecordBroadcaster<T> via the open generic, so
         // the real chokepoint fires into BroadcastCapture (additive — existing goldens ignore it).
         services.AddSingleton<BroadcastCapture>();
