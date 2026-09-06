@@ -645,6 +645,39 @@ public class PasskeyControllerTests : IDisposable
     }
 
     /// <summary>
+    /// Only owners who still stand are told a stranger is at the door: a revoked membership is off
+    /// the tenant, a deactivated subject cannot sign in to act, and the Public subject is a share
+    /// with nobody behind it.
+    /// </summary>
+    [Fact]
+    public async Task AccessRequestComplete_NotifiesTheStandingOwnersOnly()
+    {
+        await AllowAccessRequestsAsync();
+        var owner = await SeedOwnerAsync("owner");
+        await SeedOwnerAsync("revoked", revokedAt: DateTime.UtcNow);
+        await SeedOwnerAsync("deactivated", isActive: false);
+        await SeedOwnerAsync("public", isSystemSubject: true);
+        var requestorId = await SeedPendingAccessRequestAsync("Sam Smith");
+        StubRegistrationChallengeMintedFor(requestorId);
+
+        var notifications = new Mock<IInAppNotificationService>();
+        var result = await _controller.AccessRequestComplete(
+            new AccessRequestCompleteRequest
+            {
+                DisplayName = "Sam Smith",
+                AttestationResponseJson = "{}",
+                ChallengeToken = "challenge-for-sam",
+            },
+            notifications.Object);
+
+        Assert.IsType<OkResult>(result);
+        notifications.Invocations
+            .Where(i => i.Method.Name == nameof(IInAppNotificationService.CreateNotificationAsync))
+            .Select(i => (string)i.Arguments[0]!)
+            .Should().Equal(owner.ToString());
+    }
+
+    /// <summary>
     /// Subjects are global; membership is what scopes them. A credential-less member of another
     /// tenant is that tenant's locked-out account, not an abandoned enrolment here, so an invite
     /// naming their username enrols a fresh subject and leaves theirs untouched.
@@ -1067,6 +1100,68 @@ public class PasskeyControllerTests : IDisposable
         });
         await _dbContext.SaveChangesAsync();
         return subjectId;
+    }
+
+    /// <summary>Adds a membership on this tenant carrying the owner role.</summary>
+    private async Task<Guid> SeedOwnerAsync(
+        string username,
+        DateTime? revokedAt = null,
+        bool isActive = true,
+        bool isSystemSubject = false)
+    {
+        await EnsureTenantAsync(_tenantId);
+
+        var ownerRoleId = await EnsureOwnerRoleAsync();
+        var subjectId = Guid.CreateVersion7();
+        var memberId = Guid.CreateVersion7();
+
+        _dbContext.Subjects.Add(new SubjectEntity
+        {
+            Id = subjectId,
+            Name = username,
+            Username = username,
+            IsActive = isActive,
+            IsSystemSubject = isSystemSubject,
+        });
+        _dbContext.TenantMembers.Add(new TenantMemberEntity
+        {
+            Id = memberId,
+            TenantId = _tenantId,
+            SubjectId = subjectId,
+            RevokedAt = revokedAt,
+        });
+        _dbContext.TenantMemberRoles.Add(new TenantMemberRoleEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantMemberId = memberId,
+            TenantRoleId = ownerRoleId,
+        });
+        await _dbContext.SaveChangesAsync();
+        return subjectId;
+    }
+
+    private async Task<Guid> EnsureOwnerRoleAsync()
+    {
+        var existing = await _dbContext.TenantRoles
+            .Where(r => r.TenantId == _tenantId && r.Slug == RoleSeeds.Owner)
+            .Select(r => (Guid?)r.Id)
+            .FirstOrDefaultAsync();
+
+        if (existing is { } id)
+            return id;
+
+        var roleId = Guid.CreateVersion7();
+        _dbContext.TenantRoles.Add(new TenantRoleEntity
+        {
+            Id = roleId,
+            TenantId = _tenantId,
+            Name = "Owner",
+            Slug = RoleSeeds.Owner,
+            Permissions = [Scope.FullAccess],
+            IsSystem = true,
+        });
+        await _dbContext.SaveChangesAsync();
+        return roleId;
     }
 
     private async Task AllowAccessRequestsAsync()

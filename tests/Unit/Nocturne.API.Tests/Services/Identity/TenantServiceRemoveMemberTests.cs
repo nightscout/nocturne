@@ -67,7 +67,10 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
         Mock.Of<ILogger<TenantService>>());
 
     /// <summary>Adds a membership, optionally carrying the owner role or being a system subject.</summary>
-    private Guid SeedMember(bool isOwner = false, bool isSystemSubject = false)
+    private Guid SeedMember(
+        bool isOwner = false,
+        bool isSystemSubject = false,
+        bool isActive = true)
     {
         var subjectId = Guid.CreateVersion7();
         using var db = Context();
@@ -76,6 +79,7 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
         {
             Id = subjectId,
             Name = isSystemSubject ? "Public" : "Member",
+            IsActive = isActive,
             IsSystemSubject = isSystemSubject,
         });
 
@@ -138,6 +142,42 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
         result.Ok.Should().BeTrue();
         await using var db = Context();
         (await db.TenantMembers.AnyAsync(m => m.SubjectId == firstOwner)).Should().BeFalse();
+    }
+
+    /// <summary>
+    /// The Public subject's membership is the share's storage, so an owner role on it is not a
+    /// person who could administer the tenant once the only one who can is gone.
+    /// </summary>
+    [Fact]
+    public async Task RemoveMemberAsync_refusesTheLastOwnerWhoseOnlyPeerIsASystemSubject()
+    {
+        var owner = SeedMember(isOwner: true);
+        SeedMember(isOwner: true, isSystemSubject: true);
+
+        var result = await Service().RemoveMemberAsync(_tenantId, owner);
+
+        result.Ok.Should().BeFalse();
+        result.ErrorDescription.Should().Be("Cannot remove the last owner of a tenant");
+        await using var db = Context();
+        (await db.TenantMembers.AnyAsync(m => m.SubjectId == owner)).Should().BeTrue();
+    }
+
+    /// <summary>
+    /// A deactivated owner cannot sign in, so it is not the second owner that would let the only
+    /// one who can go.
+    /// </summary>
+    [Fact]
+    public async Task RemoveMemberAsync_refusesTheLastOwnerWhoseOnlyPeerIsDeactivated()
+    {
+        var owner = SeedMember(isOwner: true);
+        SeedMember(isOwner: true, isActive: false);
+
+        var result = await Service().RemoveMemberAsync(_tenantId, owner);
+
+        result.Ok.Should().BeFalse();
+        result.ErrorDescription.Should().Be("Cannot remove the last owner of a tenant");
+        await using var db = Context();
+        (await db.TenantMembers.AnyAsync(m => m.SubjectId == owner)).Should().BeTrue();
     }
 
     [Fact]

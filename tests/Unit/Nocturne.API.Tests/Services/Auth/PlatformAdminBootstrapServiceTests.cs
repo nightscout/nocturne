@@ -97,6 +97,68 @@ public class PlatformAdminBootstrapServiceTests : IDisposable
         (await _db.Subjects.AsNoTracking().AnyAsync(s => s.IsPlatformAdmin)).Should().BeFalse();
     }
 
+    [Fact]
+    public async Task ATenantWhoseOnlyOwnerIsRevokedIsSkippedForTheNextOldest()
+    {
+        var revoked = await AddTenantAsync(
+            "revoked-oldest", new DateTime(2019, 1, 1), RoleSeeds.Owner, revoked: true);
+        var owner = await AddTenantWithOwnerAsync("owned", new DateTime(2020, 1, 1));
+
+        await BootstrapAsync();
+
+        (await IsPlatformAdminAsync(revoked)).Should().BeFalse();
+        (await IsPlatformAdminAsync(owner)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ATenantWhoseOnlyOwnerIsDeactivatedIsSkippedForTheNextOldest()
+    {
+        var deactivated = await AddTenantAsync(
+            "deactivated-oldest", new DateTime(2019, 1, 1), RoleSeeds.Owner, subjectIsActive: false);
+        var owner = await AddTenantWithOwnerAsync("owned", new DateTime(2020, 1, 1));
+
+        await BootstrapAsync();
+
+        (await IsPlatformAdminAsync(deactivated)).Should().BeFalse();
+        (await IsPlatformAdminAsync(owner)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task TheFirstOwnerOfTheSoleTenantIsGrantedOnSetupCompletion()
+    {
+        var owner = await AddTenantWithOwnerAsync("only", new DateTime(2020, 1, 1));
+
+        (await EnsureFirstOwnerAsync(owner)).Should().BeTrue();
+        (await IsPlatformAdminAsync(owner)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ARevokedOwnerOfTheSoleTenantIsNotGrantedOnSetupCompletion()
+    {
+        var revoked = await AddTenantAsync(
+            "only", new DateTime(2020, 1, 1), RoleSeeds.Owner, revoked: true);
+
+        (await EnsureFirstOwnerAsync(revoked)).Should().BeFalse();
+        (await IsPlatformAdminAsync(revoked)).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ADeactivatedOwnerOfTheSoleTenantIsNotGrantedOnSetupCompletion()
+    {
+        var deactivated = await AddTenantAsync(
+            "only", new DateTime(2020, 1, 1), RoleSeeds.Owner, subjectIsActive: false);
+
+        (await EnsureFirstOwnerAsync(deactivated)).Should().BeFalse();
+        (await IsPlatformAdminAsync(deactivated)).Should().BeFalse();
+    }
+
+    private Task<bool> EnsureFirstOwnerAsync(Guid subjectId) =>
+        new PlatformAdminBootstrapService(
+            _sqlite.ContextFactory,
+            Options.Create(new PlatformOptions { AdminSubjectIds = [] }),
+            NullLogger<PlatformAdminBootstrapService>.Instance)
+            .EnsureFirstOwnerIsPlatformAdminAsync(subjectId, CancellationToken.None);
+
     private Task BootstrapAsync(List<Guid>? adminSubjectIds = null) =>
         new PlatformAdminBootstrapService(
             _sqlite.ContextFactory,
@@ -110,14 +172,15 @@ public class PlatformAdminBootstrapServiceTests : IDisposable
             .Select(s => s.IsPlatformAdmin)
             .SingleAsync();
 
-    private async Task<Guid> AddSubjectAsync(string name, bool isPlatformAdmin = false)
+    private async Task<Guid> AddSubjectAsync(
+        string name, bool isPlatformAdmin = false, bool isActive = true)
     {
         var subject = new SubjectEntity
         {
             Id = Guid.CreateVersion7(),
             Name = name,
             Username = name,
-            IsActive = true,
+            IsActive = isActive,
             IsPlatformAdmin = isPlatformAdmin,
         };
         _db.Subjects.Add(subject);
@@ -134,10 +197,15 @@ public class PlatformAdminBootstrapServiceTests : IDisposable
     private async Task<Guid> AddTenantWithoutOwnerAsync(string slug, DateTime createdAt) =>
         await AddTenantAsync(slug, createdAt, RoleSeeds.Viewer);
 
-    private async Task<Guid> AddTenantAsync(string slug, DateTime createdAt, string roleSlug)
+    private async Task<Guid> AddTenantAsync(
+        string slug,
+        DateTime createdAt,
+        string roleSlug,
+        bool revoked = false,
+        bool subjectIsActive = true)
     {
         var tenantId = Guid.CreateVersion7();
-        var subjectId = await AddSubjectAsync($"{slug}-member");
+        var subjectId = await AddSubjectAsync($"{slug}-member", isActive: subjectIsActive);
         var roleId = Guid.CreateVersion7();
         var memberId = Guid.CreateVersion7();
 
@@ -163,6 +231,7 @@ public class PlatformAdminBootstrapServiceTests : IDisposable
             Id = memberId,
             TenantId = tenantId,
             SubjectId = subjectId,
+            RevokedAt = revoked ? createdAt : null,
         });
         _db.TenantMemberRoles.Add(new TenantMemberRoleEntity
         {

@@ -203,7 +203,7 @@ public class DevAuthController : ControllerBase
         }
         else
         {
-            member = DevTenantMemberSelection.PickOwnerOrFirst(candidates);
+            member = DevTenantMemberSelection.PickOwnerOrFirst(candidates, tenant.Id);
         }
 
         var session = await _sessionService.IssueSessionAsync(
