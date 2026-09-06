@@ -64,6 +64,24 @@ public class StatisticsComputeLimitTests
         return context;
     }
 
+    [Fact]
+    public void TheBodyLimit_IsDeclaredOnceOnTheController()
+    {
+        typeof(StatisticsController)
+            .GetCustomAttribute<RequestSizeLimitAttribute>()
+            .Should().NotBeNull("the ceiling is a controller-wide convention, not a per-action opt-in");
+
+        var perAction = typeof(StatisticsController)
+            .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+            .Where(m => m.GetCustomAttribute<RequestSizeLimitAttribute>() is not null)
+            .Select(m => m.Name)
+            .ToList();
+
+        perAction.Should().BeEmpty(
+            "an action-level copy overrides the controller's and lets the two drift. Copies on: "
+            + string.Join(", ", perAction));
+    }
+
     /// <summary>
     /// The declared body limit has to cover the largest range a report can ask for: the web client
     /// pages every reading in the range into one <c>site-change-impact</c> post, so a year of
@@ -73,10 +91,6 @@ public class StatisticsComputeLimitTests
     public void TheDeclaredBodyLimit_CoversAYearOfReadings()
     {
         const int readingsPerYear = 365 * 24 * 12;
-
-        ComputePosts()
-            .Count(a => a.GetCustomAttribute<RequestSizeLimitAttribute>() is not null)
-            .Should().BeGreaterThan(0, "the collection-taking posts declare a body ceiling");
 
         (readingsPerYear * (long)SerializedReadingBytes()).Should()
             .BeLessThan(StatisticsController.ComputeBodyLimitBytes,
