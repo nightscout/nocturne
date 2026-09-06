@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.ConnectorPublishing;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -20,6 +21,7 @@ public class DevicePublisherTests
     private readonly Mock<IApsSnapshotRepository> _mockApsSnapshotRepository;
     private readonly Mock<IPumpSnapshotRepository> _mockPumpSnapshotRepository;
     private readonly Mock<IUploaderSnapshotRepository> _mockUploaderSnapshotRepository;
+    private readonly Mock<IPatientDeviceStamper> _mockPatientDeviceStamper;
     private readonly DevicePublisher _publisher;
 
     public DevicePublisherTests()
@@ -29,10 +31,12 @@ public class DevicePublisherTests
         _mockApsSnapshotRepository = new Mock<IApsSnapshotRepository>();
         _mockPumpSnapshotRepository = new Mock<IPumpSnapshotRepository>();
         _mockUploaderSnapshotRepository = new Mock<IUploaderSnapshotRepository>();
+        _mockPatientDeviceStamper = new Mock<IPatientDeviceStamper>();
 
         _publisher = new DevicePublisher(
             _mockDecomposer.Object,
             _mockDeviceEventRepository.Object,
+            _mockPatientDeviceStamper.Object,
             Mock.Of<IAuditContext>(),
             _mockApsSnapshotRepository.Object,
             _mockPumpSnapshotRepository.Object,
@@ -65,6 +69,34 @@ public class DevicePublisherTests
         var result = await _publisher.PublishDeviceStatusAsync(new List<DeviceStatus> { new() }, "test-source", WriteOrigin.Live);
 
         result.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task PublishDeviceEventsAsync_AttributesEachEventToTheDeviceCategoryThatOwnsIt()
+    {
+        var records = new List<DeviceEvent>
+        {
+            new() { EventType = DeviceEventType.SensorChange },
+            new() { EventType = DeviceEventType.SiteChange },
+        };
+
+        var result = await _publisher.PublishDeviceEventsAsync(records, "test-source", WriteOrigin.Live);
+
+        result.Should().BeTrue();
+        _mockPatientDeviceStamper.Verify(
+            s => s.StampAsync(
+                It.Is<IReadOnlyList<IDeviceAttributed>>(r => r.Count == 1 && r[0] == records[0]),
+                DeviceAttributionCategories.SensorDeviceEvent,
+                "test-source",
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+        _mockPatientDeviceStamper.Verify(
+            s => s.StampAsync(
+                It.Is<IReadOnlyList<IDeviceAttributed>>(r => r.Count == 1 && r[0] == records[1]),
+                DeviceAttributionCategories.PumpDeviceEvent,
+                "test-source",
+                It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     [Fact]

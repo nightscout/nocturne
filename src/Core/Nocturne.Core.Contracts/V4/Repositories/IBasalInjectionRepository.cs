@@ -12,7 +12,8 @@ namespace Nocturne.Core.Contracts.V4.Repositories;
 /// </remarks>
 /// <seealso cref="BasalInjection"/>
 /// <seealso cref="IV4Repository{T}"/>
-public interface IBasalInjectionRepository : IV4Repository<BasalInjection>, IDeviceAttributedRepository<BasalInjection>
+public interface IBasalInjectionRepository
+    : IV4Repository<BasalInjection>, IDeviceAttributedRepository<BasalInjection>, IBulkCreateRepository<BasalInjection>
 {
     /// <summary>Delete <see cref="BasalInjection"/> records matching the given data source and sync identifier.</summary>
     /// <param name="dataSource">The external data source name.</param>
@@ -27,15 +28,6 @@ public interface IBasalInjectionRepository : IV4Repository<BasalInjection>, IDev
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The matching record, or <c>null</c> if not found.</returns>
     Task<BasalInjection?> FindBySyncIdentifierAsync(string dataSource, string syncIdentifier, CancellationToken ct = default);
-
-    /// <summary>
-    /// Bulk-create basal injection records with LegacyId-based deduplication.
-    /// Records whose <see cref="BasalInjection.LegacyId"/> already exists for the tenant are skipped.
-    /// </summary>
-    /// <param name="records">The records to create.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>The created records (excludes duplicates).</returns>
-    Task<IEnumerable<BasalInjection>> BulkCreateAsync(IEnumerable<BasalInjection> records, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
     /// Retrieve the timestamp of the most recently stored <see cref="BasalInjection"/>, optionally scoped to a data source.

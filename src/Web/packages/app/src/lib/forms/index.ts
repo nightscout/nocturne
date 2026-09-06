@@ -6,12 +6,17 @@ export {
   type AvailabilityQuery,
 } from "./availability.svelte";
 export { useSubmission, type Submission } from "./submission.svelte";
+export {
+  useToastSubmission,
+  type ToastSubmission,
+} from "./toast-submission.svelte";
 export { fieldMessages, type FieldIssues } from "./field-messages";
 export {
   describeSubmitError,
   errorMessage,
   errorStatus,
   GENERIC_SUBMIT_ERROR,
+  permissionGatedMutationError,
 } from "./submit-error";
 export { default as FormField, type FormFieldControl } from "./FormField.svelte";
 export { default as FormError } from "./FormError.svelte";

@@ -29,6 +29,10 @@ public class ActivityControllerV4Tests
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };
+
+        _service.Setup(s => s.CountActivitiesByCategoryAsync(
+                It.IsAny<IReadOnlySet<string>>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, long>());
     }
 
     private void GrantScopes(params string[] scopes) =>
@@ -90,8 +94,8 @@ public class ActivityControllerV4Tests
     [Fact]
     public async Task CreateActivities_SleepRecordWithoutSleepScope_ReturnsForbidden()
     {
-        GrantScopes(OAuthScopes.GlucoseReadWrite);
-        _decomposer.Setup(d => d.RequiredWriteScope(It.IsAny<Activity>())).Returns(OAuthScopes.SleepReadWrite);
+        GrantScopes(Scope.GlucoseReadWrite);
+        _decomposer.Setup(d => d.RequiredWriteScope(It.IsAny<Activity>())).Returns(Scope.SleepReadWrite);
 
         var result = await _controller.CreateActivities(
             [new UpsertActivityRequest { Type = "sleep", Mills = 1700000000000 }], CancellationToken.None);
@@ -103,14 +107,40 @@ public class ActivityControllerV4Tests
             Times.Never);
     }
 
+    /// <summary>
+    /// The payload here is a regular activity, which needs no category scope of its own — only the
+    /// record being edited is a sleep session, so the gate has to look at both.
+    /// </summary>
+    [Fact]
+    public async Task UpdateActivity_ExistingRecordIsSleep_WithoutSleepScope_ReturnsForbidden()
+    {
+        const string id = "sleep-session-1";
+        GrantScopes(Scope.TreatmentsReadWrite);
+        _service.Setup(x => x.GetActivityByIdAsync(id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Activity { Id = id, Type = "sleep" });
+        _decomposer.Setup(d => d.RequiredWriteScope(It.Is<Activity>(a => a.Type == "sleep")))
+            .Returns(Scope.SleepReadWrite);
+
+        var result = await _controller.UpdateActivity(
+            id,
+            new UpsertActivityRequest { Type = "exercise", Mills = 1700000000000 },
+            CancellationToken.None);
+
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        _service.Verify(
+            x => x.UpdateActivityAsync(It.IsAny<string>(), It.IsAny<Activity>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
     [Fact]
     public async Task DeleteActivity_ExistingRecordIsSleep_WithoutSleepScope_ReturnsForbidden()
     {
         const string id = "sleep-session-1";
-        GrantScopes(OAuthScopes.GlucoseReadWrite);
+        GrantScopes(Scope.GlucoseReadWrite);
         _service.Setup(x => x.GetActivityByIdAsync(id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Activity { Id = id, Type = "sleep" });
-        _decomposer.Setup(d => d.RequiredWriteScope(It.IsAny<Activity>())).Returns(OAuthScopes.SleepReadWrite);
+        _decomposer.Setup(d => d.RequiredWriteScope(It.IsAny<Activity>())).Returns(Scope.SleepReadWrite);
 
         var result = await _controller.DeleteActivity(id, CancellationToken.None);
 
@@ -123,10 +153,10 @@ public class ActivityControllerV4Tests
     public async Task DeleteActivity_ExistingRecordIsSleep_WithSleepScope_Proceeds()
     {
         const string id = "sleep-session-1";
-        GrantScopes(OAuthScopes.SleepReadWrite);
+        GrantScopes(Scope.SleepReadWrite);
         _service.Setup(x => x.GetActivityByIdAsync(id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Activity { Id = id, Type = "sleep" });
-        _decomposer.Setup(d => d.RequiredWriteScope(It.IsAny<Activity>())).Returns(OAuthScopes.SleepReadWrite);
+        _decomposer.Setup(d => d.RequiredWriteScope(It.IsAny<Activity>())).Returns(Scope.SleepReadWrite);
         _service.Setup(x => x.DeleteActivityAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(true);
 
         var result = await _controller.DeleteActivity(id, CancellationToken.None);

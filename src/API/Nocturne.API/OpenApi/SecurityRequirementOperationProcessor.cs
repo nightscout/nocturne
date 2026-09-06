@@ -22,7 +22,7 @@ public sealed class SecurityRequirementOperationProcessor : IOperationProcessor
         // Each scheme is its own requirement entry → OR logic (any one suffices).
         operation.Security.Add(new OpenApiSecurityRequirement
         {
-            [SecuritySchemeDefinitions.OAuth2] = new[] { OAuthScopes.FullAccess },
+            [SecuritySchemeDefinitions.OAuth2] = new[] { Scope.FullAccess },
         });
         operation.Security.Add(new OpenApiSecurityRequirement
         {

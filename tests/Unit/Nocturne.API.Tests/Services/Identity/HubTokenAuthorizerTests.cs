@@ -16,6 +16,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Xunit;
+using Nocturne.API.Services.Auth;
 
 namespace Nocturne.API.Tests.Services.Identity;
 
@@ -52,13 +53,21 @@ public class HubTokenAuthorizerTests
             .BuildServiceProvider()
             .GetRequiredService<IDbContextFactory<NocturneDbContext>>();
 
+    // The real validator, not a stub: these tests are this path's coverage for the shared credential
+    // chain, and stubbing it would hide the grant and revocation links behind a mock.
+    private JwtCredentialValidator CreateCredentialValidator() => new(
+        _jwtService.Object,
+        _grantService.Object,
+        _revocationCache.Object,
+        NullLogger<JwtCredentialValidator>.Instance);
+
     private HubTokenAuthorizer CreateAuthorizer(IConfiguration? configuration = null) => new(
         _jwtService.Object,
-        _revocationCache.Object,
-        _grantService.Object,
+        CreateCredentialValidator(),
         _authorizationService.Object,
         _memberService.Object,
         _dbContextFactory,
+        TimeProvider.System,
         configuration ?? new ConfigurationBuilder().Build(),
         NullLogger<HubTokenAuthorizer>.Instance);
 
@@ -72,7 +81,7 @@ public class HubTokenAuthorizerTests
 
     private void SetupValidJwt(Guid? tenantId, Guid? grantId, params string[] scopes)
     {
-        SeedMember(Tenant, JwtSubject, TenantPermissions.Superuser);
+        SeedMember(Tenant, JwtSubject, Scope.FullAccess);
         _jwtService
             .Setup(s => s.ValidateAccessToken(JwtShapedToken))
             .Returns(JwtValidationResult.Success(new JwtClaims
@@ -139,7 +148,7 @@ public class HubTokenAuthorizerTests
             TenantId = tenantId,
             SubjectId = subjectId,
             GrantType = OAuthGrantTypes.Direct,
-            TokenHash = DirectGrantTokenHandler.ComputeSha256Hex(DirectGrantToken),
+            TokenHash = HashUtils.Sha256Hex(DirectGrantToken),
             Scopes = [.. scopes],
             RevokedAt = revokedAt,
         };
@@ -153,11 +162,11 @@ public class HubTokenAuthorizerTests
     [Fact]
     public async Task Jwt_pinned_to_connection_tenant_with_required_scope_is_authorized()
     {
-        SetupValidJwt(Tenant, OAuthScopes.GlucoseRead, OAuthScopes.DeviceNotify);
+        SetupValidJwt(Tenant, Scope.GlucoseRead, Scope.DeviceNotify);
         var authorizer = CreateAuthorizer();
 
         var result = await authorizer.AuthorizeTokenAsync(
-            JwtShapedToken, Tenant, OAuthScopes.GlucoseRead);
+            JwtShapedToken, Tenant, Scope.GlucoseRead);
 
         result.Should().NotBeNull();
         result!.Kind.Should().Be(HubCredentialKind.Subject);
@@ -169,11 +178,11 @@ public class HubTokenAuthorizerTests
     [Fact]
     public async Task Jwt_from_another_tenant_is_rejected()
     {
-        SetupValidJwt(OtherTenant, OAuthScopes.GlucoseRead);
+        SetupValidJwt(OtherTenant, Scope.GlucoseRead);
         var authorizer = CreateAuthorizer();
 
         var result = await authorizer.AuthorizeTokenAsync(
-            JwtShapedToken, Tenant, OAuthScopes.GlucoseRead);
+            JwtShapedToken, Tenant, Scope.GlucoseRead);
 
         result.Should().BeNull();
     }
@@ -181,11 +190,11 @@ public class HubTokenAuthorizerTests
     [Fact]
     public async Task Unpinned_jwt_is_rejected()
     {
-        SetupValidJwt(tenantId: null, OAuthScopes.GlucoseRead);
+        SetupValidJwt(tenantId: null, Scope.GlucoseRead);
         var authorizer = CreateAuthorizer();
 
         var result = await authorizer.AuthorizeTokenAsync(
-            JwtShapedToken, Tenant, OAuthScopes.GlucoseRead);
+            JwtShapedToken, Tenant, Scope.GlucoseRead);
 
         result.Should().BeNull();
     }
@@ -193,11 +202,11 @@ public class HubTokenAuthorizerTests
     [Fact]
     public async Task Jwt_without_required_scope_is_rejected()
     {
-        SetupValidJwt(Tenant, OAuthScopes.TherapyRead);
+        SetupValidJwt(Tenant, Scope.TherapyRead);
         var authorizer = CreateAuthorizer();
 
         var result = await authorizer.AuthorizeTokenAsync(
-            JwtShapedToken, Tenant, OAuthScopes.GlucoseRead);
+            JwtShapedToken, Tenant, Scope.GlucoseRead);
 
         result.Should().BeNull();
     }
@@ -206,14 +215,14 @@ public class HubTokenAuthorizerTests
     public async Task Jwt_whose_grant_is_revoked_is_rejected()
     {
         var grantId = Guid.CreateVersion7();
-        SetupValidJwt(Tenant, grantId, OAuthScopes.GlucoseRead);
+        SetupValidJwt(Tenant, grantId, Scope.GlucoseRead);
         _grantService
             .Setup(g => g.IsGrantRevokedAsync(grantId, Tenant, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
         var authorizer = CreateAuthorizer();
 
         var result = await authorizer.AuthorizeTokenAsync(
-            JwtShapedToken, Tenant, OAuthScopes.GlucoseRead);
+            JwtShapedToken, Tenant, Scope.GlucoseRead);
 
         result.Should().BeNull();
     }
@@ -221,11 +230,11 @@ public class HubTokenAuthorizerTests
     [Fact]
     public async Task Jwt_with_readwrite_scope_satisfies_read_requirement()
     {
-        SetupValidJwt(Tenant, OAuthScopes.GlucoseReadWrite);
+        SetupValidJwt(Tenant, Scope.GlucoseReadWrite);
         var authorizer = CreateAuthorizer();
 
         var result = await authorizer.AuthorizeTokenAsync(
-            JwtShapedToken, Tenant, OAuthScopes.GlucoseRead);
+            JwtShapedToken, Tenant, Scope.GlucoseRead);
 
         result.Should().NotBeNull();
     }
@@ -233,12 +242,12 @@ public class HubTokenAuthorizerTests
     [Fact]
     public async Task Revoked_jwt_is_rejected()
     {
-        SetupValidJwt(Tenant, OAuthScopes.GlucoseRead);
+        SetupValidJwt(Tenant, Scope.GlucoseRead);
         _revocationCache.Setup(c => c.IsRevokedAsync("jti-1")).ReturnsAsync(true);
         var authorizer = CreateAuthorizer();
 
         var result = await authorizer.AuthorizeTokenAsync(
-            JwtShapedToken, Tenant, OAuthScopes.GlucoseRead);
+            JwtShapedToken, Tenant, Scope.GlucoseRead);
 
         result.Should().BeNull();
     }
@@ -252,7 +261,7 @@ public class HubTokenAuthorizerTests
         var authorizer = CreateAuthorizer();
 
         var result = await authorizer.AuthorizeTokenAsync(
-            JwtShapedToken, Tenant, OAuthScopes.GlucoseRead);
+            JwtShapedToken, Tenant, Scope.GlucoseRead);
 
         result.Should().BeNull();
         _authorizationService.Verify(
@@ -265,12 +274,12 @@ public class HubTokenAuthorizerTests
         // A token's scopes are frozen at issue; a membership is not. A member demoted to read-only
         // must lose alert acknowledgement on the hub the moment the demotion lands, exactly as
         // MemberScopeMiddleware makes them lose it over HTTP.
-        SetupValidJwt(Tenant, OAuthScopes.AlertsReadWrite);
-        SeedMember(Tenant, JwtSubject, OAuthScopes.GlucoseRead, OAuthScopes.AlertsRead);
+        SetupValidJwt(Tenant, Scope.AlertsReadWrite);
+        SeedMember(Tenant, JwtSubject, Scope.GlucoseRead, Scope.AlertsRead);
         var authorizer = CreateAuthorizer();
 
         var result = await authorizer.AuthorizeTokenAsync(
-            JwtShapedToken, Tenant, OAuthScopes.AlertsReadWrite);
+            JwtShapedToken, Tenant, Scope.AlertsReadWrite);
 
         result.Should().BeNull();
     }
@@ -281,15 +290,15 @@ public class HubTokenAuthorizerTests
         // The credential is the ceiling in the other direction too: the authorized connection must
         // not carry a scope the token holds but the membership does not, because the hub freezes
         // this scope set for the life of the connection.
-        SetupValidJwt(Tenant, OAuthScopes.GlucoseRead, OAuthScopes.TreatmentsRead);
-        SeedMember(Tenant, JwtSubject, OAuthScopes.GlucoseRead);
+        SetupValidJwt(Tenant, Scope.GlucoseRead, Scope.TreatmentsRead);
+        SeedMember(Tenant, JwtSubject, Scope.GlucoseRead);
         var authorizer = CreateAuthorizer();
 
         var result = await authorizer.AuthorizeTokenAsync(
-            JwtShapedToken, Tenant, OAuthScopes.GlucoseRead);
+            JwtShapedToken, Tenant, Scope.GlucoseRead);
 
         result.Should().NotBeNull();
-        result!.Satisfies(OAuthScopes.TreatmentsRead).Should().BeFalse();
+        result!.Satisfies(Scope.TreatmentsRead).Should().BeFalse();
     }
 
     [Fact]
@@ -297,12 +306,12 @@ public class HubTokenAuthorizerTests
     {
         // AuthenticationMiddleware rejects a membership-less OAuth access token outright over HTTP;
         // the hub must not be the one plane where it still authorizes.
-        SetupValidJwt(Tenant, OAuthScopes.GlucoseRead);
-        SeedMember(OtherTenant, JwtSubject, OAuthScopes.GlucoseRead);
+        SetupValidJwt(Tenant, Scope.GlucoseRead);
+        SeedMember(OtherTenant, JwtSubject, Scope.GlucoseRead);
         var authorizer = CreateAuthorizer();
 
         var result = await authorizer.AuthorizeTokenAsync(
-            JwtShapedToken, Tenant, OAuthScopes.GlucoseRead);
+            JwtShapedToken, Tenant, Scope.GlucoseRead);
 
         result.Should().BeNull();
     }
@@ -310,11 +319,11 @@ public class HubTokenAuthorizerTests
     [Fact]
     public async Task Jwt_with_null_connection_tenant_is_rejected()
     {
-        SetupValidJwt(Tenant, OAuthScopes.GlucoseRead);
+        SetupValidJwt(Tenant, Scope.GlucoseRead);
         var authorizer = CreateAuthorizer();
 
         var result = await authorizer.AuthorizeTokenAsync(
-            JwtShapedToken, connectionTenantId: null, OAuthScopes.GlucoseRead);
+            JwtShapedToken, connectionTenantId: null, Scope.GlucoseRead);
 
         result.Should().BeNull();
     }
@@ -324,11 +333,11 @@ public class HubTokenAuthorizerTests
     {
         var subjectId = Guid.CreateVersion7();
         SetupExchangedToken(subjectId);
-        SeedMember(Tenant, subjectId, OAuthScopes.GlucoseRead);
+        SeedMember(Tenant, subjectId, Scope.GlucoseRead);
         var authorizer = CreateAuthorizer();
 
         var result = await authorizer.AuthorizeTokenAsync(
-            LegacyToken, Tenant, OAuthScopes.GlucoseRead);
+            LegacyToken, Tenant, Scope.GlucoseRead);
 
         result.Should().NotBeNull();
         result!.TenantId.Should().Be(Tenant);
@@ -341,11 +350,11 @@ public class HubTokenAuthorizerTests
         // another tenant would authorize this connection's tenant-scoped groups.
         var subjectId = Guid.CreateVersion7();
         SetupExchangedToken(subjectId);
-        SeedMember(OtherTenant, subjectId, OAuthScopes.GlucoseRead);
+        SeedMember(OtherTenant, subjectId, Scope.GlucoseRead);
         var authorizer = CreateAuthorizer();
 
         var result = await authorizer.AuthorizeTokenAsync(
-            LegacyToken, Tenant, OAuthScopes.GlucoseRead);
+            LegacyToken, Tenant, Scope.GlucoseRead);
 
         result.Should().BeNull();
     }
@@ -356,11 +365,11 @@ public class HubTokenAuthorizerTests
         var subjectId = Guid.CreateVersion7();
         SetupExchangedToken(subjectId);
         // Membership grants only therapy, so the glucose gate is not satisfied.
-        SeedMember(Tenant, subjectId, OAuthScopes.TherapyRead);
+        SeedMember(Tenant, subjectId, Scope.TherapyRead);
         var authorizer = CreateAuthorizer();
 
         var result = await authorizer.AuthorizeTokenAsync(
-            LegacyToken, Tenant, OAuthScopes.GlucoseRead);
+            LegacyToken, Tenant, Scope.GlucoseRead);
 
         result.Should().BeNull();
     }
@@ -372,12 +381,12 @@ public class HubTokenAuthorizerTests
         // row's own tenant differs. The lookup is pinned to the connection's tenant, so it finds
         // nothing — a hub connection cannot reach another tenant's grant.
         var subjectId = Guid.CreateVersion7();
-        await SeedDirectGrantAsync(OtherTenant, subjectId, revokedAt: null, OAuthScopes.GlucoseRead);
-        SeedMember(Tenant, subjectId, OAuthScopes.GlucoseRead);
+        await SeedDirectGrantAsync(OtherTenant, subjectId, revokedAt: null, Scope.GlucoseRead);
+        SeedMember(Tenant, subjectId, Scope.GlucoseRead);
         var authorizer = CreateAuthorizer();
 
         var result = await authorizer.AuthorizeTokenAsync(
-            DirectGrantToken, Tenant, OAuthScopes.GlucoseRead);
+            DirectGrantToken, Tenant, Scope.GlucoseRead);
 
         result.Should().BeNull();
         _memberService.Verify(
@@ -393,12 +402,12 @@ public class HubTokenAuthorizerTests
     public async Task Direct_grant_token_pinned_to_the_connection_tenant_is_authorized()
     {
         var subjectId = Guid.CreateVersion7();
-        await SeedDirectGrantAsync(Tenant, subjectId, revokedAt: null, OAuthScopes.GlucoseRead);
-        SeedMember(Tenant, subjectId, OAuthScopes.GlucoseRead);
+        await SeedDirectGrantAsync(Tenant, subjectId, revokedAt: null, Scope.GlucoseRead);
+        SeedMember(Tenant, subjectId, Scope.GlucoseRead);
         var authorizer = CreateAuthorizer();
 
         var result = await authorizer.AuthorizeTokenAsync(
-            DirectGrantToken, Tenant, OAuthScopes.GlucoseRead);
+            DirectGrantToken, Tenant, Scope.GlucoseRead);
 
         result.Should().NotBeNull();
         result!.TenantId.Should().Be(Tenant);
@@ -415,27 +424,27 @@ public class HubTokenAuthorizerTests
         // exactly as MemberScopeMiddleware applies it to the same credential over HTTP.
         var subjectId = Guid.CreateVersion7();
         await SeedDirectGrantAsync(
-            Tenant, subjectId, revokedAt: null, OAuthScopes.GlucoseRead, OAuthScopes.TreatmentsRead);
-        SeedMember(Tenant, subjectId, OAuthScopes.GlucoseRead);
+            Tenant, subjectId, revokedAt: null, Scope.GlucoseRead, Scope.TreatmentsRead);
+        SeedMember(Tenant, subjectId, Scope.GlucoseRead);
         var authorizer = CreateAuthorizer();
 
         var result = await authorizer.AuthorizeTokenAsync(
-            DirectGrantToken, Tenant, OAuthScopes.GlucoseRead);
+            DirectGrantToken, Tenant, Scope.GlucoseRead);
 
         result.Should().NotBeNull();
-        result!.Satisfies(OAuthScopes.TreatmentsRead).Should().BeFalse();
+        result!.Satisfies(Scope.TreatmentsRead).Should().BeFalse();
     }
 
     [Fact]
     public async Task Direct_grant_whose_subject_is_not_a_member_is_rejected()
     {
         var subjectId = Guid.CreateVersion7();
-        await SeedDirectGrantAsync(Tenant, subjectId, revokedAt: null, OAuthScopes.GlucoseRead);
-        SeedMember(OtherTenant, subjectId, OAuthScopes.GlucoseRead);
+        await SeedDirectGrantAsync(Tenant, subjectId, revokedAt: null, Scope.GlucoseRead);
+        SeedMember(OtherTenant, subjectId, Scope.GlucoseRead);
         var authorizer = CreateAuthorizer();
 
         var result = await authorizer.AuthorizeTokenAsync(
-            DirectGrantToken, Tenant, OAuthScopes.GlucoseRead);
+            DirectGrantToken, Tenant, Scope.GlucoseRead);
 
         result.Should().BeNull();
     }
@@ -445,12 +454,12 @@ public class HubTokenAuthorizerTests
     {
         var subjectId = Guid.CreateVersion7();
         await SeedDirectGrantAsync(
-            Tenant, subjectId, DateTime.UtcNow.AddMinutes(-1), OAuthScopes.GlucoseRead);
-        SeedMember(Tenant, subjectId, OAuthScopes.GlucoseRead);
+            Tenant, subjectId, DateTime.UtcNow.AddMinutes(-1), Scope.GlucoseRead);
+        SeedMember(Tenant, subjectId, Scope.GlucoseRead);
         var authorizer = CreateAuthorizer();
 
         var result = await authorizer.AuthorizeTokenAsync(
-            DirectGrantToken, Tenant, OAuthScopes.GlucoseRead);
+            DirectGrantToken, Tenant, Scope.GlucoseRead);
 
         result.Should().BeNull();
     }
@@ -461,7 +470,7 @@ public class HubTokenAuthorizerTests
         var authorizer = CreateAuthorizer();
 
         var result = await authorizer.AuthorizeTokenAsync(
-            DirectGrantToken, Tenant, OAuthScopes.GlucoseRead);
+            DirectGrantToken, Tenant, Scope.GlucoseRead);
 
         result.Should().BeNull();
     }
@@ -475,7 +484,7 @@ public class HubTokenAuthorizerTests
         var authorizer = CreateAuthorizer();
 
         var result = await authorizer.AuthorizeTokenAsync(
-            LegacyToken, Tenant, OAuthScopes.GlucoseRead);
+            LegacyToken, Tenant, Scope.GlucoseRead);
 
         result.Should().BeNull();
     }
@@ -491,7 +500,7 @@ public class HubTokenAuthorizerTests
 
         var granted = authorizer.AuthorizeInstanceKey(expected, Tenant);
         granted.Should().NotBeNull();
-        granted!.Scopes.Should().Contain(OAuthScopes.FullAccess);
+        granted!.Scopes.Should().Contain(Scope.FullAccess);
         granted.Kind.Should().Be(HubCredentialKind.Infrastructure);
 
         authorizer.AuthorizeInstanceKey("deadbeef", Tenant).Should().BeNull();

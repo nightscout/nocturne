@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatDayTime } from "$lib/utils/formatting";
   import {
     Card,
     CardContent,
@@ -7,7 +8,7 @@
   import { Badge } from "$lib/components/ui/badge";
   import * as Tabs from "$lib/components/ui/tabs";
   import * as Dialog from "$lib/components/ui/dialog";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog";
+  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import * as Select from "$lib/components/ui/select";
@@ -36,6 +37,7 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import * as trackersRemote from "$api/generated/trackers.generated.remote";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
   import {
     NotificationUrgency,
     TrackerCategory,
@@ -230,12 +232,7 @@
   // Format date
   function formatDate(dateStr: any): string {
     if (!dateStr) return "";
-    return new Date(dateStr).toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return formatDayTime(dateStr);
   }
 
   // Get time remaining for instance
@@ -489,7 +486,7 @@
         <CardContent class="py-6 text-center">
           <AlertTriangle class="h-8 w-8 text-destructive mx-auto mb-2" />
           <p class="text-destructive">
-            {error instanceof Error ? error.message : "Failed to load tracker data"}
+            {remoteErrorMessage(error, "Failed to load tracker data")}
           </p>
           <Button variant="outline" class="mt-4" onclick={reset}>Retry</Button>
         </CardContent>
@@ -633,63 +630,35 @@
 <ReservoirReportDialog bind:open={isReservoirReportDialogOpen} defaultKind="Fill" />
 
 <!-- Delete Definition Confirmation Dialog -->
-<AlertDialog.Root bind:open={isDeleteDefinitionDialogOpen}>
-  <AlertDialog.Content>
-    <AlertDialog.Header>
-      <AlertDialog.Title>Delete Tracker Definition</AlertDialog.Title>
-      <AlertDialog.Description>
-        Are you sure you want to delete this tracker definition? This action
-        cannot be undone. Any active instances using this definition will
-        remain, but you won't be able to start new ones.
-      </AlertDialog.Description>
-    </AlertDialog.Header>
-    <AlertDialog.Footer>
-      <AlertDialog.Cancel
-        onclick={() => {
-          isDeleteDefinitionDialogOpen = false;
-          deletingDefinitionId = null;
-        }}
-      >
-        Cancel
-      </AlertDialog.Cancel>
-      <AlertDialog.Action
-        onclick={confirmDeleteDefinition}
-        class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-      >
-        Delete
-      </AlertDialog.Action>
-    </AlertDialog.Footer>
-  </AlertDialog.Content>
-</AlertDialog.Root>
+<ConfirmDialog
+  bind:open={isDeleteDefinitionDialogOpen}
+  onOpenChange={(o) => { if (!o) deletingDefinitionId = null; }}
+  title="Delete Tracker Definition"
+  confirmLabel="Delete"
+  destructive
+  onConfirm={confirmDeleteDefinition}
+>
+  {#snippet description()}
+    Are you sure you want to delete this tracker definition? This action
+    cannot be undone. Any active instances using this definition will
+    remain, but you won't be able to start new ones.
+  {/snippet}
+</ConfirmDialog>
 
 <!-- Delete Instance Confirmation Dialog -->
-<AlertDialog.Root bind:open={isDeleteInstanceDialogOpen}>
-  <AlertDialog.Content>
-    <AlertDialog.Header>
-      <AlertDialog.Title>Delete Tracker Instance</AlertDialog.Title>
-      <AlertDialog.Description>
-        Are you sure you want to delete this tracker instance? This action
-        cannot be undone.
-      </AlertDialog.Description>
-    </AlertDialog.Header>
-    <AlertDialog.Footer>
-      <AlertDialog.Cancel
-        onclick={() => {
-          isDeleteInstanceDialogOpen = false;
-          deletingInstanceId = null;
-        }}
-      >
-        Cancel
-      </AlertDialog.Cancel>
-      <AlertDialog.Action
-        onclick={confirmDeleteInstance}
-        class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-      >
-        Delete
-      </AlertDialog.Action>
-    </AlertDialog.Footer>
-  </AlertDialog.Content>
-</AlertDialog.Root>
+<ConfirmDialog
+  bind:open={isDeleteInstanceDialogOpen}
+  onOpenChange={(o) => { if (!o) deletingInstanceId = null; }}
+  title="Delete Tracker Instance"
+  confirmLabel="Delete"
+  destructive
+  onConfirm={confirmDeleteInstance}
+>
+  {#snippet description()}
+    Are you sure you want to delete this tracker instance? This action
+    cannot be undone.
+  {/snippet}
+</ConfirmDialog>
 
 <!-- Preset Dialog -->
 <Dialog.Root bind:open={isPresetDialogOpen}>
@@ -752,30 +721,16 @@
 </Dialog.Root>
 
 <!-- Delete Preset Confirmation Dialog -->
-<AlertDialog.Root bind:open={isDeletePresetDialogOpen}>
-  <AlertDialog.Content>
-    <AlertDialog.Header>
-      <AlertDialog.Title>Delete Preset</AlertDialog.Title>
-      <AlertDialog.Description>
-        Are you sure you want to delete this preset? This action cannot be
-        undone.
-      </AlertDialog.Description>
-    </AlertDialog.Header>
-    <AlertDialog.Footer>
-      <AlertDialog.Cancel
-        onclick={() => {
-          isDeletePresetDialogOpen = false;
-          deletingPresetId = null;
-        }}
-      >
-        Cancel
-      </AlertDialog.Cancel>
-      <AlertDialog.Action
-        onclick={confirmDeletePreset}
-        class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-      >
-        Delete
-      </AlertDialog.Action>
-    </AlertDialog.Footer>
-  </AlertDialog.Content>
-</AlertDialog.Root>
+<ConfirmDialog
+  bind:open={isDeletePresetDialogOpen}
+  onOpenChange={(o) => { if (!o) deletingPresetId = null; }}
+  title="Delete Preset"
+  confirmLabel="Delete"
+  destructive
+  onConfirm={confirmDeletePreset}
+>
+  {#snippet description()}
+    Are you sure you want to delete this preset? This action cannot be
+    undone.
+  {/snippet}
+</ConfirmDialog>

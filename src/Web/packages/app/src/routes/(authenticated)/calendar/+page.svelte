@@ -3,6 +3,7 @@
   import { page } from "$app/state";
   import * as Card from "$lib/components/ui/card";
   import { getPunchCardData } from "$api/generated/statistics.generated.remote";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
   import { getActiveInstances, getDefinitions, getInstanceHistory } from "$api/generated/trackers.generated.remote";
   import type { TrackerInstanceDto, TrackerDefinitionDto } from "$api";
   import { NotificationUrgency as NotificationUrgencyEnum } from "$api";
@@ -379,7 +380,7 @@
             Failed to load calendar data
           </p>
           <p class="text-sm text-muted-foreground mt-1">
-            {punchCardError instanceof Error ? punchCardError.message : "An error occurred"}
+            {remoteErrorMessage(punchCardError, "An error occurred")}
           </p>
           <Button class="mt-4" onclick={() => window.location.reload()}>
             Try Again

@@ -27,11 +27,11 @@ internal static class LegacyStorageReadScopes
     private static readonly IReadOnlyDictionary<string, string> ScopesByStorage =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["entries"] = OAuthScopes.GlucoseRead,
-            ["treatments"] = OAuthScopes.TreatmentsRead,
-            ["devicestatus"] = OAuthScopes.DevicesRead,
-            ["profile"] = OAuthScopes.TherapyRead,
-            ["food"] = OAuthScopes.FoodRead,
+            ["entries"] = Scope.GlucoseRead,
+            ["treatments"] = Scope.TreatmentsRead,
+            ["devicestatus"] = Scope.DevicesRead,
+            ["profile"] = Scope.TherapyRead,
+            ["food"] = Scope.FoodRead,
         };
 
     /// <summary>
@@ -47,7 +47,7 @@ internal static class LegacyStorageReadScopes
     /// unknown selector, so a new collection is denied until it is classified here.
     /// </summary>
     public static bool CanRead(IReadOnlySet<string> grantedScopes, string? storage) =>
-        RequiredReadScope(storage) is { } scope && OAuthScopes.SatisfiesScope(grantedScopes, scope);
+        RequiredReadScope(storage) is { } scope && Scope.Satisfies(grantedScopes, scope);
 
     /// <summary>
     /// The result to return instead of reading <paramref name="storage"/>, or <see langword="null"/>

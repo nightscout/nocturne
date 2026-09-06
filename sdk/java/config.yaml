@@ -1,8 +1,6 @@
 generatorName: java
 outputDir: ./out
-# Overrides ApiClient.mustache so RequestBody.create uses the MediaType-first
-# argument order, which exists in both OkHttp 3.12.x and 4.x. Android consumers
-# (xDrip) pin OkHttp 3.12.x; the stock template's content-first order is 4.x-only.
+# Overrides and the reason for each: sdk/java/templates/README.md.
 # Path is relative to the CI working directory (repo root).
 templateDir: sdk/java/templates
 globalProperties:

@@ -1,11 +1,13 @@
 <script lang="ts">
+  import { formatMediumDateTime } from "$lib/utils/formatting";
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog";
+  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import { Weight, Plus, Trash2, Loader2 } from "lucide-svelte";
   import * as bw from "$api/generated/bodyWeights.generated.remote";
+  import { describeSubmitError } from "$lib/forms/submit-error";
   import type { BodyWeight } from "$api";
 
   // create/deleteBodyWeight declare a GetBodyWeights invalidation, but it refreshes
@@ -23,13 +25,7 @@
 
   function formatMills(mills: number | undefined): string {
     if (!mills) return "";
-    return new Date(mills).toLocaleString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
+    return formatMediumDateTime(mills);
   }
 
   async function addEntry() {
@@ -46,7 +42,7 @@
       newWeightKg = "";
       newDate = "";
     } catch (e) {
-      errorMessage = (e as { message?: string })?.message ?? "Failed to add entry";
+      errorMessage = describeSubmitError(e, "Failed to add entry");
     } finally {
       saving = false;
     }
@@ -60,7 +56,7 @@
       await bw.deleteBodyWeight(entry.id);
       await weightsQuery.refresh();
     } catch (e) {
-      errorMessage = (e as { message?: string })?.message ?? "Failed to delete entry";
+      errorMessage = describeSubmitError(e, "Failed to delete entry");
     }
   }
 </script>
@@ -143,19 +139,16 @@
   </Card.Root>
 </div>
 
-<AlertDialog.Root open={pendingDelete !== null} onOpenChange={(o) => { if (!o) pendingDelete = null; }}>
-  <AlertDialog.Content>
-    <AlertDialog.Header>
-      <AlertDialog.Title>Delete this entry?</AlertDialog.Title>
-      <AlertDialog.Description>
-        {#if pendingDelete}
-          Remove the {pendingDelete.weightKg} kg entry from {formatMills(pendingDelete.mills)}.
-        {/if}
-      </AlertDialog.Description>
-    </AlertDialog.Header>
-    <AlertDialog.Footer>
-      <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-      <AlertDialog.Action onclick={confirmDelete}>Delete</AlertDialog.Action>
-    </AlertDialog.Footer>
-  </AlertDialog.Content>
-</AlertDialog.Root>
+<ConfirmDialog
+  open={pendingDelete !== null}
+  onOpenChange={(o) => { if (!o) pendingDelete = null; }}
+  title="Delete this entry?"
+  confirmLabel="Delete"
+  onConfirm={confirmDelete}
+>
+  {#snippet description()}
+    {#if pendingDelete}
+      Remove the {pendingDelete.weightKg} kg entry from {formatMills(pendingDelete.mills)}.
+    {/if}
+  {/snippet}
+</ConfirmDialog>

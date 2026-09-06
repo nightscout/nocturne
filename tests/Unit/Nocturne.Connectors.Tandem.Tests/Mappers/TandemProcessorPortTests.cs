@@ -54,7 +54,7 @@ public static class TandemProcessorPortTests
         public void Consecutive_run_spans_each_delivery_to_the_next()
         {
             // Window ends 5 minutes after the last event, like upstream's RUN_TIME_END.
-            var records = _mapper.Map(Run, Utc(2026, 5, 14, 4, 16, 0), ignoreZeroUnitBasal: false);
+            var records = _mapper.Map(Run, Utc(2026, 5, 14, 4, 16, 0), ignoreZeroUnitBasal: false).Spans;
 
             records.Should().HaveCount(3);
             records[0].StartTimestamp.Should().Be(Utc(2026, 5, 14, 4, 1, 0));
@@ -83,7 +83,7 @@ public static class TandemProcessorPortTests
                 _ => SrcTempAndAlgo,
             };
 
-            var records = _mapper.Map([ev], Utc(2026, 5, 17, 0, 0, 0), ignoreZeroUnitBasal: false);
+            var records = _mapper.Map([ev], Utc(2026, 5, 17, 0, 0, 0), ignoreZeroUnitBasal: false).Spans;
 
             var basal = records.Should().ContainSingle().Subject;
             basal.Rate.Should().Be(rate);
@@ -94,7 +94,7 @@ public static class TandemProcessorPortTests
         public void Zero_rate_events_are_skipped_when_ignore_zero_unit_basal()
         {
             var records = _mapper.Map(
-                [SrcSuspended, SrcProfile], Utc(2026, 5, 17, 0, 0, 0), ignoreZeroUnitBasal: true);
+                [SrcSuspended, SrcProfile], Utc(2026, 5, 17, 0, 0, 0), ignoreZeroUnitBasal: true).Spans;
 
             records.Should().ContainSingle().Which.PumpRecordId.Should().Be("447435");
         }
@@ -106,7 +106,7 @@ public static class TandemProcessorPortTests
             var start = Utc(2026, 5, 16, 0, 48, 27); // SrcProfile at 20:48:27-04:00
             var windowEnd = start.AddHours(25);
 
-            var records = _mapper.Map([SrcProfile], windowEnd, ignoreZeroUnitBasal: false);
+            var records = _mapper.Map([SrcProfile], windowEnd, ignoreZeroUnitBasal: false).Spans;
 
             records.Should().ContainSingle().Which.EndTimestamp.Should().Be(windowEnd);
         }

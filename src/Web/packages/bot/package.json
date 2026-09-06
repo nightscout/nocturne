@@ -16,6 +16,7 @@
   "author": "Nocturne Project",
   "license": "AGPL-3.0-only",
   "dependencies": {
+    "@nocturne/ui": "workspace:*",
     "chat": "4.29.0",
     "@chat-adapter/discord": "4.29.0",
     "@chat-adapter/slack": "4.29.0",

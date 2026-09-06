@@ -1,6 +1,9 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Interceptors;
+using Nocturne.Infrastructure.Data.Security;
 using Npgsql;
 using Testcontainers.PostgreSql;
 using Xunit;
@@ -33,12 +36,21 @@ public class RlsCompletenessFixture : IAsyncLifetime
     public string AppConnectionString { get; private set; } = string.Empty;
     public string MigratorConnectionString { get; private set; } = string.Empty;
 
+    /// <summary>
+    /// Tables the suites in this collection expect the live database to have policied, cascaded
+    /// and forced. Deliberately NOT <see cref="ShareRlsPolicy.TenantScopedTableNames"/>: that
+    /// method produced the DDL under test, so asserting against it would only restate what the
+    /// reconciler was told to do. Walks <see cref="ITenantScoped"/> CLR types instead and asks
+    /// the model for each one's table, so a table dropped from the reconciler's set still
+    /// appears here and the database is caught missing it.
+    /// </summary>
+    public IReadOnlyList<string> TenantScopedTableNames { get; private set; } = [];
+
     public async Task InitializeAsync()
     {
         var initScriptPath = ResolveInitScriptPath();
 
-        _container = new PostgreSqlBuilder()
-            .WithImage("postgres:17.6")
+        _container = new PostgreSqlBuilder("postgres:17.6")
             .WithDatabase(DbName)
             .WithUsername(BootstrapUser)
             .WithPassword(BootstrapPassword)
@@ -67,6 +79,23 @@ public class RlsCompletenessFixture : IAsyncLifetime
         await DatabaseInitializationExtensions.ReconcileShareRlsPoliciesAsync(
             MigratorConnectionString,
             NullLogger.Instance);
+
+        // Apply the tenant-table storage parameters, exactly as the API does at startup.
+        await DatabaseInitializationExtensions.ReconcileTenantTableStorageParametersAsync(
+            MigratorConnectionString,
+            NullLogger.Instance);
+
+        await using var context = new NocturneDbContext(
+            new DbContextOptionsBuilder<NocturneDbContext>().UseNpgsql(MigratorConnectionString).Options);
+
+        TenantScopedTableNames = typeof(ITenantScoped).Assembly.GetTypes()
+            .Where(t => t is { IsClass: true, IsAbstract: false } && typeof(ITenantScoped).IsAssignableFrom(t))
+            .Select(t => context.Model.FindEntityType(t)?.GetTableName())
+            .Where(n => n is not null)
+            .Select(n => n!)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ToList();
     }
 
     public async Task DisposeAsync()

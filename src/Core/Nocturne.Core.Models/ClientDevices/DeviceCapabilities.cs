@@ -46,8 +46,8 @@ public sealed record DeviceCapability(
 /// <summary>
 /// Server-owned, closed registry of device actuation capabilities. Devices advertise from this set;
 /// anything not listed here is dropped on registration. Each capability maps to a required OAuth
-/// scope (<see cref="OAuthScopes.DeviceNotify"/> for low-risk notifications,
-/// <see cref="OAuthScopes.DeviceActuate"/> for hardware) and the device kinds that may expose it.
+/// scope (<see cref="Scope.DeviceNotify"/> for low-risk notifications,
+/// <see cref="Scope.DeviceActuate"/> for hardware) and the device kinds that may expose it.
 /// </summary>
 public static class DeviceCapabilities
 {
@@ -78,19 +78,19 @@ public static class DeviceCapabilities
     public static readonly IReadOnlyDictionary<string, DeviceCapability> Registry =
         new Dictionary<string, DeviceCapability>
         {
-            [Notify] = new(Notify, "Send a notification", OAuthScopes.DeviceNotify,
+            [Notify] = new(Notify, "Send a notification", Scope.DeviceNotify,
                 Kinds(DeviceKinds.Prelude, DeviceKinds.Companion)),
-            [Vibrate] = new(Vibrate, "Vibrate", OAuthScopes.DeviceActuate,
+            [Vibrate] = new(Vibrate, "Vibrate", Scope.DeviceActuate,
                 Kinds(DeviceKinds.Prelude)),
-            [Torch] = new(Torch, "Flash the torch", OAuthScopes.DeviceActuate,
+            [Torch] = new(Torch, "Flash the torch", Scope.DeviceActuate,
                 Kinds(DeviceKinds.Prelude)),
-            [Speak] = new(Speak, "Speak the alert aloud", OAuthScopes.DeviceActuate,
+            [Speak] = new(Speak, "Speak the alert aloud", Scope.DeviceActuate,
                 Kinds(DeviceKinds.Prelude)),
-            [Fullscreen] = new(Fullscreen, "Show a full-screen alert", OAuthScopes.DeviceActuate,
+            [Fullscreen] = new(Fullscreen, "Show a full-screen alert", Scope.DeviceActuate,
                 Kinds(DeviceKinds.Prelude)),
-            [Sound] = new(Sound, "Play an alarm sound", OAuthScopes.DeviceActuate,
+            [Sound] = new(Sound, "Play an alarm sound", Scope.DeviceActuate,
                 Kinds(DeviceKinds.Prelude)),
-            [TrayFlash] = new(TrayFlash, "Flash the taskbar", OAuthScopes.DeviceActuate,
+            [TrayFlash] = new(TrayFlash, "Flash the taskbar", Scope.DeviceActuate,
                 Kinds(DeviceKinds.Companion)),
         };
 
@@ -118,7 +118,7 @@ public static class DeviceCapabilities
                 continue;
             if (!def.Kinds.Contains(kind))
                 continue;
-            if (!OAuthScopes.SatisfiesScope(grantedScopes, def.RequiredScope))
+            if (!Scope.Satisfies(grantedScopes, def.RequiredScope))
                 continue;
             accepted.Add(cap);
         }
@@ -159,7 +159,7 @@ public static class DeviceCapabilities
     /// <summary>
     /// Project the registry into the static catalog the rule-builder consumes: the known kinds and,
     /// per capability, its label, required scope, allowed kinds, and whether it is a hardware actuator
-    /// (i.e. gated on <see cref="OAuthScopes.DeviceActuate"/>).
+    /// (i.e. gated on <see cref="Scope.DeviceActuate"/>).
     /// </summary>
     public static DeviceCapabilityCatalog BuildCatalog() => new()
     {
@@ -177,7 +177,7 @@ public static class DeviceCapabilities
                 Label = c.Label,
                 RequiredScope = c.RequiredScope,
                 Kinds = [.. c.Kinds],
-                IsHardware = c.RequiredScope == OAuthScopes.DeviceActuate,
+                IsHardware = c.RequiredScope == Scope.DeviceActuate,
             })
             .ToList(),
     };

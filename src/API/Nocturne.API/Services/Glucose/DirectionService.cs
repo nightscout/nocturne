@@ -56,8 +56,7 @@ public static class DirectionService
         if (entry == null)
             return result;
 
-        // Parse direction from string to enum
-        var direction = ParseDirection(entry.Direction);
+        var direction = DirectionExtensions.Parse(entry.Direction);
         result.Value = direction;
         result.Label = DirectionToChar(direction);
         result.Entity = CharToEntity(result.Label);
@@ -164,33 +163,6 @@ public static class DirectionService
             return string.Empty;
 
         return $"&#{(int)character[0]};";
-    }
-
-    /// <summary>
-    /// Parse direction string to enum - handles legacy string values
-    /// </summary>
-    private static Direction ParseDirection(string? directionString)
-    {
-        if (string.IsNullOrEmpty(directionString))
-            return Direction.NONE;
-
-        return directionString switch
-        {
-            "NONE" => Direction.NONE,
-            "TripleUp" => Direction.TripleUp,
-            "DoubleUp" => Direction.DoubleUp,
-            "SingleUp" => Direction.SingleUp,
-            "FortyFiveUp" => Direction.FortyFiveUp,
-            "Flat" => Direction.Flat,
-            "FortyFiveDown" => Direction.FortyFiveDown,
-            "SingleDown" => Direction.SingleDown,
-            "DoubleDown" => Direction.DoubleDown,
-            "TripleDown" => Direction.TripleDown,
-            "NOT COMPUTABLE" => Direction.NotComputable,
-            "RATE OUT OF RANGE" => Direction.RateOutOfRange,
-            "CGM ERROR" => Direction.CgmError,
-            _ => Direction.NONE,
-        };
     }
 
     /// <summary>

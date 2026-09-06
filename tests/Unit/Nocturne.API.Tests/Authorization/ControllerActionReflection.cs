@@ -59,6 +59,13 @@ internal static class ControllerActionReflection
         return templates.Select(t => Combine(prefix, t)).Distinct(StringComparer.OrdinalIgnoreCase);
     }
 
+    /// <summary>The HTTP methods an action answers, empty when its attribute constrains none.</summary>
+    public static IEnumerable<string> GetHttpMethods(MethodInfo action) =>
+        action.GetCustomAttributes()
+            .OfType<IActionHttpMethodProvider>()
+            .SelectMany(p => p.HttpMethods)
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+
     public static bool HasAnonymous(MethodInfo action, Type controller) =>
         action.GetCustomAttributes(inherit: true).OfType<IAllowAnonymous>().Any()
         || controller.GetCustomAttributes(inherit: true).OfType<IAllowAnonymous>().Any();

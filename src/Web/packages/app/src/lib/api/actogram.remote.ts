@@ -53,6 +53,7 @@ export const getActogramData = query(actogramSchema, async ({ from, to }) => {
 
 		return {
 			stepCounts,
+			stepDayTotals: data.stepDayTotals ?? {},
 			heartRates,
 			glucoseData,
 			sleepSpans,

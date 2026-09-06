@@ -17,9 +17,7 @@ public static class SettingsMapper
     {
         return new SettingsEntity
         {
-            Id = string.IsNullOrEmpty(settings.Id)
-                ? Guid.CreateVersion7()
-                : ParseIdToGuid(settings.Id),
+            Id = MapperHelpers.ParseIdToGuid(settings.Id),
             OriginalId = MongoIdUtils.IsValidMongoId(settings.Id) ? settings.Id : null,
             Key = settings.Key,
             Value = settings.Value != null ? JsonSerializer.Serialize(settings.Value) : null,
@@ -95,21 +93,5 @@ public static class SettingsMapper
         entity.Version = settings.Version;
         entity.IsActive = settings.IsActive;
         entity.Notes = settings.Notes;
-    }
-
-    /// <summary>
-    /// Convert string ID to GUID for consistent mapping
-    /// </summary>
-    private static Guid ParseIdToGuid(string id)
-    {
-        if (Guid.TryParse(id, out var guid))
-        {
-            return guid;
-        }
-
-        // For string IDs, create a deterministic GUID
-        // This ensures consistent mapping between string ID and GUID
-        var bytes = System.Text.Encoding.UTF8.GetBytes(id.PadRight(16, '0')[..16]);
-        return new Guid(bytes);
     }
 }

@@ -8,7 +8,8 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Maps to Nocturne.Core.Models.StepCount
 /// </summary>
 [Table("step_counts")]
-public class StepCountEntity : ITenantScoped, ISoftDeletable, ISyncDedupable, ISystemTimestamped
+public class StepCountEntity
+    : ITenantScoped, ISoftDeletable, ISyncDedupable, ISystemTimestamped, IOriginalIdentified, IObservationTimestamped
 {
     /// <summary>
     /// Identifier of the tenant this step count record belongs to

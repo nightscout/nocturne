@@ -3,6 +3,7 @@ import {
   isClockReadingStale,
   readingAgeLabel,
   readingAgeMinutes,
+  readingAgePhrase,
 } from "./staleness";
 
 const MIN = 60_000;
@@ -44,6 +45,10 @@ describe("isClockReadingStale", () => {
       true
     );
   });
+
+  it("is never stale without a reading to have aged", () => {
+    expect(isClockReadingStale(15, null, lastUpdated + 60 * MIN)).toBe(false);
+  });
 });
 
 describe("readingAgeLabel", () => {
@@ -54,5 +59,16 @@ describe("readingAgeLabel", () => {
   it("reads whole minutes above a minute", () => {
     expect(readingAgeLabel(lastUpdated, lastUpdated + MIN)).toBe("1m");
     expect(readingAgeLabel(lastUpdated, lastUpdated + 125 * MIN)).toBe("125m");
+  });
+});
+
+describe("readingAgePhrase", () => {
+  it("reads 'now' with no preposition under a minute", () => {
+    expect(readingAgePhrase(lastUpdated, lastUpdated + 30_000)).toBe("now");
+  });
+
+  it("appends 'ago' to an elapsed count", () => {
+    expect(readingAgePhrase(lastUpdated, lastUpdated + MIN)).toBe("1m ago");
+    expect(readingAgePhrase(lastUpdated, lastUpdated + 7 * MIN)).toBe("7m ago");
   });
 });

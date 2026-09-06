@@ -114,15 +114,14 @@ public class OidcController : ControllerBase
         [FromQuery] string? returnUrl = null
     )
     {
-        // Validate return URL to prevent open redirect attacks
-        if (!string.IsNullOrEmpty(returnUrl) && !IsValidReturnUrl(returnUrl))
+        if (!string.IsNullOrEmpty(returnUrl) && !_baseDomain.IsValidReturnUrl(returnUrl))
         {
             return BadRequest(new { error = "invalid_return_url", message = "Invalid return URL" });
         }
 
         try
         {
-            var tenantSlug = (HttpContext.Items["TenantContext"] as TenantContext)?.Slug;
+            var tenantSlug = (HttpContext.GetTenantContext())?.Slug;
             var authRequest = await _authService.GenerateAuthorizationUrlAsync(provider, returnUrl, tenantSlug: tenantSlug);
 
             // Store state in a secure cookie for verification on callback
@@ -206,7 +205,7 @@ public class OidcController : ControllerBase
         // The callback runs on the tenant subdomain (OidcCallbackRedirectMiddleware has already
         // bounced apex callbacks to {slug}.{baseDomain}), so the resolved tenant is the one being
         // logged into. Pass it through so a session is only issued to a member of that tenant.
-        var currentTenantId = (HttpContext.Items["TenantContext"] as TenantContext)?.TenantId;
+        var currentTenantId = (HttpContext.GetTenantContext())?.TenantId;
 
         // Handle the callback
         var result = await _authService.HandleCallbackAsync(
@@ -253,6 +252,10 @@ public class OidcController : ControllerBase
 
         // Set session cookies
         SetSessionCookies(result.Tokens!);
+        Response.SetLastSignInCookie(
+            SessionCookieExtensions.SignInMethods.Oidc,
+            result.ProviderId?.ToString(),
+            _options);
 
         await _auditService.LogAsync(AuthAuditEventType.Login, result.Tokens?.SubjectId, success: true,
             ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent,
@@ -287,12 +290,12 @@ public class OidcController : ControllerBase
         if (auth == null || !auth.IsAuthenticated || !auth.SubjectId.HasValue)
             return Unauthorized(new { error = "not_authenticated", message = "Authentication required" });
 
-        if (!string.IsNullOrEmpty(returnUrl) && !IsValidReturnUrl(returnUrl))
+        if (!string.IsNullOrEmpty(returnUrl) && !_baseDomain.IsValidReturnUrl(returnUrl))
             return BadRequest(new { error = "invalid_return_url", message = "Invalid return URL" });
 
         try
         {
-            var tenantSlug = (HttpContext.Items["TenantContext"] as TenantContext)?.Slug;
+            var tenantSlug = (HttpContext.GetTenantContext())?.Slug;
             var req = await _authService.GenerateLinkAuthorizationUrlAsync(
                 provider, auth.SubjectId.Value, returnUrl, tenantSlug);
             SetLinkStateCookie(req.State, req.ExpiresAt);
@@ -316,6 +319,7 @@ public class OidcController : ControllerBase
     /// Does NOT issue new session cookies.
     /// </summary>
     [HttpGet("link/callback")]
+    [DenyDemoSubject]
     [ProducesResponseType(StatusCodes.Status302Found)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> LinkCallback(
@@ -658,158 +662,23 @@ public class OidcController : ControllerBase
 
     #region Private Helper Methods
 
-    /// <summary>
-    /// Validate that a return URL is safe (prevents open redirect attacks)
-    /// </summary>
-    private bool IsValidReturnUrl(string returnUrl)
-    {
-        // Site-local path: starts with "/" but not "//" or "/\", which browsers
-        // resolve as scheme-relative — "Location: //evil.com" leaves the site.
-        if (returnUrl.StartsWith('/'))
-        {
-            return returnUrl.Length == 1 || (returnUrl[1] != '/' && returnUrl[1] != '\\');
-        }
+    private void SetStateCookie(string state, DateTimeOffset expiresAt) =>
+        Response.SetStateCookie(_options.Cookie.StateCookieName, state, expiresAt, _options);
 
-        // Absolute URL: parse and compare scheme + authority against the public
-        // origin, so neither "https://example.com.evil.com" (prefix) nor
-        // "https://example.com@evil.com" (userinfo) can pass a string match.
-        var origin = _baseDomain.PublicOrigin;
-        return !string.IsNullOrEmpty(origin)
-            && Uri.TryCreate(returnUrl, UriKind.Absolute, out var target)
-            && Uri.TryCreate(origin, UriKind.Absolute, out var expected)
-            && target.Scheme == expected.Scheme
-            && string.Equals(target.Authority, expected.Authority, StringComparison.OrdinalIgnoreCase)
-            && string.IsNullOrEmpty(target.UserInfo);
-    }
+    private void ClearStateCookie() =>
+        Response.ClearStateCookie(_options.Cookie.StateCookieName, _options);
 
-    /// <summary>
-    /// Set the OIDC state cookie
-    /// </summary>
-    private void SetStateCookie(string state, DateTimeOffset expiresAt)
-    {
-        Response.Cookies.Append(
-            _options.Cookie.StateCookieName,
-            state,
-            new CookieOptions
-            {
-                HttpOnly = true,
-                Secure = _options.Cookie.Secure,
-                SameSite = SessionCookieExtensions.MapSameSiteMode(_options.Cookie.SameSite),
-                Path = _options.Cookie.Path,
-                Domain = _options.Cookie.Domain,
-                Expires = expiresAt,
-            }
-        );
-    }
+    private void SetLinkStateCookie(string state, DateTimeOffset expiresAt) =>
+        Response.SetStateCookie(_options.Cookie.LinkStateCookieName, state, expiresAt, _options);
 
-    /// <summary>
-    /// Clear the OIDC state cookie
-    /// </summary>
-    private void ClearStateCookie()
-    {
-        Response.Cookies.Delete(
-            _options.Cookie.StateCookieName,
-            new CookieOptions { Path = _options.Cookie.Path, Domain = _options.Cookie.Domain }
-        );
-    }
+    private void ClearLinkStateCookie() =>
+        Response.ClearStateCookie(_options.Cookie.LinkStateCookieName, _options);
 
-    /// <summary>
-    /// Set the OIDC link state cookie
-    /// </summary>
-    private void SetLinkStateCookie(string state, DateTimeOffset expiresAt)
-    {
-        Response.Cookies.Append(
-            _options.Cookie.LinkStateCookieName,
-            state,
-            new CookieOptions
-            {
-                HttpOnly = true,
-                Secure = _options.Cookie.Secure,
-                SameSite = SessionCookieExtensions.MapSameSiteMode(_options.Cookie.SameSite),
-                Path = _options.Cookie.Path,
-                Domain = _options.Cookie.Domain,
-                Expires = expiresAt,
-            }
-        );
-    }
+    private void SetSessionCookies(OidcTokenResponse tokens) =>
+        Response.SetSessionCookies(
+            tokens.AccessToken, tokens.RefreshToken, tokens.ExpiresAt, _options);
 
-    /// <summary>
-    /// Clear the OIDC link state cookie
-    /// </summary>
-    private void ClearLinkStateCookie()
-    {
-        Response.Cookies.Delete(
-            _options.Cookie.LinkStateCookieName,
-            new CookieOptions { Path = _options.Cookie.Path, Domain = _options.Cookie.Domain }
-        );
-    }
-
-    /// <summary>
-    /// Set session cookies (access token and refresh token)
-    /// </summary>
-    private void SetSessionCookies(OidcTokenResponse tokens)
-    {
-        // Access token cookie (short-lived)
-        Response.Cookies.Append(
-            _options.Cookie.AccessTokenName,
-            tokens.AccessToken,
-            new CookieOptions
-            {
-                HttpOnly = _options.Cookie.HttpOnly,
-                Secure = _options.Cookie.Secure,
-                SameSite = SessionCookieExtensions.MapSameSiteMode(_options.Cookie.SameSite),
-                Path = _options.Cookie.Path,
-                Domain = _options.Cookie.Domain,
-                Expires = tokens.ExpiresAt,
-            }
-        );
-
-        // Refresh token cookie (longer-lived)
-        Response.Cookies.Append(
-            _options.Cookie.RefreshTokenName,
-            tokens.RefreshToken,
-            new CookieOptions
-            {
-                HttpOnly = true, // Always HttpOnly for refresh tokens
-                Secure = _options.Cookie.Secure,
-                SameSite = SessionCookieExtensions.MapSameSiteMode(_options.Cookie.SameSite),
-                Path = _options.Cookie.Path,
-                Domain = _options.Cookie.Domain,
-                Expires = DateTimeOffset.UtcNow.Add(_options.Session.RefreshTokenLifetime),
-            }
-        );
-
-        // Also set a non-HttpOnly cookie with just auth status for JavaScript
-        Response.Cookies.Append(
-            "IsAuthenticated",
-            "true",
-            new CookieOptions
-            {
-                HttpOnly = false,
-                Secure = _options.Cookie.Secure,
-                SameSite = SessionCookieExtensions.MapSameSiteMode(_options.Cookie.SameSite),
-                Path = _options.Cookie.Path,
-                Domain = _options.Cookie.Domain,
-                Expires = DateTimeOffset.UtcNow.Add(_options.Session.RefreshTokenLifetime),
-            }
-        );
-    }
-
-    /// <summary>
-    /// Clear session cookies
-    /// </summary>
-    private void ClearSessionCookies()
-    {
-        var cookieOptions = new CookieOptions
-        {
-            Path = _options.Cookie.Path,
-            Domain = _options.Cookie.Domain,
-        };
-
-        Response.Cookies.Delete(_options.Cookie.AccessTokenName, cookieOptions);
-        Response.Cookies.Delete(_options.Cookie.RefreshTokenName, cookieOptions);
-        Response.Cookies.Delete("IsAuthenticated", cookieOptions);
-    }
+    private void ClearSessionCookies() => Response.ClearSessionCookies(_options);
 
     /// <summary>
     /// Get the refresh token from cookie or request body
@@ -824,32 +693,14 @@ public class OidcController : ControllerBase
         }
 
         // Then try from Authorization header (for API clients)
-        var authHeader = Request.Headers.Authorization.FirstOrDefault();
-        if (
-            !string.IsNullOrEmpty(authHeader)
-            && authHeader.StartsWith("Refresh ", StringComparison.OrdinalIgnoreCase)
-        )
-        {
-            return authHeader["Refresh ".Length..].Trim();
-        }
-
-        return null;
+        return Request.GetAuthorizationCredential("Refresh");
     }
 
     /// <summary>
     /// Get the client IP address
     /// </summary>
-    private string? GetClientIpAddress()
-    {
-        // Check for forwarded headers first (when behind a reverse proxy)
-        var forwarded = Request.Headers["X-Forwarded-For"].FirstOrDefault();
-        if (!string.IsNullOrEmpty(forwarded))
-        {
-            return forwarded.Split(',').First().Trim();
-        }
-
-        return HttpContext.Connection.RemoteIpAddress?.ToString();
-    }
+    private string? GetClientIpAddress() =>
+        HttpContext.Connection.RemoteIpAddress?.ToString();
 
     /// <summary>
     /// Redirect to an error page

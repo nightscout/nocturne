@@ -124,6 +124,23 @@ describe("ResourceGuard", () => {
 			.toBeVisible();
 	});
 
+	it("shows the reason a remote query was rejected", async () => {
+		// A rejected remote function is SvelteKit's `HttpError`: a plain
+		// `{ status, body }` with no `Error` in its prototype chain.
+		render(ResourceGuard, {
+			loading: false,
+			error: { status: 400, body: { message: "That date range is too wide." } },
+			compact: true,
+			children: createRawSnippet(() => ({
+				render: () => "<p>Content loaded</p>",
+			})),
+		});
+
+		await expect
+			.element(page.getByText("That date range is too wide."))
+			.toBeVisible();
+	});
+
 	it("shows content when loaded successfully", async () => {
 		render(ResourceGuard, {
 			loading: false,

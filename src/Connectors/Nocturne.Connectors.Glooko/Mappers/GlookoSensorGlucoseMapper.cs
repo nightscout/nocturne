@@ -2,6 +2,7 @@ using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Connectors.Glooko.Models;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Connectors.Glooko.Mappers;
@@ -254,7 +255,7 @@ public class GlookoSensorGlucoseMapper
 
     private static GlucoseDirection ParseTrendToDirection(string? trend)
     {
-        if (string.IsNullOrWhiteSpace(trend)) return GlucoseDirection.Flat;
+        if (string.IsNullOrWhiteSpace(trend)) return GlucoseDirection.None;
 
         return trend.ToUpperInvariant() switch
         {
@@ -267,10 +268,10 @@ public class GlookoSensorGlucoseMapper
             "DOUBLEDOWN" or "DOUBLE_DOWN" => GlucoseDirection.DoubleDown,
             "NOT COMPUTABLE" or "NOTCOMPUTABLE" => GlucoseDirection.NotComputable,
             "RATE OUT OF RANGE" or "RATEOUTOFRANGE" => GlucoseDirection.RateOutOfRange,
-            _ => GlucoseDirection.Flat
+            _ => GlucoseDirection.NotComputable
         };
     }
 
     private static double ConvertToMgdl(double value, string? meterUnits) =>
-        meterUnits?.ToLowerInvariant() == "mmoll" ? value * 18.0182 : value;
+        meterUnits?.ToLowerInvariant() == "mmoll" ? value * GlucoseConstants.MgdlPerMmol : value;
 }

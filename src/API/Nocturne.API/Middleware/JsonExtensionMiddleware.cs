@@ -10,11 +10,11 @@ namespace Nocturne.API.Middleware;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Pipeline order (position 1 of 7 custom middleware -- runs first, before routing):
+/// Pipeline order (position 1 of 6 custom middleware -- runs first, before routing):
 /// <b>JsonExtensionMiddleware</b>,
 /// <see cref="OidcCallbackRedirectMiddleware"/>, <see cref="Multitenancy.TenantResolutionMiddleware"/>,
 /// <see cref="TenantSetupMiddleware"/>, <see cref="AuthenticationMiddleware"/>,
-/// <see cref="MemberScopeMiddleware"/>, <see cref="SiteSecurityMiddleware"/>.
+/// <see cref="MemberScopeMiddleware"/>.
 /// </para>
 /// <para>
 /// This middleware rewrites the request path before <c>UseRouting</c> so that the router

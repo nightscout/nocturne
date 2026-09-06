@@ -1,8 +1,10 @@
 <script lang="ts">
+  import { formatNumber } from "$lib/utils/formatting";
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
   import { Sparkles, CheckCircle, AlertCircle, Loader2, Trash2 } from "lucide-svelte";
   import { deleteDemoData as deleteDemoDataRemote } from "$api/generated/services.generated.remote";
+  import { describeSubmitError } from "$lib/forms/submit-error";
 
   let { open = $bindable(false), onDeleteComplete } = $props<{
     open: boolean;
@@ -40,7 +42,7 @@
     } catch (e) {
       demoDeleteResult = {
         success: false,
-        error: e instanceof Error ? e.message : "Failed to delete demo data",
+        error: describeSubmitError(e, "Failed to delete demo data"),
       };
     } finally {
       isDeletingDemo = false;
@@ -69,7 +71,7 @@
               <span class="font-medium">Demo data cleared successfully</span>
             </div>
             <p class="text-sm text-green-700 dark:text-green-300 mt-1">
-              Deleted {demoDeleteResult.totalDeleted?.toLocaleString() ?? 0} records
+              Deleted {formatNumber(demoDeleteResult.totalDeleted)} records
             </p>
           </div>
         {:else}

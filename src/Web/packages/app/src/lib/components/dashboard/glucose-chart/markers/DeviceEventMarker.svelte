@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { Group } from "layerchart";
   import { DeviceEventIcon } from "$lib/components/icons";
   import type { DeviceEventType } from "$lib/api";
 
@@ -14,15 +13,20 @@
 
   let { xPos, yPos, eventType, color, treatmentId, onMarkerClick }: Props =
     $props();
+
+  const handleClick = $derived(
+    treatmentId && onMarkerClick
+      ? () => onMarkerClick(treatmentId)
+      : undefined,
+  );
 </script>
 
-<Group
-  x={xPos}
-  y={yPos}
-  onclick={treatmentId && onMarkerClick
-    ? () => onMarkerClick(treatmentId)
-    : undefined}
-  class={treatmentId && onMarkerClick ? "cursor-pointer" : ""}
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<g
+  transform="translate({xPos}, {yPos})"
+  onclick={handleClick}
+  class={handleClick ? "cursor-pointer" : ""}
 >
   <!-- Background circle -->
   <circle
@@ -30,9 +34,7 @@
     fill="var(--background)"
     stroke={color}
     stroke-width="2"
-    class="opacity-95 {treatmentId && onMarkerClick
-      ? 'hover:opacity-100 transition-opacity'
-      : ''}"
+    class="opacity-95 {handleClick ? 'hover:opacity-100 transition-opacity' : ''}"
   />
   <!-- Icon using foreignObject to embed Lucide component -->
   <foreignObject x="-10" y="-10" width="20" height="20">
@@ -40,4 +42,4 @@
       <DeviceEventIcon {eventType} size={16} {color} />
     </div>
   </foreignObject>
-</Group>
+</g>

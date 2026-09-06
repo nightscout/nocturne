@@ -9,6 +9,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Core.Contracts.V4;
@@ -17,13 +18,13 @@ using Nocturne.Core.Models.Projections;
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
-/// Repository for managing sensor glucose (CGM) records in the database. A SyncId-upsert (bulk) +
-/// DeduplicationService participant, so it inherits the shared CRUD/soft-delete surface from
-/// <see cref="V4RepositoryBase{TModel,TEntity}"/> and keeps only the dedup-specific behaviour as
-/// overrides (extended <c>GetAsync</c> with the non-primary LinkedRecords filter + keyset cursor,
-/// SyncId-upsert <c>BulkCreateAsync</c>, audited soft-deletes, and source/time-range deletes).
+/// Repository for managing sensor glucose (CGM) records in the database. A DeduplicationService
+/// participant on top of the sync-key upsert and keyed delete of
+/// <see cref="SyncUpsertRepositoryBase{TModel,TEntity}"/>, so it keeps only the extended <c>GetAsync</c>
+/// (non-primary LinkedRecords filter + keyset cursor), the legacy entries projection, the tenant
+/// last-reading watermark, the post-commit dedup linking, and the source/time-range deletes.
 /// </summary>
-public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlucoseEntity>, ISensorGlucoseRepository
+public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, SensorGlucoseEntity>, ISensorGlucoseRepository
 {
     private readonly IDeduplicationService _deduplicationService;
     private readonly ILogger<SensorGlucoseRepository> _logger;
@@ -120,12 +121,8 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
     /// <inheritdoc />
     protected override void ApplyUpdate(SensorGlucoseEntity target, SensorGlucose source) => SensorGlucoseMapper.UpdateEntity(target, source);
 
-    /// <summary>
-    /// Excludes non-primary cross-connector duplicates so <see cref="V4RepositoryBase{TModel,TEntity}.CountAsync"/>
-    /// matches the rows <c>GetAsync</c> returns. Mirrors the inline filter in the extended <c>GetAsync</c>.
-    /// </summary>
-    protected override IQueryable<SensorGlucoseEntity> ApplyReadVisibility(IQueryable<SensorGlucoseEntity> query, NocturneDbContext ctx) =>
-        query.Where(b => !ctx.LinkedRecords.Any(lr => lr.RecordType == "sensorglucose" && !lr.IsPrimary && lr.RecordId == b.Id));
+    /// <inheritdoc />
+    protected internal override RecordType? DedupRecordType => RecordType.SensorGlucose;
 
     /// <summary>
     /// Routes the base 7-arg form through the extended sensor-glucose query (non-primary LinkedRecords
@@ -184,9 +181,7 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
         if (nativeOnly)
             query = query.Where(e => e.LegacyId == null);
 
-        // Exclude non-primary duplicates from cross-connector deduplication
-        query = query.Where(b => !ctx.LinkedRecords
-            .Any(lr => lr.RecordType == "sensorglucose" && !lr.IsPrimary && lr.RecordId == b.Id));
+        query = ApplyReadVisibility(query, ctx);
 
         // Keyset cursor — when provided, replaces OFFSET with a WHERE clause
         // that seeks directly to the cursor position. O(limit) vs O(offset + limit).
@@ -212,43 +207,12 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
         return entities.Select(SensorGlucoseMapper.ToDomainModel);
     }
 
-    /// <summary>
-    /// Creates a new sensor glucose record. When <c>DataSource</c> and <c>SyncIdentifier</c>
-    /// match an existing row for this tenant, the record is updated in place rather than
-    /// inserted — making the operation idempotent for connector replays. Tenant scoping is
-    /// implicit via the DbContext's RLS-equivalent query filter. Mirrors BolusRepository.
-    /// </summary>
-    /// <param name="model">The sensor glucose record to create.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The created or updated sensor glucose record.</returns>
+    /// <inheritdoc />
     public override async Task<SensorGlucose> CreateAsync(SensorGlucose model, WriteOrigin origin, CancellationToken ct = default)
     {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        if (!string.IsNullOrEmpty(model.DataSource) && !string.IsNullOrEmpty(model.SyncIdentifier))
-        {
-            var existing = await ctx.SensorGlucose
-                .FirstOrDefaultAsync(
-                    e => e.DataSource == model.DataSource && e.SyncIdentifier == model.SyncIdentifier,
-                    ct);
-            if (existing != null)
-            {
-                SensorGlucoseMapper.UpdateEntity(existing, model);
-                await ctx.SaveChangesAsync(ct);
-                var upserted = SensorGlucoseMapper.ToDomainModel(existing);
-                // A single explicit upsert always broadcasts (no material-change gate on the single path).
-                await RaiseBroadcastAsync([], [upserted], [], origin, ct);
-                await AdvanceTenantLastReadingAsync([upserted], ct);
-                return upserted;
-            }
-        }
-
-        var entity = SensorGlucoseMapper.ToEntity(model);
-        ctx.SensorGlucose.Add(entity);
-        await ctx.SaveChangesAsync(ct);
-        var created = SensorGlucoseMapper.ToDomainModel(entity);
-        await RaiseBroadcastAsync([created], [], [], origin, ct);
-        await AdvanceTenantLastReadingAsync([created], ct);
-        return created;
+        var written = await base.CreateAsync(model, origin, ct);
+        await AdvanceTenantLastReadingAsync([written], ct);
+        return written;
     }
 
     /// <inheritdoc />
@@ -346,73 +310,6 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
     }
 
     /// <summary>
-    /// SyncId-upsert split: intra-batch keep-last per (DataSource, SyncIdentifier), then match existing
-    /// rows in the DB by that key and update them in place — so timezone re-correction moves a reading's
-    /// timestamp instead of duplicating it. Persists the updates inside the transaction before returning
-    /// so the base's insert loop (which clears the tracker) doesn't lose them. Mirrors BolusRepository.
-    /// </summary>
-    protected override async Task<UpsertSplit> SplitUpsertsAsync(
-        NocturneDbContext ctx, List<SensorGlucoseEntity> entities, CancellationToken ct)
-    {
-        // Intra-batch SyncIdentifier dedup: keep last occurrence per (DataSource, SyncIdentifier).
-        // Records without both keys keep a unique grouping key so they're not collapsed.
-        entities = entities
-            .GroupBy(e => !string.IsNullOrEmpty(e.DataSource) && !string.IsNullOrEmpty(e.SyncIdentifier)
-                ? $"sync|{e.DataSource}|{e.SyncIdentifier}"
-                : $"id|{e.Id}")
-            .Select(g => g.Last())
-            .ToList();
-
-        // DB-level SyncIdentifier upsert: rows matched by (DataSource, SyncIdentifier) are updated
-        // in place. Everything else falls through to the LegacyId/insert path below.
-        var updatedEntities = new List<SensorGlucoseEntity>();
-        var materiallyChanged = new List<SensorGlucoseEntity>();
-        var syncKeyed = entities
-            .Where(e => !string.IsNullOrEmpty(e.DataSource) && !string.IsNullOrEmpty(e.SyncIdentifier))
-            .ToList();
-
-        if (syncKeyed.Count == 0)
-            return new UpsertSplit(updatedEntities, materiallyChanged, entities);
-
-        var sources = syncKeyed.Select(e => e.DataSource!).Distinct().ToList();
-        var syncIds = syncKeyed.Select(e => e.SyncIdentifier!).Distinct().ToList();
-
-        var existingRows = await ctx.SensorGlucose.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId)
-            .Where(e => sources.Contains(e.DataSource!) && syncIds.Contains(e.SyncIdentifier!))
-            .ToListAsync(ct);
-
-        var existingByKey = existingRows
-            .GroupBy(e => $"{e.DataSource}|{e.SyncIdentifier}")
-            .ToDictionary(g => g.Key, g => g.First());
-
-        var toInsert = new List<SensorGlucoseEntity>();
-        foreach (var entity in entities)
-        {
-            var hasKey = !string.IsNullOrEmpty(entity.DataSource)
-                && !string.IsNullOrEmpty(entity.SyncIdentifier);
-            if (hasKey && existingByKey.TryGetValue($"{entity.DataSource}|{entity.SyncIdentifier}", out var existing))
-            {
-                var domain = SensorGlucoseMapper.ToDomainModel(entity);
-                SensorGlucoseMapper.UpdateEntity(existing, domain);
-                updatedEntities.Add(existing);
-                // Capture material changes now, before SaveChanges clears the modified flags.
-                if (HasMaterialChange(ctx, existing))
-                    materiallyChanged.Add(existing);
-            }
-            else
-            {
-                toInsert.Add(entity);
-            }
-        }
-
-        if (updatedEntities.Count > 0)
-            await ctx.SaveChangesAsync(ct);
-
-        return new UpsertSplit(updatedEntities, materiallyChanged, toInsert);
-    }
-
-    /// <summary>
     /// Insert-time deduplication: link newly inserted records to canonical groups. Feeds inserts-only
     /// (matching Bolus/CarbIntake). Since dedup runs after commit (D4), upserted rows are reached as
     /// committed canonicals via their committed value, so re-feeding them is redundant — already-linked
@@ -429,7 +326,7 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
                 RecordId: e.Id,
                 Mills: new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
                 DataSource: e.DataSource ?? DeduplicationInput.UnknownDataSource,
-                Criteria: new MatchCriteria { GlucoseValue = e.Mgdl, GlucoseTolerance = 1.0 }
+                Criteria: MatchCriteriaMapper.From(e)
             )).ToList();
 
             await _deduplicationService.DeduplicateBatchAsync(RecordType.SensorGlucose, dedupInputs, ct);
@@ -438,21 +335,6 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
         {
             _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "SensorGlucose", inserted.Count);
         }
-    }
-
-    /// <summary>
-    /// Counts sensor glucose records for the given data source.
-    /// </summary>
-    /// <param name="source">Data source identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>Number of matching records.</returns>
-    public async Task<int> CountBySourceAsync(string source, CancellationToken ct = default)
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        return await ctx.SensorGlucose
-            .AsNoTracking()
-            .Where(e => e.DataSource == source || (e.DataSource == null && e.Device == source))
-            .CountAsync(ct);
     }
 
     /// <summary>
@@ -465,8 +347,7 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         return await ctx.AuditedSoftDeleteAsync(
-            ctx.SensorGlucose.Where(e => e.DataSource == source || (e.DataSource == null && e.Device == source)),
-            AuditContext, ct);
+            ctx.SensorGlucose.FromSource(source), AuditContext, $"data_source={source}", ct);
     }
 
     /// <inheritdoc />
@@ -525,6 +406,6 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
         if (to.HasValue)
             query = query.Where(e => e.Timestamp < to.Value);
 
-        return await ctx.AuditedSoftDeleteAsync(query, AuditContext, ct);
+        return await ctx.AuditedSoftDeleteAsync(query, AuditContext, $"timestamp={from:O}..{to:O}", ct);
     }
 }

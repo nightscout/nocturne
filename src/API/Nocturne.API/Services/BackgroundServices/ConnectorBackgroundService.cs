@@ -3,8 +3,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Nocturne.API.Services.Audit;
+using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
@@ -28,6 +30,9 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
 {
     protected readonly IServiceProvider ServiceProvider;
     protected readonly ILogger Logger;
+
+    private static readonly ConnectorRegistrationAttribute Registration =
+        ConnectorRegistrationAttribute.DeclaredOn(typeof(TConfig));
 
     /// <summary>
     /// Tracks the last sync time per tenant so each tenant's configured
@@ -94,9 +99,11 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
     }
 
     /// <summary>
-    /// Gets the connector name for logging
+    /// The connector's configuration-section name; must match the name its stored health state is
+    /// filed under.
     /// </summary>
-    protected abstract string ConnectorName { get; }
+    /// <seealso cref="ConnectorRegistrationAttribute.DeclaredOn"/>
+    protected static string ConnectorName => Registration.ConnectorName;
 
     /// <summary>
     /// Called after the initial startup delay and again every <see cref="RealtimeSupervisionInterval"/>.
@@ -185,6 +192,28 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// The tenant's configured instance URL as an absolute origin, or null when the stored value
+    /// cannot be read as one. A listener cannot reach an unresolvable URL and the tenant's polling
+    /// path rejects it in the same words, so this reports it against the listener and leaves the
+    /// caller to fall back to polling rather than raising it as an unexpected failure.
+    /// </summary>
+    protected string? ResolveListenerBaseUrl(string? url, string tenantSlug)
+    {
+        try
+        {
+            return ConnectorUrl.ResolveBase(url, ConnectorName);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Logger.LogWarning(
+                "{ConnectorName} URL for tenant {TenantSlug} cannot be resolved to an absolute http(s) URL ({Reason}), will rely on polling",
+                ConnectorName, tenantSlug, ex.Message);
+
+            return null;
+        }
     }
 
     /// <summary>
@@ -357,9 +386,10 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
         var tenantAccessor = scope.ServiceProvider.GetRequiredService<ITenantAccessor>();
         tenantAccessor.SetTenant(new TenantContext(tenantId, tenantSlug, displayName, true, IsDemo: false));
 
-        // Attribute this connector's mutations to the connector rather than to a human actor.
+        // Attribute this connector's mutations to the connector rather than to a human actor, under
+        // the dispatch id so a scheduled sync and one ConnectorSyncService triggered agree.
         using var systemScope = SystemAuditScope.PushForScope(
-            scope.ServiceProvider, $"connector:{ConnectorName}");
+            scope.ServiceProvider, $"connector:{Registration.ConnectorId}");
 
         var dbContext = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
 
@@ -427,8 +457,10 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
         }
         else
         {
+            // Distinct because the same message repeats per chunk; see
+            // ConnectorConfigurationEntity.LastErrorMessageMaxLength.
             var errorMessage = result.Errors.Count > 0
-                ? string.Join("; ", result.Errors)
+                ? string.Join("; ", result.Errors.Distinct(StringComparer.Ordinal))
                 : !string.IsNullOrWhiteSpace(result.Message)
                     ? result.Message
                     : "Sync failed";
@@ -454,4 +486,25 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
         );
         await base.StopAsync(cancellationToken);
     }
+}
+
+/// <summary>
+/// Polls <typeparamref name="TService"/> on the schedule <typeparamref name="TConfig"/> configures.
+/// <c>AddConnectors</c> closes this over every connector that registers a sync executor and has no
+/// subclass of its own, so a connector needs no scheduling code to be polled.
+/// </summary>
+public class ConnectorBackgroundService<TService, TConfig>(
+    IServiceProvider serviceProvider,
+    ILogger<ConnectorBackgroundService<TService, TConfig>> logger)
+    : ConnectorBackgroundService<TConfig>(serviceProvider, logger)
+    where TService : class, IConnectorService<TConfig>
+    where TConfig : BaseConnectorConfiguration
+{
+    protected sealed override Task<SyncResult> PerformSyncAsync(
+        IServiceProvider scopeProvider,
+        TConfig config,
+        CancellationToken cancellationToken,
+        ISyncProgressReporter? progressReporter = null) =>
+        scopeProvider.GetRequiredService<TService>()
+            .SyncDataAsync(config, cancellationToken, since: null, progressReporter);
 }

@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
 
@@ -18,23 +17,10 @@ public static class CalibrationMapper
     {
         return new CalibrationEntity
         {
-            Id = model.Id == Guid.Empty ? Guid.CreateVersion7() : model.Id,
-            Timestamp = model.Timestamp,
-            UtcOffset = model.UtcOffset,
-            Device = model.Device,
-            App = model.App,
-            DataSource = model.DataSource,
-            CorrelationId = model.CorrelationId,
-            LegacyId = model.LegacyId,
-            SysCreatedAt = DateTime.UtcNow,
-            SysUpdatedAt = DateTime.UtcNow,
             Slope = model.Slope,
             Intercept = model.Intercept,
             Scale = model.Scale,
-            AdditionalPropertiesJson = model.AdditionalProperties is { Count: > 0 }
-                ? JsonSerializer.Serialize(model.AdditionalProperties)
-                : null,
-        };
+        }.WithHeaderFrom(model);
     }
 
     /// <summary>
@@ -46,23 +32,10 @@ public static class CalibrationMapper
     {
         return new Calibration
         {
-            Id = entity.Id,
-            Timestamp = entity.Timestamp,
-            UtcOffset = entity.UtcOffset,
-            Device = entity.Device,
-            App = entity.App,
-            DataSource = entity.DataSource,
-            CorrelationId = entity.CorrelationId,
-            LegacyId = entity.LegacyId,
-            CreatedAt = entity.SysCreatedAt,
-            ModifiedAt = entity.SysUpdatedAt,
             Slope = entity.Slope,
             Intercept = entity.Intercept,
             Scale = entity.Scale,
-            AdditionalProperties = !string.IsNullOrEmpty(entity.AdditionalPropertiesJson)
-                ? JsonSerializer.Deserialize<Dictionary<string, object?>>(entity.AdditionalPropertiesJson)
-                : null,
-        };
+        }.WithHeaderFrom(entity);
     }
 
     /// <summary>
@@ -72,18 +45,9 @@ public static class CalibrationMapper
     /// <param name="model">The domain model containing updated data.</param>
     public static void UpdateEntity(CalibrationEntity entity, Calibration model)
     {
-        entity.Timestamp = model.Timestamp;
-        entity.UtcOffset = model.UtcOffset;
-        entity.Device = model.Device;
-        entity.App = model.App;
-        entity.DataSource = model.DataSource;
-        entity.CorrelationId = model.CorrelationId;
-        entity.LegacyId = model.LegacyId;
+        V4RecordHeaderMapper.UpdateHeader(entity, model);
         entity.Slope = model.Slope;
         entity.Intercept = model.Intercept;
         entity.Scale = model.Scale;
-        entity.AdditionalPropertiesJson = model.AdditionalProperties is { Count: > 0 }
-            ? JsonSerializer.Serialize(model.AdditionalProperties)
-            : null;
     }
 }

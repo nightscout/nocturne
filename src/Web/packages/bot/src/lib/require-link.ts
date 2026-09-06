@@ -1,24 +1,41 @@
-import type { SlashCommandEvent } from "chat";
+import type { ActionEvent, SlashCommandEvent } from "chat";
 import { getUnscopedApi, runWithResolvedLink, type ResolvedLink } from "./request-context.js";
+import { decodeActionValue, encodeTenantKey } from "./action-value.js";
 import type { DirectoryCandidate } from "../types.js";
 
+interface LinkResolutionInput {
+  platform: string;
+  platformUserId: string;
+  /** Label typed as a command argument. Actions carry no text, so null. */
+  labelArg: string | null;
+  /** Tenant the invocation is already bound to (from a card button's value). Wins over labelArg. */
+  tenantKey: string | null;
+  /** Appended to the ambiguity message to tell the user how to pick. */
+  disambiguationHint: string;
+}
+
 /**
- * Resolves the current Discord (or other chat platform) user to a specific
- * Nocturne tenant link, then invokes `callback` with the resolved link and a
- * nested request context that makes `getApi()` return the tenant-scoped api
- * client.
+ * Resolves a chat-platform user to a specific Nocturne tenant link, then
+ * invokes `callback` with the resolved link and a nested request context that
+ * makes `getApi()` return the tenant-scoped api client. `explain` receives the
+ * user-facing message on every non-success branch.
  *
- * This is the chokepoint that every tenant-scoped slash command should go
- * through. Handlers that don't wrap their body in requireLink will have
+ * This is the chokepoint that every tenant-scoped handler goes through, via
+ * {@link requireLink} (slash commands) or {@link requireLinkForAction} (card
+ * button taps). Handlers that don't wrap their body in one of those will have
  * `getApi()` throw.
  *
  * ## Resolution logic
  *
- * Parses `event.text` (trimmed, lowercased) as an optional label argument
- * and calls the directory.resolve endpoint via the unscoped api client:
+ * Calls the directory.resolve endpoint via the unscoped api client, then:
  *
- * - **Zero candidates** → posts ephemeral "your account isn't linked yet, run
+ * - **Zero candidates** → explains "your account isn't linked yet, run
  *   /connect" and returns null without invoking callback.
+ *
+ * - **`tenantId` given** (the invocation is already bound to a tenant, e.g. an
+ *   alert card carries the tenant the alert fired for) → the candidate for that
+ *   tenant, or, if the tapping user has no link to it, explains that and
+ *   returns null. Never falls back to another tenant.
  *
  * - **One candidate** → ignores any label arg (even if it doesn't match —
  *   assume the user typed a different platform's label by mistake; give them
@@ -27,17 +44,117 @@ import type { DirectoryCandidate } from "../types.js";
  * - **Multiple candidates + label arg matches exactly one** → invokes
  *   callback with the matched link.
  *
- * - **Multiple candidates + no label arg + a default exists** → invokes
- *   callback with the default.
+ * - **Multiple candidates + no label arg + exactly one marked default** →
+ *   invokes callback with the default link.
  *
- * - **Multiple candidates + no label arg + no default** → posts an ephemeral
- *   disambiguation message listing each label and display name, returns null.
+ * - **Multiple candidates + no label arg + no single default** → explains the
+ *   ambiguity, listing each label and display name, and returns null.
  *
- * - **Multiple candidates + label arg does not match any** → posts an
- *   ephemeral "no link named X, try one of: ..." and returns null.
+ * - **Multiple candidates + label arg does not match any** → explains "no link
+ *   named X, try one of: ..." and returns null.
  *
  * Returns `null` on any non-success branch so callers can detect whether
  * their work actually ran.
+ *
+ * @example
+ * // Zero candidates branch:
+ * //   User invokes /bg, never ran /connect.
+ * //   Ephemeral: "Your Discord account isn't linked to a Nocturne account
+ * //   yet. Run `/connect` to get started."
+ *
+ * @example
+ * // Single candidate branch:
+ * //   User has one link labelled "home". They run `/bg wrong-label`.
+ * //   Resolves to "home" anyway.
+ *
+ * @example
+ * // Multi + label match:
+ * //   User has "home" and "work". They run `/bg work`.
+ * //   Resolves to the "work" link.
+ *
+ * @example
+ * // Multi + default:
+ * //   User has "home" and "work", with "work" set as their default.
+ * //   They run `/bg`. Resolves to "work" without asking.
+ *
+ * @example
+ * // Multi + ambiguous:
+ * //   User has "home" and "work", neither set as default. They run `/bg`.
+ * //   Ephemeral: "You have multiple linked Nocturne accounts: `home` (Home),
+ * //   `work` (Work). Use `/bg <label>` to pick one, or set a default in
+ * //   Settings → Integrations → Discord."
+ *
+ * @example
+ * // Multi + label not found:
+ * //   User has "home" and "work". They run `/bg beach`.
+ * //   Ephemeral: "No linked account named `beach`. Your linked accounts:
+ * //   `home`, `work`."
+ *
+ * @example
+ * // Bound tenant branch:
+ * //   User has "home" and "work" and taps Acknowledge on a "work" alert.
+ * //   Resolves to "work" without asking, because the card carries its tenant.
+ */
+async function withResolvedLink<T>(
+  input: LinkResolutionInput,
+  explain: (message: string) => Promise<unknown>,
+  callback: (link: ResolvedLink) => Promise<T>,
+): Promise<T | null> {
+  const candidates = await getUnscopedApi().directory.resolve(
+    input.platform,
+    input.platformUserId,
+  );
+
+  if (!candidates || candidates.length === 0) {
+    await explain(
+      "Your Discord account isn't linked to a Nocturne account yet. Run `/connect` to get started.",
+    );
+    return null;
+  }
+
+  const picked = pickCandidate(candidates, input.labelArg, input.tenantKey);
+  const availableLabels = candidates.map((c) => `\`${c.label}\``).join(", ");
+
+  if (picked === "ambiguous") {
+    const labelList = candidates
+      .map((c) => `\`${c.label}\` (${c.displayName})`)
+      .join(", ");
+    await explain(
+      `You have multiple linked Nocturne accounts: ${labelList}. ${input.disambiguationHint}`,
+    );
+    return null;
+  }
+
+  if (picked === "not-found") {
+    await explain(
+      `No linked account named \`${input.labelArg}\`. Your linked accounts: ${availableLabels}.`,
+    );
+    return null;
+  }
+
+  if (picked === "tenant-not-linked") {
+    await explain(
+      `That belongs to a Nocturne account you aren't linked to. Your linked accounts: ${availableLabels}.`,
+    );
+    return null;
+  }
+
+  const link: ResolvedLink = {
+    id: picked.id,
+    tenantId: picked.tenantId,
+    tenantSlug: picked.tenantSlug,
+    nocturneUserId: picked.nocturneUserId,
+    label: picked.label,
+    displayName: picked.displayName,
+  };
+
+  return await runWithResolvedLink(link, () => callback(link));
+}
+
+/**
+ * Slash-command entry point to {@link withResolvedLink}. Takes the optional
+ * label argument from `event.text` (trimmed, lowercased) and explains failures
+ * as an ephemeral in the invoking channel.
  *
  * @example
  * // Basic tenant-scoped handler
@@ -61,107 +178,89 @@ import type { DirectoryCandidate } from "../types.js";
  *   }
  *   // use result...
  * });
- *
- * @example
- * // Zero candidates branch:
- * //   User invokes /bg, never ran /connect.
- * //   Ephemeral: "Your Discord account isn't linked to a Nocturne account
- * //   yet. Run `/connect` to get started."
- *
- * @example
- * // Single candidate branch:
- * //   User has one link labelled "home". They run `/bg wrong-label`.
- * //   requireLink ignores the bad label and resolves to "home" anyway.
- *
- * @example
- * // Multi + label match:
- * //   User has "home" and "work". They run `/bg work`.
- * //   requireLink resolves to the "work" link.
- *
- * @example
- * // Multi + default:
- * //   User has "home" (default) and "work". They run `/bg`.
- * //   requireLink resolves to "home".
- *
- * @example
- * // Multi + ambiguous:
- * //   User has "home" and "work", neither default. They run `/bg`.
- * //   Ephemeral: "You have multiple linked Nocturne accounts: `home` (Home),
- * //   `work` (Work). Use `/bg <label>` to pick one, or set a default in
- * //   Settings → Integrations → Discord."
- *
- * @example
- * // Multi + label not found:
- * //   User has "home" and "work". They run `/bg beach`.
- * //   Ephemeral: "No linked account named `beach`. Your linked accounts:
- * //   `home`, `work`."
  */
 export async function requireLink<T>(
   event: SlashCommandEvent,
   callback: (link: ResolvedLink) => Promise<T>,
 ): Promise<T | null> {
-  const platform = event.adapter.name;
-  const platformUserId = event.user.userId;
-  const labelArg = event.text?.trim().toLowerCase() || null;
-
-  const candidates = await getUnscopedApi().directory.resolve(platform, platformUserId);
-
-  if (!candidates || candidates.length === 0) {
-    await event.channel.postEphemeral(
-      event.user,
-      "Your Discord account isn't linked to a Nocturne account yet. Run `/connect` to get started.",
-      { fallbackToDM: true },
-    );
-    return null;
-  }
-
-  const picked = pickCandidate(candidates, labelArg);
-
-  if (picked === "ambiguous") {
-    const labelList = candidates
-      .map((c) => `\`${c.label}\` (${c.displayName})`)
-      .join(", ");
-    await event.channel.postEphemeral(
-      event.user,
-      `You have multiple linked Nocturne accounts: ${labelList}. Use \`${event.command} <label>\` to pick one, or set a default in Settings → Integrations → Discord.`,
-      { fallbackToDM: true },
-    );
-    return null;
-  }
-
-  if (picked === "not-found") {
-    const availableLabels = candidates.map((c) => `\`${c.label}\``).join(", ");
-    await event.channel.postEphemeral(
-      event.user,
-      `No linked account named \`${labelArg}\`. Your linked accounts: ${availableLabels}.`,
-      { fallbackToDM: true },
-    );
-    return null;
-  }
-
-  const link: ResolvedLink = {
-    id: picked.id,
-    tenantId: picked.tenantId,
-    tenantSlug: picked.tenantSlug,
-    nocturneUserId: picked.nocturneUserId,
-    label: picked.label,
-    displayName: picked.displayName,
-  };
-
-  return await runWithResolvedLink(link, () => callback(link));
+  return await withResolvedLink(
+    {
+      platform: event.adapter.name,
+      platformUserId: event.user.userId,
+      labelArg: event.text?.trim().toLowerCase() || null,
+      tenantKey: null,
+      disambiguationHint: `Use \`${event.command} <label>\` to pick one, or set a default in Settings → Integrations → Discord.`,
+    },
+    (message) =>
+      event.channel.postEphemeral(event.user, message, { fallbackToDM: true }),
+    callback,
+  );
 }
 
 /**
- * Selects a single DirectoryCandidate from a non-empty list, based on an
- * optional label argument. Returns "ambiguous" if no disambiguation is
- * possible, or "not-found" if the label arg doesn't match any candidate.
+ * Card-action entry point to {@link withResolvedLink}. An `ActionEvent` carries
+ * no channel, text or command, so the tenant comes from the button's value
+ * (cards that address a tenant must set it, encoded by `encodeActionValue`)
+ * and failures are explained as an ephemeral in the thread the card was posted
+ * to.
+ *
+ * @example
+ * bot.onAction("ack_alert", async (event) => {
+ *   await requireLinkForAction(event, async () => {
+ *     const { excursionId } = decodeActionValue(event.value);
+ *     if (!excursionId) return;
+ *     await getApi().alerts.acknowledgeExcursion(excursionId, {
+ *       acknowledgedBy: event.user.fullName,
+ *     });
+ *   });
+ * });
+ */
+export async function requireLinkForAction<T>(
+  event: ActionEvent,
+  callback: (link: ResolvedLink) => Promise<T>,
+): Promise<T | null> {
+  return await withResolvedLink(
+    {
+      platform: event.adapter.name,
+      platformUserId: event.user.userId,
+      labelArg: null,
+      tenantKey: decodeActionValue(event.value).tenantKey,
+      disambiguationHint:
+        "Set a default in Settings → Integrations → Discord, or use the matching slash command with a label.",
+    },
+    (message) =>
+      event.thread?.postEphemeral(event.user, message, { fallbackToDM: true }) ??
+      Promise.resolve(null),
+    callback,
+  );
+}
+
+/**
+ * Selects a single DirectoryCandidate from a non-empty list, preferring a bound
+ * `tenantKey`, then an explicit `labelArg`, then the sole default link. Returns
+ * "tenant-not-linked" if `tenantKey` names a tenant the user has no link to,
+ * "ambiguous" if no disambiguation is possible — including a `tenantKey` two of
+ * the candidates answer to — or "not-found" if the label arg doesn't match any
+ * candidate.
  *
  * Pure function — no side effects, easy to reason about.
  */
 function pickCandidate(
   candidates: DirectoryCandidate[],
   labelArg: string | null,
-): DirectoryCandidate | "ambiguous" | "not-found" {
+  tenantKey: string | null,
+): DirectoryCandidate | "ambiguous" | "not-found" | "tenant-not-linked" {
+  // A bound tenant is authoritative: acting on a different one would silently
+  // hit the wrong patient's data. The key names a tenant rather than being one,
+  // so two candidates can answer to it; that is a refusal, not a coin toss.
+  if (tenantKey) {
+    const matched = candidates.filter(
+      (c) => encodeTenantKey(c.tenantId) === tenantKey,
+    );
+    if (matched.length === 1) return matched[0]!;
+    return matched.length === 0 ? "tenant-not-linked" : "ambiguous";
+  }
+
   // Single candidate: always return it, ignoring any label arg the user typed.
   if (candidates.length === 1) return candidates[0]!;
 
@@ -171,6 +270,10 @@ function pickCandidate(
     return match ?? "not-found";
   }
 
-  // No label and multiple candidates: ambiguous.
+  // ux_directory_user_one_default permits at most one default per platform
+  // user, so more than one here means the invariant broke — don't guess.
+  const defaults = candidates.filter((c) => c.isDefault);
+  if (defaults.length === 1) return defaults[0]!;
+
   return "ambiguous";
 }

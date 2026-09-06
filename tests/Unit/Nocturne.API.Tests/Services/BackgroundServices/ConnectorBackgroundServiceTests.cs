@@ -7,12 +7,14 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.BackgroundServices;
+using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.BackgroundServices;
@@ -20,8 +22,10 @@ namespace Nocturne.API.Tests.Services.BackgroundServices;
 public class ConnectorBackgroundServiceTests
 {
     /// <summary>
-    /// Minimal IConnectorConfiguration implementation for testing.
+    /// Minimal IConnectorConfiguration implementation for testing. The registration attribute is what
+    /// names the connector in logs, health rows and audit endpoints.
     /// </summary>
+    [ConnectorRegistration("TestConnector", "test-connector", "TESTCONNECTOR", "TestConnector")]
     private class TestConnectorConfig : BaseConnectorConfiguration
     {
         protected override void ValidateSourceSpecificConfiguration() { }
@@ -58,8 +62,6 @@ public class ConnectorBackgroundServiceTests
             _hangFirstNCalls = hangFirstNCalls;
             _onSyncCompleted = onSyncCompleted;
         }
-
-        protected override string ConnectorName => "TestConnector";
 
         protected override TimeSpan PerTenantSyncTimeout => _perTenantTimeout ?? base.PerTenantSyncTimeout;
 
@@ -208,9 +210,7 @@ public class ConnectorBackgroundServiceTests
         // Register scoped services
         services.AddScoped<ITenantAccessor>(_ =>
         {
-            var mock = new Mock<ITenantAccessor>();
-            mock.Setup(t => t.IsResolved).Returns(true);
-            mock.Setup(t => t.TenantId).Returns(Guid.NewGuid());
+            var mock = MockTenantAccessor.Create(Guid.NewGuid());
             mock.Setup(t => t.SetTenant(It.IsAny<TenantContext>()));
             return mock.Object;
         });
@@ -300,6 +300,51 @@ public class ConnectorBackgroundServiceTests
                 It.IsAny<CancellationToken>()),
             Times.Once,
             "Expected the specific error messages from SyncResult.Errors to be passed to UpdateHealthStateAsync");
+    }
+
+    /// <summary>
+    /// A repeated error must reach the health message once, and two errors that differ only in case
+    /// are different errors; see <c>ConnectorConfigurationEntity.LastErrorMessageMaxLength</c>.
+    /// </summary>
+    [Fact]
+    public async Task FailedSync_WithRepeatedErrors_JoinsEachDistinctMessageOnceCaseSensitively()
+    {
+        var (cleanup, connStr) = CreateSqliteDb();
+        using var _ = cleanup;
+
+        var syncResult = new SyncResult
+        {
+            Success = false,
+            Message = "Fallback message",
+            Errors =
+            [
+                .. Enumerable.Repeat("StateSpans publish failed", 20),
+                .. Enumerable.Repeat("statespans publish failed", 20),
+            ]
+        };
+
+        var configServiceMock = BuildEnabledConfigMock();
+        var config = new TestConnectorConfig { Enabled = true, SyncIntervalMinutes = 5 };
+        var serviceProvider = BuildServiceProvider(connStr, configServiceMock, config);
+
+        var sut = new TestConnectorBackgroundService(
+            serviceProvider,
+            syncResult,
+            NullLogger<TestConnectorBackgroundService>.Instance);
+
+        await sut.ExecuteOnceAsync(CancellationToken.None);
+
+        configServiceMock.Verify(
+            x => x.UpdateHealthStateAsync(
+                "TestConnector",
+                It.IsAny<DateTime?>(),
+                It.IsAny<DateTime?>(),
+                "StateSpans publish failed; statespans publish failed",
+                It.IsAny<DateTime?>(),
+                false,
+                It.IsAny<CancellationToken>()),
+            Times.Once,
+            "identical chunk errors collapse to one entry, but a case difference is a different error");
     }
 
     [Fact]
@@ -563,7 +608,7 @@ public class ConnectorBackgroundServiceTests
     }
 
     [Fact]
-    public async Task SyncForTenant_MarksScopedAuditContextAsSystem()
+    public async Task SyncForTenant_SystemAttributesTheScopeToTheConnector()
     {
         // Regression test for the mutation_audit_log firehose: V4 repositories stamp their
         // factory-created DbContexts from the scoped IAuditContext (V4RepositoryBase), not from
@@ -599,17 +644,23 @@ public class ConnectorBackgroundServiceTests
         var serviceProvider = BuildServiceProvider(connStr, configServiceMock, config);
 
         bool? capturedIsSystem = null;
+        string? capturedEndpoint = null;
         var sut = new TestConnectorBackgroundService(
             serviceProvider,
             syncResult,
             NullLogger<TestConnectorBackgroundService>.Instance,
-            onSyncScope: sp => capturedIsSystem = sp.GetRequiredService<IAuditContext>().IsSystem);
+            onSyncScope: sp =>
+            {
+                capturedIsSystem = sp.GetRequiredService<IAuditContext>().IsSystem;
+                capturedEndpoint = sp.GetRequiredService<NocturneDbContext>().AuditContext?.Endpoint;
+            });
 
         // Act
         await sut.ExecuteOnceAsync(CancellationToken.None);
 
         // Assert — everything written during the sync must carry system attribution.
         Assert.True(capturedIsSystem);
+        Assert.Equal("connector:testconnector", capturedEndpoint);
     }
 
     [Fact]
@@ -936,8 +987,6 @@ public class ConnectorBackgroundServiceTests
 
         public Task SecondSupervisionPass => _secondSupervisionPass.Task;
 
-        protected override string ConnectorName => "TestConnector";
-
         protected override TimeSpan StartupDelay => TimeSpan.Zero;
 
         protected override TimeSpan PollInterval => TimeSpan.FromMilliseconds(20);
@@ -990,8 +1039,6 @@ public class ConnectorBackgroundServiceTests
         public ConcurrentDictionary<Guid, FakeListenerClient> Clients { get; } = new();
 
         public int StartCount => _startCount;
-
-        protected override string ConnectorName => "TestConnector";
 
         protected override TimeSpan RealtimeSupervisionInterval => supervisionInterval;
 

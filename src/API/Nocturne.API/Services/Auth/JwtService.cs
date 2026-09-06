@@ -5,6 +5,7 @@ using System.Text;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Nocturne.API.Helpers;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Models.Configuration;
 
 namespace Nocturne.API.Services.Auth;
@@ -373,12 +374,7 @@ public class JwtService : IJwtService
     }
 
     /// <inheritdoc />
-    public string HashRefreshToken(string refreshToken)
-    {
-        var bytes = Encoding.UTF8.GetBytes(refreshToken);
-        var hash = SHA256.HashData(bytes);
-        return Convert.ToHexString(hash).ToLowerInvariant();
-    }
+    public string HashRefreshToken(string refreshToken) => HashUtils.Sha256Hex(refreshToken);
 
     /// <inheritdoc />
     public TimeSpan GetAccessTokenLifetime()

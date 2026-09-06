@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatNumericDate } from "$lib/utils/formatting";
   import {
     Card,
     CardContent,
@@ -33,7 +34,8 @@
   import type { TenantDetailDto, TenantMemberDto } from "$api";
   import { getCurrentTenantId } from "../../current-tenant.remote";
   import { getTransitionStatus } from "$api/generated/platforms.generated.remote";
-  import { errorMessage } from "$lib/forms/submit-error";
+  import { describeSubmitError } from "$lib/forms/submit-error";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
 
   const tenantIdQuery = getCurrentTenantId();
   const currentTenantId = $derived(tenantIdQuery.current ?? undefined);
@@ -79,8 +81,8 @@
     loadError = null;
     try {
       tenant = await tenantRemote.getById(currentTenantId).run();
-    } catch {
-      loadError = "Failed to load tenant details.";
+    } catch (err) {
+      loadError = remoteErrorMessage(err, "Failed to load tenant details.");
     } finally {
       loading = false;
     }
@@ -145,8 +147,10 @@
         ),
       };
     } catch (err: unknown) {
-      platformAdminError =
-        errorMessage(err) ?? "Failed to update platform admin status.";
+      platformAdminError = describeSubmitError(
+        err,
+        "Failed to update platform admin status."
+      );
     } finally {
       platformAdminSavingId = null;
     }
@@ -228,8 +232,10 @@
       createdSlug = normalizedSlug;
       isCreateDialogOpen = false;
     } catch (err) {
-      createError =
-        (err as Error)?.message ?? "Failed to create tenant. Please try again.";
+      createError = describeSubmitError(
+        err,
+        "Failed to create tenant. Please try again."
+      );
     } finally {
       creating = false;
     }
@@ -329,7 +335,7 @@
             <p class="text-sm font-medium text-muted-foreground">Created</p>
             <p class="mt-1 text-sm">
               {tenant.sysCreatedAt
-                ? new Date(tenant.sysCreatedAt).toLocaleDateString()
+                ? formatNumericDate(new Date(tenant.sysCreatedAt))
                 : "---"}
             </p>
           </div>

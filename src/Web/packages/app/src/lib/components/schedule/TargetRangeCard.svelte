@@ -10,6 +10,7 @@
   import { Target, Pencil } from "lucide-svelte";
   import ScheduleView from "./ScheduleView.svelte";
   import { createTargetRangeSchedule } from "$api/generated/profiles.generated.remote";
+  import { describeSubmitError } from "$lib/forms/submit-error";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import {
     bgLabel,
@@ -93,7 +94,7 @@
       });
       editing = false;
     } catch (err) {
-      saveError = err instanceof Error ? err.message : "Failed to save target range";
+      saveError = describeSubmitError(err, "Failed to save target range");
     } finally {
       saving = false;
     }

@@ -3,19 +3,12 @@
  *
  * All helpers accept Date | string | undefined and return "" on missing
  * or unparseable input (call sites supply their own dash fallback when
- * they want one). Generic time/date-time formatting now lives in
- * "$lib/utils/formatting"; only alert-specific relative/duration
- * formatters remain here.
+ * they want one). Generic time/date-time formatting lives in
+ * "$lib/utils/formatting" and durations in "$lib/utils/duration"; only
+ * alert-specific relative formatters remain here.
  */
 
-import { formatDateTimeCompact } from "$lib/utils/formatting";
-
-function toDate(at: Date | string | undefined): Date | null {
-  if (!at) return null;
-  const d = at instanceof Date ? at : new Date(at);
-  if (Number.isNaN(d.getTime())) return null;
-  return d;
-}
+import { formatDateTimeCompact, toDate } from "$lib/utils/formatting";
 
 /** "Mar 5, 14:32 — Mar 5, 15:00" — compact date-time range. Empty when either side missing. */
 export function formatRange(
@@ -45,21 +38,4 @@ export function formatTimeSince(
   const diffHr = Math.floor(diffMin / 60);
   if (diffHr < 24) return `${diffHr}h ${diffMin % 60}m ago`;
   return `${Math.floor(diffHr / 24)}d ago`;
-}
-
-/** "1h 12m" / "45m" / "< 1m". When `end` is undefined, uses `Date.now()`. */
-export function formatDuration(
-  start: Date | string | undefined,
-  end: Date | string | undefined
-): string {
-  const s = toDate(start);
-  if (!s) return "";
-  const e = toDate(end);
-  const endMs = e ? e.getTime() : Date.now();
-  const ms = Math.max(0, endMs - s.getTime());
-  const min = Math.floor(ms / 60_000);
-  if (min < 1) return "< 1m";
-  if (min < 60) return `${min}m`;
-  const h = Math.floor(min / 60);
-  return `${h}h ${min % 60}m`;
 }

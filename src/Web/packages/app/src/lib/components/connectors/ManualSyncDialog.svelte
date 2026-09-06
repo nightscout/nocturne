@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatLocale } from "$lib/utils/formatting";
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
   import { Loader2, Download, CheckCircle, AlertCircle } from "lucide-svelte";
@@ -45,7 +46,7 @@
   $effect(() => {
     if (syncProgress?.messageType) {
       const entry: LogEntry = {
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+        time: new Date().toLocaleTimeString(formatLocale(), { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
         message: formatSyncMessage(syncProgress.messageType, syncProgress.messageParams),
       };
       logEntries = [...logEntries, entry];

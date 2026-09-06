@@ -36,9 +36,13 @@ public class TempBasalController(
     /// <summary>
     /// Lists temp basal spans, newest-first by default.
     /// </summary>
+    /// <remarks>
+    /// Never cached, per <see cref="Profiles.ProfileController.GetProfileSummary"/>: a just-started
+    /// or just-cancelled span must not be invisible until a cached list body expires.
+    /// </remarks>
     [HttpGet]
-    [RequireScope(OAuthScopes.TreatmentsRead)]
-    [ResponseCache(Duration = 90, VaryByQueryKeys = new[] { "*" })]
+    [RequireScope(Scope.TreatmentsRead)]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [ProducesResponseType(typeof(PaginatedResponse<TempBasal>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PaginatedResponse<TempBasal>>> GetAll(
@@ -64,7 +68,7 @@ public class TempBasalController(
     /// Returns a single temp basal span by ID.
     /// </summary>
     [HttpGet("{id:guid}")]
-    [RequireScope(OAuthScopes.TreatmentsRead)]
+    [RequireScope(Scope.TreatmentsRead)]
     [ProducesResponseType(typeof(TempBasal), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<TempBasal>> GetById(Guid id, CancellationToken ct = default)
@@ -89,24 +93,15 @@ public class TempBasalController(
     /// persisted. The response contains every record written or truncated, in processing order.
     /// </remarks>
     [HttpPost]
-    [RequireScope(OAuthScopes.TreatmentsReadWrite)]
+    [RequireScope(Scope.TreatmentsReadWrite)]
     [ProducesResponseType(typeof(TempBasal[]), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<TempBasal[]>> CreateTempBasals(
         [FromBody] CreateTempBasalRequest[] requests,
         CancellationToken ct = default)
     {
-        if (requests is not { Length: > 0 })
-            return Problem(detail: "Temp basal data is required", statusCode: 400, title: "Bad Request");
-
-        if (requests.Length > 1000)
-            return Problem(detail: "Bulk operations are limited to 1000 temp basals per request", statusCode: 400, title: "Bad Request");
-
-        if (requests.Any(r => r.Timestamp == default))
-            return Problem(detail: "Timestamp must be set on every temp basal", statusCode: 400, title: "Bad Request");
-
-        if (requests.Any(r => !string.IsNullOrEmpty(r.SyncIdentifier) && string.IsNullOrEmpty(r.DataSource)))
-            return Problem(detail: "DataSource is required when SyncIdentifier is supplied", statusCode: 400, title: "Bad Request");
+        if (await this.ValidateBulkAsync(requests, "Temp basal", "temp basal", "temp basals", ct) is { } invalid)
+            return invalid;
 
         if (requests.Any(r => !r.IsCancel && (r.Rate < 0 || r.DurationMinutes < 0)))
             return Problem(detail: "Rate and duration must not be negative", statusCode: 400, title: "Bad Request");

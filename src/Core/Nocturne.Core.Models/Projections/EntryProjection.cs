@@ -21,7 +21,7 @@ public static class EntryProjection
         entry.Mgdl = sg.Mgdl;
         entry.Sgv = sg.Mgdl;
         entry.Mmol = sg.Mmol;
-        entry.Direction = sg.Direction?.ToString();
+        entry.Direction = sg.Direction?.ToWireString();
         entry.Trend = sg.Trend.HasValue ? (int)sg.Trend.Value : null;
         entry.TrendRate = sg.TrendRate;
         entry.Noise = sg.Noise;

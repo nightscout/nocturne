@@ -4,6 +4,7 @@ title: Email Alerts (Resend)
 
 <script>
   import Callout from '@nocturne/cms/components/Callout.svelte';
+  import Screenshot from '$lib/components/docs/Screenshot.svelte';
 </script>
 
 # Email Alerts
@@ -74,15 +75,20 @@ Then restart Nocturne for the changes to take effect.
 
 ## 5. Set up an alert rule
 
-1. Go to **Settings > Alerts**
+Alert rules live under **Alerts > Rules** in the sidebar. Each rule decides what
+Nocturne watches for; the email address goes on a channel inside one:
+
+<Screenshot id="alerts-configuration" />
+
+1. Go to **Alerts > Rules**
 2. Create or edit an alert rule
-3. Under **Delivery channels**, add an **Email** channel
+3. Under **Channels**, add an **Email** channel
 4. Enter the recipient email address
 5. Save the rule
 
 ## 6. Test it
 
-1. Trigger a test alert from **Settings > Alerts** (or wait for a real glucose excursion)
+1. Trigger a test alert from **Alerts > Rules** (or wait for a real glucose excursion)
 2. Check the recipient's inbox for the alert email
 3. Verify that the **Acknowledge** link in the email works
 

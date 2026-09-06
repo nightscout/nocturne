@@ -183,7 +183,8 @@ public class MyLifeSoapClient(HttpClient httpClient, ILogger<MyLifeSoapClient> l
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps)
         {
             logger.LogError("SOAP request rejected: URL must use HTTPS. Got scheme {Scheme}", Uri.TryCreate(url, UriKind.Absolute, out var rejected) ? rejected.Scheme : "invalid");
-            return string.Empty;
+            throw new InvalidOperationException(
+                $"MyLife service URL for {action} is unusable; it must be an absolute HTTPS URL");
         }
 
         using var request = new HttpRequestMessage(HttpMethod.Post, uri);
@@ -196,7 +197,14 @@ public class MyLifeSoapClient(HttpClient httpClient, ILogger<MyLifeSoapClient> l
         if (response.IsSuccessStatusCode) return content;
 
         logger.LogWarning("MyLife SOAP request failed {StatusCode}", response.StatusCode);
-        return string.Empty;
+
+        // An empty return means "this call returned nothing", which cannot express why. Callers have
+        // to tell a rejected token, a refused request and a sick server apart — to drop the token, to
+        // stop asking, or to try again — so every failed status leaves as an exception carrying it.
+        throw new HttpRequestException(
+            $"MyLife rejected the {action} request with HTTP {(int)response.StatusCode}",
+            null,
+            response.StatusCode);
     }
 
     private string? ExtractSoapResult(string xml, string elementName)

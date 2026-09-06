@@ -40,13 +40,7 @@
     FileText,
     Smartphone,
   } from "lucide-svelte";
-  import {
-    formatInsulinDisplay,
-    formatCarbDisplay,
-    formatDateTimeCompact,
-    bg,
-    bgLabel,
-  } from "$lib/utils/formatting";
+  import { bg, bgLabel, formatCarbDisplay, formatDateTimeCompact, formatInsulinDisplay, formatNumber, formatNumericDate } from "$lib/utils/formatting";
   import { toast } from "svelte-sonner";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
@@ -370,10 +364,10 @@
     >
       <Calendar class="h-4 w-4" />
       <span>
-        {dateInfo.from.toLocaleDateString()} – {dateInfo.to.toLocaleDateString()}
+        {formatNumericDate(dateInfo.from)} – {formatNumericDate(dateInfo.to)}
       </span>
       <span class="text-muted-foreground/50">•</span>
-      <span>{allRows.length.toLocaleString()} records</span>
+      <span>{formatNumber(allRows.length)} records</span>
     </div>
     <h1 class="text-center text-3xl font-bold">Treatment Log</h1>
     <p class="mx-auto max-w-2xl text-center text-muted-foreground">
@@ -500,8 +494,8 @@
   <!-- Footer -->
   <div class="text-center text-xs text-muted-foreground">
     <p>
-      Report generated from {allRows.length.toLocaleString()} records between
-      {dateInfo.from.toLocaleDateString()} and {dateInfo.to.toLocaleDateString()}
+      Report generated from {formatNumber(allRows.length)} records between
+      {formatNumericDate(dateInfo.from)} and {formatNumericDate(dateInfo.to)}
     </p>
   </div>
 </div>

@@ -3,7 +3,7 @@ using Nocturne.API.Extensions;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
-using OAuthScopes = Nocturne.Core.Models.Authorization.OAuthScopes;
+using Scope = Nocturne.Core.Models.Authorization.Scope;
 using ScopeTranslator = Nocturne.Core.Models.Authorization.ScopeTranslator;
 
 namespace Nocturne.API.Middleware;
@@ -18,21 +18,20 @@ namespace Nocturne.API.Middleware;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Pipeline order (position 6 of 7 custom middleware):
+/// Pipeline order (position 6 of 6 custom middleware):
 /// <see cref="JsonExtensionMiddleware"/>,
 /// <see cref="OidcCallbackRedirectMiddleware"/>, <see cref="Multitenancy.TenantResolutionMiddleware"/>,
 /// <see cref="TenantSetupMiddleware"/>, <see cref="AuthenticationMiddleware"/>,
-/// <b>MemberScopeMiddleware</b>, <see cref="SiteSecurityMiddleware"/>.
+/// <b>MemberScopeMiddleware</b>.
 /// </para>
 /// <para>
 /// Reads the <see cref="AuthContext"/> set by <see cref="AuthenticationMiddleware"/> and
-/// replaces <c>HttpContext.Items["GrantedScopes"]</c> and <c>HttpContext.Items["PermissionTrie"]</c>
+/// replaces <c>HttpContext.Items[AuthContextKeys.GrantedScopes]</c> and <c>HttpContext.Items[AuthContextKeys.PermissionTrie]</c>
 /// with membership-scoped values. Uses <see cref="ScopeTranslator"/> to convert between
 /// Shiro-style permissions and OAuth scopes.
 /// </para>
 /// </remarks>
 /// <seealso cref="AuthenticationMiddleware"/>
-/// <seealso cref="SiteSecurityMiddleware"/>
 /// <seealso cref="PermissionTrie"/>
 public class MemberScopeMiddleware
 {
@@ -73,11 +72,11 @@ public class MemberScopeMiddleware
         if (authContext.AuthType is AuthType.InstanceKey or AuthType.PlatformAccess)
         {
             var superuserScopes = new HashSet<string> { "*" };
-            context.Items["GrantedScopes"] = (IReadOnlySet<string>)superuserScopes;
+            context.SetGrantedScopes((IReadOnlySet<string>)superuserScopes);
 
             var permissionTrie = new PermissionTrie();
             permissionTrie.Add(["*"]);
-            context.Items["PermissionTrie"] = permissionTrie;
+            context.SetPermissionTrie(permissionTrie);
 
             await _next(context);
             return;
@@ -86,12 +85,12 @@ public class MemberScopeMiddleware
         // Guest sessions get their scopes directly from the grant — no membership lookup
         if (authContext.AuthType == AuthType.Guest)
         {
-            var guestScopes = OAuthScopes.Normalize(authContext.Scopes);
-            context.Items["GrantedScopes"] = (IReadOnlySet<string>)guestScopes;
+            var guestScopes = Scope.Normalize(authContext.Scopes);
+            context.SetGrantedScopes((IReadOnlySet<string>)guestScopes);
             var guestPermissions = ScopeTranslator.ToPermissions(guestScopes);
             var guestTrie = new PermissionTrie();
             guestTrie.Add(guestPermissions);
-            context.Items["PermissionTrie"] = guestTrie;
+            context.SetPermissionTrie(guestTrie);
             await _next(context);
             return;
         }
@@ -140,7 +139,7 @@ public class MemberScopeMiddleware
             {
                 var grantTrie = new PermissionTrie();
                 grantTrie.Add(ScopeTranslator.ToPermissions(context.GetGrantedScopes()));
-                context.Items["PermissionTrie"] = grantTrie;
+                context.SetPermissionTrie(grantTrie);
             }
 
             await _next(context);
@@ -155,7 +154,7 @@ public class MemberScopeMiddleware
 
         var resolvedScopes = MemberScopeResolver.Resolve(
             effectivePermissions, authContext.AuthType, context.GetGrantedScopes());
-        context.Items["GrantedScopes"] = resolvedScopes;
+        context.SetGrantedScopes(resolvedScopes);
 
         // Rebuild the permission trie from the resolved scopes. Both must be set: GrantedScopes
         // drives RequireScope checks, while the trie drives the HasPermissions policy (the legacy
@@ -165,7 +164,7 @@ public class MemberScopeMiddleware
         // collapses a resolved set containing "*" to a wildcard trie.
         var memberTrie = new PermissionTrie();
         memberTrie.Add(ScopeTranslator.ToPermissions(resolvedScopes));
-        context.Items["PermissionTrie"] = memberTrie;
+        context.SetPermissionTrie(memberTrie);
 
         authContext.LimitTo24Hours = membership.LimitTo24Hours;
 

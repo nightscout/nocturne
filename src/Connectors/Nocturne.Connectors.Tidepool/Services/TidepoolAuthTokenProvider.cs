@@ -36,7 +36,7 @@ public class TidepoolAuthTokenProvider(
     protected override async Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
         TidepoolConnectorConfiguration config, CancellationToken cancellationToken)
     {
-        const int maxRetries = 3;
+        var maxRetries = LoginAttempts(config);
         string? authUserId = null;
 
         var sessionToken = await ExecuteWithRetryAsync(

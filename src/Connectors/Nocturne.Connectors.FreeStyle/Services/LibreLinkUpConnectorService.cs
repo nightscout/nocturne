@@ -71,16 +71,6 @@ public class LibreConnectorService(
 
     public override string ServiceName => "LibreLinkUp";
     protected override string ConnectorSource => DataSources.LibreConnector;
-    public override List<SyncDataType> SupportedDataTypes => [SyncDataType.Glucose];
-
-    public override bool IsHealthy => base.IsHealthy && !_tokenProvider.IsTokenExpired;
-
-    public override async Task<bool> AuthenticateAsync()
-    {
-        // Legacy method; actual auth happens per-tenant in sync flow
-        TrackSuccessfulRequest();
-        return true;
-    }
 
     private async Task<bool> AuthenticateWithConfigAsync(LibreLinkUpConnectorConfiguration config)
     {
@@ -169,14 +159,12 @@ public class LibreConnectorService(
     protected override async Task<SyncResult> PerformSyncInternalAsync(
         SyncRequest request,
         LibreLinkUpConnectorConfiguration config,
-        CancellationToken cancellationToken,
-        ISyncProgressReporter? progressReporter = null
-    )
+        CancellationToken cancellationToken)
     {
         var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
 
-        var enabledTypes = config.GetEnabledDataTypes(SupportedDataTypes);
-        if (!enabledTypes.Contains(SyncDataType.Glucose))
+        var activeTypes = ResolveActiveTypes(request, config);
+        if (!activeTypes.Contains(SyncDataType.Glucose))
         {
             result.EndTime = DateTimeOffset.UtcNow;
             return result;
@@ -185,26 +173,9 @@ public class LibreConnectorService(
         try
         {
             var sensorGlucose = await FetchSensorGlucoseAsync(config, request.From);
-            var sgList = sensorGlucose.ToList();
 
-            if (sgList.Count > 0)
-            {
-                var success = await PublishSensorGlucoseDataAsync(sgList, config, cancellationToken);
-                result.ItemsSynced[SyncDataType.Glucose] = sgList.Count;
-                result.LastEntryTimes[SyncDataType.Glucose] = DateTimeOffset
-                    .FromUnixTimeMilliseconds(sgList.Max(s => s.Mills))
-                    .UtcDateTime;
-
-                if (!success)
-                {
-                    result.Success = false;
-                    result.Errors.Add("SensorGlucose publish failed");
-                }
-                else
-                {
-                    _logger.LogInformation("Synced {Count} SensorGlucose records from LibreLinkUp", sgList.Count);
-                }
-            }
+            await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
+                sensorGlucose.ToList(), PublishSensorGlucoseDataAsync, config, cancellationToken);
         }
         catch (Exception ex)
         {

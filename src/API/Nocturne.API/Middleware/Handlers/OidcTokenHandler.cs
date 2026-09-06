@@ -3,6 +3,8 @@ using System.Security.Claims;
 using Microsoft.IdentityModel.Protocols;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
+using Nocturne.API.Authorization;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Middleware.Handlers;
@@ -54,21 +56,9 @@ public class OidcTokenHandler : IAuthHandler
     /// <inheritdoc />
     public async Task<AuthResult> AuthenticateAsync(HttpContext context)
     {
-        // Check for Bearer token in Authorization header
-        var authHeader = context.Request.Headers.Authorization.FirstOrDefault();
+        var token = context.Request.GetAuthorizationCredential();
 
-        if (
-            string.IsNullOrEmpty(authHeader)
-            || !authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
-        )
-        {
-            return AuthResult.Skip();
-        }
-
-        var token = authHeader["Bearer ".Length..].Trim();
-
-        // Must be a JWT (has 3 parts separated by dots)
-        if (string.IsNullOrEmpty(token) || token.Count(c => c == '.') != 2)
+        if (!TokenFormat.IsJwt(token))
         {
             return AuthResult.Skip();
         }

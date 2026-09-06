@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { startOfDay, toDayString } from "$lib/utils/date-range";
+  import { formatDayTime, formatLongDate } from "$lib/utils/formatting";
   import {
     Card,
     CardContent,
@@ -24,6 +26,7 @@
   import { cn } from "$lib/utils";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import * as trackersRemote from "$api/generated/trackers.generated.remote";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
   import {
     CompletionReason,
     type TrackerInstanceDto,
@@ -79,12 +82,7 @@
   // Format date
   function formatDate(dateStr: Date | undefined): string {
     if (!dateStr) return "";
-    return new Date(dateStr).toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return formatDayTime(dateStr);
   }
 
   // Get level icon
@@ -150,12 +148,7 @@
       const date = new Date(
         instance.completedAt ?? instance.startedAt ?? new Date()
       );
-      const key = date.toLocaleDateString(undefined, {
-        weekday: "long",
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      });
+      const key = toDayString(date);
       if (!groups[key]) groups[key] = [];
       groups[key].push(instance);
     }
@@ -317,7 +310,7 @@
               <div class="py-6 text-center">
                 <AlertTriangle class="h-8 w-8 text-destructive mx-auto mb-2" />
                 <p class="text-destructive">
-                  {error instanceof Error ? error.message : "Failed to load notification data"}
+                  {remoteErrorMessage(error, "Failed to load notification data")}
                 </p>
                 <Button variant="outline" class="mt-4" onclick={reset}>Retry</Button>
               </div>
@@ -346,7 +339,7 @@
                   >
                     <div class="flex items-center gap-2">
                       <Clock class="h-4 w-4 text-muted-foreground" />
-                      <span class="font-medium">{date}</span>
+                      <span class="font-medium">{formatLongDate(startOfDay(date))}</span>
                       <Badge variant="secondary" class="ml-2">
                         {instances.length}
                       </Badge>

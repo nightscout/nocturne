@@ -14,11 +14,11 @@ namespace Nocturne.API.Tests.Authorization;
 public class LegacyStorageReadScopeTests
 {
     [Theory]
-    [InlineData("entries", OAuthScopes.GlucoseRead)]
-    [InlineData("treatments", OAuthScopes.TreatmentsRead)]
-    [InlineData("devicestatus", OAuthScopes.DevicesRead)]
-    [InlineData("profile", OAuthScopes.TherapyRead)]
-    [InlineData("food", OAuthScopes.FoodRead)]
+    [InlineData("entries", Scope.GlucoseRead)]
+    [InlineData("treatments", Scope.TreatmentsRead)]
+    [InlineData("devicestatus", Scope.DevicesRead)]
+    [InlineData("profile", Scope.TherapyRead)]
+    [InlineData("food", Scope.FoodRead)]
     public void EachStorage_MapsToItsCategory(string storage, string expected)
     {
         LegacyStorageReadScopes.RequiredReadScope(storage).Should().Be(expected);
@@ -44,7 +44,7 @@ public class LegacyStorageReadScopeTests
         // activity included deliberately: it merges four categories, so it has no single governing
         // scope and must not resolve to one here.
         LegacyStorageReadScopes.RequiredReadScope(storage).Should().BeNull();
-        LegacyStorageReadScopes.CanRead(Granted(OAuthScopes.FullAccess), storage).Should().BeFalse();
+        LegacyStorageReadScopes.CanRead(Granted(Scope.FullAccess), storage).Should().BeFalse();
     }
 
     [Fact]
@@ -52,7 +52,7 @@ public class LegacyStorageReadScopeTests
     {
         // The hole this replaces: a class-level OR of glucose|treatments|devices admitted a
         // glucose-only grant to /api/v1/slice/treatments/... and every treatment record with it.
-        var glucoseOnly = Granted(OAuthScopes.GlucoseRead);
+        var glucoseOnly = Granted(Scope.GlucoseRead);
 
         LegacyStorageReadScopes.CanRead(glucoseOnly, "entries").Should().BeTrue();
         LegacyStorageReadScopes.CanRead(glucoseOnly, "treatments").Should().BeFalse();
@@ -65,14 +65,14 @@ public class LegacyStorageReadScopeTests
     public void ReadWrite_SatisfiesTheReadRequirement()
     {
         LegacyStorageReadScopes
-            .CanRead(Granted(OAuthScopes.TreatmentsReadWrite), "treatments")
+            .CanRead(Granted(Scope.TreatmentsReadWrite), "treatments")
             .Should().BeTrue();
     }
 
     [Fact]
     public void FullAccess_ReadsEveryClassifiedStorage()
     {
-        var superuser = Granted(OAuthScopes.FullAccess);
+        var superuser = Granted(Scope.FullAccess);
 
         foreach (var storage in new[] { "entries", "treatments", "devicestatus", "profile", "food" })
         {
@@ -86,9 +86,9 @@ public class LegacyStorageReadScopeTests
         // The shape every active direct grant in production carries. It holds no alerts scope and
         // not always sleep, so the categories it does hold must keep working.
         var productionGrant = Granted(
-            OAuthScopes.GlucoseReadWrite, OAuthScopes.TreatmentsReadWrite, OAuthScopes.DevicesReadWrite,
-            OAuthScopes.TherapyReadWrite, OAuthScopes.HeartRateReadWrite, OAuthScopes.StepCountReadWrite,
-            OAuthScopes.FoodReadWrite);
+            Scope.GlucoseReadWrite, Scope.TreatmentsReadWrite, Scope.DevicesReadWrite,
+            Scope.TherapyReadWrite, Scope.HeartRateReadWrite, Scope.StepCountReadWrite,
+            Scope.FoodReadWrite);
 
         foreach (var storage in new[] { "entries", "treatments", "devicestatus", "profile", "food" })
         {
@@ -120,5 +120,5 @@ public class LegacyStorageReadScopeTests
     }
 
     private static IReadOnlySet<string> Granted(params string[] scopes) =>
-        OAuthScopes.Normalize(scopes);
+        Scope.Normalize(scopes);
 }

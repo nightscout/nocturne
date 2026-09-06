@@ -7,6 +7,8 @@
     getTenantSettings,
     setPublicDocs,
   } from "$api/generated/tenantSettings.generated.remote";
+  import { retainQuery } from "$lib/api/retain-query.svelte";
+  import { describeSubmitError } from "$lib/forms/submit-error";
 
   const effectivePermissions: string[] = $derived(
     (page.data as any).effectivePermissions ?? [],
@@ -17,6 +19,7 @@
   );
 
   const settingsQuery = $derived(canManageSettings ? getTenantSettings() : null);
+  retainQuery(() => settingsQuery);
 
   // Held only while a write is in flight; null = use server truth.
   let pending = $state<boolean | null>(null);
@@ -33,10 +36,13 @@
     pending = on;
     try {
       await setPublicDocs({ enabled: on });
-    } catch {
-      errorMessage = on
-        ? "Couldn't publish the API reference. Please try again."
-        : "Couldn't hide the API reference. Please try again.";
+    } catch (err) {
+      errorMessage = describeSubmitError(
+        err,
+        on
+          ? "Couldn't publish the API reference. Please try again."
+          : "Couldn't hide the API reference. Please try again."
+      );
     } finally {
       busy = false;
       pending = null;

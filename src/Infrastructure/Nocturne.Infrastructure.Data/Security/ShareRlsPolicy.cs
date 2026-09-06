@@ -17,10 +17,9 @@ public static class ShareRlsPolicy
     /// <summary>Name of the RESTRICTIVE FOR SELECT policy applied to every tenant-scoped table.</summary>
     public const string PolicyName = "share_category_read";
 
-    // Table and scope identifiers come from the model and OAuthScopes constants, never user
-    // input; the patterns are belt-and-suspenders so a malformed identifier fails closed
-    // (throws) rather than being interpolated into DDL.
-    private static readonly Regex TableNamePattern = new("^[a-z_][a-z0-9_]*$", RegexOptions.Compiled);
+    // Scope identifiers come from the Scope constants, never user input; the pattern is
+    // belt-and-suspenders so a malformed one fails closed (throws) rather than being
+    // interpolated into DDL. Table and column identifiers go through SqlIdentifier.
     private static readonly Regex ScopePattern = new(@"^[a-z]+\.[a-z]+$", RegexOptions.Compiled);
 
     /// <summary>
@@ -55,12 +54,11 @@ public static class ShareRlsPolicy
     /// <c>null</c> when the table is exempt (catalog data with no per-row time).</param>
     public static string BuildPolicySql(string table, string? governingScope, string? recencyColumn = null)
     {
-        if (!TableNamePattern.IsMatch(table))
-            throw new ArgumentException($"Unsafe table identifier '{table}'.", nameof(table));
+        SqlIdentifier.Require(table, nameof(table));
         if (governingScope is not null && !ScopePattern.IsMatch(governingScope))
             throw new ArgumentException($"Unsafe scope identifier '{governingScope}'.", nameof(governingScope));
-        if (recencyColumn is not null && !TableNamePattern.IsMatch(recencyColumn))
-            throw new ArgumentException($"Unsafe column identifier '{recencyColumn}'.", nameof(recencyColumn));
+        if (recencyColumn is not null)
+            SqlIdentifier.Require(recencyColumn, nameof(recencyColumn));
 
         var usingExpr = "current_setting('app.is_share', true) IS DISTINCT FROM 'true'";
         if (governingScope is not null)

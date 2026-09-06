@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
@@ -13,6 +14,7 @@ using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Services.Identity;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
@@ -46,6 +48,7 @@ public partial class SetupController : ControllerBase
     private readonly OperatorConfiguration _operatorConfig;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly PlatformAdminBootstrapService _platformAdminBootstrap;
+    private readonly IInstanceSetupState _setupState;
     private readonly ILogger<SetupController> _logger;
 
     public SetupController(
@@ -60,6 +63,7 @@ public partial class SetupController : ControllerBase
         IOptions<OperatorConfiguration> operatorConfig,
         IHttpClientFactory httpClientFactory,
         PlatformAdminBootstrapService platformAdminBootstrap,
+        IInstanceSetupState setupState,
         ILogger<SetupController> logger)
     {
         _tenantService = tenantService;
@@ -73,6 +77,7 @@ public partial class SetupController : ControllerBase
         _operatorConfig = operatorConfig.Value;
         _httpClientFactory = httpClientFactory;
         _platformAdminBootstrap = platformAdminBootstrap;
+        _setupState = setupState;
         _logger = logger;
     }
 
@@ -82,17 +87,23 @@ public partial class SetupController : ControllerBase
     private static readonly HashSet<string> ReservedUsernames = ["admin", "system"];
 
     /// <summary>
+    /// Whether the username webhook's last attempt has already been reported. See
+    /// <see cref="AskUsernameWebhookAsync"/>.
+    /// </summary>
+    private static int _usernameWebhookOutageReported;
+
+    /// <summary>
     /// Create the first tenant on a fresh install. Only succeeds when zero tenants exist.
     /// </summary>
     [HttpPost("tenant")]
+    [EnableRateLimiting("setup")]
     [RemoteCommand]
     [ProducesResponseType(typeof(SetupTenantResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> CreateTenant(
         [FromBody] SetupTenantRequest request, CancellationToken ct)
     {
-        // Block if any tenant already has a member with credentials (passkey or OIDC).
-        if (await AnyTenantHasCredentialedMemberAsync(ct))
+        if (await _setupState.IsSetupCompleteAsync(ct))
             return Conflict(new { error = "setup_already_complete" });
 
         if (string.IsNullOrWhiteSpace(request.Slug) || string.IsNullOrWhiteSpace(request.DisplayName))
@@ -112,8 +123,13 @@ public partial class SetupController : ControllerBase
     /// Check whether a username is available for the owner account.
     /// </summary>
     [HttpGet("validate-username")]
+    [AnonymousUntilSetupComplete]
+    [DenyDemoSubject]
+    [EnableRateLimiting("name-availability")]
     [RemoteQuery]
     [ProducesResponseType(typeof(SlugValidationResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> ValidateUsername(
         [FromQuery] string username, CancellationToken ct)
     {
@@ -131,7 +147,7 @@ public partial class SetupController : ControllerBase
 
         await using var context = await _dbFactory.CreateDbContextAsync(ct);
 
-        var tenant = await context.Tenants.AsNoTracking().FirstOrDefaultAsync(ct);
+        var tenant = await context.Tenants.AsNoTracking().ExcludeDemo().FirstOrDefaultAsync(ct);
         if (tenant == null)
             return Ok(new SlugValidationResult(false, "No tenant exists"));
 
@@ -143,28 +159,8 @@ public partial class SetupController : ControllerBase
         if (exists)
             return Ok(new SlugValidationResult(false, "This username is already taken"));
 
-        if (!string.IsNullOrEmpty(_operatorConfig.UsernameValidationWebhookUrl))
-        {
-            try
-            {
-                var client = _httpClientFactory.CreateClient("username-validation");
-                var response = await client.PostAsJsonAsync(
-                    _operatorConfig.UsernameValidationWebhookUrl,
-                    new { username = normalized },
-                    ct);
-
-                if (response.IsSuccessStatusCode)
-                {
-                    var result = await response.Content.ReadFromJsonAsync<SlugValidationResult>(ct);
-                    if (result is { IsValid: false })
-                        return Ok(result);
-                }
-            }
-            catch
-            {
-                // Webhook failure should not block validation — fall through to success
-            }
-        }
+        if (await AskUsernameWebhookAsync(normalized, ct) is { IsValid: false } refusal)
+            return Ok(refusal);
 
         return Ok(new SlugValidationResult(true));
     }
@@ -174,6 +170,7 @@ public partial class SetupController : ControllerBase
     /// Guard: exactly one tenant must exist with zero non-system members.
     /// </summary>
     [HttpPost("owner/options")]
+    [EnableRateLimiting("setup")]
     [RemoteCommand]
     [ProducesResponseType(typeof(SetupOwnerOptionsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
@@ -181,6 +178,9 @@ public partial class SetupController : ControllerBase
     public async Task<IActionResult> OwnerOptions(
         [FromBody] SetupOwnerOptionsRequest request, CancellationToken ct)
     {
+        if (this.PasskeyHostRefusal(_passkeyService) is { } refusal)
+            return refusal;
+
         var (tenant, error) = await GetSoleTenantWithoutOwnerAsync(ct);
         if (error != null)
             return error;
@@ -200,7 +200,7 @@ public partial class SetupController : ControllerBase
             tenant!, request.DisplayName.Trim(), normalizedUsername, ct);
 
         var result = await _passkeyService.GenerateRegistrationOptionsAsync(
-            subjectId, normalizedUsername, tenant!.Id);
+            subjectId, normalizedUsername);
 
         return Ok(new SetupOwnerOptionsResponse
         {
@@ -215,6 +215,7 @@ public partial class SetupController : ControllerBase
     /// Verifies attestation, generates recovery codes, issues a full JWT session.
     /// </summary>
     [HttpPost("owner/complete")]
+    [EnableRateLimiting("setup")]
     [RemoteCommand]
     [ProducesResponseType(typeof(SetupOwnerCompleteResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
@@ -281,6 +282,7 @@ public partial class SetupController : ControllerBase
     /// then redirects to the OIDC provider to link an identity.
     /// </summary>
     [HttpPost("owner/oidc")]
+    [EnableRateLimiting("setup")]
     [RemoteCommand]
     [ProducesResponseType(typeof(SetupOwnerOidcResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
@@ -324,7 +326,9 @@ public partial class SetupController : ControllerBase
         catch (InvalidOperationException ex)
         {
             _logger.LogWarning(ex, "Failed to generate setup OIDC authorization URL");
-            return Problem(detail: ex.Message, statusCode: 400, title: "Provider Error");
+            return Problem(
+                detail: "We couldn't reach that sign-in provider. Try another one, or check the provider settings.",
+                statusCode: 400);
         }
     }
 
@@ -335,6 +339,7 @@ public partial class SetupController : ControllerBase
     [HttpGet("oidc/callback")]
     [AllowAnonymous]
     [AllowDuringSetup]
+    [EnableRateLimiting("setup")]
     [ProducesResponseType(StatusCodes.Status302Found)]
     public async Task<IActionResult> OidcCallback(
         [FromQuery] string? code,
@@ -402,52 +407,78 @@ public partial class SetupController : ControllerBase
     #region Private Helpers
 
     /// <summary>
-    /// Whether any tenant on the instance already has a member holding a real credential (passkey
-    /// or linked OIDC identity), i.e. whether first-run setup has already produced a usable
-    /// account somewhere.
+    /// The operator's username-validation webhook's verdict, or <see langword="null"/> when no
+    /// webhook is configured or it could not answer.
     /// </summary>
     /// <remarks>
-    /// Asked per tenant under that tenant's own pin, then OR'd. The equivalent single query over
-    /// every tenant's memberships has no tenant to be pinned to, and a membership hidden from it
-    /// would read as "no credentialed member exists" — re-opening setup on a configured instance.
+    /// Fails open. The webhook is an operator's extra restriction layered on the checks above, and
+    /// only this advisory probe consults it — the owner-creation steps never do, so refusing here
+    /// would not keep the name from being taken. An outage that refused every username instead
+    /// would strand the operator on the one screen with no way past it, on an instance that has no
+    /// account yet to correct the configuration from.
     /// <para>
-    /// The per-iteration re-pin is confined to a context of its own, so the caller is not left
-    /// holding one pinned to whichever tenant happened to be enumerated last.
+    /// The endpoint is anonymous, so a caller sets the request volume; one log line per outage
+    /// keeps that from being a log-volume lever. The latch reopens when the webhook next answers.
     /// </para>
     /// </remarks>
-    private async Task<bool> AnyTenantHasCredentialedMemberAsync(CancellationToken ct)
+    private async Task<SlugValidationResult?> AskUsernameWebhookAsync(string username, CancellationToken ct)
     {
-        await using var context = await _dbFactory.CreateDbContextAsync(ct);
+        if (string.IsNullOrEmpty(_operatorConfig.UsernameValidationWebhookUrl))
+            return null;
 
-        var tenantIds = await context.Tenants.AsNoTracking()
-            .Select(t => t.Id)
-            .ToListAsync(ct);
+        Exception? failure = null;
+        int? statusCode = null;
 
-        foreach (var tenantId in tenantIds)
+        try
         {
-            await context.PinTenantAsync(tenantId, ct);
+            var client = _httpClientFactory.CreateClient("username-validation");
+            var response = await client.PostAsJsonAsync(
+                _operatorConfig.UsernameValidationWebhookUrl,
+                new { username },
+                ct);
 
-            var hasCredentialedMember = await context.TenantMembers.AsNoTracking()
-                .Where(m => m.TenantId == tenantId)
-                .AnyAsync(m =>
-                    context.PasskeyCredentials.Any(c => c.SubjectId == m.SubjectId) ||
-                    context.SubjectOidcIdentities.Any(o => o.SubjectId == m.SubjectId), ct);
+            if (response.IsSuccessStatusCode)
+            {
+                Interlocked.Exchange(ref _usernameWebhookOutageReported, 0);
+                return await response.Content.ReadFromJsonAsync<SlugValidationResult>(ct);
+            }
 
-            if (hasCredentialedMember) return true;
+            statusCode = (int)response.StatusCode;
+        }
+        catch (Exception ex)
+        {
+            if (ct.IsCancellationRequested)
+                return null;
+
+            failure = ex;
         }
 
-        return false;
+        if (Interlocked.Exchange(ref _usernameWebhookOutageReported, 1) == 0)
+        {
+            _logger.LogWarning(
+                failure,
+                "Username validation webhook did not answer ({Outcome}); usernames are being accepted without it",
+                statusCode?.ToString() ?? "unreachable");
+        }
+
+        return null;
     }
 
     /// <summary>
     /// Returns the sole tenant if exactly one exists and it has no non-system members,
     /// or an error result if the preconditions are not met.
     /// </summary>
+    /// <remarks>
+    /// A demo tenant never trips the credentialed-member arm (<see cref="DemoExclusionFilter"/>),
+    /// so a demo-only instance answers <c>no_tenant_exists</c>, from which a tenant can still be
+    /// created, rather than <c>setup_already_complete</c>, which would strand the operator on a
+    /// tenant nobody can adopt.
+    /// </remarks>
     private async Task<(TenantEntity? Tenant, IActionResult? Error)> GetSoleTenantWithoutOwnerAsync(CancellationToken ct)
     {
         await using var context = await _dbFactory.CreateDbContextAsync(ct);
 
-        var tenants = await context.Tenants.Take(2).ToListAsync(ct);
+        var tenants = await context.Tenants.ExcludeDemo().Take(2).ToListAsync(ct);
 
         if (tenants.Count == 0)
             return (null, Conflict(new { error = "no_tenant_exists" }));
@@ -457,20 +488,10 @@ public partial class SetupController : ControllerBase
 
         var tenant = tenants[0];
 
-        // Pin the RLS context to query the tenant-scoped members table
-        await context.PinTenantAsync(tenant.Id, ct);
-
-        // Setup is "complete" only once a member holds real credentials (passkey or
-        // OIDC). A credential-less member is a half-finished setup left behind by an
-        // abandoned or failed WebAuthn/OIDC ceremony — EnsureOwnerSubjectAsync reuses
-        // that subject idempotently, so let the flow resume instead of dead-ending on
-        // owner_already_exists. Mirrors the CreateTenant guard and
-        // TenantSetupMiddleware's hasCredentials check.
-        var hasOwnerWithCredentials = await context.TenantMembers
-            .Where(m => m.TenantId == tenant.Id)
-            .AnyAsync(m =>
-                context.PasskeyCredentials.Any(c => c.SubjectId == m.SubjectId) ||
-                context.SubjectOidcIdentities.Any(o => o.SubjectId == m.SubjectId), ct);
+        // A credential-less member is a half-finished setup left behind by an abandoned or failed
+        // WebAuthn/OIDC ceremony — EnsureOwnerSubjectAsync reuses that subject idempotently, so
+        // let the flow resume instead of dead-ending on owner_already_exists.
+        var hasOwnerWithCredentials = await _setupState.TenantHasCredentialedMemberAsync(tenant.Id, ct);
 
         if (hasOwnerWithCredentials)
             return (null, Conflict(new { error = "owner_already_exists" }));
@@ -479,12 +500,17 @@ public partial class SetupController : ControllerBase
     }
 
     /// <summary>
-    /// The first-run owner subject: the earliest non-system active subject. Setup only runs while
-    /// no member of the tenant holds credentials, so this is the account the owner options step
-    /// created or reused. Ordered so the options and complete steps resolve the same row.
+    /// The first-run owner subject: the earliest active subject that is neither a system subject
+    /// nor the demo visitor (<see cref="DemoExclusionFilter"/>). Setup only runs while no member
+    /// of the tenant holds credentials, so this is the account the owner options step created or
+    /// reused. Ordered so the options and complete steps resolve the same row.
     /// </summary>
+    /// <remarks>
+    /// <c>subjects</c> is not tenant-scoped, so this sees every subject on the instance — the
+    /// demo visitor included, and it is older than the operator's.
+    /// </remarks>
     private static IQueryable<SubjectEntity> SetupOwnerSubjects(NocturneDbContext context) =>
-        context.Subjects.Where(s => !s.IsSystemSubject && s.IsActive).OrderBy(s => s.Id);
+        context.Subjects.ExcludeDemo().Where(s => !s.IsSystemSubject && s.IsActive).OrderBy(s => s.Id);
 
     /// <summary>
     /// Returns the first-run owner subject's id as resolved from the database, or
@@ -590,35 +616,13 @@ public partial class SetupController : ControllerBase
             subjectId, CancellationToken.None);
     }
 
-    private void SetOidcStateCookie(string state, DateTimeOffset expiresAt)
-    {
-        var cookieSameSite = _oidcOptions.Cookie.SameSite switch
-        {
-            SameSiteMode.Strict => Microsoft.AspNetCore.Http.SameSiteMode.Strict,
-            SameSiteMode.Lax => Microsoft.AspNetCore.Http.SameSiteMode.Lax,
-            SameSiteMode.None => Microsoft.AspNetCore.Http.SameSiteMode.None,
-            _ => Microsoft.AspNetCore.Http.SameSiteMode.Lax,
-        };
+    // Through the shared writer: the setup flow reuses the login flow's state-cookie name, so a
+    // scope of its own would leave two same-named cookies the callback cannot tell apart.
+    private void SetOidcStateCookie(string state, DateTimeOffset expiresAt) =>
+        Response.SetStateCookie(_oidcOptions.Cookie.StateCookieName, state, expiresAt, _oidcOptions);
 
-        Response.Cookies.Append(_oidcOptions.Cookie.StateCookieName, state, new CookieOptions
-        {
-            HttpOnly = true,
-            Secure = _oidcOptions.Cookie.Secure,
-            SameSite = cookieSameSite,
-            Path = _oidcOptions.Cookie.Path,
-            Domain = _oidcOptions.Cookie.Domain,
-            Expires = expiresAt,
-        });
-    }
-
-    private void ClearOidcStateCookie()
-    {
-        Response.Cookies.Delete(_oidcOptions.Cookie.StateCookieName, new CookieOptions
-        {
-            Path = _oidcOptions.Cookie.Path,
-            Domain = _oidcOptions.Cookie.Domain,
-        });
-    }
+    private void ClearOidcStateCookie() =>
+        Response.ClearStateCookie(_oidcOptions.Cookie.StateCookieName, _oidcOptions);
 
     #endregion
 }

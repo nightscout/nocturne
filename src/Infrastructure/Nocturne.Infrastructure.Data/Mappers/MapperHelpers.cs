@@ -11,7 +11,7 @@ internal static class MapperHelpers
     /// Parse string ID to GUID. Returns a new GUID for null/empty input,
     /// or a deterministic SHA1-derived GUID for non-GUID strings.
     /// </summary>
-    public static Guid ParseIdToGuid(string id)
+    public static Guid ParseIdToGuid(string? id)
     {
         if (string.IsNullOrEmpty(id))
             return Guid.CreateVersion7();

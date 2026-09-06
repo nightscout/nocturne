@@ -1,24 +1,23 @@
 using FluentAssertions;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Multitenancy;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Identity;
 
 public class MemberInviteServiceTests : IDisposable
 {
-    private readonly SqliteConnection _connection;
-    private readonly DbContextOptions<NocturneDbContext> _dbOptions;
+    private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _dbContext;
     private readonly Mock<IJwtService> _jwtService;
     private readonly Mock<ITenantService> _tenantService;
@@ -30,24 +29,17 @@ public class MemberInviteServiceTests : IDisposable
     private Guid _followerRoleId;
 
     /// <summary>Granter permissions of a tenant owner: satisfies any grant the invite can carry.</summary>
-    private static readonly string[] OwnerPermissions = [TenantPermissions.Superuser];
+    private static readonly string[] OwnerPermissions = [Scope.FullAccess];
 
     private const string FakeToken = "fake-random-token-abc123";
-    private const string FakeTokenHash = "hashed-fake-token";
+    private static readonly string FakeTokenHash = HashUtils.Sha256Hex(FakeToken);
     private const string BaseDomain = "app.nocturnecgm.com";
 
     public MemberInviteServiceTests()
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
+        _db = TestDbContextFactory.CreateSqlite();
 
-        _dbOptions = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .Options;
-
-        _dbContext = new NocturneDbContext(_dbOptions);
-        _dbContext.Database.EnsureCreated();
+        _dbContext = _db.CreateContext();
         // member_invites is tenant-scoped, so the context carries the tenant the request resolved
         // to. In the app TenantResolutionMiddleware pins it before any handler runs; here it stands
         // in for that pin, and without it every read below is filtered to nothing.
@@ -55,7 +47,6 @@ public class MemberInviteServiceTests : IDisposable
 
         _jwtService = new Mock<IJwtService>();
         _jwtService.Setup(j => j.GenerateRefreshToken()).Returns(FakeToken);
-        _jwtService.Setup(j => j.HashRefreshToken(FakeToken)).Returns(FakeTokenHash);
 
         _tenantService = new Mock<ITenantService>();
 
@@ -105,7 +96,7 @@ public class MemberInviteServiceTests : IDisposable
             TenantId = _tenantId,
             Name = "Follower",
             Slug = "follower",
-            Permissions = [TenantPermissions.GlucoseRead, TenantPermissions.ReportsRead],
+            Permissions = [Scope.GlucoseRead, Scope.ReportsRead],
             IsSystem = true,
             SysCreatedAt = DateTime.UtcNow,
             SysUpdatedAt = DateTime.UtcNow,
@@ -117,7 +108,7 @@ public class MemberInviteServiceTests : IDisposable
     public void Dispose()
     {
         _dbContext.Dispose();
-        _connection.Dispose();
+        _db.Dispose();
     }
 
     [Fact]
@@ -163,13 +154,13 @@ public class MemberInviteServiceTests : IDisposable
             _creatorSubjectId,
             OwnerPermissions,
             [],
-            directPermissions: [TenantPermissions.GlucoseRead]);
+            directPermissions: [Scope.GlucoseRead]);
 
         result.Token.Should().Be(FakeToken);
 
         var entity = await _dbContext.MemberInvites.FirstOrDefaultAsync();
         entity.Should().NotBeNull();
-        entity!.DirectPermissions.Should().Contain(TenantPermissions.GlucoseRead);
+        entity!.DirectPermissions.Should().Contain(Scope.GlucoseRead);
     }
 
     [Fact]
@@ -178,9 +169,9 @@ public class MemberInviteServiceTests : IDisposable
         var act = () => _service.CreateInviteAsync(
             _tenantId,
             _creatorSubjectId,
-            [TenantPermissions.MembersInvite, TenantPermissions.MembersManage],
+            [Scope.MembersInvite, Scope.MembersManage],
             [],
-            directPermissions: [TenantPermissions.Superuser]);
+            directPermissions: [Scope.FullAccess]);
 
         await act.Should().ThrowAsync<ArgumentException>()
             .WithMessage("*Cannot grant '*'*");
@@ -194,9 +185,9 @@ public class MemberInviteServiceTests : IDisposable
         var act = () => _service.CreateInviteAsync(
             _tenantId,
             _creatorSubjectId,
-            [TenantPermissions.MembersInvite, TenantPermissions.GlucoseRead],
+            [Scope.MembersInvite, Scope.GlucoseRead],
             [],
-            directPermissions: [TenantPermissions.TreatmentsReadWrite]);
+            directPermissions: [Scope.TreatmentsReadWrite]);
 
         await act.Should().ThrowAsync<ArgumentException>()
             .WithMessage("*treatments.readwrite*");
@@ -224,7 +215,7 @@ public class MemberInviteServiceTests : IDisposable
         var act = () => _service.CreateInviteAsync(
             _tenantId,
             _creatorSubjectId,
-            [TenantPermissions.MembersInvite],
+            [Scope.MembersInvite],
             [_followerRoleId]);
 
         await act.Should().ThrowAsync<ArgumentException>()
@@ -514,7 +505,7 @@ public class MemberInviteServiceTests : IDisposable
             CreatedBySubjectId = _creatorSubjectId,
             TokenHash = "hash-minted-for-the-other-tenant",
             RoleIds = [],
-            DirectPermissions = [TenantPermissions.GlucoseRead],
+            DirectPermissions = [Scope.GlucoseRead],
             ExpiresAt = DateTime.UtcNow.AddDays(7),
         });
         await _dbContext.SaveChangesAsync();

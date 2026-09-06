@@ -1,3 +1,6 @@
+using NJsonSchema.Annotations;
+using Nocturne.Core.Constants;
+
 namespace Nocturne.Core.Models.V4;
 
 /// <summary>
@@ -9,9 +12,10 @@ namespace Nocturne.Core.Models.V4;
 /// stored as its own record rather than being multiplexed through the entries collection.
 /// </para>
 /// <para>
-/// <see cref="Mmol"/> is computed from <see cref="Mgdl"/> using the standard conversion factor
-/// (18.0182). <see cref="Trend"/> is computed by casting <see cref="Direction"/> to its integer
-/// equivalent, providing a 1:1 mapping between <see cref="GlucoseDirection"/> and <see cref="GlucoseTrend"/>.
+/// <see cref="Mmol"/> is computed from <see cref="Mgdl"/> using
+/// <see cref="GlucoseConstants.MgdlPerMmol"/>. <see cref="Trend"/> is computed by casting
+/// <see cref="Direction"/> to its integer equivalent, providing a 1:1 mapping between
+/// <see cref="GlucoseDirection"/> and <see cref="GlucoseTrend"/>.
 /// </para>
 /// </remarks>
 /// <seealso cref="Entry"/>
@@ -20,57 +24,13 @@ namespace Nocturne.Core.Models.V4;
 /// <seealso cref="GlucoseTrend"/>
 /// <seealso cref="MeterGlucose"/>
 /// <seealso cref="BGCheck"/>
-public class SensorGlucose : IV4Record, IDeviceAttributed
+[JsonSchemaFlatten]
+public class SensorGlucose : V4RecordBase, IDeviceAttributed
 {
-    /// <summary>
-    /// UUID v7 primary key
-    /// </summary>
-    public Guid Id { get; set; }
-
-    /// <summary>
-    /// Canonical timestamp as UTC DateTime
-    /// </summary>
-    public DateTime Timestamp { get; set; }
-
-    /// <summary>
-    /// Unix milliseconds (computed from Timestamp for v1/v3 compatibility)
-    /// </summary>
-    public long Mills => new DateTimeOffset(Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
-
-    /// <summary>
-    /// UTC offset in minutes
-    /// </summary>
-    public int? UtcOffset { get; set; }
-
-    /// <summary>
-    /// Device identifier that produced this reading
-    /// </summary>
-    public string? Device { get; set; }
-
-    /// <summary>
-    /// Application that uploaded this reading
-    /// </summary>
-    public string? App { get; set; }
-
-    /// <summary>
-    /// Origin data source identifier
-    /// </summary>
-    public string? DataSource { get; set; }
-
-    /// <summary>
-    /// Links records that were split from the same legacy Treatment
-    /// </summary>
-    public Guid? CorrelationId { get; set; }
-
     /// <summary>
     /// FK to the patient's registered CGM device (null if not yet resolved)
     /// </summary>
     public Guid? PatientDeviceId { get; set; }
-
-    /// <summary>
-    /// Original v1/v3 record ID for migration traceability
-    /// </summary>
-    public string? LegacyId { get; set; }
 
     /// <summary>
     /// Stable per-source identifier. Records matched on (DataSource, SyncIdentifier) are updated in
@@ -78,16 +38,6 @@ public class SensorGlucose : IV4Record, IDeviceAttributed
     /// moves the existing row instead of duplicating it.
     /// </summary>
     public string? SyncIdentifier { get; set; }
-
-    /// <summary>
-    /// When this record was created
-    /// </summary>
-    public DateTime CreatedAt { get; set; }
-
-    /// <summary>
-    /// When this record was last modified
-    /// </summary>
-    public DateTime ModifiedAt { get; set; }
 
     /// <summary>
     /// Glucose value in mg/dL
@@ -98,9 +48,9 @@ public class SensorGlucose : IV4Record, IDeviceAttributed
     /// Glucose value in mmol/L (computed from <see cref="Mgdl"/>).
     /// </summary>
     /// <remarks>
-    /// Computed as <c>Mgdl / 18.0182</c>. The mg/dL value is the source of truth.
+    /// The mg/dL value is the source of truth.
     /// </remarks>
-    public double Mmol => Mgdl / 18.0182;
+    public double Mmol => Mgdl / GlucoseConstants.MgdlPerMmol;
 
     /// <summary>
     /// CGM trend arrow direction.
@@ -158,7 +108,8 @@ public class SensorGlucose : IV4Record, IDeviceAttributed
     /// <summary>
     /// Smoothed glucose value in mmol/L (computed from <see cref="SmoothedMgdl"/>).
     /// </summary>
-    public double? SmoothedMmol => SmoothedMgdl.HasValue ? SmoothedMgdl.Value / 18.0182 : null;
+    public double? SmoothedMmol =>
+        SmoothedMgdl.HasValue ? SmoothedMgdl.Value / GlucoseConstants.MgdlPerMmol : null;
 
     /// <summary>
     /// Unsmoothed (raw) glucose value in mg/dL, when known.
@@ -168,10 +119,6 @@ public class SensorGlucose : IV4Record, IDeviceAttributed
     /// <summary>
     /// Unsmoothed glucose value in mmol/L (computed from <see cref="UnsmoothedMgdl"/>).
     /// </summary>
-    public double? UnsmoothedMmol => UnsmoothedMgdl.HasValue ? UnsmoothedMgdl.Value / 18.0182 : null;
-
-    /// <summary>
-    /// Catch-all for fields not mapped to dedicated columns
-    /// </summary>
-    public Dictionary<string, object?>? AdditionalProperties { get; set; }
+    public double? UnsmoothedMmol =>
+        UnsmoothedMgdl.HasValue ? UnsmoothedMgdl.Value / GlucoseConstants.MgdlPerMmol : null;
 }

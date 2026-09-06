@@ -1,37 +1,35 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Services.Legacy;
+using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Legacy;
-using Nocturne.API.Services.Legacy;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Mappers;
-using Nocturne.API.Services.Realtime;
 
 namespace Nocturne.API.Services.Health;
 
 /// <summary>
 /// Domain service for step count record operations. Inherits standard CRUD, SignalR broadcasting,
-/// and document-processing behaviour from <see cref="SimpleEntityService{TModel,TEntity}"/>.
+/// and document-processing behaviour from <see cref="TimeSeriesEntityService{TModel,TEntity}"/>.
 /// </summary>
 /// <seealso cref="IStepCountService"/>
-/// <seealso cref="SimpleEntityService{TModel,TEntity}"/>
-public class StepCountService
-    : SimpleEntityService<StepCount, StepCountEntity>,
+/// <seealso cref="TimeSeriesEntityService{TModel,TEntity}"/>
+/// <param name="dbContext">EF Core context providing access to the step counts table.</param>
+/// <param name="documentProcessingService">Service that applies field processing before save.</param>
+/// <param name="signalRBroadcastService">Service used to broadcast entity changes over SignalR.</param>
+/// <param name="logger">Logger instance for this service.</param>
+public class StepCountService(
+    NocturneDbContext dbContext,
+    IDocumentProcessingService documentProcessingService,
+    ISignalRBroadcastService signalRBroadcastService,
+    ILogger<StepCountService> logger
+)
+    : TimeSeriesEntityService<StepCount, StepCountEntity>(
+        dbContext, documentProcessingService, signalRBroadcastService, logger),
         IStepCountService
 {
-    /// <param name="dbContext">EF Core context providing access to the step counts table.</param>
-    /// <param name="documentProcessingService">Service that applies field processing before save.</param>
-    /// <param name="signalRBroadcastService">Service used to broadcast entity changes over SignalR.</param>
-    /// <param name="logger">Logger instance for this service.</param>
-    public StepCountService(
-        NocturneDbContext dbContext,
-        IDocumentProcessingService documentProcessingService,
-        ISignalRBroadcastService signalRBroadcastService,
-        ILogger<StepCountService> logger
-    )
-        : base(dbContext, documentProcessingService, signalRBroadcastService, logger) { }
-
     protected override DbSet<StepCountEntity> EntitySet => DbContext.StepCounts;
     protected override string CollectionName => "stepcount";
     protected override string EntityTypeName => "step count";
@@ -45,56 +43,19 @@ public class StepCountService
     protected override void UpdateEntity(StepCountEntity entity, StepCount model) =>
         StepCountMapper.UpdateEntity(entity, model);
 
-    protected override IOrderedQueryable<StepCountEntity> OrderByTimestamp(
-        IQueryable<StepCountEntity> query
-    ) => query.OrderByDescending(s => s.Timestamp);
-
-    protected override Task<StepCountEntity?> FindByIdAsync(
-        string id,
-        CancellationToken cancellationToken
-    ) =>
-        Guid.TryParse(id, out var guid)
-            ? DbContext.StepCounts.FirstOrDefaultAsync(s => s.Id == guid, cancellationToken)
-            : DbContext.StepCounts.FirstOrDefaultAsync(
-                s => s.OriginalId == id,
-                cancellationToken
-            );
-
     public Task<IEnumerable<StepCount>> GetStepCountsAsync(
         int count = 10,
         int skip = 0,
         CancellationToken cancellationToken = default
     ) => GetAllAsync(count, skip, cancellationToken);
 
-    public async Task<IEnumerable<StepCount>> GetStepCountsByDateRangeAsync(
+    public Task<IEnumerable<StepCount>> GetStepCountsByDateRangeAsync(
         DateTime from,
         DateTime to,
         int? count = null,
         int skip = 0,
         CancellationToken cancellationToken = default
-    )
-    {
-        var query = EntitySet
-            .Where(s => s.Timestamp >= from && s.Timestamp < to)
-            .OrderBy(s => s.Timestamp)
-            .Skip(skip);
-
-        if (count is { } take)
-            query = query.Take(take);
-
-        var entities = await query.ToListAsync(cancellationToken);
-
-        return entities.Select(ToDomainModel);
-    }
-
-    public Task<DateTime?> GetLatestTimestampAsync(
-        string source,
-        CancellationToken cancellationToken = default
-    ) =>
-        EntitySet
-            .AsNoTracking()
-            .Where(s => s.DataSource == source)
-            .MaxAsync(s => (DateTime?)s.Timestamp, cancellationToken);
+    ) => GetByDateRangeAsync(from, to, count, skip, cancellationToken);
 
     public Task<StepCount?> GetStepCountByIdAsync(
         string id,

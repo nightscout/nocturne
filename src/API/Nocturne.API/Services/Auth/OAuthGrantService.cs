@@ -47,7 +47,7 @@ public class OAuthGrantService : IOAuthGrantService
         Guid clientEntityId,
         Guid subjectId,
         IEnumerable<string> scopes,
-        string grantType = OAuthScopes.GrantTypeApp,
+        string grantType = OAuthGrantTypes.App,
         string? label = null,
         CancellationToken ct = default)
     {
@@ -145,6 +145,28 @@ public class OAuthGrantService : IOAuthGrantService
             .ToListAsync(ct);
 
         return entities.Select(MapToInfo).ToList();
+    }
+
+    /// <inheritdoc />
+    public async Task<OAuthGrantInfo?> GetGrantForSubjectAsync(
+        Guid grantId,
+        Guid ownerSubjectId,
+        CancellationToken ct = default)
+    {
+        var entity = await _dbContext.OAuthGrants
+            .AsNoTracking()
+            .Include(g => g.Client)
+            .Where(g => g.Id == grantId
+                     && g.SubjectId == ownerSubjectId
+                     && g.RevokedAt == null)
+            .FirstOrDefaultAsync(ct);
+
+        if (entity == null)
+        {
+            return null;
+        }
+
+        return MapToInfo(entity);
     }
 
     /// <inheritdoc />
@@ -266,11 +288,10 @@ public class OAuthGrantService : IOAuthGrantService
     {
         var grant = await _dbContext.OAuthGrants
             .Include(g => g.Client)
-            .Where(g => g.Id == grantId)
+            .Where(g => g.Id == grantId && g.SubjectId == ownerSubjectId)
             .FirstOrDefaultAsync(ct);
 
-        // Grant not found or not owned by the specified subject
-        if (grant == null || grant.SubjectId != ownerSubjectId)
+        if (grant == null)
             return null;
 
         // Validated before anything is assigned, so a rejected update leaves the tracked entity
@@ -280,7 +301,7 @@ public class OAuthGrantService : IOAuthGrantService
         // access.
         var validatedScopes = scopes is null
             ? null
-            : OAuthScopes.ValidateGrantScopes(scopes, grant.GrantType);
+            : Scope.ValidateGrantScopes(scopes, grant.GrantType);
 
         if (label != null)
         {

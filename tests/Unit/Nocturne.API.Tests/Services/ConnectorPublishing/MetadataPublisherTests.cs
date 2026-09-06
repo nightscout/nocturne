@@ -17,6 +17,7 @@ using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
 using Xunit;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Tests.Shared.Mocks;
 
 namespace Nocturne.API.Tests.Services.ConnectorPublishing;
 
@@ -46,9 +47,7 @@ public class MetadataPublisherTests
         _mockNoteRepository = new Mock<INoteRepository>();
         _mockSystemEventRepository = new Mock<ISystemEventRepository>();
 
-        _mockTenantAccessor = new Mock<ITenantAccessor>();
-        _mockTenantAccessor.Setup(t => t.IsResolved).Returns(true);
-        _mockTenantAccessor.Setup(t => t.TenantId).Returns(TenantId);
+        _mockTenantAccessor = MockTenantAccessor.Create(TenantId);
 
         _mockTenantOwnerResolver = new Mock<ITenantOwnerResolver>();
         _mockTenantOwnerResolver

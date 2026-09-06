@@ -51,11 +51,18 @@ public record FallbackUrlResponse
 public class SupportConfigResponse
 {
     public SupportChannelConfig? AccountBilling { get; set; }
+    public AccountPortalConfig? AccountPortal { get; set; }
 }
 
 public class SupportChannelConfig
 {
     public string Mode { get; set; } = "";
+    public string Url { get; set; } = "";
+    public string? Label { get; set; }
+}
+
+public class AccountPortalConfig
+{
     public string Url { get; set; } = "";
     public string? Label { get; set; }
 }

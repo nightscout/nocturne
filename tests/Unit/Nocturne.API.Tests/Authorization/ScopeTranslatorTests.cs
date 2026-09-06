@@ -11,10 +11,10 @@ public class ScopeTranslatorTests
         var permissions = new[] { "*" };
         var scopes = ScopeTranslator.FromPermissions(permissions);
 
-        Assert.Contains(OAuthScopes.FullAccess, scopes);
+        Assert.Contains(Scope.FullAccess, scopes);
         // Full access should also include all individual scopes
-        Assert.Contains(OAuthScopes.GlucoseRead, scopes);
-        Assert.Contains(OAuthScopes.TreatmentsReadWrite, scopes);
+        Assert.Contains(Scope.GlucoseRead, scopes);
+        Assert.Contains(Scope.TreatmentsReadWrite, scopes);
     }
 
     [Fact]
@@ -23,7 +23,7 @@ public class ScopeTranslatorTests
         var permissions = new[] { "admin" };
         var scopes = ScopeTranslator.FromPermissions(permissions);
 
-        Assert.Contains(OAuthScopes.FullAccess, scopes);
+        Assert.Contains(Scope.FullAccess, scopes);
     }
 
     [Fact]
@@ -32,8 +32,8 @@ public class ScopeTranslatorTests
         var permissions = new[] { "api:entries:read" };
         var scopes = ScopeTranslator.FromPermissions(permissions);
 
-        Assert.Contains(OAuthScopes.GlucoseRead, scopes);
-        Assert.DoesNotContain(OAuthScopes.GlucoseReadWrite, scopes);
+        Assert.Contains(Scope.GlucoseRead, scopes);
+        Assert.DoesNotContain(Scope.GlucoseReadWrite, scopes);
     }
 
     [Fact]
@@ -42,16 +42,67 @@ public class ScopeTranslatorTests
         var permissions = new[] { "api:entries:create" };
         var scopes = ScopeTranslator.FromPermissions(permissions);
 
-        Assert.Contains(OAuthScopes.GlucoseReadWrite, scopes);
+        Assert.Contains(Scope.GlucoseReadWrite, scopes);
+    }
+
+    [Theory]
+    [InlineData("api:entries:*", Scope.GlucoseReadWrite)]
+    [InlineData("api:treatments:*", Scope.TreatmentsReadWrite)]
+    [InlineData("api:devicestatus:*", Scope.DevicesReadWrite)]
+    [InlineData("api:food:*", Scope.FoodReadWrite)]
+    [InlineData("api:profile:*", Scope.TherapyReadWrite)]
+    [InlineData("api:activity:*", Scope.SleepReadWrite)]
+    public void FromPermissions_VerbWildcard_MapsToReadWrite(string permission, string expected)
+    {
+        // Nightscout's own roles are written with verb wildcards, so a subject migrated off one
+        // holds these and nothing else.
+        var scopes = ScopeTranslator.FromPermissions([permission]);
+
+        Assert.Contains(expected, scopes);
+        Assert.DoesNotContain(Scope.FullAccess, scopes);
     }
 
     [Fact]
-    public void FromPermissions_EntriesDelete_MapsToFullAccess()
+    public void FromPermissions_NightscoutReadableWildcard_MapsToAllReadScopes()
     {
-        var permissions = new[] { "api:entries:delete" };
-        var scopes = ScopeTranslator.FromPermissions(permissions);
+        // "*:*:read" is the permission on Nightscout's seeded "readable" role.
+        var scopes = ScopeTranslator.FromPermissions(["*:*:read"]);
 
-        Assert.Contains(OAuthScopes.FullAccess, scopes);
+        Assert.Contains(Scope.GlucoseRead, scopes);
+        Assert.Contains(Scope.TreatmentsRead, scopes);
+        Assert.DoesNotContain(Scope.GlucoseReadWrite, scopes);
+    }
+
+    [Fact]
+    public void FromPermissions_EntriesDelete_MapsToGlucoseReadWriteOnly()
+    {
+        // A delete verb on one collection is authority over that collection, not superuser: mapping
+        // it to "*" handed a subject holding only "api:entries:delete" every other collection too.
+        var scopes = ScopeTranslator.FromPermissions(["api:entries:delete"]);
+
+        Assert.Contains(Scope.GlucoseReadWrite, scopes);
+        Assert.DoesNotContain(Scope.FullAccess, scopes);
+        Assert.DoesNotContain(Scope.TreatmentsReadWrite, scopes);
+    }
+
+    [Fact]
+    public void FromPermissions_CareportalTreatmentsWildcard_CanDeleteTreatments()
+    {
+        // Nightscout's seeded careportal role is "api:treatments:*", which covers its delete verb.
+        var scopes = ScopeTranslator.FromPermissions(["api:treatments:*"]);
+
+        Assert.True(Scope.Satisfies(scopes, Scope.TreatmentsReadWrite));
+    }
+
+    [Fact]
+    public void ToPermissions_ReadWriteScope_RoundTripsThroughItsDeleteVerb()
+    {
+        var permissions = ScopeTranslator.ToPermissions([Scope.TreatmentsReadWrite]);
+
+        Assert.Contains("api:treatments:delete", permissions);
+        Assert.Contains(
+            Scope.TreatmentsReadWrite,
+            ScopeTranslator.FromPermissions(permissions));
     }
 
     [Fact]
@@ -60,16 +111,16 @@ public class ScopeTranslatorTests
         var permissions = new[] { "api:*:read" };
         var scopes = ScopeTranslator.FromPermissions(permissions);
 
-        Assert.Contains(OAuthScopes.GlucoseRead, scopes);
-        Assert.Contains(OAuthScopes.TreatmentsRead, scopes);
-        Assert.Contains(OAuthScopes.DevicesRead, scopes);
-        Assert.Contains(OAuthScopes.TherapyRead, scopes);
-        Assert.Contains(OAuthScopes.AlertsRead, scopes);
-        Assert.Contains(OAuthScopes.ReportsRead, scopes);
-        Assert.Contains(OAuthScopes.IdentityRead, scopes);
-        Assert.Contains(OAuthScopes.HeartRateRead, scopes);
-        Assert.Contains(OAuthScopes.StepCountRead, scopes);
-        Assert.Contains(OAuthScopes.SleepRead, scopes);
+        Assert.Contains(Scope.GlucoseRead, scopes);
+        Assert.Contains(Scope.TreatmentsRead, scopes);
+        Assert.Contains(Scope.DevicesRead, scopes);
+        Assert.Contains(Scope.TherapyRead, scopes);
+        Assert.Contains(Scope.AlertsRead, scopes);
+        Assert.Contains(Scope.ReportsRead, scopes);
+        Assert.Contains(Scope.IdentityRead, scopes);
+        Assert.Contains(Scope.HeartRateRead, scopes);
+        Assert.Contains(Scope.StepCountRead, scopes);
+        Assert.Contains(Scope.SleepRead, scopes);
     }
 
     [Fact]
@@ -78,13 +129,13 @@ public class ScopeTranslatorTests
         var permissions = new[] { "readable" };
         var scopes = ScopeTranslator.FromPermissions(permissions);
 
-        Assert.Contains(OAuthScopes.GlucoseRead, scopes);
-        Assert.Contains(OAuthScopes.TreatmentsRead, scopes);
-        Assert.Contains(OAuthScopes.DevicesRead, scopes);
-        Assert.Contains(OAuthScopes.TherapyRead, scopes);
-        Assert.Contains(OAuthScopes.HeartRateRead, scopes);
-        Assert.Contains(OAuthScopes.StepCountRead, scopes);
-        Assert.Contains(OAuthScopes.SleepRead, scopes);
+        Assert.Contains(Scope.GlucoseRead, scopes);
+        Assert.Contains(Scope.TreatmentsRead, scopes);
+        Assert.Contains(Scope.DevicesRead, scopes);
+        Assert.Contains(Scope.TherapyRead, scopes);
+        Assert.Contains(Scope.HeartRateRead, scopes);
+        Assert.Contains(Scope.StepCountRead, scopes);
+        Assert.Contains(Scope.SleepRead, scopes);
     }
 
     /// <summary>
@@ -97,11 +148,11 @@ public class ScopeTranslatorTests
     {
         var scopes = ScopeTranslator.FromPermissions(["api:activity:read"]);
 
-        Assert.Contains(OAuthScopes.HeartRateRead, scopes);
-        Assert.Contains(OAuthScopes.StepCountRead, scopes);
-        Assert.Contains(OAuthScopes.SleepRead, scopes);
-        Assert.DoesNotContain(OAuthScopes.TreatmentsRead, scopes);
-        Assert.DoesNotContain(OAuthScopes.GlucoseRead, scopes);
+        Assert.Contains(Scope.HeartRateRead, scopes);
+        Assert.Contains(Scope.StepCountRead, scopes);
+        Assert.Contains(Scope.SleepRead, scopes);
+        Assert.DoesNotContain(Scope.TreatmentsRead, scopes);
+        Assert.DoesNotContain(Scope.GlucoseRead, scopes);
     }
 
     /// <summary>
@@ -110,12 +161,12 @@ public class ScopeTranslatorTests
     /// must therefore still produce a legacy permission string.
     /// </summary>
     [Theory]
-    [InlineData(OAuthScopes.HeartRateRead)]
-    [InlineData(OAuthScopes.StepCountRead)]
-    [InlineData(OAuthScopes.SleepRead)]
-    [InlineData(OAuthScopes.HeartRateReadWrite)]
-    [InlineData(OAuthScopes.StepCountReadWrite)]
-    [InlineData(OAuthScopes.SleepReadWrite)]
+    [InlineData(Scope.HeartRateRead)]
+    [InlineData(Scope.StepCountRead)]
+    [InlineData(Scope.SleepRead)]
+    [InlineData(Scope.HeartRateReadWrite)]
+    [InlineData(Scope.StepCountReadWrite)]
+    [InlineData(Scope.SleepReadWrite)]
     public void ToPermissions_ActivityCategories_MapBackToTheActivityCollection(string scope)
     {
         var permissions = ScopeTranslator.ToPermissions([scope]);
@@ -129,9 +180,9 @@ public class ScopeTranslatorTests
         var permissions = new[] { "api:entries:read", "api:treatments:create" };
         var scopes = ScopeTranslator.FromPermissions(permissions);
 
-        Assert.Contains(OAuthScopes.GlucoseRead, scopes);
-        Assert.Contains(OAuthScopes.TreatmentsReadWrite, scopes);
-        Assert.DoesNotContain(OAuthScopes.FullAccess, scopes);
+        Assert.Contains(Scope.GlucoseRead, scopes);
+        Assert.Contains(Scope.TreatmentsReadWrite, scopes);
+        Assert.DoesNotContain(Scope.FullAccess, scopes);
     }
 
     [Fact]
@@ -146,28 +197,28 @@ public class ScopeTranslatorTests
     [Fact]
     public void ToPermissions_EntriesRead_MapsBack()
     {
-        var scopes = new[] { OAuthScopes.GlucoseRead };
+        var scopes = new[] { Scope.GlucoseRead };
         var permissions = ScopeTranslator.ToPermissions(scopes);
 
         Assert.Contains("api:entries:read", permissions);
     }
 
     [Fact]
-    public void ToPermissions_EntriesReadWrite_IncludesReadCreateUpdate()
+    public void ToPermissions_EntriesReadWrite_IncludesEveryWriteVerb()
     {
-        var scopes = new[] { OAuthScopes.GlucoseReadWrite };
+        var scopes = new[] { Scope.GlucoseReadWrite };
         var permissions = ScopeTranslator.ToPermissions(scopes);
 
         Assert.Contains("api:entries:read", permissions);
         Assert.Contains("api:entries:create", permissions);
         Assert.Contains("api:entries:update", permissions);
-        Assert.DoesNotContain("api:entries:delete", permissions);
+        Assert.Contains("api:entries:delete", permissions);
     }
 
     [Fact]
     public void ToPermissions_FullAccess_MapsToWildcard()
     {
-        var scopes = new[] { OAuthScopes.FullAccess };
+        var scopes = new[] { Scope.FullAccess };
         var permissions = ScopeTranslator.ToPermissions(scopes);
 
         Assert.Contains("*", permissions);
@@ -180,8 +231,8 @@ public class ScopeTranslatorTests
         var permissions = new[] { "api:food:read" };
         var scopes = ScopeTranslator.FromPermissions(permissions);
 
-        Assert.Contains(OAuthScopes.FoodRead, scopes);
-        Assert.DoesNotContain(OAuthScopes.FoodReadWrite, scopes);
+        Assert.Contains(Scope.FoodRead, scopes);
+        Assert.DoesNotContain(Scope.FoodReadWrite, scopes);
     }
 
     [Fact]
@@ -190,28 +241,28 @@ public class ScopeTranslatorTests
         var permissions = new[] { "api:food:create" };
         var scopes = ScopeTranslator.FromPermissions(permissions);
 
-        Assert.Contains(OAuthScopes.FoodReadWrite, scopes);
+        Assert.Contains(Scope.FoodReadWrite, scopes);
     }
 
     [Fact]
     public void ToPermissions_FoodRead_MapsBack()
     {
-        var scopes = new[] { OAuthScopes.FoodRead };
+        var scopes = new[] { Scope.FoodRead };
         var permissions = ScopeTranslator.ToPermissions(scopes);
 
         Assert.Contains("api:food:read", permissions);
     }
 
     [Fact]
-    public void ToPermissions_FoodReadWrite_IncludesReadCreateUpdate()
+    public void ToPermissions_FoodReadWrite_IncludesEveryWriteVerb()
     {
-        var scopes = new[] { OAuthScopes.FoodReadWrite };
+        var scopes = new[] { Scope.FoodReadWrite };
         var permissions = ScopeTranslator.ToPermissions(scopes);
 
         Assert.Contains("api:food:read", permissions);
         Assert.Contains("api:food:create", permissions);
         Assert.Contains("api:food:update", permissions);
-        Assert.DoesNotContain("api:food:delete", permissions);
+        Assert.Contains("api:food:delete", permissions);
     }
 
     [Fact]
@@ -220,7 +271,7 @@ public class ScopeTranslatorTests
         var permissions = new[] { "api:*:read" };
         var scopes = ScopeTranslator.FromPermissions(permissions);
 
-        Assert.Contains(OAuthScopes.FoodRead, scopes);
+        Assert.Contains(Scope.FoodRead, scopes);
     }
 
     [Fact]
@@ -229,6 +280,6 @@ public class ScopeTranslatorTests
         var permissions = new[] { "api:*:create" };
         var scopes = ScopeTranslator.FromPermissions(permissions);
 
-        Assert.Contains(OAuthScopes.FoodReadWrite, scopes);
+        Assert.Contains(Scope.FoodReadWrite, scopes);
     }
 }

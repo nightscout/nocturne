@@ -1,3 +1,5 @@
+using NJsonSchema.Annotations;
+
 namespace Nocturne.Core.Models.V4;
 
 /// <summary>
@@ -25,23 +27,9 @@ namespace Nocturne.Core.Models.V4;
 /// <seealso cref="AidAlgorithm"/>
 /// <seealso cref="Bolus"/>
 /// <seealso cref="TempBasal"/>
-public class ApsSnapshot : IV4Record
+[JsonSchemaFlatten]
+public class ApsSnapshot : V4RecordBase
 {
-    /// <inheritdoc />
-    public Guid Id { get; set; }
-
-    /// <inheritdoc />
-    public DateTime Timestamp { get; set; }
-
-    /// <inheritdoc />
-    public long Mills => new DateTimeOffset(Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
-
-    /// <inheritdoc />
-    public int? UtcOffset { get; set; }
-
-    /// <inheritdoc />
-    public string? Device { get; set; }
-
     /// <summary>
     /// Foreign key to the <see cref="Device"/> table.
     /// </summary>
@@ -52,29 +40,11 @@ public class ApsSnapshot : IV4Record
     /// </summary>
     public Guid? PatientDeviceId { get; set; }
 
-    /// <inheritdoc />
-    public string? App { get; set; }
-
-    /// <inheritdoc />
-    public string? DataSource { get; set; }
-
     /// <summary>
     /// Stable per-source identifier. Records matched on (DataSource, SyncIdentifier) are updated in
     /// place on re-upload instead of duplicated, so uploader retries are idempotent.
     /// </summary>
     public string? SyncIdentifier { get; set; }
-
-    /// <inheritdoc />
-    public Guid? CorrelationId { get; set; }
-
-    /// <inheritdoc />
-    public string? LegacyId { get; set; }
-
-    /// <inheritdoc />
-    public DateTime CreatedAt { get; set; }
-
-    /// <inheritdoc />
-    public DateTime ModifiedAt { get; set; }
 
     /// <summary>
     /// Which AID algorithm produced this snapshot.
@@ -156,9 +126,4 @@ public class ApsSnapshot : IV4Record
 
     /// <summary>Algorithm version string (e.g. Trio app version).</summary>
     public string? AidVersion { get; set; }
-
-    /// <summary>
-    /// Catch-all for fields not mapped to dedicated columns
-    /// </summary>
-    public Dictionary<string, object?>? AdditionalProperties { get; set; }
 }

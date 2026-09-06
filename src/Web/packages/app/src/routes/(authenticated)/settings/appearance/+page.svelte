@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { time } from "$lib/utils/formatting";
   import { getSettingsStore } from "$lib/stores/settings-store.svelte";
   import {
     getColorTheme,
@@ -79,6 +80,7 @@
   import { WidgetId } from "$lib/api/generated/nocturne-api-client";
   import { page } from "$app/state";
   import { coachmark } from "@nocturne/coach";
+  import { describeSubmitError } from "$lib/forms/submit-error";
 
   const store = getSettingsStore();
   const realtimeStore = getRealtimeStore();
@@ -127,25 +129,28 @@
     }
   });
 
-  // Current time in timezone for display
-  const currentTime = $derived(
-    new Date(realtimeStore.now).toLocaleTimeString(undefined, {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    })
-  );
+  // Follows the 12/24 preference, which the selector two cards below sets: this
+  // field is the only place a reader sees that choice take effect.
+  const currentTime = $derived(time(realtimeStore.now, { seconds: true }));
+
+  /**
+   * This page carries two scopes: units, formats, theme, chart style, widgets and language live on
+   * the subject, while chart range, glucose processing and tracker pills are the tenant's. The
+   * endpoints behind the tenant half are not served on a host that resolves none, so its queries
+   * are never created rather than left to 404.
+   */
+  const tenantless = page.data.tenantless === true;
 
   // Glucose processing settings
-  const preferenceQuery = getPreference();
-  const sourceDefaultsQuery = getSourceDefaults();
+  const preferenceQuery = tenantless ? null : getPreference();
+  const sourceDefaultsQuery = tenantless ? null : getSourceDefaults();
   let glucoseProcessingPreference: string | null = $derived(
-    preferenceQuery.current?.preferredGlucoseProcessing ?? null,
+    preferenceQuery?.current?.preferredGlucoseProcessing ?? null,
   );
   let sourceDefaults: Array<{ match: string; field: string; processing: string }> =
     $derived(
       // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- zod types the rule fields as optional, but the API always returns them populated
-      (sourceDefaultsQuery.current?.rules ?? []) as Array<{
+      (sourceDefaultsQuery?.current?.rules ?? []) as Array<{
         match: string;
         field: string;
         processing: string;
@@ -156,8 +161,8 @@
   // Chart range and tracker pills persist server-side. They used to only mutate
   // the in-memory settings store, which nothing ever saved, so the dashboard
   // picked the change up live and then lost it on reload.
-  const uiSettingsQuery = getUiSettings();
-  const featureSettings = $derived(uiSettingsQuery.current?.features);
+  const uiSettingsQuery = tenantless ? null : getUiSettings();
+  const featureSettings = $derived(uiSettingsQuery?.current?.features);
   const focusHours = $derived(featureSettings?.display?.focusHours ?? 12);
   const trackerPillsEnabled = $derived(featureSettings?.trackerPills?.enabled ?? true);
 
@@ -173,9 +178,11 @@
       // The dashboard still reads these through the shared settings store; reload
       // it so the change it renders matches what was persisted.
       await store.reload();
-    } catch {
-      toast.error("Could not save. Check your connection and try again.");
-      await uiSettingsQuery.refresh();
+    } catch (err) {
+      toast.error(
+        describeSubmitError(err, "Could not save. Check your connection and try again.")
+      );
+      await uiSettingsQuery?.refresh();
     }
   }
 </script>
@@ -202,10 +209,7 @@
     <Card class="border-destructive">
       <CardContent class="flex items-center gap-3 py-6">
         <AlertCircle class="h-5 w-5 text-destructive" />
-        <div>
-          <p class="font-medium">Failed to load settings</p>
-          <p class="text-sm text-muted-foreground">{store.error}</p>
-        </div>
+        <p class="font-medium">{store.error}</p>
       </CardContent>
     </Card>
   {:else}
@@ -644,31 +648,33 @@
         <CardDescription>Configure chart display preferences</CardDescription>
       </CardHeader>
       <CardContent>
-        <div class="grid gap-4 @sm:grid-cols-2">
-          <div class="space-y-2">
-            <FormLabel>Default chart range</FormLabel>
-            <Select
-              type="single"
-              value={String(focusHours)}
-              onValueChange={(value: string) =>
-                saveFeatures({ display: { focusHours: parseInt(value) } })}
-            >
-              <SelectTrigger>
-                <span>{focusHours} hours</span>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="2">2 hours</SelectItem>
-                <SelectItem value="3">3 hours</SelectItem>
-                <SelectItem value="4">4 hours</SelectItem>
-                <SelectItem value="6">6 hours</SelectItem>
-                <SelectItem value="12">12 hours</SelectItem>
-                <SelectItem value="24">24 hours</SelectItem>
-              </SelectContent>
-            </Select>
+        {#if !tenantless}
+          <div class="grid gap-4 @sm:grid-cols-2">
+            <div class="space-y-2">
+              <FormLabel>Default chart range</FormLabel>
+              <Select
+                type="single"
+                value={String(focusHours)}
+                onValueChange={(value: string) =>
+                  saveFeatures({ display: { focusHours: parseInt(value) } })}
+              >
+                <SelectTrigger>
+                  <span>{focusHours} hours</span>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="2">2 hours</SelectItem>
+                  <SelectItem value="3">3 hours</SelectItem>
+                  <SelectItem value="4">4 hours</SelectItem>
+                  <SelectItem value="6">6 hours</SelectItem>
+                  <SelectItem value="12">12 hours</SelectItem>
+                  <SelectItem value="24">24 hours</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-        </div>
 
-        <Separator class="my-4" />
+          <Separator class="my-4" />
+        {/if}
 
         <!-- Glucose line visual style -->
         <div class="grid gap-4 @sm:grid-cols-2">
@@ -848,6 +854,7 @@
     </div>
 
 
+    {#if !tenantless}
     <!-- Glucose Processing -->
     <Card>
       <CardHeader>
@@ -961,6 +968,7 @@
         </p>
       </CardContent>
     </Card>
+    {/if}
 
     <!-- Browser Tab Settings (Favicon) -->
     <TitleFaviconSettings />

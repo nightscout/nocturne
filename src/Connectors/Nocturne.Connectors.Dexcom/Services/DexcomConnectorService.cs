@@ -46,14 +46,6 @@ public class DexcomConnectorService : BaseConnectorService<DexcomConnectorConfig
 
     protected override string ConnectorSource => DataSources.DexcomConnector;
     public override string ServiceName => "Dexcom Share";
-    public override List<SyncDataType> SupportedDataTypes => [SyncDataType.Glucose];
-
-    public override async Task<bool> AuthenticateAsync()
-    {
-        // AuthenticateAsync is a legacy method; actual auth happens per-tenant in sync flow
-        TrackSuccessfulRequest();
-        return true;
-    }
 
     /// <summary>
     ///     Fetches SensorGlucose records from the Dexcom Share API.
@@ -79,14 +71,12 @@ public class DexcomConnectorService : BaseConnectorService<DexcomConnectorConfig
     protected override async Task<SyncResult> PerformSyncInternalAsync(
         SyncRequest request,
         DexcomConnectorConfiguration config,
-        CancellationToken cancellationToken,
-        ISyncProgressReporter? progressReporter = null
-    )
+        CancellationToken cancellationToken)
     {
         var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
 
-        var enabledTypes = config.GetEnabledDataTypes(SupportedDataTypes);
-        if (!enabledTypes.Contains(SyncDataType.Glucose))
+        var activeTypes = ResolveActiveTypes(request, config);
+        if (!activeTypes.Contains(SyncDataType.Glucose))
         {
             result.EndTime = DateTimeOffset.UtcNow;
             return result;
@@ -95,26 +85,9 @@ public class DexcomConnectorService : BaseConnectorService<DexcomConnectorConfig
         try
         {
             var sensorGlucose = await FetchSensorGlucoseAsync(config, request.From);
-            var sgList = sensorGlucose.ToList();
 
-            if (sgList.Count > 0)
-            {
-                var success = await PublishSensorGlucoseDataAsync(sgList, config, cancellationToken);
-                result.ItemsSynced[SyncDataType.Glucose] = sgList.Count;
-                result.LastEntryTimes[SyncDataType.Glucose] = DateTimeOffset
-                    .FromUnixTimeMilliseconds(sgList.Max(s => s.Mills))
-                    .UtcDateTime;
-
-                if (!success)
-                {
-                    result.Success = false;
-                    result.Errors.Add("SensorGlucose publish failed");
-                }
-                else
-                {
-                    _logger.LogInformation("Synced {Count} SensorGlucose records from Dexcom", sgList.Count);
-                }
-            }
+            await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
+                sensorGlucose.ToList(), PublishSensorGlucoseDataAsync, config, cancellationToken);
         }
         catch (Exception ex)
         {

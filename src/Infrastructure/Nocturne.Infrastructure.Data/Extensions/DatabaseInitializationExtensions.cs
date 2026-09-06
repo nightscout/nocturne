@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Configuration;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Security;
 using Npgsql;
@@ -16,6 +16,58 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// </summary>
 public static class DatabaseInitializationExtensions
 {
+    /// <summary>
+    /// The migrator <see cref="NocturneDbContext"/>, with server notices forwarded to
+    /// <paramref name="logger"/>.
+    /// <para>
+    /// A migration that decides something at runtime — which constraints matched a shape, which
+    /// index it had to rebuild, whether it could take a lock before giving up — can only report it
+    /// with <c>RAISE NOTICE</c>, and a notice reaches no log by default: the server's
+    /// <c>log_min_messages</c> is <c>warning</c>, and Npgsql surfaces it as a connection event with
+    /// no subscriber. Forwarding it is the only record such a migration leaves, because one that
+    /// completes gets its history row and is never run again.
+    /// </para>
+    /// <para>
+    /// The subscription has to be on the connection EF executes against, which is why this builds
+    /// the context rather than configuring the data source.
+    /// <c>NpgsqlDataSourceBuilder.UsePhysicalConnectionInitializer</c> looks like the natural hook
+    /// and is not one: it hands out a throwaway <see cref="NpgsqlConnection"/> wrapper for
+    /// initialisation only, so the handler list dies with that instance and the connection EF later
+    /// takes from the pool has none. Subscribing there is silent, not wrong-looking.
+    /// </para>
+    /// </summary>
+    internal static NocturneDbContext CreateMigratorContext(
+        NpgsqlDataSource dataSource,
+        TenantConnectionInterceptor interceptor,
+        ILogger logger)
+    {
+        var optionsBuilder = new DbContextOptionsBuilder<NocturneDbContext>();
+
+        // A migration can include long-running DDL — e.g. building an index on a
+        // multi-million-row table — that exceeds Npgsql's default 30s command timeout.
+        // A timed-out migration command surfaces as a transient failure and crashes
+        // startup; under `restart: unless-stopped` the next boot re-runs the migration
+        // from scratch, so the build is killed and restarted forever — an unbreakable
+        // crash loop. Give migration DDL ample time to complete.
+        optionsBuilder.UseNpgsql(
+            dataSource,
+            npgsql => npgsql.CommandTimeout((int)TimeSpan.FromHours(1).TotalSeconds));
+        optionsBuilder.AddInterceptors(interceptor);
+
+        var context = new NocturneDbContext(optionsBuilder.Options);
+
+        // Survives the open/close churn EF does around every suppressTransaction boundary:
+        // the DbConnection instance is stable for the context's lifetime, only its physical
+        // connector is returned to the pool and retaken.
+        if (context.Database.GetDbConnection() is NpgsqlConnection npgsql)
+        {
+            npgsql.Notice += (_, args) =>
+                logger.LogInformation("Migration notice: {Notice}", args.Notice.MessageText);
+        }
+
+        return context;
+    }
+
     /// <summary>
     /// Runs EF Core migrations against the database using a dedicated migrator
     /// connection string. Builds a throwaway NpgsqlDataSource + DbContextOptions
@@ -57,19 +109,7 @@ public static class DatabaseInitializationExtensions
                 logger,
                 cancellationToken);
 
-            var optionsBuilder = new DbContextOptionsBuilder<NocturneDbContext>();
-            // A migration can include long-running DDL — e.g. building an index on a
-            // multi-million-row table — that exceeds Npgsql's default 30s command timeout.
-            // A timed-out migration command surfaces as a transient failure and crashes
-            // startup; under `restart: unless-stopped` the next boot re-runs the migration
-            // from scratch, so the build is killed and restarted forever — an unbreakable
-            // crash loop. Give migration DDL ample time to complete.
-            optionsBuilder.UseNpgsql(
-                dataSource,
-                npgsql => npgsql.CommandTimeout((int)TimeSpan.FromHours(1).TotalSeconds));
-            optionsBuilder.AddInterceptors(interceptor);
-
-            using var context = new NocturneDbContext(optionsBuilder.Options);
+            using var context = CreateMigratorContext(dataSource, interceptor, logger);
             await context.Database.MigrateAsync(cancellationToken);
 
             logger.LogInformation("PostgreSQL database migrations completed");
@@ -167,6 +207,79 @@ public static class DatabaseInitializationExtensions
                 await dataSource.DisposeAsync();
             }
         }
+    }
+
+    /// <summary>
+    /// Applies <see cref="TenantTableStorageParameters"/> to every tenant-scoped table (the
+    /// rationale lives there). Runs under the migrator role right after migrations, like
+    /// <see cref="ReconcileShareRlsPoliciesAsync"/>, and derives the table set from the EF model so
+    /// a new tenant-scoped entity is covered on its first startup. Only tables whose stored value
+    /// is absent or above the ceiling are altered, so a steady-state startup issues no DDL. A table
+    /// whose lock cannot be taken within the statement's <c>lock_timeout</c> is skipped with a
+    /// warning and picked up on the next startup.
+    /// </summary>
+    /// <param name="migratorConnectionString">Connection string for the schema-owning migrator role.</param>
+    /// <param name="logger">Logger for progress and diagnostics.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The number of tables altered.</returns>
+    public static async Task<int> ReconcileTenantTableStorageParametersAsync(
+        string migratorConnectionString,
+        ILogger logger,
+        CancellationToken cancellationToken = default)
+    {
+        await using var dataSource = new NpgsqlDataSourceBuilder(migratorConnectionString).Build();
+
+        var optionsBuilder = new DbContextOptionsBuilder<NocturneDbContext>();
+        optionsBuilder.UseNpgsql(dataSource);
+        using var context = new NocturneDbContext(optionsBuilder.Options);
+        var tables = ShareRlsPolicy.TenantScopedTableNames(context.Model);
+
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+
+        var drifted = new List<string>();
+        await using (var query = connection.CreateCommand())
+        {
+            query.CommandText = TenantTableStorageParameters.DriftQuerySql;
+            query.Parameters.AddWithValue(tables.ToArray());
+            query.Parameters.AddWithValue(TenantTableStorageParameters.AnalyzeScaleFactorName);
+            query.Parameters.AddWithValue(TenantTableStorageParameters.AnalyzeScaleFactor);
+            await using var reader = await query.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+                drifted.Add(reader.GetString(0));
+        }
+
+        var altered = 0;
+        foreach (var table in drifted)
+        {
+            await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+            try
+            {
+                await using var command = connection.CreateCommand();
+                command.Transaction = transaction;
+                command.CommandText = TenantTableStorageParameters.BuildSetSql(table);
+                await command.ExecuteNonQueryAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                altered++;
+            }
+            catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.LockNotAvailable)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                logger.LogWarning(
+                    "Skipped setting {Parameter} on {Table}: {Message}. It will be retried on the next startup.",
+                    TenantTableStorageParameters.AnalyzeScaleFactorName, table, ex.MessageText);
+            }
+        }
+
+        if (altered > 0)
+        {
+            logger.LogInformation(
+                "Set {Parameter} = {Value} on {Count} tenant-scoped tables.",
+                TenantTableStorageParameters.AnalyzeScaleFactorName,
+                TenantTableStorageParameters.AnalyzeScaleFactor,
+                altered);
+        }
+
+        return altered;
     }
 
     /// <summary>
@@ -269,17 +382,9 @@ public static class DatabaseInitializationExtensions
         var context = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<NocturneDbContext>>();
 
-        var tenantScopedTables = context.Model.GetEntityTypes()
-            .Where(et => typeof(ITenantScoped).IsAssignableFrom(et.ClrType))
-            .Select(et => et.GetTableName())
-            .Where(name => !string.IsNullOrEmpty(name))
-            .Select(name => name!)
-            .Distinct()
-            .ToArray();
-
         await VerifyRlsAsync(
             context.Database.GetDbConnection(),
-            tenantScopedTables,
+            ShareRlsPolicy.TenantScopedTableNames(context.Model),
             logger,
             cancellationToken);
 
@@ -309,9 +414,17 @@ public static class DatabaseInitializationExtensions
 
     /// <summary>
     /// Verifies that every supplied tenant-scoped table has Row Level Security
-    /// enabled, forced, and at least one policy. Also checks table ownership and
+    /// enabled, forced, at least one policy, and the share-category policy
+    /// <see cref="ShareRlsPolicy.PolicyName"/> by name. Also checks table ownership and
     /// default privileges, and warns if the connected database user is a superuser
     /// or has BYPASSRLS.
+    ///
+    /// Naming the share policy is what makes a partial reconcile visible: every
+    /// tenant-scoped table carries <c>tenant_isolation</c> from its migration, so a
+    /// table the reconciler skipped still has a non-zero policy count.
+    /// <see cref="ReconcileShareRlsPoliciesAsync"/> applies that policy to every table in
+    /// this same set immediately before this check runs, so the expectation is the
+    /// reconciler's own output rather than a second list.
     ///
     /// Runs at API startup after migrations so accidentally adding a new
     /// tenant-scoped table without an accompanying RLS migration fails loud
@@ -326,7 +439,7 @@ public static class DatabaseInitializationExtensions
     /// if it isn't already, and is left open on return.
     /// </summary>
     /// <param name="connection">Open or closed DbConnection to run the checks against. Opened if needed and left open.</param>
-    /// <param name="tenantScopedTables">Names of tables expected to have RLS configured (typically derived from the EF model walk for <see cref="ITenantScoped"/> entities).</param>
+    /// <param name="tenantScopedTables">Names of tables expected to have RLS configured — <see cref="ShareRlsPolicy.TenantScopedTableNames"/> in production.</param>
     /// <param name="logger">Logger for pass/warn/fail messages. Pass <see cref="Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance"/> to suppress.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public static async Task VerifyRlsAsync(
@@ -354,7 +467,7 @@ public static class DatabaseInitializationExtensions
             SELECT c.relname,
                    c.relrowsecurity,
                    c.relforcerowsecurity,
-                   (SELECT COUNT(*) FROM pg_policy p WHERE p.polrelid = c.oid) AS policy_count
+                   ARRAY(SELECT p.polname::text FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
             FROM pg_class c
             JOIN pg_namespace n ON n.oid = c.relnamespace
             WHERE n.nspname = 'public'
@@ -362,7 +475,7 @@ public static class DatabaseInitializationExtensions
               AND c.relname = ANY(@tables);
             """;
 
-        var rows = new List<(string Table, bool RlsEnabled, bool RlsForced, long PolicyCount)>();
+        var rows = new List<(string Table, bool RlsEnabled, bool RlsForced, string[] Policies)>();
 
         await using (var cmd = connection.CreateCommand())
         {
@@ -379,7 +492,7 @@ public static class DatabaseInitializationExtensions
                     reader.GetString(0),
                     reader.GetBoolean(1),
                     reader.GetBoolean(2),
-                    reader.GetInt64(3)));
+                    reader.GetFieldValue<string[]>(3)));
             }
         }
 
@@ -387,7 +500,11 @@ public static class DatabaseInitializationExtensions
         var missing = tables.Where(t => !foundTables.Contains(t)).ToArray();
         var notEnabled = rows.Where(r => !r.RlsEnabled).Select(r => r.Table).ToArray();
         var notForced = rows.Where(r => r.RlsEnabled && !r.RlsForced).Select(r => r.Table).ToArray();
-        var noPolicy = rows.Where(r => r.RlsEnabled && r.PolicyCount == 0).Select(r => r.Table).ToArray();
+        var noPolicy = rows.Where(r => r.RlsEnabled && r.Policies.Length == 0).Select(r => r.Table).ToArray();
+        var noSharePolicy = rows
+            .Where(r => r.RlsEnabled && r.Policies.Length > 0 && !r.Policies.Contains(ShareRlsPolicy.PolicyName))
+            .Select(r => r.Table)
+            .ToArray();
 
         var problems = new List<string>();
         if (missing.Length > 0)
@@ -406,13 +523,20 @@ public static class DatabaseInitializationExtensions
         {
             problems.Add($"no policy defined on: {string.Join(", ", noPolicy)}");
         }
+        if (noSharePolicy.Length > 0)
+        {
+            problems.Add($"'{ShareRlsPolicy.PolicyName}' policy missing on: {string.Join(", ", noSharePolicy)}");
+        }
 
         if (problems.Count > 0)
         {
             var message =
-                "Row Level Security self-check failed. Tenant-scoped tables must have RLS enabled, forced, and at least one policy. " +
+                "Row Level Security self-check failed. Tenant-scoped tables must have RLS enabled, forced, a " +
+                $"tenant_isolation policy and the '{ShareRlsPolicy.PolicyName}' policy. " +
                 string.Join("; ", problems) +
-                ". Add a migration that runs ENABLE + FORCE ROW LEVEL SECURITY and creates a tenant_isolation policy.";
+                ". Add a migration that runs ENABLE + FORCE ROW LEVEL SECURITY and creates a tenant_isolation " +
+                $"policy; a missing '{ShareRlsPolicy.PolicyName}' means the table was not in the set " +
+                $"{nameof(ReconcileShareRlsPoliciesAsync)} just reconciled.";
             logger.LogCritical("{Message}", message);
             throw new InvalidOperationException(message);
         }

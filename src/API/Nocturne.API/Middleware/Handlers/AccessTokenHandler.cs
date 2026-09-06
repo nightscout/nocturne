@@ -1,5 +1,5 @@
-using System.Security.Cryptography;
-using System.Text;
+using Nocturne.API.Extensions;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Middleware.Handlers;
@@ -63,7 +63,7 @@ public class AccessTokenHandler : IAuthHandler
         }
 
         // Hash the token to look it up
-        var tokenHash = ComputeSha256Hash(accessToken);
+        var tokenHash = HashUtils.Sha256Hex(accessToken);
 
         // Look up the subject by access token hash
         using var scope = _scopeFactory.CreateScope();
@@ -136,18 +136,11 @@ public class AccessTokenHandler : IAuthHandler
     private static string? ExtractAccessToken(HttpContext context)
     {
         // 1. Check Authorization header (Bearer token that's not a JWT)
-        var authHeader = context.Request.Headers.Authorization.FirstOrDefault();
-        if (
-            !string.IsNullOrEmpty(authHeader)
-            && authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
-        )
+        var token = context.Request.GetAuthorizationCredential();
+        // Only return if it's NOT a JWT (no dots)
+        if (token is not null && !token.Contains('.'))
         {
-            var token = authHeader["Bearer ".Length..].Trim();
-            // Only return if it's NOT a JWT (no dots)
-            if (!token.Contains('.'))
-            {
-                return token;
-            }
+            return token;
         }
 
         // 2. Check query parameters
@@ -186,15 +179,5 @@ public class AccessTokenHandler : IAuthHandler
 
         // Allow alphanumeric characters in digest
         return digest.All(c => char.IsLetterOrDigit(c));
-    }
-
-    /// <summary>
-    /// Compute SHA-256 hash of the access token for storage lookup
-    /// </summary>
-    private static string ComputeSha256Hash(string input)
-    {
-        var bytes = Encoding.UTF8.GetBytes(input);
-        var hash = SHA256.HashData(bytes);
-        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 }

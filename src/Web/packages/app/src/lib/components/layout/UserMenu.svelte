@@ -17,9 +17,14 @@
     isPlatformAdmin?: boolean;
     /** Whether the current session is a guest link session */
     isGuestSession?: boolean;
+    /**
+     * Whether this host serves the cross-tenant dashboard rather than one tenant. Hides the
+     * /settings/* entries below, which the route guard bounces back to "/" there.
+     */
+    tenantless?: boolean;
   }
 
-  const { user, collapsed = false, class: className = "", isPlatformAdmin = false, isGuestSession = false }: Props = $props();
+  const { user, collapsed = false, class: className = "", isPlatformAdmin = false, isGuestSession = false, tenantless = false }: Props = $props();
 
   let isOpen = $state(false);
   let showRequestDialog = $state(false);
@@ -106,22 +111,24 @@
           <DropdownMenu.Separator />
         {/if}
 
-        <DropdownMenu.Group>
-          <DropdownMenu.Item onSelect={() => goto("/settings/account")}>
-            <User class="mr-2 h-4 w-4" />
-            <span>Account</span>
-          </DropdownMenu.Item>
-          <DropdownMenu.Item onSelect={() => goto("/settings")}>
-            <Settings class="mr-2 h-4 w-4" />
-            <span>Settings</span>
-          </DropdownMenu.Item>
-          {#if isPlatformAdmin}
-            <DropdownMenu.Item onSelect={() => goto("/settings/admin")}>
-              <Shield class="mr-2 h-4 w-4" />
-              <span>Admin</span>
+        {#if !tenantless}
+          <DropdownMenu.Group>
+            <DropdownMenu.Item onSelect={() => goto("/settings/account")}>
+              <User class="mr-2 h-4 w-4" />
+              <span>Account</span>
             </DropdownMenu.Item>
-          {/if}
-        </DropdownMenu.Group>
+            <DropdownMenu.Item onSelect={() => goto("/settings")}>
+              <Settings class="mr-2 h-4 w-4" />
+              <span>Settings</span>
+            </DropdownMenu.Item>
+            {#if isPlatformAdmin}
+              <DropdownMenu.Item onSelect={() => goto("/settings/admin")}>
+                <Shield class="mr-2 h-4 w-4" />
+                <span>Admin</span>
+              </DropdownMenu.Item>
+            {/if}
+          </DropdownMenu.Group>
+        {/if}
       {:else}
         <DropdownMenu.Group>
           <DropdownMenu.Item onSelect={() => (showRequestDialog = true)}>
@@ -153,6 +160,7 @@
   <!-- Not logged in - show login button -->
   <Button
     variant="ghost"
+    data-testid="sign-in-link"
     href="/auth/login"
     class="w-full justify-start gap-2 px-2 {collapsed
       ? 'justify-center'

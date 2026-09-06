@@ -16,9 +16,7 @@ public static class SystemEventMapper
     {
         return new SystemEventEntity
         {
-            Id = string.IsNullOrEmpty(systemEvent.Id)
-                ? Guid.CreateVersion7()
-                : MapperHelpers.ParseIdToGuid(systemEvent.Id),
+            Id = MapperHelpers.ParseIdToGuid(systemEvent.Id),
             EventType = systemEvent.EventType.ToString(),
             Category = systemEvent.Category.ToString(),
             Code = systemEvent.Code,

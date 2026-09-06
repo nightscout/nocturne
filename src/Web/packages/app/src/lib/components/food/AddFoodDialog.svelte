@@ -4,6 +4,7 @@
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import { toast } from "svelte-sonner";
+  import { useToastSubmission } from "$lib/forms";
   import type { Food } from "$lib/api";
   import { CategorySubcategoryCombobox } from "$lib/components/food";
   import UnitCombobox from "./UnitCombobox.svelte";
@@ -53,7 +54,7 @@
   // Track if editing existing or creating new
   let editingFoodId = $state<string | undefined>(undefined);
 
-  let isSaving = $state(false);
+  const save = useToastSubmission("Failed to save food");
 
   // Initialize form from initialFood when dialog opens
   $effect(() => {
@@ -98,18 +99,17 @@
     onOpenChange(false);
   }
 
-  const canSave = $derived(foodName.trim() !== "" && !isSaving);
+  const canSave = $derived(foodName.trim() !== "" && !save.busy);
   const dialogTitle = $derived(editingFoodId ? "Edit Food" : "Add Food");
   const saveButtonLabel = $derived(
-    isSaving ? "Saving..." : editingFoodId ? "Update" : "Create"
+    save.busy ? "Saving..." : editingFoodId ? "Update" : "Create"
   );
 
   async function handleSubmit(event: SubmitEvent) {
     event.preventDefault();
     if (!canSave) return;
 
-    isSaving = true;
-    try {
+    await save.run(async () => {
       const payload: Food = {
         _id: editingFoodId,
         type: "food",
@@ -132,12 +132,7 @@
       toast.success(editingFoodId ? "Food updated successfully" : "Food created successfully");
       onSave?.(result as Food);
       onOpenChange(false);
-    } catch (err) {
-      console.error("Failed to save food:", err);
-      toast.error("Failed to save food");
-    } finally {
-      isSaving = false;
-    }
+    });
   }
 </script>
 

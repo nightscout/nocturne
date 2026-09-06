@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatNumber } from "$lib/utils/formatting";
   import type {
     ConnectorDataSummary,
   } from "$lib/api/generated/nocturne-api-client";
@@ -8,6 +9,7 @@
   import {
     deleteConnectorData,
   } from "$lib/api/generated/services.generated.remote";
+  import { describeSubmitError } from "$lib/forms/submit-error";
   import {
     Card,
     CardContent,
@@ -88,7 +90,7 @@
     } catch (e) {
       deleteConfigResult = {
         success: false,
-        error: e instanceof Error ? e.message : "Failed to delete configuration",
+        error: describeSubmitError(e, "Failed to delete configuration"),
       };
     }
   }
@@ -104,7 +106,7 @@
     } catch (e) {
       deleteDataResult = {
         success: false,
-        error: e instanceof Error ? e.message : "Failed to delete data",
+        error: describeSubmitError(e, "Failed to delete data"),
       };
     }
   }
@@ -162,7 +164,7 @@
                 {#each Object.entries(dataSummary.recordCounts ?? {}) as [key, count], i (key)}
                   <span class="flex items-center gap-1">
                     {#if i === 0}<Database class="h-3 w-3" />{/if}
-                    {count.toLocaleString()}
+                    {formatNumber(count)}
                     {formatCountLabel(key)}
                   </span>
                 {/each}
@@ -243,11 +245,11 @@
           <p class="text-sm font-medium mb-2">Data to be deleted:</p>
           <ul class="text-sm text-muted-foreground space-y-1">
             {#each Object.entries(dataSummary.recordCounts ?? {}) as [key, count] (key)}
-              <li>{count.toLocaleString()} {formatCountLabel(key)}</li>
+              <li>{formatNumber(count)} {formatCountLabel(key)}</li>
             {/each}
           </ul>
           <p class="text-sm font-medium mt-2">
-            Total: {dataSummary.total?.toLocaleString() ?? 0} records
+            Total: {formatNumber(dataSummary.total)} records
           </p>
         </div>
       {/if}
@@ -269,13 +271,13 @@
               class="text-sm text-green-700 dark:text-green-300 mt-2 space-y-1"
             >
               {#each Object.entries(deleteDataResult.deletedCounts ?? {}) as [key, count] (key)}
-                <li>{count.toLocaleString()} {formatCountLabel(key)}</li>
+                <li>{formatNumber(count)} {formatCountLabel(key)}</li>
               {/each}
             </ul>
             <p
               class="text-sm font-medium text-green-700 dark:text-green-300 mt-2"
             >
-              Total: {deleteDataResult.totalDeleted?.toLocaleString() ?? 0} records
+              Total: {formatNumber(deleteDataResult.totalDeleted)} records
               deleted
             </p>
           </div>

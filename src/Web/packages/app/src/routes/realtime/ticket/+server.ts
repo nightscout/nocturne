@@ -58,6 +58,7 @@ export const GET: RequestHandler = async (event) => {
       "Cache-Control": "no-cache, no-store",
     },
     responseCookies: event.cookies,
+    rawSetCookies: event.locals.rawSetCookies,
     signal: event.request.signal,
   });
 

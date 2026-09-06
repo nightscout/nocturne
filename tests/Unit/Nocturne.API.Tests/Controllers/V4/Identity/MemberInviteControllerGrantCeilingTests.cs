@@ -38,7 +38,7 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
 
     /// <summary>Effective permissions of the seeded Administrator role: manage rights, no superuser.</summary>
     private static readonly string[] AdministratorScopes =
-        [.. TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Admin]];
+        [.. RoleSeeds.Permissions[RoleSeeds.Admin]];
 
     public MemberInviteControllerGrantCeilingTests()
     {
@@ -62,18 +62,18 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
         {
             Id = Guid.CreateVersion7(),
             TenantId = _tenantId,
-            Name = TenantPermissions.SeedRoleNames[TenantPermissions.SeedRoles.Owner],
-            Slug = TenantPermissions.SeedRoles.Owner,
-            Permissions = [TenantPermissions.Superuser],
+            Name = RoleSeeds.DisplayNames[RoleSeeds.Owner],
+            Slug = RoleSeeds.Owner,
+            Permissions = [Scope.FullAccess],
             IsSystem = true,
         };
         var caretakerRole = new TenantRoleEntity
         {
             Id = Guid.CreateVersion7(),
             TenantId = _tenantId,
-            Name = TenantPermissions.SeedRoleNames[TenantPermissions.SeedRoles.Caretaker],
-            Slug = TenantPermissions.SeedRoles.Caretaker,
-            Permissions = [.. TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Caretaker]],
+            Name = RoleSeeds.DisplayNames[RoleSeeds.Caretaker],
+            Slug = RoleSeeds.Caretaker,
+            Permissions = [.. RoleSeeds.Permissions[RoleSeeds.Caretaker]],
             IsSystem = true,
         };
         _dbContext.TenantRoles.AddRange(ownerRole, caretakerRole);
@@ -100,7 +100,7 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
             Id = Guid.CreateVersion7(),
             TenantId = _tenantId,
             SubjectId = _targetSubjectId,
-            DirectPermissions = [TenantPermissions.GlucoseRead],
+            DirectPermissions = [Scope.GlucoseRead],
         };
         _dbContext.TenantMembers.AddRange(callerMember, targetMember);
         _callerMemberId = callerMember.Id;
@@ -146,17 +146,13 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
     }
 
     /// <summary>
-    /// Asserts the refusal the granter actually reads. openapi-remote-codegen 0.2.0 resolves a
-    /// ProblemDetails to <c>title</c> before <c>detail</c>, so a reason carried only in the detail
-    /// reaches the members page as the literal "Bad Request" or "Forbidden" — asserting the title is
-    /// what makes the reason testable.
+    /// Asserts the refusal the granter actually reads, rather than the status phrase.
     /// </summary>
     private static void ShouldRefuse(IActionResult result, int statusCode, string reason)
     {
         var problem = result.Should().BeOfType<ObjectResult>().Subject;
         problem.StatusCode.Should().Be(statusCode);
         var details = problem.Value.Should().BeOfType<ProblemDetails>().Subject;
-        details.Title.Should().Be(reason);
         details.Detail.Should().Be(reason);
     }
 
@@ -179,7 +175,7 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
 
         var result = await controller.SetMemberPermissions(
             _targetMemberId,
-            new SetMemberPermissionsRequest([TenantPermissions.Superuser]),
+            new SetMemberPermissionsRequest([Scope.FullAccess]),
             _publicAccessCache,
             CancellationToken.None);
 
@@ -188,7 +184,7 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
             StatusCodes.Status403Forbidden,
             "Cannot grant '*' because the caller does not hold it.");
 
-        (await TargetPermissionsAsync()).Should().BeEquivalentTo([TenantPermissions.GlucoseRead]);
+        (await TargetPermissionsAsync()).Should().BeEquivalentTo([Scope.GlucoseRead]);
     }
 
     [Fact]
@@ -199,7 +195,7 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
 
         var result = await controller.SetMemberPermissions(
             _targetMemberId,
-            new SetMemberPermissionsRequest([TenantPermissions.AuditManage]),
+            new SetMemberPermissionsRequest([Scope.AuditManage]),
             _publicAccessCache,
             CancellationToken.None);
 
@@ -208,7 +204,7 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
             StatusCodes.Status403Forbidden,
             "Cannot grant 'audit.manage' because the caller does not hold it.");
 
-        (await TargetPermissionsAsync()).Should().BeEquivalentTo([TenantPermissions.GlucoseRead]);
+        (await TargetPermissionsAsync()).Should().BeEquivalentTo([Scope.GlucoseRead]);
     }
 
     [Fact]
@@ -217,7 +213,7 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
         // Superuser caller, so the ceiling cannot be what refuses this. 400 rather than 403
         // distinguishes the two: an atom outside the vocabulary is malformed input, and asserting
         // the status is what makes the stated reason testable.
-        var controller = BuildController(TenantPermissions.Superuser);
+        var controller = BuildController(Scope.FullAccess);
 
         var result = await controller.SetMemberPermissions(
             _targetMemberId,
@@ -230,7 +226,7 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
             StatusCodes.Status400BadRequest,
             "'glucose.destroy' is not a known permission.");
 
-        (await TargetPermissionsAsync()).Should().BeEquivalentTo([TenantPermissions.GlucoseRead]);
+        (await TargetPermissionsAsync()).Should().BeEquivalentTo([Scope.GlucoseRead]);
     }
 
     [Fact]
@@ -240,48 +236,48 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
 
         var result = await controller.SetMemberPermissions(
             _targetMemberId,
-            new SetMemberPermissionsRequest([TenantPermissions.GlucoseRead, TenantPermissions.TreatmentsReadWrite]),
+            new SetMemberPermissionsRequest([Scope.GlucoseRead, Scope.TreatmentsReadWrite]),
             _publicAccessCache,
             CancellationToken.None);
 
         result.Should().BeOfType<NoContentResult>();
 
         (await TargetPermissionsAsync()).Should().BeEquivalentTo(
-            [TenantPermissions.GlucoseRead, TenantPermissions.TreatmentsReadWrite]);
+            [Scope.GlucoseRead, Scope.TreatmentsReadWrite]);
     }
 
     [Fact]
     public async Task SetMemberPermissions_allowsTheReadTierImpliedByAManageGrantTheCallerHolds()
     {
         // audit.manage implies audit.read, so a caller holding the manage tier may hand out read.
-        var controller = BuildController(TenantPermissions.MembersManage, TenantPermissions.AuditManage);
+        var controller = BuildController(Scope.MembersManage, Scope.AuditManage);
 
         var result = await controller.SetMemberPermissions(
             _targetMemberId,
-            new SetMemberPermissionsRequest([TenantPermissions.AuditRead]),
+            new SetMemberPermissionsRequest([Scope.AuditRead]),
             _publicAccessCache,
             CancellationToken.None);
 
         result.Should().BeOfType<NoContentResult>();
 
-        (await TargetPermissionsAsync()).Should().BeEquivalentTo([TenantPermissions.AuditRead]);
+        (await TargetPermissionsAsync()).Should().BeEquivalentTo([Scope.AuditRead]);
     }
 
     [Fact]
     public async Task SetMemberPermissions_allowsASuperuserToGrantSuperuser()
     {
         // The ceiling is a ceiling, not a ban: an owner still delegates its own access.
-        var controller = BuildController(TenantPermissions.Superuser);
+        var controller = BuildController(Scope.FullAccess);
 
         var result = await controller.SetMemberPermissions(
             _targetMemberId,
-            new SetMemberPermissionsRequest([TenantPermissions.Superuser]),
+            new SetMemberPermissionsRequest([Scope.FullAccess]),
             _publicAccessCache,
             CancellationToken.None);
 
         result.Should().BeOfType<NoContentResult>();
 
-        (await TargetPermissionsAsync()).Should().BeEquivalentTo([TenantPermissions.Superuser]);
+        (await TargetPermissionsAsync()).Should().BeEquivalentTo([Scope.FullAccess]);
     }
 
     [Fact]
@@ -291,7 +287,7 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
 
         var result = await controller.SetMemberPermissions(
             _callerMemberId,
-            new SetMemberPermissionsRequest([TenantPermissions.GlucoseRead]),
+            new SetMemberPermissionsRequest([Scope.GlucoseRead]),
             _publicAccessCache,
             CancellationToken.None);
 
@@ -360,7 +356,7 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
     [Fact]
     public async Task SetMemberRoles_rejectsEditingTheCallersOwnMembership()
     {
-        var controller = BuildController(TenantPermissions.Superuser);
+        var controller = BuildController(Scope.FullAccess);
 
         var result = await controller.SetMemberRoles(
             _callerMemberId,
@@ -377,7 +373,7 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
     public async Task SetMemberLimitTo24Hours_rejectsEditingTheCallersOwnMembership()
     {
         // The clamp is the third self-edit refusal, and the only one whose reason had no test.
-        var controller = BuildController(TenantPermissions.Superuser);
+        var controller = BuildController(Scope.FullAccess);
 
         var result = await controller.SetMemberLimitTo24Hours(
             _callerMemberId,

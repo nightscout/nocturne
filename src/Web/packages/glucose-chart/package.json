@@ -32,6 +32,7 @@
     "@types/d3-scale": "^4.0.9",
     "d3": "^7.9.0",
     "d3-scale": "^4.0.2",
+    "layerchart": "2.2.0",
     "svelte": "^5.54.0",
     "typescript": "^5.9.3",
     "svelte-check": "^4.4.2"

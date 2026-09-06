@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { startOfDay, toDayString } from "$lib/utils/date-range";
+  import { formatLongDate } from "$lib/utils/formatting";
   import { Calendar } from "lucide-svelte";
   import type {
     MealEvent,
@@ -9,14 +11,14 @@
   import { getMeals, addCarbIntakeFood, deleteCarbIntakeFood } from "$api/generated/nutritions.generated.remote";
   import { getSuggestions as getMealMatchingSuggestions, acceptMatch, dismissMatch } from "$api/generated/mealMatchings.generated.remote";
   import { toast } from "svelte-sonner";
+  import { useToastSubmission } from "$lib/forms";
   import {
     TreatmentFoodSelectorDialog,
     TreatmentFoodEntryEditDialog,
   } from "$lib/components/treatments";
   import { getMealNameForTime } from "$lib/constants/meal-times";
   import { MealMatchReviewDialog } from "$lib/components/meal-matching";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog";
-  import { Button } from "$lib/components/ui/button";
+  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import MealsFilterBar from "$lib/components/meals/MealsFilterBar.svelte";
   import MealsTable from "$lib/components/meals/MealsTable.svelte";
   import MealBolusDialog from "$lib/components/meals/MealBolusDialog.svelte";
@@ -60,7 +62,8 @@
   // Unlink food confirmation state
   let showUnlinkConfirm = $state(false);
   let unlinkTarget = $state<{ meal: MealEvent; food: TreatmentFood } | null>(null);
-  let isUnlinking = $state(false);
+  const unlink = useToastSubmission("Failed to unlink food");
+  const addFood = useToastSubmission("Failed to add food");
 
   const queryParams = $derived({
     from: dateRange.from ? localDayStart(dateRange.from).getTime() : undefined,
@@ -193,8 +196,7 @@
       const mills = meal.carbIntakes?.[0]?.mills;
       if (!mills) continue;
 
-      const date = new Date(mills);
-      const dateKey = date.toLocaleDateString();
+      const dateKey = toDayString(new Date(mills));
 
       if (!grouped.has(dateKey)) {
         grouped.set(dateKey, []);
@@ -206,14 +208,7 @@
     for (const [date, dayMeals] of grouped) {
       result.push({
         date,
-        displayDate: new Date(
-          dayMeals[0].carbIntakes?.[0]?.mills ?? 0
-        ).toLocaleDateString(undefined, {
-          weekday: "long",
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-        }),
+        displayDate: formatLongDate(startOfDay(date)),
         meals: dayMeals,
       });
     }
@@ -294,24 +289,19 @@
     if (!unlinkTarget) return;
     const { meal, food } = unlinkTarget;
     const carbIntakeId = meal.carbIntakes?.[0]?.id;
-    if (!carbIntakeId || !food.id) return;
+    const foodEntryId = food.id;
+    if (!carbIntakeId || !foodEntryId) return;
 
-    isUnlinking = true;
-    try {
+    await unlink.run(async () => {
       await deleteCarbIntakeFood({
         id: carbIntakeId,
-        foodEntryId: food.id,
+        foodEntryId,
       });
       toast.success("Food unlinked");
       showUnlinkConfirm = false;
       unlinkTarget = null;
       mealsQuery.refresh();
-    } catch (err) {
-      console.error("Unlink food error:", err);
-      toast.error("Failed to unlink food");
-    } finally {
-      isUnlinking = false;
-    }
+    });
   }
 
   async function handleFoodEntrySaved() {
@@ -322,7 +312,7 @@
     const carbIntakeId = addFoodMeal?.carbIntakes?.[0]?.id;
     if (!carbIntakeId) return;
 
-    try {
+    await addFood.run(async () => {
       await addCarbIntakeFood({
         id: carbIntakeId,
         request,
@@ -331,10 +321,7 @@
       showAddFoodDialog = false;
       addFoodMeal = null;
       mealsQuery.refresh();
-    } catch (err) {
-      console.error("Add food error:", err);
-      toast.error("Failed to add food");
-    }
+    });
   }
 
 
@@ -450,6 +437,7 @@
     if (!value) addFoodMeal = null;
   }}
   onSubmit={handleAddFoodSubmit}
+  submitting={addFood.busy}
   totalCarbs={addFoodMeal?.totalCarbs ?? 0}
   unspecifiedCarbs={addFoodMeal?.unspecifiedCarbs ??
     addFoodMeal?.totalCarbs ??
@@ -494,24 +482,16 @@
   onComplete={handleReviewComplete}
 />
 
-<AlertDialog.Root bind:open={showUnlinkConfirm}>
-  <AlertDialog.Content>
-    <AlertDialog.Header>
-      <AlertDialog.Title>Unlink food</AlertDialog.Title>
-      <AlertDialog.Description>
-        Remove "{unlinkTarget?.food.foodName ?? unlinkTarget?.food.note ?? 'this food'}" from this meal? The food will remain in your database.
-      </AlertDialog.Description>
-    </AlertDialog.Header>
-    <AlertDialog.Footer>
-      <AlertDialog.Cancel
-        disabled={isUnlinking}
-        onclick={() => { showUnlinkConfirm = false; unlinkTarget = null; }}
-      >
-        Cancel
-      </AlertDialog.Cancel>
-      <Button variant="destructive" disabled={isUnlinking} onclick={handleUnlinkFood}>
-        {isUnlinking ? "Removing..." : "Remove"}
-      </Button>
-    </AlertDialog.Footer>
-  </AlertDialog.Content>
-</AlertDialog.Root>
+<ConfirmDialog
+  bind:open={showUnlinkConfirm}
+  onOpenChange={(o) => { if (!o) unlinkTarget = null; }}
+  title="Unlink food"
+  confirmLabel={unlink.busy ? "Removing..." : "Remove"}
+  destructive
+  busy={unlink.busy}
+  onConfirm={handleUnlinkFood}
+>
+  {#snippet description()}
+    Remove "{unlinkTarget?.food.foodName ?? unlinkTarget?.food.note ?? 'this food'}" from this meal? The food will remain in your database.
+  {/snippet}
+</ConfirmDialog>

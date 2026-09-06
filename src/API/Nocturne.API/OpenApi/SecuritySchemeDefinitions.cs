@@ -47,22 +47,22 @@ public static class SecuritySchemeDefinitions
     public static readonly IReadOnlyDictionary<string, string> OAuth2Scopes =
         new Dictionary<string, string>
         {
-            [OAuthScopes.FullAccess] = "Full access (read, write, delete)",
-            [OAuthScopes.HealthRead] =
+            [Scope.FullAccess] = "Full access (read, write, delete)",
+            [Scope.HealthRead] =
                 "Read all health data (glucose, treatments, devices, therapy settings)",
-            [OAuthScopes.GlucoseRead] = "Read glucose data",
-            [OAuthScopes.GlucoseReadWrite] = "Read and write glucose data",
-            [OAuthScopes.TreatmentsRead] = "Read treatments",
-            [OAuthScopes.TreatmentsReadWrite] = "Read and write treatments",
-            [OAuthScopes.DevicesRead] = "Read device status data",
-            [OAuthScopes.DevicesReadWrite] = "Read and write device status data",
-            [OAuthScopes.TherapyRead] = "Read therapy settings",
-            [OAuthScopes.TherapyReadWrite] = "Read and write therapy settings",
-            [OAuthScopes.AlertsRead] = "Read alert configuration",
-            [OAuthScopes.AlertsReadWrite] = "Read and write alert configuration",
-            [OAuthScopes.ReportsRead] = "Read reports",
-            [OAuthScopes.IdentityRead] = "Read identity information",
-            [OAuthScopes.SharingReadWrite] = "Manage sharing settings",
+            [Scope.GlucoseRead] = "Read glucose data",
+            [Scope.GlucoseReadWrite] = "Read and write glucose data",
+            [Scope.TreatmentsRead] = "Read treatments",
+            [Scope.TreatmentsReadWrite] = "Read and write treatments",
+            [Scope.DevicesRead] = "Read device status data",
+            [Scope.DevicesReadWrite] = "Read and write device status data",
+            [Scope.TherapyRead] = "Read therapy settings",
+            [Scope.TherapyReadWrite] = "Read and write therapy settings",
+            [Scope.AlertsRead] = "Read alert configuration",
+            [Scope.AlertsReadWrite] = "Read and write alert configuration",
+            [Scope.ReportsRead] = "Read reports",
+            [Scope.IdentityRead] = "Read identity information",
+            [Scope.SharingReadWrite] = "Manage sharing settings",
         };
 
     /// <summary>

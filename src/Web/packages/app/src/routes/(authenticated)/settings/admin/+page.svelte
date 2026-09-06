@@ -19,7 +19,8 @@
   import IntegrationsTabContent from "$lib/components/admin/IntegrationsTabContent.svelte";
   import OidcProvidersTabContent from "$lib/components/admin/OidcProvidersTabContent.svelte";
   import OidcProviderDialog from "$lib/components/admin/OidcProviderDialog.svelte";
-  import { errorMessage } from "$lib/forms/submit-error";
+  import { describeSubmitError } from "$lib/forms/submit-error";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
   import type {
     TenantRoleDto,
     OidcProviderResponse,
@@ -72,11 +73,7 @@
       }
     } catch (err) {
       console.error("Failed to load OIDC providers:", err);
-      const body = (err as { body?: { message?: string; detail?: string } })?.body;
-      oidcError =
-        body?.message ??
-        body?.detail ??
-        (err instanceof Error ? err.message : "Failed to load identity providers");
+      oidcError = remoteErrorMessage(err, "Failed to load identity providers");
     } finally {
       oidcLoading = false;
     }
@@ -104,9 +101,7 @@
       await oidcRemote.remove(p.id);
       await loadOidcData();
     } catch (err: unknown) {
-      // A 409 from the lock-out guard arrives as an HttpError, which does not
-      // extend Error; its body carries the message written for the user.
-      oidcError = errorMessage(err) ?? "Failed to delete provider.";
+      oidcError = describeSubmitError(err, "Failed to delete provider.");
     }
   }
 
@@ -120,7 +115,10 @@
       }
       await loadOidcData();
     } catch (err: unknown) {
-      oidcError = errorMessage(err) ?? "Failed to change whether this provider is enabled.";
+      oidcError = describeSubmitError(
+        err,
+        "Failed to change whether this provider is enabled."
+      );
     }
   }
 

@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
@@ -17,7 +18,7 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 /// </summary>
 /// <remarks>
 /// An invite attaches a follower to an alert rule channel, so creating, redeeming and revoking one
-/// all change who an alert reaches and require <see cref="OAuthScopes.AlertsReadWrite"/>. The
+/// all change who an alert reaches and require <see cref="Scope.AlertsReadWrite"/>. The
 /// per-action <c>[Authorize]</c> alone is satisfied by read-only credentials such as a guest-link
 /// session, which holds <c>alerts.read</c>. Validation stays <c>[AllowAnonymous]</c> — the
 /// redemption flow reads it before the invitee has signed in.
@@ -49,7 +50,7 @@ public class AlertInvitesController : ControllerBase
     /// </summary>
     [HttpPost]
     [Authorize]
-    [RequireScope(OAuthScopes.AlertsReadWrite)]
+    [RequireScope(Scope.AlertsReadWrite)]
     [RemoteCommand]
     [ProducesResponseType(typeof(AlertInviteResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -108,6 +109,7 @@ public class AlertInvitesController : ControllerBase
     /// </summary>
     [HttpGet("{token}")]
     [AllowAnonymous]
+    [EnableRateLimiting("invite-lookup")]
     [RemoteQuery]
     [ProducesResponseType(typeof(AlertInviteResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -146,7 +148,7 @@ public class AlertInvitesController : ControllerBase
     /// </summary>
     [HttpPost("{token}/redeem")]
     [Authorize]
-    [RequireScope(OAuthScopes.AlertsReadWrite)]
+    [RequireScope(Scope.AlertsReadWrite)]
     [RemoteCommand]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -183,7 +185,7 @@ public class AlertInvitesController : ControllerBase
     /// </summary>
     [HttpDelete("{id:guid}")]
     [Authorize]
-    [RequireScope(OAuthScopes.AlertsReadWrite)]
+    [RequireScope(Scope.AlertsReadWrite)]
     [RemoteCommand]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
+  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { AlertTriangle, Loader2, Trash2 } from "lucide-svelte";
@@ -23,8 +24,8 @@
   let {
     open = $bindable(false),
     onOpenChange,
-    title,
-    description,
+    title: heading,
+    description: warning,
     confirmationPhrase,
     onConfirm,
     disabled = false,
@@ -43,11 +44,9 @@
 
   function handleOpenChange(newOpen: boolean) {
     if (!newOpen) {
-      // Reset state when closing
       confirmText = "";
       showResult = false;
     }
-    open = newOpen;
     onOpenChange?.(newOpen);
   }
 
@@ -66,71 +65,70 @@
   }
 </script>
 
-<AlertDialog.Root bind:open onOpenChange={handleOpenChange}>
-  <AlertDialog.Content>
-    <AlertDialog.Header>
-      <AlertDialog.Title class="flex items-center gap-2 text-destructive">
-        <AlertTriangle class="h-5 w-5" />
-        {title}
-      </AlertDialog.Title>
-      <AlertDialog.Description class="sr-only">
-        {description}
-      </AlertDialog.Description>
-    </AlertDialog.Header>
+<ConfirmDialog
+  bind:open
+  onOpenChange={handleOpenChange}
+  descriptionClass="sr-only"
+>
+  {#snippet title()}
+    <span class="flex items-center gap-2 text-destructive">
+      <AlertTriangle class="h-5 w-5" />
+      {heading}
+    </span>
+  {/snippet}
 
-    <div class="space-y-4">
-      <div
-        class="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20 p-4"
-      >
-        <p class="text-sm font-semibold text-red-800 dark:text-red-200">
-          THIS ACTION CANNOT BE UNDONE
-        </p>
-        <p class="text-sm text-red-700 dark:text-red-300 mt-2">
-          {description}
-        </p>
-      </div>
+  {#snippet description()}{warning}{/snippet}
 
-      {#if content}
-        {@render content()}
-      {/if}
-
-      {#if showResult && result}
-        {@render result()}
-      {:else if !showResult}
-        <div class="space-y-2">
-          <label for="danger-zone-confirm" class="text-sm font-medium">
-            Type <strong>{confirmationPhrase}</strong> to confirm:
-          </label>
-          <Input
-            id="danger-zone-confirm"
-            type="text"
-            bind:value={confirmText}
-            placeholder="Type {confirmationPhrase}"
-          />
-        </div>
-      {/if}
+  <div class="space-y-4">
+    <div
+      class="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20 p-4"
+    >
+      <p class="text-sm font-semibold text-red-800 dark:text-red-200">
+        THIS ACTION CANNOT BE UNDONE
+      </p>
+      <p class="text-sm text-red-700 dark:text-red-300 mt-2">
+        {warning}
+      </p>
     </div>
 
-    <AlertDialog.Footer>
-      <AlertDialog.Cancel onclick={() => handleOpenChange(false)}>
-        {showResult ? "Close" : "Cancel"}
-      </AlertDialog.Cancel>
-      {#if !showResult}
-        <Button
-          variant="destructive"
-          onclick={handleConfirm}
-          disabled={!isConfirmEnabled}
-          class="gap-2"
-        >
-          {#if isConfirming}
-            <Loader2 class="h-4 w-4 animate-spin" />
-            Processing...
-          {:else}
-            <Trash2 class="h-4 w-4" />
-            {confirmButtonText}
-          {/if}
-        </Button>
-      {/if}
-    </AlertDialog.Footer>
-  </AlertDialog.Content>
-</AlertDialog.Root>
+    {@render content?.()}
+
+    {#if showResult && result}
+      {@render result()}
+    {:else if !showResult}
+      <div class="space-y-2">
+        <label for="danger-zone-confirm" class="text-sm font-medium">
+          Type <strong>{confirmationPhrase}</strong> to confirm:
+        </label>
+        <Input
+          id="danger-zone-confirm"
+          type="text"
+          bind:value={confirmText}
+          placeholder="Type {confirmationPhrase}"
+        />
+      </div>
+    {/if}
+  </div>
+
+  {#snippet footer()}
+    <AlertDialog.Cancel onclick={() => handleOpenChange(false)}>
+      {showResult ? "Close" : "Cancel"}
+    </AlertDialog.Cancel>
+    {#if !showResult}
+      <Button
+        variant="destructive"
+        onclick={handleConfirm}
+        disabled={!isConfirmEnabled}
+        class="gap-2"
+      >
+        {#if isConfirming}
+          <Loader2 class="h-4 w-4 animate-spin" />
+          Processing...
+        {:else}
+          <Trash2 class="h-4 w-4" />
+          {confirmButtonText}
+        {/if}
+      </Button>
+    {/if}
+  {/snippet}
+</ConfirmDialog>

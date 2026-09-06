@@ -20,7 +20,7 @@ namespace Nocturne.API.Controllers.V4.Sleep;
 [Tags("Sleep")]
 [Route("api/v4/sleep/report")]
 [Authorize]
-[RequireScope(requireAll: true, OAuthScopes.SleepRead, OAuthScopes.GlucoseRead)]
+[RequireScope(requireAll: true, Scope.SleepRead, Scope.GlucoseRead)]
 public class SleepReportController : ControllerBase
 {
     private readonly ISleepReportService _service;

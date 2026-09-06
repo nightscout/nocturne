@@ -7,6 +7,7 @@ on:
       - 'src/Web/packages/portal/**'
       - 'src/Web/packages/ui/**'
       - 'src/Web/packages/cms/**'
+      - 'src/Web/packages/screenshots/**'
       - 'src/Web/pnpm-lock.yaml'
       - '.github/workflows/portal-pages.yml'
   workflow_dispatch:

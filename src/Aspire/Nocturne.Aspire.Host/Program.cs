@@ -92,9 +92,9 @@ class Program
                 "PostgreSQL bootstrap password",
                 "Used only at first container start to create runtime roles");
 
-            // Non-bootstrap role passwords. The Postgres container's init
-            // script reads them via env vars and creates nocturne_migrator
-            // and nocturne_app at first container start.
+            // Non-bootstrap role passwords. The Postgres container's init script reads them via
+            // env vars and creates nocturne_migrator, nocturne_app and nocturne_web at first
+            // container start.
             postgresMigratorPassword = builder.AddParameter(
                 ServiceNames.Parameters.PostgresMigratorPassword,
                 secret: true
@@ -146,9 +146,11 @@ class Program
                     .WithDataVolume(ServiceNames.Volumes.PostgresData);
             }
 
-            if (builder.Environment.IsDevelopment() && persistence == PersistenceMode.Persistent)
+            if (builder.ExecutionContext.IsRunMode
+                && builder.Environment.IsDevelopment()
+                && persistence == PersistenceMode.Persistent)
             {
-                postgres.WithPgAdmin();
+                postgres.WithPgAdmin(pgAdmin => pgAdmin.WithHostPort(1611));
             }
 
             postgres.PublishAsDockerComposeService(
@@ -230,12 +232,22 @@ class Program
         var discordClientSecret = builder.AddParameter("discord-client-secret", "", secret: true);
 
         // Platform base domain — the single hostname all services derive URLs from.
-        // Production should set this to e.g. "nocturne.run" via user-secrets.
-        // Injected as "BaseDomain" into both the API and SvelteKit.
+        // Production should set this to e.g. "nocturne.run" via user-secrets. Reaches the API and
+        // SvelteKit as BASE_DOMAIN in publish mode only; run mode overrides it further down with a
+        // value derived from the live gateway endpoint.
         var baseDomain = builder.AddParameter("base-domain", "")
             .WithPublishMetadata(
                 "Base domain",
-                "Root domain only, e.g. example.com (not app.example.com — subdomains are generated per tenant)");
+                "The hostname tenant subdomains hang off, e.g. example.com or nocturne.example.com. At least two labels; not an IP address.");
+
+        // CDN/proxy ranges the bundled Caddy will believe a client-address header from. Empty
+        // means only the socket peer counts, which is right whenever Caddy is the outermost hop.
+        // Loopback is never the peer of a proxied request, so the default trusts nothing.
+        var trustedProxies = builder.AddParameter("trusted-proxies", "127.0.0.1/32")
+            .WithPublishMetadata(
+                "Trusted proxy ranges",
+                "Space-separated CIDRs of a CDN in front of this deployment, e.g. Cloudflare's published ranges. Decides whose CF-Connecting-IP header is believed; leave as-is unless a CDN is present, and never set it empty.",
+                defaultValue: "127.0.0.1/32");
 
         // Chat platform credentials. All optional — a deployment that only
         // uses Discord shouldn't need to supply Telegram/Slack/WhatsApp
@@ -438,7 +450,9 @@ class Program
                 .WithPnpm()
                 .WithHttpHealthCheck("/health")
                 .WaitFor(api)
-                .WaitFor(bridge)
+                // WaitFor would deadlock a web restart: the one-shot build sits at Finished,
+                // which WaitFor (waiting for Running) never accepts.
+                .WaitForCompletion(bridge)
                 .WithReference(bridge);
 
             ConfigureWebEnvironment(viteWeb);
@@ -632,6 +646,14 @@ class Program
         // default rewrite stays.
         var preserveOriginalHost = !builder.ExecutionContext.IsRunMode;
 
+        // X-Forwarded-For is the one the API resolves an address from, and it follows the same
+        // rule for a different reason: in run mode the gateway is the only hop, so it Sets the
+        // peer it saw; in publish mode the edge in front (bundled Caddy, or the operator's proxy
+        // in the byo bundle) has already overwritten the header with the client it resolved, and
+        // appending the gateway's own peer here would bury that entry under a container address.
+        // The API consumes one entry from the right, so whatever the edge writes must be the
+        // client — an edge that appends to the caller's chain instead needs the API's
+        // ForwardedHeaders:ForwardLimit raised to match its hop count.
         void ApplyEdgeTransforms(YarpRoute route)
         {
             route.WithTransformXForwarded("X-Forwarded-", xForwardedAction);
@@ -704,6 +726,7 @@ class Program
                 .WithVolume("caddy-data", "/data")
                 .WithVolume("caddy-config", "/config")
                 .WithEnvironment("BASE_DOMAIN", baseDomain)
+                .WithEnvironment("TRUSTED_PROXIES", trustedProxies)
                 .WaitFor(gateway)
                 .PublishAsDockerComposeService((_, service) =>
                 {

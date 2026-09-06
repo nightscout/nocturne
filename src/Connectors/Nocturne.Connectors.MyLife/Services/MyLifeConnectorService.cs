@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
@@ -33,38 +34,6 @@ public class MyLifeConnectorService(
 
     public override string ServiceName => "MyLife";
     protected override string ConnectorSource => DataSources.MyLifeConnector;
-
-    public override List<SyncDataType> SupportedDataTypes =>
-    [
-        SyncDataType.Glucose,
-        SyncDataType.ManualBG,
-        SyncDataType.Boluses,
-        SyncDataType.CarbIntake,
-        SyncDataType.BolusCalculations,
-        SyncDataType.Notes,
-        SyncDataType.DeviceEvents,
-        SyncDataType.StateSpans,
-        SyncDataType.Profiles
-    ];
-
-    public override bool IsHealthy =>
-        FailedRequestCount < MaxFailedRequestsBeforeUnhealthy && !tokenProvider.IsTokenExpired;
-
-    public override Task<bool> AuthenticateAsync()
-    {
-        // Auth happens per-tenant inside PerformSyncInternalAsync where config is available
-        TrackSuccessfulRequest();
-        return Task.FromResult(true);
-    }
-
-    /// <summary>
-    /// Legacy method required by IConnectorService interface.
-    /// Returns empty - use PerformSyncInternalAsync for glucose data.
-    /// </summary>
-    public override Task<IEnumerable<Entry>> FetchGlucoseDataAsync(DateTime? since = null)
-    {
-        return Task.FromResult(Enumerable.Empty<Entry>());
-    }
 
     /// <summary>
     /// Fetches pump settings readouts from MyLife. Returns an empty list when no valid session
@@ -108,17 +77,11 @@ public class MyLifeConnectorService(
     protected override async Task<SyncResult> PerformSyncInternalAsync(
         SyncRequest request,
         MyLifeConnectorConfiguration config,
-        CancellationToken cancellationToken,
-        ISyncProgressReporter? progressReporter = null
-    )
+        CancellationToken cancellationToken)
     {
         var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
 
-        if (!request.DataTypes.Any())
-            request.DataTypes = SupportedDataTypes;
-
-        var enabledTypes = config.GetEnabledDataTypes(SupportedDataTypes);
-        var activeTypes = request.DataTypes.Where(t => enabledTypes.Contains(t)).ToHashSet();
+        var activeTypes = ResolveActiveTypes(request, config);
 
         try
         {
@@ -158,10 +121,15 @@ public class MyLifeConnectorService(
             var needRecords = treatmentSubTypes.Any(t => activeTypes.Contains(t));
             var needStateSpans = activeTypes.Contains(SyncDataType.StateSpans);
 
-            // Calculate since timestamps. MyLife streams the source month by month, so it needs a
-            // concrete lower bound; fall back to the default initial window when no cursor exists.
-            var glucoseSince = await CalculateSinceTimestampAsync(config, request.From) ?? DefaultInitialSyncFloor();
-            var treatmentSince = await CalculateTreatmentSinceTimestampAsync(config, request.From) ?? DefaultInitialSyncFloor();
+            // MyLife streams the source month by month, so every bound below has to be concrete.
+            // The initial-sync floor is the fallback, and as far back as this connector reaches for
+            // a range naming no lower bound; whether the source itself holds more is unverified.
+            var floor = InitialSyncFloor ?? DefaultInitialSyncFloor();
+            var glucoseSince = ResumeFrom(
+                request, await CalculateSinceTimestampAsync(config) ?? floor, floor);
+            var treatmentSince = ResumeFrom(
+                request, await CalculateTreatmentSinceTimestampAsync(config) ?? floor, floor);
+
             var overallSince = glucoseSince < treatmentSince ? glucoseSince : treatmentSince;
             var until = request.To ?? DateTime.UtcNow;
 
@@ -195,29 +163,8 @@ public class MyLifeConnectorService(
                         .MapSensorGlucose(batch.Events.Where(e => e.EventDateTime >= glucoseSinceTicks))
                         .ToList();
 
-                    if (sgList.Count > 0)
-                    {
-                        var success = await PublishSensorGlucoseDataAsync(sgList, config, cancellationToken);
-                        result.ItemsSynced.TryGetValue(SyncDataType.Glucose, out var prevCount);
-                        result.ItemsSynced[SyncDataType.Glucose] = prevCount + sgList.Count;
-
-                        if (!success)
-                        {
-                            result.Success = false;
-                            result.Errors.Add("SensorGlucose publish failed");
-                        }
-                        else
-                        {
-                            var maxMills = sgList.Max(s => s.Mills);
-                            var maxTime = DateTimeOffset.FromUnixTimeMilliseconds(maxMills).UtcDateTime;
-                            if (!result.LastEntryTimes.TryGetValue(SyncDataType.Glucose, out var existing) || maxTime > existing)
-                                result.LastEntryTimes[SyncDataType.Glucose] = maxTime;
-
-                            _logger.LogInformation(
-                                "Synced {Count} SensorGlucose records from {Month}",
-                                sgList.Count, batch.Month);
-                        }
-                    }
+                    await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
+                        sgList, PublishSensorGlucoseDataAsync, config, cancellationToken, batch.Month);
                 }
 
                 // Shared treatment filtering and context for records + state spans
@@ -278,17 +225,17 @@ public class MyLifeConnectorService(
                     profiles, PublishProfileDataAsync, config, cancellationToken);
 
                 var profileStateSpans = MyLifePumpSettingsMapper.MapToStateSpans(readouts, ConnectorSource);
-                if (profileStateSpans.Count > 0)
-                {
-                    await PublishStateSpanDataAsync(profileStateSpans, config, cancellationToken);
-                    _logger.LogInformation(
-                        "Published {Count} profile state spans from pump settings",
-                        profileStateSpans.Count);
-                }
+                await PublishRecordTypeAsync(result, SyncDataType.StateSpans, activeTypes,
+                    profileStateSpans, PublishStateSpanDataAsync, config, cancellationToken, "from pump settings");
             }
         }
         catch (Exception ex)
         {
+            // A token MyLife has already rejected would otherwise stay cached until its nominal
+            // 24-hour expiry, failing every sync in between.
+            if (ex is HttpRequestException { StatusCode: HttpStatusCode.Unauthorized })
+                tokenProvider.InvalidateToken();
+
             _logger.LogError(ex, "Error during sync");
             result.Success = false;
             result.Errors.Add($"Sync error: {ex.Message}");

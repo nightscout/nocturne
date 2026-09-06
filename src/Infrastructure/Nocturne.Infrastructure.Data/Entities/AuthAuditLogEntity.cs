@@ -7,6 +7,12 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Audit log for security events
 /// Tracks all authentication-related events for security monitoring
 /// </summary>
+/// <remarks>
+/// Deliberately not <c>ITenantScoped</c>: failed logins and everything else that happens before a
+/// tenant is resolved must still be recordable, and a tenant query filter plus RLS policy would
+/// make those rows unwritable and unreadable exactly when they matter. <see cref="TenantId"/> is a
+/// plain nullable column with no foreign key for the same reason — the trail outlives the tenant.
+/// </remarks>
 [Table("auth_audit_log")]
 public class AuthAuditLogEntity : IEntityCreated
 {
@@ -35,6 +41,30 @@ public class AuthAuditLogEntity : IEntityCreated
     /// Navigation property to the subject
     /// </summary>
     public SubjectEntity? Subject { get; set; }
+
+    /// <summary>
+    /// The subject who performed this event, which on an administrative action is not
+    /// <see cref="SubjectId"/>. Mirrors <see cref="SubjectId"/> when a subject acted for
+    /// themselves, so "everything this subject did" is one indexed predicate.
+    /// </summary>
+    [Column("actor_subject_id")]
+    public Guid? ActorSubjectId { get; set; }
+
+    /// <summary>
+    /// Identifies the credential that performed this event when the caller has no subject of its
+    /// own, e.g. an instance-key provisioner. Never holds key material.
+    /// </summary>
+    /// <seealso cref="Nocturne.Core.Models.Authorization.AuthContext.CredentialFingerprint"/>
+    [MaxLength(64)]
+    [Column("actor_credential")]
+    public string? ActorCredential { get; set; }
+
+    /// <summary>
+    /// The tenant this event targeted, if any. Differs from the actor's own tenant on
+    /// administrative actions, and is null for events that precede tenant resolution.
+    /// </summary>
+    [Column("tenant_id")]
+    public Guid? TenantId { get; set; }
 
     /// <summary>
     /// Foreign key to the refresh token involved in this event (if applicable)
@@ -81,11 +111,11 @@ public class AuthAuditLogEntity : IEntityCreated
     public string? ErrorMessage { get; set; }
 
     /// <summary>
-    /// Correlation ID for tracing related events
+    /// Request trace identifier for tracing related events
     /// </summary>
     [MaxLength(50)]
     [Column("correlation_id")]
-    public string? CorrelationId { get; set; }
+    public string? TraceId { get; set; }
 
     /// <summary>
     /// When this event occurred
@@ -178,4 +208,37 @@ public static class AuthAuditEventType
     /// Event type when an OIDC identity is unlinked from a subject.
     /// </summary>
     public const string OidcIdentityUnlinked = "oidc_identity_unlinked";
+
+    /// <summary>
+    /// Event type when a platform administrator is granted access to a tenant they are not a
+    /// member of.
+    /// </summary>
+    public const string PlatformAdminTenantAccess = "platform_admin_tenant_access";
+
+    /// <summary>
+    /// Event type when a platform administrator issues a direct grant to a tenant's member,
+    /// as opposed to that member issuing one for themselves.
+    /// </summary>
+    public const string PlatformAdminGrantIssued = "platform_admin_grant_issued";
+
+    /// <summary>
+    /// Event type when a platform administrator revokes a tenant member's direct grant.
+    /// </summary>
+    public const string PlatformAdminGrantRevoked = "platform_admin_grant_revoked";
+
+    /// <summary>
+    /// Event type when a platform administrator mints a single-use login code for a tenant member.
+    /// </summary>
+    public const string LoginCodeIssued = "login_code_issued";
+
+    /// <summary>
+    /// Event type when a login code is exchanged for a session.
+    /// </summary>
+    public const string LoginHandoff = "login_handoff";
+
+    /// <summary>
+    /// Event type when a login code exchange is refused. The row names no subject: the presented
+    /// code did not resolve to one.
+    /// </summary>
+    public const string LoginHandoffFailed = "login_handoff_failed";
 }

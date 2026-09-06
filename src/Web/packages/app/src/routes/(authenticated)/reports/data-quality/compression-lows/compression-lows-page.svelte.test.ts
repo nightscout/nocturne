@@ -1,7 +1,9 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { error } from "@sveltejs/kit";
 import { page as pageState } from "$app/state";
+import { remoteCommand, remoteQuery } from "$lib/test-stubs/remote-resource";
 
 const { toastError } = vi.hoisted(() => ({ toastError: vi.fn() }));
 
@@ -26,17 +28,12 @@ const suggestions = [suggestion];
 let acceptImpl: () => Promise<unknown>;
 
 vi.mock("$api/generated/compressionLows.generated.remote", () => ({
-  getSuggestions: () => ({
-    current: suggestions,
-    loading: false,
-    error: undefined,
-    refresh: () => {},
-  }),
-  getSuggestion: () => ({ run: () => Promise.resolve(detail) }),
-  acceptSuggestion: () => acceptImpl(),
-  dismissSuggestion: () => Promise.resolve(),
-  deleteSuggestion: () => Promise.resolve(),
-  triggerDetection: () => Promise.resolve({}),
+  getSuggestions: () => remoteQuery(() => suggestions),
+  getSuggestion: () => remoteQuery(() => detail),
+  acceptSuggestion: remoteCommand(() => acceptImpl()),
+  dismissSuggestion: remoteCommand(() => undefined),
+  deleteSuggestion: remoteCommand(() => undefined),
+  triggerDetection: remoteCommand(() => ({})),
 }));
 
 vi.mock("svelte-sonner", () => ({ toast: { error: toastError } }));
@@ -81,13 +78,17 @@ describe("compression-lows page", () => {
 
   it("surfaces a refused accept instead of discarding it", async () => {
     pageState.data = { effectivePermissions: ["glucose.readwrite"] };
-    acceptImpl = () => Promise.reject({ status: 403, body: { message: "Forbidden" } });
+    acceptImpl = async () => error(403, "Forbidden");
 
     render(CompressionLowsPage, {});
 
     await expect.element(acceptButton()).toBeVisible();
     await acceptButton().click();
 
-    await vi.waitFor(() => expect(toastError).toHaveBeenCalled());
+    await vi.waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith(
+        "Reviewing compression lows requires the glucose.readwrite permission."
+      )
+    );
   });
 });

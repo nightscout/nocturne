@@ -31,7 +31,7 @@ public class ExperimentsController : ControllerBase
     /// <c>glucose.readwrite</c>) pass, instead of only full-access/legacy <c>*</c> secrets.
     /// </remarks>
     [HttpGet("experiments/test")]
-    [RequireScope(OAuthScopes.GlucoseRead, OAuthScopes.TreatmentsRead, OAuthScopes.DevicesRead)]
+    [RequireScope(Scope.GlucoseRead, Scope.TreatmentsRead, Scope.DevicesRead)]
     [NightscoutEndpoint("/api/v1/experiments/test")]
     [ProducesResponseType(200)]
     [ProducesResponseType(401)]

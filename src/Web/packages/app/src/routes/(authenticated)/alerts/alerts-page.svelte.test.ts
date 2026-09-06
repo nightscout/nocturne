@@ -1,8 +1,10 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { error } from "@sveltejs/kit";
 import { page as pageState } from "$app/state";
 import type { AlertRuleResponse } from "$api-clients";
+import { remoteCommand, remoteQuery } from "$lib/test-stubs/remote-resource";
 
 const { toastError } = vi.hoisted(() => ({ toastError: vi.fn() }));
 
@@ -18,34 +20,32 @@ const rules = [
   },
 ] as unknown as AlertRuleResponse[];
 
-/** Stands in for a remote query: awaitable in the template, plus its methods. */
-function remoteQuery<T>(value: T, extra: Record<string, unknown> = {}) {
-  return Object.assign(Promise.resolve(value), {
-    refresh: () => Promise.resolve(),
-    ...extra,
-  });
-}
+// The backing values are module-level so each read hands back the same object:
+// a resource that answered a fresh array every access would restart any effect
+// deriving from it.
+const activeAlerts: unknown[] = [];
+const alertHistory = { items: [], totalCount: 0 };
 
 // `toggleRule` is the shortest write path on the page (one click, no dialog), so
 // it stands in for the server's refusal.
 let toggleImpl: () => Promise<unknown>;
 
 vi.mock("$api/generated/alertRules.generated.remote", () => ({
-  getRules: () => remoteQuery(rules),
-  deleteRule: () => Promise.resolve(),
-  toggleRule: () => toggleImpl(),
-  testFire: () => Promise.resolve(),
+  getRules: () => remoteQuery(() => rules),
+  deleteRule: remoteCommand(() => undefined),
+  toggleRule: remoteCommand(() => toggleImpl()),
+  testFire: remoteCommand(() => undefined),
 }));
 
 vi.mock("$api/generated/alerts.generated.remote", () => ({
-  getActiveAlerts: () => remoteQuery([], { withOverride: () => undefined }),
-  getAlertHistory: () => remoteQuery({ items: [], totalCount: 0 }),
-  acknowledge: () => ({ updates: () => Promise.resolve() }),
+  getActiveAlerts: () => remoteQuery(() => activeAlerts),
+  getAlertHistory: () => remoteQuery(() => alertHistory),
+  acknowledge: remoteCommand(() => undefined),
 }));
 
 vi.mock("$api/generated/tenantAlertSettings.generated.remote", () => ({
-  get: () => remoteQuery(null),
-  update: () => Promise.resolve(),
+  get: () => remoteQuery(() => null),
+  update: remoteCommand(() => undefined),
 }));
 
 vi.mock("svelte-sonner", () => ({ toast: { error: toastError } }));
@@ -96,13 +96,33 @@ describe("alerts page", () => {
 
   it("surfaces a refused toggle instead of discarding it", async () => {
     pageState.data = { effectivePermissions: ["alerts.readwrite"] };
-    toggleImpl = () => Promise.reject({ status: 403, body: { message: "Forbidden" } });
+    toggleImpl = async () => error(403, "Forbidden");
 
     render(AlertsPage, {});
 
     await expect.element(enableSwitch()).toBeVisible();
     await enableSwitch().click();
 
-    await vi.waitFor(() => expect(toastError).toHaveBeenCalled());
+    await vi.waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith(
+        "Changing alerts requires the alerts.readwrite permission."
+      )
+    );
+  });
+
+  it("surfaces a stale rule as gone rather than as a permission problem", async () => {
+    pageState.data = { effectivePermissions: ["alerts.readwrite"] };
+    toggleImpl = async () => error(404, "Not Found");
+
+    render(AlertsPage, {});
+
+    await expect.element(enableSwitch()).toBeVisible();
+    await enableSwitch().click();
+
+    await vi.waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith(
+        "That item no longer exists. Refresh the page to see what's there now."
+      )
+    );
   });
 });

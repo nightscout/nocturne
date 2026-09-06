@@ -14,7 +14,7 @@ namespace Nocturne.API.Tests.Authorization;
 /// Behavioural tests for <see cref="RequireScopeAttribute"/>, the filter that guards every
 /// V1/V3 write endpoint. Verifies the exact security semantics relied on by the fix for the
 /// unauthenticated-write bug: an anonymous request is rejected, a read-only grant cannot write,
-/// a matching read-write scope is accepted, and delete requires full access (<c>*</c>).
+/// and a matching read-write scope is accepted.
 /// </summary>
 public class RequireScopeAttributeTests
 {
@@ -38,7 +38,7 @@ public class RequireScopeAttributeTests
     public void UnauthenticatedRequestWithNoScopes_IsRejectedWith401()
     {
         // No resolved scopes means no grant at all: neither an authenticated caller nor a share.
-        var result = Evaluate(new RequireScopeAttribute(OAuthScopes.GlucoseReadWrite),
+        var result = Evaluate(new RequireScopeAttribute(Scope.GlucoseReadWrite),
             authenticated: false);
 
         result.Should().BeOfType<UnauthorizedResult>();
@@ -52,8 +52,8 @@ public class RequireScopeAttributeTests
         // every share link would 401. A write requirement is refused before the scope set is
         // consulted, which is what keeps write-immunity a property of the filter rather than of the
         // scopes a share happens to hold.
-        var result = Evaluate(new RequireScopeAttribute(OAuthScopes.GlucoseReadWrite),
-            authenticated: false, OAuthScopes.GlucoseRead);
+        var result = Evaluate(new RequireScopeAttribute(Scope.GlucoseReadWrite),
+            authenticated: false, Scope.GlucoseRead);
 
         result.Should().BeOfType<UnauthorizedResult>();
     }
@@ -61,8 +61,8 @@ public class RequireScopeAttributeTests
     [Fact]
     public void UnauthenticatedPublicShare_WithReadScopes_CanRead()
     {
-        var result = Evaluate(new RequireScopeAttribute(OAuthScopes.GlucoseRead),
-            authenticated: false, OAuthScopes.GlucoseRead);
+        var result = Evaluate(new RequireScopeAttribute(Scope.GlucoseRead),
+            authenticated: false, Scope.GlucoseRead);
 
         result.Should().BeNull("public share links read the V1/V2/V3 surface");
     }
@@ -70,8 +70,8 @@ public class RequireScopeAttributeTests
     [Fact]
     public void AuthenticatedReadOnlyGrant_CannotWrite_IsForbidden()
     {
-        var result = Evaluate(new RequireScopeAttribute(OAuthScopes.GlucoseReadWrite),
-            authenticated: true, OAuthScopes.GlucoseRead, OAuthScopes.TreatmentsRead);
+        var result = Evaluate(new RequireScopeAttribute(Scope.GlucoseReadWrite),
+            authenticated: true, Scope.GlucoseRead, Scope.TreatmentsRead);
 
         result.Should().BeOfType<ForbidResult>();
     }
@@ -79,8 +79,8 @@ public class RequireScopeAttributeTests
     [Fact]
     public void AuthenticatedReadWriteGrant_CanWrite_IsAllowed()
     {
-        var result = Evaluate(new RequireScopeAttribute(OAuthScopes.GlucoseReadWrite),
-            authenticated: true, OAuthScopes.GlucoseReadWrite);
+        var result = Evaluate(new RequireScopeAttribute(Scope.GlucoseReadWrite),
+            authenticated: true, Scope.GlucoseReadWrite);
 
         result.Should().BeNull();
     }
@@ -89,18 +89,30 @@ public class RequireScopeAttributeTests
     public void FullAccessGrant_SatisfiesEveryWriteScope()
     {
         // A legacy full api-secret normalises to "*" (FullAccess) — real uploaders must keep working.
-        Evaluate(new RequireScopeAttribute(OAuthScopes.GlucoseReadWrite), authenticated: true, OAuthScopes.FullAccess)
+        Evaluate(new RequireScopeAttribute(Scope.GlucoseReadWrite), authenticated: true, Scope.FullAccess)
             .Should().BeNull();
-        Evaluate(new RequireScopeAttribute(OAuthScopes.FullAccess), authenticated: true, OAuthScopes.FullAccess)
+        Evaluate(new RequireScopeAttribute(Scope.FullAccess), authenticated: true, Scope.FullAccess)
             .Should().BeNull();
     }
 
     [Fact]
-    public void Delete_RequiresFullAccess_ReadWriteScopeIsInsufficient()
+    public void ReadWriteGrant_DoesNotReachAnotherCategory()
     {
-        // Delete endpoints require FullAccess by design; a scoped readwrite grant cannot delete.
-        var result = Evaluate(new RequireScopeAttribute(OAuthScopes.FullAccess),
-            authenticated: true, OAuthScopes.GlucoseReadWrite, OAuthScopes.TreatmentsReadWrite);
+        // A collection delete now gates on that collection's readwrite scope, so the boundary that
+        // remains is the category one: treatments.readwrite must not reach the entries surface.
+        var result = Evaluate(new RequireScopeAttribute(Scope.GlucoseReadWrite),
+            authenticated: true, Scope.TreatmentsReadWrite);
+
+        result.Should().BeOfType<ForbidResult>();
+    }
+
+    [Fact]
+    public void ScopeRequiringFullAccess_IsNotSatisfiedByEveryReadWriteScope()
+    {
+        // Endpoints that still name "*" (tenant administration) are unreachable from the health-data
+        // readwrite scopes however many of them a grant holds.
+        var result = Evaluate(new RequireScopeAttribute(Scope.FullAccess),
+            authenticated: true, [.. Scope.HealthReadWriteExpansion]);
 
         result.Should().BeOfType<ForbidResult>();
     }

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models;
 
@@ -28,8 +29,8 @@ internal sealed class ProfileLoadStage(
 ) : IChartDataStage
 {
     private const double DefaultVeryLow = 54;
-    private const double DefaultLow = 70;
-    private const double DefaultHigh = 180;
+    private const double DefaultLow = GlucoseConstants.TargetBottomMgdl;
+    private const double DefaultHigh = GlucoseConstants.TargetTopMgdl;
     private const double DefaultVeryHigh = 250;
 
     public async Task<ChartDataContext> ExecuteAsync(ChartDataContext context, CancellationToken cancellationToken)

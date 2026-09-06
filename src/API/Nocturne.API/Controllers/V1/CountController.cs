@@ -82,7 +82,7 @@ public class CountController : ControllerBase
     [HttpGet("entries/where")]
     [NightscoutEndpoint("/api/v1/count/entries/where")]
     [ProducesResponseType(typeof(CountResponse), 200)]
-    [RequireScope(OAuthScopes.GlucoseRead)]
+    [RequireScope(Scope.GlucoseRead)]
     public async Task<ActionResult<CountResponse>> CountEntries(
         [FromQuery] string? find = null,
         [FromQuery] string? type = null,
@@ -132,7 +132,7 @@ public class CountController : ControllerBase
     [HttpGet("treatments/where")]
     [NightscoutEndpoint("/api/v1/count/treatments/where")]
     [ProducesResponseType(typeof(CountResponse), 200)]
-    [RequireScope(OAuthScopes.TreatmentsRead)]
+    [RequireScope(Scope.TreatmentsRead)]
     public async Task<ActionResult<CountResponse>> CountTreatments(
         [FromQuery] string? find = null,
         CancellationToken cancellationToken = default
@@ -175,7 +175,7 @@ public class CountController : ControllerBase
     [HttpGet("devicestatus/where")]
     [NightscoutEndpoint("/api/v1/count/devicestatus/where")]
     [ProducesResponseType(typeof(CountResponse), 200)]
-    [RequireScope(OAuthScopes.DevicesRead)]
+    [RequireScope(Scope.DevicesRead)]
     public async Task<ActionResult<CountResponse>> CountDeviceStatus(
         [FromQuery] string? find = null,
         CancellationToken cancellationToken = default

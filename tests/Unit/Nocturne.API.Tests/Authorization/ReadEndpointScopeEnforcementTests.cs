@@ -173,7 +173,7 @@ public class ReadEndpointScopeEnforcementTests
 
     /// <summary>
     /// Public share links reach exactly this read surface, and their scopes are narrowed to
-    /// <see cref="Nocturne.Core.Models.Authorization.TenantPermissions.PublicShareScopes"/>. A read
+    /// <see cref="Nocturne.Core.Models.Authorization.Scope.PublicShareScopes"/>. A read
     /// scope outside that set is not a bug — the share RLS policies hide the underlying tables from
     /// shares anyway (see <c>ShareDataCategories</c>) — but the scopes the share view depends on
     /// must stay inside it, or every share link 403s.
@@ -181,14 +181,14 @@ public class ReadEndpointScopeEnforcementTests
     [Fact]
     public void ShareReachableReadScopes_StayWithinPublicShareScopes()
     {
-        var shareable = Nocturne.Core.Models.Authorization.TenantPermissions.PublicShareScopes;
+        var shareable = Nocturne.Core.Models.Authorization.Scope.PublicShareScopes;
 
-        shareable.Should().Contain(Nocturne.Core.Models.Authorization.OAuthScopes.GlucoseRead,
+        shareable.Should().Contain(Nocturne.Core.Models.Authorization.Scope.GlucoseRead,
             "the default share grant is glucose-only, so the glucose read endpoints " +
             "(/api/v1/entries, /pebble, /api/v2/properties, ddata, summary) must be satisfiable by it");
-        shareable.Should().Contain(Nocturne.Core.Models.Authorization.OAuthScopes.TreatmentsRead);
-        shareable.Should().Contain(Nocturne.Core.Models.Authorization.OAuthScopes.DevicesRead);
-        shareable.Should().Contain(Nocturne.Core.Models.Authorization.OAuthScopes.FoodRead);
+        shareable.Should().Contain(Nocturne.Core.Models.Authorization.Scope.TreatmentsRead);
+        shareable.Should().Contain(Nocturne.Core.Models.Authorization.Scope.DevicesRead);
+        shareable.Should().Contain(Nocturne.Core.Models.Authorization.Scope.FoodRead);
 
         shareable.Should().OnlyContain(s => s.EndsWith(".read", StringComparison.Ordinal),
             "RequireScope admits the anonymous share principal on its scope set alone, so the set " +

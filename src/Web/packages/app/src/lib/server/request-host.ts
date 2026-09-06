@@ -7,6 +7,10 @@
  * (e.g. the realtime handshake-ticket endpoint).
  */
 
+// Imported from the shared (non-server) module, and re-exported below, so the client 401
+// interceptor and these server hooks share one definition of the share-host shape.
+import { isShareHost } from "$lib/share-host";
+
 /**
  * Get the original client-facing host from the request.
  * YARP suppresses the original Host header when transforms are configured,
@@ -68,17 +72,21 @@ export const SETUP_TENANT_COOKIE = "nocturne-setup-tenant";
 /**
  * Returns the effective host for API calls, prepending the setup tenant slug
  * when available so the apex domain resolves to the correct tenant.
+ *
+ * Never on a share host: the cookie is a leftover of whoever last ran setup in this browser, and
+ * prepending a slug to {token}.share.{baseDomain} yields a host the API resolves no share from,
+ * so a stale cookie would decide whether the shared view renders or the visitor is bounced to
+ * sign-in.
  */
 export function getEffectiveHost(
   request: Request,
   cookies: { get(name: string): string | undefined },
 ): string | null {
   const host = getOriginalHost(request);
+  if (isShareHost(host)) return host;
   const slug = cookies.get(SETUP_TENANT_COOKIE);
   if (slug && host && !host.startsWith(`${slug}.`)) return `${slug}.${host}`;
   return host;
 }
 
-// Re-exported from the shared (non-server) module so the client 401 interceptor and these server
-// hooks share one definition of the share-host shape. See $lib/share-host.
-export { isShareHost } from "$lib/share-host";
+export { isShareHost };

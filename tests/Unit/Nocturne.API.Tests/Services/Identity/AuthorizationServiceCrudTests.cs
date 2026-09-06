@@ -1,6 +1,4 @@
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -10,6 +8,7 @@ using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Tests.Shared.Infrastructure;
 using AuthSubjectModel = Nocturne.Core.Models.Authorization.Subject;
 using AuthRoleModel = Nocturne.Core.Models.Authorization.Role;
 using LegacySubject = Nocturne.Core.Models.Subject;
@@ -28,7 +27,7 @@ public class AuthorizationServiceCrudTests : IDisposable
     private readonly Mock<ISubjectService> _mockSubjectService;
     private readonly Mock<IRoleService> _mockRoleService;
     private readonly Mock<IJwtService> _mockJwtService;
-    private readonly SqliteConnection _connection;
+    private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _dbContext;
     private readonly AuthorizationService _authorizationService;
 
@@ -40,14 +39,8 @@ public class AuthorizationServiceCrudTests : IDisposable
         _mockRoleService = new Mock<IRoleService>();
         _mockJwtService = new Mock<IJwtService>();
 
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
-        var dbOptions = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .Options;
-        _dbContext = new NocturneDbContext(dbOptions);
-        _dbContext.Database.EnsureCreated();
+        _db = TestDbContextFactory.CreateSqlite();
+        _dbContext = _db.CreateContext();
 
         // Setup configuration
         _mockConfiguration
@@ -67,7 +60,7 @@ public class AuthorizationServiceCrudTests : IDisposable
     public void Dispose()
     {
         _dbContext.Dispose();
-        _connection.Dispose();
+        _db.Dispose();
     }
 
     #region Subject CRUD Tests

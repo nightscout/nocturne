@@ -229,68 +229,14 @@ public class SessionCookieHandler : IAuthHandler
         };
     }
 
-    /// <summary>
-    /// Set session cookies in the response
-    /// </summary>
-    private void SetSessionCookies(HttpContext context, OidcTokenResponse tokens)
-    {
-        // Access token cookie (short-lived)
-        context.Response.Cookies.Append(
-            _options.Cookie.AccessTokenName,
-            tokens.AccessToken,
-            new CookieOptions
-            {
-                HttpOnly = _options.Cookie.HttpOnly,
-                Secure = _options.Cookie.Secure,
-                SameSite = SessionCookieExtensions.MapSameSiteMode(_options.Cookie.SameSite),
-                Path = _options.Cookie.Path,
-                Domain = _options.Cookie.Domain,
-                Expires = tokens.ExpiresAt,
-            }
-        );
-
-        // Refresh token cookie (longer-lived)
-        context.Response.Cookies.Append(
-            _options.Cookie.RefreshTokenName,
-            tokens.RefreshToken,
-            new CookieOptions
-            {
-                HttpOnly = true, // Always HttpOnly for refresh tokens
-                Secure = _options.Cookie.Secure,
-                SameSite = SessionCookieExtensions.MapSameSiteMode(_options.Cookie.SameSite),
-                Path = _options.Cookie.Path,
-                Domain = _options.Cookie.Domain,
-                Expires = DateTimeOffset.UtcNow.Add(_options.Session.RefreshTokenLifetime),
-            }
-        );
-
-        // Also update the non-HttpOnly IsAuthenticated cookie for frontend state tracking
-        context.Response.Cookies.Append(
-            "IsAuthenticated",
-            "true",
-            new CookieOptions
-            {
-                HttpOnly = false,
-                Secure = _options.Cookie.Secure,
-                SameSite = SessionCookieExtensions.MapSameSiteMode(_options.Cookie.SameSite),
-                Path = "/",
-                Domain = _options.Cookie.Domain,
-                Expires = DateTimeOffset.UtcNow.Add(_options.Session.RefreshTokenLifetime),
-            }
-        );
-    }
+    private void SetSessionCookies(HttpContext context, OidcTokenResponse tokens) =>
+        context.Response.SetSessionCookies(
+            tokens.AccessToken, tokens.RefreshToken, tokens.ExpiresAt, _options);
 
     /// <summary>
     /// Get client IP address
     /// </summary>
-    private static string? GetClientIpAddress(HttpContext context)
-    {
-        var forwarded = context.Request.Headers["X-Forwarded-For"].FirstOrDefault();
-        if (!string.IsNullOrEmpty(forwarded))
-        {
-            return forwarded.Split(',').First().Trim();
-        }
-        return context.Connection.RemoteIpAddress?.ToString();
-    }
+    private static string? GetClientIpAddress(HttpContext context) =>
+        context.Connection.RemoteIpAddress?.ToString();
 
 }

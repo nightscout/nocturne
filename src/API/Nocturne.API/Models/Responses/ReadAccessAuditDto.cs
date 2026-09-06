@@ -13,5 +13,5 @@ public class ReadAccessAuditDto
     public string? SubjectName { get; set; }
     public string? AuthType { get; set; }
     public string? IpAddress { get; set; }
-    public string? ApiSecretHashPrefix { get; set; }
+    public string? CredentialFingerprint { get; set; }
 }

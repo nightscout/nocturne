@@ -63,7 +63,7 @@ public class PebbleController : ControllerBase
     [NightscoutEndpoint("/pebble")]
     [Produces("application/json")]
     [ProducesResponseType(typeof(PebbleResponse), 200)]
-    [RequireScope(OAuthScopes.GlucoseRead)]
+    [RequireScope(Scope.GlucoseRead)]
     public async Task<ActionResult<PebbleResponse>> GetPebbleData(
         [FromQuery] string? units = null,
         [FromQuery] int count = 1,

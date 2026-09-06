@@ -37,6 +37,8 @@
     try {
       settings = await getDnd().run();
     } catch {
+      // A sidebar toggle has nowhere to put a sentence; the null state renders as
+      // "unknown" and the panel behind it reports the reason.
       settings = null;
     }
   }
@@ -55,6 +57,8 @@
       });
       settings = r;
     } catch {
+      // The toggle's own failed state is the report; a reason needs somewhere to
+      // sit, and /alerts/dnd is where it does.
       failed = true;
     } finally {
       saving = false;

@@ -280,8 +280,12 @@ public class StatisticsServiceClinicalAccuracyTests
     [Fact]
     public void CalculateTimeInRange_DurationsShouldMatchReadingCount()
     {
-        // 20 entries * 5 min interval = 100 minutes total
-        var entries = Enumerable.Range(0, 20).Select(_ => new SensorGlucose { Mgdl = 120 }).ToArray();
+        // 20 entries five minutes apart = 100 minutes total
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var entries = Enumerable
+            .Range(0, 20)
+            .Select(i => new SensorGlucose { Mgdl = 120, Timestamp = start.AddMinutes(i * 5) })
+            .ToArray();
 
         var result = _sut.CalculateTimeInRange(entries);
 
@@ -484,6 +488,23 @@ public class StatisticsServiceClinicalAccuracyTests
         var result = _sut.CalculateHBGI(values);
 
         result.Should().BeGreaterThan(9.0, "HBGI > 9.0 indicates high hyperglycemia risk");
+    }
+
+    /// <summary>
+    /// Pins the published Kovatchev magnitudes exactly: the risk transform divides by 18 (not the
+    /// 18.0182 unit-conversion factor), and a drifted divisor or coefficient moves these values
+    /// well past the tolerance.
+    /// </summary>
+    [Fact]
+    public void CalculateHBGI_KnownSeries_MatchesPublishedFormula()
+    {
+        _sut.CalculateHBGI([180.0, 250.0, 300.0]).Should().BeApproximately(9.6041173, 0.001);
+    }
+
+    [Fact]
+    public void CalculateLBGI_KnownSeries_MatchesPublishedFormula()
+    {
+        _sut.CalculateLBGI([40.0, 54.0, 65.0]).Should().BeApproximately(9.2579505, 0.001);
     }
 
     [Fact]
@@ -1006,7 +1027,7 @@ public class StatisticsServiceClinicalAccuracyTests
             Timestamp = DateTimeOffset.UtcNow.AddMinutes(i * 5).UtcDateTime,
         });
 
-        var result = _sut.CalculateGlycemicVariability(values, entries);
+        var result = _sut.CalculateGlycemicVariability(values, entries)!;
 
         // CV < 36% is the clinical target
         result.CoefficientOfVariation.Should().BeLessThan(36);
@@ -1024,7 +1045,7 @@ public class StatisticsServiceClinicalAccuracyTests
             Timestamp = DateTimeOffset.UtcNow.AddMinutes(i * 5).UtcDateTime,
         });
 
-        var result = _sut.CalculateGlycemicVariability(values, entries);
+        var result = _sut.CalculateGlycemicVariability(values, entries)!;
 
         result.CoefficientOfVariation.Should().BeGreaterThan(50);
     }
@@ -1152,7 +1173,7 @@ public class StatisticsServiceClinicalAccuracyTests
         }).ToArray();
 
         var basicStats = _sut.CalculateBasicStats(values);
-        var gv = _sut.CalculateGlycemicVariability(values, entries);
+        var gv = _sut.CalculateGlycemicVariability(values, entries)!;
 
         // Both use sample SD (N-1): sqrt(Σ(x-mean)²/4) = sqrt(4000/4) = sqrt(1000) ≈ 31.6
         basicStats.StandardDeviation.Should().Be(
@@ -1302,35 +1323,29 @@ public class StatisticsServiceClinicalAccuracyTests
     #region Edge Case: Episode Counting Across Severity Boundaries
 
     /// <summary>
-    /// When glucose drops from target → severe low → low → target,
-    /// the current implementation counts this as 1 severe low episode + 1 low episode.
-    /// Clinically this is a single continuous hypoglycemic event.
+    /// A drop from target through severe low, recovering through low, is one continuous
+    /// hypoglycemic event and is reported as one episode, against the severe zone it reached.
     /// </summary>
     [Fact]
-    public void TimeInRange_Episodes_VeryLowToLowTransition_CountsSeparateEpisodes()
+    public void TimeInRange_Episodes_VeryLowToLowTransition_CountsOneEpisode()
     {
         var entries = new[]
         {
             new SensorGlucose { Mgdl = 120 }, // target
             new SensorGlucose { Mgdl = 45 },  // severe low — episode starts
             new SensorGlucose { Mgdl = 45 },  // severe low — continues
-            new SensorGlucose { Mgdl = 60 },  // low — this is a DIFFERENT range, counts as new episode
+            new SensorGlucose { Mgdl = 60 },  // low — recovering, still the same event
             new SensorGlucose { Mgdl = 60 },  // low — continues
-            new SensorGlucose { Mgdl = 120 }, // back to target
+            new SensorGlucose { Mgdl = 120 }, // back to target — event ends
         };
 
         var result = _sut.CalculateTimeInRange(entries);
 
-        // Current behavior: counts separate episodes for severity transitions
-        // This means one continuous hypo event gets counted as 2 episodes
         result.Episodes.VeryLow.Should().Be(1);
-        result.Episodes.Low.Should().Be(1);
+        result.Episodes.Low.Should().Be(0);
 
-        // Total hypo "episodes" reported = 2, but clinically it was 1 event
         var totalHypoEpisodes = result.Episodes.VeryLow + result.Episodes.Low;
-        totalHypoEpisodes.Should().Be(2,
-            "current implementation counts severity transitions as separate episodes — " +
-            "consider whether a single continuous hypo event should be counted as 1 episode");
+        totalHypoEpisodes.Should().Be(1, "one continuous hypo event is one episode");
     }
 
     #endregion

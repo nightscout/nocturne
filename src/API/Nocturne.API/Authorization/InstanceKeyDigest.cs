@@ -21,11 +21,31 @@ public static class InstanceKeyDigest
     /// </summary>
     public static string Resolve(IConfiguration configuration)
     {
-        var instanceKey =
-            configuration[$"Parameters:{ServiceNames.Parameters.InstanceKey}"]
-            ?? configuration[ServiceNames.ConfigKeys.InstanceKey]
-            ?? "";
+        var instanceKey = ResolveKey(configuration);
 
         return !string.IsNullOrEmpty(instanceKey) ? HashUtils.Sha256Hex(instanceKey) : "";
     }
+
+    /// <summary>
+    /// Returns the configured instance key itself, or an empty string when none is configured.
+    /// For the callers that need the key as signing material rather than as a credential to
+    /// compare (see <see cref="RateLimiting.ClientRateLimitKey"/>).
+    /// </summary>
+    public static string ResolveKey(IConfiguration configuration) =>
+        configuration[$"Parameters:{ServiceNames.Parameters.InstanceKey}"]
+        ?? configuration[ServiceNames.ConfigKeys.InstanceKey]
+        ?? "";
+
+    /// <summary>
+    /// Returns a stable identifier for the configured instance key suitable for an audit trail, or
+    /// null when no instance key is configured. Two different keys yield two different values.
+    /// </summary>
+    /// <remarks>
+    /// What <see cref="Resolve"/> returns is exactly what a caller presents in the
+    /// <see cref="ServiceNames.Headers.InstanceKey"/> header, so the digest is itself bearer
+    /// material and must never be recorded. See <see cref="AuditFingerprint"/> for what is
+    /// recorded instead.
+    /// </remarks>
+    public static string? ResolveFingerprint(IConfiguration configuration) =>
+        AuditFingerprint.Of(AuditFingerprint.InstanceKeyDomain, Resolve(configuration));
 }

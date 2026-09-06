@@ -83,7 +83,10 @@ public class Entry : ProcessableDocumentBase
     [JsonConverter(typeof(FlexibleLongConverter))]
     public long DateMills
     {
-        get => _dateMills;
+        // Nightscout emits "date" and "mills" with the same value on every entry it returns, and
+        // AAPS reads "date" alone with no fallback to either sibling. An entry that reached us with
+        // only "mills" set would otherwise serialise as date: 0 and land in AAPS at the epoch.
+        get => _dateMills != 0 ? _dateMills : Mills;
         set => _dateMills = value;
     }
     private long _dateMills;
@@ -207,34 +210,7 @@ public class Entry : ProcessableDocumentBase
     /// Gets the direction as a strongly-typed enum value
     /// </summary>
     [JsonIgnore]
-    public Models.Direction DirectionEnum => ParseDirection(Direction);
-
-    /// <summary>
-    /// Parse direction string to enum - handles legacy string values
-    /// </summary>
-    private static Models.Direction ParseDirection(string? directionString)
-    {
-        if (string.IsNullOrEmpty(directionString))
-            return Models.Direction.NONE;
-
-        return directionString switch
-        {
-            "NONE" => Models.Direction.NONE,
-            "TripleUp" => Models.Direction.TripleUp,
-            "DoubleUp" => Models.Direction.DoubleUp,
-            "SingleUp" => Models.Direction.SingleUp,
-            "FortyFiveUp" => Models.Direction.FortyFiveUp,
-            "Flat" => Models.Direction.Flat,
-            "FortyFiveDown" => Models.Direction.FortyFiveDown,
-            "SingleDown" => Models.Direction.SingleDown,
-            "DoubleDown" => Models.Direction.DoubleDown,
-            "TripleDown" => Models.Direction.TripleDown,
-            "NOT COMPUTABLE" => Models.Direction.NotComputable,
-            "RATE OUT OF RANGE" => Models.Direction.RateOutOfRange,
-            "CGM ERROR" => Models.Direction.CgmError,
-            _ => Models.Direction.NONE,
-        };
-    }
+    public Models.Direction DirectionEnum => DirectionExtensions.Parse(Direction);
 
     /// <summary>
     /// Gets or sets the entry type (e.g., "sgv", "cal", "mbg")
@@ -403,8 +379,8 @@ public class Entry : ProcessableDocumentBase
 
     /// <summary>
     /// Gets or sets the server-modified timestamp (Unix milliseconds). V3 compatibility field.
-    /// Falls back to Mills so every serialized entry carries it: NS v3 socket clients (AAPS)
-    /// read it unconditionally from realtime storage events and drop docs without it.
+    /// Falls back to <see cref="FallbackTimestampMills"/>; see <see cref="V3Timestamps"/> for
+    /// why it may never serialize as null.
     /// </summary>
     private long? _srvModified;
 
@@ -412,7 +388,7 @@ public class Entry : ProcessableDocumentBase
     [JsonConverter(typeof(FlexibleNullableLongConverter))]
     public long? SrvModified
     {
-        get => _srvModified ?? (Mills > 0 ? Mills : null);
+        get => _srvModified ?? FallbackTimestampMills();
         set => _srvModified = value;
     }
 
@@ -425,9 +401,16 @@ public class Entry : ProcessableDocumentBase
     [JsonConverter(typeof(FlexibleNullableLongConverter))]
     public long? SrvCreated
     {
-        get => _srvCreated ?? (Mills > 0 ? Mills : null);
+        get => _srvCreated ?? FallbackTimestampMills();
         set => _srvCreated = value;
     }
+
+    /// <summary>
+    /// Resolves the V3 compatibility timestamps: Mills, then <c>created_at</c>. Mills already
+    /// resolves <c>date</c> and <c>dateString</c>; <c>created_at</c> is the only timestamp it
+    /// does not reach.
+    /// </summary>
+    private long? FallbackTimestampMills() => V3Timestamps.Resolve(Mills, CreatedAt);
 
     /// <summary>
     /// Gets or sets the subject identifier. V3 compatibility field.

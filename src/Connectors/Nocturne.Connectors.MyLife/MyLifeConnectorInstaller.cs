@@ -12,8 +12,6 @@ namespace Nocturne.Connectors.MyLife;
 
 public class MyLifeConnectorInstaller : IConnectorInstaller
 {
-    public string ConnectorName => "MyLife";
-
     public void Install(IServiceCollection services, IConfiguration configuration)
     {
         var config = services.AddConnectorConfiguration<MyLifeConnectorConfiguration>(
@@ -47,14 +45,6 @@ public class MyLifeConnectorInstaller : IConnectorInstaller
         services.AddSingleton<MyLifeSyncService>();
         services.AddSingleton<MyLifeEventProcessor>();
 
-        services.AddScoped<IConnectorSyncExecutor, MyLifeSyncExecutor>();
+        services.AddConnectorSyncExecutor<ConnectorSyncExecutor<MyLifeConnectorService, MyLifeConnectorConfiguration>>();
     }
-}
-
-public class MyLifeSyncExecutor
-    : ConnectorSyncExecutor<MyLifeConnectorService, MyLifeConnectorConfiguration>
-{
-    public override string ConnectorId => "mylife";
-
-    protected override string ConnectorName => "MyLife";
 }

@@ -64,7 +64,8 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(304)]
     [ProducesResponseType(500)]
-    [RequireScope(OAuthScopes.DevicesRead)]
+    [RequireScope(Scope.DevicesRead)]
+    [ErrorEnvelope]
     public async Task<IActionResult> GetDeviceStatus(CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
@@ -138,11 +139,6 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
             _logger.LogWarning(ex, "Invalid V3 devicestatus request parameters");
             return CreateV3ErrorResponse(400, "Invalid request parameters", ex.Message);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving V3 devicestatus");
-            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
-        }
     }
 
     /// <summary>
@@ -156,7 +152,8 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
     [ProducesResponseType(typeof(DeviceStatus), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(500)]
-    [RequireScope(OAuthScopes.DevicesRead)]
+    [RequireScope(Scope.DevicesRead)]
+    [ErrorEnvelope]
     public async Task<ActionResult> GetDeviceStatusById(
         string id,
         CancellationToken cancellationToken = default
@@ -168,22 +165,14 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
             HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
         );
 
-        try
-        {
-            var result = await _projection.GetByIdAsync(id, cancellationToken);
+        var result = await _projection.GetByIdAsync(id, cancellationToken);
 
-            if (result == null)
-            {
-                return CreateV3ErrorResponse(404, "Device status not found");
-            }
-
-            return CreateV3SuccessResponse(MapToV3Dto(result));
-        }
-        catch (Exception ex)
+        if (result == null)
         {
-            _logger.LogError(ex, "Error retrieving device status with ID {Id}", id);
-            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
+            return CreateV3ErrorResponse(404, "Device status not found");
         }
+
+        return CreateV3SuccessResponse(MapToV3Dto(result));
     }
 
     /// <summary>
@@ -194,11 +183,12 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
     /// <returns>Created device status records</returns>
     [HttpPost]
     [Authorize]
-    [RequireScope(OAuthScopes.DevicesReadWrite)]
+    [RequireScope(Scope.DevicesReadWrite)]
     [NightscoutEndpoint("/api/v3/devicestatus")]
     [ProducesResponseType(typeof(DeviceStatus[]), 201)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult> CreateDeviceStatus(
         [FromBody] JsonElement deviceStatusData,
         CancellationToken cancellationToken = default
@@ -318,11 +308,6 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
             _logger.LogWarning(ex, "Invalid V3 devicestatus create request");
             return CreateV3ErrorResponse(400, "Invalid request data", ex.Message);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating V3 devicestatus");
-            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
-        }
     }
 
     /// <summary>
@@ -335,11 +320,12 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
     /// <returns>Updated device status record</returns>
     [HttpPut("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.DevicesReadWrite)]
+    [RequireScope(Scope.DevicesReadWrite)]
     [NightscoutEndpoint("/api/v3/devicestatus/{id}")]
     [ProducesResponseType(typeof(Dictionary<string, object>), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
+    [ErrorEnvelope]
     public async Task<IActionResult> UpdateDeviceStatus(
         string id,
         [FromBody] JsonElement request,
@@ -385,46 +371,38 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
         deviceStatus.Id = id;
         ProcessDeviceStatusForCreation(deviceStatus);
 
-        try
+        // Verify the record exists in V4 before updating
+        var existing = await _projection.GetByIdAsync(id, cancellationToken);
+        if (existing == null)
         {
-            // Verify the record exists in V4 before updating
-            var existing = await _projection.GetByIdAsync(id, cancellationToken);
-            if (existing == null)
+            return CreateV3ErrorResponse(404, "Device status not found");
+        }
+
+        // Delete old V4 records by legacy ID, then decompose the updated DeviceStatus
+        await _decomposer.DeleteByLegacyIdAsync(id, WriteOrigin.Live, cancellationToken);
+        // Direct v3 update has no connector data source; a live update broadcasts.
+        await _decomposer.DecomposeAsync(deviceStatus, source: null, WriteOrigin.Live, cancellationToken);
+
+        // Project the V4 snapshots back to DeviceStatus shape for the response
+        var updated = await _projection.GetByIdAsync(id, cancellationToken) ?? deviceStatus;
+
+        // Broadcast via WriteSideEffectsService (cache invalidation + SignalR)
+        await _sideEffects.OnUpdatedAsync(
+            CollectionName,
+            updated,
+            NoDecompose,
+            cancellationToken
+        );
+
+        await _events.OnUpdatedAsync(updated, cancellationToken);
+
+        return Ok(
+            new Dictionary<string, object>
             {
-                return CreateV3ErrorResponse(404, "Device status not found");
+                ["status"] = 200,
+                ["result"] = MapToV3Dto(updated),
             }
-
-            // Delete old V4 records by legacy ID, then decompose the updated DeviceStatus
-            await _decomposer.DeleteByLegacyIdAsync(id, WriteOrigin.Live, cancellationToken);
-            // Direct v3 update has no connector data source; a live update broadcasts.
-            await _decomposer.DecomposeAsync(deviceStatus, source: null, WriteOrigin.Live, cancellationToken);
-
-            // Project the V4 snapshots back to DeviceStatus shape for the response
-            var updated = await _projection.GetByIdAsync(id, cancellationToken) ?? deviceStatus;
-
-            // Broadcast via WriteSideEffectsService (cache invalidation + SignalR)
-            await _sideEffects.OnUpdatedAsync(
-                CollectionName,
-                updated,
-                NoDecompose,
-                cancellationToken
-            );
-
-            await _events.OnUpdatedAsync(updated, cancellationToken);
-
-            return Ok(
-                new Dictionary<string, object>
-                {
-                    ["status"] = 200,
-                    ["result"] = MapToV3Dto(updated),
-                }
-            );
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error updating device status with ID {Id}", id);
-            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
-        }
+        );
     }
 
     /// <summary>
@@ -435,11 +413,12 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
     /// <returns>No content on success</returns>
     [HttpDelete("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.FullAccess)]
+    [RequireScope(Scope.DevicesReadWrite)]
     [NightscoutEndpoint("/api/v3/devicestatus/{id}")]
     [ProducesResponseType(204)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult> DeleteDeviceStatus(
         string id,
         CancellationToken cancellationToken = default
@@ -451,41 +430,33 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
             HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
         );
 
-        try
+        // Get the projected record before deleting (for broadcast)
+        var deviceStatusToDelete = await _projection.GetByIdAsync(id, cancellationToken);
+
+        // Delete V4 snapshot records by legacy ID
+        var deleted = await _decomposer.DeleteByLegacyIdAsync(id, WriteOrigin.Live, cancellationToken);
+
+        if (deleted == 0 && deviceStatusToDelete == null)
         {
-            // Get the projected record before deleting (for broadcast)
-            var deviceStatusToDelete = await _projection.GetByIdAsync(id, cancellationToken);
-
-            // Delete V4 snapshot records by legacy ID
-            var deleted = await _decomposer.DeleteByLegacyIdAsync(id, WriteOrigin.Live, cancellationToken);
-
-            if (deleted == 0 && deviceStatusToDelete == null)
-            {
-                return CreateV3ErrorResponse(
-                    404,
-                    "Device status not found",
-                    $"Device status with ID '{id}' was not found"
-                );
-            }
-
-            await _sideEffects.OnDeletedAsync(
-                CollectionName,
-                deviceStatusToDelete,
-                NoDecompose,
-                cancellationToken
+            return CreateV3ErrorResponse(
+                404,
+                "Device status not found",
+                $"Device status with ID '{id}' was not found"
             );
-
-            await _events.OnDeletedAsync(deviceStatusToDelete, cancellationToken);
-
-            _logger.LogDebug("Successfully deleted device status with ID {Id}", id);
-
-            return NoContent();
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting device status with ID {Id}", id);
-            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
-        }
+
+        await _sideEffects.OnDeletedAsync(
+            CollectionName,
+            deviceStatusToDelete,
+            NoDecompose,
+            cancellationToken
+        );
+
+        await _events.OnDeletedAsync(deviceStatusToDelete, cancellationToken);
+
+        _logger.LogDebug("Successfully deleted device status with ID {Id}", id);
+
+        return NoContent();
     }
 
     /// <summary>
@@ -499,7 +470,8 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
     [NightscoutEndpoint("/api/v3/devicestatus/history/{lastModified}")]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(500)]
-    [RequireScope(OAuthScopes.DevicesRead)]
+    [RequireScope(Scope.DevicesRead)]
+    [ErrorEnvelope]
     public async Task<ActionResult> GetDeviceStatusHistory(
         long lastModified,
         [FromQuery] int limit = 1000,
@@ -512,29 +484,21 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
             limit
         );
 
-        try
+        limit = Math.Min(Math.Max(limit, 1), 1000);
+
+        var deviceStatuses = (await _projection.GetModifiedSinceAsync(
+            lastModified,
+            limit,
+            cancellationToken
+        )).ToList();
+
+        if (deviceStatuses.Count > 0)
         {
-            limit = Math.Min(Math.Max(limit, 1), 1000);
-
-            var deviceStatuses = (await _projection.GetModifiedSinceAsync(
-                lastModified,
-                limit,
-                cancellationToken
-            )).ToList();
-
-            if (deviceStatuses.Count > 0)
-            {
-                SetHistoryCursorHeaders(deviceStatuses.Max(d => d.Mills));
-            }
-
-            var mappedData = deviceStatuses.Select(MapToV3Dto);
-            return CreateV3SuccessResponse(mappedData);
+            SetHistoryCursorHeaders(deviceStatuses.Max(d => d.Mills));
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving devicestatus history");
-            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
-        }
+
+        var mappedData = deviceStatuses.Select(MapToV3Dto);
+        return CreateV3SuccessResponse(mappedData);
     }
 
     /// <summary>

@@ -24,8 +24,6 @@ public class CareLinkAuthTokenProvider(
     private readonly IRetryDelayStrategy _retryDelayStrategy =
         retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
 
-    protected override int TokenLifetimeBufferMinutes => 1;
-
     protected override string ConnectorName => "CareLink";
 
     /// <summary>
@@ -108,7 +106,7 @@ public class CareLinkAuthTokenProvider(
             return (null, DateTime.MinValue, null);
         }
 
-        const int maxRetries = 2;
+        var maxRetries = LoginAttempts(config);
         var result = await ExecuteWithRetryAsync(
             async attempt =>
             {

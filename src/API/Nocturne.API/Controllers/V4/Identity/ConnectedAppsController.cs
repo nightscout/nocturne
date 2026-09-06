@@ -56,7 +56,7 @@ public class ConnectedAppsController : ControllerBase
         var grants = await _grantService.GetGrantsForSubjectAsync(subjectId.Value, ct);
 
         var result = grants
-            .Where(g => g.GrantType == OAuthScopes.GrantTypeApp && !g.IsRevoked)
+            .Where(g => g.GrantType == OAuthGrantTypes.App && !g.IsRevoked)
             .OrderByDescending(g => g.LastUsedAt ?? g.CreatedAt)
             .Select(g => new ConnectedAppDto
             {
@@ -95,12 +95,8 @@ public class ConnectedAppsController : ControllerBase
             return Unauthorized();
         }
 
-        // Verify ownership: the grant must belong to this subject on this tenant.
-        var grants = await _grantService.GetGrantsForSubjectAsync(subjectId.Value, ct);
-        var grant = grants.FirstOrDefault(g =>
-            g.Id == grantId && g.GrantType == OAuthScopes.GrantTypeApp && !g.IsRevoked);
-
-        if (grant is null)
+        var grant = await _grantService.GetGrantForSubjectAsync(grantId, subjectId.Value, ct);
+        if (grant is null || grant.GrantType != OAuthGrantTypes.App)
         {
             return NotFound();
         }

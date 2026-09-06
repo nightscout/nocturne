@@ -16,7 +16,7 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 /// to reduce database load when the heatmap re-renders.
 /// <para>
 /// Every response is an aggregate — record counts, daily averages, monthly GRI — so the whole
-/// controller sits behind <see cref="OAuthScopes.ReportsRead"/> rather than the read scope of each
+/// controller sits behind <see cref="Scope.ReportsRead"/> rather than the read scope of each
 /// category it counts, matching <c>StatisticsController</c>. Public shares are narrowed further by
 /// per-category share RLS.
 /// </para>
@@ -29,7 +29,7 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 [Tags("Analytics")]
 [Route("api/v4/year-overview")]
 [Produces("application/json")]
-[RequireScope(OAuthScopes.ReportsRead)]
+[RequireScope(Scope.ReportsRead)]
 [ClientPropertyName("dataOverview")]
 public class DataOverviewController : ControllerBase
 {
@@ -55,20 +55,13 @@ public class DataOverviewController : ControllerBase
     [ResponseCache(Duration = 300)]
     [ProducesResponseType(typeof(DataOverviewYearsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [ErrorEnvelope]
     public async Task<ActionResult<DataOverviewYearsResponse>> GetAvailableYears(
         CancellationToken cancellationToken = default
     )
     {
-        try
-        {
-            var result = await _dataOverviewService.GetAvailableYearsAsync(cancellationToken);
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting available years for data overview");
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
-        }
+        var result = await _dataOverviewService.GetAvailableYearsAsync(cancellationToken);
+        return Ok(result);
     }
 
     /// <summary>
@@ -83,34 +76,27 @@ public class DataOverviewController : ControllerBase
     [ProducesResponseType(typeof(DailySummaryResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [ErrorEnvelope]
     public async Task<ActionResult<DailySummaryResponse>> GetDailySummary(
         [FromQuery] int year,
         [FromQuery] string[]? dataSources = null,
         CancellationToken cancellationToken = default
     )
     {
-        try
-        {
-            if (year < 1970 || year > 2100)
-                return Problem(detail: "Year must be between 1970 and 2100", statusCode: 400, title: "Bad Request");
+        if (year < 1970 || year > 2100)
+            return Problem(detail: "Year must be between 1970 and 2100", statusCode: 400, title: "Bad Request");
 
-            // Filter out empty strings
-            var cleanSources = dataSources?.Where(s => !string.IsNullOrWhiteSpace(s)).ToArray();
-            if (cleanSources is { Length: 0 })
-                cleanSources = null;
+        // Filter out empty strings
+        var cleanSources = dataSources?.Where(s => !string.IsNullOrWhiteSpace(s)).ToArray();
+        if (cleanSources is { Length: 0 })
+            cleanSources = null;
 
-            var result = await _dataOverviewService.GetDailySummaryAsync(
-                year,
-                cleanSources,
-                cancellationToken
-            );
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting daily summary for year {Year}", year);
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
-        }
+        var result = await _dataOverviewService.GetDailySummaryAsync(
+            year,
+            cleanSources,
+            cancellationToken
+        );
+        return Ok(result);
     }
 
     /// <summary>
@@ -125,33 +111,26 @@ public class DataOverviewController : ControllerBase
     [ProducesResponseType(typeof(GriTimelineResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [ErrorEnvelope]
     public async Task<ActionResult<GriTimelineResponse>> GetGriTimeline(
         [FromQuery] int year,
         [FromQuery] string[]? dataSources = null,
         CancellationToken cancellationToken = default
     )
     {
-        try
-        {
-            if (year < 1970 || year > 2100)
-                return Problem(detail: "Year must be between 1970 and 2100", statusCode: 400, title: "Bad Request");
+        if (year < 1970 || year > 2100)
+            return Problem(detail: "Year must be between 1970 and 2100", statusCode: 400, title: "Bad Request");
 
-            // Filter out empty strings
-            var cleanSources = dataSources?.Where(s => !string.IsNullOrWhiteSpace(s)).ToArray();
-            if (cleanSources is { Length: 0 })
-                cleanSources = null;
+        // Filter out empty strings
+        var cleanSources = dataSources?.Where(s => !string.IsNullOrWhiteSpace(s)).ToArray();
+        if (cleanSources is { Length: 0 })
+            cleanSources = null;
 
-            var result = await _dataOverviewService.GetGriTimelineAsync(
-                year,
-                cleanSources,
-                cancellationToken
-            );
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting GRI timeline for year {Year}", year);
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
-        }
+        var result = await _dataOverviewService.GetGriTimelineAsync(
+            year,
+            cleanSources,
+            cancellationToken
+        );
+        return Ok(result);
     }
 }

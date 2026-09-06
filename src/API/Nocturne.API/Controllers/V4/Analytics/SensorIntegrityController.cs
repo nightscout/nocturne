@@ -21,7 +21,7 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 [Tags("Analytics")]
 [Route("api/v4/sensor-integrity")]
 [Produces("application/json")]
-[RequireScope(OAuthScopes.ReportsRead)]
+[RequireScope(Scope.ReportsRead)]
 public class SensorIntegrityController : ControllerBase
 {
     private readonly ISensorIntegrityService _sensorIntegrityService;

@@ -16,7 +16,7 @@ namespace Nocturne.API.Middleware;
 /// <see cref="JsonExtensionMiddleware"/>,
 /// <b>OidcCallbackRedirectMiddleware</b>, <see cref="Multitenancy.TenantResolutionMiddleware"/>,
 /// <see cref="TenantSetupMiddleware"/>, <see cref="AuthenticationMiddleware"/>,
-/// <see cref="MemberScopeMiddleware"/>, <see cref="SiteSecurityMiddleware"/>.
+/// <see cref="MemberScopeMiddleware"/>.
 /// </para>
 /// <para>
 /// Reads the tenant slug out of the protected OIDC <c>state</c> query parameter via

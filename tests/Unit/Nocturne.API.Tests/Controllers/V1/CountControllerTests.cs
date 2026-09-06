@@ -54,7 +54,7 @@ public class CountControllerTests
         // tests need a scope set. Full access keeps them about delegation;
         // CountGeneric_RefusesAStorageOutsideTheGrant covers the refusal.
         var httpContext = new DefaultHttpContext();
-        httpContext.Items["GrantedScopes"] = OAuthScopes.Normalize([OAuthScopes.FullAccess]);
+        httpContext.Items["GrantedScopes"] = Scope.Normalize([Scope.FullAccess]);
 
         _controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
     }
@@ -65,7 +65,7 @@ public class CountControllerTests
         // The route serves five collections, so an attribute could only OR across them and would
         // let a glucose-only grant learn a treatment row count.
         var httpContext = new DefaultHttpContext();
-        httpContext.Items["GrantedScopes"] = OAuthScopes.Normalize([OAuthScopes.GlucoseRead]);
+        httpContext.Items["GrantedScopes"] = Scope.Normalize([Scope.GlucoseRead]);
         _controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
 
         var refused = await _controller.CountGeneric("treatments");

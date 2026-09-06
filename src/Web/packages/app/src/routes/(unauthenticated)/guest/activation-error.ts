@@ -18,17 +18,5 @@ export function classifyActivationError(err: unknown): ActivationFailure {
   if (status === 429) return "rate-limited";
   if (status === 400) return "rejected";
 
-  // The generated client throws the parsed response body for a status it has a
-  // response type for, so a refused code arrives as the API's
-  // `{ expiresAt, error }` shape with no status attached. Everything else
-  // arrives as an exception that does carry one.
-  if (status === undefined && hasErrorField(err)) return "rejected";
-
   return "unavailable";
-}
-
-function hasErrorField(err: unknown): boolean {
-  if (!err || typeof err !== "object" || !("error" in err)) return false;
-  const { error } = err;
-  return typeof error === "string" || error === null;
 }

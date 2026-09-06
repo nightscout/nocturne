@@ -10,11 +10,6 @@ namespace Nocturne.Connectors.Core.Interfaces;
 public interface IConnectorInstaller
 {
     /// <summary>
-    ///     The connector name (e.g., "Dexcom", "LibreLinkUp").
-    /// </summary>
-    string ConnectorName { get; }
-
-    /// <summary>
     ///     Registers all services required by this connector.
     /// </summary>
     void Install(IServiceCollection services, IConfiguration configuration);

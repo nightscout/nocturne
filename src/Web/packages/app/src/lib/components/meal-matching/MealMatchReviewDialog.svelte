@@ -1,15 +1,18 @@
 <script lang="ts">
+  import { formatShortDate } from "$lib/utils/formatting";
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import { toast } from "svelte-sonner";
+  import { useToastSubmission } from "$lib/forms";
   import { getFoodEntry, acceptMatch, dismissMatch } from "$api/generated/mealMatchings.generated.remote";
   import type {
     InAppNotificationDto,
     ConnectorFoodEntry,
     SuggestedMealMatch,
   } from "$lib/api/generated/nocturne-api-client";
+  import { retainQuery } from "$lib/api/retain-query.svelte";
 
   interface Props {
     open: boolean;
@@ -30,7 +33,8 @@
   // Form state
   let carbs = $state<number>(0);
   let selectedTime = $state<string>(""); // HH:mm format for time input
-  let isLoading = $state(false);
+  const accept = useToastSubmission("Failed to accept meal match");
+  const dismiss = useToastSubmission("Failed to dismiss meal match");
 
   // Extract data from notification OR match
   const carbIntakeId = $derived(
@@ -57,6 +61,7 @@
   const foodEntryQuery = $derived(
     open && foodEntryId ? getFoodEntry(foodEntryId) : null,
   );
+  retainQuery(() => foodEntryQuery);
   const foodEntry = $derived<ConnectorFoodEntry | null>(
     foodEntryQuery?.current ?? null,
   );
@@ -89,7 +94,7 @@
   function formatDateDisplay(mills: number): string {
     if (!mills) return "";
     const date = new Date(mills);
-    return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    return formatShortDate(date);
   }
 
   // Track selected date separately
@@ -127,7 +132,6 @@
     carbs = 0;
     selectedTime = "";
     selectedDate = "";
-    isLoading = false;
     open = false;
     onOpenChange(false);
   }
@@ -138,8 +142,7 @@
       return;
     }
 
-    isLoading = true;
-    try {
+    await accept.run(async () => {
       await acceptMatch({
         foodEntryId,
         carbIntakeId,
@@ -149,12 +152,7 @@
       toast.success("Meal match accepted");
       onComplete?.();
       resetAndClose();
-    } catch (err) {
-      console.error("Failed to accept meal match:", err);
-      toast.error("Failed to accept meal match");
-    } finally {
-      isLoading = false;
-    }
+    });
   }
 
   async function handleDismiss() {
@@ -163,18 +161,12 @@
       return;
     }
 
-    isLoading = true;
-    try {
+    await dismiss.run(async () => {
       await dismissMatch({ foodEntryId });
       toast.success("Meal match dismissed");
       onComplete?.();
       resetAndClose();
-    } catch (err) {
-      console.error("Failed to dismiss meal match:", err);
-      toast.error("Failed to dismiss meal match");
-    } finally {
-      isLoading = false;
-    }
+    });
   }
 
   // Calculate scale factor based on carbs adjustment
@@ -327,7 +319,7 @@
         type="button"
         variant="outline"
         onclick={handleDismiss}
-        disabled={isLoading}
+        disabled={dismiss.busy || accept.busy}
       >
         Dismiss
       </Button>
@@ -335,8 +327,8 @@
       <Button type="button" variant="outline" onclick={resetAndClose}>
         Cancel
       </Button>
-      <Button type="button" onclick={handleAccept} disabled={isLoading}>
-        {isLoading ? "Saving..." : "Accept"}
+      <Button type="button" onclick={handleAccept} disabled={accept.busy || dismiss.busy}>
+        {accept.busy ? "Saving..." : "Accept"}
       </Button>
     </Dialog.Footer>
   </Dialog.Content>

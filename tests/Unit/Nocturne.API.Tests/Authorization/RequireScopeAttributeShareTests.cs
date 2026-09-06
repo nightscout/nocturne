@@ -14,7 +14,7 @@ namespace Nocturne.API.Tests.Authorization;
 /// <summary>
 /// <see cref="RequireScopeAttribute"/> decides a read requirement on the resolved scope set alone,
 /// because a public share link is deliberately <c>IsAuthenticated: false</c> while still carrying
-/// scopes narrowed to <see cref="TenantPermissions.PublicShareScopes"/>. A requirement naming
+/// scopes narrowed to <see cref="Scope.PublicShareScopes"/>. A requirement naming
 /// anything other than read additionally demands an authenticated caller. These tests pin both
 /// halves: the share can satisfy a read requirement, and it can never satisfy a write one.
 /// </summary>
@@ -35,13 +35,13 @@ public class RequireScopeAttributeShareTests
 
     /// <summary>The scopes AuthenticationMiddleware resolves for a share granted every category.</summary>
     private static IReadOnlySet<string> FullShareScopes() =>
-        TenantPermissions.PublicShareScopes.ToHashSet(StringComparer.Ordinal);
+        Scope.PublicShareScopes.ToHashSet(StringComparer.Ordinal);
 
     [Theory]
-    [InlineData(OAuthScopes.GlucoseRead)]
-    [InlineData(OAuthScopes.TreatmentsRead)]
-    [InlineData(OAuthScopes.DevicesRead)]
-    [InlineData(OAuthScopes.FoodRead)]
+    [InlineData(Scope.GlucoseRead)]
+    [InlineData(Scope.TreatmentsRead)]
+    [InlineData(Scope.DevicesRead)]
+    [InlineData(Scope.FoodRead)]
     public void AnonymousShare_SatisfiesAReadScopeItWasGranted(string requiredScope)
     {
         var context = Context(isAuthenticated: false, FullShareScopes());
@@ -56,21 +56,21 @@ public class RequireScopeAttributeShareTests
     public void DefaultGlucoseOnlyShare_SatisfiesTheGlucoseReadEndpoints()
     {
         // DefaultPublicShareScopes is what a freshly-enabled share link carries.
-        var context = Context(isAuthenticated: false, TenantPermissions.DefaultPublicShareScopes);
+        var context = Context(isAuthenticated: false, Scope.DefaultPublicShareScopes);
 
-        new RequireScopeAttribute(OAuthScopes.GlucoseRead).OnAuthorization(context);
+        new RequireScopeAttribute(Scope.GlucoseRead).OnAuthorization(context);
 
         context.Result.Should().BeNull();
     }
 
     [Theory]
-    [InlineData(OAuthScopes.GlucoseReadWrite)]
-    [InlineData(OAuthScopes.TreatmentsReadWrite)]
-    [InlineData(OAuthScopes.DevicesReadWrite)]
-    [InlineData(OAuthScopes.FoodReadWrite)]
-    [InlineData(OAuthScopes.TherapyReadWrite)]
-    [InlineData(OAuthScopes.AlertsReadWrite)]
-    [InlineData(OAuthScopes.FullAccess)]
+    [InlineData(Scope.GlucoseReadWrite)]
+    [InlineData(Scope.TreatmentsReadWrite)]
+    [InlineData(Scope.DevicesReadWrite)]
+    [InlineData(Scope.FoodReadWrite)]
+    [InlineData(Scope.TherapyReadWrite)]
+    [InlineData(Scope.AlertsReadWrite)]
+    [InlineData(Scope.FullAccess)]
     public void AnonymousShare_NeverSatisfiesAWriteScope(string writeScope)
     {
         var context = Context(isAuthenticated: false, FullShareScopes());
@@ -83,9 +83,9 @@ public class RequireScopeAttributeShareTests
     }
 
     [Theory]
-    [InlineData(OAuthScopes.TherapyRead)]
-    [InlineData(OAuthScopes.AlertsRead)]
-    [InlineData(OAuthScopes.SleepRead)]
+    [InlineData(Scope.TherapyRead)]
+    [InlineData(Scope.AlertsRead)]
+    [InlineData(Scope.SleepRead)]
     public void AnonymousShare_IsDeniedCategoriesOutsideTheShareSet(string requiredScope)
     {
         // therapy/alerts/sleep are not shareable categories, and the share RLS policies already
@@ -102,7 +102,7 @@ public class RequireScopeAttributeShareTests
     {
         var context = Context(isAuthenticated: false, []);
 
-        new RequireScopeAttribute(OAuthScopes.GlucoseRead).OnAuthorization(context);
+        new RequireScopeAttribute(Scope.GlucoseRead).OnAuthorization(context);
 
         context.Result.Should().BeOfType<UnauthorizedResult>(
             "no resolved scopes means no grant at all — the check fails closed");
@@ -113,7 +113,7 @@ public class RequireScopeAttributeShareTests
     {
         var context = Context(isAuthenticated: true, []);
 
-        new RequireScopeAttribute(OAuthScopes.GlucoseRead).OnAuthorization(context);
+        new RequireScopeAttribute(Scope.GlucoseRead).OnAuthorization(context);
 
         context.Result.Should().BeOfType<ForbidResult>(
             "the identity is known, so the failure is authorization, not authentication");
@@ -126,15 +126,15 @@ public class RequireScopeAttributeShareTests
     /// require must survive that translation, or those clients break.
     /// </summary>
     [Theory]
-    [InlineData(OAuthScopes.GlucoseRead)]
-    [InlineData(OAuthScopes.TreatmentsRead)]
-    [InlineData(OAuthScopes.DevicesRead)]
-    [InlineData(OAuthScopes.TherapyRead)]
-    [InlineData(OAuthScopes.FoodRead)]
-    [InlineData(OAuthScopes.AlertsRead)]
-    [InlineData(OAuthScopes.HeartRateRead)]
-    [InlineData(OAuthScopes.StepCountRead)]
-    [InlineData(OAuthScopes.SleepRead)]
+    [InlineData(Scope.GlucoseRead)]
+    [InlineData(Scope.TreatmentsRead)]
+    [InlineData(Scope.DevicesRead)]
+    [InlineData(Scope.TherapyRead)]
+    [InlineData(Scope.FoodRead)]
+    [InlineData(Scope.AlertsRead)]
+    [InlineData(Scope.HeartRateRead)]
+    [InlineData(Scope.StepCountRead)]
+    [InlineData(Scope.SleepRead)]
     public void LegacyApiSecretAndReadTokens_SatisfyEveryRequiredReadScope(string requiredScope)
     {
         // api-secret / admin subjects carry "*"; read-only legacy subjects carry the Shiro
@@ -179,13 +179,13 @@ public class RequireScopeAttributeShareTests
 
         foreach (var category in new[]
                  {
-                     OAuthScopes.TreatmentsRead,
-                     OAuthScopes.HeartRateRead,
-                     OAuthScopes.StepCountRead,
-                     OAuthScopes.SleepRead,
+                     Scope.TreatmentsRead,
+                     Scope.HeartRateRead,
+                     Scope.StepCountRead,
+                     Scope.SleepRead,
                  })
         {
-            OAuthScopes.SatisfiesScope(scopes, category).Should().BeTrue(
+            Scope.Satisfies(scopes, category).Should().BeTrue(
                 $"a legacy read subject must keep reading {category} data from /api/v1/activity");
         }
     }
@@ -201,8 +201,8 @@ public class RequireScopeAttributeShareTests
         var granted = Context(isAuthenticated: true, scopes);
         var denied = Context(isAuthenticated: true, scopes);
 
-        new RequireScopeAttribute(OAuthScopes.GlucoseRead).OnAuthorization(granted);
-        new RequireScopeAttribute(OAuthScopes.TherapyRead).OnAuthorization(denied);
+        new RequireScopeAttribute(Scope.GlucoseRead).OnAuthorization(granted);
+        new RequireScopeAttribute(Scope.TherapyRead).OnAuthorization(denied);
 
         granted.Result.Should().BeNull();
         denied.Result.Should().BeOfType<ForbidResult>(

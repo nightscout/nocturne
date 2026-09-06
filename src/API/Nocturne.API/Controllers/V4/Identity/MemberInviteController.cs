@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Authorization;
 using OpenApi.Remote.Attributes;
@@ -67,7 +68,7 @@ public class MemberInviteController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> CreateInvite([FromBody] CreateMemberInviteRequest request)
     {
-        if (!HasPermission(TenantPermissions.MembersInvite))
+        if (!HttpContext.HasScope(Scope.MembersInvite))
             return Forbid();
 
         var subjectId = HttpContext.GetSubjectId();
@@ -78,7 +79,7 @@ public class MemberInviteController : ControllerBase
         // clamped member minting an unclamped invite would widen past their own ceiling by
         // handing the wider access to someone else. Lifting an existing member's clamp already
         // requires members.manage and is refused for self-edits.
-        var authContext = HttpContext.Items["AuthContext"] as AuthContext;
+        var authContext = HttpContext.GetAuthContext();
         var limitTo24Hours = request.LimitTo24Hours || authContext?.LimitTo24Hours == true;
 
         try
@@ -99,10 +100,7 @@ public class MemberInviteController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            // Title as well as detail: openapi-remote-codegen 0.2.0 resolves a ProblemDetails to
-            // `title` first, so a reason carried only in the detail reaches the creator as the
-            // literal "Bad Request".
-            return Problem(detail: ex.Message, statusCode: 400, title: ex.Message);
+            return Problem(detail: ex.Message, statusCode: 400);
         }
     }
 
@@ -113,7 +111,7 @@ public class MemberInviteController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> ListInvites()
     {
-        if (!HasPermission(TenantPermissions.MembersInvite))
+        if (!HttpContext.HasScope(Scope.MembersInvite))
             return Forbid();
 
         var invites = await _memberInviteService.GetInvitesForTenantAsync(_tenantAccessor.TenantId);
@@ -128,7 +126,7 @@ public class MemberInviteController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> RevokeInvite(Guid inviteId)
     {
-        if (!HasPermission(TenantPermissions.MembersInvite))
+        if (!HttpContext.HasScope(Scope.MembersInvite))
             return Forbid();
 
         var revoked = await _memberInviteService.RevokeInviteAsync(inviteId, _tenantAccessor.TenantId);
@@ -148,16 +146,13 @@ public class MemberInviteController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> RemoveMember(Guid subjectId, CancellationToken ct)
     {
-        if (!HasPermission(TenantPermissions.MembersManage))
+        if (!HttpContext.HasScope(Scope.MembersManage))
             return Forbid();
 
         var result = await _tenantService.RemoveMemberAsync(_tenantAccessor.TenantId, subjectId, ct);
         return result.Ok
             ? NoContent()
-            // "Cannot remove the last owner of a tenant" has to reach the member list, and the
-            // generated client resolves `title` before `detail`.
-            : Problem(
-                detail: result.ErrorDescription, statusCode: 400, title: result.ErrorDescription);
+            : Problem(detail: result.ErrorDescription, statusCode: 400);
     }
 
     /// <summary>
@@ -177,6 +172,7 @@ public class MemberInviteController : ControllerBase
     /// </remarks>
     [HttpGet("{token}/info")]
     [AllowAnonymous]
+    [EnableRateLimiting("invite-lookup")]
     [InviteTokenAuthorized]
     [RemoteQuery]
     [ProducesResponseType(typeof(MemberInviteInfo), StatusCodes.Status200OK)]
@@ -193,21 +189,20 @@ public class MemberInviteController : ControllerBase
         {
             // 400 rather than 410, matching AcceptInvite below: the generated client passes a 400
             // ProblemDetails through to the caller, and describeSubmitError surfaces the reason,
-            // whereas other 4xx statuses collapse to the generic message. The reason is carried in
-            // the title as well as the detail because openapi-remote-codegen 0.2.0 resolves a
-            // ProblemDetails to `title` first. Wording and order match the acceptance refusal.
+            // whereas other 4xx statuses collapse to the generic message. Wording and order match
+            // the acceptance refusal.
             var reason = invite.IsExpired ? "This invite has expired."
                 : invite.IsRevoked ? "This invite has been revoked."
                 : "This invite has reached its maximum uses.";
 
-            return Problem(detail: reason, statusCode: StatusCodes.Status400BadRequest, title: reason);
+            return Problem(detail: reason, statusCode: StatusCodes.Status400BadRequest);
         }
 
         var subjectId = HttpContext.GetSubjectId();
         if (subjectId == null)
             return Ok(invite);
 
-        var authContext = HttpContext.Items["AuthContext"] as AuthContext;
+        var authContext = HttpContext.GetAuthContext();
         var isMember = await _tenantMemberService.IsMemberAsync(subjectId.Value, tenantId, ct);
 
         return Ok(invite with { Viewer = new InviteViewer(subjectId, authContext?.SubjectName, isMember) });
@@ -239,12 +234,9 @@ public class MemberInviteController : ControllerBase
             token, subjectId.Value, _tenantAccessor.TenantId);
 
         // The refusal reason is written for the invitee — "You are already a member of this
-        // tenant", "This invite has expired". It goes in the title as well as the detail because
-        // openapi-remote-codegen 0.2.0 resolves a ProblemDetails to `title` before `detail`, so a
-        // reason carried only in the detail reaches the invitee as the literal "Bad Request".
+        // tenant", "This invite has expired".
         if (!result.Success)
-            return Problem(
-                detail: result.ErrorDescription, statusCode: 400, title: result.ErrorDescription);
+            return Problem(detail: result.ErrorDescription, statusCode: 400);
 
         return Ok(result);
     }
@@ -279,7 +271,7 @@ public class MemberInviteController : ControllerBase
             return NotFound();
 
         var followers = tenant.Members
-            .Where(m => m.Roles.Any(r => r.Slug == TenantPermissions.SeedRoles.Viewer))
+            .Where(m => m.Roles.Any(r => r.Slug == RoleSeeds.Viewer))
             .ToList();
 
         return Ok(followers);
@@ -300,7 +292,7 @@ public class MemberInviteController : ControllerBase
         [FromServices] PublicAccessCacheService publicAccessCache,
         CancellationToken ct)
     {
-        if (!HasPermission(TenantPermissions.MembersManage))
+        if (!HttpContext.HasScope(Scope.MembersManage))
             return Forbid();
 
         var tenantId = _tenantAccessor.TenantId;
@@ -313,16 +305,13 @@ public class MemberInviteController : ControllerBase
         if (member == null)
             return NotFound();
 
-        // Every refusal on this controller carries its reason in the title as well as the detail:
-        // openapi-remote-codegen 0.2.0 resolves a ProblemDetails to `title` before `detail`, so a
-        // reason carried only in the detail reaches the member list as the literal "Bad Request".
         if (IsCallersOwnMembership(member))
-            return Problem(detail: SelfEditDetail, statusCode: 400, title: SelfEditDetail);
+            return Problem(detail: SelfEditDetail, statusCode: 400);
 
         if (request.RoleIds.Count == 0 && (member.DirectPermissions == null || member.DirectPermissions.Count == 0))
         {
             const string reason = "Cannot remove all roles when member has no direct permissions";
-            return Problem(detail: reason, statusCode: 400, title: reason);
+            return Problem(detail: reason, statusCode: 400);
         }
 
         var roleGrant = await _tenantRoleService.ValidateRoleGrantAsync(
@@ -370,7 +359,7 @@ public class MemberInviteController : ControllerBase
         [FromServices] PublicAccessCacheService publicAccessCache,
         CancellationToken ct)
     {
-        if (!HasPermission(TenantPermissions.MembersManage))
+        if (!HttpContext.HasScope(Scope.MembersManage))
             return Forbid();
 
         var tenantId = _tenantAccessor.TenantId;
@@ -384,12 +373,12 @@ public class MemberInviteController : ControllerBase
             return NotFound();
 
         if (IsCallersOwnMembership(member))
-            return Problem(detail: SelfEditDetail, statusCode: 400, title: SelfEditDetail);
+            return Problem(detail: SelfEditDetail, statusCode: 400);
 
         if ((request.DirectPermissions == null || request.DirectPermissions.Count == 0) && member.MemberRoles.Count == 0)
         {
             const string reason = "Cannot remove all permissions when member has no roles";
-            return Problem(detail: reason, statusCode: 400, title: reason);
+            return Problem(detail: reason, statusCode: 400);
         }
 
         // The Public system subject serves the anonymous share viewer, so the granter's own
@@ -400,17 +389,17 @@ public class MemberInviteController : ControllerBase
         if (isPublicSubject)
         {
             var outsideShareVocabulary = (request.DirectPermissions ?? [])
-                .Where(p => !TenantPermissions.PublicShareScopes.Contains(p))
+                .Where(p => !Scope.PublicShareScopes.Contains(p))
                 .ToList();
             if (outsideShareVocabulary.Count > 0)
             {
                 var reason = $"Public access cannot be granted: {string.Join(", ", outsideShareVocabulary)}.";
-                return Problem(detail: reason, statusCode: 400, title: reason);
+                return Problem(detail: reason, statusCode: 400);
             }
         }
         else
         {
-            var violation = TenantPermissions.ValidateGrant(
+            var violation = Scope.ValidateGrant(
                 request.DirectPermissions, HttpContext.GetGrantedScopes());
             if (violation != null)
                 return GrantProblem(violation);
@@ -436,7 +425,7 @@ public class MemberInviteController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetEffectivePermissions(Guid id, CancellationToken ct)
     {
-        if (!HasPermission(TenantPermissions.SharingManage))
+        if (!HttpContext.HasScope(Scope.SharingManage))
             return Forbid();
 
         var tenantId = _tenantAccessor.TenantId;
@@ -465,7 +454,7 @@ public class MemberInviteController : ControllerBase
         [FromServices] PublicAccessCacheService publicAccessCache,
         CancellationToken ct)
     {
-        if (!HasPermission(TenantPermissions.MembersManage))
+        if (!HttpContext.HasScope(Scope.MembersManage))
             return Forbid();
 
         var tenantId = _tenantAccessor.TenantId;
@@ -480,7 +469,7 @@ public class MemberInviteController : ControllerBase
         // The clamp is enforced in RLS via app.share_full_history, so lifting your own is a
         // self-widening edit — the same class the role and permission editors refuse.
         if (IsCallersOwnMembership(member))
-            return Problem(detail: SelfEditDetail, statusCode: 400, title: SelfEditDetail);
+            return Problem(detail: SelfEditDetail, statusCode: 400);
 
         member.LimitTo24Hours = request.LimitTo24Hours;
         member.SysUpdatedAt = DateTime.UtcNow;
@@ -492,8 +481,6 @@ public class MemberInviteController : ControllerBase
         return NoContent();
     }
 
-    private bool HasPermission(string permission)
-        => TenantPermissions.HasPermission(HttpContext.GetGrantedScopes(), permission);
 
     private const string SelfEditDetail =
         "Cannot change your own roles or permissions; ask another member with members.manage.";
@@ -509,20 +496,20 @@ public class MemberInviteController : ControllerBase
 
     /// <summary>
     /// An unknown permission is malformed input; exceeding the ceiling is a refusal. Either way the
-    /// description is what the granter reads, so it travels in the title as well as the detail.
+    /// description is what the granter reads.
     /// </summary>
     private ObjectResult GrantProblem(GrantCeilingViolation violation) =>
         violation.Code == GrantCeilingViolation.UnknownPermission
-            ? Problem(detail: violation.Description, statusCode: 400, title: violation.Description)
-            : Problem(detail: violation.Description, statusCode: 403, title: violation.Description);
+            ? Problem(detail: violation.Description, statusCode: 400)
+            : Problem(detail: violation.Description, statusCode: 403);
 
     /// <summary>
     /// A foreign role id is malformed input; a role conferring more than the caller holds is a refusal.
     /// </summary>
     private ObjectResult RoleGrantProblem(RoleGrantValidation validation) =>
         validation.ErrorCode == RoleGrantValidation.ForeignRole
-            ? Problem(detail: validation.ErrorDescription, statusCode: 400, title: validation.ErrorDescription)
-            : Problem(detail: validation.ErrorDescription, statusCode: 403, title: validation.ErrorDescription);
+            ? Problem(detail: validation.ErrorDescription, statusCode: 400)
+            : Problem(detail: validation.ErrorDescription, statusCode: 403);
 }
 
 public class CreateMemberInviteRequest

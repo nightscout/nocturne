@@ -21,6 +21,9 @@
   // Get return URL from query params
   const returnUrl = $derived(page.url.searchParams.get("returnUrl") || "/");
 
+  // Resolved once by the root layout; here it decides which sign-in methods can work at all.
+  const tenantless = $derived(page.data.tenantless === true);
+
   // Redirect if already authenticated
   $effect(() => {
     const currentAuth = authStateQuery.current;
@@ -35,7 +38,7 @@
 </svelte:head>
 
 <div class="flex flex-1 items-center justify-center p-4">
-  <Card.Root class="w-full max-w-md">
+  <Card.Root class="w-full max-w-md" data-testid="sign-in-card">
     <Card.Header class="space-y-1 text-center">
       <div
         class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10"
@@ -51,13 +54,17 @@
     </Card.Header>
 
     <Card.Content>
-      <LoginForm {returnUrl} />
+      <LoginForm {returnUrl} {tenantless} />
     </Card.Content>
 
     <Card.Footer class="flex flex-col space-y-2">
       {#if allowAccessRequests}
         <div class="text-center">
-          <Button variant="link" onclick={() => (showRequestDialog = true)}>
+          <Button
+            variant="link"
+            data-testid="request-membership-link"
+            onclick={() => (showRequestDialog = true)}
+          >
             Request membership
           </Button>
         </div>

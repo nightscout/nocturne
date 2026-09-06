@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Card, CardContent, CardHeader, CardTitle } from "$lib/components/ui/card";
   import { ChartPie } from "lucide-svelte";
-  import { formatMinutesDuration } from "$lib/utils/sleep-format";
+  import { formatMinutesDuration } from "$lib/utils/duration";
   import type { SleepStageBreakdown } from "$lib/api";
 
   interface Props {

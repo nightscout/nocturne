@@ -37,9 +37,9 @@ public class NotificationsControllerExecuteActionScopeTests
     /// admits it through the gate, and no alert write scope.
     /// </summary>
     private static readonly HashSet<string> DeviceNotifyOnly =
-        [OAuthScopes.GlucoseRead, OAuthScopes.AlertsRead, OAuthScopes.DeviceNotify];
+        [Scope.GlucoseRead, Scope.AlertsRead, Scope.DeviceNotify];
 
-    private static readonly HashSet<string> AlertsWriter = [OAuthScopes.AlertsReadWrite];
+    private static readonly HashSet<string> AlertsWriter = [Scope.AlertsReadWrite];
 
     private NotificationsController CreateController(IReadOnlySet<string> grantedScopes)
     {

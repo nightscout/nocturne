@@ -6,6 +6,7 @@ using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Services.Realtime;
 using Nocturne.Infrastructure.Data.Mappers;
 
@@ -42,6 +43,19 @@ public class ActivityService : IActivityService
     /// what a caller may request.
     /// </summary>
     private const int MaxOverFetch = 100_000;
+
+    /// <summary>
+    /// Every source <see cref="CountActivitiesByCategoryAsync"/> knows how to count, named by the
+    /// read scope its records carry.
+    /// </summary>
+    private static readonly IReadOnlySet<string> CountableCategories = new HashSet<string>(
+        StringComparer.Ordinal)
+    {
+        Scope.TreatmentsRead,
+        Scope.HeartRateRead,
+        Scope.StepCountRead,
+        Scope.SleepRead,
+    };
 
     /// <summary>
     /// Initializes a new instance of <see cref="ActivityService"/>.
@@ -455,7 +469,7 @@ public class ActivityService : IActivityService
                 {
                     await _signalRBroadcastService.BroadcastStorageDeleteAsync(
                         "activity",
-                        new { collection = "activity", id }
+                        new StorageDeleteEvent("activity", id)
                     );
                     await _events.OnDeletedAsync(null, cancellationToken);
                     _logger.LogDebug("Successfully deleted sleep session for activity ID: {Id}", id);
@@ -469,7 +483,7 @@ public class ActivityService : IActivityService
             {
                 await _signalRBroadcastService.BroadcastStorageDeleteAsync(
                     "activity",
-                    new { collection = "activity", id = id }
+                    new StorageDeleteEvent("activity", id)
                 );
 
                 await _events.OnDeletedAsync(null, cancellationToken);
@@ -538,7 +552,7 @@ public class ActivityService : IActivityService
             {
                 await _signalRBroadcastService.BroadcastStorageDeleteAsync(
                     "activity",
-                    new { collection = "activity", count = deletedCount }
+                    new StorageBulkDeleteEvent("activity", deletedCount)
                 );
 
                 await _events.OnBulkDeletedAsync(deletedCount, cancellationToken);
@@ -564,50 +578,72 @@ public class ActivityService : IActivityService
         CancellationToken cancellationToken = default
     )
     {
+        var counts = await CountActivitiesByCategoryAsync(
+            CountableCategories, find, cancellationToken);
+        return counts.Values.Sum();
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<string, long>> CountActivitiesByCategoryAsync(
+        IReadOnlySet<string> categories,
+        string? find = null,
+        CancellationToken cancellationToken = default
+    )
+    {
         try
         {
-            _logger.LogDebug("Counting activity records with find: {Find}", find);
+            var sanitizedFindForLog = find?.Replace("\r", string.Empty).Replace("\n", string.Empty);
 
-            // Count from each decomposed source and sum
-            var stateSpanTask = _stateSpanService.GetActivitiesAsync(
-                type: find,
-                count: int.MaxValue,
-                skip: 0,
-                cancellationToken: cancellationToken
-            );
-
-            var heartRateTask = _heartRateService.GetHeartRatesAsync(
-                count: int.MaxValue,
-                skip: 0,
-                cancellationToken: cancellationToken
-            );
-
-            var stepCountTask = _stepCountService.GetStepCountsAsync(
-                count: int.MaxValue,
-                skip: 0,
-                cancellationToken: cancellationToken
-            );
+            _logger.LogDebug(
+                "Counting activity records in {Categories} with find: {Find}",
+                string.Join(",", categories),
+                sanitizedFindForLog);
 
             // Sleep sessions are merged into GetActivitiesAsync only when `find` is
             // empty or a sleep type; the count applies the same gate
-            var sleepCountTask = string.IsNullOrEmpty(find) || ActivityStateSpanMapper.IsSleepType(find)
-                ? _sleepService.CountSessionsAsync(cancellationToken: cancellationToken)
-                : Task.FromResult(0);
+            var countSleep = string.IsNullOrEmpty(find) || ActivityStateSpanMapper.IsSleepType(find);
 
-            await Task.WhenAll(stateSpanTask, heartRateTask, stepCountTask, sleepCountTask);
+            var pending = new Dictionary<string, Task<long>>(StringComparer.Ordinal);
+            if (categories.Contains(Scope.TreatmentsRead))
+                pending[Scope.TreatmentsRead] = CountOf(_stateSpanService.GetActivitiesAsync(
+                    type: find,
+                    count: int.MaxValue,
+                    skip: 0,
+                    cancellationToken: cancellationToken));
 
-            var total = stateSpanTask.Result.Count()
-                + heartRateTask.Result.Count()
-                + stepCountTask.Result.Count()
-                + sleepCountTask.Result;
+            if (categories.Contains(Scope.HeartRateRead))
+                pending[Scope.HeartRateRead] = CountOf(_heartRateService.GetHeartRatesAsync(
+                    count: int.MaxValue,
+                    skip: 0,
+                    cancellationToken: cancellationToken));
 
-            _logger.LogDebug("Counted {Total} activity records", total);
-            return total;
+            if (categories.Contains(Scope.StepCountRead))
+                pending[Scope.StepCountRead] = CountOf(_stepCountService.GetStepCountsAsync(
+                    count: int.MaxValue,
+                    skip: 0,
+                    cancellationToken: cancellationToken));
+
+            if (categories.Contains(Scope.SleepRead))
+                pending[Scope.SleepRead] = countSleep
+                    ? Widen(_sleepService.CountSessionsAsync(cancellationToken: cancellationToken))
+                    : Task.FromResult(0L);
+
+            await Task.WhenAll(pending.Values);
+
+            var counts = pending.ToDictionary(
+                source => source.Key, source => source.Value.Result, StringComparer.Ordinal);
+
+            _logger.LogDebug("Counted {Total} activity records", counts.Values.Sum());
+            return counts;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error counting activity records");
             throw;
         }
+
+        static async Task<long> CountOf<T>(Task<IEnumerable<T>> source) => (await source).Count();
+
+        static async Task<long> Widen(Task<int> source) => await source;
     }
 }

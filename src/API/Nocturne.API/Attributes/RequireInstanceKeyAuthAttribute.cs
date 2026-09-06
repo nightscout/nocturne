@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.API.Extensions;
 
 namespace Nocturne.API.Attributes;
 
@@ -27,7 +28,7 @@ public sealed class RequireInstanceKeyAuthAttribute : Attribute, IAuthorizationF
     /// <param name="context">The authorization filter context.</param>
     public void OnAuthorization(AuthorizationFilterContext context)
     {
-        var authContext = context.HttpContext.Items["AuthContext"] as AuthContext;
+        var authContext = context.HttpContext.GetAuthContext();
         if (authContext?.AuthType != AuthType.InstanceKey)
         {
             context.Result = new ForbidResult();

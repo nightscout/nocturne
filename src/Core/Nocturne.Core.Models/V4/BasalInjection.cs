@@ -1,3 +1,5 @@
+using NJsonSchema.Annotations;
+
 namespace Nocturne.Core.Models.V4;
 
 /// <summary>
@@ -9,28 +11,15 @@ namespace Nocturne.Core.Models.V4;
 /// <seealso cref="PatientInsulin"/>
 /// <seealso cref="TreatmentInsulinContext"/>
 /// <seealso cref="IV4Record"/>
-public class BasalInjection : IV4Record, IDeviceAttributed
+[JsonSchemaFlatten]
+public class BasalInjection : V4RecordBase, IDeviceAttributed
 {
-    public Guid Id { get; set; }
-    public DateTime Timestamp { get; set; }
-    public long Mills => new DateTimeOffset(Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
-    public int? UtcOffset { get; set; }
-
-    public string? Device { get; set; }
-    public string? App { get; set; }
-    public string? DataSource { get; set; }
     public string? SyncIdentifier { get; set; }
-
-    public Guid? CorrelationId { get; set; }
-    public string? LegacyId { get; set; }
 
     /// <summary>
     /// Foreign key to the <see cref="PatientDevice"/> (pen) this injection is attributed to.
     /// </summary>
     public Guid? PatientDeviceId { get; set; }
-
-    public DateTime CreatedAt { get; set; }
-    public DateTime ModifiedAt { get; set; }
 
     /// <summary>Insulin units injected.</summary>
     public double Units { get; set; }
@@ -45,9 +34,4 @@ public class BasalInjection : IV4Record, IDeviceAttributed
     /// about the patient's insulin catalog. Same shape as <see cref="Bolus.InsulinContext"/>.
     /// </summary>
     public TreatmentInsulinContext? InsulinContext { get; set; }
-
-    /// <summary>
-    /// Catch-all for fields not mapped to dedicated columns.
-    /// </summary>
-    public Dictionary<string, object?>? AdditionalProperties { get; set; }
 }

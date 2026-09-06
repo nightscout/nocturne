@@ -1,6 +1,5 @@
-using System.ComponentModel.DataAnnotations.Schema;
-using System.Reflection;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Infrastructure.Data.Security;
 
 namespace Nocturne.Infrastructure.Data.Tests.Authorization;
 
@@ -27,8 +26,8 @@ public class ShareDataCategoriesGuardTests
         "basal_schedules", "body_weights", "carb_ratio_schedules", "client_devices", "clock_faces", "coach_mark_states",
         "compression_low_suggestions", "connector_configurations", "data_source_metadata",
         "dedup_reconcile_state", "devices", "discrepancy_analyses",
-        "discrepancy_details", "dnd_windows", "in_app_notifications", "linked_records", "member_invites",
-        "membership_requests",
+        "discrepancy_details", "dnd_windows", "in_app_notifications", "linked_records", "login_codes",
+        "member_invites", "membership_requests",
         "mutation_audit_log", "notes", "oauth_authorization_codes", "oauth_clients", "oauth_device_codes",
         "oauth_grants", "oauth_refresh_tokens", "patient_devices", "patient_insulins", "patient_records",
         "read_access_log", "sensitivity_schedules", "settings",
@@ -40,37 +39,18 @@ public class ShareDataCategoriesGuardTests
         "user_food_favorites",
     };
 
-    private static IReadOnlyList<Type> TenantScopedEntities() =>
-        typeof(ITenantScoped).Assembly.GetTypes()
-            .Where(t => t is { IsClass: true, IsAbstract: false } && typeof(ITenantScoped).IsAssignableFrom(t))
-            .ToList();
-
-    private static string? TableName(Type entity) => entity.GetCustomAttribute<TableAttribute>()?.Name;
-
-    [Fact]
-    public void EveryTenantScopedEntity_HasATableAttribute()
+    private static readonly Lazy<IReadOnlySet<string>> TenantScopedTables = new(() =>
     {
-        // The coverage guard resolves table names from [Table] attributes; an entity
-        // without one would be silently skipped and therefore ungated.
-        var untabled = TenantScopedEntities()
-            .Where(t => TableName(t) is null)
-            .Select(t => t.Name)
-            .OrderBy(s => s, StringComparer.Ordinal)
-            .ToList();
-
-        untabled.Should().BeEmpty();
-    }
+        using var context = OfflineDbContext.Create();
+        return ShareRlsPolicy.TenantScopedTableNames(context.Model).ToHashSet(StringComparer.Ordinal);
+    });
 
     [Fact]
     public void EveryTenantScopedTable_IsClassifiedShareableOrHidden()
     {
-        var unclassified = TenantScopedEntities()
-            .Select(t => new { Entity = t.Name, Table = TableName(t) })
-            .Where(x => x.Table is not null)
-            .Where(x => ShareDataCategories.GoverningScopeFor(x.Table!) is null
-                     && !KnownHiddenTables.Contains(x.Table!))
-            .Select(x => $"{x.Entity} -> {x.Table}")
-            .OrderBy(s => s, StringComparer.Ordinal)
+        var unclassified = TenantScopedTables.Value
+            .Where(t => ShareDataCategories.GoverningScopeFor(t) is null && !KnownHiddenTables.Contains(t))
+            .OrderBy(t => t, StringComparer.Ordinal)
             .ToList();
 
         unclassified.Should().BeEmpty(
@@ -81,7 +61,7 @@ public class ShareDataCategoriesGuardTests
     [Fact]
     public void GovernedTables_OnlyReferenceRealTenantScopedTables()
     {
-        var real = TenantScopedEntities().Select(TableName).Where(n => n is not null).ToHashSet(StringComparer.Ordinal);
+        var real = TenantScopedTables.Value;
 
         ShareDataCategories.GovernedTables.Values.SelectMany(t => t)
             .Where(t => !real.Contains(t))
@@ -91,7 +71,7 @@ public class ShareDataCategoriesGuardTests
     [Fact]
     public void KnownHiddenTables_AreAllStillTenantScoped()
     {
-        var real = TenantScopedEntities().Select(TableName).Where(n => n is not null).ToHashSet(StringComparer.Ordinal);
+        var real = TenantScopedTables.Value;
 
         KnownHiddenTables.Where(t => !real.Contains(t))
             .Should().BeEmpty("KnownHiddenTables must not list a stale, non-ITenantScoped table");

@@ -1,9 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import {
-  formatRange,
-  formatTimeSince,
-  formatDuration,
-} from "./alertTime";
+import { formatRange, formatTimeSince } from "./alertTime";
 
 describe("alertTime", () => {
   describe("formatRange", () => {
@@ -46,37 +42,6 @@ describe("alertTime", () => {
     });
     it("returns days for older", () => {
       expect(formatTimeSince(new Date("2025-03-03T15:00:00Z"))).toBe("2d ago");
-    });
-  });
-
-  describe("formatDuration", () => {
-    it("returns empty string when start undefined", () => {
-      expect(formatDuration(undefined, new Date())).toBe("");
-    });
-    it("returns '< 1m' for very short range", () => {
-      const s = new Date("2025-03-05T14:00:00Z");
-      const e = new Date("2025-03-05T14:00:30Z");
-      expect(formatDuration(s, e)).toBe("< 1m");
-    });
-    it("returns minutes for sub-hour", () => {
-      const s = new Date("2025-03-05T14:00:00Z");
-      const e = new Date("2025-03-05T14:45:00Z");
-      expect(formatDuration(s, e)).toBe("45m");
-    });
-    it("returns hours+minutes for longer", () => {
-      const s = new Date("2025-03-05T14:00:00Z");
-      const e = new Date("2025-03-05T15:12:00Z");
-      expect(formatDuration(s, e)).toBe("1h 12m");
-    });
-    it("uses Date.now() when end is undefined", () => {
-      vi.useFakeTimers();
-      vi.setSystemTime(new Date("2025-03-05T15:00:00Z"));
-      try {
-        const s = new Date("2025-03-05T14:30:00Z");
-        expect(formatDuration(s, undefined)).toBe("30m");
-      } finally {
-        vi.useRealTimers();
-      }
     });
   });
 });

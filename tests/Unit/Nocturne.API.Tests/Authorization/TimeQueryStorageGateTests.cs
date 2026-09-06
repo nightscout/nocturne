@@ -33,7 +33,7 @@ public class TimeQueryStorageGateTests
     {
         // A class-level OR of glucose|treatments|devices would admit this caller to
         // /api/v1/slice/treatments/... and every treatment record with it.
-        var (controller, service) = Build(OAuthScopes.GlucoseRead);
+        var (controller, service) = Build(Scope.GlucoseRead);
 
         var result = await controller.GetSlicedData(storage, "dateString");
 
@@ -42,9 +42,9 @@ public class TimeQueryStorageGateTests
     }
 
     [Theory]
-    [InlineData("entries", OAuthScopes.GlucoseRead)]
-    [InlineData("treatments", OAuthScopes.TreatmentsRead)]
-    [InlineData("devicestatus", OAuthScopes.DevicesRead)]
+    [InlineData("entries", Scope.GlucoseRead)]
+    [InlineData("treatments", Scope.TreatmentsRead)]
+    [InlineData("devicestatus", Scope.DevicesRead)]
     public async Task Slice_AllowsTheCollectionTheGrantCovers(string storage, string scope)
     {
         var (controller, service) = Build(scope);
@@ -63,7 +63,7 @@ public class TimeQueryStorageGateTests
     {
         // Ahead of the scope gate, so the answer does not vary with the grant on a collection the
         // route never served.
-        foreach (var scopes in new[] { new[] { OAuthScopes.FullAccess }, new[] { OAuthScopes.SleepRead } })
+        foreach (var scopes in new[] { new[] { Scope.FullAccess }, new[] { Scope.SleepRead } })
         {
             var (controller, service) = Build(scopes);
 
@@ -80,7 +80,7 @@ public class TimeQueryStorageGateTests
     public void TimesEcho_RefusesACollectionOutsideTheGrant(string storage)
     {
         // The echo variants take the collection as a query value and reach the same service.
-        var (controller, service) = Build(OAuthScopes.GlucoseRead);
+        var (controller, service) = Build(Scope.GlucoseRead);
 
         var result = controller.GetTimeQueryEchoWithPrefix("2026-07", storage: storage);
 
@@ -92,7 +92,7 @@ public class TimeQueryStorageGateTests
     [Fact]
     public async Task FullAccess_ReadsEverySliceableCollection()
     {
-        var (controller, service) = Build(OAuthScopes.FullAccess);
+        var (controller, service) = Build(Scope.FullAccess);
         StubSlice(service);
 
         foreach (var storage in SliceableStorage)
@@ -120,7 +120,7 @@ public class TimeQueryStorageGateTests
             .SelectMany(a => a.RequiredScopes)
             .ToArray();
 
-        required.Should().Equal(OAuthScopes.GlucoseRead);
+        required.Should().Equal(Scope.GlucoseRead);
     }
 
     /// <summary>
@@ -139,8 +139,8 @@ public class TimeQueryStorageGateTests
 
         var httpContext = new DefaultHttpContext();
         httpContext.Items["AuthContext"] = new AuthContext { IsAuthenticated = true };
-        httpContext.Items["GrantedScopes"] = OAuthScopes.Normalize(
-            [OAuthScopes.SleepRead, OAuthScopes.ReportsRead]);
+        httpContext.Items["GrantedScopes"] = Scope.Normalize(
+            [Scope.SleepRead, Scope.ReportsRead]);
 
         var filterContext = new AuthorizationFilterContext(
             new ActionContext(httpContext, new RouteData(), new ActionDescriptor()),
@@ -170,7 +170,7 @@ public class TimeQueryStorageGateTests
         var service = new Mock<ITimeQueryService>(MockBehavior.Loose);
 
         var httpContext = new DefaultHttpContext();
-        httpContext.Items["GrantedScopes"] = OAuthScopes.Normalize(grantedScopes);
+        httpContext.Items["GrantedScopes"] = Scope.Normalize(grantedScopes);
 
         var controller = new TimeQueryController(service.Object, NullLogger<TimeQueryController>.Instance)
         {

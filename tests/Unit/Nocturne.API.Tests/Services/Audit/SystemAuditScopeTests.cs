@@ -14,7 +14,7 @@ public class SystemAuditScopeTests
         {
             SubjectId = Guid.NewGuid(), SubjectName = "alice", AuthType = "Bearer",
             TokenId = Guid.NewGuid(), IpAddress = "10.0.0.1",
-            CorrelationId = "trace-123", Endpoint = "POST /api/sync",
+            TraceId = "trace-123", Endpoint = "POST /api/sync",
         };
 
         using (SystemAuditScope.Push(ambient))
@@ -25,7 +25,7 @@ public class SystemAuditScopeTests
             ambient.TokenId.Should().BeNull();
             ambient.IpAddress.Should().BeNull();
             ambient.IsSystem.Should().BeTrue();
-            ambient.CorrelationId.Should().Be("trace-123");
+            ambient.TraceId.Should().Be("trace-123");
             ambient.Endpoint.Should().Be("POST /api/sync");
         }
     }
@@ -36,7 +36,7 @@ public class SystemAuditScopeTests
         var ambient = new AuditContext
         {
             SubjectId = Guid.NewGuid(), AuthType = "Bearer",
-            CorrelationId = "trace-123",
+            TraceId = "trace-123",
         };
         var originalSubject = ambient.SubjectId;
 

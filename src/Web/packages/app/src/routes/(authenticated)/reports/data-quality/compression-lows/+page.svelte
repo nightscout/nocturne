@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { toast } from 'svelte-sonner';
-	import { remoteErrorMessage } from '$lib/api/remote-error';
+	import { permissionGatedMutationError } from '$lib/forms';
 	import { Button } from '$lib/components/ui/button';
 	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
 	import { Badge } from '$lib/components/ui/badge';
@@ -35,7 +35,7 @@
 	import AlertTriangle from 'lucide-svelte/icons/triangle-alert';
 	import History from 'lucide-svelte/icons/history';
 	import ArrowLeft from 'lucide-svelte/icons/arrow-left';
-	import { time, bg, bgLabel } from '$lib/utils/formatting';
+	import { bg, bgLabel, formatShortDate, time } from "$lib/utils/formatting";
 	import type { CompressionLowSuggestion } from '$lib/api';
 
 	const effectivePermissions: string[] = $derived(
@@ -49,6 +49,9 @@
 	);
 	const NEEDS_GLUCOSE_READWRITE =
 		'Reviewing compression lows requires the glucose.readwrite permission.';
+
+	const mutationError = (err: unknown) =>
+		permissionGatedMutationError(err, NEEDS_GLUCOSE_READWRITE);
 
 	// Create resource with automatic layout registration - load ALL suggestions
 	const suggestionsResource = contextResource(
@@ -161,7 +164,7 @@
 			selectedSuggestions = new Set();
 			selectNextSuggestion(firstSelectedIndex);
 		} catch (err) {
-			toast.error(remoteErrorMessage(err, NEEDS_GLUCOSE_READWRITE));
+			toast.error(mutationError(err));
 		} finally {
 			isLoading = false;
 		}
@@ -180,7 +183,7 @@
 			selectedSuggestions = new Set();
 			selectNextSuggestion(firstSelectedIndex);
 		} catch (err) {
-			toast.error(remoteErrorMessage(err, NEEDS_GLUCOSE_READWRITE));
+			toast.error(mutationError(err));
 		} finally {
 			isLoading = false;
 		}
@@ -199,7 +202,7 @@
 			selectedSuggestions = new Set();
 			selectNextSuggestion(firstSelectedIndex);
 		} catch (err) {
-			toast.error(remoteErrorMessage(err, NEEDS_GLUCOSE_READWRITE));
+			toast.error(mutationError(err));
 		} finally {
 			isLoading = false;
 		}
@@ -234,7 +237,7 @@
 			detectionResult = result;
 			suggestionsResource.refresh();
 		} catch (err) {
-			toast.error(remoteErrorMessage(err, NEEDS_GLUCOSE_READWRITE));
+			toast.error(mutationError(err));
 		} finally {
 			isLoading = false;
 		}
@@ -268,9 +271,8 @@
 		const date = nightOf instanceof Date ? nightOf : new Date(nightOf);
 		const nextDay = new Date(date);
 		nextDay.setDate(nextDay.getDate() + 1);
-		const dateStr = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-		const nextDayStr = nextDay.toLocaleDateString(undefined, { day: 'numeric', year: 'numeric' });
-		return `Night of ${dateStr}-${nextDayStr}`;
+		// `{ day, year }` has no CLDR pattern; ICU renders it as "2026 (day: 30)".
+		return `Night of ${formatShortDate(date)} \u2013 ${formatShortDate(nextDay, true)}`;
 	}
 
 	const chartDateRange = $derived.by(() => {

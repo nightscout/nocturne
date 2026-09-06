@@ -23,6 +23,7 @@
   const sidebarEngine = createChartDataEngine({
     enablePredictions: false,
     focusHours: 3,
+    dataWindow: "display",
   });
 
   // Glucose-only layout — no space reserved for basal/IOB/swim lanes
@@ -74,7 +75,7 @@
 
   // Trend metadata
   const bgDelta = $derived(realtimeStore?.bgDelta ?? 0);
-  const direction = $derived(realtimeStore?.direction ?? "Flat");
+  const direction = $derived(realtimeStore?.direction ?? "");
   const timeSinceReading = $derived(realtimeStore?.timeSinceReading ?? "");
   const displayDelta = $derived(formatGlucoseDelta(bgDelta, units));
   const hasData = $derived(!isLoading && rawCurrentBG > 0);
@@ -129,7 +130,10 @@
         >
           {#snippet tracks(_ctx)}
             <ThresholdRules />
-            <GlucoseTrack showAxis={false} />
+            <!-- The density heuristic would show a dot per reading now that the
+                 series is the displayed window rather than the 48-hour buffer.
+                 A 120px sparkline reads as a line. -->
+            <GlucoseTrack showAxis={false} showPoints={false} />
           {/snippet}
         </GlucoseChartShell>
       </a>

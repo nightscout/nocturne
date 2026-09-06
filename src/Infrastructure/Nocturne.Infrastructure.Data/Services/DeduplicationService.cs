@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -155,27 +156,6 @@ public class DeduplicationService : IDeduplicationService
     /// </summary>
     private static readonly ConcurrentDictionary<Guid, Guid> _jobTenants = new();
 
-    /// <summary>
-    /// Event types that should be grouped together for deduplication.
-    /// When a Basal and Temp Basal occur at the same time, they represent
-    /// the same underlying event and should be deduplicated together.
-    /// </summary>
-    private static readonly HashSet<string> BasalRelatedTypes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "Basal",
-        "Temp Basal"
-    };
-
-    /// <summary>
-    /// Priority order for basal-related types. Higher priority types
-    /// are preferred when merging duplicates.
-    /// </summary>
-    private static readonly Dictionary<string, int> BasalTypePriority = new(StringComparer.OrdinalIgnoreCase)
-    {
-        { "Temp Basal", 1 },  // Highest priority - most specific
-        { "Basal", 0 }       // Lower priority - generic
-    };
-
     /// <inheritdoc cref="IDeduplicationService" />
     public DeduplicationService(
         NocturneDbContext context,
@@ -187,180 +167,6 @@ public class DeduplicationService : IDeduplicationService
         _scopeFactory = scopeFactory;
         _logger = logger;
         _tenantAccessor = tenantAccessor;
-    }
-
-    /// <inheritdoc />
-    public async Task<Guid> GetOrCreateCanonicalIdAsync(
-        RecordType recordType,
-        long mills,
-        MatchCriteria criteria,
-        string? dataSource = null,
-        CancellationToken cancellationToken = default)
-    {
-        var recordTypeStr = recordType.ToString().ToLowerInvariant();
-        var windowStart = mills - MatchingWindowMillis;
-        var windowEnd = mills + MatchingWindowMillis;
-
-        // Look for existing linked records in the time window
-        var potentialMatches = await _context.LinkedRecords
-            .Where(lr => lr.RecordType == recordTypeStr)
-            .Where(lr => lr.SourceTimestamp >= windowStart && lr.SourceTimestamp <= windowEnd)
-            .ToListAsync(cancellationToken);
-
-        Guid? matched = null;
-
-        // Each typed branch scans the candidate canonical groups for a value-level match within
-        // the time window; the time-window membership alone is enough for notes.
-        if (potentialMatches.Count == 0)
-        {
-            // Nothing in the tight window; the wide path below is the only remaining chance.
-        }
-        else if (recordType == RecordType.StateSpan && criteria.Category.HasValue)
-        {
-            var categoryStr = criteria.Category.Value.ToString();
-            matched = await FindMatchingCanonicalIdAsync(
-                potentialMatches,
-                ids => _context.StateSpans.Where(s => ids.Contains(s.Id)),
-                s => string.Equals(s.Category, categoryStr, StringComparison.OrdinalIgnoreCase)
-                    && (string.IsNullOrEmpty(criteria.State)
-                        || string.Equals(s.State, criteria.State, StringComparison.OrdinalIgnoreCase)),
-                cancellationToken);
-        }
-        else if (recordType == RecordType.SensorGlucose && criteria.GlucoseValue.HasValue)
-        {
-            matched = await FindMatchingCanonicalIdAsync(
-                potentialMatches,
-                ids => _context.SensorGlucose.Where(r => ids.Contains(r.Id)),
-                r => Math.Abs(r.Mgdl - criteria.GlucoseValue.Value) <= criteria.GlucoseTolerance,
-                cancellationToken);
-        }
-        else if (recordType == RecordType.Bolus && criteria.Insulin.HasValue)
-        {
-            matched = await FindMatchingCanonicalIdAsync(
-                potentialMatches,
-                ids => _context.Boluses.Where(b => ids.Contains(b.Id)),
-                b => Math.Abs(b.Insulin - criteria.Insulin.Value) <= criteria.InsulinTolerance,
-                cancellationToken);
-        }
-        else if (recordType == RecordType.CarbIntake && criteria.Carbs.HasValue)
-        {
-            matched = await FindMatchingCanonicalIdAsync(
-                potentialMatches,
-                ids => _context.CarbIntakes.Where(c => ids.Contains(c.Id)),
-                c => Math.Abs(c.Carbs - criteria.Carbs.Value) <= criteria.CarbsTolerance,
-                cancellationToken);
-        }
-        else if (recordType == RecordType.BGCheck && criteria.GlucoseValue.HasValue)
-        {
-            matched = await FindMatchingCanonicalIdAsync(
-                potentialMatches,
-                ids => _context.BGChecks.Where(bg => ids.Contains(bg.Id)),
-                bg => Math.Abs(bg.Glucose - criteria.GlucoseValue.Value) <= criteria.GlucoseTolerance,
-                cancellationToken);
-        }
-        else if (recordType == RecordType.DeviceEvent && !string.IsNullOrEmpty(criteria.EventType))
-        {
-            matched = await FindMatchingCanonicalIdAsync(
-                potentialMatches,
-                ids => _context.DeviceEvents.Where(e => ids.Contains(e.Id)),
-                e => string.Equals(e.EventType, criteria.EventType, StringComparison.OrdinalIgnoreCase),
-                cancellationToken);
-        }
-        else if (recordType == RecordType.Note)
-        {
-            // Notes match on time window alone.
-            matched = potentialMatches.First().CanonicalId;
-        }
-        else if (recordType == RecordType.BolusCalculation && criteria.Carbs.HasValue)
-        {
-            matched = await FindMatchingCanonicalIdAsync(
-                potentialMatches,
-                ids => _context.BolusCalculations.Where(bc => ids.Contains(bc.Id)),
-                bc => Math.Abs((bc.CarbInput ?? 0) - criteria.Carbs.Value) <= criteria.CarbsTolerance,
-                cancellationToken);
-        }
-        else if (recordType == RecordType.TempBasal && criteria.Rate.HasValue)
-        {
-            matched = await FindMatchingCanonicalIdAsync(
-                potentialMatches,
-                ids => _context.TempBasals.Where(tb => ids.Contains(tb.Id)),
-                tb => Math.Abs(tb.Rate - criteria.Rate.Value) <= criteria.RateTolerance,
-                cancellationToken);
-        }
-
-        if (matched.HasValue)
-        {
-            var closest = potentialMatches
-                .Where(m => m.CanonicalId == matched.Value)
-                .OrderBy(m => Math.Abs(m.SourceTimestamp - mills))
-                .First();
-            LogCrossSourceMatch(recordType, dataSource, closest.DataSource, closest.SourceTimestamp - mills, wide: false);
-            return matched.Value;
-        }
-
-        var wideMatch = await TryWideMatchAsync(
-            recordType, recordTypeStr, mills, criteria, dataSource, cancellationToken);
-
-        // No matching records found, create a new canonical ID
-        return wideMatch ?? Guid.CreateVersion7();
-    }
-
-    /// <summary>
-    /// Second-chance match over <see cref="WideMatchingWindow"/> for a single record, run only
-    /// after the tight window found nothing. Joins a group only when exactly one candidate
-    /// canonical group in the wide window holds an exact value match and that group contains no
-    /// record from <paramref name="dataSource"/>. Every other outcome — no candidate, several
-    /// candidates, an unknown source, an ineligible record type — returns null so the caller
-    /// mints a new canonical id and the records stay separate.
-    /// </summary>
-    private async Task<Guid?> TryWideMatchAsync(
-        RecordType recordType,
-        string recordTypeStr,
-        long mills,
-        MatchCriteria criteria,
-        string? dataSource,
-        CancellationToken ct)
-    {
-        if (!WideMatchableTypes.Contains(recordType) || !CanEstablishCrossSource(dataSource))
-            return null;
-
-        var wideStart = mills - WideMatchingWindowMillis;
-        var wideEnd = mills + WideMatchingWindowMillis;
-
-        var links = await _context.LinkedRecords
-            .AsNoTracking()
-            .Where(lr => lr.RecordType == recordTypeStr)
-            .Where(lr => lr.SourceTimestamp >= wideStart && lr.SourceTimestamp <= wideEnd)
-            .ToListAsync(ct);
-
-        if (links.Count == 0)
-            return null;
-
-        var info = await LoadRecordInfoAsync(recordType, links.Select(l => l.RecordId).ToHashSet(), ct);
-        var candidates = links
-            .Where(l => info.TryGetValue(l.RecordId, out var recordInfo)
-                        && !recordInfo.IsDeleted
-                        && CriteriaMatch(recordType, recordInfo.Criteria, criteria, exact: true))
-            .ToList();
-
-        var canonicalId = SingleCandidateCanonical(candidates.Select(c => c.CanonicalId));
-        if (canonicalId is null)
-            return null;
-
-        var groupSources = await LoadGroupSourcesAsync(recordTypeStr, [canonicalId.Value], ct);
-        if (!groupSources.TryGetValue(canonicalId.Value, out var sources)
-            || !CanEstablishCrossSource(sources)
-            || sources.Contains(dataSource))
-        {
-            return null;
-        }
-
-        var closest = candidates
-            .Where(c => c.CanonicalId == canonicalId.Value)
-            .OrderBy(c => Math.Abs(c.SourceTimestamp - mills))
-            .First();
-        LogCrossSourceMatch(recordType, dataSource, closest.DataSource, closest.SourceTimestamp - mills, wide: true);
-        return canonicalId;
     }
 
     /// <summary>
@@ -497,122 +303,6 @@ public class DeduplicationService : IDeduplicationService
     private static bool CanEstablishCrossSource(HashSet<string> sources) =>
         sources.Count > 0 && !sources.Contains(DeduplicationInput.UnknownDataSource);
 
-    /// <summary>
-    /// Scans the candidate canonical groups for one whose underlying records include a value-level
-    /// match. For each distinct canonical ID in <paramref name="potentialMatches"/>, loads that
-    /// group's records via <paramref name="query"/> and returns the canonical ID if any record
-    /// satisfies <paramref name="isMatch"/>. Returns null when no group matches. The per-record
-    /// predicate runs in memory after materialization, exactly as the original per-type loops did.
-    /// </summary>
-    private async Task<Guid?> FindMatchingCanonicalIdAsync<TEntity>(
-        List<LinkedRecordEntity> potentialMatches,
-        Func<List<Guid>, IQueryable<TEntity>> query,
-        Func<TEntity, bool> isMatch,
-        CancellationToken cancellationToken)
-    {
-        foreach (var canonicalId in potentialMatches.Select(m => m.CanonicalId).Distinct())
-        {
-            var recordIds = potentialMatches
-                .Where(m => m.CanonicalId == canonicalId)
-                .Select(m => m.RecordId)
-                .ToList();
-
-            var entities = await query(recordIds).ToListAsync(cancellationToken);
-            if (entities.Any(isMatch))
-                return canonicalId;
-        }
-
-        return null;
-    }
-
-    /// <inheritdoc />
-    public async Task LinkRecordAsync(
-        Guid canonicalId,
-        RecordType recordType,
-        Guid recordId,
-        long mills,
-        string dataSource,
-        CancellationToken cancellationToken = default)
-    {
-        var recordTypeStr = recordType.ToString().ToLowerInvariant();
-
-        // Check if this record is already linked
-        var existing = await _context.LinkedRecords
-            .FirstOrDefaultAsync(lr =>
-                lr.RecordType == recordTypeStr && lr.RecordId == recordId,
-                cancellationToken);
-
-        if (existing != null)
-        {
-            _logger.LogDebug(
-                "Record {RecordType} {RecordId} already linked to canonical {CanonicalId}",
-                recordType, recordId, existing.CanonicalId);
-            return;
-        }
-
-        // Check if this should be the primary record (earliest timestamp)
-        var existingInGroup = await _context.LinkedRecords
-            .Where(lr => lr.CanonicalId == canonicalId)
-            .OrderBy(static lr => lr.SourceTimestamp)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        var isPrimary = existingInGroup == null || mills < existingInGroup.SourceTimestamp;
-
-        // If the existing primary references a record that no longer exists,
-        // clean up the orphaned entries and promote this record to primary.
-        if (!isPrimary && existingInGroup is { IsPrimary: true })
-        {
-            var primaryExists = await RecordExistsAsync(recordTypeStr, existingInGroup.RecordId, cancellationToken);
-            if (!primaryExists)
-            {
-                // Remove all orphaned linked records in this group
-                var orphaned = await _context.LinkedRecords
-                    .Where(lr => lr.CanonicalId == canonicalId)
-                    .ToListAsync(cancellationToken);
-                var orphanedIds = orphaned.Select(lr => lr.RecordId).ToHashSet();
-
-                foreach (var o in orphaned)
-                {
-                    var exists = orphanedIds.Contains(recordId) && o.RecordId == recordId
-                        ? true // The record we're about to link obviously exists
-                        : await RecordExistsAsync(recordTypeStr, o.RecordId, cancellationToken);
-                    if (!exists)
-                    {
-                        _context.LinkedRecords.Remove(o);
-                    }
-                }
-
-                isPrimary = true;
-                _logger.LogDebug(
-                    "Promoted {RecordType} {RecordId} to primary after orphaned primary cleanup in canonical {CanonicalId}",
-                    recordType, recordId, canonicalId);
-            }
-        }
-
-        // If this is the new primary, demote the old primary
-        if (isPrimary && existingInGroup != null && _context.Entry(existingInGroup).State != Microsoft.EntityFrameworkCore.EntityState.Deleted)
-        {
-            existingInGroup.IsPrimary = false;
-        }
-
-        var linkedRecord = new LinkedRecordEntity
-        {
-            CanonicalId = canonicalId,
-            RecordType = recordTypeStr,
-            RecordId = recordId,
-            SourceTimestamp = mills,
-            DataSource = dataSource,
-            IsPrimary = isPrimary
-        };
-
-        _context.LinkedRecords.Add(linkedRecord);
-        await _context.SaveChangesAsync(cancellationToken);
-
-        _logger.LogDebug(
-            "Linked {RecordType} {RecordId} to canonical {CanonicalId} (primary: {IsPrimary})",
-            recordType, recordId, canonicalId, isPrimary);
-    }
-
     /// <inheritdoc />
     public async Task<DeduplicationBatchResult> DeduplicateBatchAsync(
         RecordType recordType,
@@ -663,7 +353,7 @@ public class DeduplicationService : IDeduplicationService
         if (records.Count == 0)
             return new DeduplicationBatchResult(0, 0, 0, 0);
 
-        var recordTypeStr = recordType.ToString().ToLowerInvariant();
+        var recordTypeStr = RecordTypeKeys.Key(recordType);
         var wideEligible = WideMatchableTypes.Contains(recordType);
 
         // 1. Compute union time window. Wide-eligible types load the wider window so the wide
@@ -684,19 +374,22 @@ public class DeduplicationService : IDeduplicationService
             .Where(lr => lr.SourceTimestamp >= minMills && lr.SourceTimestamp <= maxMills)
             .ToListAsync(ct);
 
-        // 3. One query: load type-specific matcher
+        // 3. One query: the criteria and soft-deleted status behind every candidate link, read by
+        //    both the tight matcher below and the wide pass.
         var referencedIds = allPotentialMatches.Select(m => m.RecordId).ToHashSet();
-        var matcher = await LoadMatcherAsync(recordType, referencedIds, ct);
+        var info = await LoadRecordInfoAsync(recordType, referencedIds, ct);
 
-        // 3b. Wide-path inputs, loaded only for wide-eligible types: the per-candidate criteria
-        //     the exact comparison runs against, and the data sources behind each candidate group.
-        //     groupSources is mutated as this chunk assigns records, so a second record of the same
-        //     source sees the group its predecessor just joined.
-        Dictionary<Guid, RecordInfo> wideInfo = new();
+        bool Matches(Guid recordId, MatchCriteria criteria) =>
+            info.TryGetValue(recordId, out var candidate)
+            && !candidate.IsDeleted
+            && CriteriaMatch(recordType, candidate.Criteria, criteria);
+
+        // 3b. The data sources behind each candidate group, needed only by the wide pass.
+        //     Mutated as this chunk assigns records, so a second record of the same source sees
+        //     the group its predecessor just joined.
         Dictionary<Guid, HashSet<string>> groupSources = new();
         if (wideEligible)
         {
-            wideInfo = await LoadRecordInfoAsync(recordType, referencedIds, ct);
             groupSources = await LoadGroupSourcesAsync(
                 recordTypeStr, allPotentialMatches.Select(m => m.CanonicalId).Distinct().ToList(), ct);
         }
@@ -763,7 +456,7 @@ public class DeduplicationService : IDeduplicationService
             for (int i = lo; i < hi; i++)
             {
                 var m = allPotentialMatches[i];
-                if (matcher(m.RecordId, record.Criteria))
+                if (Matches(m.RecordId, record.Criteria))
                 {
                     canonicalId = m.CanonicalId;
                     duplicateGroups++;
@@ -805,7 +498,7 @@ public class DeduplicationService : IDeduplicationService
                 for (int i = wideLo; i < wideHi; i++)
                 {
                     var m = allPotentialMatches[i];
-                    if (wideInfo.TryGetValue(m.RecordId, out var recordInfo)
+                    if (info.TryGetValue(m.RecordId, out var recordInfo)
                         && !recordInfo.IsDeleted
                         && CriteriaMatch(recordType, recordInfo.Criteria, record.Criteria, exact: true))
                     {
@@ -902,10 +595,9 @@ public class DeduplicationService : IDeduplicationService
 
         // 7. A wide join reaches up to ten minutes back, so it can land earlier than the group's
         //    primary — and unlike reconcile-merged groups, ingest-formed groups are never revisited
-        //    by MergeDuplicateGroupsAsync. Re-derive the primary here with the same survivor rule
-        //    MergeDuplicateGroupsAsync uses, or the event time the group displays would depend on
-        //    which connector synced first. Scoped to wide joins: the tight path's sticky primary is
-        //    long-standing behaviour.
+        //    by MergeDuplicateGroupsAsync. Re-derive the primary here, or the event time the group
+        //    displays would depend on which connector synced first. Scoped to wide joins: the tight
+        //    path's sticky primary is long-standing behaviour.
         if (wideJoinedCanonicals.Count > 0)
         {
             var joined = wideJoinedCanonicals.ToList();
@@ -915,26 +607,10 @@ public class DeduplicationService : IDeduplicationService
 
             var rowInfo = await LoadRecordInfoAsync(recordType, rows.Select(r => r.RecordId).ToHashSet(), ct);
 
-            // Reads hide soft-deleted records and non-primary links alike, so promoting either a
-            // deleted record or an orphaned link would render the whole group as nothing. A record
-            // id missing from rowInfo is an orphaned link and is treated like a deleted one.
-            bool IsPromotable(LinkedRecordEntity r) =>
-                rowInfo.TryGetValue(r.RecordId, out var ri) && !ri.IsDeleted;
-
             var repointed = false;
             foreach (var group in rows.GroupBy(r => r.CanonicalId))
             {
-                // Earliest promotable record, falling back to earliest overall when the group holds
-                // nothing promotable — the same survivor rule as the reconcile merge.
-                var survivor = group
-                    .Where(IsPromotable)
-                    .OrderBy(r => r.SourceTimestamp)
-                    .ThenBy(r => r.RecordId)
-                    .FirstOrDefault()
-                    ?? group
-                        .OrderBy(r => r.SourceTimestamp)
-                        .ThenBy(r => r.RecordId)
-                        .First();
+                var survivor = PickSurvivor(group, rowInfo);
 
                 // A group with no primary at all renders as nothing, so repair it while the
                 // survivor is already in hand.
@@ -963,16 +639,34 @@ public class DeduplicationService : IDeduplicationService
     }
 
     /// <summary>
+    /// The link a canonical group's <see cref="LinkedRecordEntity.IsPrimary"/> belongs on: the
+    /// earliest promotable record, falling back to the earliest overall when the group holds
+    /// nothing promotable. Reads hide soft-deleted records and non-primary links alike, so
+    /// promoting either a deleted record or an orphaned link renders the whole group as nothing —
+    /// a record id missing from <paramref name="rowInfo"/> is an orphaned link and is no more
+    /// promotable than a deleted one. <see cref="LinkedRecordEntity.RecordId"/> settles a
+    /// timestamp tie, which a cross-source pair normally has.
+    /// </summary>
+    internal static LinkedRecordEntity PickSurvivor(
+        IEnumerable<LinkedRecordEntity> rows,
+        IReadOnlyDictionary<Guid, RecordInfo> rowInfo)
+    {
+        var ordered = rows.OrderBy(r => r.SourceTimestamp).ThenBy(r => r.RecordId).ToList();
+
+        return ordered.FirstOrDefault(r => rowInfo.TryGetValue(r.RecordId, out var ri) && !ri.IsDeleted)
+               ?? ordered[0];
+    }
+
+    /// <summary>
     /// Collapses duplicate canonical groups for a record type within the current tenant.
     /// Two groups merge when their primary records fall within <see cref="MatchingWindowMillis"/>
     /// of each other and their <see cref="MatchCriteria"/> match; merging is transitive
     /// (union-find) and source-agnostic, mirroring insert-time <see cref="DeduplicateBatchAsync"/>
     /// semantics. A second pass then applies the same wide rules the insert path uses, so a
     /// cross-source pair missed at ingest (out-of-order connector syncs) heals here.
-    /// For each merged super-group the surviving primary is the earliest-timestamp
-    /// non-deleted record (falling back to earliest-overall when every record is soft-deleted);
-    /// all linked rows are re-pointed to the survivor's canonical id and <c>IsPrimary</c> is set
-    /// on exactly the survivor.
+    /// For each merged super-group <see cref="PickSurvivor"/> chooses the surviving primary; all
+    /// linked rows are re-pointed to the survivor's canonical id and <c>IsPrimary</c> is set on
+    /// exactly the survivor.
     /// </summary>
     /// <param name="recordType">The record type whose canonical groups are reconciled.</param>
     /// <param name="candidateCanonicalIds">
@@ -986,7 +680,7 @@ public class DeduplicationService : IDeduplicationService
         IReadOnlySet<Guid>? candidateCanonicalIds,
         CancellationToken ct)
     {
-        var recordTypeStr = recordType.ToString().ToLowerInvariant();
+        var recordTypeStr = RecordTypeKeys.Key(recordType);
         var wideEligible = WideMatchableTypes.Contains(recordType);
 
         // The span the candidate-bounded path actually loaded. Groups whose extent reaches within a
@@ -1354,18 +1048,7 @@ public class DeduplicationService : IDeduplicationService
             var rowIds = rows.Select(r => r.RecordId).ToHashSet();
             var rowInfo = await LoadRecordInfoAsync(recordType, rowIds, ct);
 
-            // Survivor = earliest-timestamp non-deleted record; fall back to earliest-overall
-            // only if every record in the group is soft-deleted. A record id missing from rowInfo
-            // is an orphaned link: reads hide it exactly as they hide a deleted record, so it is
-            // never promotable. Same rule as the ingest path's primary re-derivation.
-            bool IsDeleted(LinkedRecordEntity r) =>
-                !rowInfo.TryGetValue(r.RecordId, out var ri) || ri.IsDeleted;
-
-            var survivor = rows
-                .Where(r => !IsDeleted(r))
-                .OrderBy(r => r.SourceTimestamp)
-                .FirstOrDefault()
-                ?? rows.OrderBy(r => r.SourceTimestamp).First();
+            var survivor = PickSurvivor(rows, rowInfo);
 
             // Re-point every row to the survivor's canonical id and fix the IsPrimary invariant.
             foreach (var r in rows)
@@ -1425,13 +1108,8 @@ public class DeduplicationService : IDeduplicationService
             // and merge each type's candidate canonical groups.
             foreach (var group in batch.GroupBy(l => l.RecordType))
             {
-                // RecordType is a free-form string column whose surface is broader than the enum.
-                // A legacy/typo'd value must not throw and block all further batches for this tenant.
-                if (!Enum.TryParse<RecordType>(group.Key, ignoreCase: true, out var type))
+                if (ParseRecordType(group.Key) is not { } type)
                 {
-                    _logger.LogWarning(
-                        "Skipping linked_records group with unknown RecordType '{RecordType}' during reconcile",
-                        group.Key);
                     continue;
                 }
 
@@ -1465,65 +1143,6 @@ public class DeduplicationService : IDeduplicationService
         return new ReconcileResult(merged, caughtUp);
     }
 
-    private async Task<bool> RecordExistsAsync(string recordType, Guid recordId, CancellationToken ct)
-    {
-        return recordType switch
-        {
-            "bolus" => await _context.Boluses.AnyAsync(b => b.Id == recordId, ct),
-            "carbintake" => await _context.CarbIntakes.AnyAsync(c => c.Id == recordId, ct),
-            "sensorglucose" => await _context.SensorGlucose.AnyAsync(s => s.Id == recordId, ct),
-            "tempbasal" => await _context.TempBasals.AnyAsync(t => t.Id == recordId, ct),
-            "bgcheck" => await _context.BGChecks.AnyAsync(b => b.Id == recordId, ct),
-            "deviceevent" => await _context.DeviceEvents.AnyAsync(d => d.Id == recordId, ct),
-            "note" => await _context.Notes.AnyAsync(n => n.Id == recordId, ct),
-            "boluscalculation" => await _context.BolusCalculations.AnyAsync(b => b.Id == recordId, ct),
-            _ => true // Assume exists for unknown types to avoid accidental promotion
-        };
-    }
-
-    // --- Per-type MatchCriteria builders ---
-    // Single source of truth for each record type's MatchCriteria. Both the inline
-    // dedup pass (DeduplicateAllAsync) and the reconciliation loader (LoadRecordInfoAsync)
-    // call these so the criteria definitions cannot drift between the two code paths.
-
-    private static MatchCriteria BuildCriteria(SensorGlucoseEntity e) =>
-        new() { GlucoseValue = e.Mgdl, GlucoseTolerance = 5.0 };
-
-    private static MatchCriteria BuildCriteria(BolusEntity b) =>
-        new() { Insulin = b.Insulin, InsulinTolerance = 0.05 };
-
-    private static MatchCriteria BuildCriteria(CarbIntakeEntity c) =>
-        new() { Carbs = c.Carbs, CarbsTolerance = 1.0 };
-
-    private static MatchCriteria BuildCriteria(BGCheckEntity bg) =>
-        new() { GlucoseValue = bg.Glucose, GlucoseTolerance = 5.0 };
-
-    private static MatchCriteria BuildCriteria(DeviceEventEntity d) =>
-        new() { EventType = d.EventType };
-
-    private static MatchCriteria BuildNoteCriteria() =>
-        new();
-
-    private static MatchCriteria BuildCriteria(BolusCalculationEntity bc) =>
-        new() { Carbs = bc.CarbInput ?? 0, CarbsTolerance = 1.0 };
-
-    // Duration is derived from the interval rather than stored; only the exact comparison reads it.
-    private static MatchCriteria BuildCriteria(TempBasalEntity t) =>
-        new()
-        {
-            Rate = t.Rate,
-            RateTolerance = 0.05,
-            Duration = t.EndTimestamp.HasValue ? t.EndTimestamp.Value - t.StartTimestamp : null
-        };
-
-    private static MatchCriteria BuildCriteria(StateSpanEntity s) =>
-        new()
-        {
-            Category = Enum.TryParse<StateSpanCategory>(s.Category, ignoreCase: true, out var cat)
-                ? cat : null,
-            State = s.State
-        };
-
     /// <summary>
     /// Loads, for each requested record id, its <see cref="MatchCriteria"/> and whether the
     /// underlying record is soft-deleted. Soft-deleted rows are included via
@@ -1542,75 +1161,45 @@ public class DeduplicationService : IDeduplicationService
         if (ids.Count == 0)
             return new Dictionary<Guid, RecordInfo>();
 
-        switch (recordType)
+        return recordType switch
         {
-            case RecordType.SensorGlucose:
-            {
-                var records = await _context.SensorGlucose.AsNoTracking().IgnoreQueryFilters()
-                    .Where(e => e.TenantId == _context.TenantId && ids.Contains(e.Id)).ToListAsync(ct);
-                return records.ToDictionary(e => e.Id,
-                    e => new RecordInfo(BuildCriteria(e), e.DeletedAt != null));
-            }
-            case RecordType.Bolus:
-            {
-                var records = await _context.Boluses.AsNoTracking().IgnoreQueryFilters()
-                    .Where(b => b.TenantId == _context.TenantId && ids.Contains(b.Id)).ToListAsync(ct);
-                return records.ToDictionary(b => b.Id,
-                    b => new RecordInfo(BuildCriteria(b), b.DeletedAt != null));
-            }
-            case RecordType.CarbIntake:
-            {
-                var records = await _context.CarbIntakes.AsNoTracking().IgnoreQueryFilters()
-                    .Where(c => c.TenantId == _context.TenantId && ids.Contains(c.Id)).ToListAsync(ct);
-                return records.ToDictionary(c => c.Id,
-                    c => new RecordInfo(BuildCriteria(c), c.DeletedAt != null));
-            }
-            case RecordType.BGCheck:
-            {
-                var records = await _context.BGChecks.AsNoTracking().IgnoreQueryFilters()
-                    .Where(bg => bg.TenantId == _context.TenantId && ids.Contains(bg.Id)).ToListAsync(ct);
-                return records.ToDictionary(bg => bg.Id,
-                    bg => new RecordInfo(BuildCriteria(bg), bg.DeletedAt != null));
-            }
-            case RecordType.DeviceEvent:
-            {
-                var records = await _context.DeviceEvents.AsNoTracking().IgnoreQueryFilters()
-                    .Where(d => d.TenantId == _context.TenantId && ids.Contains(d.Id)).ToListAsync(ct);
-                return records.ToDictionary(d => d.Id,
-                    d => new RecordInfo(BuildCriteria(d), d.DeletedAt != null));
-            }
-            case RecordType.Note:
-            {
-                var records = await _context.Notes.AsNoTracking().IgnoreQueryFilters()
-                    .Where(n => n.TenantId == _context.TenantId && ids.Contains(n.Id)).ToListAsync(ct);
-                return records.ToDictionary(n => n.Id,
-                    n => new RecordInfo(BuildNoteCriteria(), n.DeletedAt != null));
-            }
-            case RecordType.BolusCalculation:
-            {
-                var records = await _context.BolusCalculations.AsNoTracking().IgnoreQueryFilters()
-                    .Where(bc => bc.TenantId == _context.TenantId && ids.Contains(bc.Id)).ToListAsync(ct);
-                return records.ToDictionary(bc => bc.Id,
-                    bc => new RecordInfo(BuildCriteria(bc), bc.DeletedAt != null));
-            }
-            case RecordType.TempBasal:
-            {
-                var records = await _context.TempBasals.AsNoTracking().IgnoreQueryFilters()
-                    .Where(t => t.TenantId == _context.TenantId && ids.Contains(t.Id)).ToListAsync(ct);
-                return records.ToDictionary(t => t.Id,
-                    t => new RecordInfo(BuildCriteria(t), t.DeletedAt != null));
-            }
-            case RecordType.StateSpan:
-            {
-                // StateSpanEntity has no DeletedAt column, so IsDeleted is always false.
-                var records = await _context.StateSpans.AsNoTracking().IgnoreQueryFilters()
-                    .Where(s => s.TenantId == _context.TenantId && ids.Contains(s.Id)).ToListAsync(ct);
-                return records.ToDictionary(s => s.Id,
-                    s => new RecordInfo(BuildCriteria(s), false));
-            }
-            default:
-                return new Dictionary<Guid, RecordInfo>();
-        }
+            RecordType.SensorGlucose => await LoadAsync<SensorGlucoseEntity>(MatchCriteriaMapper.From, ids, ct),
+            RecordType.Bolus => await LoadAsync<BolusEntity>(MatchCriteriaMapper.From, ids, ct),
+            RecordType.CarbIntake => await LoadAsync<CarbIntakeEntity>(MatchCriteriaMapper.From, ids, ct),
+            RecordType.BGCheck => await LoadAsync<BGCheckEntity>(MatchCriteriaMapper.From, ids, ct),
+            RecordType.DeviceEvent => await LoadAsync<DeviceEventEntity>(MatchCriteriaMapper.From, ids, ct),
+            RecordType.Note => await LoadAsync<NoteEntity>(_ => MatchCriteriaMapper.ForNote(), ids, ct),
+            RecordType.BolusCalculation => await LoadAsync<BolusCalculationEntity>(MatchCriteriaMapper.From, ids, ct),
+            RecordType.TempBasal => await LoadAsync<TempBasalEntity>(MatchCriteriaMapper.From, ids, ct),
+            RecordType.StateSpan => await LoadStateSpanInfoAsync(ids, ct),
+            _ => new Dictionary<Guid, RecordInfo>()
+        };
+    }
+
+    /// <summary>
+    /// Loads the criteria and soft-deleted status of every requested row of one entity type.
+    /// </summary>
+    private async Task<Dictionary<Guid, RecordInfo>> LoadAsync<TEntity>(
+        Func<TEntity, MatchCriteria> toCriteria, HashSet<Guid> ids, CancellationToken ct)
+        where TEntity : class, IV4Entity
+    {
+        var records = await _context.Set<TEntity>().AsNoTracking().IgnoreQueryFilters()
+            .Where(e => e.TenantId == _context.TenantId && ids.Contains(e.Id)).ToListAsync(ct);
+        return records.ToDictionary(e => e.Id, e => new RecordInfo(toCriteria(e), e.DeletedAt != null));
+    }
+
+    /// <summary>
+    /// State spans are loaded apart from <see cref="LoadAsync{TEntity}"/> because
+    /// <see cref="StateSpanEntity"/> is keyed by <c>OriginalId</c> rather than the
+    /// <c>LegacyId</c> that <see cref="IV4Entity"/> requires.
+    /// </summary>
+    private async Task<Dictionary<Guid, RecordInfo>> LoadStateSpanInfoAsync(
+        HashSet<Guid> ids, CancellationToken ct)
+    {
+        var records = await _context.StateSpans.AsNoTracking().IgnoreQueryFilters()
+            .Where(s => s.TenantId == _context.TenantId && ids.Contains(s.Id)).ToListAsync(ct);
+        return records.ToDictionary(s => s.Id,
+            s => new RecordInfo(MatchCriteriaMapper.From(s), s.DeletedAt != null));
     }
 
     /// <summary>
@@ -1620,118 +1209,6 @@ public class DeduplicationService : IDeduplicationService
     internal Task<Dictionary<Guid, RecordInfo>> LoadRecordInfoForTestAsync(
         RecordType recordType, HashSet<Guid> ids, CancellationToken ct = default)
         => LoadRecordInfoAsync(recordType, ids, ct);
-
-    private async Task<Func<Guid, MatchCriteria, bool>> LoadMatcherAsync(
-        RecordType recordType, HashSet<Guid> ids, CancellationToken ct)
-    {
-        if (ids.Count == 0)
-            return (_, _) => false;
-
-        switch (recordType)
-        {
-            case RecordType.TempBasal:
-            {
-                var records = (await _context.TempBasals
-                    .AsNoTracking()
-                    .Where(t => ids.Contains(t.Id))
-                    .ToListAsync(ct))
-                    .ToDictionary(t => t.Id);
-                return (id, criteria) =>
-                    records.TryGetValue(id, out var tb) && criteria.Rate.HasValue
-                    && Math.Abs(tb.Rate - criteria.Rate.Value) <= criteria.RateTolerance;
-            }
-            case RecordType.SensorGlucose:
-            {
-                var records = (await _context.SensorGlucose
-                    .AsNoTracking()
-                    .Where(s => ids.Contains(s.Id))
-                    .ToListAsync(ct))
-                    .ToDictionary(s => s.Id);
-                return (id, criteria) =>
-                    records.TryGetValue(id, out var sg) && criteria.GlucoseValue.HasValue
-                    && Math.Abs(sg.Mgdl - criteria.GlucoseValue.Value) <= criteria.GlucoseTolerance;
-            }
-            case RecordType.Bolus:
-            {
-                var records = (await _context.Boluses
-                    .AsNoTracking()
-                    .Where(b => ids.Contains(b.Id))
-                    .ToListAsync(ct))
-                    .ToDictionary(b => b.Id);
-                return (id, criteria) =>
-                    records.TryGetValue(id, out var b) && criteria.Insulin.HasValue
-                    && Math.Abs(b.Insulin - criteria.Insulin.Value) <= criteria.InsulinTolerance;
-            }
-            case RecordType.CarbIntake:
-            {
-                var records = (await _context.CarbIntakes
-                    .AsNoTracking()
-                    .Where(c => ids.Contains(c.Id))
-                    .ToListAsync(ct))
-                    .ToDictionary(c => c.Id);
-                return (id, criteria) =>
-                    records.TryGetValue(id, out var c) && criteria.Carbs.HasValue
-                    && Math.Abs(c.Carbs - criteria.Carbs.Value) <= criteria.CarbsTolerance;
-            }
-            case RecordType.BGCheck:
-            {
-                var records = (await _context.BGChecks
-                    .AsNoTracking()
-                    .Where(bg => ids.Contains(bg.Id))
-                    .ToListAsync(ct))
-                    .ToDictionary(bg => bg.Id);
-                return (id, criteria) =>
-                    records.TryGetValue(id, out var bg) && criteria.GlucoseValue.HasValue
-                    && Math.Abs(bg.Glucose - criteria.GlucoseValue.Value) <= criteria.GlucoseTolerance;
-            }
-            case RecordType.DeviceEvent:
-            {
-                var records = (await _context.DeviceEvents
-                    .AsNoTracking()
-                    .Where(d => ids.Contains(d.Id))
-                    .ToListAsync(ct))
-                    .ToDictionary(d => d.Id);
-                return (id, criteria) =>
-                    records.TryGetValue(id, out var d) && !string.IsNullOrEmpty(criteria.EventType)
-                    && string.Equals(d.EventType, criteria.EventType, StringComparison.OrdinalIgnoreCase);
-            }
-            case RecordType.Note:
-                return (_, _) => true; // time-window only matching
-            case RecordType.BolusCalculation:
-            {
-                var records = (await _context.BolusCalculations
-                    .AsNoTracking()
-                    .Where(bc => ids.Contains(bc.Id))
-                    .ToListAsync(ct))
-                    .ToDictionary(bc => bc.Id);
-                return (id, criteria) =>
-                    records.TryGetValue(id, out var bc) && criteria.Carbs.HasValue
-                    && Math.Abs((bc.CarbInput ?? 0) - criteria.Carbs.Value) <= criteria.CarbsTolerance;
-            }
-            case RecordType.StateSpan:
-            {
-                var records = (await _context.StateSpans
-                    .AsNoTracking()
-                    .Where(s => ids.Contains(s.Id))
-                    .ToListAsync(ct))
-                    .ToDictionary(s => s.Id);
-                return (id, criteria) =>
-                {
-                    if (!records.TryGetValue(id, out var ss) || !criteria.Category.HasValue)
-                        return false;
-                    var categoryStr = criteria.Category.Value.ToString();
-                    if (!string.Equals(ss.Category, categoryStr, StringComparison.OrdinalIgnoreCase))
-                        return false;
-                    if (!string.IsNullOrEmpty(criteria.State)
-                        && !string.Equals(ss.State, criteria.State, StringComparison.OrdinalIgnoreCase))
-                        return false;
-                    return true;
-                };
-            }
-            default:
-                return (_, _) => false;
-        }
-    }
 
     private static int LowerBoundTimestamp(long[] sortedTimestamps, long value)
     {
@@ -1788,22 +1265,26 @@ public class DeduplicationService : IDeduplicationService
                 && Math.Abs(a.Insulin.Value - b.Insulin.Value) <= Tolerance(a.InsulinTolerance, b.InsulinTolerance),
             RecordType.CarbIntake => a.Carbs.HasValue && b.Carbs.HasValue
                 && Math.Abs(a.Carbs.Value - b.Carbs.Value) <= Tolerance(a.CarbsTolerance, b.CarbsTolerance),
-            // A correction-only calculation has no carb input, which BuildCriteria reports as 0, so
+            // A correction-only calculation has no carb input, which the mapper reports as 0, so
             // every such calculation in a ten-minute span would compare exactly equal to every
             // other. Only a calculation that actually carries carbs can wide-match.
             RecordType.BolusCalculation => a.Carbs.HasValue && b.Carbs.HasValue
                 && Math.Abs(a.Carbs.Value - b.Carbs.Value) <= Tolerance(a.CarbsTolerance, b.CarbsTolerance)
                 && (!exact || (a.Carbs.Value > 0 && b.Carbs.Value > 0)),
-            // The event type is the whole value here, so exact mode adds only a presence check.
+            // The event type is the whole value here, so an absent one leaves nothing to compare and
+            // every such event in the window would read as equal to every other.
             // Distinguishing two same-type events relies on the single-candidate and disjoint-source
             // guards instead: when a type genuinely repeats within ten minutes both connectors
             // report both occurrences, which puts two candidates in range and refuses the match.
-            RecordType.DeviceEvent => (!exact || !string.IsNullOrEmpty(a.EventType))
+            RecordType.DeviceEvent => !string.IsNullOrEmpty(a.EventType)
                 && string.Equals(a.EventType, b.EventType, StringComparison.OrdinalIgnoreCase),
             RecordType.Note => true,
-            RecordType.StateSpan => a.Category == b.Category
-                && (string.IsNullOrEmpty(a.State) || string.IsNullOrEmpty(b.State)
-                    || string.Equals(a.State, b.State, StringComparison.OrdinalIgnoreCase)),
+            // An unparseable category maps to null, so null == null would collapse every state span
+            // whose category the mapper could not read into one group. The states must agree
+            // outright: treating an absent one as a wildcard makes the result depend on which span
+            // is the argument, and the merge pass compares stored spans in both orders.
+            RecordType.StateSpan => a.Category.HasValue && a.Category == b.Category
+                && string.Equals(a.State, b.State, StringComparison.OrdinalIgnoreCase),
             _ => false
         };
     }
@@ -1818,17 +1299,37 @@ public class DeduplicationService : IDeduplicationService
             .OrderBy(static lr => lr.SourceTimestamp)
             .ToListAsync(cancellationToken);
 
-        return entities.Select(e => new LinkedRecord
+        return entities
+            .Select(e => (Entity: e, Type: ParseRecordType(e.RecordType)))
+            .Where(static x => x.Type.HasValue)
+            .Select(x => new LinkedRecord
+            {
+                Id = x.Entity.Id.ToString(),
+                CanonicalId = x.Entity.CanonicalId,
+                RecordType = x.Type!.Value,
+                RecordId = x.Entity.RecordId,
+                SourceTimestamp = x.Entity.SourceTimestamp,
+                DataSource = x.Entity.DataSource,
+                IsPrimary = x.Entity.IsPrimary,
+                CreatedAt = x.Entity.SysCreatedAt
+            });
+    }
+
+    /// <summary>
+    /// The <see cref="RecordType"/> a <c>linked_records.record_type</c> string names, or null when
+    /// the column holds a value outside the enum. The column's surface is broader than the enum —
+    /// it carries whatever earlier versions wrote — and one such row must neither fail a read nor
+    /// block a tenant's remaining reconcile batches, so every caller skips a null.
+    /// </summary>
+    private RecordType? ParseRecordType(string recordType)
+    {
+        if (Enum.TryParse<RecordType>(recordType, ignoreCase: true, out var type))
         {
-            Id = e.Id.ToString(),
-            CanonicalId = e.CanonicalId,
-            RecordType = Enum.Parse<RecordType>(e.RecordType, ignoreCase: true),
-            RecordId = e.RecordId,
-            SourceTimestamp = e.SourceTimestamp,
-            DataSource = e.DataSource,
-            IsPrimary = e.IsPrimary,
-            CreatedAt = e.SysCreatedAt
-        });
+            return type;
+        }
+
+        _logger.LogWarning("Skipping linked_records row with unknown RecordType '{RecordType}'", recordType);
+        return null;
     }
 
     /// <inheritdoc />
@@ -1837,7 +1338,7 @@ public class DeduplicationService : IDeduplicationService
         Guid recordId,
         CancellationToken cancellationToken = default)
     {
-        var recordTypeStr = recordType.ToString().ToLowerInvariant();
+        var recordTypeStr = RecordTypeKeys.Key(recordType);
 
         var entity = await _context.LinkedRecords
             .FirstOrDefaultAsync(lr =>
@@ -1865,8 +1366,9 @@ public class DeduplicationService : IDeduplicationService
         Guid canonicalId,
         CancellationToken cancellationToken = default)
     {
+        var key = RecordTypeKeys.Key(RecordType.StateSpan);
         var linkedRecords = await _context.LinkedRecords
-            .Where(lr => lr.CanonicalId == canonicalId && lr.RecordType == "statespan")
+            .Where(lr => lr.CanonicalId == canonicalId && lr.RecordType == key)
             .OrderBy(static lr => lr.SourceTimestamp)
             .ToListAsync(cancellationToken);
 
@@ -1890,6 +1392,138 @@ public class DeduplicationService : IDeduplicationService
         return MergeStateSpans(sortedStateSpans, canonicalId);
     }
 
+    private delegate Task<(int processed, int groups, int linked, int duplicates)> PhaseRunner(
+        DeduplicationService service,
+        int totalRecords,
+        int startOffset,
+        IProgress<DeduplicationProgress>? progress,
+        CancellationToken ct);
+
+    /// <summary>
+    /// One record type's <see cref="DeduplicateAllAsync"/> phase. <see cref="Name"/> is reported as
+    /// <see cref="DeduplicationProgress.CurrentPhase"/>, so callers observe it.
+    /// <see cref="RecordIds"/> is every id a link of this type can point at: the type's rows with
+    /// <see cref="NocturneDbContext.SoftDeleteFilterKey"/> lifted, because a soft-deleted record is
+    /// still linked. Tenant isolation stays on, which the <see cref="ITenantScoped"/> constraint on
+    /// <see cref="Phase{TEntity}"/> is what guarantees.
+    /// </summary>
+    private sealed record TypePhase(
+        RecordType RecordType,
+        string Name,
+        Func<NocturneDbContext, CancellationToken, Task<int>> CountAsync,
+        Func<NocturneDbContext, IQueryable<Guid>> RecordIds,
+        PhaseRunner RunAsync);
+
+    /// <summary>
+    /// Builds one <see cref="TypePhase"/>. <paramref name="timestamp"/> both orders the query and
+    /// supplies the event time, so a type whose event time is not <c>Timestamp</c> states it once;
+    /// <paramref name="id"/> serves the same two purposes.
+    /// </summary>
+    private static TypePhase Phase<TEntity>(
+        RecordType recordType,
+        string name,
+        Func<NocturneDbContext, IQueryable<TEntity>> set,
+        Expression<Func<TEntity, DateTime>> timestamp,
+        Expression<Func<TEntity, Guid>> id,
+        Func<TEntity, string?> dataSource,
+        Func<TEntity, MatchCriteria> criteria) where TEntity : class, ITenantScoped
+    {
+        var eventTime = timestamp.Compile();
+        var recordId = id.Compile();
+
+        return new TypePhase(
+            recordType,
+            name,
+            (context, ct) => set(context).CountAsync(ct),
+            context => set(context)
+                .IgnoreQueryFilters([NocturneDbContext.SoftDeleteFilterKey])
+                .Select(id),
+            (service, totalRecords, startOffset, progress, ct) => service.DeduplicateTypeAsync(
+                recordType,
+                set(service._context),
+                timestamp,
+                e => new DeduplicationInput(
+                    recordId(e),
+                    new DateTimeOffset(eventTime(e), TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                    dataSource(e) ?? DeduplicationInput.UnknownDataSource,
+                    criteria(e)),
+                name, totalRecords, startOffset, progress, ct));
+    }
+
+    /// <summary>
+    /// Every record type <see cref="DeduplicateAllAsync"/> passes over, in processing order.
+    /// MeterGlucose was previously processed via DeduplicateEntriesAsync alongside SensorGlucose,
+    /// but there is no <see cref="RecordType"/> value for it, and the old code also double-processed
+    /// SensorGlucose (once in Entries, once standalone). MeterGlucose dedup is intentionally
+    /// dropped; add a <see cref="RecordType"/> if it is needed in the future.
+    /// </summary>
+    private static readonly TypePhase[] TypePhases =
+    [
+        Phase(RecordType.SensorGlucose, "SensorGlucose",
+            static c => c.SensorGlucose, static e => e.Timestamp,
+            static e => e.Id, static e => e.DataSource, MatchCriteriaMapper.From),
+        Phase(RecordType.Bolus, "Boluses",
+            static c => c.Boluses, static b => b.Timestamp,
+            static b => b.Id, static b => b.DataSource, MatchCriteriaMapper.From),
+        Phase(RecordType.CarbIntake, "CarbIntakes",
+            static c => c.CarbIntakes, static c => c.Timestamp,
+            static c => c.Id, static c => c.DataSource, MatchCriteriaMapper.From),
+        Phase(RecordType.BGCheck, "BGChecks",
+            static c => c.BGChecks, static bg => bg.Timestamp,
+            static bg => bg.Id, static bg => bg.DataSource, MatchCriteriaMapper.From),
+        Phase(RecordType.DeviceEvent, "DeviceEvents",
+            static c => c.DeviceEvents, static d => d.Timestamp,
+            static d => d.Id, static d => d.DataSource, MatchCriteriaMapper.From),
+        Phase(RecordType.Note, "Notes",
+            static c => c.Notes, static n => n.Timestamp,
+            static n => n.Id, static n => n.DataSource, static _ => MatchCriteriaMapper.ForNote()),
+        Phase(RecordType.BolusCalculation, "BolusCalculations",
+            static c => c.BolusCalculations, static bc => bc.Timestamp,
+            static bc => bc.Id, static bc => bc.DataSource, MatchCriteriaMapper.From),
+        Phase(RecordType.TempBasal, "TempBasals",
+            static c => c.TempBasals, static t => t.StartTimestamp,
+            static t => t.Id, static t => t.DataSource, MatchCriteriaMapper.From),
+        Phase(RecordType.StateSpan, "StateSpans",
+            static c => c.StateSpans, static s => s.StartTimestamp,
+            static s => s.Id, static s => s.Source, MatchCriteriaMapper.From)
+    ];
+
+    /// <summary>
+    /// The record types <see cref="DeduplicateAllAsync"/> covers, in processing order. Internal so
+    /// a test can drive itself off the registry instead of restating it.
+    /// </summary>
+    internal static IReadOnlyList<RecordType> DeduplicatedRecordTypes { get; } =
+        [.. TypePhases.Select(static p => p.RecordType)];
+
+    /// <summary>
+    /// Deletes the links of <paramref name="context"/>'s tenant that have nothing left to point at:
+    /// a record id no longer in its type's table, and a record type no <see cref="RecordType"/>
+    /// member names, which no caller can read back — <see cref="GetLinkedRecordsAsync"/> drops a row
+    /// whose key does not parse. A soft-deleted record is not an orphan.
+    /// </summary>
+    /// <returns>The number of links deleted.</returns>
+    public static async Task<int> DeleteOrphanedLinksAsync(
+        NocturneDbContext context, CancellationToken ct = default)
+    {
+        var namedTypes = Enum.GetValues<RecordType>().Select(RecordTypeKeys.Key).ToList();
+
+        var deleted = await context.LinkedRecords
+            .Where(lr => !namedTypes.Contains(lr.RecordType))
+            .ExecuteDeleteAsync(ct);
+
+        foreach (var phase in TypePhases)
+        {
+            var recordTypeStr = RecordTypeKeys.Key(phase.RecordType);
+            var recordIds = phase.RecordIds(context);
+
+            deleted += await context.LinkedRecords
+                .Where(lr => lr.RecordType == recordTypeStr && !recordIds.Contains(lr.RecordId))
+                .ExecuteDeleteAsync(ct);
+        }
+
+        return deleted;
+    }
+
     /// <inheritdoc />
     public async Task<DeduplicationResult> DeduplicateAllAsync(
         IProgress<DeduplicationProgress>? progress = null,
@@ -1899,161 +1533,27 @@ public class DeduplicationService : IDeduplicationService
 
         try
         {
-            var stateSpanCount = await _context.StateSpans.CountAsync(cancellationToken);
-            var sensorGlucoseCount = await _context.SensorGlucose.CountAsync(cancellationToken);
-            var bolusCount = await _context.Boluses.CountAsync(cancellationToken);
-            var carbIntakeCount = await _context.CarbIntakes.CountAsync(cancellationToken);
-            var bgCheckCount = await _context.BGChecks.CountAsync(cancellationToken);
-            var deviceEventCount = await _context.DeviceEvents.CountAsync(cancellationToken);
-            var noteCount = await _context.Notes.CountAsync(cancellationToken);
-            var bolusCalcCount = await _context.BolusCalculations.CountAsync(cancellationToken);
-            var tempBasalCount = await _context.TempBasals.CountAsync(cancellationToken);
-            // NOTE: MeterGlucose was previously processed via DeduplicateEntriesAsync alongside
-            // SensorGlucose, but there is no RecordType.MeterGlucose enum value. The old code also
-            // double-processed SensorGlucose (once in Entries, once standalone). MeterGlucose dedup
-            // is intentionally dropped; add a RecordType if it's needed in the future.
-            var totalRecords = stateSpanCount + sensorGlucoseCount + bolusCount + carbIntakeCount
-                + bgCheckCount + deviceEventCount + noteCount + bolusCalcCount + tempBasalCount;
+            var totalRecords = 0;
+            foreach (var phase in TypePhases)
+            {
+                totalRecords += await phase.CountAsync(_context, cancellationToken);
+            }
 
             var processed = 0;
             var groupsCreated = 0;
             var recordsLinked = 0;
             var duplicateGroups = 0;
+            var processedByType = new Dictionary<RecordType, int>();
 
-            // --- SensorGlucose ---
-            var sensorGlucoseResult = await DeduplicateTypeAsync(
-                RecordType.SensorGlucose,
-                _context.SensorGlucose.OrderBy(e => e.Timestamp),
-                e => new DeduplicationInput(
-                    e.Id,
-                    new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                    e.DataSource ?? DeduplicationInput.UnknownDataSource,
-                    BuildCriteria(e)),
-                "SensorGlucose", totalRecords, processed, progress, cancellationToken);
-            processed += sensorGlucoseResult.processed;
-            groupsCreated += sensorGlucoseResult.groups;
-            recordsLinked += sensorGlucoseResult.linked;
-            duplicateGroups += sensorGlucoseResult.duplicates;
-
-            // --- Boluses ---
-            var bolusResult = await DeduplicateTypeAsync(
-                RecordType.Bolus,
-                _context.Boluses.OrderBy(b => b.Timestamp),
-                b => new DeduplicationInput(
-                    b.Id,
-                    new DateTimeOffset(b.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                    b.DataSource ?? DeduplicationInput.UnknownDataSource,
-                    BuildCriteria(b)),
-                "Boluses", totalRecords, processed, progress, cancellationToken);
-            processed += bolusResult.processed;
-            groupsCreated += bolusResult.groups;
-            recordsLinked += bolusResult.linked;
-            duplicateGroups += bolusResult.duplicates;
-
-            // --- CarbIntakes ---
-            var carbIntakeResult = await DeduplicateTypeAsync(
-                RecordType.CarbIntake,
-                _context.CarbIntakes.OrderBy(c => c.Timestamp),
-                c => new DeduplicationInput(
-                    c.Id,
-                    new DateTimeOffset(c.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                    c.DataSource ?? DeduplicationInput.UnknownDataSource,
-                    BuildCriteria(c)),
-                "CarbIntakes", totalRecords, processed, progress, cancellationToken);
-            processed += carbIntakeResult.processed;
-            groupsCreated += carbIntakeResult.groups;
-            recordsLinked += carbIntakeResult.linked;
-            duplicateGroups += carbIntakeResult.duplicates;
-
-            // --- BGChecks ---
-            var bgCheckResult = await DeduplicateTypeAsync(
-                RecordType.BGCheck,
-                _context.BGChecks.OrderBy(bg => bg.Timestamp),
-                bg => new DeduplicationInput(
-                    bg.Id,
-                    new DateTimeOffset(bg.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                    bg.DataSource ?? DeduplicationInput.UnknownDataSource,
-                    BuildCriteria(bg)),
-                "BGChecks", totalRecords, processed, progress, cancellationToken);
-            processed += bgCheckResult.processed;
-            groupsCreated += bgCheckResult.groups;
-            recordsLinked += bgCheckResult.linked;
-            duplicateGroups += bgCheckResult.duplicates;
-
-            // --- DeviceEvents ---
-            var deviceEventResult = await DeduplicateTypeAsync(
-                RecordType.DeviceEvent,
-                _context.DeviceEvents.OrderBy(d => d.Timestamp),
-                d => new DeduplicationInput(
-                    d.Id,
-                    new DateTimeOffset(d.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                    d.DataSource ?? DeduplicationInput.UnknownDataSource,
-                    BuildCriteria(d)),
-                "DeviceEvents", totalRecords, processed, progress, cancellationToken);
-            processed += deviceEventResult.processed;
-            groupsCreated += deviceEventResult.groups;
-            recordsLinked += deviceEventResult.linked;
-            duplicateGroups += deviceEventResult.duplicates;
-
-            // --- Notes ---
-            var noteResult = await DeduplicateTypeAsync(
-                RecordType.Note,
-                _context.Notes.OrderBy(n => n.Timestamp),
-                n => new DeduplicationInput(
-                    n.Id,
-                    new DateTimeOffset(n.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                    n.DataSource ?? DeduplicationInput.UnknownDataSource,
-                    BuildNoteCriteria()),
-                "Notes", totalRecords, processed, progress, cancellationToken);
-            processed += noteResult.processed;
-            groupsCreated += noteResult.groups;
-            recordsLinked += noteResult.linked;
-            duplicateGroups += noteResult.duplicates;
-
-            // --- BolusCalculations ---
-            var bolusCalcResult = await DeduplicateTypeAsync(
-                RecordType.BolusCalculation,
-                _context.BolusCalculations.OrderBy(bc => bc.Timestamp),
-                bc => new DeduplicationInput(
-                    bc.Id,
-                    new DateTimeOffset(bc.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                    bc.DataSource ?? DeduplicationInput.UnknownDataSource,
-                    BuildCriteria(bc)),
-                "BolusCalculations", totalRecords, processed, progress, cancellationToken);
-            processed += bolusCalcResult.processed;
-            groupsCreated += bolusCalcResult.groups;
-            recordsLinked += bolusCalcResult.linked;
-            duplicateGroups += bolusCalcResult.duplicates;
-
-            // --- TempBasals ---
-            var tempBasalResult = await DeduplicateTypeAsync(
-                RecordType.TempBasal,
-                _context.TempBasals.OrderBy(t => t.StartTimestamp),
-                t => new DeduplicationInput(
-                    t.Id,
-                    new DateTimeOffset(t.StartTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                    t.DataSource ?? DeduplicationInput.UnknownDataSource,
-                    BuildCriteria(t)),
-                "TempBasals", totalRecords, processed, progress, cancellationToken);
-            processed += tempBasalResult.processed;
-            groupsCreated += tempBasalResult.groups;
-            recordsLinked += tempBasalResult.linked;
-            duplicateGroups += tempBasalResult.duplicates;
-
-            // --- StateSpans ---
-            var stateSpanResult = await DeduplicateTypeAsync(
-                RecordType.StateSpan,
-                _context.StateSpans.OrderBy(s => s.StartTimestamp),
-                s => new DeduplicationInput(
-                    s.Id,
-                    new DateTimeOffset(s.StartTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                    s.Source ?? DeduplicationInput.UnknownDataSource,
-                    BuildCriteria(s)),
-                "StateSpans", totalRecords, processed, progress, cancellationToken);
-            processed += stateSpanResult.processed;
-            groupsCreated += stateSpanResult.groups;
-            recordsLinked += stateSpanResult.linked;
-            duplicateGroups += stateSpanResult.duplicates;
+            foreach (var phase in TypePhases)
+            {
+                var result = await phase.RunAsync(this, totalRecords, processed, progress, cancellationToken);
+                processedByType[phase.RecordType] = result.processed;
+                processed += result.processed;
+                groupsCreated += result.groups;
+                recordsLinked += result.linked;
+                duplicateGroups += result.duplicates;
+            }
 
             stopwatch.Stop();
 
@@ -2068,17 +1568,15 @@ public class DeduplicationService : IDeduplicationService
                 RecordsLinked = recordsLinked,
                 DuplicateGroupsFound = duplicateGroups,
                 Duration = stopwatch.Elapsed,
-                EntriesProcessed = sensorGlucoseResult.processed,
-                TreatmentsProcessed = 0,
-                StateSpansProcessed = stateSpanResult.processed,
-                SensorGlucoseProcessed = sensorGlucoseResult.processed,
-                BolusesProcessed = bolusResult.processed,
-                CarbIntakesProcessed = carbIntakeResult.processed,
-                BGChecksProcessed = bgCheckResult.processed,
-                DeviceEventsProcessed = deviceEventResult.processed,
-                NotesProcessed = noteResult.processed,
-                BolusCalculationsProcessed = bolusCalcResult.processed,
-                TempBasalsProcessed = tempBasalResult.processed,
+                StateSpansProcessed = processedByType[RecordType.StateSpan],
+                SensorGlucoseProcessed = processedByType[RecordType.SensorGlucose],
+                BolusesProcessed = processedByType[RecordType.Bolus],
+                CarbIntakesProcessed = processedByType[RecordType.CarbIntake],
+                BGChecksProcessed = processedByType[RecordType.BGCheck],
+                DeviceEventsProcessed = processedByType[RecordType.DeviceEvent],
+                NotesProcessed = processedByType[RecordType.Note],
+                BolusCalculationsProcessed = processedByType[RecordType.BolusCalculation],
+                TempBasalsProcessed = processedByType[RecordType.TempBasal],
                 Success = true
             };
         }
@@ -2232,9 +1730,19 @@ public class DeduplicationService : IDeduplicationService
                && owner == tenantId;
     }
 
+    /// <summary>
+    /// Pages <paramref name="set"/> in <paramref name="timestamp"/> order into
+    /// <see cref="DeduplicateBatchAsync"/>. A page ends on a whole timestamp — the run of rows
+    /// sharing the last one is drained with it — so the cursor can advance strictly past it and no
+    /// row is read twice or skipped, without needing an order over record ids that both the
+    /// database and the CLR agree on. A canonical group split across pages still collapses: each
+    /// page's links are persisted before the next page's matching-window query re-reads them,
+    /// the same seam <see cref="DeduplicateBatchAsync"/> already documents for its own chunking.
+    /// </summary>
     private async Task<(int processed, int groups, int linked, int duplicates)> DeduplicateTypeAsync<TEntity>(
         RecordType recordType,
-        IQueryable<TEntity> query,
+        IQueryable<TEntity> set,
+        Expression<Func<TEntity, DateTime>> timestamp,
         Func<TEntity, DeduplicationInput> toInput,
         string phaseName,
         int totalRecords,
@@ -2243,19 +1751,56 @@ public class DeduplicationService : IDeduplicationService
         CancellationToken ct) where TEntity : class
     {
         const int batchSize = 500;
-        var allEntities = await query.ToListAsync(ct);
-        var inputs = allEntities.Select(toInput).ToList();
+
+        // One paging predicate serves every entity type, so the ordering column arrives as a
+        // property name rather than an expression to compose into it.
+        if (timestamp.Body is not MemberExpression timestampMember)
+        {
+            throw new ArgumentException(
+                "The ordering expression must be a simple member access (e => e.Timestamp): the "
+                + "keyset predicate reads that property by name.",
+                nameof(timestamp));
+        }
+
+        var timestampProperty = timestampMember.Member.Name;
+        var eventTime = timestamp.Compile();
+
+        var ordered = set
+            .AsNoTracking()
+            .OrderBy(e => EF.Property<DateTime>(e, timestampProperty));
 
         var totalProcessed = 0;
         var totalGroups = 0;
         var totalLinked = 0;
         var totalDuplicates = 0;
+        DateTime? cursor = null;
 
-        foreach (var chunk in inputs.Chunk(batchSize))
+        while (true)
         {
             ct.ThrowIfCancellationRequested();
 
-            var result = await DeduplicateBatchAsync(recordType, chunk, ct);
+            var page = await (cursor is { } after
+                    ? ordered.Where(e => EF.Property<DateTime>(e, timestampProperty) > after)
+                    : ordered)
+                .Take(batchSize)
+                .ToListAsync(ct);
+
+            if (page.Count == 0)
+                break;
+
+            var pageEnd = eventTime(page[^1]);
+            if (page.Count == batchSize)
+            {
+                var tail = await ordered
+                    .Where(e => EF.Property<DateTime>(e, timestampProperty) == pageEnd)
+                    .ToListAsync(ct);
+
+                page = [.. page.Where(e => eventTime(e) < pageEnd), .. tail];
+            }
+
+            cursor = pageEnd;
+
+            var result = await DeduplicateBatchAsync(recordType, page.Select(toInput).ToList(), ct);
             totalProcessed += result.Processed;
             totalGroups += result.GroupsCreated;
             totalLinked += result.RecordsLinked;
@@ -2283,82 +1828,6 @@ public class DeduplicationService : IDeduplicationService
         }
 
         return (totalProcessed, totalGroups, totalLinked, totalDuplicates);
-    }
-
-    private static Treatment MergeTreatments(List<Treatment> treatments, Guid canonicalId)
-    {
-        if (treatments.Count == 0)
-            throw new ArgumentException("Cannot merge empty list of treatments");
-
-        // For basal-related treatments, prefer the highest priority type (e.g., Temp Basal over Basal)
-        var primary = treatments[0];
-        var preferredEventType = GetPreferredEventType(treatments);
-
-        // When the preferred event type differs from the primary (e.g., Temp Basal preferred but
-        // Basal is first by timestamp), use basal-related fields from the preferred-type treatment
-        // so Duration/Percent/Rate come from the correct source.
-        var basalSource = primary;
-        if (preferredEventType != null && preferredEventType != primary.EventType)
-        {
-            basalSource = treatments.FirstOrDefault(t => t.EventType == preferredEventType) ?? primary;
-        }
-
-        var merged = new Treatment
-        {
-            Id = primary.Id,
-            Mills = primary.Mills,
-            Created_at = primary.Created_at,
-            EventType = preferredEventType,
-            Insulin = primary.Insulin,
-            Carbs = primary.Carbs,
-            Protein = primary.Protein,
-            Fat = primary.Fat,
-            Duration = basalSource.Duration,
-            EnteredBy = primary.EnteredBy,
-            Notes = primary.Notes,
-            Reason = primary.Reason,
-            Glucose = primary.Glucose,
-            GlucoseType = primary.GlucoseType,
-            Profile = primary.Profile,
-            Percent = basalSource.Percent,
-            Rate = basalSource.Rate,
-            DataSource = primary.DataSource,
-            AdditionalProperties = primary.AdditionalProperties != null
-                ? new Dictionary<string, object>(primary.AdditionalProperties)
-                : new(),
-            CanonicalId = canonicalId,
-            Sources = treatments.Select(t => t.DataSource).Where(s => s != null).Distinct().ToArray()!
-        };
-
-        // Enrich with data from other sources
-        foreach (var treatment in treatments.Skip(1))
-        {
-            merged.Notes ??= treatment.Notes;
-            merged.Reason ??= treatment.Reason;
-            merged.Glucose ??= treatment.Glucose;
-            merged.GlucoseType ??= treatment.GlucoseType;
-            merged.Profile ??= treatment.Profile;
-            merged.Protein ??= treatment.Protein;
-            merged.Fat ??= treatment.Fat;
-
-            // Enrich basal-related fields
-            merged.Duration ??= treatment.Duration;
-            merged.Percent ??= treatment.Percent;
-            merged.Rate ??= treatment.Rate;
-            merged.Carbs ??= treatment.Carbs;
-            merged.Insulin ??= treatment.Insulin;
-
-            // Merge additional properties
-            if (treatment.AdditionalProperties != null)
-            {
-                foreach (var kvp in treatment.AdditionalProperties)
-                {
-                    merged.AdditionalProperties.TryAdd(kvp.Key, kvp.Value);
-                }
-            }
-        }
-
-        return merged;
     }
 
     private static StateSpan MergeStateSpans(List<StateSpan> stateSpans, Guid canonicalId)
@@ -2403,49 +1872,6 @@ public class DeduplicationService : IDeduplicationService
         }
 
         return merged;
-    }
-
-    /// <summary>
-    /// Gets the priority for a basal-related type.
-    /// Higher values indicate higher priority (preferred when deduplicating).
-    /// </summary>
-    private static int GetBasalTypePriority(string? eventType)
-    {
-        if (string.IsNullOrEmpty(eventType))
-            return -1;
-
-        return BasalTypePriority.TryGetValue(eventType, out var priority) ? priority : -1;
-    }
-
-    /// <summary>
-    /// Gets the preferred event type when merging treatments.
-    /// For basal-related types, returns the highest priority type among all treatments.
-    /// For other types, returns the primary treatment's event type.
-    /// </summary>
-    private static string? GetPreferredEventType(List<Treatment> treatments)
-    {
-        if (treatments.Count == 0)
-            return null;
-
-        var primary = treatments[0];
-
-        // Check if any treatment is a basal-related type
-        var basalTypes = treatments
-            .Where(t => !string.IsNullOrEmpty(t.EventType) && BasalRelatedTypes.Contains(t.EventType))
-            .Select(t => t.EventType!)
-            .Distinct()
-            .ToList();
-
-        if (basalTypes.Count == 0)
-        {
-            // No basal-related types, use primary's event type
-            return primary.EventType;
-        }
-
-        // Return the highest priority basal type
-        return basalTypes
-            .OrderByDescending(GetBasalTypePriority)
-            .First();
     }
 
     /// <summary>

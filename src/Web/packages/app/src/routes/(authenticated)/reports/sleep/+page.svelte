@@ -19,19 +19,17 @@
     Activity,
   } from "lucide-svelte";
   import {
-    ACTOGRAM_PADDING_DAYS,
     Actogram,
     buildDayRange,
     type ActogramRowContext,
   } from "$lib/components/actogram";
-  import { MS_PER_DAY, MS_PER_HOUR, HOURS_PER_ROW } from "$lib/components/actogram/actogram";
-  import { getActogramData } from "$api/actogram.remote";
+  import { MS_PER_HOUR, HOURS_PER_ROW } from "$lib/components/actogram/actogram";
   import { getTrends } from "$api/generated/sleepReports.generated.remote";
-  import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
+  import { useActogramReport } from "$lib/hooks/actogram-report.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
   import { resolve } from "$app/paths";
   import { dayKeyFor, buildNightsByDayKey } from "$lib/utils/sleep-night-mapping";
-  import { bgDelta, bgLabel } from "$lib/utils/formatting";
+  import { bgDelta, bgLabel, formatShortDate } from "$lib/utils/formatting";
   import SleepSummaryTile, {
     type TileDelta,
   } from "$lib/components/reports/sleep/SleepSummaryTile.svelte";
@@ -43,22 +41,8 @@
 
   const VISIBLE_DAYS = 14;
 
-  const reportsParams = requireDateParamsContext(14);
-
-  /** Padded window the actogram loads, so its double-plot rows have context either side. */
-  const paddedRangeMillis = $derived({
-    from: reportsParams.dateRangeMillis.from - ACTOGRAM_PADDING_DAYS * MS_PER_DAY,
-    to: reportsParams.dateRangeMillis.to + ACTOGRAM_PADDING_DAYS * MS_PER_DAY,
-  });
-
-  const actogramResource = contextResource(
-    () =>
-      getActogramData({
-        from: paddedRangeMillis.from,
-        to: paddedRangeMillis.to,
-      }),
-    { errorTitle: "Error Loading Sleep Report" }
-  );
+  const report = useActogramReport("Error Loading Sleep Report");
+  const { params: reportsParams, resource: actogramResource } = report;
 
   /**
    * "All sources" is a frontend-only sentinel; omitted from the request when
@@ -97,18 +81,6 @@
         source: sourceFilter === "all" ? undefined : sourceFilter,
       }),
     { errorTitle: "Error Loading Sleep Report" }
-  );
-
-  // Actogram rows run newest-first (most recent night on top), descending into
-  // the past. Anchored at the selected range end — never the future — so padding
-  // days after `to` are not shown as rows; the padded fetch window above still
-  // feeds each row's next-day double-plot. Extends ACTOGRAM_PADDING_DAYS before
-  // the range start for scroll-back context.
-  const days = $derived(
-    buildDayRange(
-      reportsParams.dateRangeMillis.from - ACTOGRAM_PADDING_DAYS * MS_PER_DAY,
-      reportsParams.dateRangeMillis.to
-    ).reverse()
   );
 
   // Unpadded, user-selected day range for the composition chart — includes
@@ -152,7 +124,7 @@
   }
 
   function formatRowLabelDate(day: Date): string {
-    return day.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    return formatShortDate(day);
   }
 
   // --- Empty-state detection -------------------------------------------------
@@ -242,230 +214,226 @@
   />
 </svelte:head>
 
-{#await actogramResource then actogramData}
-  {#if actogramData}
-  <div class="@container container mx-auto space-y-6 p-3 @md:p-6 max-w-7xl">
-    <!-- Header -->
-    <div>
-      <h1 class="text-2xl @md:text-3xl font-bold">Sleep & Overnight</h1>
-      <p class="text-muted-foreground">
-        Sleep patterns with overnight glucose overlay
-      </p>
+<div class="@container container mx-auto space-y-6 p-3 @md:p-6 max-w-7xl">
+  <!-- Header -->
+  <div>
+    <h1 class="text-2xl @md:text-3xl font-bold">Sleep & Overnight</h1>
+    <p class="text-muted-foreground">
+      Sleep patterns with overnight glucose overlay
+    </p>
+  </div>
+
+  {#if fullyEmpty}
+    <Card>
+      <CardContent class="p-12 text-center">
+        <div
+          class="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-muted"
+        >
+          <Moon class="h-10 w-10 text-muted-foreground" />
+        </div>
+        <h2 class="mb-2 text-xl font-semibold">No sleep data</h2>
+        <p class="mx-auto max-w-md text-muted-foreground">
+          Sleep sessions arrive from connected sources (Apple Health, Health
+          Connect, Fitbit, Oura, Garmin, Samsung) or manual entries. If
+          tracking started recently, try a larger date range.
+        </p>
+      </CardContent>
+    </Card>
+  {:else}
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-2 @sm:grid-cols-4 gap-4">
+      {#if hasTrendsNights}
+        <SleepSummaryTile
+          icon={Moon}
+          iconClass="text-indigo-500"
+          label="Average Sleep"
+          value={formatHoursMinutes((sleepSummary?.meanAsleepMinutes ?? 0) / 60)}
+          caption="per night"
+        />
+      {/if}
+
+      <SleepSummaryTile
+        icon={Calendar}
+        label="Nights Tracked"
+        value={`${sleepSummary?.nightCount ?? 0} of ${sleepSummary?.daysInRange ?? 0}`}
+        caption={nightsTrackedCaption}
+      />
+
+      {#if sleepSummary?.meanScore != null}
+        <SleepSummaryTile
+          icon={Sparkles}
+          label="Sleep Score"
+          value={Math.round(sleepSummary.meanScore).toString()}
+          caption={scoreCaption}
+          delta={scoreDelta}
+        />
+      {/if}
+
+      {#if sleepSummary?.meanTirPct != null}
+        <SleepSummaryTile
+          icon={Gauge}
+          label="Overnight TIR"
+          value={`${Math.round(sleepSummary.meanTirPct)}%`}
+          caption={tirCaption}
+          delta={tirDelta}
+        />
+      {/if}
+
+      {#if sleepSummary?.meanDawnRiseMg != null}
+        <SleepSummaryTile
+          icon={Sunrise}
+          label="Dawn Rise"
+          value={bgDelta(sleepSummary.meanDawnRiseMg, true)}
+          unit={bgLabel()}
+          caption="avg pre-wake change"
+          delta={dawnDelta}
+        />
+      {/if}
+
+      <!-- meanTirPct is non-null exactly when overnight CGM data exists; hypo
+           counts are only meaningful on CGM nights, so the lows tile shares
+           the TIR tile's gate. -->
+      {#if sleepSummary?.meanTirPct != null}
+        <SleepSummaryTile
+          icon={TriangleAlert}
+          label="Overnight Lows"
+          value={(sleepSummary?.totalHypoCount ?? 0).toString()}
+          caption={lowsCaption}
+        />
+      {/if}
+
+      {#if sleepSummary?.meanHrvMs != null}
+        <SleepSummaryTile
+          icon={Activity}
+          label="HRV"
+          value={Math.round(sleepSummary.meanHrvMs).toString()}
+          unit="ms"
+          caption="overnight average"
+        />
+      {/if}
     </div>
 
-    {#if fullyEmpty}
+    {#if hasTrendsNights && sleepWeeks.length > 0}
+      <!-- Weekly Breakdown -->
       <Card>
-        <CardContent class="p-12 text-center">
-          <div
-            class="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-muted"
-          >
-            <Moon class="h-10 w-10 text-muted-foreground" />
-          </div>
-          <h2 class="mb-2 text-xl font-semibold">No sleep data</h2>
-          <p class="mx-auto max-w-md text-muted-foreground">
-            Sleep sessions arrive from connected sources (Apple Health, Health
-            Connect, Fitbit, Oura, Garmin, Samsung) or manual entries. If
-            tracking started recently, try a larger date range.
-          </p>
+        <CardHeader>
+          <CardTitle class="flex items-center gap-2">
+            <CalendarRange class="h-5 w-5 text-indigo-500" />
+            Weekly Breakdown
+          </CardTitle>
+          <CardDescription>Each tracked night links to its full report.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <SleepWeeklyBreakdown weeks={sleepWeeks} nights={sleepNights} />
         </CardContent>
       </Card>
-    {:else}
-      <!-- Summary Cards -->
-      <div class="grid grid-cols-2 @sm:grid-cols-4 gap-4">
-        {#if hasTrendsNights}
-          <SleepSummaryTile
-            icon={Moon}
-            iconClass="text-indigo-500"
-            label="Average Sleep"
-            value={formatHoursMinutes((sleepSummary?.meanAsleepMinutes ?? 0) / 60)}
-            caption="per night"
-          />
-        {/if}
+    {/if}
 
-        <SleepSummaryTile
-          icon={Calendar}
-          label="Nights Tracked"
-          value={`${sleepSummary?.nightCount ?? 0} of ${sleepSummary?.daysInRange ?? 0}`}
-          caption={nightsTrackedCaption}
-        />
-
-        {#if sleepSummary?.meanScore != null}
-          <SleepSummaryTile
-            icon={Sparkles}
-            label="Sleep Score"
-            value={Math.round(sleepSummary.meanScore).toString()}
-            caption={scoreCaption}
-            delta={scoreDelta}
-          />
-        {/if}
-
-        {#if sleepSummary?.meanTirPct != null}
-          <SleepSummaryTile
-            icon={Gauge}
-            label="Overnight TIR"
-            value={`${Math.round(sleepSummary.meanTirPct)}%`}
-            caption={tirCaption}
-            delta={tirDelta}
-          />
-        {/if}
-
-        {#if sleepSummary?.meanDawnRiseMg != null}
-          <SleepSummaryTile
-            icon={Sunrise}
-            label="Dawn Rise"
-            value={bgDelta(sleepSummary.meanDawnRiseMg, true)}
-            unit={bgLabel()}
-            caption="avg pre-wake change"
-            delta={dawnDelta}
-          />
-        {/if}
-
-        <!-- meanTirPct is non-null exactly when overnight CGM data exists; hypo
-             counts are only meaningful on CGM nights, so the lows tile shares
-             the TIR tile's gate. -->
-        {#if sleepSummary?.meanTirPct != null}
-          <SleepSummaryTile
-            icon={TriangleAlert}
-            label="Overnight Lows"
-            value={(sleepSummary?.totalHypoCount ?? 0).toString()}
-            caption={lowsCaption}
-          />
-        {/if}
-
-        {#if sleepSummary?.meanHrvMs != null}
-          <SleepSummaryTile
-            icon={Activity}
-            label="HRV"
-            value={Math.round(sleepSummary.meanHrvMs).toString()}
-            unit="ms"
-            caption="overnight average"
-          />
-        {/if}
-      </div>
-
-      {#if hasTrendsNights && sleepWeeks.length > 0}
-        <!-- Weekly Breakdown -->
-        <Card>
-          <CardHeader>
-            <CardTitle class="flex items-center gap-2">
-              <CalendarRange class="h-5 w-5 text-indigo-500" />
-              Weekly Breakdown
-            </CardTitle>
-            <CardDescription>Each tracked night links to its full report.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <SleepWeeklyBreakdown weeks={sleepWeeks} nights={sleepNights} />
-          </CardContent>
-        </Card>
-      {/if}
-
-      {#if showCompositionCard}
-        <!-- Sleep Composition -->
-        <Card>
-          <CardHeader>
-            <CardTitle class="flex items-center gap-2">
-              <Moon class="h-5 w-5 text-indigo-500" />
-              Sleep Composition
-            </CardTitle>
-            {#if sourceFilter !== "all"}
-              <CardDescription>
-                Showing all {sourceLabel} sessions — nights aren't deduplicated across devices.
-              </CardDescription>
-            {/if}
-            <CardAction>
-              <Select.Root
-                type="single"
-                value={sourceFilter}
-                onValueChange={(v) =>
-                  (viewParams.source = v && v !== "all" ? (v as SleepSource) : null)}
-              >
-                <Select.Trigger class="w-44">
-                  {sourceLabel}
-                </Select.Trigger>
-                <Select.Content>
-                  {#each sourceOptions as opt (opt.value)}
-                    <Select.Item value={opt.value} label={opt.label} />
-                  {/each}
-                </Select.Content>
-              </Select.Root>
-            </CardAction>
-          </CardHeader>
-          <CardContent>
-            <SleepCompositionChart
-              nights={sleepNights}
-              days={selectedRangeDays}
-              meanDeepPct={sleepSummary?.meanDeepPct}
-              meanRemPct={sleepSummary?.meanRemPct}
-              referenceRanges={sleepSummary?.referenceRanges}
-              deepMinutesDelta={sleepSummary?.last7dVsPrior7d?.deepMinutesDelta}
-            />
-          </CardContent>
-        </Card>
-      {/if}
-
-      <!-- Actogram -->
+    {#if showCompositionCard}
+      <!-- Sleep Composition -->
       <Card>
         <CardHeader>
           <CardTitle class="flex items-center gap-2">
             <Moon class="h-5 w-5 text-indigo-500" />
-            Sleep Actogram
+            Sleep Composition
           </CardTitle>
+          {#if sourceFilter !== "all"}
+            <CardDescription>
+              Showing all {sourceLabel} sessions — nights aren't deduplicated across devices.
+            </CardDescription>
+          {/if}
+          <CardAction>
+            <Select.Root
+              type="single"
+              value={sourceFilter}
+              onValueChange={(v) =>
+                (viewParams.source = v && v !== "all" ? (v as SleepSource) : null)}
+            >
+              <Select.Trigger class="w-44">
+                {sourceLabel}
+              </Select.Trigger>
+              <Select.Content>
+                {#each sourceOptions as opt (opt.value)}
+                  <Select.Item value={opt.value} label={opt.label} />
+                {/each}
+              </Select.Content>
+            </Select.Root>
+          </CardAction>
         </CardHeader>
-        <CardContent class="w-full overflow-x-auto print:overflow-visible">
-          <Actogram
-            data={sleepPoints}
-            bgData={bgPoints}
-            {days}
-            thresholds={actogramResource.current?.thresholds}
-            rowHeight={48}
-            visibleCount={VISIBLE_DAYS}
-            initialOffset={0}
-          >
-            {#snippet tooltipValue({ point })}
-              {@const span = point as { mills: number; state: string }}
-              <div class="size-2 rounded-full bg-[var(--lane-color)]" data-lane={span.state.toLowerCase()}></div>
-              <span class="text-muted-foreground">Sleep</span>
-              <span class="ml-auto font-mono font-medium tabular-nums capitalize">{span.state.toLowerCase()}</span>
-            {/snippet}
-            {#snippet rowLabel({ day })}
-              {@const linkDate = nightDateByDayKey.get(dayKeyFor(day))}
-              {#if linkDate}
-                <a
-                  href={resolve("/(authenticated)/reports/sleep/[date]", { date: linkDate })}
-                  class="block text-xs text-muted-foreground text-right pr-2 hover:text-foreground hover:underline"
-                >
-                  {formatRowLabelDate(day)}
-                </a>
-              {:else}
-                <span class="block text-xs text-muted-foreground text-right pr-2">
-                  {formatRowLabelDate(day)}
-                </span>
-              {/if}
-            {/snippet}
-            {#snippet row(ctx: ActogramRowContext)}
-              {#each ctx.data as { point, hoursFromStart, isExtended }}
-                {@const span = point as { mills: number; startMills: number; endMills: number; state: string }}
-                {@const durationHours = (span.endMills - span.startMills) / MS_PER_HOUR}
-                {@const x = ctx.xScale(new Date(ctx.day.getTime() + hoursFromStart * MS_PER_HOUR))}
-                {@const endHours = hoursFromStart + durationHours}
-                {@const clampedEnd = Math.min(endHours, HOURS_PER_ROW)}
-                {@const x2 = ctx.xScale(new Date(ctx.day.getTime() + clampedEnd * MS_PER_HOUR))}
-                {@const rectWidth = Math.max(x2 - x, 1)}
-                <rect
-                  {x}
-                  y={4}
-                  width={rectWidth}
-                  height={ctx.height - 8}
-                  data-lane={span.state.toLowerCase()}
-                  class="fill-[var(--lane-color)]"
-                  opacity={isExtended ? 0.25 : 0.5}
-                />
-              {/each}
-            {/snippet}
-          </Actogram>
+        <CardContent>
+          <SleepCompositionChart
+            nights={sleepNights}
+            days={selectedRangeDays}
+            meanDeepPct={sleepSummary?.meanDeepPct}
+            meanRemPct={sleepSummary?.meanRemPct}
+            referenceRanges={sleepSummary?.referenceRanges}
+            deepMinutesDelta={sleepSummary?.last7dVsPrior7d?.deepMinutesDelta}
+          />
         </CardContent>
       </Card>
     {/if}
-  </div>
+
+    <!-- Actogram -->
+    <Card>
+      <CardHeader>
+        <CardTitle class="flex items-center gap-2">
+          <Moon class="h-5 w-5 text-indigo-500" />
+          Sleep Actogram
+        </CardTitle>
+      </CardHeader>
+      <CardContent class="w-full overflow-x-auto print:overflow-visible">
+        <Actogram
+          data={sleepPoints}
+          bgData={bgPoints}
+          days={report.days}
+          thresholds={actogramResource.current?.thresholds}
+          rowHeight={48}
+          visibleCount={VISIBLE_DAYS}
+          initialOffset={0}
+        >
+          {#snippet tooltipValue({ point })}
+            {@const span = point as { mills: number; state: string }}
+            <div class="size-2 rounded-full bg-[var(--lane-color)]" data-lane={span.state.toLowerCase()}></div>
+            <span class="text-muted-foreground">Sleep</span>
+            <span class="ml-auto font-mono font-medium tabular-nums capitalize">{span.state.toLowerCase()}</span>
+          {/snippet}
+          {#snippet rowLabel({ day })}
+            {@const linkDate = nightDateByDayKey.get(dayKeyFor(day))}
+            {#if linkDate}
+              <a
+                href={resolve("/(authenticated)/reports/sleep/[date]", { date: linkDate })}
+                class="block text-xs text-muted-foreground text-right pr-2 hover:text-foreground hover:underline"
+              >
+                {formatRowLabelDate(day)}
+              </a>
+            {:else}
+              <span class="block text-xs text-muted-foreground text-right pr-2">
+                {formatRowLabelDate(day)}
+              </span>
+            {/if}
+          {/snippet}
+          {#snippet row(ctx: ActogramRowContext)}
+            {#each ctx.data as { point, hoursFromStart, isExtended }}
+              {@const span = point as { mills: number; startMills: number; endMills: number; state: string }}
+              {@const durationHours = (span.endMills - span.startMills) / MS_PER_HOUR}
+              {@const x = ctx.xScale(new Date(ctx.day.getTime() + hoursFromStart * MS_PER_HOUR))}
+              {@const endHours = hoursFromStart + durationHours}
+              {@const clampedEnd = Math.min(endHours, HOURS_PER_ROW)}
+              {@const x2 = ctx.xScale(new Date(ctx.day.getTime() + clampedEnd * MS_PER_HOUR))}
+              {@const rectWidth = Math.max(x2 - x, 1)}
+              <rect
+                {x}
+                y={4}
+                width={rectWidth}
+                height={ctx.height - 8}
+                data-lane={span.state.toLowerCase()}
+                class="fill-[var(--lane-color)]"
+                opacity={isExtended ? 0.25 : 0.5}
+              />
+            {/each}
+          {/snippet}
+        </Actogram>
+      </CardContent>
+    </Card>
   {/if}
-{/await}
+</div>

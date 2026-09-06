@@ -13,7 +13,7 @@ namespace Nocturne.API.Models.Requests.V4;
 /// than sending a sentinel value.
 /// </remarks>
 /// <seealso cref="Nocturne.API.Controllers.V4.Devices.PumpSnapshotController"/>
-public class UpsertPumpSnapshotRequest
+public class UpsertPumpSnapshotRequest : IBulkUpsertRequest
 {
     /// <summary>
     /// When the pump status was read.

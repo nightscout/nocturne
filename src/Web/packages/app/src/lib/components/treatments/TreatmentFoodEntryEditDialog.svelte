@@ -12,6 +12,7 @@
   import { updateCarbIntakeFood } from "$api/generated/nutritions.generated.remote";
   import { getFood as getFoodById, getFoods as getAllFoods } from "$api/generated/foods.generated.remote";
   import { toast } from "svelte-sonner";
+  import { useToastSubmission } from "$lib/forms";
   import { AddFoodDialog } from "$lib/components/food";
 
   interface Props {
@@ -56,7 +57,7 @@
   let isLoadingFood = $state(false);
   let categories = $state<Record<string, Record<string, boolean>>>({});
 
-  let isSubmitting = $state(false);
+  const submission = useToastSubmission("Failed to update food entry");
 
   // Initialize form when entry changes
   $effect(() => {
@@ -184,15 +185,15 @@
 
   async function handleSubmit(event: SubmitEvent) {
     event.preventDefault();
-    if (!carbIntakeId || !entry?.id) return;
+    const foodEntryId = entry?.id;
+    if (!carbIntakeId || !foodEntryId) return;
 
-    isSubmitting = true;
-    try {
+    await submission.run(async () => {
       await updateCarbIntakeFood({
         id: carbIntakeId,
-        foodEntryId: entry.id,
+        foodEntryId,
         request: {
-          foodId: entry.foodId ?? null,
+          foodId: entry?.foodId ?? null,
           portions: submitPortions,
           carbs: submitCarbs,
           timeOffsetMinutes: editOffset ?? 0,
@@ -204,12 +205,7 @@
       toast.success("Food entry updated");
       onSave?.();
       resetAndClose();
-    } catch (err) {
-      console.error("Failed to update food entry:", err);
-      toast.error("Failed to update food entry");
-    } finally {
-      isSubmitting = false;
-    }
+    });
   }
 </script>
 
@@ -332,8 +328,8 @@
         <Button type="button" variant="outline" onclick={resetAndClose}>
           Cancel
         </Button>
-        <Button type="submit" disabled={isSubmitting}>
-          {#if isSubmitting}
+        <Button type="submit" disabled={submission.busy}>
+          {#if submission.busy}
             <Loader2 class="mr-2 h-4 w-4 animate-spin" />
             Saving...
           {:else}

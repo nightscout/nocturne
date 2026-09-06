@@ -6,7 +6,6 @@ namespace Nocturne.API.Models.Requests.V4;
 /// Request body for updating an existing basal insulin injection record via the V4 API.
 /// The injection is identified by the route-level ID parameter.
 /// </summary>
-/// <seealso cref="Validators.V4.UpdateBasalInjectionRequestValidator"/>
 /// <seealso cref="Nocturne.API.Controllers.V4.Treatments.BasalInjectionController"/>
 public class UpdateBasalInjectionRequest
 {

@@ -50,7 +50,7 @@ public class PasskeyServiceTests
         var service = CreateService();
 
         // Act
-        var credentials = await service.GetCredentialsAsync(_subjectId, _tenantId);
+        var credentials = await service.GetCredentialsAsync(_subjectId);
 
         // Assert - only returns credentials for the specified subject
         credentials.Should().HaveCount(2);
@@ -63,7 +63,7 @@ public class PasskeyServiceTests
     {
         var service = CreateService();
 
-        var credentials = await service.GetCredentialsAsync(_subjectId, _tenantId);
+        var credentials = await service.GetCredentialsAsync(_subjectId);
 
         credentials.Should().BeEmpty();
     }
@@ -82,7 +82,7 @@ public class PasskeyServiceTests
         await _dbContext.SaveChangesAsync();
 
         var service = CreateService();
-        var credentials = await service.GetCredentialsAsync(_subjectId, _tenantId);
+        var credentials = await service.GetCredentialsAsync(_subjectId);
 
         credentials.Should().HaveCount(2);
         credentials[0].Label.Should().Be("Newer");
@@ -329,7 +329,7 @@ public class PasskeyServiceTests
         var victimSubjectId = Guid.CreateVersion7();
 
         // A challenge minted for the victim — as the old caller-supplied subjectId allowed.
-        var options = await service.GenerateRegistrationOptionsAsync(victimSubjectId, "victim", _tenantId);
+        var options = await service.GenerateRegistrationOptionsAsync(victimSubjectId, "victim");
 
         var act = () => service.CompleteRegistrationAsync(
             "{}", options.ChallengeToken, _tenantId, expectedSubjectId: _subjectId);
@@ -364,7 +364,7 @@ public class PasskeyServiceTests
     {
         var service = CreateService();
 
-        var registration = await service.GenerateRegistrationOptionsAsync(_subjectId, "testuser", _tenantId);
+        var registration = await service.GenerateRegistrationOptionsAsync(_subjectId, "testuser");
 
         var act = () => service.CompleteAssertionAsync("{}", registration.ChallengeToken, _tenantId);
 
@@ -374,17 +374,76 @@ public class PasskeyServiceTests
 
     #endregion
 
+    #region DescribeRpIdMismatch
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void DescribeRpIdMismatch_WhenHostIsTheRpId_AllowsTheCeremony()
+    {
+        var service = CreateService("Production", "cgm.example.com");
+
+        service.DescribeRpIdMismatch("cgm.example.com").Should().BeNull();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void DescribeRpIdMismatch_WhenHostIsATenantSubdomain_AllowsTheCeremony()
+    {
+        var service = CreateService("Production", "cgm.example.com");
+
+        service.DescribeRpIdMismatch("rhys.cgm.example.com").Should().BeNull();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void DescribeRpIdMismatch_WhenHostMerelyEndsWithTheRpId_Refuses()
+    {
+        // The label boundary is the whole guarantee: "evilcgm.example.com" is a stranger's host,
+        // not a tenant. This predicate also decides which origins reach the FIDO2 allow-list.
+        var service = CreateService("Production", "cgm.example.com");
+
+        service.DescribeRpIdMismatch("evilcgm.example.com").Should().NotBeNull();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void DescribeRpIdMismatch_WhenHostIsElsewhere_NamesBothAddressesAndTheSetting()
+    {
+        var service = CreateService("Production", "localhost");
+
+        var detail = service.DescribeRpIdMismatch("cgm.example.com");
+
+        detail.Should().NotBeNull();
+        detail.Should().Contain("localhost")
+            .And.Contain("cgm.example.com")
+            .And.Contain("BASE_DOMAIN");
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void DescribeRpIdMismatch_InDevelopment_AllowsAnyHost()
+    {
+        // What the exemption buys is reaching the API or the web app directly on localhost,
+        // past the gateway whose host the dev rpId already names.
+        var service = CreateService("Development", "nocturne.localhost");
+
+        service.DescribeRpIdMismatch("localhost").Should().BeNull();
+    }
+
+    #endregion
+
     #region Helpers
 
-    private PasskeyService CreateService()
+    private PasskeyService CreateService(
+        string environmentName = "Development", string rpId = "localhost")
     {
         // We use a mock Fido2 - it won't be called for DB-only tests.
         // For methods that call Fido2, integration tests are needed.
         var fido2Config = new Fido2Configuration
         {
-            ServerDomain = "localhost",
+            ServerDomain = rpId,
             ServerName = "Test",
-            Origins = new HashSet<string> { "https://localhost" },
+            Origins = new HashSet<string> { $"https://{rpId}" },
         };
         var fido2 = new Fido2NetLib.Fido2(fido2Config);
 
@@ -392,7 +451,7 @@ public class PasskeyServiceTests
         var fido2Options = Options.Create(fido2Config);
         var logger = NullLogger<PasskeyService>.Instance;
 
-        var environment = Mock.Of<IHostEnvironment>(e => e.EnvironmentName == "Development");
+        var environment = Mock.Of<IHostEnvironment>(e => e.EnvironmentName == environmentName);
         return new PasskeyService(_dbContext, fido2, dataProtectionProvider, fido2Options, logger, environment);
     }
 

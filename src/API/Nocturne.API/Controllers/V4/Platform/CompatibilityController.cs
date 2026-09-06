@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Attributes;
@@ -156,7 +158,7 @@ public class CompatibilityController : ControllerBase
                 .Select(a => new AnalysisListItemDto
                 {
                     Id = a.Id,
-                    CorrelationId = a.CorrelationId,
+                    TraceId = a.TraceId,
                     AnalysisTimestamp = a.AnalysisTimestamp,
                     RequestMethod = a.RequestMethod,
                     RequestPath = a.RequestPath,
@@ -200,17 +202,7 @@ public class CompatibilityController : ControllerBase
     {
         try
         {
-            var analyses = await _repository.GetAnalysesAsync(
-                null,
-                null,
-                null,
-                null,
-                1,
-                0,
-                cancellationToken
-            );
-
-            var analysis = analyses.FirstOrDefault(a => a.Id == id);
+            var analysis = await _repository.GetAnalysisByIdAsync(id, cancellationToken);
 
             if (analysis == null)
             {
@@ -220,7 +212,7 @@ public class CompatibilityController : ControllerBase
             var detail = new AnalysisDetailDto
             {
                 Id = analysis.Id,
-                CorrelationId = analysis.CorrelationId,
+                TraceId = analysis.TraceId,
                 AnalysisTimestamp = analysis.AnalysisTimestamp,
                 RequestMethod = analysis.RequestMethod,
                 RequestPath = analysis.RequestPath,
@@ -439,7 +431,14 @@ public class ProxyConfigurationDto
 public class AnalysisListItemDto
 {
     public Guid Id { get; set; }
-    public string CorrelationId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Trace identifier linking the Nightscout and Nocturne requests being compared.
+    /// The wire name stays <c>correlationId</c>: it predates the TraceId rename and the
+    /// compatibility page reads it by that name.
+    /// </summary>
+    [JsonPropertyName("correlationId")]
+    public string TraceId { get; set; } = string.Empty;
     public DateTimeOffset AnalysisTimestamp { get; set; }
     public string RequestMethod { get; set; } = string.Empty;
     public string RequestPath { get; set; } = string.Empty;
@@ -474,7 +473,10 @@ public class AnalysesListResponse
 public class AnalysisDetailDto
 {
     public Guid Id { get; set; }
-    public string CorrelationId { get; set; } = string.Empty;
+
+    /// <inheritdoc cref="AnalysisListItemDto.TraceId"/>
+    [JsonPropertyName("correlationId")]
+    public string TraceId { get; set; } = string.Empty;
     public DateTimeOffset AnalysisTimestamp { get; set; }
     public string RequestMethod { get; set; } = string.Empty;
     public string RequestPath { get; set; } = string.Empty;

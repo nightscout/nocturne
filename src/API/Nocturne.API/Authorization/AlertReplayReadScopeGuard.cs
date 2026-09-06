@@ -32,7 +32,7 @@ internal static class AlertReplayReadScopeGuard
     {
         var visible = result.FactTimelines
             .Where(fact => FactScopes.TryGetValue(fact.Key, out var scope)
-                           && OAuthScopes.SatisfiesScope(grantedScopes, scope))
+                           && Scope.Satisfies(grantedScopes, scope))
             .ToDictionary(fact => fact.Key, fact => fact.Value, StringComparer.Ordinal);
 
         return visible.Count == result.FactTimelines.Count

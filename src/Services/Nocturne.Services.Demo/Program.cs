@@ -78,11 +78,10 @@ public class Program
         builder.Services.AddSingleton<DemoServiceHealthCheck>();
         builder
             .Services.AddHealthChecks()
-            .AddCheck<DemoServiceHealthCheck>("demo-service", tags: ["live", "ready"]);
+            .AddCheck<DemoServiceHealthCheck>("demo-service", tags: ["live"]);
 
         var app = builder.Build();
 
-        // Map default health check endpoints (includes /health, /alive, /ready)
         app.MapDefaultEndpoints();
 
         // Map lifecycle endpoints

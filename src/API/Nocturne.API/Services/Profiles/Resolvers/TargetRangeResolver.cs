@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -21,8 +22,8 @@ internal sealed class TargetRangeResolver : ITargetRangeResolver
     private readonly ILogger<TargetRangeResolver> _logger;
 
     private const int CacheTtlSeconds = 5;
-    private const double DefaultLow = 70.0;
-    private const double DefaultHigh = 180.0;
+    private const double DefaultLow = GlucoseConstants.TargetBottomMgdl;
+    private const double DefaultHigh = GlucoseConstants.TargetTopMgdl;
 
     public TargetRangeResolver(
         ITargetRangeScheduleRepository repo,

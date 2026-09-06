@@ -14,7 +14,7 @@ namespace Nocturne.API.Models.Requests.V4;
 /// uploader snapshots together.
 /// </remarks>
 /// <seealso cref="Nocturne.API.Controllers.V4.Devices.ApsSnapshotController"/>
-public class UpsertApsSnapshotRequest
+public class UpsertApsSnapshotRequest : IBulkUpsertRequest
 {
     /// <summary>
     /// When the loop decision was made (e.g. the determination's deliverAt).

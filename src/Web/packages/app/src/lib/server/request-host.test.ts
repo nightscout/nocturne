@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { extractTenantSlug, isShareHost } from "./request-host";
+import {
+  SETUP_TENANT_COOKIE,
+  extractTenantSlug,
+  getEffectiveHost,
+  isShareHost,
+} from "./request-host";
 
 describe("isShareHost", () => {
   it("matches the {token}.share.{baseDomain} form", () => {
@@ -86,5 +91,27 @@ describe("extractTenantSlug", () => {
     expect(extractTenantSlug("rhys.nocturne.run", null)).toBeNull();
     expect(extractTenantSlug("rhys.nocturne.run", "")).toBeNull();
     expect(extractTenantSlug(null, "nocturne.run")).toBeNull();
+  });
+});
+
+describe("getEffectiveHost", () => {
+  /** A request as it reaches the app behind the gateway, on `host`. */
+  function requestOn(host: string): Request {
+    return new Request("http://internal/", { headers: { "x-forwarded-host": host } });
+  }
+
+  /** A browser presenting the setup cookie left by whoever last ran the wizard here. */
+  const setupCookie = { get: (name: string) => (name === SETUP_TENANT_COOKIE ? "acme" : undefined) };
+
+  const noCookies = { get: () => undefined };
+
+  it("prepends the setup tenant slug on the apex, so the API resolves that tenant", () => {
+    expect(getEffectiveHost(requestOn("nocturne.run"), setupCookie)).toBe("acme.nocturne.run");
+  });
+
+  it("leaves a share host alone, whatever the browser carries", () => {
+    const share = "k7m2q9x4r3wt.share.nocturne.run";
+    expect(getEffectiveHost(requestOn(share), setupCookie)).toBe(share);
+    expect(getEffectiveHost(requestOn(share), noCookies)).toBe(share);
   });
 });

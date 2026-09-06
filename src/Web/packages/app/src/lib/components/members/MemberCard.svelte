@@ -2,7 +2,7 @@
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
   import * as Card from "$lib/components/ui/card";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog";
+  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import { Checkbox } from "$lib/components/ui/checkbox";
   import { Label } from "$lib/components/ui/label";
   import { Separator } from "$lib/components/ui/separator";
@@ -151,40 +151,31 @@
           </Button>
         {/if}
         {#if canManage}
-          <AlertDialog.Root>
-            <AlertDialog.Trigger>
-              {#snippet child({ props }: { props: Record<string, unknown> })}
-                <Button
-                  {...props}
-                  variant="outline"
-                  size="sm"
-                  class="text-destructive border-destructive/30 hover:bg-destructive/10"
-                  disabled={isSaving}
-                >
-                  {#if isSaving}
-                    <Loader2 class="h-3.5 w-3.5 animate-spin" />
-                  {:else}
-                    <Trash2 class="h-3.5 w-3.5" />
-                  {/if}
-                </Button>
-              {/snippet}
-            </AlertDialog.Trigger>
-            <AlertDialog.Content>
-              <AlertDialog.Header>
-                <AlertDialog.Title>Remove member</AlertDialog.Title>
-                <AlertDialog.Description>
-                  Remove {member.name ?? "this member"} from the tenant? They
-                  will lose access to all tenant data.
-                </AlertDialog.Description>
-              </AlertDialog.Header>
-              <AlertDialog.Footer>
-                <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-                <AlertDialog.Action onclick={onRemove}>
-                  Remove
-                </AlertDialog.Action>
-              </AlertDialog.Footer>
-            </AlertDialog.Content>
-          </AlertDialog.Root>
+          <ConfirmDialog
+            title="Remove member"
+            confirmLabel="Remove"
+            onConfirm={onRemove}
+          >
+            {#snippet trigger(props)}
+              <Button
+                {...props}
+                variant="outline"
+                size="sm"
+                class="text-destructive border-destructive/30 hover:bg-destructive/10"
+                disabled={isSaving}
+              >
+                {#if isSaving}
+                  <Loader2 class="h-3.5 w-3.5 animate-spin" />
+                {:else}
+                  <Trash2 class="h-3.5 w-3.5" />
+                {/if}
+              </Button>
+            {/snippet}
+            {#snippet description()}
+              Remove {member.name ?? "this member"} from the tenant? They
+              will lose access to all tenant data.
+            {/snippet}
+          </ConfirmDialog>
         {/if}
       </div>
     </div>

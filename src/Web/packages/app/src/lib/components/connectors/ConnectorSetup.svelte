@@ -6,7 +6,6 @@
     ConnectorStatusInfo,
     ConnectorDataSummary,
     ConnectorCapabilities,
-    SyncResult,
   } from "$lib/api/generated/nocturne-api-client";
   import {
     getAllConnectorStatus,
@@ -25,6 +24,7 @@
     getConnectorCapabilities,
     getConnectorDataSummary,
   } from "$lib/api/generated/services.generated.remote";
+  import { describeSubmitError } from "$lib/forms/submit-error";
   import {
     Card,
     CardContent,
@@ -40,20 +40,16 @@
   import CareLinkConnectPanel from "$lib/components/connectors/CareLinkConnectPanel.svelte";
   import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
 
-  import {
-    AlertCircle,
-    Loader2,
-    ExternalLink,
-  } from "lucide-svelte";
+  import { AlertCircle, ExternalLink } from "lucide-svelte";
   import ConnectorSelectionGrid from "$lib/components/connectors/ConnectorSelectionGrid.svelte";
   import ConnectorDangerZone from "$lib/components/connectors/ConnectorDangerZone.svelte";
-  import SyncResultCard from "$lib/components/connectors/SyncResultCard.svelte";
+  import { retainQuery } from "$lib/api/retain-query.svelte";
 
   interface Props {
     /** Pre-select a specific connector (skips selection grid) */
     connectorId?: string;
-    /** Called after successful sync or user clicks "done" */
-    onComplete?: (result: SyncResult) => void;
+    /** Called once a setup-mode save (and the activation that follows it) succeeds. */
+    onComplete?: () => void;
     /** Called on back/cancel */
     onCancel?: () => void;
     /** Show enable/disable toggle. Default: false for setup, true when connectorId set */
@@ -62,17 +58,13 @@
     showDangerZone?: boolean;
     /** Show capabilities card. Default: false */
     showCapabilities?: boolean;
-    /** Override primary action. Default: "save-and-sync" for setup, "save-only" for manage */
-    primaryAction?: "save-and-sync" | "save-only";
+    /** Default: "save-and-finish" when picking from the grid, "save-only" when a connector is given */
+    primaryAction?: "save-and-finish" | "save-only";
     /** Whether to show .env variable name hints in the config form. False for non-platform-admin users. */
     showEnvVarHints?: boolean;
     /** Extra UI after config form */
     extras?: Snippet<
       [{ connector: AvailableConnector; isActive: boolean; isSaving: boolean }]
-    >;
-    /** Extra UI after results */
-    resultActions?: Snippet<
-      [{ result: SyncResult; reset: () => void }]
     >;
   }
 
@@ -83,14 +75,13 @@
     showToggle = connectorId !== undefined,
     showDangerZone = false,
     showCapabilities = false,
-    primaryAction = connectorId ? "save-only" : "save-and-sync",
+    primaryAction = connectorId ? "save-only" : "save-and-finish",
     showEnvVarHints = true,
     extras,
-    resultActions,
   }: Props = $props();
 
   // --- State machine ---
-  type Step = "selection" | "configuring" | "syncing" | "results";
+  type Step = "selection" | "configuring";
   let step = $state<Step>(connectorId != null ? "configuring" : "selection");
 
   // --- User-selected connector (when picking from the grid) ---
@@ -104,6 +95,11 @@
   const effectiveConfigQuery = $derived(activeId ? getConnectorEffectiveConfig(activeId) : null);
   const dataSummaryQuery = $derived(activeId ? getConnectorDataSummary(activeId) : null);
   const capabilitiesQuery = $derived(activeId ? getConnectorCapabilities(activeId) : null);
+  retainQuery(() => schemaQuery);
+  retainQuery(() => configQuery);
+  retainQuery(() => effectiveConfigQuery);
+  retainQuery(() => dataSummaryQuery);
+  retainQuery(() => capabilitiesQuery);
   const statusQuery = getAllConnectorStatus();
 
   // --- Derived data from queries ---
@@ -160,7 +156,6 @@
       configuration = { ...configuration, countryCode: info.country.toLowerCase() };
     }
   }
-  let syncResult = $state<SyncResult | null>(null);
 
   // --- UI state ---
   let isSaving = $state(false);
@@ -257,7 +252,7 @@
       }
 
       // In wizard/setup mode, activate the connector after saving
-      if (primaryAction === "save-and-sync") {
+      if (primaryAction === "save-and-finish") {
         await setConnectorActive({
           connectorName: connectorInfo.id,
           request: { isActive: true },
@@ -267,10 +262,12 @@
       // Secrets are write-only — drop the entered values once they're stored.
       secrets = {};
       saveMessage = { type: "success", text: "Configuration saved" };
+
+      if (primaryAction === "save-and-finish") onComplete?.();
     } catch (e) {
       saveMessage = {
         type: "error",
-        text: e instanceof Error ? e.message : "Failed to save configuration",
+        text: describeSubmitError(e, "Failed to save configuration"),
       };
       throw e;
     }
@@ -296,7 +293,7 @@
     } catch (e) {
       saveMessage = {
         type: "error",
-        text: e instanceof Error ? e.message : "Failed to update connector state",
+        text: describeSubmitError(e, "Failed to update connector state"),
       };
     }
 
@@ -318,7 +315,6 @@
     seededConnectorId = undefined;
     configuration = {};
     secrets = {};
-    syncResult = null;
     saveMessage = null;
   }
 </script>
@@ -398,7 +394,7 @@
 
       <!-- Enable/Disable Toggle -->
       {#if showToggle}
-        <Card>
+        <Card data-testid="connector-enable">
           <CardContent class="flex items-center justify-between gap-4 py-4">
             <div class="space-y-0.5 min-w-0">
               <Label class="text-base">Enable Connector</Label>
@@ -570,31 +566,5 @@
       {/if}
     </div>
   {/if}
-
-<!-- SYNCING STEP -->
-{:else if step === "syncing"}
-  <div class="flex flex-col items-center justify-center py-16 space-y-4">
-    <Loader2 class="h-12 w-12 animate-spin text-primary" />
-    <div class="text-center">
-      <p class="text-lg font-medium">Syncing {displayName}...</p>
-      <p class="text-sm text-muted-foreground">
-        This may take a moment depending on the amount of data.
-      </p>
-    </div>
-  </div>
-
-<!-- RESULTS STEP -->
-{:else if step === "results" && syncResult}
-  <SyncResultCard
-    {syncResult}
-    {displayName}
-    onComplete={() => {
-      if (syncResult) {
-        onComplete?.(syncResult);
-      }
-    }}
-    {resultActions}
-    onReset={resetToSelection}
-  />
 {/if}
 

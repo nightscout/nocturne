@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatClock, formatLocale } from "$lib/utils/formatting";
   import type { MealEvent, Bolus, BolusType, PatientInsulin } from "$lib/api";
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
@@ -11,6 +12,7 @@
     remove as removeBolus,
   } from "$api/generated/bolus.generated.remote";
   import { toast } from "svelte-sonner";
+  import { useToastSubmission } from "$lib/forms";
   import { Syringe, Plus, Pencil, Trash2, ArrowLeft } from "lucide-svelte";
 
   interface Props {
@@ -26,7 +28,7 @@
   let editingBolus = $state<Bolus | null>(null);
   let isSaving = $state(false);
   let deletingBolusId = $state<string | null>(null);
-  let isDeleting = $state(false);
+  const deletion = useToastSubmission("Failed to delete bolus");
 
   let editForm = $state({
     insulin: null as number | null,
@@ -63,9 +65,12 @@
     }
   });
 
+  // The locale's own medium date with a short time. Not the shared
+  // `formatMediumDateTime`, whose explicit field set spells the month out where
+  // this shape stays numeric — de-DE, ja-JP, ko-KR and ar-EG all differ.
   let mealTimestamp = $derived(
     meal?.timestamp
-      ? new Date(meal.timestamp).toLocaleString(undefined, {
+      ? new Date(meal.timestamp).toLocaleString(formatLocale(), {
           dateStyle: "medium",
           timeStyle: "short",
         })
@@ -115,26 +120,19 @@
   }
 
   async function handleDelete(bolus: Bolus) {
-    if (!bolus.id) return;
-    isDeleting = true;
-    try {
-      await removeBolus(bolus.id);
+    const bolusId = bolus.id;
+    if (!bolusId) return;
+    await deletion.run(async () => {
+      await removeBolus(bolusId);
       toast.success("Bolus deleted");
       onSave();
       deletingBolusId = null;
-    } catch {
-      toast.error("Failed to delete bolus");
-    } finally {
-      isDeleting = false;
-    }
+    });
   }
 
   function formatBolusTime(mills: number | undefined): string {
     if (!mills) return "";
-    return new Date(mills).toLocaleTimeString(undefined, {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return formatClock(mills);
   }
 </script>
 
@@ -254,7 +252,7 @@
                       variant="ghost"
                       size="sm"
                       onclick={() => (deletingBolusId = null)}
-                      disabled={isDeleting}
+                      disabled={deletion.busy}
                     >
                       Cancel
                     </Button>
@@ -262,7 +260,7 @@
                       variant="destructive"
                       size="sm"
                       onclick={() => handleDelete(bolus)}
-                      disabled={isDeleting}
+                      disabled={deletion.busy}
                     >
                       Delete
                     </Button>

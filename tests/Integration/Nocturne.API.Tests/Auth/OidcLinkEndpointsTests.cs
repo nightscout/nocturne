@@ -1,8 +1,8 @@
 using System.Net;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using FluentAssertions;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Npgsql;
 using Xunit;
@@ -220,7 +220,7 @@ public class OidcLinkEndpointsTests : AspireIntegrationTestBase
     private async Task<Guid> SeedSubjectWithAccessTokenAsync()
     {
         var subjectId = Guid.CreateVersion7();
-        var tokenHash = ComputeSha256Hash(TestAccessToken);
+        var tokenHash = HashUtils.Sha256Hex(TestAccessToken);
 
         var connStr = await GetPostgresConnectionStringAsync();
         await using var conn = new NpgsqlConnection(connStr);
@@ -358,16 +358,6 @@ public class OidcLinkEndpointsTests : AspireIntegrationTestBase
         await cmd.ExecuteNonQueryAsync();
 
         Log($"Seeded passkey {passkeyId} for subject {subjectId}");
-    }
-
-    /// <summary>
-    /// Compute SHA-256 hash of the access token, matching AccessTokenHandler's logic.
-    /// </summary>
-    private static string ComputeSha256Hash(string input)
-    {
-        var bytes = Encoding.UTF8.GetBytes(input);
-        var hash = SHA256.HashData(bytes);
-        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
     #endregion

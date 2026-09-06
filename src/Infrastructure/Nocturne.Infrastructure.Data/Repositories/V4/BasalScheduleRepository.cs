@@ -93,7 +93,7 @@ public class BasalScheduleRepository : V4RepositoryBase<BasalSchedule, BasalSche
         await using var ctx = await ContextFactory.CreateAsync(ct);
         return await ctx.AuditedSoftDeleteAsync(
             ctx.BasalSchedules.Where(e => e.LegacyId != null && e.LegacyId.StartsWith(prefix)),
-            AuditContext, ct);
+            AuditContext, $"legacy_id_prefix={prefix}", ct);
     }
 
     /// <summary>

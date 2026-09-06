@@ -11,12 +11,6 @@ namespace Nocturne.Desktop.Tray.Helpers;
 /// </summary>
 public static class GlucoseRangeHelper
 {
-    /// <summary>
-    /// Standard conversion factor from mg/dL to mmol/L.
-    /// Provided here for backward compatibility; prefer <see cref="GlucoseFormatHelper.MgdlToMmolFactor"/>.
-    /// </summary>
-    public const double MgdlToMmolFactor = GlucoseFormatHelper.MgdlToMmolFactor;
-
     public static readonly Color UrgentColor = Color.FromArgb(255, 200, 30, 30);
     public static readonly Color WarningColor = Color.FromArgb(255, 230, 160, 30);
     public static readonly Color InRangeColor = Color.FromArgb(255, 60, 180, 75);

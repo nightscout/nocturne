@@ -240,13 +240,15 @@ public class ConnectorCursorResetJobServiceTests
         var (service, provider) = BuildService(engine.Object);
 
         var info = await service.StartResetAsync(_tenantId, null, null, CancellationToken.None);
-        await WaitForTerminalAsync(service, info!.JobId);
 
         // A fresh service over the same store models the post-restart process: empty job map,
         // same database.
         var (restarted, _) = BuildService(engine.Object, provider);
 
-        var status = await restarted.GetStatusAsync(info.JobId);
+        // Poll the persisted view, not the in-memory one: ExecuteAsync sets the terminal state on
+        // the snapshot and only writes it in the finally that follows, so waiting on the original
+        // service would let this read the record as it stood at start.
+        var status = await WaitForTerminalAsync(restarted, info!.JobId);
         status.JobId.Should().Be(info.JobId);
         status.TenantId.Should().Be(_tenantId);
         status.TenantSlug.Should().Be("erik");

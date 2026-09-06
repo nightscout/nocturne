@@ -1,13 +1,11 @@
-using System.Data.Common;
 using FluentAssertions;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories.V4;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 using Nocturne.Core.Contracts.V4;
 
@@ -19,42 +17,26 @@ namespace Nocturne.Infrastructure.Data.Tests.Repositories.V4;
 public class BasalInjectionRepositoryTests : IDisposable
 {
     private static readonly Guid TestTenantId = Guid.Parse("00000000-0000-0000-0000-000000000002");
-    private readonly DbConnection _connection;
-    private readonly DbContextOptions<NocturneDbContext> _contextOptions;
+    private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
     private readonly BasalInjectionRepository _repo;
 
     public BasalInjectionRepositoryTests()
     {
-        _connection = new SqliteConnection("Filename=:memory:");
-        _connection.Open();
+        _db = TestDbContextFactory.CreateSqliteWithTenant(TestTenantId);
 
-        _contextOptions = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .EnableSensitiveDataLogging()
-            .Options;
-
-        using (var seedContext = new NocturneDbContext(_contextOptions))
-        {
-            seedContext.TenantId = TestTenantId;
-            seedContext.Database.EnsureCreated();
-            seedContext.Tenants.Add(new TenantEntity { Id = TestTenantId, Slug = "test" });
-            seedContext.SaveChanges();
-        }
-
-        _context = new NocturneDbContext(_contextOptions);
+        _context = _db.CreateContext();
         _context.TenantId = TestTenantId;
 
         _repo = new BasalInjectionRepository(
-            _context,
-            new Mock<IAuditContext>().Object,
-            NullLogger<BasalInjectionRepository>.Instance);
+            new TestTenantDbContextFactory(_context),
+            new Mock<IAuditContext>().Object);
     }
 
     public void Dispose()
     {
         _context.Dispose();
-        _connection.Dispose();
+        _db.Dispose();
         GC.SuppressFinalize(this);
     }
 
@@ -107,12 +89,6 @@ public class BasalInjectionRepositoryTests : IDisposable
         found.Should().BeNull();
     }
 
-    // The end-to-end "soft-delete writes a MutationAuditLogEntity 'delete' entry"
-    // assertion is intentionally NOT made here. The audit interceptor lives outside
-    // the repository and is wired only by the production composition root, so a
-    // unit-test fixture cannot exercise it without duplicating that wiring. The
-    // assertion belongs at integration-test level where the full interceptor stack
-    // is live (Phase 3 / Task 3.3 BasalInjectionIntegrationTests).
     [Fact]
     public async Task DeleteAsync_sets_DeletedAt()
     {
@@ -167,6 +143,24 @@ public class BasalInjectionRepositoryTests : IDisposable
             .FirstOrDefaultAsync(e => e.Id == created.Id);
         raw.Should().NotBeNull();
         raw!.DeletedAt.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task DeleteBySyncIdentifierAsync_records_the_delete_and_stamps_the_dedup_flag()
+    {
+        var created = await _repo.CreateAsync(MakeInjection("aaps", "sync-7"), WriteOrigin.Live);
+
+        await _repo.DeleteBySyncIdentifierAsync("aaps", "sync-7", WriteOrigin.Live);
+
+        await using var verify = _db.CreateContext();
+        var raw = await verify.BasalInjections.IgnoreQueryFilters().SingleAsync(e => e.Id == created.Id);
+        verify.Entry(raw).Property("DeletedByUser").CurrentValue.Should().Be(true);
+
+        var audit = await verify.Set<MutationAuditLogEntity>()
+            .Where(a => a.EntityId == created.Id && a.Action == "delete")
+            .ToListAsync();
+        audit.Should().ContainSingle();
+        audit[0].EntityType.Should().Be("BasalInjection");
     }
 
     [Fact]

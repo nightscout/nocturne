@@ -10,12 +10,30 @@
 #   docker compose -f docker-compose.yaml -f docker-compose.byo-proxy.yaml up -d
 #
 # Then point your proxy at http://<host>:8080 and forward the original Host and
-# X-Forwarded-* headers. For multi-tenant deployments, terminate the apex AND
-# *.your-domain there (e.g. a wildcard certificate obtained via DNS-01).
+# X-Forwarded-* headers. For multi-tenant deployments, terminate the apex,
+# *.your-domain AND *.share.your-domain there: an X.509 wildcard matches
+# exactly one label, so a certificate for *.your-domain does not cover the
+# public share links. Two wildcard SANs, issued via DNS-01, cover all of them.
+# A DNS wildcard does answer at any depth, so one *.your-domain A record is
+# enough on that side.
+#
+# The API resolves a caller's address from the RIGHTMOST X-Forwarded-For entry,
+# so a proxy that appends is safe — nginx's $proxy_add_x_forwarded_for, and
+# Caddy and Traefik by default — because entries a caller prepends are never
+# consumed. Behind a CDN, keep the chain and raise ForwardedHeaders__ForwardLimit
+# to the number of hops you trust, or the address recorded in audit rows and
+# rate-limit buckets is your CDN's rather than the client's.
+#
+# Port 8080 bypasses your proxy if it is reachable from outside the host, and a
+# caller reaching the gateway directly does get to choose its X-Forwarded-For.
+# Bind it to the interface your proxy uses (e.g. "127.0.0.1:8080:5000").
 #
 # Troubleshooting: POSTs failing with 403 behind your proxy means the app could
 # not reconstruct the browser origin — make sure the proxy sets BOTH
 # X-Forwarded-Proto and X-Forwarded-Host.
+#
+# Worked nginx, Traefik and Caddy configurations, plus a troubleshooting table:
+#   https://getnocturne.dev/docs/installation/reverse-proxy
 services:
   caddy:
     profiles: ["byo-proxy-disabled"]

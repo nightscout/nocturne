@@ -1,16 +1,14 @@
+import { describeRemoteError, READ_SURFACE } from "$lib/forms/submit-error";
+
 /**
- * Message to show for a rejected remote function call.
+ * Message to show for a rejected remote function call on a reading surface —
+ * a query whose rejection is rendered in place of the data it was going to
+ * show. A mutation takes `describeSubmitError` even where its fallback names a
+ * permission.
  *
- * SvelteKit rethrows the generated remote function's `error(status, message)` as
- * an `HttpError` — a plain `{ status, body: { message } }` object, not an
- * `Error`. A scope refusal is a bare `ForbidResult` with no body, so the 403
- * message is the HTTP client's own boilerplate; the caller's fallback names the
- * permission instead.
+ * @see {@link import("$lib/forms/submit-error").RemoteErrorPolicy} for how the
+ * two halves differ and which one a call site wants.
  */
 export function remoteErrorMessage(err: unknown, fallback: string): string {
-  const e = err as { status?: number; body?: { message?: unknown } } | null;
-  if (e?.status === 403) return fallback;
-
-  const message = e?.body?.message;
-  return typeof message === "string" && message.trim() ? message : fallback;
+  return describeRemoteError(err, fallback, READ_SURFACE);
 }

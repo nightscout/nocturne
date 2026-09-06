@@ -56,6 +56,24 @@ public class ChartDataServiceTests
         }
 
         [Fact]
+        public void NotComputableDirection_UsesLegacyWireSpelling()
+        {
+            var readings = new List<SensorGlucose>
+            {
+                new()
+                {
+                    Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(TestMills).UtcDateTime,
+                    Mgdl = 120.0,
+                    Direction = GlucoseDirection.NotComputable,
+                },
+            };
+
+            var (data, _) = ChartDataService.BuildGlucoseData(readings);
+
+            data[0].Direction.Should().Be("NOT COMPUTABLE");
+        }
+
+        [Fact]
         public void AllReadingsIncluded()
         {
             var readings = new List<SensorGlucose>

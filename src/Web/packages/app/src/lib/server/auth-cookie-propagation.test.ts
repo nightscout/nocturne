@@ -140,6 +140,39 @@ describe("propagateAuthCookies", () => {
     });
   });
 
+  it("propagates the recovery session, and the expiry that spends it", () => {
+    // Recovery-code sign-in is a server-side form: dropped here, the visitor never receives the
+    // credential their code bought and cannot register the passkey that gets them back in.
+    const { cookies, calls } = createRecordingCookies();
+
+    propagateAuthCookies(
+      [
+        `${AUTH_COOKIE_NAMES.recoverySession}=recovery-token; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=600`,
+      ],
+      cookies
+    );
+
+    expect(calls[0]).toMatchObject({
+      op: "set",
+      name: AUTH_COOKIE_NAMES.recoverySession,
+      value: "recovery-token",
+      opts: { path: "/", httpOnly: true, sameSite: "strict", maxAge: 600 },
+    });
+
+    const spent = createRecordingCookies();
+    propagateAuthCookies(
+      [
+        `${AUTH_COOKIE_NAMES.recoverySession}=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT`,
+      ],
+      spent.cookies
+    );
+
+    expect(spent.calls[0]).toMatchObject({
+      op: "delete",
+      name: AUTH_COOKIE_NAMES.recoverySession,
+    });
+  });
+
   it("propagates cookie deletion when the server expires an auth cookie", () => {
     const { cookies, calls } = createRecordingCookies();
 
@@ -220,5 +253,128 @@ describe("propagateAuthCookies", () => {
       name: AUTH_COOKIE_NAMES.accessToken,
       value: "valid",
     });
+  });
+});
+
+describe("propagateAuthCookies with a same-name pair", () => {
+  const EXPIRED = "Thu, 01 Jan 1970 00:00:00 GMT";
+
+  /** What the API emits on sign-out: the domain-wide cookie and the pre-widening host-scoped one. */
+  const signOutHeaders = [
+    `${AUTH_COOKIE_NAMES.accessToken}=; Path=/; Expires=${EXPIRED}`,
+    `${AUTH_COOKIE_NAMES.accessToken}=; Path=/; Domain=.nocturne.run; Expires=${EXPIRED}`,
+    `${AUTH_COOKIE_NAMES.refreshToken}=; Path=/; Expires=${EXPIRED}`,
+    `${AUTH_COOKIE_NAMES.refreshToken}=; Path=/; Domain=.nocturne.run; Expires=${EXPIRED}`,
+  ];
+
+  /** What the API emits on a silent refresh: host-scoped expiry, then the domain-wide value. */
+  const refreshHeaders = [
+    `${AUTH_COOKIE_NAMES.accessToken}=; Path=/; Expires=${EXPIRED}`,
+    `${AUTH_COOKIE_NAMES.accessToken}=rotated; Path=/; Domain=.nocturne.run; HttpOnly; Secure; SameSite=Lax; Max-Age=900`,
+  ];
+
+  it("keeps both halves of a sign-out pair alive", () => {
+    const { cookies, calls } = createRecordingCookies();
+    const raw: string[] = [];
+
+    propagateAuthCookies(signOutHeaders, cookies, (h) => raw.push(h));
+
+    // SvelteKit's jar keys pending cookies by name alone, so passing both halves through it
+    // would drop one — leaving a host-scoped access token valid on the tenant host for the rest
+    // of its lifetime after the user signed out.
+    for (const name of [AUTH_COOKIE_NAMES.accessToken, AUTH_COOKIE_NAMES.refreshToken]) {
+      expect(calls).toContainEqual({
+        op: "delete",
+        name,
+        opts: { path: "/", domain: ".nocturne.run" },
+      });
+      expect(raw).toContainEqual(`${name}=; Path=/; Expires=${EXPIRED}`);
+    }
+    expect(calls).toHaveLength(2);
+    expect(raw).toHaveLength(2);
+  });
+
+  it("keeps the host-scoped expiry alongside the rotated domain-wide value", () => {
+    const { cookies, calls } = createRecordingCookies();
+    const raw: string[] = [];
+
+    propagateAuthCookies(refreshHeaders, cookies, (h) => raw.push(h));
+
+    // Losing the expiry leaves the stale host-scoped cookie in the browser for its full life,
+    // and the browser sends both under one indistinguishable Cookie header.
+    expect(calls).toEqual([
+      {
+        op: "set",
+        name: AUTH_COOKIE_NAMES.accessToken,
+        value: "rotated",
+        opts: {
+          path: "/",
+          domain: ".nocturne.run",
+          httpOnly: true,
+          secure: true,
+          sameSite: "lax",
+          maxAge: 900,
+        },
+      },
+    ]);
+    expect(raw).toEqual([
+      `${AUTH_COOKIE_NAMES.accessToken}=; Path=/; Expires=${EXPIRED}`,
+    ]);
+  });
+
+  it("routes a lone host-scoped cookie through the jar, not the raw sink", () => {
+    const { cookies, calls } = createRecordingCookies();
+    const raw: string[] = [];
+
+    // A host-only deployment (localhost, an IP literal) emits no domain-wide sibling at all.
+    propagateAuthCookies(
+      [`${AUTH_COOKIE_NAMES.accessToken}=t; Path=/; HttpOnly; Secure`],
+      cookies,
+      (h) => raw.push(h)
+    );
+
+    expect(raw).toEqual([]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ op: "set", name: AUTH_COOKIE_NAMES.accessToken });
+  });
+
+  it("keeps the domain-wide half when no sink is supplied", () => {
+    const { cookies, calls } = createRecordingCookies();
+
+    propagateAuthCookies(signOutHeaders, cookies);
+
+    // No worse than before the sink existed: the wide cookie, which every host presents, is the
+    // one that has to go.
+    expect(calls.filter((c) => c.opts.domain === ".nocturne.run")).toHaveLength(2);
+  });
+});
+
+describe("propagateAuthCookies and the last-used sign-in hint", () => {
+  it("forwards the hint the API wrote, so the passkey flow records one at all", () => {
+    const { cookies, calls } = createRecordingCookies();
+
+    // The passkey and authenticator sign-ins complete inside a remote function, so the API's
+    // Set-Cookie lands on a server-to-server response and reaches the browser only through here.
+    propagateAuthCookies(
+      [
+        `${AUTH_COOKIE_NAMES.lastSignIn}=passkey; Path=/; Domain=.nocturne.run; Secure; SameSite=Lax; Max-Age=31536000`,
+      ],
+      cookies
+    );
+
+    expect(calls).toEqual([
+      {
+        op: "set",
+        name: AUTH_COOKIE_NAMES.lastSignIn,
+        value: "passkey",
+        opts: {
+          path: "/",
+          domain: ".nocturne.run",
+          secure: true,
+          sameSite: "lax",
+          maxAge: 31536000,
+        },
+      },
+    ]);
   });
 });

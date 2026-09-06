@@ -8,13 +8,19 @@
   import GlucoseRangeCalendarPicker from "$lib/components/alerts/GlucoseRangeCalendarPicker.svelte";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import { getReportsAnalysis, type DateRangeInput } from "$api/reports.remote";
-  import { bg, bgDelta, bgLabel } from "$lib/utils/formatting";
+  import { bg, bgDelta, bgLabel, formatShortDate } from "$lib/utils/formatting";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
   import { parseDate } from "@internationalized/date";
   import { untrack } from "svelte";
   import { useSearchParams } from "runed/kit";
   import { z } from "zod";
-  import { dayCount, isDayString, startOfDay, toDayString } from "$lib/utils/date-range";
+  import {
+    dayCount,
+    dayPart,
+    isDayString,
+    startOfDay,
+    toDayString,
+  } from "$lib/utils/date-range";
 
   const PRESETS = [
     "last7-prior7",
@@ -56,12 +62,7 @@
   }
 
   function rangeDisplay(from: string, to: string): string {
-    const opts: Intl.DateTimeFormatOptions = {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    };
-    return `${startOfDay(from).toLocaleDateString(undefined, opts)} – ${startOfDay(to).toLocaleDateString(undefined, opts)}`;
+    return `${formatShortDate(startOfDay(from), true)} – ${formatShortDate(startOfDay(to), true)}`;
   }
 
   // Presets are built on the local calendar day. Deriving "today" from
@@ -120,7 +121,7 @@
     const preset = urlParams.preset ?? DEFAULT_PRESET;
     const fromPreset = computePreset(preset === "custom" ? DEFAULT_PRESET : preset);
     const day = (value: string | null, fallback: string) =>
-      isDayString(value) ? value : fallback;
+      dayPart(isDayString(value) ? value : fallback);
     return {
       a: {
         label: urlParams.aLabel ?? fromPreset.a.label,
@@ -263,13 +264,12 @@
 
   function getMetric(a: Analysis | undefined, key: MetricKey): number | null {
     if (!a) return null;
-    const tir = a.timeInRange?.percentages;
+    const tir = a.timeInRange;
     const gv = a.glycemicVariability;
     const stats = a.basicStats;
-    const hyper = a.hyperglycemiaAnalysis;
     switch (key) {
       case "tirTarget":
-        return tir?.target ?? null;
+        return tir?.percentages?.target ?? null;
       case "gmi":
         return gv?.estimatedA1c ?? a.gmi?.value ?? null;
       case "cv":
@@ -279,11 +279,9 @@
       case "mean":
         return stats?.mean ?? null;
       case "hyperHours":
-        return hyper?.averageDurationMinutes != null && hyper?.totalEpisodes != null
-          ? (hyper.averageDurationMinutes * hyper.totalEpisodes) / 60
-          : null;
+        return tir?.durations?.aboveRange != null ? tir.durations.aboveRange / 60 : null;
       case "hyperEvents":
-        return hyper?.totalEpisodes ?? null;
+        return tir?.episodes?.aboveRange ?? null;
     }
     return null;
   }
@@ -302,13 +300,20 @@
   const BAR_CAP_PCT = 60;
   const BAR_COLOR = "var(--foreground)";
 
+  // Signed percent change from the first period to the second. A zero baseline admits no
+  // proportional change, so any move off it saturates the bar in the move's direction
+  // rather than drawing a flat bar beside a non-zero delta.
+  function percentChange(from: number, to: number): number {
+    const delta = to - from;
+    if (from === 0) return delta === 0 ? 0 : Math.sign(delta) * 100;
+    return (delta / Math.abs(from)) * 100;
+  }
+
   type DiffRow = {
     key: MetricKey;
     label: string;
     av: number | null;
     bv: number | null;
-    delta: number | null;
-    pct: number | null;
     fillStyle: string;
     deltaText: string;
   };
@@ -328,19 +333,16 @@
           label: def.label,
           av,
           bv,
-          delta: null,
-          pct: null,
           fillStyle: `left: calc(50% - 1px); width: 2px; background: ${BAR_COLOR};`,
           deltaText: "—",
         };
       }
 
       const delta = bv - av;
-      const pct = av === 0 ? 0 : (delta / Math.abs(av)) * 100;
       const flat =
         Math.abs(delta) < (key === "gri" || key === "hyperEvents" ? 0.5 : 0.05);
 
-      const magnitude = Math.min(BAR_CAP_PCT, Math.abs(pct));
+      const magnitude = Math.min(BAR_CAP_PCT, Math.abs(percentChange(av, bv)));
       const halfWidth = (magnitude / BAR_CAP_PCT) * 50;
 
       // The bar carries the sign of the change: it grows right when the second
@@ -356,8 +358,6 @@
         label: def.label,
         av,
         bv,
-        delta,
-        pct,
         fillStyle,
         deltaText: def.formatDelta(delta),
       };

@@ -76,12 +76,12 @@ public static class TempBasalMapper
             PumpRecordId = entity.PumpRecordId,
             SyncIdentifier = entity.SyncIdentifier,
             ApsSnapshotId = entity.ApsSnapshotId,
-            InsulinContext = !string.IsNullOrEmpty(entity.InsulinContextJson)
-                ? JsonSerializer.Deserialize<TreatmentInsulinContext>(entity.InsulinContextJson)
-                : null,
-            AdditionalProperties = !string.IsNullOrEmpty(entity.AdditionalPropertiesJson)
-                ? JsonSerializer.Deserialize<Dictionary<string, object?>>(entity.AdditionalPropertiesJson)
-                : null,
+            InsulinContext = MapperHelpers.DeserializeJson<TreatmentInsulinContext>(
+                entity.InsulinContextJson
+            ),
+            AdditionalProperties = MapperHelpers.DeserializeJson<Dictionary<string, object?>>(
+                entity.AdditionalPropertiesJson
+            ),
         };
     }
 

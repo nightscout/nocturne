@@ -3,7 +3,6 @@ using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
-using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Nocturne.API.Authorization;
@@ -29,6 +28,7 @@ using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Cache.Extensions;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Configuration;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Interceptors;
 using OpenTelemetry.Logs;
@@ -95,16 +95,18 @@ var aspirePostgreSqlConnection = builder.Configuration.GetConnectionString(Servi
         $"ConnectionStrings:{ServiceNames.PostgreSql} is required."));
 var migratorConnectionString = builder.Configuration.GetConnectionString($"{ServiceNames.PostgreSql}-migrator");
 
+var postgreSqlOptions = PostgreSqlConfiguration.ResolveForEnvironment(
+    aspirePostgreSqlConnection,
+    builder.Configuration,
+    builder.Environment.IsDevelopment());
+
+// Registered whether or not the pool is built, so the resolution above is observable from a test
+// host, which always runs as Testing and so never reaches the registration below.
+builder.Services.AddSingleton(postgreSqlOptions);
+
 if (!isTesting)
 {
-    builder.Services.AddPostgreSqlInfrastructure(
-        aspirePostgreSqlConnection,
-        config =>
-        {
-            config.EnableDetailedErrors = builder.Environment.IsDevelopment();
-            config.EnableSensitiveDataLogging = builder.Environment.IsDevelopment();
-        }
-    );
+    builder.Services.AddPostgreSqlInfrastructure(postgreSqlOptions);
 }
 else
 {
@@ -128,7 +130,7 @@ builder.Services.AddDataProtection()
 // Add compatibility proxy services
 builder.Services.AddCompatibilityProxyServices(builder.Configuration);
 
-// Use in-memory cache for single-user deployments
+// In-process, so each replica caches independently and entries are lost on restart.
 builder.Services.AddNocturneMemoryCache();
 
 builder.Logging.ClearProviders();
@@ -151,9 +153,6 @@ builder.Services.AddHostedService<SoftDeleteCleanupService>();
 // controller's seed-extras endpoint (demo container, all environments).
 builder.Services.AddScoped<SampleDataSeeder>();
 
-// Add native API services for strangler pattern
-// Note: NightscoutJsonFilter is added globally to apply null-omission and
-// NocturneOnly field exclusion to v1-v3 API responses only
 builder.Services.AddScoped<ReadAccessAuditFilter>();
 builder.Services.AddControllers(options =>
 {
@@ -167,6 +166,7 @@ builder.Services.AddControllers(options =>
 builder.Services.AddFluentValidationAutoValidation();
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<ApiErrorEnvelopeHandler>();
 builder.Services.AddEndpointsApiExplorer();
 
 // ── OpenAPI document generation ──────────────────────────────────────
@@ -279,16 +279,6 @@ builder.Services.AddCors(options =>
     });
 });
 
-builder.Services.Configure<ForwardedHeadersOptions>(options =>
-{
-    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor
-                             | ForwardedHeaders.XForwardedProto
-                             | ForwardedHeaders.XForwardedHost;
-    // Trust any proxy — the API is only reachable through the gateway.
-    options.KnownIPNetworks.Clear();
-    options.KnownProxies.Clear();
-});
-
 var app = builder.Build();
 
 // Surface the effective credentialed-CORS base domain so operators can see what's active.
@@ -305,12 +295,26 @@ else if (app.Environment.IsDevelopment())
         + "disabled (loopback origins are still allowed in Development).",
         rawCorsBaseDomain);
 }
+// The key decides more than CORS, and the rest cannot fail closed the way CORS does: the
+// WebAuthn relying-party id is fixed at startup, and a browser reports the refusal it causes as
+// an opaque security error naming nothing an operator can search for. Split by cause so each
+// names the rp.id the deployment actually ended up with.
+else if (string.IsNullOrWhiteSpace(rawCorsBaseDomain))
+{
+    app.Logger.LogError(
+        "{ConfigKey} is unset or blank. Cross-origin CORS is disabled (fail closed), passkeys "
+        + "are bound to 'localhost' so browsers will refuse to create or use one on any other "
+        + "address, and OIDC sign-in has no redirect URI to send. Set it to the address people "
+        + "browse to and restart.",
+        BaseDomainOptions.ConfigKey);
+}
 else
 {
     app.Logger.LogError(
         "CORS base domain '{RawCorsBaseDomain}' is not a valid multi-label host ({ConfigKey}). "
         + "Cross-origin CORS is disabled (fail closed) — tenant and share subdomains will be "
-        + "rejected until this is corrected.",
+        + "rejected until this is corrected, and passkeys are bound to a relying-party id derived "
+        + "from the same value, so browsers will refuse them too.",
         rawCorsBaseDomain, BaseDomainOptions.ConfigKey);
 }
 
@@ -325,7 +329,7 @@ app.UseStatusCodePages();
 app.UseWhen(PublicDocsMiddleware.IsPublicDocsPath, branch => branch.UseCors(PublicDocsCorsPolicy));
 app.UseWhen(context => !PublicDocsMiddleware.IsPublicDocsPath(context), branch => branch.UseCors());
 app.UseStaticFiles();
-app.UseForwardedHeaders();
+app.UseNocturneForwardedHeaders(builder.Configuration);
 
 // Response caching must run after UseForwardedHeaders so its cache key uses the per-tenant
 // Host (rewritten from X-Forwarded-Host) rather than the constant gateway destination host
@@ -338,9 +342,8 @@ app.UseResponseCaching();
 // UseRouting so the rewritten path is what the router sees.
 app.UseMiddleware<JsonExtensionMiddleware>();
 
-// Explicit UseRouting so TenantSetupMiddleware can read endpoint metadata
-// (e.g. [AllowDuringSetup]). Minimal hosting would insert this automatically
-// but we make it explicit for clarity.
+// Routing must run here, not where minimal hosting would insert it, so that
+// TenantSetupMiddleware below can read endpoint metadata such as [AllowDuringSetup].
 app.UseRouting();
 
 // Ahead of the documentation branch below, which jumps straight to its endpoint and would
@@ -369,9 +372,6 @@ app.UseMiddleware<MemberScopeMiddleware>();
 
 // Add audit context middleware (captures actor metadata for mutation audit log)
 app.UseMiddleware<AuditContextMiddleware>();
-
-// Add site security middleware (enforces authentication when site lockdown is enabled)
-app.UseMiddleware<SiteSecurityMiddleware>();
 
 // There is no app.UseAuthentication() call here, and adding one would be a security regression.
 //
@@ -404,6 +404,7 @@ app.MapHub<AlarmHub>("/hubs/alarms");
 app.MapHub<AlertHub>("/hubs/alerts");
 app.MapHub<ConfigHub>("/hubs/config");
 app.MapHub<HomeAssistantHub>("/hubs/home-assistant");
+app.MapHub<OverviewHub>("/hubs/overview");
 
 // Serve OpenAPI specs at /openapi/{documentName}.json
 app.MapOpenApi().RequireRateLimiting(ServiceRegistrationExtensions.DocsRateLimitPolicy);
@@ -441,7 +442,7 @@ app.MapScalarApiReference((options, httpContext) =>
                 flow.RedirectUri = scalarAuth.RedirectUri;
             }
             flow.Pkce = Pkce.Sha256;
-            flow.SelectedScopes = [OAuthScopes.FullAccess];
+            flow.SelectedScopes = [Scope.FullAccess];
         })
         .AddApiKeyAuthentication("apiSecret", apiKey =>
         {
@@ -458,7 +459,11 @@ app.MapScalarApiReference((options, httpContext) =>
     }
 }).RequireRateLimiting(ServiceRegistrationExtensions.DocsRateLimitPolicy);
 
-// Add root endpoint to serve a basic info page
+// Add root endpoint to serve a basic info page. The payload includes the tenant's latest
+// entry (sgv/mbg/direction), and on an ordinary tenant host the share RLS does not restrict
+// the read (app.is_share is not 'true'), so the endpoint gate is the only protection for that
+// PHI. No AllowAnonymous: the HasPermissions fallback policy applies, as on the rest of the
+// API surface. A public info page would need the latest_entry payload stripped first.
 app.MapGet(
     "/",
     async (IEntryStore entryStore) =>
@@ -514,7 +519,7 @@ app.MapGet(
             }
         );
     }
-).AllowAnonymous();
+);
 
 app.MapDefaultEndpoints();
 
@@ -543,6 +548,9 @@ if (!isNSwagGeneration && !app.Environment.IsEnvironment("Testing"))
         // Apply the per-category public-share RLS policies, derived from the C# category map,
         // so they cannot drift from the code. Runs under the migrator role like migrations.
         await DatabaseInitializationExtensions.ReconcileShareRlsPoliciesAsync(migratorConnectionString, logger);
+
+        // Apply the tenant-table storage parameters; see TenantTableStorageParameters for why.
+        await DatabaseInitializationExtensions.ReconcileTenantTableStorageParametersAsync(migratorConnectionString, logger);
 
         // Background job records left Pending/Running by a previous process are orphans —
         // the detached tasks died with it. Mark them Interrupted so polls report the truth.

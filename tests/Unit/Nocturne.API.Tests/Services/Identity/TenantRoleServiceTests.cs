@@ -178,13 +178,13 @@ public class TenantRoleServiceTests : IDisposable
         var otherRoleId = await SeedOtherTenantViewerRoleAsync();
 
         var result = await _service.UpdateRoleAsync(
-            _tenantId, otherRoleId, "Pwned", null, [TenantPermissions.Superuser]);
+            _tenantId, otherRoleId, "Pwned", null, [Scope.FullAccess]);
 
         result.Should().BeNull("a role ID from another tenant must not resolve");
 
         var untouched = await _context.TenantRoles.AsNoTracking().FirstAsync(r => r.Id == otherRoleId);
         untouched.Name.Should().Be("Viewer");
-        untouched.Permissions.Should().BeEquivalentTo([TenantPermissions.GlucoseRead]);
+        untouched.Permissions.Should().BeEquivalentTo([Scope.GlucoseRead]);
     }
 
     [Fact]
@@ -223,7 +223,7 @@ public class TenantRoleServiceTests : IDisposable
             TenantId = otherTenantId,
             Name = "Viewer",
             Slug = "viewer",
-            Permissions = [TenantPermissions.GlucoseRead],
+            Permissions = [Scope.GlucoseRead],
             IsSystem = true,
         };
         _context.TenantRoles.Add(role);

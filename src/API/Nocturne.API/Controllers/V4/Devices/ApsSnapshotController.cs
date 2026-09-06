@@ -25,7 +25,7 @@ namespace Nocturne.API.Controllers.V4.Devices;
 [ApiController]
 [Tags("Devices")]
 [Route("api/v4/device-status/aps")]
-[RequireScope(OAuthScopes.DevicesRead)]
+[RequireScope(Scope.DevicesRead)]
 [Produces("application/json")]
 public class ApsSnapshotController(IApsSnapshotRepository repo)
     : V4ReadOnlyControllerBase<ApsSnapshot, IApsSnapshotRepository>(repo)
@@ -44,27 +44,18 @@ public class ApsSnapshotController(IApsSnapshotRepository repo)
     /// so the stamper can't take them). Reads that join by <c>correlationId</c> are unaffected.
     /// </remarks>
     [HttpPost]
-    [RequireScope(OAuthScopes.DevicesReadWrite)]
+    [RequireScope(Scope.DevicesReadWrite)]
     [ProducesResponseType(typeof(ApsSnapshot[]), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<ApsSnapshot[]>> CreateApsSnapshots(
         [FromBody] UpsertApsSnapshotRequest[] requests,
         CancellationToken ct = default)
     {
-        if (requests is not { Length: > 0 })
-            return Problem(detail: "APS snapshot data is required", statusCode: 400, title: "Bad Request");
-
-        if (requests.Length > 1000)
-            return Problem(detail: "Bulk operations are limited to 1000 snapshots per request", statusCode: 400, title: "Bad Request");
-
-        if (requests.Any(r => r.Timestamp == default))
-            return Problem(detail: "Timestamp must be set on every snapshot", statusCode: 400, title: "Bad Request");
-
-        if (requests.Any(r => !string.IsNullOrEmpty(r.SyncIdentifier) && string.IsNullOrEmpty(r.DataSource)))
-            return Problem(detail: "DataSource is required when SyncIdentifier is supplied", statusCode: 400, title: "Bad Request");
+        if (await this.ValidateBulkAsync(requests, "APS snapshot", "snapshot", "snapshots", ct) is { } invalid)
+            return invalid;
 
         var models = requests.Select(MapToModel).ToList();
-        var persisted = await Repository.BulkUpsertAsync(models, WriteOrigin.Live, ct);
+        var persisted = await Repository.BulkCreateAsync(models, WriteOrigin.Live, ct);
         return StatusCode(201, persisted.ToArray());
     }
 

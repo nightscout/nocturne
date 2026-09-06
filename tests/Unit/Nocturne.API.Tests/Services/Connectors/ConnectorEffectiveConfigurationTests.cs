@@ -1,7 +1,5 @@
 using FluentAssertions;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -12,6 +10,7 @@ using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Connectors;
@@ -25,7 +24,7 @@ namespace Nocturne.API.Tests.Services.Connectors;
 /// </summary>
 public class ConnectorEffectiveConfigurationTests : IDisposable
 {
-    private readonly SqliteConnection _connection;
+    private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _dbContext;
 
     public ConnectorEffectiveConfigurationTests()
@@ -34,22 +33,15 @@ public class ConnectorEffectiveConfigurationTests : IDisposable
         // (AppDomain scan for [ConnectorRegistration]) can resolve "Glooko".
         _ = typeof(GlookoConnectorConfiguration);
 
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
+        _db = TestDbContextFactory.CreateSqlite();
 
-        var dbOptions = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .Options;
-
-        _dbContext = new NocturneDbContext(dbOptions) { TenantId = Guid.CreateVersion7() };
-        _dbContext.Database.EnsureCreated();
+        _dbContext = _db.CreateContext(Guid.CreateVersion7());
     }
 
     public void Dispose()
     {
         _dbContext.Dispose();
-        _connection.Dispose();
+        _db.Dispose();
     }
 
     private ConnectorConfigurationService CreateService(IConfiguration configuration) =>

@@ -275,7 +275,7 @@ public class V4ReadLimitClampTests
     public async Task BodyWeights_CountAtCeiling_ReachesServiceUnchanged()
     {
         var service = new Mock<IBodyWeightService>();
-        var controller = new BodyWeightController(service.Object, Mock.Of<ILogger<BodyWeightController>>());
+        var controller = new BodyWeightController(service.Object);
 
         var result = await controller.GetBodyWeights(count: Ceiling, skip: 0);
 
@@ -287,7 +287,7 @@ public class V4ReadLimitClampTests
     public async Task BodyWeights_CountAboveCeiling_IsClamped()
     {
         var service = new Mock<IBodyWeightService>();
-        var controller = new BodyWeightController(service.Object, Mock.Of<ILogger<BodyWeightController>>());
+        var controller = new BodyWeightController(service.Object);
 
         var result = await controller.GetBodyWeights(count: AboveCeiling, skip: -1);
 
@@ -301,7 +301,7 @@ public class V4ReadLimitClampTests
     public async Task HeartRates_CountAtCeiling_ReachesServiceUnchanged()
     {
         var service = new Mock<IHeartRateService>();
-        var controller = new HeartRateController(service.Object, Mock.Of<ILogger<HeartRateController>>());
+        var controller = new HeartRateController(service.Object);
 
         var result = await controller.GetHeartRates(count: Ceiling, skip: 0);
 
@@ -313,7 +313,7 @@ public class V4ReadLimitClampTests
     public async Task HeartRates_CountAboveCeiling_IsClamped()
     {
         var service = new Mock<IHeartRateService>();
-        var controller = new HeartRateController(service.Object, Mock.Of<ILogger<HeartRateController>>());
+        var controller = new HeartRateController(service.Object);
 
         var result = await controller.GetHeartRates(count: AboveCeiling, skip: -1);
 
@@ -325,7 +325,7 @@ public class V4ReadLimitClampTests
     public async Task HeartRates_DateRangeWithoutCount_ReadsNoMoreThanTheCeiling()
     {
         var service = new Mock<IHeartRateService>();
-        var controller = new HeartRateController(service.Object, Mock.Of<ILogger<HeartRateController>>());
+        var controller = new HeartRateController(service.Object);
 
         var result = await controller.GetHeartRates(from: RangeFrom, to: RangeTo);
 
@@ -337,7 +337,7 @@ public class V4ReadLimitClampTests
     public async Task HeartRates_DateRangeCountAtCeiling_ReachesServiceUnchanged()
     {
         var service = new Mock<IHeartRateService>();
-        var controller = new HeartRateController(service.Object, Mock.Of<ILogger<HeartRateController>>());
+        var controller = new HeartRateController(service.Object);
 
         var result = await controller.GetHeartRates(count: Ceiling, skip: 0, from: RangeFrom, to: RangeTo);
 
@@ -349,7 +349,7 @@ public class V4ReadLimitClampTests
     public async Task HeartRates_DateRangeCountAboveCeiling_IsClamped()
     {
         var service = new Mock<IHeartRateService>();
-        var controller = new HeartRateController(service.Object, Mock.Of<ILogger<HeartRateController>>());
+        var controller = new HeartRateController(service.Object);
 
         var result = await controller.GetHeartRates(count: AboveCeiling, skip: -1, from: RangeFrom, to: RangeTo);
 
@@ -367,7 +367,7 @@ public class V4ReadLimitClampTests
     public async Task StepCounts_CountAtCeiling_ReachesServiceUnchanged()
     {
         var service = new Mock<IStepCountService>();
-        var controller = new StepCountController(service.Object, Mock.Of<ILogger<StepCountController>>());
+        var controller = new StepCountController(service.Object);
 
         var result = await controller.GetStepCounts(count: Ceiling, skip: 0);
 
@@ -379,7 +379,7 @@ public class V4ReadLimitClampTests
     public async Task StepCounts_CountAboveCeiling_IsClamped()
     {
         var service = new Mock<IStepCountService>();
-        var controller = new StepCountController(service.Object, Mock.Of<ILogger<StepCountController>>());
+        var controller = new StepCountController(service.Object);
 
         var result = await controller.GetStepCounts(count: AboveCeiling, skip: -1);
 
@@ -391,7 +391,7 @@ public class V4ReadLimitClampTests
     public async Task StepCounts_DateRangeWithoutCount_ReadsNoMoreThanTheCeiling()
     {
         var service = new Mock<IStepCountService>();
-        var controller = new StepCountController(service.Object, Mock.Of<ILogger<StepCountController>>());
+        var controller = new StepCountController(service.Object);
 
         var result = await controller.GetStepCounts(from: RangeFrom, to: RangeTo);
 
@@ -403,7 +403,7 @@ public class V4ReadLimitClampTests
     public async Task StepCounts_DateRangeCountAtCeiling_ReachesServiceUnchanged()
     {
         var service = new Mock<IStepCountService>();
-        var controller = new StepCountController(service.Object, Mock.Of<ILogger<StepCountController>>());
+        var controller = new StepCountController(service.Object);
 
         var result = await controller.GetStepCounts(count: Ceiling, skip: 0, from: RangeFrom, to: RangeTo);
 
@@ -415,7 +415,7 @@ public class V4ReadLimitClampTests
     public async Task StepCounts_DateRangeCountAboveCeiling_IsClamped()
     {
         var service = new Mock<IStepCountService>();
-        var controller = new StepCountController(service.Object, Mock.Of<ILogger<StepCountController>>());
+        var controller = new StepCountController(service.Object);
 
         var result = await controller.GetStepCounts(count: AboveCeiling, skip: -1, from: RangeFrom, to: RangeTo);
 

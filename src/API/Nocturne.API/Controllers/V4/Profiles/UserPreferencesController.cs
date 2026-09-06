@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
@@ -78,6 +79,7 @@ public class UserPreferencesController : ControllerBase
     /// <param name="request">The preferences to update</param>
     /// <returns>Updated preferences</returns>
     [HttpPatch]
+    [DenyDemoSubject]
     [RemoteCommand(Invalidates = ["GetPreferences"])]
     [ProducesResponseType(typeof(UserPreferencesResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

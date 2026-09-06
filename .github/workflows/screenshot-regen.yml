@@ -1,0 +1,188 @@
+name: Documentation screenshots
+
+# Re-shoots every screenshot the documentation embeds against a stack built from this ref, and
+# opens a PR when the images move. Dispatch-only: the seeded data is anchored to the calendar
+# date, so an unattended schedule would drift every time it ran and bury real UI changes in data
+# noise. A schedule becomes viable once seeding can replay identical data shapes across days.
+#
+# The PR is created with GITHUB_TOKEN, so GitHub deliberately does not run workflows on it —
+# reviewing it means closing and reopening the PR to get checks. Creating it at all requires
+# "Allow GitHub Actions to create and approve pull requests" under Settings > Actions > General.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: screenshot-regen
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_VERSION: "10.0"
+  NODE_VERSION: "24"
+  PNPM_VERSION: "11.5.0"
+  APPHOST_LOG: apphost.log
+  CAPTURE_LOG: capture.log
+  DIFF_TABLE: screenshot-diff.md
+  API_URL: http://localhost:1610
+  GATEWAY_URL: https://nocturne.localhost:1612
+  BOOT_TIMEOUT_SECONDS: "900"
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+          cache-dependency-path: src/Web/pnpm-lock.yaml
+
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
+
+      - name: Install web dependencies
+        working-directory: src/Web
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        working-directory: src/Web
+        run: pnpm --filter @nocturne/screenshots exec playwright install chromium --with-deps
+
+      # mkcert is not installed here, so the AppHost falls back to the ASP.NET developer
+      # certificate for the gateway the capture browses through. Untrusted is fine — the browser
+      # context sets ignoreHTTPSErrors — but it has to exist.
+      - name: Create the ASP.NET developer certificate
+        run: dotnet dev-certs https
+
+      # The `http` launch profile keeps the dashboard/OTLP/resource-service endpoints on plain
+      # HTTP; `dotnet run` would otherwise pick `https`, which wants an HTTPS dashboard endpoint.
+      - name: Start the stack
+        run: |
+          nohup dotnet run --project src/Aspire/Nocturne.Aspire.Host --launch-profile http \
+            > "$APPHOST_LOG" 2>&1 &
+          echo "APPHOST_PID=$!" >> "$GITHUB_ENV"
+
+      # The capture browses through the gateway to the web dev server, both of which come up well
+      # after the API, so waiting on the API alone would move a slow web boot's failure from here
+      # (where the AppHost log is dumped) into an opaque Playwright navigation timeout.
+      - name: Wait for the stack
+        run: |
+          deadline=$(( SECONDS + BOOT_TIMEOUT_SECONDS ))
+          wait_for() {
+            until curl -fkso /dev/null "$1"; do
+              if ! kill -0 "$APPHOST_PID" 2>/dev/null; then
+                echo "The AppHost exited before $1 came up."
+                tail -n 200 "$APPHOST_LOG"
+                exit 1
+              fi
+              if [ "$SECONDS" -ge "$deadline" ]; then
+                echo "$1 did not answer within ${BOOT_TIMEOUT_SECONDS}s."
+                tail -n 200 "$APPHOST_LOG"
+                exit 1
+              fi
+              sleep 5
+            done
+          }
+          wait_for "$API_URL/health"
+          wait_for "$GATEWAY_URL"
+
+      # A stale anchor or an unsettled route is the signal this workflow exists to raise, so a
+      # failure here stops the run rather than committing whatever it managed to shoot.
+      - name: Capture
+        working-directory: src/Web
+        env:
+          NOCTURNE_API_URL: ${{ env.API_URL }}
+        run: |
+          set -o pipefail
+          pnpm --filter @nocturne/screenshots run capture 2>&1 \
+            | tee "$GITHUB_WORKSPACE/$CAPTURE_LOG"
+
+      - name: Upload capture diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshot-capture-diagnostics
+          path: |
+            ${{ env.CAPTURE_LOG }}
+            ${{ env.APPHOST_LOG }}
+            src/Web/packages/screenshots/images
+          if-no-files-found: ignore
+
+      # --restore-identical puts committed bytes back for images whose pixels did not change, so
+      # an encoder version bump re-quantising every file cannot open a PR by itself. The byte-level
+      # gate below therefore only sees pixel-level drift (and manifest changes).
+      - name: Measure the drift
+        working-directory: src/Web
+        run: |
+          pnpm --filter @nocturne/screenshots run diff-stats \
+            --restore-identical --output "$GITHUB_WORKSPACE/$DIFF_TABLE"
+
+      - name: Detect drift
+        id: drift
+        run: |
+          if [ -z "$(git status --porcelain src/Web/packages/screenshots)" ]; then
+            echo "No drift: the captured screenshots match the committed ones."
+            echo "drifted=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "drifted=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Compose the pull request body
+        if: steps.drift.outputs.drifted == 'true'
+        run: |
+          {
+            echo "Regenerated from a stack built at ${GITHUB_SHA}."
+            echo
+            echo "Read the table as a shortlist of what to look at rather than a verdict: the"
+            echo "percentage is pixels, and a small one can still be the label a documentation"
+            echo "page quotes. The seeded data ends on the capture date, so rows under about 1%"
+            echo "are usually clocks and axis labels; larger jumps are UI or data-shape changes."
+            echo
+            cat "$DIFF_TABLE"
+            echo
+            echo "[Workflow run](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})"
+            echo
+            echo "Checks do not run on a pull request opened with \`GITHUB_TOKEN\`. Close and reopen"
+            echo "this one to start them."
+          } > pr-body.md
+
+      - name: Open or update the pull request
+        if: steps.drift.outputs.drifted == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: docs/screenshot-regen
+          base: main
+          add-paths: src/Web/packages/screenshots
+          commit-message: "docs: regenerate documentation screenshots"
+          title: "docs: regenerate documentation screenshots"
+          body-path: pr-body.md
+          delete-branch: true
+
+      - name: Stop the stack
+        if: always() && env.APPHOST_PID != ''
+        run: kill "$APPHOST_PID" || true

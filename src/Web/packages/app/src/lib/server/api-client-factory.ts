@@ -24,9 +24,15 @@ export interface ServerHttpClientOptions {
   refreshToken?: string;
   guestSessionToken?: string;
   platformAccessToken?: string;
+  recoverySessionToken?: string;
   hashedInstanceKey?: string | null;
   extraHeaders?: Record<string, string>;
   responseCookies?: CookieSetter;
+  /**
+   * Sink for Set-Cookie headers SvelteKit's cookie jar cannot hold, appended verbatim to the
+   * outgoing response by a handler. See propagateAuthCookies.
+   */
+  rawSetCookies?: string[];
   signal?: AbortSignal;
 }
 
@@ -80,6 +86,11 @@ export function createServerHttpClient(
           `${AUTH_COOKIE_NAMES.platformAccess}=${options.platformAccessToken}`
         );
       }
+      if (options?.recoverySessionToken) {
+        cookies.push(
+          `${AUTH_COOKIE_NAMES.recoverySession}=${options.recoverySessionToken}`
+        );
+      }
       if (cookies.length > 0) {
         headers.set("Cookie", cookies.join("; "));
       }
@@ -98,9 +109,11 @@ export function createServerHttpClient(
       });
 
       if (options?.responseCookies) {
+        const rawSink = options.rawSetCookies;
         propagateAuthCookies(
           response.headers.getSetCookie(),
-          options.responseCookies
+          options.responseCookies,
+          rawSink && ((header) => rawSink.push(header))
         );
       }
 

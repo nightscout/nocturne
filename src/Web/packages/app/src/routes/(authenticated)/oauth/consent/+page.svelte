@@ -18,6 +18,7 @@
   } from "lucide-svelte";
   import { consentForm, getClientInfo } from "../oauth.remote";
   import { getOAuthScopeDescription } from "$lib/constants/oauth-scopes";
+  import { retainQuery } from "$lib/api/retain-query.svelte";
 
   // Auth guard: redirect to login if not authenticated
   $effect(() => {
@@ -39,6 +40,7 @@
 
   // Fetch client info via remote function
   const clientInfoQuery = $derived(clientId ? getClientInfo({ clientId }) : null);
+  retainQuery(() => clientInfoQuery);
   const clientInfo = $derived(clientInfoQuery?.current ?? {
     clientId,
     displayName: null,
@@ -75,6 +77,11 @@
 
   // Get form-level issues for error display
   const formIssues = $derived(consentForm.fields.allIssues() ?? []);
+
+  // A SvelteKit remote form can only be bound to a single <form> element, so Deny
+  // and Approve each need their own keyed instance of the same remote function.
+  const denyForm = $derived(consentForm.for("deny"));
+  const approveForm = $derived(consentForm.for("approve"));
 </script>
 
 <svelte:head>
@@ -290,7 +297,7 @@
 
         <div class="flex gap-3">
           <form
-            {...consentForm.enhance(async ({ submit }) => {
+            {...denyForm.enhance(async ({ submit }) => {
               await submit();
             })}
             class="flex-1"
@@ -310,16 +317,16 @@
               type="submit"
               variant="outline"
               class="w-full"
-              disabled={!!consentForm.pending}
+              disabled={!!denyForm.pending}
             >
-              {#if consentForm.pending}
+              {#if denyForm.pending}
                 <Loader2 class="mr-2 h-4 w-4 animate-spin" />
               {/if}
               Deny
             </Button>
           </form>
           <form
-            {...consentForm.enhance(async ({ submit }) => {
+            {...approveForm.enhance(async ({ submit }) => {
               await submit();
             })}
             class="flex-1"
@@ -338,9 +345,9 @@
             <Button
               type="submit"
               class="w-full"
-              disabled={!!consentForm.pending}
+              disabled={!!approveForm.pending}
             >
-              {#if consentForm.pending}
+              {#if approveForm.pending}
                 <Loader2 class="mr-2 h-4 w-4 animate-spin" />
               {/if}
               Approve

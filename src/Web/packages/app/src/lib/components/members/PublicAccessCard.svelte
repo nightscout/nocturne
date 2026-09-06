@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatDayTime } from "$lib/utils/formatting";
   import { page } from "$app/state";
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
@@ -26,6 +27,8 @@
     publicDataCategories,
     formatList,
   } from "./public-data-categories";
+  import { retainQuery } from "$lib/api/retain-query.svelte";
+  import { describeSubmitError } from "$lib/forms/submit-error";
 
   const effectivePermissions: string[] = $derived(
     (page.data as any).effectivePermissions ?? [],
@@ -36,6 +39,7 @@
   );
 
   const shareQuery = $derived(canManageSharing ? getShareLink() : null);
+  retainQuery(() => shareQuery);
   const share = $derived(shareQuery?.current ?? null);
 
   // Optimistic overrides held only while a mutation is in flight; null = use server truth.
@@ -75,10 +79,13 @@
         await disableShareLink();
         revealedUrl = null;
       }
-    } catch {
-      errorMessage = on
-        ? "Couldn't create the link. Please try again."
-        : "Couldn't turn off public access. Please try again.";
+    } catch (err) {
+      errorMessage = describeSubmitError(
+        err,
+        on
+          ? "Couldn't create the link. Please try again."
+          : "Couldn't turn off public access. Please try again."
+      );
     } finally {
       busy = false;
       pendingEnabled = null;
@@ -91,8 +98,8 @@
     confirmingRotate = false;
     try {
       revealedUrl = (await rotateShareLink()).url ?? null;
-    } catch {
-      errorMessage = "Couldn't regenerate the link. Please try again.";
+    } catch (err) {
+      errorMessage = describeSubmitError(err, "Couldn't regenerate the link. Please try again.");
     } finally {
       busy = false;
     }
@@ -108,8 +115,8 @@
     scopeWritesInFlight++;
     try {
       await setShareLinkScopes({ scopes: list });
-    } catch {
-      errorMessage = "Couldn't update what's shared. Please try again.";
+    } catch (err) {
+      errorMessage = describeSubmitError(err, "Couldn't update what's shared. Please try again.");
     } finally {
       // Hold the optimistic value until every concurrent toggle settles, then fall back to
       // server truth — the generated command already refreshed getShareLink.
@@ -123,8 +130,8 @@
     errorMessage = null;
     try {
       await setShareLinkFullHistory({ fullHistory: fh });
-    } catch {
-      errorMessage = "Couldn't update the time window. Please try again.";
+    } catch (err) {
+      errorMessage = describeSubmitError(err, "Couldn't update the time window. Please try again.");
     } finally {
       pendingFullHistory = null;
     }
@@ -143,17 +150,12 @@
   function formatDate(date: Date | string | undefined | null): string {
     if (!date) return "never";
     const d = date instanceof Date ? date : new Date(date);
-    return d.toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
+    return formatDayTime(d);
   }
 </script>
 
 {#if canManageSharing}
-  <Card.Root>
+  <Card.Root data-testid="public-access-card">
     <!-- Hero header: globe/lock + master toggle -->
     <div class="flex items-start gap-4 p-5 @md:p-6">
       <div
@@ -175,6 +177,7 @@
         </p>
       </div>
       <Switch
+        data-testid="public-access-toggle"
         checked={enabled}
         disabled={busy}
         onCheckedChange={(v: boolean) => setEnabled(v)}
@@ -306,7 +309,7 @@
               Limit public viewers to recent data only. Older history stays private.
             </div>
           </div>
-          <div class="inline-flex shrink-0 rounded-lg bg-muted p-1">
+          <div class="inline-flex shrink-0 rounded-lg bg-muted p-1" data-testid="public-access-window">
             <button
               type="button"
               onclick={() => setWindow(true)}

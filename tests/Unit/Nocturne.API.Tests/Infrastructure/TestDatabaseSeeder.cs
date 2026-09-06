@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -89,8 +90,8 @@ public static class TestDatabaseSeeder
             Id = readableRoleId,
             TenantId = TenantId,
             Name = "Clinician",
-            Slug = TenantPermissions.SeedRoles.Clinician,
-            Permissions = TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Clinician],
+            Slug = RoleSeeds.Clinician,
+            Permissions = RoleSeeds.Permissions[RoleSeeds.Clinician],
             IsSystem = true,
             SysCreatedAt = DateTime.UtcNow,
             SysUpdatedAt = DateTime.UtcNow,
@@ -102,8 +103,8 @@ public static class TestDatabaseSeeder
             Id = ownerRoleId,
             TenantId = TenantId,
             Name = "Owner",
-            Slug = TenantPermissions.SeedRoles.Owner,
-            Permissions = TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Owner],
+            Slug = RoleSeeds.Owner,
+            Permissions = RoleSeeds.Permissions[RoleSeeds.Owner],
             IsSystem = true,
             SysCreatedAt = DateTime.UtcNow,
             SysUpdatedAt = DateTime.UtcNow,
@@ -121,7 +122,7 @@ public static class TestDatabaseSeeder
                 GrantType = OAuthGrantTypes.Direct,
                 LegacySecretHash = apiSecretHash,
                 IsMigrated = true,
-                Scopes = [OAuthScopes.FullAccess],
+                Scopes = [Scope.FullAccess],
                 Label = "Legacy API Secret",
                 CreatedAt = DateTime.UtcNow,
             });
@@ -145,6 +146,89 @@ public static class TestDatabaseSeeder
         });
 
         db.SaveChanges();
+    }
+
+    /// <summary>
+    /// Adds a subject and its membership of <paramref name="tenantId"/>, carrying
+    /// <paramref name="roleSlug"/> unless that is <see langword="null"/>. The tenant's role row is
+    /// created on first use. Returns the subject id.
+    /// </summary>
+    public static async Task<Guid> SeedMemberAsync(
+        NocturneDbContext db,
+        Guid tenantId,
+        string? roleSlug = RoleSeeds.Owner,
+        string? name = null,
+        bool isActive = true,
+        bool isSystemSubject = false,
+        DateTime? revokedAt = null,
+        DateTime? joinedAt = null,
+        string? preferences = null)
+    {
+        var roleId = roleSlug == null ? (Guid?)null : await EnsureRoleAsync(db, tenantId, roleSlug);
+        var subjectId = Guid.CreateVersion7();
+        var member = new TenantMemberEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = tenantId,
+            SubjectId = subjectId,
+            RevokedAt = revokedAt,
+        };
+
+        db.Subjects.Add(new SubjectEntity
+        {
+            Id = subjectId,
+            Name = name ?? (isSystemSubject ? "Public" : $"Member {subjectId:N}"),
+            Username = name,
+            IsActive = isActive,
+            IsSystemSubject = isSystemSubject,
+            Preferences = preferences,
+        });
+        db.TenantMembers.Add(member);
+
+        if (roleId is { } id)
+        {
+            db.TenantMemberRoles.Add(new TenantMemberRoleEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantMemberId = member.Id,
+                TenantRoleId = id,
+            });
+        }
+
+        await db.SaveChangesAsync();
+
+        if (joinedAt is { } joined)
+        {
+            // The context stamps SysCreatedAt on insert, so the join time can only be set afterwards.
+            member.SysCreatedAt = joined;
+            await db.SaveChangesAsync();
+        }
+
+        return subjectId;
+    }
+
+    private static async Task<Guid> EnsureRoleAsync(NocturneDbContext db, Guid tenantId, string roleSlug)
+    {
+        var existing = await db.TenantRoles
+            .Where(r => r.TenantId == tenantId && r.Slug == roleSlug)
+            .Select(r => (Guid?)r.Id)
+            .FirstOrDefaultAsync();
+
+        if (existing is { } id)
+            return id;
+
+        var roleId = Guid.CreateVersion7();
+        db.TenantRoles.Add(new TenantRoleEntity
+        {
+            Id = roleId,
+            TenantId = tenantId,
+            Name = RoleSeeds.DisplayNames[roleSlug],
+            Slug = roleSlug,
+            Permissions = RoleSeeds.Permissions[roleSlug],
+            IsSystem = true,
+        });
+        await db.SaveChangesAsync();
+        return roleId;
     }
 
     public static string Sha1Hex(string input)

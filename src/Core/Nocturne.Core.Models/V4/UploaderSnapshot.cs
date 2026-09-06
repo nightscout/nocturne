@@ -1,3 +1,5 @@
+using NJsonSchema.Annotations;
+
 namespace Nocturne.Core.Models.V4;
 
 /// <summary>
@@ -14,46 +16,14 @@ namespace Nocturne.Core.Models.V4;
 /// <seealso cref="ApsSnapshot"/>
 /// <seealso cref="PumpSnapshot"/>
 /// <seealso cref="Device"/>
-public class UploaderSnapshot : IV4Record
+[JsonSchemaFlatten]
+public class UploaderSnapshot : V4RecordBase
 {
-    /// <inheritdoc />
-    public Guid Id { get; set; }
-
-    /// <inheritdoc />
-    public DateTime Timestamp { get; set; }
-
-    /// <inheritdoc />
-    public long Mills => new DateTimeOffset(Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
-
-    /// <inheritdoc />
-    public int? UtcOffset { get; set; }
-
-    /// <inheritdoc />
-    public string? Device { get; set; }
-
-    /// <inheritdoc />
-    public string? App { get; set; }
-
-    /// <inheritdoc />
-    public string? DataSource { get; set; }
-
     /// <summary>
     /// Stable per-source identifier. Records matched on (DataSource, SyncIdentifier) are updated in
     /// place on re-upload instead of duplicated, so uploader retries are idempotent.
     /// </summary>
     public string? SyncIdentifier { get; set; }
-
-    /// <inheritdoc />
-    public Guid? CorrelationId { get; set; }
-
-    /// <inheritdoc />
-    public string? LegacyId { get; set; }
-
-    /// <inheritdoc />
-    public DateTime CreatedAt { get; set; }
-
-    /// <inheritdoc />
-    public DateTime ModifiedAt { get; set; }
 
     /// <summary>
     /// Uploader device name (e.g., phone model or bridge device name).
@@ -89,9 +59,4 @@ public class UploaderSnapshot : IV4Record
     /// Foreign key to the <see cref="V4.Device"/> table.
     /// </summary>
     public Guid? DeviceId { get; set; }
-
-    /// <summary>
-    /// Catch-all for fields not mapped to dedicated columns
-    /// </summary>
-    public Dictionary<string, object?>? AdditionalProperties { get; set; }
 }

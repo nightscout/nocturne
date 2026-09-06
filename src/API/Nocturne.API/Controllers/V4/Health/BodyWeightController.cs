@@ -21,26 +21,35 @@ namespace Nocturne.API.Controllers.V4.Health;
 [Tags("Health")]
 [Route("api/v4/body-weight")]
 [Authorize]
-public class BodyWeightController : ControllerBase, IWriteScopedController
+public class BodyWeightController(IBodyWeightService bodyWeightService)
+    : HealthRecordControllerBase<BodyWeight>, IWriteScopedController
 {
     /// <summary>
     /// The OAuth scope every write action on this controller requires. Body weight has no category
     /// scope of its own: the record is patient clinical configuration, written from the Patient
     /// Record settings form together with the therapy settings, so it is gated on
     /// <c>therapy.readwrite</c>. The <c>health.readwrite</c> alias cannot be required —
-    /// <see cref="OAuthScopes.Normalize"/> expands it into per-category scopes, so no granted set
+    /// <see cref="Scope.Normalize"/> expands it into per-category scopes, so no granted set
     /// ever contains it.
     /// </summary>
-    public string WriteScope => OAuthScopes.TherapyReadWrite;
+    public string WriteScope => Scope.TherapyReadWrite;
 
-    private readonly IBodyWeightService _bodyWeightService;
-    private readonly ILogger<BodyWeightController> _logger;
+    protected override string RecordTypeName => "Body weight";
 
-    public BodyWeightController(IBodyWeightService bodyWeightService, ILogger<BodyWeightController> logger)
-    {
-        _bodyWeightService = bodyWeightService;
-        _logger = logger;
-    }
+    protected override Task<IEnumerable<BodyWeight>> ReadPageAsync(int count, int skip, CancellationToken ct) =>
+        bodyWeightService.GetBodyWeightsAsync(count, skip, ct);
+
+    protected override Task<BodyWeight?> ReadAsync(string id, CancellationToken ct) =>
+        bodyWeightService.GetBodyWeightByIdAsync(id, ct);
+
+    protected override Task<IEnumerable<BodyWeight>> WriteManyAsync(IReadOnlyList<BodyWeight> models, CancellationToken ct) =>
+        bodyWeightService.CreateBodyWeightsAsync(models, ct);
+
+    protected override Task<BodyWeight?> WriteAsync(string id, BodyWeight model, CancellationToken ct) =>
+        bodyWeightService.UpdateBodyWeightAsync(id, model, ct);
+
+    protected override Task<bool> EraseAsync(string id, CancellationToken ct) =>
+        bodyWeightService.DeleteBodyWeightAsync(id, ct);
 
     /// <summary>
     /// Get body weight records with optional pagination
@@ -53,26 +62,12 @@ public class BodyWeightController : ControllerBase, IWriteScopedController
     [RemoteQuery]
     [ProducesResponseType(typeof(IEnumerable<BodyWeight>), 200)]
     [ProducesResponseType(500)]
-    public async Task<ActionResult<IEnumerable<BodyWeight>>> GetBodyWeights(
-        [FromQuery] int count = 10,
+    [ErrorEnvelope]
+    public Task<ActionResult<IEnumerable<BodyWeight>>> GetBodyWeights(
+        [FromQuery] int count = DefaultCount,
         [FromQuery] int skip = 0,
         CancellationToken cancellationToken = default
-    )
-    {
-        count = V4ReadLimits.ClampLimit(count);
-        skip = V4ReadLimits.ClampOffset(skip);
-
-        try
-        {
-            var records = await _bodyWeightService.GetBodyWeightsAsync(count, skip, cancellationToken);
-            return Ok(records);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving body weight records");
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
-        }
-    }
+    ) => ListResponseAsync(count, skip, cancellationToken);
 
     /// <summary>
     /// Get a specific body weight record by ID
@@ -84,25 +79,11 @@ public class BodyWeightController : ControllerBase, IWriteScopedController
     [ProducesResponseType(typeof(BodyWeight), 200)]
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]
-    public async Task<ActionResult<BodyWeight>> GetBodyWeight(
+    [ErrorEnvelope]
+    public Task<ActionResult<BodyWeight>> GetBodyWeight(
         string id,
         CancellationToken cancellationToken = default
-    )
-    {
-        try
-        {
-            var record = await _bodyWeightService.GetBodyWeightByIdAsync(id, cancellationToken);
-            if (record == null)
-                return Problem(detail: $"Body weight record with ID {id} not found", statusCode: 404, title: "Not Found");
-
-            return Ok(record);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving body weight record with ID {Id}", id);
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
-        }
-    }
+    ) => GetResponseAsync(id, cancellationToken);
 
     /// <summary>
     /// Create a single body weight record
@@ -113,80 +94,32 @@ public class BodyWeightController : ControllerBase, IWriteScopedController
     [ProducesResponseType(typeof(BodyWeight), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<BodyWeight>> Create(
         [FromBody] BodyWeight bodyWeight,
         CancellationToken cancellationToken = default
     )
     {
-        try
-        {
-            if (bodyWeight == null)
-                return Problem(detail: "Body weight data is required", statusCode: 400, title: "Bad Request");
+        if (bodyWeight == null)
+            return Problem(detail: "Body weight data is required", statusCode: 400, title: "Bad Request");
 
-            var result = await _bodyWeightService.CreateBodyWeightsAsync([bodyWeight], cancellationToken);
-            return StatusCode(StatusCodes.Status201Created, result.First());
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating body weight record");
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
-        }
+        var result = await WriteManyAsync([bodyWeight], cancellationToken);
+        return StatusCode(StatusCodes.Status201Created, result.First());
     }
 
     /// <summary>
-    /// Create one or more body weight records (single object or array)
+    /// Create one or more body weight records
     /// </summary>
     [HttpPost("batch")]
     [RequireDeclaredWriteScope]
     [ProducesResponseType(typeof(IEnumerable<BodyWeight>), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]
-    public async Task<ActionResult<IEnumerable<BodyWeight>>> CreateBodyWeights(
-        [FromBody] object bodyWeights,
+    [ErrorEnvelope]
+    public Task<ActionResult<IEnumerable<BodyWeight>>> CreateBodyWeights(
+        [FromBody] BodyWeight[] bodyWeights,
         CancellationToken cancellationToken = default
-    )
-    {
-        try
-        {
-            if (bodyWeights == null)
-                return Problem(detail: "Body weight data is required", statusCode: 400, title: "Bad Request");
-
-            List<BodyWeight> bodyWeightList;
-
-            if (bodyWeights is System.Text.Json.JsonElement jsonElement)
-            {
-                if (jsonElement.ValueKind == System.Text.Json.JsonValueKind.Array)
-                {
-                    bodyWeightList =
-                        System.Text.Json.JsonSerializer.Deserialize<List<BodyWeight>>(
-                            jsonElement.GetRawText()
-                        ) ?? [];
-                }
-                else
-                {
-                    var single = System.Text.Json.JsonSerializer.Deserialize<BodyWeight>(
-                        jsonElement.GetRawText()
-                    );
-                    bodyWeightList = single != null ? [single] : [];
-                }
-            }
-            else
-            {
-                return Problem(detail: "Invalid data format", statusCode: 400, title: "Bad Request");
-            }
-
-            if (bodyWeightList.Count == 0)
-                return Problem(detail: "At least one body weight record is required", statusCode: 400, title: "Bad Request");
-
-            var result = await _bodyWeightService.CreateBodyWeightsAsync(bodyWeightList, cancellationToken);
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating body weight records");
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
-        }
-    }
+    ) => CreateResponseAsync(bodyWeights, cancellationToken);
 
     /// <summary>
     /// Update an existing body weight record
@@ -197,26 +130,12 @@ public class BodyWeightController : ControllerBase, IWriteScopedController
     [ProducesResponseType(typeof(BodyWeight), 200)]
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]
-    public async Task<ActionResult<BodyWeight>> UpdateBodyWeight(
+    [ErrorEnvelope]
+    public Task<ActionResult<BodyWeight>> UpdateBodyWeight(
         string id,
         [FromBody] BodyWeight bodyWeight,
         CancellationToken cancellationToken = default
-    )
-    {
-        try
-        {
-            var updated = await _bodyWeightService.UpdateBodyWeightAsync(id, bodyWeight, cancellationToken);
-            if (updated == null)
-                return Problem(detail: $"Body weight record with ID {id} not found", statusCode: 404, title: "Not Found");
-
-            return Ok(updated);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error updating body weight record with ID {Id}", id);
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
-        }
-    }
+    ) => UpdateResponseAsync(id, bodyWeight, cancellationToken);
 
     /// <summary>
     /// Delete a body weight record by ID
@@ -227,23 +146,9 @@ public class BodyWeightController : ControllerBase, IWriteScopedController
     [ProducesResponseType(200)]
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]
-    public async Task<ActionResult> DeleteBodyWeight(
+    [ErrorEnvelope]
+    public Task<ActionResult> DeleteBodyWeight(
         string id,
         CancellationToken cancellationToken = default
-    )
-    {
-        try
-        {
-            var deleted = await _bodyWeightService.DeleteBodyWeightAsync(id, cancellationToken);
-            if (!deleted)
-                return Problem(detail: $"Body weight record with ID {id} not found", statusCode: 404, title: "Not Found");
-
-            return Ok(new { message = "Body weight record deleted successfully" });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting body weight record with ID {Id}", id);
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
-        }
-    }
+    ) => DeleteResponseAsync(id, cancellationToken);
 }

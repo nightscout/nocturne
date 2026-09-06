@@ -5,6 +5,7 @@ using Nocturne.API.Models.Responses;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.API.Extensions;
 
 namespace Nocturne.API.Controllers.V4.Identity;
 
@@ -35,7 +36,7 @@ public class ShareLinkController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<ShareLinkDto>> GetShareLink(CancellationToken ct)
     {
-        if (!HasPermission(TenantPermissions.SharingManage))
+        if (!HttpContext.HasScope(Scope.SharingManage))
             return Forbid();
 
         return Ok(await _shareLinkService.GetAsync(_tenantAccessor.TenantId, ct));
@@ -51,7 +52,7 @@ public class ShareLinkController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<ShareLinkDto>> RotateShareLink(CancellationToken ct)
     {
-        if (!HasPermission(TenantPermissions.SharingManage))
+        if (!HttpContext.HasScope(Scope.SharingManage))
             return Forbid();
 
         return Ok(await _shareLinkService.RotateAsync(_tenantAccessor.TenantId, ct));
@@ -64,7 +65,7 @@ public class ShareLinkController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<ShareLinkDto>> DisableShareLink(CancellationToken ct)
     {
-        if (!HasPermission(TenantPermissions.SharingManage))
+        if (!HttpContext.HasScope(Scope.SharingManage))
             return Forbid();
 
         return Ok(await _shareLinkService.DisableAsync(_tenantAccessor.TenantId, ct));
@@ -78,7 +79,7 @@ public class ShareLinkController : ControllerBase
     public async Task<ActionResult<ShareLinkDto>> SetShareLinkFullHistory(
         [FromBody] SetShareFullHistoryRequest request, CancellationToken ct)
     {
-        if (!HasPermission(TenantPermissions.SharingManage))
+        if (!HttpContext.HasScope(Scope.SharingManage))
             return Forbid();
 
         return Ok(await _shareLinkService.SetFullHistoryAsync(_tenantAccessor.TenantId, request.FullHistory, ct));
@@ -86,7 +87,7 @@ public class ShareLinkController : ControllerBase
 
     /// <summary>
     /// Set which data categories anonymous viewers can see. Scopes must be read-permission atoms
-    /// drawn from <c>TenantPermissions.PublicShareScopes</c>; an empty list keeps the link live but
+    /// drawn from <c>Scope.PublicShareScopes</c>; an empty list keeps the link live but
     /// shares nothing.
     /// </summary>
     [HttpPut("scopes")]
@@ -97,24 +98,21 @@ public class ShareLinkController : ControllerBase
     public async Task<ActionResult<ShareLinkDto>> SetShareLinkScopes(
         [FromBody] SetShareScopesRequest request, CancellationToken ct)
     {
-        if (!HasPermission(TenantPermissions.SharingManage))
+        if (!HttpContext.HasScope(Scope.SharingManage))
             return Forbid();
 
         try
         {
             return Ok(await _shareLinkService.SetScopesAsync(_tenantAccessor.TenantId, request.Scopes, ct));
         }
-        catch (ArgumentException ex)
+        catch (ArgumentException)
         {
-            return Problem(detail: ex.Message, statusCode: 400, title: "Invalid scopes");
+            return Problem(
+                detail: "Some of the chosen sharing options aren't available. Reload the page and choose again.",
+                statusCode: 400);
         }
     }
 
-    private bool HasPermission(string permission)
-    {
-        var grantedScopes = HttpContext.Items["GrantedScopes"] as IReadOnlySet<string>;
-        return grantedScopes != null && TenantPermissions.HasPermission(grantedScopes, permission);
-    }
 }
 
 public record SetShareFullHistoryRequest(bool FullHistory);

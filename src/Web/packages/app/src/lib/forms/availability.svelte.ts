@@ -23,15 +23,31 @@ export interface Availability {
   readonly error: string | null;
   /** The server confirmed this value is available. */
   readonly valid: boolean;
+  /**
+   * Nothing known says this value can't be used: either the server confirmed it,
+   * or the check itself failed and so refused nothing. Gate submission on this
+   * rather than on {@link valid}, or a check that cannot answer — the rate
+   * limiter turning the probe away, the network dropping — leaves the field
+   * behind a button that never enables, for a value the server may well accept.
+   * The server validates the value again on submit, which is what actually
+   * decides.
+   */
+  readonly submittable: boolean;
 }
 
 interface AvailabilityState {
   validating: boolean;
   error: string | null;
   valid: boolean;
+  submittable: boolean;
 }
 
-const IDLE: AvailabilityState = { validating: false, error: null, valid: false };
+const IDLE: AvailabilityState = {
+  validating: false,
+  error: null,
+  valid: false,
+  submittable: false,
+};
 
 /**
  * Debounced "is this name free?" checking for a single text field.
@@ -61,19 +77,20 @@ export function useAvailability(
         validating: false,
         error: `${label} must be at least ${minLength} characters`,
         valid: false,
+        submittable: false,
       };
     }
 
     // Still waiting for the debounce to settle on the latest keystroke.
     if (debounced.current !== current) {
-      return { validating: true, error: null, valid: false };
+      return { validating: true, error: null, valid: false, submittable: false };
     }
 
     const result = check(current);
 
     // loading: request in flight; !current: result not populated yet
     if (result.loading || !result.current) {
-      return { validating: true, error: null, valid: false };
+      return { validating: true, error: null, valid: false, submittable: false };
     }
 
     if (result.error) {
@@ -81,17 +98,19 @@ export function useAvailability(
         validating: false,
         error: `Could not validate ${label.toLowerCase()}`,
         valid: false,
+        submittable: true,
       };
     }
 
     if (result.current.isValid) {
-      return { validating: false, error: null, valid: true };
+      return { validating: false, error: null, valid: true, submittable: true };
     }
 
     return {
       validating: false,
       error: result.current.message ?? `Invalid ${label.toLowerCase()}`,
       valid: false,
+      submittable: false,
     };
   });
 
@@ -104,6 +123,9 @@ export function useAvailability(
     },
     get valid() {
       return state.valid;
+    },
+    get submittable() {
+      return state.submittable;
     },
   };
 }

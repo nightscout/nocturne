@@ -97,8 +97,7 @@ public class ConnectorSyncService : IConnectorSyncService
                 };
             }
 
-            // A manual trigger ingests the same connector data as the scheduled sync and must be
-            // attributed the same way. Mirrors ConnectorBackgroundService.
+            // Attributed as ConnectorBackgroundService attributes a scheduled sync.
             using var systemScope = SystemAuditScope.PushForScope(
                 scope.ServiceProvider, $"connector:{executor.ConnectorId}");
 

@@ -450,9 +450,9 @@ public partial class GitHubTranslationService(
         [JsonPropertyName("html_url")]
         public string HtmlUrl { get; init; } = "";
     }
-}
 
     private static string SanitizeForLog(string value) =>
         value.Replace("\r", string.Empty).Replace("\n", string.Empty);
+}
 
 public class TranslationContributionRejectedException(string message) : Exception(message);

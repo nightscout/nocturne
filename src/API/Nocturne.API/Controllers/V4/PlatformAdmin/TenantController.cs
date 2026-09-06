@@ -1,10 +1,15 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.API.Extensions;
+using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 
@@ -61,7 +66,7 @@ public class TenantController : ControllerBase
     public async Task<IActionResult> Create(
         [FromBody] CreateTenantRequest request, CancellationToken ct)
     {
-        var authContext = HttpContext.Items["AuthContext"] as AuthContext;
+        var authContext = HttpContext.GetAuthContext();
         var tenant = authContext?.SubjectId is { } creatorId
             ? await _tenantService.CreateAsync(request.Slug, request.DisplayName, creatorId, ct)
             : await _tenantService.CreateWithoutOwnerAsync(request.Slug, request.DisplayName, ct);
@@ -180,7 +185,7 @@ public class TenantController : ControllerBase
         if (!await IsCallerTenantOwnerAsync(id, ct))
             return Forbid();
 
-        var passkeys = await passkeyService.GetCredentialsAsync(subjectId, id);
+        var passkeys = await passkeyService.GetCredentialsAsync(subjectId);
         var oidcIdentities = await subjectService.GetLinkedOidcIdentitiesAsync(subjectId);
 
         return Ok(new SubjectCredentialsDto(
@@ -248,12 +253,56 @@ public class TenantController : ControllerBase
     }
 
     /// <summary>
+    /// Mints a single-use code that signs a member in on the tenant's own host, for a caller that
+    /// has already established which browser the member is at.
+    /// </summary>
+    /// <remarks>
+    /// The code is redeemed at <c>POST /api/auth/handoff</c> on that host. It grants no more than
+    /// the direct grant <see cref="TenantDirectGrantController"/> already mints for the same
+    /// member, and like that one it names the platform-admin caller as the actor in the audit
+    /// trail rather than the member.
+    /// </remarks>
+    [HttpPost("{id:guid}/members/{subjectId:guid}/login-code")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    [ProducesResponseType(typeof(LoginCode), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> IssueLoginCode(
+        Guid id, Guid subjectId,
+        [FromServices] IDbContextFactory<NocturneDbContext> dbContextFactory,
+        [FromServices] ILoginCodeService loginCodeService,
+        CancellationToken ct)
+    {
+        if (!await IsCallerTenantOwnerAsync(id, ct))
+            return Forbid();
+
+        var tenant = await _tenantService.GetByIdAsync(id, ct);
+        if (tenant is null || tenant.Members.All(m => m.SubjectId != subjectId))
+            return NotFound();
+
+        if (!tenant.IsActive)
+            return Problem(detail: "Tenant is not active", statusCode: 409, title: "Conflict");
+
+        await using var dbContext = await dbContextFactory.CreateTenantPinnedContextAsync(id, ct);
+
+        var issued = await loginCodeService.IssueAsync(
+            dbContext, subjectId,
+            HttpContext.Connection.RemoteIpAddress?.ToString(),
+            Request.Headers.UserAgent.ToString(),
+            AuthAuditActor.From(HttpContext.GetAuthContext()),
+            ct);
+
+        return Ok(issued);
+    }
+
+    /// <summary>
     /// Verifies the authenticated caller is a member of the specified tenant
     /// with the Owner role (has superuser permission).
     /// </summary>
     private async Task<bool> IsCallerTenantOwnerAsync(Guid tenantId, CancellationToken ct)
     {
-        var authContext = HttpContext.Items["AuthContext"] as AuthContext;
+        var authContext = HttpContext.GetAuthContext();
 
         // Instance-key / platform-admin callers bypass ownership checks —
         // they already passed [Authorize(Roles = "platform_admin")] and have
@@ -270,7 +319,7 @@ public class TenantController : ControllerBase
         var member = tenant.Members.FirstOrDefault(m => m.SubjectId == subjectId);
         if (member == null) return false;
 
-        return member.Roles.Any(r => r.Slug == TenantPermissions.SeedRoles.Owner);
+        return member.Roles.Any(r => r.Slug == RoleSeeds.Owner);
     }
 }
 

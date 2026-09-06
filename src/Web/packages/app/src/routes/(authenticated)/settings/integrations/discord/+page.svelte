@@ -14,6 +14,7 @@
 		revokeLink,
 	} from "$lib/api/generated/chatIdentities.generated.remote";
 	import { getDiscordConfig, initiateDiscordLink } from "./discord.remote";
+	import { describeSubmitError } from "$lib/forms/submit-error";
 
 	// Auth guard
 	$effect(() => {
@@ -58,8 +59,8 @@
 		actionError = null;
 		try {
 			await setDefault(id);
-		} catch {
-			actionError = "Failed to set default link.";
+		} catch (err) {
+			actionError = describeSubmitError(err, "Failed to set default link.");
 		} finally {
 			isSettingDefault = null;
 		}
@@ -77,8 +78,8 @@
 				},
 			});
 			cancelEdit();
-		} catch {
-			actionError = "Failed to update link.";
+		} catch (err) {
+			actionError = describeSubmitError(err, "Failed to update link.");
 		} finally {
 			isSavingEdit = false;
 		}
@@ -89,8 +90,8 @@
 		actionError = null;
 		try {
 			await revokeLink(id);
-		} catch {
-			actionError = "Failed to revoke link.";
+		} catch (err) {
+			actionError = describeSubmitError(err, "Failed to revoke link.");
 		} finally {
 			isRevoking = null;
 		}
@@ -107,8 +108,8 @@
 				window.location.href = result.redirectUrl;
 				return;
 			}
-		} catch {
-			actionError = "Failed to start Discord link flow.";
+		} catch (err) {
+			actionError = describeSubmitError(err, "Failed to start Discord link flow.");
 		} finally {
 			isLinking = false;
 		}
@@ -141,7 +142,7 @@
 		<Card.Header>
 			<Card.Title>Linked accounts</Card.Title>
 			<Card.Description>
-				Discord accounts linked to <strong>this Nocturne instance</strong>. Each one can be
+				Discord accounts linked to <strong>this Nocturne account</strong>. Each one can be
 				queried from Discord with <code>/bg &lt;label&gt;</code>.
 			</Card.Description>
 		</Card.Header>
@@ -206,48 +207,56 @@
 												· Discord <code>{link.platformUserId}</code>
 											{/if}
 										</div>
+										{#if !link.isDefault && link.defaultLabel}
+											<div class="text-xs text-muted-foreground truncate">
+												<code>/bg</code> without a label goes to <code>{link.defaultLabel}</code> on
+												another Nocturne account.
+											</div>
+										{/if}
 									</div>
 								</div>
-								<div class="flex gap-1 shrink-0">
-									{#if !link.isDefault}
+								{#if link.isOwnedByCaller}
+									<div class="flex gap-1 shrink-0">
+										{#if !link.isDefault}
+											<Button
+												size="icon"
+												variant="ghost"
+												title="Set as default"
+												disabled={isSettingDefault === link.id}
+												onclick={() => handleSetDefault(link.id ?? "")}
+											>
+												{#if isSettingDefault === link.id}
+													<Loader2 class="size-4 animate-spin" />
+												{:else}
+													<Star class="size-4" />
+												{/if}
+											</Button>
+										{/if}
 										<Button
+											type="button"
 											size="icon"
 											variant="ghost"
-											title="Set as default"
-											disabled={isSettingDefault === link.id}
-											onclick={() => handleSetDefault(link.id ?? "")}
+											title="Edit"
+											onclick={() => startEdit(link.id ?? "", link.label ?? "", link.displayName ?? "")}
 										>
-											{#if isSettingDefault === link.id}
+											<Pencil class="size-4" />
+										</Button>
+										<Button
+											type="button"
+											size="icon"
+											variant="ghost"
+											title="Revoke"
+											disabled={isRevoking === link.id}
+											onclick={() => handleRevokeLink(link.id ?? "")}
+										>
+											{#if isRevoking === link.id}
 												<Loader2 class="size-4 animate-spin" />
 											{:else}
-												<Star class="size-4" />
+												<Link2Off class="size-4" />
 											{/if}
 										</Button>
-									{/if}
-									<Button
-										type="button"
-										size="icon"
-										variant="ghost"
-										title="Edit"
-										onclick={() => startEdit(link.id ?? "", link.label ?? "", link.displayName ?? "")}
-									>
-										<Pencil class="size-4" />
-									</Button>
-									<Button
-										type="button"
-										size="icon"
-										variant="ghost"
-										title="Revoke"
-										disabled={isRevoking === link.id}
-										onclick={() => handleRevokeLink(link.id ?? "")}
-									>
-										{#if isRevoking === link.id}
-											<Loader2 class="size-4 animate-spin" />
-										{:else}
-											<Link2Off class="size-4" />
-										{/if}
-									</Button>
-								</div>
+									</div>
+								{/if}
 							</div>
 						{/if}
 					</div>

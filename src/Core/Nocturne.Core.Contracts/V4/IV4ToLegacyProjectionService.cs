@@ -46,8 +46,10 @@ public interface IV4ToLegacyProjectionService
     );
 
     /// <summary>
-    /// Returns legacy <see cref="Treatment"/> objects synthesised from V4 records
-    /// whose <c>ModifiedAt</c> is at or after the given threshold. Used for v3 incremental sync.
+    /// Returns legacy <see cref="Treatment"/> objects synthesised from V4 records whose system
+    /// update stamp is strictly after the given threshold, oldest first. Used for v3 incremental
+    /// sync, and shaped exactly as <see cref="GetProjectedTreatmentsAsync"/> shapes a time range:
+    /// records of both provenances, meals paired into one treatment, carb foods populated.
     /// </summary>
     Task<IEnumerable<Treatment>> GetProjectedTreatmentsModifiedSinceAsync(
         long lastModifiedMills,

@@ -62,10 +62,10 @@ public class ActivityController : ControllerBase
     [ProducesResponseType(typeof(IEnumerable<Activity>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     [RequireScope(
-        OAuthScopes.TreatmentsRead,
-        OAuthScopes.HeartRateRead,
-        OAuthScopes.StepCountRead,
-        OAuthScopes.SleepRead)]
+        Scope.TreatmentsRead,
+        Scope.HeartRateRead,
+        Scope.StepCountRead,
+        Scope.SleepRead)]
     public async Task<ActionResult<IEnumerable<Activity>>> GetActivities(
         [FromQuery] int count = 10,
         [FromQuery] int skip = 0,
@@ -134,10 +134,10 @@ public class ActivityController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     [RequireScope(
-        OAuthScopes.TreatmentsRead,
-        OAuthScopes.HeartRateRead,
-        OAuthScopes.StepCountRead,
-        OAuthScopes.SleepRead)]
+        Scope.TreatmentsRead,
+        Scope.HeartRateRead,
+        Scope.StepCountRead,
+        Scope.SleepRead)]
     public async Task<ActionResult<Activity>> GetActivity(
         string id,
         CancellationToken cancellationToken = default
@@ -171,7 +171,7 @@ public class ActivityController : ControllerBase
     /// </summary>
     [HttpPost]
     [Authorize]
-    [RequireScope(OAuthScopes.TreatmentsReadWrite)]
+    [RequireScope(Scope.TreatmentsReadWrite)]
     [ProducesResponseType(typeof(IEnumerable<Activity>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -241,7 +241,7 @@ public class ActivityController : ControllerBase
     /// </summary>
     [HttpPut("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.TreatmentsReadWrite)]
+    [RequireScope(Scope.TreatmentsReadWrite)]
     [ProducesResponseType(typeof(Activity), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -294,7 +294,7 @@ public class ActivityController : ControllerBase
     /// </summary>
     [HttpDelete("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.FullAccess)]
+    [RequireScope(Scope.FullAccess)]
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]

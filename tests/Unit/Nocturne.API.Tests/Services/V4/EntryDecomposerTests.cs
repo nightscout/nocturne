@@ -49,6 +49,24 @@ public class EntryDecomposerTests : IDisposable
     #region SGV Decomposition
 
     [Fact]
+    public async Task DecomposeAsync_ReDecomposedSgvEntry_KeepsTheStoredPatientDeviceAttribution()
+    {
+        var entry = new Entry { Id = "sgv-attribution", Type = "sgv", Mills = 1700000000000, Sgv = 120.0, DataSource = "dexcom-connector" };
+        await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
+        var patientDeviceId = Guid.CreateVersion7();
+        var stored = _context.SensorGlucose.Single(e => e.LegacyId == "sgv-attribution");
+        stored.PatientDeviceId = patientDeviceId;
+        await _context.SaveChangesAsync();
+        _context.ChangeTracker.Clear();
+
+        // The stamper resolves nothing on the second pass; the rebuilt model must not wipe the stored link.
+        await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
+
+        _context.ChangeTracker.Clear();
+        _context.SensorGlucose.Single(e => e.LegacyId == "sgv-attribution").PatientDeviceId.Should().Be(patientDeviceId);
+    }
+
+    [Fact]
     public async Task DecomposeAsync_SgvEntry_CreatesSensorGlucoseWithCorrectFields()
     {
         // Arrange
@@ -657,23 +675,21 @@ public class EntryDecomposerTests : IDisposable
 
     #endregion
 
-    #region Direction Fallback via TryParse
+    #region Direction Parsing
 
     [Theory]
     [InlineData("flat", GlucoseDirection.Flat)]
     [InlineData("FLAT", GlucoseDirection.Flat)]
     [InlineData("singleup", GlucoseDirection.SingleUp)]
     [InlineData("SINGLEDOWN", GlucoseDirection.SingleDown)]
-    public void MapDirection_CaseInsensitiveFallback_MapsCorrectly(string input, GlucoseDirection expected)
+    public void MapDirection_CaseInsensitive_MapsCorrectly(string input, GlucoseDirection expected)
     {
-        // The switch cases are exact-match; non-matching falls to Enum.TryParse with ignoreCase
         EntryDecomposer.MapDirection(input).Should().Be(expected);
     }
 
     [Fact]
     public void MapDirection_WhitespaceOnly_ReturnsNull()
     {
-        // String.IsNullOrEmpty returns false for whitespace, so it goes to switch
         EntryDecomposer.MapDirection("   ").Should().BeNull();
     }
 
@@ -804,9 +820,21 @@ public class EntryDecomposerTests : IDisposable
     [InlineData("NOT COMPUTABLE", GlucoseDirection.NotComputable)]
     [InlineData("RATE OUT OF RANGE", GlucoseDirection.RateOutOfRange)]
     [InlineData("NONE", GlucoseDirection.None)]
+    [InlineData("NotComputable", GlucoseDirection.NotComputable)]
+    [InlineData("RateOutOfRange", GlucoseDirection.RateOutOfRange)]
+    [InlineData("None", GlucoseDirection.None)]
     public void MapDirection_KnownValues_MapsCorrectly(string input, GlucoseDirection expected)
     {
         EntryDecomposer.MapDirection(input).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("TripleUp")]
+    [InlineData("TripleDown")]
+    [InlineData("CGM ERROR")]
+    public void MapDirection_LegacyOnlyValues_ReturnNull(string input)
+    {
+        EntryDecomposer.MapDirection(input).Should().BeNull();
     }
 
     [Fact]
