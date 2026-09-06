@@ -11,7 +11,8 @@ import { activeTenants } from "$lib/utils/tenant-host";
  * Get the tenant the request's host serves, of those the authenticated user can reach.
  *
  * A host that names no tenant — the apex of a single-tenant install, where the API resolves the
- * sole tenant itself — falls back to the visitor's oldest membership.
+ * sole tenant itself — falls back to the first tenant the visitor owns, or to their oldest
+ * membership where they own none.
  */
 export const getCurrentTenantId = query(async () => {
   const { locals, url, request } = getRequestEvent();

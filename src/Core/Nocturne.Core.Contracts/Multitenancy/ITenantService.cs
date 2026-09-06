@@ -47,8 +47,9 @@ public interface ITenantService
     Task<MemberRemovalResult> RemoveMemberAsync(Guid tenantId, Guid subjectId, CancellationToken ct = default);
 
     /// <summary>
-    /// Returns all tenants that the specified subject is a member of, oldest membership first,
-    /// ties broken on slug; callers read the first entry as the subject's own tenant.
+    /// Returns all tenants that the specified subject is a member of: tenants the subject owns
+    /// first, then oldest membership, ties on slug. Callers read the first entry as the
+    /// subject's own tenant.
     /// </summary>
     Task<List<TenantDto>> GetTenantsForSubjectAsync(Guid subjectId, CancellationToken ct = default);
 

@@ -7,6 +7,7 @@ using Moq;
 using Nocturne.API.Configuration;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -15,8 +16,9 @@ using Xunit;
 namespace Nocturne.API.Tests.Services.Identity;
 
 /// <summary>
-/// The order of a subject's tenant list is contractual: the UI takes the first entry as the
-/// tenant that person owns, so an unordered read would rename "My Data" between requests.
+/// The order of a subject's tenant list is contractual: on a host that names no tenant,
+/// <c>getCurrentTenantId</c> settles the settings pages on the first entry, so it has to be a
+/// tenant that person owns and it has to be the same one on every request.
 /// </summary>
 [Trait("Category", "Unit")]
 public sealed class TenantServiceGetTenantsForSubjectTests : IDisposable
@@ -39,7 +41,7 @@ public sealed class TenantServiceGetTenantsForSubjectTests : IDisposable
         Mock.Of<ITenantRoleService>(),
         Mock.Of<ILogger<TenantService>>());
 
-    private void SeedMembership(string slug, DateTime joinedAt)
+    private void SeedMembership(string slug, DateTime joinedAt, bool owner = false)
     {
         var tenantId = Guid.CreateVersion7();
         using var db = _db.CreateContext(tenantId);
@@ -52,12 +54,49 @@ public sealed class TenantServiceGetTenantsForSubjectTests : IDisposable
             SubjectId = _subjectId,
         };
         db.TenantMembers.Add(member);
+
+        if (owner)
+        {
+            var role = new TenantRoleEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = tenantId,
+                Name = "Owner",
+                Slug = RoleSeeds.Owner,
+                Permissions = [Scope.FullAccess],
+                IsSystem = true,
+            };
+            db.TenantRoles.Add(role);
+            db.TenantMemberRoles.Add(new TenantMemberRoleEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantMemberId = member.Id,
+                TenantRoleId = role.Id,
+            });
+        }
+
         db.SaveChanges();
 
         // Inserting stamps SysCreatedAt with the current time, so a past join date can only be
         // written afterwards.
         member.SysCreatedAt = joinedAt;
         db.SaveChanges();
+    }
+
+    /// <summary>
+    /// Accepting an invite stamps a membership just as creating a tenant does, so a caregiver
+    /// invited to someone else's tenant before standing up their own would otherwise be settled
+    /// on the tenant they merely belong to.
+    /// </summary>
+    [Fact]
+    public async Task GetTenantsForSubjectAsync_putsAnOwnedTenantAheadOfAnOlderInvitation()
+    {
+        SeedMembership("alpha", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        SeedMembership("zulu", new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc), owner: true);
+
+        var tenants = await Service().GetTenantsForSubjectAsync(_subjectId);
+
+        tenants.Select(t => t.Slug).Should().Equal("zulu", "alpha");
     }
 
     [Fact]

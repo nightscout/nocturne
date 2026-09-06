@@ -12,13 +12,45 @@ vi.mock("$lib/api/generated/myTenants.generated.remote", () => ({
   getMyTenants: () => ({ current: membership.tenants }),
 }));
 
+// Switching tenant is a document navigation, which would take the test runner with it.
+const visited: { urls: string[] } = vi.hoisted(() => ({ urls: [] }));
+vi.mock("$lib/utils/tenant-host", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("$lib/utils/tenant-host")>();
+  return {
+    ...actual,
+    goToTenant: (slug: string, baseDomain: string) => {
+      visited.urls.push(actual.tenantUrl(slug, baseDomain, "https:"));
+    },
+  };
+});
+
 import Harness from "./AppSidebarHarness.test.svelte";
 
 const link = (name: string) => page.getByRole("link", { name, exact: true });
 const group = (name: string) => page.getByRole("button", { name, exact: true });
+const option = (name: string) => page.getByRole("option", { name, exact: true });
 
 /** A signed-in member, as the layout passes one down. */
 const MEMBER = { subjectId: "s1", name: "Sam", roles: [], permissions: [] };
+
+const TENANTS = [
+  { id: "t1", slug: "alpha", displayName: "Alpha", isActive: true },
+  { id: "t2", slug: "bravo", displayName: "Bravo", isActive: true },
+  { id: "t3", slug: "charlie", displayName: "Charlie", isActive: true },
+];
+
+/** The sidebar as a member of every tenant above sees it, viewing one that is not the first. */
+function renderViewingBravo() {
+  pageState.data = { effectivePermissions: ["*"] };
+  membership.tenants = TENANTS;
+
+  render(Harness, {
+    user: MEMBER,
+    currentSlug: "bravo",
+    baseDomain: "example.com",
+  });
+}
 
 describe("AppSidebar", () => {
   beforeEach(async () => {
@@ -26,6 +58,7 @@ describe("AppSidebar", () => {
     await page.viewport(1280, 900);
     pageState.data = {};
     membership.tenants = [];
+    visited.urls = [];
   });
 
   it("offers a public share the dashboard and a way to sign in, and nothing the owner acts on", async () => {
@@ -60,18 +93,33 @@ describe("AppSidebar", () => {
   });
 
   it("names the tenant on screen, not the first one the member belongs to", async () => {
-    pageState.data = { effectivePermissions: ["*"] };
-    membership.tenants = [
-      { id: "t1", slug: "alpha", displayName: "Alpha", isActive: true },
-      { id: "t2", slug: "bravo", displayName: "Bravo", isActive: true },
-    ];
-
-    render(Harness, {
-      user: MEMBER,
-      currentSlug: "bravo",
-      baseDomain: "example.com",
-    });
+    renderViewingBravo();
 
     await expect.element(group("Bravo (bravo)")).toBeVisible();
+  });
+
+  it("holds the tenant on screen as the switcher's selection", async () => {
+    renderViewingBravo();
+
+    await group("Bravo (bravo)").click();
+
+    await expect
+      .element(option("Bravo (bravo)"))
+      .toHaveAttribute("aria-selected", "true");
+    await expect
+      .element(option("Alpha (alpha)"))
+      .not.toHaveAttribute("aria-selected");
+  });
+
+  it("goes to the tenant the visitor picks, and nowhere for the one on screen", async () => {
+    renderViewingBravo();
+
+    await group("Bravo (bravo)").click();
+    await option("Bravo (bravo)").click();
+    expect(visited.urls).toEqual([]);
+
+    await group("Bravo (bravo)").click();
+    await option("Charlie (charlie)").click();
+    expect(visited.urls).toEqual(["https://charlie.example.com/"]);
   });
 });

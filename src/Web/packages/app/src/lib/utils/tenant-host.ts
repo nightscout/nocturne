@@ -19,6 +19,14 @@ export function tenantUrl(
 }
 
 /**
+ * Sends the browser to `slug`'s app. Each tenant is its own origin, so this is a document
+ * navigation rather than a client-side one.
+ */
+export function goToTenant(slug: string, baseDomain: string): void {
+  window.location.href = tenantUrl(slug, baseDomain);
+}
+
+/**
  * The `Domain` attribute scoping a cookie to every host under the base domain, or null where a
  * browser would reject or discard it: a single-label host, an IP literal, or a `*.localhost` name
  * (Chromium does not reliably scope cookies across those).

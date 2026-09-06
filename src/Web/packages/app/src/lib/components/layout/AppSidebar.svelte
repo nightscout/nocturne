@@ -15,8 +15,8 @@
   import { ChevronDown, Shield, Eye } from "lucide-svelte";
   import { buildAppNavigation, type NavItem } from "$lib/navigation/app-navigation";
   import {
+    goToTenant,
     resolveTenantSwitcher,
-    tenantUrl,
     type TenantSwitcherTarget,
   } from "$lib/utils/tenant-host";
   import type { AuthUser } from "$lib/stores/auth-store.svelte";
@@ -90,7 +90,7 @@
       return;
     }
 
-    window.location.href = tenantUrl(value, baseDomain);
+    goToTenant(value, baseDomain);
   }
 
   function formatTenantLabel(target: TenantSwitcherTarget): string {

@@ -387,7 +387,8 @@ public partial class TenantService : ITenantService
         return await context.TenantMembers.AsNoTracking()
             .Where(tm => tm.SubjectId == subjectId)
             .Include(tm => tm.Tenant)
-            .OrderBy(tm => tm.SysCreatedAt)
+            .OrderByDescending(tm => tm.MemberRoles.Any(mr => mr.TenantRole!.Slug == RoleSeeds.Owner))
+            .ThenBy(tm => tm.SysCreatedAt)
             .ThenBy(tm => tm.Tenant!.Slug)
             .Select(tm => new TenantDto(
                 tm.Tenant!.Id, tm.Tenant.Slug, tm.Tenant.DisplayName,
