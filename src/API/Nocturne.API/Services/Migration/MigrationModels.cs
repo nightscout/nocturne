@@ -97,6 +97,14 @@ public record MigrationJobInfo
     public DateTime? StartedAt { get; init; }
     public DateTime? CompletedAt { get; init; }
     public string? ErrorMessage { get; init; }
+
+    /// <summary>
+    /// Whether <see cref="ErrorMessage"/> reports a fault. A run that completed carrying only a
+    /// skip — a read-only API secret cannot list sign-ins, which is the ordinary setup — has a
+    /// message to show and nothing to warn about, and history has no per-collection detail of its
+    /// own to tell the two apart with.
+    /// </summary>
+    public bool HasFailures { get; init; }
 }
 
 
@@ -128,6 +136,55 @@ public record CollectionProgress
     public long DocumentsMigrated { get; init; }
     public long DocumentsFailed { get; init; }
     public bool IsComplete { get; init; }
+
+    /// <summary>
+    /// Why this collection stopped short, in the words shown to whoever ran the import;
+    /// <see langword="null"/> when it finished. A collection can end complete and failed at the
+    /// same time — <see cref="IsComplete"/> only means nothing more will be attempted for it.
+    /// </summary>
+    public string? FailureReason { get; init; }
+
+    /// <summary>
+    /// Why this collection was passed over, or <see langword="null"/> when it was attempted.
+    /// </summary>
+    /// <remarks>
+    /// Distinct from <see cref="FailureReason"/> because a skip is a property of the source's
+    /// configuration rather than a fault: a read-only API secret is refused by Nightscout's admin
+    /// routes and is otherwise perfectly good, and that is the ordinary case, not an incident.
+    /// Counting it as a failure would put a warning on every run of a healthy site.
+    /// </remarks>
+    public string? SkippedReason { get; init; }
+}
+
+/// <summary>
+/// What went wrong when reading from the source, at the granularity the person running the import
+/// can act on. The cause decides whether one collection failed or the whole run cannot proceed:
+/// a rejected secret or an unreachable host will repeat for every remaining collection, whereas
+/// one collection answering an error status says nothing about the next.
+/// </summary>
+internal enum MigrationFailureCause
+{
+    /// <summary>The source answered 401 or 403.</summary>
+    ApiSecretRejected,
+
+    /// <summary>The request never got an answer: name lookup, connection or timeout failure.</summary>
+    Unreachable,
+
+    /// <summary>The source answered, with a status that is not success.</summary>
+    Status,
+
+    /// <summary>The source answered and Nocturne could not use what came back.</summary>
+    Internal,
+}
+
+/// <summary>
+/// A read from the migration source failed. The message is the text shown to the user, so it is
+/// written for someone who does not run servers for a living.
+/// </summary>
+internal sealed class MigrationSourceException(string message, MigrationFailureCause cause, Exception? inner = null)
+    : Exception(message, inner)
+{
+    public MigrationFailureCause Cause { get; } = cause;
 }
 
 /// <summary>
