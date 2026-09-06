@@ -306,8 +306,7 @@ public interface IStatisticsService
         IEnumerable<CarbIntake> carbIntakes,
         ExtendedAnalysisConfig? config = null,
         DateTime? startDate = null,
-        DateTime? endDate = null,
-        int updateIntervalMinutes = 5
+        DateTime? endDate = null
     );
 
     // Site Change Analysis
