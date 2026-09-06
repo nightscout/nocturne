@@ -87,8 +87,8 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
         if (model.Timestamp == default)
             return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
 
-        if (await OnBeforeCreateAsync(model, request, ct) is { } error)
-            return error;
+        if (await OnBeforeCreateAsync(model, request, ct) is { } result)
+            return result;
 
         var created = await Repository.CreateAsync(model, WriteOrigin.Live, ct);
         created = await OnAfterCreateAsync(created, ct);
@@ -161,8 +161,8 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
         if (model.Timestamp == default)
             return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
 
-        if (await OnBeforeUpdateAsync(model, request, existing, ct) is { } error)
-            return error;
+        if (await OnBeforeUpdateAsync(model, request, existing, ct) is { } result)
+            return result;
 
         try
         {
@@ -281,7 +281,12 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
     /// <param name="model">The mapped record.</param>
     /// <param name="request">The inbound request, for the fields the domain model does not carry.</param>
     /// <param name="ct">Cancellation token.</param>
-    /// <returns>A problem result rejecting the request, or <c>null</c> to persist.</returns>
+    /// <returns>
+    /// <c>null</c> to persist, or a result that is returned to the caller verbatim in place of the
+    /// write. That is usually a problem rejecting the request, but it may equally be a success
+    /// result standing in for the create — an idempotent upsert answering with the record it
+    /// already holds, say.
+    /// </returns>
     protected virtual Task<ObjectResult?> OnBeforeCreateAsync(TModel model, TCreateRequest request, CancellationToken ct)
         => Task.FromResult<ObjectResult?>(null);
 
@@ -293,7 +298,11 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
     /// <param name="request">The inbound request, for the fields the domain model does not carry.</param>
     /// <param name="existing">The stored record this update replaces.</param>
     /// <param name="ct">Cancellation token.</param>
-    /// <returns>A problem result rejecting the request, or <c>null</c> to persist.</returns>
+    /// <returns>
+    /// <c>null</c> to persist, or a result that is returned to the caller verbatim in place of the
+    /// write. That is usually a problem rejecting the request, but it may equally be a success
+    /// result standing in for the update.
+    /// </returns>
     protected virtual Task<ObjectResult?> OnBeforeUpdateAsync(TModel model, TUpdateRequest request, TModel existing, CancellationToken ct)
         => Task.FromResult<ObjectResult?>(null);
 

@@ -144,10 +144,11 @@ public class BasalInjectionControllerTests
     public async Task Create_returns_400_when_timestamp_is_more_than_5_minutes_in_future()
     {
         var controller = CreateController();
+        // No PatientInsulinId: an unresolvable reference would collect its own 400 and pass this
+        // test whatever the future tolerance is.
         var request = new CreateBasalInjectionRequest
         {
             Timestamp = DateTimeOffset.UtcNow.AddMinutes(10),
-            PatientInsulinId = Guid.NewGuid(),
             Units = 12,
         };
 
@@ -155,6 +156,8 @@ public class BasalInjectionControllerTests
 
         var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
         objectResult.StatusCode.Should().Be(400);
+        objectResult.Value.Should().BeOfType<ProblemDetails>()
+            .Which.Detail.Should().Be("Timestamp cannot be more than 5 minutes in the future.");
         _repoMock.Verify(r => r.CreateAsync(It.IsAny<BasalInjection>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -175,6 +178,29 @@ public class BasalInjectionControllerTests
         };
 
         var result = await controller.Create(request);
+
+        var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(400);
+        objectResult.Value.Should().BeOfType<ProblemDetails>()
+            .Which.Detail.Should().Be("Timestamp must be set");
+        _repoMock.Verify(r => r.CreateAsync(It.IsAny<BasalInjection>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    /// <summary>
+    /// A request breaking both rules is answered for the timestamp, not the units: the CRUD base
+    /// runs its unset-timestamp guard before the hook carrying the units rule, which is the order
+    /// the bulk path already reported in.
+    /// </summary>
+    [Fact]
+    public async Task Create_with_both_unset_timestamp_and_bad_units_reports_the_timestamp()
+    {
+        var request = new CreateBasalInjectionRequest
+        {
+            Timestamp = default,
+            Units = 0,
+        };
+
+        var result = await CreateController().Create(request);
 
         var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
         objectResult.StatusCode.Should().Be(400);
@@ -359,43 +385,132 @@ public class BasalInjectionControllerTests
         _insulinRepoMock.Verify(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    [Fact]
-    public async Task Update_without_PatientInsulinId_clears_InsulinContext()
+    /// <summary>
+    /// Stores an existing injection carrying an insulin context, so an update that drops the
+    /// reference has something to drop.
+    /// </summary>
+    private Guid SetupExistingWithInsulinContext()
     {
         var id = Guid.NewGuid();
-        var existing = new BasalInjection
-        {
-            Id = id,
-            Timestamp = DateTime.UtcNow.AddHours(-2),
-            Units = 10,
-            InsulinContext = new TreatmentInsulinContext
-            {
-                PatientInsulinId = Guid.NewGuid(),
-                InsulinName = "Tresiba",
-            },
-        };
         _repoMock.Setup(r => r.GetByIdAsync(id, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(existing);
+            .ReturnsAsync(new BasalInjection
+            {
+                Id = id,
+                Timestamp = DateTime.UtcNow.AddHours(-2),
+                Units = 10,
+                InsulinContext = new TreatmentInsulinContext
+                {
+                    PatientInsulinId = Guid.NewGuid(),
+                    InsulinName = "Tresiba",
+                },
+            });
+        return id;
+    }
 
-        BasalInjection? captured = null;
+    private void SetupUpdatePassthrough(Guid id, Action<BasalInjection> onUpdate)
+    {
         _repoMock
             .Setup(r => r.UpdateAsync(id, It.IsAny<BasalInjection>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .Callback<Guid, BasalInjection, WriteOrigin, CancellationToken>((_, b, _, _) => captured = b)
+            .Callback<Guid, BasalInjection, WriteOrigin, CancellationToken>((_, b, _, _) => onUpdate(b))
             .ReturnsAsync((Guid _, BasalInjection b, WriteOrigin _, CancellationToken _) => b);
+    }
 
-        var controller = CreateController();
+    private void VerifyNoUpdate() => _repoMock.Verify(
+        r => r.UpdateAsync(It.IsAny<Guid>(), It.IsAny<BasalInjection>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+        Times.Never);
+
+    /// <summary>
+    /// <c>InsulinContext</c> is not among the fields an update carries forward from the stored
+    /// record, unlike <c>LegacyId</c> and <c>CreatedAt</c>: dropping the reference drops the snapshot.
+    /// </summary>
+    [Fact]
+    public async Task Update_without_PatientInsulinId_does_not_carry_the_stored_InsulinContext_forward()
+    {
+        var id = SetupExistingWithInsulinContext();
+        BasalInjection? captured = null;
+        SetupUpdatePassthrough(id, b => captured = b);
+
         var request = new UpdateBasalInjectionRequest
         {
             Timestamp = DateTimeOffset.UtcNow,
             Units = 11,
         };
 
-        var result = await controller.Update(id, request);
+        var result = await CreateController().Update(id, request);
 
         result.Result.Should().BeOfType<OkObjectResult>();
         captured.Should().NotBeNull();
         captured!.InsulinContext.Should().BeNull();
         _insulinRepoMock.Verify(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1.5)]
+    [InlineData(500.01)]
+    public async Task Update_returns_400_when_units_out_of_range(double units)
+    {
+        var id = SetupExistingWithInsulinContext();
+
+        var request = new UpdateBasalInjectionRequest
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            Units = units,
+        };
+
+        var result = await CreateController().Update(id, request);
+
+        var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(400);
+        objectResult.Value.Should().BeOfType<ProblemDetails>()
+            .Which.Detail.Should().Be("Units must be > 0 and <= 500.");
+        VerifyNoUpdate();
+    }
+
+    [Fact]
+    public async Task Update_returns_400_when_timestamp_is_more_than_5_minutes_in_future()
+    {
+        var id = SetupExistingWithInsulinContext();
+
+        // No PatientInsulinId: an unresolvable reference would collect its own 400 and pass this
+        // test whatever the future tolerance is.
+        var request = new UpdateBasalInjectionRequest
+        {
+            Timestamp = DateTimeOffset.UtcNow.AddMinutes(10),
+            Units = 11,
+        };
+
+        var result = await CreateController().Update(id, request);
+
+        var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(400);
+        objectResult.Value.Should().BeOfType<ProblemDetails>()
+            .Which.Detail.Should().Be("Timestamp cannot be more than 5 minutes in the future.");
+        VerifyNoUpdate();
+    }
+
+    [Fact]
+    public async Task Update_returns_400_when_PatientInsulin_not_found()
+    {
+        var id = SetupExistingWithInsulinContext();
+        var insulinId = Guid.NewGuid();
+        _insulinRepoMock.Setup(r => r.GetByIdAsync(insulinId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((PatientInsulin?)null);
+
+        var request = new UpdateBasalInjectionRequest
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            PatientInsulinId = insulinId,
+            Units = 11,
+        };
+
+        var result = await CreateController().Update(id, request);
+
+        var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(400);
+        objectResult.Value.Should().BeOfType<ProblemDetails>()
+            .Which.Detail.Should().Be("PatientInsulin not found.");
+        VerifyNoUpdate();
     }
 
     [Fact]

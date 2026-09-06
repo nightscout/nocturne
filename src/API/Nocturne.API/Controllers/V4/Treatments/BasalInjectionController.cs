@@ -61,8 +61,7 @@ public class BasalInjectionController(
             return unitsOrTsProblem;
 
         // Idempotent upsert: a record already stored under this (DataSource, SyncIdentifier) is
-        // returned as a 200 instead of the create the caller asked for, so the hook short-circuits
-        // with a success result rather than a rejection.
+        // returned as a 200 instead of the create the caller asked for.
         if (!string.IsNullOrEmpty(request.DataSource) && !string.IsNullOrEmpty(request.SyncIdentifier)
             && await Repository.FindBySyncIdentifierAsync(request.DataSource, request.SyncIdentifier, ct) is { } existingBySync)
         {
@@ -157,9 +156,11 @@ public class BasalInjectionController(
     }
 
     /// <summary>
-    /// The rules the CRUD base does not already enforce: the unset-timestamp guard is the base's,
-    /// on every single and bulk write path alike.
+    /// Enforces the two rules every basal injection write shares: <see cref="BasalInjection.Units"/>
+    /// must be in (0, 500], and <see cref="BasalInjection.Timestamp"/> must be no more than five
+    /// minutes in the future.
     /// </summary>
+    /// <returns>A <c>400 Bad Request</c> problem naming the rule broken, or <c>null</c> when both hold.</returns>
     private ObjectResult? ValidateUnitsAndFutureTolerance(double units, DateTimeOffset timestamp)
     {
         if (units <= 0 || units > UnitsHardCeiling)
@@ -173,9 +174,9 @@ public class BasalInjectionController(
 
     /// <summary>
     /// Resolves the referenced <see cref="PatientInsulin"/> onto
-    /// <see cref="BasalInjection.InsulinContext"/>, or leaves it <c>null</c> when the request omits
-    /// the reference — not an error, but uploader parity with <see cref="BolusController"/> for
-    /// clients that know nothing about the patient's insulin catalog.
+    /// <see cref="BasalInjection.InsulinContext"/>, or leaves it as the mapper left it — unset —
+    /// when the request omits the reference. That is not an error, but uploader parity with
+    /// <see cref="BolusController"/> for clients that know nothing about the patient's insulin catalog.
     /// </summary>
     /// <param name="model">The mapped injection, enriched in place.</param>
     /// <param name="patientInsulinId">The requested insulin reference, or <c>null</c>.</param>
@@ -188,8 +189,6 @@ public class BasalInjectionController(
     private async Task<ObjectResult?> ApplyInsulinContextAsync(
         BasalInjection model, Guid? patientInsulinId, DateTimeOffset timestamp, CancellationToken ct)
     {
-        model.InsulinContext = null;
-
         if (patientInsulinId is not { } insulinId)
             return null;
 
