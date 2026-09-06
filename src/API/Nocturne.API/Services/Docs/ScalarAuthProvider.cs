@@ -273,18 +273,10 @@ public sealed class ScalarAuthProvider
         TenantEntity? tenant;
         if (slug is null)
         {
-            var soleTenants = await db.Set<TenantEntity>()
-                .AsNoTracking()
-                .ExcludeDemo()
-                .Where(t => t.IsActive)
-                .OrderBy(t => t.Id)
-                .Take(2)
-                .ToListAsync(ct);
+            tenant = await db.Set<TenantEntity>().SoleTenantAsync(ct);
 
-            if (soleTenants.Count != 1)
+            if (tenant is null)
                 return null;
-
-            tenant = soleTenants[0];
         }
         else
         {

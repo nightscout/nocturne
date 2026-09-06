@@ -60,13 +60,13 @@ public sealed class TenantResolutionMiddlewareApexTests : IDisposable
         Options.Create(new BaseDomainOptions { BaseDomain = BaseDomain }),
         _root.GetRequiredService<IMemoryCache>());
 
-    private Guid SeedTenant(string slug, bool isDemo = false, Guid? id = null)
+    private Guid SeedTenant(string slug, bool isDemo = false, Guid? id = null, bool isActive = true)
     {
         var tenantId = id ?? Guid.CreateVersion7();
         using var seed = _root.GetRequiredService<IDbContextFactory<NocturneDbContext>>().CreateDbContext();
         seed.Tenants.Add(new TenantEntity
         {
-            Id = tenantId, Slug = slug, DisplayName = slug, IsActive = true, IsDemo = isDemo,
+            Id = tenantId, Slug = slug, DisplayName = slug, IsActive = isActive, IsDemo = isDemo,
         });
         seed.SaveChanges();
         return tenantId;
@@ -225,6 +225,21 @@ public sealed class TenantResolutionMiddlewareApexTests : IDisposable
         // rather than the 404 that would strand an operator with nowhere to create one.
         served.Should().BeFalse();
         pageCtx.Response.StatusCode.Should().Be(StatusCodes.Status503ServiceUnavailable);
+        scope.ServiceProvider.GetRequiredService<ITenantAccessor>().IsResolved.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Apex_with_a_single_inactive_tenant_does_not_resolve_it()
+    {
+        SeedTenant("paused", isActive: false);
+        using var scope = _root.CreateScope();
+
+        var served = false;
+        var ctx = ApexRequest(scope, "/api/v4/entries");
+        await Build(_ => { served = true; return Task.CompletedTask; }).InvokeAsync(ctx);
+
+        served.Should().BeFalse();
+        ctx.Response.StatusCode.Should().Be(StatusCodes.Status404NotFound);
         scope.ServiceProvider.GetRequiredService<ITenantAccessor>().IsResolved.Should().BeFalse();
     }
 

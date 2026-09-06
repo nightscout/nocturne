@@ -162,15 +162,12 @@ public class DevAuthController : ControllerBase
         }
         else
         {
-            // Apex request with no explicit slug: unambiguous only when a single
-            // tenant exists. Counted the way the apex counts it, demo excluded.
-            var tenants = await _db.Tenants.AsNoTracking().ExcludeDemo().Take(2).ToListAsync(ct);
-            if (tenants.Count != 1)
+            tenant = await _db.Tenants.SoleTenantAsync(ct);
+            if (tenant is null)
                 return (BadRequest(new
                 {
                     error = "Tenant could not be resolved from the host. Pass ?tenant=<slug>.",
                 }), null);
-            tenant = tenants[0];
         }
 
         // tenant_members/tenant_roles carry no RLS policies today, but set the
