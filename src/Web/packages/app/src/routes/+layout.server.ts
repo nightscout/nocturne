@@ -1,4 +1,5 @@
 import type { LayoutServerLoad } from "./$types";
+import type { UserDisplayPreferences } from "$lib/api";
 import { getOriginalHost } from "$lib/server/request-host";
 import {
   classifyHost,
@@ -6,6 +7,8 @@ import {
   parseDashboardSlugs,
 } from "$lib/server/tenantless-host";
 import { getRequestStatus } from "$lib/server/request-status";
+import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
+import { parseLastSignIn } from "$lib/components/auth/last-sign-in";
 import {
   LANGUAGE_COOKIE_NAME,
   PREFS_COOKIE_NAME,
@@ -29,6 +32,28 @@ async function resolveEffectivePermissions(locals: App.Locals): Promise<string[]
     return await locals.apiClient.myPermissions.getMyPermissions();
   } catch {
     return [];
+  }
+}
+
+/**
+ * The saved display preferences this viewer's page is rendered with. A signed-in member has
+ * their own. A public share viewer has no account to have any, so the link owner's presentation
+ * settings stand in: a share link should show its recipient the data the way its sender reads
+ * it — their units, their clock, their colours — rather than the frontend's defaults. Only
+ * presentation crosses; the owner's display language does not, because adopting it would rewrite
+ * the viewer's own base-domain-wide language cookie. A refused call leaves the viewer on the
+ * defaults instead of failing the page.
+ */
+async function resolveServerPreferences(
+  locals: App.Locals
+): Promise<UserDisplayPreferences | null> {
+  if (locals.isAuthenticated) return locals.user?.preferences ?? null;
+  if (!locals.isShareHost) return null;
+
+  try {
+    return await locals.apiClient.shareAppearance.getShareAppearance();
+  } catch {
+    return null;
   }
 }
 
@@ -58,8 +83,12 @@ export const load: LayoutServerLoad = async ({ locals, request, cookies }) => {
   );
 
   // Display preferences for SSR, in the same precedence the browser applies them
-  // (backend blob over the mirrored cookie) so the markup matches hydration.
-  const serverPrefs = locals.isAuthenticated ? locals.user?.preferences : null;
+  // (backend blob over the mirrored cookie) so the markup matches hydration. Together with the
+  // scopes because on a share host both are API round-trips and neither reads the other.
+  const [serverPrefs, effectivePermissions] = await Promise.all([
+    resolveServerPreferences(locals),
+    resolveEffectivePermissions(locals),
+  ]);
   const cookiePrefs = parsePrefsCookie(cookies.get(PREFS_COOKIE_NAME));
   const displayPreferences = [
     hasStoredPreferences(serverPrefs) ? serverPrefs : null,
@@ -73,14 +102,19 @@ export const load: LayoutServerLoad = async ({ locals, request, cookies }) => {
   return {
     displayPreferences,
     displayLanguage,
+    serverPreferences: serverPrefs,
     user: locals.user,
     isAuthenticated: locals.isAuthenticated,
-    effectivePermissions: await resolveEffectivePermissions(locals),
+    isShareHost: locals.isShareHost,
+    effectivePermissions,
     isPlatformAdmin: locals.isPlatformAdmin,
     isPlatformAccessGrant: locals.isPlatformAccessGrant ?? false,
     tenantSlug,
     tenantless,
     baseDomain,
     dashboardSlugs,
+    // Read here rather than from document.cookie so the login form renders its "Last used" badge
+    // in the server markup, and the buttons don't reorder under the visitor on hydration.
+    lastSignIn: parseLastSignIn(cookies.get(AUTH_COOKIE_NAMES.lastSignIn)),
   };
 };

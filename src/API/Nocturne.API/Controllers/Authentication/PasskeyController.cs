@@ -584,6 +584,8 @@ public class PasskeyController : ControllerBase
                     UserAgent: Request.Headers.UserAgent.ToString()));
 
             Response.SetSessionCookies(session, _oidcOptions);
+            Response.SetLastSignInCookie(
+                SessionCookieExtensions.SignInMethods.Passkey, providerId: null, _oidcOptions);
 
             await _auditService.LogAsync(AuthAuditEventType.Login, assertionResult.SubjectId, success: true,
                 ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),

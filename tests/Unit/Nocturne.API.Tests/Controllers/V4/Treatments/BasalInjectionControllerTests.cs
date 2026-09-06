@@ -27,6 +27,47 @@ public class BasalInjectionControllerTests
         return controller;
     }
 
+    [Fact]
+    public async Task CreateBulk_UnitsOutsideTheAllowedRange_RejectsTheWholeBatch()
+    {
+        var result = await CreateController().CreateBulk(
+        [
+            new CreateBasalInjectionRequest { Timestamp = DateTimeOffset.UtcNow, Units = 12 },
+            new CreateBasalInjectionRequest { Timestamp = DateTimeOffset.UtcNow, Units = 0 },
+        ]);
+
+        var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(400);
+        objectResult.Value.Should().BeOfType<ProblemDetails>()
+            .Which.Detail.Should().Be("Units must be > 0 and <= 500.");
+        _repoMock.Verify(
+            r => r.BulkCreateAsync(It.IsAny<IEnumerable<BasalInjection>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task CreateBulk_ResolvesTheInsulinContextPerInjection()
+    {
+        var insulin = BasalInsulin();
+        _insulinRepoMock.Setup(r => r.GetByIdAsync(insulin.Id, It.IsAny<CancellationToken>())).ReturnsAsync(insulin);
+        IEnumerable<BasalInjection>? persisted = null;
+        _repoMock
+            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<BasalInjection>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<BasalInjection>, WriteOrigin, CancellationToken>((b, _, _) => persisted = b.ToList())
+            .ReturnsAsync((IEnumerable<BasalInjection> b, WriteOrigin _, CancellationToken _) => b);
+
+        await CreateController().CreateBulk(
+        [
+            new CreateBasalInjectionRequest { Timestamp = DateTimeOffset.UtcNow, Units = 12, PatientInsulinId = insulin.Id },
+            new CreateBasalInjectionRequest { Timestamp = DateTimeOffset.UtcNow, Units = 10 },
+        ]);
+
+        persisted.Should().NotBeNull();
+        persisted!.Should().SatisfyRespectively(
+            referenced => referenced.InsulinContext!.PatientInsulinId.Should().Be(insulin.Id),
+            unreferenced => unreferenced.InsulinContext.Should().BeNull());
+    }
+
     private static PatientInsulin BasalInsulin(
         Guid? id = null,
         InsulinRole role = InsulinRole.Basal,

@@ -5,6 +5,13 @@ using Nocturne.API.Models.Requests.V4;
 namespace Nocturne.API.Controllers.V4.Base;
 
 /// <summary>
+/// How a bulk endpoint names what it takes, in the three places a rejection message needs it:
+/// <c>"Bolus data is required"</c>, <c>"limited to 1000 boluses per request"</c>,
+/// <c>"Timestamp must be set on every bolus"</c>.
+/// </summary>
+public readonly record struct V4BulkNaming(string Subject, string Singular, string Plural);
+
+/// <summary>
 /// The checks a V4 bulk create-or-update endpoint runs over its payload before it maps or
 /// persists anything.
 /// </summary>
@@ -62,7 +69,7 @@ public static class V4BulkValidation
     /// <returns>The error response to return, or <c>null</c> when the payload is usable.</returns>
     public static async Task<ObjectResult?> ValidateBulkAsync<TRequest>(
         this ControllerBase controller,
-        TRequest[]? requests,
+        IReadOnlyList<TRequest>? requests,
         string subject,
         string singular,
         string plural,
@@ -83,7 +90,7 @@ public static class V4BulkValidation
         if (controller.HttpContext?.RequestServices?.GetService(typeof(IValidator<TRequest>)) is not IValidator<TRequest> validator)
             return null;
 
-        for (var index = 0; index < items.Length; index++)
+        for (var index = 0; index < items.Count; index++)
         {
             var result = await validator.ValidateAsync(items[index], ct);
             if (result.IsValid)

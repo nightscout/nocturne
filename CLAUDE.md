@@ -75,7 +75,7 @@ The `--skip-worktree` bits may be cleared by git during branch switches that tou
 
 ### Worktrees
 
-Git worktrees are supported. In the main checkout, `aspire start` uses persistent Postgres (named volume, pgAdmin), binds the gateway to `https://nocturne.localhost:1612` (tenants at `https://<slug>.nocturne.localhost:1612`), and pins nocturne-api to `http://localhost:1610`. In a worktree, Postgres is automatically ephemeral (anonymous volume, no pgAdmin) and ports are dynamic.
+Git worktrees are supported. In the main checkout, `aspire start` uses persistent Postgres (named volume, pgAdmin at `http://localhost:1611`), binds the gateway to `https://nocturne.localhost:1612` (tenants at `https://<slug>.nocturne.localhost:1612`), and pins nocturne-api to `http://localhost:1610`. In a worktree, Postgres is automatically ephemeral (anonymous volume, no pgAdmin) and ports are dynamic.
 
 **Always use `--isolated` when running Aspire from a worktree** to avoid dashboard port collisions with the main instance:
 

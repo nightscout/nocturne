@@ -28,6 +28,10 @@ export const COOKIE_GUEST_SESSION_NAME = "nocturne-guest-session";
 // the API accepts it for passkey enrolment only, so it has to reach that ceremony and
 // nothing about it makes the visitor signed in.
 export const COOKIE_RECOVERY_SESSION_NAME = ".Nocturne.RecoverySession";
+// Which method last completed a sign-in, written by the API next to the session cookies so it
+// carries the same Domain. A functional preference, not a credential: it outlives sign-out on
+// purpose, because a signed-out visitor is who it is for.
+export const COOKIE_LAST_SIGN_IN_NAME = "LastSignIn";
 
 // OpenTelemetry service identity (build-time, not deployment config)
 export const OTEL_SERVICE_NAME = "nocturne-web";

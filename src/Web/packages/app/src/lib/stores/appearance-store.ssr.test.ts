@@ -22,7 +22,9 @@ describe("appearance-store SSR resolution", () => {
   it("renders the request's units, not the module default", async () => {
     const body = await ssr([mmol]);
 
-    expect(body).toContain("5.6");
+    // The reader renders bg(100), and 100 / MGDL_PER_MMOL (18.0182) is 5.5499…,
+    // which formats to one decimal place as 5.5.
+    expect(body).toContain("5.5");
     expect(body).toContain("mmol/L");
     expect(body).toContain("3.9-10 mmol/L");
     expect(body).not.toContain("mg/dL");

@@ -3,8 +3,10 @@ using Microsoft.Extensions.Options;
 using Nocturne.API.Models.Responses;
 using Nocturne.API.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Security;
 
 namespace Nocturne.API.Services.Auth;
@@ -38,6 +40,14 @@ public interface IShareLinkService
     /// authoritative.
     /// </summary>
     Task<ShareLinkDto> SetScopesAsync(Guid tenantId, IReadOnlyList<string> scopes, CancellationToken ct = default);
+
+    /// <summary>
+    /// The appearance an anonymous share viewer renders the tenant's data with: the owner's
+    /// display preferences, narrowed by <see cref="UserDisplayPreferences.ToPresentationOnly"/>.
+    /// All-null when the tenant has no owner or the owner saved nothing, which leaves the viewer
+    /// on the frontend's own defaults.
+    /// </summary>
+    Task<UserDisplayPreferences> GetSharedAppearanceAsync(Guid tenantId, CancellationToken ct = default);
 }
 
 /// <inheritdoc />
@@ -187,6 +197,17 @@ public sealed class ShareLinkService : IShareLinkService
         _publicAccessCache.Evict(tenantId);
 
         return ToDto(tenant, member);
+    }
+
+    /// <inheritdoc />
+    public async Task<UserDisplayPreferences> GetSharedAppearanceAsync(Guid tenantId, CancellationToken ct = default)
+    {
+        var ownerPreferences = await _dbContext.TenantMembers.AsNoTracking()
+            .OwnersOf(tenantId)
+            .Select(m => m.Subject!.Preferences)
+            .FirstOrDefaultAsync(ct);
+
+        return UserDisplayPreferences.Deserialize(ownerPreferences).ToPresentationOnly();
     }
 
     private Task<TenantMemberEntity?> GetPublicMemberAsync(Guid tenantId, CancellationToken ct) =>
