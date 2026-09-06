@@ -717,6 +717,7 @@ public class PasskeyController : ControllerBase
 
         var credentials = await _passkeyService.GetCredentialsAsync(auth.SubjectId.Value);
         var primaryFactorCount = await _subjectService.CountPrimaryAuthFactorsAsync(auth.SubjectId.Value);
+        var hasSingleSignInMethod = await _subjectService.HasSingleSignInMethodAsync(auth.SubjectId.Value);
 
         return Ok(new PasskeyCredentialListResponse
         {
@@ -728,6 +729,7 @@ public class PasskeyController : ControllerBase
                 LastUsedAt = c.LastUsedAt,
             }).ToList(),
             PrimaryAuthFactorCount = primaryFactorCount,
+            HasSingleSignInMethod = hasSingleSignInMethod,
         });
     }
 
@@ -771,7 +773,7 @@ public class PasskeyController : ControllerBase
     /// </summary>
     [HttpPost("recovery/regenerate")]
     [DenyDemoSubject]
-    [RemoteCommand(Invalidates = ["GetRecoveryStatus"])]
+    [RemoteCommand(Invalidates = ["GetRecoveryStatus", "ListCredentials"])]
     [ProducesResponseType(typeof(RecoveryRegenerateResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<RecoveryRegenerateResponse>> RegenerateRecoveryCodes()
@@ -1361,6 +1363,12 @@ public class PasskeyCredentialListResponse
 {
     public List<PasskeyCredentialDto> Credentials { get; set; } = new();
     public int PrimaryAuthFactorCount { get; set; }
+
+    /// <summary>
+    /// True when this account can be signed into exactly one way, with no unused recovery codes
+    /// behind it.
+    /// </summary>
+    public bool HasSingleSignInMethod { get; set; }
 }
 
 /// <summary>
