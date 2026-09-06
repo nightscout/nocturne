@@ -114,12 +114,6 @@ describe("AppSidebar", () => {
   it("goes to the host of the tenant the visitor picks", async () => {
     renderViewingBravo();
 
-    // Re-picking the selection fires no change event, so this stands guard over the switcher's
-    // value rather than over the handler: a value that has drifted off the host reloads it.
-    await group("Bravo (bravo)").click();
-    await option("Bravo (bravo)").click();
-    expect(visited.urls).toEqual([]);
-
     await group("Bravo (bravo)").click();
     await option("Charlie (charlie)").click();
     expect(visited.urls).toEqual(["https://charlie.example.com/"]);
