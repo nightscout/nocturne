@@ -60,16 +60,16 @@ public sealed class TenantResolutionMiddlewareApexTests : IDisposable
         Options.Create(new BaseDomainOptions { BaseDomain = BaseDomain }),
         _root.GetRequiredService<IMemoryCache>());
 
-    private Guid SeedTenant(string slug, bool isDemo = false)
+    private Guid SeedTenant(string slug, bool isDemo = false, Guid? id = null)
     {
-        var id = Guid.CreateVersion7();
+        var tenantId = id ?? Guid.CreateVersion7();
         using var seed = _root.GetRequiredService<IDbContextFactory<NocturneDbContext>>().CreateDbContext();
         seed.Tenants.Add(new TenantEntity
         {
-            Id = id, Slug = slug, DisplayName = slug, IsActive = true, IsDemo = isDemo,
+            Id = tenantId, Slug = slug, DisplayName = slug, IsActive = true, IsDemo = isDemo,
         });
         seed.SaveChanges();
-        return id;
+        return tenantId;
     }
 
     // Host == BaseDomain → apex, no subdomain.
@@ -123,6 +123,9 @@ public sealed class TenantResolutionMiddlewareApexTests : IDisposable
     [Fact]
     public async Task Apex_status_with_multiple_tenants_stays_tenantless()
     {
+        // The demo takes the lowest id so it orders first: a demo dropped after the two-row
+        // limit rather than before it would leave one row here and serve alpha from the apex.
+        SeedTenant("demo", isDemo: true, id: new Guid("00000000-0000-7000-8000-000000000001"));
         SeedTenant("alpha");
         SeedTenant("beta");
         using var scope = _root.CreateScope();

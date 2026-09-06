@@ -477,11 +477,8 @@ public class TenantResolutionMiddleware
     /// Returns null when zero or multiple such tenants exist.
     /// </summary>
     /// <remarks>
-    /// A demo tenant is an ordinary active tenant, so counting it would take an operator's
-    /// single-tenant install out of single-tenant mode the moment the demo is provisioned. It
-    /// is excluded instead, which also means a demo-only instance's apex resolves nothing
-    /// rather than quietly becoming a public demo: the demo is reached on its own host, the
-    /// same as on a multi-tenant install.
+    /// A demo tenant is an ordinary active tenant, so it would otherwise be counted here; see
+    /// <see cref="DemoExclusionFilter"/>.
     /// </remarks>
     private async Task<TenantContext?> GetSoleTenantAsync(IServiceProvider services)
     {

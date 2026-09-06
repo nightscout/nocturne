@@ -12,6 +12,10 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// demo subject is one anyone can obtain a session for. Left in, the demo tenant reads as a tenant
 /// awaiting its first owner, the demo subject reads as the account that owner is enrolling, and
 /// the operator's own single-tenant install stops being single-tenant the moment a demo appears.
+/// <para>
+/// A demo-only instance therefore resolves no tenant on its apex: the demo is reached on its own
+/// host, never adopted by the front door.
+/// </para>
 /// </remarks>
 public static class DemoExclusionFilter
 {
