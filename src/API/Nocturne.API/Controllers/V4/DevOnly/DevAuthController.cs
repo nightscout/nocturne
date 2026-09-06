@@ -146,9 +146,7 @@ public class DevAuthController : ControllerBase
         var slug = tenantSlug;
         if (string.IsNullOrWhiteSpace(slug))
         {
-            var host = Request.Headers["X-Forwarded-Host"].FirstOrDefault()?.Split(':')[0]
-                ?? Request.Host.Host;
-            slug = SubdomainParser.Extract(host, _baseDomainOptions.Value.BaseDomain);
+            slug = SubdomainParser.Extract(Request.Host.Host, _baseDomainOptions.Value.BaseDomain);
         }
 
         TenantEntity? tenant;

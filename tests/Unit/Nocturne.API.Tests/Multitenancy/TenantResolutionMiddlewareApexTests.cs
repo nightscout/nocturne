@@ -73,7 +73,7 @@ public sealed class TenantResolutionMiddlewareApexTests : IDisposable
     private DefaultHttpContext ApexRequest(IServiceScope scope, string path, string method = "GET")
     {
         var ctx = new DefaultHttpContext { RequestServices = scope.ServiceProvider };
-        ctx.Request.Headers["X-Forwarded-Host"] = BaseDomain;
+        ctx.Request.Host = new HostString(BaseDomain);
         ctx.Request.Path = path;
         ctx.Request.Method = method;
         ctx.Response.Body = new MemoryStream();

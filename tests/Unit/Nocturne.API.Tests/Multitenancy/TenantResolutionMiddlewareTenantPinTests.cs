@@ -79,7 +79,7 @@ public sealed class TenantResolutionMiddlewareTenantPinTests : IDisposable
         var mw = Build(_ => { nextCalled = true; return Task.CompletedTask; });
 
         var ctx = new DefaultHttpContext { RequestServices = scope.ServiceProvider };
-        ctx.Request.Headers["X-Forwarded-Host"] = $"{Slug}.{BaseDomain}";
+        ctx.Request.Host = new HostString($"{Slug}.{BaseDomain}");
         ctx.Request.Path = "/api/v4/migration/start-from-connector/nightscout";
 
         await mw.InvokeAsync(ctx);
@@ -104,7 +104,7 @@ public sealed class TenantResolutionMiddlewareTenantPinTests : IDisposable
         var mw = Build(_ => { nextCalled = true; return Task.CompletedTask; });
 
         var ctx = new DefaultHttpContext { RequestServices = scope.ServiceProvider };
-        ctx.Request.Headers["X-Forwarded-Host"] = $"nope.{BaseDomain}";
+        ctx.Request.Host = new HostString($"nope.{BaseDomain}");
         ctx.Request.Path = "/api/v4/migration/history";
 
         await mw.InvokeAsync(ctx);

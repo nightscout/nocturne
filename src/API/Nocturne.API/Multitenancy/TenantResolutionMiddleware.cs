@@ -243,10 +243,7 @@ public class TenantResolutionMiddleware
     public async Task InvokeAsync(HttpContext context)
     {
         var tenantAccessor = context.RequestServices.GetRequiredService<ITenantAccessor>();
-        // Check X-Forwarded-Host first (set by reverse proxies), then fall back to Host
-        var host = context.Request.Headers["X-Forwarded-Host"].FirstOrDefault()?.Split(':')[0]
-                   ?? context.Request.Host.Host;
-        var slug = SubdomainParser.Extract(host, _config.BaseDomain);
+        var slug = SubdomainParser.Extract(context.Request.Host.Host, _config.BaseDomain);
 
         // Public share link: {token}.share.{baseDomain}. Resolve the tenant by its share token
         // and mark the request read-only-public. An unknown token returns the same 404 as an

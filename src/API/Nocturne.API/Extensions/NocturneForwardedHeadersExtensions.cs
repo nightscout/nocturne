@@ -45,6 +45,18 @@ public static class NocturneForwardedHeadersExtensions
     /// <summary>Comma-separated CIDR ranges whose forwarded address is honoured.</summary>
     public const string KnownNetworksKey = "ForwardedHeaders:KnownNetworks";
 
+    /// <summary>
+    /// The scheme of the address the caller browsed to, for a URL handed back to them.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="HostAndSchemeOptions"/> validates <c>X-Forwarded-Proto</c> as a scheme token and
+    /// not as a web scheme, so <see cref="HttpRequest.Scheme"/> carries whatever scheme-shaped
+    /// value the caller sent. A deployment with an edge in front of it terminates TLS there, so
+    /// https is the answer for anything else.
+    /// </remarks>
+    public static string PublicScheme(this HttpRequest request) =>
+        request.Scheme is "http" or "https" ? request.Scheme : "https";
+
     public static IApplicationBuilder UseNocturneForwardedHeaders(
         this IApplicationBuilder app,
         IConfiguration configuration)

@@ -83,7 +83,7 @@ public sealed class TenantResolutionMiddlewareShareTokenTests : IDisposable
         var nextCalled = false;
         var mw = Build(_ => { nextCalled = true; return Task.CompletedTask; });
         var ctx = new DefaultHttpContext { RequestServices = scope.ServiceProvider };
-        ctx.Request.Headers["X-Forwarded-Host"] = host;
+        ctx.Request.Host = new HostString(host);
         ctx.Request.Path = path;
         await mw.InvokeAsync(ctx);
         return (ctx, nextCalled);

@@ -72,7 +72,7 @@ public sealed class TenantResolutionMiddlewareInactiveTenantTests : IDisposable
     private static DefaultHttpContext Request(IServiceScope scope, string path, string method = "GET")
     {
         var ctx = new DefaultHttpContext { RequestServices = scope.ServiceProvider };
-        ctx.Request.Headers["X-Forwarded-Host"] = $"{Slug}.{BaseDomain}";
+        ctx.Request.Host = new HostString($"{Slug}.{BaseDomain}");
         ctx.Request.Path = path;
         ctx.Request.Method = method;
         ctx.Response.Body = new MemoryStream();
