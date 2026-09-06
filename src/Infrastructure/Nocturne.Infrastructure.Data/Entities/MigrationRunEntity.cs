@@ -100,9 +100,8 @@ public class MigrationRunEntity
 
     /// <summary>
     /// Per-collection outcome for the run: a JSON array of
-    /// <c>{ collectionName, totalDocuments, documentsMigrated, documentsFailed, isComplete, failureReason }</c>.
-    /// The two count columns above cover entries and treatments only, so a run where some
-    /// collections imported and others were rejected has nowhere else to say so.
+    /// <c>{ collectionName, totalDocuments, documentsMigrated, documentsFailed, isComplete, failureReason, skippedReason }</c>.
+    /// The two count columns above cover entries and treatments only.
     /// </summary>
     [Column("collection_outcomes", TypeName = "jsonb")]
     public string? CollectionOutcomes { get; set; }
