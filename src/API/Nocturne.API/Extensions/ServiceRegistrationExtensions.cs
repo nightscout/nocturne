@@ -608,6 +608,7 @@ public static class ServiceRegistrationExtensions
 
         // Timezone timeline (fake-UTC connector conversion + travel/relocation)
         services.AddScoped<ITimezoneTimelineService, TimezoneTimelineService>();
+        services.AddScoped<IDeviceClockService, DeviceClockService>();
 
         // UI and display
         services.AddScoped<IUISettingsService, UISettingsService>();

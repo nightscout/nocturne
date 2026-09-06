@@ -195,6 +195,12 @@ export const connectorPropertyMeta = {
     description: 'Include historical CGM data when using V3 API',
     category: 'Advanced',
   },
+  AutoClockCorrection: {
+    label: 'Automatic Clock Correction',
+    description:
+      'Let device-clock evidence from the account correct imported timestamps and keep the timezone timeline current',
+    category: 'Advanced',
+  },
 
   // MyLife-specific
   ServiceUrl: {

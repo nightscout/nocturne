@@ -31,6 +31,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
     private readonly IRetryDelayStrategy _retryDelayStrategy;
     private readonly GlookoAuthTokenProvider _tokenProvider;
     private readonly ITimezoneTimelineService? _timezoneTimelineService;
+    private readonly IDeviceClockService? _deviceClockService;
     private readonly ILogger<GlookoConnectorService> _glookoLogger;
 
     public GlookoConnectorService(
@@ -42,7 +43,8 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         GlookoAuthTokenProvider tokenProvider,
         IConnectorPublisher? publisher = null,
         IMealMatchingService? mealMatchingService = null,
-        ITimezoneTimelineService? timezoneTimelineService = null
+        ITimezoneTimelineService? timezoneTimelineService = null,
+        IDeviceClockService? deviceClockService = null
     )
         : base(httpClient, serverResolver, logger, publisher)
     {
@@ -52,6 +54,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         _rateLimitingStrategy = rateLimitingStrategy ?? throw new ArgumentNullException(nameof(rateLimitingStrategy));
         _tokenProvider = tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
         _timezoneTimelineService = timezoneTimelineService;
+        _deviceClockService = deviceClockService;
         _glookoLogger = logger;
     }
 
@@ -901,19 +904,164 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             if (!string.IsNullOrWhiteSpace(context.Timezone))
                 await _timezoneTimelineService.EnsureOriginAsync(context.Timezone, cancellationToken);
 
-            var resolver = await _timezoneTimelineService.GetResolverAsync(
-                context.Config.TimezoneOffset, cancellationToken);
+            // Gather device-clock evidence before building the resolver so a confirmed deviation
+            // corrects the records this very sync is about to map.
+            var segments = await ObserveDeviceClockAsync(context, cancellationToken);
+
+            var entries = await _timezoneTimelineService.GetTimelineAsync(cancellationToken);
+            var resolver = new TimezoneTimeline(entries, context.Config.TimezoneOffset, segments);
             context.TimeMapper.UseTimeline(resolver);
 
             _logger.LogInformation(
-                "[{ConnectorSource}] Timezone timeline configured (entries present: {HasEntries}, home zone: {Zone})",
-                ConnectorSource, resolver.HasEntries, context.Timezone ?? "(none)");
+                "[{ConnectorSource}] Timezone timeline configured (entries present: {HasEntries}, home zone: {Zone}, "
+                + "derived clock segments: {SegmentCount})",
+                ConnectorSource, resolver.HasEntries, context.Timezone ?? "(none)", segments.Count);
         }
         catch (Exception ex)
         {
             // Never fail a sync over timeline setup — fall back to the static offset.
             _logger.LogWarning(ex, "[{ConnectorSource}] Failed to configure timezone timeline; using static offset", ConnectorSource);
         }
+    }
+
+    /// <summary>
+    ///     Connector id device-clock evidence is scoped under — a derived correction must never leak
+    ///     into another connector's conversion. Matches the sync-service id used elsewhere.
+    /// </summary>
+    private const string ClockConnectorId = "glooko";
+
+    /// <summary>How far back the per-sync clock probe reads recent uploads.</summary>
+    private static readonly TimeSpan ClockProbeLookback = TimeSpan.FromHours(48);
+
+    private const string InitialGuid = "00000000-0000-0000-0000-000000000000";
+
+    /// <summary>
+    ///     Gathers device-clock evidence for this sync: the account's profile offset (the phone app
+    ///     writes the device's real offset to the vendor profile when it drifts) plus upload-batch
+    ///     derivations over recent CGM and bolus records, whose server-side <c>syncTimestamp</c> is
+    ///     real UTC while their clinical timestamps carry the device wall clock. Evidence is always
+    ///     recorded; the derived segments are returned for the resolver only when the tenant has
+    ///     enabled automatic correction. Never fails the sync.
+    /// </summary>
+    private async Task<IReadOnlyList<DeviceClockSegment>> ObserveDeviceClockAsync(
+        GlookoSyncContext context, CancellationToken cancellationToken)
+    {
+        if (_deviceClockService is null)
+            return [];
+
+        try
+        {
+            var observations = new List<DeviceClockObservation>();
+
+            // The user record itself rarely changes, so read it from the epoch rather than a window.
+            var users = await FetchClockPageAsync<GlookoSsv2UsersPage>(
+                context, GlookoConstants.V2UsersPath, DateTime.UnixEpoch);
+
+            // SSV2 answers for the session account, not for a ?patient= code. On a linked account
+            // (caregiver session, re-linked source) that is a different person, and their phone's
+            // clock must never become evidence about the patient's data.
+            var sessionUser = users?.Users?.FirstOrDefault(u => !u.SoftDeleted);
+            if (sessionUser?.GlookoCode is { Length: > 0 } sessionCode
+                && context.PatientCode is { Length: > 0 } patientCode
+                && !string.Equals(sessionCode, patientCode, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogInformation(
+                    "[{ConnectorSource}] Session account is not the patient; skipping device clock evidence",
+                    ConnectorSource);
+                return [];
+            }
+
+            if (GlookoDeviceClockMapper.MapProfileObservation(users?.Users, ClockConnectorId) is { } profile)
+                observations.Add(profile);
+
+            var since = DateTime.UtcNow - ClockProbeLookback;
+            var egvs = await FetchClockPageAsync<GlookoClockEgvsPage>(
+                context, GlookoConstants.V2CgmEgvsPath, since);
+            var boluses = await FetchClockPageAsync<GlookoClockBolusPage>(
+                context, GlookoConstants.NormalBolusesPath, since);
+            observations.AddRange(
+                GlookoDeviceClockMapper.MapUploadBatches(ClockConnectorId, egvs?.Egvs, boluses?.NormalBoluses));
+
+            // A tenant with no stored evidence gets a one-time historical scan, so deviations that
+            // predate this feature (the whole point of re-correction) are discoverable at all. Bolus
+            // records are sparse enough to page through the full retention window; CGM history is not,
+            // so old windows carry bound-only evidence.
+            if ((await _deviceClockService.GetObservationsAsync(ClockConnectorId, cancellationToken)).Count == 0)
+                observations.AddRange(await ScanHistoricalBolusClocksAsync(context, cancellationToken));
+
+            var segments = await _deviceClockService.RecordObservationsAsync(
+                ClockConnectorId,
+                observations,
+                context.Config.TimezoneOffset,
+                context.Config.AutoClockCorrection,
+                cancellationToken);
+
+            return context.Config.AutoClockCorrection ? segments : [];
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "[{ConnectorSource}] Device clock observation failed; syncing without it", ConnectorSource);
+            return [];
+        }
+    }
+
+    /// <summary>
+    ///     Fetches a single SSV2 cursor page for the clock probe. The cursor's <c>lastUpdatedAt</c> is
+    ///     real UTC (server-side), so a wall-clock offset can never clip the window.
+    /// </summary>
+    private Task<T?> FetchClockPageAsync<T>(GlookoSyncContext context, string path, DateTime sinceUtc)
+        where T : class =>
+        FetchClockPageAsync<T>(context, path, sinceUtc.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'"), InitialGuid);
+
+    private async Task<T?> FetchClockPageAsync<T>(
+        GlookoSyncContext context, string path, string cursor, string guid)
+        where T : class
+    {
+        var url = $"{path}?lastUpdatedAt={cursor}&lastGuid={guid}"
+                  + "&limit=500&sendSoftDeleted=false&allDevicesFlag=true";
+        var result = await FetchFromGlookoEndpoint(context, url);
+        if (!result.HasValue)
+            return null;
+
+        return JsonSerializer.Deserialize<T>(result.Value.GetRawText());
+    }
+
+    /// <summary>Page budget for the one-time historical scan: 12 × 500 boluses ≈ years of pump use.</summary>
+    private const int HistoricalScanMaxPages = 12;
+
+    private async Task<IReadOnlyList<DeviceClockObservation>> ScanHistoricalBolusClocksAsync(
+        GlookoSyncContext context, CancellationToken cancellationToken)
+    {
+        var records = new List<GlookoClockBolus>();
+        var cursor = (DateTime.UtcNow - TimeSpan.FromDays(IDeviceClockService.RetentionDays))
+            .ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'");
+        var guid = InitialGuid;
+
+        for (var page = 0; page < HistoricalScanMaxPages; page++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var result = await FetchClockPageAsync<GlookoClockBolusPage>(
+                context, GlookoConstants.NormalBolusesPath, cursor, guid);
+            if (result?.NormalBoluses is not { Length: > 0 } boluses)
+                break;
+
+            records.AddRange(boluses);
+
+            var stalled = result.LastUpdatedAt == cursor && result.LastGuid == guid;
+            if (result.LastPage || string.IsNullOrEmpty(result.LastUpdatedAt) || stalled)
+                break;
+
+            cursor = result.LastUpdatedAt;
+            guid = result.LastGuid ?? InitialGuid;
+        }
+
+        _logger.LogInformation(
+            "[{ConnectorSource}] Historical clock scan read {Count} bolus records", ConnectorSource, records.Count);
+
+        // Mapping once over the full set keeps upload batches whole across page boundaries.
+        return GlookoDeviceClockMapper.MapUploadBatches(ClockConnectorId, null, records.ToArray());
     }
 
     /// <summary>

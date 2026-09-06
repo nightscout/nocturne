@@ -74,4 +74,13 @@ public class GlookoConnectorConfiguration : BaseConnectorConfiguration
     /// </summary>
     [ConnectorProperty(ConnectorPropertyKey.V3IncludeCgmBackfill, DefaultValue = "false")]
     public bool V3IncludeCgmBackfill { get; set; } = false;
+
+    /// <summary>
+    ///     Let device-clock evidence from the Glooko account adjust time conversion automatically:
+    ///     confirmed clock deviations correct imported timestamps, and a sustained change of the
+    ///     account's declared timezone appends a timezone timeline entry. Evidence is recorded either
+    ///     way; this only controls whether it moves data.
+    /// </summary>
+    [ConnectorProperty(ConnectorPropertyKey.AutoClockCorrection, DefaultValue = "false")]
+    public bool AutoClockCorrection { get; set; } = false;
 }

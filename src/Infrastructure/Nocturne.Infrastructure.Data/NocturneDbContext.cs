@@ -248,6 +248,12 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     /// </summary>
     public DbSet<TimezoneTimelineEntity> TimezoneTimeline { get; set; }
 
+    /// <summary>
+    /// Device-clock offset evidence gathered by connectors — stored separately from
+    /// <see cref="TimezoneTimeline"/> so derived knowledge never clobbers a user assertion.
+    /// </summary>
+    public DbSet<DeviceClockObservationEntity> DeviceClockObservations { get; set; }
+
     public DbSet<CalibrationEntity> Calibrations { get; set; }
 
     public DbSet<BolusEntity> Boluses { get; set; }
@@ -1624,6 +1630,13 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<TimezoneTimelineEntity>()
             .HasIndex(e => new { e.TenantId, e.EffectiveFrom })
             .HasDatabaseName("ix_timezone_timeline_tenant_effective_from")
+            .IsUnique();
+
+        // DeviceClockObservations: an observation is keyed by what was observed and when — the same
+        // evidence re-gathered on a later sync must upsert into the same row, not accumulate.
+        modelBuilder.Entity<DeviceClockObservationEntity>()
+            .HasIndex(e => new { e.TenantId, e.Connector, e.Source, e.ObservedAt })
+            .HasDatabaseName("ix_device_clock_observations_tenant_connector_source_observed")
             .IsUnique();
 
         modelBuilder

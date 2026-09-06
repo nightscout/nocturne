@@ -91,4 +91,7 @@ public enum ConnectorPropertyKey
     PumpSerialNumber,
     FetchAllEventTypes,
     IgnoreZeroUnitBasal,
+
+    // Glooko-specific (appended so earlier members keep their values)
+    AutoClockCorrection,
 }
