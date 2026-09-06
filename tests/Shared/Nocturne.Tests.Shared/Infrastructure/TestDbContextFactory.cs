@@ -2,6 +2,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.InMemory.Storage.Internal;
+using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 
@@ -27,8 +28,8 @@ public static class TestDbContextFactory
     }
 
     /// <summary>
-    /// Creates an empty SQLite-backed schema. Use when the test seeds its own tenant rows,
-    /// for example because it needs several tenants or a non-default slug.
+    /// Creates an empty SQLite-backed schema with no tenant seeded; contexts it creates carry
+    /// <see cref="Guid.Empty"/> as their tenant id. Use when the test seeds its own rows, or none.
     /// </summary>
     public static SqliteTestDatabase CreateSqlite() => new(tenantId: null, tenantSlug: null);
 
@@ -94,6 +95,18 @@ public sealed class SqliteTestDatabase : IDisposable
     public NocturneDbContext CreateContext() => CreateContext(TenantId);
 
     public NocturneDbContext CreateContext(Guid tenantId) => new(Options) { TenantId = tenantId };
+
+    /// <summary>
+    /// Registers this database the way the request pipeline resolves it: <see cref="ContextFactory"/>
+    /// as the context pool, plus one scoped <see cref="NocturneDbContext"/> per service scope, every
+    /// one of them over the same connection.
+    /// </summary>
+    public IServiceCollection AddToServices(IServiceCollection services)
+    {
+        services.AddSingleton(ContextFactory);
+        services.AddScoped(_ => CreateContext());
+        return services;
+    }
 
     /// <summary>Adds a further tenant row, for tests that assert one tenant cannot reach another's.</summary>
     public SqliteTestDatabase SeedTenant(Guid tenantId, string slug)
