@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Cache.Extensions;
 using Xunit;
@@ -177,6 +178,18 @@ public class MemoryCacheServiceTests : IDisposable
             Assert.NotNull(stored);
             Assert.Equal($"Updated {testData.Value}", stored.Value);
         }
+    }
+
+    /// <summary>
+    /// Everything this collection holds comes from <c>AddNocturneMemoryCache</c>, so a consumer
+    /// that is not the API host resolves the same way. The processing-status service takes
+    /// <see cref="TimeProvider"/>, which nothing here would otherwise register.
+    /// </summary>
+    [Fact]
+    [Trait("Category", "Cache")]
+    public void ProcessingStatusService_Should_ResolveWithoutAHostSuppliedClock()
+    {
+        Assert.NotNull(_serviceProvider.GetRequiredService<IProcessingStatusService>());
     }
 
     public void Dispose()

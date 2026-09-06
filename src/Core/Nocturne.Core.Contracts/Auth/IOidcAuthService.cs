@@ -249,12 +249,19 @@ public class OidcCallbackResult
     public Guid? SubjectId { get; set; }
 
     /// <summary>
+    /// The provider that authenticated the identity. <see cref="OidcUserInfo.ProviderName"/> is
+    /// for display; this is the id the login form keys its buttons by.
+    /// </summary>
+    public Guid? ProviderId { get; set; }
+
+    /// <summary>
     /// Create a successful result
     /// </summary>
     public static OidcCallbackResult Succeeded(
         OidcTokenResponse tokens,
         OidcUserInfo userInfo,
-        string? returnUrl = null
+        string? returnUrl = null,
+        Guid? providerId = null
     ) =>
         new()
         {
@@ -263,6 +270,7 @@ public class OidcCallbackResult
             UserInfo = userInfo,
             ReturnUrl = returnUrl,
             SubjectId = tokens.SubjectId,
+            ProviderId = providerId,
         };
 
     /// <summary>

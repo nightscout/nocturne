@@ -328,12 +328,19 @@ public class ScalarAuthProviderTests : IDisposable
     [Fact]
     public async Task TryPrepareAsync_ResolvesTheSoleTenant_OnTheConfiguredApex()
     {
+        // The demo sits beside the operator's tenant on a stock install. Counted here, it would
+        // either take the apex out of single-tenant mode or make the front door serve the demo
+        // account's bearer token.
+        _fixture.SeedTenant("demo", isDemo: true, withDemoMember: true);
         _fixture.SeedTenant("rhys", isDemo: false, withDemoMember: false);
         var context = DocsTenantFixture.BuildContext(BaseDomain);
 
         await _fixture.BuildProvider().TryPrepareAsync(context);
 
-        Auth(context)!.RedirectUri.Should().Be($"https://{BaseDomain}/scalar");
+        var auth = Auth(context);
+        auth.Should().NotBeNull("a demo beside it does not end single-tenant mode");
+        auth!.RedirectUri.Should().Be($"https://{BaseDomain}/scalar");
+        auth.BearerToken.Should().BeNull("only the demo's own host may carry its token");
     }
 
     /// <summary>

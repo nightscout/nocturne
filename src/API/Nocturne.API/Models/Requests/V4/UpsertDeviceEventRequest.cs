@@ -7,7 +7,7 @@ namespace Nocturne.API.Models.Requests.V4;
 /// </summary>
 /// <seealso cref="Validators.V4.UpsertDeviceEventRequestValidator"/>
 /// <seealso cref="Nocturne.API.Controllers.V4.Devices.DeviceEventController"/>
-public class UpsertDeviceEventRequest
+public class UpsertDeviceEventRequest : IBulkUpsertRequest
 {
     /// <summary>
     /// When the device event occurred.

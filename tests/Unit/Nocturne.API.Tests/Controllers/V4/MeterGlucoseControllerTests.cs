@@ -6,6 +6,7 @@ using Nocturne.API.Controllers.V4.Glucose;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Xunit;
 using Nocturne.Core.Contracts.V4;
@@ -167,6 +168,44 @@ public class MeterGlucoseControllerTests
         updated!.PatientDeviceId.Should().BeNull();
         VerifyStamperNeverRan();
     }
+
+    [Fact]
+    public async Task CreateBulk_StampsEveryReadingThatDidNotClearAttribution()
+    {
+        var stamped = Guid.NewGuid();
+        StampAllWith(stamped);
+        IEnumerable<MeterGlucose>? persisted = null;
+        _repoMock
+            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<MeterGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<MeterGlucose>, WriteOrigin, CancellationToken>((m, _, _) => persisted = m.ToList())
+            .ReturnsAsync((IEnumerable<MeterGlucose> m, WriteOrigin _, CancellationToken _) => m);
+
+        await CreateController().CreateBulk(
+        [
+            new UpsertMeterGlucoseRequest { Timestamp = DateTimeOffset.UtcNow, Mgdl = 120, PatientDeviceId = Guid.Empty },
+            new UpsertMeterGlucoseRequest { Timestamp = DateTimeOffset.UtcNow.AddMinutes(-5), Mgdl = 95 },
+        ]);
+
+        persisted.Should().NotBeNull();
+        persisted!.Should().SatisfyRespectively(
+            cleared => cleared.PatientDeviceId.Should().BeNull(),
+            attributed => attributed.PatientDeviceId.Should().Be(stamped));
+    }
+
+    private void StampAllWith(Guid patientDeviceId) =>
+        _deviceStamperMock
+            .Setup(s => s.StampAsync(
+                It.IsAny<IReadOnlyList<IDeviceAttributed>>(),
+                It.IsAny<IReadOnlyList<DeviceCategory>>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<IReadOnlyList<IDeviceAttributed>, IReadOnlyList<DeviceCategory>, string?, CancellationToken>(
+                (records, _, _, _) =>
+                {
+                    foreach (var record in records)
+                        record.PatientDeviceId = patientDeviceId;
+                })
+            .Returns(Task.CompletedTask);
 
     private void SetupExisting(Guid id, Guid? patientDeviceId) =>
         _repoMock

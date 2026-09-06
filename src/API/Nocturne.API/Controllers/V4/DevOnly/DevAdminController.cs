@@ -1097,7 +1097,7 @@ public class DevAdminController : ControllerBase
             .ToListAsync(ct);
         var candidates = DevTenantMemberSelection.Candidates(members);
         var owner = candidates.Count > 0
-            ? DevTenantMemberSelection.PickOwnerOrFirst(candidates)
+            ? DevTenantMemberSelection.PickOwnerOrFirst(candidates, tenant.Id)
             : null;
 
         var seeded = await sampleDataService.SeedAsync(
@@ -1145,7 +1145,7 @@ public class DevAdminController : ControllerBase
 
         var target = request?.SubjectId is { } subjectId
             ? candidates.FirstOrDefault(m => m.SubjectId == subjectId)
-            : DevTenantMemberSelection.PickOwnerOrFirst(candidates);
+            : DevTenantMemberSelection.PickOwnerOrFirst(candidates, tenant.Id);
         if (target is null)
             return NotFound(new { error = $"Subject {request?.SubjectId} is not a member of '{tenant.Slug}'" });
 

@@ -8,6 +8,17 @@ namespace Nocturne.Core.Contracts.Auth;
 /// <seealso cref="ISubjectService"/>
 public interface IPasskeyService
 {
+    /// <summary>
+    /// Explains, for a person, why a ceremony started at <paramref name="requestHost"/> cannot
+    /// succeed against the configured relying-party id, or returns <c>null</c> when it can.
+    /// </summary>
+    /// <remarks>
+    /// The rp.id is derived from the deployment's base domain, so a mismatch is a server
+    /// misconfiguration the browser reports only as an opaque security error. Asking here lets a
+    /// ceremony be refused with the actual reason before options are issued.
+    /// </remarks>
+    string? DescribeRpIdMismatch(string requestHost);
+
     /// <summary>Generates registration options for creating a new passkey credential.</summary>
     Task<PasskeyRegistrationOptions> GenerateRegistrationOptionsAsync(Guid subjectId, string username);
 

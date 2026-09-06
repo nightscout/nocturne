@@ -6,7 +6,7 @@ using Nocturne.API.Authorization;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
-using Nocturne.Core.Models.Authorization;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.API.Multitenancy;
 using Nocturne.Infrastructure.Data;
 using Nocturne.API.Extensions;
@@ -99,10 +99,8 @@ public class AccessRequestController(
 
             await tenantService.AddMemberAsync(tenantId, subjectId, request.RoleIds, request.DirectPermissions, ct: ct);
 
-            // Find owners by looking at members with the owner role slug
             var ownerIds = await dbContext.TenantMembers
-                .Where(tm => tm.TenantId == tenantId
-                    && tm.MemberRoles.Any(mr => mr.TenantRole.Slug == RoleSeeds.Owner))
+                .OwnersOf(tenantId)
                 .Select(tm => tm.SubjectId)
                 .ToListAsync(ct);
 
@@ -141,8 +139,7 @@ public class AccessRequestController(
         if (denyTenantContext != null)
         {
             var ownerIds = await dbContext.TenantMembers
-                .Where(tm => tm.TenantId == denyTenantContext.TenantId
-                    && tm.MemberRoles.Any(mr => mr.TenantRole.Slug == RoleSeeds.Owner))
+                .OwnersOf(denyTenantContext.TenantId)
                 .Select(tm => tm.SubjectId)
                 .ToListAsync(ct);
 

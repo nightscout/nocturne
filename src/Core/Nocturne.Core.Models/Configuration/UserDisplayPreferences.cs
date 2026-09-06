@@ -143,6 +143,29 @@ public class UserDisplayPreferences
         }
     }
 
+    /// <summary>
+    /// A copy carrying only the fields that describe how data is drawn, for disclosure to a
+    /// viewer who is not the owner (the anonymous public share). Each top-level field is named
+    /// individually, so one added later is withheld until someone decides it is presentation
+    /// rather than a fact about the owner. <see cref="Prediction"/> and <see cref="Chart"/> are
+    /// carried whole and carry no such guarantee: a field added inside either is disclosed on
+    /// the next build. Their contents are pinned by a test instead.
+    /// <para>
+    /// <see cref="DashboardTopWidgets"/> is withheld: the widgets an owner pins say what they
+    /// treat and track. <see cref="NightModeSchedule"/> is withheld: it reports when the owner
+    /// sleeps, and when a viewer's own screen dims is the viewer's setting.
+    /// </para>
+    /// </summary>
+    public UserDisplayPreferences ToPresentationOnly() => new()
+    {
+        GlucoseUnits = GlucoseUnits,
+        TimeFormat = TimeFormat,
+        RegionFormat = RegionFormat,
+        ColorTheme = ColorTheme,
+        Prediction = Prediction,
+        Chart = Chart,
+    };
+
     /// <summary>Glucose units: "mg/dl" or "mmol".</summary>
     [JsonPropertyName("glucoseUnits")]
     public string? GlucoseUnits { get; set; }

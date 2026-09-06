@@ -33,6 +33,9 @@ public class BolusCalculationController(IBolusCalculationRepository repo)
     /// <remarks>Bolus calculations sit in the treatments share category alongside the boluses they explain.</remarks>
     public override string WriteScope => Scope.TreatmentsReadWrite;
 
+    /// <inheritdoc/>
+    protected override V4BulkNaming BulkNaming => new("Bolus calculation", "calculation", "calculations");
+
     protected override BolusCalculation MapCreateToModel(UpsertBolusCalculationRequest request) => new()
     {
         Timestamp = request.Timestamp.UtcDateTime,

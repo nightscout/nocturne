@@ -29,6 +29,10 @@ export default defineConfig({
         "./src/lib/test-stubs/app-navigation.ts",
         import.meta.url
       ).pathname,
+      "$app/paths": new URL(
+        "./src/lib/test-stubs/app-paths.ts",
+        import.meta.url
+      ).pathname,
       "$app/server": new URL(
         "./src/lib/test-stubs/app-server.ts",
         import.meta.url

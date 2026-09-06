@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   classifyHost,
+  classifyRequestHost,
   isTenantlessHost,
   parseDashboardSlugs,
 } from "./tenantless-host";
@@ -120,5 +121,41 @@ describe("isTenantlessHost", () => {
       expect(isTenantlessHost("share", resolved)).toBe(false);
       expect(isTenantlessHost("unknown", resolved)).toBe(false);
     }
+  });
+});
+
+describe("classifyRequestHost", () => {
+  beforeEach(() => {
+    process.env.BASE_DOMAIN = BASE;
+    process.env.DASHBOARD_SLUGS = "home";
+  });
+  afterEach(() => {
+    delete process.env.BASE_DOMAIN;
+    delete process.env.DASHBOARD_SLUGS;
+  });
+
+  const request = (host: string) =>
+    new Request("http://internal/", { headers: { host } });
+
+  it("names the tenant the request's own host serves", () => {
+    expect(classifyRequestHost(request(`acme.${BASE}`))).toEqual({
+      kind: "tenant",
+      slug: "acme",
+      baseDomain: BASE,
+      dashboardSlugs: ["home"],
+    });
+  });
+
+  it("names no tenant on the apex or a reserved dashboard slug", () => {
+    expect(classifyRequestHost(request(BASE)).slug).toBeNull();
+    expect(classifyRequestHost(request(`home.${BASE}`)).slug).toBeNull();
+  });
+
+  it("reads the host the proxy forwarded, not the one it dialled", () => {
+    const forwarded = new Request("http://internal/", {
+      headers: { host: "web:3000", "x-forwarded-host": `acme.${BASE}` },
+    });
+
+    expect(classifyRequestHost(forwarded).slug).toBe("acme");
   });
 });

@@ -9,12 +9,19 @@ const logger = createLogger();
 export function registerAlertCommands(bot: Chat) {
   bot.onAction("ack_alert", async (event) => {
     await requireLinkForAction(event, async () => {
-      const { excursionId } = decodeActionValue(event.value);
+      const { excursionId, unreadableExcursion } = decodeActionValue(event.value);
+      if (unreadableExcursion) {
+        await event.thread?.post(
+          "Couldn't tell which alert this button is for. Nothing was acknowledged.",
+        );
+        return;
+      }
+
       try {
         const api = getApi();
         const acknowledgedBy = event.user.fullName ?? "Unknown";
 
-        // Cards already in chat history carry only a tenant; their button still has to work.
+        // A value that names no excursion at all addresses the whole tenant.
         if (!excursionId) {
           await api.alerts.acknowledge({ acknowledgedBy });
           await event.thread?.post("All alerts acknowledged.");

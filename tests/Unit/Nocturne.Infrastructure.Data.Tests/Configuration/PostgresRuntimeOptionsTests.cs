@@ -15,15 +15,6 @@ namespace Nocturne.Infrastructure.Data.Tests.Configuration;
 [Trait("Category", "Unit")]
 public class PostgresRuntimeOptionsTests
 {
-    private const string ConnectionString = "Host=localhost;Database=nocturne;Username=nocturne_app;Password=pw";
-
-    private static IConfiguration SectionWith(params (string Key, string Value)[] settings) =>
-        new ConfigurationBuilder()
-            .AddInMemoryCollection(settings.ToDictionary(
-                s => $"{PostgreSqlConfiguration.SectionName}:{s.Key}",
-                s => (string?)s.Value))
-            .Build();
-
     /// <summary>
     /// Reads the pool the registration actually built. The data source is registered as a
     /// singleton instance, so this needs no provider and touches nothing else in the graph.
@@ -33,7 +24,7 @@ public class PostgresRuntimeOptionsTests
         Action<PostgreSqlConfiguration>? configure = null)
     {
         var services = new ServiceCollection();
-        services.AddPostgreSqlInfrastructure(ConnectionString, configuration, configure);
+        services.AddPostgreSqlInfrastructure(PostgreSqlSection.AppConnectionString, configuration, configure);
 
         var dataSource = (NpgsqlDataSource)services
             .Single(d => d.ServiceType == typeof(NpgsqlDataSource))
@@ -53,7 +44,7 @@ public class PostgresRuntimeOptionsTests
     [Fact]
     public void ConfigurationSection_ReachesTheRuntimePool()
     {
-        RegisteredPool(SectionWith(("MaxPoolSize", "33"))).MaxPoolSize.Should().Be(
+        RegisteredPool(PostgreSqlSection.With(("MaxPoolSize", "33"))).MaxPoolSize.Should().Be(
             33,
             "an operator must be able to retune the pool without a code change and redeploy");
     }
@@ -61,7 +52,7 @@ public class PostgresRuntimeOptionsTests
     [Fact]
     public void ConfigurationSection_ReachesTheStatementTimeout()
     {
-        RegisteredPool(SectionWith(("StatementTimeoutSeconds", "12"))).Options.Should().Contain(
+        RegisteredPool(PostgreSqlSection.With(("StatementTimeoutSeconds", "12"))).Options.Should().Contain(
             "statement_timeout=12000",
             "the server-side cap must be settable from configuration too");
     }
@@ -76,7 +67,7 @@ public class PostgresRuntimeOptionsTests
     public void ConfigureActionClearingTheConnectionString_StillFails()
     {
         var register = () => RegisteredPool(
-            SectionWith(("MaxPoolSize", "33")),
+            PostgreSqlSection.With(("MaxPoolSize", "33")),
             config => config.ConnectionString = string.Empty);
 
         register.Should().Throw<InvalidOperationException>()
@@ -87,7 +78,7 @@ public class PostgresRuntimeOptionsTests
     public void ConfigureAction_WinsOverTheSection()
     {
         var pool = RegisteredPool(
-            SectionWith(("MaxPoolSize", "33")),
+            PostgreSqlSection.With(("MaxPoolSize", "33")),
             config => config.MaxPoolSize = 44);
 
         pool.MaxPoolSize.Should().Be(
@@ -117,7 +108,7 @@ public class PostgresRuntimeOptionsTests
     [Fact]
     public void SectionConnectionString_DoesNotDisplaceTheSuppliedOne()
     {
-        var pool = RegisteredPool(SectionWith(
+        var pool = RegisteredPool(PostgreSqlSection.With(
             ("MaxPoolSize", "33"),
             ("ConnectionString", "Host=WRONGHOST;Database=nocturne;Username=nocturne_migrator;Password=pw")));
 
@@ -135,7 +126,7 @@ public class PostgresRuntimeOptionsTests
     [Fact]
     public void MalformedValue_FailsAtStartup()
     {
-        var register = () => RegisteredPool(SectionWith(("MaxPoolSize", "not-a-number")));
+        var register = () => RegisteredPool(PostgreSqlSection.With(("MaxPoolSize", "not-a-number")));
 
         register.Should().Throw<InvalidOperationException>();
     }
@@ -150,7 +141,7 @@ public class PostgresRuntimeOptionsTests
     [Fact]
     public void StatementTimeoutThatWouldWrapIntoAValidValue_KeepsItsMagnitude()
     {
-        RegisteredPool(SectionWith(("StatementTimeoutSeconds", "5000000"))).Options
+        RegisteredPool(PostgreSqlSection.With(("StatementTimeoutSeconds", "5000000"))).Options
             .Should().Contain("statement_timeout=5000000000")
             .And.NotContain("statement_timeout=705032704");
     }
