@@ -352,8 +352,7 @@ public partial class TenantService : ITenantService
             .AnyAsync(mr => mr.TenantMemberId == member.Id
                 && mr.TenantRole!.Slug == RoleSeeds.Owner, ct);
 
-        // A deactivated owner can be reactivated; a removed membership cannot be brought back, so
-        // the guard holds even when the departing owner is one the rest of the system ignores.
+        // A deactivated or system-subject peer is not a remaining owner.
         if (isOwner && !await context.TenantMembers.OwnersOf(tenantId).AnyAsync(m => m.Id != member.Id, ct))
             return new MemberRemovalResult(false, "Cannot remove the last owner of a tenant");
 

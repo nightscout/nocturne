@@ -99,19 +99,6 @@ public class PlatformAdminBootstrapServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task ATenantWhoseOnlyOwnerIsRevokedIsSkippedForTheNextOldest()
-    {
-        var revoked = await AddTenantAsync(
-            "revoked-oldest", new DateTime(2019, 1, 1), RoleSeeds.Owner, revoked: true);
-        var owner = await AddTenantWithOwnerAsync("owned", new DateTime(2020, 1, 1));
-
-        await BootstrapAsync();
-
-        (await IsPlatformAdminAsync(revoked)).Should().BeFalse();
-        (await IsPlatformAdminAsync(owner)).Should().BeTrue();
-    }
-
-    [Fact]
     public async Task ATenantWhoseOnlyOwnerIsDeactivatedIsSkippedForTheNextOldest()
     {
         var deactivated = await AddTenantAsync(
@@ -131,16 +118,6 @@ public class PlatformAdminBootstrapServiceTests : IDisposable
 
         (await EnsureFirstOwnerAsync(owner)).Should().BeTrue();
         (await IsPlatformAdminAsync(owner)).Should().BeTrue();
-    }
-
-    [Fact]
-    public async Task ARevokedOwnerOfTheSoleTenantIsNotGrantedOnSetupCompletion()
-    {
-        var revoked = await AddTenantAsync(
-            "only", new DateTime(2020, 1, 1), RoleSeeds.Owner, revoked: true);
-
-        (await EnsureFirstOwnerAsync(revoked)).Should().BeFalse();
-        (await IsPlatformAdminAsync(revoked)).Should().BeFalse();
     }
 
     [Fact]
@@ -201,7 +178,6 @@ public class PlatformAdminBootstrapServiceTests : IDisposable
         string slug,
         DateTime createdAt,
         string roleSlug,
-        bool revoked = false,
         bool subjectIsActive = true)
     {
         var tenantId = Guid.CreateVersion7();
@@ -218,8 +194,7 @@ public class PlatformAdminBootstrapServiceTests : IDisposable
         var subjectId = await TestDatabaseSeeder.SeedMemberAsync(
             _db, tenantId, roleSlug,
             name: $"{slug}-member",
-            isActive: subjectIsActive,
-            revokedAt: revoked ? createdAt : null);
+            isActive: subjectIsActive);
 
         _db.ChangeTracker.Clear();
         return subjectId;

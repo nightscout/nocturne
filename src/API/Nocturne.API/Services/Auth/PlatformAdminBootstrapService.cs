@@ -98,8 +98,7 @@ public class PlatformAdminBootstrapService
     }
 
     /// <summary>
-    /// The owner of the oldest tenant that has one, or <see langword="null"/> when no tenant
-    /// does. Tenants without an owner are skipped.
+    /// The owner of the oldest tenant that has one, or <see langword="null"/> when no tenant does.
     /// </summary>
     private static async Task<Guid?> FindOldestTenantOwnerAsync(
         NocturneDbContext db, CancellationToken cancellationToken)

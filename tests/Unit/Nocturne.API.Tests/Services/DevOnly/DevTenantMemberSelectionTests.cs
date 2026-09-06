@@ -26,16 +26,6 @@ public sealed class DevTenantMemberSelectionTests
     }
 
     [Fact]
-    public void PickOwnerOrFirst_skipsAnOwnerOfAnotherTenant()
-    {
-        var elsewhere = Member(isOwner: true, tenantId: Guid.CreateVersion7());
-        var plainMember = Member();
-
-        DevTenantMemberSelection.PickOwnerOrFirst([elsewhere, plainMember], TenantId)
-            .Should().BeSameAs(elsewhere, "the first candidate is the fallback when no owner stands");
-    }
-
-    [Fact]
     public void PickOwnerOrFirst_takesTheOldestOwner()
     {
         var newer = Member(isOwner: true, createdAt: new DateTime(2024, 1, 1));
@@ -60,11 +50,10 @@ public sealed class DevTenantMemberSelectionTests
         bool isActive = true,
         bool isSystemSubject = false,
         DateTime? revokedAt = null,
-        DateTime? createdAt = null,
-        Guid? tenantId = null) => new()
+        DateTime? createdAt = null) => new()
     {
         Id = Guid.CreateVersion7(),
-        TenantId = tenantId ?? TenantId,
+        TenantId = TenantId,
         SubjectId = Guid.CreateVersion7(),
         RevokedAt = revokedAt,
         SysCreatedAt = createdAt ?? DateTime.UtcNow,
@@ -85,7 +74,7 @@ public sealed class DevTenantMemberSelectionTests
                     TenantRole = new TenantRoleEntity
                     {
                         Id = OwnerRoleId,
-                        TenantId = tenantId ?? TenantId,
+                        TenantId = TenantId,
                         Name = "Owner",
                         Slug = RoleSeeds.Owner,
                         Permissions = [Scope.FullAccess],

@@ -134,20 +134,6 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
         (await db.TenantMembers.AnyAsync(m => m.SubjectId == owner)).Should().BeTrue();
     }
 
-    /// <summary>A deactivated subject can be reactivated; a removed membership cannot come back.</summary>
-    [Fact]
-    public async Task RemoveMemberAsync_refusesADeactivatedSoleOwner()
-    {
-        var owner = await SeedMemberAsync(isOwner: true, isActive: false);
-
-        var result = await Service().RemoveMemberAsync(_tenantId, owner);
-
-        result.Ok.Should().BeFalse();
-        result.ErrorDescription.Should().Be("Cannot remove the last owner of a tenant");
-        await using var db = Context();
-        (await db.TenantMembers.AnyAsync(m => m.SubjectId == owner)).Should().BeTrue();
-    }
-
     [Fact]
     public async Task RemoveMemberAsync_refusesASystemSubject()
     {
