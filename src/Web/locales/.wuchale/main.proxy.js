@@ -1,11 +1,12 @@
 
             
             /** @typedef {() => Promise<import("wuchale/runtime").CatalogModule>} CatalogMod */
-            /** @typedef {{[locale: string]: CatalogMod}} KeyCatalogs */
-            /** @type {{[loadID: string]: KeyCatalogs}} */
-            const catalogs = {main: {en: () => import('./main.main.en.compiled.js'),es: () => import('./main.main.es.compiled.js'),fr: () => import('./main.main.fr.compiled.js'),de: () => import('./main.main.de.compiled.js'),it: () => import('./main.main.it.compiled.js'),pt: () => import('./main.main.pt.compiled.js'),nl: () => import('./main.main.nl.compiled.js'),ru: () => import('./main.main.ru.compiled.js'),zh: () => import('./main.main.zh.compiled.js'),ja: () => import('./main.main.ja.compiled.js'),ko: () => import('./main.main.ko.compiled.js')}}
-            export const loadCatalog = (/** @type {string} */ loadID, /** @type {string} */ locale) => {
-                return /** @type {CatalogMod} */ (/** @type {KeyCatalogs} */ (catalogs[loadID])[locale])()
+            /** @type {{[locale: string]: CatalogMod[]}} */
+            const catalogs = {en: [() => import('./main.0.en.compiled.js')],es: [() => import('./main.0.es.compiled.js')],fr: [() => import('./main.0.fr.compiled.js')],de: [() => import('./main.0.de.compiled.js')],it: [() => import('./main.0.it.compiled.js')],pt: [() => import('./main.0.pt.compiled.js')],nl: [() => import('./main.0.nl.compiled.js')],ru: [() => import('./main.0.ru.compiled.js')],zh: [() => import('./main.0.zh.compiled.js')],ja: [() => import('./main.0.ja.compiled.js')],ko: [() => import('./main.0.ko.compiled.js')]}
+            export const loadCatalog = (/** @type {number} */ loadID, /** @type {string} */ locale) => {
+                return /** @type {CatalogMod} */ (/** @type {CatalogMod[]} */ (catalogs[locale])[loadID])()
             }
-            export const loadIDs = ['main']
+            export const loadCount = 1
+            // not essential. in case it is needed and for debugging
+            export const patterns = ["main"]
         

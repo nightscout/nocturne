@@ -24,8 +24,7 @@ const reactAliases = {
   react: dirname(require.resolve("react/package.json")),
   "react-dom": dirname(require.resolve("react-dom/package.json")),
 };
-// WUCHALE-DISABLED: wuchale temporarily disabled — see also hooks.server.ts and +layout.ts
-// import { wuchale } from '@wuchale/vite-plugin'
+import { wuchale } from 'wuchale/vite'
 
 export default defineConfig(({ mode }) => {
   // Load env file based on `mode` in the current working directory.
@@ -70,7 +69,7 @@ export default defineConfig(({ mode }) => {
       route: '/_translations',  // Route where editor UI is served
       localesDir: '../../locales',  // Path to .po files
     }),
-      // wuchale(),
+      wuchale(),
       // Custom plugin to integrate WebSocket bridge into Vite dev server
       {
         name: "websocket-bridge",

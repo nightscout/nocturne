@@ -1,7 +1,6 @@
 import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
-// WUCHALE-DISABLED: wuchale temporarily disabled
-// import { wuchale } from '@wuchale/vite-plugin';
+import { wuchale } from 'wuchale/vite';
 import lingo from 'vite-plugin-lingo';
 import { blogManifest } from '@nocturne/cms/blog/vite-plugin';
 import { resolve } from 'node:path';
@@ -96,6 +95,7 @@ export default defineConfig({
     sharedFonts(),
     releaseAssets(),
     tailwindcss(),
+    wuchale(),
     lingo({
       route: '/_translations',
       localesDir: '../../locales',
