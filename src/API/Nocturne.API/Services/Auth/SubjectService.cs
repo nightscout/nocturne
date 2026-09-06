@@ -21,6 +21,7 @@ public class SubjectService : ISubjectService
 {
     private readonly NocturneDbContext _dbContext;
     private readonly IAuthAuditService _auditService;
+    private readonly IRecoveryCodeService _recoveryCodeService;
     private readonly ILogger<SubjectService> _logger;
 
     /// <summary>
@@ -28,11 +29,18 @@ public class SubjectService : ISubjectService
     /// </summary>
     /// <param name="dbContext">The EF Core database context for subject and role entity access.</param>
     /// <param name="auditService">Service for recording audit events on authentication actions.</param>
+    /// <param name="recoveryCodeService">Service for counting the subject's unused recovery codes.</param>
     /// <param name="logger">The logger instance.</param>
-    public SubjectService(NocturneDbContext dbContext, IAuthAuditService auditService, ILogger<SubjectService> logger)
+    public SubjectService(
+        NocturneDbContext dbContext,
+        IAuthAuditService auditService,
+        IRecoveryCodeService recoveryCodeService,
+        ILogger<SubjectService> logger
+    )
     {
         _dbContext = dbContext;
         _auditService = auditService;
+        _recoveryCodeService = recoveryCodeService;
         _logger = logger;
     }
 
@@ -797,6 +805,17 @@ public class SubjectService : ISubjectService
         var passkeys = await _dbContext.PasskeyCredentials.CountAsync(p => p.SubjectId == subjectId);
         var oidc = await _dbContext.SubjectOidcIdentities.CountAsync(i => i.SubjectId == subjectId);
         return passkeys + oidc;
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> HasSingleSignInMethodAsync(Guid subjectId)
+    {
+        if (await CountPrimaryAuthFactorsAsync(subjectId) != 1)
+        {
+            return false;
+        }
+
+        return await _recoveryCodeService.GetRemainingCountAsync(subjectId) == 0;
     }
 
     /// <inheritdoc />
