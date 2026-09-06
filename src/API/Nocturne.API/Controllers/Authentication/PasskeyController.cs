@@ -1053,8 +1053,7 @@ public class PasskeyController : ControllerBase
             await using var ownerCtx = await _dbContextFactory.CreateTenantPinnedContextAsync(
                 tenant.Id, HttpContext.RequestAborted);
             var ownerIds = await ownerCtx.TenantMembers
-                .Where(tm => tm.TenantId == tenant.Id
-                    && tm.MemberRoles.Any(mr => mr.TenantRole.Slug == Core.Models.Authorization.RoleSeeds.Owner))
+                .OwnersOf(tenant.Id)
                 .Select(tm => tm.SubjectId)
                 .ToListAsync();
 

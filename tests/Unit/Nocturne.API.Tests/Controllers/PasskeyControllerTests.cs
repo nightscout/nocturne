@@ -8,6 +8,7 @@ using Moq;
 using Nocturne.API.Controllers.Authentication;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Identity;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Notifications;
@@ -644,6 +645,34 @@ public class PasskeyControllerTests : IDisposable
             Times.Once);
     }
 
+    [Fact]
+    public async Task AccessRequestComplete_NotifiesTheStandingOwnersOnly()
+    {
+        await AllowAccessRequestsAsync();
+        var owner = await SeedOwnerAsync("owner");
+        await SeedOwnerAsync("revoked", revokedAt: DateTime.UtcNow);
+        await SeedOwnerAsync("deactivated", isActive: false);
+        await SeedOwnerAsync("public", isSystemSubject: true);
+        var requestorId = await SeedPendingAccessRequestAsync("Sam Smith");
+        StubRegistrationChallengeMintedFor(requestorId);
+
+        var notifications = new Mock<IInAppNotificationService>();
+        var result = await _controller.AccessRequestComplete(
+            new AccessRequestCompleteRequest
+            {
+                DisplayName = "Sam Smith",
+                AttestationResponseJson = "{}",
+                ChallengeToken = "challenge-for-sam",
+            },
+            notifications.Object);
+
+        Assert.IsType<OkResult>(result);
+        notifications.Invocations
+            .Where(i => i.Method.Name == nameof(IInAppNotificationService.CreateNotificationAsync))
+            .Select(i => (string)i.Arguments[0]!)
+            .Should().Equal(owner.ToString());
+    }
+
     /// <summary>
     /// Subjects are global; membership is what scopes them. A credential-less member of another
     /// tenant is that tenant's locked-out account, not an abandoned enrolment here, so an invite
@@ -1067,6 +1096,18 @@ public class PasskeyControllerTests : IDisposable
         });
         await _dbContext.SaveChangesAsync();
         return subjectId;
+    }
+
+    private async Task<Guid> SeedOwnerAsync(
+        string username,
+        DateTime? revokedAt = null,
+        bool isActive = true,
+        bool isSystemSubject = false)
+    {
+        await EnsureTenantAsync(_tenantId);
+        return await TestDatabaseSeeder.SeedMemberAsync(
+            _dbContext, _tenantId, name: username,
+            isActive: isActive, isSystemSubject: isSystemSubject, revokedAt: revokedAt);
     }
 
     private async Task AllowAccessRequestsAsync()

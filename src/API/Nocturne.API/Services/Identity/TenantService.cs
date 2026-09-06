@@ -352,16 +352,9 @@ public partial class TenantService : ITenantService
             .AnyAsync(mr => mr.TenantMemberId == member.Id
                 && mr.TenantRole!.Slug == RoleSeeds.Owner, ct);
 
-        if (isOwner)
-        {
-            var ownerCount = await context.TenantMemberRoles
-                .CountAsync(mr => mr.TenantRole!.TenantId == tenantId
-                    && mr.TenantRole.Slug == RoleSeeds.Owner
-                    && mr.TenantMember!.RevokedAt == null, ct);
-
-            if (ownerCount <= 1)
-                return new MemberRemovalResult(false, "Cannot remove the last owner of a tenant");
-        }
+        // A deactivated or system-subject peer is not a remaining owner.
+        if (isOwner && !await context.TenantMembers.OwnersOf(tenantId).AnyAsync(m => m.Id != member.Id, ct))
+            return new MemberRemovalResult(false, "Cannot remove the last owner of a tenant");
 
         // Chat identity directory rows are global and carry no membership join, so a link left
         // behind here would keep answering bot commands for this tenant. It goes in the same
