@@ -10,7 +10,8 @@ using Nocturne.Tests.Shared.Infrastructure;
 namespace Nocturne.Infrastructure.Data.Tests.Repositories.V4;
 
 /// <summary>
-/// The tenant guard on <c>SyncUpsertRepositoryBase.SplitUpsertsAsync</c>. The split matches stored
+/// The tenant guard on both of <c>SyncUpsertRepositoryBase</c>'s keyed reads —
+/// <c>SplitUpsertsAsync</c> for a batch and <c>CreateAsync</c> for one record. Each matches stored
 /// rows through <c>IgnoreQueryFilters()</c> — lifting the soft-delete filter also lifts the tenant
 /// one — so its explicit <c>TenantId</c> predicate is the only thing keeping one tenant's connector
 /// replay out of another tenant's rows. The sync key is unique per tenant, not globally: two tenants
@@ -87,10 +88,14 @@ public class SyncUpsertTenantScopeTests : IDisposable
         return await verify.Boluses.IgnoreQueryFilters().CountAsync();
     }
 
+    private static Bolus OnTheSyncKey(double insulin) =>
+        new() { Timestamp = T0, DataSource = DataSource, SyncIdentifier = SyncIdentifier, Insulin = insulin };
+
     private Task<IEnumerable<Bolus>> UpsertFromTenantAAsync(double insulin) =>
-        _repoA.BulkCreateAsync(
-            [new Bolus { Timestamp = T0, DataSource = DataSource, SyncIdentifier = SyncIdentifier, Insulin = insulin }],
-            WriteOrigin.Live);
+        _repoA.BulkCreateAsync([OnTheSyncKey(insulin)], WriteOrigin.Live);
+
+    private Task<Bolus> CreateFromTenantAAsync(double insulin) =>
+        _repoA.CreateAsync(OnTheSyncKey(insulin), WriteOrigin.Live);
 
     [Fact]
     public async Task BulkCreate_WhenAnotherTenantHoldsTheSameKey_UpsertsOnlyTheCallersRow()
@@ -113,6 +118,37 @@ public class SyncUpsertTenantScopeTests : IDisposable
         await UpsertFromTenantAAsync(insulin: 9.0);
 
         (await ReadAsync(rowB)).Insulin.Should().Be(1.0, "another tenant's row is not a match candidate");
+        (await CountAsync()).Should().Be(2, "the caller has no row on this key, so one is inserted");
+
+        await using var verify = _db.CreateContext(TenantA);
+        var inserted = await verify.Boluses.SingleAsync();
+        inserted.TenantId.Should().Be(TenantA);
+        inserted.Insulin.Should().Be(9.0);
+    }
+
+    [Fact]
+    public async Task Create_WhenAnotherTenantHoldsTheSameKey_UpsertsOnlyTheCallersRow()
+    {
+        var rowB = Seed(TenantB, insulin: 1.0);
+        var rowA = Seed(TenantA, insulin: 5.0);
+
+        var upserted = await CreateFromTenantAAsync(insulin: 9.0);
+
+        upserted.Id.Should().Be(rowA);
+        (await ReadAsync(rowA)).Insulin.Should().Be(9.0);
+        (await ReadAsync(rowB)).Insulin.Should().Be(1.0, "another tenant's row is not the caller's to update");
+        (await CountAsync()).Should().Be(2, "the upsert matched in place rather than inserting");
+    }
+
+    [Fact]
+    public async Task Create_WhenOnlyAnotherTenantHoldsTheKey_InsertsRatherThanMatchingIt()
+    {
+        var rowB = Seed(TenantB, insulin: 1.0);
+
+        var created = await CreateFromTenantAAsync(insulin: 9.0);
+
+        created.Id.Should().NotBe(rowB, "another tenant's row is not a match candidate");
+        (await ReadAsync(rowB)).Insulin.Should().Be(1.0);
         (await CountAsync()).Should().Be(2, "the caller has no row on this key, so one is inserted");
 
         await using var verify = _db.CreateContext(TenantA);

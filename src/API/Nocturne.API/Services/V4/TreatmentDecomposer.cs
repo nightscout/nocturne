@@ -522,10 +522,10 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
 
     private async Task DecomposeCarbIntakeAsync(Treatment treatment, V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
     {
-        var (carbIntake, created) = await UpsertByLegacyIdAsync(
+        var upserted = await UpsertByLegacyIdAsync(
             _carbIntakeRepository, treatment.Id, MapToCarbIntake(treatment, result.CorrelationId), result, origin, ct);
 
-        if (created)
+        if (upserted is ({ } carbIntake, true))
             await WriteLegacyFoodLineAsync(carbIntake.Id, treatment, ct);
     }
 

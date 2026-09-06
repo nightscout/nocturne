@@ -73,6 +73,10 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
     /// `Timestamp` must be set on the mapped model; requests that resolve to a default timestamp are rejected with `400 Bad Request`.
     ///
     /// On success, responds with `201 Created` and a `Location` header containing the URL of the newly created record.
+    ///
+    /// A record whose `(dataSource, syncIdentifier)` is held by a record the owner deleted is
+    /// refused with `409 Conflict` — deleting a record stops that record's source from
+    /// re-uploading it. Restore it from `GET deleted` instead.
     /// </remarks>
     [HttpPost]
     [RemoteForm]
@@ -80,6 +84,7 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
     [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public virtual async Task<ActionResult<TModel>> Create([FromBody] TCreateRequest request, CancellationToken ct = default)
     {
         var model = MapCreateToModel(request);

@@ -59,6 +59,10 @@ public interface IV4Repository<T> where T : class, IV4Record
     /// <param name="origin">Whether this is a live write (broadcast) or a backfill import (silent).</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The created record as persisted.</returns>
+    /// <exception cref="RecreationBlockedException">
+    /// The record's external identity — its (DataSource, SyncIdentifier) or its LegacyId — is
+    /// already held by a stored row, so re-creating it is refused.
+    /// </exception>
     Task<T> CreateAsync(T model, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>

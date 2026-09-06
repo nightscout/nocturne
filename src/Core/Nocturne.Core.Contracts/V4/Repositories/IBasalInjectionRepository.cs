@@ -13,7 +13,8 @@ namespace Nocturne.Core.Contracts.V4.Repositories;
 /// <seealso cref="BasalInjection"/>
 /// <seealso cref="IV4Repository{T}"/>
 public interface IBasalInjectionRepository
-    : IV4Repository<BasalInjection>, IDeviceAttributedRepository<BasalInjection>, IBulkCreateRepository<BasalInjection>
+    : IV4Repository<BasalInjection>, IDeviceAttributedRepository<BasalInjection>,
+      IBulkCreateRepository<BasalInjection>, ISyncKeyedRepository<BasalInjection>
 {
     /// <summary>Delete <see cref="BasalInjection"/> records matching the given data source and sync identifier.</summary>
     /// <param name="dataSource">The external data source name.</param>

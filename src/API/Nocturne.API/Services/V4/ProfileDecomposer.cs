@@ -80,10 +80,16 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
             var legacyId = $"{profile.Id}:{storeName}";
             var isDefault = string.Equals(storeName, profile.DefaultProfile, StringComparison.OrdinalIgnoreCase);
 
-            var (settings, _) = await UpsertByLegacyIdAsync(
+            var anchor = await UpsertByLegacyIdAsync(
                 _therapySettingsRepo, legacyId,
                 MapToTherapySettings(profile, profileData, storeName, legacyId, isDefault, result.CorrelationId),
                 result, origin, ct, preserveStoredCorrelationId: true);
+
+            // A refused anchor leaves the schedules nothing to converge on. Writing them under the
+            // minted id would fork the group off the settings row they belong to rather than join
+            // it, which is the damage the stamping above exists to prevent.
+            if (anchor is not ({ } settings, _))
+                continue;
 
             var groupCorrelationId = settings.CorrelationId ?? mintedCorrelationId;
 

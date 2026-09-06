@@ -2,7 +2,12 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
+using Microsoft.AspNetCore.Mvc.Abstractions;
+using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
+using Microsoft.AspNetCore.Routing;
 using Nocturne.API.Controllers.V4.Treatments;
+using Nocturne.API.Filters;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -441,5 +446,69 @@ public class BolusControllerTests
         captured!.InsulinContext.Should().BeNull();
         captured.InsulinType.Should().Be("Manual Entry");
         _insulinRepoMock.Verify(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    /// <remarks>
+    /// This controller overrides <c>Create</c> without calling the CRUD base, which is why the
+    /// mapping lives in the globally-registered <see cref="RecreationBlockedFilter"/> rather than
+    /// in a <c>catch</c> on the base action.
+    /// </remarks>
+    [Fact]
+    public async Task Create_WhenTheRepositoryRefusesTheWrite_RaisesTheExceptionTheFilterMapsTo409()
+    {
+        _repoMock
+            .Setup(r => r.CreateAsync(It.IsAny<Bolus>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new RecreationBlockedException(nameof(Bolus), "sync identifier 'sync-1' from 'aaps'"));
+
+        var controller = CreateController();
+        var act = () => controller.Create(new CreateBolusRequest
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            Insulin = 5.0,
+            DataSource = "aaps",
+            SyncIdentifier = "sync-1",
+        });
+
+        var blocked = (await act.Should().ThrowAsync<RecreationBlockedException>()).Which;
+        var answered = RunRecreationBlockedFilter(controller, blocked);
+
+        answered.StatusCode.Should().Be(StatusCodes.Status409Conflict);
+        answered.Value.Should().BeOfType<ProblemDetails>()
+            .Which.Detail.Should().Contain("sync identifier 'sync-1'");
+    }
+
+    /// <remarks>
+    /// The MVC-registered factory is exercised end to end by
+    /// <see cref="GoldenFiles.RecreationBlockedPipelineTests"/>; here it only has to carry the
+    /// status, title and detail the filter hands it.
+    /// </remarks>
+    private static ProblemDetailsFactory EchoingProblemDetailsFactory()
+    {
+        var factory = new Mock<ProblemDetailsFactory>();
+        factory
+            .Setup(f => f.CreateProblemDetails(
+                It.IsAny<HttpContext>(), It.IsAny<int?>(), It.IsAny<string?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>()))
+            .Returns((HttpContext _, int? status, string? title, string? type, string? detail, string? instance) =>
+                new ProblemDetails
+                {
+                    Status = status, Title = title, Type = type, Detail = detail, Instance = instance,
+                });
+        return factory.Object;
+    }
+
+    private static ObjectResult RunRecreationBlockedFilter(ControllerBase controller, Exception exception)
+    {
+        var context = new ExceptionContext(
+            new ActionContext(controller.HttpContext, new RouteData(), new ActionDescriptor()),
+            [])
+        {
+            Exception = exception,
+        };
+
+        new RecreationBlockedFilter(EchoingProblemDetailsFactory()).OnException(context);
+
+        context.ExceptionHandled.Should().BeTrue();
+        return context.Result.Should().BeOfType<ObjectResult>().Subject;
     }
 }

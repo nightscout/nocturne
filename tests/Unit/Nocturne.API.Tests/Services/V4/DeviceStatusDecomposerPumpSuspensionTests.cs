@@ -136,6 +136,33 @@ public class DeviceStatusDecomposerPumpSuspensionTests : IDisposable
             Times.Once);
     }
 
+    /// <remarks>
+    /// The spans are derived from the snapshot that was just stored, so a refused write
+    /// (<see cref="RecreationBlockedException"/>: the user deleted the snapshot this legacy id
+    /// names) leaves nothing to transition from.
+    /// </remarks>
+    [Fact]
+    public async Task WhenTheSnapshotWriteIsRefused_DerivesNoSpans()
+    {
+        var prior = new V4Models.PumpSnapshot { Suspended = false, Timestamp = new DateTime(2024, 1, 1, 11, 0, 0, DateTimeKind.Utc) };
+        _pumpRepoMock.Setup(r => r.GetLatestBeforeAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(prior);
+        _pumpRepoMock
+            .Setup(r => r.CreateAsync(It.IsAny<V4Models.PumpSnapshot>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new RecreationBlockedException(
+                nameof(V4Models.PumpSnapshot), "legacy id 'legacy-refused'"));
+
+        var ds = MakeDeviceStatus("legacy-refused", 1704110400000, suspended: true);
+
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
+
+        result.CreatedRecords.Should().NotContain(r => r is V4Models.PumpSnapshot,
+            "the refused snapshot is not reported as created");
+        _stateSpanServiceMock.Verify(
+            s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
     [Fact]
     public async Task TrueToFalse_ClosesOpenSpan()
     {

@@ -180,7 +180,7 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
     {
         var model = await BuildPumpSnapshotAsync(ds, legacyId, source, result.CorrelationId, ct);
 
-        var (persisted, _) = await UpsertByLegacyIdAsync(
+        var upserted = await UpsertByLegacyIdAsync(
             _pumpRepo, legacyId, model, result, origin, ct,
             beforeWrite: async existing =>
             {
@@ -189,8 +189,12 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
                     ?? existing?.PatientDeviceId;
             });
 
-        await DecomposePumpSuspensionAsync(ds, persisted, result, origin, ct);
-        await DecomposePumpModeAsync(ds, persisted, result, origin, ct);
+        // No stored snapshot to transition from when the write was refused.
+        if (upserted is ({ } persisted, _))
+        {
+            await DecomposePumpSuspensionAsync(ds, persisted, result, origin, ct);
+            await DecomposePumpModeAsync(ds, persisted, result, origin, ct);
+        }
 
         return model.DeviceId;
     }
@@ -556,7 +560,19 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
         if (result.CorrelationId is not { } correlationId || BuildExtras(ds, correlationId) is not { } model)
             return;
 
-        var created = await _extrasRepo.CreateAsync(model, origin, ct);
+        V4Models.DeviceStatusExtras created;
+        try
+        {
+            created = await _extrasRepo.CreateAsync(model, origin, ct);
+        }
+        catch (RecreationBlockedException)
+        {
+            Logger.LogDebug(
+                "Skipped DeviceStatusExtras for correlation {CorrelationId}: its identity is already held",
+                correlationId);
+            return;
+        }
+
         result.CreatedRecords.Add(created);
         Logger.LogDebug("Created DeviceStatusExtras with {Count} keys for correlation {CorrelationId}",
             model.Extras!.Count, correlationId);

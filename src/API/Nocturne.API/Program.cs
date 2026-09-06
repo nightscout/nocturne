@@ -158,6 +158,7 @@ builder.Services.AddControllers(options =>
 {
     options.Filters.Add<NightscoutJsonFilter>();
     options.Filters.Add<TenantCacheVaryFilter>();
+    options.Filters.Add<RecreationBlockedFilter>();
     options.Filters.AddService<ReadAccessAuditFilter>();
 })
 .ConfigureApplicationPartManager(manager =>

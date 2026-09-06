@@ -11,7 +11,9 @@ using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Microsoft.EntityFrameworkCore;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
@@ -216,6 +218,53 @@ public class TreatmentDecomposerTests : IDisposable
         bolus.Automatic.Should().BeTrue();
         bolus.BolusType.Should().Be(V4Models.BolusType.Normal);
         bolus.LegacyId.Should().Be("correction-1");
+    }
+
+    /// <remarks>
+    /// The record the user deleted holds its legacy id, so the repository refuses the re-create. The
+    /// decomposer must reach the same outcome the batch path reaches by dropping the record from its
+    /// insert set: the upload succeeds carrying nothing for it.
+    /// </remarks>
+    [Fact]
+    public async Task DecomposeAsync_WhenAUserDeletedRecordHoldsTheLegacyId_ReportsNothingAndSucceeds()
+    {
+        const string legacyId = "correction-blocked-1";
+        var tombstoneId = SeedUserDeletedBolus(legacyId, insulin: 8.0);
+
+        var result = await _decomposer.DecomposeAsync(new Treatment
+        {
+            Id = legacyId,
+            EventType = "Correction Bolus",
+            Mills = 1700000000000,
+            Insulin = 3.0,
+            BolusType = "normal",
+        }, WriteOrigin.Live);
+
+        result.CreatedRecords.Should().BeEmpty("the refused record is not reported as created");
+        result.UpdatedRecords.Should().BeEmpty("nothing was updated either");
+
+        var rows = await _context.Boluses.IgnoreQueryFilters().AsNoTracking().ToListAsync();
+        rows.Should().ContainSingle("the decomposition must not have inserted past the tombstone")
+            .Which.Id.Should().Be(tombstoneId);
+        rows[0].Insulin.Should().Be(8.0, "the tombstone row is left untouched");
+    }
+
+    private Guid SeedUserDeletedBolus(string legacyId, double insulin)
+    {
+        var entity = new BolusEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = _context.TenantId,
+            Timestamp = new DateTime(2023, 11, 14, 22, 13, 20, DateTimeKind.Utc),
+            LegacyId = legacyId,
+            Insulin = insulin,
+            DeletedAt = new DateTime(2023, 11, 15, 0, 0, 0, DateTimeKind.Utc),
+        };
+        var entry = _context.Boluses.Add(entity);
+        entry.Property("DeletedByUser").CurrentValue = true;
+        _context.SaveChanges();
+        _context.ChangeTracker.Clear();
+        return entity.Id;
     }
 
     #endregion
