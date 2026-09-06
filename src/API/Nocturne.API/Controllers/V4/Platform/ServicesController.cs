@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
+using Nocturne.API.Extensions;
 using Nocturne.API.Models;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Connectors;
@@ -639,7 +640,7 @@ public class ServicesController : ControllerBase
         }
 
         var request = HttpContext.Request;
-        return $"{request.Scheme}://{request.Host}";
+        return $"{request.PublicScheme()}://{request.Host}";
     }
 
 }

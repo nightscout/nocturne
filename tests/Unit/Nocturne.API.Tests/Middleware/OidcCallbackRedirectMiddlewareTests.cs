@@ -197,6 +197,26 @@ public class OidcCallbackRedirectMiddlewareTests
             .Should().StartWith("https://ryceg.nocturne.run/api/auth/oidc/link/callback?");
     }
 
+    /// <summary>
+    /// Local development runs the whole stack over plain http behind a gateway that forwards
+    /// <c>X-Forwarded-Proto: http</c>, so an https redirect here points at a port nothing serves.
+    /// </summary>
+    [Fact]
+    public async Task Redirect_keeps_http_when_that_is_what_the_caller_used()
+    {
+        var middleware = CreateMiddleware();
+        var state = StateFor("ryceg");
+        var context = NewContext();
+        context.Request.Scheme = "http";
+        context.Request.Host = new HostString("nocturne.run");
+        context.Request.Path = "/api/auth/oidc/callback";
+        context.Request.QueryString = new QueryString($"?code=abc&state={state}");
+
+        await middleware.InvokeAsync(context);
+
+        context.Response.Headers.Location.ToString().Should().StartWith("http://ryceg.nocturne.run/");
+    }
+
     [Fact]
     public async Task Redirect_falls_back_to_https_for_a_scheme_no_browser_would_follow()
     {

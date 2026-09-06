@@ -56,7 +56,7 @@ public class GuestLinkController : ControllerBase
             return Forbid();
 
         var effectiveSubjectId = auth.EffectiveSubjectId!.Value;
-        var baseUrl = $"{Request.Scheme}://{Request.Host}";
+        var baseUrl = $"{Request.PublicScheme()}://{Request.Host}";
 
         try
         {

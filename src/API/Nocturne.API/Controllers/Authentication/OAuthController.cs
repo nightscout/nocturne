@@ -478,7 +478,7 @@ public class OAuthController : ControllerBase
         // The frontend runs on a different port, so we use the Origin header if available
         // or fall back to the current request with the frontend path
         var baseUrl = Request.Headers.Origin.FirstOrDefault()
-            ?? $"{Request.Scheme}://{Request.Host}";
+            ?? $"{Request.PublicScheme()}://{Request.Host}";
         var verificationUri = $"{baseUrl}/oauth/device";
         var verificationUriComplete = $"{verificationUri}?user_code={Uri.EscapeDataString(result.UserCode)}";
 

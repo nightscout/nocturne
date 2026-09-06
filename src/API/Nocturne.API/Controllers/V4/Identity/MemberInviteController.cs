@@ -94,7 +94,7 @@ public class MemberInviteController : ControllerBase
                 request.ExpiresInDays,
                 request.MaxUses,
                 limitTo24Hours,
-                $"{Request.Scheme}://{Request.Host}");
+                $"{Request.PublicScheme()}://{Request.Host}");
 
             return StatusCode(StatusCodes.Status201Created, result);
         }
