@@ -1,4 +1,3 @@
-using System.Net;
 using System.Security;
 using System.Text;
 using System.Text.Json;
@@ -184,7 +183,8 @@ public class MyLifeSoapClient(HttpClient httpClient, ILogger<MyLifeSoapClient> l
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps)
         {
             logger.LogError("SOAP request rejected: URL must use HTTPS. Got scheme {Scheme}", Uri.TryCreate(url, UriKind.Absolute, out var rejected) ? rejected.Scheme : "invalid");
-            return string.Empty;
+            throw new InvalidOperationException(
+                $"MyLife service URL for {action} is unusable; it must be an absolute HTTPS URL");
         }
 
         using var request = new HttpRequestMessage(HttpMethod.Post, uri);
@@ -198,14 +198,13 @@ public class MyLifeSoapClient(HttpClient httpClient, ILogger<MyLifeSoapClient> l
 
         logger.LogWarning("MyLife SOAP request failed {StatusCode}", response.StatusCode);
 
-        // Every other status is indistinguishable from "this call returned nothing" to the caller,
-        // which is what the empty string means. A rejected auth token has to be told apart from
-        // that so the caller can drop it.
-        if (response.StatusCode == HttpStatusCode.Unauthorized)
-            throw new HttpRequestException(
-                $"MyLife rejected the {action} request as unauthorized", null, response.StatusCode);
-
-        return string.Empty;
+        // An empty return means "this call returned nothing", which cannot express why. Callers have
+        // to tell a rejected token, a refused request and a sick server apart — to drop the token, to
+        // stop asking, or to try again — so every failed status leaves as an exception carrying it.
+        throw new HttpRequestException(
+            $"MyLife rejected the {action} request with HTTP {(int)response.StatusCode}",
+            null,
+            response.StatusCode);
     }
 
     private string? ExtractSoapResult(string xml, string elementName)

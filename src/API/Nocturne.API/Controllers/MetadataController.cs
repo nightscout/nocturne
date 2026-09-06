@@ -20,12 +20,15 @@ namespace Nocturne.API.Controllers;
 /// Metadata controller that exposes type definitions for NSwag and the frontend client generation pipeline.
 /// </summary>
 /// <remarks>
-/// This controller exists solely to ensure NSwag generates TypeScript types for models that are not
-/// otherwise reachable through regular API endpoints (e.g., WebSocket event envelopes, connector
-/// configuration shapes, OAuth scope lists). It is excluded from the interactive API explorer via
-/// <see cref="ApiExplorerSettingsAttribute"/> with <c>IgnoreApi = true</c>.
+/// Most of these endpoints exist only to pull types into the generated client that no other endpoint
+/// reaches — WebSocket event envelopes, connector configuration shapes, OAuth scope lists — and
+/// answer with a constant, usually an enum's values. Two serve real data: widget definitions return
+/// the widget catalogue, and multitenancy answers from configuration and the resolved tenant.
 ///
-/// None of the endpoints here perform real business logic — they return empty/stub responses.
+/// The class hides itself from the interactive API explorer with
+/// <see cref="ApiExplorerSettingsAttribute"/>, so an endpoint a client actually calls has to
+/// override that with <c>IgnoreApi = false</c> to reach the OpenAPI document at all; widget
+/// definitions, alert condition types, auth error codes and TOTP setup failures do.
 /// All endpoints are permitted during initial setup (<see cref="AllowDuringSetupAttribute"/>).
 /// </remarks>
 [ApiController]
@@ -167,13 +170,14 @@ public class MetadataController : ControllerBase
     /// <returns>Widget definitions metadata</returns>
     [HttpGet("widget-definitions")]
     [RemoteQuery]
+    [ApiExplorerSettings(IgnoreApi = false)]
     [ProducesResponseType(typeof(WidgetDefinitionsMetadata), 200)]
     public ActionResult<WidgetDefinitionsMetadata> GetWidgetDefinitions()
     {
         return Ok(
             new WidgetDefinitionsMetadata
             {
-                Definitions = GetAllWidgetDefinitions(),
+                Definitions = [.. WidgetCatalog.All],
                 AvailablePlacements = Enum.GetValues<WidgetPlacement>(),
                 AvailableSizes = Enum.GetValues<WidgetSize>(),
                 AvailableUICategories = Enum.GetValues<WidgetUICategory>(),
@@ -286,172 +290,6 @@ public class MetadataController : ControllerBase
             }
         );
     }
-
-    private static WidgetDefinition[] GetAllWidgetDefinitions() =>
-    [
-        // Top widgets (widget grid above the chart)
-        new()
-        {
-            Id = WidgetId.BgDelta,
-            Name = "BG Delta",
-            Description = "Blood glucose change with connection status and last updated time",
-            DefaultEnabled = true,
-            Icon = "TrendingUp",
-            UICategory = WidgetUICategory.Glucose,
-            Placement = WidgetPlacement.Top,
-        },
-        new()
-        {
-            Id = WidgetId.LastUpdated,
-            Name = "Last Updated",
-            Description = "Time since last glucose reading with device info",
-            DefaultEnabled = true,
-            Icon = "Clock",
-            UICategory = WidgetUICategory.Device,
-            Placement = WidgetPlacement.Top,
-        },
-        new()
-        {
-            Id = WidgetId.ConnectionStatus,
-            Name = "Connection Status",
-            Description = "Real-time data connection status",
-            DefaultEnabled = true,
-            Icon = "Wifi",
-            UICategory = WidgetUICategory.Status,
-            Placement = WidgetPlacement.Top,
-        },
-        new()
-        {
-            Id = WidgetId.Meals,
-            Name = "Recent Meals",
-            Description = "Recent meal entries and carb intake",
-            DefaultEnabled = false,
-            Icon = "UtensilsCrossed",
-            UICategory = WidgetUICategory.Meals,
-            Placement = WidgetPlacement.Top,
-        },
-        new()
-        {
-            Id = WidgetId.Trackers,
-            Name = "Trackers",
-            Description = "Active tracker status and progress",
-            DefaultEnabled = false,
-            Icon = "ListChecks",
-            UICategory = WidgetUICategory.Status,
-            Placement = WidgetPlacement.Top,
-        },
-        new()
-        {
-            Id = WidgetId.TirChart,
-            Name = "Time in Range",
-            Description = "Stacked chart showing time in glucose ranges",
-            DefaultEnabled = false,
-            Icon = "BarChart3",
-            UICategory = WidgetUICategory.Glucose,
-            Placement = WidgetPlacement.Top,
-        },
-        new()
-        {
-            Id = WidgetId.DailySummary,
-            Name = "Daily Summary",
-            Description = "Today's glucose statistics overview",
-            DefaultEnabled = false,
-            Icon = "CalendarDays",
-            UICategory = WidgetUICategory.Glucose,
-            Placement = WidgetPlacement.Top,
-        },
-        new()
-        {
-            Id = WidgetId.Clock,
-            Name = "Clock",
-            Description = "Current time and date display",
-            DefaultEnabled = false,
-            Icon = "Clock",
-            UICategory = WidgetUICategory.Status,
-            Placement = WidgetPlacement.Top,
-        },
-        new()
-        {
-            Id = WidgetId.Tdd,
-            Name = "Total Daily Dose",
-            Description = "Today's insulin with basal/bolus breakdown",
-            DefaultEnabled = true,
-            Icon = "PieChart",
-            UICategory = WidgetUICategory.Glucose,
-            Placement = WidgetPlacement.Top,
-        },
-        // Main sections (larger dashboard components)
-        new()
-        {
-            Id = WidgetId.GlucoseChart,
-            Name = "Glucose Chart",
-            Description = "Main glucose trend chart with treatments",
-            DefaultEnabled = true,
-            Icon = "LineChart",
-            UICategory = WidgetUICategory.Glucose,
-            Placement = WidgetPlacement.Main,
-        },
-        new()
-        {
-            Id = WidgetId.Statistics,
-            Name = "Statistics",
-            Description = "BG statistics cards",
-            DefaultEnabled = true,
-            Icon = "BarChart2",
-            UICategory = WidgetUICategory.Glucose,
-            Placement = WidgetPlacement.Main,
-        },
-        new()
-        {
-            Id = WidgetId.Predictions,
-            Name = "Predictions",
-            Description = "Glucose prediction lines on chart",
-            DefaultEnabled = true,
-            Icon = "TrendingUp",
-            UICategory = WidgetUICategory.Glucose,
-            Placement = WidgetPlacement.Main,
-        },
-        new()
-        {
-            Id = WidgetId.DailyStats,
-            Name = "Daily Stats",
-            Description = "Recent entries card",
-            DefaultEnabled = true,
-            Icon = "CalendarDays",
-            UICategory = WidgetUICategory.Glucose,
-            Placement = WidgetPlacement.Main,
-        },
-        new()
-        {
-            Id = WidgetId.Treatments,
-            Name = "Treatments",
-            Description = "Recent treatments card",
-            DefaultEnabled = true,
-            Icon = "Syringe",
-            UICategory = WidgetUICategory.Glucose,
-            Placement = WidgetPlacement.Main,
-        },
-        new()
-        {
-            Id = WidgetId.Agp,
-            Name = "AGP",
-            Description = "Ambulatory glucose profile",
-            DefaultEnabled = false,
-            Icon = "Activity",
-            UICategory = WidgetUICategory.Glucose,
-            Placement = WidgetPlacement.Main,
-        },
-        new()
-        {
-            Id = WidgetId.BatteryStatus,
-            Name = "Battery Status",
-            Description = "Device battery status",
-            DefaultEnabled = true,
-            Icon = "Battery",
-            UICategory = WidgetUICategory.Device,
-            Placement = WidgetPlacement.Main,
-        },
-    ];
 }
 
 /// <summary>

@@ -1,4 +1,3 @@
-using System.Data.Common;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -7,6 +6,7 @@ using Nocturne.API.Services.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Authorization;
@@ -19,8 +19,7 @@ namespace Nocturne.API.Tests.Authorization;
 [Trait("Category", "OAuth")]
 public class OAuthTokenServiceTests : IDisposable
 {
-    private readonly DbConnection _connection;
-    private readonly DbContextOptions<NocturneDbContext> _contextOptions;
+    private readonly SqliteTestDatabase _db;
     private readonly Mock<IJwtService> _mockJwtService;
     private readonly Mock<ISubjectService> _mockSubjectService;
     private readonly Mock<IOAuthGrantService> _mockGrantService;
@@ -47,17 +46,7 @@ public class OAuthTokenServiceTests : IDisposable
 
     public OAuthTokenServiceTests()
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
-
-        _contextOptions = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .Options;
-
-        using var dbContext = new NocturneDbContext(_contextOptions);
-        dbContext.Database.EnsureCreated();
-        dbContext.Tenants.Add(new TenantEntity { Id = _testTenantId, Slug = "test" });
-        dbContext.SaveChanges();
+        _db = TestDbContextFactory.CreateSqliteWithTenant(_testTenantId);
 
         _mockJwtService = new Mock<IJwtService>();
         _mockSubjectService = new Mock<ISubjectService>();
@@ -70,7 +59,7 @@ public class OAuthTokenServiceTests : IDisposable
 
     public void Dispose()
     {
-        _connection.Dispose();
+        _db.Dispose();
     }
 
     private void SetupDefaultMocks()
@@ -134,10 +123,7 @@ public class OAuthTokenServiceTests : IDisposable
         );
     }
 
-    private NocturneDbContext CreateDbContext()
-    {
-        return new NocturneDbContext(_contextOptions) { TenantId = _testTenantId };
-    }
+    private NocturneDbContext CreateDbContext() => _db.CreateContext();
 
     /// <summary>
     /// Seed a SubjectEntity so FK constraints are satisfied.

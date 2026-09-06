@@ -1,8 +1,6 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -11,6 +9,7 @@ using Nocturne.API.Multitenancy;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Multitenancy;
@@ -25,33 +24,25 @@ namespace Nocturne.API.Tests.Multitenancy;
 /// </summary>
 public sealed class TenantResolutionMiddlewareApexTests : IDisposable
 {
-    private readonly SqliteConnection _connection;
+    private readonly SqliteTestDatabase _db;
     private readonly ServiceProvider _root;
     private const string BaseDomain = "nocturne.theconen.de";
 
     public TenantResolutionMiddlewareApexTests()
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
+        _db = TestDbContextFactory.CreateSqlite();
 
         var services = new ServiceCollection();
-        services.AddDbContextFactory<NocturneDbContext>(o => o
-            .UseSqlite(_connection)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning)));
-        services.AddScoped(sp => sp.GetRequiredService<IDbContextFactory<NocturneDbContext>>().CreateDbContext());
+        _db.AddToServices(services);
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
         services.AddMemoryCache();
         _root = services.BuildServiceProvider();
-
-        using var seed = _root.GetRequiredService<IDbContextFactory<NocturneDbContext>>().CreateDbContext();
-        seed.Database.EnsureCreated();
-        seed.SaveChanges();
     }
 
     public void Dispose()
     {
         _root.Dispose();
-        _connection.Dispose();
+        _db.Dispose();
     }
 
     private TenantResolutionMiddleware Build(RequestDelegate next) => new(
@@ -60,13 +51,16 @@ public sealed class TenantResolutionMiddlewareApexTests : IDisposable
         Options.Create(new BaseDomainOptions { BaseDomain = BaseDomain }),
         _root.GetRequiredService<IMemoryCache>());
 
-    private Guid SeedTenant(string slug)
+    private Guid SeedTenant(string slug, bool isDemo = false, Guid? id = null, bool isActive = true)
     {
-        var id = Guid.CreateVersion7();
+        var tenantId = id ?? Guid.CreateVersion7();
         using var seed = _root.GetRequiredService<IDbContextFactory<NocturneDbContext>>().CreateDbContext();
-        seed.Tenants.Add(new TenantEntity { Id = id, Slug = slug, DisplayName = slug, IsActive = true });
+        seed.Tenants.Add(new TenantEntity
+        {
+            Id = tenantId, Slug = slug, DisplayName = slug, IsActive = isActive, IsDemo = isDemo,
+        });
         seed.SaveChanges();
-        return id;
+        return tenantId;
     }
 
     // Host == BaseDomain → apex, no subdomain.
@@ -120,6 +114,9 @@ public sealed class TenantResolutionMiddlewareApexTests : IDisposable
     [Fact]
     public async Task Apex_status_with_multiple_tenants_stays_tenantless()
     {
+        // The demo takes the lowest id so it orders first: a demo dropped after the two-row
+        // limit rather than before it would leave one row here and serve alpha from the apex.
+        SeedTenant("demo", isDemo: true, id: new Guid("00000000-0000-7000-8000-000000000001"));
         SeedTenant("alpha");
         SeedTenant("beta");
         using var scope = _root.CreateScope();
@@ -175,6 +172,66 @@ public sealed class TenantResolutionMiddlewareApexTests : IDisposable
         read.Should().BeTrue();
         created.Should().BeFalse();
         createCtx.Response.StatusCode.Should().Be(StatusCodes.Status404NotFound);
+    }
+
+    [Fact]
+    public async Task Apex_keeps_resolving_the_operators_tenant_once_a_demo_is_provisioned()
+    {
+        var tenantId = SeedTenant("theconen");
+        SeedTenant("demo", isDemo: true);
+        using var scope = _root.CreateScope();
+        var accessor = scope.ServiceProvider.GetRequiredService<ITenantAccessor>();
+
+        var served = false;
+        var pageCtx = ApexRequest(scope, "/api/v4/entries");
+        await Build(_ => { served = true; return Task.CompletedTask; }).InvokeAsync(pageCtx);
+
+        var statusTenant = Guid.Empty;
+        var statusCtx = ApexRequest(scope, "/api/v4/status");
+        await Build(_ => { statusTenant = accessor.TenantId; return Task.CompletedTask; }).InvokeAsync(statusCtx);
+
+        // Turning the demo on is a second active tenant, which would otherwise end single-tenant
+        // mode: every apex page 404s and status stops naming the operator's tenant.
+        served.Should().BeTrue();
+        pageCtx.Response.StatusCode.Should().Be(StatusCodes.Status200OK);
+        accessor.TenantId.Should().Be(tenantId);
+        statusTenant.Should().Be(tenantId);
+    }
+
+    [Fact]
+    public async Task Apex_with_only_a_demo_tenant_answers_as_a_fresh_install()
+    {
+        SeedTenant("demo", isDemo: true);
+        using var scope = _root.CreateScope();
+
+        var served = false;
+        var pageCtx = ApexRequest(scope, "/api/v4/entries");
+        await Build(_ => { served = true; return Task.CompletedTask; }).InvokeAsync(pageCtx);
+
+        var statusCtx = ApexRequest(scope, "/api/v4/status");
+        await Build(_ => Task.CompletedTask).InvokeAsync(statusCtx);
+
+        // The demo is served on its own host, never adopted by the apex — so an instance holding
+        // only a demo has no tenant to resolve, and answers 503 so the frontend goes to /setup
+        // rather than the 404 that would strand an operator with nowhere to create one.
+        served.Should().BeFalse();
+        pageCtx.Response.StatusCode.Should().Be(StatusCodes.Status503ServiceUnavailable);
+        scope.ServiceProvider.GetRequiredService<ITenantAccessor>().IsResolved.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Apex_with_a_single_inactive_tenant_does_not_resolve_it()
+    {
+        SeedTenant("paused", isActive: false);
+        using var scope = _root.CreateScope();
+
+        var served = false;
+        var ctx = ApexRequest(scope, "/api/v4/entries");
+        await Build(_ => { served = true; return Task.CompletedTask; }).InvokeAsync(ctx);
+
+        served.Should().BeFalse();
+        ctx.Response.StatusCode.Should().Be(StatusCodes.Status404NotFound);
+        scope.ServiceProvider.GetRequiredService<ITenantAccessor>().IsResolved.Should().BeFalse();
     }
 
     [Fact]

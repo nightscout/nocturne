@@ -114,6 +114,7 @@
     credentialsQuery.current?.primaryAuthFactorCount ?? 0
   );
   const recoveryStatus = $derived(recoveryQuery.current);
+  const remainingRecoveryCodes = $derived(recoveryStatus?.remainingCodes ?? 0);
   const isSecurityLoading = $derived(credentialsQuery.loading);
   const canRemovePasskey = $derived(primaryAuthFactorCount > 1);
 
@@ -464,25 +465,31 @@
             <div class="flex items-center justify-between">
               <div class="space-y-1">
                 <p class="text-sm font-medium">
-                  {recoveryStatus.remainingCodes} of {recoveryStatus.totalCodes} recovery
-                  codes remaining
+                  {#if remainingRecoveryCodes > 0}
+                    {remainingRecoveryCodes} of {recoveryStatus.totalCodes} recovery
+                    codes remaining
+                  {:else if recoveryStatus.hasCodes}
+                    Every recovery code has been used
+                  {:else}
+                    No recovery codes yet
+                  {/if}
                 </p>
-                <p class="text-xs text-muted-foreground">
-                  Each code can only be used once.
-                </p>
+                {#if remainingRecoveryCodes > 0}
+                  <p class="text-xs text-muted-foreground">
+                    Each code can only be used once.
+                  </p>
+                {/if}
               </div>
               <Badge
-                variant={(recoveryStatus.remainingCodes ?? 0) > 2
+                variant={remainingRecoveryCodes > 2
                   ? "secondary"
                   : "destructive"}
               >
-                {recoveryStatus.remainingCodes} remaining
+                {remainingRecoveryCodes > 0
+                  ? `${remainingRecoveryCodes} remaining`
+                  : "None"}
               </Badge>
             </div>
-          {:else}
-            <p class="text-sm text-muted-foreground">
-              No recovery codes have been generated yet.
-            </p>
           {/if}
 
           <Separator />
@@ -497,7 +504,9 @@
             {:else}
               <RefreshCw class="mr-1.5 h-4 w-4" />
             {/if}
-            Regenerate recovery codes
+            {recoveryStatus?.hasCodes
+              ? "Regenerate recovery codes"
+              : "Generate recovery codes"}
           </Button>
         </Card.Content>
       </Card.Root>

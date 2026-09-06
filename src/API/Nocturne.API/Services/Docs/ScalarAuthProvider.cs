@@ -9,6 +9,7 @@ using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Services.Docs;
 
@@ -272,17 +273,10 @@ public sealed class ScalarAuthProvider
         TenantEntity? tenant;
         if (slug is null)
         {
-            var soleTenants = await db.Set<TenantEntity>()
-                .AsNoTracking()
-                .Where(t => t.IsActive)
-                .OrderBy(t => t.Id)
-                .Take(2)
-                .ToListAsync(ct);
+            tenant = await db.Set<TenantEntity>().SoleTenantAsync(ct);
 
-            if (soleTenants.Count != 1)
+            if (tenant is null)
                 return null;
-
-            tenant = soleTenants[0];
         }
         else
         {

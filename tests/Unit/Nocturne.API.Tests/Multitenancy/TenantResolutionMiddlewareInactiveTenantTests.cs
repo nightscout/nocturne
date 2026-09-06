@@ -1,17 +1,14 @@
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Data.Sqlite;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Multitenancy;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Multitenancy;
@@ -26,27 +23,22 @@ namespace Nocturne.API.Tests.Multitenancy;
 [Trait("Category", "Unit")]
 public sealed class TenantResolutionMiddlewareInactiveTenantTests : IDisposable
 {
-    private readonly SqliteConnection _connection;
+    private readonly SqliteTestDatabase _db;
     private readonly ServiceProvider _root;
     private const string BaseDomain = "nocturne.example";
     private const string Slug = "lapsed";
 
     public TenantResolutionMiddlewareInactiveTenantTests()
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
+        _db = TestDbContextFactory.CreateSqlite();
 
         var services = new ServiceCollection();
-        services.AddDbContextFactory<NocturneDbContext>(o => o
-            .UseSqlite(_connection)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning)));
-        services.AddScoped(sp => sp.GetRequiredService<IDbContextFactory<NocturneDbContext>>().CreateDbContext());
+        _db.AddToServices(services);
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
         services.AddMemoryCache();
         _root = services.BuildServiceProvider();
 
-        using var seed = _root.GetRequiredService<IDbContextFactory<NocturneDbContext>>().CreateDbContext();
-        seed.Database.EnsureCreated();
+        using var seed = _db.CreateContext();
         seed.Tenants.Add(new TenantEntity
         {
             Id = Guid.CreateVersion7(),
@@ -60,7 +52,7 @@ public sealed class TenantResolutionMiddlewareInactiveTenantTests : IDisposable
     public void Dispose()
     {
         _root.Dispose();
-        _connection.Dispose();
+        _db.Dispose();
     }
 
     private TenantResolutionMiddleware Build(RequestDelegate next) => new(

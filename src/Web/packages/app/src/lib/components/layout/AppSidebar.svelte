@@ -15,9 +15,8 @@
   import { ChevronDown, Shield, Eye } from "lucide-svelte";
   import { buildAppNavigation, type NavItem } from "$lib/navigation/app-navigation";
   import {
-    activeTenants,
+    goToTenant,
     resolveTenantSwitcher,
-    tenantUrl,
     type TenantSwitcherTarget,
   } from "$lib/utils/tenant-host";
   import type { AuthUser } from "$lib/stores/auth-store.svelte";
@@ -63,7 +62,6 @@
   // Tenant switcher state
   let tenantTargets = $state<TenantSwitcherTarget[]>([]);
   let totalTenantCount = $state(0);
-  let selectedTenantSlug = $state<string | null>(null);
 
   /**
    * Platform-admin "access" mode: the session is a short-lived platform-access grant on a
@@ -82,20 +80,17 @@
       : null,
   );
 
-  // Available tenants for the subdomain switcher.
+  // Available tenants for the subdomain switcher. The switcher is valued by slug, so a host that
+  // names no tenant needs a sentinel; a slug can never be one, having no underscores.
+  const TENANTLESS = "__self__";
   const myTenantsQuery = getMyTenants();
 
   function handleTenantChange(value: string | undefined) {
-    if (!value || !baseDomain) return;
-
-    const targetSlug: string | null =
-      value === "__self__"
-        ? currentSlug
-        : (tenantTargets.find((t) => t.id === value)?.slug ?? null);
-
-    if (targetSlug && targetSlug !== currentSlug) {
-      window.location.href = tenantUrl(targetSlug, baseDomain);
+    if (!value || !baseDomain || value === TENANTLESS || value === currentSlug) {
+      return;
     }
+
+    goToTenant(value, baseDomain);
   }
 
   function formatTenantLabel(target: TenantSwitcherTarget): string {
@@ -111,14 +106,17 @@
     const tenants = myTenantsQuery.current;
     if (tenants === undefined) return;
 
-    const switcher = resolveTenantSwitcher(tenants, currentSlug);
+    const switcher = resolveTenantSwitcher(tenants);
     totalTenantCount = switcher.totalCount;
     tenantTargets = switcher.targets;
+  });
 
-    // Pre-select based on current subdomain; the first reachable tenant is "My Data".
-    const defaultSlug = activeTenants(tenants)[0]?.slug ?? null;
-    selectedTenantSlug =
-      currentSlug && currentSlug !== defaultSlug ? currentSlug : null;
+  // A platform-access grant views a tenant the operator is not a member of, so the host's slug
+  // can name a tenant the list does not carry.
+  const viewedTenantLabel = $derived.by(() => {
+    if (!currentSlug) return "My Data";
+    const viewed = tenantTargets.find((t) => t.slug === currentSlug);
+    return viewed ? formatTenantLabel(viewed) : currentSlug;
   });
 
   const navigation: NavItem[] = $derived(
@@ -134,20 +132,6 @@
 
   // Track which collapsible menus are open
   let openMenus = $state<Record<string, boolean>>({});
-
-  // Check if current path matches or starts with a nav item path
-  // const isActive = (item: NavItem): boolean => {
-  //   if (item.href) {
-  //     if (item.href === "/") {
-  //       return page.url.pathname === "/";
-  //     }
-  //     return page.url.pathname.startsWith(item.href);
-  //   }
-  //   if (item.children) {
-  //     return item.children.some((child) => isActive(child));
-  //   }
-  //   return false;
-  // };
 
   const isActive = (item: NavItem): boolean => {
     if (item.href && item?.strict) {
@@ -249,27 +233,18 @@
       </p>
       <Select.Root
         type="single"
-        value={selectedTenantSlug
-          ? (tenantTargets.find((t) => t.slug === selectedTenantSlug)?.id ??
-            "__self__")
-          : "__self__"}
+        value={currentSlug ?? TENANTLESS}
         onValueChange={handleTenantChange}
       >
         <Select.Trigger size="sm" class="w-full">
-          {#if !selectedTenantSlug}
-            My Data
-          {:else}
-            {#each tenantTargets as target (target.id)}
-              {#if target.slug === selectedTenantSlug}
-                {formatTenantLabel(target)}
-              {/if}
-            {/each}
-          {/if}
+          {viewedTenantLabel}
         </Select.Trigger>
         <Select.Content>
-          <Select.Item value="__self__">My Data</Select.Item>
-          {#each tenantTargets as target (target.id)}
-            <Select.Item value={target.id}>
+          {#if !currentSlug}
+            <Select.Item value={TENANTLESS}>My Data</Select.Item>
+          {/if}
+          {#each tenantTargets as target (target.slug)}
+            <Select.Item value={target.slug}>
               {formatTenantLabel(target)}
             </Select.Item>
           {/each}

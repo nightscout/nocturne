@@ -1,11 +1,6 @@
 import type { LayoutServerLoad } from "./$types";
 import type { UserDisplayPreferences } from "$lib/api";
-import { getOriginalHost } from "$lib/server/request-host";
-import {
-  classifyHost,
-  isTenantlessHost,
-  parseDashboardSlugs,
-} from "$lib/server/tenantless-host";
+import { classifyRequestHost, isTenantlessHost } from "$lib/server/tenantless-host";
 import { getRequestStatus } from "$lib/server/request-status";
 import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
 import { parseLastSignIn } from "$lib/components/auth/last-sign-in";
@@ -68,11 +63,12 @@ export const load: LayoutServerLoad = async ({ locals, request, cookies }) => {
   // so the browser never has to guess it by counting hostname labels. A share
   // host carries a token rather than a slug, so it has no tenant to name, and a
   // reserved dashboard slug names no single tenant either.
-  const host = getOriginalHost(request);
-  const baseDomain = process.env.BASE_DOMAIN ?? null;
-  const dashboardSlugs = parseDashboardSlugs(process.env.DASHBOARD_SLUGS);
-  const { kind, slug } = classifyHost(host, baseDomain, dashboardSlugs);
-  const tenantSlug = slug;
+  const {
+    kind,
+    slug: tenantSlug,
+    baseDomain,
+    dashboardSlugs,
+  } = classifyRequestHost(request);
 
   // Resolved once here, for every route: the apex needs the API's answer (does a sole tenant
   // resolve behind it?) and asking per-page would repeat both the question and the round-trip.

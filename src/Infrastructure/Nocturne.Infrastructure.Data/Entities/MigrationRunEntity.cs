@@ -99,6 +99,14 @@ public class MigrationRunEntity
     public string? ErrorMessage { get; set; }
 
     /// <summary>
+    /// Per-collection outcome for the run: a JSON array of
+    /// <c>{ collectionName, totalDocuments, documentsMigrated, documentsFailed, isComplete, failureReason, skippedReason }</c>.
+    /// The two count columns above cover entries and treatments only.
+    /// </summary>
+    [Column("collection_outcomes", TypeName = "jsonb")]
+    public string? CollectionOutcomes { get; set; }
+
+    /// <summary>
     /// Navigation property for the migration source
     /// </summary>
     [ForeignKey(nameof(SourceId))]

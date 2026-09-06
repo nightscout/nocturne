@@ -41,7 +41,8 @@ internal static class MyLifeSyncHarness
             tenantAccessor.Object,
             soapClient,
             sessionCache,
-            NullLogger<MyLifeAuthTokenProvider>.Instance);
+            NullLogger<MyLifeAuthTokenProvider>.Instance,
+            Mock.Of<IRetryDelayStrategy>());
         var syncService = syncServiceFactory?.Invoke(soapClient)
             ?? new MyLifeSyncService(soapClient, NullLogger<MyLifeSyncService>.Instance);
 
