@@ -348,12 +348,13 @@ public partial class TenantService : ITenantService
         if (member.Subject?.IsSystemSubject == true)
             return new MemberRemovalResult(false, "Cannot remove system subject memberships");
 
-        var ownerIds = await context.TenantMembers
-            .OwnersOf(tenantId)
-            .Select(m => m.Id)
-            .ToListAsync(ct);
+        var isOwner = await context.TenantMemberRoles
+            .AnyAsync(mr => mr.TenantMemberId == member.Id
+                && mr.TenantRole!.Slug == RoleSeeds.Owner, ct);
 
-        if (ownerIds.Count == 1 && ownerIds[0] == member.Id)
+        // A deactivated owner can be reactivated; a removed membership cannot be brought back, so
+        // the guard holds even when the departing owner is one the rest of the system ignores.
+        if (isOwner && !await context.TenantMembers.OwnersOf(tenantId).AnyAsync(m => m.Id != member.Id, ct))
             return new MemberRemovalResult(false, "Cannot remove the last owner of a tenant");
 
         // Chat identity directory rows are global and carry no membership join, so a link left

@@ -8,6 +8,7 @@ using Moq;
 using Nocturne.API.Controllers.Authentication;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Identity;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Notifications;
@@ -644,11 +645,6 @@ public class PasskeyControllerTests : IDisposable
             Times.Once);
     }
 
-    /// <summary>
-    /// Only owners who still stand are told a stranger is at the door: a revoked membership is off
-    /// the tenant, a deactivated subject cannot sign in to act, and the Public subject is a share
-    /// with nobody behind it.
-    /// </summary>
     [Fact]
     public async Task AccessRequestComplete_NotifiesTheStandingOwnersOnly()
     {
@@ -1102,7 +1098,6 @@ public class PasskeyControllerTests : IDisposable
         return subjectId;
     }
 
-    /// <summary>Adds a membership on this tenant carrying the owner role.</summary>
     private async Task<Guid> SeedOwnerAsync(
         string username,
         DateTime? revokedAt = null,
@@ -1110,58 +1105,9 @@ public class PasskeyControllerTests : IDisposable
         bool isSystemSubject = false)
     {
         await EnsureTenantAsync(_tenantId);
-
-        var ownerRoleId = await EnsureOwnerRoleAsync();
-        var subjectId = Guid.CreateVersion7();
-        var memberId = Guid.CreateVersion7();
-
-        _dbContext.Subjects.Add(new SubjectEntity
-        {
-            Id = subjectId,
-            Name = username,
-            Username = username,
-            IsActive = isActive,
-            IsSystemSubject = isSystemSubject,
-        });
-        _dbContext.TenantMembers.Add(new TenantMemberEntity
-        {
-            Id = memberId,
-            TenantId = _tenantId,
-            SubjectId = subjectId,
-            RevokedAt = revokedAt,
-        });
-        _dbContext.TenantMemberRoles.Add(new TenantMemberRoleEntity
-        {
-            Id = Guid.CreateVersion7(),
-            TenantMemberId = memberId,
-            TenantRoleId = ownerRoleId,
-        });
-        await _dbContext.SaveChangesAsync();
-        return subjectId;
-    }
-
-    private async Task<Guid> EnsureOwnerRoleAsync()
-    {
-        var existing = await _dbContext.TenantRoles
-            .Where(r => r.TenantId == _tenantId && r.Slug == RoleSeeds.Owner)
-            .Select(r => (Guid?)r.Id)
-            .FirstOrDefaultAsync();
-
-        if (existing is { } id)
-            return id;
-
-        var roleId = Guid.CreateVersion7();
-        _dbContext.TenantRoles.Add(new TenantRoleEntity
-        {
-            Id = roleId,
-            TenantId = _tenantId,
-            Name = "Owner",
-            Slug = RoleSeeds.Owner,
-            Permissions = [Scope.FullAccess],
-            IsSystem = true,
-        });
-        await _dbContext.SaveChangesAsync();
-        return roleId;
+        return await TestDatabaseSeeder.SeedMemberAsync(
+            _dbContext, _tenantId, name: username,
+            isActive: isActive, isSystemSubject: isSystemSubject, revokedAt: revokedAt);
     }
 
     private async Task AllowAccessRequestsAsync()

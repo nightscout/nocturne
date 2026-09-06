@@ -4,9 +4,9 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Controllers.V4.PlatformAdmin;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
-using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -24,11 +24,9 @@ public sealed class AccessRequestControllerTests : IDisposable
     private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _dbContext;
     private readonly Mock<IInAppNotificationService> _notifications = new();
-    private readonly Mock<ITenantService> _tenantService = new();
     private readonly AccessRequestController _controller;
 
     private readonly Guid _tenantId = Guid.CreateVersion7();
-    private readonly Guid _ownerRoleId = Guid.CreateVersion7();
 
     public AccessRequestControllerTests()
     {
@@ -45,7 +43,7 @@ public sealed class AccessRequestControllerTests : IDisposable
         _controller = new AccessRequestController(
             _dbContext,
             Mock.Of<ISubjectService>(),
-            _tenantService.Object,
+            Mock.Of<ITenantService>(),
             roleService.Object,
             MockTenantAccessor.Create(_tenantId).Object,
             _notifications.Object,
@@ -60,15 +58,6 @@ public sealed class AccessRequestControllerTests : IDisposable
             Slug = "test",
             DisplayName = "Test",
         });
-        _dbContext.TenantRoles.Add(new TenantRoleEntity
-        {
-            Id = _ownerRoleId,
-            TenantId = _tenantId,
-            Name = "Owner",
-            Slug = RoleSeeds.Owner,
-            Permissions = [Scope.FullAccess],
-            IsSystem = true,
-        });
         _dbContext.SaveChanges();
     }
 
@@ -81,14 +70,14 @@ public sealed class AccessRequestControllerTests : IDisposable
     [Fact]
     public async Task Approve_archivesForTheStandingOwnerOnly()
     {
-        var owner = SeedOwner();
-        var revoked = SeedOwner(revokedAt: DateTime.UtcNow);
-        var deactivated = SeedOwner(isActive: false);
-        var requestorId = SeedPendingRequest();
+        var owner = await SeedOwnerAsync();
+        var revoked = await SeedOwnerAsync(revokedAt: DateTime.UtcNow);
+        var deactivated = await SeedOwnerAsync(isActive: false);
+        var requestorId = await SeedPendingRequestAsync();
 
         var result = await _controller.Approve(
             requestorId,
-            new ApproveAccessRequestRequest { RoleIds = [_ownerRoleId] },
+            new ApproveAccessRequestRequest { DirectPermissions = ["api:*:read"] },
             CancellationToken.None);
 
         Assert.IsType<OkResult>(result);
@@ -100,10 +89,10 @@ public sealed class AccessRequestControllerTests : IDisposable
     [Fact]
     public async Task Deny_archivesForTheStandingOwnerOnly()
     {
-        var owner = SeedOwner();
-        var revoked = SeedOwner(revokedAt: DateTime.UtcNow);
-        var system = SeedOwner(isSystemSubject: true);
-        var requestorId = SeedPendingRequest();
+        var owner = await SeedOwnerAsync();
+        var revoked = await SeedOwnerAsync(revokedAt: DateTime.UtcNow);
+        var system = await SeedOwnerAsync(isSystemSubject: true);
+        var requestorId = await SeedPendingRequestAsync();
 
         var result = await _controller.Deny(requestorId, CancellationToken.None);
 
@@ -120,37 +109,13 @@ public sealed class AccessRequestControllerTests : IDisposable
                 reason, It.IsAny<CancellationToken>()),
             times);
 
-    private Guid SeedOwner(
-        DateTime? revokedAt = null, bool isActive = true, bool isSystemSubject = false)
-    {
-        var subjectId = Guid.CreateVersion7();
-        var memberId = Guid.CreateVersion7();
+    private Task<Guid> SeedOwnerAsync(
+        DateTime? revokedAt = null, bool isActive = true, bool isSystemSubject = false) =>
+        TestDatabaseSeeder.SeedMemberAsync(
+            _dbContext, _tenantId,
+            isActive: isActive, isSystemSubject: isSystemSubject, revokedAt: revokedAt);
 
-        _dbContext.Subjects.Add(new SubjectEntity
-        {
-            Id = subjectId,
-            Name = "Owner",
-            IsActive = isActive,
-            IsSystemSubject = isSystemSubject,
-        });
-        _dbContext.TenantMembers.Add(new TenantMemberEntity
-        {
-            Id = memberId,
-            TenantId = _tenantId,
-            SubjectId = subjectId,
-            RevokedAt = revokedAt,
-        });
-        _dbContext.TenantMemberRoles.Add(new TenantMemberRoleEntity
-        {
-            Id = Guid.CreateVersion7(),
-            TenantMemberId = memberId,
-            TenantRoleId = _ownerRoleId,
-        });
-        _dbContext.SaveChanges();
-        return subjectId;
-    }
-
-    private Guid SeedPendingRequest()
+    private async Task<Guid> SeedPendingRequestAsync()
     {
         var subjectId = Guid.CreateVersion7();
         _dbContext.Subjects.Add(new SubjectEntity
@@ -160,7 +125,7 @@ public sealed class AccessRequestControllerTests : IDisposable
             IsActive = false,
             ApprovalStatus = "Pending",
         });
-        _dbContext.SaveChanges();
+        await _dbContext.SaveChangesAsync();
         return subjectId;
     }
 }

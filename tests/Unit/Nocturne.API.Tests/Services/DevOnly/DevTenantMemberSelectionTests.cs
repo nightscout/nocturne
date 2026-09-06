@@ -35,7 +35,6 @@ public sealed class DevTenantMemberSelectionTests
             .Should().BeSameAs(elsewhere, "the first candidate is the fallback when no owner stands");
     }
 
-    /// <summary>Several owners resolve to the longest-standing one on every call.</summary>
     [Fact]
     public void PickOwnerOrFirst_takesTheOldestOwner()
     {

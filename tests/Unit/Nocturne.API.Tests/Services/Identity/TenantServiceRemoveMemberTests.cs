@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Services.Chat;
 using Nocturne.API.Services.Identity;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
@@ -30,7 +31,6 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
 {
     private readonly SqliteTestDatabase _db;
     private readonly Guid _tenantId = Guid.CreateVersion7();
-    private readonly Guid _ownerRoleId = Guid.CreateVersion7();
 
     public TenantServiceRemoveMemberTests()
     {
@@ -38,15 +38,6 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
 
         using var db = Context();
         db.Tenants.Add(new TenantEntity { Id = _tenantId, Slug = "test", DisplayName = "Test" });
-        db.TenantRoles.Add(new TenantRoleEntity
-        {
-            Id = _ownerRoleId,
-            TenantId = _tenantId,
-            Name = "Owner",
-            Slug = RoleSeeds.Owner,
-            Permissions = [Scope.FullAccess],
-            IsSystem = true,
-        });
         db.SaveChanges();
     }
 
@@ -67,48 +58,19 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
         Mock.Of<ILogger<TenantService>>());
 
     /// <summary>Adds a membership, optionally carrying the owner role or being a system subject.</summary>
-    private Guid SeedMember(
-        bool isOwner = false,
-        bool isSystemSubject = false,
-        bool isActive = true)
+    private async Task<Guid> SeedMemberAsync(
+        bool isOwner = false, bool isSystemSubject = false, bool isActive = true)
     {
-        var subjectId = Guid.CreateVersion7();
-        using var db = Context();
-
-        db.Subjects.Add(new SubjectEntity
-        {
-            Id = subjectId,
-            Name = isSystemSubject ? "Public" : "Member",
-            IsActive = isActive,
-            IsSystemSubject = isSystemSubject,
-        });
-
-        var member = new TenantMemberEntity
-        {
-            Id = Guid.CreateVersion7(),
-            TenantId = _tenantId,
-            SubjectId = subjectId,
-        };
-        db.TenantMembers.Add(member);
-
-        if (isOwner)
-        {
-            db.TenantMemberRoles.Add(new TenantMemberRoleEntity
-            {
-                Id = Guid.CreateVersion7(),
-                TenantMemberId = member.Id,
-                TenantRoleId = _ownerRoleId,
-            });
-        }
-
-        db.SaveChanges();
-        return subjectId;
+        await using var db = Context();
+        return await TestDatabaseSeeder.SeedMemberAsync(
+            db, _tenantId, isOwner ? RoleSeeds.Owner : null,
+            isActive: isActive, isSystemSubject: isSystemSubject);
     }
 
     [Fact]
     public async Task RemoveMemberAsync_removesAnOrdinaryMember()
     {
-        var subjectId = SeedMember();
+        var subjectId = await SeedMemberAsync();
 
         var result = await Service().RemoveMemberAsync(_tenantId, subjectId);
 
@@ -120,7 +82,7 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
     [Fact]
     public async Task RemoveMemberAsync_refusesTheLastOwner()
     {
-        var ownerSubjectId = SeedMember(isOwner: true);
+        var ownerSubjectId = await SeedMemberAsync(isOwner: true);
 
         var result = await Service().RemoveMemberAsync(_tenantId, ownerSubjectId);
 
@@ -134,8 +96,8 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
     [Fact]
     public async Task RemoveMemberAsync_removesAnOwnerWhenAnotherRemains()
     {
-        var firstOwner = SeedMember(isOwner: true);
-        SeedMember(isOwner: true);
+        var firstOwner = await SeedMemberAsync(isOwner: true);
+        await SeedMemberAsync(isOwner: true);
 
         var result = await Service().RemoveMemberAsync(_tenantId, firstOwner);
 
@@ -144,15 +106,11 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
         (await db.TenantMembers.AnyAsync(m => m.SubjectId == firstOwner)).Should().BeFalse();
     }
 
-    /// <summary>
-    /// The Public subject's membership is the share's storage, so an owner role on it is not a
-    /// person who could administer the tenant once the only one who can is gone.
-    /// </summary>
     [Fact]
     public async Task RemoveMemberAsync_refusesTheLastOwnerWhoseOnlyPeerIsASystemSubject()
     {
-        var owner = SeedMember(isOwner: true);
-        SeedMember(isOwner: true, isSystemSubject: true);
+        var owner = await SeedMemberAsync(isOwner: true);
+        await SeedMemberAsync(isOwner: true, isSystemSubject: true);
 
         var result = await Service().RemoveMemberAsync(_tenantId, owner);
 
@@ -162,15 +120,25 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
         (await db.TenantMembers.AnyAsync(m => m.SubjectId == owner)).Should().BeTrue();
     }
 
-    /// <summary>
-    /// A deactivated owner cannot sign in, so it is not the second owner that would let the only
-    /// one who can go.
-    /// </summary>
     [Fact]
     public async Task RemoveMemberAsync_refusesTheLastOwnerWhoseOnlyPeerIsDeactivated()
     {
-        var owner = SeedMember(isOwner: true);
-        SeedMember(isOwner: true, isActive: false);
+        var owner = await SeedMemberAsync(isOwner: true);
+        await SeedMemberAsync(isOwner: true, isActive: false);
+
+        var result = await Service().RemoveMemberAsync(_tenantId, owner);
+
+        result.Ok.Should().BeFalse();
+        result.ErrorDescription.Should().Be("Cannot remove the last owner of a tenant");
+        await using var db = Context();
+        (await db.TenantMembers.AnyAsync(m => m.SubjectId == owner)).Should().BeTrue();
+    }
+
+    /// <summary>A deactivated subject can be reactivated; a removed membership cannot come back.</summary>
+    [Fact]
+    public async Task RemoveMemberAsync_refusesADeactivatedSoleOwner()
+    {
+        var owner = await SeedMemberAsync(isOwner: true, isActive: false);
 
         var result = await Service().RemoveMemberAsync(_tenantId, owner);
 
@@ -183,7 +151,7 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
     [Fact]
     public async Task RemoveMemberAsync_refusesASystemSubject()
     {
-        var publicSubjectId = SeedMember(isSystemSubject: true);
+        var publicSubjectId = await SeedMemberAsync(isSystemSubject: true);
 
         var result = await Service().RemoveMemberAsync(_tenantId, publicSubjectId);
 
@@ -242,9 +210,9 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
     [Fact]
     public async Task RemoveMemberAsync_removesTheMembersChatLinkForThisTenantOnly()
     {
-        var subjectId = SeedMember();
+        var subjectId = await SeedMemberAsync();
         var otherTenantId = Guid.CreateVersion7();
-        var otherSubjectId = SeedMember();
+        var otherSubjectId = await SeedMemberAsync();
 
         await using (var db = Context())
         {

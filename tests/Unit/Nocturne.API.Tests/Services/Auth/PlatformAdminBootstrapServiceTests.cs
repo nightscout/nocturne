@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
@@ -172,15 +173,14 @@ public class PlatformAdminBootstrapServiceTests : IDisposable
             .Select(s => s.IsPlatformAdmin)
             .SingleAsync();
 
-    private async Task<Guid> AddSubjectAsync(
-        string name, bool isPlatformAdmin = false, bool isActive = true)
+    private async Task<Guid> AddSubjectAsync(string name, bool isPlatformAdmin = false)
     {
         var subject = new SubjectEntity
         {
             Id = Guid.CreateVersion7(),
             Name = name,
             Username = name,
-            IsActive = isActive,
+            IsActive = true,
             IsPlatformAdmin = isPlatformAdmin,
         };
         _db.Subjects.Add(subject);
@@ -205,10 +205,6 @@ public class PlatformAdminBootstrapServiceTests : IDisposable
         bool subjectIsActive = true)
     {
         var tenantId = Guid.CreateVersion7();
-        var subjectId = await AddSubjectAsync($"{slug}-member", isActive: subjectIsActive);
-        var roleId = Guid.CreateVersion7();
-        var memberId = Guid.CreateVersion7();
-
         _db.Tenants.Add(new TenantEntity
         {
             Id = tenantId,
@@ -217,29 +213,14 @@ public class PlatformAdminBootstrapServiceTests : IDisposable
             IsActive = true,
             SysCreatedAt = createdAt,
         });
-        _db.TenantRoles.Add(new TenantRoleEntity
-        {
-            Id = roleId,
-            TenantId = tenantId,
-            Name = roleSlug,
-            Slug = roleSlug,
-            Permissions = [],
-            IsSystem = true,
-        });
-        _db.TenantMembers.Add(new TenantMemberEntity
-        {
-            Id = memberId,
-            TenantId = tenantId,
-            SubjectId = subjectId,
-            RevokedAt = revoked ? createdAt : null,
-        });
-        _db.TenantMemberRoles.Add(new TenantMemberRoleEntity
-        {
-            Id = Guid.CreateVersion7(),
-            TenantMemberId = memberId,
-            TenantRoleId = roleId,
-        });
         await _db.SaveChangesAsync();
+
+        var subjectId = await TestDatabaseSeeder.SeedMemberAsync(
+            _db, tenantId, roleSlug,
+            name: $"{slug}-member",
+            isActive: subjectIsActive,
+            revokedAt: revoked ? createdAt : null);
+
         _db.ChangeTracker.Clear();
         return subjectId;
     }
