@@ -14,8 +14,7 @@ public class WidgetCatalogTests
         WidgetCatalog.All.Select(d => d.Id).Should().BeEquivalentTo(Enum.GetValues<WidgetId>());
     }
 
-    // The drift this catalogue replaced was three tables disagreeing about names and defaults, so
-    // both are pinned per id: changing one is a deliberate edit here, never a silent divergence.
+    // Name and default are pinned per id: changing one is a deliberate edit here, never a silent divergence.
     [Theory]
     [InlineData(WidgetId.BgDelta, "BG Delta", true, WidgetPlacement.Top, true)]
     [InlineData(WidgetId.LastUpdated, "Last Updated", true, WidgetPlacement.Top, true)]

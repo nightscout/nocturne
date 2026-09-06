@@ -30,7 +30,7 @@ export function isTopWidgetId(id: string): id is TopWidgetId {
 }
 
 /** What the picker falls back to offering when the catalogue cannot be fetched. */
-export const RENDERABLE_TOP_WIDGETS: TopWidgetId[] =
+export const LOADABLE_TOP_WIDGETS: TopWidgetId[] =
   Object.keys(TOP_WIDGET_LOADERS).filter(isTopWidgetId);
 
 export const DEFAULT_TOP_WIDGETS: TopWidgetId[] = [

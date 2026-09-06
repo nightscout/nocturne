@@ -16,7 +16,7 @@
   import { getWidgetDefinitions } from "$api/generated/metadatas.generated.remote";
   import {
     DEFAULT_TOP_WIDGETS,
-    RENDERABLE_TOP_WIDGETS,
+    LOADABLE_TOP_WIDGETS,
     isTopWidgetId,
     knownTopWidgets,
     type TopWidgetId,
@@ -43,7 +43,7 @@
 
   const definitions = getWidgetDefinitions();
 
-  const unnamed = $derived(definitions.error !== undefined);
+  const unnamed = $derived(definitions.error !== undefined && definitions.current === undefined);
   const loading = $derived(!definitions.current && !unnamed);
 
   /**
@@ -53,7 +53,7 @@
    */
   const offered: { id: TopWidgetId; name: string }[] = $derived(
     unnamed
-      ? RENDERABLE_TOP_WIDGETS.map((id) => ({ id, name: id }))
+      ? LOADABLE_TOP_WIDGETS.map((id) => ({ id, name: id }))
       : (definitions.current?.definitions ?? []).flatMap((d) => {
           const id = d.id ?? "";
           return d.placement === WidgetPlacement.Top &&
