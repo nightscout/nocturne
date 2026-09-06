@@ -147,8 +147,7 @@ public class StatisticsController : ControllerBase
 
     /// <summary>
     /// Appends one <see cref="TempBasalOrigin.Scheduled"/> TempBasal per profile basal segment
-    /// when the pump reported none, so a tenant with a profile still gets a basal shape. Callers
-    /// distribute each across the user-local hour-of-day buckets it overlaps, weighted by duration.
+    /// when the pump reported none.
     /// </summary>
     /// <param name="recordedBasal">Basal delivered by a route other than TempBasals; non-empty
     /// suppresses the fallback, because a profile baseline on top of MDI injections would
