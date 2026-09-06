@@ -76,5 +76,18 @@ export const DISCORD_COMMAND_MANIFEST: SlashCommandDefinition[] = [
       },
     ],
   },
+  {
+    name: "alerts",
+    description: "List your active alerts",
+    options: [
+      {
+        type: 3,
+        name: "label",
+        description: "The label of the Nocturne account to query (optional if you only have one)",
+        required: false,
+        max_length: 64,
+      },
+    ],
+  },
   { name: "status", description: "Show your Nocturne account status" },
 ];

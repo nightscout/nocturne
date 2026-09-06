@@ -1,6 +1,6 @@
 import { Card, CardText, Fields, Field, Actions, Button } from "chat";
-import type { AlertPayload } from "../types.js";
-import { formatGlucose, trendArrow } from "../lib/format.js";
+import type { ActiveExcursion, AlertPayload } from "../types.js";
+import { formatGlucose, timeAgo, trendArrow } from "../lib/format.js";
 import { encodeActionValue } from "../lib/action-value.js";
 
 export function AlertCard(props: {
@@ -37,38 +37,41 @@ export function AlertCard(props: {
         <Button id="ack_alert" value={target} style="primary">
           Acknowledge
         </Button>
-        <Button id="mute_30" value={target}>
-          Mute 30 min
-        </Button>
       </Actions>
     </Card>
   );
 }
 
-export function AcknowledgedCard(props: {
-  originalTitle: string;
-  acknowledgedBy: string;
-}) {
+/**
+ * Posted in the thread once Acknowledge is tapped. The alert card is left
+ * standing rather than edited: an `ActionEvent` carries the message id but
+ * none of the card's content, so an edit would have to replace the reading,
+ * trend, subject and timestamp with this summary.
+ */
+export function AcknowledgedCard(props: { detail: string }) {
   return (
-    <Card title={`${props.originalTitle} [Acknowledged]`}>
-      <CardText>{`Acknowledged by ${props.acknowledgedBy}`}</CardText>
+    <Card title="Alert acknowledged">
+      <CardText>{props.detail}</CardText>
     </Card>
   );
 }
 
-export function ResolvedCard(props: {
-  originalTitle: string;
-  resolvedValue?: number;
-  unit?: "mg/dL" | "mmol/L";
-}) {
-  const { unit = "mg/dL" } = props;
-  const valueStr =
-    props.resolvedValue != null
-      ? formatGlucose(props.resolvedValue, unit)
-      : "";
+export function ActiveAlertsCard(props: { excursions: ActiveExcursion[] }) {
   return (
-    <Card title={`${props.originalTitle} [Resolved]`}>
-      <CardText>{`Resolved${valueStr ? ` -- back in range (${valueStr})` : ""}`}</CardText>
+    <Card title="Active alerts">
+      <Fields>
+        {props.excursions.map((excursion) => (
+          <Field
+            key={excursion.id}
+            label={excursion.ruleName ?? "Alert"}
+            value={`${excursion.acknowledgedAt ? "Acknowledged" : "Firing"}, started ${
+              excursion.startedAt
+                ? timeAgo(new Date(excursion.startedAt).getTime())
+                : "at an unknown time"
+            }`}
+          />
+        ))}
+      </Fields>
     </Card>
   );
 }
