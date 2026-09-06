@@ -229,7 +229,7 @@ public class FeatureSettings
     /// Dashboard widget configurations. Array position determines display order within each category.
     /// </summary>
     [JsonPropertyName("widgets")]
-    public List<WidgetConfig> Widgets { get; set; } = GetDefaultWidgets();
+    public List<WidgetConfig> Widgets { get; set; } = WidgetCatalog.Defaults();
 
     /// <summary>
     /// Legacy Nightscout plugin toggles, carried for schema compatibility and empty by default.
@@ -249,26 +249,6 @@ public class FeatureSettings
     /// </summary>
     [JsonPropertyName("trackerPills")]
     public TrackerPillsSettings TrackerPills { get; set; } = new();
-
-    private static List<WidgetConfig> GetDefaultWidgets() =>
-    [
-        // Top widgets (widget grid)
-        new() { Id = WidgetId.BgDelta, Enabled = true, Placement = WidgetPlacement.Top },
-        new() { Id = WidgetId.LastUpdated, Enabled = true, Placement = WidgetPlacement.Top },
-        new() { Id = WidgetId.ConnectionStatus, Enabled = true, Placement = WidgetPlacement.Top },
-        new() { Id = WidgetId.Meals, Enabled = false, Placement = WidgetPlacement.Top },
-        new() { Id = WidgetId.Trackers, Enabled = false, Placement = WidgetPlacement.Top },
-        new() { Id = WidgetId.TirChart, Enabled = false, Placement = WidgetPlacement.Top },
-        new() { Id = WidgetId.DailySummary, Enabled = false, Placement = WidgetPlacement.Top },
-        // Main sections
-        new() { Id = WidgetId.GlucoseChart, Enabled = true, Placement = WidgetPlacement.Main },
-        new() { Id = WidgetId.Statistics, Enabled = true, Placement = WidgetPlacement.Main },
-        new() { Id = WidgetId.Predictions, Enabled = true, Placement = WidgetPlacement.Main },
-        new() { Id = WidgetId.DailyStats, Enabled = true, Placement = WidgetPlacement.Main },
-        new() { Id = WidgetId.Treatments, Enabled = true, Placement = WidgetPlacement.Main },
-        new() { Id = WidgetId.Agp, Enabled = false, Placement = WidgetPlacement.Main },
-        new() { Id = WidgetId.BatteryStatus, Enabled = true, Placement = WidgetPlacement.Main },
-    ];
 }
 
 /// <summary>
@@ -320,6 +300,201 @@ public enum WidgetId
     DailyStats,
     Agp,
     BatteryStatus
+}
+
+/// <summary>
+/// The one description of every dashboard widget: what it is called, where it sits, and whether a
+/// fresh tenant gets it. <see cref="FeatureSettings.Widgets"/> and the widget metadata endpoint both
+/// read from here, so adding a widget means adding a <see cref="WidgetId"/> and a row below.
+/// </summary>
+public static class WidgetCatalog
+{
+    /// <summary>
+    /// Every <see cref="WidgetId"/>, including the ones nothing renders — stored settings still
+    /// carry them, and <see cref="WidgetDefinition.Renderable"/> is what tells them apart.
+    /// </summary>
+    public static IReadOnlyList<WidgetDefinition> All { get; } =
+    [
+        // Top widgets (widget grid above the chart)
+        new()
+        {
+            Id = WidgetId.BgDelta,
+            Name = "BG Delta",
+            Description = "Blood glucose change with connection status and last updated time",
+            DefaultEnabled = true,
+            Icon = "TrendingUp",
+            UICategory = WidgetUICategory.Glucose,
+            Placement = WidgetPlacement.Top,
+        },
+        new()
+        {
+            Id = WidgetId.LastUpdated,
+            Name = "Last Updated",
+            Description = "Time since last glucose reading with device info",
+            DefaultEnabled = true,
+            Icon = "Clock",
+            UICategory = WidgetUICategory.Device,
+            Placement = WidgetPlacement.Top,
+        },
+        new()
+        {
+            Id = WidgetId.ConnectionStatus,
+            Name = "Connection Status",
+            Description = "Real-time data connection status",
+            DefaultEnabled = true,
+            Icon = "Wifi",
+            UICategory = WidgetUICategory.Status,
+            Placement = WidgetPlacement.Top,
+        },
+        new()
+        {
+            Id = WidgetId.Meals,
+            Name = "Recent Meals",
+            Description = "Recent meal entries and carb intake",
+            DefaultEnabled = false,
+            Icon = "UtensilsCrossed",
+            UICategory = WidgetUICategory.Meals,
+            Placement = WidgetPlacement.Top,
+        },
+        new()
+        {
+            Id = WidgetId.Trackers,
+            Name = "Trackers",
+            Description = "Active tracker status and progress",
+            DefaultEnabled = false,
+            Icon = "ListChecks",
+            UICategory = WidgetUICategory.Status,
+            Placement = WidgetPlacement.Top,
+        },
+        new()
+        {
+            Id = WidgetId.TirChart,
+            Name = "Time in Range",
+            Description = "Stacked chart showing time in glucose ranges",
+            DefaultEnabled = false,
+            Icon = "BarChart3",
+            UICategory = WidgetUICategory.Glucose,
+            Placement = WidgetPlacement.Top,
+        },
+        new()
+        {
+            Id = WidgetId.DailySummary,
+            Name = "Daily Summary",
+            Description = "Today's glucose statistics overview",
+            DefaultEnabled = false,
+            Icon = "CalendarDays",
+            UICategory = WidgetUICategory.Glucose,
+            Placement = WidgetPlacement.Top,
+        },
+        new()
+        {
+            Id = WidgetId.Clock,
+            Name = "Clock",
+            Description = "Current time and date display",
+            DefaultEnabled = false,
+            Icon = "Clock",
+            UICategory = WidgetUICategory.Status,
+            Placement = WidgetPlacement.Top,
+        },
+        new()
+        {
+            Id = WidgetId.Tdd,
+            Name = "Total Daily Dose",
+            Description = "Today's insulin with basal/bolus breakdown",
+            DefaultEnabled = false,
+            Icon = "PieChart",
+            UICategory = WidgetUICategory.Glucose,
+            Placement = WidgetPlacement.Top,
+        },
+        // Main sections (larger dashboard components)
+        new()
+        {
+            Id = WidgetId.GlucoseChart,
+            Name = "Glucose Chart",
+            Description = "Main glucose trend chart with treatments",
+            DefaultEnabled = true,
+            Icon = "LineChart",
+            UICategory = WidgetUICategory.Glucose,
+            Placement = WidgetPlacement.Main,
+        },
+        new()
+        {
+            Id = WidgetId.Statistics,
+            Name = "Statistics",
+            Description = "BG statistics cards",
+            DefaultEnabled = true,
+            Icon = "BarChart2",
+            UICategory = WidgetUICategory.Glucose,
+            Placement = WidgetPlacement.Main,
+        },
+        new()
+        {
+            Id = WidgetId.Predictions,
+            Name = "Predictions",
+            Description = "Glucose prediction lines on chart",
+            DefaultEnabled = true,
+            Icon = "TrendingUp",
+            UICategory = WidgetUICategory.Glucose,
+            Placement = WidgetPlacement.Main,
+        },
+        new()
+        {
+            Id = WidgetId.DailyStats,
+            Name = "Daily Stats",
+            Description = "Recent entries card",
+            DefaultEnabled = true,
+            Icon = "CalendarDays",
+            UICategory = WidgetUICategory.Glucose,
+            Placement = WidgetPlacement.Main,
+        },
+        new()
+        {
+            Id = WidgetId.Treatments,
+            Name = "Treatments",
+            Description = "Recent treatments card",
+            DefaultEnabled = true,
+            Icon = "Syringe",
+            UICategory = WidgetUICategory.Glucose,
+            Placement = WidgetPlacement.Main,
+        },
+        new()
+        {
+            Id = WidgetId.Agp,
+            Name = "AGP",
+            Description = "Ambulatory glucose profile",
+            DefaultEnabled = false,
+            Renderable = false,
+            Icon = "Activity",
+            UICategory = WidgetUICategory.Glucose,
+            Placement = WidgetPlacement.Main,
+        },
+        new()
+        {
+            Id = WidgetId.BatteryStatus,
+            Name = "Battery Status",
+            Description = "Device battery status",
+            DefaultEnabled = false,
+            Renderable = false,
+            Icon = "Battery",
+            UICategory = WidgetUICategory.Device,
+            Placement = WidgetPlacement.Main,
+        },
+    ];
+
+    /// <summary>
+    /// The widget configuration a tenant starts with: one entry per renderable widget, at its
+    /// catalogued placement and default.
+    /// </summary>
+    public static List<WidgetConfig> Defaults() =>
+        [
+            .. All.Where(d => d.Renderable)
+                .Select(d => new WidgetConfig
+                {
+                    Id = d.Id,
+                    Enabled = d.DefaultEnabled,
+                    Placement = d.Placement,
+                }),
+        ];
 }
 
 /// <summary>
@@ -379,6 +554,14 @@ public class WidgetDefinition
 
     [JsonPropertyName("defaultEnabled")]
     public bool DefaultEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Whether a dashboard surface exists for this widget. Ids kept only so that stored settings
+    /// naming them still deserialise are catalogued with <c>false</c>: they get no default and are
+    /// not offered.
+    /// </summary>
+    [JsonPropertyName("renderable")]
+    public bool Renderable { get; set; } = true;
 
     /// <summary>
     /// Icon name (e.g., "TrendingUp", "Clock") - frontend maps to actual icon component

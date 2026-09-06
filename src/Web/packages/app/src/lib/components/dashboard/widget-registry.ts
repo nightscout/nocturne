@@ -1,7 +1,7 @@
 /**
- * `WidgetId` also carries ids for the dashboard's main sections, which are not
- * grid widgets, so this — not the enum — is the set the grid renders and the
- * settings picker offers.
+ * What this build can render. Names, descriptions and placement come from the
+ * backend widget catalogue; the picker offers that catalogue's top widgets
+ * narrowed to the ids below.
  */
 
 import { WidgetId } from "$lib/api/generated/nocturne-api-client";
@@ -25,13 +25,9 @@ const TOP_WIDGET_LOADERS = {
 /** A widget id the grid can actually render. */
 export type TopWidgetId = keyof typeof TOP_WIDGET_LOADERS;
 
-function isTopWidgetId(id: string): id is TopWidgetId {
+export function isTopWidgetId(id: string): id is TopWidgetId {
   return Object.hasOwn(TOP_WIDGET_LOADERS, id);
 }
-
-/** Every widget offerable in settings, in the order the picker lists them. */
-export const TOP_WIDGET_IDS: TopWidgetId[] =
-  Object.keys(TOP_WIDGET_LOADERS).filter(isTopWidgetId);
 
 export const DEFAULT_TOP_WIDGETS: TopWidgetId[] = [
   WidgetId.BgDelta,

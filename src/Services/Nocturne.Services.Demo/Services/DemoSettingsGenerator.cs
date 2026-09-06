@@ -119,19 +119,7 @@ public class DemoSettingsGenerator
                 ShowRawBG = false,
                 FocusHours = 3,
             },
-            Widgets = new List<WidgetConfig>
-            {
-                // Top widgets
-                new() { Id = WidgetId.BgDelta, Enabled = true, Placement = WidgetPlacement.Top },
-                new() { Id = WidgetId.LastUpdated, Enabled = true, Placement = WidgetPlacement.Top },
-                new() { Id = WidgetId.ConnectionStatus, Enabled = true, Placement = WidgetPlacement.Top },
-                // Main sections
-                new() { Id = WidgetId.GlucoseChart, Enabled = true, Placement = WidgetPlacement.Main },
-                new() { Id = WidgetId.Statistics, Enabled = true, Placement = WidgetPlacement.Main },
-                new() { Id = WidgetId.Predictions, Enabled = true, Placement = WidgetPlacement.Main },
-                new() { Id = WidgetId.DailyStats, Enabled = true, Placement = WidgetPlacement.Main },
-                new() { Id = WidgetId.Treatments, Enabled = true, Placement = WidgetPlacement.Main },
-            },
+            Widgets = WidgetCatalog.Defaults(),
             Plugins = new Dictionary<string, PluginSettings>
             {
                 {
