@@ -675,7 +675,7 @@ public class StatisticsService : IStatisticsService
     /// <returns>Basic glucose statistics including mean, median, percentiles, etc.</returns>
     public BasicGlucoseStats CalculateBasicStats(IEnumerable<double> glucoseValues)
     {
-        var values = glucoseValues.Where(v => v > 0 && v < 600).ToList();
+        var values = glucoseValues.Where(IsPlausibleReading).ToList();
 
         if (!values.Any())
         {
@@ -773,8 +773,9 @@ public class StatisticsService : IStatisticsService
         return entries.Where(IsPlausibleReading).Select(entry => entry.Mgdl);
     }
 
-    private static bool IsPlausibleReading(SensorGlucose entry) =>
-        entry.Mgdl > 0 && entry.Mgdl < 600;
+    private static bool IsPlausibleReading(SensorGlucose entry) => IsPlausibleReading(entry.Mgdl);
+
+    private static bool IsPlausibleReading(double mgdl) => mgdl > 0 && mgdl < 600;
 
     #endregion
 
@@ -1360,7 +1361,7 @@ public class StatisticsService : IStatisticsService
         foreach (var entry in entries)
         {
             var value = entry.Mgdl;
-            if (value <= 0 || value >= 600)
+            if (!IsPlausibleReading(value))
                 continue;
 
             var minute =
@@ -1483,8 +1484,9 @@ public class StatisticsService : IStatisticsService
     }
 
     /// <summary>
-    /// The cadence assumed for a series whose entries do not show one: a single reading, or
-    /// several stamped at the same instant.
+    /// The gap credited to the final reading of a series whose entries show no gap of their own:
+    /// a lone reading, or several stamped at the same instant. The readings before it in such a
+    /// series cover no elapsed time and are credited none.
     /// </summary>
     private const double DefaultCadenceMinutes = 5;
 
@@ -2916,7 +2918,7 @@ public class StatisticsService : IStatisticsService
                 Mills = e.Mills,
                 Glucose = e.Mgdl,
             })
-            .Where(e => e.Glucose > 0 && e.Glucose < 600) // Filter invalid readings
+            .Where(e => IsPlausibleReading(e.Glucose))
             .OrderBy(e => e.Mills)
             .ToList();
 

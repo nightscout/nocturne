@@ -384,6 +384,22 @@ public class StatisticsServiceTests
         result.Durations.Target.Should().Be(10);
     }
 
+    [Fact]
+    public void CalculateTimeInRange_Durations_CreditReadingsStampedAtTheSameInstantWithOneInterval()
+    {
+        // Readings sharing a timestamp cover no time between them, so only the last is credited.
+        var at = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var entries = Enumerable
+            .Range(0, 4)
+            .Select(_ => new SensorGlucose { Mgdl = 100, Timestamp = at })
+            .ToArray();
+
+        var result = _statisticsService.CalculateTimeInRange(entries);
+
+        result.Durations.Target.Should().Be(5);
+        result.Percentages.Target.Should().Be(100);
+    }
+
     private static SensorGlucose[] Sequence(params int[] mgdl) => Sequence(5, mgdl);
 
     private static SensorGlucose[] Sequence(double cadenceMinutes, params int[] mgdl)

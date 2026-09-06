@@ -399,4 +399,51 @@ public class StatisticsControllerTests
         capturedFrom.Should().Be(new DateTime(2026, 5, 31, 22, 0, 0, DateTimeKind.Utc));
         capturedTo.Should().Be(new DateTime(2026, 6, 2, 21, 59, 59, 999, DateTimeKind.Utc).AddTicks(9999));
     }
+
+    [Fact]
+    public async Task GetPunchCardData_CountsTheReadingsThemselvesRatherThanDividingDurations()
+    {
+        // A one-minute sensor: 60 readings covering 60 minutes, which the old count of
+        // duration-minutes over a five-minute interval would have reported as 12 readings.
+        var dayStart = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+        var readings = Enumerable
+            .Range(0, 60)
+            .Select(i => new SensorGlucose { Timestamp = dayStart.AddMinutes(i), Mgdl = 100 })
+            .ToArray();
+
+        _glucoseRepoMock
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
+                It.IsAny<CancellationToken>(), It.IsAny<Guid?>()))
+            .ReturnsAsync(readings);
+        SetupEmptyTreatments();
+        _statsServiceMock
+            .Setup(s => s.CalculateTimeInRange(
+                It.IsAny<IEnumerable<SensorGlucose>>(),
+                It.IsAny<GlycemicThresholds?>()))
+            .Returns(new TimeInRangeMetrics
+            {
+                Percentages = new TimeInRangePercentages { Target = 100 },
+                Durations = new TimeInRangeDurations { Target = 60 },
+                RangeStats = new TimeInRangeDetailedStats
+                {
+                    Target = new PeriodMetrics { PeriodName = "In Range", Mean = 100 },
+                },
+            });
+
+        var result = await CreateController().GetPunchCardData(dayStart, dayStart.AddDays(1));
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var payload = ok.Value.Should().BeOfType<PunchCardResponse>().Subject;
+        var month = payload.Months.Should().ContainSingle().Subject;
+        var day = month.Days.Should().ContainSingle(d => d.Date == "2026-06-01").Subject;
+
+        day.TotalReadings.Should().Be(60);
+        day.InRangeCount.Should().Be(60);
+        month.TotalReadings.Should().Be(60);
+        month.Summary!.TotalReadings.Should().Be(60);
+    }
 }

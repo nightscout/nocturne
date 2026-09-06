@@ -336,7 +336,9 @@ public class ExtendedTimeInRangePercentages
 /// <summary>
 /// Time in range durations (in minutes), measured from the gaps between the readings themselves
 /// rather than assuming a cadence, so a one-minute sensor and a five-minute one both report the
-/// time they actually covered. A gap the sensor did not cover counts as one reading interval.
+/// time they actually covered. A gap the sensor did not cover counts as one extra median gap.
+/// <see cref="TimeInRangePercentages"/> counts readings while these sum time, so the two diverge
+/// on a series with gaps or a cadence that varies.
 /// </summary>
 public class TimeInRangeDurations
 {
@@ -406,7 +408,8 @@ public class TimeInRangeEpisodes
 
     /// <summary>
     /// Number of excursions above range, which is <see cref="High"/> plus <see cref="VeryHigh"/>:
-    /// every excursion above target is counted once, against whichever of the two it reached.
+    /// every excursion above target is counted once, against the more extreme of the two it
+    /// reached.
     /// </summary>
     public int AboveRange { get; set; }
 }
