@@ -49,8 +49,8 @@ public class NocturneRemoteConnectorConfiguration : BaseConnectorConfiguration
     /// <summary>
     ///     Direct grant bearer token for the remote instance.
     /// </summary>
-    [ConnectorProperty(ConnectorPropertyKey.ApiSecret, Required = true, Secret = true)]
-    public string Token { get; set; } = string.Empty;
+    [ConnectorProperty(ConnectorPropertyKey.AccessToken, Required = true, Secret = true)]
+    public string AccessToken { get; set; } = string.Empty;
 
     /// <summary>
     ///     Page size for paginated V4 API requests.

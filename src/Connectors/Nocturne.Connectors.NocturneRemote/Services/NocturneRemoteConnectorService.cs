@@ -439,8 +439,8 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
 
         var body = await response.Content.ReadAsStringAsync(ct);
 
-        if (!string.IsNullOrEmpty(config.Token))
-            body = body.Replace(config.Token, "[redacted]", StringComparison.Ordinal);
+        if (!string.IsNullOrEmpty(config.AccessToken))
+            body = body.Replace(config.AccessToken, "[redacted]", StringComparison.Ordinal);
 
         return body.Length <= maxQuotedBody ? body : body[..maxQuotedBody] + "...";
     }
@@ -594,8 +594,8 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
     {
         _resolvedBaseUrl = config.ResolveBaseUrl();
 
-        _authHeaders = !string.IsNullOrEmpty(config.Token)
-            ? new Dictionary<string, string> { ["Authorization"] = $"Bearer {config.Token}" }
+        _authHeaders = !string.IsNullOrEmpty(config.AccessToken)
+            ? new Dictionary<string, string> { ["Authorization"] = $"Bearer {config.AccessToken}" }
             : null;
     }
 
