@@ -11,6 +11,7 @@ using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Controllers.V4.DevOnly;
 
@@ -162,8 +163,8 @@ public class DevAuthController : ControllerBase
         else
         {
             // Apex request with no explicit slug: unambiguous only when a single
-            // tenant exists.
-            var tenants = await _db.Tenants.AsNoTracking().Take(2).ToListAsync(ct);
+            // tenant exists. Counted the way the apex counts it, demo excluded.
+            var tenants = await _db.Tenants.AsNoTracking().ExcludeDemo().Take(2).ToListAsync(ct);
             if (tenants.Count != 1)
                 return (BadRequest(new
                 {

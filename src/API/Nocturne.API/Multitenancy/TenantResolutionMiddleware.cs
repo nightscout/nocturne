@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.API.Extensions;
 
 namespace Nocturne.API.Multitenancy;
@@ -460,21 +461,28 @@ public class TenantResolutionMiddleware
     }
 
     /// <summary>
-    /// Checks whether any tenant exists at all (used to distinguish "no tenants
-    /// yet" from "tenant not found" on the apex domain).
+    /// Checks whether any tenant a caller could be served exists at all (used to distinguish
+    /// "no tenants yet" from "tenant not found" on the apex domain).
     /// </summary>
     private async Task<bool> AnyTenantExistsAsync(IServiceProvider services)
     {
         var factory = services.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
         await using var context = await factory.CreateDbContextAsync();
-        return await context.Tenants.AsNoTracking().AnyAsync();
+        return await context.Tenants.AsNoTracking().ExcludeDemo().AnyAsync();
     }
 
     /// <summary>
-    /// Returns the sole active tenant if exactly one exists, enabling single-tenant
+    /// Returns the sole active non-demo tenant if exactly one exists, enabling single-tenant
     /// mode where the apex domain auto-resolves without a subdomain.
-    /// Returns null when zero or multiple tenants exist.
+    /// Returns null when zero or multiple such tenants exist.
     /// </summary>
+    /// <remarks>
+    /// A demo tenant is an ordinary active tenant, so counting it would take an operator's
+    /// single-tenant install out of single-tenant mode the moment the demo is provisioned. It
+    /// is excluded instead, which also means a demo-only instance's apex resolves nothing
+    /// rather than quietly becoming a public demo: the demo is reached on its own host, the
+    /// same as on a multi-tenant install.
+    /// </remarks>
     private async Task<TenantContext?> GetSoleTenantAsync(IServiceProvider services)
     {
         var cacheKey = SoleTenantCacheKey;
@@ -486,6 +494,7 @@ public class TenantResolutionMiddleware
         await using var context = await factory.CreateDbContextAsync();
 
         var tenants = await context.Tenants.AsNoTracking()
+            .ExcludeDemo()
             .Where(t => t.IsActive)
             .OrderBy(t => t.Id)
             .Take(2)
