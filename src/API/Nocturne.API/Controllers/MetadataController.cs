@@ -20,13 +20,15 @@ namespace Nocturne.API.Controllers;
 /// Metadata controller that exposes type definitions for NSwag and the frontend client generation pipeline.
 /// </summary>
 /// <remarks>
-/// This controller exists solely to ensure NSwag generates TypeScript types for models that are not
-/// otherwise reachable through regular API endpoints (e.g., WebSocket event envelopes, connector
-/// configuration shapes, OAuth scope lists). It is excluded from the interactive API explorer via
-/// <see cref="ApiExplorerSettingsAttribute"/> with <c>IgnoreApi = true</c>.
+/// Most of these endpoints exist only to pull types into the generated client that no other endpoint
+/// reaches — WebSocket event envelopes, connector configuration shapes, OAuth scope lists — and
+/// answer with a constant, usually an enum's values. Two serve real data: widget definitions return
+/// the widget catalogue, and multitenancy answers from configuration and the resolved tenant.
 ///
-/// Most answer with a constant, usually an enum's values, but not all: widget definitions serve the
-/// widget catalogue and multitenancy answers from configuration and the resolved tenant.
+/// The class hides itself from the interactive API explorer with
+/// <see cref="ApiExplorerSettingsAttribute"/>, so an endpoint a client actually calls has to
+/// override that with <c>IgnoreApi = false</c> to reach the OpenAPI document at all; widget
+/// definitions, alert condition types, auth error codes and TOTP setup failures do.
 /// All endpoints are permitted during initial setup (<see cref="AllowDuringSetupAttribute"/>).
 /// </remarks>
 [ApiController]

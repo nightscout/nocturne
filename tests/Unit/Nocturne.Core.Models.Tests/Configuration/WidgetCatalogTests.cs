@@ -14,6 +14,47 @@ public class WidgetCatalogTests
         WidgetCatalog.All.Select(d => d.Id).Should().BeEquivalentTo(Enum.GetValues<WidgetId>());
     }
 
+    // The drift this catalogue replaced was three tables disagreeing about names and defaults, so
+    // both are pinned per id: changing one is a deliberate edit here, never a silent divergence.
+    [Theory]
+    [InlineData(WidgetId.BgDelta, "BG Delta", true, WidgetPlacement.Top, true)]
+    [InlineData(WidgetId.LastUpdated, "Last Updated", true, WidgetPlacement.Top, true)]
+    [InlineData(WidgetId.ConnectionStatus, "Connection Status", true, WidgetPlacement.Top, true)]
+    [InlineData(WidgetId.Meals, "Recent Meals", false, WidgetPlacement.Top, true)]
+    [InlineData(WidgetId.Trackers, "Trackers", false, WidgetPlacement.Top, true)]
+    [InlineData(WidgetId.TirChart, "Time in Range", false, WidgetPlacement.Top, true)]
+    [InlineData(WidgetId.DailySummary, "Daily Summary", false, WidgetPlacement.Top, true)]
+    [InlineData(WidgetId.Clock, "Clock", false, WidgetPlacement.Top, true)]
+    [InlineData(WidgetId.Tdd, "Total Daily Dose", false, WidgetPlacement.Top, true)]
+    [InlineData(WidgetId.GlucoseChart, "Glucose Chart", true, WidgetPlacement.Main, true)]
+    [InlineData(WidgetId.Statistics, "Statistics", true, WidgetPlacement.Main, true)]
+    [InlineData(WidgetId.Predictions, "Predictions", true, WidgetPlacement.Main, true)]
+    [InlineData(WidgetId.DailyStats, "Daily Stats", true, WidgetPlacement.Main, true)]
+    [InlineData(WidgetId.Treatments, "Treatments", true, WidgetPlacement.Main, true)]
+    [InlineData(WidgetId.Agp, "AGP", false, WidgetPlacement.Main, false)]
+    [InlineData(WidgetId.BatteryStatus, "Battery Status", false, WidgetPlacement.Main, false)]
+    public void Catalogue_row_is_pinned(
+        WidgetId id,
+        string name,
+        bool defaultEnabled,
+        WidgetPlacement placement,
+        bool renderable
+    )
+    {
+        WidgetCatalog
+            .All.Single(d => d.Id == id)
+            .Should()
+            .BeEquivalentTo(
+                new
+                {
+                    Name = name,
+                    DefaultEnabled = defaultEnabled,
+                    Placement = placement,
+                    Renderable = renderable,
+                }
+            );
+    }
+
     [Fact]
     public void Catalogue_rows_are_fully_described()
     {

@@ -11,12 +11,12 @@
   import { Skeleton } from "$lib/components/ui/skeleton";
   import {
     WidgetPlacement,
-    type WidgetDefinition,
     type WidgetId,
   } from "$lib/api/generated/nocturne-api-client";
   import { getWidgetDefinitions } from "$api/generated/metadatas.generated.remote";
   import {
     DEFAULT_TOP_WIDGETS,
+    RENDERABLE_TOP_WIDGETS,
     isTopWidgetId,
     knownTopWidgets,
     type TopWidgetId,
@@ -43,21 +43,31 @@
 
   const definitions = getWidgetDefinitions();
 
-  const catalogue = $derived(
-    (definitions.current?.definitions ?? []).filter(
-      (d): d is WidgetDefinition & { id: TopWidgetId } =>
-        d.placement === WidgetPlacement.Top &&
-        d.renderable !== false &&
-        isTopWidgetId(d.id ?? "")
-    )
+  const unnamed = $derived(definitions.error !== undefined);
+  const loading = $derived(!definitions.current && !unnamed);
+
+  /**
+   * The top widgets this build can render, named by the catalogue. Ids stand in
+   * for names when the catalogue cannot be fetched, so a selection can still be
+   * reordered and saved.
+   */
+  const offered: { id: TopWidgetId; name: string }[] = $derived(
+    unnamed
+      ? RENDERABLE_TOP_WIDGETS.map((id) => ({ id, name: id }))
+      : (definitions.current?.definitions ?? []).flatMap((d) => {
+          const id = d.id ?? "";
+          return d.placement === WidgetPlacement.Top &&
+            d.renderable !== false &&
+            isTopWidgetId(id)
+            ? [{ id, name: d.name || id }]
+            : [];
+        })
   );
-  const widgetNames = $derived(
-    new Map(catalogue.map((d) => [d.id, d.name ?? ""]))
-  );
+  const widgetNames = $derived(new Map(offered.map((w) => [w.id, w.name])));
 
   const selectedWidgets = $derived(knownTopWidgets(value));
   const availableWidgets = $derived(
-    catalogue.filter((d) => !selectedWidgets.includes(d.id))
+    offered.filter((w) => !selectedWidgets.includes(w.id))
   );
   const canAddMore = $derived(selectedWidgets.length < maxWidgets);
 
@@ -123,11 +133,17 @@
     </CardDescription>
   </CardHeader>
   <CardContent class="space-y-4 @container">
-    {#if !definitions.current}
+    {#if loading}
       <Skeleton class="h-14 w-full" />
       <Skeleton class="h-14 w-full" />
       <Skeleton class="h-14 w-full" />
     {:else}
+      {#if unnamed}
+        <p class="text-sm text-muted-foreground">
+          Widget names could not be loaded, so widgets are listed by their
+          internal id. Choosing and reordering them still works.
+        </p>
+      {/if}
       <!-- Selected widgets (draggable) -->
       <div class="space-y-2">
         <span class="text-sm font-medium">Active Widgets</span>
@@ -155,7 +171,7 @@
               <Icon class="h-4 w-4 text-muted-foreground" />
               <div class="flex-1 min-w-0">
                 <div class="font-medium text-sm">
-                  {widgetNames.get(widgetId)}
+                  {widgetNames.get(widgetId) ?? widgetId}
                 </div>
               </div>
               <Button
