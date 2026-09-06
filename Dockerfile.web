@@ -66,6 +66,10 @@ RUN node -e "import('zod'); import('@nocturne/bridge'); import('./server-origin-
 
 ENV NODE_ENV=production
 ENV PORT=5173
+# adapter-node caps request bodies at 512K by default, which rejects support
+# issue screenshot uploads (up to 4 x 10 MB) before they reach the app. Keep in
+# sync with src/Web/Dockerfile.
+ENV BODY_SIZE_LIMIT=44M
 EXPOSE 5173
 
 CMD ["node", "server.js"]
