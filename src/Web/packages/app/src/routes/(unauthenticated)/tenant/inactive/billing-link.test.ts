@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveBillingLink } from "./+page.server";
+import { resolveBillingLink } from "./billing-link";
 
 describe("resolveBillingLink", () => {
   it("links the operator's billing page in redirect mode", () => {
