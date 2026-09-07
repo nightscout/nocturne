@@ -11,6 +11,8 @@ import {
   elementInfo,
   type InternalElement,
 } from "./types";
+import { getGlucoseColor } from "$lib/utils/chart-colors";
+import { FALLBACK_GLUCOSE_THRESHOLDS } from "$lib/constants/glucose-thresholds";
 
 export const DEFAULT_ELEMENT_COLOR = "#ffffff";
 
@@ -23,16 +25,19 @@ const NAMED_ELEMENT_COLORS = new Map([["muted", "var(--muted-foreground)"]]);
 const HEX_COLOR = /^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
 
 /**
- * Colour of the glucose band a reading falls in, as an unresolved CSS variable
- * reference: resolving it would freeze the theme and leave SSR, which has no
- * computed style to read, with no colour at all.
+ * Colour of the glucose band a reading falls in. The clock has no access to the
+ * tenant's own cut-points, so it takes the app-wide fallbacks. The result is an
+ * unresolved `var()`: every theme redefines the `--glucose-*` palette, and a
+ * value resolved here would hold the colours of whichever theme was active when
+ * the reading last changed.
  */
 export function getBgColor(bg: number): string {
-  if (bg < 70) return "var(--glucose-very-low)";
-  if (bg < 80) return "var(--glucose-low)";
-  if (bg > 250) return "var(--glucose-very-high)";
-  if (bg > 180) return "var(--glucose-high)";
-  return "var(--glucose-in-range)";
+  return getGlucoseColor(bg, FALLBACK_GLUCOSE_THRESHOLDS);
+}
+
+/** Font size an element renders at before the caller's scale. */
+export function elementSize(element: ClockElement): number {
+  return element.size || elementInfo(element.type)?.defaultSize || 20;
 }
 
 /**
@@ -146,8 +151,7 @@ export function buildCustomCssString(element: ClockElement): string {
 
 /**
  * Build inline style string from element.style (including custom properties).
- * `scale` multiplies the font size: the face is rendered at whatever size its
- * container allows, the builder preview at a fixed fraction of the real thing.
+ * The builder preview passes a smaller `scale` than the face it previews.
  */
 export function buildStyleString(
   element: ClockElement,
@@ -157,8 +161,7 @@ export function buildStyleString(
   const style = element.style;
   const parts: string[] = [];
 
-  const size = element.size || elementInfo(element.type)?.defaultSize || 20;
-  parts.push(`font-size: ${size * scale}px`);
+  parts.push(`font-size: ${elementSize(element) * scale}px`);
   parts.push(`color: ${getElementColor(element, currentBG)}`);
   parts.push(`opacity: ${style?.opacity ?? 1.0}`);
 

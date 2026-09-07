@@ -94,10 +94,10 @@ describe("ClockFaceRenderer", () => {
 
   it("does not paint the whole face with a colour nothing reported", () => {
     const glucoseColored = { ...config, settings: { bgColor: true } };
-    const veryLow = cssColor("--glucose-very-low");
+    const low = cssColor("--glucose-low");
 
-    expect(face(reading, glucoseColored).background).toBe(veryLow);
-    expect(face(noReading, glucoseColored).background).not.toBe(veryLow);
+    expect(face(reading, glucoseColored).background).toBe(low);
+    expect(face(noReading, glucoseColored).background).not.toBe(low);
   });
 
   it("renders nothing for tracker parts no data source backs", () => {

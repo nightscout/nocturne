@@ -5,6 +5,7 @@
     buildCustomCssString,
     buildStyleString,
     clockBackgroundStyle,
+    elementSize,
     getElementColor,
     getFontClass,
     getFontWeightClass,
@@ -385,7 +386,7 @@
                 </div>
               {/if}
             {:else if element.type === "arrow"}
-              {@const size = (element.size || 25) * scale}
+              {@const size = elementSize(element) * scale}
               {@const customCss = buildCustomCssString(element)}
               <div
                 class="flex items-center"
@@ -395,7 +396,7 @@
               </div>
             {:else if element.type === "tracker"}
               {@const def = getTrackerDefinition(element.definitionId, trackerDefinitions)}
-              {@const size = (element.size || 14) * scale}
+              {@const size = elementSize(element) * scale}
               {@const showOptions = element.show ?? ["name"]}
               {@const customCss = buildCustomCssString(element)}
               <div

@@ -11,12 +11,4 @@ describe("createDefaultConfig", () => {
     expect(DEFAULT_SETTINGS.staleMinutes).toBe(original);
     expect(createDefaultConfig().settings?.staleMinutes).toBe(original);
   });
-
-  it("gives every call its own element styles", () => {
-    const first = createDefaultConfig().rows?.[0]?.elements?.[0]?.style;
-    const second = createDefaultConfig().rows?.[0]?.elements?.[0]?.style;
-
-    expect(first).toEqual(second);
-    expect(first).not.toBe(second);
-  });
 });

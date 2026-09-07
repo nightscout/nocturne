@@ -14,10 +14,10 @@ const dynamic = (): ClockElement => ({
 
 describe("getBgColor", () => {
   it.each([
-    [69, "var(--glucose-very-low)"],
-    [70, "var(--glucose-low)"],
-    [79, "var(--glucose-low)"],
-    [80, "var(--glucose-in-range)"],
+    [53, "var(--glucose-very-low)"],
+    [54, "var(--glucose-low)"],
+    [69, "var(--glucose-low)"],
+    [70, "var(--glucose-in-range)"],
     [180, "var(--glucose-in-range)"],
     [181, "var(--glucose-high)"],
     [250, "var(--glucose-high)"],
@@ -45,7 +45,7 @@ describe("getElementColor", () => {
   });
 
   it("paints a dynamic element in the reading's band colour", () => {
-    expect(getElementColor(dynamic(), 55)).toBe("var(--glucose-very-low)");
+    expect(getElementColor(dynamic(), 40)).toBe("var(--glucose-very-low)");
     expect(getElementColor(dynamic(), 120)).toBe("var(--glucose-in-range)");
   });
 
@@ -78,8 +78,6 @@ describe("buildStyleString", () => {
   });
 
   it("sizes an element that carries no size off its type's default", () => {
-    // sg's ELEMENT_INFO default is 40; the API models size as optional, so a
-    // face saved without one must not fall back to a single global size.
     expect(buildStyleString({ type: "sg" }, null, 1)).toContain(
       "font-size: 40px"
     );
@@ -106,7 +104,7 @@ describe("clockBackgroundStyle", () => {
 
   it("colours the face by a real reading", () => {
     expect(clockBackgroundStyle(settings, 55, "#0a0a0a")).toBe(
-      "background-color: var(--glucose-very-low);"
+      "background-color: var(--glucose-low);"
     );
   });
 
