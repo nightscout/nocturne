@@ -160,6 +160,7 @@ builder.Services.AddControllers(options =>
     options.Filters.Add<TenantCacheVaryFilter>();
     options.Filters.Add<RecreationBlockedFilter>();
     options.Filters.AddService<ReadAccessAuditFilter>();
+    options.ModelMetadataDetailsProviders.Add(new QueryValueTypeBindingMetadataProvider());
 })
 .ConfigureApplicationPartManager(manager =>
     AuthorizationConfiguration.ConfigureControllerDiscovery(

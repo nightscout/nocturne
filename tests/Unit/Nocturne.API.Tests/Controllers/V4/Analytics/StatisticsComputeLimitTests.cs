@@ -3,7 +3,6 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.RateLimiting;
 using Nocturne.API.Controllers.V4.Analytics;
 using Nocturne.API.Extensions;
@@ -88,34 +87,6 @@ public class StatisticsComputeLimitTests
         perAction.Should().BeEmpty(
             "an action-level copy overrides the controller's and lets the two drift. Copies on: "
             + string.Join(", ", perAction));
-    }
-
-    /// <summary>
-    /// MVC does not reject a <em>missing</em> non-nullable value-type query parameter: it binds
-    /// <c>default</c> and runs the action, so an omitted date silently becomes 0001-01-01 and the
-    /// endpoint answers 200 with an empty report. <c>[BindRequired]</c> is what produces the 400.
-    /// </summary>
-    [Fact]
-    public void EveryRequiredDateOnAGetAction_IsBindRequired()
-    {
-        var dateParams = typeof(StatisticsController)
-            .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
-            .Where(m => m.GetCustomAttributes<HttpGetAttribute>().Any())
-            .SelectMany(m => m.GetParameters().Select(p => (Action: m.Name, Parameter: p)))
-            .Where(x => x.Parameter.ParameterType == typeof(DateTime))
-            .ToList();
-
-        dateParams.Should().HaveCountGreaterThan(10,
-            "the scan should discover the date-range GETs; zero discoveries would pass while guarding nothing");
-
-        var unguarded = dateParams
-            .Where(x => x.Parameter.GetCustomAttribute<BindRequiredAttribute>() is null)
-            .Select(x => $"{x.Action}.{x.Parameter.Name}")
-            .ToList();
-
-        unguarded.Should().BeEmpty(
-            "an omitted date would bind to DateTime.MinValue and answer 200 over an empty window "
-            + "instead of 400. Unguarded: " + string.Join(", ", unguarded));
     }
 
     /// <summary>
