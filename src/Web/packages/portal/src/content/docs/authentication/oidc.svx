@@ -10,7 +10,7 @@ title: Sign in with any OIDC provider
 # Sign in with any OIDC provider
 
 Nocturne's social login is a generic OpenID Connect client. Any provider that publishes a
-standard discovery document works — Nocturne fetches
+standard discovery document works: Nocturne fetches
 `{issuer}/.well-known/openid-configuration` and wires up the authorization, token, and
 userinfo endpoints automatically. [Google](/docs/authentication/google) and
 [GitHub](/docs/authentication/github) have their own step-by-step guides; this page covers
@@ -25,15 +25,15 @@ https://your-instance.com/api/auth/oidc/callback
 ```
 
 Replace `your-instance.com` with your actual Nocturne domain. This is the same URL for
-every provider — only the credentials differ.
+every provider; only the credentials differ.
 
 ## Two ways to configure providers
 
 Nocturne reads providers from one of two places:
 
-1. **Admin UI (database-backed)** — add and edit providers at runtime from
+1. **Admin UI (database-backed)**: add and edit providers at runtime from
    **Settings > Administration > Identity Providers**. No restart needed. This is the default.
-2. **Operator config (`appsettings` / environment)** — declare providers in configuration.
+2. **Operator config (`appsettings` / environment)**: declare providers in configuration.
    When one or more providers are configured this way, Nocturne **bypasses the database
    entirely and hides the management UI**. Use this for declarative, infrastructure-as-code
    deployments.
@@ -41,7 +41,7 @@ Nocturne reads providers from one of two places:
 <Callout type="info" title="Pick one, not both">
   As soon as <code>Oidc:Providers</code> has at least one entry in configuration, the
   database-backed providers and their management UI are ignored. Manage providers either
-  through the admin UI <em>or</em> through configuration — not a mix.
+  through the admin UI <em>or</em> through configuration, not a mix.
 </Callout>
 
 ### Option A: the admin UI
@@ -60,7 +60,7 @@ The new sign-in button appears on your login page immediately.
 ### Option B: configuration
 
 Declare providers under the `Oidc:Providers` array. Keep the client **secret** out of
-`appsettings.json` — supply it through user-secrets or an environment variable.
+`appsettings.json`; supply it through user-secrets or an environment variable.
 
 ```jsonc
 "Oidc": {
@@ -86,7 +86,7 @@ Supply the secret separately, by index:
 # Local development (user-secrets)
 dotnet user-secrets set "Oidc:Providers:0:ClientSecret" "your-client-secret"
 
-# Production (environment variable — note the double underscores)
+# Production (environment variable; note the double underscores)
 Oidc__Providers__0__ClientSecret=your-client-secret
 ```
 
@@ -129,8 +129,8 @@ When someone signs in through a provider for the first time, Nocturne creates an
 and assigns the provider's **Default Roles** (`readable` unless you change it). Adjust this
 list to control what new users can do before an admin grants them more access.
 
-Providers configured through the admin UI also support **claim mappings** — pairs of
-*(OIDC claim name → Nocturne claim name)* — for providers that emit non-standard claim
+Providers configured through the admin UI also support **claim mappings**, pairs of
+*(OIDC claim name → Nocturne claim name)*, for providers that emit non-standard claim
 names. Most providers need no mapping when they return the standard `email`, `name`, and
 `sub` claims.
 
@@ -138,4 +138,4 @@ names. Most providers need no mapping when they return the standard `email`, `na
 
 - [Sign in with Google](/docs/authentication/google)
 - [Sign in with GitHub](/docs/authentication/github)
-- [Authentication overview](/docs/authentication) — all sign-in methods
+- [Authentication overview](/docs/authentication): all sign-in methods

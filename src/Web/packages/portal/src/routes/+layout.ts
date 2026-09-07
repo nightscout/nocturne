@@ -31,6 +31,6 @@ export const load: Load = async ({ url }) => {
         locale = preferredLanguage.current
     }
 
-    // WUCHALE-DISABLED: wuchale temporarily disabled — locale dynamic load skipped.
+    // WUCHALE-DISABLED: wuchale temporarily disabled; locale dynamic load skipped.
     void locale
 }

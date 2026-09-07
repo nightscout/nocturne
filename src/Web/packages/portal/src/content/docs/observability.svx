@@ -22,7 +22,7 @@ there is nothing to disable on a default install.
 | **Web** | Server-side traces and logs, plus client-error spans | Node auto-instrumentation (server-side HTTP) and a browser error handler that reports unhandled errors |
 
 Telemetry is **push-based over OTLP**. Nocturne does **not** expose a Prometheus
-`/metrics` scrape endpoint -- see **Using Prometheus and Grafana** below if that
+`/metrics` scrape endpoint; see **Using Prometheus and Grafana** below if that
 is your stack.
 
 <Callout type="info" title="You provide the backend">
@@ -49,7 +49,7 @@ off. The standard OpenTelemetry SDK environment variables apply:
 
 Both the `nocturne-api` and `nocturne-web` services already reference
 `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_PROTOCOL` from your `.env`.
-Telemetry is off because the endpoint ships empty -- there is no need to edit
+Telemetry is off because the endpoint ships empty, so there is no need to edit
 the Compose file. To turn it on, set the endpoint in `.env`:
 
 ```bash

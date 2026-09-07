@@ -29,7 +29,7 @@ environment-variable workflow that all platforms share, see [Chat Bots](/docs/bo
 
 | Field | Where to find it |
 |-------|------------------|
-| **Bot Token** | **OAuth & Permissions** — the Bot User OAuth Token (`xoxb-…`) |
+| **Bot Token** | **OAuth & Permissions**: the Bot User OAuth Token (`xoxb-…`) |
 | **Signing Secret** | **Basic Information > App Credentials** |
 
 ## 4. Configure Nocturne
@@ -67,10 +67,10 @@ https://your-instance.com/api/v4/webhooks/slack
 
 in each of these places that applies:
 
-- **Slash Commands** — create a `/bg` command (and any others you want) with this Request URL.
-- **Interactivity & Shortcuts** — turn on Interactivity and set the Request URL (needed for
+- **Slash Commands**: create a `/bg` command (and any others you want) with this Request URL.
+- **Interactivity & Shortcuts**: turn on Interactivity and set the Request URL (needed for
   the **Acknowledge** / **Resolve** buttons on alerts).
-- **Event Subscriptions** — if you enable events, set the Request URL here too.
+- **Event Subscriptions**: if you enable events, set the Request URL here too.
 
 <Callout type="info" title="Verify the URL after configuring credentials">
   Slack verifies the Request URL by sending a signed challenge that Nocturne validates with

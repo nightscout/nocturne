@@ -28,7 +28,7 @@ From then on they have access until you change their role or remove them.
 Two things to know about the link:
 
 - **It expires.** By default an invite is good for 7 days. If it lapses before
-  they use it, create another one — nothing is lost.
+  they use it, create another one; nothing is lost.
 - **Treat it as private.** Until it's accepted, whoever opens the link can claim
   that role. Send it directly to the person, not to a group chat.
 
@@ -46,16 +46,16 @@ access:
 | Owner | You. Full control of the account; can't be removed. |
 
 If a role is close but not quite right, you can adjust an individual member's
-**permissions** on top of it — switching a particular kind of access on or off for
+**permissions** on top of it, switching a particular kind of access on or off for
 that one person, without changing what the role means for everyone else.
 
-You can also tick **Only last 24 hours** — when you invite them, or later — to
+You can also tick **Only last 24 hours** (when you invite them, or later) to
 limit that member to recent data, the same way the public link's time window
 works.
 
 <Callout type="tip" title="When to use it: a teacher and a school nurse">
   At school, two people need access for the whole term, and they need different
-  things. Invite the <strong>teacher as a Viewer</strong> — they just need to
+  things. Invite the <strong>teacher as a Viewer</strong>; they just need to
   glance at the current glucose during class. Invite the
   <strong>school nurse as a Caretaker</strong>, so they can also log a treatment
   or manage an alert if they step in. Each has their own login, you can see them
@@ -64,17 +64,17 @@ works.
 
 ## Membership requests
 
-Inviting someone is one direction — you reach out and hand them a link.
+Inviting someone is one direction: you reach out and hand them a link.
 **Membership requests** are the other direction: you let people **ask you** for
 access, and nothing is granted until you approve it.
 
 The toggle lives on **Settings > Sharing & Privacy**. While it's on, your sign-in
 page shows a **Request membership** link. Someone who lands on your instance writes
-a short note saying who they are, presses **Continue to Sign Up**, and signs in —
+a short note saying who they are, presses **Continue to Sign Up**, and signs in,
 which is how the request arrives with a name attached. It **never grants access on
 its own**; it waits for you.
 
-You review requests **in place, on Settings > Sharing & Privacy** — the same page
+You review requests **in place, on Settings > Sharing & Privacy**, the same page
 as the toggle. Each one shows who asked, their note, and when. Tick the roles they
 should have and approve to add them as a member, or deny it. It's the same roles as
 an invite; the only difference is who started the conversation.
@@ -86,7 +86,7 @@ For what the person on the other side sees, and how to word the note, see
   A grandparent asks to keep an eye on your child's glucose. Rather than
   collecting their email and sending an invite, switch membership requests on and
   point them at your instance. They sign in, request access, and you approve them as a
-  <strong>Viewer</strong> when it suits you — or deny it if you change your mind.
+  <strong>Viewer</strong> when it suits you, or deny it if you change your mind.
 </Callout>
 
 ## Removing a member

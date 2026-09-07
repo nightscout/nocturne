@@ -11,7 +11,7 @@ title: Email Alerts (Resend)
 
 Nocturne can deliver glucose alerts directly to email using [Resend](https://resend.com),
 an email API provider. Resend's free tier includes 3,000 emails per month and 100 emails
-per day -- more than enough for most alert configurations.
+per day, which is more than enough for most alert configurations.
 
 ## 1. Create a Resend account
 
@@ -23,7 +23,7 @@ per day -- more than enough for most alert configurations.
 1. In the Resend dashboard, go to **Domains**
 2. Click **Add Domain** and enter the domain you want to send from (e.g. `alerts.your-instance.com`)
 3. Add the DNS records Resend provides (typically a few TXT and MX records)
-4. Wait for verification -- this usually takes a few minutes but can take up to 48 hours
+4. Wait for verification. This usually takes a few minutes but can take up to 48 hours
 
 <Callout type="info" title="Free tier sending domain">
   On the free tier you can also send from Resend's shared domain

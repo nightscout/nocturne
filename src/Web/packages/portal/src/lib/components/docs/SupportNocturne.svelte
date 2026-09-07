@@ -19,7 +19,7 @@
         {
             amount: "US$20",
             name: "Sustainer",
-            desc: "Adds test hardware — pumps, CGM transmitters, and phones the connectors are verified against.",
+            desc: "Adds test hardware: pumps, CGM transmitters, and phones the connectors are verified against.",
             href: LINKS.subscribe20,
             featured: true,
         },

@@ -1,5 +1,6 @@
 <script lang="ts">
     import { onMount } from "svelte";
+    import { auroraTime } from "$lib/utils/aurora-noise";
 
     let {
         height = 880,
@@ -15,7 +16,8 @@
 
     let canvasEl: HTMLCanvasElement;
 
-    // Fragment shader — domain-warped FBM noise into the Nocturne glucose palette
+    // Fragment shader: domain-warped FBM noise into the Nocturne glucose palette.
+    // aurora-noise.ts is a JS port of this chain; keep the two in step.
     const FRAG = `
 precision highp float;
 uniform vec2  u_res;
@@ -101,7 +103,6 @@ void main(){
 
         let raf: number;
         let running = true;
-        const t0 = performance.now();
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
 
         const resize = () => {
@@ -116,7 +117,7 @@ void main(){
 
         const tick = () => {
             if (!running) return;
-            const t = ((performance.now() - t0) / 1000) * speed;
+            const t = auroraTime() * speed;
             gl.uniform2f(uRes, canvas.width, canvas.height);
             gl.uniform1f(uT, t);
             gl.uniform1f(uI, intensity);

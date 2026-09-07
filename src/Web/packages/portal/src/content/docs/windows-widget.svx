@@ -8,7 +8,7 @@ title: Windows 11 Widget
 
 # Nocturne Windows 11 Widget
 
-The Nocturne widget puts your live glucose on the Windows 11 Widgets Board — the
+The Nocturne widget puts your live glucose on the Windows 11 Widgets Board, the
 panel that opens with **Win + W**. It reads from any Nocturne server you have access
 to (hosted or self-hosted) and refreshes on its own.
 
@@ -20,7 +20,7 @@ It comes in three sizes:
 | Medium | Nocturne | Glucose, trend, delta, insulin-on-board and carbs-on-board |
 | Large | Nocturne Dashboard | Everything in Medium, plus short-term predictions and tracker ages |
 
-You can add more than one — for example a Small widget for a quick number and a
+You can add more than one, for example a Small widget for a quick number and a
 Large one for the full picture.
 
 ## Requirements
@@ -30,7 +30,7 @@ Large one for the full picture.
 
 ## Install
 
-The widget installs from the **Microsoft Store** — search for "Nocturne" in the
+The widget installs from the **Microsoft Store**: search for "Nocturne" in the
 Store app, or on the Widgets Board itself. Store installs are signed by Microsoft,
 update automatically, and need no extra setup.
 
@@ -51,7 +51,7 @@ The widget appears showing **Setup Required** until you connect it to your serve
 
 ## Connect to your Nocturne server
 
-The widget signs in with a short code — there are no tokens or passwords to copy.
+The widget signs in with a short code; there are no tokens or passwords to copy.
 
 1. Right-click the widget and choose **Customize**.
 2. Enter your **Nocturne server URL** (for example `https://your-nocturne-server.com`) and click **Connect**.
@@ -59,7 +59,7 @@ The widget signs in with a short code — there are no tokens or passwords to co
    Nocturne if needed, and approve the request.
 4. Once approved, the widget switches to showing your glucose automatically.
 
-The widget asks only for **read-only** access — glucose, treatments (for IOB/COB),
+The widget asks only for **read-only** access: glucose, treatments (for IOB/COB),
 device status, and therapy settings used for display. It can never change anything
 on your server.
 
@@ -70,10 +70,10 @@ on your server.
 
 ## What each size shows
 
-- **Small** — the current glucose value and trend arrow.
-- **Medium** — adds the delta since the previous reading, insulin-on-board (IOB),
+- **Small**: the current glucose value and trend arrow.
+- **Medium**: adds the delta since the previous reading, insulin-on-board (IOB),
   and carbs-on-board (COB).
-- **Large** — adds predicted values at +15 / +30 / +45 / +60 minutes (when your
+- **Large**: adds predicted values at +15 / +30 / +45 / +60 minutes (when your
   server provides predictions) and the ages of your active trackers (such as site
   or sensor), highlighted when one needs attention.
 
@@ -103,7 +103,7 @@ Close and reopen the Widgets Board (Win + W). If it still doesn't appear right a
 installing, sign out of Windows and back in so the board re-scans for new widgets.
 
 **It still says "Setup Required".**
-You haven't connected it yet — follow [Connect to your Nocturne server](#connect-to-your-nocturne-server).
+You haven't connected it yet; follow [Connect to your Nocturne server](#connect-to-your-nocturne-server).
 
 **It shows a connection error or no data.**
 Check that the server URL is correct and reachable from this PC in a browser. If the

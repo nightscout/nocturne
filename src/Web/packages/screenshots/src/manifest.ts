@@ -201,7 +201,7 @@ export const definitions: ScreenshotDefinition[] = [
 	{
 		id: 'alerts-configuration',
 		route: '/alerts',
-		alt: 'The Alerts page. Three tiles across the top count how many rules are switched on, how many alerts are sounding right now, and how many fired this week. Below them sits the list of rules — an urgent low, a low, a high, and one for the sensor going quiet — each showing the reading it watches for, a switch to turn it off, and a button to send a test alert. A New rule button sits in the top corner.',
+		alt: 'The Alerts page. Three tiles across the top count how many rules are switched on, how many alerts are sounding right now, and how many fired this week. Below them sits the list of rules: an urgent low, a low, a high, and one for the sensor going quiet, each showing the reading it watches for, a switch to turn it off, and a button to send a test alert. A New rule button sits in the top corner.',
 	},
 	{
 		id: 'report-agp',
@@ -229,7 +229,7 @@ export const definitions: ScreenshotDefinition[] = [
 		prepare: revealThePublicLink,
 		clip: '[data-testid="public-access-card"]',
 		// The address is minted per run, so this one image differs every capture.
-		alt: 'The Public access card, switched on and holding a freshly minted link. The address is spelled out in full — the one time Nocturne shows it — with Copy and Regenerate beside it, then a tile for each kind of data you can share or keep back, a choice between all history and the last 24 hours, and a sentence spelling out what a viewer would see.',
+		alt: 'The Public access card, switched on and holding a freshly minted link. The address is spelled out in full (the one time Nocturne shows it) with Copy and Regenerate beside it, then a tile for each kind of data you can share or keep back, a choice between all history and the last 24 hours, and a sentence spelling out what a viewer would see.',
 		anchors: {
 			enable: '[data-testid="public-access-toggle"]',
 			'time-window': '[data-testid="public-access-window"]',

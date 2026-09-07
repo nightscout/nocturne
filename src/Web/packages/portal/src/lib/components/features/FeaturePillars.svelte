@@ -4,6 +4,7 @@
     import ConnectorsDemo from "./ConnectorsDemo.svelte";
     import AlarmsDemo from "./AlarmsDemo.svelte";
     import AuthDemo from "./AuthDemo.svelte";
+    import { PILLARS } from "$lib/data/pillars";
 
     interface Props {
         /** Pass a button/link component for the CTAs, or use default anchors */
@@ -11,44 +12,6 @@
     }
     let { demoHeight = 400 }: Props = $props();
 
-    const PILLARS = [
-        {
-            n: 1,
-            eyebrow: "Reports",
-            title: "Every report you actually use.",
-            accent: "Built in.",
-            body: "Time in Range. AGP. Day calendars. Meal impact. Pump activity. GLP-1 tracking. A dozen reports your endo asks for — already on the dashboard.",
-            bullets: ["12+ built-in reports", "Print, share, or schedule by email", "Drill from any chart into the raw data"],
-            color: "oklch(0.6 0.118 184.704)",
-        },
-        {
-            n: 2,
-            eyebrow: "Connectors",
-            title: "Plays nice with your gear.",
-            accent: "Right out of the box.",
-            body: "22 devices and services already wired in. Dexcom, Libre, Omnipod, Tandem, Loop, Trio, xDrip, Nightscout, Home Assistant. If your stuff is on the list, it's on Nocturne.",
-            bullets: ["Just sign in to your CGM — no fiddling", "Two-way bridge with Nightscout", "New connector every release"],
-            color: "oklch(0.72 0.16 150)",
-        },
-        {
-            n: 3,
-            eyebrow: "Alarms",
-            title: "Tell Nocturne what to do.",
-            accent: "It will.",
-            body: "Build alarms that fit your life. \"When my BG dips below 70, call my wife and flash the bedroom lights.\" Drag-and-drop rules, no scripts required.",
-            bullets: ["When-this-then-that recipes", "Send to phone, watch, Discord, Slack, Home Assistant", "Snooze, escalate, or skip when asleep"],
-            color: "oklch(0.646 0.222 41.116)",
-        },
-        {
-            n: 4,
-            eyebrow: "Sign in",
-            title: "No password to lose.",
-            accent: "Or to leak.",
-            body: "Sign in with a passkey on your phone, or with Google, Apple, or GitHub. Your health data stays on your server — Nocturne never sees it.",
-            bullets: ["Passkeys on every modern device", "Google · Apple · GitHub · Microsoft", "Self-hosted: nothing leaves your machine"],
-            color: "oklch(0.65 0.18 270)",
-        },
-    ] as const;
 </script>
 
 <section class="max-w-[1200px] mx-auto px-6 border-t border-border overflow-x-clip">
@@ -56,7 +19,7 @@
     <div class="pt-20 pb-14">
         <div class="font-mono text-[11px] tracking-[0.14em] uppercase text-muted-foreground mb-4">What it can do</div>
         <h2 class="text-[clamp(1.6rem,3.5vw,2.5rem)] font-bold leading-[1.2] tracking-[-0.02em] text-foreground m-0">
-            Four things Nocturne is <em class="text-glucose-in-range">really good at.</em>
+            Four things Nocturne is <em class="text-glucose-in-range">good at.</em>
         </h2>
     </div>
 
@@ -126,7 +89,7 @@
     <div class="border-t border-border py-12 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
         <div>
             <div class="text-[1.2rem] font-bold text-foreground">See it all running together</div>
-            <div class="text-[0.9375rem] text-muted-foreground mt-1">Open the demo, or run your own copy in 5 minutes.</div>
+            <div class="text-[0.9375rem] text-muted-foreground mt-1">Open the demo, or run your own copy in a few minutes.</div>
         </div>
         <div class="flex flex-wrap gap-3 shrink-0">
             <a

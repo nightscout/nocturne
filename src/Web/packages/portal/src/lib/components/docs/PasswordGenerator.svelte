@@ -36,7 +36,7 @@
 
     let refreshKey = $state(0);
     // Derived so password regenerates whenever length or refreshKey changes.
-    // The generatePassword call reads neither reactive state nor props directly —
+    // The generatePassword call reads neither reactive state nor props directly,
     // refreshKey and length are the only tracked dependencies here.
     let password = $derived.by(() => {
         // Track both dependencies explicitly.
@@ -74,6 +74,6 @@
     </div>
 
     <p class="mt-1.5 text-xs text-muted-foreground">
-        Generated locally in your browser — never sent anywhere.
+        Generated locally in your browser and never sent anywhere.
     </p>
 </div>

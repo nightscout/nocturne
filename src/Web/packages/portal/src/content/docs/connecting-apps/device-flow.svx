@@ -20,14 +20,14 @@ on a separate device (phone, computer) by entering a short code.
 
 <Callout type="tip" title="Prefer an SDK for API calls?">
   The code below uses raw HTTP requests to show the device flow end to end. Once you
-  have an access token, you don't have to hand-write API calls — official SDKs for
+  have an access token, you don't have to hand-write API calls; official SDKs for
   the V4 API are available in several languages. See <a href="/docs/sdks">SDKs</a>.
 </Callout>
 
 ## 1. Register your app
 
 Before your app can authenticate users, it needs a `client_id`. Nocturne supports
-[Dynamic Client Registration (RFC 7591)](https://datatracker.ietf.org/doc/html/rfc7591) —
+[Dynamic Client Registration (RFC 7591)](https://datatracker.ietf.org/doc/html/rfc7591):
 your app registers itself by calling a single endpoint.
 
 ```typescript
@@ -47,7 +47,7 @@ const response = await fetch(
 const { client_id } = await response.json();
 ```
 
-Registration is **idempotent per tenant** — if your `software_id` is already registered
+Registration is **idempotent per tenant**: if your `software_id` is already registered
 on that Nocturne instance, you'll get the existing `client_id` back. Store the `client_id`;
 you'll need it for every authorization request.
 
@@ -87,16 +87,16 @@ const {
 
 The response contains everything you need to guide the user through authorization:
 
-- **`user_code`** — a short alphanumeric code like `BCTV-3KMN` the user enters
-- **`verification_uri`** — where the user goes to enter the code
-- **`verification_uri_complete`** — has the code pre-filled (use this for "Open in browser" buttons)
-- **`expires_in`** — how long the code is valid (30 minutes)
-- **`interval`** — minimum polling interval in seconds (5 seconds)
+- **`user_code`**: a short alphanumeric code like `BCTV-3KMN` the user enters
+- **`verification_uri`**: where the user goes to enter the code
+- **`verification_uri_complete`**: has the code pre-filled (use this for "Open in browser" buttons)
+- **`expires_in`**: how long the code is valid (30 minutes)
+- **`interval`**: minimum polling interval in seconds (5 seconds)
 
 ## 3. Display the code to the user
 
 Show the `user_code` prominently in your app. If possible, offer a button that opens
-`verification_uri_complete` in a browser — the code is pre-filled so the user just
+`verification_uri_complete` in a browser; the code is pre-filled so the user just
 needs to sign in and approve.
 
 ## 4. Poll for the token
@@ -194,7 +194,7 @@ const refreshResponse = await fetch(
 );
 
 const { access_token, refresh_token } = await refreshResponse.json();
-// Store BOTH new tokens — the old refresh token is now invalid
+// Store BOTH new tokens; the old refresh token is now invalid
 ```
 
 <Callout type="danger" title="Refresh tokens rotate">
@@ -227,7 +227,7 @@ Scopes control what your app can access. Request only what you need.
 
 <OAuthScopeTable />
 
-A `readwrite` scope always implies `read` — you don't need to request both.
+A `readwrite` scope always implies `read`; you don't need to request both.
 
 <Callout type="info" title="Scope expansion">
   <code>health.read</code> and <code>health.readwrite</code> are convenience aliases.
