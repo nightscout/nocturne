@@ -4,6 +4,7 @@ using System.Reflection;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.Extensions.DependencyInjection;
+using Nocturne.API.Controllers.Authentication;
 using Nocturne.API.Controllers.V4.Audit;
 using Nocturne.API.Controllers.V4.Devices;
 using Nocturne.API.Tests.Infrastructure;
@@ -58,8 +59,9 @@ public sealed class QueryValueTypeBindingMetadataProviderTests
     }
 
     /// <summary>
-    /// The two ways a caller is allowed to omit a query-bound value type. Neither may be made
-    /// mandatory: a nullable range filter reads as "no filter", and a defaulted one as its default.
+    /// The ways a caller is allowed to omit a query parameter. None may be made mandatory: a
+    /// nullable range filter reads as "no filter", a defaulted one as its default, and an absent
+    /// reference type as null.
     /// </summary>
     public static TheoryData<Type, string, string> OptionalParameters => new()
     {
@@ -67,6 +69,8 @@ public sealed class QueryValueTypeBindingMetadataProviderTests
         { typeof(ApsSnapshotController), "GetAll", "from" },
         // int with a default.
         { typeof(AuditController), nameof(AuditController.GetMutationAuditLog), "limit" },
+        // string? with no default: the OIDC provider sends it only when the login failed.
+        { typeof(OidcController), nameof(OidcController.Callback), "error" },
     };
 
     [Theory]
@@ -102,22 +106,28 @@ public sealed class QueryValueTypeBindingMetadataProviderTests
         controller.GetMethod(action)!.GetParameters().Single(p => p.Name == name);
 
     /// <summary>
-    /// Every parameter the convention has to cover: declared on a controller GET action, bound
-    /// from the query by an explicit attribute, a non-nullable value type, and with no default.
-    /// Read off each declaring type so a base-class action is visited once.
+    /// Every parameter the convention has to cover, discovered by the same predicate the provider
+    /// applies: declared on a controller action, bound from the query by the first binding-source
+    /// attribute as <see cref="Microsoft.AspNetCore.Mvc.ModelBinding.Metadata.DefaultBindingMetadataProvider"/>
+    /// reads it, a non-nullable value type, and with no default.
     /// </summary>
+    /// <remarks>
+    /// Read off each declaring type so a base-class action is visited once, which for a generic
+    /// base evaluates the open definition's <see cref="ParameterInfo"/> while MVC binds the closed
+    /// one — equivalent for a concrete parameter type, not for one typed by a type argument.
+    /// </remarks>
     private static IEnumerable<ParameterInfo> MandatoryQueryValueTypes() =>
         typeof(Nocturne.API.Program).Assembly
             .GetTypes()
             .Where(t => typeof(ControllerBase).IsAssignableFrom(t))
             .SelectMany(t => t.GetMethods(
                 BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
-            .Where(m => m.GetCustomAttributes<HttpGetAttribute>().Any())
+            .Where(m => !m.IsSpecialName && m.GetCustomAttribute<NonActionAttribute>() is null)
             .SelectMany(m => m.GetParameters())
             .Where(p => !p.HasDefaultValue
                 && p.ParameterType.IsValueType
                 && Nullable.GetUnderlyingType(p.ParameterType) is null
                 && p.GetCustomAttributes()
                     .OfType<IBindingSourceMetadata>()
-                    .Any(a => a.BindingSource == BindingSource.Query));
+                    .FirstOrDefault()?.BindingSource == BindingSource.Query);
 }
