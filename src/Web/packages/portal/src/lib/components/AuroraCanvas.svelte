@@ -1,16 +1,25 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import { auroraTime } from "$lib/utils/aurora-noise";
+    import {
+        MAX_RIPPLES,
+        RIPPLE_LIFE,
+        RIPPLE_SPEED,
+        RIPPLE_WIDTH,
+        type RippleField,
+    } from "$lib/utils/aurora-ripples";
 
     let {
         height = 880,
         intensity = 1.0,
         speed = 1.0,
+        ripples = null,
         class: className = "",
     }: {
         height?: number;
         intensity?: number;
         speed?: number;
+        ripples?: RippleField | null;
         class?: string;
     } = $props();
 
@@ -23,6 +32,12 @@ precision highp float;
 uniform vec2  u_res;
 uniform float u_t;
 uniform float u_intensity;
+uniform vec3  u_rip[${MAX_RIPPLES}];
+uniform int   u_ripN;
+
+const float RIP_LIFE  = ${RIPPLE_LIFE.toFixed(4)};
+const float RIP_SPEED = ${RIPPLE_SPEED.toFixed(4)};
+const float RIP_WIDTH = ${RIPPLE_WIDTH.toFixed(4)};
 
 const vec3 C_VLOW  = vec3(0.835, 0.149, 0.192);
 const vec3 C_LOW   = vec3(0.165, 0.608, 0.608);
@@ -50,6 +65,13 @@ vec3 ramp(float t){
   if(t<0.65) return mix(C_IN,C_TIGHT,smoothstep(0.45,0.65,t));
   return mix(C_TIGHT,C_HIGH,smoothstep(0.65,1.,t));
 }
+// Mirrors rippleCrest() in aurora-ripples.ts.
+float crest(float d,float age){
+  if(age<0.||age>=RIP_LIFE) return 0.;
+  float front=(d-age*RIP_SPEED)/RIP_WIDTH;
+  float fade=1.-age/RIP_LIFE;
+  return exp(-front*front)*fade*fade;
+}
 void main(){
   vec2 uv=gl_FragCoord.xy/u_res.xy;
   vec2 p=(gl_FragCoord.xy-0.5*u_res.xy)/u_res.y;
@@ -63,6 +85,19 @@ void main(){
   vec3 col=ramp(v);
   float vign=smoothstep(0.95,0.2,length(p*vec2(0.55,1.05)));
   col=mix(C_BG,col,vign*u_intensity);
+  // Ripples: a red crest at each wavefront, with darker water just behind it.
+  float rip=0.,trough=0.;
+  for(int i=0;i<${MAX_RIPPLES};i++){
+    if(i>=u_ripN) break;
+    float d=length(p-u_rip[i].xy);
+    float age=u_rip[i].z;
+    rip+=crest(d,age);
+    trough+=crest(d+1.6*RIP_WIDTH,age);
+  }
+  rip=clamp(rip,0.,1.);
+  col*=1.-0.45*clamp(trough,0.,1.);
+  col=mix(col,C_VLOW,rip*(0.6+0.4*n));
+  col+=C_VLOW*rip*0.35;
   float g=(hash(gl_FragCoord.xy+u_t*0.001)-0.5)*0.025;
   col+=g;
   gl_FragColor=vec4(col,1.0);
@@ -77,17 +112,27 @@ void main(){
         const gl = canvas.getContext("webgl", { antialias: false, alpha: false });
         if (!gl) return;
 
+        // A shader that fails to compile or link draws a silent black hero; surface why.
         const compile = (type: number, src: string) => {
             const s = gl.createShader(type)!;
             gl.shaderSource(s, src);
             gl.compileShader(s);
-            return s;
+            if (gl.getShaderParameter(s, gl.COMPILE_STATUS)) return s;
+            console.error(gl.getShaderInfoLog(s));
+            return null;
         };
 
+        const vert = compile(gl.VERTEX_SHADER, VERT);
+        const frag = compile(gl.FRAGMENT_SHADER, FRAG);
+        if (!vert || !frag) return;
         const prog = gl.createProgram()!;
-        gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT));
-        gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG));
+        gl.attachShader(prog, vert);
+        gl.attachShader(prog, frag);
         gl.linkProgram(prog);
+        if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+            console.error(gl.getProgramInfoLog(prog));
+            return;
+        }
         gl.useProgram(prog);
 
         const buf = gl.createBuffer();
@@ -100,6 +145,9 @@ void main(){
         const uRes = gl.getUniformLocation(prog, "u_res");
         const uT = gl.getUniformLocation(prog, "u_t");
         const uI = gl.getUniformLocation(prog, "u_intensity");
+        const uRip = gl.getUniformLocation(prog, "u_rip[0]");
+        const uRipN = gl.getUniformLocation(prog, "u_ripN");
+        const ripBuf = new Float32Array(MAX_RIPPLES * 3);
 
         let raf: number;
         let running = true;
@@ -117,10 +165,15 @@ void main(){
 
         const tick = () => {
             if (!running) return;
-            const t = auroraTime() * speed;
+            const now = auroraTime();
             gl.uniform2f(uRes, canvas.width, canvas.height);
-            gl.uniform1f(uT, t);
+            gl.uniform1f(uT, now * speed);
             gl.uniform1f(uI, intensity);
+            if (ripples) {
+                // Ripple ages run on the unscaled clock so the pool's physics sees the same radius.
+                gl.uniform1i(uRipN, ripples.pack(now, ripBuf));
+                gl.uniform3fv(uRip, ripBuf);
+            }
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
             raf = requestAnimationFrame(tick);
         };

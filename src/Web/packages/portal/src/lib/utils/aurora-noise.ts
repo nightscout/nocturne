@@ -107,17 +107,24 @@ const D_TIME = 0.05; // seconds
 const FLOW_EPS = 1e-4; // regulariser: flow is undefined where the field is flat
 
 /**
- * Sample the drawn field at a container-pixel position. `cw`/`ch` are the
- * canvas's CSS size, which the shader normalises by height; the y-axis is
- * flipped because gl_FragCoord runs bottom-up while the DOM runs top-down.
+ * Container pixel to the shader's p-space: centred, normalised by height, y up.
+ * `cw`/`ch` are the canvas's CSS size. The y-axis flips because gl_FragCoord
+ * runs bottom-up while the DOM runs top-down.
  */
+export function toAuroraSpace(
+  cx: number, cy: number,
+  cw: number, ch: number,
+): { px: number; py: number } {
+  return { px: (cx - cw * 0.5) / ch, py: (ch * 0.5 - cy) / ch };
+}
+
+/** Sample the drawn field at a container-pixel position. */
 export function sampleSurface(
   cx: number, cy: number,
   cw: number, ch: number,
   t: number,
 ): SurfaceSample {
-  const px = (cx - cw * 0.5) / ch;
-  const py = (ch * 0.5 - cy) / ch;
+  const { px, py } = toAuroraSpace(cx, cy, cw, ch);
 
   const v0 = auroraBrightness(px, py, t);
   const dvdx = (auroraBrightness(px + D_SPACE, py, t) - v0) / D_SPACE;
