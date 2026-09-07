@@ -310,11 +310,10 @@ public interface IStatisticsService
     );
 
     /// <summary>
-    /// The share of a report period a CGM was delivering readings, as it appears in
-    /// <see cref="DataQuality.CgmActivePercent"/>. Each reading covers one cadence of its stream;
-    /// what that is measured against is the registered devices' windows clipped to the report
-    /// where <paramref name="cgmDevices"/> is given, else the report period itself, which runs
-    /// from the first reading to the last where <paramref name="reportStart"/> or
+    /// The share of a report period a CGM was delivering readings. Each reading covers one cadence
+    /// of its stream; what that is measured against is the registered devices' windows clipped to
+    /// the report where <paramref name="cgmDevices"/> is given, else the report period itself,
+    /// which runs from the first reading to the last where <paramref name="reportStart"/> or
     /// <paramref name="reportEnd"/> is absent. Readings no given device claims are credited at
     /// their own stream's cadence, and do not widen the period the given windows account for.
     /// The <paramref name="readings"/> are expected canonically selected.
