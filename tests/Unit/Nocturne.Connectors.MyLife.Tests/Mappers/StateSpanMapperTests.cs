@@ -111,23 +111,42 @@ public class StateSpanMapperTests
         record.Origin.Should().Be(TempBasalOrigin.Algorithm);
     }
 
-    [Fact]
-    public void MapTempBasals_ZeroRate_SetsOriginToSuspended()
+    [Theory]
+    [InlineData(false, TempBasalOrigin.Scheduled)]
+    [InlineData(true, TempBasalOrigin.Algorithm)]
+    public void MapTempBasals_ZeroRate_IsARateNotASuspension(bool isTempBasalRate, TempBasalOrigin expected)
     {
-        // Arrange
+        // A CamAPS 0 U/h decision (and a 0 U/h profile segment) used to surface as "Suspended";
+        // mylife reports real suspensions as PumpSuspend/PumpResume events instead.
         var eventTime = DateTime.UtcNow.AddHours(-1);
         var events = new[]
         {
-            CreateBasalRateEvent(ToMyLifeTicks(eventTime), 0)
+            CreateBasalRateEvent(ToMyLifeTicks(eventTime), 0, isTempBasalRate)
         };
 
-        // Act
         var tempBasals = MyLifeStateSpanMapper.MapTempBasals(events, false, 0).ToList();
 
-        // Assert
         tempBasals.Should().HaveCount(1);
         var record = tempBasals[0];
-        record.Origin.Should().Be(TempBasalOrigin.Suspended);
+        record.Rate.Should().Be(0);
+        record.Origin.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData(0.0, null)]
+    [InlineData(1.0, 0.0)]
+    public void MapTempBasals_ZeroTempBasalProgram_StaysManual(double rate, double? percent)
+    {
+        var eventTime = DateTime.UtcNow.AddHours(-1);
+        var events = new[]
+        {
+            CreateTempBasalEvent(ToMyLifeTicks(eventTime), rate, minutes: 30, percent: percent)
+        };
+
+        var tempBasals = MyLifeStateSpanMapper.MapTempBasals(events, false, 0).ToList();
+
+        tempBasals.Should().HaveCount(1);
+        tempBasals[0].Origin.Should().Be(TempBasalOrigin.Manual);
     }
 
     [Fact]
@@ -329,7 +348,7 @@ public class StateSpanMapperTests
     }
 
     [Fact]
-    public void MapTempBasals_ZeroBasalAmount_SetsOriginToSuspended()
+    public void MapTempBasals_ZeroBasalAmount_StaysScheduled()
     {
         // Arrange
         var eventTime = DateTime.UtcNow.AddHours(-1);
@@ -344,6 +363,7 @@ public class StateSpanMapperTests
         // Assert
         tempBasals.Should().HaveCount(1);
         var record = tempBasals[0];
-        record.Origin.Should().Be(TempBasalOrigin.Suspended);
+        record.Rate.Should().Be(0);
+        record.Origin.Should().Be(TempBasalOrigin.Scheduled);
     }
 }
