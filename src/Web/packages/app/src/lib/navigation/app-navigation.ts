@@ -134,7 +134,10 @@ export function buildAppNavigation(viewer: NavViewer): NavItem[] {
       icon: BarChart3,
       children: [
         { title: "Overview", href: "/reports", icon: PieChart, strict: true },
-        ...getSidebarReportItems(!viewer.user),
+        ...getSidebarReportItems({
+          grantedScopes: viewer.grantedScopes,
+          anonymous: !viewer.user,
+        }),
       ],
     },
     {

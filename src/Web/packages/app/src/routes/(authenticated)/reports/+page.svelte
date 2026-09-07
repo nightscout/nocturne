@@ -62,7 +62,11 @@
     ChevronRight,
   } from "lucide-svelte";
   import { page } from "$app/state";
-  import { visibleReportCategories } from "$lib/navigation/report-navigation";
+  import {
+    reportsOverviewScopes,
+    visibleReportCategories,
+  } from "$lib/navigation/report-navigation";
+  import { satisfiesAllScopes } from "$lib/authorization/scopes";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
   import { AmbulatoryGlucoseProfile } from "$lib/components/ambulatory-glucose-profile";
@@ -81,8 +85,29 @@
   // Default: 14 days is standard for reports overview
   const reportsParams = requireDateParamsContext(14);
 
+  const grantedScopes: string[] = $derived(
+    (page.data as { effectivePermissions?: string[] }).effectivePermissions ?? []
+  );
+  const viewer = $derived({
+    grantedScopes,
+    anonymous: !page.data.user,
+  });
+  const categories = $derived(visibleReportCategories(viewer));
+  const visibleHrefs = $derived(
+    new Set(categories.flatMap((c) => c.reports).map((r) => r.href))
+  );
+
+  const canLoadSummary = $derived(
+    satisfiesAllScopes(grantedScopes, reportsOverviewScopes)
+  );
+
+  // A viewer without the summary's scopes gets no query at all: the analytics call would
+  // 403 and the page would render its error state instead of the reports it can open.
   const reportsResource = contextResource(
-    () => getReportsData(reportsParams.dateRangeInput),
+    () =>
+      canLoadSummary
+        ? getReportsData(reportsParams.dateRangeInput)
+        : { loading: false, error: null, current: undefined, refresh: () => {} },
     { errorTitle: "Error Loading Reports", dateParams: reportsParams }
   );
 
@@ -163,6 +188,7 @@
   </div>
 {:else}
   <div class="@container min-h-screen">
+    {#if canLoadSummary}
     <!-- Hero Section with Key Metrics -->
     <section
       class="relative overflow-hidden bg-linear-to-b from-slate-50 via-white to-transparent pb-8 pt-6 dark:from-slate-900 dark:via-slate-950 dark:to-transparent"
@@ -395,6 +421,7 @@
         {/if}
       </div>
     </section>
+    {/if}
 
     <!-- Quick Actions -->
     <section class="container mx-auto max-w-6xl px-3 py-6">
@@ -402,29 +429,35 @@
         class="flex flex-wrap items-center justify-center gap-3"
         in:fly={{ y: 20, duration: 500, delay: 450, easing: cubicOut }}
       >
-        <Button
-          href="/reports/executive-summary"
-          class="gap-2 rounded-full px-5"
-        >
-          <Gauge class="h-4 w-4" />
-          Executive Summary
-        </Button>
-        <Button
-          href="/reports/agp"
-          variant="outline"
-          class="gap-2 rounded-full px-5"
-        >
-          <BarChart3 class="h-4 w-4" />
-          AGP Report
-        </Button>
-        <Button
-          href="/reports/readings"
-          variant="outline"
-          class="gap-2 rounded-full px-5"
-        >
-          <Calendar class="h-4 w-4" />
-          Day-by-Day
-        </Button>
+        {#if visibleHrefs.has("/reports/executive-summary")}
+          <Button
+            href="/reports/executive-summary"
+            class="gap-2 rounded-full px-5"
+          >
+            <Gauge class="h-4 w-4" />
+            Executive Summary
+          </Button>
+        {/if}
+        {#if visibleHrefs.has("/reports/agp")}
+          <Button
+            href="/reports/agp"
+            variant="outline"
+            class="gap-2 rounded-full px-5"
+          >
+            <BarChart3 class="h-4 w-4" />
+            AGP Report
+          </Button>
+        {/if}
+        {#if visibleHrefs.has("/reports/readings")}
+          <Button
+            href="/reports/readings"
+            variant="outline"
+            class="gap-2 rounded-full px-5"
+          >
+            <Calendar class="h-4 w-4" />
+            Day-by-Day
+          </Button>
+        {/if}
       </div>
     </section>
 
@@ -446,7 +479,7 @@
         description: "It combines your key metrics into a single page \u2014 great for clinic visits or sharing with your endo.",
         completeOn: { event: "click" },
       })}>
-        {#each visibleReportCategories(!page.data.user) as category, categoryIndex}
+        {#each categories as category, categoryIndex}
           {@const CategoryIcon = category.icon}
           {@const styles = categoryVariants({
             category: category.id as CategoryType,

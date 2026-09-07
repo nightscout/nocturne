@@ -63,6 +63,12 @@ public class ControllerAuthorizationCoverageTests
             // already display.
             ["Nocturne.API.Controllers.V4.Identity.ShareAppearanceController"] = "presentation-only, share-host-only; fallback rejects an empty trie",
 
+            // ── V4 caller-scoped identity read ──────────────────────────────────────────────
+            // Answers with the caller's own resolved grant, which discloses nothing a request of
+            // theirs would not. The share view needs it to offer only the reports it can load, and
+            // the share subject is unauthenticated, so [Authorize] would 401 every public share.
+            ["Nocturne.API.Controllers.V4.Identity.MyPermissionsController"] = "returns the caller's own grant; fallback rejects an empty trie",
+
             // ── V4 tracker reads ─────────────────────────────────────────────────────────────
             // GET definitions/instances lean on the fallback policy: a bare unauthenticated request
             // on a tenant subdomain has an empty trie and is rejected, so a private tenant exposes
