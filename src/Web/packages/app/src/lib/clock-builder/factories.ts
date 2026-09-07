@@ -127,7 +127,7 @@ export function createDefaultConfig(): ClockFaceConfig {
         ],
       },
     ],
-    settings: DEFAULT_SETTINGS,
+    settings: { ...DEFAULT_SETTINGS },
   };
 }
 
