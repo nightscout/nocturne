@@ -6,7 +6,7 @@
  */
 
 import { WidgetId, type WidgetConfig } from "$lib/api/generated/nocturne-api-client";
-import type { TopWidgetId } from "$lib/components/dashboard/widget-registry";
+import type { TopWidgetId } from "$lib/components/dashboard/top-widget-ids";
 
 import {
   TrendingUp,

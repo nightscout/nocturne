@@ -27,11 +27,11 @@ From the application you just created:
 |-------|------------------|
 | **Application ID** | **General Information** tab |
 | **Public Key** | **General Information** tab |
-| **Bot Token** | **Bot** tab — click **Reset Token** and copy the value |
+| **Bot Token** | **Bot** tab: click **Reset Token** and copy the value |
 
 <Callout type="warning" title="Save the bot token now">
   Discord shows the bot token only once when it's generated. If you lose it, reset it again
-  on the <strong>Bot</strong> tab — note that resetting invalidates the previous token.
+  on the <strong>Bot</strong> tab; note that resetting invalidates the previous token.
 </Callout>
 
 ## 3. Configure Nocturne
@@ -83,7 +83,7 @@ Key**. Discord rejects the URL if verification fails.
 ## 5. Register the slash commands
 
 Slash commands (`/bg`, `/glucose`, `/connect`, `/disconnect`, `/status`) are registered with
-Discord once, as a deploy step — not at app startup. Run:
+Discord once, as a deploy step, not at app startup. Run:
 
 ```bash
 DISCORD_APPLICATION_ID=... DISCORD_BOT_TOKEN=... \
@@ -118,9 +118,9 @@ my Discord account** button (**Settings > Integrations > Discord**), enable Disc
 
    Use your root domain (`BASE_DOMAIN`), not a tenant subdomain.
 3. Give the client secret to Nocturne, either:
-   - **Admin UI** — enter it in the **Client Secret** field on the Discord card at
+   - **Admin UI**: enter it in the **Client Secret** field on the Discord card at
      **Settings > Admin > Integrations** (the same card as the bot credentials), or
-   - **Environment** — set `DISCORD_CLIENT_SECRET` and restart Nocturne.
+   - **Environment**: set `DISCORD_CLIENT_SECRET` and restart Nocturne.
 
    The **Application ID** (`DISCORD_APPLICATION_ID`) doubles as the OAuth2 client ID, so no
    separate client ID is needed.

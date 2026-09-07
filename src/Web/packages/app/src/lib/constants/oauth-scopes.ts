@@ -35,7 +35,7 @@ export const OAUTH_SCOPE_DESCRIPTIONS: Readonly<Record<string, string>> = {
   [OAuthScope.FullAccess]: "Full access to all data and settings",
   [DEVICE_NOTIFY_SCOPE]: "Send notifications to this device",
   [DEVICE_ACTUATE_SCOPE]:
-    "Use this device's alarms — sound, vibration, flashlight, and full-screen alerts",
+    "Use this device's alarms: sound, vibration, flashlight, and full-screen alerts",
 } as const;
 
 /** Scopes that grant hardware/device actuation and warrant extra emphasis in consent UI. */

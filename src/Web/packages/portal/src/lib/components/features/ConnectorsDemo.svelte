@@ -1,158 +1,9 @@
 <script lang="ts">
   import { Search, Check, Clock } from "@lucide/svelte";
 
-  interface Connector {
-    file: string;
-    name: string;
-    kind: string;
-    aliases?: string[];
-    comingSoon?: true;
-    issue?: number;
-  }
+  import { CONNECTORS, type Connector } from "$lib/data/connectors";
 
-  const CONNECTORS: Connector[] = [
-    {
-      file: "dexcom.png",
-      name: "Dexcom",
-      kind: "CGM",
-      aliases: ["Clarity", "g6", "g7"],
-    },
-    {
-      file: "libre.png",
-      name: "FreeStyle Libre",
-      kind: "CGM",
-      aliases: ["Libre", "FSL", "Abbott"],
-    },
-    { file: "glooko.png", name: "Glooko", kind: "Cloud" },
-    { file: "medtronic.jpg", name: "Medtronic", kind: "Pump" },
-    {
-      file: "omnipod.png",
-      name: "Omnipod",
-      kind: "Pump",
-      aliases: ["Insulet", "DASH", "5"],
-    },
-    { file: "loop.png", name: "Loop", kind: "Looping" },
-    { file: "trio.jpg", name: "Trio", kind: "Looping" },
-    {
-      file: "aaps.png",
-      name: "AndroidAPS",
-      kind: "Looping",
-      aliases: ["AAPS", "android"],
-    },
-    {
-      file: "xdrip.jpg",
-      name: "xDrip+",
-      kind: "App",
-      aliases: ["xDrip", "android"],
-    },
-    { file: "mylife.png", name: "myLife", kind: "Pump" },
-    {
-      file: "myfitnesspal.jpg",
-      name: "MyFitnessPal",
-      kind: "Food",
-      aliases: ["MFP"],
-    },
-    { file: "tidepool.jpg", name: "Tidepool", kind: "Cloud" },
-    { file: "sugarmate.png", name: "Sugarmate", kind: "App" },
-    { file: "spike.png", name: "Spike", kind: "App" },
-    { file: "juggluco.png", name: "Juggluco", kind: "App" },
-    { file: "glucotracker.png", name: "GlucoTracker", kind: "App" },
-    {
-      file: "nightscout.png",
-      name: "Nightscout",
-      kind: "Legacy",
-      aliases: ["NS"],
-    },
-    { file: "discord.png", name: "Discord", kind: "Notify" },
-    { file: "slack.png", name: "Slack", kind: "Notify" },
-    { file: "telegram.png", name: "Telegram", kind: "Notify" },
-    {
-      file: "home-assistant.png",
-      name: "Home Assistant",
-      kind: "Smart Home",
-      aliases: ["HA", "smart home"],
-    },
-    // Coming soon
-    {
-      file: "tandem.png",
-      name: "Tandem",
-      kind: "Pump",
-      aliases: ["TConnect"],
-      comingSoon: true,
-      issue: 72,
-    },
-    {
-      file: "medtrum.jpg",
-      name: "Medtrum",
-      kind: "CGM",
-      comingSoon: true,
-      issue: 106,
-    },
-    {
-      file: "n8n.png",
-      name: "n8n",
-      kind: "Cloud",
-      comingSoon: true,
-      issue: 112,
-    },
-    {
-      file: "twilio.png",
-      name: "Twilio / SMS",
-      kind: "Messaging",
-      aliases: ["SMS", "Twilio"],
-      comingSoon: true,
-      issue: 137,
-    },
-    {
-      file: "oura.png",
-      name: "Oura",
-      kind: "App",
-      aliases: ["Oura Ring"],
-      comingSoon: true,
-      issue: 151,
-    },
-    {
-      file: "whatsapp.png",
-      name: "WhatsApp",
-      kind: "Messaging",
-      aliases: ["WA"],
-      comingSoon: true,
-      issue: 177,
-    },
-    {
-      file: "imessage.jpg",
-      name: "iMessage",
-      kind: "Messaging",
-      aliases: ["Apple Messages", "iMsg", "ios"],
-      comingSoon: true,
-      issue: 178,
-    },
-    {
-      file: "google-chat.png",
-      name: "Google Chat",
-      kind: "Messaging",
-      aliases: ["GChat"],
-      comingSoon: true,
-      issue: 179,
-    },
-    {
-      file: "teams.png",
-      name: "MS Teams",
-      kind: "Messaging",
-      aliases: ["Teams", "Microsoft Teams"],
-      comingSoon: true,
-      issue: 180,
-    },
-    {
-      file: "email.jpg",
-      name: "Email",
-      kind: "Notify",
-      comingSoon: true,
-      issue: 181,
-    },
-  ];
-
-  const TYPE_TARGETS = ["Dexcom", "Libre", "Loop", "Omnipod", "xDrip"];
+  const TYPE_TARGETS = ["Dexcom", "Libre", "Loop", "Tandem", "xDrip"];
 
   interface Props {
     height?: number;
@@ -231,7 +82,7 @@
     <Search class="size-5 text-muted-foreground shrink-0" />
     <input
       class="flex-1 bg-transparent border-none outline-none text-[17px] text-foreground font-medium placeholder:text-muted-foreground/60 min-h-7 w-0"
-      placeholder="Find your device or app…"
+      placeholder="Find your device or app"
       aria-label="Search connectors"
       bind:value={query}
       onfocus={() => (userTyping = true)}

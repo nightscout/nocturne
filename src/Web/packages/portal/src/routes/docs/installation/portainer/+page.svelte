@@ -123,7 +123,7 @@
         Once running, the bundled Caddy proxy obtains Let's Encrypt TLS certificates
         automatically and serves the stack at
         <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">https://your-domain</code>
-        on ports 80 and 443 — no certificate files to manage. Each tenant subdomain
+        on ports 80 and 443, with no certificate files to manage. Each tenant subdomain
         gets its own certificate on demand the first time it is visited.
     </p>
 
@@ -142,7 +142,7 @@
     <h2 class="text-2xl font-bold mt-8 mb-4">Connectors</h2>
     <p class="text-muted-foreground mb-8">
         Data source connectors (Dexcom, LibreLinkUp, Glooko, etc.) are configured through the
-        Nocturne UI after deployment — no compose changes required.
+        Nocturne UI after deployment; no compose changes are required.
     </p>
 
     <h2 class="text-2xl font-bold mt-8 mb-4">Next Steps</h2>

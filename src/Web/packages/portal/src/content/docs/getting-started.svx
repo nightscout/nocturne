@@ -16,32 +16,30 @@ Before you begin, make sure you have:
 
 - Docker and Docker Compose installed
 - A server or VPS with at least 1 GB RAM
-- A domain name (recommended) or static IP
+- A domain name with a DNS record pointing at the server
 
-## Step 1: Create your project
+## Step 1: Deploy
 
-```
-mkdir nocturne && cd nocturne
-```
+Follow one of the [installation guides](/docs/installation). The Docker Compose
+guide takes you from an empty directory to a running stack: two files from the
+release page, a handful of values in `.env`, and `docker compose up -d`.
 
-## Step 2: Deploy
+## Step 2: Open your instance
 
-Follow one of our [installation guides](/docs/installation) to set up the Docker Compose stack and configure your environment variables.
-
-## Step 3: Access Your Instance
-
-Once the containers are running, access your Nocturne instance at:
+The bundled proxy obtains a TLS certificate as soon as your DNS points at the
+server, so once the containers are running your instance is at:
 
 ```
-https://your-server-ip:8443
+https://your-domain
 ```
 
-Sign in and you land on the home screen. It stays empty until a device or an app
+where `your-domain` is the `BASE_DOMAIN` you set in `.env`. Sign in and you land
+on the home screen. It stays empty until a device or an app
 starts sending readings:
 
 <Screenshot id="first-run" />
 
-## Step 4: Connect a data source
+## Step 3: Connect a data source
 
 Saying where your readings come from is part of getting started. Every service
 Nocturne can collect readings from, and every phone app that can send readings
@@ -70,5 +68,6 @@ by itself, with nothing left for you to do:
 
 ## Next Steps
 
-- Set up HTTPS with a reverse proxy
-- Configure your CGM app to point to your new instance
+- Point your CGM app or loop system at your new instance: see [Connecting apps](/docs/connecting-apps)
+- Invite followers or create a share link: see [Sharing & privacy](/docs/sharing)
+- Set up your first alarm rule

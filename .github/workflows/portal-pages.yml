@@ -8,6 +8,10 @@ on:
       - 'src/Web/packages/ui/**'
       - 'src/Web/packages/cms/**'
       - 'src/Web/packages/screenshots/**'
+      # The portal bundles the app's appearance store and OAuth scope constants.
+      - 'src/Web/packages/app/src/lib/stores/**'
+      - 'src/Web/packages/app/src/lib/constants/**'
+      - 'src/Web/packages/app/src/lib/components/dashboard/top-widget-ids.ts'
       - 'src/Web/pnpm-lock.yaml'
       - '.github/workflows/portal-pages.yml'
   workflow_dispatch:

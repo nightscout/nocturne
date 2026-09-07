@@ -32,7 +32,7 @@ Replace `your-instance.com` with your actual Nocturne domain.
 ## 2. Generate a client secret
 
 1. On the app page, click **Generate a new client secret**
-2. Copy the **Client ID** and the **Client secret** immediately — the secret is only shown once
+2. Copy the **Client ID** and the **Client secret** immediately; the secret is only shown once
 
 <Callout type="warning" title="Save the secret now">
   GitHub only displays the client secret once. If you lose it, you'll need to
@@ -64,7 +64,7 @@ The GitHub sign-in button will appear on your login page immediately.
 <Callout type="info" title="GitHub as an OIDC provider">
   GitHub doesn't natively implement OpenID Connect discovery, but Nocturne
   handles this automatically. Just use <code>https://github.com</code> as
-  the issuer URL — Nocturne knows how to map GitHub's OAuth endpoints and
+  the issuer URL; Nocturne knows how to map GitHub's OAuth endpoints and
   retrieve user profile information.
 </Callout>
 

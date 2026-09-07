@@ -32,7 +32,7 @@
     type="button"
     onclick={copy}
     class="shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
-    aria-label={copied ? "Copied" : failed ? "Copy failed — select the text and copy it manually" : label}
+    aria-label={copied ? "Copied" : failed ? "Copy failed. Select the text and copy it manually" : label}
 >
     {#if copied}
         <Check class="h-4 w-4 text-green-500" />

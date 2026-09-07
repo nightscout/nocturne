@@ -1,5 +1,5 @@
 <script lang="ts">
-    // Stripped-down replay demo — real playback engine + chart, synthetic data,
+    // Stripped-down replay demo: real playback engine + chart, synthetic data,
     // no API calls. Wire to the real ReplayPanel once the portal auth story is done.
 
     import { onDestroy } from "svelte";
@@ -35,7 +35,7 @@
     const BASE_MS = new Date("2026-03-15T22:00:00").getTime();
     const SPAN_MS = 8 * 3600_000;
 
-    // Synthetic rules — each has a single leaf condition for the sidebar.
+    // Synthetic rules; each has a single leaf condition for the sidebar.
     // BG first crosses 180 at 4.2875 h (interpolated from waypoints [4.1,162]→[4.35,186]).
     // Sustained 30-min alarm fires 0.5 h later at 4.7875 h.
     const R1_FIRED_MS    = BASE_MS + 2.25   * 3600_000;
@@ -180,8 +180,8 @@
             const resolved = r.resolvedMs != null && r.resolvedMs <= currentMs;
             const active   = fired && !resolved;
             // Leaf truth:
-            //   threshold — true while BG is currently below 70
-            //   sustained — true once BG has been above 180 for 30 min (i.e. past fire time)
+            //   threshold: true while BG is currently below 70
+            //   sustained: true once BG has been above 180 for 30 min (i.e. past fire time)
             //                but the inner condition (BG > 180) must still hold
             const leafTrue = disabled ? false
                 : r.leaf.kind === "threshold"
@@ -374,11 +374,11 @@
                 </div>
             </div>
 
-            <!-- Events log — fixed height so new entries scroll in without shifting layout -->
+            <!-- Events log: fixed height so new entries scroll in without shifting layout -->
             <div class="h-24 shrink-0 overflow-y-auto mx-3 mt-2 mb-3 rounded-md border divide-y text-sm">
                 {#if firedEvents.length === 0}
                     <div class="flex items-center justify-center h-full text-xs text-muted-foreground/50 px-3 py-4">
-                        No events yet — playhead at start of window.
+                        No events yet; playhead at start of window.
                     </div>
                 {:else}
                     {#each firedEvents as ev (`${ev.kind}-${ev.tMs}`)}

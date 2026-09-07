@@ -7,7 +7,7 @@ category: nightscout
 tags: []
 summary: Setting up your Nocturne instance to be like Nightscout
 image:
-draft: false
+draft: true
 ---
 <p>Because Nocturne reimplements Nightscout’s API, the good news is that 99% of Nightscout’s features are already baked into Nocturne- they might just be under different names.</p>
 

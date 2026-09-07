@@ -16,7 +16,7 @@ from the messaging apps they already use. Four platforms are supported:
 - [Telegram](/docs/bots/telegram)
 - [WhatsApp](/docs/bots/whatsapp)
 
-Email delivery is handled by a separate provider — see [Email Alerts (Resend)](/docs/alerts/email).
+Email delivery is handled by a separate provider; see [Email Alerts (Resend)](/docs/alerts/email).
 
 All four platforms follow the same shape: create an app on the platform, collect its
 credentials, point its webhook at your Nocturne instance, and enter the credentials in
@@ -35,13 +35,13 @@ Once a platform is connected and a user has linked their account, they can:
 | `/status` | Show linked accounts and their status |
 
 The bot can also **deliver alerts**. Add the platform as a delivery channel on an alert rule
-(see **Receiving alerts** below) and excursions are pushed to the linked chat — with
+(see **Receiving alerts** below) and excursions are pushed to the linked chat, with
 **Acknowledge** and **Resolve** actions built into the message.
 
 ## Linking accounts
 
 A chat account has to be linked to a Nocturne account before it can see any glucose data.
-PHI is never stored on the chat platform — every reading is fetched over HTTPS through the
+PHI is never stored on the chat platform; every reading is fetched over HTTPS through the
 Nocturne API at request time, scoped to the linked account.
 
 To link, a user runs `/connect` in the chat app. The bot replies with a one-time
@@ -67,7 +67,7 @@ Every platform's credentials can be supplied two ways. Pick whichever fits your 
 3. Find the platform's card, fill in its fields, turn the **Enabled** switch on, and click **Save**.
 
 Credentials entered here are **encrypted at rest** and stored per-instance. The fields are
-write-only — once saved, a field shows a **Set** badge and the input stays blank; leave it
+write-only: once saved, a field shows a **Set** badge and the input stays blank; leave it
 blank on a later save to keep the existing value.
 
 <Callout type="warning" title="Restart after saving">
