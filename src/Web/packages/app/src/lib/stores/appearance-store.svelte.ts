@@ -28,7 +28,7 @@ import { PersistedState } from "runed";
 import { setMode, mode, userPrefersMode } from "mode-watcher";
 import supportedLocales from "../../../../../supportedLocales.json";
 import type { WidgetId } from "../api/generated/nocturne-api-client";
-import { DEFAULT_TOP_WIDGETS } from "../components/dashboard/widget-registry";
+import { DEFAULT_TOP_WIDGETS } from "../components/dashboard/top-widget-ids";
 import type { UserDisplayPreferences } from "$lib/api";
 import { weekStartName } from "../components/calendar/calendar-date";
 import { resolveCookieDomain } from "../utils/tenant-host";

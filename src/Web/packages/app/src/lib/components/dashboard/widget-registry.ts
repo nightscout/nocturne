@@ -1,15 +1,26 @@
 /**
  * What this build can render. Names, descriptions and placement come from the
  * backend widget catalogue; the picker offers that catalogue's top widgets
- * narrowed to the ids below.
+ * narrowed to the ids in top-widget-ids.ts, which this map must cover exactly:
+ * an id without a loader, or a loader without an id, fails to compile.
  */
 
 import { WidgetId } from "$lib/api/generated/nocturne-api-client";
 import type { Component } from "svelte";
+import type { TopWidgetId } from "./top-widget-ids";
+
+export {
+  DEFAULT_TOP_WIDGETS,
+  LOADABLE_TOP_WIDGETS,
+  TOP_WIDGET_IDS,
+  isTopWidgetId,
+  knownTopWidgets,
+  type TopWidgetId,
+} from "./top-widget-ids";
 
 type WidgetLoader = () => Promise<{ default: Component }>;
 
-const TOP_WIDGET_LOADERS = {
+const TOP_WIDGET_LOADERS: Record<TopWidgetId, WidgetLoader> = {
   [WidgetId.BgDelta]: () => import("./widgets/BgDeltaWidget.svelte"),
   [WidgetId.LastUpdated]: () => import("./widgets/LastUpdatedWidget.svelte"),
   [WidgetId.ConnectionStatus]: () =>
@@ -20,35 +31,7 @@ const TOP_WIDGET_LOADERS = {
   [WidgetId.DailySummary]: () => import("./widgets/DailySummaryWidget.svelte"),
   [WidgetId.Clock]: () => import("./widgets/ClockWidget.svelte"),
   [WidgetId.Tdd]: () => import("./widgets/TddWidget.svelte"),
-} satisfies Partial<Record<WidgetId, WidgetLoader>>;
-
-/** A widget id the grid can actually render. */
-export type TopWidgetId = keyof typeof TOP_WIDGET_LOADERS;
-
-export function isTopWidgetId(id: string): id is TopWidgetId {
-  return Object.hasOwn(TOP_WIDGET_LOADERS, id);
-}
-
-/** What the picker falls back to offering when the catalogue cannot be fetched. */
-export const LOADABLE_TOP_WIDGETS: TopWidgetId[] =
-  Object.keys(TOP_WIDGET_LOADERS).filter(isTopWidgetId);
-
-export const DEFAULT_TOP_WIDGETS: TopWidgetId[] = [
-  WidgetId.BgDelta,
-  WidgetId.TirChart,
-  WidgetId.Tdd,
-];
-
-/**
- * Selections persist per user, outlive any one release, and arrive from a
- * cookie any tenant subdomain can write, so a stored list can name an id this
- * build has no component for — or no id at all.
- */
-export function knownTopWidgets(
-  ids: readonly string[] | undefined
-): TopWidgetId[] {
-  return (ids ?? []).filter(isTopWidgetId);
-}
+};
 
 const cache = new Map<TopWidgetId, Promise<Component>>();
 
