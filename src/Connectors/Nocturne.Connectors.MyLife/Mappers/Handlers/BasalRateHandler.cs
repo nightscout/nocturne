@@ -25,19 +25,12 @@ internal sealed class BasalRateHandler : IMyLifeStateSpanHandler
 
         var isTemp = MyLifeMapperHelpers.TryGetInfoBool(info, MyLifeJsonKeys.IsTempBasalRate);
 
-        // Determine origin based on the event context:
-        // - IsTempBasalRate = true means algorithm adjusted (CamAPS, Loop, etc.)
-        // - IsTempBasalRate = false means scheduled basal from pump profile
-        // - Rate = 0 indicates suspended delivery
-        TempBasalOrigin origin;
-        if (rate <= 0)
-            origin = TempBasalOrigin.Suspended;
-        else if (isTemp)
-            // IsTempBasalRate = true indicates algorithm adjustment (e.g., CamAPS)
-            origin = TempBasalOrigin.Algorithm;
-        else
-            // Regular basal rate from pump schedule
-            origin = TempBasalOrigin.Scheduled;
+        // IsTempBasalRate = true is an algorithm adjustment (CamAPS), otherwise the rate comes from
+        // the pump's programmed schedule. A zero rate is still a rate on either path: CamAPS commands
+        // 0 U/h whenever it wants to withhold basal, and a profile segment can be programmed at 0 U/h.
+        // Neither is a suspension - mylife reports that as its own PumpSuspend/PumpResume event pair,
+        // which DeviceEventHandler maps.
+        var origin = isTemp ? TempBasalOrigin.Algorithm : TempBasalOrigin.Scheduled;
 
         var tempBasal = MyLifeStateSpanFactory.CreateTempBasal(ev, rate, origin);
         return [tempBasal];

@@ -37,13 +37,10 @@ internal sealed class BasalAmountHandler : IMyLifeStateSpanHandler
         // overall basal delivery timeline.
         var estimatedRate = insulin;
 
-        // Origin is "Scheduled" for basal amount events - these come from the
-        // pump's programmed basal schedule, not from algorithm adjustments
+        // Basal amount events come from the pump's programmed schedule, not from algorithm
+        // adjustments. An hour that delivered 0 U is a zero rate, not a suspension - mylife reports
+        // suspension as its own PumpSuspend/PumpResume event pair.
         var origin = TempBasalOrigin.Scheduled;
-
-        // Check if rate is 0 (suspended)
-        if (estimatedRate <= 0)
-            origin = TempBasalOrigin.Suspended;
 
         var tempBasal = MyLifeStateSpanFactory.CreateTempBasal(ev, estimatedRate, origin);
         return [tempBasal];

@@ -32,36 +32,10 @@ internal sealed class TempBasalHandler : IMyLifeStateSpanHandler
         )
             rate = absoluteRate;
 
-        // TempBasal events (event ID 4) are user-initiated temporary basal programs.
-        // This is different from IsTempBasalRate which indicates algorithm adjustments.
-        // Origin is "Manual" for user-initiated temp basal programs.
-        TempBasalOrigin origin;
-        if (rate <= 0)
-        {
-            // Zero rate or percentage indicates suspended delivery
-            // (though percentage-based would be relative to scheduled rate)
-            if (
-                MyLifeMapperHelpers.TryGetInfoDouble(
-                    info,
-                    MyLifeJsonKeys.Percentage,
-                    out var percent
-                )
-                && percent <= 0
-            )
-                origin = TempBasalOrigin.Suspended;
-            else if (
-                rate <= 0
-                && !MyLifeMapperHelpers.TryGetInfoDouble(info, MyLifeJsonKeys.Percentage, out _)
-            )
-                origin = TempBasalOrigin.Suspended;
-            else
-                origin = TempBasalOrigin.Manual;
-        }
-        else
-        {
-            // User-initiated temporary basal rate
-            origin = TempBasalOrigin.Manual;
-        }
+        // TempBasal events (event ID 4) are user-initiated temporary basal programs, so the origin is
+        // Manual whatever the rate. A 0 U/h or 0 % program is still a temp basal the user set, not a
+        // suspension - mylife reports suspension as its own PumpSuspend/PumpResume event pair.
+        var origin = TempBasalOrigin.Manual;
 
         var tempBasal = MyLifeStateSpanFactory.CreateTempBasal(ev, rate, origin);
 
