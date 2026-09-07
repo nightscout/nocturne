@@ -309,6 +309,24 @@ public interface IStatisticsService
         DateTime? endDate = null
     );
 
+    /// <summary>
+    /// The share of a report period a CGM was delivering readings, as it appears in
+    /// <see cref="DataQuality.CgmActivePercent"/>. Each reading covers one cadence of its stream;
+    /// what that is measured against is the registered devices' windows clipped to the report
+    /// where <paramref name="cgmDevices"/> is given, else the report period itself, which runs
+    /// from the first reading to the last where <paramref name="reportStart"/> or
+    /// <paramref name="reportEnd"/> is absent. Readings no given device claims are credited at
+    /// their own stream's cadence, and do not widen the period the given windows account for.
+    /// The <paramref name="readings"/> are expected canonically selected.
+    /// </summary>
+    /// <returns><c>null</c> without readings, or without a period to measure them against.</returns>
+    double? CalculateCgmActivePercent(
+        IEnumerable<SensorGlucose> readings,
+        DateTime? reportStart = null,
+        DateTime? reportEnd = null,
+        IReadOnlyCollection<CgmDeviceWindow>? cgmDevices = null
+    );
+
     // Site Change Analysis
 
     /// <summary>
@@ -370,3 +388,20 @@ public interface IStatisticsService
         TimeZoneInfo? userTimeZone = null,
         IEnumerable<BasalInjection>? basalInjections = null);
 }
+
+/// <summary>
+/// A registered CGM's claim on a report period, for
+/// <see cref="IStatisticsService.CalculateCgmActivePercent"/>.
+/// </summary>
+/// <param name="DeviceId">Matched against <see cref="SensorGlucose.PatientDeviceId"/>.</param>
+/// <param name="Start">When the device came into use; the report start when absent.</param>
+/// <param name="End">When the device went out of use; the report end when absent.</param>
+/// <param name="CadenceMinutes">
+/// How often the catalogue says the device reports, which it is held to whatever it uploaded at.
+/// </param>
+public sealed record CgmDeviceWindow(
+    Guid DeviceId,
+    DateTime? Start,
+    DateTime? End,
+    double? CadenceMinutes
+);

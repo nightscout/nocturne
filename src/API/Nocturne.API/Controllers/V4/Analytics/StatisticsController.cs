@@ -1278,7 +1278,9 @@ public class StatisticsController : ControllerBase
     /// CGM active percent, and per-algorithm segment breakdowns.</returns>
     /// <remarks>
     /// Fetches APS snapshots, temp basals, device events, glucose readings, and target-range schedules
-    /// from their respective repositories. CGM metrics are derived from <see cref="IStatisticsService.AnalyzeGlucoseData"/>.
+    /// from their respective repositories. CGM active time comes from
+    /// <see cref="IStatisticsService.CalculateCgmActivePercent"/>, measured against the registered
+    /// CGMs' windows where the tenant has registered any.
     /// Target range is optional; the method continues without it if the repository throws.
     /// </remarks>
     [HttpGet("aid-system-metrics")]
@@ -1322,7 +1324,7 @@ public class StatisticsController : ControllerBase
         var apsSnapshots = (await apsTask).ToList();
         var tempBasals   = (await basalTask).ToList();
         var deviceEvents = (await eventTask).ToList();
-        var glucose      = (await glucoseTask).ToList();
+        var glucose      = await _canonicalGlucose.SelectAsync((await glucoseTask).ToList(), HttpContext.RequestAborted);
 
         // Count site changes
         var siteChangeCount = deviceEvents.Count(e =>
@@ -1347,58 +1349,17 @@ public class StatisticsController : ControllerBase
                 .Distinct())
             : null;
 
-        // Calculate per-device CGM active time
-        double? cgmActivePercent = null;
-        if (glucose.Count > 0)
-        {
-            if (cgmDevices.Count > 0)
-            {
-                double totalExpected = 0;
-                double totalActual = 0;
-
-                foreach (var cgm in cgmDevices)
-                {
-                    var catalogEntry = cgm.CatalogId != null ? DeviceCatalog.GetById(cgm.CatalogId) : null;
-                    var interval = catalogEntry?.Cgm?.UpdateIntervalMinutes ?? 5;
-                    var deviceStart = cgm.StartDate.HasValue
-                        ? DateTime.SpecifyKind(cgm.StartDate.Value.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc)
-                        : startDt;
-                    var deviceEnd = cgm.EndDate.HasValue
-                        ? DateTime.SpecifyKind(cgm.EndDate.Value.ToDateTime(new TimeOnly(23, 59, 59)), DateTimeKind.Utc)
-                        : endDt;
-                    var windowStart = deviceStart > startDt ? deviceStart : startDt;
-                    var windowEnd = deviceEnd < endDt ? deviceEnd : endDt;
-                    var windowMinutes = (windowEnd - windowStart).TotalMinutes;
-
-                    if (windowMinutes <= 0) continue;
-
-                    totalExpected += windowMinutes / interval;
-                    totalActual += glucose.Count(r => r.PatientDeviceId == cgm.Id);
-                }
-
-                // Count unattributed readings with fallback interval
-                var unattributed = glucose.Count(r => r.PatientDeviceId == null);
-                if (unattributed > 0 && cgmDevices.Count == 0)
-                {
-                    var fallbackSource = glucose.FirstOrDefault(r => r.PatientDeviceId == null)?.DataSource;
-                    var fallbackInterval = DataSources.GetDefaultUpdateIntervalMinutes(fallbackSource);
-                    totalExpected += (endDt - startDt).TotalMinutes / fallbackInterval;
-                    totalActual += unattributed;
-                }
-
-                cgmActivePercent = totalExpected > 0
-                    ? Math.Min(Math.Round(totalActual / totalExpected * 100.0, 1), 100.0)
-                    : null;
-            }
-            else
-            {
-                // No device registered — use AnalyzeGlucoseData with defaults
-                var analytics = _statisticsService.AnalyzeGlucoseData(
-                    glucose, Enumerable.Empty<Bolus>(), Enumerable.Empty<CarbIntake>(),
-                    startDate: startDt, endDate: endDt);
-                cgmActivePercent = analytics.DataQuality.CgmActivePercent;
-            }
-        }
+        var cgmActivePercent = _statisticsService.CalculateCgmActivePercent(
+            glucose,
+            startDt,
+            endDt,
+            cgmDevices
+                .Select(d => new CgmDeviceWindow(
+                    d.Id,
+                    d.StartDate?.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
+                    d.EndDate?.ToDateTime(new TimeOnly(23, 59, 59), DateTimeKind.Utc),
+                    d.CatalogId != null ? DeviceCatalog.GetById(d.CatalogId)?.Cgm?.UpdateIntervalMinutes : null))
+                .ToList());
 
         // Get target range from target range schedule repository
         double? targetLow = null;
