@@ -727,6 +727,14 @@ public class TandemE2eSyncTests
             Record(SystemEvents, systemEvents);
         public Task<bool> PublishNotesAsync(IEnumerable<Note> records, string source, WriteOrigin origin, CancellationToken ct = default) =>
             Task.FromResult(true);
+        public Task<bool> PublishPatientDevicesAsync(IEnumerable<PatientDevice> devices, string source, WriteOrigin origin, CancellationToken ct = default) =>
+            Task.FromResult(true);
+        public Task<bool> PublishBodyWeightsAsync(IEnumerable<BodyWeight> records, string source, CancellationToken ct = default) =>
+            Task.FromResult(true);
+        public Task<bool> PublishStepCountsAsync(IEnumerable<StepCount> records, string source, CancellationToken ct = default) =>
+            Task.FromResult(true);
+        public Task<bool> PublishHeartRatesAsync(IEnumerable<HeartRate> records, string source, CancellationToken ct = default) =>
+            Task.FromResult(true);
         public Task<DateTime?> GetLatestActivityTimestampAsync(string source, CancellationToken ct = default) =>
             Task.FromResult<DateTime?>(null);
         public Task<DateTime?> GetBackfillLowWaterMarkAsync(string source, string collection, CancellationToken ct = default) =>

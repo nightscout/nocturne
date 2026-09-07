@@ -7,6 +7,7 @@ using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Health;
 using Nocturne.API.Services.Realtime;
 using Nocturne.API.Services.V4;
+using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Events;
@@ -107,6 +108,9 @@ public class ActivityWatermarkSourceScopeTests : IDisposable
             _stateSpanService,
             Mock.Of<ISystemEventRepository>(),
             Mock.Of<INoteRepository>(),
+            Mock.Of<IBodyWeightService>(),
+            Mock.Of<IStepCountService>(),
+            Mock.Of<IHeartRateService>(),
             Mock.Of<ITenantOwnerResolver>(),
             Mock.Of<ITenantAccessor>(),
             _context,

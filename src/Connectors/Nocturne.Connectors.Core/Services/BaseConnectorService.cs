@@ -1098,6 +1098,60 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     }
 
     /// <summary>
+    ///     Submits body-weight measurements to the API (upserted by deterministic Id).
+    /// </summary>
+    protected virtual async Task<bool> PublishBodyWeightDataAsync(
+        IEnumerable<BodyWeight> records,
+        TConfig config,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (_publisher == null || !_publisher.IsAvailable)
+        {
+            _logger?.LogWarning("Publisher not available for BodyWeight submission");
+            return false;
+        }
+
+        return await _publisher.Metadata.PublishBodyWeightsAsync(records, ConnectorSource, cancellationToken);
+    }
+
+    /// <summary>
+    ///     Submits step-count records to the API (upserted by deterministic Id).
+    /// </summary>
+    protected virtual async Task<bool> PublishStepCountDataAsync(
+        IEnumerable<StepCount> records,
+        TConfig config,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (_publisher == null || !_publisher.IsAvailable)
+        {
+            _logger?.LogWarning("Publisher not available for StepCount submission");
+            return false;
+        }
+
+        return await _publisher.Metadata.PublishStepCountsAsync(records, ConnectorSource, cancellationToken);
+    }
+
+    /// <summary>
+    ///     Submits heart-rate records to the API (upserted by deterministic Id).
+    /// </summary>
+    protected virtual async Task<bool> PublishHeartRateDataAsync(
+        IEnumerable<HeartRate> records,
+        TConfig config,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (_publisher == null || !_publisher.IsAvailable)
+        {
+            _logger?.LogWarning("Publisher not available for HeartRate submission");
+            return false;
+        }
+
+        return await _publisher.Metadata.PublishHeartRatesAsync(records, ConnectorSource, cancellationToken);
+    }
+
+    /// <summary>
     ///     Submits V4 DeviceEvent data directly to the API
     /// </summary>
     protected virtual async Task<bool> PublishDeviceEventDataAsync(

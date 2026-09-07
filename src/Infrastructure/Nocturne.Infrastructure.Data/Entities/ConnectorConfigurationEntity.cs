@@ -119,6 +119,14 @@ public class ConnectorConfigurationEntity : ITenantScoped, ISystemTimestamped
     public bool IsHealthy { get; set; } = true;
 
     /// <summary>
+    /// Per-resource incremental-sync cursors as a JSON object keyed by resource name
+    /// (e.g. <c>{"cgm/egvs":{"lastUpdatedAt":"...","lastGuid":"..."}}</c>). Connector runtime state,
+    /// written after each successful sync; null until a connector runs its first cursor-based sync.
+    /// </summary>
+    [Column("sync_cursors", TypeName = "jsonb")]
+    public string? SyncCursorsJson { get; set; }
+
+    /// <summary>
     /// Per-collection backfill low-water marks, serialized as a JSON map of collection key
     /// (e.g. "Glucose") to the oldest successfully published record time. A key means an
     /// earlier backfill crawl of that collection stopped before reaching the source's

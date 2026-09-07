@@ -30,8 +30,11 @@ namespace Nocturne.Connectors.Glooko.Configurations;
         SyncDataType.Food,
         SyncDataType.TempBasals,
         SyncDataType.StateSpans,
+        SyncDataType.TempBasals,
         SyncDataType.DeviceEvents,
-        SyncDataType.Profiles
+        SyncDataType.Profiles,
+        SyncDataType.Notes,
+        SyncDataType.Activity
     ]
 )]
 public class GlookoConnectorConfiguration : BaseConnectorConfiguration
@@ -74,4 +77,16 @@ public class GlookoConnectorConfiguration : BaseConnectorConfiguration
     /// </summary>
     [ConnectorProperty(ConnectorPropertyKey.V3IncludeCgmBackfill, DefaultValue = "false")]
     public bool V3IncludeCgmBackfill { get; set; } = false;
+
+    /// <summary>
+    ///     Sync via Glooko's granular SSV2 cursor protocol — the per-resource <c>/api/v2/{resource}</c>
+    ///     endpoints the mobile app uses — instead of the date-windowed web graph/batch flow. When enabled
+    ///     this path sources <em>every</em> data type incrementally by persisted per-resource cursor:
+    ///     glucose from the raw per-reading <c>cgm/egvs</c> stream, plus boluses, basals, meter readings,
+    ///     foods and device events (the latter from the net-new <c>pumps/events</c> feed). The windowed
+    ///     v2/v3 path is bypassed entirely, so <see cref="UseV3Api"/> has no effect while this is on.
+    ///     Experimental; off by default.
+    /// </summary>
+    [ConnectorProperty(ConnectorPropertyKey.UseSsv2Sync, DefaultValue = "false")]
+    public bool UseSsv2Sync { get; set; } = false;
 }

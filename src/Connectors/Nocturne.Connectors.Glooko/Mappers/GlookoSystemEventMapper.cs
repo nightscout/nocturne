@@ -67,6 +67,68 @@ public class GlookoSystemEventMapper
         return events;
     }
 
+    /// <summary>
+    /// Maps the SSV2 <c>pumps/alarms</c> feed to <see cref="SystemEvent"/>s — the SSV2 counterpart to the
+    /// v3 graph's <c>pumpAlarm</c> series. Severity comes straight from the record's <c>alarm_severity</c>
+    /// (rather than the v3 path's keyword heuristic); the alarm code is its <c>value</c>. Keyed on the
+    /// stable Glooko guid (raw-timestamp fallback) and skips soft-deleted records.
+    /// </summary>
+    public List<SystemEvent> TransformSsv2AlarmsToSystemEvents(IEnumerable<GlookoSsv2Alarm>? alarms)
+    {
+        var events = new List<SystemEvent>();
+        if (alarms == null) return events;
+
+        foreach (var alarm in alarms)
+        {
+            try
+            {
+                if (alarm.SoftDeleted || string.IsNullOrWhiteSpace(alarm.PumpTimestamp)) continue;
+
+                var raw = _timeMapper.GetRawGlookoDate(alarm.PumpTimestamp, null);
+                var timestamp = _timeMapper.GetCorrectedGlookoTime(raw);
+                var code = alarm.Value ?? alarm.AlarmType;
+
+                var key = !string.IsNullOrEmpty(alarm.Guid)
+                    ? $"glooko_ssv2_alarm_{alarm.Guid}"
+                    : $"glooko_ssv2_alarm_raw_{alarm.PumpTimestamp}_{code}";
+
+                events.Add(new SystemEvent
+                {
+                    OriginalId = key,
+                    EventType = MapAlarmSeverity(alarm.AlarmSeverity),
+                    Category = SystemEventCategory.Pump,
+                    Code = code,
+                    Description = code ?? "Unknown alarm",
+                    Mills = new DateTimeOffset(timestamp).ToUnixTimeMilliseconds(),
+                    Source = _connectorSource,
+                    Metadata = new Dictionary<string, object>
+                    {
+                        { "severity", alarm.AlarmSeverity ?? "unknown" },
+                        { "alarmType", alarm.AlarmType ?? "" }
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[{ConnectorSource}] Error mapping SSV2 alarm", _connectorSource);
+            }
+        }
+
+        _logger.LogInformation(
+            "[{ConnectorSource}] Transformed {Count} system events from SSV2 alarms", _connectorSource, events.Count);
+
+        return events;
+    }
+
+    private static SystemEventType MapAlarmSeverity(string? severity) =>
+        (severity ?? string.Empty).ToLowerInvariant() switch
+        {
+            "hazard" => SystemEventType.Hazard,
+            "warning" => SystemEventType.Warning,
+            "info" or "information" or "informational" => SystemEventType.Info,
+            _ => SystemEventType.Alarm
+        };
+
     private static SystemEventType DetermineAlarmEventType(string? alarmType, string? alarmCode)
     {
         var type = (alarmType ?? "").ToUpperInvariant();

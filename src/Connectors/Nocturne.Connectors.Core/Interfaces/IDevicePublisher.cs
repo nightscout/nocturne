@@ -17,6 +17,16 @@ public interface IDevicePublisher
         WriteOrigin origin, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Upserts the patient's hardware inventory (pumps, CGMs) as <see cref="PatientDevice"/> records,
+    /// keyed by the deterministic <see cref="PatientDevice.Id"/> so re-syncs update in place rather
+    /// than duplicating.
+    /// </summary>
+    Task<bool> PublishPatientDevicesAsync(
+        IEnumerable<PatientDevice> devices,
+        string source,
+        WriteOrigin origin, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Returns the timestamp of the most recent device-status record for the current tenant,
     /// used by connectors to resume catch-up from where they left off, or <c>null</c> if none exist.
     /// </summary>

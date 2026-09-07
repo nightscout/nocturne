@@ -23,6 +23,14 @@ internal sealed class GlookoSyncContext
         TempBasalMapper = new GlookoTempBasalMapper(connectorSource, TimeMapper, logger);
         SystemEventMapper = new GlookoSystemEventMapper(connectorSource, TimeMapper, logger);
         ProfileMapper = new GlookoProfileMapper(connectorSource, logger);
+        PumpEventMapper = new GlookoPumpEventMapper(connectorSource, TimeMapper, logger);
+        DeviceMapper = new GlookoDeviceMapper(connectorSource, TimeMapper, logger);
+        NoteMapper = new GlookoNoteMapper(connectorSource, TimeMapper, logger);
+        ActivityMapper = new GlookoActivityMapper(connectorSource, TimeMapper, logger);
+        BodyWeightMapper = new GlookoBodyWeightMapper(connectorSource, TimeMapper, logger);
+        StepCountMapper = new GlookoStepCountMapper(connectorSource, TimeMapper, logger);
+        HeartRateMapper = new GlookoHeartRateMapper(connectorSource, TimeMapper, logger);
+        SettingsProfileMapper = new GlookoSettingsProfileMapper(connectorSource, logger);
     }
 
     internal GlookoConnectorConfiguration Config { get; }
@@ -34,6 +42,17 @@ internal sealed class GlookoSyncContext
     internal GlookoTempBasalMapper TempBasalMapper { get; }
     internal GlookoSystemEventMapper SystemEventMapper { get; }
     internal GlookoProfileMapper ProfileMapper { get; }
+
+    // SSV2-only mappers. They are built here rather than in the SSV2 path so that, like every
+    // mapper above, they are bound to this run's time mapping and cannot be shared across tenants.
+    internal GlookoPumpEventMapper PumpEventMapper { get; }
+    internal GlookoDeviceMapper DeviceMapper { get; }
+    internal GlookoNoteMapper NoteMapper { get; }
+    internal GlookoActivityMapper ActivityMapper { get; }
+    internal GlookoBodyWeightMapper BodyWeightMapper { get; }
+    internal GlookoStepCountMapper StepCountMapper { get; }
+    internal GlookoHeartRateMapper HeartRateMapper { get; }
+    internal GlookoSettingsProfileMapper SettingsProfileMapper { get; }
 
     /// <summary>Glooko's session cookie, which doubles as this run's auth token. Null until authenticated.</summary>
     internal string? SessionCookie { get; set; }

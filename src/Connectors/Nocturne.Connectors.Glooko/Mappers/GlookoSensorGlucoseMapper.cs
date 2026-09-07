@@ -40,6 +40,55 @@ public class GlookoSensorGlucoseMapper
         return results;
     }
 
+    /// <summary>
+    /// Maps SSV2 <c>cgm/egvs</c> records to SensorGlucose. Values are mg/dL × 100 (always mg/dL,
+    /// independent of account units); <c>calculated</c> (interpolated) and <c>softDeleted</c> records
+    /// are skipped. Keyed on Glooko's per-reading guid so re-imports upsert in place.
+    /// </summary>
+    public IEnumerable<SensorGlucose> TransformEgvsToSensorGlucose(IEnumerable<GlookoEgv>? egvs)
+    {
+        var results = new List<SensorGlucose>();
+        if (egvs == null) return results;
+
+        foreach (var egv in egvs)
+        {
+            if (egv.Calculated || egv.SoftDeleted || egv.GlucoseValue <= 0) continue;
+
+            var date = ParseV2Timestamp(egv.DisplayTime);
+            if (date == null) continue;
+
+            // mg/dL × 100, same integer encoding as the v2 cgm/readings feed.
+            var mgdl = egv.GlucoseValue / 100.0;
+
+            // Prefer Glooko's guid; else the RAW fake-UTC display string (stable across timezone
+            // re-correction, unlike corrected ticks) so a re-sync upserts rather than duplicates.
+            var key = !string.IsNullOrEmpty(egv.Guid)
+                ? $"glooko_egv_{egv.Guid}"
+                : $"glooko_egv_raw_{egv.DisplayTime}";
+
+            var now = DateTime.UtcNow;
+            results.Add(new SensorGlucose
+            {
+                Id = Guid.CreateVersion7(),
+                Timestamp = date.Value,
+                LegacyId = key,
+                SyncIdentifier = key,
+                Device = _connectorSource,
+                DataSource = _connectorSource,
+                Mgdl = mgdl,
+                Direction = ParseTrendToDirection(egv.TrendArrow),
+                CreatedAt = now,
+                ModifiedAt = now
+            });
+        }
+
+        _logger.LogInformation(
+            "[{ConnectorSource}] Transformed {Count} SensorGlucose records from SSV2 egvs",
+            _connectorSource, results.Count);
+
+        return results;
+    }
+
     public IEnumerable<SensorGlucose> TransformV3ToSensorGlucose(GlookoV3GraphResponse graphData, string? meterUnits)
     {
         var results = new List<SensorGlucose>();

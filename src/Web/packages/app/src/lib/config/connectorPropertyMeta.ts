@@ -190,6 +190,12 @@ export const connectorPropertyMeta = {
     description: 'Use the newer Glooko V3 API for data retrieval',
     category: 'Advanced',
   },
+  UseSsv2Sync: {
+    label: 'Use Granular Sync (Experimental)',
+    description:
+      'Sync each kind of data from its own Glooko feed, resuming where the last sync stopped instead of re-reading a date window. Imports pen injections, app-logged doses, extended boluses and more. Replaces the V3 API setting when on.',
+    category: 'Advanced',
+  },
   V3IncludeCgmBackfill: {
     label: 'Include CGM Backfill',
     description: 'Include historical CGM data when using V3 API',

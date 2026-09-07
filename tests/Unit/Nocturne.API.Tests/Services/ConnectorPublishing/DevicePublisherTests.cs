@@ -39,6 +39,7 @@ public class DevicePublisherTests
             _mockPatientDeviceStamper.Object,
             Mock.Of<IAuditContext>(),
             _mockApsSnapshotRepository.Object,
+            Mock.Of<IPatientDeviceRepository>(),
             _mockPumpSnapshotRepository.Object,
             _mockUploaderSnapshotRepository.Object,
             NullLogger<DevicePublisher>.Instance

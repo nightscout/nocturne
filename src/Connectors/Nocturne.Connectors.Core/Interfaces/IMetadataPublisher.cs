@@ -56,6 +56,33 @@ public interface IMetadataPublisher
         WriteOrigin origin, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Upserts body-weight measurements, keyed by the connector's deterministic <see cref="BodyWeight.Id"/>
+    /// (a GUID) so re-syncs update in place rather than duplicating.
+    /// </summary>
+    Task<bool> PublishBodyWeightsAsync(
+        IEnumerable<BodyWeight> records,
+        string source,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Upserts step-count records, keyed by the connector's deterministic <see cref="StepCount.Id"/> (a GUID)
+    /// so re-syncs update in place rather than duplicating.
+    /// </summary>
+    Task<bool> PublishStepCountsAsync(
+        IEnumerable<StepCount> records,
+        string source,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Upserts heart-rate records, keyed by the connector's deterministic <see cref="HeartRate.Id"/> (a GUID)
+    /// so re-syncs update in place rather than duplicating.
+    /// </summary>
+    Task<bool> PublishHeartRatesAsync(
+        IEnumerable<HeartRate> records,
+        string source,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Returns the timestamp of the most recent activity record written by
     /// <paramref name="source"/>, used by connectors to resume catch-up from where they left off,
     /// or <c>null</c> when this source has written none.

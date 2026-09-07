@@ -63,6 +63,145 @@ public static class GlookoConstants
     public const string V3DeviceSettingsPath = "/api/v3/devices_and_settings";
     public const string V3HistoriesPath = "/api/v3/users/summary/histories";
 
+    // -- SSV2 sync (mobile-app granular sync) ---------------------------------
+
+    /// <summary>
+    ///     Granular per-reading CGM stream consumed by the Glooko mobile app, paginated by cursor.
+    ///     One resource in the broader SSV2 sync protocol (<c>com.glooko.serversync</c>).
+    /// </summary>
+    public const string Ssv2EgvsPath = "/api/v2/cgm/egvs";
+
+    /// <summary>
+    ///     Granular pump device-event stream (reservoir/site/cannula changes, prime, suspend/resume, etc.).
+    /// </summary>
+    public const string Ssv2PumpEventsPath = "/api/v2/pumps/events";
+
+    /// <summary>
+    ///     Manual pen-injected boluses (rapid/short-acting). SSV2 counterpart to the v3 graph's
+    ///     <c>gkInsulinBolus</c> series — the only insulin source for MDI (pen) users.
+    /// </summary>
+    public const string Ssv2InjectionBolusesPath = "/api/v2/pumps/injection_boluses";
+
+    /// <summary>
+    ///     Manual pen-injected basal (long/ultra-long-acting). SSV2 counterpart to the v3 graph's
+    ///     <c>gkInsulinBasal</c> series.
+    /// </summary>
+    public const string Ssv2InjectionBasalsPath = "/api/v2/pumps/injection_basals";
+
+    /// <summary>
+    ///     Pump alarms (occlusion, empty reservoir, etc.). SSV2 counterpart to the v3 graph's
+    ///     <c>pumpAlarm</c> series. Note: records are snake_case Mongo documents, unlike the other
+    ///     camelCase pump feeds.
+    /// </summary>
+    public const string Ssv2AlarmsPath = "/api/v2/pumps/alarms";
+
+    /// <summary>
+    ///     Standalone carb entries logged in the Glooko/CGM app (not tied to a bolus). SSV2 counterpart
+    ///     to the v3 graph's <c>carbAll</c> series.
+    /// </summary>
+    public const string Ssv2CarbsEventsPath = "/api/v2/cgm/carbs_events";
+
+    /// <summary>
+    ///     Extended/square-wave and dual-wave boluses (an initial portion plus a portion delivered over a
+    ///     duration). Net-new vs the windowed path and the v3 graph (which has no extended-bolus series).
+    /// </summary>
+    public const string Ssv2ExtendedBolusesPath = "/api/v2/pumps/extended_boluses";
+
+    /// <summary>
+    ///     App-logged insulin doses for CGM-only/MDI users (logged in the app, not pump-delivered).
+    ///     "fast_acting" → rapid Bolus; "long_acting"/"intermediate" → BasalInjection. Records are
+    ///     snake_case Mongo documents.
+    /// </summary>
+    public const string Ssv2InsulinEventsPath = "/api/v2/cgm/insulin_events";
+
+    /// <summary>
+    ///     App-logged free-text notes (camelCase) → Note.
+    /// </summary>
+    public const string Ssv2NotesPath = "/api/v2/notes";
+
+    /// <summary>
+    ///     App-logged exercises (camelCase) → Activity. Duration is in seconds.
+    /// </summary>
+    public const string Ssv2ExercisesPath = "/api/v2/exercises";
+
+    /// <summary>
+    ///     A second app-logged exercise source (snake_case Mongo) → Activity. Duration is in minutes and
+    ///     intensity is a string, unlike <see cref="Ssv2ExercisesPath"/>.
+    /// </summary>
+    public const string Ssv2ExerciseEventsPath = "/api/v2/cgm/exercise_events";
+
+    /// <summary>
+    ///     Pump basal/bolus program snapshots → Nocturne Profiles. The SSV2-native profile source that lets
+    ///     the SSV2 path stop calling the v3 <c>devices_and_settings</c> endpoint. Records are snake_case
+    ///     Mongo documents (like <c>pumps/alarms</c>); segment times are seconds-of-day and ISF/target glucose
+    ///     values are mg/dL × 100.
+    /// </summary>
+    public const string Ssv2PumpSettingsPath = "/api/v2/pumps/settings";
+
+    /// <summary>
+    ///     The patient's pump hardware inventory (brand/model/serial per pump ever used). Maps to
+    ///     PatientDevice (InsulinPump), distinct from the per-event pumps/* feeds.
+    /// </summary>
+    public const string Ssv2PumpsPath = "/api/v2/pumps";
+
+    /// <summary>
+    ///     The patient's CGM hardware inventory (brand/model/serial per sensor system). Maps to
+    ///     PatientDevice (CGM).
+    /// </summary>
+    public const string Ssv2CgmDevicesPath = "/api/v2/cgm_devices";
+
+    /// <summary>
+    ///     Manual + HealthKit body-weight entries → BodyWeight. <c>value</c> is in grams. The third-party
+    ///     counterpart is <see cref="Ssv2ValidicWeightsPath"/> (kilograms).
+    /// </summary>
+    public const string Ssv2WeightsPath = "/api/v2/weights";
+
+    /// <summary>
+    ///     Third-party (Validic) body-weight entries → BodyWeight. <c>weight</c> is already in kilograms and
+    ///     <c>bmi</c> may be present, unlike the manual/HealthKit <see cref="Ssv2WeightsPath"/> feed (grams).
+    /// </summary>
+    public const string Ssv2ValidicWeightsPath = "/api/v2/validic/weights";
+
+    /// <summary>
+    ///     Daily third-party (Validic) activity summary → StepCount. <c>steps</c> is the day's total step
+    ///     count. (Per-workout steps also appear in <see cref="Ssv2ValidicFitnessesPath"/> but are not
+    ///     ingested, to avoid double-counting the daily total.)
+    /// </summary>
+    public const string Ssv2RoutinesPath = "/api/v2/validic/routines";
+
+    /// <summary>
+    ///     Third-party (Validic) workouts. Carries per-workout steps but <b>no</b> heart rate; not currently
+    ///     ingested (steps come from <see cref="Ssv2RoutinesPath"/>). Kept as a documented path for reference.
+    /// </summary>
+    public const string Ssv2ValidicFitnessesPath = "/api/v2/validic/fitnesses";
+
+    /// <summary>
+    ///     Third-party (Validic) biometric panel (cholesterol, blood pressure, SpO2, resting heart rate, …).
+    ///     The only heart-rate-bearing SSV2 source: the <c>restingHeartrate</c> field → HeartRate. Glooko has
+    ///     no continuous/time-series HR stream.
+    /// </summary>
+    public const string Ssv2BiometricMeasurementsPath = "/api/v2/validic/biometric_measurements";
+
+    /// <summary>
+    ///     Sentinel <c>lastGuid</c> that starts an SSV2 cursor scan from the beginning.
+    /// </summary>
+    public const string Ssv2InitialLastGuid = "00000000-0000-0000-0000-000000000000";
+
+    /// <summary>
+    ///     Sentinel <c>lastUpdatedAt</c> (Unix epoch) that starts an SSV2 cursor scan from the beginning.
+    /// </summary>
+    public const string Ssv2InitialLastUpdatedAt = "1970-01-01T00:00:00.000Z";
+
+    /// <summary>
+    ///     Records requested per SSV2 page. The app uses a few hundred; this bounds memory per call.
+    /// </summary>
+    public const int Ssv2PageSize = 500;
+
+    /// <summary>
+    ///     Hard cap on SSV2 pages per resource per sync, so a non-advancing cursor can never loop forever.
+    /// </summary>
+    public const int Ssv2MaxPages = 1000;
+
     // -- V3 graph series ------------------------------------------------------
 
     /// <summary>
