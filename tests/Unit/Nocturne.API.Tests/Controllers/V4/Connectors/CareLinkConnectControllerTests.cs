@@ -17,7 +17,7 @@ namespace Nocturne.API.Tests.Controllers.V4.Connectors;
 /// <summary>
 /// Verifies the desktop link-code mint: the token must be pinned to the caller's tenant and
 /// subject, carry only the connect scope, and the link code must point at the host the user
-/// actually used (X-Forwarded-Host when proxied).
+/// actually used, which the forwarded-headers middleware has already resolved onto the request.
 /// </summary>
 public sealed class CareLinkConnectControllerTests
 {
@@ -111,7 +111,7 @@ public sealed class CareLinkConnectControllerTests
     }
 
     [Fact]
-    public void DesktopToken_prefers_the_forwarded_host_and_scheme()
+    public void DesktopToken_uses_the_host_and_scheme_the_pipeline_resolved()
     {
         _jwtService
             .Setup(j => j.GenerateAccessToken(
@@ -121,9 +121,9 @@ public sealed class CareLinkConnectControllerTests
             .Returns("t");
 
         var controller = Build(Tenant(), Auth());
-        controller.HttpContext.Request.Host = new HostString("nocturne-api", 8080);
-        controller.HttpContext.Request.Headers["X-Forwarded-Host"] = "acme.localhost:1612";
-        controller.HttpContext.Request.Headers["X-Forwarded-Proto"] = "https";
+        controller.HttpContext.Request.Host = new HostString("acme.localhost", 1612);
+        controller.HttpContext.Request.Scheme = "https";
+        controller.HttpContext.Request.Headers["X-Forwarded-Host"] = "nocturne-api:8080";
 
         var result = controller.DesktopToken();
 

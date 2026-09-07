@@ -55,7 +55,6 @@ public class OidcCallbackRedirectMiddlewareTests
         context.Request.Host = new HostString("nocturne.run");
         context.Request.Path = "/api/auth/oidc/link/callback";
         context.Request.QueryString = new QueryString($"?code=abc&state={state}");
-        context.Request.Headers["X-Forwarded-Proto"] = "https";
 
         await middleware.InvokeAsync(context);
 
@@ -76,7 +75,6 @@ public class OidcCallbackRedirectMiddlewareTests
         context.Request.Host = new HostString("nocturne.run");
         context.Request.Path = "/api/auth/oidc/callback";
         context.Request.QueryString = new QueryString($"?code=xyz&state={state}");
-        context.Request.Headers["X-Forwarded-Proto"] = "https";
 
         await middleware.InvokeAsync(context);
 
@@ -182,20 +180,57 @@ public class OidcCallbackRedirectMiddlewareTests
     }
 
     [Fact]
-    public async Task Uses_x_forwarded_host_for_subdomain_detection()
+    public async Task Stray_forwarded_host_header_does_not_stand_in_for_a_subdomain()
     {
-        var called = false;
-        var middleware = CreateMiddleware(_ => { called = true; return Task.CompletedTask; });
+        var middleware = CreateMiddleware();
         var state = StateFor("ryceg");
         var context = NewContext();
-        context.Request.Host = new HostString("nocturne-api");
-        context.Request.Headers["X-Forwarded-Host"] = "ryceg.nocturne.run";
+        context.Request.Scheme = "https";
+        context.Request.Host = new HostString("nocturne.run");
+        context.Request.Headers["X-Forwarded-Host"] = "evil.nocturne.run";
         context.Request.Path = "/api/auth/oidc/link/callback";
         context.Request.QueryString = new QueryString($"?code=abc&state={state}");
 
         await middleware.InvokeAsync(context);
 
-        called.Should().BeTrue();
+        context.Response.Headers.Location.ToString()
+            .Should().StartWith("https://ryceg.nocturne.run/api/auth/oidc/link/callback?");
+    }
+
+    /// <summary>
+    /// Local development runs the whole stack over plain http behind a gateway that forwards
+    /// <c>X-Forwarded-Proto: http</c>, so an https redirect here points at a port nothing serves.
+    /// </summary>
+    [Fact]
+    public async Task Redirect_keeps_http_when_that_is_what_the_caller_used()
+    {
+        var middleware = CreateMiddleware();
+        var state = StateFor("ryceg");
+        var context = NewContext();
+        context.Request.Scheme = "http";
+        context.Request.Host = new HostString("nocturne.run");
+        context.Request.Path = "/api/auth/oidc/callback";
+        context.Request.QueryString = new QueryString($"?code=abc&state={state}");
+
+        await middleware.InvokeAsync(context);
+
+        context.Response.Headers.Location.ToString().Should().StartWith("http://ryceg.nocturne.run/");
+    }
+
+    [Fact]
+    public async Task Redirect_falls_back_to_https_for_a_scheme_no_browser_would_follow()
+    {
+        var middleware = CreateMiddleware();
+        var state = StateFor("ryceg");
+        var context = NewContext();
+        context.Request.Scheme = "javascript";
+        context.Request.Host = new HostString("nocturne.run");
+        context.Request.Path = "/api/auth/oidc/callback";
+        context.Request.QueryString = new QueryString($"?code=abc&state={state}");
+
+        await middleware.InvokeAsync(context);
+
+        context.Response.Headers.Location.ToString().Should().StartWith("https://ryceg.nocturne.run/");
     }
 
     [Fact]

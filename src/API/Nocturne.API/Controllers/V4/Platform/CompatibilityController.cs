@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using Nocturne.API.Attributes;
 using Nocturne.API.Configuration;
 using Nocturne.API.Controllers.V4.Base;
+using Nocturne.API.Extensions;
 using Nocturne.API.Services.Compatibility;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Core.Models;
@@ -298,7 +299,7 @@ public class CompatibilityController : ControllerBase
         var nightscoutUrl = nightscoutBaseUrl + queryPath;
 
         // Get Nocturne base URL from current request
-        var nocturneBaseUrl = $"{Request.Scheme}://{Request.Host}";
+        var nocturneBaseUrl = $"{Request.PublicScheme()}://{Request.Host}";
         var nocturneUrl = nocturneBaseUrl + queryPath;
 
         _logger.LogInformation(

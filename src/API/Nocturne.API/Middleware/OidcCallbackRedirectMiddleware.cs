@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Options;
+using Nocturne.API.Extensions;
 using Nocturne.API.Multitenancy;
 using Nocturne.Core.Contracts.Auth;
 
@@ -69,8 +70,7 @@ public partial class OidcCallbackRedirectMiddleware
             return;
         }
 
-        var host = context.Request.Headers["X-Forwarded-Host"].FirstOrDefault()?.Split(':')[0]
-                   ?? context.Request.Host.Host;
+        var host = context.Request.Host.Host;
         var baseDomainHost = _config.BaseDomain.Split(':')[0];
 
         // If there's already a subdomain, pass through — the callback is on the right host.
@@ -102,9 +102,8 @@ public partial class OidcCallbackRedirectMiddleware
             return;
         }
 
-        var scheme = context.Request.Headers["X-Forwarded-Proto"].FirstOrDefault()
-                     ?? context.Request.Scheme;
-        var redirectUrl = $"{scheme}://{tenantSlug}.{baseDomainHost}{context.Request.Path}{context.Request.QueryString}";
+        var redirectUrl = $"{context.Request.PublicScheme()}://{tenantSlug}.{baseDomainHost}"
+                          + $"{context.Request.Path}{context.Request.QueryString}";
 
         _logger.LogInformation(
             "Redirecting OIDC callback from apex to tenant subdomain {TenantSlug}",

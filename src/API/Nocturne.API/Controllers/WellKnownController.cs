@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Extensions;
 using Nocturne.API.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
@@ -174,7 +175,7 @@ public class WellKnownController : ControllerBase
 
     private string GetBaseUrl()
     {
-        return _baseDomain.PublicOrigin ?? $"{Request.Scheme}://{Request.Host}";
+        return _baseDomain.PublicOrigin ?? $"{Request.PublicScheme()}://{Request.Host}";
     }
 }
 
