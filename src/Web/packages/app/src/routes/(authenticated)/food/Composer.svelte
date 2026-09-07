@@ -109,6 +109,7 @@
      another, close) — submit and required-field checks come from the form. -->
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <form
+	data-testid="food-composer"
 	class="mx-4 my-3 rounded-[10px] p-3.5"
 	style="border: 1px solid var(--carbs-border); background: var(--carbs-bg-subtle)"
 	onsubmit={handleSubmit}
@@ -207,7 +208,7 @@
 	<div class="mt-3 flex items-center justify-between">
 		<!-- Details toggle -->
 		<Collapsible.Root bind:open={showDetails}>
-			<Collapsible.Trigger class="inline-flex cursor-pointer select-none items-center gap-1.5 text-xs text-muted-foreground">
+			<Collapsible.Trigger data-testid="food-composer-details" class="inline-flex cursor-pointer select-none items-center gap-1.5 text-xs text-muted-foreground">
 				<span class="inline-flex transition-transform" style:transform={showDetails ? 'rotate(90deg)' : ''}><ChevronRight class="h-3 w-3" /></span> {showDetails ? 'Hide' : 'Add'} fat, protein, category...
 			</Collapsible.Trigger>
 			<Collapsible.Content>

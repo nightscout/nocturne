@@ -585,6 +585,7 @@
       <Table.Body>
         {#each table.getRowModel().rows as row (row.id)}
           <Table.Row
+            data-testid="treatment-row"
             data-state={row.getIsSelected() ? "selected" : undefined}
             class={onRowClick ? "cursor-pointer" : ""}
             onclick={(e: MouseEvent) => {

@@ -4,6 +4,7 @@ title: Carb entries
 
 <script>
   import Callout from '@nocturne/cms/components/Callout.svelte';
+  import Screenshot from '$lib/components/docs/Screenshot.svelte';
 </script>
 
 # Carb entries
@@ -22,6 +23,8 @@ hangs off it.
 | **Carb time** | Minutes of offset, used by some uploaders to say "these carbs are for later". |
 | **Fat** and **protein** | Grams, when the source reports them. |
 | **Source and device** | Which app or pump the entry came from. |
+
+<Screenshot id="carb-entry-edit" />
 
 Fat and protein are real fields, not carbs in disguise. Some older uploaders
 convert fat and protein into a series of invented carb entries spread over the

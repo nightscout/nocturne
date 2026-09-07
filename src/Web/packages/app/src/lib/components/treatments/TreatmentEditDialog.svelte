@@ -441,7 +441,7 @@
   </Sheet.Root>
 {:else}
   <Dialog.Root bind:open onOpenChange={(o) => !o && onClose()}>
-    <Dialog.Content class="max-w-lg max-h-[90vh] overflow-y-auto">
+    <Dialog.Content data-testid="treatment-edit-dialog" class="max-w-lg max-h-[90vh] overflow-y-auto">
       {@render dialogBody()}
     </Dialog.Content>
   </Dialog.Root>

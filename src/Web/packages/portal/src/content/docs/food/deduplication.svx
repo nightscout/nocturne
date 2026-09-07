@@ -4,6 +4,7 @@ title: When the same carbs arrive twice
 
 <script>
   import Callout from '@nocturne/cms/components/Callout.svelte';
+  import Screenshot from '$lib/components/docs/Screenshot.svelte';
 </script>
 
 # When the same carbs arrive twice
@@ -83,6 +84,8 @@ Three times, so that a duplicate is caught whichever way it arrives:
   **Run Deduplication** action walks your entire history. It reports how many
   records it processed, how many groups it created and how many duplicates it
   found, and it can be cancelled while it runs.
+
+<Screenshot id="deduplication-card" />
 
 The full pass is the one to reach for after a migration, after connecting a
 second data source that overlaps with a first, or any time you are looking at

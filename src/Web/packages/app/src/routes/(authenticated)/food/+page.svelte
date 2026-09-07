@@ -55,7 +55,7 @@
   <div class="overflow-hidden rounded-[14px] border border-border bg-card">
     <!-- Toolbar -->
     <div class="flex flex-wrap items-center gap-2.5 border-b border-border bg-card px-4 py-3.5">
-      <div class="flex h-[38px] min-w-[180px] flex-1 items-center gap-2 rounded-lg border border-border bg-white/[0.04] px-2.5 text-[13px] focus-within:border-ring focus-within:bg-white/[0.07]">
+      <div data-testid="food-search" class="flex h-[38px] min-w-[180px] flex-1 items-center gap-2 rounded-lg border border-border bg-white/[0.04] px-2.5 text-[13px] focus-within:border-ring focus-within:bg-white/[0.07]">
         <Search class="h-[15px] w-[15px] text-muted-foreground" />
         <input
           class="h-full flex-1 border-0 bg-transparent p-0 text-foreground outline-0"
@@ -68,6 +68,7 @@
       </div>
 
       <button
+        data-testid="food-favorites-filter"
         class="flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 text-xs cursor-pointer transition-all"
         style:background={state.favoritesOnly ? 'oklch(1 0 0 / 0.08)' : 'transparent'}
         style:border-color={state.favoritesOnly ? 'oklch(1 0 0 / 0.16)' : undefined}
@@ -82,7 +83,7 @@
       <Separator orientation="vertical" class="h-5" />
 
       <Select.Root type="single" bind:value={state.sort}>
-        <Select.Trigger class="h-8 rounded-lg border border-border bg-white/4 px-2.5 text-xs">
+        <Select.Trigger data-testid="food-sort" class="h-8 rounded-lg border border-border bg-white/4 px-2.5 text-xs">
           {state.sort === 'name' ? 'Sort: A → Z' : state.sort === 'carbs' ? 'Sort: Carbs (high)' : 'Sort: Recently added'}
         </Select.Trigger>
         <Select.Content>

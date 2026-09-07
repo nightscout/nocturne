@@ -14,6 +14,21 @@
 			}
 		}
 	},
+	"carb-entry-edit": {
+		"alt": "The Edit Record box for a carb entry. A line across the top gives when it was recorded and which app and device sent it; under that are the date and time, the grams of carbohydrate, and boxes for absorption time and carb time, both left empty by a source that reported neither. A Linked Records list at the bottom shows the other records written as part of the same event.",
+		"variants": {
+			"light": {
+				"file": "images/carb-entry-edit.light.webp",
+				"width": 1024,
+				"height": 1214
+			},
+			"dark": {
+				"file": "images/carb-entry-edit.dark.webp",
+				"width": 1024,
+				"height": 1214
+			}
+		}
+	},
 	"clock-builder": {
 		"alt": "The clock face editor. The face fills the canvas showing the reading it will display, with a plus button above and below it for adding another row of information, and a toolbar across the top to undo, save and preview.",
 		"variants": {
@@ -133,6 +148,21 @@
 			}
 		}
 	},
+	"deduplication-card": {
+		"alt": "The Deduplicate Records tool, under Data Maintenance on the Connectors and Apps settings page. It explains that it links records from different data sources that describe the same event, and offers a Run Deduplication button.",
+		"variants": {
+			"light": {
+				"file": "images/deduplication-card.light.webp",
+				"width": 1644,
+				"height": 292
+			},
+			"dark": {
+				"file": "images/deduplication-card.dark.webp",
+				"width": 1644,
+				"height": 292
+			}
+		}
+	},
 	"first-run": {
 		"alt": "The Nocturne home screen on a brand new site, before any device or app has sent readings. The graph is empty and every panel reads zero or \"No data available\".",
 		"variants": {
@@ -145,6 +175,56 @@
 				"file": "images/first-run.dark.webp",
 				"width": 2880,
 				"height": 1800
+			}
+		}
+	},
+	"food-catalog": {
+		"alt": "The Food Editor page, listing the foods saved on this instance. A search box, a Favorites filter and a sort control sit across the top, with chips underneath for filtering by category and by glycaemic index, and then one row per food showing its name, its carbs and the portion those carbs are for.",
+		"variants": {
+			"light": {
+				"file": "images/food-catalog.light.webp",
+				"width": 2880,
+				"height": 1800
+			},
+			"dark": {
+				"file": "images/food-catalog.dark.webp",
+				"width": 2880,
+				"height": 1800
+			}
+		},
+		"anchors": {
+			"search": {
+				"x": 586,
+				"y": 330,
+				"width": 1780,
+				"height": 76
+			},
+			"favorites": {
+				"x": 2386,
+				"y": 336,
+				"width": 170,
+				"height": 64
+			},
+			"sort": {
+				"x": 2598,
+				"y": 332,
+				"width": 208,
+				"height": 72
+			}
+		}
+	},
+	"food-composer": {
+		"alt": "The Add food form, expanded. The top row takes the name, the carbs, the portion those carbs are for, the unit that portion is measured in, and whether the food is low, medium or high GI. Underneath it, a second row adds fat, protein, energy in kilocalories, and a category and subcategory to group the food under.",
+		"variants": {
+			"light": {
+				"file": "images/food-composer.light.webp",
+				"width": 2220,
+				"height": 442
+			},
+			"dark": {
+				"file": "images/food-composer.dark.webp",
+				"width": 2220,
+				"height": 442
 			}
 		}
 	},

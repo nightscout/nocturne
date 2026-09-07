@@ -199,6 +199,59 @@ export const definitions: ScreenshotDefinition[] = [
 		alt: 'The Enable Connector card of the Dexcom connection page, with a switch that turns collection on or off.',
 	},
 	{
+		id: 'carb-entry-edit',
+		route: '/reports/treatments',
+		scenario: 'patient',
+		// The Carbs tab first, so the row opened is a carb entry rather than whatever the seeded
+		// data happens to have logged most recently.
+		prepare: async (page) => {
+			await page.getByRole('tab', { name: /Carbs/ }).click();
+			await page.getByTestId('treatment-row').first().click();
+			await page.getByLabel('Absorption Time (min)').waitFor();
+		},
+		clip: '[data-testid="treatment-edit-dialog"]',
+		// The amount and the time come from the seeded data, so this one image differs every capture.
+		alt: 'The Edit Record box for a carb entry. A line across the top gives when it was recorded and which app and device sent it; under that are the date and time, the grams of carbohydrate, and boxes for absorption time and carb time, both left empty by a source that reported neither. A Linked Records list at the bottom shows the other records written as part of the same event.',
+	},
+	{
+		id: 'food-catalog',
+		route: '/food',
+		scenario: 'patient',
+		// The list loads itself after hydration rather than through the route, and a settled empty
+		// card looks exactly like a settled full one to the runner. A row is the proof the page is
+		// finished, and without it a capture can come back reading "Loading food database".
+		prepare: async (page) => {
+			await page.getByTestId('food-row').first().waitFor();
+		},
+		alt: 'The Food Editor page, listing the foods saved on this instance. A search box, a Favorites filter and a sort control sit across the top, with chips underneath for filtering by category and by glycaemic index, and then one row per food showing its name, its carbs and the portion those carbs are for.',
+		anchors: {
+			search: '[data-testid="food-search"]',
+			favorites: '[data-testid="food-favorites-filter"]',
+			sort: '[data-testid="food-sort"]',
+		},
+	},
+	{
+		id: 'food-composer',
+		route: '/food',
+		scenario: 'patient',
+		// Opened with its extra fields showing, because the collapsed form is four boxes and the
+		// docs page it sits under is a table of every field a food holds.
+		prepare: async (page) => {
+			await page.getByRole('button', { name: 'Add food' }).click();
+			await page.getByTestId('food-composer-details').click();
+			await page.getByLabel('Energy').waitFor();
+		},
+		clip: '[data-testid="food-composer"]',
+		alt: 'The Add food form, expanded. The top row takes the name, the carbs, the portion those carbs are for, the unit that portion is measured in, and whether the food is low, medium or high GI. Underneath it, a second row adds fat, protein, energy in kilocalories, and a category and subcategory to group the food under.',
+	},
+	{
+		id: 'deduplication-card',
+		route: '/settings/connectors',
+		scenario: 'patient',
+		clip: '[data-testid="deduplicate-records"]',
+		alt: 'The Deduplicate Records tool, under Data Maintenance on the Connectors and Apps settings page. It explains that it links records from different data sources that describe the same event, and offers a Run Deduplication button.',
+	},
+	{
 		id: 'alerts-configuration',
 		route: '/alerts',
 		alt: 'The Alerts page. Three tiles across the top count how many rules are switched on, how many alerts are sounding right now, and how many fired this week. Below them sits the list of rules: an urgent low, a low, a high, and one for the sensor going quiet, each showing the reading it watches for, a switch to turn it off, and a button to send a test alert. A New rule button sits in the top corner.',

@@ -4,6 +4,7 @@ title: The food catalog
 
 <script>
   import Callout from '@nocturne/cms/components/Callout.svelte';
+  import Screenshot from '$lib/components/docs/Screenshot.svelte';
 </script>
 
 # The food catalog
@@ -26,6 +27,8 @@ A food is a name plus a set of numbers for one portion of it:
 | **Fat**, **protein**, **energy** | Optional. Energy is entered as kcal in the editor. |
 | **Category** and **subcategory** | Free-form grouping — "Breakfast", "Dairy", whatever suits you. |
 
+<Screenshot id="food-composer" />
+
 New foods start at 100 g, medium GI. Everything scales from the portion: define
 a food as 12 g of carb per 100 g and Nocturne works out 1.5 portions for you
 when you use it.
@@ -42,6 +45,15 @@ The **Food** page is one long searchable table. Search matches names, categories
 and subcategories. You can filter to favorites only, sort by name, carbs or
 recency, and edit rows in place — a food's carbs are one click and a number away
 from being corrected.
+
+<Screenshot
+  id="food-catalog"
+  callouts={[
+    { anchor: "search", label: "Search names and categories" },
+    { anchor: "favorites", label: "Your starred foods only" },
+    { anchor: "sort", label: "Name, carbs or recency" },
+  ]}
+/>
 
 **Favorites** are per person. Starring a food moves it up your list without
 touching anyone else's. **Recents** are shared: the foods most recently used in
