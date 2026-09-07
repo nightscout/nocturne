@@ -1,0 +1,90 @@
+---
+title: Carb entries
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+</script>
+
+# Carb entries
+
+A carb entry is the simplest record in the food system: an amount of
+carbohydrate, in grams, at a moment in time. Everything else in this section
+hangs off it.
+
+## What one holds
+
+| Field | Meaning |
+|-------|---------|
+| **Carbs** | Grams of carbohydrate. The only required value. |
+| **Time** | When the carbs were eaten, stored to the millisecond. |
+| **Absorption time** | Minutes. How long this food takes to absorb, when the source knows. |
+| **Carb time** | Minutes of offset, used by some uploaders to say "these carbs are for later". |
+| **Fat** and **protein** | Grams, when the source reports them. |
+| **Source and device** | Which app or pump the entry came from. |
+
+Fat and protein are real fields, not carbs in disguise. Some older uploaders
+convert fat and protein into a series of invented carb entries spread over the
+following hours — the fat-protein-unit trick. Where a source reports the macros
+properly, Nocturne stores them as macros, so your carb history stays a record of
+carbs.
+
+### Absorption time
+
+Loop, AAPS and similar systems attach an absorption time to a carb entry when
+you tell them a meal is slow or fast. When it is present it overrides the
+default from your profile for carbs-on-board purposes. When it is absent — which
+is most of the time, and always for carbs typed in by hand — the profile default
+applies.
+
+## Where carb entries come from
+
+Four routes, all producing the same kind of record:
+
+- **You log them in Nocturne.** Typed in against the graph or as part of a meal.
+- **Your loop or pump uploads them.** Loop, AAPS, Trio and the rest send carbs
+  with the bolus you gave for them.
+- **A connector imports them.** Glooko, Tidepool, MyLife, Twiist, a Nightscout
+  instance you are migrating from, and others.
+- **An app posts a Nightscout-style treatment.** Anything written against the
+  legacy `/api/v1/treatments` or `/api/v3/treatments` surface still works.
+
+That last one is worth expanding. A legacy Nightscout treatment is one document
+that may carry carbs, insulin, a blood glucose check and a note all at once.
+Nocturne takes it apart into its constituent records, so a "Meal Bolus" with
+`carbs: 45, insulin: 4.5` becomes a carb entry and a bolus, correlated with each
+other. Read it back through the legacy API and you get your treatment document
+again, reassembled.
+
+<Callout type="info" title="Sync identifiers">
+  Loop and AAPS give every record they upload a stable sync identifier. Nocturne
+  keys on it, so if the same app re-uploads the same carb entry — after a phone
+  restore, a backfill, or a flaky connection — the existing record is updated
+  rather than a second one created. This is exact-key matching between one app
+  and itself; the fuzzier problem of <em>two different</em> apps reporting the
+  same meal is covered in
+  <a href="/docs/food/deduplication">When the same carbs arrive twice</a>.
+</Callout>
+
+## Editing and deleting
+
+Carb entries are editable after the fact, from the graph or the **Meals** page.
+Correcting the amount is the usual reason: you guessed 40 g at the table and
+worked out later it was closer to 55 g.
+
+Deleting one is a real delete from your point of view, but Nocturne keeps a
+tombstone behind the scenes. That tombstone is what stops a connector's next
+sync from cheerfully re-importing the entry you just deleted. A record that
+Nocturne itself swept away — as opposed to one you deleted — carries no such
+block, so ordinary resyncs still work.
+
+## Through the API
+
+Carb entries live under `/api/v4/nutrition/carbs`, with the usual list, fetch,
+create, update and delete, plus a bulk create for importers and a delete keyed
+on a source's own sync identifier for apps that never learned Nocturne's IDs.
+
+They are gated by the `treatments.read` and `treatments.readwrite` scopes, the
+same as boluses — a share link or connected app that can see treatments can see
+carbs. The food catalog is a separate category with its own scopes; see
+[the food catalog](/docs/food/catalog).

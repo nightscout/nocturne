@@ -1,0 +1,68 @@
+---
+title: Food, carbs and meals
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+</script>
+
+# Food, carbs and meals
+
+Nocturne keeps four separate things where a lot of diabetes software keeps one.
+Understanding which is which makes the rest of this section obvious, so it is
+worth two minutes.
+
+| Thing | What it is | Where you see it |
+|-------|------------|------------------|
+| **Carb entry** | "35 g of carbs at 12:41." A dated amount, and nothing more. | The graph, **Meals** |
+| **Food** | A reusable item in your catalog: _Greek yogurt, 12 g carbs per 100 g_. | **Food** |
+| **Attribution** | A line saying _this_ carb entry was 1.5 portions of _that_ food. | **Meals**, expanded |
+| **Meal** | A carb entry and the insulin given for it, grouped as one event. | **Meals** |
+
+The split matters because the pieces arrive at different times and from
+different places. Your pump uploads the carb entry the moment you bolus. The
+food catalog is something you build up over months. The attribution — what the
+carbs actually _were_ — may be added days later, by you or by a food-logging app
+you have connected. None of them has to wait for the others.
+
+## How they fit together
+
+A carb entry stands on its own. It is complete and useful with no food attached
+to it: the graph draws it, carbs-on-board counts it, reports total it up.
+
+Attributions sit on top. Each one names a food from your catalog, a number of
+portions, and the grams of carb that food contributed. Add them up and you get
+the **attributed** carbs for that entry; whatever is left over is **unspecified**.
+An entry with nothing attributed is 100% unspecified, and that is a perfectly
+normal state for it to stay in forever.
+
+A meal is the grouping layer. When you bolus for food, the insulin and the carbs
+are recorded as two records that share a correlation identifier, and Nocturne
+shows them as a single meal event. A carb entry with no insulin correlated to it
+is still a meal event; it just has no insulin in it.
+
+<Callout type="info" title="Why not one record?">
+  Carbs and insulin come from different places, get corrected independently, and
+  are used by different calculations. Keeping them separate means a corrected
+  bolus does not rewrite your carb history, and a carb entry that arrives from
+  your phone can still be joined to a bolus that arrived from your pump.
+</Callout>
+
+## The pages
+
+- **[Carb entries](/docs/food/carbs)** — what a carb entry holds, the ways one
+  gets created, and the fields loops and pumps add to it.
+- **[The food catalog](/docs/food/catalog)** — building your list of foods,
+  portions and quick picks, and what happens when you delete one that is in use.
+- **[Meals and food attribution](/docs/food/meals)** — the Meals page,
+  attributing carbs to foods, and matching entries from a food-logging app.
+- **[When the same carbs arrive twice](/docs/food/deduplication)** — how
+  Nocturne collapses the duplicate that appears when two apps report the same
+  meal.
+
+## The short version
+
+If you only read one thing: log carbs however is convenient, from as many apps
+as you like. Nocturne works out which of them are the same event and shows you
+one. Attribute them to foods later if you want the detail, or never, if you
+don't.

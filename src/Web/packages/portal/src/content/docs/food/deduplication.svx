@@ -1,0 +1,122 @@
+---
+title: When the same carbs arrive twice
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+</script>
+
+# When the same carbs arrive twice
+
+Log 45 g of carbs in your loop, and have both the loop and a second app upload
+to Nocturne, and two records arrive describing one plate of food. Nocturne
+notices, groups them, and shows you one meal. This page explains when that
+happens, when it deliberately doesn't, and what to do about the leftovers.
+
+The same machinery covers boluses, glucose readings, pump events and the rest —
+carbs are just the case people meet first, because carbs are the thing most
+likely to be entered by hand in two places.
+
+## Linking, not deleting
+
+Nocturne never destroys a duplicate. Records that describe the same event are
+**linked into a group**, one member of the group is marked as the one to show,
+and reads quietly skip the others. Everything you uploaded is still in the
+database, still attributed to the app that sent it, and still there if you
+export.
+
+Within a group, the record shown is the earliest surviving one, with its
+identifier breaking ties. That is usually the copy from whichever app got there
+first.
+
+## When two records are treated as the same event
+
+There are two rules, tried in order.
+
+### The close rule
+
+Two carb entries are the same event when they are **within 30 seconds** of each
+other and their carbs are **within 1 g**. This rule does not care where they came
+from: two records that close together, agreeing that closely, are one meal
+however they arrived.
+
+### The drift rule
+
+Clocks disagree. A connector reading your pump's raw clock and a connector
+reading a corrected one can be minutes apart on the same event, and that gap
+grows over time. So when the close rule finds nothing, a second, wider attempt
+runs — but only under conditions strict enough that widening the window cannot
+merge two genuinely separate meals:
+
+- The two records are **within 10 minutes**.
+- Their carbs are **exactly equal**. No tolerance at all.
+- Both records **name the app they came from**, and those apps are **different**.
+  A record with no known source, or a second record from an app already in the
+  group, is refused.
+- There is **exactly one** candidate group in range. Two possible matches means
+  the record cannot be attributed with confidence, so it isn't.
+
+The drift rule applies to carbs, boluses, BG checks, temp basals, bolus
+calculations and pump events. It deliberately does not apply to glucose
+readings, notes or state spans, where repeating the same value inside ten
+minutes is ordinary rather than suspicious.
+
+<Callout type="info" title="What this means in practice">
+  Two apps reporting your 45 g lunch, minutes apart, collapse into one meal. Two
+  helpings of 45 g from the same app, half an hour apart, stay two meals — the
+  drift rule refuses a second record from an app already in the group, so
+  Nocturne never turns your afternoon snack into a copy of your lunch.
+</Callout>
+
+## When it runs
+
+Three times, so that a duplicate is caught whichever way it arrives:
+
+- **As records are written.** Linking runs immediately after an upload commits.
+  It is best-effort by design: your data is saved first, and a failure to link
+  never rejects an upload.
+- **Every couple of minutes, in the background.** A reconciliation pass revisits
+  recently created links and merges groups that ingest could not have seen —
+  most often because two connectors synced out of order, and the second copy
+  arrived hours after the first.
+- **On demand, as a full pass.** Under **Settings > Connectors & Apps**, the
+  **Run Deduplication** action walks your entire history. It reports how many
+  records it processed, how many groups it created and how many duplicates it
+  found, and it can be cancelled while it runs.
+
+The full pass is the one to reach for after a migration, after connecting a
+second data source that overlaps with a first, or any time you are looking at
+doubled history from before both were set up.
+
+<Callout type="tip" title="After adding an overlapping data source">
+  Turning on a second connector that covers ground the first already covered is
+  the classic way to acquire duplicates in bulk. Add it, let the first sync
+  finish, then run the full pass once. Ongoing duplicates from that point on are
+  handled as records arrive.
+</Callout>
+
+## What it will not do
+
+Worth knowing so the leftovers make sense:
+
+- **Amounts that disagree by more than a gram, more than 30 seconds apart.**
+  Your pump says 45 g and your food app says 47 g, ten minutes apart: not merged.
+  The drift rule requires exact equality, and 45 is not 47.
+- **Two records with no identifiable source.** A source that names no app cannot
+  establish that two records came from different places, so the drift rule
+  refuses it.
+- **Anything ambiguous.** Where two candidate groups are in range, no merge
+  happens. Nocturne would rather show you two records than guess wrong about
+  which of them is a copy.
+
+For those, editing or deleting the extra record by hand is the answer, from the
+graph or the **Meals** page.
+
+## The other kind of duplicate
+
+Everything above is about _different records_ that turn out to describe one
+event. There is a simpler case that never reaches it: the **same app
+re-uploading the same record**, after a backfill or a phone restore. Loop, AAPS
+and connectors attach a stable sync identifier to what they send, and Nocturne
+keys on it — a repeat upload updates the record in place instead of creating a
+second one. See [carb entries](/docs/food/carbs) for more on sync identifiers.

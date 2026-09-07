@@ -1,0 +1,101 @@
+---
+title: The food catalog
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+</script>
+
+# The food catalog
+
+The catalog is your own list of the things you actually eat, with the numbers
+you have worked out for them. It lives under **Food** in the sidebar, and it is
+shared across everyone with access to your data — one household, one list. Your
+_favorites_ within it are personal.
+
+## What a food is
+
+A food is a name plus a set of numbers for one portion of it:
+
+| Field | Notes |
+|-------|-------|
+| **Name** | "Greek yogurt, plain". Required. |
+| **Carbs** | Grams per portion. The number that does the work. |
+| **Per** and **unit** | The portion this food's numbers describe: 100 g, 1 pcs, 250 ml, 1 serving. |
+| **GI** | Low, medium or high. Defaults to medium. |
+| **Fat**, **protein**, **energy** | Optional. Energy is entered as kcal in the editor. |
+| **Category** and **subcategory** | Free-form grouping — "Breakfast", "Dairy", whatever suits you. |
+
+New foods start at 100 g, medium GI. Everything scales from the portion: define
+a food as 12 g of carb per 100 g and Nocturne works out 1.5 portions for you
+when you use it.
+
+<Callout type="tip" title="Define the portion you actually measure">
+  If you weigh your pasta, define the food per 100 g. If you count biscuits,
+  define it per 1 pcs. The portion is not a nutrition-label convention — it is
+  whatever unit stops you doing arithmetic at the table.
+</Callout>
+
+## Working the list
+
+The **Food** page is one long searchable table. Search matches names, categories
+and subcategories. You can filter to favorites only, sort by name, carbs or
+recency, and edit rows in place — a food's carbs are one click and a number away
+from being corrected.
+
+**Favorites** are per person. Starring a food moves it up your list without
+touching anyone else's. **Recents** are shared: the foods most recently used in
+attributions across the account, so the picker offers what the household has
+been eating rather than what you personally starred six months ago.
+
+## Quick picks
+
+A quick pick is a saved bundle of foods — the same breakfast, the four things
+that make up a school lunch — stored as a single catalog entry containing a list
+of foods and how many portions of each. Picking it applies the lot at once.
+
+Quick picks carry two flags worth knowing: **hidden**, which keeps one out of
+the picker without deleting it, and **hide after use**, which retires it
+automatically once you have used it. They also carry a display position, so you
+can order the ones you reach for most.
+
+Quick picks are a legacy Nightscout concept and Nocturne stores them
+compatibly, which is why they are the same kind of record as an ordinary food
+rather than a separate thing.
+
+## Deleting a food that is in use
+
+Foods get referenced by attributions on your meal history, sometimes years of
+them. Deleting one therefore asks a question first: Nocturne counts how many
+attributions point at the food and tells you the number. You then choose what
+happens to them:
+
+- **Clear the references** (the default). The attribution lines stay on your
+  meals, with their carbs and portions intact, but no longer point at a catalog
+  entry. Your history keeps its shape; the deleted food simply stops being
+  linkable.
+- **Remove the attributions.** The lines go too. Your carb entries keep their
+  totals — deleting an attribution never changes how many carbs were recorded —
+  but the breakdown of what those carbs were is gone, and the carbs return to
+  being unspecified.
+
+<Callout type="warning" title="Deleting is not correcting">
+  If a food's numbers are simply wrong, edit it. Editing updates the catalog
+  entry in place, and existing attributions keep the carb figures that were
+  recorded at the time. Deleting and re-adding gives you a new food, an
+  identical-looking list, and a history that points at the wrong one of the two.
+</Callout>
+
+## Through the API
+
+The catalog is available three ways, all backed by the same records:
+
+| Surface | Purpose |
+|---------|---------|
+| `/api/v1/food` | Nightscout-compatible, including `/regular` and `/quickpicks`. |
+| `/api/v3/food` | Nightscout v3, with the modified-since history endpoint. |
+| `/api/v4/foods` | Native, with favorites, recents and attribution counts. |
+
+Writes need `food.readwrite`; reads need `food.read`, which a `health.read`
+grant expands to include. A single upload that contains the same item twice —
+same name, portion, unit and numbers — stores it once.
