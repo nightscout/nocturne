@@ -1536,14 +1536,20 @@ public class StatisticsService : IStatisticsService
     /// should arrive: each stream credited its own count of readings at its own cadence. Streams
     /// are told apart on the identity <c>CanonicalGlucoseStream.Select</c> selects on, because a
     /// window spanning a switch from a one-minute sensor to a five-minute one holds two cadences.
+    /// A stream's cadence comes from all of its readings even when only some are
+    /// <paramref name="credited"/>, since the gap between two survivors of a filter says nothing
+    /// about how often the sensor reported.
     /// </summary>
-    private static double DerivedCoverageMinutes(IEnumerable<SensorGlucose> readings) =>
+    private static double DerivedCoverageMinutes(
+        IEnumerable<SensorGlucose> readings,
+        Func<SensorGlucose, bool>? credited = null) =>
         readings
             .GroupBy(CanonicalGlucoseStream.StreamKey, StringComparer.Ordinal)
             .Sum(stream =>
             {
                 var ordered = stream.OrderBy(reading => reading.Mills).ToList();
-                return ordered.Count * SeriesCadenceMinutes(ReadingIntervals(ordered));
+                var count = credited is null ? ordered.Count : ordered.Count(credited);
+                return count * SeriesCadenceMinutes(ReadingIntervals(ordered));
             });
 
     /// <summary>
@@ -2944,18 +2950,21 @@ public class StatisticsService : IStatisticsService
             var period = MergeWindows(windows);
             periodMinutes = period.Sum(window => (window.End - window.Start).TotalMinutes);
 
-            var inPeriod = entries
-                .Where(reading => period.Any(window =>
-                    reading.Timestamp >= window.Start && reading.Timestamp <= window.End))
-                .ToList();
+            bool InPeriod(SensorGlucose reading) =>
+                period.Any(window =>
+                    reading.Timestamp >= window.Start && reading.Timestamp <= window.End);
 
             coveredMinutes =
-                inPeriod.Sum(reading =>
-                    reading.PatientDeviceId is { } id && cadences.TryGetValue(id, out var cadence)
+                entries.Sum(reading =>
+                    InPeriod(reading)
+                    && reading.PatientDeviceId is { } id
+                    && cadences.TryGetValue(id, out var cadence)
                         ? cadence
                         : 0)
-                + DerivedCoverageMinutes(inPeriod.Where(reading =>
-                    reading.PatientDeviceId is not { } id || !cadences.ContainsKey(id)));
+                + DerivedCoverageMinutes(
+                    entries.Where(reading =>
+                        reading.PatientDeviceId is not { } id || !cadences.ContainsKey(id)),
+                    InPeriod);
         }
         else
         {

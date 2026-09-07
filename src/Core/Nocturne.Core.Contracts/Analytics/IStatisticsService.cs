@@ -315,8 +315,8 @@ public interface IStatisticsService
     /// <paramref name="cgmDevices"/> is given the period is the union of their windows clipped to
     /// the report — sensors worn at once are one stretch of time — and only readings falling
     /// inside it count, at their device's catalogue cadence or, for a reading no given device
-    /// claims, at the cadence its own stream keeps within the period. Where no devices are given
-    /// the period is the report itself, which runs from the first reading to the last where
+    /// claims, at the cadence its own stream keeps across all of its readings. Where no devices
+    /// are given the period is the report itself, which runs from the first reading to the last where
     /// <paramref name="reportStart"/> or <paramref name="reportEnd"/> is absent.
     /// </summary>
     /// <returns><c>null</c> without readings, or without a period to measure them against.</returns>
