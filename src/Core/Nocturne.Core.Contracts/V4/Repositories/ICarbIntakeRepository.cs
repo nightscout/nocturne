@@ -14,7 +14,8 @@ namespace Nocturne.Core.Contracts.V4.Repositories;
 /// <seealso cref="CarbIntake"/>
 /// <seealso cref="IBolusRepository"/>
 /// <seealso cref="IV4Repository{T}"/>
-public interface ICarbIntakeRepository : ILegacyKeyedRepository<CarbIntake>
+public interface ICarbIntakeRepository
+    : ILegacyKeyedRepository<CarbIntake>, ISyncKeyedRepository<CarbIntake>
 {
     /// <summary>
     /// Retrieve a page of <see cref="CarbIntake"/> records filtered by time range, device, source, and origin.

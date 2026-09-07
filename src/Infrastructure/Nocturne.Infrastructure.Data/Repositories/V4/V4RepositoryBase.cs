@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities;
@@ -218,7 +219,27 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     public virtual async Task<TModel> CreateAsync(TModel model, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entity = ToEntity(model);
+        return await InsertAsync(ctx, ToEntity(model), origin, ct);
+    }
+
+    /// <summary>
+    /// The insert tail both single-create paths share: the LegacyId guard
+    /// <see cref="BulkCreateAsync"/> applies to its insert set, the insert itself, and the create
+    /// broadcast.
+    /// </summary>
+    /// <exception cref="RecreationBlockedException">
+    /// The LegacyId is held by a stored row, per
+    /// <see cref="SoftDeleteDedupExtensions.GetBlockingLegacyIdsAsync{TEntity}"/>.
+    /// </exception>
+    protected async Task<TModel> InsertAsync(
+        NocturneDbContext ctx, TEntity entity, WriteOrigin origin, CancellationToken ct)
+    {
+        if (!string.IsNullOrEmpty(entity.LegacyId)
+            && (await ctx.GetBlockingLegacyIdsAsync<TEntity>([entity.LegacyId], ct)).Count > 0)
+        {
+            throw new RecreationBlockedException(typeof(TModel).Name, $"legacy id '{entity.LegacyId}'");
+        }
+
         ctx.Set<TEntity>().Add(entity);
         await ctx.SaveChangesAsync(ct);
         var created = ToDomain(entity);

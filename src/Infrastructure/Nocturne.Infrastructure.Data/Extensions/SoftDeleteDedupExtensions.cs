@@ -35,6 +35,26 @@ public static class SoftDeleteDedupExtensions
         => source.Where(e => e.DeletedAt == null || EF.Property<bool>(e, DeletedByUserProperty));
 
     /// <summary>
+    /// Of the rows <see cref="WhereBlocksRecreation{TEntity}"/> kept for one external identity, the
+    /// row that governs a re-upload of it: the live row when there is one — the write upserts that —
+    /// otherwise the user tombstone, which blocks the write. The partial unique index counts live
+    /// rows only, so a tombstone and a live row can share an identity.
+    /// </summary>
+    public static TEntity? GoverningRow<TEntity>(this IEnumerable<TEntity> rows)
+        where TEntity : class, ISoftDeletable
+    {
+        TEntity? tombstone = null;
+        foreach (var row in rows)
+        {
+            if (row.DeletedAt == null)
+                return row;
+            tombstone ??= row;
+        }
+
+        return tombstone;
+    }
+
+    /// <summary>
     /// Returns the subset of <paramref name="legacyIds"/> that must be skipped on bulk
     /// insert, per <see cref="WhereBlocksRecreation{TEntity}"/>.
     /// </summary>

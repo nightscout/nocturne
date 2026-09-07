@@ -14,7 +14,10 @@ using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories.V4;
+using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 using Nocturne.Core.Contracts.V4;
 
@@ -36,6 +39,8 @@ public class NutritionControllerMealsTests : IDisposable
     private readonly CarbIntakeRepository _carbIntakeRepo;
     private readonly Mock<ITreatmentFoodService> _foodServiceMock = new();
     private readonly Mock<IDemoModeService> _demoModeMock = new();
+    private readonly RecordingV4RecordBroadcaster<Bolus> _bolusBroadcaster = new();
+    private readonly RecordingV4RecordBroadcaster<CarbIntake> _carbBroadcaster = new();
 
     public NutritionControllerMealsTests()
     {
@@ -52,12 +57,14 @@ public class NutritionControllerMealsTests : IDisposable
             ctxFactory,
             dedupMock.Object,
             auditMock,
-            NullLogger<BolusRepository>.Instance);
+            NullLogger<BolusRepository>.Instance,
+            _bolusBroadcaster);
         _carbIntakeRepo = new CarbIntakeRepository(
             ctxFactory,
             dedupMock.Object,
             auditMock,
-            NullLogger<CarbIntakeRepository>.Instance);
+            NullLogger<CarbIntakeRepository>.Instance,
+            _carbBroadcaster);
     }
 
     public void Dispose()
@@ -225,6 +232,77 @@ public class NutritionControllerMealsTests : IDisposable
         (await _dbContext.CarbIntakes.CountAsync()).Should().Be(1);
         // Overall status should be 201 because the carb half was new.
         ExtractStatus(result).Should().Be(StatusCodes.Status201Created);
+    }
+
+    /// <remarks>
+    /// The two halves are written on separate contexts, so the refusal has to be known before the
+    /// bolus write commits. Pins that the preflight, not the second write, is what refuses.
+    /// </remarks>
+    [Fact]
+    public async Task CreateMeal_WhenAUserDeletedCarbIntakeHoldsTheKey_RefusesWithoutWritingTheBolus()
+    {
+        const string dataSource = "aaps";
+        const string syncIdentifier = "meal-sync-1";
+        var liveBolusId = SeedLiveBolus(dataSource, syncIdentifier, insulin: 5.5);
+        SeedUserDeletedCarbIntake(dataSource, syncIdentifier, carbs: 45.0);
+
+        var act = () => CreateController().CreateMeal(new CreateMealRequest
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            Insulin = 9.9,
+            Carbs = 99.0,
+            DataSource = dataSource,
+            SyncIdentifier = syncIdentifier,
+        }, default);
+
+        await act.Should().ThrowAsync<RecreationBlockedException>()
+            .WithMessage($"*{syncIdentifier}*");
+
+        await using var verify = _db.CreateContext(TestTenantId);
+        var bolus = await verify.Boluses.AsNoTracking().SingleAsync();
+        bolus.Id.Should().Be(liveBolusId);
+        bolus.Insulin.Should().Be(5.5, "the bolus half must not have been upserted behind the refusal");
+        (await verify.CarbIntakes.CountAsync()).Should().Be(0, "the carb intake the user deleted stays deleted");
+
+        _bolusBroadcaster.Created.Should().BeEmpty();
+        _bolusBroadcaster.Updated.Should().BeEmpty("a refused meal broadcasts nothing");
+        _carbBroadcaster.Created.Should().BeEmpty();
+        _carbBroadcaster.Updated.Should().BeEmpty();
+    }
+
+    private Guid SeedLiveBolus(string dataSource, string syncIdentifier, double insulin)
+    {
+        var entity = new BolusEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = TestTenantId,
+            Timestamp = DateTime.UtcNow,
+            DataSource = dataSource,
+            SyncIdentifier = syncIdentifier,
+            Insulin = insulin,
+        };
+        using var ctx = _db.CreateContext(TestTenantId);
+        ctx.Boluses.Add(entity);
+        ctx.SaveChanges();
+        return entity.Id;
+    }
+
+    private void SeedUserDeletedCarbIntake(string dataSource, string syncIdentifier, double carbs)
+    {
+        var entity = new CarbIntakeEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = TestTenantId,
+            Timestamp = DateTime.UtcNow,
+            DataSource = dataSource,
+            SyncIdentifier = syncIdentifier,
+            Carbs = carbs,
+            DeletedAt = DateTime.UtcNow,
+        };
+        using var ctx = _db.CreateContext(TestTenantId);
+        var entry = ctx.CarbIntakes.Add(entity);
+        entry.Property("DeletedByUser").CurrentValue = true;
+        ctx.SaveChanges();
     }
 
     [Fact]

@@ -34,10 +34,18 @@ public class DeviceStatusExtrasRepository : IDeviceStatusExtrasRepository
     /// <param name="model">The device status extras to create.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The created device status extras.</returns>
+    /// <exception cref="RecreationBlockedException">
+    /// The CorrelationId is held by a stored row, per the same
+    /// <see cref="SoftDeleteDedupExtensions.GetBlockingCorrelationIdsAsync"/> guard
+    /// <see cref="BulkCreateAsync"/> applies.
+    /// </exception>
     public async Task<DeviceStatusExtras> CreateAsync(DeviceStatusExtras model, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var entity = DeviceStatusExtrasMapper.ToEntity(model);
+        if ((await ctx.GetBlockingCorrelationIdsAsync([entity.CorrelationId], ct)).Count > 0)
+            throw new RecreationBlockedException(nameof(DeviceStatusExtras), $"correlation id '{entity.CorrelationId}'");
+
         ctx.DeviceStatusExtras.Add(entity);
         await ctx.SaveChangesAsync(ct);
         return DeviceStatusExtrasMapper.ToDomainModel(entity);

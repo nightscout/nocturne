@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities;
@@ -41,6 +42,11 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
     /// <param name="origin">Whether the write is live or a backfill import.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The created or updated record.</returns>
+    /// <exception cref="RecreationBlockedException">
+    /// The key is held by a row the user deleted, per
+    /// <see cref="SoftDeleteDedupExtensions.WhereBlocksRecreation{TEntity}"/> — the same rule
+    /// <see cref="SplitUpsertsAsync"/> applies to a batch.
+    /// </exception>
     public override async Task<TModel> CreateAsync(TModel model, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
@@ -50,9 +56,11 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
         var syncIdentifier = entity.SyncIdentifier;
         if (!string.IsNullOrEmpty(dataSource) && !string.IsNullOrEmpty(syncIdentifier))
         {
-            var existing = await ctx.Set<TEntity>()
-                .FirstOrDefaultAsync(
-                    e => e.DataSource == dataSource && e.SyncIdentifier == syncIdentifier, ct);
+            var existing = await FindGoverningRowAsync(ctx, dataSource, syncIdentifier, ct);
+
+            if (existing?.DeletedAt != null)
+                throw RecreationBlockedException.ForSyncKey(typeof(TModel).Name, dataSource, syncIdentifier);
+
             if (existing != null)
             {
                 ApplyUpdate(existing, model);
@@ -64,12 +72,32 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
             }
         }
 
-        ctx.Set<TEntity>().Add(entity);
-        await ctx.SaveChangesAsync(ct);
-        var created = ToDomain(entity);
-        await RaiseBroadcastAsync([created], [], [], origin, ct);
-        return created;
+        return await InsertAsync(ctx, entity, origin, ct);
     }
+
+    /// <inheritdoc cref="Core.Contracts.V4.Repositories.ISyncKeyedRepository{T}.IsRecreationBlockedAsync" />
+    public async Task<bool> IsRecreationBlockedAsync(
+        string dataSource, string syncIdentifier, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        return await FindGoverningRowAsync(ctx, dataSource, syncIdentifier, ct) is { DeletedAt: not null };
+    }
+
+    /// <summary>
+    /// The row that decides a write on the sync key, tracked so a matched live row can be updated
+    /// in place. Reads past the soft-delete query filter, which would hide the tombstone holding
+    /// the key; <c>IgnoreQueryFilters</c> lifts the tenant filter with it, hence the explicit
+    /// predicate.
+    /// </summary>
+    /// <seealso cref="SoftDeleteDedupExtensions.GoverningRow{TEntity}"/>
+    private static async Task<TEntity?> FindGoverningRowAsync(
+        NocturneDbContext ctx, string dataSource, string syncIdentifier, CancellationToken ct)
+        => (await ctx.Set<TEntity>().IgnoreQueryFilters()
+                .Where(e => e.TenantId == ctx.TenantId)
+                .WhereBlocksRecreation()
+                .Where(e => e.DataSource == dataSource && e.SyncIdentifier == syncIdentifier)
+                .ToListAsync(ct))
+            .GoverningRow();
 
     /// <summary>
     /// SyncId-upsert split: intra-batch keep-last per (DataSource, SyncIdentifier), then match existing
@@ -110,10 +138,9 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
             .Where(e => sources.Contains(e.DataSource!) && syncIds.Contains(e.SyncIdentifier!))
             .ToListAsync(ct);
 
-        // The unique index counts live rows only, so a user tombstone and a live row can share a key.
         var existingByKey = existingRows
             .GroupBy(e => $"{e.DataSource}|{e.SyncIdentifier}")
-            .ToDictionary(g => g.Key, g => g.FirstOrDefault(e => e.DeletedAt == null) ?? g.First());
+            .ToDictionary(g => g.Key, g => g.GoverningRow()!);
 
         var toInsert = new List<TEntity>();
         foreach (var entity in entities)
