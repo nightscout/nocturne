@@ -33,7 +33,16 @@ public class GlookoSystemEventMapper
             foreach (var alarm in series.PumpAlarm)
             {
                 var timestamp = _timeMapper.GetCorrectedGlookoTime(alarm.X);
-                var eventType = DetermineAlarmEventType(alarm.AlarmType, alarm.Data?.AlarmCode);
+
+                // Glooko populates the graph point's `name` (e.g. "Occlusion", "Low Battery") and
+                // `alarmSeverity`; the older `alarmType`/`data.alarmCode`/`label` fields are absent on
+                // this payload, so reading only those produced an Info "Unknown alarm" for every alarm
+                // and lost occlusion/battery hazards entirely. Prefer the real fields, keep the legacy
+                // ones as fallbacks, and fall back to the keyword heuristic only when severity is absent.
+                var name = alarm.Name ?? alarm.Label ?? alarm.AlarmType;
+                var eventType = !string.IsNullOrWhiteSpace(alarm.AlarmSeverity)
+                    ? MapAlarmSeverity(alarm.AlarmSeverity)
+                    : DetermineAlarmEventType(alarm.Name ?? alarm.AlarmType, alarm.Data?.AlarmCode);
 
                 events.Add(
                     new SystemEvent
@@ -41,17 +50,17 @@ public class GlookoSystemEventMapper
                         OriginalId = $"glooko_alarm_{alarm.X}",
                         EventType = eventType,
                         Category = SystemEventCategory.Pump,
-                        Code = alarm.Data?.AlarmCode ?? alarm.AlarmType,
+                        Code = name ?? alarm.Data?.AlarmCode,
                         Description =
-                            alarm.Data?.AlarmDescription
-                            ?? alarm.Label
-                            ?? alarm.AlarmType
+                            name
+                            ?? alarm.Data?.AlarmDescription
                             ?? "Unknown alarm",
                         Mills = new DateTimeOffset(timestamp).ToUnixTimeMilliseconds(),
                         Source = _connectorSource,
                         Metadata = new Dictionary<string, object>
                         {
-                            { "alarmType", alarm.AlarmType ?? "unknown" },
+                            { "severity", alarm.AlarmSeverity ?? "unknown" },
+                            { "alarmType", alarm.AlarmType ?? "" },
                             { "label", alarm.Label ?? "" }
                         }
                     }
