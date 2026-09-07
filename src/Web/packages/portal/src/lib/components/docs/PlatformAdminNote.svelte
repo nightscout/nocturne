@@ -8,7 +8,7 @@
 <Callout type="info" title="Can't see the Administration section?">
     Administration is only visible to a <strong>platform admin</strong>. That is a
     separate permission from a tenant's <strong>owner</strong> role, so being the owner
-    of your instance is not enough on its own — opening
+    of your instance is not enough on its own; opening
     <code>/settings/admin</code> without it sends you back to <strong>Settings</strong>.
     On a new install the permission goes to the owner of the first tenant, granted when
     that owner finishes setting up their passkey or sign-in provider.

@@ -11,7 +11,7 @@ title: Temporary guest links
 
 A guest link gives someone a **read-only view of your data without an account**.
 You create it, hand over the link (or the short code inside it), and it lets them
-look — they can't change anything. It **expires on its own 48 hours after you make
+look; they can't change anything. It **expires on its own 48 hours after you make
 it** and can only be used **once**, so there's nothing to remember to switch off
 afterwards.
 
@@ -24,21 +24,21 @@ currently reaches your data:
 ## Handing one over
 
 Each guest link carries a short code. You can send the whole link, or read the
-code out over the phone — the person enters it on the guest page of your instance:
+code out over the phone. The person enters it on the guest page of your instance:
 
 <Screenshot id="guest-code-entry" />
 
 Once they enter it, the code is spent. That's the point: a link that has already
 been used can't be forwarded on and opened again by somebody else.
 
-You can have **five** active guest links at once — one per person you're sharing
-with — and give each one a label so you can tell them apart.
+You can have **five** active guest links at once (one per person you're sharing
+with) and give each one a label so you can tell them apart.
 
 <Callout type="tip" title="When to use it: a specialist appointment">
   You're seeing your specialist on Tuesday and want them to look at your recent
   data on their own screen. Create a guest link labelled
   <strong>"Dr. Smith"</strong>, send it ahead of the appointment, and forget about
-  it — it stops working on its own two days later. No account to set up
+  it; it stops working on its own two days later. No account to set up
   for a one-off visit, and nothing left switched on afterwards.
 </Callout>
 

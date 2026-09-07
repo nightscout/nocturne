@@ -230,17 +230,17 @@ static string GenerateEnvExample(EnvVarGroups groups, EnvVarMeta[] metadata)
     sb.AppendLine("# Copy this file to .env and fill in the required values.");
     sb.AppendLine("# Passwords are only used on first database initialization.");
     sb.AppendLine();
-    sb.AppendLine("# -- Configuration ---------------------------------------------");
-    sb.AppendLine();
-    foreach (var (name, value) in groups.Config)
-        AppendVar(name, value);
-    sb.AppendLine();
     sb.AppendLine("# -- Required (set these before first run) ----------------------");
     sb.AppendLine();
     foreach (var (name, _) in groups.RequiredConfig)
         AppendVar(name, "");
     foreach (var (name, _) in groups.Secrets)
         AppendVar(name, "");
+    sb.AppendLine();
+    sb.AppendLine("# -- Configuration (defaults work; change if you need to) --------");
+    sb.AppendLine();
+    foreach (var (name, value) in groups.Config)
+        AppendVar(name, value);
     sb.AppendLine();
     sb.AppendLine("# -- Optional --------------------------------------------------");
     sb.AppendLine();

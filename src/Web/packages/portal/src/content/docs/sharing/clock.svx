@@ -9,8 +9,8 @@ title: Clocks
 
 # Clocks
 
-A **clock** turns your glucose into a full-screen display — the number, a trend
-arrow, how much it's changed — that refreshes on its own. It's made for a screen
+A **clock** turns your glucose into a full-screen display (the number, a trend
+arrow, how much it's changed) that refreshes on its own. It's made for a screen
 you read across the room: a bedside clock, a tablet on the kitchen counter, a
 monitor on a desk.
 
@@ -43,7 +43,7 @@ get its address.
 
 That link is **public**: anyone you give it to can open it with no login, on any
 device, and it keeps showing your latest reading. It works **whether or not** you
-have turned on the [public share link](/docs/sharing/public-link) — a clock is its
+have turned on the [public share link](/docs/sharing/public-link); a clock is its
 own, separate thing, and turning public access off does not switch a clock off.
 
 The address ends in a long code, like
@@ -69,7 +69,7 @@ whoever holds it.
       </li>
       <li>
         <strong>The random half is astronomically large.</strong> It has roughly
-        2 &times; 10<sup>22</sup> possible values — a 2 followed by 22 digits — so
+        2 &times; 10<sup>22</sup> possible values (a 2 followed by 22 digits), so
         even someone who knew to the second when you made a clock could not work
         out the rest of its code.
       </li>
@@ -77,14 +77,14 @@ whoever holds it.
     <p>
       To picture that scale,
       <a href="https://everyuuid.com" target="_blank" rel="noopener noreferrer" class="underline">everyuuid.com</a>
-      lets you scroll through every possible UUID — you would never reach the end.
+      lets you scroll through every possible UUID; you would never reach the end.
     </p>
   </div>
 </details>
 
 ## Turning one off
 
-A clock link has no expiry and no password — it works until you delete the clock.
+A clock link has no expiry and no password: it works until you delete the clock.
 Delete it in the **Clock** section and its link stops working right away. Deleting
 and recreating a clock gives it a brand-new code, so the old link can't be reused.
 

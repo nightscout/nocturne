@@ -6,7 +6,7 @@ title: Windows Widget Privacy Policy
   import Callout from '@nocturne/cms/components/Callout.svelte';
 </script>
 
-# Nocturne Windows Widget — Privacy Policy
+# Nocturne Windows Widget: Privacy Policy
 
 _Last updated: 21 June 2026_
 
@@ -40,7 +40,7 @@ on your server.
 The widget communicates **directly** between your PC and the Nocturne server you
 enter during setup. There are no intermediary servers. Your diabetes data is
 fetched over the network solely to render the widget and is held only transiently
-in memory for display — it is not written to disk and is not transmitted anywhere
+in memory for display; it is not written to disk and is not transmitted anywhere
 else.
 
 The Nightscout Foundation operates no servers in this flow and receives no data.

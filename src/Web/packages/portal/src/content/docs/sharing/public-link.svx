@@ -10,7 +10,7 @@ title: Public share link
 # Public share link
 
 Public access turns on a single read-only link that **anyone you give it to can
-open — with no login and no invite**. Because there's no sign-in, treat the link
+open, with no login and no invite**. Because there's no sign-in, treat the link
 itself as the key: anyone who has it can see whatever you've chosen to share.
 
 It is **off until you turn it on**, and you turn it on under
@@ -31,7 +31,7 @@ domain, in the shape `https://<random>.share.<your domain>`.
 
 When you first switch public access on, Nocturne creates the link and shows it to
 you **that one time**. Copy it there and then, and keep it somewhere you can get
-back to — a password manager is ideal. If you lose it, you can't ask Nocturne to
+back to; a password manager is ideal. If you lose it, you can't ask Nocturne to
 show it again; you **Regenerate** to get a new one, which also stops the old one
 working.
 
@@ -83,13 +83,13 @@ chose:
 
 ## Turning it off or replacing it
 
-There's no expiry — the link works until you turn public access off. Two controls
+There's no expiry: the link works until you turn public access off. Two controls
 end it:
 
 - **Switch public access off.** The link stops working immediately.
 - **Regenerate.** Nocturne issues a brand-new link and the old one stops working
   immediately. Use this when a link has spread further than you meant it to, but
-  you still want the daycare (or whoever) to have one — you just have to hand out
+  you still want the daycare (or whoever) to have one; you just have to hand out
   the new address.
 
 <Callout type="warning" title="Anyone with the link can open it">
@@ -100,6 +100,6 @@ end it:
 </Callout>
 
 If only one person needs a look, and only once, a
-[temporary guest link](/docs/sharing/guest-links) is the safer choice — it expires
+[temporary guest link](/docs/sharing/guest-links) is the safer choice; it expires
 on its own. If they need ongoing access, give them their own
 [member account](/docs/sharing/members).

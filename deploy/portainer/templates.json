@@ -30,22 +30,22 @@
         {
           "name": "POSTGRES_MIGRATOR_PASSWORD",
           "label": "Migrator role password",
-          "description": "Password for nocturne_migrator \u2014 owns the schema, runs EF migrations"
+          "description": "Password for nocturne_migrator: owns the schema, runs EF migrations"
         },
         {
           "name": "POSTGRES_APP_PASSWORD",
           "label": "App role password",
-          "description": "Password for nocturne_app \u2014 runtime role, cannot bypass Row Level Security"
+          "description": "Password for nocturne_app: runtime role, cannot bypass Row Level Security"
         },
         {
           "name": "POSTGRES_WEB_PASSWORD",
           "label": "Web role password",
-          "description": "Password for nocturne_web \u2014 bot-framework state, cannot bypass Row Level Security"
+          "description": "Password for nocturne_web: bot-framework state, cannot bypass Row Level Security"
         },
         {
           "name": "INSTANCE_KEY",
           "label": "Instance key",
-          "description": "Minimum 12 characters \u2014 used for JWT signing and service authentication"
+          "description": "Minimum 12 characters: used for JWT signing and service authentication"
         },
         {
           "name": "BASE_DOMAIN",

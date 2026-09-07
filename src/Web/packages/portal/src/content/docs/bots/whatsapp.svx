@@ -27,9 +27,9 @@ WhatsApp messaging runs through Meta's Cloud API.
 | Field | Where to find it |
 |-------|------------------|
 | **Access Token** | **WhatsApp > API Setup** (or a System User token in Business Settings) |
-| **Phone Number ID** | **WhatsApp > API Setup** — the number's ID, not the phone number itself |
+| **Phone Number ID** | **WhatsApp > API Setup**: the number's ID, not the phone number itself |
 | **App Secret** | **App settings > Basic > App Secret** |
-| **Verify Token** | A value *you* choose — any random string (see step 4) |
+| **Verify Token** | A value *you* choose: any random string (see step 4) |
 
 ## 3. Configure Nocturne
 
@@ -87,6 +87,6 @@ Then restart Nocturne. The verify token here must match the one you set in the M
 
 <Callout type="info" title="The 24-hour window">
   Meta only lets a business send free-form messages within 24 hours of the user's last
-  message. Alerts that fire outside that window may require an approved message template —
+  message. Alerts that fire outside that window may require an approved message template;
   see Meta's WhatsApp messaging documentation.
 </Callout>

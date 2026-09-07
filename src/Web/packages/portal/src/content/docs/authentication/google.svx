@@ -53,7 +53,7 @@ https://your-instance.com/api/auth/oidc/callback
 Replace `your-instance.com` with your actual Nocturne domain (e.g. `rhys.nocturne.run`).
 
 6. Click **Create**
-7. Copy the **Client ID** and **Client secret** — you'll need both in the next step
+7. Copy the **Client ID** and **Client secret**; you'll need both in the next step
 
 ## 4. Add the provider in Nocturne
 
@@ -84,7 +84,7 @@ The Google sign-in button will appear on your login page immediately.
 4. You should be redirected back to Nocturne and signed in
 
 <Callout type="tip" title="Multiple tenants">
-  OIDC providers are platform-wide — all tenants on the same Nocturne instance
+  OIDC providers are platform-wide: all tenants on the same Nocturne instance
   share the same provider configuration. You only need to register one callback URL
   in Google Cloud Console regardless of how many tenants you run.
 </Callout>

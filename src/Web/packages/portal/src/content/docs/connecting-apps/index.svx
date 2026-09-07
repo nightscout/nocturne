@@ -13,20 +13,20 @@ This guide walks you through connecting your app to a Nocturne instance using OA
 By the end, you'll have a working integration that can read glucose entries on behalf of a user.
 
 Nocturne uses **OAuth 2.0 Authorization Code with PKCE** (Proof Key for Code Exchange).
-Every client is a public client — there are no client secrets. PKCE replaces the secret,
+Every client is a public client; there are no client secrets. PKCE replaces the secret,
 which makes this flow safe for desktop apps and SPAs. For mobile apps or devices
 with limited input, see the [Device Authorization flow guide](/docs/connecting-apps/device-flow).
 
 <Callout type="tip" title="Prefer an SDK for API calls?">
   The code below uses raw HTTP requests to show the OAuth flow end to end. Once you
-  have an access token, you don't have to hand-write API calls — official SDKs for
+  have an access token, you don't have to hand-write API calls; official SDKs for
   the V4 API are available in several languages. See <a href="/docs/sdks">SDKs</a>.
 </Callout>
 
 ## 1. Register your app
 
 Before your app can authenticate users, it needs a `client_id`. Nocturne supports
-[Dynamic Client Registration (RFC 7591)](https://datatracker.ietf.org/doc/html/rfc7591) —
+[Dynamic Client Registration (RFC 7591)](https://datatracker.ietf.org/doc/html/rfc7591):
 your app registers itself by calling a single endpoint.
 
 ```typescript
@@ -55,7 +55,7 @@ const registration = await response.json();
 // }
 ```
 
-Registration is **idempotent per tenant** — if your `software_id` is already registered
+Registration is **idempotent per tenant**: if your `software_id` is already registered
 on that Nocturne instance, you'll get the existing `client_id` back. Store the `client_id`;
 you'll need it for every authorization request.
 
@@ -105,7 +105,7 @@ Build the authorization URL and redirect the user's browser to it:
 const codeVerifier = generateCodeVerifier();
 const codeChallenge = await generateCodeChallenge(codeVerifier);
 
-// Store codeVerifier — you'll need it in step 3
+// Store codeVerifier; you'll need it in step 3
 sessionStorage.setItem("pkce_code_verifier", codeVerifier);
 
 const params = new URLSearchParams({
@@ -176,7 +176,7 @@ const tokens = await tokenResponse.json();
   in production.
 </Callout>
 
-The authorization code is single-use — if the exchange fails, you'll get an
+The authorization code is single-use: if the exchange fails, you'll get an
 `invalid_grant` error and the user will need to re-authorize.
 
 ## 4. Make API calls
@@ -238,7 +238,7 @@ const refreshResponse = await fetch(
 );
 
 const newTokens = await refreshResponse.json();
-// Same shape as the original token response —
+// Same shape as the original token response:
 // new access_token AND new refresh_token
 ```
 
@@ -271,7 +271,7 @@ Scopes control what your app can access. Request only what you need.
 
 <OAuthScopeTable />
 
-A `readwrite` scope always implies `read` — you don't need to request both.
+A `readwrite` scope always implies `read`; you don't need to request both.
 
 <Callout type="info" title="Scope expansion">
   <code>health.read</code> and <code>health.readwrite</code> are convenience aliases.

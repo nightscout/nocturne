@@ -13,7 +13,7 @@
         <div class="max-w-xl mx-auto text-center">
             <h1 class="text-3xl font-bold mb-4">Live demo</h1>
             <p class="text-muted-foreground mb-6">
-                A full Nocturne instance you can explore and change — add treatments, edit
+                A full Nocturne instance you can explore and change: add treatments, edit
                 settings, browse reports. It runs on made-up data, not anyone's real
                 readings, and it resets on a schedule, so you can click anything.
             </p>

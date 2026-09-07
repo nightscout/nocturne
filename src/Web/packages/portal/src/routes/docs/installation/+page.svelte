@@ -255,7 +255,7 @@
       </ul>
       <p class="mt-3">
         Submit your request by opening an issue on the <a
-          href="https://github.com/nicknightscout/nocturne"
+          href="https://github.com/nightscout/nocturne/issues/new"
           target="_blank"
           rel="noopener noreferrer"
           class="text-primary hover:underline">Nocturne GitHub repository</a

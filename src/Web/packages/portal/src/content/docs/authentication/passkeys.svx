@@ -15,15 +15,15 @@ the two fallbacks that keep an account reachable when the usual device isn't to 
 ## Signing in with a passkey
 
 A **passkey** is a credential kept on your phone, laptop, tablet or hardware security key
-and unlocked the way you already unlock that device — a fingerprint, a face scan, or its
+and unlocked the way you already unlock that device: a fingerprint, a face scan, or its
 PIN. Nothing secret is typed in, and nothing secret is stored on the instance, so there is no
 password to be guessed, reused or leaked.
 
 There are two ways in, both on the sign-in page:
 
-- **Sign in with passkey** — the main button. Your device offers the passkeys it holds for
+- **Sign in with passkey**: the main button. Your device offers the passkeys it holds for
   this instance and you pick one. You don't need to type a username.
-- **Sign in with username** — you type your username first, then unlock the passkey
+- **Sign in with username**: you type your username first, then unlock the passkey
   registered to that account. Use this when the first button doesn't offer the account you
   wanted, which usually means the passkey lives on a different device.
 
@@ -42,7 +42,7 @@ There are two ways in, both on the sign-in page:
 
 ## The authenticator app step
 
-An **authenticator app** — Aegis, 1Password, Google Authenticator and others — shows a
+An **authenticator app** (Aegis, 1Password, Google Authenticator and others) shows a
 six-digit code that changes every thirty seconds. The technical name for this is **TOTP**,
 short for time-based one-time password.
 
@@ -63,7 +63,7 @@ confirm the two are in step:
 
 <Screenshot id="totp-setup" />
 
-Scan the code with the app before leaving the page — it isn't shown again afterwards.
+Scan the code with the app before leaving the page; it isn't shown again afterwards.
 
 ### Signing in afterwards
 
@@ -82,7 +82,7 @@ code from your app. Open the app, read the six digits, type them in.
 
 **Recovery codes** are a short list of one-time codes issued when your account is set up.
 Each one works once and then is spent. They exist for the day the usual device isn't
-available — lost, broken, or simply left at home.
+available: lost, broken, or simply left at home.
 
 To use one, follow the **Use a recovery code** link on the sign-in page and enter
 a code you haven't used yet.

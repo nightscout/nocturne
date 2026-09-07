@@ -100,19 +100,19 @@ class Program
                 secret: true
             ).WithPublishMetadata(
                 "Migrator role password",
-                "Password for nocturne_migrator — owns the schema, runs EF migrations");
+                "Password for nocturne_migrator: owns the schema, runs EF migrations");
             postgresAppPassword = builder.AddParameter(
                 ServiceNames.Parameters.PostgresAppPassword,
                 secret: true
             ).WithPublishMetadata(
                 "App role password",
-                "Password for nocturne_app — runtime role, cannot bypass Row Level Security");
+                "Password for nocturne_app: runtime role, cannot bypass Row Level Security");
             postgresWebPassword = builder.AddParameter(
                 ServiceNames.Parameters.PostgresWebPassword,
                 secret: true
             ).WithPublishMetadata(
                 "Web role password",
-                "Password for nocturne_web — bot-framework state, cannot bypass Row Level Security");
+                "Password for nocturne_web: bot-framework state, cannot bypass Row Level Security");
 
             // Container init lives in docs/postgres/container-init. Only
             // 00-init.sh is mounted into /docker-entrypoint-initdb.d so the
@@ -216,7 +216,7 @@ class Program
         var instanceKey = builder.AddParameter(ServiceNames.Parameters.InstanceKey, secret: true)
             .WithPublishMetadata(
                 "Instance key",
-                "Minimum 12 characters — used for JWT signing and service authentication");
+                "Minimum 12 characters: used for JWT signing and service authentication");
 
         // Discord bot credentials. Optional — only required if Discord bot
         // features are enabled for a deployment. Empty-string defaults let

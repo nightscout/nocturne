@@ -45,7 +45,7 @@
       icon: Globe,
       accent: "oklch(0.65 0.16 250)",
       title: "Translate Nocturne",
-      desc: "Every interface string lives in a gettext .po file, one per language, and most languages are barely started. Edit one on GitHub and open a pull request — no build tools, just words.",
+      desc: "Every interface string lives in a gettext .po file, one per language, and most languages are barely started. Edit one on GitHub and open a pull request: no build tools, just words.",
       cta: "Open the translation files",
       href: LINKS.translationFiles,
       external: true,
@@ -55,7 +55,7 @@
       icon: MessageCircle,
       accent: "oklch(0.62 0.17 280)",
       title: "Answer questions",
-      desc: "New self-hosters get stuck. Hang out in the Discord and help someone get their data flowing — the fastest way to make a real difference today.",
+      desc: "New self-hosters get stuck. Hang out in the Discord and help someone get their data flowing. It is the fastest way to make a real difference today.",
       cta: "Join the Discord",
       href: LINKS.discord,
       external: true,
@@ -114,7 +114,7 @@
       icon: Database,
       accent: "oklch(0.6 0.13 200)",
       title: "Donate anonymized data",
-      desc: "Opt in to share de-identified glucose data so connectors and reports can be tested against real-world patterns — not just synthetic samples.",
+      desc: "Opt in to share de-identified glucose data so connectors and reports can be tested against real-world patterns, not just synthetic samples.",
       cta: "Email research-data@nocturne.run",
       href: LINKS.researchData,
       external: true,
@@ -176,7 +176,7 @@
 
   // GitHub's REST API is public (CORS-enabled, ~60 req/hr per visitor IP),
   // so the feed is fetched live in the browser rather than baked in at build
-  // time — keeping these tasks genuinely grabbable and up to date.
+  // time, keeping these tasks genuinely grabbable and up to date.
   const ISSUES_API =
     "https://api.github.com/repos/nightscout/nocturne/issues?labels=get-involved&state=open&sort=updated&direction=desc&per_page=8";
 
@@ -231,7 +231,7 @@
   <title>Get Involved - Nocturne</title>
   <meta
     name="description"
-    content="Nocturne is built by volunteers. You don't need to write code to contribute — here's where to start."
+    content="Nocturne is built by volunteers. You don't need to write code to contribute. Here's where to start."
   />
 </svelte:head>
 
@@ -254,7 +254,7 @@
       </h1>
       <p class="text-muted-foreground text-[17px] max-w-[520px] mb-[26px]">
         Nocturne is free, open source, and made entirely by volunteers. You
-        don't need to write a line of code to move it forward — here's where to
+        don't need to write a line of code to move it forward. Here's where to
         start.
       </p>
       <div class="flex gap-2.5 flex-wrap">
@@ -413,7 +413,7 @@
         </div>
       {:else if issues.length === 0}
         <div class="px-[22px] py-10 text-center text-sm text-muted-foreground">
-          No open tasks tagged <code>get-involved</code> right now — check back soon,
+          No open tasks tagged <code>get-involved</code> right now. Check back soon,
           or
           <a
             href={LINKS.discord}
@@ -464,7 +464,7 @@
       {/if}
 
       <div class="flex items-center justify-between gap-3 px-[22px] py-4">
-        <span class="text-muted-foreground text-[13px]">Updated continuously — these are real, grabbable tasks.</span>
+        <span class="text-muted-foreground text-[13px]">Updated continuously: these are real, grabbable tasks.</span>
         <a
           href={LINKS.githubLabel}
           target="_blank"
@@ -493,7 +493,7 @@
           Keep Nocturne free and independent
         </h3>
         <p class="text-muted-foreground m-0 max-w-[52ch]">
-          There is no company behind Nocturne — just volunteers and the
+          There is no company behind Nocturne, just volunteers and the
           Nightscout Foundation, a registered non-profit. Donations cover
           servers, test devices, and the work that keeps your data yours. Give
           once, or subscribe monthly.

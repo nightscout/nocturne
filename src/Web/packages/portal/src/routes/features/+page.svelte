@@ -5,80 +5,44 @@
     import ConnectorsDemo from "$lib/components/features/ConnectorsDemo.svelte";
     import AlarmsDemo from "$lib/components/features/AlarmsDemo.svelte";
     import AuthDemo from "$lib/components/features/AuthDemo.svelte";
-
-    const PILLARS = [
-        {
-            n: 1,
-            eyebrow: "Reports",
-            title: "Every report you actually use.",
-            accent: "Built in.",
-            body: "Time in Range. AGP. Day calendars. Meal impact. Pump activity. Sensor lifecycle. GLP-1 tracking. A dozen reports your endo asks for — already on the dashboard, ready to print or share.",
-            bullets: ["12+ built-in reports", "Print, share, or schedule by email", "Drill from any chart into the raw data"],
-            color: "oklch(0.6 0.118 184.704)",
-        },
-        {
-            n: 2,
-            eyebrow: "Connectors",
-            title: "Plays nice with your gear.",
-            accent: "Right out of the box.",
-            body: "22 devices and services already wired in. Dexcom, Libre, Omnipod, Tandem, Loop, Trio, xDrip, Nightscout, Home Assistant. If your stuff is on the list, it works on day one.",
-            bullets: ["Just sign in to your CGM — no fiddling", "Two-way bridge with Nightscout", "New connector every release on average"],
-            color: "oklch(0.72 0.16 150)",
-        },
-        {
-            n: 3,
-            eyebrow: "Alarms",
-            title: "Tell Nocturne what to do.",
-            accent: "It will.",
-            body: "Build alarms that actually fit your life. \"When my BG dips below 70, call my wife and flash the bedroom lights.\" Drag-and-drop rules, no scripts required.",
-            bullets: ["When-this-then-that recipes", "Send to phone, watch, Discord, Slack, Home Assistant", "Snooze, escalate, or skip when asleep"],
-            color: "oklch(0.646 0.222 41.116)",
-        },
-        {
-            n: 4,
-            eyebrow: "Sign in",
-            title: "No password to lose.",
-            accent: "Or to leak.",
-            body: "Sign in with a passkey on your phone, or with Google, Apple, or GitHub. Your health data stays on your server — Nocturne never sees it, never touches it.",
-            bullets: ["Passkeys on every modern device", "Google · Apple · GitHub · Microsoft", "Self-hosted: nothing leaves your machine"],
-            color: "oklch(0.65 0.18 270)",
-        },
-    ] as const;
+    import { PILLARS } from "$lib/data/pillars";
+    import { DATA_SOURCES } from "$lib/data/connectors";
+    import { AVAILABLE_REPORT_COUNT } from "$lib/data/reports";
 
     const SUPPORTING = [
         {
             title: "Your server, your data",
-            copy: "Self-hosted on Docker, Aspire, or bare metal. No cloud middleman, no third-party tracker. PHI never leaves your infrastructure.",
+            copy: "Self-hosted with Docker Compose, Portainer, or Helm. No cloud middleman and no third-party analytics. Your health data never leaves your infrastructure.",
             icon: "shield",
             color: "oklch(0.577 0.245 27.325)",
         },
         {
             title: "One install, many people",
-            copy: "Run a household, a clinic, or a community on a single deployment. Each tenant fully isolated via row-level security.",
+            copy: "Run a household, a clinic, or a community on a single deployment. Each tenant lives in its own database schema, behind its own subdomain.",
             icon: "users",
             color: "oklch(0.65 0.18 270)",
         },
         {
-            title: "Sub-second updates",
-            copy: "New readings arrive on every device the moment they're written. WebSocket-first — no five-minute polling delay.",
+            title: "Real-time updates",
+            copy: "New readings reach every open dashboard and follower the moment they are written, over WebSockets rather than polling.",
             icon: "zap",
             color: "oklch(0.769 0.188 70)",
         },
         {
             title: "Drop-in Nightscout",
-            copy: "Full v1/v2/v3 API parity. xDrip, Loop, AAPS, watch faces — everything just keeps working after you migrate.",
+            copy: "Speaks the Nightscout v1, v2, and v3 APIs. xDrip+, Loop, AndroidAPS, Trio, and watch faces keep working after you switch.",
             icon: "plug",
             color: "oklch(0.72 0.16 150)",
         },
         {
             title: "Built for years of data",
-            copy: "Modern stack handles years of readings without slowdowns. Search a date from years ago and get an answer in milliseconds.",
+            copy: "PostgreSQL underneath, with the reports written to query years of readings. Jumping to a date from years ago stays quick.",
             icon: "chart",
             color: "oklch(0.6 0.118 184.704)",
         },
         {
-            title: "Always free, always open",
-            copy: "AGPL-3.0 licensed. Auditable, forkable, never going behind a paywall. The community built it; the community owns it.",
+            title: "Free and open source",
+            copy: "AGPL-3.0 licensed, so you can read it, fork it, and self-host it for nothing. Stewarded by the Nightscout Foundation.",
             icon: "sparkle",
             color: "oklch(0.488 0.243 264.376)",
         },
@@ -125,7 +89,7 @@
         </div>
     </div>
 
-    <!-- THE FOUR KILLER FEATURES — alternating pillar layout -->
+    <!-- The four headline features, alternating layout -->
     {#each PILLARS as p, i (p.n)}
         {@const flip = i % 2 === 1}
         <section class="py-20 border-t border-border grid gap-16 items-center
@@ -186,7 +150,7 @@
         </section>
     {/each}
 
-    <!-- SUPPORTING — security, multitenant, developer -->
+    <!-- Supporting: security, multitenant, developer -->
     <section class="py-20 border-t border-border">
         <div class="flex items-center gap-3 text-[17px] font-semibold tracking-[0.02em] uppercase text-muted-foreground mb-4">
             <span class="size-2.5 rounded-full bg-muted-foreground/40 shrink-0"></span>
@@ -215,14 +179,14 @@
         </div>
     </section>
 
-    <!-- COMPARE — plain-English before/after -->
+    <!-- Compare: plain-English before/after -->
     <section class="py-20 border-t border-border">
         <div class="flex items-center gap-3 text-[17px] font-semibold tracking-[0.02em] uppercase text-glucose-in-range mb-4">
             <span class="size-2.5 rounded-full bg-glucose-in-range shrink-0"></span>
             What changes
         </div>
         <h2 class="text-[clamp(1.6rem,3.2vw,2.5rem)] font-bold leading-[1.1] tracking-[-0.025em] text-foreground m-0 mb-10">
-            The same data. <em class="text-glucose-in-range">Better everything else.</em>
+            The same data. <em class="text-glucose-in-range">A new home for it.</em>
         </h2>
 
         <div class="rounded-2xl overflow-hidden border border-border grid md:grid-cols-2">
@@ -231,17 +195,17 @@
                 <div class="font-mono text-[13px] tracking-[0.08em] uppercase text-muted-foreground font-bold">
                     The old way
                 </div>
-                <h3 class="text-[1.5rem] font-bold text-muted-foreground m-0">Nightscout, circa 2014</h3>
+                <h3 class="text-[1.5rem] font-bold text-muted-foreground m-0">Nightscout</h3>
                 {#each [
-                    "A handful of reports, all built in 2014",
-                    "Each device needs a separate uploader app",
-                    "Alarms = an on/off threshold, nothing more",
-                    "API secrets that you can't remember",
-                    "Slows down after a year of readings",
+                    "One instance per person",
+                    "Readings arrive through uploader apps or bridge plugins you configure",
+                    "Alarms are high and low thresholds, with a snooze",
+                    "One shared API secret for every app and follower",
+                    "A fixed set of report pages",
                 ] as line (line)}
                     <div class="flex items-center gap-3 text-[1rem] text-muted-foreground/70">
                         <span class="size-5 rounded-full bg-white/[0.06] grid place-items-center shrink-0
-                                     font-mono text-[13px] text-muted-foreground/50">—</span>
+                                     font-mono text-[13px] text-muted-foreground/50">&middot;</span>
                         {line}
                     </div>
                 {/each}
@@ -255,13 +219,13 @@
                 <div class="font-mono text-[13px] tracking-[0.08em] uppercase text-glucose-in-range font-bold relative">
                     Nocturne
                 </div>
-                <h3 class="text-[1.5rem] font-bold text-foreground m-0 relative">The rewrite, 2026</h3>
+                <h3 class="text-[1.5rem] font-bold text-foreground m-0 relative">Nocturne</h3>
                 {#each [
-                    "12+ reports your endo asks for, on the dashboard",
-                    "22 connectors out of the box — one click each",
-                    "If-this-then-that recipes, send anywhere",
-                    "Passkeys & sign-in-with-Google, no passwords",
-                    "Modern database — years of data, sub-second",
+                    "One install for a household, a clinic, or a community",
+                    `Sign in to ${DATA_SOURCES.length} sources from the dashboard; uploaders still work`,
+                    "Rules with thresholds, durations, and trends, delivered anywhere",
+                    "Passkeys and social sign-in, with a scoped token per app",
+                    `${AVAILABLE_REPORT_COUNT} reports, with your own target range drawn on them`,
                 ] as line (line)}
                     <div class="flex items-center gap-3 text-[1rem] text-foreground/90 font-medium relative">
                         <span class="size-5 rounded-full bg-glucose-in-range/[0.18] border border-glucose-in-range/40
@@ -281,11 +245,11 @@
         <div class="relative max-w-[680px]">
             <h2 class="text-[clamp(2rem,4vw,3.5rem)] font-bold leading-[1.06] tracking-[-0.025em] text-foreground m-0 mb-4">
                 Ready to take a look?<br/>
-                <em class="not-italic text-glucose-in-range font-semibold">Five minutes, tops.</em>
+                <em class="not-italic text-glucose-in-range font-semibold">Start with the demo.</em>
             </h2>
             <p class="text-[1.0625rem] leading-[1.6] text-muted-foreground m-0 mb-8">
-                Run your own copy with Docker, or poke around the demo first.
-                No credit card, no waitlist, never any of that.
+                Poke around the demo, then run your own copy with Docker Compose.
+                No account, no credit card, no waitlist.
             </p>
             <div class="flex flex-wrap gap-3">
                 <Button href="/docs/installation" size="lg" class="gap-2 text-base">

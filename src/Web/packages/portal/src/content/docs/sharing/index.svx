@@ -10,7 +10,7 @@ title: Sharing your data
 # Sharing your data
 
 Nocturne gives you a few ways to let someone else see your data, each built for
-a different situation — a one-off clinic visit, an always-on screen at daycare,
+a different situation: a one-off clinic visit, an always-on screen at daycare,
 a person who needs their own ongoing login, or a glucose clock you can leave on
 any screen. This page explains what each one does and when to reach for it; each
 one then has its own page with the step-by-step detail.
@@ -31,10 +31,10 @@ members follow below it:
 
 | Option | Best for | Needs a login? | Expires |
 |--------|----------|----------------|---------|
-| [Temporary guest link](/docs/sharing/guest-links) | A one-off look — a clinic visit | No | After 48 hours, one use |
-| [Public share link](/docs/sharing/public-link) | An always-on screen — a daycare | No | Never (until you turn it off) |
-| [Member account](/docs/sharing/members) | An ongoing helper — a teacher or nurse | Yes | Never (until you remove them) |
-| [Clock](/docs/sharing/clock) | An at-a-glance glucose screen — a bedside clock | No | Never (until you delete it) |
+| [Temporary guest link](/docs/sharing/guest-links) | A one-off look (a clinic visit) | No | After 48 hours, one use |
+| [Public share link](/docs/sharing/public-link) | An always-on screen (a daycare) | No | Never (until you turn it off) |
+| [Member account](/docs/sharing/members) | An ongoing helper (a teacher or nurse) | Yes | Never (until you remove them) |
+| [Clock](/docs/sharing/clock) | An at-a-glance glucose screen (a bedside clock) | No | Never (until you delete it) |
 
 There is also a fifth setting that isn't a way of sharing so much as a way of
 being asked: **membership requests**. Turn it on and visitors can request a
@@ -71,15 +71,15 @@ member account instead of waiting for you to send them an invite. See
 Every option here is reversible, and all but the clock are reversed from
 **Settings > Sharing & Privacy**:
 
-- **Public share link** — switch public access off, or **Regenerate** it. Either
+- **Public share link**: switch public access off, or **Regenerate** it. Either
   one stops the old link working immediately.
-- **Guest link** — revoke it, or simply let it expire. A used code cannot be used
+- **Guest link**: revoke it, or simply let it expire. A used code cannot be used
   a second time.
-- **Member** — change their role to a narrower one, or remove them entirely.
-- **Membership requests** — switch the toggle off, and no one new can ask. It
+- **Member**: change their role to a narrower one, or remove them entirely.
+- **Membership requests**: switch the toggle off, and no one new can ask. It
   doesn't affect anyone you have already approved.
-- **Clock** — turned off separately. Delete it in the **Clock** section and its
+- **Clock**: turned off separately. Delete it in the **Clock** section and its
   link stops working right away.
 
-When in doubt, share the least you can for the shortest time you can — you can
+When in doubt, share the least you can for the shortest time you can; you can
 always grant more later.

@@ -1,6 +1,18 @@
 // aurora-noise.ts
-// JS port of the GLSL noise functions from AuroraCanvas.svelte.
-// Kept in sync with the shader so chips respond to the same wave field.
+// JS port of the GLSL in AuroraCanvas.svelte, so the hero chips can sample the
+// exact brightness field the shader is drawing underneath them. Any change to
+// the shader's noise chain must be mirrored here or the chips drift out of step.
+
+const CLOCK_ORIGIN_MS = typeof performance !== "undefined" ? performance.now() : 0;
+
+/**
+ * Seconds elapsed on the clock shared by the canvas and the pool. Both must
+ * read the same origin: the shader's pattern is a function of time, so a
+ * different zero on either side samples a different frame of the animation.
+ */
+export function auroraTime(nowMs: number = performance.now()): number {
+  return (nowMs - CLOCK_ORIGIN_MS) / 1000;
+}
 
 function fract(x: number): number {
   return x - Math.floor(x);
@@ -42,36 +54,86 @@ function fbm(px: number, py: number): number {
   return v;
 }
 
+function smoothstep(e0: number, e1: number, x: number): number {
+  const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0)));
+  return t * t * (3 - 2 * t);
+}
+
 /**
- * Sample the aurora shader's domain-warp flow vector at a chip position.
+ * The shader's pre-palette brightness `v` at a point in its own p-space
+ * (centred, y up, normalised by height) at time `t` seconds.
  *
- * @param cx  chip center x in container pixels
- * @param cy  chip center y in container pixels
- * @param cw  container width in pixels
- * @param ch  container height in pixels
- * @param t   time in seconds — pass `now / 1000 * speed` to match AuroraCanvas exactly (speed defaults to 1.0)
- * @returns   { rx, ry } — approximately in [0, 1]. Subtract 0.5 and scale for force.
+ * Mirrors main() in AuroraCanvas.svelte up to `ramp(v)`: the colour ramp and
+ * vignette are monotone or static, so `v` is what moves on screen.
  */
-export function sampleFlow(
+function auroraBrightness(px: number, py: number, t: number): number {
+  const st = t * 0.06;
+
+  // q: first warp layer. Time enters y only: vec2(0., t) and vec2(5.2, -t*0.8).
+  const qx = fbm(px * 1.4,       py * 1.4 + st      );
+  const qy = fbm(px * 1.4 + 5.2, py * 1.4 - st * 0.8);
+
+  // r: second warp layer. `+ t*1.3` and `- t*1.1` are scalars added to a vec2,
+  // so they shift both components.
+  const wx = px * 2.1 + 1.8 * qx;
+  const wy = py * 2.1 + 1.8 * qy;
+  const rx = fbm(wx + 1.7 + st * 1.3, wy + 9.2 + st * 1.3);
+  const ry = fbm(wx + 8.3 - st * 1.1, wy + 2.8 - st * 1.1);
+
+  const n = fbm(px * 1.6 + 2.2 * rx, py * 1.6 + 2.2 * ry);
+
+  const yb = py * 1.15 + 0.05;
+  const band = smoothstep(0, 0.55, 1 - yb * yb);
+  return Math.pow(n, 1.15) * (0.55 + 0.6 * band);
+}
+
+export interface SurfaceSample {
+  /** Brightness in [0, ~1]: 0 is the dark trough, 1 the bright crest. */
+  value: number;
+  /** Brightness gradient in container pixels (per px). Points uphill, toward the crest. */
+  slopeX: number;
+  slopeY: number;
+  /**
+   * Apparent velocity of the pattern under this point in container px/s, from
+   * the optical-flow constraint dv/dt + grad(v) . u = 0. This is the direction
+   * the crest is visibly travelling, so a floater riding it moves this way.
+   */
+  flowX: number;
+  flowY: number;
+}
+
+const D_SPACE = 0.004; // p-space finite-difference step (~4 px at 920 px tall)
+const D_TIME = 0.05; // seconds
+const FLOW_EPS = 1e-4; // regulariser: flow is undefined where the field is flat
+
+/**
+ * Sample the drawn field at a container-pixel position. `cw`/`ch` are the
+ * canvas's CSS size, which the shader normalises by height; the y-axis is
+ * flipped because gl_FragCoord runs bottom-up while the DOM runs top-down.
+ */
+export function sampleSurface(
   cx: number, cy: number,
   cw: number, ch: number,
   t: number,
-): { rx: number; ry: number } {
-  // Map container-px → shader p-space: centered, normalised by height.
-  // Matches: vec2 p = (gl_FragCoord.xy - 0.5*u_res) / u_res.y
+): SurfaceSample {
   const px = (cx - cw * 0.5) / ch;
-  const py = (cy - ch * 0.5) / ch;
+  const py = (ch * 0.5 - cy) / ch;
 
-  // Matches shader: float t = u_t * 0.06
-  const st = t * 0.06;
+  const v0 = auroraBrightness(px, py, t);
+  const dvdx = (auroraBrightness(px + D_SPACE, py, t) - v0) / D_SPACE;
+  const dvdy = (auroraBrightness(px, py + D_SPACE, t) - v0) / D_SPACE;
+  const dvdt = (auroraBrightness(px, py, t + D_TIME) - v0) / D_TIME;
 
-  // q — first warp layer (matches shader exactly)
-  const qx = fbm(px * 1.4,       py * 1.4 + st         );
-  const qy = fbm(px * 1.4 + 5.2, py * 1.4 - st * 0.8   );
+  // Normal flow in p-space units per second, then scale to px/s (px = p * ch).
+  const g2 = dvdx * dvdx + dvdy * dvdy + FLOW_EPS;
+  const ux = (-dvdt * dvdx) / g2;
+  const uy = (-dvdt * dvdy) / g2;
 
-  // r — second warp layer (this is the flow vector we use as force)
-  const rx = fbm(px * 2.1 + 1.8 * qx + 1.7 + st * 1.3, py * 2.1 + 1.8 * qy + 9.2      );
-  const ry = fbm(px * 2.1 + 1.8 * qx + 8.3 - st * 1.1, py * 2.1 + 1.8 * qy + 2.8      );
-
-  return { rx, ry };
+  return {
+    value: v0,
+    slopeX: dvdx / ch,
+    slopeY: -dvdy / ch,
+    flowX: ux * ch,
+    flowY: -uy * ch,
+  };
 }
