@@ -57,7 +57,7 @@ public class NocturneRemoteBackgroundSyncAuthTests
         var tenantConfig = new NocturneRemoteConnectorConfiguration
         {
             Url = "https://remote.nocturne.example.com",
-            Token = "bearer-token",
+            AccessToken = "bearer-token",
             Enabled = true,
             SyncIntervalMinutes = 5,
         };
@@ -157,7 +157,7 @@ public class NocturneRemoteBackgroundSyncAuthTests
     private static NocturneRemoteConnectorConfiguration RemoteConfig => new()
     {
         Url = "https://remote.nocturne.example.com",
-        Token = "bearer-token",
+        AccessToken = "bearer-token",
     };
 
     private static SyncRequest GlucoseSince() =>
