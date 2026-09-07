@@ -1,10 +1,12 @@
 <script lang="ts">
   interface Props {
     textBlock?: HTMLElement | null;
+    ripples?: RippleField | null;
   }
-  let { textBlock = null }: Props = $props();
+  let { textBlock = null, ripples = null }: Props = $props();
 
   import { auroraTime, sampleSurface } from "$lib/utils/aurora-noise";
+  import type { RippleField } from "$lib/utils/aurora-ripples";
 
   // ── Chip definitions ──────────────────────────────────────────────────────
   // hPos: left or right as % of container width. Preserved from the original
@@ -90,6 +92,7 @@
   const TILT_GAIN = 6000; // deg per (brightness/px) of x-slope
   const TILT_MAX = 14; // deg
   const TILT_K = 6; // 1/s²: spring toward the surface tilt
+  const RIPPLE_PUSH = 1800; // px/s² at a full-strength crest
   const LINEAR_DAMP = 0.03; // fraction of velocity lost per frame (not per second)
   const ANGULAR_DAMP = 0.07; // same for rotation
   const RESTITUTION = 0.2; // bounciness (0 = dead stop, 1 = perfectly elastic)
@@ -427,6 +430,12 @@
         // right lifts the right end, which is a negative CSS rotation (y is down).
         const tilt = Math.max(-TILT_MAX, Math.min(TILT_MAX, -s.slopeX * TILT_GAIN));
         c.rotV += (tilt - c.rot) * TILT_K * dt;
+
+        if (ripples) {
+          const shove = ripples.shove(c.cx, c.cy, cw, ch, t);
+          c.vx += shove.x * RIPPLE_PUSH * dt;
+          c.vy += shove.y * RIPPLE_PUSH * dt;
+        }
       }
       c.vx *= 1 - LINEAR_DAMP;
       c.vy *= 1 - LINEAR_DAMP;
@@ -462,6 +471,14 @@
       grabOffset = { x: pointer.x - cs[i].cx, y: pointer.y - cs[i].cy };
     }
     containerEl?.setPointerCapture(e.pointerId);
+  }
+
+  // Reached only for the background: chips stop propagation of their own pointerdown.
+  // Touch is excluded because a scroll flick through the hero starts with a pointerdown.
+  function onBackgroundPointerDown(e: PointerEvent) {
+    if (!ripples || !containerEl || !e.isPrimary || e.button !== 0 || e.pointerType === "touch") return;
+    const cr = containerEl.getBoundingClientRect();
+    ripples.spawn(e.clientX - cr.left, e.clientY - cr.top, cr.width, cr.height, auroraTime());
   }
 
   function onPointerMove(e: PointerEvent) {
@@ -504,6 +521,7 @@
   class="absolute inset-0 overflow-hidden"
   aria-hidden="true"
   bind:this={containerEl}
+  onpointerdown={onBackgroundPointerDown}
   onpointermove={onPointerMove}
   onpointerup={onPointerUp}
 >

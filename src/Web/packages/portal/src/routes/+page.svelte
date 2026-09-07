@@ -8,8 +8,10 @@
     import { getCommunityData } from "$lib/data/portal";
     import { DATA_SOURCES, LIVE_CONNECTORS } from "$lib/data/connectors";
     import { AVAILABLE_REPORT_COUNT } from "$lib/data/reports";
+    import { RippleField } from "$lib/utils/aurora-ripples";
 
     let textBlockEl: HTMLElement | null = $state(null);
+    const ripples = new RippleField();
 
     let communityData = $state<Awaited<ReturnType<typeof getCommunityData>> | null>(null);
     getCommunityData()
@@ -32,9 +34,9 @@
 
 <!-- Hero -->
 <section class="relative w-full overflow-hidden -mt-16">
-    <AuroraCanvas height={920} />
+    <AuroraCanvas height={920} {ripples} />
     <div class="grain-bg absolute inset-0 pointer-events-none opacity-35 mix-blend-overlay" aria-hidden="true"></div>
-    <AuroraPool textBlock={textBlockEl} />
+    <AuroraPool textBlock={textBlockEl} {ripples} />
     <div class="absolute bottom-0 inset-x-0 h-[280px] pointer-events-none bg-gradient-to-b from-transparent to-background" aria-hidden="true"></div>
 
     <div class="absolute inset-0 pt-16 pointer-events-none">
