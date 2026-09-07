@@ -226,11 +226,17 @@ public class StateSpanRepository : IStateSpanRepository
         // For exclusive categories, close any existing open spans when a new one is inserted
         if (isNew && ExclusiveCategories.Contains(entity.Category))
         {
+            // Supersession closes a PRIOR open span when a newer one starts (a missed resume/switch).
+            // "Prior" is by start time, not insert order: a span that starts AFTER this one is not
+            // superseded by it. Without this bound, a span inserted out of order (historical backfill
+            // of a pump that reports newest-first) closes a later-starting open span at its own
+            // earlier start — inverting it (end < start), and clearing a genuinely active suspension.
             var openSpansQuery = _context.StateSpans
                 .Where(s =>
                     s.Category == entity.Category
                     && s.EndTimestamp == null
-                    && s.Id != entity.Id);
+                    && s.Id != entity.Id
+                    && s.StartTimestamp <= entity.StartTimestamp);
 
             // PumpMode mixes independent dimensions — Automatic/Manual loop mode vs Suspended
             // delivery — which can legitimately overlap, so only the SAME state is mutually exclusive

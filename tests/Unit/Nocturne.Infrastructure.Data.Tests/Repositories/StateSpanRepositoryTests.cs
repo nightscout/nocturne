@@ -113,6 +113,44 @@ public class StateSpanRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task UpsertStateSpanAsync_OlderStartingSpan_DoesNotSupersedeALaterOpenSpan()
+    {
+        // Historical backfill can insert a span that starts BEFORE an already-open one (a pump that
+        // reports newest-first, ingested out of order). Superseding the later span would close it at
+        // the earlier span's start — inverting it (end < start) and clearing a live suspension.
+        var laterStart = new DateTime(2026, 1, 1, 11, 0, 0, DateTimeKind.Utc);
+        var laterOpen = new StateSpan
+        {
+            Category = StateSpanCategory.PumpMode,
+            State = PumpModeState.Suspended.ToString(),
+            StartTimestamp = laterStart,
+            EndTimestamp = null,
+            Source = "Trio",
+            OriginalId = "pump-suspended:later",
+        };
+        await _repository.UpsertStateSpanAsync(laterOpen);
+
+        // A backfilled suspension that STARTS EARLIER arrives afterwards.
+        var earlier = new StateSpan
+        {
+            Category = StateSpanCategory.PumpMode,
+            State = PumpModeState.Suspended.ToString(),
+            StartTimestamp = new DateTime(2026, 1, 1, 10, 0, 0, DateTimeKind.Utc),
+            EndTimestamp = new DateTime(2026, 1, 1, 10, 30, 0, DateTimeKind.Utc),
+            Source = "Trio",
+            OriginalId = "pump-suspended:earlier",
+        };
+        await _repository.UpsertStateSpanAsync(earlier);
+
+        var spans = (await _repository.GetStateSpansAsync(category: StateSpanCategory.PumpMode)).ToList();
+
+        var later = spans.First(s => s.OriginalId == "pump-suspended:later");
+        later.EndTimestamp.Should().BeNull("a span that starts after the inserted one must not be superseded");
+        later.SupersededById.Should().BeNullOrEmpty();
+        later.IsActive.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task UpsertStateSpanAsync_PumpModeAutomatic_DoesNotSupersedeOpenSuspended()
     {
         // Suspended (LGS) and Automatic/Manual loop mode are independent dimensions that can overlap,
