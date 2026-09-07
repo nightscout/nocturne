@@ -17,6 +17,8 @@ export interface BotApiClient {
     ): Promise<PaginatedSensorGlucose>;
   };
   alerts: {
+    /** Null when the response body is empty or its status is unmapped. */
+    getActiveAlerts(signal?: AbortSignal): Promise<ActiveExcursion[] | null>;
     /** Acknowledges every active excursion for the tenant. */
     acknowledge(request: AcknowledgeRequest, signal?: AbortSignal): Promise<void>;
     acknowledgeExcursion(
@@ -76,6 +78,13 @@ export interface SensorGlucoseReading {
 
 export interface AcknowledgeRequest {
   acknowledgedBy?: string;
+}
+
+export interface ActiveExcursion {
+  id?: string;
+  ruleName?: string;
+  startedAt?: Date;
+  acknowledgedAt?: Date | null;
 }
 
 export interface MarkDeliveredRequest {

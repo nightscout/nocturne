@@ -1,14 +1,6 @@
 import { Card, Fields, Field } from "chat";
 import type { SensorGlucoseReading } from "../types.js";
-import { formatGlucose, trendArrow } from "../lib/format.js";
-
-function timeAgo(dateMs: number): string {
-  const diffMs = Date.now() - dateMs;
-  const minutes = Math.round(diffMs / 60000);
-  if (minutes < 1) return "just now";
-  if (minutes === 1) return "1 min ago";
-  return `${minutes} min ago`;
-}
+import { formatGlucose, timeAgo, trendArrow } from "../lib/format.js";
 
 export function GlucoseCard(props: {
   reading: SensorGlucoseReading;
