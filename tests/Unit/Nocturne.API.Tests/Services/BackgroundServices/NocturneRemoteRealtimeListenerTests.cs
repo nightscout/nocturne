@@ -91,7 +91,7 @@ public class NocturneRemoteRealtimeListenerTests
         {
             Enabled = false,
             Url = "http://remote.example.com",
-            Token = "test-token",
+            AccessToken = "test-token",
         };
 
         var serviceProvider = BuildServiceProvider(connectionString, config);
@@ -118,7 +118,7 @@ public class NocturneRemoteRealtimeListenerTests
         {
             Enabled = true,
             Url = "",
-            Token = "test-token",
+            AccessToken = "test-token",
         };
 
         var serviceProvider = BuildServiceProvider(connectionString, config);
@@ -145,7 +145,7 @@ public class NocturneRemoteRealtimeListenerTests
         {
             Enabled = true,
             Url = "127.0.0.1:9",
-            Token = "test-token",
+            AccessToken = "test-token",
         };
 
         var logger = new ListLogger<NocturneRemoteConnectorBackgroundService>();
@@ -173,7 +173,7 @@ public class NocturneRemoteRealtimeListenerTests
         {
             Enabled = true,
             Url = "ftp://x",
-            Token = "test-token",
+            AccessToken = "test-token",
         };
 
         var logger = new ListLogger<NocturneRemoteConnectorBackgroundService>();
