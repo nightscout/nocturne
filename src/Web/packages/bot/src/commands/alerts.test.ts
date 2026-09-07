@@ -1,9 +1,14 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
-import type { ActionEvent, Chat } from "chat";
+import type { ActionEvent, Chat, SlashCommandEvent } from "chat";
 import { registerAlertCommands } from "./alerts.js";
 import { runWithContext, type BotRequestContext } from "../lib/request-context.js";
-import type { BotApiClient, DirectoryCandidate } from "../types.js";
+import type {
+  ActiveExcursion,
+  BotApiClient,
+  DirectoryCandidate,
+} from "../types.js";
 import { encodeActionValue, encodeTenantKey } from "../lib/action-value.js";
+import { cardFields, cardTexts } from "../cards/card.test-utils.js";
 
 vi.mock("../lib/logger.js", () => ({
   createLogger: () => ({
@@ -55,9 +60,13 @@ const asDefault = (c: DirectoryCandidate): DirectoryCandidate => ({
 interface ScopedAlerts {
   acknowledge: Mock;
   acknowledgeExcursion: Mock;
+  getActiveAlerts: Mock;
 }
 
-function createContext(candidates: DirectoryCandidate[] | null) {
+function createContext(
+  candidates: DirectoryCandidate[] | null,
+  activeAlerts: ActiveExcursion[] | null = [],
+) {
   const resolve = vi.fn().mockResolvedValue(candidates);
   const ambientAcknowledge = vi.fn().mockResolvedValue(undefined);
   const alertsBySlug = new Map<string, ScopedAlerts>();
@@ -68,6 +77,7 @@ function createContext(candidates: DirectoryCandidate[] | null) {
       alerts = {
         acknowledge: vi.fn().mockResolvedValue(undefined),
         acknowledgeExcursion: vi.fn().mockResolvedValue(undefined),
+        getActiveAlerts: vi.fn().mockResolvedValue(activeAlerts),
       };
       alertsBySlug.set(tenantSlug, alerts);
     }
@@ -102,20 +112,50 @@ function createActionEvent(value?: string) {
   return { event, post, postEphemeral };
 }
 
+function createSlashEvent() {
+  const post = vi.fn().mockResolvedValue({ id: "platform-message-1" });
+  const postEphemeral = vi.fn().mockResolvedValue(null);
+  const event = {
+    adapter: { name: "discord" },
+    channel: { post, postEphemeral },
+    command: "/alerts",
+    text: "",
+    user: { userId: "discord-user-1", fullName: "Sam Tester" },
+  } as unknown as SlashCommandEvent;
+  return { event, post, postEphemeral };
+}
+
+function registerHandlers() {
+  const actions = new Map<string, (event: ActionEvent) => Promise<void>>();
+  const commands = new Map<
+    string,
+    (event: SlashCommandEvent) => Promise<void>
+  >();
+  const bot = {
+    onAction: (id: string, fn: (event: ActionEvent) => Promise<void>) => {
+      actions.set(id, fn);
+    },
+    onSlashCommand: (
+      name: string,
+      fn: (event: SlashCommandEvent) => Promise<void>,
+    ) => {
+      commands.set(name, fn);
+    },
+  } as unknown as Chat;
+
+  registerAlertCommands(bot);
+  return { actions, commands };
+}
+
+/** The confirmation the handler posts is a card, so assert on its text. */
+const postedText = (post: Mock, call = 0) =>
+  cardTexts(post.mock.calls[call]?.[0]);
+
 describe("ack_alert action", () => {
   let handler: (event: ActionEvent) => Promise<void>;
 
   beforeEach(() => {
-    const actions = new Map<string, (event: ActionEvent) => Promise<void>>();
-    const bot = {
-      onAction: (id: string, fn: (event: ActionEvent) => Promise<void>) => {
-        actions.set(id, fn);
-      },
-      onSlashCommand: vi.fn(),
-    } as unknown as Chat;
-
-    registerAlertCommands(bot);
-    handler = actions.get("ack_alert")!;
+    handler = registerHandlers().actions.get("ack_alert")!;
   });
 
   it("acknowledges only the excursion the card is about", async () => {
@@ -131,8 +171,9 @@ describe("ack_alert action", () => {
     );
     expect(alerts.acknowledge).not.toHaveBeenCalled();
     expect(ctx.ambientAcknowledge).not.toHaveBeenCalled();
-    expect(post).toHaveBeenCalledExactlyOnceWith(
-      "Acknowledged this alert. Any other active alerts are untouched.",
+    expect(post).toHaveBeenCalledOnce();
+    expect(postedText(post)).toContain(
+      "By Sam Tester. Any other active alerts are untouched.",
     );
   });
 
@@ -147,7 +188,8 @@ describe("ack_alert action", () => {
       acknowledgedBy: "Sam Tester",
     });
     expect(alerts.acknowledgeExcursion).not.toHaveBeenCalled();
-    expect(post).toHaveBeenCalledExactlyOnceWith("All alerts acknowledged.");
+    expect(post).toHaveBeenCalledOnce();
+    expect(postedText(post)).toContain("All alerts acknowledged by Sam Tester.");
   });
 
   it("acknowledges the excursion named by a two-UUID value", async () => {
@@ -184,7 +226,8 @@ describe("ack_alert action", () => {
     expect(
       ctx.alertsBySlug.get("home-clinic")!.acknowledge,
     ).toHaveBeenCalledExactlyOnceWith({ acknowledgedBy: "Sam Tester" });
-    expect(post).toHaveBeenCalledExactlyOnceWith("All alerts acknowledged.");
+    expect(post).toHaveBeenCalledOnce();
+    expect(postedText(post)).toContain("All alerts acknowledged by Sam Tester.");
   });
 
   it("tells an unlinked user to connect and calls no api", async () => {
@@ -244,8 +287,9 @@ describe("ack_alert action", () => {
 
     expect(ctx.scopedApiFactory).toHaveBeenCalledExactlyOnceWith("work-clinic");
     expect(ctx.alertsBySlug.has("home-clinic")).toBe(false);
-    expect(post).toHaveBeenCalledExactlyOnceWith(
-      "Acknowledged this alert. Any other active alerts are untouched.",
+    expect(post).toHaveBeenCalledOnce();
+    expect(postedText(post)).toContain(
+      "By Sam Tester. Any other active alerts are untouched.",
     );
   });
 
@@ -257,7 +301,8 @@ describe("ack_alert action", () => {
 
     expect(ctx.scopedApiFactory).toHaveBeenCalledExactlyOnceWith("work-clinic");
     expect(postEphemeral).not.toHaveBeenCalled();
-    expect(post).toHaveBeenCalledExactlyOnceWith("All alerts acknowledged.");
+    expect(post).toHaveBeenCalledOnce();
+    expect(postedText(post)).toContain("All alerts acknowledged by Sam Tester.");
   });
 
   it("asks a multi-link user to choose when the button carries no tenant", async () => {
@@ -331,6 +376,90 @@ describe("ack_alert action", () => {
     expect(ctx.scopedApiFactory).toHaveBeenCalledExactlyOnceWith("work-clinic");
     expect(post).toHaveBeenCalledExactlyOnceWith(
       "Failed to acknowledge. Please try again.",
+    );
+  });
+
+  it("does not report a failure when only the confirmation cannot be posted", async () => {
+    const ctx = createContext([HOME, WORK]);
+    const { event, post } = createActionEvent(cardValue(WORK_TENANT, EXCURSION));
+    post.mockRejectedValue(new Error("channel_not_found"));
+
+    await expect(
+      runWithContext(ctx.context, () => handler(event)),
+    ).resolves.toBeUndefined();
+
+    expect(
+      ctx.alertsBySlug.get("work-clinic")!.acknowledgeExcursion,
+    ).toHaveBeenCalledOnce();
+    expect(post).toHaveBeenCalledOnce();
+  });
+});
+
+describe("/alerts command", () => {
+  let handler: (event: SlashCommandEvent) => Promise<void>;
+
+  beforeEach(() => {
+    handler = registerHandlers().commands.get("/alerts")!;
+  });
+
+  const excursion = (id: string, ruleName: string): ActiveExcursion => ({
+    id,
+    ruleName,
+    startedAt: new Date(Date.now() - 3 * 60_000),
+  });
+
+  it("lists every active excursion", async () => {
+    const ctx = createContext(
+      [asDefault(WORK)],
+      [excursion("e1", "Urgent low"), excursion("e2", "High")],
+    );
+    const { event, post } = createSlashEvent();
+
+    await runWithContext(ctx.context, () => handler(event));
+
+    expect(
+      ctx.alertsBySlug.get("work-clinic")!.getActiveAlerts,
+    ).toHaveBeenCalledOnce();
+    expect(cardFields(post.mock.calls[0]?.[0])).toEqual([
+      "Urgent low: Firing, started 3 min ago",
+      "High: Firing, started 3 min ago",
+    ]);
+  });
+
+  it("says there are none rather than posting an empty card", async () => {
+    const ctx = createContext([asDefault(WORK)]);
+    const { event, post } = createSlashEvent();
+
+    await runWithContext(ctx.context, () => handler(event));
+
+    expect(post).toHaveBeenCalledExactlyOnceWith("No active alerts for WORK.");
+  });
+
+  it("reads a null response as no active alerts", async () => {
+    const ctx = createContext([asDefault(WORK)], null);
+    const { event, post } = createSlashEvent();
+
+    await runWithContext(ctx.context, () => handler(event));
+
+    expect(post).toHaveBeenCalledExactlyOnceWith("No active alerts for WORK.");
+  });
+
+  it("reports a failed lookup", async () => {
+    const ctx = createContext([asDefault(WORK)]);
+    const { event, post } = createSlashEvent();
+    ctx.scopedApiFactory.mockImplementation(
+      () =>
+        ({
+          alerts: {
+            getActiveAlerts: vi.fn().mockRejectedValue(new Error("503")),
+          },
+        }) as unknown as BotApiClient,
+    );
+
+    await runWithContext(ctx.context, () => handler(event));
+
+    expect(post).toHaveBeenCalledExactlyOnceWith(
+      "Failed to fetch alerts. Please try again.",
     );
   });
 });
