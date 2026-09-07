@@ -1,12 +1,12 @@
 <script lang="ts">
   interface Props {
     textBlock?: HTMLElement | null;
-    ripples?: RippleField | null;
+    flow?: FlowField | null;
   }
-  let { textBlock = null, ripples = null }: Props = $props();
+  let { textBlock = null, flow = null }: Props = $props();
 
   import { auroraTime, sampleSurface } from "$lib/utils/aurora-noise";
-  import type { RippleField } from "$lib/utils/aurora-ripples";
+  import type { FlowField } from "$lib/utils/aurora-flow";
 
   // ── Chip definitions ──────────────────────────────────────────────────────
   // hPos: left or right as % of container width. Preserved from the original
@@ -92,7 +92,8 @@
   const TILT_GAIN = 6000; // deg per (brightness/px) of x-slope
   const TILT_MAX = 14; // deg
   const TILT_K = 6; // 1/s²: spring toward the surface tilt
-  const RIPPLE_PUSH = 1800; // px/s² at a full-strength crest
+  const STIR_PUSH = 1.2; // 1/s: acceleration per px/s of stirred current under the chip
+  const STIR_MAX = 300; // px/s: current beyond this counts no further
   const LINEAR_DAMP = 0.03; // fraction of velocity lost per frame (not per second)
   const ANGULAR_DAMP = 0.07; // same for rotation
   const RESTITUTION = 0.2; // bounciness (0 = dead stop, 1 = perfectly elastic)
@@ -138,6 +139,8 @@
   let pointer = { x: 0, y: 0 };
   let grabOffset = { x: 0, y: 0 }; // pointer-to-center offset at grab time
   let dragIdx = -1;
+  // Last pointer sample while stirring; a stroke's velocity is the difference between two.
+  let paddle: { x: number; y: number; t: number } | null = null;
   let textRects: { x: number; y: number; w: number; h: number }[] = [];
 
   // ── Svelte action: collect chip element refs without triggering reactivity ──
@@ -404,6 +407,7 @@
     const t = auroraTime(now);
     const cw = containerEl ? containerEl.offsetWidth : 0;
     const ch = containerEl ? containerEl.offsetHeight : 0;
+    if (flow) flow.advance(t);
 
     // Integrate forces
     for (let i = 0; i < cs.length; i++) {
@@ -431,10 +435,17 @@
         const tilt = Math.max(-TILT_MAX, Math.min(TILT_MAX, -s.slopeX * TILT_GAIN));
         c.rotV += (tilt - c.rot) * TILT_K * dt;
 
-        if (ripples) {
-          const shove = ripples.shove(c.cx, c.cy, cw, ch, t);
-          c.vx += shove.x * RIPPLE_PUSH * dt;
-          c.vy += shove.y * RIPPLE_PUSH * dt;
+        if (flow) {
+          const cur = flow.velocityAt(c.cx / cw, c.cy / ch);
+          let fx = cur.vx * cw;
+          let fy = cur.vy * ch;
+          const speed = Math.hypot(fx, fy);
+          if (speed > STIR_MAX) {
+            fx *= STIR_MAX / speed;
+            fy *= STIR_MAX / speed;
+          }
+          c.vx += fx * STIR_PUSH * dt;
+          c.vy += fy * STIR_PUSH * dt;
         }
       }
       c.vx *= 1 - LINEAR_DAMP;
@@ -474,17 +485,35 @@
   }
 
   // Reached only for the background: chips stop propagation of their own pointerdown.
-  // Touch is excluded because a scroll flick through the hero starts with a pointerdown.
+  // Touch is excluded here and from stirring in onPointerMove: a scroll flick
+  // through the hero is a pointer stroke too.
   function onBackgroundPointerDown(e: PointerEvent) {
-    if (!ripples || !containerEl || !e.isPrimary || e.button !== 0 || e.pointerType === "touch") return;
+    if (!flow || !containerEl || !e.isPrimary || e.button !== 0 || e.pointerType === "touch") return;
     const cr = containerEl.getBoundingClientRect();
-    ripples.spawn(e.clientX - cr.left, e.clientY - cr.top, cr.width, cr.height, auroraTime());
+    flow.poke((e.clientX - cr.left) / cr.width, (e.clientY - cr.top) / cr.height);
   }
 
   function onPointerMove(e: PointerEvent) {
-    if (dragIdx < 0 || !containerEl) return;
+    if (!containerEl) return;
     const cr = containerEl.getBoundingClientRect();
-    pointer = { x: e.clientX - cr.left, y: e.clientY - cr.top };
+    const x = e.clientX - cr.left;
+    const y = e.clientY - cr.top;
+    if (dragIdx >= 0) pointer = { x, y };
+    if (!flow || !e.isPrimary || e.pointerType === "touch") return;
+    if (paddle) {
+      flow.stir(
+        x / cr.width,
+        y / cr.height,
+        (x - paddle.x) / cr.width,
+        (y - paddle.y) / cr.height,
+        (e.timeStamp - paddle.t) / 1000,
+      );
+    }
+    paddle = { x, y, t: e.timeStamp };
+  }
+
+  function onPointerLeave() {
+    paddle = null;
   }
 
   function onPointerUp(_e: PointerEvent) {
@@ -524,6 +553,7 @@
   onpointerdown={onBackgroundPointerDown}
   onpointermove={onPointerMove}
   onpointerup={onPointerUp}
+  onpointerleave={onPointerLeave}
 >
   <!-- Mobile: static chip wrap -->
   <div class="md:hidden absolute top-[72px] left-0 right-0 px-4">

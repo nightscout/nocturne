@@ -1,43 +1,37 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import { auroraTime } from "$lib/utils/aurora-noise";
-    import {
-        MAX_RIPPLES,
-        RIPPLE_LIFE,
-        RIPPLE_SPEED,
-        RIPPLE_WIDTH,
-        type RippleField,
-    } from "$lib/utils/aurora-ripples";
+    import { FLOW_H, FLOW_VMAX, FLOW_W, type FlowField } from "$lib/utils/aurora-flow";
 
     let {
         height = 880,
         intensity = 1.0,
         speed = 1.0,
-        ripples = null,
+        flow = null,
         class: className = "",
     }: {
         height?: number;
         intensity?: number;
         speed?: number;
-        ripples?: RippleField | null;
+        flow?: FlowField | null;
         class?: string;
     } = $props();
 
     let canvasEl: HTMLCanvasElement;
 
     // Fragment shader: domain-warped FBM noise into the Nocturne glucose palette.
-    // aurora-noise.ts is a JS port of this chain; keep the two in step.
+    // aurora-noise.ts is a JS port of this chain; keep the two in step. The flow
+    // field's warp is deliberately not mirrored there: the pool takes the current
+    // straight from the field instead.
     const FRAG = `
 precision highp float;
 uniform vec2  u_res;
 uniform float u_t;
 uniform float u_intensity;
-uniform vec3  u_rip[${MAX_RIPPLES}];
-uniform int   u_ripN;
+uniform sampler2D u_flow;
 
-const float RIP_LIFE  = ${RIPPLE_LIFE.toFixed(4)};
-const float RIP_SPEED = ${RIPPLE_SPEED.toFixed(4)};
-const float RIP_WIDTH = ${RIPPLE_WIDTH.toFixed(4)};
+const float FLOW_VMAX = ${FLOW_VMAX.toFixed(4)};
+const float FLOW_WARP = 0.22;
 
 const vec3 C_VLOW  = vec3(0.835, 0.149, 0.192);
 const vec3 C_LOW   = vec3(0.165, 0.608, 0.608);
@@ -65,39 +59,30 @@ vec3 ramp(float t){
   if(t<0.65) return mix(C_IN,C_TIGHT,smoothstep(0.45,0.65,t));
   return mix(C_TIGHT,C_HIGH,smoothstep(0.65,1.,t));
 }
-// Mirrors rippleCrest() in aurora-ripples.ts.
-float crest(float d,float age){
-  if(age<0.||age>=RIP_LIFE) return 0.;
-  float front=(d-age*RIP_SPEED)/RIP_WIDTH;
-  float fade=1.-age/RIP_LIFE;
-  return exp(-front*front)*fade*fade;
-}
 void main(){
   vec2 uv=gl_FragCoord.xy/u_res.xy;
   vec2 p=(gl_FragCoord.xy-0.5*u_res.xy)/u_res.y;
+  // Flow rows run top-down like the DOM; gl_FragCoord runs bottom-up.
+  vec4 flow=texture2D(u_flow,vec2(uv.x,1.0-uv.y));
+  // Current in widths/s and heights/s with DOM y down; p is height-normalised, y up.
+  // The pattern is sampled from where the water came from, so it rides the current.
+  vec2 cur=(flow.rg-0.5)*2.0*FLOW_VMAX;
+  vec2 pw=p-vec2(cur.x*u_res.x/u_res.y,-cur.y)*FLOW_WARP;
   float t=u_t*0.06;
-  vec2 q=vec2(fbm(p*1.4+vec2(0.,t)),fbm(p*1.4+vec2(5.2,-t*0.8)));
-  vec2 r=vec2(fbm(p*2.1+1.8*q+vec2(1.7,9.2)+t*1.3),fbm(p*2.1+1.8*q+vec2(8.3,2.8)-t*1.1));
-  float n=fbm(p*1.6+2.2*r);
+  vec2 q=vec2(fbm(pw*1.4+vec2(0.,t)),fbm(pw*1.4+vec2(5.2,-t*0.8)));
+  vec2 r=vec2(fbm(pw*2.1+1.8*q+vec2(1.7,9.2)+t*1.3),fbm(pw*2.1+1.8*q+vec2(8.3,2.8)-t*1.1));
+  float n=fbm(pw*1.6+2.2*r);
   float yb=p.y*1.15+0.05;
   float band=smoothstep(0.0,0.55,1.0-yb*yb);
   float v=pow(n,1.15)*(0.55+0.6*band);
   vec3 col=ramp(v);
   float vign=smoothstep(0.95,0.2,length(p*vec2(0.55,1.05)));
   col=mix(C_BG,col,vign*u_intensity);
-  // Ripples: a red crest at each wavefront, with darker water just behind it.
-  float rip=0.,trough=0.;
-  for(int i=0;i<${MAX_RIPPLES};i++){
-    if(i>=u_ripN) break;
-    float d=length(p-u_rip[i].xy);
-    float age=u_rip[i].z;
-    rip+=crest(d,age);
-    trough+=crest(d+1.6*RIP_WIDTH,age);
-  }
-  rip=clamp(rip,0.,1.);
-  col*=1.-0.45*clamp(trough,0.,1.);
-  col=mix(col,C_VLOW,rip*(0.6+0.4*n));
-  col+=C_VLOW*rip*0.35;
+  // Stirred water heats from blue through orange to red.
+  float heat=flow.b;
+  vec3 hot=heat<0.5?mix(C_HIGH,C_IN,heat*2.0):mix(C_IN,C_VLOW,(heat-0.5)*2.0);
+  col=mix(col,hot,smoothstep(0.02,0.3,heat)*0.85);
+  col+=hot*heat*0.25;
   float g=(hash(gl_FragCoord.xy+u_t*0.001)-0.5)*0.025;
   col+=g;
   gl_FragColor=vec4(col,1.0);
@@ -145,9 +130,20 @@ void main(){
         const uRes = gl.getUniformLocation(prog, "u_res");
         const uT = gl.getUniformLocation(prog, "u_t");
         const uI = gl.getUniformLocation(prog, "u_intensity");
-        const uRip = gl.getUniformLocation(prog, "u_rip[0]");
-        const uRipN = gl.getUniformLocation(prog, "u_ripN");
-        const ripBuf = new Float32Array(MAX_RIPPLES * 3);
+        const uFlow = gl.getUniformLocation(prog, "u_flow");
+        const flowTex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, flowTex);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        if (flow) {
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, FLOW_W, FLOW_H, 0, gl.RGBA, gl.UNSIGNED_BYTE, flow.texture);
+        } else {
+            // Still water: zero velocity, no heat.
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([128, 128, 0, 255]));
+        }
+        gl.uniform1i(uFlow, 0);
 
         let raf: number;
         let running = true;
@@ -169,10 +165,9 @@ void main(){
             gl.uniform2f(uRes, canvas.width, canvas.height);
             gl.uniform1f(uT, now * speed);
             gl.uniform1f(uI, intensity);
-            if (ripples) {
-                // Ripple ages run on the unscaled clock so the pool's physics sees the same radius.
-                gl.uniform1i(uRipN, ripples.pack(now, ripBuf));
-                gl.uniform3fv(uRip, ripBuf);
+            if (flow) {
+                flow.advance(now);
+                gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, FLOW_W, FLOW_H, gl.RGBA, gl.UNSIGNED_BYTE, flow.texture);
             }
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
             raf = requestAnimationFrame(tick);
