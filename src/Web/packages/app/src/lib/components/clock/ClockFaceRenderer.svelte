@@ -3,6 +3,7 @@
   import { getClockGlucoseSource } from "$lib/stores/realtime-store.svelte";
   import {
     buildCustomCssString,
+    buildStyleString,
     clockBackgroundStyle,
     getElementColor,
     getFontClass,
@@ -23,11 +24,7 @@
   import TrackerMarkers from "$lib/components/dashboard/glucose-chart/markers/TrackerMarkers.svelte";
   import ChartTooltip from "$lib/components/dashboard/glucose-chart/ChartTooltip.svelte";
   import TrackerCategoryIcon from "$lib/components/icons/TrackerCategoryIcon.svelte";
-  import type {
-    ClockFaceConfig,
-    ClockElement,
-    TrackerDefinitionDto,
-  } from "$lib/api";
+  import type { ClockFaceConfig, TrackerDefinitionDto } from "$lib/api";
   import { getDefinitions } from "$api/generated/trackers.generated.remote";
   import {
     advance,
@@ -97,21 +94,6 @@
   const trackerDefinitions = $derived<TrackerDefinitionDto[]>(
     definitionsQuery?.current ?? [],
   );
-
-  // Sized off `scale`, so it cannot share the builder's own style builder.
-  function buildStyleString(element: ClockElement): string {
-    const style = element.style;
-    const parts: string[] = [];
-    const size = (element.size || 20) * scale;
-    parts.push(`font-size: ${size}px`);
-    parts.push(`color: ${getElementColor(element, currentBG)}`);
-    parts.push(`opacity: ${style?.opacity ?? 1.0}`);
-    const customCss = buildCustomCssString(element);
-    if (customCss) {
-      parts.push(customCss);
-    }
-    return parts.join("; ");
-  }
 
   // Background chart element
   const backgroundChart = $derived.by(() => {
@@ -434,7 +416,7 @@
             {:else if element.type !== "chart"}
               <span
                 class="leading-none tabular-nums {getFontClass(element.style?.font)} {getFontWeightClass(element.style?.fontWeight)} {isStale && element.type === 'sg' ? 'line-through opacity-60' : ''}"
-                style={buildStyleString(element)}
+                style={buildStyleString(element, currentBG, scale)}
               >
                 {renderClockElementValue(element, glucose, currentTime)}
               </span>

@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 import type { ClockElement } from "$lib/api";
-import { clockBackgroundStyle, getBgColor, getElementColor } from "./utils";
+import {
+  buildStyleString,
+  clockBackgroundStyle,
+  getBgColor,
+  getElementColor,
+} from "./utils";
 
 const dynamic = (): ClockElement => ({
   type: "sg",
@@ -62,6 +67,31 @@ describe("getElementColor", () => {
       const element: ClockElement = { type: "sg", style: { color: css } };
       expect(getElementColor(element, null)).toBe("#ffffff");
     }
+  });
+});
+
+describe("buildStyleString", () => {
+  it("scales the font size the caller renders at", () => {
+    const element: ClockElement = { type: "sg", size: 20 };
+    expect(buildStyleString(element, null, 2)).toContain("font-size: 40px");
+    expect(buildStyleString(element, null, 0.8)).toContain("font-size: 16px");
+  });
+
+  it("sizes an element that carries no size off its type's default", () => {
+    // sg's ELEMENT_INFO default is 40; the API models size as optional, so a
+    // face saved without one must not fall back to a single global size.
+    expect(buildStyleString({ type: "sg" }, null, 1)).toContain(
+      "font-size: 40px"
+    );
+    expect(buildStyleString({ type: "age" }, null, 1)).toContain(
+      "font-size: 10px"
+    );
+  });
+
+  it("sizes an element of an unknown type off the global default", () => {
+    expect(buildStyleString({ type: "wormhole" }, null, 1)).toContain(
+      "font-size: 20px"
+    );
   });
 });
 

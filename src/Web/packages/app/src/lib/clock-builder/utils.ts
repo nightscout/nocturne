@@ -145,26 +145,23 @@ export function buildCustomCssString(element: ClockElement): string {
 }
 
 /**
- * Build inline style string from element.style (including custom properties)
+ * Build inline style string from element.style (including custom properties).
+ * `scale` multiplies the font size: the face is rendered at whatever size its
+ * container allows, the builder preview at a fixed fraction of the real thing.
  */
 export function buildStyleString(
   element: ClockElement,
-  currentBG: number | null
+  currentBG: number | null,
+  scale: number
 ): string {
   const style = element.style;
   const parts: string[] = [];
 
-  // Font size from element.size
   const size = element.size || elementInfo(element.type)?.defaultSize || 20;
-  parts.push(`font-size: ${size * 0.8}px`);
-
-  // Color
+  parts.push(`font-size: ${size * scale}px`);
   parts.push(`color: ${getElementColor(element, currentBG)}`);
-
-  // Opacity
   parts.push(`opacity: ${style?.opacity ?? 1.0}`);
 
-  // Add any custom CSS properties
   const customCss = buildCustomCssString(element);
   if (customCss) {
     parts.push(customCss);

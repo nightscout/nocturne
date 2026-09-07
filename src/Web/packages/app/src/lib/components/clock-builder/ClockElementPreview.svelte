@@ -69,7 +69,7 @@
     class="leading-none tabular-nums {getFontClass(
       element.style?.font
     )} {getFontWeightClass(element.style?.fontWeight)}"
-    style={buildStyleString(element, glucose.currentBG)}
+    style={buildStyleString(element, glucose.currentBG, 0.8)}
   >
     {value}
   </span>
@@ -78,7 +78,7 @@
        inventing a value; an empty span could not be selected or removed. -->
   <span
     class="leading-none italic opacity-60"
-    style={buildStyleString(element, glucose.currentBG)}
+    style={buildStyleString(element, glucose.currentBG, 0.8)}
   >
     {elementInfo(element.type)?.name ?? element.type}
   </span>
