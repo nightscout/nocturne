@@ -210,6 +210,35 @@ public class MealMatchingServiceTests
     }
 
     /// <summary>
+    /// Npgsql rejects a DateTimeOffset carrying any offset but zero against a
+    /// "timestamp with time zone", and binding a bare date off the query string gives one the
+    /// server's own offset. Unnormalised, the whole Meals page 500s on any host that is not on
+    /// UTC, which is every developer machine and no production one.
+    /// </summary>
+    [Fact]
+    public async Task GetSuggestionsAsync_QueriesInUtcWhateverOffsetItIsHanded()
+    {
+        var captured = new List<DateTimeOffset>();
+        _foodEntryRepository
+            .Setup(r => r.GetPendingInTimeRangeAsync(
+                It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
+            .Callback((DateTimeOffset from, DateTimeOffset to, CancellationToken _) =>
+            {
+                captured.Add(from);
+                captured.Add(to);
+            })
+            .ReturnsAsync([]);
+
+        var offset = TimeSpan.FromHours(10);
+        var from = new DateTimeOffset(2026, 9, 8, 0, 0, 0, offset);
+
+        await NewService().GetSuggestionsAsync(from, from.AddDays(1));
+
+        captured.Should().OnlyContain(instant => instant.Offset == TimeSpan.Zero);
+        captured[0].Should().Be(from);
+    }
+
+    /// <summary>
     /// <c>treatment_foods.carb_intake_id</c> has no foreign key, so an unknown id would persist
     /// a row nothing can resolve and strand the food entry in Matched.
     /// </summary>
