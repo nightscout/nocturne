@@ -11,15 +11,6 @@ import {
   elementInfo,
   type InternalElement,
 } from "./types";
-import { browser } from "$app/environment";
-
-/**
- * Resolve CSS variable to its computed value
- */
-function resolveCssVar(name: string): string {
-  if (!browser) return "#000000"; // fallback for SSR
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-}
 
 export const DEFAULT_ELEMENT_COLOR = "#ffffff";
 
@@ -32,14 +23,16 @@ const NAMED_ELEMENT_COLORS = new Map([["muted", "var(--muted-foreground)"]]);
 const HEX_COLOR = /^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
 
 /**
- * Get BG color based on glucose value
+ * Colour of the glucose band a reading falls in, as an unresolved CSS variable
+ * reference: resolving it would freeze the theme and leave SSR, which has no
+ * computed style to read, with no colour at all.
  */
 export function getBgColor(bg: number): string {
-  if (bg < 70) return resolveCssVar("--glucose-very-low");
-  if (bg < 80) return resolveCssVar("--glucose-low");
-  if (bg > 250) return resolveCssVar("--glucose-very-high");
-  if (bg > 180) return resolveCssVar("--glucose-high");
-  return resolveCssVar("--glucose-in-range");
+  if (bg < 70) return "var(--glucose-very-low)";
+  if (bg < 80) return "var(--glucose-low)";
+  if (bg > 250) return "var(--glucose-very-high)";
+  if (bg > 180) return "var(--glucose-high)";
+  return "var(--glucose-in-range)";
 }
 
 /**

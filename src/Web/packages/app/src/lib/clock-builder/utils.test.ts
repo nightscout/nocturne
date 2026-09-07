@@ -1,10 +1,25 @@
 import { describe, it, expect } from "vitest";
 import type { ClockElement } from "$lib/api";
-import { clockBackgroundStyle, getElementColor } from "./utils";
+import { clockBackgroundStyle, getBgColor, getElementColor } from "./utils";
 
 const dynamic = (): ClockElement => ({
   type: "sg",
   style: { color: "dynamic" },
+});
+
+describe("getBgColor", () => {
+  it.each([
+    [69, "var(--glucose-very-low)"],
+    [70, "var(--glucose-low)"],
+    [79, "var(--glucose-low)"],
+    [80, "var(--glucose-in-range)"],
+    [180, "var(--glucose-in-range)"],
+    [181, "var(--glucose-high)"],
+    [250, "var(--glucose-high)"],
+    [251, "var(--glucose-very-high)"],
+  ])("gives %i the band colour as a CSS variable", (bg, expected) => {
+    expect(getBgColor(bg)).toBe(expected);
+  });
 });
 
 describe("getElementColor", () => {
@@ -22,6 +37,11 @@ describe("getElementColor", () => {
     const muted: ClockElement = { type: "delta", style: { color: "muted" } };
     expect(getElementColor(muted, null)).toBe("var(--muted-foreground)");
     expect(getElementColor(muted, 55)).toBe("var(--muted-foreground)");
+  });
+
+  it("paints a dynamic element in the reading's band colour", () => {
+    expect(getElementColor(dynamic(), 55)).toBe("var(--glucose-very-low)");
+    expect(getElementColor(dynamic(), 120)).toBe("var(--glucose-in-range)");
   });
 
   it("takes the default rather than emitting an unknown token as CSS", () => {
@@ -55,8 +75,8 @@ describe("clockBackgroundStyle", () => {
   });
 
   it("colours the face by a real reading", () => {
-    expect(clockBackgroundStyle(settings, 55, "#0a0a0a")).not.toBe(
-      "background-color: #0a0a0a;"
+    expect(clockBackgroundStyle(settings, 55, "#0a0a0a")).toBe(
+      "background-color: var(--glucose-very-low);"
     );
   });
 
