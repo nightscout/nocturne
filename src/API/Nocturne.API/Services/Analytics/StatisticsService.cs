@@ -1484,12 +1484,8 @@ public class StatisticsService : IStatisticsService
     }
 
     /// <summary>
-    /// The cadence assumed where nothing publishes one: a series whose entries show no interval of
-    /// their own — a lone reading, or several stamped at the same instant — or a registered device
-    /// whose <see cref="CgmDeviceWindow.CadenceMinutes"/> the catalogue does not carry. In
-    /// <see cref="ReadingMinutes"/> it is what the final reading of such a series stands for, the
-    /// readings before it covering no elapsed time; in <see cref="DerivedCoverageMinutes"/> it is
-    /// the coverage each reading is credited.
+    /// The cadence assumed where nothing publishes one: a series showing no interval of its own,
+    /// or a device the catalogue carries no <see cref="CgmDeviceWindow.CadenceMinutes"/> for.
     /// </summary>
     private const double DefaultCadenceMinutes = 5;
 
@@ -1514,6 +1510,25 @@ public class StatisticsService : IStatisticsService
     {
         var elapsed = intervals.Where(interval => interval > 0).Order().ToList();
         return elapsed.Count == 0 ? DefaultCadenceMinutes : GlucoseStatistics.Median(elapsed);
+    }
+
+    /// <summary>
+    /// Two sensors worn at once are one stretch of elapsed time, so the windows they were worn in
+    /// are merged rather than added up.
+    /// </summary>
+    private static List<(DateTime Start, DateTime End)> MergeWindows(
+        List<(DateTime Start, DateTime End)> windows)
+    {
+        var merged = new List<(DateTime Start, DateTime End)>();
+        foreach (var window in windows.OrderBy(w => w.Start))
+        {
+            if (merged.Count == 0 || window.Start > merged[^1].End)
+                merged.Add(window);
+            else if (window.End > merged[^1].End)
+                merged[^1] = (merged[^1].Start, window.End);
+        }
+
+        return merged;
     }
 
     /// <summary>
@@ -2912,27 +2927,34 @@ public class StatisticsService : IStatisticsService
         if (cgmDevices is { Count: > 0 })
         {
             var cadences = new Dictionary<Guid, double>();
-            periodMinutes = 0;
+            var windows = new List<(DateTime Start, DateTime End)>();
 
             foreach (var device in cgmDevices)
             {
                 var windowStart =
                     device.Start is { } start && start > periodStart ? start : periodStart;
                 var windowEnd = device.End is { } end && end < periodEnd ? end : periodEnd;
-                var windowMinutes = (windowEnd - windowStart).TotalMinutes;
-                if (windowMinutes <= 0)
+                if (windowEnd <= windowStart)
                     continue;
 
-                periodMinutes += windowMinutes;
+                windows.Add((windowStart, windowEnd));
                 cadences[device.DeviceId] = device.CadenceMinutes ?? DefaultCadenceMinutes;
             }
 
+            var period = MergeWindows(windows);
+            periodMinutes = period.Sum(window => (window.End - window.Start).TotalMinutes);
+
+            var inPeriod = entries
+                .Where(reading => period.Any(window =>
+                    reading.Timestamp >= window.Start && reading.Timestamp <= window.End))
+                .ToList();
+
             coveredMinutes =
-                entries.Sum(reading =>
+                inPeriod.Sum(reading =>
                     reading.PatientDeviceId is { } id && cadences.TryGetValue(id, out var cadence)
                         ? cadence
                         : 0)
-                + DerivedCoverageMinutes(entries.Where(reading =>
+                + DerivedCoverageMinutes(inPeriod.Where(reading =>
                     reading.PatientDeviceId is not { } id || !cadences.ContainsKey(id)));
         }
         else
@@ -2944,9 +2966,8 @@ public class StatisticsService : IStatisticsService
         if (periodMinutes <= 0)
             return null;
 
-        // The clamp answers cadence estimation, not concurrent streams: a cadence read low credits
-        // a stream more minutes than it covered. Picking one stream per instant is
-        // CanonicalGlucoseStream.Select's job, upstream of here.
+        // A reading credited a cadence longer than the gap it stood for — a catalogue figure the
+        // device beats, or a median read low — can carry coverage past the period.
         return Math.Min(coveredMinutes / periodMinutes * 100.0, 100.0);
     }
 

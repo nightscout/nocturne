@@ -310,13 +310,14 @@ public interface IStatisticsService
     );
 
     /// <summary>
-    /// The share of a report period a CGM was delivering readings. Each reading covers one cadence
-    /// of its stream; what that is measured against is the registered devices' windows clipped to
-    /// the report where <paramref name="cgmDevices"/> is given, else the report period itself,
-    /// which runs from the first reading to the last where <paramref name="reportStart"/> or
-    /// <paramref name="reportEnd"/> is absent. Readings no given device claims are credited at
-    /// their own stream's cadence, and do not widen the period the given windows account for.
-    /// The <paramref name="readings"/> are expected canonically selected.
+    /// The share of a report period a CGM was delivering readings, from readings a canonical
+    /// selection has already reduced to one stream per instant. Where
+    /// <paramref name="cgmDevices"/> is given the period is the union of their windows clipped to
+    /// the report — sensors worn at once are one stretch of time — and only readings falling
+    /// inside it count, at their device's catalogue cadence or, for a reading no given device
+    /// claims, at the cadence its own stream keeps within the period. Where no devices are given
+    /// the period is the report itself, which runs from the first reading to the last where
+    /// <paramref name="reportStart"/> or <paramref name="reportEnd"/> is absent.
     /// </summary>
     /// <returns><c>null</c> without readings, or without a period to measure them against.</returns>
     double? CalculateCgmActivePercent(
@@ -396,7 +397,8 @@ public interface IStatisticsService
 /// <param name="Start">When the device came into use; the report start when absent.</param>
 /// <param name="End">When the device went out of use; the report end when absent.</param>
 /// <param name="CadenceMinutes">
-/// How often the catalogue says the device reports, which it is held to whatever it uploaded at.
+/// The cadence the catalogue publishes for the device. Its readings each stand for this, not for
+/// the gaps between them.
 /// </param>
 public sealed record CgmDeviceWindow(
     Guid DeviceId,
