@@ -4,7 +4,6 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.IdentityModel.Tokens;
 using Nocturne.API.Authorization;
 using Nocturne.API.Configuration;
@@ -15,11 +14,6 @@ using Nocturne.API.Services.DevOnly;
 using Nocturne.API.Services.Docs;
 using Nocturne.API.Services.Health.GoogleHealth;
 using Nocturne.API.Services.Seeding;
-using Nocturne.Connectors.Core.Extensions;
-using Nocturne.Connectors.Core.Interfaces;
-using Nocturne.Connectors.Core.Services;
-using Nocturne.Connectors.GoogleHealth.Configurations;
-using Nocturne.Connectors.GoogleHealth.Services;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Audit;
@@ -159,17 +153,6 @@ builder.Services.AddHostedService<SoftDeleteCleanupService>();
 builder.Services.AddSingleton<GoogleHealthCoordinator>();
 builder.Services.AddScoped<IGoogleHealthService, GoogleHealthService>();
 builder.Services.AddScoped<IGoogleHealthReadingWriter, GoogleHealthReadingWriter>();
-builder.Services.AddHttpClient<GoogleHealthClient>(client =>
-{
-    client.MaxResponseContentBufferSize = 16 * 1024 * 1024;
-}).ConfigureConnectorClient(null, timeout: TimeSpan.FromSeconds(45));
-builder.Services.TryAddSingleton<IConnectorTokenCache, ConnectorTokenCache>();
-builder.Services.TryAddSingleton<IConnectorCacheInvalidator>(
-    services => services.GetRequiredService<IConnectorTokenCache>());
-builder.Services.AddSingleton<IConnectorServerResolver<GoogleHealthConnectorConfiguration>>(
-    new ConnectorServerResolver<GoogleHealthConnectorConfiguration>(null, null, null));
-builder.Services.AddHttpClient<GoogleHealthAuthTokenProvider>()
-    .ConfigureConnectorClient(null, timeout: TimeSpan.FromSeconds(45));
 builder.Services.AddHostedService<GoogleHealthWorker>();
 
 // Consumed by the dev-only admin controllers (Development) and the demo admin
