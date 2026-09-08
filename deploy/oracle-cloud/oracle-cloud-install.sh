@@ -347,6 +347,10 @@ info "Open https://$BASE_DOMAIN to create your first site and passkey."
 info "SSH:   ssh -i ~/.ssh/nocturne_oci ubuntu@$PUBLIC_IP"
 info "Files: /opt/nocturne on the instance. Database passwords are in .env; Nocturne generated them and only it needs them."
 info "Logs:  sudo journalctl -u nocturne   and   cd /opt/nocturne && sudo docker compose logs"
+printf '\n'
+info "Back up the SSH key. It exists only in this Cloud Shell home, which Oracle deletes after six months"
+info "without a Cloud Shell session. Nocturne keeps running without it, but you lose the way onto the server."
+info "Cloud Shell menu (top left of this terminal) > Download, then enter:  .ssh/nocturne_oci"
 
 INSTANCE_KEY=$(ssh -i "${SSH_PUBLIC_KEY_FILE%.pub}" -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=10 \
   "ubuntu@$PUBLIC_IP" "sudo sed -n 's/^INSTANCE_KEY=//p' /opt/nocturne/.env" 2>/dev/null || true)

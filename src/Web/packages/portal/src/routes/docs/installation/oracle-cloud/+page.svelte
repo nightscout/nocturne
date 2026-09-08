@@ -140,6 +140,13 @@
             credential for this installation, used for administrative API access and account
             recovery. Save it in a password manager. Running the script again shows it again.
         </li>
+        <li>
+            Download the SSH key the script created. It lives only in your Cloud Shell home,
+            which Oracle deletes after six months without a Cloud Shell session. Use the Cloud
+            Shell menu, <strong>Download</strong>, and enter
+            <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">.ssh/nocturne_oci</code>.
+            Nocturne keeps running without it, but it is your only way onto the server.
+        </li>
         <li>Updates are automatic. Watchtower checks for new Nocturne images daily.</li>
         <li>Nocturne starts again by itself when the server reboots.</li>
         <li>
