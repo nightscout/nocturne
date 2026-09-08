@@ -288,6 +288,9 @@ CLOUD_INIT_EOF
       fi
       if grep -qi "capacity" <<<"$out"; then
         info "no Ampere A1 capacity in $ad right now"
+      elif grep -qi "TooManyRequests" <<<"$out"; then
+        info "Oracle is rate-limiting launch attempts; pausing two minutes"
+        sleep 120
       else
         die "launch failed: $out"
       fi
