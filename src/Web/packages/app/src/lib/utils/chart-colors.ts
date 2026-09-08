@@ -2,7 +2,9 @@
  * Chart color utilities for resolving backend ChartColor enum values to CSS variables
  * ChartColor enum values are kebab-case strings that match CSS custom property names
  */
-import { type ChartColor } from '$lib/api';
+// Type-only so the generated client is not loaded at runtime; this module is imported by
+// code whose tests run without codegen.
+import type { ChartColor } from '$lib/api';
 
 /**
  * Resolve a ChartColor enum value to a CSS variable reference

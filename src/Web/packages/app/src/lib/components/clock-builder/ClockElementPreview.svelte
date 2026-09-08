@@ -5,8 +5,8 @@
   import type { ClockGlucoseSource } from "$lib/stores/realtime-store.svelte";
   import { renderClockElementValue } from "$lib/components/clock/element-value";
   import {
-    ELEMENT_INFO,
     elementInfo,
+    elementSize,
     type InternalElement,
     buildCustomCssString,
     getElementColor,
@@ -31,7 +31,7 @@
 </script>
 
 {#if element.type === "arrow"}
-  {@const size = (element.size || ELEMENT_INFO.arrow.defaultSize) * 0.8}
+  {@const size = elementSize(element) * 0.8}
   <div
     class="flex items-center"
     style="color: {getElementColor(element, glucose.currentBG)}; opacity: {element
@@ -41,7 +41,7 @@
   </div>
 {:else if element.type === "tracker"}
   {@const def = getTrackerDefinition(element.definitionId, trackerDefinitions)}
-  {@const size = element.size || ELEMENT_INFO.tracker.defaultSize}
+  {@const size = elementSize(element)}
   {@const showOptions = element.show ?? ["name"]}
   <div
     class="flex items-center gap-1 {getFontClass(
@@ -69,7 +69,7 @@
     class="leading-none tabular-nums {getFontClass(
       element.style?.font
     )} {getFontWeightClass(element.style?.fontWeight)}"
-    style={buildStyleString(element, glucose.currentBG)}
+    style={buildStyleString(element, glucose.currentBG, 0.8)}
   >
     {value}
   </span>
@@ -78,7 +78,7 @@
        inventing a value; an empty span could not be selected or removed. -->
   <span
     class="leading-none italic opacity-60"
-    style={buildStyleString(element, glucose.currentBG)}
+    style={buildStyleString(element, glucose.currentBG, 0.8)}
   >
     {elementInfo(element.type)?.name ?? element.type}
   </span>

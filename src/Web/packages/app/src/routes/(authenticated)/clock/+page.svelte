@@ -19,7 +19,7 @@
     remove as removeClockFace,
   } from "$api/generated/clockFaces.generated.remote";
   import ClockFacePreview from "$lib/components/clock/ClockFacePreview.svelte";
-  import type { ClockFaceConfig } from "$lib/api";
+  import { createDefaultConfig } from "$lib/clock-builder";
 
   const clockFacesQuery = listClockFaces();
 
@@ -27,67 +27,6 @@
   const deletion = useToastSubmission("Failed to delete clock face");
   let deleteDialogOpen = $state(false);
   let clockFaceToDelete = $state<{ id: string; name: string } | null>(null);
-
-  function createDefaultConfig(): ClockFaceConfig {
-    return {
-      rows: [
-        {
-          elements: [
-            {
-              type: "sg",
-              size: 40,
-              style: {
-                color: "dynamic",
-                font: "system",
-                fontWeight: "medium",
-                opacity: 1.0,
-              },
-            },
-            {
-              type: "arrow",
-              size: 25,
-              style: {
-                color: "dynamic",
-                font: "system",
-                fontWeight: "medium",
-                opacity: 1.0,
-              },
-            },
-          ],
-        },
-        {
-          elements: [
-            {
-              type: "delta",
-              size: 14,
-              showUnits: true,
-              style: {
-                color: "dynamic",
-                font: "system",
-                fontWeight: "medium",
-                opacity: 1.0,
-              },
-            },
-          ],
-        },
-        {
-          elements: [
-            {
-              type: "age",
-              size: 10,
-              style: { font: "system", fontWeight: "medium", opacity: 0.7 },
-            },
-          ],
-        },
-      ],
-      settings: {
-        bgColor: false,
-        staleMinutes: 13,
-        alwaysShowTime: false,
-        backgroundOpacity: 100,
-      },
-    };
-  }
 
   async function handleCreate() {
     creating = true;
