@@ -919,6 +919,7 @@ public static class ServiceRegistrationExtensions
             configuration,
             pollingService: typeof(ConnectorBackgroundService<,>)
         );
+        services.AddSingleton(ConnectorSyncBudget.FromConfiguration(configuration, services));
 
         // Demo service health monitor
         services.AddHttpClient("DemoServiceHealth");

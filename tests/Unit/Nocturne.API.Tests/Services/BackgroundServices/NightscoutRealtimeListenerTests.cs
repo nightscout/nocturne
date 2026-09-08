@@ -36,6 +36,7 @@ public class NightscoutRealtimeListenerTests
         var serviceProvider = BuildServiceProvider(connectionString);
         var sut = new NightscoutConnectorBackgroundService(
             serviceProvider,
+            new ConnectorSyncBudget(),
             NullLogger<NightscoutConnectorBackgroundService>.Instance);
 
         // Act & Assert — should not throw
@@ -56,6 +57,7 @@ public class NightscoutRealtimeListenerTests
         var serviceProvider = BuildServiceProvider(connectionString);
         var sut = new NightscoutConnectorBackgroundService(
             serviceProvider,
+            new ConnectorSyncBudget(),
             NullLogger<NightscoutConnectorBackgroundService>.Instance);
 
         // Act & Assert — should not throw
@@ -75,6 +77,7 @@ public class NightscoutRealtimeListenerTests
         var serviceProvider = BuildServiceProvider(connectionString);
         var sut = new NightscoutConnectorBackgroundService(
             serviceProvider,
+            new ConnectorSyncBudget(),
             NullLogger<NightscoutConnectorBackgroundService>.Instance);
 
         // Act & Assert — should not throw on repeated calls
@@ -102,6 +105,7 @@ public class NightscoutRealtimeListenerTests
         var serviceProvider = BuildServiceProvider(connectionString, config);
         var sut = new NightscoutConnectorBackgroundService(
             serviceProvider,
+            new ConnectorSyncBudget(),
             NullLogger<NightscoutConnectorBackgroundService>.Instance);
 
         // Act & Assert — should skip the tenant without throwing
@@ -128,6 +132,7 @@ public class NightscoutRealtimeListenerTests
         var serviceProvider = BuildServiceProvider(connectionString, config);
         var sut = new NightscoutConnectorBackgroundService(
             serviceProvider,
+            new ConnectorSyncBudget(),
             NullLogger<NightscoutConnectorBackgroundService>.Instance);
 
         // Act & Assert — should skip the tenant without throwing
@@ -171,7 +176,7 @@ public class NightscoutRealtimeListenerTests
 
         var logger = new ListLogger<NightscoutConnectorBackgroundService>();
         var serviceProvider = BuildServiceProvider(connectionString, config);
-        var sut = new NightscoutConnectorBackgroundService(serviceProvider, logger);
+        var sut = new NightscoutConnectorBackgroundService(serviceProvider, new ConnectorSyncBudget(), logger);
 
         // Act
         await InvokeStartRealtimeListenersAsync(sut, CancellationToken.None);
@@ -201,7 +206,7 @@ public class NightscoutRealtimeListenerTests
 
         var logger = new ListLogger<NightscoutConnectorBackgroundService>();
         var serviceProvider = BuildServiceProvider(connectionString, config);
-        var sut = new NightscoutConnectorBackgroundService(serviceProvider, logger);
+        var sut = new NightscoutConnectorBackgroundService(serviceProvider, new ConnectorSyncBudget(), logger);
 
         // Act
         await InvokeStartRealtimeListenersAsync(sut, CancellationToken.None);
@@ -233,6 +238,7 @@ public class NightscoutRealtimeListenerTests
         var serviceProvider = BuildServiceProvider(connectionString, config);
         var sut = new NightscoutConnectorBackgroundService(
             serviceProvider,
+            new ConnectorSyncBudget(),
             NullLogger<NightscoutConnectorBackgroundService>.Instance);
 
         var dead = new SocketIO(new Uri("http://127.0.0.1:9"));
@@ -263,7 +269,7 @@ public class NightscoutRealtimeListenerTests
 
         var logger = new ListLogger<NightscoutConnectorBackgroundService>();
         var sut = new NightscoutConnectorBackgroundService(
-            BuildServiceProvider(connectionString, config), logger);
+            BuildServiceProvider(connectionString, config), new ConnectorSyncBudget(), logger);
 
         await InvokeStartRealtimeListenersAsync(sut, CancellationToken.None);
 

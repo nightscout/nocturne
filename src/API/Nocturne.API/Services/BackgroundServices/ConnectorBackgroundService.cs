@@ -50,8 +50,10 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
 
     /// <summary>
     /// Maximum number of tenants this connector syncs concurrently. Tenants sync in parallel so one
-    /// tenant's slow or failing sync never blocks another's; this only caps resource use (DB
-    /// connections, outbound requests). Overridable for tests.
+    /// tenant's slow or failing sync never blocks another's. This is one connector's share of the
+    /// <see cref="ConnectorSyncBudget"/> every poller draws on, so a connector whose tenants are all
+    /// stuck cannot take every slot from the others; the budget is what bounds the total. Overridable
+    /// for tests.
     /// </summary>
     protected virtual int MaxConcurrentTenantSyncs => 8;
 
@@ -62,17 +64,22 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
     /// </summary>
     protected virtual TimeSpan PerTenantSyncTimeout => TimeSpan.FromMinutes(3);
 
+    private readonly ConnectorSyncBudget _budget;
+
     /// <summary>
     /// Initialises a new <see cref="ConnectorBackgroundService{TConfig}"/>.
     /// </summary>
     /// <param name="serviceProvider">Root DI service provider; a new scope is created per tenant sync.</param>
+    /// <param name="budget">The process-wide budget.</param>
     /// <param name="logger">Logger instance.</param>
     protected ConnectorBackgroundService(
         IServiceProvider serviceProvider,
+        ConnectorSyncBudget budget,
         ILogger logger
     )
     {
         ServiceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+        _budget = budget ?? throw new ArgumentNullException(nameof(budget));
         Logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -122,7 +129,9 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
     protected virtual TimeSpan RealtimeSupervisionInterval => TimeSpan.FromMinutes(5);
 
     /// <summary>
-    /// Delay before the first poll tick, letting the application fully start. Overridable for tests.
+    /// Delay before the first poll tick, letting the application fully start. The poller's phase
+    /// offset from <see cref="ConnectorSyncBudget.NextStartupOffset"/> is added on top. Overridable
+    /// for tests.
     /// </summary>
     protected virtual TimeSpan StartupDelay => TimeSpan.FromSeconds(5);
 
@@ -279,8 +288,9 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (StartupDelay > TimeSpan.Zero)
-            await Task.Delay(StartupDelay, stoppingToken);
+        var startupDelay = StartupDelay + _budget.NextStartupOffset(PollInterval);
+        if (startupDelay > TimeSpan.Zero)
+            await Task.Delay(startupDelay, stoppingToken);
 
         Logger.LogInformation(
             "{ConnectorName} connector background service started",
@@ -339,9 +349,7 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
 
         // Sync tenants concurrently so each tenant is independent: one tenant's slow or failing sync
         // must never delay or block another's. Each tenant already runs in its own DI scope (own
-        // DbContext, own tenant context), so concurrent execution is isolated. MaxConcurrentTenantSyncs
-        // only caps resource use (DB connections, outbound requests), and PerTenantSyncTimeout bounds
-        // how long any single tenant can hold a slot.
+        // DbContext, own tenant context), so concurrent execution is isolated.
         await Parallel.ForEachAsync(
             tenants,
             new ParallelOptions
@@ -351,6 +359,9 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
             },
             async (tenant, ct) =>
             {
+                // Waiting for a slot is not the tenant's time, so the timeout starts once one is held.
+                using var lease = await AcquireSlotAsync(tenant.Slug, ct);
+
                 using var tenantCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 tenantCts.CancelAfter(PerTenantSyncTimeout);
 
@@ -376,6 +387,30 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
                         ConnectorName, tenant.Slug);
                 }
             });
+    }
+
+    /// <summary>
+    /// How long a tenant may queue for a budget slot before the wait is reported. A saturated budget
+    /// otherwise shows only as syncs running late.
+    /// </summary>
+    protected virtual TimeSpan SlotWaitWarningAfter => TimeSpan.FromSeconds(30);
+
+    private async Task<ConnectorSyncBudget.Lease> AcquireSlotAsync(string tenantSlug, CancellationToken stoppingToken)
+    {
+        var acquire = _budget.AcquireAsync(stoppingToken);
+        if (acquire.IsCompleted)
+            return await acquire;
+
+        var pending = acquire.AsTask();
+        var started = DateTime.UtcNow;
+        while (await Task.WhenAny(pending, Task.Delay(SlotWaitWarningAfter, stoppingToken)) != pending)
+        {
+            Logger.LogWarning(
+                "{ConnectorName} sync for tenant {TenantSlug} has waited {Waited} for a sync slot; {InFlight} of {Slots} in use",
+                ConnectorName, tenantSlug, DateTime.UtcNow - started, _budget.InFlight, _budget.Slots);
+        }
+
+        return await pending;
     }
 
     private async Task SyncForTenantAsync(Guid tenantId, string tenantSlug, string displayName, CancellationToken stoppingToken)
@@ -495,8 +530,9 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
 /// </summary>
 public class ConnectorBackgroundService<TService, TConfig>(
     IServiceProvider serviceProvider,
+    ConnectorSyncBudget budget,
     ILogger<ConnectorBackgroundService<TService, TConfig>> logger)
-    : ConnectorBackgroundService<TConfig>(serviceProvider, logger)
+    : ConnectorBackgroundService<TConfig>(serviceProvider, budget, logger)
     where TService : class, IConnectorService<TConfig>
     where TConfig : BaseConnectorConfiguration
 {
