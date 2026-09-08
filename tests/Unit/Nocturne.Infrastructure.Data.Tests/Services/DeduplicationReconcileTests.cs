@@ -13,8 +13,8 @@ namespace Nocturne.Infrastructure.Data.Tests.Services;
 /// Tests for dedup reconciliation in <see cref="DeduplicationService"/>: the reusable
 /// per-record criteria + deleted-status loader (<see cref="MatchCriteria"/> plus soft-deleted
 /// status keyed by record id), merging duplicate canonical groups (full and candidate-bounded,
-/// including transitive chains), the per-tenant reconciliation watermark round-trip, and the
-/// watermark-bounded chunked reconcile pass over newly-created links.
+/// including transitive chains), the per-tenant reconciliation cursor round-trip, and the
+/// cursor-bounded chunked reconcile pass over newly-created links.
 /// </summary>
 [Trait("Category", "Unit")]
 [Trait("Category", "Deduplication")]
@@ -682,7 +682,7 @@ public class DeduplicationReconcileTests : IDisposable
     public async Task ReconcileNewLinksAsync_MergesGroupsWithRecentLinks()
     {
         var now = DateTime.UtcNow;
-        await _service.SetWatermarkAsync(now.AddHours(-1), CancellationToken.None);
+        await _service.SetCursorAsync(new ReconcileCursor(now.AddHours(-1), Guid.Empty), CancellationToken.None);
 
         var t = now.AddMinutes(-5);
         var mylife = await AddCarb(t, "mylife-connector", 50);
@@ -690,7 +690,8 @@ public class DeduplicationReconcileTests : IDisposable
         AddPrimaryLink(RecordType.CarbIntake, mylife, ToMills(t), "mylife-connector");
         AddPrimaryLink(RecordType.CarbIntake, glooko, ToMills(t.AddSeconds(20)), "glooko-connector");
         await _context.SaveChangesAsync();
-        await SetAllLinkSysCreatedAt(now);
+        var created = now.AddMinutes(-5);
+        await SetAllLinkSysCreatedAt(created);
 
         var result = await _service.ReconcileNewLinksAsync(5000, 10, CancellationToken.None);
 
@@ -699,17 +700,18 @@ public class DeduplicationReconcileTests : IDisposable
         var links = await _context.LinkedRecords.IgnoreQueryFilters().Where(l => l.RecordType == "carbintake").ToListAsync();
         links.Select(l => l.CanonicalId).Distinct().Should().HaveCount(1);
 
-        var watermark = await _service.GetWatermarkAsync(CancellationToken.None);
-        watermark.Should().BeCloseTo(now, TimeSpan.FromSeconds(1));
+        var cursor = await _service.GetCursorAsync(CancellationToken.None);
+        cursor.Should().NotBeNull();
+        cursor!.Value.CreatedAt.Should().BeCloseTo(created, TimeSpan.FromSeconds(1));
     }
 
     [Fact]
-    public async Task ReconcileNewLinksAsync_IgnoresLinksBeforeWatermark()
+    public async Task ReconcileNewLinksAsync_IgnoresLinksBeforeCursor()
     {
         var now = DateTime.UtcNow;
-        await _service.SetWatermarkAsync(now, CancellationToken.None);
+        await _service.SetCursorAsync(new ReconcileCursor(now, Guid.Empty), CancellationToken.None);
 
-        // Links created an hour ago — well before (watermark - overlap), so out of scope.
+        // Links created an hour ago — before the cursor, so already reconciled.
         var t = now.AddHours(-1);
         var mylife = await AddCarb(t, "mylife-connector", 50);
         var glooko = await AddCarb(t.AddSeconds(20), "glooko-connector", 50);
@@ -729,7 +731,7 @@ public class DeduplicationReconcileTests : IDisposable
     public async Task ReconcileNewLinksAsync_SkipsUnknownRecordType()
     {
         var now = DateTime.UtcNow;
-        await _service.SetWatermarkAsync(now.AddHours(-1), CancellationToken.None);
+        await _service.SetCursorAsync(new ReconcileCursor(now.AddHours(-1), Guid.Empty), CancellationToken.None);
 
         // A valid mergeable pair that should still collapse despite a bogus row in the batch.
         var t = now.AddMinutes(-5);
@@ -753,7 +755,7 @@ public class DeduplicationReconcileTests : IDisposable
             SysCreatedAt = DateTime.UtcNow
         });
         await _context.SaveChangesAsync();
-        await SetAllLinkSysCreatedAt(now);
+        await SetAllLinkSysCreatedAt(now.AddMinutes(-5));
 
         var act = async () => await _service.ReconcileNewLinksAsync(5000, 10, CancellationToken.None);
 
@@ -765,11 +767,9 @@ public class DeduplicationReconcileTests : IDisposable
     }
 
     [Fact]
-    public async Task ReconcileNewLinksAsync_FreshTenant_DefaultWatermark_ReconcilesWithoutThrowing()
+    public async Task ReconcileNewLinksAsync_FreshTenant_NoCursor_ReconcilesFromTheStart()
     {
-        // Fresh tenant: no watermark seeded, so GetWatermarkAsync returns DateTime.MinValue.
-        // cutoff = watermark - ReconcileOverlap would underflow (ArgumentOutOfRangeException).
-        (await _service.GetWatermarkAsync(CancellationToken.None)).Should().Be(DateTime.MinValue);
+        (await _service.GetCursorAsync(CancellationToken.None)).Should().BeNull();
 
         var now = DateTime.UtcNow;
         var t = now.AddMinutes(-5);
@@ -778,46 +778,176 @@ public class DeduplicationReconcileTests : IDisposable
         AddPrimaryLink(RecordType.CarbIntake, mylife, ToMills(t), "mylife-connector");
         AddPrimaryLink(RecordType.CarbIntake, glooko, ToMills(t.AddSeconds(20)), "glooko-connector");
         await _context.SaveChangesAsync();
-        await SetAllLinkSysCreatedAt(now);
+        var created = now.AddMinutes(-5);
+        await SetAllLinkSysCreatedAt(created);
 
-        var act = async () => await _service.ReconcileNewLinksAsync(5000, 10, CancellationToken.None);
+        var result = await _service.ReconcileNewLinksAsync(5000, 10, CancellationToken.None);
 
-        var result = await act.Should().NotThrowAsync();
-        result.Subject.GroupsMerged.Should().Be(1);
+        result.GroupsMerged.Should().Be(1);
         var links = await _context.LinkedRecords.IgnoreQueryFilters().Where(l => l.RecordType == "carbintake").ToListAsync();
         links.Select(l => l.CanonicalId).Distinct().Should().HaveCount(1);
 
-        // The watermark advances past MinValue.
-        var watermark = await _service.GetWatermarkAsync(CancellationToken.None);
-        watermark.Should().BeCloseTo(now, TimeSpan.FromSeconds(1));
+        var cursor = await _service.GetCursorAsync(CancellationToken.None);
+        cursor.Should().NotBeNull();
+        cursor!.Value.CreatedAt.Should().BeCloseTo(created, TimeSpan.FromSeconds(1));
     }
 
     [Fact]
-    public async Task Watermark_RoundTrips_DefaultsToMinValue()
+    public async Task ReconcileNewLinksAsync_PagesThroughLinksSharingOneCreationInstant()
     {
-        (await _service.GetWatermarkAsync(CancellationToken.None)).Should().Be(DateTime.MinValue);
+        // One bulk insert stamps every link with the same sys_created_at. Three mergeable pairs,
+        // an hour apart with distinct values so no pair can match another, all created in one
+        // instant; a batch of three cuts through the instant twice. Every pair must still merge,
+        // and the pass must report itself caught up.
+        var now = DateTime.UtcNow;
+        var created = now.AddMinutes(-5);
+        await AddThreePairsCreatedAt(now.AddHours(-6), created);
 
+        var result = await _service.ReconcileNewLinksAsync(batchSize: 3, maxBatches: 10, CancellationToken.None);
+
+        result.GroupsMerged.Should().Be(3);
+        result.CaughtUp.Should().BeTrue();
+        var links = await _context.LinkedRecords.IgnoreQueryFilters().Where(l => l.RecordType == "carbintake").ToListAsync();
+        links.Select(l => l.CanonicalId).Distinct().Should().HaveCount(3);
+
+        var cursor = await _service.GetCursorAsync(CancellationToken.None);
+        cursor.Should().NotBeNull();
+        cursor!.Value.CreatedAt.Should().BeCloseTo(created, TimeSpan.FromSeconds(1));
+        cursor.Value.Id.Should().Be(links.Select(l => l.Id).Max(), "the cursor rests on the last link in (sys_created_at, id) order");
+    }
+
+    [Fact]
+    public async Task ReconcileNewLinksAsync_ResumesInsideAnInstantAcrossPasses()
+    {
+        // The persisted cursor carries the id, so a pass that ends part-way through a run of links
+        // sharing one sys_created_at is continued by the next pass rather than restarted. With a
+        // timestamp-only cursor the second pass would re-read the first batch and never move on.
+        var now = DateTime.UtcNow;
+        await AddThreePairsCreatedAt(now.AddHours(-6), now.AddMinutes(-5));
+
+        var merged = 0;
+        var passes = 0;
+        ReconcileResult result;
+        do
+        {
+            result = await _service.ReconcileNewLinksAsync(batchSize: 2, maxBatches: 1, CancellationToken.None);
+            merged += result.GroupsMerged;
+            passes++;
+        } while (!result.CaughtUp && passes < 10);
+
+        result.CaughtUp.Should().BeTrue("six links in batches of two need three full passes and one empty one");
+        passes.Should().Be(4);
+        merged.Should().Be(3);
+        var links = await _context.LinkedRecords.IgnoreQueryFilters().Where(l => l.RecordType == "carbintake").ToListAsync();
+        links.Select(l => l.CanonicalId).Distinct().Should().HaveCount(3);
+    }
+
+    [Fact]
+    public async Task ReconcileNewLinksAsync_LeavesLinksYoungerThanTheLagForALaterPass()
+    {
+        // A link's sys_created_at is its ingest transaction's start; a sibling from the same
+        // transaction may not have committed yet. Links created just now stay for a later pass.
+        var now = DateTime.UtcNow;
+        var t = now.AddHours(-1);
+        var mylife = await AddCarb(t, "mylife-connector", 50);
+        var glooko = await AddCarb(t.AddSeconds(20), "glooko-connector", 50);
+        AddPrimaryLink(RecordType.CarbIntake, mylife, ToMills(t), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, glooko, ToMills(t.AddSeconds(20)), "glooko-connector");
+        await _context.SaveChangesAsync();
+        await SetAllLinkSysCreatedAt(now);
+
+        var young = await _service.ReconcileNewLinksAsync(5000, 10, CancellationToken.None);
+
+        young.GroupsMerged.Should().Be(0);
+        young.CaughtUp.Should().BeTrue();
+        (await _service.GetCursorAsync(CancellationToken.None)).Should().BeNull();
+
+        await SetAllLinkSysCreatedAt(now.AddMinutes(-3));
+
+        var aged = await _service.ReconcileNewLinksAsync(5000, 10, CancellationToken.None);
+
+        aged.GroupsMerged.Should().Be(1);
+    }
+
+    [Fact]
+    public void LinksAfter_OnPostgres_RangesOnTheCreationIndexAndPagesByKeyset()
+    {
+        // The page query must range the (tenant_id, sys_created_at) index and break ties on id,
+        // so a run of links sharing one instant is paged rather than re-read. The SQL is checked
+        // against the Npgsql provider because the SQLite tests above cannot see the shape.
+        using var context = OfflineDbContext.Create();
+        var service = new DeduplicationService(
+            context, new Mock<IServiceScopeFactory>().Object, NullLogger<DeduplicationService>.Instance);
+        var cursor = new ReconcileCursor(new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc), Guid.CreateVersion7());
+
+        var sql = service.LinksAfter(cursor, cursor.CreatedAt.AddHours(1)).Take(5000).ToQueryString();
+
+        sql.Should().MatchRegex(@"l\.sys_created_at >= @\w+ AND \(l\.sys_created_at > @\w+ OR l\.id > @\w+\)",
+            "the lower bound ranges the creation index and the keyset continues inside an instant");
+        sql.Should().MatchRegex(@"l\.sys_created_at < @\w+", "the horizon is the upper bound");
+        sql.Should().MatchRegex(@"ORDER BY l\.sys_created_at, l\.id\s+LIMIT", "the order matches the cursor");
+    }
+
+    [Fact]
+    public async Task Cursor_RoundTrips_DefaultsToNull()
+    {
+        (await _service.GetCursorAsync(CancellationToken.None)).Should().BeNull();
+
+        var cursor = new ReconcileCursor(new DateTime(2026, 5, 30, 12, 0, 0, DateTimeKind.Utc), Guid.CreateVersion7());
+        await _service.SetCursorAsync(cursor, CancellationToken.None);
+
+        (await _service.GetCursorAsync(CancellationToken.None)).Should().Be(cursor);
+    }
+
+    [Fact]
+    public async Task Cursor_WrittenBeforeTheIdColumn_ResumesAtTheStartOfItsInstant()
+    {
         var t = new DateTime(2026, 5, 30, 12, 0, 0, DateTimeKind.Utc);
-        await _service.SetWatermarkAsync(t, CancellationToken.None);
+        _context.DedupReconcileState.Add(new DedupReconcileStateEntity
+        {
+            TenantId = TestTenantId,
+            LastReconciledLinkCreatedAt = t,
+            LastReconciledLinkId = null
+        });
+        await _context.SaveChangesAsync();
 
-        (await _service.GetWatermarkAsync(CancellationToken.None)).Should().Be(t);
+        (await _service.GetCursorAsync(CancellationToken.None)).Should().Be(new ReconcileCursor(t, Guid.Empty));
     }
 
     [Fact]
-    public async Task Watermark_SetTwice_Updates()
+    public async Task Cursor_SetTwice_Updates()
     {
-        var t1 = new DateTime(2026, 5, 30, 12, 0, 0, DateTimeKind.Utc);
-        var t2 = new DateTime(2026, 5, 31, 9, 30, 0, DateTimeKind.Utc);
+        var first = new ReconcileCursor(new DateTime(2026, 5, 30, 12, 0, 0, DateTimeKind.Utc), Guid.CreateVersion7());
+        var second = new ReconcileCursor(new DateTime(2026, 5, 31, 9, 30, 0, DateTimeKind.Utc), Guid.CreateVersion7());
 
-        await _service.SetWatermarkAsync(t1, CancellationToken.None);
-        await _service.SetWatermarkAsync(t2, CancellationToken.None);
+        await _service.SetCursorAsync(first, CancellationToken.None);
+        await _service.SetCursorAsync(second, CancellationToken.None);
 
-        (await _service.GetWatermarkAsync(CancellationToken.None)).Should().Be(t2);
+        (await _service.GetCursorAsync(CancellationToken.None)).Should().Be(second);
 
         // Upsert must update the single row, not create a duplicate.
         var rows = await _context.DedupReconcileState.IgnoreQueryFilters()
             .Where(s => s.TenantId == TestTenantId).CountAsync();
         rows.Should().Be(1);
+    }
+
+    /// <summary>
+    /// Three cross-source carb pairs an hour apart with distinct values, so each pair merges with
+    /// itself and nothing else, all six links stamped with the same <paramref name="createdAt"/>.
+    /// </summary>
+    private async Task AddThreePairsCreatedAt(DateTime firstEvent, DateTime createdAt)
+    {
+        for (var i = 0; i < 3; i++)
+        {
+            var t = firstEvent.AddHours(i);
+            var carbs = 50 + i * 10;
+            var mylife = await AddCarb(t, "mylife-connector", carbs);
+            var glooko = await AddCarb(t.AddSeconds(20), "glooko-connector", carbs);
+            AddPrimaryLink(RecordType.CarbIntake, mylife, ToMills(t), "mylife-connector");
+            AddPrimaryLink(RecordType.CarbIntake, glooko, ToMills(t.AddSeconds(20)), "glooko-connector");
+        }
+        await _context.SaveChangesAsync();
+        await SetAllLinkSysCreatedAt(createdAt);
     }
 
     [Fact]
@@ -1133,7 +1263,7 @@ public class DeduplicationReconcileTests : IDisposable
     /// Overrides <see cref="LinkedRecordEntity.SysCreatedAt"/> on all of the tenant's links.
     /// The SaveChanges interceptor stamps SysCreatedAt = now only on <c>Added</c> rows, so the
     /// initializer value is ignored on insert; updating already-persisted rows lets tests pin a
-    /// deterministic ingestion time for the watermark-bounded reconcile pass.
+    /// deterministic ingestion time for the cursor-bounded reconcile pass.
     /// </summary>
     private async Task SetAllLinkSysCreatedAt(DateTime sysCreatedAt)
     {
