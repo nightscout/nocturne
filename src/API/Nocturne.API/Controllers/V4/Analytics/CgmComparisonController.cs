@@ -58,7 +58,7 @@ public class CgmComparisonController : ControllerBase
         CancellationToken cancellationToken = default)
     {
         if (startDate == default || endDate == default)
-            return BadRequest(new { error = "startDate and endDate are required." });
+            return BadRequest(new { error = "startDate and endDate must be later than 0001-01-01." });
 
         if (endDate <= startDate)
             return BadRequest(new { error = "endDate must be after startDate." });

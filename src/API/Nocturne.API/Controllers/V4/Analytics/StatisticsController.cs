@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.RateLimiting;
 using Nocturne.API.Attributes;
 using Nocturne.API.Extensions;
@@ -369,8 +368,8 @@ public class StatisticsController : ControllerBase
     [RemoteQuery]
     [ResponseCache(Duration = 60, VaryByQueryKeys = new[] { "*" })]
     public async Task<ActionResult<ReportAnalysisResult>> GetRangeAnalytics(
-        [FromQuery, BindRequired] DateTime startDate,
-        [FromQuery, BindRequired] DateTime endDate,
+        [FromQuery] DateTime startDate,
+        [FromQuery] DateTime endDate,
         [FromQuery] DiabetesPopulation population = DiabetesPopulation.Type1Adult,
         [FromQuery] Guid? patientDeviceId = null,
         CancellationToken cancellationToken = default
@@ -459,8 +458,8 @@ public class StatisticsController : ControllerBase
     [RemoteQuery]
     [ResponseCache(Duration = 60, VaryByQueryKeys = new[] { "*" })]
     public async Task<ActionResult<IEnumerable<WeekdayGlucoseSlot>>> GetWeekdayAverages(
-        [FromQuery, BindRequired] DateTime startDate,
-        [FromQuery, BindRequired] DateTime endDate,
+        [FromQuery] DateTime startDate,
+        [FromQuery] DateTime endDate,
         CancellationToken cancellationToken = default
     )
     {
@@ -915,8 +914,8 @@ public class StatisticsController : ControllerBase
     [RequireScope(Scope.ReportsRead)]
     [RemoteQuery]
     public async Task<ActionResult<DailyBasalBolusRatioResponse>> GetDailyBasalBolusRatios(
-        [FromQuery, BindRequired] DateTime startDate,
-        [FromQuery, BindRequired] DateTime endDate
+        [FromQuery] DateTime startDate,
+        [FromQuery] DateTime endDate
     )
     {
         var startDt = DateTime.SpecifyKind(startDate, DateTimeKind.Utc);
@@ -953,8 +952,8 @@ public class StatisticsController : ControllerBase
     [RequireScope(Scope.GlucoseRead)]
     [RemoteQuery]
     public async Task<ActionResult<PunchCardResponse>> GetPunchCardData(
-        [FromQuery, BindRequired] DateTime startDate,
-        [FromQuery, BindRequired] DateTime endDate,
+        [FromQuery] DateTime startDate,
+        [FromQuery] DateTime endDate,
         CancellationToken cancellationToken = default
     )
     {
@@ -1148,8 +1147,8 @@ public class StatisticsController : ControllerBase
     [RequireScope(Scope.ReportsRead)]
     [RemoteQuery]
     public async Task<ActionResult<InsulinDeliveryStatistics>> GetInsulinDeliveryStatistics(
-        [FromQuery, BindRequired] DateTime startDate,
-        [FromQuery, BindRequired] DateTime endDate
+        [FromQuery] DateTime startDate,
+        [FromQuery] DateTime endDate
     )
     {
         var startDt = DateTime.SpecifyKind(startDate, DateTimeKind.Utc);
@@ -1193,8 +1192,8 @@ public class StatisticsController : ControllerBase
     [RequireScope(Scope.ReportsRead)]
     [RemoteQuery]
     public async Task<ActionResult<BasalAnalysisResponse>> GetBasalAnalysis(
-        [FromQuery, BindRequired] DateTime startDate,
-        [FromQuery, BindRequired] DateTime endDate
+        [FromQuery] DateTime startDate,
+        [FromQuery] DateTime endDate
     )
     {
         // Force UTC kind to avoid DateTimeOffset throwing when the server's local
@@ -1240,8 +1239,8 @@ public class StatisticsController : ControllerBase
     [RequireScope(Scope.ReportsRead)]
     [RemoteQuery]
     public async Task<ActionResult<HourlyInsulinDeliveryResponse>> GetHourlyInsulinDelivery(
-        [FromQuery, BindRequired] DateTime startDate,
-        [FromQuery, BindRequired] DateTime endDate
+        [FromQuery] DateTime startDate,
+        [FromQuery] DateTime endDate
     )
     {
         var startUtc = DateTime.SpecifyKind(startDate, DateTimeKind.Utc);
@@ -1285,8 +1284,8 @@ public class StatisticsController : ControllerBase
     [RequireScope(Scope.ReportsRead)]
     [RemoteQuery]
     public async Task<ActionResult<AidSystemMetrics>> GetAidSystemMetrics(
-        [FromQuery, BindRequired] DateTime startDate,
-        [FromQuery, BindRequired] DateTime endDate
+        [FromQuery] DateTime startDate,
+        [FromQuery] DateTime endDate
     )
     {
         var startDt = DateTime.SpecifyKind(startDate, DateTimeKind.Utc);

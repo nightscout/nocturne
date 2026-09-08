@@ -58,11 +58,9 @@ public class SensorIntegrityController : ControllerBase
         [FromQuery] double windowHours = 3.0,
         CancellationToken cancellationToken = default)
     {
-        // Both bounds are required: an omitted DateTime binds to default(DateTime), which would
-        // otherwise scan the tenant's entire history.
         if (startDate == default || endDate == default)
         {
-            return BadRequest(new { error = "startDate and endDate are required." });
+            return BadRequest(new { error = "startDate and endDate must be later than 0001-01-01." });
         }
 
         if (endDate <= startDate)

@@ -160,6 +160,7 @@ builder.Services.AddControllers(options =>
     options.Filters.Add<TenantCacheVaryFilter>();
     options.Filters.Add<RecreationBlockedFilter>();
     options.Filters.AddService<ReadAccessAuditFilter>();
+    options.AddNocturneBindingConventions();
 })
 .ConfigureApplicationPartManager(manager =>
     AuthorizationConfiguration.ConfigureControllerDiscovery(
@@ -647,7 +648,7 @@ internal class NSwagStartup
 {
     public void ConfigureServices(IServiceCollection services)
     {
-        services.AddControllers()
+        services.AddControllers(options => options.AddNocturneBindingConventions())
             .AddApplicationPart(typeof(Nocturne.API.Program).Assembly);
 
         services.AddOpenApiDocument(NSwagDocumentConfiguration.Configure);
