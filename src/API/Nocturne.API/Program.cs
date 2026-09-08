@@ -15,6 +15,7 @@ using Nocturne.API.Services.Docs;
 using Nocturne.API.Services.Health.GoogleHealth;
 using Nocturne.API.Services.Seeding;
 using Nocturne.Connectors.Core.Extensions;
+using Nocturne.Connectors.GoogleHealth.Services;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Audit;

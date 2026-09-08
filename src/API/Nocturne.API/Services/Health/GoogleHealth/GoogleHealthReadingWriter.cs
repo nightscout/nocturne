@@ -1,5 +1,6 @@
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Sleep;
+using Nocturne.Connectors.GoogleHealth.Services;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Health;
 using Microsoft.EntityFrameworkCore;

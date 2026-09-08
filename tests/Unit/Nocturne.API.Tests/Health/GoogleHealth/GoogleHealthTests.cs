@@ -10,6 +10,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 using Moq;
 using Nocturne.API.Controllers.V4.Health;
 using Nocturne.API.Services.Health.GoogleHealth;
+using Nocturne.Connectors.GoogleHealth.Services;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Core.Models;

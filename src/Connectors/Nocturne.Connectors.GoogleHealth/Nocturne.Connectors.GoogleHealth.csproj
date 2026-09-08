@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Description>Google Health data source connector</Description>
+        <Company>Nocturne</Company>
+        <Product>Nocturne Connectors</Product>
+    </PropertyGroup>
+    <ItemGroup>
+        <InternalsVisibleTo Include="Nocturne.API.Tests" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\Core\Nocturne.Core.Models\Nocturne.Core.Models.csproj" />
+    </ItemGroup>
+</Project>

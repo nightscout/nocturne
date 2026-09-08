@@ -6,7 +6,7 @@ using System.Text.Json;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Health;
 
-namespace Nocturne.API.Services.Health.GoogleHealth;
+namespace Nocturne.Connectors.GoogleHealth.Services;
 
 public sealed class GoogleHealthException(
     string code,

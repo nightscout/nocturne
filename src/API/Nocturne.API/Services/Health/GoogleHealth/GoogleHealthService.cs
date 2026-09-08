@@ -6,6 +6,7 @@ using System.Threading.Channels;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Connectors.GoogleHealth.Services;
 using Nocturne.Core.Models.Health;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Infrastructure.Data;
