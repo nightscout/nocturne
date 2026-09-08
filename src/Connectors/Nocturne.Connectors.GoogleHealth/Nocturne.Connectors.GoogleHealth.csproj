@@ -9,8 +9,10 @@
     </PropertyGroup>
     <ItemGroup>
         <InternalsVisibleTo Include="Nocturne.API.Tests" />
+        <InternalsVisibleTo Include="Nocturne.Connectors.GoogleHealth.Tests" />
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\..\Core\Nocturne.Core.Models\Nocturne.Core.Models.csproj" />
+        <ProjectReference Include="..\Nocturne.Connectors.Core\Nocturne.Connectors.Core.csproj" />
     </ItemGroup>
 </Project>

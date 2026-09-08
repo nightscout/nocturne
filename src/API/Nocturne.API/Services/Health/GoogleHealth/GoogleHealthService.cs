@@ -6,6 +6,7 @@ using System.Threading.Channels;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Connectors.GoogleHealth.Configurations;
 using Nocturne.Connectors.GoogleHealth.Services;
 using Nocturne.Core.Models.Health;
 using Nocturne.Core.Contracts.Health;
@@ -246,10 +247,10 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
     {
         if (options.DataTypes is null || options.DataTypes.Length > 32 || options.DataTypes.Distinct().Count() != options.DataTypes.Length || options.DataTypes.Except(GoogleHealthClient.SupportedTypes).Any())
             throw new GoogleHealthException("unsupported_type");
-        if (!options.ClientId.EndsWith(".apps.googleusercontent.com", StringComparison.Ordinal) || options.HistoryDays is < 1 or > 90 ||
+        if (!GoogleHealthConnectorConfiguration.IsValidClientId(options.ClientId) || options.HistoryDays is < 1 or > 90 ||
             options.ImportFrom is { } importFrom && (importFrom < new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero) || importFrom > DateTimeOffset.UtcNow.AddDays(1)))
             throw new GoogleHealthException("invalid_configuration");
-        if (!Uri.TryCreate(options.CallbackUrl, UriKind.Absolute, out var callback) || callback.Scheme != "https" || callback.HostNameType != UriHostNameType.Dns || callback.UserInfo != "" || callback.Query != "" || callback.Fragment != "" || callback.AbsolutePath != "/settings/connectors/google-health/callback")
+        if (!GoogleHealthConnectorConfiguration.IsValidCallbackUrl(options.CallbackUrl))
             throw new GoogleHealthException("invalid_callback");
     }
 

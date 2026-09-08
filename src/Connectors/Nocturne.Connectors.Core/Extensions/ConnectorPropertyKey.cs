@@ -92,4 +92,13 @@ public enum ConnectorPropertyKey
     PumpSerialNumber,
     FetchAllEventTypes,
     IgnoreZeroUnitBasal,
+
+    // Google Health-specific
+    ClientId,
+    ClientSecret,
+    CallbackUrl,
+    SyncSteps,
+    SyncHeartRate,
+    SyncBodyWeight,
+    SyncSleep,
 }

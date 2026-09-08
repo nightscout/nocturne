@@ -97,6 +97,18 @@ public abstract class BaseConnectorConfiguration : IConnectorConfiguration
     [ConnectorProperty(ConnectorPropertyKey.SyncFood, DefaultValue = "true")]
     public bool SyncFood { get; set; } = true;
 
+    [ConnectorProperty(ConnectorPropertyKey.SyncSteps, DefaultValue = "true")]
+    public bool SyncSteps { get; set; } = true;
+
+    [ConnectorProperty(ConnectorPropertyKey.SyncHeartRate, DefaultValue = "true")]
+    public bool SyncHeartRate { get; set; } = true;
+
+    [ConnectorProperty(ConnectorPropertyKey.SyncBodyWeight, DefaultValue = "true")]
+    public bool SyncBodyWeight { get; set; } = true;
+
+    [ConnectorProperty(ConnectorPropertyKey.SyncSleep, DefaultValue = "true")]
+    public bool SyncSleep { get; set; } = true;
+
     /// <summary>
     ///     Override for active threshold (minutes). 0 = use connector default.
     /// </summary>

@@ -156,6 +156,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Connectors.CareLin
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Connectors.GoogleHealth", "src\Connectors\Nocturne.Connectors.GoogleHealth\Nocturne.Connectors.GoogleHealth.csproj", "{9E587C2B-4C7C-4E90-9D14-CB79944807AB}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Connectors.GoogleHealth.Tests", "tests\Unit\Nocturne.Connectors.GoogleHealth.Tests\Nocturne.Connectors.GoogleHealth.Tests.csproj", "{A8148783-6699-4227-8F54-3AC3DB17F7A3}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Connectors.Dexcom.Tests", "tests\Unit\Nocturne.Connectors.Dexcom.Tests\Nocturne.Connectors.Dexcom.Tests.csproj", "{0563E4E3-D81A-454D-8C27-B53867751EC5}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Aspire.ServiceDefaults.Tests", "tests\Unit\Nocturne.Aspire.ServiceDefaults.Tests\Nocturne.Aspire.ServiceDefaults.Tests.csproj", "{64AD1A7B-51A0-4800-9E66-12AE59089F4D}"
@@ -204,6 +206,18 @@ Global
 		Release|x86 = Release|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A8148783-6699-4227-8F54-3AC3DB17F7A3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A8148783-6699-4227-8F54-3AC3DB17F7A3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A8148783-6699-4227-8F54-3AC3DB17F7A3}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{A8148783-6699-4227-8F54-3AC3DB17F7A3}.Debug|x64.Build.0 = Debug|Any CPU
+		{A8148783-6699-4227-8F54-3AC3DB17F7A3}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{A8148783-6699-4227-8F54-3AC3DB17F7A3}.Debug|x86.Build.0 = Debug|Any CPU
+		{A8148783-6699-4227-8F54-3AC3DB17F7A3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A8148783-6699-4227-8F54-3AC3DB17F7A3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A8148783-6699-4227-8F54-3AC3DB17F7A3}.Release|x64.ActiveCfg = Release|Any CPU
+		{A8148783-6699-4227-8F54-3AC3DB17F7A3}.Release|x64.Build.0 = Release|Any CPU
+		{A8148783-6699-4227-8F54-3AC3DB17F7A3}.Release|x86.ActiveCfg = Release|Any CPU
+		{A8148783-6699-4227-8F54-3AC3DB17F7A3}.Release|x86.Build.0 = Release|Any CPU
 		{9E587C2B-4C7C-4E90-9D14-CB79944807AB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{9E587C2B-4C7C-4E90-9D14-CB79944807AB}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{9E587C2B-4C7C-4E90-9D14-CB79944807AB}.Debug|x64.ActiveCfg = Debug|Any CPU
@@ -1025,6 +1039,7 @@ Global
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
+		{A8148783-6699-4227-8F54-3AC3DB17F7A3} = {F25A9213-C080-46DC-93A8-09D96E2C55A1}
 		{9E587C2B-4C7C-4E90-9D14-CB79944807AB} = {A328B835-4990-6931-34B9-ABE689D5831A}
 		{F8F5E333-028E-4184-9863-D4535360F29E} = {B1C2D3E4-F5A6-7B8C-9D0E-1F2A3B4C5D6E}
 		{E9F7D2B1-4A5C-6E8F-9B0D-1C3E5F7A9B2C} = {B1C2D3E4-F5A6-7B8C-9D0E-1F2A3B4C5D6E}

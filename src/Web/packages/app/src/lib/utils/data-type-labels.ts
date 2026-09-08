@@ -21,6 +21,10 @@ const DATA_TYPE_LABELS: Record<SyncDataType, string> = {
 	[SyncDataType.DeviceStatus]: 'Device Status',
 	[SyncDataType.Activity]: 'Activity',
 	[SyncDataType.Food]: 'Food',
+	[SyncDataType.Steps]: 'Steps',
+	[SyncDataType.HeartRate]: 'Heart Rate',
+	[SyncDataType.BodyWeight]: 'Body Weight',
+	[SyncDataType.Sleep]: 'Sleep',
 };
 
 /** Get a human-readable label for a data type key */
