@@ -1,5 +1,6 @@
 using System.Text.Json;
 using FluentAssertions;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.MyFitnessPal.Configurations;
 using Nocturne.Connectors.MyFitnessPal.Models;
 using Nocturne.Connectors.MyFitnessPal.Services;
@@ -46,6 +47,29 @@ public class MyFitnessPalSyncRequestTests
 
         resource.GetProperty("paginationInput").GetProperty("before").GetString().Should().Be("page-2");
         resource.GetProperty("syncCursors").EnumerateObject().Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// The rule lives in <c>FullWalkSchedule</c>; this pins the binding: the stamp read is
+    /// <c>LastFullWalkAt</c> and the interval is <c>FullWalkInterval</c>.
+    /// </summary>
+    [Fact]
+    public void IsFullWalkDue_ReadsLastFullWalkAtAgainstTheFullWalkInterval()
+    {
+        MyFitnessPalConnectorService.IsFullWalkDue(new MyFitnessPalConnectorConfiguration())
+            .Should().BeTrue();
+
+        var oneMinuteShort = DateTimeOffset.UtcNow - MyFitnessPalConstants.FullWalkInterval + TimeSpan.FromMinutes(1);
+        MyFitnessPalConnectorService.IsFullWalkDue(new MyFitnessPalConnectorConfiguration
+        {
+            LastFullWalkAt = FullWalkSchedule.Stamp(oneMinuteShort),
+        }).Should().BeFalse();
+
+        var oneMinuteOver = DateTimeOffset.UtcNow - MyFitnessPalConstants.FullWalkInterval - TimeSpan.FromMinutes(1);
+        MyFitnessPalConnectorService.IsFullWalkDue(new MyFitnessPalConnectorConfiguration
+        {
+            LastFullWalkAt = FullWalkSchedule.Stamp(oneMinuteOver),
+        }).Should().BeTrue();
     }
 
     [Fact]

@@ -288,9 +288,20 @@ public static class GlookoConstants
     public static readonly TimeSpan FullWalkInterval = TimeSpan.FromDays(1);
 
     /// <summary>
-    ///     The sync-cursor resource under which the last completed full walk is recorded.
+    ///     How long after a failed full walk the next one is tried. Shorter than
+    ///     <see cref="FullWalkInterval"/> so a new connection whose first walk failed is not left on
+    ///     the lookback for a day; longer than a poll interval so a persistently failing window is
+    ///     not walked every cycle.
+    /// </summary>
+    public static readonly TimeSpan FullWalkRetryInterval = TimeSpan.FromHours(1);
+
+    /// <summary>
+    ///     The sync-cursor resources under which the last completed and the last attempted full walk
+    ///     are recorded.
     /// </summary>
     public const string FullWalkCursorResource = "full-walk";
+
+    public const string FullWalkAttemptCursorResource = "full-walk-attempt";
 
     // -- Device information (sent during sign-in) -----------------------------
 

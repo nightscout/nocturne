@@ -134,6 +134,25 @@ public class GlookoSsv2SyncTests
         DataTypes = [SyncDataType.Glucose, SyncDataType.Boluses, SyncDataType.CarbIntake],
     };
 
+    /// <summary>
+    /// SSV2 resumes every resource from its own cursor, so the scheduled run is not put on the
+    /// windowed path's walk schedule: the cursor store holds only the resource cursors afterwards.
+    /// </summary>
+    [Fact]
+    public async Task Ssv2_ScheduledRun_IsNotPutOnTheFullWalkSchedule()
+    {
+        var store = new FakeCursorStore();
+        var handler = new RoutingHandler(path =>
+            path.Contains("/api/v2/cgm/egvs") ? EgvPage(["g1"], "2026-06-02T00:00:00Z", "g1", lastPage: true)
+            : Json("{\"lastPage\":true}"));
+        var service = BuildService(handler, store, CapturePublisher([]));
+
+        await service.SyncDataAsync(Config(), CancellationToken.None);
+
+        store.Saved.Keys.Should().NotContain(GlookoConstants.FullWalkCursorResource);
+        store.Saved.Keys.Should().NotContain(GlookoConstants.FullWalkAttemptCursorResource);
+    }
+
     private static GlookoConnectorConfiguration Config() => new()
     {
         ConnectSource = ConnectSource.Glooko,

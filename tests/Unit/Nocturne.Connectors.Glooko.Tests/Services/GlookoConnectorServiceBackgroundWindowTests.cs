@@ -9,194 +9,206 @@ using Xunit;
 namespace Nocturne.Connectors.Glooko.Tests.Services;
 
 /// <summary>
-/// A background run has no upper bound and, for most Glooko accounts, no glucose watermark to hand
-/// it a lower one, so the connector used to answer every such run with the whole history floor:
-/// fourteen chunks and twenty-eight requests, every five minutes, for ever. The window now reaches
-/// back a fixed lookback, and the whole floor only once per <see cref="GlookoConstants.FullWalkInterval"/>.
+/// The scheduled run is the connector's own to bound: the base hands it the glucose watermark, which
+/// most Glooko accounts never have, and then the six-month floor — fourteen chunks and twenty-eight
+/// requests, every five minutes, for ever. Every test here drives the scheduled entry point, the
+/// shape <c>ConnectorBackgroundService</c> actually sends, and asserts the date windows Glooko is
+/// asked for.
 /// </summary>
 public class GlookoConnectorServiceBackgroundWindowTests
 {
-    private static readonly SyncDataType[] Types =
-    [
-        SyncDataType.StateSpans, SyncDataType.TempBasals, SyncDataType.DeviceEvents, SyncDataType.Profiles,
-    ];
+    private static readonly string Completed = GlookoConstants.FullWalkCursorResource;
+    private static readonly string Attempted = GlookoConstants.FullWalkAttemptCursorResource;
 
     /// <summary>
-    /// A stamp that keeps the schedule quiet: half an hour into the interval.
+    /// The harness serves the state-span, temp-basal, device-event and profile feeds; the rest of
+    /// the connector's types are switched off so the scheduled run reports on what it fetched.
     /// </summary>
-    private static ConnectorSyncCursor RecentWalk() =>
-        new(FullWalkSchedule.Stamp(DateTimeOffset.UtcNow.AddMinutes(-30)), null);
+    private static GlookoConnectorConfiguration ScheduledConfig(bool useV3Api = true)
+    {
+        var config = GlookoSyncHarness.Config(useV3Api);
+        config.SyncGlucose = false;
+        config.SyncManualBG = false;
+        config.SyncBoluses = false;
+        config.SyncBasalInjections = false;
+        config.SyncCarbIntake = false;
+        config.SyncBolusCalculations = false;
+        config.SyncNotes = false;
+        config.SyncFood = false;
+        config.SyncActivity = false;
+        return config;
+    }
+
+    private static ConnectorSyncCursor StampAgo(TimeSpan ago) =>
+        new(FullWalkSchedule.Stamp(DateTimeOffset.UtcNow - ago), null);
+
+    private static FakeCursorStore StoreWith(params (string Resource, ConnectorSyncCursor Cursor)[] stamps)
+    {
+        var store = new FakeCursorStore();
+        foreach (var (resource, cursor) in stamps)
+            store.Saved[resource] = cursor;
+        return store;
+    }
+
+    private static Task<SyncResult> Scheduled(
+        RecordingGlookoConnectorService service, GlookoConnectorConfiguration config) =>
+        service.SyncDataAsync(config, CancellationToken.None);
 
     [Fact]
-    public async Task SyncDataAsync_OnTheFirstRun_WalksTheFullHistoryAndRecordsIt()
+    public async Task ScheduledRun_OnTheFirstRun_WalksTheFullHistoryAndRecordsIt()
     {
         var handler = new GlookoEndpointHandler();
         var store = new FakeCursorStore();
-        var service = GlookoSyncHarness.Service(handler, cursorStore: store);
 
-        var result = await service.SyncDataAsync(
-            OpenEnded(), GlookoSyncHarness.Config(useV3Api: true), CancellationToken.None);
+        var result = await Scheduled(GlookoSyncHarness.Service(handler, cursorStore: store), ScheduledConfig());
 
         result.Success.Should().BeTrue();
         handler.WindowCount.Should().Be(FullWalkChunks());
         Parse(handler.Windows[0].Start).Should().BeCloseTo(
             DateTime.UtcNow.AddMonths(-GlookoConstants.FullWalkMonths).AddDays(-1), TimeSpan.FromHours(1));
 
-        var stamp = store.Saved.Should().ContainKey(GlookoConstants.FullWalkCursorResource).WhoseValue;
-        FullWalkSchedule.IsDue(stamp.LastUpdatedAt, GlookoConstants.FullWalkInterval, DateTimeOffset.UtcNow)
+        store.Saved.Keys.Should().BeEquivalentTo([Completed, Attempted]);
+        FullWalkSchedule.IsDue(store.Saved[Completed].LastUpdatedAt, GlookoConstants.FullWalkInterval, DateTimeOffset.UtcNow)
             .Should().BeFalse("the walk that just completed is what the next run stands on");
     }
 
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task SyncDataAsync_InsideTheInterval_ReachesBackOnlyTheLookback(bool useV3Api)
+    public async Task ScheduledRun_InsideTheInterval_ReachesBackOnlyTheLookback(bool useV3Api)
     {
         var handler = new GlookoEndpointHandler();
-        var seeded = RecentWalk();
-        var store = new FakeCursorStore { Saved = { [GlookoConstants.FullWalkCursorResource] = seeded } };
+        var seeded = StampAgo(TimeSpan.FromMinutes(30));
+        var store = StoreWith((Completed, seeded));
+        var config = ScheduledConfig(useV3Api);
         var service = GlookoSyncHarness.Service(handler, cursorStore: store);
-        var config = GlookoSyncHarness.Config(useV3Api);
 
-        var result = await service.SyncDataAsync(OpenEnded(), config, CancellationToken.None);
+        var result = await Scheduled(service, config);
 
         result.Success.Should().BeTrue();
-        // The lookback plus the day of padding on each side is exactly one chunk.
+        // The lookback plus the day of padding on each side is one chunk.
         handler.WindowCount.Should().Be(1);
         Parse(handler.Windows[0].Start).Should().BeCloseTo(
             DateTime.UtcNow.AddDays(-config.LookbackDays - 1), TimeSpan.FromHours(1));
-        store.Saved[GlookoConstants.FullWalkCursorResource].Should().BeSameAs(seeded,
-            "an incremental run leaves the walk stamp alone");
+        store.Saved.Should().HaveCount(1);
+        store.Saved[Completed].Should().BeSameAs(seeded, "an incremental run leaves the stamps alone");
         service.Published.Should().Contain(PublishKind.StateSpans);
     }
 
     [Fact]
-    public async Task SyncDataAsync_InsideTheInterval_HonoursAWiderLookback()
+    public async Task ScheduledRun_InsideTheInterval_HonoursAWiderLookback()
     {
         var handler = new GlookoEndpointHandler();
-        var store = new FakeCursorStore { Saved = { [GlookoConstants.FullWalkCursorResource] = RecentWalk() } };
-        var service = GlookoSyncHarness.Service(handler, cursorStore: store);
-        var config = GlookoSyncHarness.Config(useV3Api: true);
+        var config = ScheduledConfig();
         config.LookbackDays = 30;
 
-        await service.SyncDataAsync(OpenEnded(), config, CancellationToken.None);
+        await Scheduled(
+            GlookoSyncHarness.Service(handler, cursorStore: StoreWith((Completed, StampAgo(TimeSpan.FromMinutes(30))))),
+            config);
 
         handler.WindowCount.Should().Be(3, "30 days plus two of padding is three fortnightly chunks");
-        Parse(handler.Windows[0].Start).Should().BeCloseTo(
-            DateTime.UtcNow.AddDays(-31), TimeSpan.FromHours(1));
+        Parse(handler.Windows[0].Start).Should().BeCloseTo(DateTime.UtcNow.AddDays(-31), TimeSpan.FromHours(1));
     }
 
     [Fact]
-    public async Task SyncDataAsync_OnceTheIntervalHasElapsed_WalksAgain()
+    public async Task ScheduledRun_OnceTheIntervalHasElapsed_WalksAgain()
     {
         var handler = new GlookoEndpointHandler();
-        var overdue = DateTimeOffset.UtcNow - GlookoConstants.FullWalkInterval - TimeSpan.FromMinutes(1);
-        var store = new FakeCursorStore
-        {
-            Saved = { [GlookoConstants.FullWalkCursorResource] = new(FullWalkSchedule.Stamp(overdue), null) },
-        };
-        var service = GlookoSyncHarness.Service(handler, cursorStore: store);
+        var overdue = GlookoConstants.FullWalkInterval + TimeSpan.FromMinutes(1);
+        var store = StoreWith((Completed, StampAgo(overdue)), (Attempted, StampAgo(overdue)));
 
-        await service.SyncDataAsync(OpenEnded(), GlookoSyncHarness.Config(useV3Api: true), CancellationToken.None);
+        await Scheduled(GlookoSyncHarness.Service(handler, cursorStore: store), ScheduledConfig());
 
         handler.WindowCount.Should().Be(FullWalkChunks());
-        Parse(store.Saved[GlookoConstants.FullWalkCursorResource].LastUpdatedAt!)
-            .Should().BeAfter(overdue.UtcDateTime, "the new walk replaces the stale stamp");
+        Parse(store.Saved[Completed].LastUpdatedAt!).Should().BeAfter(
+            DateTime.UtcNow - overdue, "the new walk replaces the stale stamp");
     }
 
     /// <summary>
-    /// A chunk that fails stops the pass, so the walk has not covered its history and must not be
-    /// counted; the next run walks again instead of settling into the lookback.
+    /// A chunk that fails stops the pass, so the walk has not covered its history and is not counted
+    /// as completed — but it was attempted, and the next runs stay on the lookback until the retry
+    /// interval has passed rather than walking every cycle.
     /// </summary>
     [Fact]
-    public async Task SyncDataAsync_WhenTheWalkFails_DoesNotRecordIt()
+    public async Task ScheduledRun_WhenTheWalkFails_RecordsTheAttemptAndBacksOff()
     {
-        var handler = new GlookoEndpointHandler(failingPaths: [GlookoConstants.V3GraphDataPath]);
         var store = new FakeCursorStore();
-        var service = GlookoSyncHarness.Service(handler, cursorStore: store);
+        var failing = new GlookoEndpointHandler(failingPaths: [GlookoConstants.V3GraphDataPath]);
 
-        var result = await service.SyncDataAsync(
-            OpenEnded(), GlookoSyncHarness.Config(useV3Api: true), CancellationToken.None);
+        var result = await Scheduled(GlookoSyncHarness.Service(failing, cursorStore: store), ScheduledConfig());
 
         result.Success.Should().BeFalse();
-        store.Saved.Should().NotContainKey(GlookoConstants.FullWalkCursorResource);
+        store.Saved.Keys.Should().BeEquivalentTo([Attempted]);
+
+        var next = new GlookoEndpointHandler();
+        await Scheduled(GlookoSyncHarness.Service(next, cursorStore: store), ScheduledConfig());
+
+        next.WindowCount.Should().Be(1, "the retry interval has not elapsed");
+        store.Saved.Should().NotContainKey(Completed);
     }
 
-    /// <summary>
-    /// The caller's lower bound and the schedule's each reach as far back as the other allows: a
-    /// repair from six weeks ago is not clipped to the lookback, and a bound inside the lookback
-    /// does not narrow it.
-    /// </summary>
     [Fact]
-    public async Task SyncDataAsync_WithACallerLowerBound_WidensButNeverNarrowsTheLookback()
+    public async Task ScheduledRun_OnceTheRetryIntervalHasElapsed_WalksAgainAfterAFailure()
     {
-        var store = new FakeCursorStore { Saved = { [GlookoConstants.FullWalkCursorResource] = RecentWalk() } };
-        var config = GlookoSyncHarness.Config(useV3Api: true);
+        var handler = new GlookoEndpointHandler();
+        var store = StoreWith((Attempted, StampAgo(GlookoConstants.FullWalkRetryInterval + TimeSpan.FromMinutes(1))));
 
-        var wider = new GlookoEndpointHandler();
-        await GlookoSyncHarness.Service(wider, cursorStore: store).SyncDataAsync(
-            OpenEnded(from: DateTime.UtcNow.AddDays(-42)), config, CancellationToken.None);
+        await Scheduled(GlookoSyncHarness.Service(handler, cursorStore: store), ScheduledConfig());
 
-        wider.WindowCount.Should().Be(4, "six weeks plus padding is four chunks");
-        Parse(wider.Windows[0].Start).Should().BeCloseTo(DateTime.UtcNow.AddDays(-43), TimeSpan.FromHours(1));
-
-        var narrower = new GlookoEndpointHandler();
-        await GlookoSyncHarness.Service(narrower, cursorStore: store).SyncDataAsync(
-            OpenEnded(from: DateTime.UtcNow.AddDays(-2)), config, CancellationToken.None);
-
-        narrower.WindowCount.Should().Be(1);
-        Parse(narrower.Windows[0].Start).Should().BeCloseTo(
-            DateTime.UtcNow.AddDays(-config.LookbackDays - 1), TimeSpan.FromHours(1));
+        handler.WindowCount.Should().Be(FullWalkChunks());
+        store.Saved.Should().ContainKey(Completed);
     }
 
     /// <summary>
-    /// An explicit range is a manual re-import of one window: it is answered as asked whatever the
-    /// schedule says, and it is not a walk, so it neither records one nor consumes one.
+    /// A caller that names its own lower bound has already chosen; the schedule neither widens nor
+    /// records.
     /// </summary>
     [Fact]
-    public async Task SyncDataAsync_WithAnExplicitRange_IgnoresTheSchedule()
+    public async Task ScheduledRun_WithACallerSince_HonoursItAndLeavesTheScheduleAlone()
     {
         var handler = new GlookoEndpointHandler();
         var store = new FakeCursorStore();
-        var service = GlookoSyncHarness.Service(handler, cursorStore: store);
 
-        var result = await service.SyncDataAsync(
-            new SyncRequest
-            {
-                From = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-                To = new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc),
-                DataTypes = [.. Types],
-            },
-            GlookoSyncHarness.Config(useV3Api: true), CancellationToken.None);
+        await GlookoSyncHarness.Service(handler, cursorStore: store).SyncDataAsync(
+            ScheduledConfig(), CancellationToken.None, since: DateTime.UtcNow.AddDays(-3));
 
-        result.Success.Should().BeTrue();
-        handler.WindowCount.Should().Be(3);
+        handler.WindowCount.Should().Be(1);
+        Parse(handler.Windows[0].Start).Should().BeCloseTo(DateTime.UtcNow.AddDays(-4), TimeSpan.FromHours(1));
         store.Saved.Should().BeEmpty();
     }
 
     /// <summary>
-    /// Nothing can remember a walk without a store, so a detached service (dry-run tooling) has no
-    /// schedule: it answers the caller's bound, or the floor when there is none, as it always did.
+    /// The tenant's own sync button sends a request with neither bound. It is not a scheduled run,
+    /// so it re-pulls the floor as it always did and never touches the schedule — clicking it does
+    /// not spend the day's walk.
     /// </summary>
     [Fact]
-    public async Task SyncDataAsync_WithoutACursorStore_AnswersTheCallerOrTheFloor()
+    public async Task RequestedRun_WithNoBounds_ReadsTheFloorAndLeavesTheScheduleAlone()
     {
-        var floor = new GlookoEndpointHandler();
-        await GlookoSyncHarness.Service(floor).SyncDataAsync(
-            OpenEnded(), GlookoSyncHarness.Config(useV3Api: true), CancellationToken.None);
+        var handler = new GlookoEndpointHandler();
+        var store = new FakeCursorStore();
 
-        floor.WindowCount.Should().Be(FullWalkChunks());
+        var result = await GlookoSyncHarness.Service(handler, cursorStore: store).SyncDataAsync(
+            new SyncRequest(), ScheduledConfig(), CancellationToken.None);
 
-        var bounded = new GlookoEndpointHandler();
-        await GlookoSyncHarness.Service(bounded).SyncDataAsync(
-            OpenEnded(from: DateTime.UtcNow.AddDays(-3)), GlookoSyncHarness.Config(useV3Api: true),
-            CancellationToken.None);
-
-        bounded.WindowCount.Should().Be(1, "the caller's three days are not widened to any lookback");
-        Parse(bounded.Windows[0].Start).Should().BeCloseTo(DateTime.UtcNow.AddDays(-4), TimeSpan.FromHours(1));
+        result.Success.Should().BeTrue();
+        handler.WindowCount.Should().Be(FullWalkChunks());
+        store.Saved.Should().BeEmpty();
     }
 
-    private static SyncRequest OpenEnded(DateTime? from = null) => new() { From = from, DataTypes = [.. Types] };
+    /// <summary>
+    /// Nothing can remember a walk without a store, so a detached service (dry-run tooling) takes the
+    /// base window, which for an account without Glooko glucose is the floor.
+    /// </summary>
+    [Fact]
+    public async Task ScheduledRun_WithoutACursorStore_TakesTheBaseWindow()
+    {
+        var handler = new GlookoEndpointHandler();
+
+        await Scheduled(GlookoSyncHarness.Service(handler), ScheduledConfig());
+
+        handler.WindowCount.Should().Be(FullWalkChunks());
+    }
 
     /// <summary>
     /// The chunk count the floor spans, computed the way the sync computes it so a month's length
