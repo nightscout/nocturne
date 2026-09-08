@@ -328,6 +328,18 @@ done
 printf '\n'
 log "Done"
 info "Open https://$BASE_DOMAIN to create your first site and passkey."
-info "SSH:  ssh -i ~/.ssh/nocturne_oci ubuntu@$PUBLIC_IP"
-info "Files on the instance: /opt/nocturne (secrets are in .env; Nocturne generated them, you do not need to know them)."
-info "Logs: sudo journalctl -u nocturne  and  cd /opt/nocturne && sudo docker compose logs"
+info "SSH:   ssh -i ~/.ssh/nocturne_oci ubuntu@$PUBLIC_IP"
+info "Files: /opt/nocturne on the instance. Database passwords are in .env; Nocturne generated them and only it needs them."
+info "Logs:  sudo journalctl -u nocturne   and   cd /opt/nocturne && sudo docker compose logs"
+
+INSTANCE_KEY=$(ssh -i "${SSH_PUBLIC_KEY_FILE%.pub}" -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=10 \
+  "ubuntu@$PUBLIC_IP" "sudo sed -n 's/^INSTANCE_KEY=//p' /opt/nocturne/.env" 2>/dev/null || true)
+printf '\n'
+if [[ -n "$INSTANCE_KEY" ]]; then
+  info "Your instance key. It is the master credential for this installation, used for administrative"
+  info "API access and account recovery. Save it in a password manager now; it is shown again on re-runs."
+  printf '\n      %s\n' "$INSTANCE_KEY"
+else
+  info "The instance key was not readable yet. Re-run this script later to see it, or read it with:"
+  info "  ssh -i ~/.ssh/nocturne_oci ubuntu@$PUBLIC_IP sudo grep ^INSTANCE_KEY= /opt/nocturne/.env"
+fi

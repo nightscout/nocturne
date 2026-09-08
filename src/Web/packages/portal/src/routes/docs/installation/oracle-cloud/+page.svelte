@@ -135,6 +135,11 @@
 
     <h2 class="text-2xl font-bold mt-8 mb-4">Afterwards</h2>
     <ul class="list-disc list-inside space-y-2 text-muted-foreground mb-8">
+        <li>
+            The script ends by printing your <strong>instance key</strong>. It is the master
+            credential for this installation, used for administrative API access and account
+            recovery. Save it in a password manager. Running the script again shows it again.
+        </li>
         <li>Updates are automatic. Watchtower checks for new Nocturne images daily.</li>
         <li>Nocturne starts again by itself when the server reboots.</li>
         <li>
