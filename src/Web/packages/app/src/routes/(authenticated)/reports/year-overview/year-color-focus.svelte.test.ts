@@ -9,6 +9,33 @@ import {
 } from "$lib/test-stubs/year-overview-runtime.svelte";
 import { getGlucoseHeatmapFill } from "$lib/utils/chart-colors";
 import { glucoseColorFocusStops } from "$lib/utils/metric-color-focus";
+
+vi.mock("$api/generated/dataOverviews.generated.remote", async () =>
+  import("$lib/test-stubs/year-overview-remote")
+);
+vi.mock("$lib/stores/appearance-store.svelte", async () =>
+  import("$lib/test-stubs/year-overview-runtime.svelte")
+);
+vi.mock("$lib/hooks/date-params.svelte", async () =>
+  import("$lib/test-stubs/year-overview-runtime.svelte")
+);
+vi.mock(
+  "$lib/components/reports/year-overview/YearHeatmap.svelte",
+  async () => import("$lib/test-stubs/YearHeatmap.test-stub.svelte")
+);
+vi.mock(
+  "$lib/components/reports/year-overview/YearOverviewFilters.svelte",
+  async () => import("$lib/test-stubs/EmptyYearPanel.test-stub.svelte")
+);
+vi.mock(
+  "$lib/components/reports/year-overview/DayDetailPanel.svelte",
+  async () => import("$lib/test-stubs/EmptyYearPanel.test-stub.svelte")
+);
+vi.mock(
+  "$lib/components/reports/GlycemicRiskIndexChart.svelte",
+  async () => import("$lib/test-stubs/EmptyYearPanel.test-stub.svelte")
+);
+
 import YearOverviewPage from "./+page.svelte";
 
 const storageKey = (user = "synthetic-user") =>
@@ -329,12 +356,13 @@ describe("year overview page color focus integration", () => {
     const originalSize = [window.innerWidth, window.innerHeight] as const;
     await page.viewport(390, 800);
     try {
-      const { container } = render(YearOverviewPage);
+      render(YearOverviewPage);
       await expect.element(bgInput("High")).toHaveValue(180);
-      const track = container.querySelector<HTMLElement>("[data-glucose-color-track]")!;
-      const bounds = track.getBoundingClientRect();
+      const track = page.getByTestId("glucose-color-track");
+      const bounds = (track.element() as HTMLElement).getBoundingClientRect();
       expect(bounds.width).toBeGreaterThan(300);
-      const originalGradient = track.style.background;
+      const originalGradient = (track.element() as HTMLElement).style
+        .background;
       await userEvent.dragAndDrop(bgSlider("High"), track, {
         targetPosition: { x: bounds.width * 0.6, y: bounds.height / 2 },
       });
@@ -342,8 +370,13 @@ describe("year overview page color focus integration", () => {
       expect(value).toBeGreaterThan(224);
       expect(value).toBeLessThan(228);
       await expect.element(bgInput("Very high")).toHaveValue(250);
-      expect(track.style.background).not.toBe(originalGradient);
-      expect(container.querySelector<HTMLElement>(".glucose-color-focus")!.getBoundingClientRect().right).toBeLessThanOrEqual(390);
+      expect((track.element() as HTMLElement).style.background).not.toBe(
+        originalGradient
+      );
+      expect(
+        (page.getByTestId("glucose-color-focus").element() as HTMLElement)
+          .getBoundingClientRect().right
+      ).toBeLessThanOrEqual(390);
       await page.screenshot({ path: "test-results/bg-color-focus-mobile.png" });
     } finally {
       await page.viewport(originalSize[0], originalSize[1]);

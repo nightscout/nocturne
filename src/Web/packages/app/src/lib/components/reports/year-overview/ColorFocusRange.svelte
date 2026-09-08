@@ -109,6 +109,7 @@
           class="h-3.5 w-full rounded-sm"
           style:background={gradient}
           data-color-focus-track
+          data-testid="color-focus-track"
         ></span>
         {#each thumbItems as thumb (thumb.index)}
           <Slider.Thumb

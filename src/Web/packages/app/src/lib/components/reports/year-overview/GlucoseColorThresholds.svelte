@@ -99,6 +99,7 @@
 
 <div
   class="glucose-color-focus w-full max-w-[420px] min-w-0 text-xs text-muted-foreground"
+  data-testid="glucose-color-focus"
 >
   <div class="print:hidden">
     <Slider.Root
@@ -118,6 +119,7 @@
           class="h-3.5 w-full rounded-sm"
           style:background={gradient}
           data-glucose-color-track
+          data-testid="glucose-color-track"
         ></span>
         {#each thumbItems as thumb (thumb.index)}
           <Slider.Thumb

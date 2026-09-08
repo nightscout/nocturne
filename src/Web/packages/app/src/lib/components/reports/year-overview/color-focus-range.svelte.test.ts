@@ -39,7 +39,7 @@ describe("year overview color focus", () => {
   });
 
   it("focuses the legend on exact numeric limits within an outlier-sized axis", async () => {
-    const { container } = render(Harness);
+    render(Harness);
 
     await minimumInput().fill("10");
     await maximumInput().fill("70");
@@ -56,11 +56,11 @@ describe("year overview color focus", () => {
     await expect
       .element(maximumSlider())
       .toHaveAttribute("aria-valuemax", "500");
-    const track = container.querySelector<HTMLElement>(
-      "[data-color-focus-track]"
-    );
-    expect(track?.style.background).toContain("2%");
-    expect(track?.style.background).toMatch(/14(?:\.0+2)?%/);
+    const background = (
+      page.getByTestId("color-focus-track").element() as HTMLElement
+    ).style.background;
+    expect(background).toContain("2%");
+    expect(background).toMatch(/14(?:\.0+2)?%/);
   });
 
   it("allows decimal limits without rounding the selected values", async () => {
@@ -80,8 +80,6 @@ describe("year overview color focus", () => {
     "keeps fractional automatic maximum %s without creating a manual preference",
     async (observedMax) => {
       const screen = render(Harness, { observedMax });
-      const { container } = screen;
-
       await expect.element(maximumInput()).toHaveValue(observedMax);
       await expect
         .element(maximumSlider())
@@ -91,8 +89,8 @@ describe("year overview color focus", () => {
         .toHaveTextContent("null");
       if (observedMax === 0.5) {
         expect(
-          container.querySelector<HTMLElement>("[data-color-focus-track]")
-            ?.style.background
+          (page.getByTestId("color-focus-track").element() as HTMLElement)
+            .style.background
         ).toContain("50%");
       }
       await screen.rerender({ observedMax: observedMax + 1 });
@@ -147,11 +145,9 @@ describe("year overview color focus", () => {
     const originalSize = [window.innerWidth, window.innerHeight] as const;
     await page.viewport(390, 700);
     try {
-      const { container } = render(Harness, { initialRange: [10, 70] });
-      const track = container.querySelector<HTMLElement>(
-        "[data-color-focus-track]"
-      )!;
-      const bounds = track.getBoundingClientRect();
+      render(Harness, { initialRange: [10, 70] });
+      const track = page.getByTestId("color-focus-track");
+      const bounds = (track.element() as HTMLElement).getBoundingClientRect();
       expect(bounds.width).toBeGreaterThan(300);
       expect(bounds.height).toBeGreaterThan(10);
 
