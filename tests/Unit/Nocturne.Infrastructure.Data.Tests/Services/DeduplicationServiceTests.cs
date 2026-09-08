@@ -1347,6 +1347,60 @@ public class DeduplicationServiceTests : IDisposable
             2, "a soft-deleted note is not a candidate for a live one to join");
     }
 
+    /// <summary>
+    /// A duration is a measurement each source rounds for itself, not a value both report the same
+    /// way: mylife quantises the pump clock to ten seconds while Glooko reports to the second, so
+    /// the same delivery arrives as 650s and 654s. Demanding equality refused nearly every
+    /// cross-source temp basal on a two-connector tenant.
+    /// </summary>
+    [Theory]
+    [InlineData(650, 654, true)]
+    [InlineData(650, 660, true)]
+    [InlineData(650, 650, true)]
+    [InlineData(650, 661, false)]
+    [InlineData(650, 710, false)]
+    [InlineData(1, 650, false)]
+    public void CriteriaMatch_TempBasal_ExactMode_AllowsDurationsToDisagreeByUpToTenSeconds(
+        int aSeconds, int bSeconds, bool expected)
+    {
+        var a = TempBasalCriteria(TimeSpan.FromSeconds(aSeconds));
+        var b = TempBasalCriteria(TimeSpan.FromSeconds(bSeconds));
+
+        DeduplicationService.CriteriaMatch(RecordType.TempBasal, a, b, exact: true).Should().Be(expected);
+    }
+
+    /// <summary>
+    /// An open-ended temp basal carries no duration. Admitting one would reduce the wide comparison
+    /// to rate alone, and a stream that holds the same rate all day makes that no evidence at all.
+    /// </summary>
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(false, false)]
+    public void CriteriaMatch_TempBasal_ExactMode_RefusesAnOpenEndedDuration(bool aKnown, bool bKnown)
+    {
+        var a = TempBasalCriteria(aKnown ? TimeSpan.FromSeconds(650) : null);
+        var b = TempBasalCriteria(bKnown ? TimeSpan.FromSeconds(650) : null);
+
+        DeduplicationService.CriteriaMatch(RecordType.TempBasal, a, b, exact: true).Should().BeFalse();
+    }
+
+    /// <summary>
+    /// The tolerance is the wide path's alone. The tight path never compared duration, and reaching
+    /// only thirty seconds it does not need to.
+    /// </summary>
+    [Fact]
+    public void CriteriaMatch_TempBasal_ExactMode_StillRefusesADifferentRate()
+    {
+        var a = TempBasalCriteria(TimeSpan.FromSeconds(650), rate: 0.8);
+        var b = TempBasalCriteria(TimeSpan.FromSeconds(654), rate: 1.2);
+
+        DeduplicationService.CriteriaMatch(RecordType.TempBasal, a, b, exact: true).Should().BeFalse();
+    }
+
+    private static MatchCriteria TempBasalCriteria(TimeSpan? duration, double rate = 0.8) =>
+        new() { Rate = rate, Duration = duration };
+
     [Fact]
     public void CriteriaMatch_DeviceEvent_RefusesWhenTheEventTypeIsAbsent()
     {

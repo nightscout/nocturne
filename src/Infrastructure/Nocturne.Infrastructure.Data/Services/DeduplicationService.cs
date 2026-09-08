@@ -59,6 +59,18 @@ public class DeduplicationService : IDeduplicationService
     private const double ExactValueEpsilon = 1e-6;
 
     /// <summary>
+    /// How far two sources' temp basal durations may disagree and still describe one delivery.
+    /// Unlike a value, a duration is a measurement each source rounds for itself: mylife reports
+    /// the pump's raw clock quantised to ten seconds while Glooko re-anchors and reports to the
+    /// second, so the same eleven-minute temp basal arrives as 650s from one and 654s from the
+    /// other. Demanding equality refused those outright — on one two-connector tenant that was
+    /// ~2800 unmerged pairs in thirty days against 125 merged, nearly every temp basal doubled.
+    /// Ten seconds covers the quantisation without reaching a neighbouring delivery, which on that
+    /// tenant still leaves the pairs disagreeing by a minute or more refused.
+    /// </summary>
+    private static readonly TimeSpan ExactDurationTolerance = TimeSpan.FromSeconds(10);
+
+    /// <summary>
     /// Record types eligible for <see cref="WideMatchingWindow"/>. Continuous streams
     /// (<see cref="RecordType.SensorGlucose"/>), free-text records (<see cref="RecordType.Note"/>)
     /// and interval records (<see cref="RecordType.StateSpan"/>) are excluded: repeating the same
@@ -1244,6 +1256,14 @@ public class DeduplicationService : IDeduplicationService
     /// the public surface and would otherwise be an untestable defence.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// True when two temp basal durations describe one delivery. Both must be known: an open-ended
+    /// temp basal carries no duration, and admitting a null would reduce the wide comparison to
+    /// rate alone, which for a stream that repeats the same rate all day is no evidence at all.
+    /// </summary>
+    private static bool DurationsAgree(TimeSpan? a, TimeSpan? b) =>
+        a.HasValue && b.HasValue && (a.Value - b.Value).Duration() <= ExactDurationTolerance;
+
     internal static bool CriteriaMatch(RecordType recordType, MatchCriteria a, MatchCriteria b, bool exact = false)
     {
         if (exact && !WideMatchableTypes.Contains(recordType))
@@ -1255,10 +1275,10 @@ public class DeduplicationService : IDeduplicationService
         return recordType switch
         {
             // An open-ended temp basal carries no duration, and null == null would quietly reduce
-            // the exact comparison to rate alone; both intervals must be known and equal.
+            // the exact comparison to rate alone; both intervals must be known.
             RecordType.TempBasal => a.Rate.HasValue && b.Rate.HasValue
                 && Math.Abs(a.Rate.Value - b.Rate.Value) <= Tolerance(a.RateTolerance, b.RateTolerance)
-                && (!exact || (a.Duration.HasValue && a.Duration == b.Duration)),
+                && (!exact || DurationsAgree(a.Duration, b.Duration)),
             RecordType.SensorGlucose or RecordType.BGCheck => a.GlucoseValue.HasValue && b.GlucoseValue.HasValue
                 && Math.Abs(a.GlucoseValue.Value - b.GlucoseValue.Value) <= Tolerance(a.GlucoseTolerance, b.GlucoseTolerance),
             RecordType.Bolus => a.Insulin.HasValue && b.Insulin.HasValue
