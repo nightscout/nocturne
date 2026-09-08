@@ -3,6 +3,11 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import type { GoogleHealthStatus } from "$lib/api";
 import { googleHealthMocks } from "$lib/test-stubs/google-health";
+
+vi.mock("$lib/api/generated/googleHealths.generated.remote", async () =>
+  import("$lib/test-stubs/google-health")
+);
+
 import GoogleHealthPage from "./google-health-page.svelte";
 
 function status(overrides: Partial<GoogleHealthStatus> = {}): GoogleHealthStatus {

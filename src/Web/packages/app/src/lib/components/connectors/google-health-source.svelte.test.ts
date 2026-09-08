@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
+import { goto } from "$app/navigation";
 import type { GoogleHealthStatus } from "$lib/api";
-import { goto } from "$lib/test-stubs/year-overview-runtime.svelte";
+
+vi.mock("$app/navigation", () => ({ goto: vi.fn() }));
+
 import GoogleHealthSourceRow from "./GoogleHealthSourceRow.svelte";
 import ServerConnectorsCard from "./ServerConnectorsCard.svelte";
 
