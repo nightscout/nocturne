@@ -18,6 +18,7 @@
 </script>
 
 <div
+	data-testid="food-row"
 	class="food-row"
 	class:expanded
 	role="button"

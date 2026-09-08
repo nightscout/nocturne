@@ -596,7 +596,7 @@
         </CardDescription>
       </CardHeader>
       <CardContent class="space-y-4">
-        <div class="flex items-start gap-4 p-4 rounded-lg border bg-card">
+        <div data-testid="deduplicate-records" class="flex items-start gap-4 p-4 rounded-lg border bg-card">
           <div
             class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10"
           >

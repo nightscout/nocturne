@@ -1,6 +1,6 @@
 <script lang="ts">
     import { page } from "$app/state";
-    import { Rocket, Download, Settings, Shield, Share2, Bell, Bot, Code2, KeyRound, Activity, LayoutGrid, Package, ChevronRight, ChevronDown } from "@lucide/svelte";
+    import { Rocket, Download, Settings, Shield, Share2, Bell, Bot, Code2, KeyRound, Activity, LayoutGrid, Package, Utensils, ChevronRight, ChevronDown } from "@lucide/svelte";
 
     const navSections = [
         {
@@ -43,6 +43,17 @@
                 { href: "/docs/sharing/members", label: "Member accounts & invites" },
                 { href: "/docs/sharing/guest-links", label: "Temporary guest links" },
                 { href: "/docs/sharing/clock", label: "Clocks" },
+            ],
+        },
+        {
+            title: "Food & Carbs",
+            icon: Utensils,
+            items: [
+                { href: "/docs/food", label: "Overview" },
+                { href: "/docs/food/carbs", label: "Carb entries" },
+                { href: "/docs/food/catalog", label: "The food catalog" },
+                { href: "/docs/food/meals", label: "Meals & attribution" },
+                { href: "/docs/food/deduplication", label: "Duplicate carbs" },
             ],
         },
         {

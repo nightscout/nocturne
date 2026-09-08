@@ -154,6 +154,13 @@ public class MealMatchingService : IMealMatchingService
         DateTimeOffset to,
         CancellationToken ct = default)
     {
+        // Npgsql refuses to write a DateTimeOffset whose offset is not zero to a
+        // "timestamp with time zone", and model binding a bare date off the query string produces
+        // one carrying the *server's* offset. Converting here changes no instant and keeps every
+        // caller — the controller, the Glooko connector — out of that trap.
+        from = from.ToUniversalTime();
+        to = to.ToUniversalTime();
+
         var settings = await GetSettingsAsync(ct);
         var timeWindow = TimeSpan.FromMinutes(settings.MatchTimeWindowMinutes);
 
