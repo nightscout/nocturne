@@ -122,6 +122,12 @@ public class GoogleHealthTests
         Assert.Equal(["steps", "sleep"], status.SelectedTypes);
         Assert.True(status.Connected);
         Assert.Equal(["steps"], status.GrantedTypes);
+        Assert.Equal(
+            "disconnect_first",
+            (await Assert.ThrowsAsync<GoogleHealthException>(() => service.StartAsync(subject, default))).Message);
+        Assert.Equal(
+            "preview_required",
+            (await Assert.ThrowsAsync<GoogleHealthException>(() => service.QueueSyncAsync(default))).Message);
     }
 
     [Fact]

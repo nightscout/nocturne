@@ -364,9 +364,10 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
         }
         catch (Exception ex) when (ex is CryptographicException or JsonException or FormatException)
         {
+            var connected = await SharedSessionAsync(ct) is not null || row.ProtectedToken is not null;
             return WithProgress(new()
             {
-                Capabilities = GoogleHealthClient.Capabilities, Connected = row.ProtectedToken is not null,
+                Capabilities = GoogleHealthClient.Capabilities, Connected = connected,
                 LastAttempt = row.LastAttempt, LastSync = row.LastSync, NextAttempt = row.NextAttempt,
                 ErrorCode = "stored_google_configuration_unreadable"
             });
@@ -426,10 +427,11 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
             else
             {
                 if (row.SubjectId != subject) throw new GoogleHealthException("connection_owner_required");
+                var session = await StoredSessionAsync(row, ct);
                 GoogleHealthOptions? prior = null;
-                if (row.ProtectedToken is not null || string.IsNullOrWhiteSpace(options.ClientSecret))
+                if (session is not null || string.IsNullOrWhiteSpace(options.ClientSecret))
                     prior = await StoredOptionsAsync(row, ct);
-                if (row.ProtectedToken is not null && prior is not null &&
+                if (session is not null && prior is not null &&
                     (options.ClientId != prior.ClientId || options.CallbackUrl != prior.CallbackUrl))
                     throw new GoogleHealthException("disconnect_first");
                 if (string.IsNullOrWhiteSpace(options.ClientSecret))
@@ -453,7 +455,8 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
         {
             var row = await Connection(ct) ?? throw new GoogleHealthException("configure_first");
             if (row.SubjectId != subject) throw new GoogleHealthException("connection_owner_required");
-            if (row.ProtectedToken is not null) throw new GoogleHealthException("disconnect_first");
+            if (await StoredSessionAsync(row, ct) is not null)
+                throw new GoogleHealthException("disconnect_first");
             var settings = await StoredOptionsAsync(row, ct);
             var verifier = WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(48));
             var state = WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(32));
@@ -544,9 +547,11 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
             if (row.SubjectId != subject) throw new GoogleHealthException("connection_owner_required");
             GoogleHealthTokenSession? token = null;
             var revokeFailed = false;
-            if (row.ProtectedToken is not null)
-                try { token = Unprotect<GoogleHealthTokenSession>(row.ProtectedToken); }
-                catch (Exception ex) when (ex is CryptographicException or JsonException or FormatException) { revokeFailed = true; }
+            try { token = await StoredSessionAsync(row, ct); }
+            catch (Exception ex) when (ex is CryptographicException or JsonException or FormatException)
+            {
+                revokeFailed = true;
+            }
             row.ProtectedToken = null; row.ErrorCode = revokeFailed ? "revoke_in_google" : null; row.NextAttempt = null;
             coordinator.Flows.TryRemove(db.TenantId, out _);
             await db.SaveChangesAsync(ct);
@@ -571,7 +576,8 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
             var row = await Connection(ct);
             if (row is null) return;
             if (row.SubjectId != subject) throw new GoogleHealthException("connection_owner_required");
-            if (row.ProtectedToken is not null) throw new GoogleHealthException("disconnect_first");
+            if (await StoredSessionAsync(row, ct) is not null)
+                throw new GoogleHealthException("disconnect_first");
             if (writer is not null) await writer.PurgeAsync(ct);
             var strategy = db.Database.CreateExecutionStrategy();
             await strategy.ExecuteAsync(async () =>
@@ -592,9 +598,9 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
         {
             var row = await Connection(ct) ?? throw new GoogleHealthException("configure_first");
             if (row.SubjectId != subject) throw new GoogleHealthException("connection_owner_required");
-            if (row.ProtectedToken is null) throw new GoogleHealthException("configure_first");
             var settings = await StoredOptionsAsync(row, ct);
-            var token = Unprotect<GoogleHealthTokenSession>(row.ProtectedToken);
+            var token = await StoredSessionAsync(row, ct) ??
+                throw new GoogleHealthException("configure_first");
             var now = DateTimeOffset.UtcNow;
             if (string.IsNullOrWhiteSpace(token.AccessToken) || token.AccessTokenExpiresAt is null ||
                 token.AccessTokenExpiresAt <= now.Add(AccessTokenSafety))
@@ -602,6 +608,7 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
                 token = await RefreshSessionAsync(settings, token, ct);
                 row.ProtectedToken = Protect(token);
                 await db.SaveChangesAsync(ct);
+                await MirrorTokenAsync(settings, token, row.SubjectId, ct);
             }
             var from = settings.ImportFrom ?? now.AddDays(-settings.HistoryDays);
             var items = new List<GoogleHealthPreviewItem>();
@@ -636,10 +643,11 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
     public async Task QueueSyncAsync(CancellationToken ct)
     {
         var row = await Connection(ct) ?? throw new GoogleHealthException("configure_first");
-        if (row.ProtectedToken is null) throw new GoogleHealthException("configure_first");
         try
         {
             var settings = await StoredOptionsAsync(row, ct);
+            if (await StoredSessionAsync(row, ct) is null)
+                throw new GoogleHealthException("configure_first");
             if (settings.PreviewOnly) throw new GoogleHealthException("preview_required");
             if (settings.DataTypes.Length == 0) throw new GoogleHealthException("no_types_selected");
             coordinator.Queue(db.TenantId, settings.DataTypes.Length);
