@@ -211,20 +211,6 @@ public class GlookoSsv2SyncTests
         }
     }
 
-    private sealed class FakeCursorStore : IConnectorSyncCursorStore
-    {
-        public Dictionary<string, ConnectorSyncCursor> Saved { get; } = new(StringComparer.Ordinal);
-
-        public Task<ConnectorSyncCursor?> GetAsync(string connectorName, string resource, CancellationToken ct = default)
-            => Task.FromResult(Saved.TryGetValue(resource, out var c) ? c : null);
-
-        public Task SetAsync(string connectorName, string resource, ConnectorSyncCursor cursor, CancellationToken ct = default)
-        {
-            Saved[resource] = cursor;
-            return Task.CompletedTask;
-        }
-    }
-
     private sealed class FixedGlookoTokenProvider : GlookoAuthTokenProvider
     {
         public FixedGlookoTokenProvider()

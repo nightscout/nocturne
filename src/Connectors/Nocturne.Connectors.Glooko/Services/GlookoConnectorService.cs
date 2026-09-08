@@ -333,19 +333,19 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             // static offset when the timeline is empty (e.g. V2-only accounts, or profile tz unknown).
             await ConfigureTimezoneTimelineAsync(context, cancellationToken);
 
+            var window = await ResolveSyncWindowAsync(request, config, cancellationToken);
+
             // The request window is real-UTC; Glooko queries expect fake-UTC (local wall-clock). Pad by
             // a day each side so a non-zero offset between the two never clips edge data (dedup absorbs
             // the overlap).
-            var from = request.From.HasValue
-                ? context.TimeMapper.ToGlookoTime(request.From.Value).AddDays(-1)
-                : context.TimeMapper.ToGlookoTime(DateTime.UtcNow.AddMonths(-6)).AddDays(-1);
-            var to = context.TimeMapper.ToGlookoTime(request.To ?? DateTime.UtcNow).AddDays(1);
+            var from = context.TimeMapper.ToGlookoTime(window.From).AddDays(-1);
+            var to = context.TimeMapper.ToGlookoTime(window.To).AddDays(1);
 
             var chunks = DateChunker.Chunk(from, to, GlookoConstants.SyncChunkSize).ToList();
 
             _logger.LogInformation(
-                "[{ConnectorSource}] Syncing {From:yyyy-MM-dd} to {To:yyyy-MM-dd} in {ChunkCount} chunk(s)",
-                ConnectorSource, from, to, chunks.Count);
+                "[{ConnectorSource}] Syncing {From:yyyy-MM-dd} to {To:yyyy-MM-dd} in {ChunkCount} chunk(s) ({Mode})",
+                ConnectorSource, from, to, chunks.Count, window.FullWalk ? "full walk" : "incremental");
 
             // Run the sync; if Glooko rejects the patient code (403 data_cant_view) the cached
             // glookoCode has gone stale (e.g. the account was re-linked), so re-authenticate once
@@ -394,6 +394,11 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                 }
             }
 
+            // Recorded only once the walk has succeeded, so a run that stopped at a failed chunk is
+            // walked again next time rather than counting against the schedule.
+            if (window.FullWalk && result.Success)
+                await RecordFullWalkAsync(cancellationToken);
+
             result.EndTime = DateTime.UtcNow;
             return result;
         }
@@ -406,6 +411,58 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             result.EndTime = DateTime.UtcNow;
             return result;
         }
+    }
+
+    /// <summary>
+    ///     This run's lower bound, in real UTC, and whether the run is a full walk.
+    ///     <para>
+    ///     An explicit range is answered as asked: it is the shape a manual re-import of one window
+    ///     sends. An open-ended run has no resume point of its own — Glooko posts pump data in
+    ///     batches, days after the fact, so the newest stored record says nothing about what is still
+    ///     to come — and reaches back <see cref="GlookoConnectorConfiguration.LookbackDays"/>, or the
+    ///     full <see cref="GlookoConstants.FullWalkMonths"/> when a walk is due. A caller's own lower
+    ///     bound can widen either but never narrow it, as
+    ///     <see cref="BaseConnectorService{TConfig}.ResumeFrom(DateTime?, DateTime)"/> reads it.
+    ///     </para>
+    ///     SSV2 resumes every resource from its stored cursor and ignores the bound on an open-ended
+    ///     run, so it keeps the history floor and no walk is scheduled for it; so does a service
+    ///     without a cursor store (detached tooling), which has nowhere to remember a walk.
+    ///     Both bounds come from one reading of the clock so the lookback plus its padding measures
+    ///     exactly the chunk it was sized to.
+    /// </summary>
+    private async Task<(DateTime From, DateTime To, bool FullWalk)> ResolveSyncWindowAsync(
+        SyncRequest request, GlookoConnectorConfiguration config, CancellationToken cancellationToken)
+    {
+        var now = DateTime.UtcNow;
+        var historyFloor = now.AddMonths(-GlookoConstants.FullWalkMonths);
+        var to = request.To ?? now;
+
+        if (request.To.HasValue || config.UseSsv2Sync || _cursorStore is null)
+            return (request.From ?? historyFloor, to, false);
+
+        var fullWalk = await IsFullWalkDueAsync(cancellationToken);
+        var resumePoint = fullWalk ? historyFloor : now.AddDays(-config.LookbackDays);
+        return (ResumeFrom(request.From, resumePoint), to, fullWalk);
+    }
+
+    private async Task<bool> IsFullWalkDueAsync(CancellationToken cancellationToken)
+    {
+        var cursor = await _cursorStore!.GetAsync(
+            ServiceName, GlookoConstants.FullWalkCursorResource, cancellationToken);
+        return FullWalkSchedule.IsDue(
+            cursor?.LastUpdatedAt, GlookoConstants.FullWalkInterval, DateTimeOffset.UtcNow);
+    }
+
+    private async Task RecordFullWalkAsync(CancellationToken cancellationToken)
+    {
+        if (_cursorStore is null)
+            return;
+
+        await _cursorStore.SetAsync(
+            ServiceName,
+            GlookoConstants.FullWalkCursorResource,
+            new ConnectorSyncCursor(FullWalkSchedule.Stamp(DateTimeOffset.UtcNow), null),
+            cancellationToken);
     }
 
     /// <summary>

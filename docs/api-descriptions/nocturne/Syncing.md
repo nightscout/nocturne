@@ -14,6 +14,7 @@ A connection carries several independent streams — glucose, treatments (boluse
 - On a normal background sync each enabled type fetches from `latest_stored_record − 5min` (a small overlap absorbs clock drift).
 - When a type has **no** data yet, it performs an initial backfill over a bounded window (currently 6 months) so a new connection fills in recent history.
 - Profiles and food are small and fetched in full on every sync rather than windowed.
+- Glooko has no per-type resume point, because Glooko itself receives pump data in batches days after the fact. Each background sync re-reads a fixed lookback (`lookbackDays`, default 12), and once a day it walks the full 6-month window so anything that arrived late still lands. A manual sync with an explicit range is answered as asked.
 
 ## Resilient ingestion
 

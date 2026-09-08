@@ -274,6 +274,24 @@ public static class GlookoConstants
     /// </summary>
     public static readonly TimeSpan SyncChunkSize = TimeSpan.FromDays(14);
 
+    /// <summary>
+    ///     How far back a full walk reads. Glooko posts pump data in batches, often days after the
+    ///     fact, so a background sync cannot resume from the newest stored record; it re-reads a
+    ///     short lookback every run and this whole span once per <see cref="FullWalkInterval"/>.
+    /// </summary>
+    public const int FullWalkMonths = 6;
+
+    /// <summary>
+    ///     How often a background sync sets its lookback aside and walks <see cref="FullWalkMonths"/>
+    ///     of history. Late arrivals older than the lookback land within this long of reaching Glooko.
+    /// </summary>
+    public static readonly TimeSpan FullWalkInterval = TimeSpan.FromDays(1);
+
+    /// <summary>
+    ///     The sync-cursor resource under which the last completed full walk is recorded.
+    /// </summary>
+    public const string FullWalkCursorResource = "full-walk";
+
     // -- Device information (sent during sign-in) -----------------------------
 
     /// <summary>
