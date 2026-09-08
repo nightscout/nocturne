@@ -7,6 +7,7 @@ using System.Threading.Channels;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.GoogleHealth.Configurations;
 using Nocturne.Connectors.GoogleHealth.Models;
 using Nocturne.Connectors.GoogleHealth.Services;
@@ -89,7 +90,9 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
     GoogleHealthCoordinator coordinator, GoogleHealthClient google, GoogleHealthAuthTokenProvider oauth,
     IGoogleHealthReadingWriter? writer = null,
     ILogger<GoogleHealthService>? logger = null,
-    IConnectorConfigurationService? connectorConfigurations = null) : IGoogleHealthService
+    IConnectorConfigurationService? connectorConfigurations = null,
+    IConnectorConfigurationLoader<GoogleHealthConnectorConfiguration>? configurationLoader = null)
+    : IGoogleHealthService
 {
     private const string ConnectorName = "GoogleHealth";
     private static readonly TimeSpan AccessTokenSafety = TimeSpan.FromMinutes(1);
@@ -98,6 +101,43 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
     private string Protect<T>(T value) => Protector.Protect(JsonSerializer.Serialize(value, Json));
     private T Unprotect<T>(string value) => JsonSerializer.Deserialize<T>(Protector.Unprotect(value), Json) ?? throw new JsonException();
     private Task<GoogleHealthConnectionEntity?> Connection(CancellationToken ct) => db.GoogleHealthConnections.SingleOrDefaultAsync(ct);
+
+    private async Task<GoogleHealthOptions?> SharedOptionsAsync(CancellationToken ct)
+    {
+        if (configurationLoader is null)
+            return null;
+
+        var configuration = await configurationLoader.LoadForTenantAsync(ct);
+        if (!configuration.Enabled)
+            return null;
+
+        DateTimeOffset? importFrom = null;
+        if (!string.IsNullOrWhiteSpace(configuration.ImportFrom))
+            importFrom = DateTimeOffset.Parse(
+                configuration.ImportFrom,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.RoundtripKind);
+
+        var dataTypes = new List<string>();
+        if (configuration.SyncSteps) dataTypes.Add("steps");
+        if (configuration.SyncHeartRate) dataTypes.Add("heart-rate");
+        if (configuration.SyncBodyWeight) dataTypes.Add("weight");
+        if (configuration.SyncSleep) dataTypes.Add("sleep");
+
+        return new GoogleHealthOptions
+        {
+            ClientId = configuration.ClientId,
+            ClientSecret = configuration.ClientSecret,
+            CallbackUrl = configuration.CallbackUrl,
+            DataTypes = dataTypes.ToArray(),
+            HistoryDays = configuration.HistoryDays,
+            ImportFrom = importFrom,
+            PreviewOnly = configuration.PreviewOnly
+        };
+    }
+
+    private static string ConfigurationFingerprint(GoogleHealthOptions options) =>
+        Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(options, Json)));
 
     private async Task MirrorOptionsAsync(
         GoogleHealthOptions options,
@@ -244,11 +284,27 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
     public async Task<GoogleHealthStatus> StatusAsync(CancellationToken ct)
     {
         var row = await Connection(ct);
-        if (row is null) return WithProgress(new() { Capabilities = GoogleHealthClient.Capabilities });
+        var sharedSettings = await SharedOptionsAsync(ct);
+        if (row is null && sharedSettings is null)
+            return WithProgress(new() { Capabilities = GoogleHealthClient.Capabilities });
+
+        if (row is null)
+            return WithProgress(new()
+            {
+                Capabilities = GoogleHealthClient.Capabilities,
+                Configured = true,
+                ClientId = sharedSettings!.ClientId,
+                CallbackUrl = sharedSettings.CallbackUrl,
+                HistoryDays = sharedSettings.HistoryDays,
+                ImportFrom = sharedSettings.ImportFrom,
+                SelectedTypes = sharedSettings.DataTypes,
+                PreviewRequired = sharedSettings.PreviewOnly
+            });
+
         GoogleHealthOptions settings;
         try
         {
-            settings = Unprotect<GoogleHealthOptions>(row.ProtectedSettings);
+            settings = sharedSettings ?? Unprotect<GoogleHealthOptions>(row.ProtectedSettings);
             if (settings.DataTypes is null) throw new JsonException();
         }
         catch (Exception ex) when (ex is CryptographicException or JsonException or FormatException)
@@ -344,10 +400,16 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
             var row = await Connection(ct) ?? throw new GoogleHealthException("configure_first");
             if (row.SubjectId != subject) throw new GoogleHealthException("connection_owner_required");
             if (row.ProtectedToken is not null) throw new GoogleHealthException("disconnect_first");
-            var settings = Unprotect<GoogleHealthOptions>(row.ProtectedSettings);
+            var settings = await SharedOptionsAsync(ct) ??
+                Unprotect<GoogleHealthOptions>(row.ProtectedSettings);
             var verifier = WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(48));
             var state = WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(32));
-            coordinator.Flows[db.TenantId] = new(state, verifier, subject, row.ProtectedSettings, DateTimeOffset.UtcNow.AddMinutes(10));
+            coordinator.Flows[db.TenantId] = new(
+                state,
+                verifier,
+                subject,
+                ConfigurationFingerprint(settings),
+                DateTimeOffset.UtcNow.AddMinutes(10));
             var parameters = new Dictionary<string, string?>
             {
                 ["client_id"] = settings.ClientId, ["redirect_uri"] = settings.CallbackUrl,
@@ -370,8 +432,11 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
                 throw new GoogleHealthException("expired_signin");
             coordinator.Flows.TryRemove(db.TenantId, out _);
             var row = await Connection(ct) ?? throw new GoogleHealthException("configure_first");
-            if (row.SubjectId != subject || row.ProtectedSettings != flow.Settings) throw new GoogleHealthException("expired_signin");
-            var settings = Unprotect<GoogleHealthOptions>(row.ProtectedSettings);
+            var settings = await SharedOptionsAsync(ct) ??
+                Unprotect<GoogleHealthOptions>(row.ProtectedSettings);
+            if (row.SubjectId != subject ||
+                ConfigurationFingerprint(settings) != flow.Settings)
+                throw new GoogleHealthException("expired_signin");
             var requestedScopes = GoogleHealthClient.SupportedTypes.Select(GoogleHealthClient.ScopeFor).Append("openid")
                 .Distinct(StringComparer.Ordinal).ToArray();
             var token = await oauth.ExchangeAuthorizationCodeAsync(

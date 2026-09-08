@@ -11,6 +11,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Controllers.V4.Health;
 using Nocturne.API.Services.Health.GoogleHealth;
+using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.GoogleHealth.Configurations;
 using Nocturne.Connectors.GoogleHealth.Services;
@@ -74,6 +75,21 @@ public class GoogleHealthTests
             .Callback<string, Dictionary<string, string>, string?, CancellationToken>(
                 (_, secrets, _, _) => savedSecrets = new Dictionary<string, string>(secrets))
             .Returns(Task.CompletedTask);
+        var configurationLoader = new Mock<
+            IConnectorConfigurationLoader<GoogleHealthConnectorConfiguration>>();
+        configurationLoader
+            .Setup(loader => loader.LoadForTenantAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new GoogleHealthConnectorConfiguration
+            {
+                ClientId = "shared.apps.googleusercontent.com",
+                ClientSecret = "shared-secret",
+                CallbackUrl = "https://shared.example/settings/connectors/google-health/callback",
+                HistoryDays = 45,
+                SyncSteps = true,
+                SyncHeartRate = false,
+                SyncBodyWeight = false,
+                SyncSleep = true
+            });
 
         var service = new GoogleHealthService(
             db,
@@ -81,7 +97,8 @@ public class GoogleHealthTests
             new GoogleHealthCoordinator(),
             new GoogleHealthClient(new HttpClient(new StubHandler(_ => Json("{}")))),
             TokenProvider(new StubHandler(_ => Json("{}")), tenant),
-            connectorConfigurations: connectorConfigurations.Object);
+            connectorConfigurations: connectorConfigurations.Object,
+            configurationLoader: configurationLoader.Object);
         var options = Options();
         options.DataTypes = ["steps", "sleep"];
         options.HistoryDays = 30;
@@ -96,6 +113,11 @@ public class GoogleHealthTests
         Assert.False(stored.RootElement.GetProperty("syncHeartRate").GetBoolean());
         Assert.True(stored.RootElement.GetProperty("syncSleep").GetBoolean());
         Assert.Equal("synthetic-secret", savedSecrets!["clientSecret"]);
+
+        var status = await service.StatusAsync(default);
+        Assert.Equal("shared.apps.googleusercontent.com", status.ClientId);
+        Assert.Equal(45, status.HistoryDays);
+        Assert.Equal(["steps", "sleep"], status.SelectedTypes);
     }
 
     [Fact]
