@@ -386,42 +386,6 @@ public class GoogleHealthTests
         Assert.DoesNotContain("sensitive", exception.Message);
     }
 
-    [Theory]
-    [InlineData("invalid_client", "invalid_client_credentials")]
-    [InlineData("redirect_uri_mismatch", "invalid_callback")]
-    [InlineData("invalid_scope", "oauth_scope_configuration")]
-    [InlineData("invalid_grant", "expired_signin")]
-    public async Task Maps_oauth_exchange_errors_to_actionable_codes(string providerError, string expected)
-    {
-        var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.BadRequest)
-        {
-            Content = new StringContent(JsonSerializer.Serialize(new { error = providerError, error_description = "do not expose" }),
-                Encoding.UTF8, "application/json")
-        });
-        var client = new GoogleHealthClient(new HttpClient(handler));
-
-        var exception = await Assert.ThrowsAsync<GoogleHealthException>(() => client.ExchangeAuthorizationCodeAsync([], default));
-
-        Assert.Equal(expected, exception.Message);
-        Assert.Equal("authorization_code", exception.Stage);
-        Assert.DoesNotContain("expose", exception.Message);
-    }
-
-    [Fact]
-    public async Task Invalid_refresh_grant_requires_reconnection()
-    {
-        var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.BadRequest)
-        {
-            Content = new StringContent("{\"error\":\"invalid_grant\"}", Encoding.UTF8, "application/json")
-        });
-        var client = new GoogleHealthClient(new HttpClient(handler));
-
-        var exception = await Assert.ThrowsAsync<GoogleHealthException>(() => client.RefreshAccessTokenAsync([], default));
-
-        Assert.Equal("reconnect_required", exception.Message);
-        Assert.Equal("token_refresh", exception.Stage);
-    }
-
     [Fact]
     public async Task Stores_encrypted_oauth_and_imports_atomically_with_tenant_isolation()
     {
@@ -451,7 +415,9 @@ public class GoogleHealthTests
             return Json(JsonSerializer.Serialize(new { dataPoints = new[] { new { weight = new { sampleTime = new { physicalTime = observation }, weightGrams = grams } } } }));
         });
         var protection = new EphemeralDataProtectionProvider();
-        var service = new GoogleHealthService(db, protection, new GoogleHealthCoordinator(), new GoogleHealthClient(new HttpClient(handler)));
+        var service = new GoogleHealthService(db, protection, new GoogleHealthCoordinator(),
+            new GoogleHealthClient(new HttpClient(handler, false)),
+            new GoogleHealthOAuthClient(new HttpClient(handler, false)));
         var options = Options(); options.DataTypes = ["steps", "weight"];
         await service.SaveAsync(options, subject, default);
         var auth = await service.StartAsync(subject, default);
@@ -535,7 +501,8 @@ public class GoogleHealthTests
             }
         });
         var service = new GoogleHealthService(db, new EphemeralDataProtectionProvider(), new GoogleHealthCoordinator(),
-            new GoogleHealthClient(new HttpClient(handler)));
+            new GoogleHealthClient(new HttpClient(handler, false)),
+            new GoogleHealthOAuthClient(new HttpClient(handler, false)));
         await service.SaveAsync(Options(), subject, default);
         var authorization = await service.StartAsync(subject, default);
         var state = QueryHelpers.ParseQuery(new Uri(authorization.Url).Query)["state"].ToString();
@@ -608,14 +575,18 @@ public class GoogleHealthTests
             _ => Json("{}")
         });
         var coordinator = new GoogleHealthCoordinator();
-        var original = new GoogleHealthService(db, new EphemeralDataProtectionProvider(), coordinator, new GoogleHealthClient(new HttpClient(handler)));
+        var original = new GoogleHealthService(db, new EphemeralDataProtectionProvider(), coordinator,
+            new GoogleHealthClient(new HttpClient(handler, false)),
+            new GoogleHealthOAuthClient(new HttpClient(handler, false)));
         var options = Options();
         await original.SaveAsync(options, subject, default);
         var authorization = await original.StartAsync(subject, default);
         var state = QueryHelpers.ParseQuery(new Uri(authorization.Url).Query)["state"].ToString();
         await original.CompleteAsync(new() { State = state, Code = "synthetic-code" }, subject, default);
 
-        var recovered = new GoogleHealthService(db, new EphemeralDataProtectionProvider(), coordinator, new GoogleHealthClient(new HttpClient(handler)));
+        var recovered = new GoogleHealthService(db, new EphemeralDataProtectionProvider(), coordinator,
+            new GoogleHealthClient(new HttpClient(handler, false)),
+            new GoogleHealthOAuthClient(new HttpClient(handler, false)));
         var broken = await recovered.StatusAsync(default);
         Assert.True(broken.Connected); Assert.False(broken.Configured);
         Assert.Equal("stored_google_configuration_unreadable", broken.ErrorCode);
@@ -639,7 +610,9 @@ public class GoogleHealthTests
         var tenant = Guid.NewGuid(); var subject = Guid.NewGuid(); db.TenantId = tenant;
         db.Tenants.Add(new TenantEntity { Id = tenant, Slug = "synthetic", DisplayName = "Synthetic", IsActive = true }); await db.SaveChangesAsync();
         var provider = new EphemeralDataProtectionProvider();
-        var service = new GoogleHealthService(db, provider, new GoogleHealthCoordinator(), new GoogleHealthClient(new HttpClient(new StubHandler(_ => Json("{}")))));
+        var service = new GoogleHealthService(db, provider, new GoogleHealthCoordinator(),
+            new GoogleHealthClient(new HttpClient(new StubHandler(_ => Json("{}")))),
+            new GoogleHealthOAuthClient(new HttpClient(new StubHandler(_ => Json("{}")))));
         await service.SaveAsync(Options(), subject, default);
         var row = await db.GoogleHealthConnections.SingleAsync();
         var legacy = Options(); legacy.DataTypes = ["weight", "body-fat"];

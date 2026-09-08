@@ -146,44 +146,6 @@ public sealed class GoogleHealthClient(HttpClient http)
         throw new GoogleHealthException("history_too_large", stage: "data_read", dataType: "sleep");
     }
 
-    public Task<JsonElement> ExchangeAuthorizationCodeAsync(Dictionary<string, string> form, CancellationToken ct) =>
-        ExchangeAsync(form, "expired_signin", "authorization_code", ct);
-
-    public Task<JsonElement> RefreshAccessTokenAsync(Dictionary<string, string> form, CancellationToken ct) =>
-        ExchangeAsync(form, "reconnect_required", "token_refresh", ct);
-
-    private async Task<JsonElement> ExchangeAsync(
-        Dictionary<string, string> form, string invalidGrantCode, string stage, CancellationToken ct)
-    {
-        using var response = await http.PostAsync("https://oauth2.googleapis.com/token", new FormUrlEncodedContent(form), ct);
-        if (!response.IsSuccessStatusCode)
-            throw await OAuthErrorAsync(response, invalidGrantCode, stage, ct);
-        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
-        return json.RootElement.Clone();
-    }
-
-    public async Task<bool> RevokeAsync(string refreshToken, CancellationToken ct)
-    {
-        using var response = await http.PostAsync("https://oauth2.googleapis.com/revoke",
-            new FormUrlEncodedContent(new Dictionary<string, string> { ["token"] = refreshToken }), ct);
-        return response.IsSuccessStatusCode;
-    }
-
-    public async Task<string> AccountKeyAsync(string token, CancellationToken ct)
-    {
-        using var request = new HttpRequestMessage(HttpMethod.Get, "https://openidconnect.googleapis.com/v1/userinfo");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        using var response = await http.SendAsync(request, ct);
-        if (!response.IsSuccessStatusCode)
-            throw new GoogleHealthException("reconnect_required", stage: "account_identity", providerStatus: (int)response.StatusCode);
-        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
-        if (!json.RootElement.TryGetProperty("sub", out var subjectValue) || subjectValue.ValueKind != JsonValueKind.String ||
-            string.IsNullOrWhiteSpace(subjectValue.GetString()))
-            throw new GoogleHealthException("invalid_token_response", stage: "account_identity");
-        var subject = subjectValue.GetString()!;
-        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(subject)));
-    }
-
     public async Task<List<GoogleHealthReading>> ReadAsync(
         string token, string type, DateTimeOffset from, DateTimeOffset to, CancellationToken ct,
         Action<int>? onPageRead = null)
@@ -238,37 +200,6 @@ public sealed class GoogleHealthClient(HttpClient http)
         throw new GoogleHealthException("history_too_large", stage: "data_read", dataType: type);
     }
 
-    private static async Task<GoogleHealthException> OAuthErrorAsync(
-        HttpResponseMessage response, string invalidGrantCode, string stage, CancellationToken ct)
-    {
-        var code = response.StatusCode == System.Net.HttpStatusCode.TooManyRequests ? "rate_limited" : "google_unavailable";
-        string? providerReason = null;
-        try
-        {
-            using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
-            string? rawReason = null;
-            if (json.RootElement.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.String)
-                rawReason = error.GetString();
-            providerReason = SafeProviderReason(rawReason);
-            code = rawReason switch
-            {
-                "invalid_grant" => invalidGrantCode,
-                "invalid_client" => "invalid_client_credentials",
-                "redirect_uri_mismatch" => "invalid_callback",
-                "invalid_scope" => "oauth_scope_configuration",
-                "access_denied" => "permission_denied",
-                "invalid_request" => "oauth_request_invalid",
-                "temporarily_unavailable" or "server_error" => "google_unavailable",
-                _ => code
-            };
-        }
-        catch (Exception ex) when (ex is JsonException or InvalidOperationException)
-        {
-        }
-        return new GoogleHealthException(code, RetryAfter(response), stage, providerReason: providerReason,
-            providerStatus: (int)response.StatusCode);
-    }
-
     private static async Task<GoogleHealthException> ErrorAsync(
         HttpResponseMessage response, string fallback, string dataType, CancellationToken ct)
     {
@@ -282,24 +213,15 @@ public sealed class GoogleHealthClient(HttpClient http)
             {
                 var reasons = GoogleReasons(details);
                 (code, providerReason) = MapGoogleReason(reasons, code);
-                providerReason = SafeProviderReason(providerReason);
+                providerReason = GoogleHealthHttpError.SafeProviderReason(providerReason);
             }
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException)
         {
         }
-        return new GoogleHealthException(code, RetryAfter(response), "data_read", dataType, providerReason,
+        return new GoogleHealthException(code, GoogleHealthHttpError.RetryAfter(response), "data_read", dataType, providerReason,
             (int)response.StatusCode);
     }
-
-    private static TimeSpan? RetryAfter(HttpResponseMessage response) =>
-        response.Headers.RetryAfter?.Delta ?? (response.Headers.RetryAfter?.Date - DateTimeOffset.UtcNow);
-
-    private static string? SafeProviderReason(string? reason) =>
-        !string.IsNullOrWhiteSpace(reason) && reason.Length <= 100 &&
-        reason.All(character => character is >= 'A' and <= 'Z' or >= '0' and <= '9' or '_' or >= 'a' and <= 'z')
-            ? reason
-            : null;
 
     private static (string Code, string? Reason) MapGoogleReason(HashSet<string> reasons, string fallback)
     {

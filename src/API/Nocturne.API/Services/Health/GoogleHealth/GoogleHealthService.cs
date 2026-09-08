@@ -81,7 +81,7 @@ public sealed class GoogleHealthCoordinator
 }
 
 public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionProvider protection,
-    GoogleHealthCoordinator coordinator, GoogleHealthClient google,
+    GoogleHealthCoordinator coordinator, GoogleHealthClient google, GoogleHealthOAuthClient oauth,
     IGoogleHealthReadingWriter? writer = null,
     ILogger<GoogleHealthService>? logger = null) : IGoogleHealthService
 {
@@ -171,7 +171,7 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
 
     private async Task<Token> RefreshSessionAsync(GoogleHealthOptions settings, Token token, CancellationToken ct)
     {
-        var response = await google.RefreshAccessTokenAsync(new()
+        var response = await oauth.RefreshAccessTokenAsync(new()
         {
             ["grant_type"] = "refresh_token", ["refresh_token"] = token.RefreshToken,
             ["client_id"] = settings.ClientId, ["client_secret"] = settings.ClientSecret!
@@ -320,7 +320,7 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
             var row = await Connection(ct) ?? throw new GoogleHealthException("configure_first");
             if (row.SubjectId != subject || row.ProtectedSettings != flow.Settings) throw new GoogleHealthException("expired_signin");
             var settings = Unprotect<GoogleHealthOptions>(row.ProtectedSettings);
-            var response = await google.ExchangeAuthorizationCodeAsync(new()
+            var response = await oauth.ExchangeAuthorizationCodeAsync(new()
             {
                 ["grant_type"] = "authorization_code", ["code"] = callback.Code,
                 ["code_verifier"] = flow.Verifier, ["client_id"] = settings.ClientId,
@@ -336,10 +336,10 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
                 refreshValue.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(refreshValue.GetString()))
                 throw new GoogleHealthException("offline_access_required", stage: "authorization_code");
             var refresh = refreshValue.GetString()!;
-            var account = await google.AccountKeyAsync(access, ct);
+            var account = await oauth.AccountKeyAsync(access, ct);
             if (row.AccountKey is not null && row.AccountKey != account)
             {
-                await google.RevokeAsync(refresh, ct);
+                await oauth.RevokeAsync(refresh, ct);
                 throw new GoogleHealthException("account_mismatch");
             }
             var now = DateTimeOffset.UtcNow;
@@ -390,7 +390,7 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
             await db.SaveChangesAsync(ct);
             if (token is not null)
             {
-                try { if (!await google.RevokeAsync(token.RefreshToken, ct)) row.ErrorCode = "revoke_in_google"; }
+                try { if (!await oauth.RevokeAsync(token.RefreshToken, ct)) row.ErrorCode = "revoke_in_google"; }
                 catch (HttpRequestException) { row.ErrorCode = "revoke_in_google"; }
                 catch (TaskCanceledException) { row.ErrorCode = "revoke_in_google"; }
                 await db.SaveChangesAsync(CancellationToken.None);

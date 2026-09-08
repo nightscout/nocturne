@@ -159,6 +159,8 @@ builder.Services.AddHttpClient<GoogleHealthClient>(client =>
 {
     client.MaxResponseContentBufferSize = 16 * 1024 * 1024;
 }).ConfigureConnectorClient(null, timeout: TimeSpan.FromSeconds(45));
+builder.Services.AddHttpClient<GoogleHealthOAuthClient>()
+    .ConfigureConnectorClient(null, timeout: TimeSpan.FromSeconds(45));
 builder.Services.AddHostedService<GoogleHealthWorker>();
 
 // Consumed by the dev-only admin controllers (Development) and the demo admin
