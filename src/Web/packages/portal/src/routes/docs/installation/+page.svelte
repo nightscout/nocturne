@@ -110,6 +110,33 @@
     </a>
 
     <a
+      href="/docs/installation/oracle-cloud"
+      class="p-6 rounded-xl border border-border/60 bg-card/50 hover:bg-card hover:border-primary/30 transition-colors group"
+    >
+      <div class="flex items-start gap-4">
+        <div
+          class="w-12 h-12 rounded-lg bg-red-500/15 flex items-center justify-center shrink-0"
+        >
+          <Cloud class="w-7 h-7 text-red-600" />
+        </div>
+        <div class="flex-1">
+          <h3
+            class="text-lg font-semibold mb-1 group-hover:text-primary transition-colors"
+          >
+            Oracle Cloud
+          </h3>
+          <p class="text-sm text-muted-foreground">
+            One command in the browser sets up a free server, HTTPS and Nocturne.
+            No SSH or Docker knowledge needed.
+          </p>
+        </div>
+        <ArrowRight
+          class="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors mt-1"
+        />
+      </div>
+    </a>
+
+    <a
       href="/docs/installation/byo-postgres"
       class="p-6 rounded-xl border border-border/60 bg-card/50 hover:bg-card hover:border-primary/30 transition-colors group"
     >
