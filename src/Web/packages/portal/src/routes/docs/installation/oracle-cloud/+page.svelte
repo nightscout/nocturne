@@ -1,5 +1,6 @@
 <script lang="ts">
     import { Cloud } from "@lucide/svelte";
+    import * as RadioGroup from "@nocturne/ui/ui/radio-group";
     import NextSteps from "$lib/components/docs/NextSteps.svelte";
     import SupportNocturne from "$lib/components/docs/SupportNocturne.svelte";
     import CodeBlock from "$lib/components/docs/CodeBlock.svelte";
@@ -7,6 +8,8 @@
 
     const runCommand =
         "BASE_DOMAIN=nocturne.example.com bash <(curl -fsSL https://github.com/nightscout/nocturne/releases/latest/download/oracle-cloud-install.sh)";
+
+    let idlePlan = $state("payg");
 </script>
 
 <div class="max-w-3xl">
@@ -75,8 +78,8 @@
     </p>
     <CodeBlock code={runCommand} class="mb-4" />
     <p class="text-muted-foreground mb-4">
-        The script creates a network, reserves a public IP address, and starts a server.
-        Early on it asks for a deSEC token. Paste one and the DNS records are created for you;
+        The script sets up a spending alert to your Oracle account email, creates a network,
+        reserves a public IP address, and starts a server. Early on it asks for a deSEC token. Paste one and the DNS records are created for you;
         press Enter instead and it prints two records for you to create by hand. Either way it
         keeps working while the server boots and waits for the records before it requests
         certificates.
@@ -84,10 +87,12 @@
     <details class="mb-8">
         <summary class="text-sm font-medium text-muted-foreground cursor-pointer hover:text-foreground">What the script does</summary>
         <ul class="list-disc list-inside space-y-1 text-sm text-muted-foreground mt-2 mb-2">
+            <li>Sets up a spending alert that emails you if the account is ever charged</li>
             <li>Creates a virtual network with ports 80 and 443 open, in your home region</li>
             <li>Reserves a public IP address so it never changes</li>
             <li>Generates an SSH key in your Cloud Shell home if you do not have one</li>
-            <li>Starts an Ampere A1 server with 2 cores and 12 GB of memory, retrying when Oracle has no free capacity</li>
+            <li>Starts an Ampere A1 server with 1 core and 6 GB of memory, retrying when Oracle has no free capacity</li>
+            <li>Optionally installs Folding@home on a nightly schedule; see "Keeping it free" below</li>
             <li>On the server: opens the firewall, installs Docker, downloads the Nocturne release bundle, generates the database passwords and starts everything once DNS resolves</li>
         </ul>
         <CodeBlock code={installScript} class="mt-2" maxHeight="400px" />
@@ -125,13 +130,83 @@
     <CodeBlock code={"OCPUS=1 MEMORY_GB=6 " + runCommand} class="mb-8" />
 
     <h2 class="text-2xl font-bold mt-8 mb-4">Keeping it free</h2>
-    <p class="text-muted-foreground mb-8">
-        Oracle reclaims Always Free servers on trial accounts that look idle for a week. A
-        Nocturne server collecting readings is rarely that quiet, but to remove the risk you
-        can upgrade the account to Pay As You Go. Always Free resources stay free after the
-        upgrade, and are then exempt from reclamation. Nothing in this guide exceeds the
-        free allowance.
+    <p class="text-muted-foreground mb-4">
+        Oracle switches off Always Free servers on trial accounts that it judges idle for seven
+        days in a row. Its measure is whether the processor, network and memory each stayed
+        below 20 percent of capacity for nearly all of that week. A Nocturne server for one
+        person does very little work by that yardstick, so left alone it is likely to be
+        stopped after its first quiet week. You have two ways to prevent that. Pick one before
+        you run the installer.
     </p>
+    <RadioGroup.Root bind:value={idlePlan} class="grid gap-3 mb-4">
+        <label
+            for="plan-payg"
+            class="flex items-start gap-3 rounded-xl border border-border/60 bg-card/50 p-4 cursor-pointer hover:border-primary/30"
+        >
+            <RadioGroup.Item value="payg" id="plan-payg" class="mt-1" />
+            <span>
+                <span class="font-semibold">Upgrade the account to Pay As You Go</span>
+                <span class="block text-sm text-muted-foreground">
+                    Recommended. Nothing changes about what you pay, and Oracle stops treating
+                    the server as reclaimable.
+                </span>
+            </span>
+        </label>
+        <label
+            for="plan-folding"
+            class="flex items-start gap-3 rounded-xl border border-border/60 bg-card/50 p-4 cursor-pointer hover:border-primary/30"
+        >
+            <RadioGroup.Item value="folding" id="plan-folding" class="mt-1" />
+            <span>
+                <span class="font-semibold">Stay on the trial and donate spare time to Folding@home</span>
+                <span class="block text-sm text-muted-foreground">
+                    The server does two hours of disease research each night, which keeps it
+                    clearly in use.
+                </span>
+            </span>
+        </label>
+    </RadioGroup.Root>
+
+    {#if idlePlan === "payg"}
+        <p class="text-muted-foreground mb-4">
+            In the Oracle console, open <strong>Billing &amp; Cost Management</strong>, then
+            <strong>Upgrade and Manage Payment</strong>, and choose Pay As You Go. Your card is
+            already on file from sign-up. Always Free resources stay free after the upgrade, and
+            Oracle's own terms exempt Pay As You Go accounts from idle reclamation. Everything
+            this installer creates is within the free allowance, so the upgrade does not by
+            itself cost anything.
+        </p>
+        <p class="text-muted-foreground mb-8">
+            What changes is that the card <em>can</em> now be charged if something outside the
+            free tier is ever created. To make sure that never goes unnoticed, the installer sets
+            up a spending alert that emails you the moment the account is billed one unit of your
+            currency. Upgrading also tends to end the "no free capacity" errors, since paying
+            accounts are served first when servers are scarce.
+        </p>
+    {:else}
+        <p class="text-muted-foreground mb-4">
+            <a href="https://foldingathome.org" class="text-primary hover:underline">Folding@home</a>
+            is a research project that simulates how proteins fold, to help understand diseases
+            such as Alzheimer's, cancer and, yes, diabetes. With this option the installer adds
+            its client to the server and runs it from 02:00 to 04:00 UTC each night. Two hours a
+            day of real computation is well above Oracle's idle threshold, so the server is never
+            a candidate for reclamation, and the time goes to something useful.
+        </p>
+        <p class="text-muted-foreground mb-4">
+            The client runs at the lowest priority the system has, so Nocturne and its alarms
+            always come first. It is one more piece of software with network access on a server
+            that holds your health data, which is why it is a choice rather than the default. To
+            choose it, add <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">FOLDING=1</code>
+            to the command in Step 2:
+        </p>
+        <CodeBlock code={"FOLDING=1 " + runCommand} class="mb-4" />
+        <p class="text-muted-foreground mb-8">
+            Work is contributed anonymously by default. To count it towards a team, add
+            <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">FOLDING_TEAM=&lt;number&gt;</code>
+            as well. Trial accounts cannot be charged, but the installer still creates the
+            spending alert in case the account is upgraded later.
+        </p>
+    {/if}
 
     <h2 class="text-2xl font-bold mt-8 mb-4">Afterwards</h2>
     <ul class="list-disc list-inside space-y-2 text-muted-foreground mb-8">

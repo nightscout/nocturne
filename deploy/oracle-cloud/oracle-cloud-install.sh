@@ -12,9 +12,12 @@
 # Optional environment:
 #   DESEC_TOKEN             deSEC API token; the apex and wildcard A records are then written
 #                           for you (prompted for, hidden, when unset and running interactively)
+#   FOLDING=1               run Folding@home 02:00-04:00 UTC nightly so the server never counts as idle
+#   FOLDING_TEAM            Folding@home team number (default 0)
+#   BUDGET_EMAIL            where the spend alert goes (default: the Oracle account's email)
 #   COMPARTMENT_ID          where to create resources (default: tenancy root)
 #   NOCTURNE_VERSION        release tag to install (default: latest)
-#   OCPUS / MEMORY_GB       A1 size (default 2 / 12; the free tier allows 4 / 24 in total)
+#   OCPUS / MEMORY_GB       A1 size (default 1 / 6; the free tier allows 4 / 24 in total)
 #   BOOT_VOLUME_GB          boot volume size (default 50; the free tier allows 200 in total)
 #   SSH_PUBLIC_KEY_FILE     key to authorise (default: generated at ~/.ssh/nocturne_oci)
 #   CAPACITY_RETRY_MINUTES  how long to keep retrying "out of host capacity" (default 30)
@@ -24,8 +27,11 @@ set -euo pipefail
 NAME="nocturne"
 COMPARTMENT_ID="${COMPARTMENT_ID:-${OCI_TENANCY:-}}"
 NOCTURNE_VERSION="${NOCTURNE_VERSION:-}"
-OCPUS="${OCPUS:-2}"
-MEMORY_GB="${MEMORY_GB:-12}"
+OCPUS="${OCPUS:-1}"
+MEMORY_GB="${MEMORY_GB:-6}"
+FOLDING="${FOLDING:-}"
+FOLDING_TEAM="${FOLDING_TEAM:-0}"
+BUDGET_EMAIL="${BUDGET_EMAIL:-}"
 BOOT_VOLUME_GB="${BOOT_VOLUME_GB:-50}"
 SSH_PUBLIC_KEY_FILE="${SSH_PUBLIC_KEY_FILE:-$HOME/.ssh/nocturne_oci.pub}"
 CAPACITY_RETRY_MINUTES="${CAPACITY_RETRY_MINUTES:-30}"
@@ -71,6 +77,34 @@ if [[ -z "$NOCTURNE_VERSION" ]]; then
 fi
 
 log "Nocturne $NOCTURNE_VERSION on $BASE_DOMAIN, region $HOME_REGION"
+
+# ── Spend alert ──────────────────────────────────────────────────────────────
+# Budgets live in the tenancy root regardless of where the resources go.
+
+log "Spend alert"
+TENANCY_ID="${OCI_TENANCY:-$COMPARTMENT_ID}"
+BUDGET_ID=$(q oci budgets budget list --compartment-id "$TENANCY_ID" --display-name "$NAME" --lifecycle-state ACTIVE --query 'data[0].id' --raw-output)
+if [[ -n "$BUDGET_ID" ]]; then
+  info "exists"
+else
+  if [[ -z "$BUDGET_EMAIL" && -n "${OCI_CS_USER_OCID:-}" ]]; then
+    BUDGET_EMAIL=$(q oci iam user get --user-id "$OCI_CS_USER_OCID" --query 'data.email' --raw-output)
+  fi
+  if [[ -z "$BUDGET_EMAIL" && -t 0 ]]; then
+    read -rp "    Email address for the spend alert: " BUDGET_EMAIL
+  fi
+  if [[ -z "$BUDGET_EMAIL" ]]; then
+    info "skipped; set BUDGET_EMAIL to be told if this account is ever charged"
+  elif BUDGET_ID=$(oci budgets budget create --compartment-id "$TENANCY_ID" --display-name "$NAME" --amount 1 --reset-period MONTHLY \
+         --target-type COMPARTMENT --targets "[\"$TENANCY_ID\"]" --query 'data.id' --raw-output 2>/dev/null) \
+       && oci budgets alert-rule create --budget-id "$BUDGET_ID" --display-name "$NAME" --type ACTUAL --threshold 1 --threshold-type ABSOLUTE \
+         --recipients "$BUDGET_EMAIL" \
+         --message "Your Nocturne server on Oracle Cloud has been charged. Everything the installer creates is within the free tier, so check the Oracle console for what changed." >/dev/null 2>&1; then
+    info "$BUDGET_EMAIL will be emailed if this account is ever charged"
+  else
+    info "could not create the budget alert; you can add one under Billing > Budgets in the console"
+  fi
+fi
 
 # ── Network ──────────────────────────────────────────────────────────────────
 
@@ -209,6 +243,7 @@ write_files:
       BASE_DOMAIN=@BASE_DOMAIN@
       PUBLIC_IP=@PUBLIC_IP@
       NOCTURNE_VERSION=@NOCTURNE_VERSION@
+      FOLDING_TEAM=@FOLDING_TEAM@
   - path: /usr/local/sbin/nocturne-up
     permissions: '0755'
     content: |
@@ -266,6 +301,100 @@ write_files:
 
       [Install]
       WantedBy=multi-user.target
+  - path: /usr/local/sbin/nocturne-folding-unpause
+    permissions: '0755'
+    content: |
+      #!/usr/bin/env python3
+      # The v8 client installs paused and only its websocket API can change that.
+      import base64, json, os, socket, sys, time
+
+      for _ in range(30):
+          try:
+              s = socket.create_connection(("127.0.0.1", 7396), timeout=5)
+              break
+          except OSError:
+              time.sleep(2)
+      else:
+          sys.exit("fah-client did not open its control port")
+
+      key = base64.b64encode(os.urandom(16)).decode()
+      s.sendall(("GET /api/websocket HTTP/1.1\r\nHost: 127.0.0.1:7396\r\nUpgrade: websocket\r\n"
+                 "Connection: Upgrade\r\nSec-WebSocket-Key: %s\r\nSec-WebSocket-Version: 13\r\n\r\n" % key).encode())
+      resp = b""
+      while b"\r\n\r\n" not in resp:
+          chunk = s.recv(4096)
+          if not chunk:
+              sys.exit("websocket handshake failed")
+          resp += chunk
+      if not resp.startswith(b"HTTP/1.1 101"):
+          sys.exit("websocket handshake refused: " + resp.split(b"\r\n")[0].decode())
+
+      payload = json.dumps({"cmd": "state", "state": "fold"}).encode()
+      mask = os.urandom(4)
+      s.sendall(bytes([0x81, 0x80 | len(payload)]) + mask + bytes(b ^ mask[i % 4] for i, b in enumerate(payload)))
+      time.sleep(2)
+      s.close()
+  - path: /usr/local/sbin/nocturne-folding-setup
+    permissions: '0755'
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      . /opt/nocturne/install.env
+
+      # Written before the package installs so its postinst keeps it instead of writing an empty one.
+      install -d -m 755 /etc/fah-client
+      cat > /etc/fah-client/config.xml <<EOF
+      <config>
+        <user v="Anonymous"/>
+        <team v="${FOLDING_TEAM}"/>
+        <cpus v="$(nproc)"/>
+        <on-idle v="false"/>
+      </config>
+      EOF
+
+      curl -fsSL -o /tmp/fah-client.deb https://download.foldingathome.org/releases/public/fah-client/debian-stable-arm64/release/latest.deb
+      DEBIAN_FRONTEND=noninteractive apt-get install -y /tmp/fah-client.deb
+      rm -f /tmp/fah-client.deb
+
+      cat > /etc/systemd/system/nocturne-folding-start.service <<EOF
+      [Unit]
+      Description=Start the nightly Folding@home window
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/bin/systemctl start fah-client
+      ExecStart=/usr/local/sbin/nocturne-folding-unpause
+      EOF
+      cat > /etc/systemd/system/nocturne-folding-start.timer <<EOF
+      [Unit]
+      Description=Nightly Folding@home window, start
+      [Timer]
+      OnCalendar=*-*-* 02:00:00
+      [Install]
+      WantedBy=timers.target
+      EOF
+      cat > /etc/systemd/system/nocturne-folding-stop.service <<EOF
+      [Unit]
+      Description=End the nightly Folding@home window
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/bin/systemctl stop fah-client
+      EOF
+      cat > /etc/systemd/system/nocturne-folding-stop.timer <<EOF
+      [Unit]
+      Description=Nightly Folding@home window, stop
+      [Timer]
+      OnCalendar=*-*-* 04:00:00
+      [Install]
+      WantedBy=timers.target
+      EOF
+
+      systemctl daemon-reload
+      # Runs only inside the window, never at boot.
+      systemctl disable fah-client
+      systemctl start fah-client
+      /usr/local/sbin/nocturne-folding-unpause
+      systemctl stop fah-client
+      systemctl enable --now nocturne-folding-start.timer nocturne-folding-stop.timer
 runcmd:
   # Oracle's Ubuntu image rejects inbound traffic other than SSH in the instance's
   # own iptables rules, independently of the VCN security list.
@@ -282,7 +411,9 @@ runcmd:
   - systemctl enable nocturne.service
   - systemctl start --no-block nocturne.service
 CLOUD_INIT_EOF
-  sed -i -e "s|@BASE_DOMAIN@|$BASE_DOMAIN|" -e "s|@PUBLIC_IP@|$PUBLIC_IP|" -e "s|@NOCTURNE_VERSION@|$NOCTURNE_VERSION|" "$CLOUD_INIT"
+  sed -i -e "s|@BASE_DOMAIN@|$BASE_DOMAIN|" -e "s|@PUBLIC_IP@|$PUBLIC_IP|" -e "s|@NOCTURNE_VERSION@|$NOCTURNE_VERSION|" \
+    -e "s|@FOLDING_TEAM@|$FOLDING_TEAM|" "$CLOUD_INIT"
+  [[ -z "$FOLDING" ]] || echo "  - /usr/local/sbin/nocturne-folding-setup" >> "$CLOUD_INIT"
 
   mapfile -t ADS < <(oci iam availability-domain list --compartment-id "$COMPARTMENT_ID" --query 'data[].name' --raw-output | jq -r '.[]')
   deadline=$((SECONDS + CAPACITY_RETRY_MINUTES * 60))
