@@ -2,6 +2,7 @@
     import { Button } from "@nocturne/ui/ui/button";
     import { ExternalLink } from "@lucide/svelte";
     import { DEMO_ENABLED, DEMO_WEB_URL } from "$lib/config";
+    import { track } from "$lib/analytics";
 </script>
 
 <svelte:head>
@@ -27,6 +28,7 @@
                 href={DEMO_WEB_URL}
                 target="_blank"
                 rel="noopener noreferrer"
+                onclick={() => track("Outbound Click", { destination: "demo" })}
                 size="lg"
                 class="gap-2 text-base"
             >

@@ -69,7 +69,7 @@
                 <RefreshCw class="h-4 w-4" />
             </button>
 
-            <CopyButton text={password} label="Copy {label} to clipboard" />
+            <CopyButton text={password} kind="password" label="Copy {label} to clipboard" />
         </div>
     </div>
 

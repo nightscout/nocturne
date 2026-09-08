@@ -1,11 +1,14 @@
 <script lang="ts">
     import DocsSidebar from "$lib/components/DocsSidebar.svelte";
+    import DocsScrollDepth from "$lib/components/docs/DocsScrollDepth.svelte";
     import { Button } from "@nocturne/ui/ui/button";
     import { Menu, X } from "@lucide/svelte";
 
     let { children } = $props();
     let sidebarOpen = $state(false);
 </script>
+
+<DocsScrollDepth />
 
 <div class="container mx-auto px-4 py-8">
     <div class="flex gap-8">

@@ -1,6 +1,7 @@
 <script lang="ts">
     import { Heart, ArrowUpRight } from "@lucide/svelte";
     import { LINKS } from "$lib/data/links";
+    import { track } from "$lib/analytics";
 
     // Matches the portal accent used on the get-involved page. Not the
     // --glucose-in-range token, which theme packs swap to green.
@@ -10,6 +11,7 @@
 
     const TIERS = [
         {
+            tier: "supporter",
             amount: "US$10",
             name: "Supporter",
             desc: "Covers the hosting behind the docs, the container registry, and the release pipeline.",
@@ -17,6 +19,7 @@
             featured: false,
         },
         {
+            tier: "sustainer",
             amount: "US$20",
             name: "Sustainer",
             desc: "Adds test hardware: pumps, CGM transmitters, and phones the connectors are verified against.",
@@ -24,6 +27,7 @@
             featured: true,
         },
         {
+            tier: "patron",
             amount: "US$50",
             name: "Patron",
             desc: "Funds sustained maintainer time on connectors, security updates, and support.",
@@ -50,6 +54,7 @@
                 href={tier.href}
                 target="_blank"
                 rel="noopener noreferrer"
+                onclick={() => track("Support Tier Click", { tier: tier.tier })}
                 class="group flex flex-col p-5 rounded-xl border transition-colors {tier.featured
                     ? 'sn-featured'
                     : 'border-border/60 bg-card/50 hover:bg-card'}"
@@ -90,6 +95,7 @@
             href={LINKS.donate}
             target="_blank"
             rel="noopener noreferrer"
+            onclick={() => track("Donate Click", { destination: "foundation" })}
             class="font-semibold hover:underline"
             style="color: {ACCENT}">Nightscout Foundation</a
         >.

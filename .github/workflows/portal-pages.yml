@@ -79,6 +79,9 @@ jobs:
           VITE_DEMO_ENABLED: 'true'
           VITE_DEMO_WEB_URL: 'https://demo.nocturne.run'
           VITE_SCALAR_API_URL: 'https://nocturne.run'
+          # Unset in a fork or a self-hosted build, which then ships no tracker at all.
+          # The site of this name has to exist in Plausible first; CE cannot create it.
+          VITE_PLAUSIBLE_DOMAIN: ${{ vars.PLAUSIBLE_PORTAL_DOMAIN }}
         run: pnpm run build
 
       - name: Upload artifact

@@ -1,6 +1,7 @@
 <script lang="ts">
     import { Github, Heart } from "@lucide/svelte";
     import LanguageSelector from "./LanguageSelector.svelte";
+    import { track } from "$lib/analytics";
 </script>
 
 <footer class="border-t border-border/40 bg-muted/30">
@@ -113,6 +114,7 @@
                             href="https://discord.gg/sKEhtHeb2z"
                             target="_blank"
                             rel="noopener noreferrer"
+                            onclick={() => track("Outbound Click", { destination: "discord" })}
                             class="text-sm text-muted-foreground hover:text-foreground transition-colors"
                         >
                             Discord
@@ -123,6 +125,7 @@
                             href="https://github.com/nightscout/nocturne"
                             target="_blank"
                             rel="noopener noreferrer"
+                            onclick={() => track("Outbound Click", { destination: "github" })}
                             class="text-sm text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1.5"
                         >
                             <Github class="w-4 h-4" />
