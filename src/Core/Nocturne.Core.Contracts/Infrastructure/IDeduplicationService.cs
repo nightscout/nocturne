@@ -90,9 +90,9 @@ public interface IDeduplicationService
 
     /// <summary>
     /// Reconcile newly-created linked_records for the current tenant in bounded chunks,
-    /// merging duplicate canonical groups. Processes links with SysCreatedAt at or after
-    /// the tenant's watermark (minus a small overlap), advancing the watermark per batch.
-    /// Stops when caught up or after maxBatches. Returns groups merged and whether caught up.
+    /// merging duplicate canonical groups. Pages links in (SysCreatedAt, Id) order from the
+    /// tenant's persisted cursor up to a short lag behind the present, advancing the cursor per
+    /// batch. Stops when caught up or after maxBatches. Returns groups merged and whether caught up.
     /// </summary>
     Task<ReconcileResult> ReconcileNewLinksAsync(int batchSize, int maxBatches, CancellationToken cancellationToken = default);
 }
