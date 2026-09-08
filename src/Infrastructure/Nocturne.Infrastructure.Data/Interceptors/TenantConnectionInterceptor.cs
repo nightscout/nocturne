@@ -11,12 +11,12 @@ namespace Nocturne.Infrastructure.Data.Interceptors;
 ///
 /// On connection open: SELECT set_config('app.current_tenant_id', $1, false)
 ///
-/// Nothing is reset on close. Npgsql runs DISCARD ALL — which includes RESET ALL —
-/// on every pool return, so each of these GUCs is already cleared before the next
-/// lessee sees the physical connection, and
-/// <c>DatabaseInitializationExtensions.VerifyNoResetOnClose</c> refuses to start the API
-/// unless that is on. Issuing the RESETs here as well cost one extra round trip per
-/// checkout and, at production checkout rates, well over half of the statements Postgres saw.
+/// Nothing is reset on close. Npgsql resets the session on every pool return —
+/// DISCARD ALL, or the DEALLOCATE-sparing equivalent that still carries RESET ALL when
+/// the connection holds prepared statements — so each of these GUCs is cleared before
+/// the next lessee's first command reaches the backend.
+/// <c>DatabaseInitializationExtensions.VerifyPoolResetOnClose</c> refuses to start the API
+/// on a connection string that would turn that reset off.
 ///
 /// The same open path carries app.current_subject_id, which gives the
 /// subject-scoped cross-tenant reads (tenant switcher, caregiver overview,

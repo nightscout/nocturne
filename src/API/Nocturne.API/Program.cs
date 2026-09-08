@@ -559,7 +559,7 @@ if (!isNSwagGeneration && !app.Environment.IsEnvironment("Testing"))
         await DatabaseInitializationExtensions.MarkInterruptedJobsAsync(migratorConnectionString, logger);
     }
 
-    // Validate RLS, ownership, default privileges, and NoResetOnClose under the app role.
+    // Validate RLS, ownership, default privileges, and pool reset-on-close under the app role.
     await app.Services.ValidateDatabaseConfigurationAsync();
 
     // Sync config-managed OIDC providers to the database (satisfies FK constraints)
