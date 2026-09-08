@@ -442,7 +442,7 @@ CLOUD_INIT_EOF
       fi
     done
     [[ -n "$INSTANCE_ID" ]] && break
-    (( SECONDS < deadline )) || die "no Ampere A1 capacity in any availability domain after $CAPACITY_RETRY_MINUTES minutes. This is common on the free tier: re-run later (everything created so far is reused), or try a smaller size with OCPUS=1 MEMORY_GB=6."
+    (( SECONDS < deadline )) || die "no Ampere A1 capacity in any availability domain after $CAPACITY_RETRY_MINUTES minutes. This is common on the free tier: re-run later (everything created so far is reused), or keep trying for longer with CAPACITY_RETRY_MINUTES=180."
     info "retrying in 60 seconds"
     sleep 60
   done

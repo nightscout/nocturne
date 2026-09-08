@@ -38,7 +38,7 @@
             questions: [
                 {
                     question: "What are the system requirements?",
-                    answer: "Nocturne runs in Docker, so any system that runs Docker (Linux, Windows, macOS) can host it. For a single user, a small VPS with 1 GB of RAM is enough. For families or several users, 2 GB or more is recommended. You also need a domain name pointed at the server.",
+                    answer: "Nocturne runs in Docker, so any system that runs Docker (Linux, Windows, macOS) can host it. For a single user, 2 GB of RAM and one CPU core will run it, though 4 GB is more comfortable because PostgreSQL uses the spare memory as disk cache. Allow 10 GB of storage, most of which is the container images. For families or several sites, 4 GB or more is recommended. You also need a domain name pointed at the server.",
                 },
                 {
                     question: "Can I run Nocturne on a Raspberry Pi?",
