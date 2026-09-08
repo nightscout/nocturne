@@ -14,6 +14,7 @@ using Nocturne.API.Services.Health.GoogleHealth;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.GoogleHealth.Configurations;
 using Nocturne.Connectors.GoogleHealth.Services;
+using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Sleep;
@@ -27,6 +28,76 @@ namespace Nocturne.API.Tests.Health.GoogleHealth;
 
 public class GoogleHealthTests
 {
+    [Fact]
+    public async Task Saving_options_populates_the_shared_connector_store()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var db = new NocturneDbContext(
+            new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options);
+        await db.Database.EnsureCreatedAsync();
+        var tenant = Guid.NewGuid();
+        var subject = Guid.NewGuid();
+        db.TenantId = tenant;
+        db.Tenants.Add(new TenantEntity
+        {
+            Id = tenant,
+            Slug = "synthetic",
+            DisplayName = "Synthetic",
+            IsActive = true
+        });
+        await db.SaveChangesAsync();
+
+        string? configurationJson = null;
+        Dictionary<string, string>? savedSecrets = null;
+        var connectorConfigurations = new Mock<IConnectorConfigurationService>();
+        connectorConfigurations
+            .Setup(service => service.SaveConfigurationAsync(
+                "GoogleHealth",
+                It.IsAny<JsonDocument>(),
+                subject.ToString(),
+                It.IsAny<CancellationToken>()))
+            .Callback<string, JsonDocument, string?, CancellationToken>((_, document, _, _) =>
+                configurationJson = document.RootElement.GetRawText())
+            .ReturnsAsync(new ConnectorConfigurationResponse());
+        connectorConfigurations
+            .Setup(service => service.GetSecretsAsync(
+                "GoogleHealth",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, string>());
+        connectorConfigurations
+            .Setup(service => service.SaveSecretsAsync(
+                "GoogleHealth",
+                It.IsAny<Dictionary<string, string>>(),
+                subject.ToString(),
+                It.IsAny<CancellationToken>()))
+            .Callback<string, Dictionary<string, string>, string?, CancellationToken>(
+                (_, secrets, _, _) => savedSecrets = new Dictionary<string, string>(secrets))
+            .Returns(Task.CompletedTask);
+
+        var service = new GoogleHealthService(
+            db,
+            new EphemeralDataProtectionProvider(),
+            new GoogleHealthCoordinator(),
+            new GoogleHealthClient(new HttpClient(new StubHandler(_ => Json("{}")))),
+            TokenProvider(new StubHandler(_ => Json("{}")), tenant),
+            connectorConfigurations: connectorConfigurations.Object);
+        var options = Options();
+        options.DataTypes = ["steps", "sleep"];
+        options.HistoryDays = 30;
+        options.PreviewOnly = true;
+
+        await service.SaveAsync(options, subject, default);
+
+        using var stored = JsonDocument.Parse(configurationJson!);
+        Assert.Equal(30, stored.RootElement.GetProperty("lookbackDays").GetInt32());
+        Assert.True(stored.RootElement.GetProperty("previewOnly").GetBoolean());
+        Assert.True(stored.RootElement.GetProperty("syncSteps").GetBoolean());
+        Assert.False(stored.RootElement.GetProperty("syncHeartRate").GetBoolean());
+        Assert.True(stored.RootElement.GetProperty("syncSleep").GetBoolean());
+        Assert.Equal("synthetic-secret", savedSecrets!["clientSecret"]);
+    }
+
     [Fact]
     public void Sync_phase_uses_the_stable_wire_value()
     {

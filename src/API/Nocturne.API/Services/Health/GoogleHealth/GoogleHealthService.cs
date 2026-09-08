@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -10,6 +11,7 @@ using Nocturne.Connectors.GoogleHealth.Configurations;
 using Nocturne.Connectors.GoogleHealth.Models;
 using Nocturne.Connectors.GoogleHealth.Services;
 using Nocturne.Core.Models.Health;
+using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -86,14 +88,87 @@ public sealed class GoogleHealthCoordinator
 public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionProvider protection,
     GoogleHealthCoordinator coordinator, GoogleHealthClient google, GoogleHealthAuthTokenProvider oauth,
     IGoogleHealthReadingWriter? writer = null,
-    ILogger<GoogleHealthService>? logger = null) : IGoogleHealthService
+    ILogger<GoogleHealthService>? logger = null,
+    IConnectorConfigurationService? connectorConfigurations = null) : IGoogleHealthService
 {
+    private const string ConnectorName = "GoogleHealth";
     private static readonly TimeSpan AccessTokenSafety = TimeSpan.FromMinutes(1);
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private IDataProtector Protector => protection.CreateProtector("Nocturne.GoogleHealth.v1", db.TenantId.ToString());
     private string Protect<T>(T value) => Protector.Protect(JsonSerializer.Serialize(value, Json));
     private T Unprotect<T>(string value) => JsonSerializer.Deserialize<T>(Protector.Unprotect(value), Json) ?? throw new JsonException();
     private Task<GoogleHealthConnectionEntity?> Connection(CancellationToken ct) => db.GoogleHealthConnections.SingleOrDefaultAsync(ct);
+
+    private async Task MirrorOptionsAsync(
+        GoogleHealthOptions options,
+        Guid subject,
+        CancellationToken ct)
+    {
+        if (connectorConfigurations is null)
+            return;
+
+        using var configuration = JsonSerializer.SerializeToDocument(new
+        {
+            enabled = true,
+            clientId = options.ClientId,
+            callbackUrl = options.CallbackUrl,
+            lookbackDays = options.HistoryDays,
+            importFrom = options.ImportFrom?.ToString("O", CultureInfo.InvariantCulture),
+            previewOnly = options.PreviewOnly,
+            syncSteps = options.DataTypes.Contains("steps", StringComparer.Ordinal),
+            syncHeartRate = options.DataTypes.Contains("heart-rate", StringComparer.Ordinal),
+            syncBodyWeight = options.DataTypes.Contains("weight", StringComparer.Ordinal),
+            syncSleep = options.DataTypes.Contains("sleep", StringComparer.Ordinal)
+        }, Json);
+        await connectorConfigurations.SaveConfigurationAsync(
+            ConnectorName,
+            configuration,
+            subject.ToString(),
+            ct);
+
+        var secrets = await connectorConfigurations.GetSecretsAsync(ConnectorName, ct);
+        secrets["clientSecret"] = options.ClientSecret!;
+        await connectorConfigurations.SaveSecretsAsync(
+            ConnectorName,
+            secrets,
+            subject.ToString(),
+            ct);
+    }
+
+    private async Task MirrorTokenAsync(
+        GoogleHealthOptions settings,
+        GoogleHealthTokenSession token,
+        Guid subject,
+        CancellationToken ct)
+    {
+        if (connectorConfigurations is null)
+            return;
+
+        var secrets = await connectorConfigurations.GetSecretsAsync(ConnectorName, ct);
+        secrets["clientSecret"] = settings.ClientSecret!;
+        secrets["refreshToken"] = token.RefreshToken;
+        secrets["grantedScopes"] = string.Join(' ', token.Scopes.Distinct(StringComparer.Ordinal));
+        await connectorConfigurations.SaveSecretsAsync(
+            ConnectorName,
+            secrets,
+            subject.ToString(),
+            ct);
+    }
+
+    private async Task ClearMirroredTokenAsync(Guid subject, CancellationToken ct)
+    {
+        if (connectorConfigurations is null)
+            return;
+
+        var secrets = await connectorConfigurations.GetSecretsAsync(ConnectorName, ct);
+        secrets.Remove("refreshToken");
+        secrets.Remove("grantedScopes");
+        await connectorConfigurations.SaveSecretsAsync(
+            ConnectorName,
+            secrets,
+            subject.ToString(),
+            ct);
+    }
 
     private static string EncodeError(string code, IEnumerable<string>? dataTypes = null)
     {
@@ -256,6 +331,7 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
             row.ProtectedSettings = Protect(options); row.ErrorCode = null; row.NextAttempt = null;
             coordinator.Flows.TryRemove(db.TenantId, out _);
             await db.SaveChangesAsync(ct);
+            await MirrorOptionsAsync(options, subject, ct);
         }
         finally { gate.Release(); }
     }
@@ -317,6 +393,7 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
             row.NextAttempt = null; row.LastAttempt = null;
             row.ErrorCode = missingScopes.Length == 0 ? null : EncodeError("partial_consent", missingScopes);
             await db.SaveChangesAsync(ct);
+            await MirrorTokenAsync(settings, token, subject, ct);
             await oauth.StoreSessionAsync(token);
         }
         catch (Exception ex) when (ex is GoogleHealthException or HttpRequestException or JsonException or TaskCanceledException)
@@ -364,6 +441,7 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
                 catch (TaskCanceledException) { row.ErrorCode = "revoke_in_google"; }
                 await db.SaveChangesAsync(CancellationToken.None);
             }
+            await ClearMirroredTokenAsync(subject, CancellationToken.None);
         }
         finally { gate.Release(); }
     }
