@@ -16,6 +16,7 @@
   } from "@lucide/svelte";
   import { onMount } from "svelte";
   import { LINKS } from "$lib/data/links";
+  import { track } from "$lib/analytics";
   import SupportNocturne from "$lib/components/docs/SupportNocturne.svelte";
 
   const ACCENT = "oklch(0.6 0.118 184.704)";
@@ -23,11 +24,12 @@
   const STATS = [
     { value: "100%", label: "Built by volunteers" },
     { value: "22+", label: "Devices & apps connected" },
-    { value: "0", label: "Ads, trackers, or paywalls" },
+    { value: "0", label: "Ads, cookies, or paywalls" },
     { value: "24/7", label: "Community support" },
   ];
 
   type Lane = {
+    /** Also the `lane` property of a `Get Involved Lane` event; see ALLOWED_PROPS. */
     id: string;
     icon: typeof Globe;
     accent: string;
@@ -269,6 +271,7 @@
           href={LINKS.discord}
           target="_blank"
           rel="noopener noreferrer"
+          onclick={() => track("Outbound Click", { destination: "discord" })}
           class="inline-flex items-center justify-center gap-2 rounded-lg font-medium text-[15px] h-[46px] px-6 whitespace-nowrap no-underline cursor-pointer transition-all duration-150 bg-transparent border border-border text-foreground hover:bg-accent"
         >
           <MessageCircle class="w-4 h-4" /> Join the Discord
@@ -310,6 +313,7 @@
           href={lane.href}
           target={opensNewTab(lane) ? "_blank" : undefined}
           rel={opensNewTab(lane) ? "noopener noreferrer" : undefined}
+          onclick={() => track("Get Involved Lane", { lane: lane.id })}
           class="gi-lane-card flex flex-row items-start gap-4 bg-card border border-border rounded-xl p-5 transition-[border-color,transform] duration-200 no-underline text-inherit"
           class:gi-lane-highlight={lane.highlight}
           style="--lane-accent: {lane.accent}"
@@ -362,6 +366,7 @@
         href={LINKS.githubLabel}
         target="_blank"
         rel="noopener noreferrer"
+        onclick={() => track("Outbound Click", { destination: "github-labels" })}
         class="inline-flex items-center justify-center gap-2 rounded-lg font-medium text-sm h-[38px] px-4 whitespace-nowrap no-underline cursor-pointer transition-all duration-150 bg-transparent border border-border text-foreground hover:bg-accent"
       >
         Open the tracker <ExternalLink class="w-3.5 h-3.5" />
@@ -407,6 +412,7 @@
             href={LINKS.githubLabel}
             target="_blank"
             rel="noopener noreferrer"
+            onclick={() => track("Outbound Click", { destination: "github-labels" })}
             class="font-semibold underline"
             style="color: {ACCENT}">View them on GitHub</a
           >.
@@ -419,6 +425,7 @@
             href={LINKS.discord}
             target="_blank"
             rel="noopener noreferrer"
+            onclick={() => track("Outbound Click", { destination: "discord" })}
             class="font-semibold underline"
             style="color: {ACCENT}">ask in the Discord</a
           >.
@@ -429,6 +436,7 @@
             href={issue.url}
             target="_blank"
             rel="noopener noreferrer"
+            onclick={() => track("Outbound Click", { destination: "github" })}
             class="gi-issue-row flex items-center gap-3.5 px-[18px] py-[13px] border-b border-border transition-[background] duration-150 cursor-pointer no-underline text-inherit hover:bg-[color-mix(in_oklch,var(--card),transparent_20%)] last:border-b-0"
           >
             <div class="gi-issue-dot shrink-0 w-3.5 h-3.5 rounded-full relative mt-[3px]" style="border: 2px solid {ACCENT}">
@@ -469,6 +477,7 @@
           href={LINKS.githubLabel}
           target="_blank"
           rel="noopener noreferrer"
+          onclick={() => track("Outbound Click", { destination: "github-labels" })}
           class="inline-flex items-center justify-center gap-2 rounded-lg font-medium text-sm h-[38px] px-4 whitespace-nowrap no-underline cursor-pointer transition-all duration-150 bg-transparent border border-border text-foreground hover:bg-accent"
         >
           View all on GitHub <ExternalLink class="w-3.5 h-3.5" />
@@ -504,6 +513,7 @@
           href={LINKS.donate}
           target="_blank"
           rel="noopener noreferrer"
+          onclick={() => track("Donate Click", { destination: "foundation" })}
           class="inline-flex items-center justify-center gap-2 rounded-lg font-medium text-[15px] h-[46px] px-6 whitespace-nowrap no-underline cursor-pointer transition-all duration-150 text-white hover:brightness-108"
           style="background: {ACCENT}"
         >

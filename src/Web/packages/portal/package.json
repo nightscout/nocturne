@@ -9,7 +9,8 @@
 		"dev": "node scripts/generate-sdk-manifest.mjs && node scripts/sync-screenshots.mjs && vite dev",
 		"build": "node scripts/generate-sdk-manifest.mjs && node scripts/sync-screenshots.mjs && vite build",
 		"preview": "vite preview",
-		"check": "node scripts/generate-sdk-manifest.mjs && svelte-kit sync && svelte-check-native --tsconfig ./tsconfig.json"
+		"check": "node scripts/generate-sdk-manifest.mjs && svelte-kit sync && svelte-check-native --tsconfig ./tsconfig.json",
+		"test": "svelte-kit sync && vitest run"
 	},
 	"devDependencies": {
 		"@lucide/svelte": "^0.555.0",
@@ -35,7 +36,8 @@
 		"tailwind-variants": "^3.2.2",
 		"tailwindcss": "^4.1.7",
 		"typescript": "^5.8.3",
-		"vite": "^7.2.6"
+		"vite": "^7.2.6",
+		"vitest": "^4.1.6"
 	},
 	"dependencies": {
 		"@nocturne/app": "workspace:*",

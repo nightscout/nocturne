@@ -1,13 +1,16 @@
 <script lang="ts">
     import { Copy, Check, X } from "@lucide/svelte";
     import { copyToClipboard } from "@nocturne/ui/utils";
+    import { track } from "$lib/analytics";
 
     interface Props {
         text: string;
         label?: string;
+        /** What was copied. Only the kind is reported, never the text itself. */
+        kind?: "code" | "password";
     }
 
-    let { text, label = "Copy to clipboard" }: Props = $props();
+    let { text, label = "Copy to clipboard", kind = "code" }: Props = $props();
 
     let copied = $state(false);
     let failed = $state(false);
@@ -20,6 +23,7 @@
         }
         failed = false;
         copied = true;
+        track("Docs Copy", { kind });
         if (timer !== undefined) clearTimeout(timer);
         timer = setTimeout(() => {
             copied = false;

@@ -215,6 +215,9 @@ jobs:
           pnpm --filter @nightscout/glucose-chart                --filter @nocturne/coach                run check
       - name: Bot unit tests
         run: pnpm --filter @nocturne/bot run test
+      # The portal's `check` needs the generated client, but its vitest suites do not.
+      - name: Portal unit tests
+        run: pnpm --filter @nocturne/portal run test
       - name: Documentation screenshots
         run: |
           pnpm --filter @nocturne/screenshots run check
