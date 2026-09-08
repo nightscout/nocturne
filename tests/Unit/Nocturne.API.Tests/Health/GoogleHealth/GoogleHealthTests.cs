@@ -85,6 +85,8 @@ public class GoogleHealthTests
                 ClientSecret = "shared-secret",
                 CallbackUrl = "https://shared.example/settings/connectors/google-health/callback",
                 HistoryDays = 45,
+                RefreshToken = "shared-refresh-token",
+                GrantedScopes = "openid https://www.googleapis.com/auth/fitness.activity.read",
                 SyncSteps = true,
                 SyncHeartRate = false,
                 SyncBodyWeight = false,
@@ -118,6 +120,8 @@ public class GoogleHealthTests
         Assert.Equal("shared.apps.googleusercontent.com", status.ClientId);
         Assert.Equal(45, status.HistoryDays);
         Assert.Equal(["steps", "sleep"], status.SelectedTypes);
+        Assert.True(status.Connected);
+        Assert.Equal(["steps"], status.GrantedTypes);
     }
 
     [Fact]
