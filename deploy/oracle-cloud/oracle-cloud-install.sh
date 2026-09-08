@@ -47,11 +47,18 @@ command -v oci >/dev/null || die "the oci command is not available. Open Cloud S
 command -v jq >/dev/null || die "jq is not available"
 [[ -n "$COMPARTMENT_ID" ]] || die "COMPARTMENT_ID is not set and OCI_TENANCY is empty. Are you in Cloud Shell?"
 
+CONFIG="$HOME/.nocturne-oci/config"
+if [[ -z "${BASE_DOMAIN:-}" && -f "$CONFIG" ]]; then
+  . "$CONFIG"
+  info "using $BASE_DOMAIN from $CONFIG (set BASE_DOMAIN to override)"
+fi
 if [[ -z "${BASE_DOMAIN:-}" ]]; then
   read -rp "Domain Nocturne should answer on (e.g. nocturne.example.com): " BASE_DOMAIN
 fi
 BASE_DOMAIN="${BASE_DOMAIN,,}"
 [[ "$BASE_DOMAIN" =~ ^([a-z0-9-]+\.)+[a-z]{2,}$ ]] || die "BASE_DOMAIN must be a domain name with at least two labels, not an IP address"
+mkdir -p "$(dirname "$CONFIG")"
+printf 'BASE_DOMAIN=%s\n' "$BASE_DOMAIN" > "$CONFIG"
 
 # Always Free compute only exists in the tenancy's home region.
 HOME_REGION=$(oci iam region-subscription list --query 'data[?"is-home-region"] | [0]."region-name"' --raw-output)
@@ -132,8 +139,12 @@ PUBLIC_IP=$(oci network public-ip get --public-ip-id "$PUBLIC_IP_ID" --query 'da
 # ── DNS ──────────────────────────────────────────────────────────────────────
 
 desec() { curl -fsS -H "Authorization: Token $DESEC_TOKEN" -H "Content-Type: application/json" "$@"; }
+resolves_to_ip() { getent ahostsv4 "$1" 2>/dev/null | awk '{print $1}' | grep -qx "$PUBLIC_IP"; }
 
-if [[ -z "${DESEC_TOKEN:-}" && -t 0 ]]; then
+if resolves_to_ip "$BASE_DOMAIN" && resolves_to_ip "dns-check.$BASE_DOMAIN"; then
+  DNS_READY=1
+  info "DNS already points at $PUBLIC_IP"
+elif [[ -z "${DESEC_TOKEN:-}" && -t 0 ]]; then
   printf '\n'
   info "If $BASE_DOMAIN is managed at deSEC (desec.io, including free dedyn.io names), paste an"
   info "API token and the DNS records are created for you. Otherwise press Enter to add them yourself."
@@ -141,7 +152,9 @@ if [[ -z "${DESEC_TOKEN:-}" && -t 0 ]]; then
   printf '\n'
 fi
 
-if [[ -n "${DESEC_TOKEN:-}" ]]; then
+if [[ -n "${DNS_READY:-}" ]]; then
+  :
+elif [[ -n "${DESEC_TOKEN:-}" ]]; then
   log "DNS records at deSEC"
   # BASE_DOMAIN may sit below the zone deSEC hosts (nocturne.example.com in example.com).
   ZONE="$BASE_DOMAIN"

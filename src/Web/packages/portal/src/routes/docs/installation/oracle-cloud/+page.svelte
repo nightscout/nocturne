@@ -119,8 +119,8 @@
     <p class="text-muted-foreground mb-8">
         Ampere A1 servers are popular and regions often run out. The script tries every
         availability domain in your region, and keeps retrying for 30 minutes. If it gives up,
-        run the same command again later. Everything it already created is reused. A smaller
-        server is easier to place:
+        run it again later. It remembers your domain, so the command no longer needs it, and
+        everything already created is reused. A smaller server is easier to place:
     </p>
     <CodeBlock code={"OCPUS=1 MEMORY_GB=6 " + runCommand} class="mb-8" />
 
