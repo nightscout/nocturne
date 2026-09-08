@@ -12,7 +12,7 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// The tenant reach the DELETE needs comes from
 /// <see cref="RlsPinningExtensions.CreateTenantPinnedContextAsync"/> and cannot come from a
 /// <c>set_config</c> issued as its own command: EF opens and closes the connection around each
-/// command, and <c>TenantConnectionInterceptor</c>'s close resets the session variable. Every
+/// command, and the pool's DISCARD ALL clears the session variable on the way back. Every
 /// tenant-scoped table is <c>FORCE ROW LEVEL SECURITY</c>, so an unpinned DELETE evaluates
 /// <c>tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid</c> against
 /// NULL, matches nothing, and reports success having deleted no rows.

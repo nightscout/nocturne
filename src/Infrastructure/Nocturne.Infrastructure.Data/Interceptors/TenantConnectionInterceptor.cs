@@ -6,13 +6,19 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 namespace Nocturne.Infrastructure.Data.Interceptors;
 
 /// <summary>
-/// EF Core connection interceptor that sets the PostgreSQL session variable
+/// EF Core connection interceptor that sets the PostgreSQL session variables
 /// for Row-Level Security tenant isolation.
 ///
 /// On connection open: SELECT set_config('app.current_tenant_id', $1, false)
-/// On connection close: RESET app.current_tenant_id
 ///
-/// The same open/reset pair carries app.current_subject_id, which gives the
+/// Nothing is reset on close. Npgsql resets the session on every pool return —
+/// DISCARD ALL, or the DEALLOCATE-sparing equivalent that still carries RESET ALL when
+/// the connection holds prepared statements — so each of these GUCs is cleared before
+/// the next lessee's first command reaches the backend.
+/// <c>DatabaseInitializationExtensions.VerifyPoolResetOnClose</c> refuses to start the API
+/// on a connection string that would turn that reset off.
+///
+/// The same open path carries app.current_subject_id, which gives the
 /// subject-scoped cross-tenant reads (tenant switcher, caregiver overview,
 /// membership enumeration) reach over one subject's own rows. Both are set only
 /// when non-empty, so an unpinned context leaves the GUC unset and matches nothing.
@@ -91,37 +97,6 @@ public class TenantConnectionInterceptor : DbConnectionInterceptor
         param.ParameterName = name;
         param.Value = value;
         cmd.Parameters.Add(param);
-    }
-
-    /// <summary>
-    /// Executes before a connection is closed.
-    /// Resets the PostgreSQL session variable.
-    /// </summary>
-    /// <param name="connection">The database connection.</param>
-    /// <param name="eventData">Information about the connection event.</param>
-    /// <param name="result">The interception result.</param>
-    /// <returns>The interception result.</returns>
-    public override async ValueTask<InterceptionResult> ConnectionClosingAsync(
-        DbConnection connection,
-        ConnectionEventData eventData,
-        InterceptionResult result)
-    {
-        // Reset the session variables before the connection returns to the pool.
-        // This prevents a stale tenant or subject ID from leaking to the next request.
-        try
-        {
-            await using var cmd = connection.CreateCommand();
-            cmd.CommandText =
-                "RESET app.current_tenant_id; RESET app.current_subject_id; RESET app.is_share; " +
-                "RESET app.visible_categories; RESET app.share_full_history";
-            await cmd.ExecuteNonQueryAsync();
-        }
-        catch
-        {
-            // Swallow errors during cleanup - the connection may already be broken
-        }
-
-        return result;
     }
 
     private async Task EnsureRoleIsSafeAsync(DbConnection connection, CancellationToken cancellationToken)

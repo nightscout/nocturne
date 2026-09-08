@@ -370,9 +370,9 @@ public static class DatabaseInitializationExtensions
     /// <summary>
     /// Validates runtime database configuration after migrations have run and
     /// the app DbContext is registered. Runs the RLS self-check under the app
-    /// role and asserts the runtime NpgsqlDataSource is configured with
-    /// NoResetOnClose = false (required so pooled connections DISCARD ALL
-    /// between uses, wiping app.current_tenant_id).
+    /// role and asserts the runtime connection string leaves Npgsql's reset on
+    /// pool return in place, so app.current_tenant_id cannot outlive a lessee
+    /// (<see cref="VerifyPoolResetOnClose(string?)"/>).
     /// </summary>
     public static async Task ValidateDatabaseConfigurationAsync(
         this IServiceProvider serviceProvider,
@@ -388,7 +388,7 @@ public static class DatabaseInitializationExtensions
             logger,
             cancellationToken);
 
-        VerifyNoResetOnClose(context, logger);
+        VerifyPoolResetOnClose(context, logger);
     }
 
     /// <summary>
@@ -622,19 +622,26 @@ public static class DatabaseInitializationExtensions
     }
 
     /// <summary>
-    /// Verifies that the runtime connection string does not have NoResetOnClose
-    /// enabled. With NoResetOnClose = true, pooled connections skip DISCARD ALL,
-    /// allowing stale app.current_tenant_id values to leak across requests.
+    /// Verifies that the runtime connection string leaves Npgsql's reset-on-pool-return in
+    /// place. <c>NpgsqlConnector</c> sends it only when pooling is on, multiplexing is off and
+    /// NoResetOnClose is off; with the reset skipped, a stale app.current_tenant_id leaks to the
+    /// next lessee of the physical connection.
+    ///
+    /// <c>TenantConnectionInterceptor</c> sets the RLS GUCs on open and clears nothing on close,
+    /// so this check is what keeps that safe. It guards the two settings a connection string can
+    /// turn on; it does not observe the reset happening, which
+    /// <c>PoolReturnDiscardsRlsGucsIntegrationTests</c> does against a real backend.
     /// </summary>
-    private static void VerifyNoResetOnClose(NocturneDbContext context, ILogger logger)
+    /// <param name="connectionString">The runtime connection string. A null or empty value is not checked.</param>
+    public static void VerifyPoolResetOnClose(string? connectionString)
     {
-        var connectionString = context.Database.GetConnectionString();
         if (string.IsNullOrEmpty(connectionString))
         {
             return;
         }
 
         var csb = new NpgsqlConnectionStringBuilder(connectionString);
+
         if (csb.NoResetOnClose)
         {
             throw new InvalidOperationException(
@@ -644,6 +651,19 @@ public static class DatabaseInitializationExtensions
                 "Remove 'No Reset On Close=true' from the connection string.");
         }
 
-        logger.LogDebug("NoResetOnClose check passed for runtime connection string");
+        if (csb.Multiplexing)
+        {
+            throw new InvalidOperationException(
+                "The runtime PostgreSQL connection string has Multiplexing = true. " +
+                "Npgsql sends no reset when a multiplexed connection is returned, " +
+                "which allows stale app.current_tenant_id values to leak across tenants. " +
+                "Remove 'Multiplexing=true' from the connection string.");
+        }
+    }
+
+    private static void VerifyPoolResetOnClose(NocturneDbContext context, ILogger logger)
+    {
+        VerifyPoolResetOnClose(context.Database.GetConnectionString());
+        logger.LogDebug("Pool reset-on-close check passed for runtime connection string");
     }
 }
