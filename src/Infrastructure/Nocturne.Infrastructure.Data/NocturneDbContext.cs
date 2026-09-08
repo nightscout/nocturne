@@ -2484,8 +2484,16 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     /// <returns>The number of state entries written to the database</returns>
     public override int SaveChanges()
     {
-        UpdateTimestamps();
-        return base.SaveChanges();
+        var autoDetectChanges = DetectChangesOnceForSave();
+        try
+        {
+            UpdateTimestamps();
+            return base.SaveChanges();
+        }
+        finally
+        {
+            ChangeTracker.AutoDetectChangesEnabled = autoDetectChanges;
+        }
     }
 
     /// <summary>
@@ -2495,8 +2503,41 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     /// <returns>A task that represents the asynchronous save operation. The task result contains the number of state entries written to the database</returns>
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        UpdateTimestamps();
-        return await base.SaveChangesAsync(cancellationToken);
+        var autoDetectChanges = DetectChangesOnceForSave();
+        try
+        {
+            UpdateTimestamps();
+            return await base.SaveChangesAsync(cancellationToken);
+        }
+        finally
+        {
+            ChangeTracker.AutoDetectChangesEnabled = autoDetectChanges;
+        }
+    }
+
+    /// <summary>
+    /// Runs the single change-detection pass a save needs, then disables auto-detection for the
+    /// rest of it. Enabled, detection repeats for every <c>ChangeTracker.Entries()</c> call in the
+    /// pipeline — <see cref="UpdateTimestamps"/>, then
+    /// <see cref="Interceptors.MutationAuditInterceptor"/>, then EF's own pass — and every pass
+    /// re-parses two <c>JsonDocument</c>s per jsonb column of every entity whose value keeps
+    /// comparing equal, through <see cref="JsonbStringComparer"/>. The cost of detecting once is
+    /// that a modification made after this point must be recorded through the change tracker;
+    /// see <see cref="Stamp"/>.
+    /// A caller that has already disabled detection keeps its own contract: nothing is detected on
+    /// its behalf and its value is what gets restored.
+    /// </summary>
+    /// <returns>The value <c>AutoDetectChangesEnabled</c> must be restored to once the save ends.</returns>
+    private bool DetectChangesOnceForSave()
+    {
+        var wasEnabled = ChangeTracker.AutoDetectChangesEnabled;
+        if (wasEnabled)
+        {
+            ChangeTracker.DetectChanges();
+            ChangeTracker.AutoDetectChangesEnabled = false;
+        }
+
+        return wasEnabled;
     }
 
     /// <summary>
@@ -2526,9 +2567,9 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             {
                 systemCreated.SysCreatedAt = utcNow;
             }
-            if (stampUpdated && entry.Entity is ISystemTimestamped systemTimestamped)
+            if (stampUpdated && entry.Entity is ISystemTimestamped)
             {
-                systemTimestamped.SysUpdatedAt = utcNow;
+                Stamp(entry, nameof(ISystemTimestamped.SysUpdatedAt), utcNow);
             }
 
             // Auth/identity tables use the created_at / updated_at convention instead.
@@ -2536,14 +2577,23 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             {
                 entityCreated.CreatedAt = utcNow;
             }
-            if (stampUpdated && entry.Entity is IEntityTimestamped entityTimestamped)
+            if (stampUpdated && entry.Entity is IEntityTimestamped)
             {
-                entityTimestamped.UpdatedAt = utcNow;
+                Stamp(entry, nameof(IEntityTimestamped.UpdatedAt), utcNow);
             }
 
-            ApplyEntitySpecificTimestamps(entry.Entity, isAdded, stampUpdated, utcNow);
+            ApplyEntitySpecificTimestamps(entry, isAdded, stampUpdated, utcNow);
         }
     }
+
+    /// <summary>
+    /// Writes a timestamp through the change tracker, which is how a modified row's stamp reaches
+    /// the UPDATE now that <see cref="DetectChangesOnceForSave"/> has turned auto-detection off.
+    /// Only the modify path needs it: an added row is inserted from its CLR values whatever the
+    /// modified flags say, so those stamps are plain assignments.
+    /// </summary>
+    private static void Stamp(EntityEntry entry, string propertyName, object value)
+        => entry.Property(propertyName).CurrentValue = value;
 
     /// <summary>
     /// True if the entry has a modified property other than the update-timestamp bookkeeping
@@ -2651,13 +2701,13 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     /// Applies timestamps for the few entities whose columns do not follow either the
     /// sys_* or created_at/updated_at conventions covered by the marker interfaces.
     /// </summary>
-    private static void ApplyEntitySpecificTimestamps(object entity, bool isAdded, bool stampUpdated, DateTime utcNow)
+    private static void ApplyEntitySpecificTimestamps(EntityEntry entry, bool isAdded, bool stampUpdated, DateTime utcNow)
     {
-        switch (entity)
+        switch (entry.Entity)
         {
             // Nullable updated_at, set alongside its ISystemTimestamped stamps.
-            case ClockFaceEntity clockFace when stampUpdated:
-                clockFace.UpdatedAt = utcNow;
+            case ClockFaceEntity when stampUpdated:
+                Stamp(entry, nameof(ClockFaceEntity.UpdatedAt), utcNow);
                 break;
             // Mirror of sys_created_at on a DateTimeOffset column, set on insert only.
             case ConnectorConfigurationEntity connectorConfig when isAdded:
