@@ -1,3 +1,4 @@
+using System.Globalization;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Constants;
@@ -34,6 +35,18 @@ public sealed class GoogleHealthConnectorConfiguration : BaseConnectorConfigurat
     [ConnectorProperty(ConnectorPropertyKey.CallbackUrl, Required = true, Format = "uri")]
     public string CallbackUrl { get; set; } = string.Empty;
 
+    [ConnectorProperty(ConnectorPropertyKey.LookbackDays, DefaultValue = "7", MinValue = 1, MaxValue = 90)]
+    public int HistoryDays { get; set; } = 7;
+
+    [ConnectorProperty(ConnectorPropertyKey.ImportFrom, Hidden = true)]
+    public string? ImportFrom { get; set; }
+
+    [ConnectorProperty(ConnectorPropertyKey.PreviewOnly, Hidden = true)]
+    public bool PreviewOnly { get; set; }
+
+    [ConnectorProperty(ConnectorPropertyKey.GrantedScopes, Secret = true, Hidden = true)]
+    public string? GrantedScopes { get; set; }
+
     public static bool IsValidClientId(string clientId) =>
         !string.IsNullOrWhiteSpace(clientId) &&
         clientId.EndsWith(".apps.googleusercontent.com", StringComparison.Ordinal);
@@ -54,5 +67,18 @@ public sealed class GoogleHealthConnectorConfiguration : BaseConnectorConfigurat
 
         if (!IsValidCallbackUrl(CallbackUrl))
             throw new ArgumentException("Google Health CallbackUrl is invalid.");
+
+        if (HistoryDays is < 1 or > 90)
+            throw new ArgumentException("Google Health LookbackDays must be between 1 and 90.");
+
+        if (!string.IsNullOrWhiteSpace(ImportFrom) &&
+            (!DateTimeOffset.TryParse(
+                 ImportFrom,
+                 CultureInfo.InvariantCulture,
+                 DateTimeStyles.RoundtripKind,
+                 out var importFrom) ||
+             importFrom < new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero) ||
+             importFrom > DateTimeOffset.UtcNow.AddDays(1)))
+            throw new ArgumentException("Google Health ImportFrom is invalid.");
     }
 }

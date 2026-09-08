@@ -167,6 +167,21 @@ export const connectorPropertyMeta = {
     description: 'HTTPS URL where the provider returns after authorization',
     category: 'Credentials',
   },
+  ImportFrom: {
+    label: 'Import From',
+    description: 'Earliest date to retrieve from the provider',
+    category: 'Sync',
+  },
+  PreviewOnly: {
+    label: 'Preview Only',
+    description: 'Inspect available data before enabling imports',
+    category: 'Advanced',
+  },
+  GrantedScopes: {
+    label: 'Granted Scopes',
+    description: 'OAuth permissions granted by the provider',
+    category: 'Credentials',
+  },
 
   // Common server/region
   Server: {

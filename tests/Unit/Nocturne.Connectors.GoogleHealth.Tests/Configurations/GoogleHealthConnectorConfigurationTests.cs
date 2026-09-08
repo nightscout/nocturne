@@ -1,6 +1,8 @@
+using System.Text.Json;
 using FluentAssertions;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Models;
+using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.GoogleHealth.Configurations;
 using Xunit;
 
@@ -42,6 +44,64 @@ public class GoogleHealthConnectorConfigurationTests
     {
         var configuration = ValidConfiguration();
         configuration.CallbackUrl = callbackUrl;
+
+        configuration.Invoking(value => value.Validate()).Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void Shared_configuration_binder_loads_health_sync_preferences()
+    {
+        using var json = JsonDocument.Parse("""
+            {
+              "lookbackDays": 30,
+              "importFrom": "2024-01-01T00:00:00+00:00",
+              "previewOnly": true,
+              "syncSteps": false,
+              "syncHeartRate": true
+            }
+            """);
+        var configuration = ValidConfiguration();
+
+        ConnectorConfigurationBinder.ApplyJsonToConfig(json, configuration);
+
+        configuration.HistoryDays.Should().Be(30);
+        configuration.ImportFrom.Should().Be("2024-01-01T00:00:00+00:00");
+        configuration.PreviewOnly.Should().BeTrue();
+        configuration.SyncSteps.Should().BeFalse();
+        configuration.SyncHeartRate.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Shared_secret_binder_loads_oauth_session_metadata()
+    {
+        var configuration = ValidConfiguration();
+
+        ConnectorConfigurationBinder.ApplySecretsToConfig(new Dictionary<string, string>
+        {
+            ["refreshToken"] = "refresh",
+            ["grantedScopes"] = "scope-a scope-b"
+        }, configuration);
+
+        configuration.RefreshToken.Should().Be("refresh");
+        configuration.GrantedScopes.Should().Be("scope-a scope-b");
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(91)]
+    public void Rejects_invalid_lookback_days(int days)
+    {
+        var configuration = ValidConfiguration();
+        configuration.HistoryDays = days;
+
+        configuration.Invoking(value => value.Validate()).Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void Rejects_invalid_import_start()
+    {
+        var configuration = ValidConfiguration();
+        configuration.ImportFrom = "not-a-date";
 
         configuration.Invoking(value => value.Validate()).Should().Throw<ArgumentException>();
     }

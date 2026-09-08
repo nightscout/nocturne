@@ -20,6 +20,8 @@ public sealed class GoogleHealthConnectorInstaller : IConnectorInstaller
             "GoogleHealth");
         services.AddSingleton<IConnectorServerResolver<GoogleHealthConnectorConfiguration>>(
             new ConnectorServerResolver<GoogleHealthConnectorConfiguration>(null, null, null));
+        services.AddScoped<IConnectorConfigurationLoader<GoogleHealthConnectorConfiguration>,
+            ConnectorConfigurationLoader<GoogleHealthConnectorConfiguration>>();
         services.TryAddSingleton<IConnectorTokenCache, ConnectorTokenCache>();
         services.TryAddSingleton<IConnectorCacheInvalidator>(provider =>
             provider.GetRequiredService<IConnectorTokenCache>());
