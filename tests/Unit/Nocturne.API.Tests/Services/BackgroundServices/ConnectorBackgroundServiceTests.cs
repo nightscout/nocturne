@@ -83,6 +83,7 @@ public class ConnectorBackgroundServiceTests
             if (n <= _hangFirstNCalls)
                 await Task.Delay(Timeout.Infinite, cancellationToken);
 
+            cancellationToken.ThrowIfCancellationRequested();
             _onSyncCompleted?.Invoke();
             return _syncResult;
         }
@@ -193,7 +194,8 @@ public class ConnectorBackgroundServiceTests
     private static IServiceProvider BuildServiceProvider(
         string connectionString,
         Mock<IConnectorConfigurationService> configServiceMock,
-        TestConnectorConfig config)
+        TestConnectorConfig config,
+        Action? onConfigLoad = null)
     {
         var services = new ServiceCollection();
 
@@ -224,7 +226,7 @@ public class ConnectorBackgroundServiceTests
 
         // Register config loader that returns the test config
         services.AddScoped<IConnectorConfigurationLoader<TestConnectorConfig>>(
-            _ => new TestConfigLoader(config));
+            _ => new TestConfigLoader(config, onConfigLoad));
 
         return services.BuildServiceProvider();
     }
@@ -706,7 +708,9 @@ public class ConnectorBackgroundServiceTests
     /// <summary>
     /// The budget is process-wide: a tenant sync in one poller holds a slot that a tenant sync in
     /// another poller has to wait for. Per-poller caps alone let the total climb with the connector
-    /// count, which is what exhausted Postgres connections in production.
+    /// count, which is what exhausted Postgres connections in production. The slot gates the tenant's
+    /// DI scope and config load, not just the sync proper — the config load is the connection the
+    /// unconfigured majority of tenants open.
     /// </summary>
     [Fact]
     public async Task SyncAllTenants_SharesTheBudgetAcrossPollers_ASecondPollerWaitsForASlot()
@@ -716,9 +720,75 @@ public class ConnectorBackgroundServiceTests
 
         var configServiceMock = BuildEnabledConfigMock();
         var config = new TestConnectorConfig { Enabled = true, SyncIntervalMinutes = 5 };
+
+        var budget = new ConnectorSyncBudget(slots: 1);
+        using var firstCts = new CancellationTokenSource();
+
+        var firstStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var first = new TestConnectorBackgroundService(
+            BuildServiceProvider(connStr, configServiceMock, config),
+            new SyncResult { Success = true },
+            NullLogger<TestConnectorBackgroundService>.Instance,
+            onSync: () => firstStarted.TrySetResult(),
+            perTenantTimeout: TimeSpan.FromSeconds(30),
+            hangFirstNCalls: 1,
+            budget: budget);
+
+        var secondConfigLoads = 0;
+        var secondDone = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var second = new TestConnectorBackgroundService(
+            BuildServiceProvider(connStr, configServiceMock, config,
+                onConfigLoad: () => Interlocked.Increment(ref secondConfigLoads)),
+            new SyncResult { Success = true },
+            NullLogger<TestConnectorBackgroundService>.Instance,
+            onSyncCompleted: () => secondDone.TrySetResult(),
+            budget: budget);
+
+        var firstRun = first.ExecuteOnceAsync(firstCts.Token);
+        try
+        {
+            (await Task.WhenAny(firstStarted.Task, Task.Delay(TimeSpan.FromSeconds(5))))
+                .Should().Be(firstStarted.Task, "the first poller must take the only slot");
+
+            var secondRun = second.ExecuteOnceAsync(CancellationToken.None);
+
+            (await Task.WhenAny(secondDone.Task, Task.Delay(TimeSpan.FromMilliseconds(500))))
+                .Should().NotBe(secondDone.Task,
+                    "the second poller's tenant must wait while the first poller holds the slot");
+            secondConfigLoads.Should().Be(0, "the slot must be held before the tenant's scope loads config");
+            budget.InFlight.Should().Be(1);
+
+            firstCts.Cancel();
+
+            (await Task.WhenAny(secondDone.Task, Task.Delay(TimeSpan.FromSeconds(5))))
+                .Should().Be(secondDone.Task, "the slot the first poller released must go to the second");
+            await secondRun;
+            secondConfigLoads.Should().Be(1);
+        }
+        finally
+        {
+            firstCts.Cancel();
+            try { await firstRun; } catch (OperationCanceledException) { }
+        }
+
+        budget.InFlight.Should().Be(0, "every lease must be returned once the syncs are over");
+    }
+
+    /// <summary>
+    /// Queueing for a slot is not the tenant's time: its <c>PerTenantSyncTimeout</c> starts once the
+    /// slot is held, so a tenant that waited longer than the timeout still gets its full sync.
+    /// </summary>
+    [Fact]
+    public async Task SyncAllTenants_StartsThePerTenantTimeout_OnlyOnceASlotIsHeld()
+    {
+        var (cleanup, connStr) = CreateSqliteDb();
+        using var _ = cleanup;
+
+        var configServiceMock = BuildEnabledConfigMock();
+        var config = new TestConnectorConfig { Enabled = true, SyncIntervalMinutes = 5 };
         var serviceProvider = BuildServiceProvider(connStr, configServiceMock, config);
 
-        using var budget = new ConnectorSyncBudget(maxConcurrentTenantSyncs: 1);
+        var budget = new ConnectorSyncBudget(slots: 1);
         using var firstCts = new CancellationTokenSource();
 
         var firstStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -737,6 +807,7 @@ public class ConnectorBackgroundServiceTests
             new SyncResult { Success = true },
             NullLogger<TestConnectorBackgroundService>.Instance,
             onSyncCompleted: () => secondDone.TrySetResult(),
+            perTenantTimeout: TimeSpan.FromMilliseconds(200),
             budget: budget);
 
         var firstRun = first.ExecuteOnceAsync(firstCts.Token);
@@ -747,15 +818,13 @@ public class ConnectorBackgroundServiceTests
 
             var secondRun = second.ExecuteOnceAsync(CancellationToken.None);
 
-            (await Task.WhenAny(secondDone.Task, Task.Delay(TimeSpan.FromMilliseconds(500))))
-                .Should().NotBe(secondDone.Task,
-                    "the second poller's tenant must wait while the first poller holds the slot");
-            budget.InFlight.Should().Be(1);
-
+            // Hold the slot for well over the second poller's timeout before releasing it.
+            await Task.Delay(TimeSpan.FromMilliseconds(800));
             firstCts.Cancel();
 
             (await Task.WhenAny(secondDone.Task, Task.Delay(TimeSpan.FromSeconds(5))))
-                .Should().Be(secondDone.Task, "the slot the first poller released must go to the second");
+                .Should().Be(secondDone.Task,
+                    "a tenant that queued longer than its timeout must still run once it holds a slot");
             await secondRun;
         }
         finally
@@ -763,12 +832,10 @@ public class ConnectorBackgroundServiceTests
             firstCts.Cancel();
             try { await firstRun; } catch (OperationCanceledException) { }
         }
-
-        budget.InFlight.Should().Be(0, "every lease must be returned once the syncs are over");
     }
 
     /// <summary>
-    /// A poller's first tick waits its stagger offset on top of <c>StartupDelay</c>, so pollers that
+    /// A poller's first tick waits its phase offset on top of <c>StartupDelay</c>, so pollers that
     /// start together do not tick together. <see cref="ExecuteAsync_RunsListenerSupervisionFromThePollLoop"/>
     /// is the control: the first poller on a budget has no offset and ticks at once.
     /// </summary>
@@ -783,16 +850,16 @@ public class ConnectorBackgroundServiceTests
             BuildEnabledConfigMock(),
             new TestConnectorConfig { Enabled = true, SyncIntervalMinutes = 5 });
 
-        using var budget = new ConnectorSyncBudget(startupStagger: TimeSpan.FromHours(1));
-        budget.NextStartupOffset();
+        var budget = new ConnectorSyncBudget(pollerCount: 2);
+        budget.NextStartupOffset(TimeSpan.FromHours(1));
 
-        var sut = new PollLoopWiringService(serviceProvider, budget);
+        var sut = new PollLoopWiringService(serviceProvider, budget, pollInterval: TimeSpan.FromHours(1));
         await sut.StartAsync(CancellationToken.None);
         try
         {
             await Task.Delay(TimeSpan.FromMilliseconds(300));
 
-            sut.Events.Should().BeEmpty("the second poller on a budget waits a stagger before its first tick");
+            sut.Events.Should().BeEmpty("the second of two pollers waits half the poll interval before its first tick");
         }
         finally
         {
@@ -1073,7 +1140,10 @@ public class ConnectorBackgroundServiceTests
     /// Runs the real ExecuteAsync poll loop with test-fast intervals, recording listener-startup
     /// passes and sync cycles in order.
     /// </summary>
-    private sealed class PollLoopWiringService(IServiceProvider serviceProvider, ConnectorSyncBudget? budget = null)
+    private sealed class PollLoopWiringService(
+        IServiceProvider serviceProvider,
+        ConnectorSyncBudget? budget = null,
+        TimeSpan? pollInterval = null)
         : ConnectorBackgroundService<TestConnectorConfig>(serviceProvider, budget ?? new ConnectorSyncBudget(), NullLogger.Instance)
     {
         private readonly TaskCompletionSource _secondSupervisionPass =
@@ -1087,7 +1157,7 @@ public class ConnectorBackgroundServiceTests
 
         protected override TimeSpan StartupDelay => TimeSpan.Zero;
 
-        protected override TimeSpan PollInterval => TimeSpan.FromMilliseconds(20);
+        protected override TimeSpan PollInterval => pollInterval ?? TimeSpan.FromMilliseconds(20);
 
         protected override TimeSpan RealtimeSupervisionInterval => TimeSpan.Zero;
 
@@ -1199,10 +1269,14 @@ public class ConnectorBackgroundServiceTests
     /// <summary>
     /// Concrete config loader that returns a preconfigured TestConnectorConfig.
     /// </summary>
-    private sealed class TestConfigLoader(TestConnectorConfig config) : IConnectorConfigurationLoader<TestConnectorConfig>
+    private sealed class TestConfigLoader(TestConnectorConfig config, Action? onLoad = null)
+        : IConnectorConfigurationLoader<TestConnectorConfig>
     {
         public Task<TestConnectorConfig> LoadForTenantAsync(CancellationToken ct)
-            => Task.FromResult(config);
+        {
+            onLoad?.Invoke();
+            return Task.FromResult(config);
+        }
     }
 
     /// <summary>

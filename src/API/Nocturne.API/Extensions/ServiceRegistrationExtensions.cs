@@ -915,11 +915,11 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IDevicePublisher, DevicePublisher>();
         services.AddScoped<IMetadataPublisher, MetadataPublisher>();
         services.AddScoped<IConnectorPublisher, InProcessConnectorPublisher>();
-        services.AddSingleton(ConnectorSyncBudget.FromConfiguration(configuration));
         services.AddConnectors(
             configuration,
             pollingService: typeof(ConnectorBackgroundService<,>)
         );
+        services.AddSingleton(ConnectorSyncBudget.FromConfiguration(configuration, services));
 
         // Demo service health monitor
         services.AddHttpClient("DemoServiceHealth");

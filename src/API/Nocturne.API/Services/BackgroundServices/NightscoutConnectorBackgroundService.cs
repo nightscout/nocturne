@@ -41,7 +41,7 @@ public class NightscoutConnectorBackgroundService
     private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(10);
 
     /// <param name="serviceProvider">Service provider used to create a DI scope per sync cycle.</param>
-    /// <param name="budget">The singleton shared by every poller in the process.</param>
+    /// <param name="budget">The process-wide budget.</param>
     /// <param name="logger">Logger instance for this background service.</param>
     public NightscoutConnectorBackgroundService(
         IServiceProvider serviceProvider,

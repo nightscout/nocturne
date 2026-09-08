@@ -70,7 +70,7 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
     /// Initialises a new <see cref="ConnectorBackgroundService{TConfig}"/>.
     /// </summary>
     /// <param name="serviceProvider">Root DI service provider; a new scope is created per tenant sync.</param>
-    /// <param name="budget">The singleton shared by every poller in the process.</param>
+    /// <param name="budget">The process-wide budget.</param>
     /// <param name="logger">Logger instance.</param>
     protected ConnectorBackgroundService(
         IServiceProvider serviceProvider,
@@ -129,7 +129,7 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
     protected virtual TimeSpan RealtimeSupervisionInterval => TimeSpan.FromMinutes(5);
 
     /// <summary>
-    /// Delay before the first poll tick, letting the application fully start. The poller's stagger
+    /// Delay before the first poll tick, letting the application fully start. The poller's phase
     /// offset from <see cref="ConnectorSyncBudget.NextStartupOffset"/> is added on top. Overridable
     /// for tests.
     /// </summary>
@@ -288,7 +288,7 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var startupDelay = StartupDelay + _budget.NextStartupOffset();
+        var startupDelay = StartupDelay + _budget.NextStartupOffset(PollInterval);
         if (startupDelay > TimeSpan.Zero)
             await Task.Delay(startupDelay, stoppingToken);
 
@@ -349,9 +349,7 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
 
         // Sync tenants concurrently so each tenant is independent: one tenant's slow or failing sync
         // must never delay or block another's. Each tenant already runs in its own DI scope (own
-        // DbContext, own tenant context), so concurrent execution is isolated. MaxConcurrentTenantSyncs
-        // caps this connector's share of the ConnectorSyncBudget, and PerTenantSyncTimeout bounds how
-        // long any single tenant can hold a slot.
+        // DbContext, own tenant context), so concurrent execution is isolated.
         await Parallel.ForEachAsync(
             tenants,
             new ParallelOptions
@@ -362,7 +360,7 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
             async (tenant, ct) =>
             {
                 // Waiting for a slot is not the tenant's time, so the timeout starts once one is held.
-                using var lease = await _budget.AcquireAsync(ct);
+                using var lease = await AcquireSlotAsync(tenant.Slug, ct);
 
                 using var tenantCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 tenantCts.CancelAfter(PerTenantSyncTimeout);
@@ -389,6 +387,30 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
                         ConnectorName, tenant.Slug);
                 }
             });
+    }
+
+    /// <summary>
+    /// How long a tenant may queue for a budget slot before the wait is reported. A saturated budget
+    /// otherwise shows only as syncs running late.
+    /// </summary>
+    protected virtual TimeSpan SlotWaitWarningAfter => TimeSpan.FromSeconds(30);
+
+    private async Task<ConnectorSyncBudget.Lease> AcquireSlotAsync(string tenantSlug, CancellationToken stoppingToken)
+    {
+        var acquire = _budget.AcquireAsync(stoppingToken);
+        if (acquire.IsCompleted)
+            return await acquire;
+
+        var pending = acquire.AsTask();
+        var started = DateTime.UtcNow;
+        while (await Task.WhenAny(pending, Task.Delay(SlotWaitWarningAfter, stoppingToken)) != pending)
+        {
+            Logger.LogWarning(
+                "{ConnectorName} sync for tenant {TenantSlug} has waited {Waited} for a sync slot; {InFlight} of {Slots} in use",
+                ConnectorName, tenantSlug, DateTime.UtcNow - started, _budget.InFlight, _budget.Slots);
+        }
+
+        return await pending;
     }
 
     private async Task SyncForTenantAsync(Guid tenantId, string tenantSlug, string displayName, CancellationToken stoppingToken)
