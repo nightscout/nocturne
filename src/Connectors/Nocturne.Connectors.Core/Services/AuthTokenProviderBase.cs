@@ -34,6 +34,8 @@ public abstract class AuthTokenProviderBase<TConfig>(
     /// </summary>
     protected virtual int TokenLifetimeBufferMinutes => 5;
 
+    protected virtual bool RethrowTokenAcquisitionExceptions => false;
+
     /// <summary>
     ///     The connector name used as the cache key prefix.
     ///     Concrete providers must supply this.
@@ -117,6 +119,8 @@ public abstract class AuthTokenProviderBase<TConfig>(
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error acquiring token for {ProviderName}", GetType().Name);
+            if (RethrowTokenAcquisitionExceptions)
+                throw;
             return null;
         }
         finally

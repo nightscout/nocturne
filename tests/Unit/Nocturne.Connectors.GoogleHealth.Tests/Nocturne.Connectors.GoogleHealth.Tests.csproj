@@ -18,6 +18,7 @@
             <PrivateAssets>all</PrivateAssets>
         </PackageReference>
         <PackageReference Include="FluentAssertions" />
+        <PackageReference Include="Moq" />
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\..\..\src\Connectors\Nocturne.Connectors.GoogleHealth\Nocturne.Connectors.GoogleHealth.csproj" />

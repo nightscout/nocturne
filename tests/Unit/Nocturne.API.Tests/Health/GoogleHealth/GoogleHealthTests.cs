@@ -7,11 +7,15 @@ using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Controllers.V4.Health;
 using Nocturne.API.Services.Health.GoogleHealth;
+using Nocturne.Connectors.Core.Services;
+using Nocturne.Connectors.GoogleHealth.Configurations;
 using Nocturne.Connectors.GoogleHealth.Services;
 using Nocturne.Core.Contracts.Health;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Health;
@@ -415,9 +419,10 @@ public class GoogleHealthTests
             return Json(JsonSerializer.Serialize(new { dataPoints = new[] { new { weight = new { sampleTime = new { physicalTime = observation }, weightGrams = grams } } } }));
         });
         var protection = new EphemeralDataProtectionProvider();
+        var tokenProvider = TokenProvider(handler, tenant);
         var service = new GoogleHealthService(db, protection, new GoogleHealthCoordinator(),
             new GoogleHealthClient(new HttpClient(handler, false)),
-            new GoogleHealthOAuthClient(new HttpClient(handler, false)));
+            tokenProvider);
         var options = Options(); options.DataTypes = ["steps", "weight"];
         await service.SaveAsync(options, subject, default);
         var auth = await service.StartAsync(subject, default);
@@ -443,6 +448,7 @@ public class GoogleHealthTests
             scopes = new[] { "openid", GoogleHealthClient.MetricsScope }
         }, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
         await db.SaveChangesAsync();
+        tokenProvider.InvalidateToken();
         grams = 73000; await service.SyncAsync(true, default);
         Assert.Equal(2, tokenCalls);
         Assert.Single(await db.GoogleHealthReadings.ToListAsync()); Assert.Equal(73m, (await db.GoogleHealthReadings.AsNoTracking().SingleAsync()).Value);
@@ -502,7 +508,7 @@ public class GoogleHealthTests
         });
         var service = new GoogleHealthService(db, new EphemeralDataProtectionProvider(), new GoogleHealthCoordinator(),
             new GoogleHealthClient(new HttpClient(handler, false)),
-            new GoogleHealthOAuthClient(new HttpClient(handler, false)));
+            TokenProvider(handler, tenant));
         await service.SaveAsync(Options(), subject, default);
         var authorization = await service.StartAsync(subject, default);
         var state = QueryHelpers.ParseQuery(new Uri(authorization.Url).Query)["state"].ToString();
@@ -577,7 +583,7 @@ public class GoogleHealthTests
         var coordinator = new GoogleHealthCoordinator();
         var original = new GoogleHealthService(db, new EphemeralDataProtectionProvider(), coordinator,
             new GoogleHealthClient(new HttpClient(handler, false)),
-            new GoogleHealthOAuthClient(new HttpClient(handler, false)));
+            TokenProvider(handler, tenant));
         var options = Options();
         await original.SaveAsync(options, subject, default);
         var authorization = await original.StartAsync(subject, default);
@@ -586,7 +592,7 @@ public class GoogleHealthTests
 
         var recovered = new GoogleHealthService(db, new EphemeralDataProtectionProvider(), coordinator,
             new GoogleHealthClient(new HttpClient(handler, false)),
-            new GoogleHealthOAuthClient(new HttpClient(handler, false)));
+            TokenProvider(handler, tenant));
         var broken = await recovered.StatusAsync(default);
         Assert.True(broken.Connected); Assert.False(broken.Configured);
         Assert.Equal("stored_google_configuration_unreadable", broken.ErrorCode);
@@ -610,9 +616,10 @@ public class GoogleHealthTests
         var tenant = Guid.NewGuid(); var subject = Guid.NewGuid(); db.TenantId = tenant;
         db.Tenants.Add(new TenantEntity { Id = tenant, Slug = "synthetic", DisplayName = "Synthetic", IsActive = true }); await db.SaveChangesAsync();
         var provider = new EphemeralDataProtectionProvider();
+        var handler = new StubHandler(_ => Json("{}"));
         var service = new GoogleHealthService(db, provider, new GoogleHealthCoordinator(),
-            new GoogleHealthClient(new HttpClient(new StubHandler(_ => Json("{}")))),
-            new GoogleHealthOAuthClient(new HttpClient(new StubHandler(_ => Json("{}")))));
+            new GoogleHealthClient(new HttpClient(handler, false)),
+            TokenProvider(handler, tenant));
         await service.SaveAsync(Options(), subject, default);
         var row = await db.GoogleHealthConnections.SingleAsync();
         var legacy = Options(); legacy.DataTypes = ["weight", "body-fat"];
@@ -699,6 +706,20 @@ public class GoogleHealthTests
 
     private static GoogleHealthOptions Options() => new() { ClientId = "synthetic.apps.googleusercontent.com", ClientSecret = "synthetic-secret", CallbackUrl = "https://example.test:8450/settings/connectors/google-health/callback", DataTypes = ["weight"] };
     private static HttpResponseMessage Json(string text) => new(HttpStatusCode.OK) { Content = new StringContent(text, Encoding.UTF8, "application/json") };
+
+    private static GoogleHealthAuthTokenProvider TokenProvider(HttpMessageHandler handler, Guid tenant)
+    {
+        var tenantAccessor = new Mock<ITenantAccessor>();
+        tenantAccessor.SetupGet(accessor => accessor.IsResolved).Returns(true);
+        tenantAccessor.SetupGet(accessor => accessor.TenantId).Returns(tenant);
+        return new GoogleHealthAuthTokenProvider(
+            new HttpClient(handler, false),
+            new ConnectorTokenCache(),
+            new ConnectorServerResolver<GoogleHealthConnectorConfiguration>(null, null, null),
+            tenantAccessor.Object,
+            NullLogger<GoogleHealthAuthTokenProvider>.Instance);
+    }
+
     private sealed class ThrowingGoogleHealthService : IGoogleHealthService
     {
         public Task<GoogleHealthStatus> StatusAsync(CancellationToken ct) => Task.FromResult(new GoogleHealthStatus());

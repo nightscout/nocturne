@@ -28,6 +28,9 @@ public sealed class GoogleHealthConnectorConfiguration : BaseConnectorConfigurat
     [ConnectorProperty(ConnectorPropertyKey.ClientSecret, Required = true, Secret = true)]
     public string? ClientSecret { get; set; }
 
+    [ConnectorProperty(ConnectorPropertyKey.RefreshToken, Secret = true, Hidden = true)]
+    public string? RefreshToken { get; set; }
+
     [ConnectorProperty(ConnectorPropertyKey.CallbackUrl, Required = true, Format = "uri")]
     public string CallbackUrl { get; set; } = string.Empty;
 

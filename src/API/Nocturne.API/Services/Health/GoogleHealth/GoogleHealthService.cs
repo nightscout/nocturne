@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Connectors.GoogleHealth.Configurations;
+using Nocturne.Connectors.GoogleHealth.Models;
 using Nocturne.Connectors.GoogleHealth.Services;
 using Nocturne.Core.Models.Health;
 using Nocturne.Core.Contracts.Health;
@@ -81,52 +82,16 @@ public sealed class GoogleHealthCoordinator
 }
 
 public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionProvider protection,
-    GoogleHealthCoordinator coordinator, GoogleHealthClient google, GoogleHealthOAuthClient oauth,
+    GoogleHealthCoordinator coordinator, GoogleHealthClient google, GoogleHealthAuthTokenProvider oauth,
     IGoogleHealthReadingWriter? writer = null,
     ILogger<GoogleHealthService>? logger = null) : IGoogleHealthService
 {
-    private sealed record Token(
-        string RefreshToken,
-        string[] Scopes,
-        string? AccessToken = null,
-        DateTimeOffset? AccessTokenExpiresAt = null);
     private static readonly TimeSpan AccessTokenSafety = TimeSpan.FromMinutes(1);
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private IDataProtector Protector => protection.CreateProtector("Nocturne.GoogleHealth.v1", db.TenantId.ToString());
     private string Protect<T>(T value) => Protector.Protect(JsonSerializer.Serialize(value, Json));
     private T Unprotect<T>(string value) => JsonSerializer.Deserialize<T>(Protector.Unprotect(value), Json) ?? throw new JsonException();
     private Task<GoogleHealthConnectionEntity?> Connection(CancellationToken ct) => db.GoogleHealthConnections.SingleOrDefaultAsync(ct);
-
-    private static string RequiredString(JsonElement response, string name, string stage)
-    {
-        if (!response.TryGetProperty(name, out var value) || value.ValueKind != JsonValueKind.String ||
-            string.IsNullOrWhiteSpace(value.GetString()))
-            throw new GoogleHealthException("invalid_token_response", stage: stage);
-        return value.GetString()!;
-    }
-
-    private static int RequiredExpiresIn(JsonElement response, string stage)
-    {
-        if (!response.TryGetProperty("expires_in", out var value) || !value.TryGetInt32(out var seconds) || seconds <= 0)
-            throw new GoogleHealthException("invalid_token_response", stage: stage);
-        return seconds;
-    }
-
-    private static void ValidateTokenType(JsonElement response, string stage)
-    {
-        if (response.TryGetProperty("token_type", out var value) &&
-            (value.ValueKind != JsonValueKind.String ||
-             !string.Equals(value.GetString(), "Bearer", StringComparison.OrdinalIgnoreCase)))
-            throw new GoogleHealthException("invalid_token_response", stage: stage);
-    }
-
-    private static string[] ResponseScopes(JsonElement response, string[] fallback)
-    {
-        if (!response.TryGetProperty("scope", out var value) || value.ValueKind != JsonValueKind.String)
-            return fallback;
-        return (value.GetString() ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Distinct(StringComparer.Ordinal).ToArray();
-    }
 
     private static string EncodeError(string code, IEnumerable<string>? dataTypes = null)
     {
@@ -169,25 +134,34 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
         return status;
     }
 
-    private async Task<Token> RefreshSessionAsync(GoogleHealthOptions settings, Token token, CancellationToken ct)
+    private static GoogleHealthConnectorConfiguration ConnectorConfiguration(
+        GoogleHealthOptions settings,
+        string? refreshToken = null) => new()
     {
-        var response = await oauth.RefreshAccessTokenAsync(new()
-        {
-            ["grant_type"] = "refresh_token", ["refresh_token"] = token.RefreshToken,
-            ["client_id"] = settings.ClientId, ["client_secret"] = settings.ClientSecret!
-        }, ct);
-        ValidateTokenType(response, "token_refresh");
-        var access = RequiredString(response, "access_token", "token_refresh");
-        var expiresIn = RequiredExpiresIn(response, "token_refresh");
-        var scopes = ResponseScopes(response, token.Scopes);
-        var refresh = token.RefreshToken;
-        if (response.TryGetProperty("refresh_token", out var replacement))
-        {
-            if (replacement.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(replacement.GetString()))
-                throw new GoogleHealthException("invalid_token_response", stage: "token_refresh");
-            refresh = replacement.GetString()!;
-        }
-        return new Token(refresh, scopes, access, DateTimeOffset.UtcNow.AddSeconds(expiresIn));
+        ClientId = settings.ClientId,
+        ClientSecret = settings.ClientSecret,
+        CallbackUrl = settings.CallbackUrl,
+        RefreshToken = refreshToken
+    };
+
+    private async Task<GoogleHealthTokenSession> RefreshSessionAsync(
+        GoogleHealthOptions settings,
+        GoogleHealthTokenSession token,
+        CancellationToken ct,
+        bool forceRefresh = false)
+    {
+        await oauth.SeedSessionAsync(token);
+        if (forceRefresh)
+            oauth.InvalidateToken();
+
+        var accessToken = await oauth.GetValidTokenAsync(
+            ConnectorConfiguration(settings, token.RefreshToken),
+            ct);
+        if (string.IsNullOrWhiteSpace(accessToken))
+            throw new GoogleHealthException("invalid_token_response", stage: "token_refresh");
+
+        return await oauth.GetCurrentSessionAsync() ??
+               throw new GoogleHealthException("invalid_token_response", stage: "token_cache");
     }
 
     public async Task<GoogleHealthStatus> StatusAsync(CancellationToken ct)
@@ -214,10 +188,10 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
             .Distinct(StringComparer.Ordinal)
             .ToArray();
         var selectionIsValid = selectedTypes.Length == settings.DataTypes.Length;
-        Token? token;
+        GoogleHealthTokenSession? token;
         try
         {
-            token = row.ProtectedToken is null ? null : Unprotect<Token>(row.ProtectedToken);
+            token = row.ProtectedToken is null ? null : Unprotect<GoogleHealthTokenSession>(row.ProtectedToken);
             if (token is not null && (string.IsNullOrWhiteSpace(token.RefreshToken) || token.Scopes is null)) throw new JsonException();
         }
         catch (Exception ex) when (ex is CryptographicException or JsonException or FormatException)
@@ -320,36 +294,28 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
             var row = await Connection(ct) ?? throw new GoogleHealthException("configure_first");
             if (row.SubjectId != subject || row.ProtectedSettings != flow.Settings) throw new GoogleHealthException("expired_signin");
             var settings = Unprotect<GoogleHealthOptions>(row.ProtectedSettings);
-            var response = await oauth.ExchangeAuthorizationCodeAsync(new()
-            {
-                ["grant_type"] = "authorization_code", ["code"] = callback.Code,
-                ["code_verifier"] = flow.Verifier, ["client_id"] = settings.ClientId,
-                ["client_secret"] = settings.ClientSecret!, ["redirect_uri"] = settings.CallbackUrl
-            }, ct);
-            ValidateTokenType(response, "authorization_code");
-            var access = RequiredString(response, "access_token", "authorization_code");
-            var expiresIn = RequiredExpiresIn(response, "authorization_code");
             var requestedScopes = GoogleHealthClient.SupportedTypes.Select(GoogleHealthClient.ScopeFor).Append("openid")
                 .Distinct(StringComparer.Ordinal).ToArray();
-            var scopes = ResponseScopes(response, requestedScopes);
-            if (!response.TryGetProperty("refresh_token", out var refreshValue) ||
-                refreshValue.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(refreshValue.GetString()))
-                throw new GoogleHealthException("offline_access_required", stage: "authorization_code");
-            var refresh = refreshValue.GetString()!;
-            var account = await oauth.AccountKeyAsync(access, ct);
+            var token = await oauth.ExchangeAuthorizationCodeAsync(
+                ConnectorConfiguration(settings),
+                callback.Code,
+                flow.Verifier,
+                requestedScopes,
+                ct);
+            var account = await oauth.AccountKeyAsync(token.AccessToken!, ct);
             if (row.AccountKey is not null && row.AccountKey != account)
             {
-                await oauth.RevokeAsync(refresh, ct);
+                await oauth.RevokeAsync(token.RefreshToken, ct);
                 throw new GoogleHealthException("account_mismatch");
             }
-            var now = DateTimeOffset.UtcNow;
             var missingScopes = GoogleHealthClient.SupportedTypes
-                .Where(type => !scopes.Contains(GoogleHealthClient.ScopeFor(type), StringComparer.Ordinal)).ToArray();
+                .Where(type => !token.Scopes.Contains(GoogleHealthClient.ScopeFor(type), StringComparer.Ordinal)).ToArray();
             row.AccountKey = account;
-            row.ProtectedToken = Protect(new Token(refresh, scopes, access, now.AddSeconds(expiresIn)));
+            row.ProtectedToken = Protect(token);
             row.NextAttempt = null; row.LastAttempt = null;
             row.ErrorCode = missingScopes.Length == 0 ? null : EncodeError("partial_consent", missingScopes);
             await db.SaveChangesAsync(ct);
+            await oauth.StoreSessionAsync(token);
         }
         catch (Exception ex) when (ex is GoogleHealthException or HttpRequestException or JsonException or TaskCanceledException)
         {
@@ -380,14 +346,15 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
             var row = await Connection(ct);
             if (row is null) return;
             if (row.SubjectId != subject) throw new GoogleHealthException("connection_owner_required");
-            Token? token = null;
+            GoogleHealthTokenSession? token = null;
             var revokeFailed = false;
             if (row.ProtectedToken is not null)
-                try { token = Unprotect<Token>(row.ProtectedToken); }
+                try { token = Unprotect<GoogleHealthTokenSession>(row.ProtectedToken); }
                 catch (Exception ex) when (ex is CryptographicException or JsonException or FormatException) { revokeFailed = true; }
             row.ProtectedToken = null; row.ErrorCode = revokeFailed ? "revoke_in_google" : null; row.NextAttempt = null;
             coordinator.Flows.TryRemove(db.TenantId, out _);
             await db.SaveChangesAsync(ct);
+            oauth.InvalidateToken();
             if (token is not null)
             {
                 try { if (!await oauth.RevokeAsync(token.RefreshToken, ct)) row.ErrorCode = "revoke_in_google"; }
@@ -430,7 +397,7 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
             if (row.SubjectId != subject) throw new GoogleHealthException("connection_owner_required");
             if (row.ProtectedToken is null) throw new GoogleHealthException("configure_first");
             var settings = Unprotect<GoogleHealthOptions>(row.ProtectedSettings);
-            var token = Unprotect<Token>(row.ProtectedToken);
+            var token = Unprotect<GoogleHealthTokenSession>(row.ProtectedToken);
             var now = DateTimeOffset.UtcNow;
             if (string.IsNullOrWhiteSpace(token.AccessToken) || token.AccessTokenExpiresAt is null ||
                 token.AccessTokenExpiresAt <= now.Add(AccessTokenSafety))
@@ -504,11 +471,11 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
             {
                 stage = "session_read";
                 GoogleHealthOptions settings;
-                Token token;
+                GoogleHealthTokenSession token;
                 try
                 {
                     settings = Unprotect<GoogleHealthOptions>(row.ProtectedSettings);
-                    token = Unprotect<Token>(row.ProtectedToken);
+                    token = Unprotect<GoogleHealthTokenSession>(row.ProtectedToken);
                     if (settings.DataTypes is null || string.IsNullOrWhiteSpace(token.RefreshToken) || token.Scopes is null)
                         throw new JsonException();
                 }
@@ -563,7 +530,7 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
                         db.TenantId, first.DataType);
                     stage = "token_refresh";
                     coordinator.Report(db.TenantId, "refreshing_session");
-                    token = await RefreshSessionAsync(settings, token, ct);
+                    token = await RefreshSessionAsync(settings, token, ct, forceRefresh: true);
                     access = token.AccessToken!;
                     row.ProtectedToken = Protect(token);
                     await db.SaveChangesAsync(ct);
@@ -632,7 +599,11 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
                     row.NextAttempt = null;
                     if (error.RetryAfter is { } delay && delay > TimeSpan.Zero)
                         row.NextAttempt = DateTimeOffset.UtcNow.Add(delay > TimeSpan.FromDays(7) ? TimeSpan.FromDays(7) : delay);
-                    if (error.Message == "reconnect_required") row.ProtectedToken = null;
+                    if (error.Message == "reconnect_required")
+                    {
+                        row.ProtectedToken = null;
+                        oauth.InvalidateToken();
+                    }
                     await db.SaveChangesAsync(ct);
                 }
             }
