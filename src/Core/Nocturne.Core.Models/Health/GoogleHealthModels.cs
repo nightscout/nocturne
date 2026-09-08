@@ -1,6 +1,33 @@
 using System.ComponentModel.DataAnnotations;
+using System.Runtime.Serialization;
+using System.Text.Json.Serialization;
 
 namespace Nocturne.Core.Models.Health;
+
+[JsonConverter(typeof(JsonStringEnumConverter<GoogleHealthSyncPhase>))]
+public enum GoogleHealthSyncPhase
+{
+    [EnumMember(Value = "queued"), JsonStringEnumMemberName("queued")]
+    Queued,
+
+    [EnumMember(Value = "preparing"), JsonStringEnumMemberName("preparing")]
+    Preparing,
+
+    [EnumMember(Value = "refreshing_session"), JsonStringEnumMemberName("refreshing_session")]
+    RefreshingSession,
+
+    [EnumMember(Value = "reading"), JsonStringEnumMemberName("reading")]
+    Reading,
+
+    [EnumMember(Value = "validating"), JsonStringEnumMemberName("validating")]
+    Validating,
+
+    [EnumMember(Value = "saving"), JsonStringEnumMemberName("saving")]
+    Saving,
+
+    [EnumMember(Value = "integrating"), JsonStringEnumMemberName("integrating")]
+    Integrating
+}
 
 public class GoogleHealthOptions
 {
@@ -32,7 +59,7 @@ public class GoogleHealthStatus
     public string[] ErrorDataTypes { get; set; } = [];
     public bool PreviewRequired { get; set; }
     public bool IsSyncing { get; set; }
-    public string? SyncPhase { get; set; }
+    public GoogleHealthSyncPhase? SyncPhase { get; set; }
     public string? SyncDataType { get; set; }
     public int SyncCompletedDataTypes { get; set; }
     public int SyncTotalDataTypes { get; set; }

@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { resolve } from "$app/paths";
   import { ArrowLeft, HeartPulse, RefreshCw, Unplug } from "lucide-svelte";
-  import type { GoogleHealthPreview, GoogleHealthStatus } from "$lib/api";
+  import { GoogleHealthSyncPhase, type GoogleHealthPreview, type GoogleHealthStatus } from "$lib/api";
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
   import { Progress } from "$lib/components/ui/progress";
@@ -74,12 +74,12 @@
   }
   function syncPhase() {
     if (!status?.isSyncing) return "";
-    if (status.syncPhase === "queued") return "Waiting for the background worker";
-    if (status.syncPhase === "refreshing_session") return "Refreshing the Google session";
-    if (status.syncPhase === "reading") return status.syncDataType ? `Reading ${labels[status.syncDataType] ?? status.syncDataType}` : "Reading Google Health data";
-    if (status.syncPhase === "validating") return "Validating the downloaded data";
-    if (status.syncPhase === "saving") return "Saving the imported measurements";
-    if (status.syncPhase === "integrating") return "Updating Nocturne health records";
+    if (status.syncPhase === GoogleHealthSyncPhase.Queued) return "Waiting for the background worker";
+    if (status.syncPhase === GoogleHealthSyncPhase.RefreshingSession) return "Refreshing the Google session";
+    if (status.syncPhase === GoogleHealthSyncPhase.Reading) return status.syncDataType ? `Reading ${labels[status.syncDataType] ?? status.syncDataType}` : "Reading Google Health data";
+    if (status.syncPhase === GoogleHealthSyncPhase.Validating) return "Validating the downloaded data";
+    if (status.syncPhase === GoogleHealthSyncPhase.Saving) return "Saving the imported measurements";
+    if (status.syncPhase === GoogleHealthSyncPhase.Integrating) return "Updating Nocturne health records";
     return "Preparing the import";
   }
   async function pollSync() {

@@ -20,7 +20,7 @@ public sealed class GoogleHealthCoordinator
 {
     internal sealed record Flow(string State, string Verifier, Guid SubjectId, string Settings, DateTimeOffset Expires);
     internal sealed record SyncProgress(
-        string Phase,
+        GoogleHealthSyncPhase Phase,
         string? DataType,
         int CompletedDataTypes,
         int TotalDataTypes,
@@ -38,7 +38,7 @@ public sealed class GoogleHealthCoordinator
 
     internal bool Queue(Guid tenant, int totalDataTypes)
     {
-        if (!syncProgress.TryAdd(tenant, new("queued", null, 0, totalDataTypes, 0))) return false;
+        if (!syncProgress.TryAdd(tenant, new(GoogleHealthSyncPhase.Queued, null, 0, totalDataTypes, 0))) return false;
         if (syncRequests.Writer.TryWrite(tenant)) return true;
         syncProgress.TryRemove(tenant, out _);
         return false;
@@ -48,12 +48,14 @@ public sealed class GoogleHealthCoordinator
         syncRequests.Reader.ReadAllAsync(ct);
 
     internal bool StartQueued(Guid tenant) => Update(tenant, current =>
-        current.Phase == "queued" ? current with { Phase = "preparing" } : null);
+        current.Phase == GoogleHealthSyncPhase.Queued
+            ? current with { Phase = GoogleHealthSyncPhase.Preparing }
+            : null);
 
     internal bool StartScheduled(Guid tenant) =>
-        syncProgress.TryAdd(tenant, new("preparing", null, 0, 0, 0));
+        syncProgress.TryAdd(tenant, new(GoogleHealthSyncPhase.Preparing, null, 0, 0, 0));
 
-    internal void Report(Guid tenant, string phase, string? dataType = null,
+    internal void Report(Guid tenant, GoogleHealthSyncPhase phase, string? dataType = null,
         int? completedDataTypes = null, int? totalDataTypes = null, int? pagesRead = null) =>
         Update(tenant, current => current with
         {
@@ -126,7 +128,7 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
         status.SyncPagesRead = progress.PagesRead;
         status.SyncProgressPercent = progress.Phase switch
         {
-            "saving" or "integrating" => 95,
+            GoogleHealthSyncPhase.Saving or GoogleHealthSyncPhase.Integrating => 95,
             _ when progress.TotalDataTypes > 0 =>
                 Math.Min(90, progress.CompletedDataTypes * 90 / progress.TotalDataTypes),
             _ => null
@@ -490,7 +492,7 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
                     token.AccessTokenExpiresAt <= now.Add(AccessTokenSafety))
                 {
                     stage = "token_refresh";
-                    coordinator.Report(db.TenantId, "refreshing_session");
+                    coordinator.Report(db.TenantId, GoogleHealthSyncPhase.RefreshingSession);
                     token = await RefreshSessionAsync(settings, token, ct);
                     access = token.AccessToken!;
                     row.ProtectedToken = Protect(token);
@@ -499,7 +501,7 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
                 stage = "scope_validation";
                 var active = settings.DataTypes.Where(t => token.Scopes.Contains(GoogleHealthClient.ScopeFor(t))).ToArray();
                 if (active.Length == 0) throw new GoogleHealthException("permission_denied", stage: "scope_validation");
-                coordinator.Report(db.TenantId, "reading", totalDataTypes: active.Length);
+                coordinator.Report(db.TenantId, GoogleHealthSyncPhase.Reading, totalDataTypes: active.Length);
                 var to = DateTimeOffset.UtcNow; var from = settings.ImportFrom ?? to.AddDays(-settings.HistoryDays);
                 async Task<(List<GoogleHealthReading> Readings, List<Nocturne.Core.Models.SleepSession> SleepSessions)> ReadAllAsync()
                 {
@@ -508,11 +510,11 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
                     for (var index = 0; index < active.Length; index++)
                     {
                         var type = active[index];
-                        coordinator.Report(db.TenantId, "reading", type, index, active.Length, 0);
-                        void PageRead(int pages) => coordinator.Report(db.TenantId, "reading", type, index, active.Length, pages);
+                        coordinator.Report(db.TenantId, GoogleHealthSyncPhase.Reading, type, index, active.Length, 0);
+                        void PageRead(int pages) => coordinator.Report(db.TenantId, GoogleHealthSyncPhase.Reading, type, index, active.Length, pages);
                         if (type == "sleep") sleepSessions.AddRange(await google.ReadSleepAsync(access, from, to, ct, PageRead));
                         else result.AddRange(await google.ReadAsync(access, type, from, to, ct, PageRead));
-                        coordinator.Report(db.TenantId, "reading", type, index + 1, active.Length);
+                        coordinator.Report(db.TenantId, GoogleHealthSyncPhase.Reading, type, index + 1, active.Length);
                     }
                     return (result, sleepSessions);
                 }
@@ -529,7 +531,7 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
                         "Google Health access token was rejected early for tenant {TenantId}, data type {DataType}; refreshing the session once",
                         db.TenantId, first.DataType);
                     stage = "token_refresh";
-                    coordinator.Report(db.TenantId, "refreshing_session");
+                    coordinator.Report(db.TenantId, GoogleHealthSyncPhase.RefreshingSession);
                     token = await RefreshSessionAsync(settings, token, ct, forceRefresh: true);
                     access = token.AccessToken!;
                     row.ProtectedToken = Protect(token);
@@ -547,7 +549,7 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
                     }
                 }
                 stage = "data_validation";
-                coordinator.Report(db.TenantId, "validating");
+                coordinator.Report(db.TenantId, GoogleHealthSyncPhase.Validating);
                 if (readings.Select(GoogleHealthClient.Key).Distinct().Count() != readings.Count)
                     throw new GoogleHealthException("duplicate_google_data", stage: "data_validation");
                 if (sleepSessions.Select(session => session.OriginalId).Distinct(StringComparer.Ordinal).Count() != sleepSessions.Count)
@@ -562,7 +564,7 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
                 var missingConsent = settings.DataTypes.Except(active, StringComparer.Ordinal).ToArray();
                 var strategy = db.Database.CreateExecutionStrategy();
                 stage = "database_write";
-                coordinator.Report(db.TenantId, "saving");
+                coordinator.Report(db.TenantId, GoogleHealthSyncPhase.Saving);
                 await strategy.ExecuteAsync(async () =>
                 {
                     foreach (var replacement in replacements)
@@ -580,7 +582,7 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
                     await db.SaveChangesAsync(ct); await transaction.CommitAsync(ct);
                 });
                 stage = "native_write";
-                coordinator.Report(db.TenantId, "integrating");
+                coordinator.Report(db.TenantId, GoogleHealthSyncPhase.Integrating);
                 if (writer is not null) await writer.WriteAsync(readings, sleepSessions, active, from, to, ct);
                 stage = "complete";
             }

@@ -28,6 +28,14 @@ namespace Nocturne.API.Tests.Health.GoogleHealth;
 public class GoogleHealthTests
 {
     [Fact]
+    public void Sync_phase_uses_the_stable_wire_value()
+    {
+        Assert.Equal(
+            "\"refreshing_session\"",
+            JsonSerializer.Serialize(GoogleHealthSyncPhase.RefreshingSession));
+    }
+
+    [Fact]
     public void Maps_google_sleep_session_and_stages_to_nocturne_sleep()
     {
         using var doc = JsonDocument.Parse("""
@@ -325,10 +333,10 @@ public class GoogleHealthTests
         Assert.True(await requests.MoveNextAsync());
         Assert.Equal(tenant, requests.Current);
         Assert.True(coordinator.StartQueued(tenant));
-        coordinator.Report(tenant, "reading", "steps", 1, 4, 3);
+        coordinator.Report(tenant, GoogleHealthSyncPhase.Reading, "steps", 1, 4, 3);
 
         var progress = Assert.IsType<GoogleHealthCoordinator.SyncProgress>(coordinator.Progress(tenant));
-        Assert.Equal("reading", progress.Phase);
+        Assert.Equal(GoogleHealthSyncPhase.Reading, progress.Phase);
         Assert.Equal("steps", progress.DataType);
         Assert.Equal(1, progress.CompletedDataTypes);
         Assert.Equal(4, progress.TotalDataTypes);

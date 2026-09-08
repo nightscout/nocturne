@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
-import type { GoogleHealthStatus } from "$lib/api";
+import { GoogleHealthSyncPhase, type GoogleHealthStatus } from "$lib/api";
 import { googleHealthMocks } from "$lib/test-stubs/google-health";
 
 vi.mock("$lib/api/generated/googleHealths.generated.remote", async () =>
@@ -167,7 +167,7 @@ describe("Google Health connector page", () => {
 
   it("shows server-side progress while a large import continues in the background", async () => {
     googleHealthMocks.status.mockResolvedValue(status({
-      configured: true, connected: true, isSyncing: true, syncPhase: "reading", syncDataType: "steps",
+      configured: true, connected: true, isSyncing: true, syncPhase: GoogleHealthSyncPhase.Reading, syncDataType: "steps",
       syncCompletedDataTypes: 1, syncTotalDataTypes: 4, syncPagesRead: 12, syncProgressPercent: 22,
     }));
     render(GoogleHealthPage);
