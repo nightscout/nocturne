@@ -14,6 +14,7 @@ using Nocturne.API.Services.DevOnly;
 using Nocturne.API.Services.Docs;
 using Nocturne.API.Services.Health.GoogleHealth;
 using Nocturne.API.Services.Seeding;
+using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Audit;
@@ -155,9 +156,8 @@ builder.Services.AddScoped<IGoogleHealthService, GoogleHealthService>();
 builder.Services.AddScoped<IGoogleHealthReadingWriter, GoogleHealthReadingWriter>();
 builder.Services.AddHttpClient<GoogleHealthClient>(client =>
 {
-    client.Timeout = TimeSpan.FromSeconds(45);
     client.MaxResponseContentBufferSize = 16 * 1024 * 1024;
-}).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+}).ConfigureConnectorClient(null, timeout: TimeSpan.FromSeconds(45));
 builder.Services.AddHostedService<GoogleHealthWorker>();
 
 // Consumed by the dev-only admin controllers (Development) and the demo admin
