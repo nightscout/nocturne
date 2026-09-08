@@ -12,10 +12,12 @@ using Xunit;
 namespace Nocturne.Infrastructure.Data.Tests;
 
 /// <summary>
-/// Pins the single change-detection pass per save. <c>UpdateTimestamps</c>, the
-/// <see cref="MutationAuditInterceptor"/> and EF's own pre-save check each used to trigger a full
-/// <c>DetectChanges</c>, so every jsonb column of every tracked entity was parsed three times per
-/// save. The store is in-memory SQLite so the persisted row, not just the tracker, is observable.
+/// Covers the single change-detection pass a save runs, and the stamps that depend on it.
+/// <c>UpdateTimestamps</c>, the <see cref="MutationAuditInterceptor"/> and EF's own pre-save check
+/// each enumerate the change tracker, so detection has to happen once up front and be off for the
+/// rest of the save; a stamp applied to a modified row after that point only reaches the UPDATE
+/// because it is written through the tracker. Every store here carries the audit interceptor and
+/// is in-memory SQLite, so the persisted row is observable, not just the tracker.
 /// </summary>
 [Trait("Category", "Unit")]
 public class SaveChangesChangeDetectionTests : IDisposable
@@ -48,8 +50,7 @@ public class SaveChangesChangeDetectionTests : IDisposable
     [Fact]
     public async Task Save_RestoresAutoDetectChanges()
     {
-        var tenantId = Guid.NewGuid();
-        var db = NewStore(tenantId);
+        var db = NewStore(Guid.NewGuid());
 
         await using var ctx = db.CreateContext();
         ctx.Foods.Add(new FoodEntity { Id = Guid.CreateVersion7() });
@@ -62,9 +63,9 @@ public class SaveChangesChangeDetectionTests : IDisposable
     [Fact]
     public async Task FailedSave_RestoresAutoDetectChanges()
     {
-        var db = NewStore();
+        var db = NewStore(Guid.NewGuid());
 
-        await using var ctx = db.CreateContext(); // no tenant resolved
+        await using var ctx = db.CreateContext(Guid.Empty); // no tenant resolved
         ctx.Foods.Add(new FoodEntity { Id = Guid.CreateVersion7() });
 
         var act = () => ctx.SaveChangesAsync();
@@ -152,35 +153,96 @@ public class SaveChangesChangeDetectionTests : IDisposable
         {
             var schedule = await verify.BasalSchedules.SingleAsync(s => s.Id == id);
             schedule.SysUpdatedAt.Should().BeAfter(stampedOnInsert,
-                "the single detection pass still flags a real modification, and the stamp written "
-                + "through the tracker still reaches the UPDATE");
+                "sys_updated_at written through the tracker still reaches the UPDATE");
             (await verify.MutationAuditLog.CountAsync()).Should().Be(1);
         }
     }
 
     [Fact]
-    public void EveryTimestampMarkerProperty_IsMapped()
+    public async Task EntityTimestamped_ModifyStillBumpsUpdatedAt()
+    {
+        var db = NewStore(Guid.NewGuid());
+        var id = Guid.CreateVersion7();
+
+        await using (var ctx = db.CreateContext())
+        {
+            ctx.Subjects.Add(new SubjectEntity { Id = id, Name = "original" });
+            await ctx.SaveChangesAsync();
+        }
+
+        DateTime stampedOnInsert;
+        await using (var ctx = db.CreateContext())
+        {
+            var subject = await ctx.Subjects.SingleAsync(s => s.Id == id);
+            stampedOnInsert = subject.UpdatedAt;
+
+            subject.Name = "renamed";
+            await Task.Delay(5);
+            await ctx.SaveChangesAsync();
+        }
+
+        await using (var verify = db.CreateContext())
+        {
+            var subject = await verify.Subjects.SingleAsync(s => s.Id == id);
+            subject.UpdatedAt.Should().BeAfter(stampedOnInsert,
+                "updated_at written through the tracker still reaches the UPDATE");
+        }
+    }
+
+    [Fact]
+    public async Task ClockFace_ModifyStillBumpsItsNullableUpdatedAt()
+    {
+        var tenantId = Guid.NewGuid();
+        var db = NewStore(tenantId);
+        var id = Guid.CreateVersion7();
+
+        await using (var ctx = db.CreateContext())
+        {
+            ctx.ClockFaces.Add(new ClockFaceEntity { Id = id, Name = "original" });
+            await ctx.SaveChangesAsync();
+        }
+
+        DateTime stampedOnInsert;
+        await using (var ctx = db.CreateContext())
+        {
+            var clockFace = await ctx.ClockFaces.SingleAsync(c => c.Id == id);
+            stampedOnInsert = clockFace.UpdatedAt!.Value;
+
+            clockFace.Name = "renamed";
+            await Task.Delay(5);
+            await ctx.SaveChangesAsync();
+        }
+
+        await using (var verify = db.CreateContext())
+        {
+            var clockFace = await verify.ClockFaces.SingleAsync(c => c.Id == id);
+            clockFace.UpdatedAt!.Value.Should().BeAfter(stampedOnInsert,
+                "the entity-specific updated_at written through the tracker still reaches the UPDATE");
+        }
+    }
+
+    [Fact]
+    public void EveryTrackerWrittenStamp_IsMapped()
     {
         using var ctx = OfflineDbContext.Create();
 
-        var markers = new (Type Marker, string Property)[]
+        // UpdateTimestamps looks these up by name on the change tracker, which throws on a
+        // property the model does not map.
+        var markers = new (Type Owner, string Property)[]
         {
-            (typeof(ISystemCreated), nameof(ISystemCreated.SysCreatedAt)),
             (typeof(ISystemTimestamped), nameof(ISystemTimestamped.SysUpdatedAt)),
-            (typeof(IEntityCreated), nameof(IEntityCreated.CreatedAt)),
             (typeof(IEntityTimestamped), nameof(IEntityTimestamped.UpdatedAt)),
+            (typeof(ClockFaceEntity), nameof(ClockFaceEntity.UpdatedAt)),
         };
 
-        // UpdateTimestamps stamps these through the change tracker, which throws on a property the
-        // model does not map.
-        foreach (var (marker, property) in markers)
+        foreach (var (owner, property) in markers)
         {
             var unmapped = ctx.Model.GetEntityTypes()
-                .Where(t => marker.IsAssignableFrom(t.ClrType) && t.FindProperty(property) is null)
+                .Where(t => owner.IsAssignableFrom(t.ClrType) && t.FindProperty(property) is null)
                 .Select(t => t.ClrType.Name)
                 .ToList();
 
-            unmapped.Should().BeEmpty($"{property} must be mapped on every {marker.Name}");
+            unmapped.Should().BeEmpty($"{property} must be mapped on every {owner.Name}");
         }
     }
 
@@ -201,15 +263,13 @@ public class SaveChangesChangeDetectionTests : IDisposable
     }
 
     /// <summary>
-    /// An isolated SQLite store carrying the audit interceptor, so a save runs the same three
-    /// <c>Entries()</c> walks production does.
+    /// An isolated SQLite store carrying the audit interceptor, so a save walks the change tracker
+    /// as many times as it does in production.
     /// </summary>
-    private SqliteTestDatabase NewStore(Guid? tenantId = null)
+    private SqliteTestDatabase NewStore(Guid tenantId)
     {
-        var interceptor = new MutationAuditInterceptor(Mock.Of<IHttpContextAccessor>());
-        var db = tenantId is null
-            ? TestDbContextFactory.CreateSqlite()
-            : TestDbContextFactory.CreateSqliteWithTenant(tenantId.Value, "test", interceptor);
+        var db = TestDbContextFactory.CreateSqliteWithTenant(
+            tenantId, "test", new MutationAuditInterceptor(Mock.Of<IHttpContextAccessor>()));
         _databases.Add(db);
         return db;
     }

@@ -2517,14 +2517,15 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     /// <summary>
     /// Runs the single change-detection pass a save needs, then disables auto-detection for the
-    /// rest of it. Left enabled, detection repeats for every <c>ChangeTracker.Entries()</c> call in
-    /// the pipeline — <see cref="UpdateTimestamps"/>, then
-    /// <see cref="Interceptors.MutationAuditInterceptor"/>, then EF's own pass — and each pass
-    /// re-parses two <c>JsonDocument</c>s per jsonb column of every tracked entity through
-    /// <see cref="JsonbStringComparer"/>. Everything downstream must therefore record its writes
-    /// through the change tracker rather than by assigning CLR properties.
-    /// A caller that has already disabled detection is left alone: nothing is detected on its
-    /// behalf, exactly as before.
+    /// rest of it. Enabled, detection repeats for every <c>ChangeTracker.Entries()</c> call in the
+    /// pipeline — <see cref="UpdateTimestamps"/>, then
+    /// <see cref="Interceptors.MutationAuditInterceptor"/>, then EF's own pass — and every pass
+    /// re-parses two <c>JsonDocument</c>s per jsonb column of every entity whose value keeps
+    /// comparing equal, through <see cref="JsonbStringComparer"/>. The cost of detecting once is
+    /// that a modification made after this point must be recorded through the change tracker;
+    /// see <see cref="Stamp"/>.
+    /// A caller that has already disabled detection keeps its own contract: nothing is detected on
+    /// its behalf and its value is what gets restored.
     /// </summary>
     /// <returns>The value <c>AutoDetectChangesEnabled</c> must be restored to once the save ends.</returns>
     private bool DetectChangesOnceForSave()
@@ -2562,9 +2563,9 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             var stampUpdated = isAdded || HasNonTimestampModification(entry);
 
             // System tracking columns (sys_created_at / sys_updated_at) on tenant data.
-            if (isAdded && entry.Entity is ISystemCreated)
+            if (isAdded && entry.Entity is ISystemCreated systemCreated)
             {
-                Stamp(entry, nameof(ISystemCreated.SysCreatedAt), utcNow);
+                systemCreated.SysCreatedAt = utcNow;
             }
             if (stampUpdated && entry.Entity is ISystemTimestamped)
             {
@@ -2572,9 +2573,9 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             }
 
             // Auth/identity tables use the created_at / updated_at convention instead.
-            if (isAdded && entry.Entity is IEntityCreated)
+            if (isAdded && entry.Entity is IEntityCreated entityCreated)
             {
-                Stamp(entry, nameof(IEntityCreated.CreatedAt), utcNow);
+                entityCreated.CreatedAt = utcNow;
             }
             if (stampUpdated && entry.Entity is IEntityTimestamped)
             {
@@ -2586,9 +2587,10 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     }
 
     /// <summary>
-    /// Writes a timestamp through the change tracker. <see cref="DetectChangesOnceForSave"/> has
-    /// already turned auto-detection off by the time this runs, so a plain CLR assignment would
-    /// never be flagged modified and would never reach the UPDATE.
+    /// Writes a timestamp through the change tracker, which is how a modified row's stamp reaches
+    /// the UPDATE now that <see cref="DetectChangesOnceForSave"/> has turned auto-detection off.
+    /// Only the modify path needs it: an added row is inserted from its CLR values whatever the
+    /// modified flags say, so those stamps are plain assignments.
     /// </summary>
     private static void Stamp(EntityEntry entry, string propertyName, object value)
         => entry.Property(propertyName).CurrentValue = value;
@@ -2708,12 +2710,12 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
                 Stamp(entry, nameof(ClockFaceEntity.UpdatedAt), utcNow);
                 break;
             // Mirror of sys_created_at on a DateTimeOffset column, set on insert only.
-            case ConnectorConfigurationEntity when isAdded:
-                Stamp(entry, nameof(ConnectorConfigurationEntity.LastModified), new DateTimeOffset(utcNow));
+            case ConnectorConfigurationEntity connectorConfig when isAdded:
+                connectorConfig.LastModified = utcNow;
                 break;
             // Creation timestamp stored as issued_at, set on insert only.
-            case OAuthRefreshTokenEntity when isAdded:
-                Stamp(entry, nameof(OAuthRefreshTokenEntity.IssuedAt), utcNow);
+            case OAuthRefreshTokenEntity oauthRefreshToken when isAdded:
+                oauthRefreshToken.IssuedAt = utcNow;
                 break;
         }
     }
