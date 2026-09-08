@@ -16,7 +16,7 @@ namespace Nocturne.Infrastructure.Data.Interceptors;
 /// lessee sees the physical connection, and
 /// <c>DatabaseInitializationExtensions.VerifyNoResetOnClose</c> refuses to start the API
 /// unless that is on. Issuing the RESETs here as well cost one extra round trip per
-/// checkout and, at production checkout rates, five sixths of the statements Postgres saw.
+/// checkout and, at production checkout rates, well over half of the statements Postgres saw.
 ///
 /// The same open path carries app.current_subject_id, which gives the
 /// subject-scoped cross-tenant reads (tenant switcher, caregiver overview,
