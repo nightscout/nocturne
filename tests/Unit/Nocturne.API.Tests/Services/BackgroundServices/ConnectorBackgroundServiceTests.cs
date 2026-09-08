@@ -52,8 +52,9 @@ public class ConnectorBackgroundServiceTests
             Action<IServiceProvider>? onSyncScope = null,
             TimeSpan? perTenantTimeout = null,
             int hangFirstNCalls = 0,
-            Action? onSyncCompleted = null)
-            : base(serviceProvider, logger)
+            Action? onSyncCompleted = null,
+            ConnectorSyncBudget? budget = null)
+            : base(serviceProvider, budget ?? new ConnectorSyncBudget(), logger)
         {
             _syncResult = syncResult;
             _onSync = onSync;
@@ -702,6 +703,103 @@ public class ConnectorBackgroundServiceTests
         }
     }
 
+    /// <summary>
+    /// The budget is process-wide: a tenant sync in one poller holds a slot that a tenant sync in
+    /// another poller has to wait for. Per-poller caps alone let the total climb with the connector
+    /// count, which is what exhausted Postgres connections in production.
+    /// </summary>
+    [Fact]
+    public async Task SyncAllTenants_SharesTheBudgetAcrossPollers_ASecondPollerWaitsForASlot()
+    {
+        var (cleanup, connStr) = CreateSqliteDb();
+        using var _ = cleanup;
+
+        var configServiceMock = BuildEnabledConfigMock();
+        var config = new TestConnectorConfig { Enabled = true, SyncIntervalMinutes = 5 };
+        var serviceProvider = BuildServiceProvider(connStr, configServiceMock, config);
+
+        using var budget = new ConnectorSyncBudget(maxConcurrentTenantSyncs: 1);
+        using var firstCts = new CancellationTokenSource();
+
+        var firstStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var first = new TestConnectorBackgroundService(
+            serviceProvider,
+            new SyncResult { Success = true },
+            NullLogger<TestConnectorBackgroundService>.Instance,
+            onSync: () => firstStarted.TrySetResult(),
+            perTenantTimeout: TimeSpan.FromSeconds(30),
+            hangFirstNCalls: 1,
+            budget: budget);
+
+        var secondDone = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var second = new TestConnectorBackgroundService(
+            serviceProvider,
+            new SyncResult { Success = true },
+            NullLogger<TestConnectorBackgroundService>.Instance,
+            onSyncCompleted: () => secondDone.TrySetResult(),
+            budget: budget);
+
+        var firstRun = first.ExecuteOnceAsync(firstCts.Token);
+        try
+        {
+            (await Task.WhenAny(firstStarted.Task, Task.Delay(TimeSpan.FromSeconds(5))))
+                .Should().Be(firstStarted.Task, "the first poller must take the only slot");
+
+            var secondRun = second.ExecuteOnceAsync(CancellationToken.None);
+
+            (await Task.WhenAny(secondDone.Task, Task.Delay(TimeSpan.FromMilliseconds(500))))
+                .Should().NotBe(secondDone.Task,
+                    "the second poller's tenant must wait while the first poller holds the slot");
+            budget.InFlight.Should().Be(1);
+
+            firstCts.Cancel();
+
+            (await Task.WhenAny(secondDone.Task, Task.Delay(TimeSpan.FromSeconds(5))))
+                .Should().Be(secondDone.Task, "the slot the first poller released must go to the second");
+            await secondRun;
+        }
+        finally
+        {
+            firstCts.Cancel();
+            try { await firstRun; } catch (OperationCanceledException) { }
+        }
+
+        budget.InFlight.Should().Be(0, "every lease must be returned once the syncs are over");
+    }
+
+    /// <summary>
+    /// A poller's first tick waits its stagger offset on top of <c>StartupDelay</c>, so pollers that
+    /// start together do not tick together. <see cref="ExecuteAsync_RunsListenerSupervisionFromThePollLoop"/>
+    /// is the control: the first poller on a budget has no offset and ticks at once.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_WaitsThePollersStaggerOffsetBeforeItsFirstTick()
+    {
+        var (cleanup, connStr) = CreateSqliteDb();
+        using var _ = cleanup;
+
+        var serviceProvider = BuildServiceProvider(
+            connStr,
+            BuildEnabledConfigMock(),
+            new TestConnectorConfig { Enabled = true, SyncIntervalMinutes = 5 });
+
+        using var budget = new ConnectorSyncBudget(startupStagger: TimeSpan.FromHours(1));
+        budget.NextStartupOffset();
+
+        var sut = new PollLoopWiringService(serviceProvider, budget);
+        await sut.StartAsync(CancellationToken.None);
+        try
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(300));
+
+            sut.Events.Should().BeEmpty("the second poller on a budget waits a stagger before its first tick");
+        }
+        finally
+        {
+            await sut.StopAsync(CancellationToken.None);
+        }
+    }
+
     [Fact]
     public async Task SyncForTenant_IsCancelled_WhenItExceedsPerTenantTimeout()
     {
@@ -975,8 +1073,8 @@ public class ConnectorBackgroundServiceTests
     /// Runs the real ExecuteAsync poll loop with test-fast intervals, recording listener-startup
     /// passes and sync cycles in order.
     /// </summary>
-    private sealed class PollLoopWiringService(IServiceProvider serviceProvider)
-        : ConnectorBackgroundService<TestConnectorConfig>(serviceProvider, NullLogger.Instance)
+    private sealed class PollLoopWiringService(IServiceProvider serviceProvider, ConnectorSyncBudget? budget = null)
+        : ConnectorBackgroundService<TestConnectorConfig>(serviceProvider, budget ?? new ConnectorSyncBudget(), NullLogger.Instance)
     {
         private readonly TaskCompletionSource _secondSupervisionPass =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -1032,7 +1130,8 @@ public class ConnectorBackgroundServiceTests
     /// Exposes the base class's real-time supervision hooks and counts listener-startup passes.
     /// </summary>
     private sealed class SupervisedListenerService(ILogger logger, TimeSpan supervisionInterval)
-        : ConnectorBackgroundService<TestConnectorConfig>(new ServiceCollection().BuildServiceProvider(), logger)
+        : ConnectorBackgroundService<TestConnectorConfig>(
+            new ServiceCollection().BuildServiceProvider(), new ConnectorSyncBudget(), logger)
     {
         private int _startCount;
 

@@ -243,6 +243,7 @@ public class ConnectorPollingRegistrationTests
     private sealed class ExposedPoller(IServiceProvider serviceProvider)
         : ConnectorBackgroundService<RecordingConnectorService, PollingTestConfiguration>(
             serviceProvider,
+            new ConnectorSyncBudget(),
             NullLogger<ConnectorBackgroundService<RecordingConnectorService, PollingTestConfiguration>>.Instance)
     {
         public Task<SyncResult> SyncAsync(

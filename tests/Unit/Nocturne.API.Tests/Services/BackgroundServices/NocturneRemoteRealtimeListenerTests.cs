@@ -30,6 +30,7 @@ public class NocturneRemoteRealtimeListenerTests
         var serviceProvider = BuildServiceProvider(connectionString);
         var sut = new NocturneRemoteConnectorBackgroundService(
             serviceProvider,
+            new ConnectorSyncBudget(),
             NullLogger<NocturneRemoteConnectorBackgroundService>.Instance);
 
         // Act & Assert — should not throw
@@ -50,6 +51,7 @@ public class NocturneRemoteRealtimeListenerTests
         var serviceProvider = BuildServiceProvider(connectionString);
         var sut = new NocturneRemoteConnectorBackgroundService(
             serviceProvider,
+            new ConnectorSyncBudget(),
             NullLogger<NocturneRemoteConnectorBackgroundService>.Instance);
 
         // Act & Assert — should not throw
@@ -69,6 +71,7 @@ public class NocturneRemoteRealtimeListenerTests
         var serviceProvider = BuildServiceProvider(connectionString);
         var sut = new NocturneRemoteConnectorBackgroundService(
             serviceProvider,
+            new ConnectorSyncBudget(),
             NullLogger<NocturneRemoteConnectorBackgroundService>.Instance);
 
         // Act & Assert — should not throw on repeated calls
@@ -97,6 +100,7 @@ public class NocturneRemoteRealtimeListenerTests
         var serviceProvider = BuildServiceProvider(connectionString, config);
         var sut = new NocturneRemoteConnectorBackgroundService(
             serviceProvider,
+            new ConnectorSyncBudget(),
             NullLogger<NocturneRemoteConnectorBackgroundService>.Instance);
 
         // Act & Assert — should skip the tenant without throwing
@@ -124,6 +128,7 @@ public class NocturneRemoteRealtimeListenerTests
         var serviceProvider = BuildServiceProvider(connectionString, config);
         var sut = new NocturneRemoteConnectorBackgroundService(
             serviceProvider,
+            new ConnectorSyncBudget(),
             NullLogger<NocturneRemoteConnectorBackgroundService>.Instance);
 
         // Act & Assert — should skip the tenant without throwing
@@ -150,7 +155,7 @@ public class NocturneRemoteRealtimeListenerTests
 
         var logger = new ListLogger<NocturneRemoteConnectorBackgroundService>();
         var sut = new NocturneRemoteConnectorBackgroundService(
-            BuildServiceProvider(connectionString, config), logger);
+            BuildServiceProvider(connectionString, config), new ConnectorSyncBudget(), logger);
 
         await InvokeStartRealtimeListenersAsync(sut, CancellationToken.None);
 
@@ -178,7 +183,7 @@ public class NocturneRemoteRealtimeListenerTests
 
         var logger = new ListLogger<NocturneRemoteConnectorBackgroundService>();
         var sut = new NocturneRemoteConnectorBackgroundService(
-            BuildServiceProvider(connectionString, config), logger);
+            BuildServiceProvider(connectionString, config), new ConnectorSyncBudget(), logger);
 
         await InvokeStartRealtimeListenersAsync(sut, CancellationToken.None);
 
