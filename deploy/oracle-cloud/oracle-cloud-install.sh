@@ -83,7 +83,7 @@ log "Nocturne $NOCTURNE_VERSION on $BASE_DOMAIN, region $HOME_REGION"
 
 log "Spend alert"
 TENANCY_ID="${OCI_TENANCY:-$COMPARTMENT_ID}"
-BUDGET_ID=$(q oci budgets budget list --compartment-id "$TENANCY_ID" --display-name "$NAME" --lifecycle-state ACTIVE --query 'data[0].id' --raw-output)
+BUDGET_ID=$(q oci budgets budget budget list --compartment-id "$TENANCY_ID" --display-name "$NAME" --lifecycle-state ACTIVE --query 'data[0].id' --raw-output)
 if [[ -n "$BUDGET_ID" ]]; then
   info "exists"
 else
@@ -95,10 +95,10 @@ else
   fi
   if [[ -z "$BUDGET_EMAIL" ]]; then
     info "skipped; set BUDGET_EMAIL to be told if this account is ever charged"
-  elif out=$(oci budgets budget create --compartment-id "$TENANCY_ID" --display-name "$NAME" --amount 1 --reset-period MONTHLY \
+  elif out=$(oci budgets budget budget create --compartment-id "$TENANCY_ID" --display-name "$NAME" --amount 1 --reset-period MONTHLY \
          --target-type COMPARTMENT --targets "[\"$TENANCY_ID\"]" --query 'data.id' --raw-output 2>&1) \
        && BUDGET_ID="$out" \
-       && out=$(oci budgets alert-rule create --budget-id "$BUDGET_ID" --display-name "$NAME" --type ACTUAL --threshold 1 --threshold-type ABSOLUTE \
+       && out=$(oci budgets budget alert-rule create --budget-id "$BUDGET_ID" --display-name "$NAME" --type ACTUAL --threshold 1 --threshold-type ABSOLUTE \
          --recipients "$BUDGET_EMAIL" \
          --message "Your Nocturne server on Oracle Cloud has been charged. Everything the installer creates is within the free tier, so check the Oracle console for what changed." 2>&1); then
     info "$BUDGET_EMAIL will be emailed if this account is ever charged"
