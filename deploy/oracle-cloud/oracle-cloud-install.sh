@@ -168,7 +168,8 @@ fi
 if [[ ! -f "$SSH_PUBLIC_KEY_FILE" ]]; then
   [[ "$SSH_PUBLIC_KEY_FILE" == "$HOME/.ssh/nocturne_oci.pub" ]] || die "SSH_PUBLIC_KEY_FILE $SSH_PUBLIC_KEY_FILE does not exist"
   mkdir -p "$HOME/.ssh"
-  ssh-keygen -q -t ed25519 -N '' -f "$HOME/.ssh/nocturne_oci" -C "$NAME"
+  # Cloud Shell runs in FIPS mode, which rejects Ed25519.
+  ssh-keygen -q -t rsa -b 4096 -N '' -f "$HOME/.ssh/nocturne_oci" -C "$NAME"
   info "generated an SSH key at ~/.ssh/nocturne_oci"
 fi
 
