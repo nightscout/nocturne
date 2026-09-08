@@ -88,10 +88,10 @@ describe("getGlucoseHeatmapFill", () => {
     );
   });
 
-  it("renders the complete very-low average range in black", () => {
+  it("uses black only for the exceptionally low average stop", () => {
     const theme = readFileSync(new URL("../../../../ui/src/styles/nocturne-theme.css", import.meta.url), "utf8");
     expect(theme).toMatch(/--glucose-heatmap-1:\s*#000000;/);
-    expect(theme).toMatch(/--glucose-heatmap-2:\s*#000000;/);
+    expect(theme).toMatch(/--glucose-heatmap-2:\s*#3b82f6;/);
   });
 });
 
