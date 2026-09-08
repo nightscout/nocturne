@@ -114,7 +114,7 @@ public record DeduplicationInput(Guid RecordId, long Mills, string DataSource, M
 public record DeduplicationBatchResult(int Processed, int GroupsCreated, int RecordsLinked, int DuplicateGroups);
 
 /// <summary>
-/// Result of a watermark-bounded reconcile pass: the number of duplicate groups merged
+/// Result of a cursor-bounded reconcile pass: the number of duplicate groups merged
 /// and whether the pass caught up to the end of the newly-created links.
 /// </summary>
 public record ReconcileResult(int GroupsMerged, bool CaughtUp);

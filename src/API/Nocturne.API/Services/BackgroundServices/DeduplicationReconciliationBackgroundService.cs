@@ -8,10 +8,10 @@ using Nocturne.Infrastructure.Data;
 namespace Nocturne.API.Services.BackgroundServices;
 
 /// <summary>
-/// Periodically drives watermark-based deduplication reconciliation for every active tenant.
+/// Periodically drives cursor-based deduplication reconciliation for every active tenant.
 /// On each tick it enumerates active tenants and calls
 /// <see cref="IDeduplicationService.ReconcileNewLinksAsync(int, int, CancellationToken)"/> for each,
-/// merging duplicate canonical groups created since the tenant's last watermark.
+/// merging duplicate canonical groups created since the tenant's persisted cursor.
 /// </summary>
 /// <remarks>
 /// Single-instance deployment only. If the API is ever scaled out, gate per-tenant reconcile with a

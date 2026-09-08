@@ -97,10 +97,11 @@ public class DeduplicationService : IDeduplicationService
 
     /// <summary>
     /// How far behind the present <see cref="ReconcileNewLinksAsync"/> reads. A link's
-    /// <c>sys_created_at</c> is its ingest transaction's start time, so a transaction still open
-    /// when a pass reads past that instant would commit a link the cursor has already passed.
-    /// Links younger than this are left for a later pass, by which time any transaction shorter
-    /// than the lag has committed.
+    /// <c>sys_created_at</c> is the API clock when its insert's <c>SaveChanges</c> began
+    /// (<see cref="NocturneDbContext"/> stamps it before opening the transaction), so an insert
+    /// still committing when a pass reads past that instant would land a link the cursor has
+    /// already passed. Links younger than this are left for a later pass, by which time any
+    /// insert shorter than the lag has committed. The horizon is taken from the same clock.
     /// </summary>
     private static readonly TimeSpan CommitVisibilityLag = TimeSpan.FromMinutes(2);
 
