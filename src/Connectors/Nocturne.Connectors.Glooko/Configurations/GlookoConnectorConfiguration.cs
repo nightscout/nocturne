@@ -84,7 +84,7 @@ public class GlookoConnectorConfiguration : BaseConnectorConfiguration
     ///     stored record; anything that arrives later than this is picked up by the daily full walk
     ///     over <see cref="GlookoConstants.FullWalkMonths"/>. Ten days plus the one-day padding on
     ///     each side of the request fits one <see cref="GlookoConstants.SyncChunkSize"/> chunk (two
-    ///     requests) with room for the clock and a timezone offset change inside the window. The
+    ///     requests on the V3 path, seven on V2) with room for the clock and a timezone offset change inside the window. The
     ///     ceiling keeps a scheduled run to a handful of chunks — the full history is the walk's job.
     /// </summary>
     [ConnectorProperty(ConnectorPropertyKey.LookbackDays, DefaultValue = "10", MinValue = 1, MaxValue = 60)]

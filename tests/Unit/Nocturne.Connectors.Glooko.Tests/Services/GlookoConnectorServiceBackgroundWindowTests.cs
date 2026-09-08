@@ -132,13 +132,23 @@ public class GlookoConnectorServiceBackgroundWindowTests
     [Fact]
     public async Task ScheduledRun_WhenTheWalkFails_RecordsTheAttemptAndBacksOff()
     {
-        var store = new FakeCursorStore();
         var failing = new GlookoEndpointHandler(failingPaths: [GlookoConstants.V3GraphDataPath]);
+        var requestsWhenAttemptLanded = -1;
+        var store = new FakeCursorStore
+        {
+            OnSet = resource =>
+            {
+                if (resource == Attempted)
+                    requestsWhenAttemptLanded = failing.RequestsFor(GlookoConstants.V3GraphDataPath);
+            },
+        };
 
         var result = await Scheduled(GlookoSyncHarness.Service(failing, cursorStore: store), ScheduledConfig());
 
         result.Success.Should().BeFalse();
         store.Saved.Keys.Should().BeEquivalentTo([Attempted]);
+        requestsWhenAttemptLanded.Should().Be(0,
+            "the attempt is stamped before the walk starts, so a walk that never finishes still counts");
 
         var next = new GlookoEndpointHandler();
         await Scheduled(GlookoSyncHarness.Service(next, cursorStore: store), ScheduledConfig());

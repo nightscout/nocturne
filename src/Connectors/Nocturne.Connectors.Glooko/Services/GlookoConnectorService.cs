@@ -488,7 +488,8 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
 
     /// <summary>
     ///     Stamps <paramref name="resource"/> with <paramref name="at"/>. A store that cannot be
-    ///     written costs a repeated walk later, not the sync that just succeeded.
+    ///     written does not fail the sync; while it stays unwritable the schedule cannot remember a
+    ///     walk and every scheduled run walks, which is what the warning is for.
     /// </summary>
     private async Task RecordFullWalkAsync(string resource, DateTime at, CancellationToken cancellationToken)
     {

@@ -49,6 +49,9 @@ internal sealed class FakeCursorStore : IConnectorSyncCursorStore
 {
     public Dictionary<string, ConnectorSyncCursor> Saved { get; } = new(StringComparer.Ordinal);
 
+    /// <summary>Observes each write as it happens, for tests that care when a stamp lands.</summary>
+    public Action<string>? OnSet { get; init; }
+
     public Task<ConnectorSyncCursor?> GetAsync(
         string connectorName, string resource, CancellationToken ct = default) =>
         Task.FromResult(Saved.TryGetValue(resource, out var cursor) ? cursor : null);
@@ -57,6 +60,7 @@ internal sealed class FakeCursorStore : IConnectorSyncCursorStore
         string connectorName, string resource, ConnectorSyncCursor cursor, CancellationToken ct = default)
     {
         Saved[resource] = cursor;
+        OnSet?.Invoke(resource);
         return Task.CompletedTask;
     }
 }

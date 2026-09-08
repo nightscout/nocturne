@@ -296,11 +296,14 @@ public static class GlookoConstants
     public static readonly TimeSpan FullWalkRetryInterval = TimeSpan.FromHours(1);
 
     /// <summary>
-    ///     The sync-cursor resources under which the last completed and the last attempted full walk
-    ///     are recorded.
+    ///     The sync-cursor resource under which the last completed full walk is recorded.
     /// </summary>
     public const string FullWalkCursorResource = "full-walk";
 
+    /// <summary>
+    ///     The sync-cursor resource under which the last attempted full walk is recorded, written
+    ///     before the walk runs so a walk that never finishes still counts against the retry interval.
+    /// </summary>
     public const string FullWalkAttemptCursorResource = "full-walk-attempt";
 
     // -- Device information (sent during sign-in) -----------------------------
