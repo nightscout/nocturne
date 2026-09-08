@@ -625,6 +625,11 @@ public static class DatabaseInitializationExtensions
     /// Verifies that the runtime connection string does not have NoResetOnClose
     /// enabled. With NoResetOnClose = true, pooled connections skip DISCARD ALL,
     /// allowing stale app.current_tenant_id values to leak across requests.
+    ///
+    /// This is the sole guarantee that a pooled connection carries none of the RLS
+    /// GUCs between lessees: <c>TenantConnectionInterceptor</c> sets them on open and
+    /// clears nothing on close, because DISCARD ALL (which includes RESET ALL) already
+    /// does. Nothing may weaken this check without restoring a reset there.
     /// </summary>
     private static void VerifyNoResetOnClose(NocturneDbContext context, ILogger logger)
     {
