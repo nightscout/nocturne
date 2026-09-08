@@ -15,7 +15,7 @@ Get Nocturne up and running in just a few minutes.
 Before you begin, make sure you have:
 
 - Docker and Docker Compose installed
-- A server or VPS with at least 1 GB RAM
+- A server or VPS with at least 2 GB RAM and 10 GB of free storage
 - A domain name with a DNS record pointing at the server
 
 ## Step 1: Deploy
