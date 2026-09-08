@@ -10,6 +10,8 @@
 # current state.
 #
 # Optional environment:
+#   DESEC_TOKEN             deSEC API token; the apex and wildcard A records are then written
+#                           for you (prompted for, hidden, when unset and running interactively)
 #   COMPARTMENT_ID          where to create resources (default: tenancy root)
 #   NOCTURNE_VERSION        release tag to install (default: latest)
 #   OCPUS / MEMORY_GB       A1 size (default 2 / 12; the free tier allows 4 / 24 in total)
@@ -127,10 +129,39 @@ if [[ -z "$PUBLIC_IP_ID" ]]; then
 fi
 PUBLIC_IP=$(oci network public-ip get --public-ip-id "$PUBLIC_IP_ID" --query 'data."ip-address"' --raw-output)
 
-printf '\n'
-info "Create these two DNS records at your domain provider now:"
-printf '\n      %-28s A   %s\n      %-28s A   %s\n\n' "$BASE_DOMAIN" "$PUBLIC_IP" "*.$BASE_DOMAIN" "$PUBLIC_IP"
-info "Nocturne waits until both resolve before requesting certificates. Do not proxy them through Cloudflare."
+# ── DNS ──────────────────────────────────────────────────────────────────────
+
+desec() { curl -fsS -H "Authorization: Token $DESEC_TOKEN" -H "Content-Type: application/json" "$@"; }
+
+if [[ -z "${DESEC_TOKEN:-}" && -t 0 ]]; then
+  printf '\n'
+  info "If $BASE_DOMAIN is managed at deSEC (desec.io, including free dedyn.io names), paste an"
+  info "API token and the DNS records are created for you. Otherwise press Enter to add them yourself."
+  read -rsp "    deSEC token: " DESEC_TOKEN
+  printf '\n'
+fi
+
+if [[ -n "${DESEC_TOKEN:-}" ]]; then
+  log "DNS records at deSEC"
+  # BASE_DOMAIN may sit below the zone deSEC hosts (nocturne.example.com in example.com).
+  ZONE="$BASE_DOMAIN"
+  while [[ "$ZONE" == *.* ]] && ! DOMAIN_JSON=$(desec "https://desec.io/api/v1/domains/$ZONE/" 2>/dev/null); do
+    ZONE="${ZONE#*.}"
+  done
+  [[ "$ZONE" == *.* ]] || die "no domain in this deSEC account contains $BASE_DOMAIN. Add it at desec.io first (for a free name, a dynDNS domain under dedyn.io), or run again without a token and create the records yourself."
+  SUBNAME="${BASE_DOMAIN%"$ZONE"}"
+  SUBNAME="${SUBNAME%.}"
+  TTL=$(jq -r '.minimum_ttl // 3600' <<<"$DOMAIN_JSON")
+  desec -X PUT "https://desec.io/api/v1/domains/$ZONE/rrsets/" -d "$(jq -cn --arg ip "$PUBLIC_IP" --arg s "$SUBNAME" --arg w "*${SUBNAME:+.$SUBNAME}" --argjson ttl "$TTL" \
+    '[{subname:$s,type:"A",ttl:$ttl,records:[$ip]},{subname:$w,type:"A",ttl:$ttl,records:[$ip]}]')" >/dev/null \
+    || die "could not write the DNS records at deSEC. The token needs write access to $ZONE."
+  info "$BASE_DOMAIN and *.$BASE_DOMAIN point at $PUBLIC_IP"
+else
+  printf '\n'
+  info "Create these two DNS records at your domain provider now:"
+  printf '\n      %-28s A   %s\n      %-28s A   %s\n\n' "$BASE_DOMAIN" "$PUBLIC_IP" "*.$BASE_DOMAIN" "$PUBLIC_IP"
+  info "Nocturne waits until both resolve before requesting certificates. Do not proxy them through Cloudflare."
+fi
 
 # ── SSH key ──────────────────────────────────────────────────────────────────
 

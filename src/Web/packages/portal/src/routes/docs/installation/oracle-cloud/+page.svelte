@@ -30,10 +30,33 @@
             creates are within the Always Free allowance, so nothing is charged.
         </li>
         <li>
-            A domain name you control, and access to its DNS settings. Nocturne gives every
-            site its own subdomain, so a free dynamic-DNS hostname is not enough.
+            A domain name. Nocturne gives every site its own subdomain, so the DNS provider
+            must support wildcard records. If you do not have a domain, a free one from deSEC
+            works well; see below.
         </li>
     </ul>
+
+    <h2 class="text-2xl font-bold mt-8 mb-4">No domain yet? Get one from deSEC</h2>
+    <p class="text-muted-foreground mb-4">
+        <a href="https://desec.io" class="text-primary hover:underline">deSEC</a> is a non-profit
+        DNS provider that gives out free names under <strong>dedyn.io</strong>. With one of those,
+        the installer creates the DNS records for you and there is nothing to configure by hand.
+    </p>
+    <ol class="list-decimal list-inside space-y-2 text-muted-foreground mb-8">
+        <li>Create an account at desec.io and confirm your email address.</li>
+        <li>
+            Under <strong>Domains</strong>, add a dynDNS domain and pick a name. Your domain is
+            then <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">yourname.dedyn.io</code>.
+        </li>
+        <li>
+            Under <strong>Token management</strong>, create a token and copy it. The installer
+            asks for it and hides what you paste. You can delete the token afterwards.
+        </li>
+    </ol>
+    <p class="text-muted-foreground mb-8">
+        The same works for a domain you already own if its DNS is hosted at deSEC. If it is
+        hosted elsewhere, you add two records by hand in Step 3.
+    </p>
 
     <h2 class="text-2xl font-bold mt-8 mb-4">Step 1: Open Cloud Shell</h2>
     <p class="text-muted-foreground mb-8">
@@ -53,8 +76,10 @@
     <CodeBlock code={runCommand} class="mb-4" />
     <p class="text-muted-foreground mb-4">
         The script creates a network, reserves a public IP address, and starts a server.
-        Early on it prints two DNS records for you to create. Do that while it continues
-        working; the server waits for them before it requests certificates.
+        Early on it asks for a deSEC token. Paste one and the DNS records are created for you;
+        press Enter instead and it prints two records for you to create by hand. Either way it
+        keeps working while the server boots and waits for the records before it requests
+        certificates.
     </p>
     <details class="mb-8">
         <summary class="text-sm font-medium text-muted-foreground cursor-pointer hover:text-foreground">What the script does</summary>
@@ -70,8 +95,9 @@
 
     <h2 class="text-2xl font-bold mt-8 mb-4">Step 3: Add the DNS records</h2>
     <p class="text-muted-foreground mb-4">
-        At your domain provider, create two <strong>A</strong> records pointing at the IP address
-        the script printed:
+        Skip this step if you gave the installer a deSEC token. Otherwise, at your domain
+        provider, create two <strong>A</strong> records pointing at the IP address the script
+        printed:
     </p>
     <CodeBlock code={"nocturne.example.com      A   <the IP address>\n*.nocturne.example.com    A   <the IP address>"} class="mb-4" />
     <p class="text-muted-foreground mb-8">
