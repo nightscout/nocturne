@@ -10,10 +10,9 @@
   --glucose-very-high: oklch(0.55 0.25 15);
 
   /* Year-overview glucose heatmap — nine stops the report interpolates between
-     across 40–350 mg/dL. Unlike the buckets above these carry no threshold
-     meaning on their own: the hues are spread to keep neighbouring values in the
-     70–250 range distinguishable across a calendar grid. Stop-to-mg/dL mapping
-     lives with the interpolation in chart-colors.ts. */
+     across 40–350 mg/dL. The first two intentionally saturate the very-low range
+     to black; the remaining hues distinguish neighbouring values across the
+     calendar grid. Stop-to-mg/dL mapping lives in chart-colors.ts. */
   --glucose-heatmap-1: #000000;
   --glucose-heatmap-2: #000000;
   --glucose-heatmap-3: #06b6d4; /* cyan-500 */

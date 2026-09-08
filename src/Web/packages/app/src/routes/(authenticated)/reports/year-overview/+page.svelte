@@ -93,9 +93,13 @@
 
   function saveColorPreferences(next: ColorFocusPreferences) {
     colorFocusPreferences = next;
+    if (loadedColorFocusKey !== colorFocusStorageKey) return;
+    if (!browser || typeof localStorage === "undefined") {
+      colorFocusStorageFailed = browser;
+      return;
+    }
     try {
-      if (loadedColorFocusKey !== colorFocusStorageKey) return;
-      window.localStorage.setItem(colorFocusStorageKey, JSON.stringify(next));
+      localStorage.setItem(colorFocusStorageKey, JSON.stringify(next));
       colorFocusStorageFailed = false;
     } catch {
       colorFocusStorageFailed = true;
@@ -127,9 +131,15 @@
 
   $effect(() => {
     const key = colorFocusStorageKey;
+    if (!browser || typeof localStorage === "undefined") {
+      colorFocusPreferences = {};
+      colorFocusStorageFailed = browser;
+      loadedColorFocusKey = key;
+      return;
+    }
     try {
       colorFocusPreferences = parseColorFocusPreferences(
-        window.localStorage.getItem(key)
+        localStorage.getItem(key)
       );
       colorFocusStorageFailed = false;
     } catch {
