@@ -609,4 +609,43 @@ public class StatisticsControllerTests
         month.TotalReadings.Should().Be(60);
         month.Summary!.TotalReadings.Should().Be(60);
     }
+
+    [Fact]
+    public async Task GetAidSystemMetrics_MeasuresCgmActiveTimeOnTheCanonicalReadings()
+    {
+        var start = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+        var raw = new[]
+        {
+            new SensorGlucose { Timestamp = start, Mgdl = 100 },
+            new SensorGlucose { Timestamp = start, Mgdl = 180 },
+        };
+        var canonical = new[] { raw[0] };
+
+        SetupGlucose(raw);
+
+        var canonicalGlucose = new Mock<ICanonicalGlucoseService>();
+        canonicalGlucose
+            .Setup(s => s.SelectAsync(
+                It.IsAny<IReadOnlyList<SensorGlucose>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(canonical);
+
+        IEnumerable<SensorGlucose>? measured = null;
+        _statsServiceMock
+            .Setup(s => s.CalculateCgmActivePercent(
+                It.IsAny<IEnumerable<SensorGlucose>>(),
+                It.IsAny<DateTime?>(),
+                It.IsAny<DateTime?>(),
+                It.IsAny<IReadOnlyCollection<CgmDeviceWindow>?>()))
+            .Callback((
+                IEnumerable<SensorGlucose> readings,
+                DateTime? _,
+                DateTime? _,
+                IReadOnlyCollection<CgmDeviceWindow>? _) => measured = readings)
+            .Returns(42.0);
+
+        await CreateController(canonicalGlucose.Object)
+            .GetAidSystemMetrics(start, start.AddDays(1));
+
+        measured.Should().BeEquivalentTo(canonical);
+    }
 }

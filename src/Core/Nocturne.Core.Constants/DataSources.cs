@@ -224,14 +224,4 @@ public static class DataSources
     {
         return dataSource is DemoService or Testing;
     }
-
-    /// <summary>
-    /// Returns the default CGM update interval in minutes for a given data source.
-    /// Used as fallback when no PatientDevice is registered.
-    /// </summary>
-    public static int GetDefaultUpdateIntervalMinutes(string? dataSource) => dataSource switch
-    {
-        LibreConnector or MyLifeConnector => 1,
-        _ => 5,
-    };
 }

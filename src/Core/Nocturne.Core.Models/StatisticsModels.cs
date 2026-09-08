@@ -1942,7 +1942,9 @@ public class AidSystemMetrics
     /// <summary>Time-weighted AID active percentage across segments</summary>
     public double? AidActivePercent { get; set; }
 
-    /// <summary>CGM data completeness percentage</summary>
+    /// <summary>
+    /// Percentage of the period a CGM was delivering readings, or null if unknown.
+    /// </summary>
     public double? CgmActivePercent { get; set; }
 
     /// <summary>Lower target bound in mg/dL</summary>

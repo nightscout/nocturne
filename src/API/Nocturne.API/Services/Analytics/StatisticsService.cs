@@ -1484,10 +1484,8 @@ public class StatisticsService : IStatisticsService
     }
 
     /// <summary>
-    /// The cadence assumed of a series whose entries show no interval of their own: a lone
-    /// reading, or several stamped at the same instant. In <see cref="ReadingMinutes"/> it is what
-    /// the final reading of such a series stands for, the readings before it covering no elapsed
-    /// time; in <see cref="AssessDataQuality"/> it is the coverage that reading is credited.
+    /// The cadence assumed where nothing publishes one: a series showing no interval of its own,
+    /// or a device the catalogue carries no <see cref="CgmDeviceWindow.CadenceMinutes"/> for.
     /// </summary>
     private const double DefaultCadenceMinutes = 5;
 
@@ -1513,6 +1511,46 @@ public class StatisticsService : IStatisticsService
         var elapsed = intervals.Where(interval => interval > 0).Order().ToList();
         return elapsed.Count == 0 ? DefaultCadenceMinutes : GlucoseStatistics.Median(elapsed);
     }
+
+    /// <summary>
+    /// Two sensors worn at once are one stretch of elapsed time, so the windows they were worn in
+    /// are merged rather than added up.
+    /// </summary>
+    private static List<(DateTime Start, DateTime End)> MergeWindows(
+        List<(DateTime Start, DateTime End)> windows)
+    {
+        var merged = new List<(DateTime Start, DateTime End)>();
+        foreach (var window in windows.OrderBy(w => w.Start))
+        {
+            if (merged.Count == 0 || window.Start > merged[^1].End)
+                merged.Add(window);
+            else if (window.End > merged[^1].End)
+                merged[^1] = (merged[^1].Start, window.End);
+        }
+
+        return merged;
+    }
+
+    /// <summary>
+    /// The minutes a set of readings covers when only the readings themselves say how often they
+    /// should arrive: each stream credited its own count of readings at its own cadence. Streams
+    /// are told apart on the identity <c>CanonicalGlucoseStream.Select</c> selects on, because a
+    /// window spanning a switch from a one-minute sensor to a five-minute one holds two cadences.
+    /// A stream's cadence comes from all of its readings even when only some are
+    /// <paramref name="credited"/>, since the gap between two survivors of a filter says nothing
+    /// about how often the sensor reported.
+    /// </summary>
+    private static double DerivedCoverageMinutes(
+        IEnumerable<SensorGlucose> readings,
+        Func<SensorGlucose, bool>? credited = null) =>
+        readings
+            .GroupBy(CanonicalGlucoseStream.StreamKey, StringComparer.Ordinal)
+            .Sum(stream =>
+            {
+                var ordered = stream.OrderBy(reading => reading.Mills).ToList();
+                var count = credited is null ? ordered.Count : ordered.Count(credited);
+                return count * SeriesCadenceMinutes(ReadingIntervals(ordered));
+            });
 
     /// <summary>
     /// The minutes each reading stands for: the gap to the next reading, capped at twice the
@@ -2817,19 +2855,16 @@ public class StatisticsService : IStatisticsService
         var totalReadings = entries.Count;
         var gaps = new List<DataGap>();
         var missingReadings = 0;
-        double coveredMinutes = 0;
         double streamSpanMinutes = 0;
 
-        // Cadence belongs to a sensor, not to a report: a window spanning a switch from a
-        // one-minute sensor to a five-minute one holds two of them. Streams are told apart on the
-        // identity CanonicalGlucoseStream.Select selects on.
+        // A gap is owed against the cadence of the stream it falls in, told apart as
+        // DerivedCoverageMinutes tells streams apart.
         foreach (var stream in entries.GroupBy(CanonicalGlucoseStream.StreamKey, StringComparer.Ordinal))
         {
             var readings = stream.ToList();
             var intervals = ReadingIntervals(readings);
             var cadence = SeriesCadenceMinutes(intervals);
 
-            coveredMinutes += readings.Count * cadence;
             streamSpanMinutes += intervals.Sum();
 
             for (int i = 0; i < intervals.Length; i++)
@@ -2853,15 +2888,6 @@ public class StatisticsService : IStatisticsService
         var longestGap = gaps.Any() ? gaps.Max(g => g.Duration) : 0;
         var averageGap = gaps.Any() ? gaps.Average(g => g.Duration) : 0;
 
-        // CgmActivePercent: minutes the sensors covered, each reading standing for one cadence of
-        // its own stream, against the report period.
-        var effectiveStart = reportStart ?? (entries.Count > 0 ? entries[0].Timestamp : DateTime.UtcNow);
-        var effectiveEnd = reportEnd ?? (entries.Count > 0 ? entries[^1].Timestamp : DateTime.UtcNow);
-        var reportSpanMinutes = (effectiveEnd - effectiveStart).TotalMinutes;
-        var cgmActivePercent = reportSpanMinutes > 0
-            ? Math.Min(coveredMinutes / reportSpanMinutes * 100.0, 100.0)
-            : 0;
-
         // DataCompleteness: time coverage within each stream's own range (first->last reading)
         var totalGapMinutes = gaps.Sum(g => g.Duration);
         var dataCompleteness = streamSpanMinutes > 0
@@ -2873,7 +2899,7 @@ public class StatisticsService : IStatisticsService
             TotalReadings = totalReadings,
             MissingReadings = missingReadings,
             DataCompleteness = dataCompleteness,
-            CgmActivePercent = cgmActivePercent,
+            CgmActivePercent = CalculateCgmActivePercent(entries, reportStart, reportEnd) ?? 0,
             GapAnalysis = new GapAnalysis
             {
                 // Collected a stream at a time, so put them back in the order they happened.
@@ -2885,6 +2911,73 @@ public class StatisticsService : IStatisticsService
             CalibrationEvents = 0,
             SensorWarmups = 0,
         };
+    }
+
+    /// <inheritdoc />
+    public double? CalculateCgmActivePercent(
+        IEnumerable<SensorGlucose> readings,
+        DateTime? reportStart = null,
+        DateTime? reportEnd = null,
+        IReadOnlyCollection<CgmDeviceWindow>? cgmDevices = null)
+    {
+        var entries = readings as IReadOnlyList<SensorGlucose> ?? readings.ToList();
+        if (entries.Count == 0)
+            return null;
+
+        var periodStart = reportStart ?? entries.Min(reading => reading.Timestamp);
+        var periodEnd = reportEnd ?? entries.Max(reading => reading.Timestamp);
+
+        double coveredMinutes;
+        double periodMinutes;
+
+        if (cgmDevices is { Count: > 0 })
+        {
+            var cadences = new Dictionary<Guid, double>();
+            var windows = new List<(DateTime Start, DateTime End)>();
+
+            foreach (var device in cgmDevices)
+            {
+                var windowStart =
+                    device.Start is { } start && start > periodStart ? start : periodStart;
+                var windowEnd = device.End is { } end && end < periodEnd ? end : periodEnd;
+                if (windowEnd <= windowStart)
+                    continue;
+
+                windows.Add((windowStart, windowEnd));
+                cadences[device.DeviceId] = device.CadenceMinutes ?? DefaultCadenceMinutes;
+            }
+
+            var period = MergeWindows(windows);
+            periodMinutes = period.Sum(window => (window.End - window.Start).TotalMinutes);
+
+            bool InPeriod(SensorGlucose reading) =>
+                period.Any(window =>
+                    reading.Timestamp >= window.Start && reading.Timestamp <= window.End);
+
+            coveredMinutes =
+                entries.Sum(reading =>
+                    InPeriod(reading)
+                    && reading.PatientDeviceId is { } id
+                    && cadences.TryGetValue(id, out var cadence)
+                        ? cadence
+                        : 0)
+                + DerivedCoverageMinutes(
+                    entries.Where(reading =>
+                        reading.PatientDeviceId is not { } id || !cadences.ContainsKey(id)),
+                    InPeriod);
+        }
+        else
+        {
+            periodMinutes = (periodEnd - periodStart).TotalMinutes;
+            coveredMinutes = DerivedCoverageMinutes(entries);
+        }
+
+        if (periodMinutes <= 0)
+            return null;
+
+        // A reading credited a cadence longer than the gap it stood for — a catalogue figure the
+        // device beats, or a median read low — can carry coverage past the period.
+        return Math.Min(coveredMinutes / periodMinutes * 100.0, 100.0);
     }
 
     #endregion

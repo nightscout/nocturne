@@ -309,6 +309,24 @@ public interface IStatisticsService
         DateTime? endDate = null
     );
 
+    /// <summary>
+    /// The share of a report period a CGM was delivering readings, from readings a canonical
+    /// selection has already reduced to one stream per instant. Where
+    /// <paramref name="cgmDevices"/> is given the period is the union of their windows clipped to
+    /// the report — sensors worn at once are one stretch of time — and only readings falling
+    /// inside it count, at their device's catalogue cadence or, for a reading no given device
+    /// claims, at the cadence its own stream keeps across all of its readings. Where no devices
+    /// are given the period is the report itself, which runs from the first reading to the last where
+    /// <paramref name="reportStart"/> or <paramref name="reportEnd"/> is absent.
+    /// </summary>
+    /// <returns><c>null</c> without readings, or without a period to measure them against.</returns>
+    double? CalculateCgmActivePercent(
+        IEnumerable<SensorGlucose> readings,
+        DateTime? reportStart = null,
+        DateTime? reportEnd = null,
+        IReadOnlyCollection<CgmDeviceWindow>? cgmDevices = null
+    );
+
     // Site Change Analysis
 
     /// <summary>
@@ -370,3 +388,21 @@ public interface IStatisticsService
         TimeZoneInfo? userTimeZone = null,
         IEnumerable<BasalInjection>? basalInjections = null);
 }
+
+/// <summary>
+/// A registered CGM's claim on a report period, for
+/// <see cref="IStatisticsService.CalculateCgmActivePercent"/>.
+/// </summary>
+/// <param name="DeviceId">Matched against <see cref="SensorGlucose.PatientDeviceId"/>.</param>
+/// <param name="Start">When the device came into use; the report start when absent.</param>
+/// <param name="End">When the device went out of use; the report end when absent.</param>
+/// <param name="CadenceMinutes">
+/// The cadence the catalogue publishes for the device. Its readings each stand for this, not for
+/// the gaps between them.
+/// </param>
+public sealed record CgmDeviceWindow(
+    Guid DeviceId,
+    DateTime? Start,
+    DateTime? End,
+    double? CadenceMinutes
+);

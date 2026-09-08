@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Nocturne.Core.Contracts.Analytics;
 using Nocturne.API.Services.Analytics;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -1076,6 +1077,273 @@ public class StatisticsServiceTests
             AtCadence(start, 5, 144), Array.Empty<Bolus>(), Array.Empty<CarbIntake>());
 
         result.DataQuality.CgmActivePercent.Should().BeApproximately(100.0, 2.0);
+    }
+
+    [Fact]
+    public void CalculateCgmActivePercent_WithARegisteredDevice_CreditsTheCatalogueCadence()
+    {
+        // The catalogue publishes five minutes and the device uploads every one: its 144 readings
+        // stand for twelve hours of the twenty-four hour report, not for 144 minutes of it.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var device = Guid.NewGuid();
+
+        var result = _statisticsService.CalculateCgmActivePercent(
+            AtCadence(start, 1, 144, device),
+            start,
+            start.AddDays(1),
+            new[] { new CgmDeviceWindow(device, start, start.AddDays(1), 5) });
+
+        result.Should().BeApproximately(50.0, 0.1);
+    }
+
+    [Fact]
+    public void CalculateCgmActivePercent_DeviceOutlivingTheReport_MeasuresAgainstTheReportPeriod()
+    {
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var device = Guid.NewGuid();
+
+        var result = _statisticsService.CalculateCgmActivePercent(
+            AtCadence(start, 5, 144, device),
+            start,
+            start.AddDays(1),
+            new[] { new CgmDeviceWindow(device, start.AddDays(-30), start.AddDays(30), 5) });
+
+        result.Should().BeApproximately(50.0, 0.1);
+    }
+
+    [Fact]
+    public void CalculateCgmActivePercent_DeviceRegisteredMidReport_MeasuresAgainstItsOwnWindow()
+    {
+        // Twelve hours of five-minute readings from a device registered for those twelve hours is
+        // a device that never missed a reading, whatever the other half of the report holds.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var device = Guid.NewGuid();
+
+        var result = _statisticsService.CalculateCgmActivePercent(
+            AtCadence(start.AddHours(12), 5, 144, device),
+            start,
+            start.AddDays(1),
+            new[] { new CgmDeviceWindow(device, start.AddHours(12), null, 5) });
+
+        result.Should().BeApproximately(100.0, 0.1);
+    }
+
+    [Fact]
+    public void CalculateCgmActivePercent_DeviceWithNoStartDate_TakesTheReportStart()
+    {
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var device = Guid.NewGuid();
+
+        var result = _statisticsService.CalculateCgmActivePercent(
+            AtCadence(start.AddHours(12), 5, 144, device),
+            start,
+            start.AddDays(1),
+            new[] { new CgmDeviceWindow(device, null, null, 5) });
+
+        result.Should().BeApproximately(50.0, 0.1);
+    }
+
+    [Fact]
+    public void CalculateCgmActivePercent_WithNoDevices_ScoresEachStreamAtItsOwnCadence()
+    {
+        // Six hours of a one-minute Libre, then six of a five-minute Dexcom: twelve of the
+        // twenty-four hours the report covers.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var entries = AtCadence(start, 1, 360, Guid.NewGuid())
+            .Concat(AtCadence(start.AddHours(12), 5, 72, Guid.NewGuid()))
+            .ToArray();
+
+        var result = _statisticsService.CalculateCgmActivePercent(entries, start, start.AddDays(1));
+
+        result.Should().BeApproximately(50.0, 0.1);
+    }
+
+    [Fact]
+    public void CalculateCgmActivePercent_TwoDevicesRegisteredAtOnce_MeasuresAgainstOnePeriod()
+    {
+        // Both registered for the whole report, the canonical stream switching from one to the
+        // other halfway: a day of five-minute readings covering a day, not half of two days.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var first = Guid.NewGuid();
+        var second = Guid.NewGuid();
+        var entries = AtCadence(start, 5, 144, first)
+            .Concat(AtCadence(start.AddHours(12), 5, 144, second))
+            .ToArray();
+
+        var result = _statisticsService.CalculateCgmActivePercent(
+            entries,
+            start,
+            start.AddDays(1),
+            new[]
+            {
+                new CgmDeviceWindow(first, start, start.AddDays(1), 5),
+                new CgmDeviceWindow(second, start, start.AddDays(1), 5),
+            });
+
+        result.Should().BeApproximately(100.0, 0.1);
+    }
+
+    [Fact]
+    public void CalculateCgmActivePercent_ReadingsOutsideEveryWindow_AreNotCredited()
+    {
+        // The device was registered for the second half of the report and delivered half of it;
+        // the readings from before it existed are not its coverage.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var device = Guid.NewGuid();
+        var entries = AtCadence(start.AddHours(12), 5, 72, device)
+            .Concat(AtCadence(start, 5, 144))
+            .ToArray();
+
+        var result = _statisticsService.CalculateCgmActivePercent(
+            entries,
+            start,
+            start.AddDays(1),
+            new[] { new CgmDeviceWindow(device, start.AddHours(12), start.AddDays(1), 5) });
+
+        result.Should().BeApproximately(50.0, 0.1);
+    }
+
+    [Fact]
+    public void CalculateCgmActivePercent_ReadingsStampedWithAnUnregisteredDevice_UseDerivedCadence()
+    {
+        // A device row the report never saw — deleted, or another category — is no more attributed
+        // than an unstamped reading: twelve hours of one-minute readings, credited as twelve.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var registered = Guid.NewGuid();
+
+        var result = _statisticsService.CalculateCgmActivePercent(
+            AtCadence(start, 1, 720, Guid.NewGuid()),
+            start,
+            start.AddDays(1),
+            new[] { new CgmDeviceWindow(registered, start, start.AddDays(1), 5) });
+
+        result.Should().BeApproximately(50.0, 0.1);
+    }
+
+    [Fact]
+    public void CalculateCgmActivePercent_DeviceEntirelyOutsideTheReport_ClaimsNoPeriod()
+    {
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var reporting = Guid.NewGuid();
+
+        var result = _statisticsService.CalculateCgmActivePercent(
+            AtCadence(start, 5, 144, reporting),
+            start,
+            start.AddDays(1),
+            new[]
+            {
+                new CgmDeviceWindow(reporting, start, start.AddDays(1), 5),
+                new CgmDeviceWindow(Guid.NewGuid(), start.AddDays(2), start.AddDays(3), 5),
+            });
+
+        result.Should().BeApproximately(50.0, 0.1);
+    }
+
+    [Fact]
+    public void CalculateCgmActivePercent_UnattributedReadings_CountAtTheirOwnCadence()
+    {
+        // Six hours from the registered device, then six from an upload nothing stamped: the
+        // unattributed stretch is credited the cadence it reports, against the same period.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var device = Guid.NewGuid();
+        var entries = AtCadence(start, 5, 72, device)
+            .Concat(AtCadence(start.AddHours(6), 1, 360))
+            .ToArray();
+
+        var result = _statisticsService.CalculateCgmActivePercent(
+            entries,
+            start,
+            start.AddDays(1),
+            new[] { new CgmDeviceWindow(device, start, start.AddDays(1), 5) });
+
+        result.Should().BeApproximately(50.0, 0.1);
+    }
+
+    [Fact]
+    public void CalculateCgmActivePercent_SparseInPeriodStream_KeepsTheCadenceOfTheWholeStream()
+    {
+        // Two devices a day apart, each delivering half its day, and an unclaimed one-minute
+        // stream running through the day between them that no window covers. The two readings of
+        // that stream which do fall inside a window are a day apart; the stream's cadence is a
+        // minute all the same.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var first = Guid.NewGuid();
+        var second = Guid.NewGuid();
+        var entries = AtCadence(start, 5, 144, first)
+            .Concat(AtCadence(start.AddDays(2), 5, 144, second))
+            .Concat(AtCadence(start.AddMinutes(1435), 5, 1))
+            .Concat(AtCadence(start.AddDays(1).AddMinutes(1), 1, 1439))
+            .Concat(AtCadence(start.AddDays(2), 1, 1))
+            .ToArray();
+
+        var result = _statisticsService.CalculateCgmActivePercent(
+            entries,
+            start,
+            start.AddDays(3),
+            new[]
+            {
+                new CgmDeviceWindow(first, start, start.AddDays(1), 5),
+                new CgmDeviceWindow(second, start.AddDays(2), start.AddDays(3), 5),
+            });
+
+        result.Should().BeApproximately(50.1, 0.2);
+    }
+
+    [Fact]
+    public void CalculateCgmActivePercent_PartlyOverlappingWindows_RunToTheLaterEnd()
+    {
+        // Worn 00:00-18:00 and 12:00-24:00: one period of twenty-four hours, delivered for twelve.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var early = Guid.NewGuid();
+        var late = Guid.NewGuid();
+
+        var result = _statisticsService.CalculateCgmActivePercent(
+            AtCadence(start, 5, 144, early),
+            start,
+            start.AddDays(1),
+            new[]
+            {
+                new CgmDeviceWindow(early, start, start.AddHours(18), 5),
+                new CgmDeviceWindow(late, start.AddHours(12), start.AddDays(1), 5),
+            });
+
+        result.Should().BeApproximately(50.0, 0.1);
+    }
+
+    [Fact]
+    public void CalculateCgmActivePercent_WindowNestedInsideAnother_AddsNoPeriod()
+    {
+        // The nested window is listed first, so a period built in the order given would start at
+        // 06:00 and lose the readings before it.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var spare = Guid.NewGuid();
+        var worn = Guid.NewGuid();
+
+        var result = _statisticsService.CalculateCgmActivePercent(
+            AtCadence(start, 5, 144, worn),
+            start,
+            start.AddDays(1),
+            new[]
+            {
+                new CgmDeviceWindow(spare, start.AddHours(6), start.AddHours(12), 5),
+                new CgmDeviceWindow(worn, start, start.AddDays(1), 5),
+            });
+
+        result.Should().BeApproximately(50.0, 0.1);
+    }
+
+    [Fact]
+    public void CalculateCgmActivePercent_WithNoReadings_IsUnknown()
+    {
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        var result = _statisticsService.CalculateCgmActivePercent(
+            Array.Empty<SensorGlucose>(),
+            start,
+            start.AddDays(1),
+            new[] { new CgmDeviceWindow(Guid.NewGuid(), null, null, 5) });
+
+        result.Should().BeNull();
     }
 
     #endregion
