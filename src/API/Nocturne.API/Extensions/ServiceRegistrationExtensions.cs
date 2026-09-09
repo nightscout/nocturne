@@ -920,6 +920,8 @@ public static class ServiceRegistrationExtensions
             pollingService: typeof(ConnectorBackgroundService<,>)
         );
         services.AddSingleton(ConnectorSyncBudget.FromConfiguration(configuration, services));
+        services.AddSingleton<ConnectorPollerNudge>();
+        services.AddSingleton<IConnectorCacheInvalidator>(sp => sp.GetRequiredService<ConnectorPollerNudge>());
 
         // Demo service health monitor
         services.AddHttpClient("DemoServiceHealth");

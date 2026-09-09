@@ -22,7 +22,8 @@ namespace Nocturne.API.Services.BackgroundServices;
 /// </typeparam>
 /// <remarks>
 /// The service polls every minute and only syncs a given tenant when its configured
-/// <c>SyncIntervalMinutes</c> has elapsed since the last sync. Per-tenant configuration
+/// <c>SyncIntervalMinutes</c> has elapsed since the last sync, and looks at a tenant only when it is
+/// due (<see cref="_nextCheckByTenant"/>). Per-tenant configuration
 /// is loaded fresh each cycle via <see cref="IConnectorConfigurationLoader{TConfig}"/>.
 /// </remarks>
 public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
@@ -45,6 +46,16 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
     /// used to debounce rapid consecutive calls.
     /// </summary>
     private readonly ConcurrentDictionary<Guid, DateTime> _lastNudgeByTenant = new();
+
+    /// <summary>
+    /// When each tenant next needs a look: a tenant with no usable configuration for this connector
+    /// after <see cref="UnconfiguredRecheckInterval"/>, a configured one when its interval has
+    /// elapsed. A tenant not yet due costs the tick nothing — no budget slot, no DI scope, no
+    /// configuration read. Cleared by <see cref="RequestImmediateSync"/>, which
+    /// <see cref="ConnectorPollerNudge"/> drives from every configuration write, so a saved or
+    /// enabled connector syncs on the next tick.
+    /// </summary>
+    private readonly ConcurrentDictionary<Guid, DateTime> _nextCheckByTenant = new();
 
     private static readonly TimeSpan NudgeDebounceWindow = TimeSpan.FromSeconds(10);
 
@@ -72,15 +83,18 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
     /// <param name="serviceProvider">Root DI service provider; a new scope is created per tenant sync.</param>
     /// <param name="budget">The process-wide budget.</param>
     /// <param name="logger">Logger instance.</param>
+    /// <param name="nudge">Delivers configuration writes for this connector; absent, a change is noticed on the tenant's next scheduled look.</param>
     protected ConnectorBackgroundService(
         IServiceProvider serviceProvider,
         ConnectorSyncBudget budget,
-        ILogger logger
+        ILogger logger,
+        ConnectorPollerNudge? nudge = null
     )
     {
         ServiceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
         _budget = budget ?? throw new ArgumentNullException(nameof(budget));
         Logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        nudge?.Subscribe(ConnectorName, RequestImmediateSync);
     }
 
     /// <summary>
@@ -99,6 +113,7 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
 
         _lastNudgeByTenant[tenantId] = now;
         _lastSyncByTenant.TryRemove(tenantId, out _);
+        _nextCheckByTenant.TryRemove(tenantId, out _);
 
         Logger.LogDebug(
             "Immediate sync requested for {ConnectorName} tenant {TenantId}",
@@ -140,6 +155,13 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
     /// SyncIntervalMinutes has elapsed since its last sync. Overridable for tests.
     /// </summary>
     protected virtual TimeSpan PollInterval => TimeSpan.FromMinutes(1);
+
+    /// <summary>
+    /// How long a tenant with no usable configuration for this connector is left alone before its
+    /// configuration is read again. Bounds the enable latency on an instance the configuration
+    /// write did not reach (<see cref="ConnectorPollerNudge"/> is in-process). Overridable for tests.
+    /// </summary>
+    protected virtual TimeSpan UnconfiguredRecheckInterval => TimeSpan.FromMinutes(5);
 
     private DateTime _lastRealtimeSupervision = DateTime.MinValue;
 
@@ -342,10 +364,13 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
         using var lookupScope = ServiceProvider.CreateScope();
         var factory = lookupScope.ServiceProvider.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
         await using var lookupContext = await factory.CreateDbContextAsync(stoppingToken);
-        var tenants = await lookupContext.Tenants.AsNoTracking()
-            .Where(t => t.IsActive)
-            .Select(t => new { t.Id, t.Slug, t.DisplayName })
-            .ToListAsync(stoppingToken);
+        var now = DateTime.UtcNow;
+        var tenants = (await lookupContext.Tenants.AsNoTracking()
+                .Where(t => t.IsActive)
+                .Select(t => new { t.Id, t.Slug, t.DisplayName })
+                .ToListAsync(stoppingToken))
+            .Where(t => !_nextCheckByTenant.TryGetValue(t.Id, out var nextCheck) || nextCheck <= now)
+            .ToList();
 
         // Sync tenants concurrently so each tenant is independent: one tenant's slow or failing sync
         // must never delay or block another's. Each tenant already runs in its own DI scope (own
@@ -455,18 +480,25 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
             return;
         }
 
+        var now = DateTime.UtcNow;
         if (!config.Enabled || config.SyncIntervalMinutes <= 0)
+        {
+            _nextCheckByTenant[tenantId] = now + UnconfiguredRecheckInterval;
             return;
+        }
 
         // Only sync when the tenant's configured interval has elapsed
-        var now = DateTime.UtcNow;
         var interval = TimeSpan.FromMinutes(config.SyncIntervalMinutes);
         if (_lastSyncByTenant.TryGetValue(tenantId, out var lastSync) && now - lastSync < interval)
+        {
+            _nextCheckByTenant[tenantId] = lastSync + interval;
             return;
+        }
 
         Logger.LogDebug("Syncing {ConnectorName} for tenant {TenantSlug}", ConnectorName, tenantSlug);
 
         _lastSyncByTenant[tenantId] = now;
+        _nextCheckByTenant[tenantId] = now + interval;
 
         await UpdateHealthStateAsync(
             scope.ServiceProvider,
@@ -531,8 +563,9 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
 public class ConnectorBackgroundService<TService, TConfig>(
     IServiceProvider serviceProvider,
     ConnectorSyncBudget budget,
-    ILogger<ConnectorBackgroundService<TService, TConfig>> logger)
-    : ConnectorBackgroundService<TConfig>(serviceProvider, budget, logger)
+    ILogger<ConnectorBackgroundService<TService, TConfig>> logger,
+    ConnectorPollerNudge? nudge = null)
+    : ConnectorBackgroundService<TConfig>(serviceProvider, budget, logger, nudge)
     where TService : class, IConnectorService<TConfig>
     where TConfig : BaseConnectorConfiguration
 {
