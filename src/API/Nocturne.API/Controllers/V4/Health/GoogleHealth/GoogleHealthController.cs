@@ -4,6 +4,7 @@ using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Health.GoogleHealth;
+using Nocturne.Connectors.GoogleHealth.Services;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Health;
 using Nocturne.Core.Contracts.Health;
