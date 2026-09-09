@@ -1,4 +1,5 @@
 using System.Net;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
@@ -112,11 +113,12 @@ public class GoogleHealthTests
         Assert.True(status.Connected);
         Assert.Equal("partial_consent", status.ErrorCode);
         Assert.Equal("refresh", store.Secrets["refreshToken"]);
-        Assert.Equal("account", store.Secrets["accountKey"]);
+        var accountKey = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes("account")));
+        Assert.Equal(accountKey, store.Secrets["accountKey"]);
 
         await service.DisconnectAsync(subject, default);
         Assert.False((await service.StatusAsync(default)).Connected);
-        Assert.Equal("account", store.Secrets["accountKey"]);
+        Assert.Equal(accountKey, store.Secrets["accountKey"]);
     }
 
     [Fact]
