@@ -48,9 +48,9 @@ public class ProfileWriteService : IProfileWriteService
             {
                 profile.Id = Guid.CreateVersion7().ToString();
             }
-
-            await _decomposer.DecomposeAsync(profile, WriteOrigin.Live, cancellationToken);
         }
+
+        await _decomposer.DecomposeBatchAsync(profileList, WriteOrigin.Live, cancellationToken);
 
         await _sideEffects.OnCreatedAsync(
             CollectionName,
