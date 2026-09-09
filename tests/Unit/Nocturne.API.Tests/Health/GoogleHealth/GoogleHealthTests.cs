@@ -94,6 +94,7 @@ public class GoogleHealthTests
         });
         var service = Service(store, handler, tenantId);
         var options = Options();
+        options.DataTypes = ["weight", "steps"];
 
         await service.SaveAsync(options, subject, default);
         var authorization = await service.StartAsync(subject, default);
