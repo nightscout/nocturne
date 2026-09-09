@@ -19,7 +19,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     tenant_id = table.Column<Guid>(type: "uuid", nullable: false),
                     subject_id = table.Column<Guid>(type: "uuid", nullable: false),
                     protected_settings = table.Column<string>(type: "text", nullable: false),
-                    protected_token = table.Column<string>(type: "text", nullable: true),
                     account_key = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
                     last_sync = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
                     last_attempt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),

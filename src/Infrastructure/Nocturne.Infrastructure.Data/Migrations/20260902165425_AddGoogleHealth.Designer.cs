@@ -3216,10 +3216,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("protected_settings");
 
-                    b.Property<string>("ProtectedToken")
-                        .HasColumnType("text")
-                        .HasColumnName("protected_token");
-
                     b.Property<Guid>("SubjectId")
                         .HasColumnType("uuid")
                         .HasColumnName("subject_id");
