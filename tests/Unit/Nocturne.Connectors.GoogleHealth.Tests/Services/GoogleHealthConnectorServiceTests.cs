@@ -44,7 +44,9 @@ public class GoogleHealthConnectorServiceTests
         var fixture = new Fixture(request => request.RequestUri!.AbsolutePath switch
         {
             "/token" => Json($$"""{"access_token":"access","refresh_token":"rotated","expires_in":3600,"token_type":"Bearer","scope":"{{GoogleHealthClient.MetricsScope}}"}"""),
-            var path when path.Contains("/weight/") => Json($$"""{"dataPoints":[{"weight":{"sampleTime":{"physicalTime":"{{sampleTime:O}}"},"weightGrams":72500}}]}"""),
+            var path when path.Contains("/weight/") => Json(
+                """{"dataPoints":[{"weight":{"sampleTime":{"physicalTime":"TIME"},"weightGrams":72500}}]}"""
+                    .Replace("TIME", sampleTime.ToString("O"))),
             _ => throw new InvalidOperationException($"Unexpected request: {request.RequestUri}")
         });
 
