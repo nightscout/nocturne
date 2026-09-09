@@ -1,3 +1,4 @@
+using Nocturne.API.Services.Alerts;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -256,7 +257,7 @@ public class EntriesController : BaseV3Controller<Entry>
 
             _logger.LogDebug("Successfully created V3 entry {Id}", createdEntry.Id);
 
-            await EvaluateAlertsAsync(new[] { createdEntry }, cancellationToken);
+            await _alertEvaluator.EvaluateForEntriesAsync([createdEntry], cancellationToken);
 
             // Location resolves to the 24-hex ObjectId that matches the response body identifier.
             return CreatedAtAction(
@@ -333,7 +334,7 @@ public class EntriesController : BaseV3Controller<Entry>
                 createdEntries.Count()
             );
 
-            await EvaluateAlertsAsync(createdEntries.ToArray(), cancellationToken);
+            await _alertEvaluator.EvaluateForEntriesAsync(createdEntries, cancellationToken);
 
             return StatusCode(201, createdEntries.ToV3Responses());
         }
@@ -625,14 +626,6 @@ public class EntriesController : BaseV3Controller<Entry>
         // Use the most recent entry's date as last modified
         var latestMills = entries.Max(e => e.Mills);
         return DateTimeOffset.FromUnixTimeMilliseconds(latestMills);
-    }
-
-    private async Task EvaluateAlertsAsync(Entry[] entries, CancellationToken ct)
-    {
-        // Alarms evaluate against the canonical stream, not the just-uploaded batch — a losing
-        // CGM's readings must not trigger or suppress an alarm.
-        if (entries.Any(e => e.Sgv is > 0))
-            await _alertEvaluator.EvaluateAsync(ct);
     }
 
     #endregion

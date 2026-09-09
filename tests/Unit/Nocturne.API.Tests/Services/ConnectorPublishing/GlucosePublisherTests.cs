@@ -25,6 +25,7 @@ public class GlucosePublisherTests
     private readonly Mock<ISensorGlucoseRepository> _mockSensorGlucoseRepository;
     private readonly Mock<IMeterGlucoseRepository> _mockMeterGlucoseRepository;
     private readonly Mock<IPatientDeviceStamper> _mockPatientDeviceStamper;
+    private readonly Mock<ICanonicalAlertEvaluator> _mockAlertEvaluator;
     private readonly GlucosePublisher _publisher;
 
     public GlucosePublisherTests()
@@ -33,13 +34,14 @@ public class GlucosePublisherTests
         _mockSensorGlucoseRepository = new Mock<ISensorGlucoseRepository>();
         _mockMeterGlucoseRepository = new Mock<IMeterGlucoseRepository>();
         _mockPatientDeviceStamper = new Mock<IPatientDeviceStamper>();
+        _mockAlertEvaluator = new Mock<ICanonicalAlertEvaluator>();
 
         _publisher = new GlucosePublisher(
             _mockEntryService.Object,
             _mockSensorGlucoseRepository.Object,
             _mockMeterGlucoseRepository.Object,
             _mockPatientDeviceStamper.Object,
-            Mock.Of<ICanonicalAlertEvaluator>(),
+            _mockAlertEvaluator.Object,
             Mock.Of<IAuditContext>(),
             NullLogger<GlucosePublisher>.Instance
         );
@@ -87,9 +89,56 @@ public class GlucosePublisherTests
             .Setup(s => s.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("test error"));
 
-        var result = await _publisher.PublishEntriesAsync(new List<Entry>(), "test-source", WriteOrigin.Live);
+        var result = await _publisher.PublishEntriesAsync(
+            new List<Entry> { new() { Id = "1", Sgv = 120 } }, "test-source", WriteOrigin.Live);
 
         result.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task PublishEntriesAsync_WritesNothing_ForAnEmptyBatch()
+    {
+        // A connector sync that found nothing new still calls its publishers; the sibling
+        // PublishAsync has always skipped that, this path did not.
+        var result = await _publisher.PublishEntriesAsync([], "test-source", WriteOrigin.Live);
+
+        result.Should().BeTrue();
+        _mockEntryService.Verify(
+            s => s.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _mockAlertEvaluator.Verify(e => e.EvaluateAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task PublishEntriesAsync_EvaluatesAlerts_ForACgmReading()
+    {
+        var entries = new List<Entry> { new() { Id = "1", Sgv = 120 } };
+        _mockEntryService
+            .Setup(s => s.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(entries);
+
+        await _publisher.PublishEntriesAsync(entries, "test-source", WriteOrigin.Live);
+
+        _mockAlertEvaluator.Verify(e => e.EvaluateAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task PublishEntriesAsync_DoesNotEvaluateAlerts_ForABatchWithNoCgmReading()
+    {
+        // Fingersticks, calibrations and sensor-error sentinels are written but are not the
+        // trigger any glucose alert condition is written against.
+        var entries = new List<Entry> { new() { Id = "1", Mbg = 96 }, new() { Id = "2", Sgv = 0 } };
+        _mockEntryService
+            .Setup(s => s.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(entries);
+
+        var result = await _publisher.PublishEntriesAsync(entries, "test-source", WriteOrigin.Live);
+
+        result.Should().BeTrue();
+        _mockEntryService.Verify(
+            s => s.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+        _mockAlertEvaluator.Verify(e => e.EvaluateAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

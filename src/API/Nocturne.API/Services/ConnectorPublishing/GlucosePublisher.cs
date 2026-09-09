@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Services.Alerts;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
@@ -44,6 +45,11 @@ internal sealed class GlucosePublisher : ConnectorPublisherBase, IGlucosePublish
         _alertEvaluator = alertEvaluator ?? throw new ArgumentNullException(nameof(alertEvaluator));
     }
 
+    /// <remarks>
+    /// Empty batches skip the write for the reason <see cref="ConnectorPublisherBase.PublishAsync"/>
+    /// does: a connector sync that found nothing new still calls its publishers, and a write of no
+    /// records has nothing for the entry service or for an alert pass to decide against.
+    /// </remarks>
     public async Task<bool> PublishEntriesAsync(
         IEnumerable<Entry> entries,
         string source,
@@ -52,8 +58,10 @@ internal sealed class GlucosePublisher : ConnectorPublisherBase, IGlucosePublish
         try
         {
             var entryList = entries.ToList();
+            if (entryList.Count == 0) return true;
+
             await _entryService.CreateEntriesAsync(entryList, origin, cancellationToken);
-            await _alertEvaluator.EvaluateAsync(cancellationToken);
+            await _alertEvaluator.EvaluateForEntriesAsync(entryList, cancellationToken);
             return true;
         }
         catch (OperationCanceledException) { throw; }
