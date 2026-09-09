@@ -22,6 +22,10 @@ public sealed class ConnectorPollerNudge : IConnectorCacheInvalidator
     public void Subscribe(string connectorName, Action<Guid> onChanged) =>
         _subscribers.GetOrAdd(connectorName, _ => []).Add(onChanged);
 
+    /// <summary>Whether any poller has subscribed under <paramref name="connectorName"/>.</summary>
+    public bool HasSubscribers(string connectorName) =>
+        _subscribers.TryGetValue(connectorName, out var subscribers) && !subscribers.IsEmpty;
+
     /// <inheritdoc />
     public void Invalidate(string connectorName, Guid tenantId)
     {

@@ -80,17 +80,27 @@ public class ConnectorPollingRegistrationTests
 
     /// <summary>
     /// A configuration write reaches a poller only through the <see cref="ConnectorPollerNudge"/> its
-    /// constructor forwards to the base. A hand-written poller whose constructor omits it is scheduled
-    /// and syncs, but never hears that a tenant saved or enabled the connector, and waits out the
-    /// recheck interval instead.
+    /// constructor forwards to the base. A hand-written poller that takes the parameter but does not
+    /// forward it, or omits it, is scheduled and syncs, but never hears that a tenant saved or enabled
+    /// the connector, and waits out the recheck interval instead. Each scheduled poller is built the
+    /// way the host builds it and the nudge is asked whether it subscribed.
     /// </summary>
     [Fact]
-    public void EveryScheduledPoller_TakesTheNudge()
+    public void EveryScheduledPoller_SubscribesToTheNudge()
     {
+        var nudge = new ConnectorPollerNudge();
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton(new ConnectorSyncBudget());
+        services.AddSingleton(nudge);
+        using var provider = services.BuildServiceProvider();
+
         foreach (var poller in ScheduledPollers())
         {
-            poller.GetConstructors().Should().Contain(
-                ctor => ctor.GetParameters().Any(p => p.ParameterType == typeof(ConnectorPollerNudge)),
+            var connectorName = ConnectorRegistrationAttribute.DeclaredOn(PolledConfigurationOf(poller)).ConnectorName;
+            using var _ = (IDisposable)ActivatorUtilities.CreateInstance(provider, poller);
+
+            nudge.HasSubscribers(connectorName).Should().BeTrue(
                 "{0} must forward ConnectorPollerNudge to the base constructor", poller.Name);
         }
     }
