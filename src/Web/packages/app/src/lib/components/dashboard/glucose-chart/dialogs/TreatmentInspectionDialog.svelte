@@ -2,8 +2,16 @@
   import * as Dialog from "$lib/components/ui/dialog";
   import { Badge } from "$lib/components/ui/badge";
   import { Syringe } from "lucide-svelte";
-  import { bg, bgLabel, formatLocale, time } from "$lib/utils/formatting";
+  import {
+    bg,
+    bgLabel,
+    formatCarbDisplay,
+    formatInsulinDisplay,
+    formatLocale,
+    time,
+  } from "$lib/utils/formatting";
   import { getDataSourceDisplayName } from "$lib/utils/data-source-display";
+  import { entrySummary } from "$lib/utils/entry-summary";
   import type { BolusCalculation } from "$lib/api";
   import { CalculationType } from "$lib/api";
   import type { EntryRecord } from "$lib/constants/entry-categories";
@@ -84,13 +92,13 @@
   const treatmentSummary = $derived.by(() => {
     const parts: string[] = [];
     if (bolusInsulin != null) {
-      let bolusText = `${bolusInsulin}U`;
+      let bolusText = `${formatInsulinDisplay(bolusInsulin)}U`;
       if (bolusType) bolusText += ` ${bolusType}`;
       else bolusText += " bolus";
       parts.push(bolusText);
     }
     if (carbGrams != null) {
-      let carbText = `${carbGrams}g carbs`;
+      let carbText = `${formatCarbDisplay(carbGrams)}g carbs`;
       if (carbLabel) carbText += ` (${carbLabel})`;
       parts.push(carbText);
     }
@@ -100,10 +108,11 @@
   // Build the chart center label
   const chartLabel = $derived.by(() => {
     if (bolusInsulin != null && carbGrams != null) {
-      return `${bolusInsulin}U + ${carbGrams}g`;
+      return `${formatInsulinDisplay(bolusInsulin)}U + ${formatCarbDisplay(carbGrams)}g`;
     }
-    if (bolusInsulin != null) return `${bolusInsulin}U bolus`;
-    if (carbGrams != null) return `${carbGrams}g carbs`;
+    if (bolusInsulin != null)
+      return `${formatInsulinDisplay(bolusInsulin)}U bolus`;
+    if (carbGrams != null) return `${formatCarbDisplay(carbGrams)}g carbs`;
     return undefined;
   });
 
@@ -122,29 +131,6 @@
     }
   });
 
-  // Format entry summary for correlated records (matches TreatmentDisambiguationDialog)
-  function formatEntrySummary(record: EntryRecord): string {
-    const parts: string[] = [];
-    switch (record.kind) {
-      case "bolus":
-        if (record.data.insulin) parts.push(`${record.data.insulin}U`);
-        if (record.data.bolusType) parts.push(record.data.bolusType);
-        break;
-      case "carbs":
-        if (record.data.carbs) parts.push(`${record.data.carbs}g carbs`);
-        break;
-      case "bgCheck":
-        if (record.data.mgdl) parts.push(`${record.data.mgdl} mg/dL`);
-        break;
-      case "note":
-        if (record.data.text) parts.push(record.data.text.slice(0, 50));
-        break;
-      case "deviceEvent":
-        if (record.data.eventType) parts.push(record.data.eventType);
-        break;
-    }
-    return parts.join(" · ") || ENTRY_CATEGORIES[record.kind].name;
-  }
 
   // Fetch the bolus calculation behind the treatment on open
   $effect(() => {
@@ -177,7 +163,7 @@
             class="{ENTRY_CATEGORIES.bolus.colorClass} {ENTRY_CATEGORIES.bolus.bgClass} {ENTRY_CATEGORIES.bolus.borderClass}"
           >
             <Syringe class="mr-1 h-3.5 w-3.5" />
-            {bolusInsulin}U{bolusType ? ` ${bolusType}` : ""}
+            {formatInsulinDisplay(bolusInsulin)}U{bolusType ? ` ${bolusType}` : ""}
           </Badge>
         {/if}
         {#if carbGrams != null}
@@ -185,7 +171,7 @@
             variant="outline"
             class="{ENTRY_CATEGORIES.carbs.colorClass} {ENTRY_CATEGORIES.carbs.bgClass} {ENTRY_CATEGORIES.carbs.borderClass}"
           >
-            {carbGrams}g{carbLabel ? ` ${carbLabel}` : " carbs"}
+            {formatCarbDisplay(carbGrams)}g{carbLabel ? ` ${carbLabel}` : " carbs"}
           </Badge>
         {/if}
       </Dialog.Title>
@@ -331,7 +317,7 @@
             >
               <div class="flex-1">
                 <div class="font-medium text-sm">
-                  {formatEntrySummary(record)}
+                  {entrySummary(record)}
                 </div>
                 <div class="text-xs text-muted-foreground">
                   {record.data.mills

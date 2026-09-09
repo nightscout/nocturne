@@ -9,6 +9,7 @@
   } from "$lib/components/ui/card";
   import { Badge } from "$lib/components/ui/badge";
   import { time } from "$lib/utils/formatting";
+  import { entryDetails, entryLabel } from "$lib/utils/entry-summary";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { EntryEditDialog } from "$lib/components/entries";
 
@@ -42,39 +43,6 @@
     isDialogOpen = true;
   }
 
-  function getEntryLabel(entry: EntryRecord): string {
-    switch (entry.kind) {
-      case "bolus":
-        return entry.data.insulin ? `${entry.data.insulin}u insulin` : "Bolus";
-      case "carbs":
-        return entry.data.carbs ? `${entry.data.carbs}g carbs` : "Carbs";
-      case "bgCheck":
-        return entry.data.mgdl ? `${entry.data.mgdl} mg/dL` : "BG Check";
-      case "note":
-        return entry.data.text ?? "Note";
-      case "deviceEvent":
-        return entry.data.eventType ?? "Device Event";
-      case "basalInjection":
-        return entry.data.units ? `${entry.data.units}u basal` : "Long-acting injection";
-    }
-  }
-
-  function getEntryDetails(entry: EntryRecord): string {
-    switch (entry.kind) {
-      case "bolus":
-        return entry.data.bolusType ?? "";
-      case "carbs":
-        return "";
-      case "bgCheck":
-        return entry.data.glucoseType ?? "";
-      case "note":
-        return entry.data.isAnnouncement ? "Announcement" : "";
-      case "deviceEvent":
-        return entry.data.notes ?? "";
-      case "basalInjection":
-        return entry.data.insulinContext?.insulinName ?? "";
-    }
-  }
 </script>
 
 <Card class="@container">
@@ -116,9 +84,9 @@
                 </Badge>
                 <div>
                   <div class="font-medium">
-                    {getEntryLabel(entry)}
-                    {#if getEntryDetails(entry)}
-                      <span class="text-muted-foreground"> - {getEntryDetails(entry)}</span>
+                    {entryLabel(entry)}
+                    {#if entryDetails(entry)}
+                      <span class="text-muted-foreground"> - {entryDetails(entry)}</span>
                     {/if}
                   </div>
                   <div class="text-sm text-muted-foreground">
