@@ -193,4 +193,89 @@ public class SensorGlucoseRepositoryDuplicateProbeTests : IDisposable
 
         match.Should().BeNull();
     }
+
+    [Fact]
+    public async Task FindStoredDuplicateCandidatesAsync_ReturnsWindowNewestFirst()
+    {
+        // The caller reproduces the single-entry probe by taking the first match in this order,
+        // so the ordering is the contract, not an incidental detail.
+        var now = DateTime.UtcNow;
+        SeedReading(now.AddMinutes(-10), 130, "Dexcom G7 DXCMRf");
+        SeedReading(now, 134, "Dexcom G7 DXCMRf");
+        SeedReading(now.AddMinutes(-5), 132, "Dexcom G7 DXCMRf");
+        SeedReading(now.AddMinutes(-40), 120, "Dexcom G7 DXCMRf");
+
+        var candidates = await _repo.FindStoredDuplicateCandidatesAsync(
+            ["Dexcom G7 DXCMRf"], now.AddMinutes(-15), now.AddMinutes(5));
+
+        candidates.Select(c => c.Mgdl).Should().Equal(134, 132, 130);
+    }
+
+    [Fact]
+    public async Task FindStoredDuplicateCandidatesAsync_FiltersToTheNamedDevices()
+    {
+        var now = DateTime.UtcNow;
+        SeedReading(now, 134, "Dexcom G7 DXCMRf");
+        SeedReading(now, 135, "xdrip");
+        SeedReading(now, 136, "dexcom-connector");
+
+        var candidates = await _repo.FindStoredDuplicateCandidatesAsync(
+            ["Dexcom G7 DXCMRf", "xdrip"], now.AddMinutes(-5), now.AddMinutes(5));
+
+        candidates.Select(c => c.Mgdl).Should().BeEquivalentTo(new[] { 134d, 135d });
+    }
+
+    [Fact]
+    public async Task FindStoredDuplicateCandidatesAsync_NoDevices_ReturnsEveryDevice()
+    {
+        var now = DateTime.UtcNow;
+        SeedReading(now, 134, "Dexcom G7 DXCMRf");
+        SeedReading(now, 135, "xdrip");
+
+        var candidates = await _repo.FindStoredDuplicateCandidatesAsync(
+            devices: null, now.AddMinutes(-5), now.AddMinutes(5));
+
+        candidates.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task FindStoredDuplicateCandidatesAsync_KeepsNonPrimaryCopiesAndDropsDeletedRows()
+    {
+        // Same raw-storage semantics as the single-entry probe: hidden duplicate copies count as
+        // stored, soft-deleted rows do not.
+        var now = DateTime.UtcNow;
+        var hiddenId = SeedReading(now, 134, "Dexcom G7 DXCMRf");
+        LinkNonPrimary(hiddenId, now);
+        var deletedId = SeedReading(now.AddMinutes(-1), 133, "Dexcom G7 DXCMRf");
+        var deleted = _context.SensorGlucose.IgnoreQueryFilters().Single(e => e.Id == deletedId);
+        deleted.DeletedAt = now;
+        _context.SaveChanges();
+
+        var candidates = await _repo.FindStoredDuplicateCandidatesAsync(
+            ["Dexcom G7 DXCMRf"], now.AddMinutes(-5), now.AddMinutes(5));
+
+        candidates.Select(c => c.Id).Should().Equal(hiddenId);
+    }
+
+    [Fact]
+    public async Task FindStoredDuplicateCandidatesAsync_OtherTenantsRows_AreExcluded()
+    {
+        var otherTenant = Guid.Parse("00000000-0000-0000-0000-000000000002");
+        var now = DateTime.UtcNow;
+        _context.Tenants.Add(new TenantEntity { Id = otherTenant, Slug = "other" });
+        _context.SensorGlucose.Add(new SensorGlucoseEntity
+        {
+            Id = Guid.NewGuid(),
+            TenantId = otherTenant,
+            Timestamp = now,
+            Mgdl = 134,
+            Device = "Dexcom G7 DXCMRf",
+        });
+        _context.SaveChanges();
+
+        var candidates = await _repo.FindStoredDuplicateCandidatesAsync(
+            ["Dexcom G7 DXCMRf"], now.AddMinutes(-5), now.AddMinutes(5));
+
+        candidates.Should().BeEmpty();
+    }
 }

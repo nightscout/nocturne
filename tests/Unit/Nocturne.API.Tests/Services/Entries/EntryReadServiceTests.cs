@@ -355,6 +355,168 @@ public class EntryReadServiceTests
 
     #endregion
 
+    #region CheckDuplicatesAsync — one query per batch
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CheckDuplicatesAsync_ContiguousBatch_ProbesStorageOnce()
+    {
+        StubNoSgvCandidates();
+        var probes = FiveMinutelyProbes(200, "xdrip");
+
+        var results = await _sut.CheckDuplicatesAsync(probes);
+
+        Assert.Equal(200, results.Count);
+        Assert.All(results, Assert.Null);
+        _sgRepo.Verify(r => r.FindStoredDuplicateCandidatesAsync(
+            It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+        _sgRepo.Verify(r => r.FindStoredDuplicateAsync(
+            It.IsAny<string?>(), It.IsAny<double?>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CheckDuplicatesAsync_ProbesFarApart_QueriesEachClusterSeparately()
+    {
+        // Two entries a week apart must not make one query read a week of readings.
+        StubNoSgvCandidates();
+        var mills = new DateTimeOffset(Now, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        var probes = new[]
+        {
+            new EntryDuplicateProbe("xdrip", "sgv", 120, mills),
+            new EntryDuplicateProbe("xdrip", "sgv", 130, mills + (long)TimeSpan.FromDays(7).TotalMilliseconds),
+        };
+
+        await _sut.CheckDuplicatesAsync(probes);
+
+        _sgRepo.Verify(r => r.FindStoredDuplicateCandidatesAsync(
+            It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+            It.IsAny<CancellationToken>()), Times.Exactly(2));
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CheckDuplicatesAsync_QueryWindowCoversEveryProbesOwnWindow()
+    {
+        var captured = new List<(DateTime From, DateTime To)>();
+        _sgRepo.Setup(r => r.FindStoredDuplicateCandidatesAsync(
+                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<IReadOnlyCollection<string>?, DateTime, DateTime, CancellationToken>(
+                (_, from, to, _) => captured.Add((from, to)))
+            .ReturnsAsync(Array.Empty<SensorGlucose>());
+
+        var probes = FiveMinutelyProbes(10, "xdrip");
+
+        await _sut.CheckDuplicatesAsync(probes, windowMinutes: 5);
+
+        var window = TimeSpan.FromMinutes(5);
+        Assert.All(probes, probe =>
+        {
+            var at = DateTimeOffset.FromUnixTimeMilliseconds(probe.Mills).UtcDateTime;
+            Assert.Contains(captured, w => w.From <= at - window && w.To >= at + window);
+        });
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CheckDuplicatesAsync_AllProbesShareADevice_FiltersToThatDevice()
+    {
+        IReadOnlyCollection<string>? devices = null;
+        _sgRepo.Setup(r => r.FindStoredDuplicateCandidatesAsync(
+                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<IReadOnlyCollection<string>?, DateTime, DateTime, CancellationToken>(
+                (d, _, _, _) => devices = d)
+            .ReturnsAsync(Array.Empty<SensorGlucose>());
+
+        await _sut.CheckDuplicatesAsync(FiveMinutelyProbes(5, "xdrip"));
+
+        Assert.NotNull(devices);
+        Assert.Equal(["xdrip"], devices);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CheckDuplicatesAsync_AnyProbeWithoutADevice_FetchesEveryDevice()
+    {
+        // A probe with no device matches a stored reading from any device, so the fetch cannot
+        // be narrowed to the devices the other probes named.
+        IReadOnlyCollection<string>? devices = new[] { "sentinel" };
+        _sgRepo.Setup(r => r.FindStoredDuplicateCandidatesAsync(
+                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<IReadOnlyCollection<string>?, DateTime, DateTime, CancellationToken>(
+                (d, _, _, _) => devices = d)
+            .ReturnsAsync(Array.Empty<SensorGlucose>());
+
+        var mills = new DateTimeOffset(Now, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        await _sut.CheckDuplicatesAsync(new[]
+        {
+            new EntryDuplicateProbe("xdrip", "sgv", 120, mills),
+            new EntryDuplicateProbe(null, "sgv", 130, mills + 300_000),
+        });
+
+        Assert.Null(devices);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CheckDuplicatesAsync_UnknownType_IsNeverADuplicateAndCostsNoQuery()
+    {
+        var mills = new DateTimeOffset(Now, TimeSpan.Zero).ToUnixTimeMilliseconds();
+
+        var results = await _sut.CheckDuplicatesAsync(
+            [new EntryDuplicateProbe("xdrip", "food", null, mills)]);
+
+        Assert.Null(Assert.Single(results));
+        _sgRepo.VerifyNoOtherCalls();
+        _mgRepo.VerifyNoOtherCalls();
+        _calRepo.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CheckDuplicatesAsync_ResultsAlignWithSubmissionOrder()
+    {
+        var mills = new DateTimeOffset(Now, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        var stored = MakeSg(Now.AddMinutes(-30), 99);
+        _sgRepo.Setup(r => r.FindStoredDuplicateCandidatesAsync(
+                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync([stored]);
+
+        // Submitted newest-first, so the stored reading answers the *last* probe: chunking sorts
+        // by time internally and must not reorder the results.
+        var results = await _sut.CheckDuplicatesAsync(new[]
+        {
+            new EntryDuplicateProbe("test-device", "sgv", 120, mills),
+            new EntryDuplicateProbe("test-device", "sgv", 99, stored.Mills),
+        });
+
+        Assert.Null(results[0]);
+        Assert.NotNull(results[1]);
+        Assert.Equal(stored.Mills, results[1]!.Mills);
+    }
+
+    private void StubNoSgvCandidates() =>
+        _sgRepo.Setup(r => r.FindStoredDuplicateCandidatesAsync(
+                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<SensorGlucose>());
+
+    private static EntryDuplicateProbe[] FiveMinutelyProbes(int count, string? device)
+    {
+        var start = new DateTimeOffset(Now, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        return Enumerable.Range(0, count)
+            .Select(i => new EntryDuplicateProbe(device, "sgv", 100 + (i % 50), start + (i * 300_000L)))
+            .ToArray();
+    }
+
+    #endregion
+
     #region QueryAsync — demo mode filtering
 
     [Fact]

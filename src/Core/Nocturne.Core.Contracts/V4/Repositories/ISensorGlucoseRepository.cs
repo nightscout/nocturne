@@ -86,6 +86,29 @@ public interface ISensorGlucoseRepository
         string? device, double? mgdl, DateTime from, DateTime to, CancellationToken ct = default);
 
     /// <summary>
+    /// Raw-storage duplicate probe for a whole upload batch: returns the stored readings in
+    /// <paramref name="from"/>..<paramref name="to"/> for the given devices, newest first, so the
+    /// caller can match every submitted entry in memory instead of querying per entry.
+    /// </summary>
+    /// <remarks>
+    /// Same raw semantics as
+    /// <see cref="FindStoredDuplicateAsync(string?, double?, DateTime, DateTime, CancellationToken)"/> —
+    /// non-primary duplicate copies are included, and the ordering (timestamp then id, both
+    /// descending) is the one the single-entry probe resolves ties by, so scanning the returned
+    /// list in order and taking the first match reproduces its result exactly.
+    /// </remarks>
+    /// <param name="devices">Device identifiers to include, or <c>null</c> for every device
+    /// (required when any submitted entry has no device, since such an entry matches any).</param>
+    /// <param name="from">Inclusive start of the time window.</param>
+    /// <param name="to">Inclusive end of the time window.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Every stored reading in the window — unpaged, so the caller must keep the window
+    /// narrow enough to hold in memory.</returns>
+    Task<IReadOnlyList<SensorGlucose>> FindStoredDuplicateCandidatesAsync(
+        IReadOnlyCollection<string>? devices, DateTime from, DateTime to,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Retrieve the timestamp of the most recently stored <see cref="SensorGlucose"/> reading, optionally scoped to a data source.
     /// </summary>
     /// <remarks>Used by connectors to determine the last sync time and avoid re-fetching already-stored data.</remarks>

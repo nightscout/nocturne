@@ -277,17 +277,46 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         string? device, double? mgdl, DateTime from, DateTime to, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entity = await StoredDuplicateQuery(ctx, device is null ? null : [device], mgdl, from, to)
+            .FirstOrDefaultAsync(ct);
+        return entity is null ? null : SensorGlucoseMapper.ToDomainModel(entity);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<SensorGlucose>> FindStoredDuplicateCandidatesAsync(
+        IReadOnlyCollection<string>? devices, DateTime from, DateTime to,
+        CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entities = await StoredDuplicateQuery(ctx, devices, mgdl: null, from, to).ToListAsync(ct);
+        return entities.Select(SensorGlucoseMapper.ToDomainModel).ToList();
+    }
+
+    /// <summary>
+    /// The duplicate probe's query, shared by the single-entry and whole-batch forms so both see
+    /// the same rows in the same order. Deliberately without the non-primary LinkedRecords filter.
+    /// </summary>
+    private static IQueryable<SensorGlucoseEntity> StoredDuplicateQuery(
+        NocturneDbContext ctx, IReadOnlyCollection<string>? devices, double? mgdl,
+        DateTime from, DateTime to)
+    {
         var query = ctx.SensorGlucose.AsNoTracking()
             .Where(e => e.Timestamp >= from && e.Timestamp <= to);
-        if (device != null)
+        if (devices is { Count: 1 })
+        {
+            // One device is the overwhelmingly common case (a single uploader): keep it an
+            // equality so the plan stays the index seek the multi-device `= ANY` cannot be.
+            var device = devices.First();
             query = query.Where(e => e.Device == device);
+        }
+        else if (devices is { Count: > 1 })
+        {
+            query = query.Where(e => e.Device != null && devices.Contains(e.Device));
+        }
         if (mgdl.HasValue)
             query = query.Where(e => Math.Abs(e.Mgdl - mgdl.Value) < 0.01);
 
-        var entity = await query
-            .OrderByDescending(e => e.Timestamp).ThenByDescending(e => e.Id)
-            .FirstOrDefaultAsync(ct);
-        return entity is null ? null : SensorGlucoseMapper.ToDomainModel(entity);
+        return query.OrderByDescending(e => e.Timestamp).ThenByDescending(e => e.Id);
     }
 
     /// <summary>

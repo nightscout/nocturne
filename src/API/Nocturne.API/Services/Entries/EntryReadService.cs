@@ -54,6 +54,18 @@ public class EntryReadService : IEntryStore
     /// </summary>
     private const int MaxFilterFetch = 100_000;
 
+    /// <summary>
+    /// Widest time span one batch duplicate query may cover, and so the bound on the stored
+    /// readings it pulls into memory: seven days of one tenant's ingest.
+    /// </summary>
+    private static readonly TimeSpan MaxProbeChunkSpan = TimeSpan.FromDays(7);
+
+    /// <summary>
+    /// Time span each entry in a batch earns towards its chunk. It stops a two-entry batch a week
+    /// apart from reading a week of readings: a chunk only widens when enough entries share it.
+    /// </summary>
+    private static readonly TimeSpan ProbeChunkSpanPerEntry = TimeSpan.FromHours(1);
+
     /// <inheritdoc />
     public async Task<IReadOnlyList<Entry>> QueryAsync(EntryQuery query, CancellationToken ct = default)
     {
@@ -158,8 +170,8 @@ public class EntryReadService : IEntryStore
         int windowMinutes = 5, CancellationToken ct = default)
     {
         var windowMs = (long)windowMinutes * 60 * 1000;
-        var from = DateTimeOffset.FromUnixTimeMilliseconds(mills - windowMs).UtcDateTime;
-        var to = DateTimeOffset.FromUnixTimeMilliseconds(mills + windowMs).UtcDateTime;
+        var from = MillsToUtc(mills - windowMs);
+        var to = MillsToUtc(mills + windowMs);
 
         return type switch
         {
@@ -168,6 +180,72 @@ public class EntryReadService : IEntryStore
             "cal" => await CheckCalDuplicateAsync(device, from, to, ct),
             _ => null,
         };
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<Entry?>> CheckDuplicatesAsync(
+        IReadOnlyList<EntryDuplicateProbe> probes, int windowMinutes = 5, CancellationToken ct = default)
+    {
+        var results = new Entry?[probes.Count];
+        var windowMs = (long)windowMinutes * 60 * 1000;
+
+        foreach (var group in probes
+            .Select((probe, index) => (probe, index))
+            .GroupBy(x => x.probe.Type, StringComparer.Ordinal))
+        {
+            // Unknown types are never duplicates (CheckDuplicateAsync's default arm) and cost no query.
+            if (group.Key is not ("sgv" or "mbg" or "cal"))
+                continue;
+
+            foreach (var chunk in ChunkByTimeSpan(group))
+                await ClassifyChunkAsync(group.Key, chunk, windowMs, results, ct);
+        }
+
+        return results;
+    }
+
+    /// <summary>
+    /// Splits one type's probes into time-contiguous chunks, each of which becomes a single query.
+    /// A chunk widens only while its entries pay for the span (<see cref="ProbeChunkSpanPerEntry"/>
+    /// each, never past <see cref="MaxProbeChunkSpan"/>), so the rows a chunk reads stay
+    /// proportional to the entries it classifies. In the worst case there is one chunk per probe —
+    /// the per-entry probing this replaces — and for an ordinary CGM backlog there is exactly one.
+    /// </summary>
+    private static List<List<(EntryDuplicateProbe probe, int index)>> ChunkByTimeSpan(
+        IEnumerable<(EntryDuplicateProbe probe, int index)> items)
+    {
+        var chunks = new List<List<(EntryDuplicateProbe probe, int index)>>();
+        var current = new List<(EntryDuplicateProbe probe, int index)>();
+        var chunkStart = 0L;
+
+        foreach (var item in items.OrderBy(x => x.probe.Mills))
+        {
+            if (current.Count == 0)
+            {
+                chunkStart = item.probe.Mills;
+            }
+            else
+            {
+                var span = TimeSpan.FromMilliseconds(item.probe.Mills - chunkStart);
+                var budget = ProbeChunkSpanPerEntry * current.Count;
+                if (budget > MaxProbeChunkSpan)
+                    budget = MaxProbeChunkSpan;
+
+                if (span > budget)
+                {
+                    chunks.Add(current);
+                    current = [];
+                    chunkStart = item.probe.Mills;
+                }
+            }
+
+            current.Add(item);
+        }
+
+        if (current.Count > 0)
+            chunks.Add(current);
+
+        return chunks;
     }
 
     /// <inheritdoc />
@@ -373,6 +451,126 @@ public class EntryReadService : IEntryStore
         var match = results.FirstOrDefault();
         return match is null ? null : EntryProjection.FromCalibration(match);
     }
+
+    /// <summary>
+    /// Loads one chunk's stored readings in a single query and classifies every probe in it.
+    /// <paramref name="chunk"/> is ordered by timestamp, so its ends give the query's window.
+    /// </summary>
+    private async Task ClassifyChunkAsync(
+        string type,
+        List<(EntryDuplicateProbe probe, int index)> chunk,
+        long windowMs,
+        Entry?[] results,
+        CancellationToken ct)
+    {
+        var from = MillsToUtc(chunk[0].probe.Mills - windowMs);
+        var to = MillsToUtc(chunk[^1].probe.Mills + windowMs);
+
+        switch (type)
+        {
+            case "sgv":
+            {
+                var candidates = await _sgRepo.FindStoredDuplicateCandidatesAsync(
+                    ResolveProbeDevices(chunk), from, to, ct);
+                Classify(chunk, candidates, windowMs, results,
+                    c => c.Timestamp, c => c.Device, c => c.Mgdl, EntryProjection.FromSensorGlucose);
+                return;
+            }
+            case "mbg":
+            {
+                // Unpaged, and across every device: a probe without a device matches a reading
+                // from any device, and the chunk's span is what keeps the row count bounded.
+                var candidates = (await _mgRepo.GetAsync(
+                    from, to, device: null, source: null, limit: int.MaxValue, offset: 0,
+                    descending: true, ct: ct)).ToList();
+                Classify(chunk, candidates, windowMs, results,
+                    c => c.Timestamp, c => c.Device, c => c.Mgdl, EntryProjection.FromMeterGlucose);
+                return;
+            }
+            default:
+            {
+                var candidates = (await _calRepo.GetAsync(
+                    from, to, device: null, source: null, limit: int.MaxValue, offset: 0,
+                    descending: true, ct: ct)).ToList();
+                // Calibrations carry no comparable value: the single-entry probe matches on
+                // device and window alone, so no value selector is supplied.
+                Classify(chunk, candidates, windowMs, results,
+                    c => c.Timestamp, c => c.Device, valueOf: null, EntryProjection.FromCalibration);
+                return;
+            }
+        }
+    }
+
+    private static void Classify<TRecord>(
+        List<(EntryDuplicateProbe probe, int index)> items,
+        IReadOnlyList<TRecord> candidates,
+        long windowMs,
+        Entry?[] results,
+        Func<TRecord, DateTime> timestampOf,
+        Func<TRecord, string?> deviceOf,
+        Func<TRecord, double>? valueOf,
+        Func<TRecord, Entry> project)
+        where TRecord : class
+    {
+        foreach (var (probe, index) in items)
+        {
+            var match = MatchInWindow(candidates, probe, windowMs, timestampOf, deviceOf, valueOf);
+            results[index] = match is null ? null : project(match);
+        }
+    }
+
+    /// <summary>
+    /// The single-entry probe's match rule, applied in memory: the first candidate inside the
+    /// probe's own window whose device and value match. <paramref name="candidates"/> arrive
+    /// newest-first in the order the per-entry query resolved ties by, so the first match is the
+    /// same row it returned.
+    /// </summary>
+    private static TRecord? MatchInWindow<TRecord>(
+        IReadOnlyList<TRecord> candidates,
+        EntryDuplicateProbe probe,
+        long windowMs,
+        Func<TRecord, DateTime> timestampOf,
+        Func<TRecord, string?> deviceOf,
+        Func<TRecord, double>? valueOf)
+        where TRecord : class
+    {
+        var from = MillsToUtc(probe.Mills - windowMs);
+        var to = MillsToUtc(probe.Mills + windowMs);
+
+        foreach (var candidate in candidates)
+        {
+            var timestamp = timestampOf(candidate);
+            if (timestamp < from || timestamp > to)
+                continue;
+            if (probe.Device is not null && !string.Equals(deviceOf(candidate), probe.Device, StringComparison.Ordinal))
+                continue;
+            if (valueOf is not null && probe.Sgv.HasValue && Math.Abs(valueOf(candidate) - probe.Sgv.Value) >= 0.01)
+                continue;
+            return candidate;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The device filter for a chunk's fetch: <c>null</c> (every device) when any probe has no
+    /// device, because such a probe matches a stored reading from any device.
+    /// </summary>
+    private static IReadOnlyCollection<string>? ResolveProbeDevices(
+        List<(EntryDuplicateProbe probe, int index)> items)
+    {
+        var devices = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (probe, _) in items)
+        {
+            if (probe.Device is null)
+                return null;
+            devices.Add(probe.Device);
+        }
+        return devices;
+    }
+
+    private static DateTime MillsToUtc(long mills) =>
+        DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime;
 
     #endregion
 

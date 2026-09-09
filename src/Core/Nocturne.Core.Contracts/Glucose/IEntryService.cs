@@ -1,5 +1,6 @@
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
+using Nocturne.Core.Contracts.Entries;
 
 namespace Nocturne.Core.Contracts.Glucose;
 
@@ -67,6 +68,25 @@ public interface IEntryService
         string type,
         double? sgv,
         long mills,
+        int windowMinutes = 5,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
+    /// Check a whole upload batch for duplicates in one pass
+    /// </summary>
+    /// <remarks>
+    /// Same per-entry classification as
+    /// <see cref="CheckForDuplicateEntryAsync(string?, string, double?, long, int, CancellationToken)"/>,
+    /// but the stored readings covering the batch are loaded in a query per entry type rather than
+    /// a query per entry.
+    /// </remarks>
+    /// <param name="probes">Entries to classify, in submission order</param>
+    /// <param name="windowMinutes">Time window in minutes to check for duplicates (default: 5)</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>One result per probe in the order given: the existing entry, or null</returns>
+    Task<IReadOnlyList<Entry?>> CheckForDuplicateEntriesAsync(
+        IReadOnlyList<EntryDuplicateProbe> probes,
         int windowMinutes = 5,
         CancellationToken cancellationToken = default
     );
