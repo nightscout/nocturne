@@ -3211,11 +3211,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("next_attempt");
 
-                    b.Property<string>("ProtectedSettings")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("protected_settings");
-
                     b.Property<Guid>("SubjectId")
                         .HasColumnType("uuid")
                         .HasColumnName("subject_id");

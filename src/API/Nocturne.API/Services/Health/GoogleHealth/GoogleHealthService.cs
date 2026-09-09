@@ -4,7 +4,6 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
-using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Connectors.Core.Interfaces;
@@ -86,8 +85,8 @@ public sealed class GoogleHealthCoordinator
     }
 }
 
-public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionProvider protection,
-    GoogleHealthCoordinator coordinator, GoogleHealthClient google, GoogleHealthAuthTokenProvider oauth,
+public sealed class GoogleHealthService(NocturneDbContext db, GoogleHealthCoordinator coordinator,
+    GoogleHealthClient google, GoogleHealthAuthTokenProvider oauth,
     IGoogleHealthReadingWriter? writer = null,
     ILogger<GoogleHealthService>? logger = null,
     IConnectorConfigurationService? connectorConfigurations = null,
@@ -97,9 +96,6 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
     private const string ConnectorName = "GoogleHealth";
     private static readonly TimeSpan AccessTokenSafety = TimeSpan.FromMinutes(1);
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
-    private IDataProtector Protector => protection.CreateProtector("Nocturne.GoogleHealth.v1", db.TenantId.ToString());
-    private string Protect<T>(T value) => Protector.Protect(JsonSerializer.Serialize(value, Json));
-    private T Unprotect<T>(string value) => JsonSerializer.Deserialize<T>(Protector.Unprotect(value), Json) ?? throw new JsonException();
     private Task<GoogleHealthConnectionEntity?> Connection(CancellationToken ct) => db.GoogleHealthConnections.SingleOrDefaultAsync(ct);
 
     private async Task<GoogleHealthOptions?> SharedOptionsAsync(CancellationToken ct)
@@ -139,12 +135,10 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
     private static string ConfigurationFingerprint(GoogleHealthOptions options) =>
         Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(options, Json)));
 
-    private async Task<GoogleHealthOptions> StoredOptionsAsync(
-        GoogleHealthConnectionEntity connection,
-        CancellationToken ct)
+    private async Task<GoogleHealthOptions> StoredOptionsAsync(CancellationToken ct)
     {
         var settings = await SharedOptionsAsync(ct) ??
-            Unprotect<GoogleHealthOptions>(connection.ProtectedSettings);
+            throw new GoogleHealthException("configure_first");
         if (settings.DataTypes is null)
             throw new JsonException();
         return settings;
@@ -342,22 +336,16 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
                 PreviewRequired = sharedSettings.PreviewOnly
             });
 
-        GoogleHealthOptions settings;
-        try
+        if (sharedSettings is null)
         {
-            settings = sharedSettings ?? Unprotect<GoogleHealthOptions>(row.ProtectedSettings);
-            if (settings.DataTypes is null) throw new JsonException();
-        }
-        catch (Exception ex) when (ex is CryptographicException or JsonException or FormatException)
-        {
-            var connected = await SharedSessionAsync(ct) is not null;
             return WithProgress(new()
             {
-                Capabilities = GoogleHealthClient.Capabilities, Connected = connected,
+                Capabilities = GoogleHealthClient.Capabilities,
                 LastAttempt = row.LastAttempt, LastSync = row.LastSync, NextAttempt = row.NextAttempt,
-                ErrorCode = "stored_google_configuration_unreadable"
+                ErrorCode = row.ErrorCode
             });
         }
+        var settings = sharedSettings;
         var selectedTypes = settings.DataTypes
             .Where(type => GoogleHealthClient.SupportedTypes.Contains(type, StringComparer.Ordinal))
             .Distinct(StringComparer.Ordinal)
@@ -368,7 +356,7 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
         {
             token = await SharedSessionAsync(ct);
         }
-        catch (Exception ex) when (ex is CryptographicException or JsonException or FormatException)
+        catch (Exception ex) when (ex is JsonException or FormatException)
         {
             return WithProgress(new()
             {
@@ -416,7 +404,7 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
                 var session = await SharedSessionAsync(ct);
                 GoogleHealthOptions? prior = null;
                 if (session is not null || string.IsNullOrWhiteSpace(options.ClientSecret))
-                    prior = await StoredOptionsAsync(row, ct);
+                    prior = await StoredOptionsAsync(ct);
                 if (session is not null && prior is not null &&
                     (options.ClientId != prior.ClientId || options.CallbackUrl != prior.CallbackUrl))
                     throw new GoogleHealthException("disconnect_first");
@@ -426,7 +414,7 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
                 }
             }
             if (string.IsNullOrWhiteSpace(options.ClientSecret)) throw new GoogleHealthException("client_secret_required");
-            row.ProtectedSettings = Protect(options); row.ErrorCode = null; row.NextAttempt = null;
+            row.ErrorCode = null; row.NextAttempt = null;
             coordinator.Flows.TryRemove(db.TenantId, out _);
             await db.SaveChangesAsync(ct);
             await MirrorOptionsAsync(options, subject, ct);
@@ -443,7 +431,7 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
             if (row.SubjectId != subject) throw new GoogleHealthException("connection_owner_required");
             if (await SharedSessionAsync(ct) is not null)
                 throw new GoogleHealthException("disconnect_first");
-            var settings = await StoredOptionsAsync(row, ct);
+            var settings = await StoredOptionsAsync(ct);
             var verifier = WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(48));
             var state = WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(32));
             coordinator.Flows[db.TenantId] = new(
@@ -474,7 +462,7 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
                 throw new GoogleHealthException("expired_signin");
             coordinator.Flows.TryRemove(db.TenantId, out _);
             var row = await Connection(ct) ?? throw new GoogleHealthException("configure_first");
-            var settings = await StoredOptionsAsync(row, ct);
+            var settings = await StoredOptionsAsync(ct);
             if (row.SubjectId != subject ||
                 ConfigurationFingerprint(settings) != flow.Settings)
                 throw new GoogleHealthException("expired_signin");
@@ -533,7 +521,7 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
             GoogleHealthTokenSession? token = null;
             var revokeFailed = false;
             try { token = await SharedSessionAsync(ct); }
-            catch (Exception ex) when (ex is CryptographicException or JsonException or FormatException)
+            catch (Exception ex) when (ex is JsonException or FormatException)
             {
                 revokeFailed = true;
             }
@@ -583,7 +571,7 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
         {
             var row = await Connection(ct) ?? throw new GoogleHealthException("configure_first");
             if (row.SubjectId != subject) throw new GoogleHealthException("connection_owner_required");
-            var settings = await StoredOptionsAsync(row, ct);
+            var settings = await StoredOptionsAsync(ct);
             var token = await SharedSessionAsync(ct) ??
                 throw new GoogleHealthException("configure_first");
             var now = DateTimeOffset.UtcNow;
@@ -616,7 +604,7 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
             }
             return new() { Items = items.ToArray() };
         }
-        catch (Exception ex) when (ex is CryptographicException or JsonException or FormatException)
+        catch (Exception ex) when (ex is JsonException or FormatException)
         {
             throw new GoogleHealthException("stored_google_configuration_unreadable", stage: "preview");
         }
@@ -628,14 +616,14 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
         var row = await Connection(ct) ?? throw new GoogleHealthException("configure_first");
         try
         {
-            var settings = await StoredOptionsAsync(row, ct);
+            var settings = await StoredOptionsAsync(ct);
             if (await SharedSessionAsync(ct) is null)
                 throw new GoogleHealthException("configure_first");
             if (settings.PreviewOnly) throw new GoogleHealthException("preview_required");
             if (settings.DataTypes.Length == 0) throw new GoogleHealthException("no_types_selected");
             coordinator.Queue(db.TenantId, settings.DataTypes.Length);
         }
-        catch (Exception ex) when (ex is CryptographicException or JsonException or FormatException)
+        catch (Exception ex) when (ex is JsonException or FormatException)
         {
             throw new GoogleHealthException("stored_google_configuration_unreadable", stage: "sync_queue");
         }
@@ -660,14 +648,14 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
                 GoogleHealthTokenSession token;
                 try
                 {
-                    settings = await StoredOptionsAsync(row, ct);
+                    settings = await StoredOptionsAsync(ct);
                     var storedToken = await SharedSessionAsync(ct);
                     if (storedToken is null) return;
                     token = storedToken;
                     if (settings.DataTypes is null)
                         throw new JsonException();
                 }
-                catch (Exception ex) when (ex is CryptographicException or JsonException or FormatException)
+                catch (Exception ex) when (ex is JsonException or FormatException)
                 {
                     throw new GoogleHealthException("stored_google_configuration_unreadable", stage: stage);
                 }

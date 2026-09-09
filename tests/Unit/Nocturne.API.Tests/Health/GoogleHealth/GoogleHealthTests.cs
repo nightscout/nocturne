@@ -1,7 +1,6 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
-using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Data.Sqlite;
@@ -95,7 +94,6 @@ public class GoogleHealthTests
 
         var service = new GoogleHealthService(
             db,
-            new EphemeralDataProtectionProvider(),
             new GoogleHealthCoordinator(),
             new GoogleHealthClient(new HttpClient(new StubHandler(_ => Json("{}")))),
             TokenProvider(new StubHandler(_ => Json("{}")), tenant),
@@ -526,10 +524,9 @@ public class GoogleHealthTests
             dataAuthorizations.Add(request.Headers.Authorization?.ToString());
             return Json(JsonSerializer.Serialize(new { dataPoints = new[] { new { weight = new { sampleTime = new { physicalTime = observation }, weightGrams = grams } } } }));
         });
-        var protection = new EphemeralDataProtectionProvider();
         var tokenProvider = TokenProvider(handler, tenant);
         var connectorStore = new TestConnectorStore();
-        var service = new GoogleHealthService(db, protection, new GoogleHealthCoordinator(),
+        var service = new GoogleHealthService(db, new GoogleHealthCoordinator(),
             new GoogleHealthClient(new HttpClient(handler, false)),
             tokenProvider,
             connectorConfigurations: connectorStore.Configurations,
@@ -547,8 +544,6 @@ public class GoogleHealthTests
         Assert.Equal(["heart-rate", "weight"], status.GrantedTypes); Assert.Equal("partial_consent", status.ErrorCode);
         Assert.Equal(["steps", "sleep"], status.ErrorDataTypes);
         Assert.NotNull(status.AccessTokenExpiresAt);
-        var stored = await db.GoogleHealthConnections.SingleAsync();
-        Assert.DoesNotContain("synthetic-secret", stored.ProtectedSettings);
         Assert.Equal("synthetic-refresh", connectorStore.Secrets["refreshToken"]);
         await service.SyncAsync(true, default); Assert.Equal(72m, (await db.GoogleHealthReadings.SingleAsync()).Value);
         Assert.Equal(1, tokenCalls);
@@ -612,7 +607,7 @@ public class GoogleHealthTests
             }
         });
         var connectorStore = new TestConnectorStore();
-        var service = new GoogleHealthService(db, new EphemeralDataProtectionProvider(), new GoogleHealthCoordinator(),
+        var service = new GoogleHealthService(db, new GoogleHealthCoordinator(),
             new GoogleHealthClient(new HttpClient(handler, false)),
             TokenProvider(handler, tenant),
             connectorConfigurations: connectorStore.Configurations,
@@ -675,7 +670,7 @@ public class GoogleHealthTests
     }
 
     [Fact]
-    public async Task Connector_storage_survives_data_protection_restart()
+    public async Task Connector_storage_survives_service_restart()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:"); await connection.OpenAsync();
         await using var db = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options);
@@ -690,7 +685,7 @@ public class GoogleHealthTests
         });
         var coordinator = new GoogleHealthCoordinator();
         var connectorStore = new TestConnectorStore();
-        var original = new GoogleHealthService(db, new EphemeralDataProtectionProvider(), coordinator,
+        var original = new GoogleHealthService(db, coordinator,
             new GoogleHealthClient(new HttpClient(handler, false)),
             TokenProvider(handler, tenant),
             connectorConfigurations: connectorStore.Configurations,
@@ -701,7 +696,7 @@ public class GoogleHealthTests
         var state = QueryHelpers.ParseQuery(new Uri(authorization.Url).Query)["state"].ToString();
         await original.CompleteAsync(new() { State = state, Code = "synthetic-code" }, subject, default);
 
-        var recovered = new GoogleHealthService(db, new EphemeralDataProtectionProvider(), coordinator,
+        var recovered = new GoogleHealthService(db, coordinator,
             new GoogleHealthClient(new HttpClient(handler, false)),
             TokenProvider(handler, tenant),
             connectorConfigurations: connectorStore.Configurations,
@@ -719,34 +714,6 @@ public class GoogleHealthTests
         Assert.False((await recovered.StatusAsync(default)).Connected);
         await recovered.SaveAsync(options, subject, default);
         Assert.True((await recovered.StatusAsync(default)).Configured);
-    }
-
-    [Fact]
-    public async Task Unsupported_stored_type_keeps_status_and_disconnect_available()
-    {
-        await using var connection = new SqliteConnection("Data Source=:memory:"); await connection.OpenAsync();
-        await using var db = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options);
-        await db.Database.EnsureCreatedAsync();
-        var tenant = Guid.NewGuid(); var subject = Guid.NewGuid(); db.TenantId = tenant;
-        db.Tenants.Add(new TenantEntity { Id = tenant, Slug = "synthetic", DisplayName = "Synthetic", IsActive = true }); await db.SaveChangesAsync();
-        var provider = new EphemeralDataProtectionProvider();
-        var handler = new StubHandler(_ => Json("{}"));
-        var service = new GoogleHealthService(db, provider, new GoogleHealthCoordinator(),
-            new GoogleHealthClient(new HttpClient(handler, false)),
-            TokenProvider(handler, tenant));
-        await service.SaveAsync(Options(), subject, default);
-        var row = await db.GoogleHealthConnections.SingleAsync();
-        var legacy = Options(); legacy.DataTypes = ["weight", "body-fat"];
-        var protector = provider.CreateProtector("Nocturne.GoogleHealth.v1", tenant.ToString());
-        row.ProtectedSettings = protector.Protect(JsonSerializer.Serialize(legacy, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
-        await db.SaveChangesAsync();
-
-        var status = await service.StatusAsync(default);
-
-        Assert.True(status.Configured); Assert.False(status.Connected);
-        Assert.Equal(["weight"], status.SelectedTypes);
-        Assert.Equal("unsupported_type", status.ErrorCode);
-        await service.DisconnectAsync(subject, default);
     }
 
     [Fact]

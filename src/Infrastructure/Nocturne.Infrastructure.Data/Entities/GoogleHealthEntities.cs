@@ -18,9 +18,6 @@ public class GoogleHealthConnectionEntity : ITenantScoped
     [Column("subject_id")]
     public Guid SubjectId { get; set; }
 
-    [Column("protected_settings")]
-    public string ProtectedSettings { get; set; } = "";
-
     [Column("account_key")]
     [MaxLength(64)]
     public string? AccountKey { get; set; }
