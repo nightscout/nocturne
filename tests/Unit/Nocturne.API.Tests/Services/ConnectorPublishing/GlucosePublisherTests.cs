@@ -25,6 +25,7 @@ public class GlucosePublisherTests
     private readonly Mock<ISensorGlucoseRepository> _mockSensorGlucoseRepository;
     private readonly Mock<IMeterGlucoseRepository> _mockMeterGlucoseRepository;
     private readonly Mock<IPatientDeviceStamper> _mockPatientDeviceStamper;
+    private readonly Mock<ICanonicalAlertEvaluator> _mockAlertEvaluator;
     private readonly GlucosePublisher _publisher;
 
     public GlucosePublisherTests()
@@ -33,13 +34,14 @@ public class GlucosePublisherTests
         _mockSensorGlucoseRepository = new Mock<ISensorGlucoseRepository>();
         _mockMeterGlucoseRepository = new Mock<IMeterGlucoseRepository>();
         _mockPatientDeviceStamper = new Mock<IPatientDeviceStamper>();
+        _mockAlertEvaluator = new Mock<ICanonicalAlertEvaluator>();
 
         _publisher = new GlucosePublisher(
             _mockEntryService.Object,
             _mockSensorGlucoseRepository.Object,
             _mockMeterGlucoseRepository.Object,
             _mockPatientDeviceStamper.Object,
-            Mock.Of<ICanonicalAlertEvaluator>(),
+            _mockAlertEvaluator.Object,
             Mock.Of<IAuditContext>(),
             NullLogger<GlucosePublisher>.Instance
         );
@@ -87,9 +89,56 @@ public class GlucosePublisherTests
             .Setup(s => s.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("test error"));
 
-        var result = await _publisher.PublishEntriesAsync(new List<Entry>(), "test-source", WriteOrigin.Live);
+        var result = await _publisher.PublishEntriesAsync(
+            new List<Entry> { new() { Id = "1", Sgv = 120 } }, "test-source", WriteOrigin.Live);
 
         result.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task PublishEntriesAsync_WritesNothing_ForAnEmptyBatch()
+    {
+        // A connector sync that found nothing new still calls its publishers; the sibling
+        // PublishAsync has always skipped that, this path did not.
+        var result = await _publisher.PublishEntriesAsync([], "test-source", WriteOrigin.Live);
+
+        result.Should().BeTrue();
+        _mockEntryService.Verify(
+            s => s.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _mockAlertEvaluator.Verify(e => e.EvaluateAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task PublishEntriesAsync_EvaluatesAlerts_ForACgmReading()
+    {
+        var entries = new List<Entry> { new() { Id = "1", Sgv = 120 } };
+        _mockEntryService
+            .Setup(s => s.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(entries);
+
+        await _publisher.PublishEntriesAsync(entries, "test-source", WriteOrigin.Live);
+
+        _mockAlertEvaluator.Verify(e => e.EvaluateAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task PublishEntriesAsync_DoesNotEvaluateAlerts_ForABatchWithNoCgmReading()
+    {
+        // Fingersticks, calibrations and sensor-error sentinels are written but are not the
+        // trigger any glucose alert condition is written against.
+        var entries = new List<Entry> { new() { Id = "1", Mbg = 96 }, new() { Id = "2", Sgv = 0 } };
+        _mockEntryService
+            .Setup(s => s.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(entries);
+
+        var result = await _publisher.PublishEntriesAsync(entries, "test-source", WriteOrigin.Live);
+
+        result.Should().BeTrue();
+        _mockEntryService.Verify(
+            s => s.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+        _mockAlertEvaluator.Verify(e => e.EvaluateAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -117,6 +166,67 @@ public class GlucosePublisherTests
                 It.IsAny<WriteOrigin>(),
                 It.IsAny<CancellationToken>()),
             Times.Once);
+    }
+
+    [Fact]
+    public async Task PublishSensorGlucoseAsync_EvaluatesAlerts_ForACgmReading()
+    {
+        // This is the alarm trigger for every v4 connector -- Dexcom, Libre, CareLink, Glooko,
+        // Tandem, twiist, Eversense, Tidepool, MyLife -- and nothing asserted on it.
+        var records = new List<SensorGlucose>
+        {
+            new() { Mgdl = 0, Timestamp = DateTime.UtcNow.AddMinutes(-5), DataSource = DataSources.DexcomConnector },
+            new() { Mgdl = 130, Timestamp = DateTime.UtcNow, DataSource = DataSources.DexcomConnector },
+        };
+        _mockSensorGlucoseRepository
+            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(records);
+
+        var result = await _publisher.PublishSensorGlucoseAsync(records, DataSources.DexcomConnector, WriteOrigin.Live);
+
+        result.Should().BeTrue();
+        _mockAlertEvaluator.Verify(e => e.EvaluateAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task PublishSensorGlucoseAsync_DoesNotEvaluateAlerts_ForSensorErrorSentinelsAlone()
+    {
+        // A batch of non-positive readings cannot move the canonical latest, so the pass could
+        // only re-decide a reading that was already evaluated when it landed.
+        var records = new List<SensorGlucose>
+        {
+            new() { Mgdl = 0, Timestamp = DateTime.UtcNow, DataSource = DataSources.DexcomConnector },
+        };
+        _mockSensorGlucoseRepository
+            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(records);
+
+        var result = await _publisher.PublishSensorGlucoseAsync(records, DataSources.DexcomConnector, WriteOrigin.Live);
+
+        result.Should().BeTrue();
+        _mockSensorGlucoseRepository.Verify(
+            r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+        _mockAlertEvaluator.Verify(e => e.EvaluateAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task PublishSensorGlucoseAsync_EvaluatesAlerts_EvenWhenDedupDropsEveryWrittenRow()
+    {
+        // The gate reads the records the publisher was handed, not the rows BulkCreateAsync
+        // returned. Fail-safe by design: over-evaluating costs a watermark-suppressed pass,
+        // whereas gating on an empty dedup result would drop the alarm for a real reading.
+        var records = new List<SensorGlucose>
+        {
+            new() { Mgdl = 130, Timestamp = DateTime.UtcNow, DataSource = DataSources.DexcomConnector },
+        };
+        _mockSensorGlucoseRepository
+            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
+        await _publisher.PublishSensorGlucoseAsync(records, DataSources.DexcomConnector, WriteOrigin.Live);
+
+        _mockAlertEvaluator.Verify(e => e.EvaluateAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

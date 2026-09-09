@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.API.Services.Alerts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.API.Helpers;
@@ -575,7 +576,7 @@ public class EntriesController : ControllerBase
             _logger.LogDebug("Created {Count} entries", createdArray.Length);
 
             // Evaluate alert rules against the latest created entry
-            await EvaluateAlertsAsync(createdArray, cancellationToken);
+            await _alertEvaluator.EvaluateForEntriesAsync(createdArray, cancellationToken);
 
             return StatusCode(201, responseEntries.ToV1Responses());
         }
@@ -1235,11 +1236,4 @@ public class EntriesController : ControllerBase
         }
     }
 
-    private async Task EvaluateAlertsAsync(Entry[] entries, CancellationToken ct)
-    {
-        // Alarms evaluate against the canonical stream, not the just-uploaded batch — a losing
-        // CGM's readings must not trigger or suppress an alarm.
-        if (entries.Any(e => e.Sgv is > 0))
-            await _alertEvaluator.EvaluateAsync(ct);
-    }
 }

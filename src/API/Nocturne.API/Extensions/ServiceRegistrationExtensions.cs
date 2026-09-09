@@ -602,6 +602,7 @@ public static class ServiceRegistrationExtensions
         // Canonical glucose stream (single-stream view for v1/v3, alarms, unfiltered analytics)
         services.AddScoped<ICanonicalGlucoseService, CanonicalGlucoseService>();
         services.AddScoped<ICanonicalAlertEvaluator, CanonicalAlertEvaluator>();
+        services.AddSingleton<AlertEvaluationWatermark>();
 
         // Coach marks
         services.AddScoped<ICoachMarkService, CoachMarkService>();

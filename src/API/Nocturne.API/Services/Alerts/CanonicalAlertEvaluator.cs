@@ -1,5 +1,6 @@
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 
 namespace Nocturne.API.Services.Alerts;
@@ -9,19 +10,33 @@ namespace Nocturne.API.Services.Alerts;
 /// <see cref="ICanonicalGlucoseService"/> and hands a <see cref="SensorContext"/> to the
 /// <see cref="IAlertOrchestrator"/>.
 /// </summary>
+/// <remarks>
+/// Callers publish in chunks and re-publish readings they have already stored, so the same
+/// canonical reading arrives here many times over; <see cref="AlertEvaluationWatermark"/> collapses
+/// those repeats to one pass per reading per
+/// <see cref="AlertEvaluationWatermark.MaxSkipWindow"/>. Signal loss, hysteresis closure, snooze
+/// expiry, auto-resolve and tracker age are owned by <see cref="AlertSweepService"/>'s own timer;
+/// every other clock-driven rule is covered by the skip window rather than by the sweep.
+/// </remarks>
 internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
 {
     private readonly ICanonicalGlucoseService _canonicalGlucose;
     private readonly IAlertOrchestrator _alertOrchestrator;
+    private readonly ITenantAccessor _tenantAccessor;
+    private readonly AlertEvaluationWatermark _watermark;
     private readonly ILogger<CanonicalAlertEvaluator> _logger;
 
     public CanonicalAlertEvaluator(
         ICanonicalGlucoseService canonicalGlucose,
         IAlertOrchestrator alertOrchestrator,
+        ITenantAccessor tenantAccessor,
+        AlertEvaluationWatermark watermark,
         ILogger<CanonicalAlertEvaluator> logger)
     {
         _canonicalGlucose = canonicalGlucose ?? throw new ArgumentNullException(nameof(canonicalGlucose));
         _alertOrchestrator = alertOrchestrator ?? throw new ArgumentNullException(nameof(alertOrchestrator));
+        _tenantAccessor = tenantAccessor ?? throw new ArgumentNullException(nameof(tenantAccessor));
+        _watermark = watermark ?? throw new ArgumentNullException(nameof(watermark));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -33,6 +48,15 @@ internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
             var latest = await _canonicalGlucose.GetLatestAsync(ct);
             if (latest is null || latest.Mgdl <= 0) return;
 
+            var tenantId = _tenantAccessor.TenantId;
+            if (_watermark.AlreadyEvaluated(tenantId, latest))
+            {
+                _logger.LogTrace(
+                    "Alert evaluation skipped for tenant {TenantId}: reading at {ReadingTimestamp} was already evaluated",
+                    tenantId, latest.Timestamp);
+                return;
+            }
+
             var context = new SensorContext
             {
                 LatestValue = (decimal)latest.Mgdl,
@@ -42,6 +66,8 @@ internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
             };
 
             await _alertOrchestrator.EvaluateAsync(context, ct);
+
+            _watermark.Record(tenantId, latest);
         }
         catch (OperationCanceledException) { throw; }
         catch (InvalidOperationException ex)
