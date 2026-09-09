@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.Alerts;
 using Nocturne.Core.Contracts.Alerts;
@@ -23,7 +24,10 @@ public class CanonicalAlertEvaluatorTests
 
     private readonly Mock<ICanonicalGlucoseService> _canonical = new();
     private readonly Mock<IAlertOrchestrator> _orchestrator = new();
-    private readonly AlertEvaluationWatermark _watermark = new();
+    private readonly FakeTimeProvider _clock = new(new DateTimeOffset(Reading, TimeSpan.Zero));
+    private readonly AlertEvaluationWatermark _watermark;
+
+    public CanonicalAlertEvaluatorTests() => _watermark = new AlertEvaluationWatermark(_clock);
 
     private static SensorGlucose Latest(DateTime timestamp, double mgdl = 120, double? trendRate = 0.5) =>
         new() { Timestamp = timestamp, Mgdl = mgdl, TrendRate = trendRate };
@@ -165,10 +169,50 @@ public class CanonicalAlertEvaluatorTests
     }
 
     [Fact]
+    public async Task EvaluateAsync_EvaluatesTheSameReadingAgainOnceTheSkipWindowExpires()
+    {
+        // A rule can turn true on elapsed time alone while the reading stands still: alert_state
+        // with forMinutes is the documented way to express delayed escalation, and no sweep path
+        // opens an excursion for it. The reading is a reason to skip a repeat, not to stop.
+        LatestIs(Latest(Reading));
+        var evaluator = Evaluator(Tenant);
+
+        await evaluator.EvaluateAsync();
+        _clock.Advance(AlertEvaluationWatermark.MaxSkipWindow - TimeSpan.FromMilliseconds(1));
+        await evaluator.EvaluateAsync();
+        VerifyPasses(1);
+
+        _clock.Advance(TimeSpan.FromMilliseconds(1));
+        await evaluator.EvaluateAsync();
+
+        VerifyPasses(2);
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_RestartsTheSkipWindowFromTheLatestPass()
+    {
+        // The window measures staleness of the last pass, not of the first sighting, so a stream
+        // of repeats cannot walk the tenant past it without ever evaluating.
+        LatestIs(Latest(Reading));
+        var evaluator = Evaluator(Tenant);
+
+        await evaluator.EvaluateAsync();
+        _clock.Advance(AlertEvaluationWatermark.MaxSkipWindow);
+        await evaluator.EvaluateAsync();
+        VerifyPasses(2);
+
+        _clock.Advance(AlertEvaluationWatermark.MaxSkipWindow - TimeSpan.FromSeconds(1));
+        await evaluator.EvaluateAsync();
+
+        VerifyPasses(2);
+    }
+
+    [Fact]
     public async Task EvaluateAsync_DoesNotSkipWhenNoTenantIsInScope()
     {
-        // With no tenant the orchestrator returns before its first read, so there is nothing to
-        // remember and nothing a shared watermark could correctly stand for.
+        // With no tenant the orchestrator returns before its first read, so nothing was evaluated
+        // and nothing is remembered; refusing that write is what keeps every tenantless caller
+        // from sharing one key.
         LatestIs(Latest(Reading));
 
         await Evaluator(Guid.Empty).EvaluateAsync();

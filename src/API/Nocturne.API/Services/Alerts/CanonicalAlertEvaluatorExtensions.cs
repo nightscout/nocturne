@@ -1,5 +1,6 @@
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.Alerts;
 
@@ -24,4 +25,11 @@ internal static class CanonicalAlertEvaluatorExtensions
         IEnumerable<Entry> entries,
         CancellationToken ct) =>
         entries.Any(e => e.Sgv is > 0) ? evaluator.EvaluateAsync(ct) : Task.CompletedTask;
+
+    /// <inheritdoc cref="EvaluateForEntriesAsync"/>
+    public static Task EvaluateForReadingsAsync(
+        this ICanonicalAlertEvaluator evaluator,
+        IEnumerable<SensorGlucose> readings,
+        CancellationToken ct) =>
+        readings.Any(r => r.Mgdl > 0) ? evaluator.EvaluateAsync(ct) : Task.CompletedTask;
 }

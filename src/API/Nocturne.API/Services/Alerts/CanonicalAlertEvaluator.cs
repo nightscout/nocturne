@@ -12,10 +12,11 @@ namespace Nocturne.API.Services.Alerts;
 /// </summary>
 /// <remarks>
 /// Callers publish in chunks and re-publish readings they have already stored, so the same
-/// canonical reading arrives here many times over; <see cref="AlertEvaluationWatermark"/> keeps
-/// the orchestrator pass to once per reading. Rules that turn on elapsed time rather than on a
-/// new reading — signal loss, hysteresis closure, snooze expiry, auto-resolve, tracker age — are
-/// owned by <see cref="AlertSweepService"/>'s own timer and are unaffected by that skip.
+/// canonical reading arrives here many times over; <see cref="AlertEvaluationWatermark"/> collapses
+/// those repeats to one pass per reading per
+/// <see cref="AlertEvaluationWatermark.MaxSkipWindow"/>. Signal loss, hysteresis closure, snooze
+/// expiry, auto-resolve and tracker age are owned by <see cref="AlertSweepService"/>'s own timer;
+/// every other clock-driven rule is covered by the skip window rather than by the sweep.
 /// </remarks>
 internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
 {
@@ -47,10 +48,8 @@ internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
             var latest = await _canonicalGlucose.GetLatestAsync(ct);
             if (latest is null || latest.Mgdl <= 0) return;
 
-            // Guid.Empty means no tenant is in scope; the orchestrator returns before its first
-            // read in that case, so there is nothing for the watermark to save.
             var tenantId = _tenantAccessor.TenantId;
-            if (tenantId != Guid.Empty && _watermark.AlreadyEvaluated(tenantId, latest))
+            if (_watermark.AlreadyEvaluated(tenantId, latest))
                 return;
 
             var context = new SensorContext
@@ -63,8 +62,7 @@ internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
 
             await _alertOrchestrator.EvaluateAsync(context, ct);
 
-            if (tenantId != Guid.Empty)
-                _watermark.Record(tenantId, latest);
+            _watermark.Record(tenantId, latest);
         }
         catch (OperationCanceledException) { throw; }
         catch (InvalidOperationException ex)

@@ -73,9 +73,9 @@ internal sealed class GlucosePublisher : ConnectorPublisherBase, IGlucosePublish
     }
 
     /// <remarks>
-    /// Alert evaluation after the write is this publisher's one addition to the shared shape: a CGM
-    /// reading is the trigger every glucose alert condition is written against.
+    /// Alert evaluation after the write is this publisher's one addition to the shared shape.
     /// </remarks>
+    /// <seealso cref="CanonicalAlertEvaluatorExtensions.EvaluateForReadingsAsync"/>
     public Task<bool> PublishSensorGlucoseAsync(
         IEnumerable<SensorGlucose> records,
         string source,
@@ -84,7 +84,7 @@ internal sealed class GlucosePublisher : ConnectorPublisherBase, IGlucosePublish
             records, _sensorGlucoseRepository, source, origin, cancellationToken,
             beforeWrite: recordList => _patientDeviceStamper.StampAsync(
                 recordList, DeviceAttributionCategories.SensorGlucose, source, cancellationToken),
-            afterWrite: () => _alertEvaluator.EvaluateAsync(cancellationToken));
+            afterWrite: recordList => _alertEvaluator.EvaluateForReadingsAsync(recordList, cancellationToken));
 
     /// <inheritdoc cref="ConnectorPublisherBase.LatestTimestampAsync" />
     /// <remarks>
