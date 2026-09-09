@@ -26,6 +26,21 @@ public interface IProfileDecomposer
     Task<DecompositionResult> DecomposeAsync(Profile profile, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
+    /// Decomposes a batch of legacy Profiles with one create-or-update round per V4 table, so a
+    /// connector re-publishing its profile set costs five table round trips rather than ten per named
+    /// profile. Same records, same idempotency, as <see cref="DecomposeAsync"/> per profile.
+    /// </summary>
+    /// <param name="profiles">The legacy Profiles to decompose</param>
+    /// <param name="ct">Cancellation token</param>
+    /// <returns>
+    /// A single <see cref="DecompositionResult"/> containing every created or updated V4 record; its
+    /// <see cref="DecompositionResult.CorrelationId"/> is the id minted for the first profile that has
+    /// a store entry.
+    /// </returns>
+    Task<DecompositionResult> DecomposeBatchAsync(
+        IReadOnlyList<Profile> profiles, WriteOrigin origin, CancellationToken ct = default);
+
+    /// <summary>
     /// Deletes all V4 records that were decomposed from a legacy Profile with the given ID.
     /// Uses prefix matching since one legacy Profile fans out to multiple composite LegacyIds.
     /// </summary>

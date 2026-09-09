@@ -271,6 +271,108 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         return updated;
     }
 
+    /// <inheritdoc cref="ILegacyKeyedRepository{T}.BulkUpsertByLegacyIdAsync" />
+    /// <remarks>
+    /// The batch twin of <see cref="GetByLegacyIdAsync"/> followed by <see cref="CreateAsync"/> or
+    /// <see cref="UpdateAsync"/> per record, with the same soft-delete visibility (the stored-row query
+    /// runs under the context's filters), the same recreation guard, and the same
+    /// <see cref="HasMaterialChange"/> gate on the update broadcast. The gate decides the broadcast
+    /// only: the save always runs, because a change the gate does not count — a correlation id
+    /// converging onto its anchor's — still has to reach the row. Change detection runs once over the
+    /// batch and stays off through the save, the contract
+    /// <see cref="NocturneDbContext.SaveChangesAsync(CancellationToken)"/> honours for a caller that
+    /// has already detected. Inserted rows go through <see cref="PostCommitDedupAsync"/> as
+    /// <see cref="BulkCreateAsync"/>'s do, so the dedup participants keyed by legacy id alone link
+    /// their canonical groups on this path too.
+    /// </remarks>
+    public virtual async Task<IReadOnlyDictionary<string, LegacyUpsert<TModel>>> BulkUpsertByLegacyIdAsync(
+        IReadOnlyList<TModel> records,
+        WriteOrigin origin,
+        bool preserveStoredCorrelationId = false,
+        CancellationToken ct = default)
+    {
+        var byLegacyId = new Dictionary<string, TModel>(StringComparer.Ordinal);
+        foreach (var record in records)
+        {
+            if (!string.IsNullOrEmpty(record.LegacyId))
+                byLegacyId[record.LegacyId] = record;
+        }
+
+        var outcomes = new Dictionary<string, LegacyUpsert<TModel>>(StringComparer.Ordinal);
+        if (byLegacyId.Count == 0)
+            return outcomes;
+
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+
+        var legacyIds = byLegacyId.Keys.ToList();
+        var stored = await ctx.Set<TEntity>()
+            .Where(e => e.LegacyId != null && legacyIds.Contains(e.LegacyId))
+            .ToListAsync(ct);
+        var storedByLegacyId = new Dictionary<string, TEntity>(StringComparer.Ordinal);
+        foreach (var entity in stored)
+            storedByLegacyId.TryAdd(entity.LegacyId!, entity);
+
+        var inserted = new List<(string LegacyId, TEntity Entity)>();
+        var updated = new List<(string LegacyId, TEntity Entity)>();
+        foreach (var (legacyId, model) in byLegacyId)
+        {
+            if (storedByLegacyId.TryGetValue(legacyId, out var entity))
+            {
+                if (preserveStoredCorrelationId
+                    && entity.CorrelationId is { } storedCorrelationId
+                    && storedCorrelationId != Guid.Empty)
+                {
+                    model.CorrelationId = storedCorrelationId;
+                }
+
+                model.Id = entity.Id;
+                ApplyUpdate(entity, model);
+                updated.Add((legacyId, entity));
+            }
+            else
+            {
+                inserted.Add((legacyId, ToEntity(model)));
+            }
+        }
+
+        if (inserted.Count > 0)
+        {
+            var blocked = await ctx.GetBlockingLegacyIdsAsync<TEntity>(
+                inserted.Select(i => i.LegacyId).ToHashSet(StringComparer.Ordinal), ct);
+            inserted.RemoveAll(i => blocked.Contains(i.LegacyId));
+            ctx.Set<TEntity>().AddRange(inserted.Select(i => i.Entity));
+        }
+
+        var materiallyChanged = new List<TEntity>();
+        var autoDetect = ctx.ChangeTracker.AutoDetectChangesEnabled;
+        ctx.ChangeTracker.DetectChanges();
+        ctx.ChangeTracker.AutoDetectChangesEnabled = false;
+        try
+        {
+            materiallyChanged.AddRange(updated.Select(u => u.Entity).Where(e => HasMaterialChange(ctx, e)));
+            await ctx.SaveChangesAsync(ct);
+        }
+        finally
+        {
+            ctx.ChangeTracker.AutoDetectChangesEnabled = autoDetect;
+        }
+
+        await PostCommitDedupAsync(ctx, inserted.Select(i => i.Entity).ToList(), origin, ct);
+
+        foreach (var (legacyId, entity) in inserted)
+            outcomes[legacyId] = new LegacyUpsert<TModel>(ToDomain(entity), Created: true);
+        foreach (var (legacyId, entity) in updated)
+            outcomes[legacyId] = new LegacyUpsert<TModel>(ToDomain(entity), Created: false);
+
+        await RaiseBroadcastAsync(
+            inserted.Select(i => outcomes[i.LegacyId].Record).ToList(),
+            materiallyChanged.Select(ToDomain).ToList(),
+            [],
+            origin, ct);
+
+        return outcomes;
+    }
+
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.DeleteAsync" />
     public async Task DeleteAsync(Guid id, WriteOrigin origin, CancellationToken ct = default)
     {
