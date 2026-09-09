@@ -281,7 +281,9 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     /// converging onto its anchor's — still has to reach the row. Change detection runs once over the
     /// batch and stays off through the save, the contract
     /// <see cref="NocturneDbContext.SaveChangesAsync(CancellationToken)"/> honours for a caller that
-    /// has already detected.
+    /// has already detected. Inserted rows go through <see cref="PostCommitDedupAsync"/> as
+    /// <see cref="BulkCreateAsync"/>'s do, so the dedup participants keyed by legacy id alone link
+    /// their canonical groups on this path too.
     /// </remarks>
     public virtual async Task<IReadOnlyDictionary<string, LegacyUpsert<TModel>>> BulkUpsertByLegacyIdAsync(
         IReadOnlyList<TModel> records,
@@ -354,6 +356,8 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         {
             ctx.ChangeTracker.AutoDetectChangesEnabled = autoDetect;
         }
+
+        await PostCommitDedupAsync(ctx, inserted.Select(i => i.Entity).ToList(), origin, ct);
 
         foreach (var (legacyId, entity) in inserted)
             outcomes[legacyId] = new LegacyUpsert<TModel>(ToDomain(entity), Created: true);
