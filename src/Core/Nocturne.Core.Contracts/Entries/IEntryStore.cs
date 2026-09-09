@@ -50,6 +50,24 @@ public interface IEntryStore
         int windowMinutes = 5, CancellationToken ct = default);
 
     /// <summary>
+    /// Checks a whole upload batch for duplicates, returning one result per probe in the order
+    /// given (<c>null</c> where nothing is stored).
+    /// </summary>
+    /// <remarks>
+    /// Classification is identical to <see cref="CheckDuplicateAsync"/> per probe. For <c>sgv</c> —
+    /// the only type that arrives in thousands-per-cycle uploads — the stored readings covering the
+    /// batch are loaded in one query instead of a query per entry, so a 1,000-entry upload costs
+    /// one query rather than a thousand, each of which carried its own context, connection lease
+    /// and plan. Other types are probed one at a time, as before.
+    /// </remarks>
+    /// <param name="probes">The entries to classify, in submission order.</param>
+    /// <param name="windowMinutes">Time window in minutes to check for duplicates. Defaults to 5.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Positionally aligned results: the stored <see cref="Entry"/>, or <c>null</c>.</returns>
+    Task<IReadOnlyList<Entry?>> CheckDuplicatesAsync(
+        IReadOnlyList<EntryDuplicateProbe> probes, int windowMinutes = 5, CancellationToken ct = default);
+
+    /// <summary>
     /// Counts entries matching the optional filter and type.
     /// </summary>
     /// <param name="find">Optional MongoDB-style find query for time-range extraction.</param>

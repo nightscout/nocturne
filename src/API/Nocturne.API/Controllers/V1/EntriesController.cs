@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -12,6 +13,7 @@ using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Extensions;
+using Nocturne.Core.Contracts.Entries;
 
 namespace Nocturne.API.Controllers.V1;
 
@@ -558,40 +560,9 @@ public class EntriesController : ControllerBase
             // submitted entry, and treat a shorter array as a failed upload — the
             // batch is then retried forever and the client never uploads anything
             // newer. Legacy cgm-remote-monitor echoed dedup hits back with their _id.
-            var uniqueEntries = new List<Entry>();
-            var responseEntries = new List<Entry>();
-            foreach (var entry in processedArray)
-            {
-                var duplicate = await _entryService.CheckForDuplicateEntryAsync(
-                    entry.Device,
-                    entry.Type ?? "sgv",
-                    entry.Sgv,
-                    entry.Mills,
-                    windowMinutes: 5,
-                    cancellationToken
-                );
-
-                if (duplicate != null)
-                {
-                    _logger.LogDebug(
-                        "Skipping duplicate entry: device={Device}, type={Type}, sgv={Sgv}, mills={Mills}",
-                        entry.Device,
-                        entry.Type,
-                        entry.Sgv,
-                        entry.Mills
-                    );
-                    responseEntries.Add(duplicate);
-                    continue;
-                }
-
-                uniqueEntries.Add(entry);
-                responseEntries.Add(entry);
-            }
-
-            _logger.LogDebug(
-                "Filtered {Original} entries to {Unique} unique entries",
-                processedArray.Length,
-                uniqueEntries.Count
+            var (uniqueEntries, responseEntries) = await PartitionStoredEntriesAsync(
+                processedArray,
+                cancellationToken
             );
 
             // Create entries in database
@@ -622,6 +593,141 @@ public class EntriesController : ControllerBase
             );
         }
     }
+
+    /// <summary>
+    /// Splits a processed upload batch into the entries to write and the entries to echo, using
+    /// one duplicate query per entry type for the whole batch instead of one per entry.
+    /// </summary>
+    /// <remarks>
+    /// The echo list carries the stored entry for every duplicate and the submitted entry
+    /// otherwise, so it always has one element per submitted entry — the response shape v1
+    /// uploaders require. Callers that do not echo (the async endpoint) discard it.
+    /// </remarks>
+    private async Task<(List<Entry> Unique, List<Entry> Response)> PartitionStoredEntriesAsync(
+        Entry[] processedArray,
+        CancellationToken cancellationToken
+    )
+    {
+        var probes = Array.ConvertAll(
+            processedArray,
+            entry => new EntryDuplicateProbe(
+                entry.Device,
+                entry.Type ?? "sgv",
+                entry.Sgv,
+                entry.Mills
+            )
+        );
+
+        var duplicates = await _entryService.CheckForDuplicateEntriesAsync(
+            probes,
+            windowMinutes: 5,
+            cancellationToken
+        );
+
+        if (duplicates.Count != processedArray.Length)
+        {
+            throw new InvalidOperationException(
+                $"Duplicate check returned {duplicates.Count} results for {processedArray.Length} entries");
+        }
+
+        var uniqueEntries = new List<Entry>();
+        var responseEntries = new List<Entry>(processedArray.Length);
+
+        for (var i = 0; i < processedArray.Length; i++)
+        {
+            var entry = processedArray[i];
+            var duplicate = duplicates[i];
+
+            if (duplicate != null)
+            {
+                _logger.LogDebug(
+                    "Skipping duplicate entry: device={Device}, type={Type}, sgv={Sgv}, mills={Mills}",
+                    entry.Device,
+                    entry.Type,
+                    entry.Sgv,
+                    entry.Mills
+                );
+                responseEntries.Add(duplicate);
+                continue;
+            }
+
+            uniqueEntries.Add(entry);
+            responseEntries.Add(entry);
+        }
+
+        _logger.LogDebug(
+            "Filtered {Original} entries to {Unique} unique entries",
+            processedArray.Length,
+            uniqueEntries.Count
+        );
+
+        LogReuploadLoop(processedArray.Length, processedArray.Length - uniqueEntries.Count);
+
+        return (uniqueEntries, responseEntries);
+    }
+
+    /// <summary>
+    /// Records one line when a large upload is almost entirely already stored, which is what a
+    /// client re-sending its backlog every cycle looks like from the server. Names the uploader
+    /// (User-Agent) and the counts only — no entry values.
+    /// </summary>
+    private void LogReuploadLoop(int submitted, int duplicates)
+    {
+        if (submitted < ReuploadLoopMinimumBatch)
+            return;
+        if (duplicates < submitted * ReuploadLoopDuplicateRatio)
+            return;
+
+        var userAgent = SanitizeForLog(Request?.Headers.UserAgent.ToString());
+
+        _logger.LogInformation(
+            "Entries upload of {Submitted} entries was already stored ({Duplicates} duplicates); "
+                + "client {UserAgent} is re-sending stored readings",
+            submitted,
+            duplicates,
+            userAgent
+        );
+    }
+
+    /// <summary>Smallest upload that can be reported as a re-upload loop.</summary>
+    private const int ReuploadLoopMinimumBatch = 100;
+
+    /// <summary>Share of an upload that must already be stored to report a re-upload loop.</summary>
+    private const double ReuploadLoopDuplicateRatio = 0.95;
+
+    /// <summary>Cap on the logged User-Agent, which is attacker-controlled free text.</summary>
+    private const int MaxLoggedUserAgentLength = 200;
+
+    /// <summary>
+    /// Renders a caller-supplied header safe to log. Logs reach a line-oriented console exporter
+    /// and are shipped verbatim over OTLP, so a control, format or line-separator character in a
+    /// header value forges log lines or spoofs how they read.
+    /// </summary>
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return "(none)";
+
+        var capped = value.Length > MaxLoggedUserAgentLength
+            ? value[..MaxLoggedUserAgentLength]
+            : value;
+
+        return string.Create(capped.Length, capped, static (span, source) =>
+        {
+            for (var i = 0; i < source.Length; i++)
+                span[i] = IsUnsafeForLog(source[i]) ? ' ' : source[i];
+        });
+    }
+
+    /// <summary>
+    /// Control characters (which include ESC, so ANSI sequences are covered), Unicode format
+    /// characters such as the right-to-left override, and the line and paragraph separators.
+    /// </summary>
+    private static bool IsUnsafeForLog(char value) =>
+        char.IsControl(value)
+        || char.GetUnicodeCategory(value) is UnicodeCategory.Format
+            or UnicodeCategory.LineSeparator
+            or UnicodeCategory.ParagraphSeparator;
 
     /// <summary>
     /// Parses the loosely-typed entries request body (JsonElement, a single Entry, an Entry[]/
@@ -1054,37 +1160,9 @@ public class EntriesController : ControllerBase
             var processedArray = processedEntries.ToArray();
 
             // Filter out duplicates using database-backed detection
-            var uniqueEntries = new List<Entry>();
-            foreach (var entry in processedArray)
-            {
-                var duplicate = await _entryService.CheckForDuplicateEntryAsync(
-                    entry.Device,
-                    entry.Type ?? "sgv",
-                    entry.Sgv,
-                    entry.Mills,
-                    windowMinutes: 5,
-                    cancellationToken
-                );
-
-                if (duplicate != null)
-                {
-                    _logger.LogDebug(
-                        "Skipping duplicate entry: device={Device}, type={Type}, sgv={Sgv}, mills={Mills}",
-                        entry.Device,
-                        entry.Type,
-                        entry.Sgv,
-                        entry.Mills
-                    );
-                    continue;
-                }
-
-                uniqueEntries.Add(entry);
-            }
-
-            _logger.LogDebug(
-                "Filtered {Original} entries to {Unique} unique entries",
-                processedArray.Length,
-                uniqueEntries.Count
+            var (uniqueEntries, _) = await PartitionStoredEntriesAsync(
+                processedArray,
+                cancellationToken
             );
 
             // Create entries in database synchronously
