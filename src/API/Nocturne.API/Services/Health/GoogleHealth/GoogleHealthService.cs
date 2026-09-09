@@ -180,20 +180,6 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
         return new GoogleHealthTokenSession(configuration.RefreshToken, scopes);
     }
 
-    private async Task<GoogleHealthTokenSession?> StoredSessionAsync(
-        GoogleHealthConnectionEntity connection,
-        CancellationToken ct)
-    {
-        var session = await SharedSessionAsync(ct) ??
-            (connection.ProtectedToken is null
-                ? null
-                : Unprotect<GoogleHealthTokenSession>(connection.ProtectedToken));
-        if (session is not null &&
-            (string.IsNullOrWhiteSpace(session.RefreshToken) || session.Scopes is null))
-            throw new JsonException();
-        return session;
-    }
-
     private async Task MirrorOptionsAsync(
         GoogleHealthOptions options,
         Guid subject,
@@ -364,7 +350,7 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
         }
         catch (Exception ex) when (ex is CryptographicException or JsonException or FormatException)
         {
-            var connected = await SharedSessionAsync(ct) is not null || row.ProtectedToken is not null;
+            var connected = await SharedSessionAsync(ct) is not null;
             return WithProgress(new()
             {
                 Capabilities = GoogleHealthClient.Capabilities, Connected = connected,
@@ -380,7 +366,7 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
         GoogleHealthTokenSession? token;
         try
         {
-            token = await StoredSessionAsync(row, ct);
+            token = await SharedSessionAsync(ct);
         }
         catch (Exception ex) when (ex is CryptographicException or JsonException or FormatException)
         {
@@ -427,7 +413,7 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
             else
             {
                 if (row.SubjectId != subject) throw new GoogleHealthException("connection_owner_required");
-                var session = await StoredSessionAsync(row, ct);
+                var session = await SharedSessionAsync(ct);
                 GoogleHealthOptions? prior = null;
                 if (session is not null || string.IsNullOrWhiteSpace(options.ClientSecret))
                     prior = await StoredOptionsAsync(row, ct);
@@ -455,7 +441,7 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
         {
             var row = await Connection(ct) ?? throw new GoogleHealthException("configure_first");
             if (row.SubjectId != subject) throw new GoogleHealthException("connection_owner_required");
-            if (await StoredSessionAsync(row, ct) is not null)
+            if (await SharedSessionAsync(ct) is not null)
                 throw new GoogleHealthException("disconnect_first");
             var settings = await StoredOptionsAsync(row, ct);
             var verifier = WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(48));
@@ -509,7 +495,6 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
             var missingScopes = GoogleHealthClient.SupportedTypes
                 .Where(type => !token.Scopes.Contains(GoogleHealthClient.ScopeFor(type), StringComparer.Ordinal)).ToArray();
             row.AccountKey = account;
-            row.ProtectedToken = Protect(token);
             row.NextAttempt = null; row.LastAttempt = null;
             row.ErrorCode = missingScopes.Length == 0 ? null : EncodeError("partial_consent", missingScopes);
             await db.SaveChangesAsync(ct);
@@ -525,7 +510,7 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
             LogFailure(error);
             db.ChangeTracker.Clear();
             var row = await Connection(CancellationToken.None);
-            if (row is not null && row.ProtectedToken is null)
+            if (row is not null && await SharedSessionAsync(CancellationToken.None) is null)
             {
                 row.LastAttempt = DateTimeOffset.UtcNow;
                 row.NextAttempt = null;
@@ -547,12 +532,12 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
             if (row.SubjectId != subject) throw new GoogleHealthException("connection_owner_required");
             GoogleHealthTokenSession? token = null;
             var revokeFailed = false;
-            try { token = await StoredSessionAsync(row, ct); }
+            try { token = await SharedSessionAsync(ct); }
             catch (Exception ex) when (ex is CryptographicException or JsonException or FormatException)
             {
                 revokeFailed = true;
             }
-            row.ProtectedToken = null; row.ErrorCode = revokeFailed ? "revoke_in_google" : null; row.NextAttempt = null;
+            row.ErrorCode = revokeFailed ? "revoke_in_google" : null; row.NextAttempt = null;
             coordinator.Flows.TryRemove(db.TenantId, out _);
             await db.SaveChangesAsync(ct);
             oauth.InvalidateToken();
@@ -576,7 +561,7 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
             var row = await Connection(ct);
             if (row is null) return;
             if (row.SubjectId != subject) throw new GoogleHealthException("connection_owner_required");
-            if (await StoredSessionAsync(row, ct) is not null)
+            if (await SharedSessionAsync(ct) is not null)
                 throw new GoogleHealthException("disconnect_first");
             if (writer is not null) await writer.PurgeAsync(ct);
             var strategy = db.Database.CreateExecutionStrategy();
@@ -599,15 +584,13 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
             var row = await Connection(ct) ?? throw new GoogleHealthException("configure_first");
             if (row.SubjectId != subject) throw new GoogleHealthException("connection_owner_required");
             var settings = await StoredOptionsAsync(row, ct);
-            var token = await StoredSessionAsync(row, ct) ??
+            var token = await SharedSessionAsync(ct) ??
                 throw new GoogleHealthException("configure_first");
             var now = DateTimeOffset.UtcNow;
             if (string.IsNullOrWhiteSpace(token.AccessToken) || token.AccessTokenExpiresAt is null ||
                 token.AccessTokenExpiresAt <= now.Add(AccessTokenSafety))
             {
                 token = await RefreshSessionAsync(settings, token, ct);
-                row.ProtectedToken = Protect(token);
-                await db.SaveChangesAsync(ct);
                 await MirrorTokenAsync(settings, token, row.SubjectId, ct);
             }
             var from = settings.ImportFrom ?? now.AddDays(-settings.HistoryDays);
@@ -646,7 +629,7 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
         try
         {
             var settings = await StoredOptionsAsync(row, ct);
-            if (await StoredSessionAsync(row, ct) is null)
+            if (await SharedSessionAsync(ct) is null)
                 throw new GoogleHealthException("configure_first");
             if (settings.PreviewOnly) throw new GoogleHealthException("preview_required");
             if (settings.DataTypes.Length == 0) throw new GoogleHealthException("no_types_selected");
@@ -678,7 +661,7 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
                 try
                 {
                     settings = await StoredOptionsAsync(row, ct);
-                    var storedToken = await StoredSessionAsync(row, ct);
+                    var storedToken = await SharedSessionAsync(ct);
                     if (storedToken is null) return;
                     token = storedToken;
                     if (settings.DataTypes is null)
@@ -698,8 +681,6 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
                     coordinator.Report(db.TenantId, GoogleHealthSyncPhase.RefreshingSession);
                     token = await RefreshSessionAsync(settings, token, ct);
                     access = token.AccessToken!;
-                    row.ProtectedToken = Protect(token);
-                    await db.SaveChangesAsync(ct);
                     await MirrorTokenAsync(settings, token, row.SubjectId, ct);
                 }
                 stage = "scope_validation";
@@ -738,8 +719,6 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
                     coordinator.Report(db.TenantId, GoogleHealthSyncPhase.RefreshingSession);
                     token = await RefreshSessionAsync(settings, token, ct, forceRefresh: true);
                     access = token.AccessToken!;
-                    row.ProtectedToken = Protect(token);
-                    await db.SaveChangesAsync(ct);
                     await MirrorTokenAsync(settings, token, row.SubjectId, ct);
                     try
                     {
@@ -808,7 +787,6 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
                         row.NextAttempt = DateTimeOffset.UtcNow.Add(delay > TimeSpan.FromDays(7) ? TimeSpan.FromDays(7) : delay);
                     if (error.Message == "reconnect_required")
                     {
-                        row.ProtectedToken = null;
                         oauth.InvalidateToken();
                         await ClearMirroredTokenAsync(row.SubjectId, ct);
                     }

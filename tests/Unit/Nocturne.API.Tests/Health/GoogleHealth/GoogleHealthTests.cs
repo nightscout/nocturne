@@ -86,7 +86,7 @@ public class GoogleHealthTests
                 CallbackUrl = "https://shared.example/settings/connectors/google-health/callback",
                 HistoryDays = 45,
                 RefreshToken = "shared-refresh-token",
-                GrantedScopes = "openid https://www.googleapis.com/auth/fitness.activity.read",
+                GrantedScopes = $"openid {GoogleHealthClient.ActivityScope}",
                 SyncSteps = true,
                 SyncHeartRate = false,
                 SyncBodyWeight = false,
@@ -531,9 +531,12 @@ public class GoogleHealthTests
         });
         var protection = new EphemeralDataProtectionProvider();
         var tokenProvider = TokenProvider(handler, tenant);
+        var connectorStore = new TestConnectorStore();
         var service = new GoogleHealthService(db, protection, new GoogleHealthCoordinator(),
             new GoogleHealthClient(new HttpClient(handler, false)),
-            tokenProvider);
+            tokenProvider,
+            connectorConfigurations: connectorStore.Configurations,
+            configurationLoader: connectorStore.Loader);
         var options = Options(); options.DataTypes = ["steps", "weight"];
         await service.SaveAsync(options, subject, default);
         var auth = await service.StartAsync(subject, default);
@@ -548,17 +551,11 @@ public class GoogleHealthTests
         Assert.Equal(["steps", "sleep"], status.ErrorDataTypes);
         Assert.NotNull(status.AccessTokenExpiresAt);
         var stored = await db.GoogleHealthConnections.SingleAsync();
-        Assert.DoesNotContain("synthetic-secret", stored.ProtectedSettings); Assert.DoesNotContain("synthetic-refresh", stored.ProtectedToken!);
+        Assert.DoesNotContain("synthetic-secret", stored.ProtectedSettings);
+        Assert.Equal("synthetic-refresh", connectorStore.Secrets["refreshToken"]);
         await service.SyncAsync(true, default); Assert.Equal(72m, (await db.GoogleHealthReadings.SingleAsync()).Value);
         Assert.Equal(1, tokenCalls);
         Assert.All(dataAuthorizations, value => Assert.Equal("Bearer synthetic-access", value));
-        var protector = protection.CreateProtector("Nocturne.GoogleHealth.v1", tenant.ToString());
-        stored.ProtectedToken = protector.Protect(JsonSerializer.Serialize(new
-        {
-            refreshToken = "synthetic-refresh",
-            scopes = new[] { "openid", GoogleHealthClient.MetricsScope }
-        }, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
-        await db.SaveChangesAsync();
         tokenProvider.InvalidateToken();
         grams = 73000; await service.SyncAsync(true, default);
         Assert.Equal(2, tokenCalls);
@@ -617,9 +614,12 @@ public class GoogleHealthTests
                 Content = new StringContent("{\"error\":{\"message\":\"do not persist this\",\"details\":[{\"metadata\":{\"detailedReasons\":[\"ACCOUNT_NOT_LINKED\"]}}]}}", Encoding.UTF8, "application/json")
             }
         });
+        var connectorStore = new TestConnectorStore();
         var service = new GoogleHealthService(db, new EphemeralDataProtectionProvider(), new GoogleHealthCoordinator(),
             new GoogleHealthClient(new HttpClient(handler, false)),
-            TokenProvider(handler, tenant));
+            TokenProvider(handler, tenant),
+            connectorConfigurations: connectorStore.Configurations,
+            configurationLoader: connectorStore.Loader);
         await service.SaveAsync(Options(), subject, default);
         var authorization = await service.StartAsync(subject, default);
         var state = QueryHelpers.ParseQuery(new Uri(authorization.Url).Query)["state"].ToString();
@@ -641,7 +641,7 @@ public class GoogleHealthTests
         Assert.Empty(status.ErrorDataTypes);
         Assert.NotNull(status.LastSync);
 
-        var token = (await db.GoogleHealthConnections.SingleAsync()).ProtectedToken;
+        var refreshToken = connectorStore.Secrets["refreshToken"];
         db.GoogleHealthReadings.Add(new GoogleHealthReadingEntity
         {
             Id = Guid.CreateVersion7(), DataType = "weight", SourceKey = "existing-import",
@@ -660,7 +660,7 @@ public class GoogleHealthTests
         Assert.Empty(status.SelectedTypes);
         Assert.Null(status.ErrorCode);
         Assert.Equal(options.ImportFrom, status.ImportFrom);
-        Assert.Equal(token, (await db.GoogleHealthConnections.SingleAsync()).ProtectedToken);
+        Assert.Equal(refreshToken, connectorStore.Secrets["refreshToken"]);
         Assert.Equal(72m, (await db.GoogleHealthReadings.SingleAsync()).Value);
 
         options.DataTypes = ["weight"];
@@ -678,7 +678,7 @@ public class GoogleHealthTests
     }
 
     [Fact]
-    public async Task Unreadable_google_configuration_can_be_disconnected_and_reconfigured()
+    public async Task Connector_storage_survives_data_protection_restart()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:"); await connection.OpenAsync();
         await using var db = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options);
@@ -692,9 +692,12 @@ public class GoogleHealthTests
             _ => Json("{}")
         });
         var coordinator = new GoogleHealthCoordinator();
+        var connectorStore = new TestConnectorStore();
         var original = new GoogleHealthService(db, new EphemeralDataProtectionProvider(), coordinator,
             new GoogleHealthClient(new HttpClient(handler, false)),
-            TokenProvider(handler, tenant));
+            TokenProvider(handler, tenant),
+            connectorConfigurations: connectorStore.Configurations,
+            configurationLoader: connectorStore.Loader);
         var options = Options();
         await original.SaveAsync(options, subject, default);
         var authorization = await original.StartAsync(subject, default);
@@ -703,13 +706,16 @@ public class GoogleHealthTests
 
         var recovered = new GoogleHealthService(db, new EphemeralDataProtectionProvider(), coordinator,
             new GoogleHealthClient(new HttpClient(handler, false)),
-            TokenProvider(handler, tenant));
-        var broken = await recovered.StatusAsync(default);
-        Assert.True(broken.Connected); Assert.False(broken.Configured);
-        Assert.Equal("stored_google_configuration_unreadable", broken.ErrorCode);
+            TokenProvider(handler, tenant),
+            connectorConfigurations: connectorStore.Configurations,
+            configurationLoader: connectorStore.Loader);
+        var recoveredStatus = await recovered.StatusAsync(default);
+        Assert.True(recoveredStatus.Connected);
+        Assert.True(recoveredStatus.Configured);
+        Assert.Null(recoveredStatus.ErrorCode);
 
         await recovered.SyncAsync(true, default);
-        Assert.Equal("stored_google_configuration_unreadable", (await db.GoogleHealthConnections.SingleAsync()).ErrorCode);
+        Assert.NotNull((await db.GoogleHealthConnections.SingleAsync()).LastSync);
         Assert.True((await recovered.StatusAsync(default)).Connected);
 
         await recovered.DisconnectAsync(subject, default);
@@ -829,6 +835,57 @@ public class GoogleHealthTests
             new ConnectorServerResolver<GoogleHealthConnectorConfiguration>(null, null, null),
             tenantAccessor.Object,
             NullLogger<GoogleHealthAuthTokenProvider>.Instance);
+    }
+
+    private sealed class TestConnectorStore
+    {
+        private string? configurationJson;
+        private Dictionary<string, string> secrets = new(StringComparer.OrdinalIgnoreCase);
+
+        public TestConnectorStore()
+        {
+            var configurations = new Mock<IConnectorConfigurationService>();
+            configurations
+                .Setup(service => service.SaveConfigurationAsync(
+                    "GoogleHealth",
+                    It.IsAny<JsonDocument>(),
+                    It.IsAny<string?>(),
+                    It.IsAny<CancellationToken>()))
+                .Callback<string, JsonDocument, string?, CancellationToken>((_, document, _, _) =>
+                    configurationJson = document.RootElement.GetRawText())
+                .ReturnsAsync(new ConnectorConfigurationResponse());
+            configurations
+                .Setup(service => service.GetSecretsAsync("GoogleHealth", It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() => new Dictionary<string, string>(secrets, StringComparer.OrdinalIgnoreCase));
+            configurations
+                .Setup(service => service.SaveSecretsAsync(
+                    "GoogleHealth",
+                    It.IsAny<Dictionary<string, string>>(),
+                    It.IsAny<string?>(),
+                    It.IsAny<CancellationToken>()))
+                .Callback<string, Dictionary<string, string>, string?, CancellationToken>((_, values, _, _) =>
+                    secrets = new Dictionary<string, string>(values, StringComparer.OrdinalIgnoreCase))
+                .Returns(Task.CompletedTask);
+            Configurations = configurations.Object;
+
+            var loader = new Mock<IConnectorConfigurationLoader<GoogleHealthConnectorConfiguration>>();
+            loader.Setup(value => value.LoadForTenantAsync(It.IsAny<CancellationToken>())).Returns(() =>
+            {
+                var configuration = new GoogleHealthConnectorConfiguration { Enabled = configurationJson is not null };
+                if (configurationJson is not null)
+                {
+                    using var document = JsonDocument.Parse(configurationJson);
+                    ConnectorConfigurationBinder.ApplyJsonToConfig(document, configuration);
+                }
+                ConnectorConfigurationBinder.ApplySecretsToConfig(secrets, configuration);
+                return Task.FromResult(configuration);
+            });
+            Loader = loader.Object;
+        }
+
+        public IConnectorConfigurationService Configurations { get; }
+        public IConnectorConfigurationLoader<GoogleHealthConnectorConfiguration> Loader { get; }
+        public IReadOnlyDictionary<string, string> Secrets => secrets;
     }
 
     private sealed class ThrowingGoogleHealthService : IGoogleHealthService
