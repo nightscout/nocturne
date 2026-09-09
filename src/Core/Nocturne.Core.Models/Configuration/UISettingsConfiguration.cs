@@ -637,6 +637,11 @@ public class ServicesSettings
     [JsonPropertyName("connectedServices")]
     public List<ConnectedService> ConnectedServices { get; set; } = new();
 
+    /// <summary>
+    /// The connector catalog, served from <c>ConnectorMetadataService</c> on every read. It is
+    /// build-time metadata rather than tenant state, so the services row omits it — see
+    /// <see cref="UISettingsSection.OmittedProperties"/>.
+    /// </summary>
     [JsonPropertyName("availableServices")]
     public List<AvailableService> AvailableServices { get; set; } = new();
 
