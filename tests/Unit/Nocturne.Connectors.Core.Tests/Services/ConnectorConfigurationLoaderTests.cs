@@ -50,7 +50,7 @@ public class ConnectorConfigurationLoaderTests
             "a connector with no per-tenant config row must not run, even though the defaults set Enabled = true");
         configService.Verify(
             s => s.GetSecretsAsync(ConnectorName, It.IsAny<CancellationToken>()), Times.Never,
-            "the secrets live on the row that does not exist; every poller asked this for every unconfigured tenant every tick");
+            "the secrets live on the row that does not exist");
     }
 
     [Fact]

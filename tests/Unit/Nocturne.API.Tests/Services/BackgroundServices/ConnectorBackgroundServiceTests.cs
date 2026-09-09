@@ -1028,9 +1028,9 @@ public class ConnectorBackgroundServiceTests
     }
 
     /// <summary>
-    /// Almost every tenant has no configuration for almost every connector, and each poller used to
-    /// open a DI scope and read that absent row for all of them every minute. A tenant found
-    /// unconfigured is left alone until <see cref="ConnectorBackgroundService{TConfig}.UnconfiguredRecheckInterval"/>.
+    /// Almost every tenant has no configuration for almost every connector. A tenant found
+    /// unconfigured is left alone until <see cref="ConnectorBackgroundService{TConfig}.UnconfiguredRecheckInterval"/>
+    /// rather than having its absent row read on every tick.
     /// </summary>
     [Fact]
     public async Task SyncAllTenants_ForAnUnconfiguredTenant_ReadsConfigOnceUntilTheRecheckInterval()
@@ -1075,8 +1075,8 @@ public class ConnectorBackgroundServiceTests
     }
 
     /// <summary>
-    /// A configured tenant inside its interval used to cost a scope and a config read every tick just
-    /// to learn it was not due; now the tick skips it until the interval has elapsed.
+    /// A configured tenant inside its interval is skipped until the interval has elapsed; the tick
+    /// does not read its configuration to learn it is not due.
     /// </summary>
     [Fact]
     public async Task SyncAllTenants_ForAConfiguredTenantInsideItsInterval_DoesNotReadConfig()

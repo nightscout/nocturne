@@ -23,7 +23,7 @@ namespace Nocturne.API.Services.BackgroundServices;
 /// <remarks>
 /// The service polls every minute and only syncs a given tenant when its configured
 /// <c>SyncIntervalMinutes</c> has elapsed since the last sync, and looks at a tenant only when it is
-/// due (<see cref="_nextCheckByTenant"/>). Per-tenant configuration
+/// due (see <see cref="UnconfiguredRecheckInterval"/>). Per-tenant configuration
 /// is loaded fresh each cycle via <see cref="IConnectorConfigurationLoader{TConfig}"/>.
 /// </remarks>
 public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
@@ -50,10 +50,9 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
     /// <summary>
     /// When each tenant next needs a look: a tenant with no usable configuration for this connector
     /// after <see cref="UnconfiguredRecheckInterval"/>, a configured one when its interval has
-    /// elapsed. A tenant not yet due costs the tick nothing — no budget slot, no DI scope, no
-    /// configuration read. Cleared by <see cref="RequestImmediateSync"/>, which
-    /// <see cref="ConnectorPollerNudge"/> drives from every configuration write, so a saved or
-    /// enabled connector syncs on the next tick.
+    /// elapsed. A tenant not yet due takes no budget slot, opens no scope and reads nothing this tick.
+    /// Cleared by <see cref="RequestImmediateSync"/>, which <see cref="ConnectorPollerNudge"/> drives
+    /// from every configuration write, so a saved or enabled connector is looked at on the next tick.
     /// </summary>
     private readonly ConcurrentDictionary<Guid, DateTime> _nextCheckByTenant = new();
 
@@ -108,12 +107,17 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
     {
         var now = DateTime.UtcNow;
 
+        // The schedule is cleared ahead of the debounce: the debounce protects the sync itself from
+        // an event storm, whereas a look costs one configuration read, and a tenant's enable flow
+        // writes configuration, secrets and the active flag in quick succession — the last of those
+        // is the one that must be seen.
+        _nextCheckByTenant.TryRemove(tenantId, out _);
+
         if (_lastNudgeByTenant.TryGetValue(tenantId, out var lastNudge) && now - lastNudge < NudgeDebounceWindow)
             return;
 
         _lastNudgeByTenant[tenantId] = now;
         _lastSyncByTenant.TryRemove(tenantId, out _);
-        _nextCheckByTenant.TryRemove(tenantId, out _);
 
         Logger.LogDebug(
             "Immediate sync requested for {ConnectorName} tenant {TenantId}",

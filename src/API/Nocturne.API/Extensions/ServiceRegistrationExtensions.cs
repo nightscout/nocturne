@@ -920,6 +920,8 @@ public static class ServiceRegistrationExtensions
             pollingService: typeof(ConnectorBackgroundService<,>)
         );
         services.AddSingleton(ConnectorSyncBudget.FromConfiguration(configuration, services));
+        // After AddConnectors: the installers register the token caches as IConnectorCacheInvalidator
+        // with TryAddSingleton, which a prior registration of the interface would silently suppress.
         services.AddSingleton<ConnectorPollerNudge>();
         services.AddSingleton<IConnectorCacheInvalidator>(sp => sp.GetRequiredService<ConnectorPollerNudge>());
 
