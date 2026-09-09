@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -698,8 +699,9 @@ public class EntriesController : ControllerBase
     private const int MaxLoggedUserAgentLength = 200;
 
     /// <summary>
-    /// Renders a caller-supplied header safe to log: the only log sink is a line-oriented console
-    /// exporter, so an unescaped control character in a header value forges log lines.
+    /// Renders a caller-supplied header safe to log. Logs reach a line-oriented console exporter
+    /// and are shipped verbatim over OTLP, so a control, format or line-separator character in a
+    /// header value forges log lines or spoofs how they read.
     /// </summary>
     private static string SanitizeForLog(string? value)
     {
@@ -713,9 +715,19 @@ public class EntriesController : ControllerBase
         return string.Create(capped.Length, capped, static (span, source) =>
         {
             for (var i = 0; i < source.Length; i++)
-                span[i] = char.IsControl(source[i]) ? ' ' : source[i];
+                span[i] = IsUnsafeForLog(source[i]) ? ' ' : source[i];
         });
     }
+
+    /// <summary>
+    /// Control characters (which include ESC, so ANSI sequences are covered), Unicode format
+    /// characters such as the right-to-left override, and the line and paragraph separators.
+    /// </summary>
+    private static bool IsUnsafeForLog(char value) =>
+        char.IsControl(value)
+        || char.GetUnicodeCategory(value) is UnicodeCategory.Format
+            or UnicodeCategory.LineSeparator
+            or UnicodeCategory.ParagraphSeparator;
 
     /// <summary>
     /// Parses the loosely-typed entries request body (JsonElement, a single Entry, an Entry[]/

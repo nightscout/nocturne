@@ -284,11 +284,13 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<SensorGlucose>> FindStoredDuplicateCandidatesAsync(
-        IReadOnlyCollection<string>? devices, DateTime from, DateTime to,
+        IReadOnlyCollection<string>? devices, DateTime from, DateTime to, int limit,
         CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entities = await StoredDuplicateQuery(ctx, devices, mgdl: null, from, to).ToListAsync(ct);
+        var entities = await StoredDuplicateQuery(ctx, devices, mgdl: null, from, to)
+            .Take(limit)
+            .ToListAsync(ct);
         return entities.Select(SensorGlucoseMapper.ToDomainModel).ToList();
     }
 

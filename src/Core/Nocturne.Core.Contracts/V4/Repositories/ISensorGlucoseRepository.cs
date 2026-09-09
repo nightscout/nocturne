@@ -101,11 +101,11 @@ public interface ISensorGlucoseRepository
     /// (required when any submitted entry has no device, since such an entry matches any).</param>
     /// <param name="from">Inclusive start of the time window.</param>
     /// <param name="to">Inclusive end of the time window.</param>
+    /// <param name="limit">Maximum rows to return. A caller that needs to know whether the window
+    /// held more than it can use should ask for one row more than that.</param>
     /// <param name="ct">Cancellation token.</param>
-    /// <returns>Every stored reading in the window — unpaged, so the caller must keep the window
-    /// narrow enough to hold in memory.</returns>
     Task<IReadOnlyList<SensorGlucose>> FindStoredDuplicateCandidatesAsync(
-        IReadOnlyCollection<string>? devices, DateTime from, DateTime to,
+        IReadOnlyCollection<string>? devices, DateTime from, DateTime to, int limit,
         CancellationToken ct = default);
 
     /// <summary>

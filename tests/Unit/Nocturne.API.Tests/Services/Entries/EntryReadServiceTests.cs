@@ -370,7 +370,7 @@ public class EntryReadServiceTests
         Assert.All(results, Assert.Null);
         _sgRepo.Verify(r => r.FindStoredDuplicateCandidatesAsync(
             It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
-            It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Once);
         _sgRepo.Verify(r => r.FindStoredDuplicateAsync(
             It.IsAny<string?>(), It.IsAny<double?>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
             It.IsAny<CancellationToken>()), Times.Never);
@@ -393,7 +393,7 @@ public class EntryReadServiceTests
 
         _sgRepo.Verify(r => r.FindStoredDuplicateCandidatesAsync(
             It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
-            It.IsAny<CancellationToken>()), Times.Exactly(2));
+            It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
 
     [Fact]
@@ -403,9 +403,9 @@ public class EntryReadServiceTests
         var captured = new List<(DateTime From, DateTime To)>();
         _sgRepo.Setup(r => r.FindStoredDuplicateCandidatesAsync(
                 It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
-                It.IsAny<CancellationToken>()))
-            .Callback<IReadOnlyCollection<string>?, DateTime, DateTime, CancellationToken>(
-                (_, from, to, _) => captured.Add((from, to)))
+                It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .Callback<IReadOnlyCollection<string>?, DateTime, DateTime, int, CancellationToken>(
+                (_, from, to, _, _) => captured.Add((from, to)))
             .ReturnsAsync(Array.Empty<SensorGlucose>());
 
         var probes = FiveMinutelyProbes(10, "xdrip");
@@ -427,9 +427,9 @@ public class EntryReadServiceTests
         IReadOnlyCollection<string>? devices = null;
         _sgRepo.Setup(r => r.FindStoredDuplicateCandidatesAsync(
                 It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
-                It.IsAny<CancellationToken>()))
-            .Callback<IReadOnlyCollection<string>?, DateTime, DateTime, CancellationToken>(
-                (d, _, _, _) => devices = d)
+                It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .Callback<IReadOnlyCollection<string>?, DateTime, DateTime, int, CancellationToken>(
+                (d, _, _, _, _) => devices = d)
             .ReturnsAsync(Array.Empty<SensorGlucose>());
 
         await _sut.CheckDuplicatesAsync(FiveMinutelyProbes(5, "xdrip"));
@@ -447,9 +447,9 @@ public class EntryReadServiceTests
         IReadOnlyCollection<string>? devices = new[] { "sentinel" };
         _sgRepo.Setup(r => r.FindStoredDuplicateCandidatesAsync(
                 It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
-                It.IsAny<CancellationToken>()))
-            .Callback<IReadOnlyCollection<string>?, DateTime, DateTime, CancellationToken>(
-                (d, _, _, _) => devices = d)
+                It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .Callback<IReadOnlyCollection<string>?, DateTime, DateTime, int, CancellationToken>(
+                (d, _, _, _, _) => devices = d)
             .ReturnsAsync(Array.Empty<SensorGlucose>());
 
         var mills = new DateTimeOffset(Now, TimeSpan.Zero).ToUnixTimeMilliseconds();
@@ -485,7 +485,7 @@ public class EntryReadServiceTests
         var stored = MakeSg(Now.AddMinutes(-30), 99);
         _sgRepo.Setup(r => r.FindStoredDuplicateCandidatesAsync(
                 It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
-                It.IsAny<CancellationToken>()))
+                It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([stored]);
 
         // Submitted newest-first, so the stored reading answers the *last* probe: chunking sorts
@@ -550,9 +550,9 @@ public class EntryReadServiceTests
         IReadOnlyCollection<string>? devices = null;
         _sgRepo.Setup(r => r.FindStoredDuplicateCandidatesAsync(
                 It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
-                It.IsAny<CancellationToken>()))
-            .Callback<IReadOnlyCollection<string>?, DateTime, DateTime, CancellationToken>(
-                (d, _, _, _) => devices = d)
+                It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .Callback<IReadOnlyCollection<string>?, DateTime, DateTime, int, CancellationToken>(
+                (d, _, _, _, _) => devices = d)
             .ReturnsAsync(Array.Empty<SensorGlucose>());
 
         var mills = new DateTimeOffset(Now, TimeSpan.Zero).ToUnixTimeMilliseconds();
@@ -589,14 +589,135 @@ public class EntryReadServiceTests
             100, It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
 
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CheckDuplicatesAsync_ReadingOutsideAProbesOwnWindow_IsNotItsDuplicate()
+    {
+        // One chunk covers every probe's window, so the candidate list holds rows that belong to
+        // other probes. Each probe must reject them: matching a reading half an hour outside its
+        // own window drops a genuinely new reading from the write.
+        var mills = new DateTimeOffset(Now, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        var later = Now.AddMinutes(30);
+        _sgRepo.Setup(r => r.FindStoredDuplicateCandidatesAsync(
+                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+                It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([MakeSg(later, 120)]);
+
+        var results = await _sut.CheckDuplicatesAsync(new[]
+        {
+            new EntryDuplicateProbe("test-device", "sgv", 120, mills),
+            new EntryDuplicateProbe("test-device", "sgv", 120, mills + (30 * 60_000L)),
+        }, windowMinutes: 5);
+
+        results[0].Should().BeNull("the stored reading is 30 minutes outside this probe's window");
+        results[1].Should().NotBeNull();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CheckDuplicatesAsync_EntriesJustUnderTheGap_DoNotWalkTheChunkOpen()
+    {
+        // Spacing an entry a millisecond under the limit is the shape that defeats a budget
+        // measured from the chunk's start: each entry pays for the next and the window grows
+        // without bound. The gap is measured against the neighbour instead.
+        var captured = CaptureCandidateWindows();
+        var justUnder = TimeSpan.FromHours(1) - TimeSpan.FromMilliseconds(1);
+
+        await _sut.CheckDuplicatesAsync(SpacedProbes(400, justUnder, "xdrip"));
+
+        captured.Max(w => w.To - w.From)
+            .Should().BeLessThanOrEqualTo(TimeSpan.FromDays(7) + TimeSpan.FromMinutes(10));
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CheckDuplicatesAsync_WindowHoldsMoreRowsThanTheCap_FallsBackToPerEntryProbes()
+    {
+        // The span and gap limits bound the chunk's window, not how many readings a tenant has
+        // inside it. Above the row cap the chunk must not hold them all in memory.
+        var flood = Enumerable.Range(0, 20_001).Select(i => MakeSg(Now.AddSeconds(-i), 100)).ToArray();
+        _sgRepo.Setup(r => r.FindStoredDuplicateCandidatesAsync(
+                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+                It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(flood);
+        _sgRepo.Setup(r => r.FindStoredDuplicateAsync(
+                It.IsAny<string?>(), It.IsAny<double?>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((SensorGlucose?)null);
+
+        var results = await _sut.CheckDuplicatesAsync(FiveMinutelyProbes(3, "xdrip"));
+
+        Assert.All(results, Assert.Null);
+        _sgRepo.Verify(r => r.FindStoredDuplicateAsync(
+            It.IsAny<string?>(), It.IsAny<double?>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+            It.IsAny<CancellationToken>()), Times.Exactly(3));
+    }
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData("SGV")]
+    [InlineData("Sgv")]
+    [InlineData("sgv ")]
+    public async Task CheckDuplicatesAsync_TypeIsNotExactlySgv_NeverReachesTheBatchRead(string type)
+    {
+        // Which types reach the batch read is the correctness boundary of this change: the batch
+        // read is a superset of the per-entry probe's paged, device-filtered read, and for mbg
+        // that difference suppresses a real write. Only exactly "sgv" may take it.
+        var mills = new DateTimeOffset(Now, TimeSpan.Zero).ToUnixTimeMilliseconds();
+
+        var results = await _sut.CheckDuplicatesAsync(
+            [new EntryDuplicateProbe("xdrip", type, 120, mills)]);
+
+        Assert.Null(Assert.Single(results));
+        _sgRepo.Verify(r => r.FindStoredDuplicateCandidatesAsync(
+            It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+            It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CheckDuplicatesAsync_DeviceFilter_KeepsDevicesThatDifferOnlyByCase()
+    {
+        // Folding case here would filter the query to one spelling, miss the other's stored
+        // readings, and re-insert them on every upload cycle.
+        IReadOnlyCollection<string>? devices = null;
+        _sgRepo.Setup(r => r.FindStoredDuplicateCandidatesAsync(
+                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+                It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .Callback<IReadOnlyCollection<string>?, DateTime, DateTime, int, CancellationToken>(
+                (d, _, _, _, _) => devices = d)
+            .ReturnsAsync(Array.Empty<SensorGlucose>());
+
+        var mills = new DateTimeOffset(Now, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        await _sut.CheckDuplicatesAsync(new[]
+        {
+            new EntryDuplicateProbe("xdrip", "sgv", 120, mills),
+            new EntryDuplicateProbe("XDRIP", "sgv", 121, mills + 60_000),
+        });
+
+        devices.Should().BeEquivalentTo(new[] { "xdrip", "XDRIP" });
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CheckDuplicatesAsync_CancelledToken_StopsClassifying()
+    {
+        StubNoSgvCandidates();
+        using var cancelled = new CancellationTokenSource();
+        await cancelled.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => _sut.CheckDuplicatesAsync(FiveMinutelyProbes(5, "xdrip"), 5, cancelled.Token));
+    }
+
     private List<(DateTime From, DateTime To)> CaptureCandidateWindows()
     {
         var captured = new List<(DateTime From, DateTime To)>();
         _sgRepo.Setup(r => r.FindStoredDuplicateCandidatesAsync(
                 It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
-                It.IsAny<CancellationToken>()))
-            .Callback<IReadOnlyCollection<string>?, DateTime, DateTime, CancellationToken>(
-                (_, from, to, _) => captured.Add((from, to)))
+                It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .Callback<IReadOnlyCollection<string>?, DateTime, DateTime, int, CancellationToken>(
+                (_, from, to, _, _) => captured.Add((from, to)))
             .ReturnsAsync(Array.Empty<SensorGlucose>());
         return captured;
     }
@@ -613,7 +734,7 @@ public class EntryReadServiceTests
     private void StubNoSgvCandidates() =>
         _sgRepo.Setup(r => r.FindStoredDuplicateCandidatesAsync(
                 It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
-                It.IsAny<CancellationToken>()))
+                It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<SensorGlucose>());
 
     private static EntryDuplicateProbe[] FiveMinutelyProbes(int count, string? device)

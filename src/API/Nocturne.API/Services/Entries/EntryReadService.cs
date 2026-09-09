@@ -61,16 +61,22 @@ public class EntryReadService : IEntryStore
     private static readonly TimeSpan MaxProbeChunkSpan = TimeSpan.FromDays(7);
 
     /// <summary>
-    /// Time span each entry in a chunk earns towards that chunk's span. It stops a sparse batch
-    /// from buying a wide query: two entries a week apart get a query each, not a week-wide read.
+    /// Gap between neighbouring entries at which a chunk ends. Measured against the neighbour
+    /// rather than the chunk's start: a budget that grows with the entry count is walked open by
+    /// entries spaced just under it, each paying for the next.
     /// </summary>
-    private static readonly TimeSpan ProbeChunkSpanPerEntry = TimeSpan.FromHours(1);
+    private static readonly TimeSpan MaxProbeChunkGap = TimeSpan.FromHours(1);
+
+    /// <summary>Entries per chunk, bounding the work one query's results are matched against.</summary>
+    private const int MaxProbeChunkEntries = 500;
 
     /// <summary>
-    /// Entries per chunk, so rows-per-query has a ceiling that does not depend on how densely the
-    /// tenant's stored readings happen to fill the chunk's span.
+    /// Rows one chunk may pull into memory. The span and gap limits bound the chunk's *window*, but
+    /// how many stored readings fall inside it is the tenant's ingest density, which no limit on
+    /// the batch can constrain — so above this the chunk falls back to the per-entry probe, which
+    /// reads one row per entry. This is the only bound here that holds whatever the density is.
     /// </summary>
-    private const int MaxProbeChunkEntries = 500;
+    private const int MaxProbeChunkRows = 20_000;
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<Entry>> QueryAsync(EntryQuery query, CancellationToken ct = default)
@@ -193,7 +199,6 @@ public class EntryReadService : IEntryStore
         IReadOnlyList<EntryDuplicateProbe> probes, int windowMinutes = 5, CancellationToken ct = default)
     {
         var results = new Entry?[probes.Count];
-        var windowMs = (long)windowMinutes * 60 * 1000;
         var sgvProbes = new List<(EntryDuplicateProbe probe, int index)>();
 
         for (var i = 0; i < probes.Count; i++)
@@ -215,18 +220,17 @@ public class EntryReadService : IEntryStore
         }
 
         foreach (var chunk in ChunkByTimeSpan(sgvProbes))
-            await ClassifySgvChunkAsync(chunk, windowMs, results, ct);
+            await ClassifySgvChunkAsync(chunk, windowMinutes, results, ct);
 
         return results;
     }
 
     /// <summary>
-    /// Splits the sgv probes into time-contiguous chunks, each of which becomes a single query.
-    /// A chunk widens only while its entries pay for the span (<see cref="ProbeChunkSpanPerEntry"/>
-    /// each, never past <see cref="MaxProbeChunkSpan"/>) and holds at most
-    /// <see cref="MaxProbeChunkEntries"/> of them, so the rows one query reads stay tied to the
-    /// entries it classifies. An ordinary CGM backlog is one chunk; the worst case is one chunk per
-    /// probe, which is the per-entry probing this replaces.
+    /// Splits the sgv probes into time-contiguous chunks, each of which becomes a single query. A
+    /// chunk continues while each entry is within <see cref="MaxProbeChunkGap"/> of its neighbour,
+    /// the chunk's whole span is within <see cref="MaxProbeChunkSpan"/>, and it holds fewer than
+    /// <see cref="MaxProbeChunkEntries"/> entries. An ordinary CGM backlog is one or two chunks;
+    /// the worst case is one chunk per probe, which is the per-entry probing this replaces.
     /// </summary>
     private static List<List<(EntryDuplicateProbe probe, int index)>> ChunkByTimeSpan(
         List<(EntryDuplicateProbe probe, int index)> items)
@@ -234,10 +238,12 @@ public class EntryReadService : IEntryStore
         var chunks = new List<List<(EntryDuplicateProbe probe, int index)>>();
         var current = new List<(EntryDuplicateProbe probe, int index)>();
         var chunkStart = 0L;
+        var previousMills = 0L;
 
         foreach (var item in items.OrderBy(x => x.probe.Mills))
         {
-            if (current.Count > 0 && !FitsInChunk(item.probe.Mills - chunkStart, current.Count))
+            if (current.Count > 0
+                && !FitsInChunk(item.probe.Mills - previousMills, item.probe.Mills - chunkStart, current.Count))
             {
                 chunks.Add(current);
                 current = [];
@@ -246,6 +252,7 @@ public class EntryReadService : IEntryStore
             if (current.Count == 0)
                 chunkStart = item.probe.Mills;
 
+            previousMills = item.probe.Mills;
             current.Add(item);
         }
 
@@ -256,21 +263,19 @@ public class EntryReadService : IEntryStore
     }
 
     /// <summary>
-    /// Whether an entry <paramref name="spanMs"/> past the chunk's first entry still belongs to it.
-    /// The span comparison is strict, so entries spaced exactly
-    /// <see cref="ProbeChunkSpanPerEntry"/> apart split rather than each one paying for the next
-    /// and walking the budget upwards without bound.
+    /// Whether an entry <paramref name="gapMs"/> past its neighbour, and <paramref name="spanMs"/>
+    /// past the chunk's first entry, still belongs to that chunk. The gap is measured against the
+    /// neighbour, not the chunk start: a budget that grows with the entry count can be walked open
+    /// by entries spaced just under it.
     /// </summary>
-    private static bool FitsInChunk(long spanMs, int chunkCount)
+    private static bool FitsInChunk(long gapMs, long spanMs, int chunkCount)
     {
         if (chunkCount >= MaxProbeChunkEntries)
             return false;
+        if (TimeSpan.FromMilliseconds(gapMs) >= MaxProbeChunkGap)
+            return false;
 
-        var budget = ProbeChunkSpanPerEntry * chunkCount;
-        if (budget > MaxProbeChunkSpan)
-            budget = MaxProbeChunkSpan;
-
-        return TimeSpan.FromMilliseconds(spanMs) < budget;
+        return TimeSpan.FromMilliseconds(spanMs) <= MaxProbeChunkSpan;
     }
 
     /// <inheritdoc />
@@ -483,15 +488,33 @@ public class EntryReadService : IEntryStore
     /// </summary>
     private async Task ClassifySgvChunkAsync(
         List<(EntryDuplicateProbe probe, int index)> chunk,
-        long windowMs,
+        int windowMinutes,
         Entry?[] results,
         CancellationToken ct)
     {
+        var windowMs = (long)windowMinutes * 60 * 1000;
         var from = MillsToUtc(chunk[0].probe.Mills - windowMs);
         var to = MillsToUtc(chunk[^1].probe.Mills + windowMs);
 
+        // One row over the cap is enough to know the window held more than this may hold.
         var candidates = await _sgRepo.FindStoredDuplicateCandidatesAsync(
-            ResolveProbeDevices(chunk), from, to, ct);
+            ResolveProbeDevices(chunk), from, to, MaxProbeChunkRows + 1, ct);
+
+        if (candidates.Count > MaxProbeChunkRows)
+        {
+            _logger.LogDebug(
+                "Duplicate candidates for {Count} sgv entries exceed {Cap} rows; probing per entry",
+                chunk.Count, MaxProbeChunkRows);
+
+            foreach (var (probe, index) in chunk)
+            {
+                ct.ThrowIfCancellationRequested();
+                results[index] = await CheckDuplicateAsync(
+                    probe.Device, probe.Type, probe.Sgv, probe.Mills, windowMinutes, ct);
+            }
+
+            return;
+        }
 
         foreach (var (probe, index) in chunk)
         {
@@ -518,6 +541,10 @@ public class EntryReadService : IEntryStore
             var candidate = candidates[i];
             if (candidate.Timestamp < from)
                 break;
+            // The search is a starting point, not the bound: a wrong index here would report a
+            // reading outside the probe's window as a duplicate and drop a real one.
+            if (candidate.Timestamp > to)
+                continue;
             if (probe.Device is not null
                 && !string.Equals(candidate.Device, probe.Device, StringComparison.Ordinal))
                 continue;
@@ -533,6 +560,7 @@ public class EntryReadService : IEntryStore
     /// Index of the newest candidate at or before <paramref name="to"/>. A chunk's candidate list
     /// covers every probe's window, so scanning it from the front for each probe is quadratic in
     /// the batch; the list is sorted newest-first, so the probe's slice is a binary search away.
+    /// The caller re-checks the bound, so this is an optimisation and not a correctness dependency.
     /// </summary>
     private static int NewestAtOrBefore(IReadOnlyList<SensorGlucose> candidates, DateTime to)
     {

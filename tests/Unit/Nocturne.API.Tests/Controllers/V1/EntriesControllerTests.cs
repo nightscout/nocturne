@@ -523,6 +523,32 @@ public class EntriesControllerTests
     }
 
     [Fact]
+    public async Task CreateEntries_ReuploadLine_CapsAndFoldsAwkwardUserAgents()
+    {
+        // Length is capped so one uploader cannot write unbounded log lines, and format and
+        // separator characters are folded as well as controls: a right-to-left override or a
+        // U+2028 spoofs how a line reads without being a control character.
+        var submitted = StoredBacklog(120);
+        _controller.ControllerContext.HttpContext.Request.Headers.UserAgent =
+            "Loop/57\u202e\u2028" + new string('x', 400);
+
+        await _controller.CreateEntries(submitted);
+
+        _mockLogger.Verify(
+            l => l.Log(
+                LogLevel.Information,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, _) =>
+                    v.ToString()!.Contains("Loop/57")
+                    && !v.ToString()!.Contains('\u202e')
+                    && !v.ToString()!.Contains('\u2028')
+                    && !v.ToString()!.Contains(new string('x', 250))),
+                It.IsAny<Exception?>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once());
+    }
+
+    [Fact]
     public async Task CreateEntries_SmallAllStoredBatch_IsNotReported()
     {
         // A handful of duplicates is the normal overlap between an uploader's cycles.

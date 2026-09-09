@@ -205,8 +205,7 @@ public class SensorGlucoseRepositoryDuplicateProbeTests : IDisposable
         SeedReading(now.AddMinutes(-5), 132, "Dexcom G7 DXCMRf");
         SeedReading(now.AddMinutes(-40), 120, "Dexcom G7 DXCMRf");
 
-        var candidates = await _repo.FindStoredDuplicateCandidatesAsync(
-            ["Dexcom G7 DXCMRf"], now.AddMinutes(-15), now.AddMinutes(5));
+        var candidates = await _repo.FindStoredDuplicateCandidatesAsync(["Dexcom G7 DXCMRf"], now.AddMinutes(-15), now.AddMinutes(5), limit: 1000);
 
         candidates.Select(c => c.Mgdl).Should().Equal(134, 132, 130);
     }
@@ -223,8 +222,7 @@ public class SensorGlucoseRepositoryDuplicateProbeTests : IDisposable
         SeedReading(now, 134, "Dexcom G7 DXCMRf", higher);
         SeedReading(now, 134, "Dexcom G7 DXCMRf", lower);
 
-        var candidates = await _repo.FindStoredDuplicateCandidatesAsync(
-            ["Dexcom G7 DXCMRf"], now.AddMinutes(-5), now.AddMinutes(5));
+        var candidates = await _repo.FindStoredDuplicateCandidatesAsync(["Dexcom G7 DXCMRf"], now.AddMinutes(-5), now.AddMinutes(5), limit: 1000);
 
         candidates.Select(c => c.Id).Should().Equal(higher, lower);
     }
@@ -237,8 +235,7 @@ public class SensorGlucoseRepositoryDuplicateProbeTests : IDisposable
         SeedReading(now, 135, "xdrip");
         SeedReading(now, 136, "dexcom-connector");
 
-        var candidates = await _repo.FindStoredDuplicateCandidatesAsync(
-            ["Dexcom G7 DXCMRf", "xdrip"], now.AddMinutes(-5), now.AddMinutes(5));
+        var candidates = await _repo.FindStoredDuplicateCandidatesAsync(["Dexcom G7 DXCMRf", "xdrip"], now.AddMinutes(-5), now.AddMinutes(5), limit: 1000);
 
         candidates.Select(c => c.Mgdl).Should().BeEquivalentTo(new[] { 134d, 135d });
     }
@@ -250,8 +247,7 @@ public class SensorGlucoseRepositoryDuplicateProbeTests : IDisposable
         SeedReading(now, 134, "Dexcom G7 DXCMRf");
         SeedReading(now, 135, "xdrip");
 
-        var candidates = await _repo.FindStoredDuplicateCandidatesAsync(
-            devices: null, now.AddMinutes(-5), now.AddMinutes(5));
+        var candidates = await _repo.FindStoredDuplicateCandidatesAsync(devices: null, now.AddMinutes(-5), now.AddMinutes(5), limit: 1000);
 
         candidates.Should().HaveCount(2);
     }
@@ -269,8 +265,7 @@ public class SensorGlucoseRepositoryDuplicateProbeTests : IDisposable
         deleted.DeletedAt = now;
         _context.SaveChanges();
 
-        var candidates = await _repo.FindStoredDuplicateCandidatesAsync(
-            ["Dexcom G7 DXCMRf"], now.AddMinutes(-5), now.AddMinutes(5));
+        var candidates = await _repo.FindStoredDuplicateCandidatesAsync(["Dexcom G7 DXCMRf"], now.AddMinutes(-5), now.AddMinutes(5), limit: 1000);
 
         candidates.Select(c => c.Id).Should().Equal(hiddenId);
     }
@@ -291,8 +286,7 @@ public class SensorGlucoseRepositoryDuplicateProbeTests : IDisposable
         });
         _context.SaveChanges();
 
-        var candidates = await _repo.FindStoredDuplicateCandidatesAsync(
-            ["Dexcom G7 DXCMRf"], now.AddMinutes(-5), now.AddMinutes(5));
+        var candidates = await _repo.FindStoredDuplicateCandidatesAsync(["Dexcom G7 DXCMRf"], now.AddMinutes(-5), now.AddMinutes(5), limit: 1000);
 
         candidates.Should().BeEmpty();
     }
