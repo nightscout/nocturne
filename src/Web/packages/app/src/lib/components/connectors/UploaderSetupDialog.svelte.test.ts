@@ -3,11 +3,12 @@ import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach } from "vitest";
 import { vi } from "vitest";
 import { UploaderPlatform, type UploaderApp } from "$api-clients";
+import { fakeRemoteQuery } from "$lib/api/fake-remote-query.svelte";
 
 let createImpl: () => Promise<{ token?: string }>;
 
 vi.mock("$lib/api/generated/directGrants.generated.remote", () => ({
-  list: () => Promise.resolve([]),
+  list: fakeRemoteQuery(() => Promise.resolve([])),
   create: () => createImpl(),
   revoke: () => Promise.resolve(),
 }));

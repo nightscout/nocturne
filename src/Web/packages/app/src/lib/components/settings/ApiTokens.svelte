@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from "svelte";
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
   import * as Dialog from "$lib/components/ui/dialog";
@@ -24,6 +23,7 @@
     revoke as revokeGrant,
   } from "$lib/api/generated/directGrants.generated.remote";
   import { describeSubmitError } from "$lib/forms/submit-error";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
   import type { DirectGrantDto } from "$api";
   import { copyToClipboard } from "$lib/utils";
 
@@ -47,10 +47,23 @@
   // State
   // ============================================================================
 
-  let grants = $state<DirectGrantDto[]>([]);
-  let isLoading = $state(true);
-  let errorMessage = $state<string | null>(null);
+  // Built here, in the component's own tracking context, so its client-side
+  // registration lasts as long as the component and the commands' declared
+  // invalidation has an instance to apply to. A proxy built inside an event
+  // handler cannot be awaited at all.
+  const grantsQuery = listGrants();
+
+  const grants = $derived<DirectGrantDto[]>(grantsQuery.current ?? []);
+  const isLoading = $derived(!grantsQuery.ready && grantsQuery.error === undefined);
+  const loadError = $derived(
+    grantsQuery.error === undefined
+      ? null
+      : remoteErrorMessage(grantsQuery.error, "Failed to load API tokens.")
+  );
+
+  let mutationError = $state<string | null>(null);
   let successMessage = $state<string | null>(null);
+  const errorMessage = $derived(mutationError ?? loadError);
 
   // Create token flow
   let showCreateDialog = $state(false);
@@ -78,23 +91,6 @@
   });
 
   // ============================================================================
-  // Data fetching
-  // ============================================================================
-
-  async function loadGrants() {
-    try {
-      grants = await listGrants();
-    } catch (err) {
-      errorMessage = "Failed to load API tokens.";
-    }
-  }
-
-  onMount(async () => {
-    await loadGrants();
-    isLoading = false;
-  });
-
-  // ============================================================================
   // Create token
   // ============================================================================
 
@@ -108,7 +104,7 @@
 
   async function handleCreateToken() {
     isCreating = true;
-    errorMessage = null;
+    mutationError = null;
 
     try {
       const data = await createGrant({
@@ -116,9 +112,9 @@
         scopes: newTokenScopes,
       });
       createdToken = data.token ?? null;
-      await loadGrants();
+      await grantsQuery.refresh();
     } catch (err) {
-      errorMessage = describeSubmitError(err, "Failed to create token.");
+      mutationError = describeSubmitError(err, "Failed to create token.");
       closeCreateDialog();
     } finally {
       isCreating = false;
@@ -128,7 +124,7 @@
   async function copyToken() {
     if (createdToken) {
       if (!(await copyToClipboard(createdToken))) {
-        errorMessage = "Couldn't copy the token to the clipboard. Copy it manually instead.";
+        mutationError = "Couldn't copy the token to the clipboard. Copy it manually instead.";
         return;
       }
       copiedToken = true;
@@ -160,16 +156,16 @@
   async function handleRevokeGrant() {
     if (!revokeTarget) return;
     isRevoking = revokeTarget.id ?? null;
-    errorMessage = null;
+    mutationError = null;
     showRevokeDialog = false;
 
     try {
       await revokeGrant(revokeTarget.id!);
-      await loadGrants();
+      await grantsQuery.refresh();
       successMessage = "API token revoked.";
       clearMessages();
     } catch (err) {
-      errorMessage = "Failed to revoke token.";
+      mutationError = describeSubmitError(err, "Failed to revoke token.");
     } finally {
       isRevoking = null;
       revokeTarget = null;
@@ -179,7 +175,7 @@
   function clearMessages() {
     setTimeout(() => {
       successMessage = null;
-      errorMessage = null;
+      mutationError = null;
     }, 3000);
   }
 </script>
@@ -235,7 +231,12 @@
       </div>
     </Card.Header>
     <Card.Content class="space-y-3">
-      {#if grants.length === 0}
+      {#if loadError}
+        <p class="text-sm text-muted-foreground">
+          Your tokens couldn't be loaded, so this list may be incomplete.
+          Refresh the page to try again.
+        </p>
+      {:else if grants.length === 0}
         <div
           class="flex flex-col items-center justify-center py-8 text-center"
         >

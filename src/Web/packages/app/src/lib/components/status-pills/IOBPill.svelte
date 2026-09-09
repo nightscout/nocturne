@@ -38,12 +38,12 @@
     }
 
     // Basal IOB
-    if (data.basalIob !== undefined) {
+    if (data.basalIob != null) {
       items.push({ label: "Basal IOB", value: `${data.basalIob.toFixed(2)}U` });
     }
 
     // Activity (insulin impact on BG)
-    if (data.activity !== undefined && data.activity !== 0) {
+    if (data.activity != null && data.activity !== 0) {
       const activityDisplay = data.activity.toFixed(4);
       items.push({
         label: "Activity",
