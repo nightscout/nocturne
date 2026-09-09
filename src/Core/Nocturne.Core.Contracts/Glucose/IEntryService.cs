@@ -78,8 +78,8 @@ public interface IEntryService
     /// <remarks>
     /// Same per-entry classification as
     /// <see cref="CheckForDuplicateEntryAsync(string?, string, double?, long, int, CancellationToken)"/>,
-    /// but the stored readings covering the batch are loaded in a query per entry type rather than
-    /// a query per entry.
+    /// but the stored readings covering an <c>sgv</c> batch are loaded in one query rather than a
+    /// query per entry. Other types are probed one at a time.
     /// </remarks>
     /// <param name="probes">Entries to classify, in submission order</param>
     /// <param name="windowMinutes">Time window in minutes to check for duplicates (default: 5)</param>

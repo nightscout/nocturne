@@ -50,9 +50,9 @@ public class SensorGlucoseRepositoryDuplicateProbeTests : IDisposable
         GC.SuppressFinalize(this);
     }
 
-    private Guid SeedReading(DateTime timestamp, double mgdl, string device)
+    private Guid SeedReading(DateTime timestamp, double mgdl, string device, Guid? forcedId = null)
     {
-        var id = Guid.NewGuid();
+        var id = forcedId ?? Guid.NewGuid();
         _context.SensorGlucose.Add(new SensorGlucoseEntity
         {
             Id = id,
@@ -209,6 +209,24 @@ public class SensorGlucoseRepositoryDuplicateProbeTests : IDisposable
             ["Dexcom G7 DXCMRf"], now.AddMinutes(-15), now.AddMinutes(5));
 
         candidates.Select(c => c.Mgdl).Should().Equal(134, 132, 130);
+    }
+
+    [Fact]
+    public async Task FindStoredDuplicateCandidatesAsync_TiedTimestamps_ReturnTheHigherIdFirst()
+    {
+        // The batch caller takes the first match, so this ordering IS the tie-break the
+        // single-entry probe resolves by. Sorting the other way silently changes which stored
+        // reading an upload is told it already has.
+        var now = DateTime.UtcNow;
+        var lower = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var higher = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        SeedReading(now, 134, "Dexcom G7 DXCMRf", higher);
+        SeedReading(now, 134, "Dexcom G7 DXCMRf", lower);
+
+        var candidates = await _repo.FindStoredDuplicateCandidatesAsync(
+            ["Dexcom G7 DXCMRf"], now.AddMinutes(-5), now.AddMinutes(5));
+
+        candidates.Select(c => c.Id).Should().Equal(higher, lower);
     }
 
     [Fact]

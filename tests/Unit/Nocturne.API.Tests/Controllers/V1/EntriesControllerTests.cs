@@ -507,6 +507,22 @@ public class EntriesControllerTests
     }
 
     [Fact]
+    public async Task CreateEntries_ReuploadLine_StripsControlCharactersFromTheUserAgent()
+    {
+        // The only log sink is a line-oriented console exporter, so a control character in a
+        // caller-supplied header forges log lines.
+        var submitted = StoredBacklog(120);
+        _controller.ControllerContext.HttpContext.Request.Headers.UserAgent =
+            "Loop/57\r\nLogRecord.Body: forged";
+
+        await _controller.CreateEntries(submitted);
+
+        VerifyInformationLogged("Loop/57", Times.Once());
+        VerifyInformationLogged("\n", Times.Never());
+        VerifyInformationLogged("\r", Times.Never());
+    }
+
+    [Fact]
     public async Task CreateEntries_SmallAllStoredBatch_IsNotReported()
     {
         // A handful of duplicates is the normal overlap between an uploader's cycles.

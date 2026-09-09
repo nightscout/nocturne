@@ -311,6 +311,9 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         }
         else if (devices is { Count: > 1 })
         {
+            // `= ANY($1)`. Custom-planned today, because nothing configures Npgsql auto-prepare;
+            // a generic plan cannot hash the array parameter and this shape has been measured at
+            // 19 s against 200 ms. Enabling auto-prepare has to account for this query.
             query = query.Where(e => e.Device != null && devices.Contains(e.Device));
         }
         if (mgdl.HasValue)

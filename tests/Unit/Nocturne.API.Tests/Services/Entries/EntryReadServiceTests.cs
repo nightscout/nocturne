@@ -501,6 +501,115 @@ public class EntryReadServiceTests
         Assert.Equal(stored.Mills, results[1]!.Mills);
     }
 
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CheckDuplicatesAsync_NoQueryReadsMoreThanTheChunkSpanCap()
+    {
+        // 400 entries half an hour apart span 8.3 days, and their per-entry budget (400 h) would
+        // allow all of it in one query. The absolute span cap is what stops that.
+        var captured = CaptureCandidateWindows();
+
+        await _sut.CheckDuplicatesAsync(SpacedProbes(400, TimeSpan.FromMinutes(30), "xdrip"));
+
+        captured.Should().HaveCountGreaterThan(1);
+        captured.Max(w => w.To - w.From)
+            .Should().BeLessThanOrEqualTo(TimeSpan.FromDays(7) + TimeSpan.FromMinutes(10));
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CheckDuplicatesAsync_EntriesSpacedAtTheBudget_DoNotWalkItUpwards()
+    {
+        // Entries spaced exactly the per-entry budget apart: a non-strict comparison lets each one
+        // pay for the next and the chunk widens without bound.
+        var captured = CaptureCandidateWindows();
+
+        await _sut.CheckDuplicatesAsync(SpacedProbes(200, TimeSpan.FromHours(1), "xdrip"));
+
+        captured.Max(w => w.To - w.From)
+            .Should().BeLessThanOrEqualTo(TimeSpan.FromMinutes(11));
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CheckDuplicatesAsync_ChunkHoldsAtMostFiveHundredEntries()
+    {
+        // Rows per query must have a ceiling that does not depend on how densely the tenant's
+        // stored readings fill the span, so entry count is capped as well as span.
+        var captured = CaptureCandidateWindows();
+
+        await _sut.CheckDuplicatesAsync(SpacedProbes(1_000, TimeSpan.FromMinutes(5), "xdrip"));
+
+        captured.Should().HaveCount(2);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CheckDuplicatesAsync_SeveralDevices_FiltersToAllOfThem()
+    {
+        IReadOnlyCollection<string>? devices = null;
+        _sgRepo.Setup(r => r.FindStoredDuplicateCandidatesAsync(
+                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<IReadOnlyCollection<string>?, DateTime, DateTime, CancellationToken>(
+                (d, _, _, _) => devices = d)
+            .ReturnsAsync(Array.Empty<SensorGlucose>());
+
+        var mills = new DateTimeOffset(Now, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        await _sut.CheckDuplicatesAsync(new[]
+        {
+            new EntryDuplicateProbe("xdrip", "sgv", 120, mills),
+            new EntryDuplicateProbe("Dexcom G6", "sgv", 121, mills + 60_000),
+            new EntryDuplicateProbe("xdrip", "sgv", 122, mills + 120_000),
+        });
+
+        devices.Should().BeEquivalentTo(new[] { "xdrip", "Dexcom G6" });
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CheckDuplicatesAsync_NonSgvTypes_KeepThePerEntryProbe()
+    {
+        _mgRepo.Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<MeterGlucose>());
+
+        var mills = new DateTimeOffset(Now, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        await _sut.CheckDuplicatesAsync(new[]
+        {
+            new EntryDuplicateProbe("meter", "mbg", 150, mills),
+            new EntryDuplicateProbe("meter", "mbg", 151, mills + 60_000),
+        });
+
+        // The per-entry page is device-filtered and limited; a batch-wide read is a superset that
+        // would drop a reading the per-entry probe stores.
+        _mgRepo.Verify(r => r.GetAsync(
+            It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), "meter", It.IsAny<string?>(),
+            100, It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
+    }
+
+    private List<(DateTime From, DateTime To)> CaptureCandidateWindows()
+    {
+        var captured = new List<(DateTime From, DateTime To)>();
+        _sgRepo.Setup(r => r.FindStoredDuplicateCandidatesAsync(
+                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<IReadOnlyCollection<string>?, DateTime, DateTime, CancellationToken>(
+                (_, from, to, _) => captured.Add((from, to)))
+            .ReturnsAsync(Array.Empty<SensorGlucose>());
+        return captured;
+    }
+
+    private static EntryDuplicateProbe[] SpacedProbes(int count, TimeSpan spacing, string? device)
+    {
+        var start = new DateTimeOffset(Now, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        var step = (long)spacing.TotalMilliseconds;
+        return Enumerable.Range(0, count)
+            .Select(i => new EntryDuplicateProbe(device, "sgv", 100 + (i % 50), start + (i * step)))
+            .ToArray();
+    }
+
     private void StubNoSgvCandidates() =>
         _sgRepo.Setup(r => r.FindStoredDuplicateCandidatesAsync(
                 It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),

@@ -54,10 +54,11 @@ public interface IEntryStore
     /// given (<c>null</c> where nothing is stored).
     /// </summary>
     /// <remarks>
-    /// Classification is identical to <see cref="CheckDuplicateAsync"/> per probe, but the stored
-    /// readings covering the batch's time span are loaded in a query per entry type instead of a
-    /// query per entry: a 1,000-entry upload is one query rather than a thousand, each of which
-    /// carried its own context, connection lease and plan.
+    /// Classification is identical to <see cref="CheckDuplicateAsync"/> per probe. For <c>sgv</c> —
+    /// the only type that arrives in thousands-per-cycle uploads — the stored readings covering the
+    /// batch are loaded in one query instead of a query per entry, so a 1,000-entry upload costs
+    /// one query rather than a thousand, each of which carried its own context, connection lease
+    /// and plan. Other types are probed one at a time, as before.
     /// </remarks>
     /// <param name="probes">The entries to classify, in submission order.</param>
     /// <param name="windowMinutes">Time window in minutes to check for duplicates. Defaults to 5.</param>

@@ -99,6 +99,7 @@ public class EntryReadServiceBatchProbeParityTests : IDisposable
             Probe(null, "sgv", 122, Start.AddMinutes(10)),                // no device: matches any
             Probe("Dexcom G6", "sgv", 121, Start.AddMinutes(7)),          // inside the window
             Probe("Dexcom G6", "sgv", 121, Start.AddMinutes(40)),         // outside the window
+            Probe("DEXCOM G6", "sgv", 120, Start),                        // device differs by case only
             Probe("Contour", "mbg", 150, Start.AddMinutes(15)),           // stored meter reading
             Probe("Contour", "mbg", 90, Start.AddMinutes(15)),            // other value
             Probe("Dexcom G6", "cal", null, Start.AddMinutes(20)),        // stored calibration
@@ -119,6 +120,65 @@ public class EntryReadServiceBatchProbeParityTests : IDisposable
         batch.Select(e => e?.Id).Should().Equal(expected);
         // Not a vacuous comparison: the batch really did find duplicates and really did miss some.
         expected.Should().Contain(id => id != null).And.Contain(id => id == null);
+    }
+
+    [Theory]
+    // The window is inclusive at both ends, as the per-entry probe's SQL was
+    // (`Timestamp >= from AND Timestamp <= to`): a reading exactly one window away is a duplicate,
+    // one millisecond further out is not.
+    [InlineData(-5, 0, true)]
+    [InlineData(5, 0, true)]
+    [InlineData(-5, -1, false)]
+    [InlineData(5, 1, false)]
+    public async Task WindowEndsAreInclusive(int offsetMinutes, int offsetMillis, bool expectDuplicate)
+    {
+        SeedSgv(Start, 120, "Dexcom G6");
+        var at = Start.AddMinutes(offsetMinutes).AddMilliseconds(offsetMillis);
+
+        var batch = await _sut.CheckDuplicatesAsync(
+            [Probe("Dexcom G6", "sgv", 120, at)], windowMinutes: 5);
+        var single = await _sut.CheckDuplicateAsync(
+            "Dexcom G6", "sgv", 120, ToMills(at), windowMinutes: 5);
+
+        (batch.Single() != null).Should().Be(expectDuplicate);
+        batch.Single()?.Id.Should().Be(single?.Id);
+    }
+
+    [Fact]
+    public async Task TiedTimestamps_EchoTheSameRowThePerEntryProbeReturns()
+    {
+        // Two stored readings identical but for their id: the probe's `id DESC` tie-break decides
+        // which one is echoed, and the batch path must not re-resolve it (a .NET Guid comparison
+        // does not order like Postgres, so re-sorting in memory would answer differently).
+        var lower = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var higher = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        SeedSgv(Start, 120, "Dexcom G6", lower);
+        SeedSgv(Start, 120, "Dexcom G6", higher);
+
+        var batch = await _sut.CheckDuplicatesAsync([Probe("Dexcom G6", "sgv", 120, Start)]);
+        var single = await _sut.CheckDuplicateAsync("Dexcom G6", "sgv", 120, ToMills(Start));
+
+        batch.Single()!.Id.Should().Be(single!.Id);
+        batch.Single()!.Id.Should().Be(higher.ToString());
+    }
+
+    [Fact]
+    public async Task MeterGlucose_KeepsThePerEntryProbe()
+    {
+        // Deliberate: the per-entry mbg probe reads a device-filtered page of the entry's own
+        // window. A batch-wide read is a strict superset, which suppresses a write the per-entry
+        // probe performs — a lost fingerstick. mbg never arrives in the volumes that motivated
+        // batching, so it is left alone.
+        for (var i = 0; i < 120; i++)
+            SeedMbg(Start.AddSeconds(60 + i), 999, "Contour");
+        SeedMbg(Start, 150, "Contour");
+
+        var probe = Probe("Contour", "mbg", 150, Start);
+        var batch = await _sut.CheckDuplicatesAsync([probe], windowMinutes: 5);
+        var single = await _sut.CheckDuplicateAsync("Contour", "mbg", 150, probe.Mills, windowMinutes: 5);
+
+        batch.Single()?.Id.Should().Be(single?.Id);
+        _statements.SelectsAgainst("sensor_glucose").Should().Be(0);
     }
 
     [Fact]
@@ -146,11 +206,14 @@ public class EntryReadServiceBatchProbeParityTests : IDisposable
     }
 
     private static EntryDuplicateProbe Probe(string? device, string type, double? sgv, DateTime at) =>
-        new(device, type, sgv, new DateTimeOffset(at, TimeSpan.Zero).ToUnixTimeMilliseconds());
+        new(device, type, sgv, ToMills(at));
 
-    private Guid SeedSgv(DateTime timestamp, double mgdl, string device)
+    private static long ToMills(DateTime at) =>
+        new DateTimeOffset(at, TimeSpan.Zero).ToUnixTimeMilliseconds();
+
+    private Guid SeedSgv(DateTime timestamp, double mgdl, string device, Guid? forcedId = null)
     {
-        var id = Guid.NewGuid();
+        var id = forcedId ?? Guid.NewGuid();
         _context.SensorGlucose.Add(new SensorGlucoseEntity
         {
             Id = id,
