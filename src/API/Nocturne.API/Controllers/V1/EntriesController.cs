@@ -623,6 +623,12 @@ public class EntriesController : ControllerBase
             cancellationToken
         );
 
+        if (duplicates.Count != processedArray.Length)
+        {
+            throw new InvalidOperationException(
+                $"Duplicate check returned {duplicates.Count} results for {processedArray.Length} entries");
+        }
+
         var uniqueEntries = new List<Entry>();
         var responseEntries = new List<Entry>(processedArray.Length);
 
@@ -671,16 +677,14 @@ public class EntriesController : ControllerBase
         if (duplicates < submitted * ReuploadLoopDuplicateRatio)
             return;
 
-        var userAgent = Request?.Headers.UserAgent.ToString() ?? string.Empty;
-        if (userAgent.Length > MaxLoggedUserAgentLength)
-            userAgent = userAgent[..MaxLoggedUserAgentLength];
+        var userAgent = SanitizeForLog(Request?.Headers.UserAgent.ToString());
 
         _logger.LogInformation(
             "Entries upload of {Submitted} entries was already stored ({Duplicates} duplicates); "
                 + "client {UserAgent} is re-sending stored readings",
             submitted,
             duplicates,
-            userAgent.Length == 0 ? "(no User-Agent)" : userAgent
+            userAgent
         );
     }
 
@@ -692,6 +696,26 @@ public class EntriesController : ControllerBase
 
     /// <summary>Cap on the logged User-Agent, which is attacker-controlled free text.</summary>
     private const int MaxLoggedUserAgentLength = 200;
+
+    /// <summary>
+    /// Renders a caller-supplied header safe to log: the only log sink is a line-oriented console
+    /// exporter, so an unescaped control character in a header value forges log lines.
+    /// </summary>
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return "(none)";
+
+        var capped = value.Length > MaxLoggedUserAgentLength
+            ? value[..MaxLoggedUserAgentLength]
+            : value;
+
+        return string.Create(capped.Length, capped, static (span, source) =>
+        {
+            for (var i = 0; i < source.Length; i++)
+                span[i] = char.IsControl(source[i]) ? ' ' : source[i];
+        });
+    }
 
     /// <summary>
     /// Parses the loosely-typed entries request body (JsonElement, a single Entry, an Entry[]/
