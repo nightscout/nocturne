@@ -79,6 +79,33 @@ public class ConnectorPollingRegistrationTests
     }
 
     /// <summary>
+    /// A configuration write reaches a poller only through the <see cref="ConnectorPollerNudge"/> its
+    /// constructor forwards to the base. A hand-written poller that takes the parameter but does not
+    /// forward it, or omits it, is scheduled and syncs, but never hears that a tenant saved or enabled
+    /// the connector, and waits out the recheck interval instead. Each scheduled poller is built the
+    /// way the host builds it and the nudge is asked whether it subscribed.
+    /// </summary>
+    [Fact]
+    public void EveryScheduledPoller_SubscribesToTheNudge()
+    {
+        var nudge = new ConnectorPollerNudge();
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton(new ConnectorSyncBudget());
+        services.AddSingleton(nudge);
+        using var provider = services.BuildServiceProvider();
+
+        foreach (var poller in ScheduledPollers())
+        {
+            var connectorName = ConnectorRegistrationAttribute.DeclaredOn(PolledConfigurationOf(poller)).ConnectorName;
+            using var _ = (IDisposable)ActivatorUtilities.CreateInstance(provider, poller);
+
+            nudge.HasSubscribers(connectorName).Should().BeTrue(
+                "{0} must forward ConnectorPollerNudge to the base constructor", poller.Name);
+        }
+    }
+
+    /// <summary>
     /// A poller subclassing the abstract base without closing the generic compiles and reads as
     /// registered, but neither the scan nor the executor loop reaches it and its connector is polled
     /// by the generic instead, without the overrides the subclass declares. That is the shape the ten

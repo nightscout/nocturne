@@ -23,12 +23,14 @@ public class NocturneRemoteConnectorBackgroundService
     /// <param name="serviceProvider">Service provider used to create a DI scope per sync cycle.</param>
     /// <param name="budget">The process-wide budget.</param>
     /// <param name="logger">Logger instance for this background service.</param>
+    /// <param name="nudge">Delivers configuration writes for this connector.</param>
     public NocturneRemoteConnectorBackgroundService(
         IServiceProvider serviceProvider,
         ConnectorSyncBudget budget,
-        ILogger<NocturneRemoteConnectorBackgroundService> logger
+        ILogger<NocturneRemoteConnectorBackgroundService> logger,
+        ConnectorPollerNudge? nudge = null
     )
-        : base(serviceProvider, budget, logger) { }
+        : base(serviceProvider, budget, logger, nudge) { }
 
     /// <inheritdoc />
     protected override async Task StartRealtimeListenersAsync(CancellationToken cancellationToken)

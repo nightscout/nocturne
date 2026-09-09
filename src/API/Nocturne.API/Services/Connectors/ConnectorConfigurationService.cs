@@ -184,11 +184,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         }
 
         await _context.SaveChangesAsync(ct);
-
-        // Invalidate cached auth tokens so the next sync uses fresh credentials
-        var tenantId = _context.TenantId;
-        foreach (var invalidator in _cacheInvalidators)
-            invalidator.Invalidate(connectorName, tenantId);
+        InvalidateCaches(connectorName);
 
         // Broadcast configuration change
         await _broadcastService.BroadcastConfigChangeAsync(new ConfigurationChangeEvent
@@ -253,6 +249,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         }
 
         await _context.SaveChangesAsync(ct);
+        InvalidateCaches(connectorName);
 
         // When saving Nightscout connector secrets that include an API secret,
         // create a DirectGrant with the SHA-1 hash so existing uploaders keep working.
@@ -481,6 +478,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         }
 
         await _context.SaveChangesAsync(ct);
+        InvalidateCaches(connectorName);
         _logger.LogInformation("Set connector {ConnectorName} active={IsActive}", connectorName, isActive);
 
         // Broadcast enable/disable change
@@ -490,6 +488,17 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
             ChangeType = isActive ? "enabled" : "disabled",
             ModifiedBy = modifiedBy
         });
+    }
+
+    /// <summary>
+    /// Tells every tenant-keyed cache — auth tokens, sessions, the pollers' schedules — that this
+    /// connector's stored configuration changed, so the next sync reads it afresh and runs now.
+    /// </summary>
+    private void InvalidateCaches(string connectorName)
+    {
+        var tenantId = _context.TenantId;
+        foreach (var invalidator in _cacheInvalidators)
+            invalidator.Invalidate(connectorName, tenantId);
     }
 
     /// <summary>
@@ -530,6 +539,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
 
         _context.ConnectorConfigurations.Remove(entity);
         await _context.SaveChangesAsync(ct);
+        InvalidateCaches(connectorName);
         _logger.LogInformation("Deleted configuration for connector {ConnectorName}", connectorName);
 
         // Broadcast deletion

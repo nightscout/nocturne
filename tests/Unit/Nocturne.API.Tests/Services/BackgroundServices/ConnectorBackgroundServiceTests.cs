@@ -41,6 +41,7 @@ public class ConnectorBackgroundServiceTests
         private readonly Action<IServiceProvider>? _onSyncScope;
         private readonly Action? _onSyncCompleted;
         private readonly TimeSpan? _perTenantTimeout;
+        private readonly TimeSpan? _unconfiguredRecheck;
         private readonly int _hangFirstNCalls;
         private int _callCount;
 
@@ -53,8 +54,10 @@ public class ConnectorBackgroundServiceTests
             TimeSpan? perTenantTimeout = null,
             int hangFirstNCalls = 0,
             Action? onSyncCompleted = null,
-            ConnectorSyncBudget? budget = null)
-            : base(serviceProvider, budget ?? new ConnectorSyncBudget(), logger)
+            ConnectorSyncBudget? budget = null,
+            ConnectorPollerNudge? nudge = null,
+            TimeSpan? unconfiguredRecheck = null)
+            : base(serviceProvider, budget ?? new ConnectorSyncBudget(), logger, nudge)
         {
             _syncResult = syncResult;
             _onSync = onSync;
@@ -62,9 +65,12 @@ public class ConnectorBackgroundServiceTests
             _perTenantTimeout = perTenantTimeout;
             _hangFirstNCalls = hangFirstNCalls;
             _onSyncCompleted = onSyncCompleted;
+            _unconfiguredRecheck = unconfiguredRecheck;
         }
 
         protected override TimeSpan PerTenantSyncTimeout => _perTenantTimeout ?? base.PerTenantSyncTimeout;
+
+        protected override TimeSpan UnconfiguredRecheckInterval => _unconfiguredRecheck ?? base.UnconfiguredRecheckInterval;
 
         /// <summary>Number of times PerformSyncAsync has been entered (across all tenants).</summary>
         public int CallCount => _callCount;
@@ -1019,6 +1025,109 @@ public class ConnectorBackgroundServiceTests
         // Sync count should remain at 2 because the nudge was debounced
         // and the 60-minute interval hasn't elapsed
         Assert.Equal(2, syncCount);
+    }
+
+    /// <summary>
+    /// Almost every tenant has no configuration for almost every connector. A tenant found
+    /// unconfigured is left alone until <see cref="ConnectorBackgroundService{TConfig}.UnconfiguredRecheckInterval"/>
+    /// rather than having its absent row read on every tick.
+    /// </summary>
+    [Fact]
+    public async Task SyncAllTenants_ForAnUnconfiguredTenant_ReadsConfigOnceUntilTheRecheckInterval()
+    {
+        var (cleanup, connStr) = CreateSqliteDb();
+        using var _ = cleanup;
+        var configLoads = 0;
+        var serviceProvider = BuildServiceProvider(
+            connStr, BuildEnabledConfigMock(), new TestConnectorConfig { Enabled = false },
+            onConfigLoad: () => Interlocked.Increment(ref configLoads));
+
+        var sut = new TestConnectorBackgroundService(
+            serviceProvider, new SyncResult { Success = true }, NullLogger<TestConnectorBackgroundService>.Instance,
+            unconfiguredRecheck: TimeSpan.FromHours(1));
+
+        await sut.ExecuteOnceAsync(CancellationToken.None);
+        await sut.ExecuteOnceAsync(CancellationToken.None);
+        await sut.ExecuteOnceAsync(CancellationToken.None);
+
+        configLoads.Should().Be(1, "an unconfigured tenant is not asked again inside the recheck interval");
+        sut.CallCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task SyncAllTenants_ForAnUnconfiguredTenant_ReadsConfigAgainOnceTheRecheckIntervalHasPassed()
+    {
+        var (cleanup, connStr) = CreateSqliteDb();
+        using var _ = cleanup;
+        var configLoads = 0;
+        var serviceProvider = BuildServiceProvider(
+            connStr, BuildEnabledConfigMock(), new TestConnectorConfig { Enabled = false },
+            onConfigLoad: () => Interlocked.Increment(ref configLoads));
+
+        var sut = new TestConnectorBackgroundService(
+            serviceProvider, new SyncResult { Success = true }, NullLogger<TestConnectorBackgroundService>.Instance,
+            unconfiguredRecheck: TimeSpan.Zero);
+
+        await sut.ExecuteOnceAsync(CancellationToken.None);
+        await sut.ExecuteOnceAsync(CancellationToken.None);
+
+        configLoads.Should().Be(2);
+    }
+
+    /// <summary>
+    /// A configured tenant inside its interval is skipped until the interval has elapsed; the tick
+    /// does not read its configuration to learn it is not due.
+    /// </summary>
+    [Fact]
+    public async Task SyncAllTenants_ForAConfiguredTenantInsideItsInterval_DoesNotReadConfig()
+    {
+        var (cleanup, connStr) = CreateSqliteDb();
+        using var _ = cleanup;
+        var configLoads = 0;
+        var serviceProvider = BuildServiceProvider(
+            connStr, BuildEnabledConfigMock(), new TestConnectorConfig { Enabled = true, SyncIntervalMinutes = 60 },
+            onConfigLoad: () => Interlocked.Increment(ref configLoads));
+
+        var sut = new TestConnectorBackgroundService(
+            serviceProvider, new SyncResult { Success = true }, NullLogger<TestConnectorBackgroundService>.Instance);
+
+        await sut.ExecuteOnceAsync(CancellationToken.None);
+        await sut.ExecuteOnceAsync(CancellationToken.None);
+        await sut.ExecuteOnceAsync(CancellationToken.None);
+
+        sut.CallCount.Should().Be(1);
+        configLoads.Should().Be(1, "the interval is known from the first read; the next reads wait for it to elapse");
+    }
+
+    /// <summary>
+    /// The schedule must never hide a configuration the tenant just saved: the configuration
+    /// service's cache-invalidation hook reaches the poller through <see cref="ConnectorPollerNudge"/>
+    /// and clears the tenant's next-check, so the next tick reads and syncs.
+    /// </summary>
+    [Fact]
+    public async Task SyncAllTenants_AfterAConfigurationWriteNudge_ReadsTheUnconfiguredTenantAgain()
+    {
+        var (cleanup, connStr, tenantId) = CreateSqliteDbWithTenantId();
+        using var _ = cleanup;
+        var configLoads = 0;
+        var serviceProvider = BuildServiceProvider(
+            connStr, BuildEnabledConfigMock(), new TestConnectorConfig { Enabled = false },
+            onConfigLoad: () => Interlocked.Increment(ref configLoads));
+        var nudge = new ConnectorPollerNudge();
+
+        var sut = new TestConnectorBackgroundService(
+            serviceProvider, new SyncResult { Success = true }, NullLogger<TestConnectorBackgroundService>.Instance,
+            nudge: nudge, unconfiguredRecheck: TimeSpan.FromHours(1));
+
+        await sut.ExecuteOnceAsync(CancellationToken.None);
+        await sut.ExecuteOnceAsync(CancellationToken.None);
+        configLoads.Should().Be(1);
+
+        // The configuration service names the connector as its row does, lower-case.
+        nudge.Invalidate("testconnector", tenantId);
+        await sut.ExecuteOnceAsync(CancellationToken.None);
+
+        configLoads.Should().Be(2, "a configuration write must be seen on the next tick, not after the recheck interval");
     }
 
     /// <summary>
