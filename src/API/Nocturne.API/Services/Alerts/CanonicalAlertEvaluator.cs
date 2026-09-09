@@ -50,7 +50,12 @@ internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
 
             var tenantId = _tenantAccessor.TenantId;
             if (_watermark.AlreadyEvaluated(tenantId, latest))
+            {
+                _logger.LogTrace(
+                    "Alert evaluation skipped for tenant {TenantId}: reading at {ReadingTimestamp} was already evaluated",
+                    tenantId, latest.Timestamp);
                 return;
+            }
 
             var context = new SensorContext
             {

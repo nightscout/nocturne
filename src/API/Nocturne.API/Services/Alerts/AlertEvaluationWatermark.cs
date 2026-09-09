@@ -33,6 +33,14 @@ internal sealed class AlertEvaluationWatermark(TimeProvider timeProvider)
     /// </summary>
     internal static readonly TimeSpan MaxSkipWindow = TimeSpan.FromSeconds(60);
 
+    /// <summary>
+    /// Measured with <see cref="TimeProvider.GetTimestamp"/> rather than a wall clock: an NTP
+    /// correction that steps the clock backwards would make the age of a recorded pass negative,
+    /// which reads as "well inside the window" and reinstates the unbounded skip this window
+    /// exists to prevent, for as long as the step.
+    /// </summary>
+    private readonly TimeProvider _timeProvider = timeProvider;
+
     private readonly ConcurrentDictionary<Guid, Pass> _lastPass = new();
 
     /// <summary>
@@ -44,7 +52,7 @@ internal sealed class AlertEvaluationWatermark(TimeProvider timeProvider)
     public bool AlreadyEvaluated(Guid tenantId, SensorGlucose reading) =>
         _lastPass.TryGetValue(tenantId, out var previous)
         && previous.Reading == Key(reading)
-        && timeProvider.GetUtcNow() - previous.At < MaxSkipWindow;
+        && _timeProvider.GetElapsedTime(previous.At) < MaxSkipWindow;
 
     /// <summary>
     /// Records the reading a completed pass evaluated, replacing any earlier one for the tenant.
@@ -57,7 +65,7 @@ internal sealed class AlertEvaluationWatermark(TimeProvider timeProvider)
     public void Record(Guid tenantId, SensorGlucose reading)
     {
         if (tenantId == Guid.Empty) return;
-        _lastPass[tenantId] = new Pass(Key(reading), timeProvider.GetUtcNow());
+        _lastPass[tenantId] = new Pass(Key(reading), _timeProvider.GetTimestamp());
     }
 
     private static ReadingKey Key(SensorGlucose reading) =>
@@ -65,5 +73,5 @@ internal sealed class AlertEvaluationWatermark(TimeProvider timeProvider)
 
     private readonly record struct ReadingKey(DateTime Timestamp, double Mgdl, double? TrendRate);
 
-    private readonly record struct Pass(ReadingKey Reading, DateTimeOffset At);
+    private readonly record struct Pass(ReadingKey Reading, long At);
 }

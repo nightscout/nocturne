@@ -169,6 +169,67 @@ public class GlucosePublisherTests
     }
 
     [Fact]
+    public async Task PublishSensorGlucoseAsync_EvaluatesAlerts_ForACgmReading()
+    {
+        // This is the alarm trigger for every v4 connector -- Dexcom, Libre, CareLink, Glooko,
+        // Tandem, twiist, Eversense, Tidepool, MyLife -- and nothing asserted on it.
+        var records = new List<SensorGlucose>
+        {
+            new() { Mgdl = 0, Timestamp = DateTime.UtcNow.AddMinutes(-5), DataSource = DataSources.DexcomConnector },
+            new() { Mgdl = 130, Timestamp = DateTime.UtcNow, DataSource = DataSources.DexcomConnector },
+        };
+        _mockSensorGlucoseRepository
+            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(records);
+
+        var result = await _publisher.PublishSensorGlucoseAsync(records, DataSources.DexcomConnector, WriteOrigin.Live);
+
+        result.Should().BeTrue();
+        _mockAlertEvaluator.Verify(e => e.EvaluateAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task PublishSensorGlucoseAsync_DoesNotEvaluateAlerts_ForSensorErrorSentinelsAlone()
+    {
+        // A batch of non-positive readings cannot move the canonical latest, so the pass could
+        // only re-decide a reading that was already evaluated when it landed.
+        var records = new List<SensorGlucose>
+        {
+            new() { Mgdl = 0, Timestamp = DateTime.UtcNow, DataSource = DataSources.DexcomConnector },
+        };
+        _mockSensorGlucoseRepository
+            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(records);
+
+        var result = await _publisher.PublishSensorGlucoseAsync(records, DataSources.DexcomConnector, WriteOrigin.Live);
+
+        result.Should().BeTrue();
+        _mockSensorGlucoseRepository.Verify(
+            r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+        _mockAlertEvaluator.Verify(e => e.EvaluateAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task PublishSensorGlucoseAsync_EvaluatesAlerts_EvenWhenDedupDropsEveryWrittenRow()
+    {
+        // The gate reads the records the publisher was handed, not the rows BulkCreateAsync
+        // returned. Fail-safe by design: over-evaluating costs a watermark-suppressed pass,
+        // whereas gating on an empty dedup result would drop the alarm for a real reading.
+        var records = new List<SensorGlucose>
+        {
+            new() { Mgdl = 130, Timestamp = DateTime.UtcNow, DataSource = DataSources.DexcomConnector },
+        };
+        _mockSensorGlucoseRepository
+            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
+        await _publisher.PublishSensorGlucoseAsync(records, DataSources.DexcomConnector, WriteOrigin.Live);
+
+        _mockAlertEvaluator.Verify(e => e.EvaluateAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task PublishSensorGlucoseAsync_StampsRecordsAsCgm_BeforeWriting()
     {
         var records = new List<SensorGlucose>

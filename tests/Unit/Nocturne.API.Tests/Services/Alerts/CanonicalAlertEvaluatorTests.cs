@@ -169,6 +169,14 @@ public class CanonicalAlertEvaluatorTests
     }
 
     [Fact]
+    public void MaxSkipWindow_IsOneMinute()
+    {
+        // The bound on how late a clock-driven escalation can be. The window tests below are
+        // written against the symbol, so without this the value itself is free to drift.
+        AlertEvaluationWatermark.MaxSkipWindow.Should().Be(TimeSpan.FromSeconds(60));
+    }
+
+    [Fact]
     public async Task EvaluateAsync_EvaluatesTheSameReadingAgainOnceTheSkipWindowExpires()
     {
         // A rule can turn true on elapsed time alone while the reading stands still: alert_state
