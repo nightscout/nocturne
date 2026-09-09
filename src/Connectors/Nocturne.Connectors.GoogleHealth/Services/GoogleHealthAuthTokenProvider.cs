@@ -208,13 +208,25 @@ public sealed class GoogleHealthAuthTokenProvider(
             !cached.Metadata.TryGetValue(RefreshTokenKey, out var refreshToken) ||
             !cached.Metadata.TryGetValue(ScopesKey, out var serializedScopes) ||
             !cached.Metadata.TryGetValue(ExpiresAtKey, out var serializedExpiresAt) ||
-            JsonSerializer.Deserialize<string[]>(serializedScopes) is not { } scopes ||
             !DateTimeOffset.TryParseExact(
                 serializedExpiresAt,
                 "O",
                 CultureInfo.InvariantCulture,
                 DateTimeStyles.RoundtripKind,
                 out var expiresAt))
+            throw new GoogleHealthException("invalid_token_response", stage: "token_cache");
+
+        string[]? scopes;
+        try
+        {
+            scopes = JsonSerializer.Deserialize<string[]>(serializedScopes);
+        }
+        catch (JsonException)
+        {
+            throw new GoogleHealthException("invalid_token_response", stage: "token_cache");
+        }
+
+        if (scopes is null)
             throw new GoogleHealthException("invalid_token_response", stage: "token_cache");
 
         return new GoogleHealthTokenSession(refreshToken, scopes, cached.Token, expiresAt);

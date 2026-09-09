@@ -3,6 +3,7 @@ using System.Text;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.GoogleHealth.Configurations;
 using Nocturne.Connectors.GoogleHealth.Services;
@@ -60,14 +61,40 @@ public class GoogleHealthAuthTokenProviderTests
         exception.Which.Stage.Should().Be("token_refresh");
     }
 
-    private static GoogleHealthAuthTokenProvider CreateProvider(HttpMessageHandler handler)
+    [Fact]
+    public async Task Maps_malformed_cached_scopes_to_an_actionable_error()
+    {
+        var tenantId = Guid.NewGuid();
+        var cache = new ConnectorTokenCache();
+        await cache.SetAsync("GoogleHealth", tenantId, new ConnectorSession(
+            "access-token",
+            DateTime.UtcNow.AddHours(1),
+            new Dictionary<string, string>
+            {
+                ["RefreshToken"] = "refresh-token",
+                ["Scopes"] = "not-json",
+                ["AccessTokenExpiresAt"] = DateTimeOffset.UtcNow.AddHours(1).ToString("O")
+            }));
+        var provider = CreateProvider(new StubHandler(_ => Json("{}")), cache, tenantId);
+
+        var action = () => provider.GetCurrentSessionAsync();
+
+        var exception = await action.Should().ThrowAsync<GoogleHealthException>();
+        exception.Which.Message.Should().Be("invalid_token_response");
+        exception.Which.Stage.Should().Be("token_cache");
+    }
+
+    private static GoogleHealthAuthTokenProvider CreateProvider(
+        HttpMessageHandler handler,
+        ConnectorTokenCache? cache = null,
+        Guid? tenantId = null)
     {
         var tenantAccessor = new Mock<ITenantAccessor>();
         tenantAccessor.SetupGet(accessor => accessor.IsResolved).Returns(true);
-        tenantAccessor.SetupGet(accessor => accessor.TenantId).Returns(Guid.NewGuid());
+        tenantAccessor.SetupGet(accessor => accessor.TenantId).Returns(tenantId ?? Guid.NewGuid());
         return new GoogleHealthAuthTokenProvider(
             new HttpClient(handler),
-            new ConnectorTokenCache(),
+            cache ?? new ConnectorTokenCache(),
             new ConnectorServerResolver<GoogleHealthConnectorConfiguration>(null, null, null),
             tenantAccessor.Object,
             NullLogger<GoogleHealthAuthTokenProvider>.Instance);
