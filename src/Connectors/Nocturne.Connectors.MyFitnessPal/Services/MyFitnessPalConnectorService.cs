@@ -8,6 +8,7 @@ using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.MyFitnessPal.Configurations;
 using Nocturne.Connectors.MyFitnessPal.Mappers;
 using Nocturne.Connectors.MyFitnessPal.Models;
@@ -136,7 +137,7 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
             // reconciling is retried rather than counting against the schedule.
             if (read.WalkedEntireDiary)
             {
-                config.LastFullWalkAt = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture);
+                config.LastFullWalkAt = FullWalkSchedule.Stamp(DateTimeOffset.UtcNow);
                 await PersistSecretsIfChangedAsync(config, cancellationToken);
             }
         }
@@ -185,20 +186,9 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
     /// provides it. An unset or unparseable timestamp walks — a connector that has never completed
     /// one has never reconciled.
     /// </remarks>
-    public static bool IsFullWalkDue(MyFitnessPalConnectorConfiguration config)
-    {
-        if (!DateTimeOffset.TryParse(
-                config.LastFullWalkAt,
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.RoundtripKind,
-                out var last))
-            return true;
-
-        // A timestamp in the future means a clock moved, which would otherwise suppress the walk
-        // until it caught up.
-        return DateTimeOffset.UtcNow - last >= MyFitnessPalConstants.FullWalkInterval
-               || last > DateTimeOffset.UtcNow;
-    }
+    public static bool IsFullWalkDue(MyFitnessPalConnectorConfiguration config) =>
+        FullWalkSchedule.IsDue(
+            config.LastFullWalkAt, MyFitnessPalConstants.FullWalkInterval, DateTimeOffset.UtcNow);
 
     /// <summary>
     /// Obtains an access token and the MyFitnessPal user id required by the GraphQL API.

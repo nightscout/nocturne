@@ -36,8 +36,33 @@ internal static class GlookoSyncHarness
         GlookoEndpointHandler handler,
         PublishKind? rejected = null,
         IConnectorPublisher? publisher = null,
-        StaticGlookoTokenProvider? tokenProvider = null) =>
-        new(new HttpClient(handler), tokenProvider ?? new StaticGlookoTokenProvider(), rejected, publisher);
+        StaticGlookoTokenProvider? tokenProvider = null,
+        IConnectorSyncCursorStore? cursorStore = null) =>
+        new(new HttpClient(handler), tokenProvider ?? new StaticGlookoTokenProvider(), rejected, publisher,
+            cursorStore);
+}
+
+/// <summary>
+/// Remembers what the sync persists between runs, standing in for the tenant's stored cursors.
+/// </summary>
+internal sealed class FakeCursorStore : IConnectorSyncCursorStore
+{
+    public Dictionary<string, ConnectorSyncCursor> Saved { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>Observes each write as it happens, for tests that care when a stamp lands.</summary>
+    public Action<string>? OnSet { get; init; }
+
+    public Task<ConnectorSyncCursor?> GetAsync(
+        string connectorName, string resource, CancellationToken ct = default) =>
+        Task.FromResult(Saved.TryGetValue(resource, out var cursor) ? cursor : null);
+
+    public Task SetAsync(
+        string connectorName, string resource, ConnectorSyncCursor cursor, CancellationToken ct = default)
+    {
+        Saved[resource] = cursor;
+        OnSet?.Invoke(resource);
+        return Task.CompletedTask;
+    }
 }
 
 /// <summary>
@@ -63,7 +88,7 @@ internal sealed class RecordingGlookoConnectorService : GlookoConnectorService
 
     public RecordingGlookoConnectorService(
         HttpClient httpClient, GlookoAuthTokenProvider tokenProvider, PublishKind? rejected,
-        IConnectorPublisher? publisher = null)
+        IConnectorPublisher? publisher = null, IConnectorSyncCursorStore? cursorStore = null)
         : base(
             httpClient,
             new ConnectorServerResolver<GlookoConnectorConfiguration>(null, null, null),
@@ -71,7 +96,8 @@ internal sealed class RecordingGlookoConnectorService : GlookoConnectorService
             Mock.Of<IRetryDelayStrategy>(),
             Mock.Of<IRateLimitingStrategy>(),
             tokenProvider,
-            publisher)
+            publisher,
+            cursorStore: cursorStore)
     {
         _rejected = rejected;
     }
