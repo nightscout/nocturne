@@ -13,7 +13,18 @@ public interface IGoogleHealthService
     Task PurgeAsync(Guid subject, CancellationToken ct);
     Task<GoogleHealthPreview> PreviewAsync(Guid subject, CancellationToken ct);
     Task QueueSyncAsync(CancellationToken ct);
-    Task SyncAsync(bool force, CancellationToken ct);
+}
+
+public interface IGoogleHealthSyncCoordinator
+{
+    SemaphoreSlim Gate(Guid tenantId);
+    void Report(
+        Guid tenantId,
+        GoogleHealthSyncPhase phase,
+        string? dataType = null,
+        int? completedDataTypes = null,
+        int? totalDataTypes = null,
+        int? pagesRead = null);
 }
 
 public interface IGoogleHealthReadingWriter

@@ -1,5 +1,6 @@
 using Nocturne.API.Services.Connectors;
 using Nocturne.Connectors.Core.Models;
+using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
 
 namespace Nocturne.API.Services.Health.GoogleHealth;
@@ -42,7 +43,29 @@ public sealed class GoogleHealthWorker(
         using var scope = scopes.CreateScope();
         scope.ServiceProvider.GetRequiredService<ITenantAccessor>()
             .SetTenant(new(id, slug, displayName, true, false));
-        await scope.ServiceProvider.GetRequiredService<IConnectorSyncService>()
+        var result = await scope.ServiceProvider.GetRequiredService<IConnectorSyncService>()
             .TriggerSyncAsync(ConnectorId, new SyncRequest(), ct);
+        var configurations = scope.ServiceProvider.GetRequiredService<IConnectorConfigurationService>();
+        var now = DateTime.UtcNow;
+        if (result.Success)
+        {
+            await configurations.UpdateHealthStateAsync(
+                "GoogleHealth",
+                lastSyncAttempt: now,
+                lastSuccessfulSync: now,
+                lastErrorMessage: string.Empty,
+                lastErrorAt: DateTime.MinValue,
+                isHealthy: true,
+                ct: ct);
+            return;
+        }
+
+        await configurations.UpdateHealthStateAsync(
+            "GoogleHealth",
+            lastSyncAttempt: now,
+            lastErrorMessage: result.Message,
+            lastErrorAt: now,
+            isHealthy: false,
+            ct: ct);
     }
 }

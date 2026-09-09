@@ -151,6 +151,8 @@ builder.Services.AddScoped<IAuditContext, AuditContext>();
 builder.Services.AddHostedService<AuditRetentionService>();
 builder.Services.AddHostedService<SoftDeleteCleanupService>();
 builder.Services.AddSingleton<GoogleHealthCoordinator>();
+builder.Services.AddSingleton<IGoogleHealthSyncCoordinator>(provider =>
+    provider.GetRequiredService<GoogleHealthCoordinator>());
 builder.Services.AddScoped<IGoogleHealthService, GoogleHealthService>();
 builder.Services.AddScoped<IGoogleHealthReadingWriter, GoogleHealthReadingWriter>();
 builder.Services.AddHostedService<GoogleHealthWorker>();

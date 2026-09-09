@@ -15,7 +15,6 @@ export const FALLBACK_LOGO = "/logos/device.svg";
  */
 export const logoAliases: Record<string, string> = {
   carelink: "medtronic",
-  openaps: "device",
 };
 
 /**

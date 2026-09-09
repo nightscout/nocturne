@@ -147,28 +147,26 @@
       {#if googleHealth?.connected || googleHealth?.configured}
         <GoogleHealthSourceRow connection={googleHealth} />
       {:else}
-      <a
-        href={resolve("/settings/connectors/google-health")}
-        class="group relative flex items-center gap-4 rounded-lg border bg-muted/30 p-4 transition-colors hover:border-primary/50 hover:bg-accent/50"
-      >
-        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-          <HeartPulse class="h-5 w-5 text-primary" />
-        </div>
-        <div class="min-w-0 flex-1">
-          <div class="flex flex-wrap items-center gap-2">
-            <span class="font-medium">Google Health</span>
-            <Badge variant={googleHealth?.connected ? "default" : "outline"} class="text-xs">
-              {googleHealth?.connected ? "Connected" : googleHealth?.configured ? "Configured" : "Not Configured"}
-            </Badge>
+        <a
+          href={resolve("/settings/connectors/google-health")}
+          class="group relative flex items-center gap-4 rounded-lg border bg-muted/30 p-4 transition-colors hover:border-primary/50 hover:bg-accent/50"
+        >
+          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+            <HeartPulse class="h-5 w-5 text-primary" />
           </div>
-          <p class="text-sm text-muted-foreground">
-            Import steps, heart rate, weight, and sleep from Google Health
-          </p>
-        </div>
-        <ChevronRight class="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
-      </a>
+          <div class="min-w-0 flex-1">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="font-medium">Google Health</span>
+              <Badge variant="outline" class="text-xs">Not Configured</Badge>
+            </div>
+            <p class="text-sm text-muted-foreground">
+              Import steps, heart rate, weight, and sleep from Google Health
+            </p>
+          </div>
+          <ChevronRight class="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+        </a>
       {/if}
-      {#each availableConnectors as connector}
+      {#each availableConnectors.filter((connector) => connector.id !== "googlehealth") as connector}
         {@const connectorStatusInfo = connectorStatuses.find(
           (cs) => cs.id === connector.id
         )}

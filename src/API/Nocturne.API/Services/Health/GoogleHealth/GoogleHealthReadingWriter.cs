@@ -13,7 +13,7 @@ public sealed class GoogleHealthReadingWriter(
     IStepCountService stepCounts,
     IBodyWeightService bodyWeights,
     ISleepService sleep,
-    NocturneDbContext? db = null) : IGoogleHealthReadingWriter
+    NocturneDbContext db) : IGoogleHealthReadingWriter
 {
     public const string Source = "google-health";
 
@@ -66,8 +66,7 @@ public sealed class GoogleHealthReadingWriter(
         foreach (var session in sleepSessions)
             await sleep.UpsertSessionAsync(session, ct);
 
-        if (db is not null)
-            await ReconcileAsync(readings, sleepSessions, activeTypes, from, to, ct);
+        await ReconcileAsync(readings, sleepSessions, activeTypes, from, to, ct);
     }
 
     private async Task ReconcileAsync(
@@ -88,25 +87,25 @@ public sealed class GoogleHealthReadingWriter(
         var weightIds = Keys(readings, "weight");
         var sleepIds = sleepSessions.Select(session => session.OriginalId!).ToArray();
 
-        if (activeTypes.Contains("heart-rate")) await db!.HeartRates
+        if (activeTypes.Contains("heart-rate")) await db.HeartRates
             .Where(record => record.DataSource == Source && record.Timestamp >= first && record.Timestamp < last &&
                 !heartRateIds.Contains(record.SyncIdentifier!))
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(record => record.DeletedAt, deletedAt)
                 .SetProperty(record => EF.Property<bool>(record, "DeletedByUser"), false), ct);
-        if (activeTypes.Contains("steps")) await db!.StepCounts
+        if (activeTypes.Contains("steps")) await db.StepCounts
             .Where(record => record.DataSource == Source && record.Timestamp >= first && record.Timestamp < last &&
                 !stepIds.Contains(record.SyncIdentifier!))
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(record => record.DeletedAt, deletedAt)
                 .SetProperty(record => EF.Property<bool>(record, "DeletedByUser"), false), ct);
-        if (activeTypes.Contains("weight")) await db!.BodyWeights
+        if (activeTypes.Contains("weight")) await db.BodyWeights
             .Where(record => record.DataSource == Source && record.Mills >= firstMills && record.Mills < lastMills &&
                 !weightIds.Contains(record.SyncIdentifier!))
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(record => record.DeletedAt, deletedAt)
                 .SetProperty(record => EF.Property<bool>(record, "DeletedByUser"), false), ct);
-        if (activeTypes.Contains("sleep")) await db!.SleepSessions
+        if (activeTypes.Contains("sleep")) await db.SleepSessions
             .Where(session => session.Source == SleepSource.Google.ToString() &&
                 session.StartTime >= first && session.StartTime < last &&
                 (session.OriginalId == null || !sleepIds.Contains(session.OriginalId)))
@@ -118,7 +117,6 @@ public sealed class GoogleHealthReadingWriter(
 
     public async Task PurgeAsync(CancellationToken ct)
     {
-        if (db is null) return;
         var strategy = db.Database.CreateExecutionStrategy();
         await strategy.ExecuteAsync(async () =>
         {

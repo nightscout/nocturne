@@ -78,7 +78,6 @@
     if (status.syncPhase === GoogleHealthSyncPhase.RefreshingSession) return "Refreshing the Google session";
     if (status.syncPhase === GoogleHealthSyncPhase.Reading) return status.syncDataType ? `Reading ${labels[status.syncDataType] ?? status.syncDataType}` : "Reading Google Health data";
     if (status.syncPhase === GoogleHealthSyncPhase.Validating) return "Validating the downloaded data";
-    if (status.syncPhase === GoogleHealthSyncPhase.Saving) return "Saving the imported measurements";
     if (status.syncPhase === GoogleHealthSyncPhase.Integrating) return "Updating Nocturne health records";
     return "Preparing the import";
   }

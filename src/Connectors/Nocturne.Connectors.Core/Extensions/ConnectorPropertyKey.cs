@@ -93,7 +93,6 @@ public enum ConnectorPropertyKey
     FetchAllEventTypes,
     IgnoreZeroUnitBasal,
 
-    // Google Health-specific
     ClientId,
     ClientSecret,
     CallbackUrl,

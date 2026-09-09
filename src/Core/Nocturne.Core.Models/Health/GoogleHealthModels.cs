@@ -22,9 +22,6 @@ public enum GoogleHealthSyncPhase
     [EnumMember(Value = "validating"), JsonStringEnumMemberName("validating")]
     Validating,
 
-    [EnumMember(Value = "saving"), JsonStringEnumMemberName("saving")]
-    Saving,
-
     [EnumMember(Value = "integrating"), JsonStringEnumMemberName("integrating")]
     Integrating
 }
@@ -54,7 +51,6 @@ public class GoogleHealthStatus
     public DateTimeOffset? AccessTokenExpiresAt { get; set; }
     public DateTimeOffset? LastAttempt { get; set; }
     public DateTimeOffset? LastSync { get; set; }
-    public DateTimeOffset? NextAttempt { get; set; }
     public string? ErrorCode { get; set; }
     public string[] ErrorDataTypes { get; set; } = [];
     public bool PreviewRequired { get; set; }

@@ -1,15 +1,12 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Health.GoogleHealth;
-using Nocturne.Connectors.GoogleHealth.Services;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Health;
 using Nocturne.Core.Contracts.Health;
-using Nocturne.Infrastructure.Data;
 using OpenApi.Remote.Attributes;
 
 namespace Nocturne.API.Controllers.V4.Health;
@@ -17,7 +14,7 @@ namespace Nocturne.API.Controllers.V4.Health;
 [ApiController, Authorize, DenyDemoSubject, RequireScope(Scope.TenantSettings)]
 [Route("api/v4/google-health")]
 [ProducesResponseType(typeof(ProblemDetails), 400)]
-public class GoogleHealthController(IGoogleHealthService service, NocturneDbContext db) : ControllerBase
+public class GoogleHealthController(IGoogleHealthService service) : ControllerBase
 {
     private Guid Subject => HttpContext.GetAuthContext()?.SubjectId ?? throw new UnauthorizedAccessException();
 
@@ -62,17 +59,6 @@ public class GoogleHealthController(IGoogleHealthService service, NocturneDbCont
     [HttpDelete("readings"), RemoteCommand, RequireScope(Scope.TenantSettings)]
     [ProducesResponseType(typeof(GoogleHealthStatus), 200)]
     public Task<ActionResult<GoogleHealthStatus>> PurgeGoogleHealth(CancellationToken ct) => Run(async () => await service.PurgeAsync(Subject, ct), ct);
-
-    [HttpGet("readings"), RemoteQuery]
-    [ProducesResponseType(typeof(List<GoogleHealthReading>), 200)]
-    public async Task<ActionResult<List<GoogleHealthReading>>> GetGoogleHealthReadings(string dataType, int skip = 0, CancellationToken ct = default)
-    {
-        if (!GoogleHealthClient.SupportedTypes.Contains(dataType)) return BadRequest();
-        return Ok(await db.GoogleHealthReadings.AsNoTracking().Where(x => x.DataType == dataType)
-            .OrderByDescending(x => x.Mills).ThenBy(x => x.Id).Skip(Math.Clamp(skip, 0, 10000000)).Take(100)
-            .Select(x => new GoogleHealthReading { DataType = x.DataType, Mills = x.Mills, EndMills = x.EndMills,
-                Value = x.Value, Unit = x.Unit, UtcOffsetMinutes = x.UtcOffsetMinutes }).ToListAsync(ct));
-    }
 
     private async Task<ActionResult<GoogleHealthStatus>> Run(Func<Task> action, CancellationToken ct)
     {
