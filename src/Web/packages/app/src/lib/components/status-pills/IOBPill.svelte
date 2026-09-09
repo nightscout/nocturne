@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { formatLocale } from "$lib/utils/formatting";
+  import { formatInsulinDisplay, formatLocale } from "$lib/utils/formatting";
   import StatusPill from "./StatusPill.svelte";
   import type {
     IOBPillData,
@@ -29,7 +29,7 @@
           minute: "2-digit",
         }
       );
-      const amount = `${data.lastBolus.insulin.toFixed(2)}U`;
+      const amount = `${formatInsulinDisplay(data.lastBolus.insulin)}U`;
       items.push({ label: "Last Bolus", value: `${amount} @ ${when}` });
 
       if (data.lastBolus.notes) {

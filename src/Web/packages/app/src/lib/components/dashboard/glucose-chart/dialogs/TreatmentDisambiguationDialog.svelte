@@ -5,6 +5,7 @@
   import { Button } from "$lib/components/ui/button";
   import * as Dialog from "$lib/components/ui/dialog";
   import { time } from "$lib/utils/formatting";
+  import { entrySummary } from "$lib/utils/entry-summary";
 
   interface Props {
     open: boolean;
@@ -14,29 +15,6 @@
   }
 
   let { open = $bindable(), entries, onSelect, onClose }: Props = $props();
-
-  function formatEntrySummary(entry: EntryRecord): string {
-    const parts: string[] = [];
-    switch (entry.kind) {
-      case "bolus":
-        if (entry.data.insulin) parts.push(`${entry.data.insulin}U`);
-        if (entry.data.bolusType) parts.push(entry.data.bolusType);
-        break;
-      case "carbs":
-        if (entry.data.carbs) parts.push(`${entry.data.carbs}g carbs`);
-        break;
-      case "bgCheck":
-        if (entry.data.mgdl) parts.push(`${entry.data.mgdl} mg/dL`);
-        break;
-      case "note":
-        if (entry.data.text) parts.push(entry.data.text.slice(0, 50));
-        break;
-      case "deviceEvent":
-        if (entry.data.eventType) parts.push(entry.data.eventType);
-        break;
-    }
-    return parts.join(" · ") || ENTRY_CATEGORIES[entry.kind].name;
-  }
 </script>
 
 <Dialog.Root bind:open>
@@ -57,7 +35,7 @@
         >
           <div class="flex-1">
             <div class="font-medium text-sm">
-              {formatEntrySummary(entry)}
+              {entrySummary(entry)}
             </div>
             <div class="text-xs text-muted-foreground">
               {entry.data.mills

@@ -4,7 +4,12 @@ import type {
   SeriesPoint,
 } from "./chart-data-engine.svelte";
 import { type BasalPoint, BasalDeliveryOrigin } from "$lib/api";
-import { bg, bgLabel } from "$lib/utils/formatting";
+import {
+  bg,
+  bgLabel,
+  formatCarbDisplay,
+  formatInsulinDisplay,
+} from "$lib/utils/formatting";
 
 // ===== Types =====
 
@@ -108,10 +113,10 @@ export function createPointInspection(
     if (context.nearbyBolus || context.nearbyCarbs) {
       const parts: string[] = [];
       if (context.nearbyBolus?.insulin) {
-        parts.push(`${context.nearbyBolus.insulin.toFixed(1)}U`);
+        parts.push(`${formatInsulinDisplay(context.nearbyBolus.insulin)}U`);
       }
       if (context.nearbyCarbs?.carbs) {
-        parts.push(`${context.nearbyCarbs.carbs}g`);
+        parts.push(`${formatCarbDisplay(context.nearbyCarbs.carbs)}g`);
       }
       opts.push({
         type: "treatment",

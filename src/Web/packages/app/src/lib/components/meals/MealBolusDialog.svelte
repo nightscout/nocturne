@@ -1,5 +1,9 @@
 <script lang="ts">
-  import { formatClock, formatLocale } from "$lib/utils/formatting";
+  import {
+    formatClock,
+    formatInsulinDisplay,
+    formatLocale,
+  } from "$lib/utils/formatting";
   import type { MealEvent, Bolus, BolusType, PatientInsulin } from "$lib/api";
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
@@ -272,7 +276,7 @@
                     <span class="text-sm font-medium">
                       {formatBolusTime(bolus.mills)}
                     </span>
-                    <span class="text-sm">{bolus.insulin}U</span>
+                    <span class="text-sm">{formatInsulinDisplay(bolus.insulin)}U</span>
                     {#if bolus.bolusType}
                       <Badge variant="secondary" class="text-xs">
                         {bolus.bolusType}

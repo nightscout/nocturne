@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { formatLocale } from "$lib/utils/formatting";
+  import { formatCarbDisplay, formatLocale } from "$lib/utils/formatting";
   import StatusPill from "./StatusPill.svelte";
   import type {
     COBPillData,
@@ -28,7 +28,7 @@
         hour: "2-digit",
         minute: "2-digit",
       });
-      const amount = `${data.lastCarbs.carbs}g`;
+      const amount = `${formatCarbDisplay(data.lastCarbs.carbs)}g`;
       items.push({ label: "Last Carbs", value: `${amount} @ ${timeStr}` });
 
       // Food description if available
