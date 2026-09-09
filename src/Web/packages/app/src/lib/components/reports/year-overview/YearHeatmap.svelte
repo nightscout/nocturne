@@ -8,13 +8,13 @@
   import { formatGlucoseValue, formatMonthLabel, formatWeekdayDate } from "$lib/utils/formatting";
   import type { GlucoseUnits } from "$lib/utils/formatting";
   import { getDataTypeLabel } from "$lib/utils/data-type-labels";
+  import { yearCalendarBounds } from "./year-bounds";
 
   let {
     year,
     yearIndex,
     loadingYears,
     yearData,
-    getYearBounds,
     transformYearData,
     getCellFill,
     getWeekColumns,
@@ -30,7 +30,6 @@
     yearIndex: number;
     loadingYears: Set<number>;
     yearData: Map<number, any[]>;
-    getYearBounds: (year: number) => { start: Date; end: Date };
     transformYearData: (days: any[]) => any[];
     getCellFill: (data: any) => string;
     getWeekColumns: (cells: any[]) => any[];
@@ -43,7 +42,7 @@
     sentinelElement?: HTMLDivElement;
   }>();
 
-  const bounds = $derived(getYearBounds(year));
+  const bounds = $derived(yearCalendarBounds(year));
   const days = $derived(yearData.get(year));
   const chartData = $derived(days ? transformYearData(days) : []);
   const isYearLoading = $derived(loadingYears.has(year) && !days);

@@ -454,13 +454,6 @@
   // Helpers
   // =========================================================================
 
-  function getYearBounds(year: number): { start: Date; end: Date } {
-    return {
-      start: new Date(year, 0, 1),
-      end: new Date(year, 11, 31),
-    };
-  }
-
   function formatSelectedDate(dateStr: string): string {
     const [y, m, d] = dateStr.split("-").map(Number);
     const date = new Date(y, m - 1, d);
@@ -623,7 +616,6 @@
             {yearIndex}
             {loadingYears}
             {yearData}
-            {getYearBounds}
             {transformYearData}
             {getCellFill}
             {getWeekColumns}
