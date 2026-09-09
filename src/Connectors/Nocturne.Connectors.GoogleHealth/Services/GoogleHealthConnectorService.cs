@@ -20,9 +20,13 @@ public sealed class GoogleHealthConnectorService(
     public override string ServiceName => ServiceNames.GoogleHealthConnector;
     protected override DateTime? InitialSyncFloor => null;
 
+    public override Task<bool> AuthenticateAsync() => IsConnectedAsync(CancellationToken.None);
+
     protected override async Task<bool> EnsureAuthenticatedAsync(
         GoogleHealthConnectorConfiguration config,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken) => await IsConnectedAsync(cancellationToken);
+
+    private async Task<bool> IsConnectedAsync(CancellationToken cancellationToken)
     {
         var status = await googleHealth.StatusAsync(cancellationToken);
         return status.Configured && status.Connected;

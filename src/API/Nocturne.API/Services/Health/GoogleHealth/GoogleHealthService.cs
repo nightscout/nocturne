@@ -54,9 +54,6 @@ public sealed class GoogleHealthCoordinator
             ? current with { Phase = GoogleHealthSyncPhase.Preparing }
             : null);
 
-    internal bool StartScheduled(Guid tenant) =>
-        syncProgress.TryAdd(tenant, new(GoogleHealthSyncPhase.Preparing, null, 0, 0, 0));
-
     internal void Report(Guid tenant, GoogleHealthSyncPhase phase, string? dataType = null,
         int? completedDataTypes = null, int? totalDataTypes = null, int? pagesRead = null) =>
         Update(tenant, current => current with

@@ -23,17 +23,16 @@ public class ConnectorPollingRegistrationTests
 {
     private static readonly string[] Polling =
     [
-        "CareLink", "Dexcom", "Eversense", "Glooko", "Gluroo", "LibreLinkUp", "MyFitnessPal",
+        "CareLink", "Dexcom", "Eversense", "Glooko", "Gluroo", "GoogleHealth", "LibreLinkUp", "MyFitnessPal",
         "MyLife", "Nightscout", "NocturneRemote", "Tandem", "Tidepool", "Twiist",
     ];
 
     /// <summary>
     /// Connectors that never poll: they receive or emit data by another route, so having no hosted
     /// service is the design, not a gap. HomeAssistant is an outbound notify target the alert
-    /// delivery pipeline pushes to. GoogleHealth runs its queued full-history imports through
-    /// <c>GoogleHealthWorker</c>.
+    /// delivery pipeline pushes to.
     /// </summary>
-    private static readonly string[] NonPollingByDesign = ["GoogleHealth", "HomeAssistant"];
+    private static readonly string[] NonPollingByDesign = ["HomeAssistant"];
 
     public static TheoryData<string> PollingConnectors() => [.. Polling];
 

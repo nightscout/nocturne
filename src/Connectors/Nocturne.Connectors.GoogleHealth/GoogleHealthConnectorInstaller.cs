@@ -34,5 +34,11 @@ public sealed class GoogleHealthConnectorInstaller : IConnectorInstaller
         services.AddHttpClient<GoogleHealthAuthTokenProvider>()
             .ConfigureConnectorClient(null, timeout: RequestTimeout);
         services.AddConnectorTokenProvider<GoogleHealthAuthTokenProvider>();
+
+        services.AddHttpClient<GoogleHealthConnectorService>()
+            .ConfigureConnectorClient(null, timeout: RequestTimeout);
+        services.AddConnectorSyncExecutor<ConnectorSyncExecutor<
+            GoogleHealthConnectorService,
+            GoogleHealthConnectorConfiguration>>();
     }
 }
