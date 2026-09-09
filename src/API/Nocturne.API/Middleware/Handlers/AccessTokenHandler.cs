@@ -1,3 +1,4 @@
+using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Models.Authorization;
@@ -5,9 +6,9 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Middleware.Handlers;
 
 /// <summary>
-/// Authentication handler for Nightscout legacy access tokens.
-/// Access tokens use format: {name_abbrev}-{16_char_sha1_digest}
-/// Example: rhys-a1b2c3d4e5f6g7h8
+/// Authentication handler for subject access tokens, in either shape
+/// <see cref="TokenFormat.IsAccessToken"/> recognises: the bare hex string Nocturne mints, and the
+/// <c>{name_abbrev}-{digest}</c> token a subject migrated from classic Nightscout keeps.
 /// Tokens can be provided via:
 /// - Authorization header (Bearer token)
 /// - Query parameter: ?token=xxx
@@ -48,15 +49,13 @@ public class AccessTokenHandler : IAuthHandler
             return AuthResult.Skip();
         }
 
-        // Access tokens contain a dash separator: name-hash
         // JWTs have dots (.), so if we find dots it's not an access token
         if (accessToken.Contains('.'))
         {
             return AuthResult.Skip();
         }
 
-        // Validate format: should have a dash and alphanumeric chars
-        if (!IsValidAccessTokenFormat(accessToken))
+        if (!TokenFormat.IsAccessToken(accessToken))
         {
             _logger.LogDebug("Token doesn't match access token format, skipping");
             return AuthResult.Skip();
@@ -155,29 +154,5 @@ public class AccessTokenHandler : IAuthHandler
         // We skip body parsing here and expect middleware to have buffered if needed
 
         return null;
-    }
-
-    /// <summary>
-    /// Validate that the token matches the access token format
-    /// Format: {name_abbrev}-{hex_digest} where digest is typically 16 chars
-    /// </summary>
-    private static bool IsValidAccessTokenFormat(string token)
-    {
-        // Must have at least one dash
-        var dashIndex = token.LastIndexOf('-');
-        if (dashIndex <= 0 || dashIndex >= token.Length - 1)
-        {
-            return false;
-        }
-
-        // Characters after the dash should be alphanumeric (hex digest)
-        var digest = token[(dashIndex + 1)..];
-        if (digest.Length < 8) // Minimum reasonable digest length
-        {
-            return false;
-        }
-
-        // Allow alphanumeric characters in digest
-        return digest.All(c => char.IsLetterOrDigit(c));
     }
 }
