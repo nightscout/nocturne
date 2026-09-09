@@ -47,7 +47,7 @@
         }
       } else if (data.lastEnacted.type === "cancel") {
         actionText = "<b>Temp Basal Canceled</b>";
-      } else if (data.lastEnacted.rate !== undefined) {
+      } else if (data.lastEnacted.rate != null) {
         actionText = `<b>Temp Basal Started</b> ${data.lastEnacted.rate.toFixed(2)}U/hour for ${data.lastEnacted.duration}m`;
       }
 
@@ -56,15 +56,15 @@
       }
 
       // Add IOB/COB info from loop
-      if (data.iob !== undefined) {
+      if (data.iob != null) {
         actionText += `, IOB: ${data.iob.toFixed(2)}U`;
       }
-      if (data.cob !== undefined) {
+      if (data.cob != null) {
         actionText += `, COB: ${Math.round(data.cob)}g`;
       }
 
       // Add eventual BG
-      if (data.eventualBG !== undefined) {
+      if (data.eventualBG != null) {
         actionText += `, Eventual BG: ${bg(data.eventualBG)}`;
       }
 
@@ -122,7 +122,7 @@
       }
     );
 
-    if (data.eventualBG !== undefined) {
+    if (data.eventualBG != null) {
       return `${time} ↝ ${bg(data.eventualBG)}`;
     }
 
