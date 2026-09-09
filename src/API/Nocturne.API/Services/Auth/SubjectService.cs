@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Authorization;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
@@ -830,11 +831,12 @@ public class SubjectService : ISubjectService
     }
 
     /// <summary>
-    /// Generate a secure access token
+    /// Generate a secure access token, in the shape <see cref="TokenFormat.IsAccessToken"/> routes
+    /// to <see cref="Middleware.Handlers.AccessTokenHandler"/>.
     /// </summary>
     private static string GenerateAccessToken()
     {
-        var bytes = RandomNumberGenerator.GetBytes(32);
+        var bytes = RandomNumberGenerator.GetBytes(TokenFormat.AccessTokenBytes);
         return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 
