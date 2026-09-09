@@ -35,6 +35,18 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
     }
 
     /// <summary>
+    /// Identity for this type is the sync key, which a legacy-id match neither honours nor
+    /// deduplicates through; the batch path is <see cref="V4RepositoryBase{TModel,TEntity}.BulkCreateAsync"/>.
+    /// </summary>
+    public override Task<IReadOnlyDictionary<string, LegacyUpsert<TModel>>> BulkUpsertByLegacyIdAsync(
+        IReadOnlyList<TModel> records,
+        WriteOrigin origin,
+        bool preserveStoredCorrelationId = false,
+        CancellationToken ct = default) =>
+        throw new NotSupportedException(
+            $"{typeof(TModel).Name} upserts on its sync key; use BulkCreateAsync for a batch.");
+
+    /// <summary>
     /// Creates a record, or updates in place the stored row carrying the same
     /// (DataSource, SyncIdentifier).
     /// </summary>

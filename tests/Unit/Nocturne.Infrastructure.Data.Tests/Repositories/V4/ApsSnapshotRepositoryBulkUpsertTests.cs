@@ -51,6 +51,17 @@ public class ApsSnapshotRepositoryBulkUpsertTests : IDisposable
         };
     }
 
+    /// <summary>
+    /// A snapshot's identity is its sync key; a legacy-id batch would insert duplicates past it.
+    /// </summary>
+    [Fact]
+    public async Task BulkUpsertByLegacyIdAsync_IsRefused_ForASyncKeyedType()
+    {
+        var act = () => _repository.BulkUpsertByLegacyIdAsync([CreateSnapshot("sync-1")], WriteOrigin.Live);
+
+        await act.Should().ThrowAsync<NotSupportedException>();
+    }
+
     [Fact]
     public async Task BulkCreateAsync_InsertsNewRecords()
     {

@@ -125,11 +125,23 @@ public class TherapySettingsRepositoryBulkUpsertTests : IDisposable
             [Settings("p1:Default", correlationId: Guid.CreateVersion7())], WriteOrigin.Live,
             preserveStoredCorrelationId: true);
         preserving["p1:Default"].Record.CorrelationId.Should().Be(stored);
+        StoredCorrelationId("p1:Default").Should().Be(stored);
 
+        // A correlation id is bookkeeping the audit gate ignores, so this write changes nothing the
+        // broadcast counts as material and still has to reach the row: it is the sibling-convergence
+        // repair the anchor's preservation exists for.
         var fresh = Guid.CreateVersion7();
         var overwriting = await _repository.BulkUpsertByLegacyIdAsync(
             [Settings("p1:Default", correlationId: fresh)], WriteOrigin.Live);
         overwriting["p1:Default"].Record.CorrelationId.Should().Be(fresh);
+        StoredCorrelationId("p1:Default").Should().Be(fresh, "a correlation-id-only change must be persisted");
+        _broadcaster.Updated.Should().BeEmpty("a correlation-id-only change is not a material update");
+    }
+
+    private Guid? StoredCorrelationId(string legacyId)
+    {
+        _context.ChangeTracker.Clear();
+        return _context.TherapySettings.AsNoTracking().Single(t => t.LegacyId == legacyId).CorrelationId;
     }
 
     /// <summary>
@@ -146,6 +158,7 @@ public class TherapySettingsRepositoryBulkUpsertTests : IDisposable
             [Settings("p1:Default", correlationId: minted)], WriteOrigin.Live, preserveStoredCorrelationId: true);
 
         outcomes["p1:Default"].Record.CorrelationId.Should().Be(minted);
+        StoredCorrelationId("p1:Default").Should().Be(minted, "the empty id self-heals on the row, not only in the answer");
     }
 
     /// <summary>

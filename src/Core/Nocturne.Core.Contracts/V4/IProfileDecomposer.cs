@@ -34,7 +34,8 @@ public interface IProfileDecomposer
     /// <param name="ct">Cancellation token</param>
     /// <returns>
     /// A single <see cref="DecompositionResult"/> containing every created or updated V4 record; its
-    /// <see cref="DecompositionResult.CorrelationId"/> is the id minted for the first profile.
+    /// <see cref="DecompositionResult.CorrelationId"/> is the id minted for the first profile that has
+    /// a store entry.
     /// </returns>
     Task<DecompositionResult> DecomposeBatchAsync(
         IReadOnlyList<Profile> profiles, WriteOrigin origin, CancellationToken ct = default);

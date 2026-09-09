@@ -111,7 +111,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         if (groups.Count < entries.Count)
         {
             Logger.LogDebug(
-                "Skipped schedules for {Count} profile store(s) whose therapy settings identity is already held",
+                "Skipped schedules for {Count} profile store(s) whose therapy settings were not written: identity held by a deleted row, or the legacy id repeated in the batch",
                 entries.Count - groups.Count);
         }
 

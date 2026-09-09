@@ -276,11 +276,14 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     /// The batch twin of <see cref="GetByLegacyIdAsync"/> followed by <see cref="CreateAsync"/> or
     /// <see cref="UpdateAsync"/> per record, with the same soft-delete visibility (the stored-row query
     /// runs under the context's filters), the same recreation guard, and the same
-    /// <see cref="HasMaterialChange"/> gate on the update broadcast. Change detection runs once over the
-    /// batch before the predicate reads it; <see cref="NocturneDbContext.SaveChangesAsync(CancellationToken)"/>
-    /// runs its own pass.
+    /// <see cref="HasMaterialChange"/> gate on the update broadcast. The gate decides the broadcast
+    /// only: the save always runs, because a change the gate does not count — a correlation id
+    /// converging onto its anchor's — still has to reach the row. Change detection runs once over the
+    /// batch and stays off through the save, the contract
+    /// <see cref="NocturneDbContext.SaveChangesAsync(CancellationToken)"/> honours for a caller that
+    /// has already detected.
     /// </remarks>
-    public async Task<IReadOnlyDictionary<string, LegacyUpsert<TModel>>> BulkUpsertByLegacyIdAsync(
+    public virtual async Task<IReadOnlyDictionary<string, LegacyUpsert<TModel>>> BulkUpsertByLegacyIdAsync(
         IReadOnlyList<TModel> records,
         WriteOrigin origin,
         bool preserveStoredCorrelationId = false,
@@ -345,14 +348,12 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         try
         {
             materiallyChanged.AddRange(updated.Select(u => u.Entity).Where(e => HasMaterialChange(ctx, e)));
+            await ctx.SaveChangesAsync(ct);
         }
         finally
         {
             ctx.ChangeTracker.AutoDetectChangesEnabled = autoDetect;
         }
-
-        if (inserted.Count > 0 || materiallyChanged.Count > 0)
-            await ctx.SaveChangesAsync(ct);
 
         foreach (var (legacyId, entity) in inserted)
             outcomes[legacyId] = new LegacyUpsert<TModel>(ToDomain(entity), Created: true);
