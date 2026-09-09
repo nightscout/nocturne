@@ -78,10 +78,14 @@ const rule = {
         const source = String(node.source.value ?? "");
         if (!source.includes("remote")) return;
         for (const spec of node.specifiers) {
-          if (
-            spec.type === "ImportSpecifier" &&
-            QUERY_NAMES.has(spec.local.name)
-          ) {
+          if (spec.type !== "ImportSpecifier") continue;
+          // The exported name is what the scan collected; the local name is what
+          // the call sites use. `import { list as listGrants }` differs in both.
+          const exported =
+            spec.imported.type === "Identifier"
+              ? spec.imported.name
+              : String(spec.imported.value);
+          if (QUERY_NAMES.has(exported)) {
             remoteQueryImports.add(spec.local.name);
           }
         }
