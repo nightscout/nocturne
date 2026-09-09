@@ -1,5 +1,6 @@
+using Nocturne.API.Services.Connectors;
+using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Core.Contracts.Health;
 
 namespace Nocturne.API.Services.Health.GoogleHealth;
 
@@ -8,6 +9,8 @@ public sealed class GoogleHealthWorker(
     GoogleHealthCoordinator coordinator,
     ILogger<GoogleHealthWorker> logger) : BackgroundService
 {
+    private const string ConnectorId = "googlehealth";
+
     protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
         ProcessRequestsAsync(stoppingToken);
 
@@ -39,7 +42,7 @@ public sealed class GoogleHealthWorker(
         using var scope = scopes.CreateScope();
         scope.ServiceProvider.GetRequiredService<ITenantAccessor>()
             .SetTenant(new(id, slug, displayName, true, false));
-        await scope.ServiceProvider.GetRequiredService<IGoogleHealthService>()
-            .SyncAsync(true, ct);
+        await scope.ServiceProvider.GetRequiredService<IConnectorSyncService>()
+            .TriggerSyncAsync(ConnectorId, new SyncRequest(), ct);
     }
 }
