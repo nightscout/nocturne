@@ -98,7 +98,7 @@ public class UserDisplayPreferences
             return "chart.lookback: must be greater than 0";
         }
 
-        return null;
+        return YearOverviewColors?.Validate();
 
         static string? Check(string field, string? value, HashSet<string> allowed) =>
             value != null && !allowed.Contains(value)
@@ -119,6 +119,8 @@ public class UserDisplayPreferences
         ColorTheme = incoming.ColorTheme ?? ColorTheme;
         NightModeSchedule = incoming.NightModeSchedule ?? NightModeSchedule;
         DashboardTopWidgets = incoming.DashboardTopWidgets ?? DashboardTopWidgets;
+        // Replace the whole color selection: an empty object resets every metric to automatic.
+        YearOverviewColors = incoming.YearOverviewColors ?? YearOverviewColors;
 
         if (incoming.Prediction is { } prediction)
         {
@@ -164,6 +166,7 @@ public class UserDisplayPreferences
         ColorTheme = ColorTheme,
         Prediction = Prediction,
         Chart = Chart,
+        YearOverviewColors = YearOverviewColors,
     };
 
     /// <summary>Glucose units: "mg/dl" or "mmol".</summary>
@@ -197,6 +200,9 @@ public class UserDisplayPreferences
     /// <summary>Glucose-chart visual style preferences.</summary>
     [JsonPropertyName("chart")]
     public ChartPreferences? Chart { get; set; }
+
+    [JsonPropertyName("yearOverviewColors")]
+    public YearOverviewColorPreferences? YearOverviewColors { get; set; }
 
     /// <summary>Ordered widget IDs shown in the dashboard top-widget grid.</summary>
     [JsonPropertyName("dashboardTopWidgets")]

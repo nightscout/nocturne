@@ -1,5 +1,4 @@
 import { describe, it, expect, vi } from "vitest";
-import { readFileSync } from "node:fs";
 
 vi.mock("$app/environment", () => ({ browser: false, dev: false }));
 vi.mock("$app/navigation", () => ({}));
@@ -82,17 +81,11 @@ describe("getGlucoseHeatmapFill", () => {
   });
 
   it("mixes the pair bracketing the value", () => {
-    // 85 mg/dL sits between the 70 and 100 anchors: stops 3 and 4.
-    expect(getGlucoseHeatmapFill(85)).toBe(
+    expect(getGlucoseHeatmapFill(86)).toBe(
       "color-mix(in srgb, var(--glucose-heatmap-3) 50.00%, var(--glucose-heatmap-4))"
     );
   });
 
-  it("uses black only for the exceptionally low average stop", () => {
-    const theme = readFileSync(new URL("../../../../ui/src/styles/nocturne-theme.css", import.meta.url), "utf8");
-    expect(theme).toMatch(/--glucose-heatmap-1:\s*#000000;/);
-    expect(theme).toMatch(/--glucose-heatmap-2:\s*#3b82f6;/);
-  });
 });
 
 describe("getGlucoseColorByMode", () => {

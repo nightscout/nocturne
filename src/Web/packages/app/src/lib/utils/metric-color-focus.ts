@@ -6,22 +6,10 @@ import {
 export type ColorFocusRange = readonly [number, number];
 export type GlucoseColorThresholds = readonly [number, number, number, number];
 export const DEFAULT_GLUCOSE_COLOR_THRESHOLDS: GlucoseColorThresholds = [
-  54, 70, 180, 250,
+  54, 72, 180, 250,
 ];
 export const GLUCOSE_COLOR_MIN = GLUCOSE_HEATMAP_LEGEND_STOPS[0].mgdl;
 export const GLUCOSE_COLOR_MAX = GLUCOSE_HEATMAP_LEGEND_STOPS.at(-1)!.mgdl;
-
-export const COLOR_FOCUS_METRICS = [
-  "tir",
-  "bolus",
-  "basal",
-  "tdd",
-  "carbs",
-] as const;
-export type ColorFocusMetric = (typeof COLOR_FOCUS_METRICS)[number];
-export type ColorFocusPreferences = Partial<
-  Record<ColorFocusMetric, ColorFocusRange>
-> & { avgGlucose?: GlucoseColorThresholds };
 
 export function resolveGlucoseColorThresholds(
   candidate: unknown
@@ -98,31 +86,6 @@ export function resolveColorFocusRange(
     : null;
 }
 
-export function parseColorFocusPreferences(
-  raw: string | null
-): ColorFocusPreferences {
-  try {
-    const parsed: unknown = JSON.parse(raw ?? "null");
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
-      return {};
-    const preferences: ColorFocusPreferences = {};
-    for (const metric of COLOR_FOCUS_METRICS) {
-      const range = resolveColorFocusRange(
-        (parsed as Record<string, unknown>)[metric]
-      );
-      if (range && (metric !== "tir" || range[1] <= 100))
-        preferences[metric] = range;
-    }
-    const glucose = resolveGlucoseColorThresholds(
-      (parsed as Record<string, unknown>).avgGlucose
-    );
-    if (glucose) preferences.avgGlucose = glucose;
-    return preferences;
-  } catch {
-    return {};
-  }
-}
-
 export function getFocusedIntensityFill(
   value: number,
   range: ColorFocusRange,
@@ -148,4 +111,18 @@ export function colorFocusGradient(
   const low = getFocusedIntensityFill(validRange[0], validRange, cssVar);
   const high = getFocusedIntensityFill(validRange[1], validRange, cssVar);
   return `linear-gradient(to right, ${low} 0%, ${low} ${(validRange[0] / domain) * 100}%, ${high} ${(validRange[1] / domain) * 100}%, ${high} 100%)`;
+}
+
+export function insertSliderSteps(base: readonly number[], extra: readonly number[]): number[] {
+  const result = [...base];
+  for (const value of extra) {
+    let low = 0, high = result.length;
+    while (low < high) {
+      const middle = (low + high) >>> 1;
+      if (result[middle] < value) low = middle + 1;
+      else high = middle;
+    }
+    if (result[low] !== value) result.splice(low, 0, value);
+  }
+  return result;
 }

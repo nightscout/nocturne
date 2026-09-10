@@ -115,7 +115,7 @@ export function getGlucoseColorContinuous(mgdl: number): string {
 const GLUCOSE_HEATMAP_STOPS: ReadonlyArray<readonly [number, string]> = [
 	[40, '--glucose-heatmap-1'],
 	[54, '--glucose-heatmap-2'],
-	[70, '--glucose-heatmap-3'],
+	[72, '--glucose-heatmap-3'],
 	[100, '--glucose-heatmap-4'],
 	[140, '--glucose-heatmap-5'],
 	[180, '--glucose-heatmap-6'],

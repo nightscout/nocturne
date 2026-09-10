@@ -3,18 +3,12 @@ import { render } from "vitest-browser-svelte";
 import { page, userEvent } from "vitest/browser";
 import type { DailySummaryDay } from "$api/generated/nocturne-api-client";
 import { yearOverviewMocks } from "$lib/test-stubs/year-overview-remote";
-import {
-  page as applicationPage,
-  glucoseUnits,
-} from "$lib/test-stubs/year-overview-runtime.svelte";
+import { glucoseUnits, yearOverviewColors, applyPreferences, collectPreferences, registerPreferencesWriteThrough, parsePrefsCookie } from "$lib/stores/appearance-store.svelte";
 import { getGlucoseHeatmapFill } from "$lib/utils/chart-colors";
 import { glucoseColorFocusStops } from "$lib/utils/metric-color-focus";
 
 vi.mock("$api/generated/dataOverviews.generated.remote", async () =>
   import("$lib/test-stubs/year-overview-remote")
-);
-vi.mock("$lib/stores/appearance-store.svelte", async () =>
-  import("$lib/test-stubs/year-overview-runtime.svelte")
 );
 vi.mock("$lib/hooks/date-params.svelte", async () =>
   import("$lib/test-stubs/year-overview-runtime.svelte")
@@ -38,8 +32,7 @@ vi.mock(
 
 import YearOverviewPage from "./+page.svelte";
 
-const storageKey = (user = "synthetic-user") =>
-  `nocturne-year-color-focus-v1:${JSON.stringify(["synthetic-tenant", user])}`;
+const storageKey = () => "nocturne-year-overview-colors";
 const minimum = (metric = "TDD") =>
   page.getByRole("spinbutton", { name: `${metric} minimum color value` });
 const maximum = (metric = "TDD") =>
@@ -63,8 +56,8 @@ function day(date: string, dose: number | null): DailySummaryDay {
     averageGlucoseMgdl: 120,
     totalCount: 1,
     counts: { Glucose: 1 },
-    totalDailyDose: dose,
-    totalBolusUnits: dose,
+    totalDailyDose: dose ?? undefined,
+    totalBolusUnits: dose ?? undefined,
     timeInRangePercent: 75,
   };
 }
@@ -87,7 +80,7 @@ describe("year overview page color focus integration", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     window.localStorage.clear();
-    applicationPage.data.user.subjectId = "synthetic-user";
+    applyPreferences({ yearOverviewColors: {} });
     glucoseUnits.current = "mg/dl";
     observedYears.clear();
     vi.stubGlobal(
@@ -99,7 +92,7 @@ describe("year overview page color focus integration", () => {
           const year = Number(target.dataset.year);
           const intersect = () => {
             this.callback(
-              [{ target, isIntersecting: true } as IntersectionObserverEntry],
+              [{ target, isIntersecting: true } as unknown as IntersectionObserverEntry],
               this as unknown as IntersectionObserver
             );
           };
@@ -171,10 +164,7 @@ describe("year overview page color focus integration", () => {
   });
 
   it("keeps a saved manual focus when lazy loading introduces a larger outlier", async () => {
-    window.localStorage.setItem(
-      storageKey(),
-      JSON.stringify({ tdd: [10, 70] })
-    );
+    applyPreferences({ yearOverviewColors: { tdd: [10, 70] } });
     yearOverviewMocks.years.mockResolvedValue({
       years: [2026, 2025],
       availableDataSources: [],
@@ -258,7 +248,9 @@ describe("year overview page color focus integration", () => {
       .toHaveTextContent(getGlucoseHeatmapFill(120));
   });
 
-  it("keeps the control usable and reports when browser storage cannot save", async () => {
+  it("syncs to the backend and cookie even when browser storage cannot save", async () => {
+    const save = vi.fn();
+    registerPreferencesWriteThrough(save);
     vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
       throw new DOMException("Blocked", "SecurityError");
     });
@@ -266,9 +258,9 @@ describe("year overview page color focus integration", () => {
     await expect.element(cell("2026-01-02")).toBeInTheDocument();
     await selectMetric("TDD");
     await setRange(10, 70);
-    await expect
-      .element(page.getByRole("status"))
-      .toHaveTextContent("This browser could not save the color settings");
+    await vi.waitFor(() => expect(save).toHaveBeenCalledWith(expect.objectContaining({ yearOverviewColors: { tdd: [10, 70] } })));
+    const cookie = document.cookie.split("; ").find(row => row.startsWith("nocturne-prefs="))!.slice("nocturne-prefs=".length);
+    expect(parsePrefsCookie(cookie)?.yearOverviewColors).toEqual({ tdd: [10, 70] });
     await expect
       .element(cell("2026-01-02"))
       .toHaveTextContent("var(--chart-4) 58%");
@@ -285,7 +277,7 @@ describe("year overview page color focus integration", () => {
       .toHaveTextContent(getGlucoseHeatmapFill(120));
     expect(page.getByRole("slider").elements()).toHaveLength(4);
     await bgInput("High").fill("140");
-    const expected = [54, 70, 140, 250] as const;
+    const expected = [54, 72, 140, 250] as const;
     await expect
       .element(cell("2026-01-01"))
       .toHaveTextContent(
@@ -321,13 +313,13 @@ describe("year overview page color focus integration", () => {
 
   it("rejects crossing and empty BG inputs and moves a boundary with the keyboard", async () => {
     render(YearOverviewPage);
-    await expect.element(bgInput("Low")).toHaveValue(70);
+    await expect.element(bgInput("Low")).toHaveValue(72);
     for (const invalid of ["", "54", "200", "-1"]) {
       await bgInput("Low").fill(invalid);
       await expect
         .element(bgInput("Low"))
         .toHaveAttribute("aria-invalid", "true");
-      expect(window.localStorage.getItem(storageKey())).toBeNull();
+      expect(yearOverviewColors.current).toEqual({});
     }
     await bgInput("Low").fill("100");
     (bgSlider("Low").element() as HTMLElement).focus();
@@ -347,7 +339,7 @@ describe("year overview page color focus integration", () => {
     await bgInput("High").fill("8");
     expect(
       JSON.parse(window.localStorage.getItem(storageKey())!).avgGlucose
-    ).toEqual([54, 70, 144, 250]);
+    ).toEqual([54, 72, 144, 250]);
     glucoseUnits.current = "mg/dl";
     await expect.element(bgInput("High")).toHaveValue(144);
   });
@@ -383,25 +375,16 @@ describe("year overview page color focus integration", () => {
     }
   });
 
-  it("does not restore another user's saved focus on the same browser", async () => {
-    window.localStorage.setItem(
-      storageKey(),
-      JSON.stringify({ tdd: [10, 70] })
-    );
-    applicationPage.data.user.subjectId = "another-synthetic-user";
+  it("hydrates server preferences and restores automatic ranges after a saved reset", async () => {
+    applyPreferences({ yearOverviewColors: { tdd: [10, 70] } });
     render(YearOverviewPage);
-    await expect.element(cell("2026-01-04")).toBeInTheDocument();
     await selectMetric("TDD");
-    await expect.element(minimum()).toHaveValue(0);
+    await expect.element(minimum()).toHaveValue(10);
+    await page.getByRole("button", { name: "Reset TDD color range to automatic" }).click();
+    const saved = collectPreferences();
+    applyPreferences({ yearOverviewColors: { tdd: [20, 60] } });
+    applyPreferences(saved);
     await expect.element(maximum()).toHaveValue(500);
-    await setRange(20, 60);
-    expect(
-      JSON.parse(
-        window.localStorage.getItem(storageKey("another-synthetic-user"))!
-      )
-    ).toEqual({ tdd: [20, 60] });
-    expect(JSON.parse(window.localStorage.getItem(storageKey())!)).toEqual({
-      tdd: [10, 70],
-    });
+    expect(yearOverviewColors.current).toEqual({});
   });
 });

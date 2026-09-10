@@ -9,12 +9,10 @@
   --glucose-high: oklch(0.65 0.18 270);
   --glucose-very-high: oklch(0.55 0.25 15);
 
-  /* Year-overview glucose heatmap — nine stops the report interpolates between
-     across 40–350 mg/dL. The black first stop makes an exceptionally low average
-     conspicuous; distinct colours resume at the next stop. Stop-to-mg/dL mapping
-     lives in chart-colors.ts. */
-  --glucose-heatmap-1: #000000; /* black, exceptionally low */
-  --glucose-heatmap-2: #3b82f6; /* blue-500, low */
+  /* The heatmap fades to a neutral endpoint from 72 to 54 mg/dL (4 to 3 mmol/L),
+     then stays solid. Dark mode inverts the endpoint; print uses white paper. */
+  --glucose-heatmap-1: #000000;
+  --glucose-heatmap-2: var(--glucose-heatmap-1);
   --glucose-heatmap-3: #06b6d4; /* cyan-500 */
   --glucose-heatmap-4: #10b981; /* emerald-500 */
   --glucose-heatmap-5: #84cc16; /* lime-500 */
@@ -112,6 +110,7 @@
 }
 
 .dark {
+  --glucose-heatmap-1: #ffffff;
   /* Insulin Types - Dark Mode - need higher opacity for visibility */
   --insulin-basal: rgba(100, 180, 255, 0.35);
   --insulin-temp-basal: rgba(140, 200, 255, 0.5);

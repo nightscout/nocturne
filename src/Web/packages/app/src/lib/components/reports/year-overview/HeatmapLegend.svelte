@@ -2,7 +2,6 @@
   import * as Select from "$lib/components/ui/select";
   import type { GlucoseUnits } from "$lib/utils/formatting";
   import ColorFocusRange from "./ColorFocusRange.svelte";
-  import GlucoseColorThresholds from "./GlucoseColorThresholds.svelte";
   import type { GlucoseColorThresholds as GlucoseThresholds } from "$lib/utils/metric-color-focus";
 
   type HeatmapMetric =
@@ -64,7 +63,8 @@
           {/each}
         </Select.Content>
       </Select.Root>
-      <GlucoseColorThresholds
+      <ColorFocusRange
+        glucose
         {units}
         thresholds={glucoseThresholds}
         stops={HEATMAP_STOPS}
@@ -114,15 +114,17 @@
           {/each}
         </Select.Content>
       </Select.Root>
-      <ColorFocusRange
-        {metricLabel}
-        unit={metricUnit}
-        observedMax={metricMax}
-        {cssVar}
-        fixedMax={selectedMetric === "tir" ? 100 : undefined}
-        {focusRange}
-        {onFocusRangeChange}
-      />
+      {#key selectedMetric}
+        <ColorFocusRange
+          {metricLabel}
+          unit={metricUnit}
+          observedMax={metricMax}
+          {cssVar}
+          fixedMax={selectedMetric === "tir" ? 100 : undefined}
+          {focusRange}
+          {onFocusRangeChange}
+        />
+      {/key}
       <div class="flex items-center gap-1.5 text-xs text-muted-foreground">
         <span
           class="inline-block h-3 w-3 rounded-sm"

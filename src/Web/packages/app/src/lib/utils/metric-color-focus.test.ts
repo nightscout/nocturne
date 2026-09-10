@@ -5,8 +5,8 @@ import {
 } from "./chart-colors";
 import {
   colorFocusGradient,
+  insertSliderSteps,
   getFocusedIntensityFill,
-  parseColorFocusPreferences,
   resolveColorFocusRange,
   resolveGlucoseColorThresholds,
   glucoseColorFocusStops,
@@ -53,22 +53,22 @@ describe("resolveColorFocusRange", () => {
 
 describe("resolveGlucoseColorThresholds", () => {
   it("accepts four strictly increasing glucose boundaries", () => {
-    expect(resolveGlucoseColorThresholds([54, 70, 180, 250])).toEqual([
-      54, 70, 180, 250,
+    expect(resolveGlucoseColorThresholds([54, 72, 180, 250])).toEqual([
+      54, 72, 180, 250,
     ]);
   });
 
   it.each(
     [
       null,
-      [54, 70, 180],
-      [54, 70, 70, 250],
+      [54, 72, 180],
+      [54, 72, 70, 250],
       [40, 70, 180, 250],
-      [54, 70, 180, 350],
+      [54, 72, 180, 350],
       [-1, 70, 180, 250],
-      [54, 70, 180, Infinity],
+      [54, 72, 180, Infinity],
       [54, "70", 180, 250],
-      [54, 70, 180, 170],
+      [54, 72, 180, 170],
     ].map((value) => ({ value }))
   )("rejects invalid boundaries $value", ({ value }) =>
     expect(resolveGlucoseColorThresholds(value)).toBeNull()
@@ -77,7 +77,7 @@ describe("resolveGlucoseColorThresholds", () => {
 
 describe("glucoseColorFocusStops", () => {
   it("preserves every original color when using the default boundaries", () => {
-    expect(glucoseColorFocusStops([54, 70, 180, 250])).toEqual(
+    expect(glucoseColorFocusStops([54, 72, 180, 250])).toEqual(
       GLUCOSE_HEATMAP_LEGEND_STOPS
     );
   });
@@ -96,7 +96,7 @@ describe("glucoseColorFocusStops", () => {
         (stop, index) => index === 0 || stop.mgdl > stops[index - 1].mgdl
       )
     ).toBe(true);
-    expect(getGlucoseHeatmapFill(100 + (50 / 110) * 100, stops)).toBe(
+    expect(getGlucoseHeatmapFill(100 + (48 / 108) * 100, stops)).toBe(
       getGlucoseHeatmapFill(120)
     );
     expect(getGlucoseHeatmapFill(-1, stops)).toBe("var(--glucose-heatmap-1)");
@@ -167,42 +167,10 @@ describe("colorFocusGradient", () => {
   });
 });
 
-describe("parseColorFocusPreferences", () => {
-  it("restores independent ranges for supported metrics", () => {
-    const preferences = {
-      avgGlucose: [54, 70, 180, 250],
-      tir: [70, 100],
-      bolus: [10, 70],
-      basal: [0, 20],
-      tdd: [10, 100],
-      carbs: [0, 500],
-    };
-
-    expect(parseColorFocusPreferences(JSON.stringify(preferences))).toEqual(
-      preferences
-    );
-  });
-
-  it.each([null, "", "{", "null", "false", "42", '"text"', "[]"])(
-    "ignores missing or malformed storage %j",
-    (raw) => {
-      expect(parseColorFocusPreferences(raw)).toEqual({});
-    }
-  );
-
-  it("discards invalid and unknown entries without losing valid preferences", () => {
-    expect(
-      parseColorFocusPreferences(
-        JSON.stringify({
-          tir: [70, 101],
-          bolus: [10, 70],
-          basal: [-1, 20],
-          tdd: [100, 10],
-          carbs: ["0", 500],
-          avgGlucose: [70, 180],
-          unknown: [0, 100],
-        })
-      )
-    ).toEqual({ bolus: [10, 70] });
+describe("insertSliderSteps", () => {
+  it("inserts exact bounds without mutating or sorting the base again", () => {
+    const base = Object.freeze([0, 0.1, 0.2, 1]);
+    expect(insertSliderSteps(base, [0.15, 0.1, 2, 0.15])).toEqual([0, 0.1, 0.15, 0.2, 1, 2]);
+    expect(base).toEqual([0, 0.1, 0.2, 1]);
   });
 });

@@ -20,6 +20,7 @@
   let range = $state<Range | null>(untrack(() => initialRange));
 </script>
 
+{#key metricLabel}
 <ColorFocusRange
   {metricLabel}
   {unit}
@@ -29,4 +30,5 @@
   focusRange={range}
   onFocusRangeChange={(next) => (range = next)}
 />
+{/key}
 <output data-testid="selected-range">{JSON.stringify(range)}</output>

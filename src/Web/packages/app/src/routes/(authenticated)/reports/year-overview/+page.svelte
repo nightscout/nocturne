@@ -1,7 +1,6 @@
 <script lang="ts">
-  import { goto } from "$app/navigation";
   import { browser } from "$app/environment";
-  import { page } from "$app/state";
+  import { goto } from "$app/navigation";
   import { Loader2, CalendarDays } from "lucide-svelte";
   import { scaleThreshold } from "d3-scale";
   import { Button } from "$lib/components/ui/button";
@@ -21,15 +20,13 @@
   } from "$api/generated/nocturne-api-client";
   import { formatLongDate, getUnitLabel } from "$lib/utils/formatting";
   import { getGlucoseHeatmapFill } from "$lib/utils/chart-colors";
-  import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
+  import { glucoseUnits, yearOverviewColors } from "$lib/stores/appearance-store.svelte";
   import {
     getFocusedIntensityFill,
-    parseColorFocusPreferences,
     resolveColorFocusRange,
     resolveGlucoseColorThresholds,
     DEFAULT_GLUCOSE_COLOR_THRESHOLDS,
     glucoseColorFocusStops,
-    type ColorFocusPreferences,
     type ColorFocusRange,
     type GlucoseColorThresholds,
   } from "$lib/utils/metric-color-focus";
@@ -73,38 +70,18 @@
   ];
 
   let selectedMetric = $state<HeatmapMetric>("avgGlucose");
-  let colorFocusPreferences = $state<ColorFocusPreferences>({});
-  let loadedColorFocusKey = $state<string | null>(null);
-  let colorFocusStorageFailed = $state(false);
-  const colorFocusStorageKey = $derived(
-    `nocturne-year-color-focus-v1:${JSON.stringify([page.data.tenantSlug ?? null, page.data.user?.subjectId ?? null])}`
-  );
+  const colorFocusPreferences = $derived(yearOverviewColors.current);
   const focusRange = $derived(
     selectedMetric === "avgGlucose"
       ? null
-      : (colorFocusPreferences[selectedMetric] ?? null)
+      : resolveColorFocusRange(colorFocusPreferences[selectedMetric])
   );
   const glucoseThresholds = $derived(
-    colorFocusPreferences.avgGlucose ?? DEFAULT_GLUCOSE_COLOR_THRESHOLDS
+    resolveGlucoseColorThresholds(colorFocusPreferences.avgGlucose) ?? DEFAULT_GLUCOSE_COLOR_THRESHOLDS
   );
   const glucoseLegendStops = $derived(
     glucoseColorFocusStops(glucoseThresholds)
   );
-
-  function saveColorPreferences(next: ColorFocusPreferences) {
-    colorFocusPreferences = next;
-    if (loadedColorFocusKey !== colorFocusStorageKey) return;
-    if (!browser || typeof localStorage === "undefined") {
-      colorFocusStorageFailed = browser;
-      return;
-    }
-    try {
-      localStorage.setItem(colorFocusStorageKey, JSON.stringify(next));
-      colorFocusStorageFailed = false;
-    } catch {
-      colorFocusStorageFailed = true;
-    }
-  }
 
   function setFocusRange(candidate: ColorFocusRange | null) {
     if (selectedMetric === "avgGlucose") return;
@@ -115,39 +92,19 @@
     )
       return;
     const next = { ...colorFocusPreferences };
-    if (range) next[selectedMetric] = range;
+    if (range) next[selectedMetric] = [...range];
     else delete next[selectedMetric];
-    saveColorPreferences(next);
+    yearOverviewColors.current = next;
   }
 
   function setGlucoseThresholds(candidate: GlucoseColorThresholds | null) {
     const thresholds = resolveGlucoseColorThresholds(candidate);
     if (candidate !== null && !thresholds) return;
     const next = { ...colorFocusPreferences };
-    if (thresholds) next.avgGlucose = thresholds;
+    if (thresholds) next.avgGlucose = [...thresholds];
     else delete next.avgGlucose;
-    saveColorPreferences(next);
+    yearOverviewColors.current = next;
   }
-
-  $effect(() => {
-    const key = colorFocusStorageKey;
-    if (!browser || typeof localStorage === "undefined") {
-      colorFocusPreferences = {};
-      colorFocusStorageFailed = browser;
-      loadedColorFocusKey = key;
-      return;
-    }
-    try {
-      colorFocusPreferences = parseColorFocusPreferences(
-        localStorage.getItem(key)
-      );
-      colorFocusStorageFailed = false;
-    } catch {
-      colorFocusPreferences = {};
-      colorFocusStorageFailed = true;
-    }
-    loadedColorFocusKey = key;
-  });
 
   /** All known data types that can appear in counts */
   const ALL_DATA_TYPES = [
@@ -599,7 +556,7 @@
   />
 </svelte:head>
 
-<div class="@container flex min-h-full">
+<div class="year-overview @container flex min-h-full">
   <!-- Main Content -->
   <div
     class="flex-1 transition-[margin] duration-200 print:mr-0 {selectedDay
@@ -631,14 +588,6 @@
       {glucoseThresholds}
       onGlucoseThresholdsChange={setGlucoseThresholds}
     />
-    <p
-      class="-mt-4 mb-6 text-xs text-muted-foreground print:hidden"
-      role={colorFocusStorageFailed ? "status" : undefined}
-    >
-      {colorFocusStorageFailed
-        ? "This browser could not save the color settings. Changes apply only until you leave this page."
-        : "Color settings are remembered per metric in this browser."}
-    </p>
 
     <!-- Loading state for metadata -->
     {#if metadataLoading && !metadataLoaded}

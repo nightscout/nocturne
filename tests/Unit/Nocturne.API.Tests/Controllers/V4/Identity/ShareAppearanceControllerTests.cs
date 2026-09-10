@@ -82,17 +82,20 @@ public sealed class ShareAppearanceControllerTests
             NightModeSchedule = true,
             Prediction = new PredictionPreferences { Enabled = true },
             Chart = new ChartPreferences { ShowPoints = true },
+            YearOverviewColors = new YearOverviewColorPreferences { Tdd = [10, 70] },
             DashboardTopWidgets = [WidgetId.Tdd],
         };
 
         var disclosed = everythingSet.ToPresentationOnly();
 
         SetPropertyNames(disclosed).Should().BeEquivalentTo(
-            "GlucoseUnits", "TimeFormat", "RegionFormat", "ColorTheme", "Prediction", "Chart");
+            "GlucoseUnits", "TimeFormat", "RegionFormat", "ColorTheme", "Prediction", "Chart", "YearOverviewColors");
 
         // Both are carried whole rather than field by field, so the projection cannot withhold a
         // field added inside them: everything these two types declare is disclosed. Pinning the
         // declarations is what makes adding one a decision rather than a default.
+        PropertyNames(typeof(YearOverviewColorPreferences)).Should().BeEquivalentTo(
+            "AvgGlucose", "Tir", "Bolus", "Basal", "Tdd", "Carbs");
         PropertyNames(typeof(PredictionPreferences)).Should().BeEquivalentTo(
             "Enabled", "Minutes", "DisplayMode");
         PropertyNames(typeof(ChartPreferences)).Should().BeEquivalentTo(
