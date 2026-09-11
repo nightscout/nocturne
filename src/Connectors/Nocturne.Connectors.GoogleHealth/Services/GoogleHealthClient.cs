@@ -151,10 +151,16 @@ public sealed class GoogleHealthClient(HttpClient http)
                 if (json.RootElement.TryGetProperty("dataPoints", out var data))
                     foreach (var item in data.EnumerateArray())
                     {
-                        var session = ParseSleep(item);
-                        if (session.StartMills < from.ToUnixTimeMilliseconds() || session.StartMills >= to.ToUnixTimeMilliseconds())
-                            throw new GoogleHealthException("unexpected_time_range", stage: "data_parse", dataType: "sleep");
-                        sessions.Add(session);
+                        try
+                        {
+                            var session = ParseSleep(item);
+                            if (session.StartMills < from.ToUnixTimeMilliseconds() || session.StartMills >= to.ToUnixTimeMilliseconds())
+                                continue;
+                            sessions.Add(session);
+                        }
+                        catch (GoogleHealthException ex) when (ex.Message is "invalid_google_data" or "unexpected_time_range")
+                        {
+                        }
                     }
                 pageToken = json.RootElement.TryGetProperty("nextPageToken", out var next) ? next.GetString() ?? "" : "";
                 onPageRead?.Invoke(page + 1);

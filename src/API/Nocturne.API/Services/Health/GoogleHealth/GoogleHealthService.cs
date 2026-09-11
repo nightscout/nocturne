@@ -353,7 +353,8 @@ public sealed class GoogleHealthService(
                 ["response_type"] = "code",
                 ["access_type"] = "offline",
                 ["prompt"] = "consent select_account",
-                ["scope"] = "openid " + string.Join(' ', GoogleHealthClient.SupportedTypes
+                ["scope"] = "openid " + string.Join(' ', settings.DataTypes
+                    .Where(type => GoogleHealthClient.SupportedTypes.Contains(type, StringComparer.Ordinal))
                     .Select(GoogleHealthClient.ScopeFor).Distinct()),
                 ["state"] = state,
                 ["code_challenge_method"] = "S256",
@@ -388,7 +389,8 @@ public sealed class GoogleHealthService(
             if (Fingerprint(settings) != flow.Settings)
                 throw new GoogleHealthException("expired_signin");
 
-            var requestedScopes = GoogleHealthClient.SupportedTypes
+            var requestedScopes = settings.DataTypes
+                .Where(type => GoogleHealthClient.SupportedTypes.Contains(type, StringComparer.Ordinal))
                 .Select(GoogleHealthClient.ScopeFor).Append("openid")
                 .Distinct(StringComparer.Ordinal).ToArray();
             var token = await oauth.ExchangeAuthorizationCodeAsync(
