@@ -145,6 +145,15 @@
         front.
     </p>
     <CodeBlock code={runCommand} class="mb-4" />
+    <Callout type="tip" title="Keep the run alive if Cloud Shell disconnects">
+        <p>
+            Cloud Shell closes idle sessions, which stops the installer part-way. Run
+            <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">tmux new -s nocturne</code>
+            first and the run survives a dropped connection. Detach with Ctrl-B then D, and come
+            back to it with
+            <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">tmux attach -t nocturne</code>.
+        </p>
+    </Callout>
     <p class="text-muted-foreground mb-4">
         Early on it asks for a deSEC token. Paste one and the DNS records are created for you;
         press Enter instead and it prints two records for you to create by hand. Either way it
@@ -160,7 +169,7 @@
             <li>Generates an SSH key in your Cloud Shell home if you do not have one</li>
             <li>Starts an Ampere A1 server with 1 core and 6 GB of memory, retrying when Oracle has no free capacity</li>
             <li>Installs Folding@home on a nightly schedule if you asked for it above</li>
-            <li>On the server: opens the firewall, installs Docker, downloads the Nocturne release bundle, generates the database passwords and starts everything once DNS resolves</li>
+            <li>On the server: opens the firewall, installs Docker, downloads the Nocturne release bundle, generates the database passwords and starts everything once DNS resolves, checking each of these again on every run</li>
         </ul>
         <CodeBlock code={installScript} class="mt-2" maxHeight="400px" />
     </details>
@@ -176,6 +185,14 @@
         </p>
         <p class="mb-2">To have it keep trying for longer instead of re-running by hand:</p>
         <CodeBlock code={"CAPACITY_RETRY_MINUTES=180 " + runCommand} />
+    </Callout>
+    <Callout type="info" title="If anything goes wrong, run it again">
+        <p>
+            Running the installer a second time is the fix for almost any failure. It looks every
+            resource up before creating it, and checks the server itself on every run, so a run
+            that was interrupted or stopped part-way carries on from where it got to rather than
+            starting over. It remembers your domain, so the command on its own is enough.
+        </p>
     </Callout>
 
     <h2 class="text-2xl font-bold mt-8 mb-4">Step 3: Add the DNS records</h2>
