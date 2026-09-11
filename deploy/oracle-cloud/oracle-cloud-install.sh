@@ -26,7 +26,9 @@
 #   FOLDING_TEAM            Folding@home team number (default 0)
 #   BUDGET_EMAIL            where the spend alert goes (default: the Oracle account's email)
 #   COMPARTMENT_ID          where to create resources (default: tenancy root)
-#   NOCTURNE_VERSION        release tag to install (default: latest); re-run with this set to upgrade
+#   NOCTURNE_VERSION        release bundle to install (default: latest). Selects the compose
+#                           file, not the container images: those are pinned in .env and kept
+#                           current by Watchtower, so this cannot pin you to an older build
 #   OCPUS / MEMORY_GB       A1 size (default 1 / 6; the free tier allows 2 / 12 in total)
 #   BOOT_VOLUME_GB          boot volume size (default 50; the free tier allows 200 in total)
 #   SSH_PUBLIC_KEY_FILE     key to authorise (default: generated at ~/.ssh/nocturne_oci)
@@ -72,8 +74,7 @@ if [[ -z "$ALLOW_PAID" ]]; then
   (( MEMORY_GB <= FREE_MEMORY_GB )) || OVER+=("$MEMORY_GB GB of memory, where Always Free allows $FREE_MEMORY_GB")
   (( BOOT_VOLUME_GB <= FREE_BOOT_VOLUME_GB )) || OVER+=("a $BOOT_VOLUME_GB GB boot volume, where Always Free allows $FREE_BOOT_VOLUME_GB")
   if [[ ${#OVER[@]} -gt 0 ]]; then
-    printf '
-'
+    printf '\n'
     for over in "${OVER[@]}"; do info "you asked for $over"; done
     die "that is outside the Always Free allowance, and is charged rather than refused once this account is on Pay As You Go. Set ALLOW_PAID=1 if you mean to pay for it."
   fi
@@ -762,9 +763,7 @@ QUOTA_STATEMENTS=(
   "set compute-memory quota standard-a1-memory-count to $FREE_MEMORY_GB in tenancy"
   "set compute-memory quota standard-a1-memory-regional-count to $FREE_MEMORY_GB in tenancy"
 )
-QUOTA_JSON=$(printf '%s
-' "${QUOTA_STATEMENTS[@]}" | jq -Rsc 'split("
-") | map(select(length > 0))')
+QUOTA_JSON=$(printf '%s\n' "${QUOTA_STATEMENTS[@]}" | jq -Rsc 'split("\n") | map(select(length > 0))')
 
 quota_error() {
   info "$1 Nothing is enforced, so watch the spend alert instead. Oracle said:"
