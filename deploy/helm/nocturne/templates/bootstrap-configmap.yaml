@@ -36,16 +36,17 @@ data:
 
     echo "Running Nocturne role bootstrap against ${PGHOST}:${PGPORT}/${PGDATABASE} as ${PGUSER}"
 
-    # Pass passwords into the SQL via PostgreSQL session custom-GUCs.
-    # psql's `:'var'` substitution doesn't reach inside dollar-quoted DO
-    # blocks (psql 14+), so we prepend SET statements that the DO block
-    # then reads via current_setting('nocturne.<role>_password').
-    TMPSQL=$(mktemp) && trap 'rm -f "$TMPSQL"' EXIT
-    {
-      printf "SET nocturne.migrator_password TO %s;\n" "$(printf "'%s'" "$MIGRATOR_PASSWORD")"
-      printf "SET nocturne.app_password TO %s;\n"      "$(printf "'%s'" "$APP_PASSWORD")"
-      printf "SET nocturne.web_password TO %s;\n"      "$(printf "'%s'" "$WEB_PASSWORD")"
-      cat /scripts/bootstrap-roles.sql
-    } > "$TMPSQL"
-    exec psql -v ON_ERROR_STOP=1 -f "$TMPSQL"
+    # Pass passwords to psql via -v variables (never shell-interpolated into
+    # the SQL text), matching the compose bundle's bootstrap pattern. psql's
+    # :'var' quoting handles values containing quotes, dollar signs or
+    # backslashes safely; files/bootstrap-roles.sql places them into session
+    # custom-GUCs via set_config(...) OUTSIDE the dollar-quoted DO block
+    # (psql :'var' substitution doesn't reach inside DO blocks). No temp
+    # files: passwords never touch disk, and the `exec` below replaces this
+    # shell so no EXIT trap would fire anyway.
+    exec psql -v ON_ERROR_STOP=1 \
+      -v migrator_password="$MIGRATOR_PASSWORD" \
+      -v app_password="$APP_PASSWORD" \
+      -v web_password="$WEB_PASSWORD" \
+      -f "${SCRIPTS_DIR:-/scripts}/bootstrap-roles.sql"
 {{- end }}
