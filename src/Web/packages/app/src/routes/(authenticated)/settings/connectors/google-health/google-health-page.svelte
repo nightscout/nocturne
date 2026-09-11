@@ -21,6 +21,7 @@
     describeGoogleHealthError,
     type GoogleHealthOperation,
   } from "$lib/connectors/google-health-error";
+  import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import {
     getGoogleHealth,
     saveGoogleHealth,
@@ -43,7 +44,11 @@
     inventoryBusy = $state(false),
     message = $state(""),
     notice = $state("");
-  let statusPolling = false;
+  const realtimeStore = getRealtimeStore();
+  const syncProgressByConnector = $derived(
+    realtimeStore.syncProgressByConnector
+  );
+  let lastTerminalProgress = $state("");
   let operation: GoogleHealthOperation = "status";
   const destinations: Record<string, string> = {
     "step-counts": "Step history",
@@ -272,48 +277,37 @@
       return "Updating Nocturne health records";
     return "Preparing the import";
   }
-  async function pollSync() {
-    if (!status?.isSyncing || statusPolling) return;
-    statusPolling = true;
-    try {
-      const updated = await getGoogleHealth().run();
-      const completed = status.isSyncing && !updated.isSyncing;
-      status = updated;
-      if (completed) {
-        notice = updated.errorCode ? "" : "Google Health import completed.";
-        if (!updated.errorCode) void loadPreview();
-      }
-    } catch (error) {
-      message = describeGoogleHealthError(error, "status", errors);
-    } finally {
-      statusPolling = false;
-    }
-  }
-  onMount(() => {
-    let active = true;
-    const timer = window.setInterval(() => {
-      if (active) void pollSync();
-    }, 2000);
-    queueMicrotask(() => {
-      if (active)
-        void run(async () => {
-          const outcome = new URLSearchParams(location.search).get(
-            "connection"
-          );
-          await refresh();
-          if (outcome === "failed")
-            message = "Google sign-in failed or was cancelled.";
-          if (outcome === "provider_denied")
-            message = "Google did not grant the requested read access.";
-          if (outcome === "no_session")
-            message =
-              "The Nocturne session was missing after the Google redirect. Sign in and reconnect in the same browser.";
-        });
+  $effect(() => {
+    const progress = syncProgressByConnector.googlehealth;
+    if (
+      !status?.isSyncing ||
+      !progress ||
+      (progress.phase !== "Completed" && progress.phase !== "Failed")
+    )
+      return;
+    const marker = `${progress.connectorId}@${progress.timestamp}`;
+    if (marker === lastTerminalProgress) return;
+    lastTerminalProgress = marker;
+    void run(async () => {
+      await refresh(false);
+      notice = status?.errorCode ? "" : "Google Health import completed.";
+      if (!status?.errorCode) void loadPreview();
     });
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-    };
+  });
+  onMount(() => {
+    queueMicrotask(() => {
+      void run(async () => {
+        const outcome = new URLSearchParams(location.search).get("connection");
+        await refresh();
+        if (outcome === "failed")
+          message = "Google sign-in failed or was cancelled.";
+        if (outcome === "provider_denied")
+          message = "Google did not grant the requested read access.";
+        if (outcome === "no_session")
+          message =
+            "The Nocturne session was missing after the Google redirect. Sign in and reconnect in the same browser.";
+      });
+    });
   });
 </script>
 

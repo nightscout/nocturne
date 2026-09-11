@@ -109,6 +109,8 @@ public sealed class GoogleHealthService(
     private const string ConnectorName = "GoogleHealth";
     private const string AccountKeySecret = "accountKey";
     private static readonly TimeSpan AccessTokenSafety = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan PreviewWindow = TimeSpan.FromDays(7);
+    private static readonly TimeSpan PreviewTimeout = TimeSpan.FromSeconds(45);
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private Guid TenantId => tenantAccessor.TenantId;
 
@@ -492,6 +494,9 @@ public sealed class GoogleHealthService(
         await gate.WaitAsync(ct);
         try
         {
+            using var previewCancellation = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            previewCancellation.CancelAfter(PreviewTimeout);
+            var previewCt = previewCancellation.Token;
             var settings = await StoredOptionsAsync(ct);
             var token = await StoredSessionAsync(ct) ??
                 throw new GoogleHealthException("configure_first");
@@ -499,13 +504,13 @@ public sealed class GoogleHealthService(
             if (string.IsNullOrWhiteSpace(token.AccessToken) || token.AccessTokenExpiresAt is null ||
                 token.AccessTokenExpiresAt <= now.Add(AccessTokenSafety))
             {
-                token = await RefreshSessionAsync(settings, token, ct);
-                var account = await AccountKeyAsync(ct) ??
-                    await oauth.AccountKeyAsync(token.AccessToken!, ct);
-                await SaveSessionAsync(settings, token, account, subject, ct);
+                token = await RefreshSessionAsync(settings, token, previewCt);
+                var account = await AccountKeyAsync(previewCt) ??
+                    await oauth.AccountKeyAsync(token.AccessToken!, previewCt);
+                await SaveSessionAsync(settings, token, account, subject, previewCt);
             }
 
-            var from = settings.ImportFrom ?? now.AddDays(-settings.HistoryDays);
+            var from = now - PreviewWindow;
             var items = new List<GoogleHealthPreviewItem>();
             foreach (var capability in GoogleHealthClient.Capabilities)
             {
@@ -532,7 +537,7 @@ public sealed class GoogleHealthService(
                 }
                 try
                 {
-                    var count = await google.CountAsync(token.AccessToken!, type, from, now, ct);
+                    var count = await google.CountAsync(token.AccessToken!, type, from, now, previewCt);
                     items.Add(new GoogleHealthPreviewItem
                     {
                         DataType = type,
