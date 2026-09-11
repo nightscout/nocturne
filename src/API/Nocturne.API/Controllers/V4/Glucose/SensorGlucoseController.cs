@@ -1,3 +1,4 @@
+using Nocturne.API.Services.Alerts;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
@@ -163,8 +164,7 @@ public class SensorGlucoseController(
     /// </remarks>
     protected override async Task<SensorGlucose[]> OnAfterBulkCreateAsync(SensorGlucose[] written, CancellationToken ct)
     {
-        if (written.Any(r => r.Mgdl > 0))
-            await alertEvaluator.EvaluateAsync(ct);
+        await alertEvaluator.EvaluateForReadingsAsync(written, ct);
 
         return written;
     }
@@ -187,8 +187,7 @@ public class SensorGlucoseController(
 
     protected override async Task<SensorGlucose> OnAfterCreateAsync(SensorGlucose created, CancellationToken ct)
     {
-        if (created.Mgdl > 0)
-            await alertEvaluator.EvaluateAsync(ct);
+        await alertEvaluator.EvaluateForReadingsAsync([created], ct);
 
         return created;
     }

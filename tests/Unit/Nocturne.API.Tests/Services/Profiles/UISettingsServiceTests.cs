@@ -1,4 +1,6 @@
+using System.Reflection;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -22,6 +24,7 @@ public class UISettingsServiceTests
     private const string LegacyAggregateKey = "ui:settings:complete";
     private const string NotificationsKey = "ui:settings:notifications";
     private const string AlarmsKey = "ui:settings:notifications:alarms";
+    private const string ServicesKey = "ui:settings:services";
 
     private static readonly Guid TenantId = Guid.Parse("33333333-3333-3333-3333-333333333333");
 
@@ -356,7 +359,105 @@ public class UISettingsServiceTests
         stored.Should().BeEquivalentTo(new UISettingsConfiguration());
     }
 
+    [Fact]
+    public async Task SaveSettingsAsync_doesNotStoreTheConnectorCatalog()
+    {
+        var context = NewContext();
+        var service = NewService(context);
+
+        await service.SaveSettingsAsync(
+            new UISettingsConfiguration
+            {
+                Services = new ServicesSettings
+                {
+                    AvailableServices = [Catalogued("dexcom-connector")],
+                    SyncSettings = new SyncSettings { AutoSync = false },
+                },
+            }
+        );
+
+        StoredRows(context).Select(r => r.Key).Should().Contain(ServicesKey);
+        StoredRows(context)
+            .Where(r => r.Value!.Contains("availableServices", StringComparison.Ordinal))
+            .Should()
+            .BeEmpty();
+        StoredRows(context)
+            .Where(r => r.Value!.Contains("dexcom-connector", StringComparison.Ordinal))
+            .Should()
+            .BeEmpty();
+
+        var stored = await service.GetSettingsAsync();
+        stored.Services.AvailableServices.Should().BeEmpty();
+        stored.Services.SyncSettings.AutoSync.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task SaveSectionAsync_doesNotStoreTheConnectorCatalog()
+    {
+        var context = NewContext();
+        var service = NewService(context);
+
+        await service.SaveSectionAsync(
+            "services",
+            new ServicesSettings { AvailableServices = [Catalogued("dexcom-connector")] }
+        );
+
+        StoredRows(context).Select(r => r.Key).Should().Contain(ServicesKey);
+        StoredRows(context)
+            .Where(r => r.Value!.Contains("availableServices", StringComparison.Ordinal))
+            .Should()
+            .BeEmpty();
+    }
+
+    [Fact]
+    public async Task SaveSettingsAsync_dropsACatalogSnapshotAnEarlierVersionStored()
+    {
+        var context = NewContext();
+        Seed(
+            context,
+            ServicesKey,
+            new ServicesSettings { AvailableServices = [Catalogued("retired-connector")] }
+        );
+        await context.SaveChangesAsync();
+
+        var service = NewService(context);
+        await service.SaveSettingsAsync(await service.GetSettingsAsync());
+
+        StoredRows(context)
+            .Where(r => r.Value!.Contains("retired-connector", StringComparison.Ordinal))
+            .Should()
+            .BeEmpty();
+    }
+
+    [Fact]
+    public void OmittedProperties_nameJsonPropertiesTheirSectionDeclares()
+    {
+        foreach (var section in UISettingsSections.All)
+        {
+            var declared = section
+                .Type.GetProperties()
+                .Select(p => p.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name)
+                .Where(name => name != null)
+                .ToList();
+
+            section
+                .OmittedProperties.Should()
+                .BeSubsetOf(declared!, $"section {section.Name} can only omit what it declares");
+        }
+    }
+
     // ----- helpers -----
+
+    private static AvailableService Catalogued(string id)
+    {
+        return new AvailableService
+        {
+            Id = id,
+            Name = id,
+            Type = "cgm",
+            Icon = id,
+        };
+    }
 
     /// <summary>
     /// The alarm configuration as returned by every public read path, so a copy that goes stale

@@ -1,6 +1,6 @@
-using System.Globalization;
 using System.Text.Json;
 using FluentAssertions;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.MyFitnessPal.Configurations;
 using Nocturne.Connectors.MyFitnessPal.Models;
 using Nocturne.Connectors.MyFitnessPal.Services;
@@ -49,42 +49,26 @@ public class MyFitnessPalSyncRequestTests
         resource.GetProperty("syncCursors").EnumerateObject().Should().BeEmpty();
     }
 
+    /// <summary>
+    /// The rule lives in <c>FullWalkSchedule</c>; this pins the binding: the stamp read is
+    /// <c>LastFullWalkAt</c> and the interval is <c>FullWalkInterval</c>.
+    /// </summary>
     [Fact]
-    public void IsFullWalkDue_WalksWhenNoFullWalkHasEverCompleted()
+    public void IsFullWalkDue_ReadsLastFullWalkAtAgainstTheFullWalkInterval()
     {
-        // Until one completes, the connector has never been able to withdraw anything.
         MyFitnessPalConnectorService.IsFullWalkDue(new MyFitnessPalConnectorConfiguration())
             .Should().BeTrue();
 
-        MyFitnessPalConnectorService.IsFullWalkDue(
-            new MyFitnessPalConnectorConfiguration { LastFullWalkAt = "not a timestamp" })
-            .Should().BeTrue();
-    }
-
-    [Fact]
-    public void IsFullWalkDue_SkipsTheWalkUntilTheIntervalHasElapsed()
-    {
-        var justNow = DateTimeOffset.UtcNow.AddMinutes(-30);
-        var overdue = DateTimeOffset.UtcNow - MyFitnessPalConstants.FullWalkInterval - TimeSpan.FromMinutes(1);
-
+        var oneMinuteShort = DateTimeOffset.UtcNow - MyFitnessPalConstants.FullWalkInterval + TimeSpan.FromMinutes(1);
         MyFitnessPalConnectorService.IsFullWalkDue(new MyFitnessPalConnectorConfiguration
         {
-            LastFullWalkAt = justNow.ToString("O", CultureInfo.InvariantCulture),
+            LastFullWalkAt = FullWalkSchedule.Stamp(oneMinuteShort),
         }).Should().BeFalse();
 
+        var oneMinuteOver = DateTimeOffset.UtcNow - MyFitnessPalConstants.FullWalkInterval - TimeSpan.FromMinutes(1);
         MyFitnessPalConnectorService.IsFullWalkDue(new MyFitnessPalConnectorConfiguration
         {
-            LastFullWalkAt = overdue.ToString("O", CultureInfo.InvariantCulture),
-        }).Should().BeTrue();
-    }
-
-    [Fact]
-    public void IsFullWalkDue_WalksWhenTheStoredTimeIsInTheFuture()
-    {
-        // A clock moved; treating it as recent would suppress reconciliation indefinitely.
-        MyFitnessPalConnectorService.IsFullWalkDue(new MyFitnessPalConnectorConfiguration
-        {
-            LastFullWalkAt = DateTimeOffset.UtcNow.AddDays(3).ToString("O", CultureInfo.InvariantCulture),
+            LastFullWalkAt = FullWalkSchedule.Stamp(oneMinuteOver),
         }).Should().BeTrue();
     }
 

@@ -27,8 +27,11 @@
     <ul class="list-disc list-inside space-y-2 text-muted-foreground mb-8">
         <li>
             An <a href="https://www.oracle.com/cloud/free/" class="text-primary hover:underline">Oracle Cloud account</a>.
-            Sign-up asks for a payment card to verify your identity. The resources this guide
-            creates are within the Always Free allowance, so nothing is charged.
+            Sign-up asks for a payment card to verify your identity. Always Free gives you
+            2 Ampere cores, 12 GB of memory and 200 GB of storage; this guide uses half the
+            processor and memory and a quarter of the storage, so nothing is charged. Oracle
+            reduced that allowance in June 2026, so older guides quoting 4 cores and 24 GB are
+            out of date.
         </li>
         <li>
             A domain name. Nocturne gives every site its own subdomain, so the DNS provider
@@ -95,9 +98,13 @@
         </p>
         <p class="text-sm text-muted-foreground mb-2">
             What changes is that the card can now be charged if something outside the free tier
-            is ever created. To make sure that never goes unnoticed, the installer sets up a
-            spending alert that emails you the moment the account is billed one unit of your
-            currency. Nothing needs adding to the command in Step 2.
+            is ever created. The installer closes that off from both ends: it refuses a server
+            size above the free allowance, and it writes an Oracle quota policy that stops the
+            account creating anything outside the Always Free compute shapes at all, whether or
+            not you have upgraded. That policy is a real limit rather than a warning: Oracle
+            refuses the request instead of billing you for it. On top of that it sets a spending alert that emails you the
+            moment the account is billed one unit of your currency. Nothing needs adding to the
+            command in Step 2.
         </p>
     </details>
     <details class="mb-8">
@@ -145,6 +152,15 @@
         front.
     </p>
     <CodeBlock code={runCommand} class="mb-4" />
+    <Callout type="tip" title="Keep the run alive if Cloud Shell disconnects">
+        <p>
+            Cloud Shell closes idle sessions, which stops the installer part-way. Run
+            <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">tmux new -s nocturne</code>
+            first and the run survives a dropped connection. Detach with Ctrl-B then D, and come
+            back to it with
+            <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">tmux attach -t nocturne</code>.
+        </p>
+    </Callout>
     <p class="text-muted-foreground mb-4">
         Early on it asks for a deSEC token. Paste one and the DNS records are created for you;
         press Enter instead and it prints two records for you to create by hand. Either way it
@@ -154,13 +170,13 @@
     <details class="mb-4">
         <summary class="text-sm font-medium text-muted-foreground cursor-pointer hover:text-foreground">What the script does</summary>
         <ul class="list-disc list-inside space-y-1 text-sm text-muted-foreground mt-2 mb-2">
-            <li>Sets up a spending alert that emails you if the account is ever charged</li>
+            <li>Sets up a spending alert that emails you if the account is ever charged, and a quota policy that stops the account creating anything outside the Always Free compute shapes</li>
             <li>Creates a virtual network with ports 80 and 443 open, in your home region</li>
             <li>Reserves a public IP address so it never changes</li>
             <li>Generates an SSH key in your Cloud Shell home if you do not have one</li>
-            <li>Starts an Ampere A1 server with 1 core and 6 GB of memory, retrying when Oracle has no free capacity</li>
+            <li>Starts an Ampere A1 server with 1 core and 6 GB of memory, half the Always Free allowance, retrying when Oracle has no free capacity</li>
             <li>Installs Folding@home on a nightly schedule if you asked for it above</li>
-            <li>On the server: opens the firewall, installs Docker, downloads the Nocturne release bundle, generates the database passwords and starts everything once DNS resolves</li>
+            <li>On the server: opens the firewall, installs Docker, downloads the Nocturne release bundle, generates the database passwords and starts everything once DNS resolves, checking each of these again on every run</li>
         </ul>
         <CodeBlock code={installScript} class="mt-2" maxHeight="400px" />
     </details>
@@ -176,6 +192,14 @@
         </p>
         <p class="mb-2">To have it keep trying for longer instead of re-running by hand:</p>
         <CodeBlock code={"CAPACITY_RETRY_MINUTES=180 " + runCommand} />
+    </Callout>
+    <Callout type="info" title="If anything goes wrong, run it again">
+        <p>
+            Running the installer a second time is the fix for almost any failure. It looks every
+            resource up before creating it, and checks the server itself on every run, so a run
+            that was interrupted or stopped part-way carries on from where it got to rather than
+            starting over. It remembers your domain, so the command on its own is enough.
+        </p>
     </Callout>
 
     <h2 class="text-2xl font-bold mt-8 mb-4">Step 3: Add the DNS records</h2>

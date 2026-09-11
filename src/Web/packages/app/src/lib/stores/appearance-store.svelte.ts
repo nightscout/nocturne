@@ -296,6 +296,12 @@ export const nightModeSchedule = new SyncedPref<boolean>(
   (p) => p.nightModeSchedule
 );
 
+export const yearOverviewColors = new SyncedPref<NonNullable<UserDisplayPreferences["yearOverviewColors"]>>(
+  "nocturne-year-overview-colors",
+  {},
+  (p) => p.yearOverviewColors
+);
+
 /**
  * Dashboard top widgets configuration
  * Stores the ordered list of widget IDs displayed in the top widget grid
@@ -578,6 +584,7 @@ export const chartAlwaysShowPatterns = new SyncedPref<boolean>(
  */
 export function collectPreferences(): UserDisplayPreferences {
   return {
+    yearOverviewColors: yearOverviewColors.current,
     glucoseUnits: glucoseUnits.current,
     timeFormat: timeFormat.current,
     regionFormat: regionFormat.current,

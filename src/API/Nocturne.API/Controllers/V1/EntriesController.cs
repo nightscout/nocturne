@@ -1,8 +1,10 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.API.Services.Alerts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.API.Helpers;
@@ -12,6 +14,7 @@ using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Extensions;
+using Nocturne.Core.Contracts.Entries;
 
 namespace Nocturne.API.Controllers.V1;
 
@@ -527,10 +530,31 @@ public class EntriesController : ControllerBase
                 );
             }
 
-            // Validate entries have meaningful data
-            var validEntries = entriesToCreate.Where(HasMeaningfulData).ToList();
+            // Fill in derived fields for every submitted entry, not just the ones that will be
+            // written: a refused entry is still echoed, and the echo has to be a well-formed v1
+            // object. Doing this before the refusal check cannot change which entries are refused
+            // — NormalizeEntry only defaults an empty type to "sgv", which HasMeaningfulData
+            // treats the same as empty, and only fills dateString when mills > 0, which already
+            // made the entry meaningful.
+            foreach (var entry in entriesToCreate)
+            {
+                NormalizeEntry(entry);
+            }
 
-            if (validEntries.Count == 0)
+            // Entries carrying no usable data are refused rather than written, but a refused entry
+            // still occupies its position in the response: v1 uploaders require one response object
+            // per submitted entry and treat a shorter array as a failed upload, which wedges the
+            // client on that batch forever (see PartitionStoredEntriesAsync).
+            var acceptedIndices = new List<int>(entriesToCreate.Count);
+            for (var i = 0; i < entriesToCreate.Count; i++)
+            {
+                if (HasMeaningfulData(entriesToCreate[i]))
+                {
+                    acceptedIndices.Add(i);
+                }
+            }
+
+            if (acceptedIndices.Count == 0)
             {
                 return BadRequest(
                     new
@@ -542,11 +566,9 @@ public class EntriesController : ControllerBase
                 );
             }
 
-            // Validate and prepare entries
-            foreach (var entry in validEntries)
-            {
-                NormalizeEntry(entry);
-            }
+            LogRefusedEntries(entriesToCreate.Count, entriesToCreate.Count - acceptedIndices.Count);
+
+            var validEntries = acceptedIndices.ConvertAll(i => entriesToCreate[i]);
 
             // Process entries for sanitization and timestamp conversion
             var processedEntries = _documentProcessingService.ProcessDocuments(validEntries);
@@ -558,40 +580,9 @@ public class EntriesController : ControllerBase
             // submitted entry, and treat a shorter array as a failed upload — the
             // batch is then retried forever and the client never uploads anything
             // newer. Legacy cgm-remote-monitor echoed dedup hits back with their _id.
-            var uniqueEntries = new List<Entry>();
-            var responseEntries = new List<Entry>();
-            foreach (var entry in processedArray)
-            {
-                var duplicate = await _entryService.CheckForDuplicateEntryAsync(
-                    entry.Device,
-                    entry.Type ?? "sgv",
-                    entry.Sgv,
-                    entry.Mills,
-                    windowMinutes: 5,
-                    cancellationToken
-                );
-
-                if (duplicate != null)
-                {
-                    _logger.LogDebug(
-                        "Skipping duplicate entry: device={Device}, type={Type}, sgv={Sgv}, mills={Mills}",
-                        entry.Device,
-                        entry.Type,
-                        entry.Sgv,
-                        entry.Mills
-                    );
-                    responseEntries.Add(duplicate);
-                    continue;
-                }
-
-                uniqueEntries.Add(entry);
-                responseEntries.Add(entry);
-            }
-
-            _logger.LogDebug(
-                "Filtered {Original} entries to {Unique} unique entries",
-                processedArray.Length,
-                uniqueEntries.Count
+            var (uniqueEntries, responseEntries) = await PartitionStoredEntriesAsync(
+                processedArray,
+                cancellationToken
             );
 
             // Create entries in database
@@ -604,9 +595,11 @@ public class EntriesController : ControllerBase
             _logger.LogDebug("Created {Count} entries", createdArray.Length);
 
             // Evaluate alert rules against the latest created entry
-            await EvaluateAlertsAsync(createdArray, cancellationToken);
+            await _alertEvaluator.EvaluateForEntriesAsync(createdArray, cancellationToken);
 
-            return StatusCode(201, responseEntries.ToV1Responses());
+            var echo = BuildSubmittedOrderEcho(entriesToCreate, acceptedIndices, responseEntries);
+
+            return StatusCode(201, echo.ToV1Responses());
         }
         catch (JsonException ex)
         {
@@ -622,6 +615,189 @@ public class EntriesController : ControllerBase
             );
         }
     }
+
+    /// <summary>
+    /// Rebuilds the response in submitted order: the processed entry for every entry that was
+    /// accepted, and the submitted entry unchanged for every one that was refused. The result has
+    /// exactly one element per submitted entry, which is the contract v1 uploaders depend on —
+    /// see <see cref="PartitionStoredEntriesAsync"/>.
+    /// </summary>
+    private static Entry[] BuildSubmittedOrderEcho(
+        List<Entry> submitted,
+        List<int> acceptedIndices,
+        List<Entry> acceptedResponses
+    )
+    {
+        if (acceptedResponses.Count != acceptedIndices.Count)
+        {
+            throw new InvalidOperationException(
+                $"Echo has {acceptedResponses.Count} entries for {acceptedIndices.Count} accepted entries");
+        }
+
+        // Refused entries are already in place; accepted ones are replaced by what the write path
+        // resolved them to (the submitted entry, or the stored row it duplicated).
+        var echo = submitted.ToArray();
+        for (var i = 0; i < acceptedIndices.Count; i++)
+        {
+            echo[acceptedIndices[i]] = acceptedResponses[i];
+        }
+
+        return echo;
+    }
+
+    /// <summary>
+    /// Records one line when a batch carried entries with no usable data. A refusal is invisible in
+    /// the response by design — the entry is echoed so the uploader's batch is not rejected — so
+    /// this is the only signal that a client is sending readings we will never store.
+    /// </summary>
+    private void LogRefusedEntries(int submitted, int refused)
+    {
+        if (refused == 0)
+            return;
+
+        _logger.LogInformation(
+            "Refused {Refused} of {Submitted} submitted entries carrying no glucose value, "
+                + "timestamp or non-sgv type; they are echoed but not stored. Client {UserAgent}",
+            refused,
+            submitted,
+            SanitizeForLog(Request?.Headers.UserAgent.ToString())
+        );
+    }
+
+    /// <summary>
+    /// Splits a processed upload batch into the entries to write and the entries to echo, using
+    /// one duplicate query per entry type for the whole batch instead of one per entry.
+    /// </summary>
+    /// <remarks>
+    /// The echo list carries the stored entry for every duplicate and the submitted entry
+    /// otherwise, so it always has one element per submitted entry — the response shape v1
+    /// uploaders require. Callers that do not echo (the async endpoint) discard it.
+    /// </remarks>
+    private async Task<(List<Entry> Unique, List<Entry> Response)> PartitionStoredEntriesAsync(
+        Entry[] processedArray,
+        CancellationToken cancellationToken
+    )
+    {
+        var probes = Array.ConvertAll(
+            processedArray,
+            entry => new EntryDuplicateProbe(
+                entry.Device,
+                entry.Type ?? "sgv",
+                entry.Sgv,
+                entry.Mills
+            )
+        );
+
+        var duplicates = await _entryService.CheckForDuplicateEntriesAsync(
+            probes,
+            windowMinutes: 5,
+            cancellationToken
+        );
+
+        if (duplicates.Count != processedArray.Length)
+        {
+            throw new InvalidOperationException(
+                $"Duplicate check returned {duplicates.Count} results for {processedArray.Length} entries");
+        }
+
+        var uniqueEntries = new List<Entry>();
+        var responseEntries = new List<Entry>(processedArray.Length);
+
+        for (var i = 0; i < processedArray.Length; i++)
+        {
+            var entry = processedArray[i];
+            var duplicate = duplicates[i];
+
+            if (duplicate != null)
+            {
+                _logger.LogDebug(
+                    "Skipping duplicate entry: device={Device}, type={Type}, sgv={Sgv}, mills={Mills}",
+                    entry.Device,
+                    entry.Type,
+                    entry.Sgv,
+                    entry.Mills
+                );
+                responseEntries.Add(duplicate);
+                continue;
+            }
+
+            uniqueEntries.Add(entry);
+            responseEntries.Add(entry);
+        }
+
+        _logger.LogDebug(
+            "Filtered {Original} entries to {Unique} unique entries",
+            processedArray.Length,
+            uniqueEntries.Count
+        );
+
+        LogReuploadLoop(processedArray.Length, processedArray.Length - uniqueEntries.Count);
+
+        return (uniqueEntries, responseEntries);
+    }
+
+    /// <summary>
+    /// Records one line when a large upload is almost entirely already stored, which is what a
+    /// client re-sending its backlog every cycle looks like from the server. Names the uploader
+    /// (User-Agent) and the counts only — no entry values.
+    /// </summary>
+    private void LogReuploadLoop(int submitted, int duplicates)
+    {
+        if (submitted < ReuploadLoopMinimumBatch)
+            return;
+        if (duplicates < submitted * ReuploadLoopDuplicateRatio)
+            return;
+
+        var userAgent = SanitizeForLog(Request?.Headers.UserAgent.ToString());
+
+        _logger.LogInformation(
+            "Entries upload of {Submitted} entries was already stored ({Duplicates} duplicates); "
+                + "client {UserAgent} is re-sending stored readings",
+            submitted,
+            duplicates,
+            userAgent
+        );
+    }
+
+    /// <summary>Smallest upload that can be reported as a re-upload loop.</summary>
+    private const int ReuploadLoopMinimumBatch = 100;
+
+    /// <summary>Share of an upload that must already be stored to report a re-upload loop.</summary>
+    private const double ReuploadLoopDuplicateRatio = 0.95;
+
+    /// <summary>Cap on the logged User-Agent, which is attacker-controlled free text.</summary>
+    private const int MaxLoggedUserAgentLength = 200;
+
+    /// <summary>
+    /// Renders a caller-supplied header safe to log. Logs reach a line-oriented console exporter
+    /// and are shipped verbatim over OTLP, so a control, format or line-separator character in a
+    /// header value forges log lines or spoofs how they read.
+    /// </summary>
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return "(none)";
+
+        var capped = value.Length > MaxLoggedUserAgentLength
+            ? value[..MaxLoggedUserAgentLength]
+            : value;
+
+        return string.Create(capped.Length, capped, static (span, source) =>
+        {
+            for (var i = 0; i < source.Length; i++)
+                span[i] = IsUnsafeForLog(source[i]) ? ' ' : source[i];
+        });
+    }
+
+    /// <summary>
+    /// Control characters (which include ESC, so ANSI sequences are covered), Unicode format
+    /// characters such as the right-to-left override, and the line and paragraph separators.
+    /// </summary>
+    private static bool IsUnsafeForLog(char value) =>
+        char.IsControl(value)
+        || char.GetUnicodeCategory(value) is UnicodeCategory.Format
+            or UnicodeCategory.LineSeparator
+            or UnicodeCategory.ParagraphSeparator;
 
     /// <summary>
     /// Parses the loosely-typed entries request body (JsonElement, a single Entry, an Entry[]/
@@ -1054,37 +1230,9 @@ public class EntriesController : ControllerBase
             var processedArray = processedEntries.ToArray();
 
             // Filter out duplicates using database-backed detection
-            var uniqueEntries = new List<Entry>();
-            foreach (var entry in processedArray)
-            {
-                var duplicate = await _entryService.CheckForDuplicateEntryAsync(
-                    entry.Device,
-                    entry.Type ?? "sgv",
-                    entry.Sgv,
-                    entry.Mills,
-                    windowMinutes: 5,
-                    cancellationToken
-                );
-
-                if (duplicate != null)
-                {
-                    _logger.LogDebug(
-                        "Skipping duplicate entry: device={Device}, type={Type}, sgv={Sgv}, mills={Mills}",
-                        entry.Device,
-                        entry.Type,
-                        entry.Sgv,
-                        entry.Mills
-                    );
-                    continue;
-                }
-
-                uniqueEntries.Add(entry);
-            }
-
-            _logger.LogDebug(
-                "Filtered {Original} entries to {Unique} unique entries",
-                processedArray.Length,
-                uniqueEntries.Count
+            var (uniqueEntries, _) = await PartitionStoredEntriesAsync(
+                processedArray,
+                cancellationToken
             );
 
             // Create entries in database synchronously
@@ -1157,11 +1305,4 @@ public class EntriesController : ControllerBase
         }
     }
 
-    private async Task EvaluateAlertsAsync(Entry[] entries, CancellationToken ct)
-    {
-        // Alarms evaluate against the canonical stream, not the just-uploaded batch — a losing
-        // CGM's readings must not trigger or suppress an alarm.
-        if (entries.Any(e => e.Sgv is > 0))
-            await _alertEvaluator.EvaluateAsync(ct);
-    }
 }

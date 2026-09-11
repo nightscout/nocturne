@@ -1,5 +1,9 @@
 <script lang="ts">
-  import { formatLocale } from "$lib/utils/formatting";
+  import {
+    formatCarbDisplay,
+    formatInsulinDisplay,
+    formatLocale,
+  } from "$lib/utils/formatting";
   import type { TreatmentDataItem } from "./types";
 
   interface Props {
@@ -24,9 +28,9 @@
               minute: "2-digit",
             })}
             {#if treatment.insulin}
-              • {treatment.insulin}U{/if}
+              • {formatInsulinDisplay(treatment.insulin)}U{/if}
             {#if treatment.carbs}
-              • {treatment.carbs}g carbs{/if}
+              • {formatCarbDisplay(treatment.carbs)}g carbs{/if}
           </div>
         </div>
       {/each}

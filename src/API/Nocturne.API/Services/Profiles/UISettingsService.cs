@@ -17,6 +17,9 @@ namespace Nocturne.API.Services.Profiles;
 /// assembled on read from the section rows rather than stored, and the alarm configuration lives
 /// only under <c>ui:settings:notifications:alarms</c> — the notifications row is written without its
 /// <see cref="NotificationSettings.AlarmConfiguration"/> so no second copy can go stale.
+/// Anything a read serves but no tenant owns gets no row at all, per
+/// <see cref="UISettingsSection.OmittedProperties"/>, so a client that sends it back cannot persist
+/// it.
 /// <c>ui:settings:complete</c>, written by earlier versions, is read-only: it is the fallback for a
 /// section that has no row of its own, which is how tenants whose settings predate this layout keep
 /// reading correctly.
@@ -323,9 +326,9 @@ public class UISettingsService : IUISettingsService
     }
 
     /// <summary>
-    /// Stages the row owning <paramref name="sectionSettings"/>. The notifications section splits in
-    /// two: its alarm configuration goes to the row that owns it, and the section row is written
-    /// without that property.
+    /// Stages the row owning <paramref name="sectionSettings"/>, minus whatever the section's
+    /// <see cref="UISettingsSection.OmittedProperties"/> keeps off it. The notifications section
+    /// splits in two, so its alarm configuration is additionally staged to the row that owns it.
     /// </summary>
     private async Task WriteSectionAsync(
         string sectionName,
@@ -333,8 +336,6 @@ public class UISettingsService : IUISettingsService
         CancellationToken cancellationToken
     )
     {
-        var notes = $"UI settings section: {sectionName}";
-
         if (sectionSettings is NotificationSettings notifications)
         {
             await UpsertAsync(
@@ -343,25 +344,37 @@ public class UISettingsService : IUISettingsService
                 AlarmConfigurationNotes,
                 cancellationToken
             );
-
-            var node = JsonSerializer.SerializeToNode(notifications, JsonOptions)!.AsObject();
-            node.Remove("alarmConfiguration");
-
-            await UpsertAsync(
-                GetSectionKey(sectionName),
-                node.ToJsonString(),
-                notes,
-                cancellationToken
-            );
-            return;
         }
 
         await UpsertAsync(
             GetSectionKey(sectionName),
-            JsonSerializer.Serialize(sectionSettings, JsonOptions),
-            notes,
+            SerializeForRow(sectionName, sectionSettings),
+            $"UI settings section: {sectionName}",
             cancellationToken
         );
+    }
+
+    /// <summary>
+    /// The JSON a section's row stores: the section as serialized, less the properties no row of
+    /// this section carries.
+    /// </summary>
+    private static string SerializeForRow(string sectionName, object sectionSettings)
+    {
+        var omitted = UISettingsSections.Find(sectionName)?.OmittedProperties ?? [];
+
+        if (omitted.Count == 0)
+        {
+            return JsonSerializer.Serialize(sectionSettings, JsonOptions);
+        }
+
+        var node = JsonSerializer.SerializeToNode(sectionSettings, JsonOptions)!.AsObject();
+
+        foreach (var property in omitted)
+        {
+            node.Remove(property);
+        }
+
+        return node.ToJsonString();
     }
 
     private async Task UpsertAsync(

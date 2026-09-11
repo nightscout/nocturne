@@ -10,7 +10,15 @@ public sealed record UISettingsSection(
     Type Type,
     Func<UISettingsConfiguration, object?> Get,
     Action<UISettingsConfiguration, object> Set
-);
+)
+{
+    /// <summary>
+    /// JSON property names the section's own row must not carry, either because another row owns
+    /// the value or because it is not tenant state at all. A client that sends one back cannot
+    /// make it stick.
+    /// </summary>
+    public IReadOnlyList<string> OmittedProperties { get; init; } = [];
+}
 
 /// <summary>
 /// The sections of <see cref="UISettingsConfiguration"/>. Routing, persistence and section lookup all
@@ -51,13 +59,19 @@ public static class UISettingsSections
             typeof(NotificationSettings),
             s => s.Notifications,
             (s, v) => s.Notifications = (NotificationSettings)v
-        ),
+        )
+        {
+            OmittedProperties = ["alarmConfiguration"],
+        },
         new(
             "services",
             typeof(ServicesSettings),
             s => s.Services,
             (s, v) => s.Services = (ServicesSettings)v
-        ),
+        )
+        {
+            OmittedProperties = ["availableServices"],
+        },
         new(
             "dataQuality",
             typeof(DataQualitySettings),

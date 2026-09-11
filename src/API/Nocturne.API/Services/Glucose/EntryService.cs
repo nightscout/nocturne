@@ -115,6 +115,15 @@ public class EntryService : IEntryService
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<Entry?>> CheckForDuplicateEntriesAsync(
+        IReadOnlyList<EntryDuplicateProbe> probes,
+        int windowMinutes = 5,
+        CancellationToken cancellationToken = default)
+    {
+        return await _store.CheckDuplicatesAsync(probes, windowMinutes, cancellationToken);
+    }
+
+    /// <inheritdoc />
     public async Task<Entry?> GetCurrentEntryAsync(CancellationToken cancellationToken = default)
     {
         return await _cache.GetOrComputeCurrentAsync(

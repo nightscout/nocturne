@@ -284,10 +284,10 @@ export const connectorPropertyMeta = {
     category: 'Advanced',
   },
 
-  // MyFitnessPal-specific
+  // MyFitnessPal and Glooko
   LookbackDays: {
     label: 'Lookback Days',
-    description: 'Number of days of historical data to retrieve',
+    description: 'How many days back each sync reaches',
     category: 'Sync',
   },
   LastFullWalkAt: {

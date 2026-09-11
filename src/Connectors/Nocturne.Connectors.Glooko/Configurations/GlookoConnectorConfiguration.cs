@@ -79,6 +79,18 @@ public class GlookoConnectorConfiguration : BaseConnectorConfiguration
     public bool V3IncludeCgmBackfill { get; set; } = false;
 
     /// <summary>
+    ///     How many days back a background sync reaches. Glooko receives pump data in batches, days
+    ///     after the fact, so the window is a fixed lookback rather than a resume point at the newest
+    ///     stored record; anything that arrives later than this is picked up by the daily full walk
+    ///     over <see cref="GlookoConstants.FullWalkMonths"/>. Ten days plus the one-day padding on
+    ///     each side of the request fits one <see cref="GlookoConstants.SyncChunkSize"/> chunk (two
+    ///     requests on the V3 path, seven on V2) with room for the clock and a timezone offset change inside the window. The
+    ///     ceiling keeps a scheduled run to a handful of chunks — the full history is the walk's job.
+    /// </summary>
+    [ConnectorProperty(ConnectorPropertyKey.LookbackDays, DefaultValue = "10", MinValue = 1, MaxValue = 60)]
+    public int LookbackDays { get; set; } = 10;
+
+    /// <summary>
     ///     Sync via Glooko's granular SSV2 cursor protocol — the per-resource <c>/api/v2/{resource}</c>
     ///     endpoints the mobile app uses — instead of the date-windowed web graph/batch flow. When enabled
     ///     this path sources <em>every</em> data type incrementally by persisted per-resource cursor:

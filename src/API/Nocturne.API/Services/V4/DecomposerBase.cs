@@ -141,8 +141,9 @@ public abstract class DecomposerBase
     /// attribution: it is reached from a genuine per-record edit, and since a legacy record
     /// persists only as its decomposed v4 rows, their audit rows are the whole trail of that edit.
     /// Connector re-syncs of the single path are system-attributed by the sync scope's own audit
-    /// context rather than here. <see cref="ProfileDecomposer"/> has no batch path at all, so it
-    /// takes no scope.
+    /// context rather than here. <see cref="ProfileDecomposer"/> takes no scope on either path: a
+    /// profile persists only as its decomposed rows, so their audit rows are the whole trail of a
+    /// user's profile edit, and an unchanged re-upsert writes nothing to audit.
     /// </remarks>
     protected static IDisposable SystemAttributedBatchWrites(IAuditContext auditContext)
         => SystemAuditScope.Push(auditContext);

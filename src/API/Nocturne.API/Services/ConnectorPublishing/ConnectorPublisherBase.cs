@@ -33,7 +33,7 @@ internal abstract class ConnectorPublisherBase
     /// <paramref name="beforeWrite"/> runs inside the system audit scope: a preparation step that
     /// writes (an auto-created insulin, a reconcile of the source's window) is attributed to the sync,
     /// and a user-attributed delete would permanently block re-import. <paramref name="afterWrite"/>
-    /// runs after a successful write, outside the scope.
+    /// runs after a successful write, outside the scope, over the same materialised list.
     /// </summary>
     protected async Task<bool> PublishAsync<TRecord>(
         IEnumerable<TRecord> records,
@@ -42,7 +42,7 @@ internal abstract class ConnectorPublisherBase
         WriteOrigin origin,
         CancellationToken ct,
         Func<List<TRecord>, Task>? beforeWrite = null,
-        Func<Task>? afterWrite = null)
+        Func<List<TRecord>, Task>? afterWrite = null)
     {
         var recordType = typeof(TRecord).Name;
         try
@@ -59,7 +59,7 @@ internal abstract class ConnectorPublisherBase
             }
 
             if (afterWrite is not null)
-                await afterWrite();
+                await afterWrite(recordList);
 
             Logger.LogDebug(
                 "Published {Count} {RecordType} records for {Source}", recordList.Count, recordType, source);

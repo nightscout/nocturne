@@ -2,9 +2,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.V4;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
-using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Tests.Services.V4;
 
@@ -13,59 +13,19 @@ public class ProfileDecomposerTests
     /// <summary>
     /// Profiles persist ONLY as the five decomposed granular records, so on the HTTP path
     /// (v1/v3 profile create/update) their audit rows are the entire mutation trail for a
-    /// user's profile edit. DecomposeAsync must NOT push a SystemAuditScope — connector
+    /// user's profile edit. Decomposition must NOT push a SystemAuditScope — connector
     /// re-syncs are suppressed by the sync scope's system audit context instead, and
-    /// byte-identical re-upserts diff to empty and are skipped — see
-    /// <see cref="DecomposeAsync_KeepsStoredCorrelationId_WhenRecordsAlreadyExist"/> for the one
-    /// column that otherwise stops that being true.
+    /// byte-identical re-upserts diff to empty and are skipped.
     /// </summary>
     [Fact]
     public async Task DecomposeAsync_PreservesCallerAuditAttribution()
     {
         var auditContext = new AuditContext { AuthType = "ApiKey", SubjectName = "someone" };
-
         var attributionDuringUpsert = new List<(bool IsSystem, string? AuthType)>();
-        void Capture() => attributionDuringUpsert.Add((auditContext.IsSystem, auditContext.AuthType));
+        var repos = new Repositories(onUpsert: () =>
+            attributionDuringUpsert.Add((auditContext.IsSystem, auditContext.AuthType)));
 
-        var therapySettingsRepo = new Mock<ITherapySettingsRepository>();
-        therapySettingsRepo
-            .Setup(x => x.CreateAsync(It.IsAny<TherapySettings>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .Callback(Capture)
-            .ReturnsAsync((TherapySettings m, WriteOrigin _, CancellationToken _) => m);
-
-        var basalScheduleRepo = new Mock<IBasalScheduleRepository>();
-        basalScheduleRepo
-            .Setup(x => x.CreateAsync(It.IsAny<BasalSchedule>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .Callback(Capture)
-            .ReturnsAsync((BasalSchedule m, WriteOrigin _, CancellationToken _) => m);
-
-        var carbRatioScheduleRepo = new Mock<ICarbRatioScheduleRepository>();
-        carbRatioScheduleRepo
-            .Setup(x => x.CreateAsync(It.IsAny<CarbRatioSchedule>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .Callback(Capture)
-            .ReturnsAsync((CarbRatioSchedule m, WriteOrigin _, CancellationToken _) => m);
-
-        var sensitivityScheduleRepo = new Mock<ISensitivityScheduleRepository>();
-        sensitivityScheduleRepo
-            .Setup(x => x.CreateAsync(It.IsAny<SensitivitySchedule>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .Callback(Capture)
-            .ReturnsAsync((SensitivitySchedule m, WriteOrigin _, CancellationToken _) => m);
-
-        var targetRangeScheduleRepo = new Mock<ITargetRangeScheduleRepository>();
-        targetRangeScheduleRepo
-            .Setup(x => x.CreateAsync(It.IsAny<TargetRangeSchedule>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .Callback(Capture)
-            .ReturnsAsync((TargetRangeSchedule m, WriteOrigin _, CancellationToken _) => m);
-
-        var decomposer = new ProfileDecomposer(
-            therapySettingsRepo.Object,
-            basalScheduleRepo.Object,
-            carbRatioScheduleRepo.Object,
-            sensitivityScheduleRepo.Object,
-            targetRangeScheduleRepo.Object,
-            NullLogger<ProfileDecomposer>.Instance);
-
-        var result = await decomposer.DecomposeAsync(BuildProfile(), WriteOrigin.Live);
+        var result = await repos.Decomposer.DecomposeAsync(BuildProfile(), WriteOrigin.Live);
 
         result.CreatedRecords.Should().HaveCount(5);
         attributionDuringUpsert.Should().HaveCount(5).And.AllSatisfy(a =>
@@ -76,150 +36,206 @@ public class ProfileDecomposerTests
     }
 
     /// <summary>
-    /// A decomposer mints a fresh correlation id per call, so re-upserting an unchanged profile
-    /// rewrote correlation_id on all five siblings. Such an update carries no material change, so it
-    /// neither audits nor broadcasts — but the column is indexed, so the update cannot be HOT and
-    /// appends an entry to every index on the table, which took production to 1.24% leaf density.
-    /// That the reassignment then leaves the entity clean is pinned by
-    /// <c>CorrelationIdChurnTests</c>; this asserts the id the decomposer hands down.
+    /// Only the therapy settings row may keep its stored correlation id; the four schedules are
+    /// stamped from what it reads back, so preserving on them would let a fork survive.
     /// </summary>
     [Fact]
-    public async Task DecomposeAsync_KeepsStoredCorrelationId_WhenRecordsAlreadyExist()
+    public async Task DecomposeAsync_PreservesTheStoredCorrelationIdOnTheAnchorOnly()
     {
-        var stored = Guid.CreateVersion7();
-        var written = SetUp(stored, stored, out var decomposer);
+        var repos = new Repositories();
 
-        var result = await decomposer.DecomposeAsync(BuildProfile(), WriteOrigin.Live);
+        await repos.Decomposer.DecomposeAsync(BuildProfile(), WriteOrigin.Live);
 
-        result.UpdatedRecords.Should().HaveCount(5);
-        written().Should().HaveCount(5).And.AllSatisfy(record => record.CorrelationId.Should().Be(
-            stored,
-            "an unchanged re-upsert must leave correlation_id alone, or every sync writes a new row version into every index"));
+        repos.PreserveFlags.Should().HaveCount(5);
+        repos.PreserveFlags[typeof(TherapySettings)].Should().BeTrue();
+        repos.PreserveFlags.Where(p => p.Key != typeof(TherapySettings))
+            .Should().AllSatisfy(p => p.Value.Should().BeFalse());
     }
 
     /// <summary>
-    /// The five siblings are written in five separate transactions, so one lost to a cancelled sync is
+    /// The five siblings are written in five separate saves, so one lost to a cancelled sync is
     /// recreated on the next one. It must rejoin the group rather than fork it: ProfileProjectionService
     /// loads the schedules by the therapy settings row's correlation id, and on a miss serves an empty
-    /// schedule rather than failing. Rewriting every id on every sync is what repairs that today, so
-    /// preserving without converging would make a fork permanent.
+    /// schedule rather than failing.
     /// </summary>
     [Fact]
-    public async Task DecomposeAsync_ConvergesDivergedSiblingsOntoTheAnchorsCorrelationId()
+    public async Task DecomposeAsync_StampsTheSchedulesWithTheAnchorsStoredCorrelationId()
     {
         var anchor = Guid.CreateVersion7();
-        var forked = Guid.CreateVersion7();
-        var written = SetUp(anchor, forked, out var decomposer);
+        var repos = new Repositories(anchorCorrelationId: anchor);
 
-        await decomposer.DecomposeAsync(BuildProfile(), WriteOrigin.Live);
+        await repos.Decomposer.DecomposeAsync(BuildProfile(), WriteOrigin.Live);
 
-        written().Should().HaveCount(5).And.AllSatisfy(record => record.CorrelationId.Should().Be(
-            anchor,
-            "a sibling that drifted must be pulled back onto the therapy settings row's id"));
+        repos.Written.Where(r => r is not TherapySettings).Should().HaveCount(4).And.AllSatisfy(
+            r => r.CorrelationId.Should().Be(anchor, "a sibling must land on the therapy settings row's id"));
     }
 
     /// <summary>
     /// A stored id of null must not leave the anchor on a fresh id while the siblings keep theirs.
     /// </summary>
     [Fact]
-    public async Task DecomposeAsync_StampsTheWholeGroup_WhenTheAnchorHasNoStoredCorrelationId()
+    public async Task DecomposeAsync_StampsTheWholeGroupWithTheMintedId_WhenTheAnchorStoresNone()
     {
-        var written = SetUp(null, Guid.CreateVersion7(), out var decomposer);
+        var repos = new Repositories(anchorCorrelationId: null);
 
-        await decomposer.DecomposeAsync(BuildProfile(), WriteOrigin.Live);
+        var result = await repos.Decomposer.DecomposeAsync(BuildProfile(), WriteOrigin.Live);
 
-        var ids = written().Select(r => r.CorrelationId).ToList();
+        var ids = repos.Written.Select(r => r.CorrelationId).ToList();
         ids.Should().HaveCount(5);
-        ids.Should().AllSatisfy(id => id.Should().NotBeNull());
-        ids.Distinct().Should().ContainSingle("the group must not fork when the anchor stored no id");
+        ids.Distinct().Should().ContainSingle().Which.Should().Be(result.CorrelationId!.Value,
+            "the group must not fork when the anchor stored no id");
     }
 
     /// <summary>
-    /// The write API binds a whole <see cref="TherapySettings"/> from the request body and validates
-    /// only the timestamp, so a caller can store an empty correlation id. Freezing that would stamp it
-    /// across all four schedules and merge the group with every other group carrying it, leaving
-    /// same-named stores to resolve against each other. It has to keep self-healing.
+    /// A refused anchor leaves the schedules nothing to converge on; writing them under the minted id
+    /// would fork the group off the settings row they belong to.
     /// </summary>
     [Fact]
-    public async Task DecomposeAsync_DoesNotPreserveAnEmptyStoredCorrelationId()
+    public async Task DecomposeAsync_WritesNoSchedules_ForAStoreWhoseAnchorWasRefused()
     {
-        var written = SetUp(Guid.Empty, Guid.CreateVersion7(), out var decomposer);
+        var repos = new Repositories(refusedLegacyIds: ["profile1:Weekend"]);
 
-        await decomposer.DecomposeAsync(BuildProfile(), WriteOrigin.Live);
+        var result = await repos.Decomposer.DecomposeAsync(BuildProfile(stores: ["Default", "Weekend"]), WriteOrigin.Live);
 
-        var ids = written().Select(r => r.CorrelationId).ToList();
-        ids.Should().HaveCount(5);
-        ids.Should().AllSatisfy(id => id.Should().NotBe(Guid.Empty).And.NotBeNull());
-        ids.Distinct().Should().ContainSingle("the group must converge on the freshly minted id");
+        repos.Written.Select(r => r.LegacyId).Should().OnlyContain(id => id == "profile1:Default");
+        repos.Written.Should().HaveCount(5);
+        result.CreatedRecords.Should().HaveCount(5);
     }
 
     /// <summary>
-    /// Five repositories each already holding a record — the therapy settings anchor under
-    /// <paramref name="anchorCorrelationId"/> and the four schedules under
-    /// <paramref name="scheduleCorrelationId"/> — returning the models handed to <c>UpdateAsync</c>.
+    /// The point of the batch: a connector's whole profile set costs one round per table, not ten
+    /// per named profile, and every store of every profile is in it.
     /// </summary>
-    private static Func<List<IV4Record>> SetUp(
-        Guid? anchorCorrelationId, Guid? scheduleCorrelationId, out ProfileDecomposer decomposer)
+    [Fact]
+    public async Task DecomposeBatchAsync_CallsEachRepositoryOnce_WithEveryStoreEntry()
     {
-        var therapy = ExistingRecord<ITherapySettingsRepository, TherapySettings>(anchorCorrelationId, out var therapyUpdates);
-        var basal = ExistingRecord<IBasalScheduleRepository, BasalSchedule>(scheduleCorrelationId, out var basalUpdates);
-        var carbRatio = ExistingRecord<ICarbRatioScheduleRepository, CarbRatioSchedule>(scheduleCorrelationId, out var carbRatioUpdates);
-        var sensitivity = ExistingRecord<ISensitivityScheduleRepository, SensitivitySchedule>(scheduleCorrelationId, out var sensitivityUpdates);
-        var targetRange = ExistingRecord<ITargetRangeScheduleRepository, TargetRangeSchedule>(scheduleCorrelationId, out var targetRangeUpdates);
+        var repos = new Repositories();
+        var profiles = new[]
+        {
+            BuildProfile(id: "profile1", stores: ["Default", "Weekend"]),
+            BuildProfile(id: "profile2", stores: ["Default"]),
+        };
 
-        decomposer = new ProfileDecomposer(
-            therapy.Object, basal.Object, carbRatio.Object, sensitivity.Object, targetRange.Object,
-            NullLogger<ProfileDecomposer>.Instance);
+        var result = await repos.Decomposer.DecomposeBatchAsync(profiles, WriteOrigin.Live);
 
-        return () => therapyUpdates.Cast<IV4Record>()
-            .Concat(basalUpdates)
-            .Concat(carbRatioUpdates)
-            .Concat(sensitivityUpdates)
-            .Concat(targetRangeUpdates)
-            .ToList();
+        repos.Calls.Should().HaveCount(5);
+        repos.Calls.Should().AllSatisfy(c => c.Should().Be(3));
+        repos.Written.Select(r => r.LegacyId).Distinct()
+            .Should().BeEquivalentTo(["profile1:Default", "profile1:Weekend", "profile2:Default"]);
+        result.CreatedRecords.Should().HaveCount(15);
     }
 
     /// <summary>
-    /// A repository already holding one record under any legacy id, capturing the models handed to
-    /// <c>UpdateAsync</c> so a test can assert what would actually have been written.
+    /// Two profiles created together must not share a correlation id, while the stores of one profile
+    /// do — the ids the single-profile path always minted.
     /// </summary>
-    private static Mock<TRepo> ExistingRecord<TRepo, TRecord>(Guid? storedCorrelationId, out List<TRecord> updates)
-        where TRepo : class, ILegacyKeyedRepository<TRecord>
-        where TRecord : class, IV4Record, new()
+    [Fact]
+    public async Task DecomposeBatchAsync_MintsOneCorrelationIdPerProfile()
     {
-        var captured = new List<TRecord>();
-        updates = captured;
+        var repos = new Repositories(anchorCorrelationId: null);
+        var profiles = new[]
+        {
+            BuildProfile(id: "profile1", stores: ["Default", "Weekend"]),
+            BuildProfile(id: "profile2", stores: ["Default"]),
+        };
 
-        var repo = new Mock<TRepo>();
-        repo
-            .Setup(x => x.GetByLegacyIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => new TRecord { Id = Guid.CreateVersion7(), CorrelationId = storedCorrelationId });
-        repo
-            .Setup(x => x.UpdateAsync(It.IsAny<Guid>(), It.IsAny<TRecord>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .Callback((Guid _, TRecord m, WriteOrigin _, CancellationToken _) => captured.Add(m))
-            .ReturnsAsync((Guid _, TRecord m, WriteOrigin _, CancellationToken _) => m);
-        return repo;
+        var result = await repos.Decomposer.DecomposeBatchAsync(profiles, WriteOrigin.Live);
+
+        var byProfile = repos.Written
+            .GroupBy(r => r.LegacyId!.Split(':')[0])
+            .ToDictionary(g => g.Key, g => g.Select(r => r.CorrelationId).Distinct().ToList());
+        byProfile["profile1"].Should().ContainSingle().Which.Should().Be(result.CorrelationId!.Value);
+        byProfile["profile2"].Should().ContainSingle().Which.Should().NotBe(result.CorrelationId!.Value);
     }
 
-    private static Profile BuildProfile() => new()
+    [Fact]
+    public async Task DecomposeBatchAsync_WithNoStoreEntries_WritesNothing()
     {
-        Id = "profile1",
+        var repos = new Repositories();
+
+        var result = await repos.Decomposer.DecomposeBatchAsync(
+            [BuildProfile(stores: [])], WriteOrigin.Live);
+
+        repos.Calls.Should().BeEmpty();
+        result.CreatedRecords.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// Five mocked repositories whose bulk upsert answers every record as created, under the
+    /// correlation id it was handed — except the therapy settings anchor, which answers with
+    /// <paramref name="anchorCorrelationId"/> as its stored id when one is given, and drops any
+    /// record whose legacy id is in <paramref name="refusedLegacyIds"/>.
+    /// </summary>
+    private sealed class Repositories
+    {
+        public ProfileDecomposer Decomposer { get; }
+        public List<IV4Record> Written { get; } = [];
+        public Dictionary<Type, bool> PreserveFlags { get; } = [];
+        public List<int> Calls { get; } = [];
+
+        public Repositories(
+            Guid? anchorCorrelationId = null,
+            IReadOnlyCollection<string>? refusedLegacyIds = null,
+            Action? onUpsert = null)
+        {
+            var refused = refusedLegacyIds ?? [];
+
+            Decomposer = new ProfileDecomposer(
+                Mock<ITherapySettingsRepository, TherapySettings>(anchorCorrelationId, refused, onUpsert),
+                Mock<IBasalScheduleRepository, BasalSchedule>(null, [], onUpsert),
+                Mock<ICarbRatioScheduleRepository, CarbRatioSchedule>(null, [], onUpsert),
+                Mock<ISensitivityScheduleRepository, SensitivitySchedule>(null, [], onUpsert),
+                Mock<ITargetRangeScheduleRepository, TargetRangeSchedule>(null, [], onUpsert),
+                NullLogger<ProfileDecomposer>.Instance);
+        }
+
+        private TRepo Mock<TRepo, TRecord>(
+            Guid? storedCorrelationId, IReadOnlyCollection<string> refused, Action? onUpsert)
+            where TRepo : class, ILegacyKeyedRepository<TRecord>
+            where TRecord : class, IV4Record
+        {
+            var repo = new Moq.Mock<TRepo>();
+            repo
+                .Setup(x => x.BulkUpsertByLegacyIdAsync(
+                    It.IsAny<IReadOnlyList<TRecord>>(), It.IsAny<WriteOrigin>(), It.IsAny<bool>(),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync((IReadOnlyList<TRecord> records, WriteOrigin _, bool preserve, CancellationToken _) =>
+                {
+                    onUpsert?.Invoke();
+                    Calls.Add(records.Count);
+                    PreserveFlags[typeof(TRecord)] = preserve;
+                    var outcomes = new Dictionary<string, LegacyUpsert<TRecord>>(StringComparer.Ordinal);
+                    foreach (var record in records)
+                    {
+                        if (refused.Contains(record.LegacyId!))
+                            continue;
+                        if (storedCorrelationId is { } stored)
+                            record.CorrelationId = stored;
+                        Written.Add(record);
+                        outcomes[record.LegacyId!] = new LegacyUpsert<TRecord>(record, Created: true);
+                    }
+                    return outcomes;
+                });
+            return repo.Object;
+        }
+    }
+
+    private static Profile BuildProfile(string id = "profile1", IReadOnlyList<string>? stores = null) => new()
+    {
+        Id = id,
         Mills = 1700000000000,
         DefaultProfile = "Default",
         EnteredBy = "test",
-        Store = new Dictionary<string, ProfileData>
+        Store = (stores ?? ["Default"]).ToDictionary(name => name, _ => new ProfileData
         {
-            ["Default"] = new ProfileData
-            {
-                Dia = 3.0,
-                Timezone = "UTC",
-                Basal = [new TimeValue { Time = "00:00", Value = 1.0 }],
-                CarbRatio = [new TimeValue { Time = "00:00", Value = 10.0 }],
-                Sens = [new TimeValue { Time = "00:00", Value = 50.0 }],
-                TargetLow = [new TimeValue { Time = "00:00", Value = 80.0 }],
-                TargetHigh = [new TimeValue { Time = "00:00", Value = 120.0 }],
-            },
-        },
+            Dia = 3.0,
+            Timezone = "UTC",
+            Basal = [new TimeValue { Time = "00:00", Value = 1.0 }],
+            CarbRatio = [new TimeValue { Time = "00:00", Value = 10.0 }],
+            Sens = [new TimeValue { Time = "00:00", Value = 50.0 }],
+            TargetLow = [new TimeValue { Time = "00:00", Value = 80.0 }],
+            TargetHigh = [new TimeValue { Time = "00:00", Value = 120.0 }],
+        }),
     };
 
     [Theory]

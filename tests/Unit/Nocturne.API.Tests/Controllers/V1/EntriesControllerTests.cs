@@ -11,6 +11,7 @@ using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Extensions;
 using Xunit;
+using Nocturne.Core.Contracts.Entries;
 
 namespace Nocturne.API.Tests.Controllers.V1;
 
@@ -76,18 +77,7 @@ public class EntriesControllerTests
             .Callback<IEnumerable<Entry>>(entries => processedInput = entries.ToList())
             .Returns<IEnumerable<Entry>>(entries => entries);
 
-        _mockEntryService
-            .Setup(x =>
-                x.CheckForDuplicateEntryAsync(
-                    It.IsAny<string?>(),
-                    It.IsAny<string>(),
-                    It.IsAny<int?>(),
-                    It.IsAny<long>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                )
-            )
-            .ReturnsAsync((Entry?)null);
+        StubNothingStored();
 
         _mockEntryService
             .Setup(x =>
@@ -139,18 +129,7 @@ public class EntriesControllerTests
             .Callback<IEnumerable<Entry>>(entries => processedInput = entries.ToList())
             .Returns<IEnumerable<Entry>>(entries => entries);
 
-        _mockEntryService
-            .Setup(x =>
-                x.CheckForDuplicateEntryAsync(
-                    It.IsAny<string?>(),
-                    It.IsAny<string>(),
-                    It.IsAny<int?>(),
-                    It.IsAny<long>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                )
-            )
-            .ReturnsAsync((Entry?)null);
+        StubNothingStored();
 
         _mockEntryService
             .Setup(x =>
@@ -197,6 +176,7 @@ public class EntriesControllerTests
         {
             new Entry { Sgv = 120 }, // Valid
             new Entry { Type = "cal" }, // Valid - non-sgv type
+            new Entry(), // Invalid - sgv type with no value and no timestamp
         };
 
         // Track what gets passed to ProcessDocuments
@@ -206,18 +186,7 @@ public class EntriesControllerTests
             .Callback<IEnumerable<Entry>>(entries => processedInput = entries.ToList())
             .Returns<IEnumerable<Entry>>(entries => entries);
 
-        _mockEntryService
-            .Setup(x =>
-                x.CheckForDuplicateEntryAsync(
-                    It.IsAny<string?>(),
-                    It.IsAny<string>(),
-                    It.IsAny<int?>(),
-                    It.IsAny<long>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                )
-            )
-            .ReturnsAsync((Entry?)null);
+        StubNothingStored();
 
         _mockEntryService
             .Setup(x =>
@@ -265,18 +234,7 @@ public class EntriesControllerTests
             .Callback<IEnumerable<Entry>>(entries => processedInput = entries.ToList())
             .Returns<IEnumerable<Entry>>(entries => entries);
 
-        _mockEntryService
-            .Setup(x =>
-                x.CheckForDuplicateEntryAsync(
-                    It.IsAny<string?>(),
-                    It.IsAny<string>(),
-                    It.IsAny<int?>(),
-                    It.IsAny<long>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                )
-            )
-            .ReturnsAsync((Entry?)null);
+        StubNothingStored();
 
         _mockEntryService
             .Setup(x =>
@@ -320,18 +278,7 @@ public class EntriesControllerTests
             .Callback<IEnumerable<Entry>>(entries => processedInput = entries.ToList())
             .Returns<IEnumerable<Entry>>(entries => entries);
 
-        _mockEntryService
-            .Setup(x =>
-                x.CheckForDuplicateEntryAsync(
-                    It.IsAny<string?>(),
-                    It.IsAny<string>(),
-                    It.IsAny<int?>(),
-                    It.IsAny<long>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                )
-            )
-            .ReturnsAsync((Entry?)null);
+        StubNothingStored();
 
         _mockEntryService
             .Setup(x =>
@@ -380,18 +327,7 @@ public class EntriesControllerTests
             .Callback<IEnumerable<Entry>>(entries => processedInput = entries.ToList())
             .Returns<IEnumerable<Entry>>(entries => entries);
 
-        _mockEntryService
-            .Setup(x =>
-                x.CheckForDuplicateEntryAsync(
-                    It.IsAny<string?>(),
-                    It.IsAny<string>(),
-                    It.IsAny<int?>(),
-                    It.IsAny<long>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                )
-            )
-            .ReturnsAsync((Entry?)null);
+        StubNothingStored();
 
         _mockEntryService
             .Setup(x =>
@@ -425,30 +361,7 @@ public class EntriesControllerTests
             .Setup(x => x.ProcessDocuments(It.IsAny<IEnumerable<Entry>>()))
             .Returns<IEnumerable<Entry>>(entries => entries);
 
-        _mockEntryService
-            .Setup(x =>
-                x.CheckForDuplicateEntryAsync(
-                    It.IsAny<string?>(),
-                    It.IsAny<string>(),
-                    It.IsAny<double?>(),
-                    1000L,
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                )
-            )
-            .ReturnsAsync(stored1);
-        _mockEntryService
-            .Setup(x =>
-                x.CheckForDuplicateEntryAsync(
-                    It.IsAny<string?>(),
-                    It.IsAny<string>(),
-                    It.IsAny<double?>(),
-                    2000L,
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                )
-            )
-            .ReturnsAsync(stored2);
+        StubStoredAt((1000L, stored1), (2000L, stored2));
 
         List<Entry>? createInput = null;
         _mockEntryService
@@ -538,30 +451,7 @@ public class EntriesControllerTests
             .Setup(x => x.ProcessDocuments(It.IsAny<IEnumerable<Entry>>()))
             .Returns<IEnumerable<Entry>>(entries => entries);
 
-        _mockEntryService
-            .Setup(x =>
-                x.CheckForDuplicateEntryAsync(
-                    It.IsAny<string?>(),
-                    It.IsAny<string>(),
-                    It.IsAny<double?>(),
-                    It.IsAny<long>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                )
-            )
-            .ReturnsAsync((Entry?)null);
-        _mockEntryService
-            .Setup(x =>
-                x.CheckForDuplicateEntryAsync(
-                    It.IsAny<string?>(),
-                    It.IsAny<string>(),
-                    It.IsAny<double?>(),
-                    2000L,
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                )
-            )
-            .ReturnsAsync(storedDuplicate);
+        StubStoredAt((2000L, storedDuplicate));
 
         List<Entry>? createInput = null;
         _mockEntryService
@@ -597,4 +487,316 @@ public class EntriesControllerTests
         createInput.Should().NotBeNull();
         createInput!.Select(e => e.Mills).Should().Equal(1000, 3000);
     }
+
+    [Fact]
+    public async Task CreateEntries_RefusedEntry_StillEchoesOneResponsePerSubmittedEntry()
+    {
+        // A batch carrying one unusable reading — a CGM sentinel with no value and no timestamp —
+        // must still be echoed in full. A short array reads as a failed upload to NightscoutKit,
+        // which re-queues the batch and never uploads anything newer, so the tenant's CGM data
+        // stops arriving entirely.
+        var submitted = new[]
+        {
+            new Entry { Sgv = 120, Mills = 1000, Device = "Dexcom G7" },
+            new Entry(), // no value, no timestamp, type defaults to sgv
+            new Entry { Sgv = 140, Mills = 3000, Device = "Dexcom G7" },
+        };
+
+        _mockDocumentProcessingService
+            .Setup(x => x.ProcessDocuments(It.IsAny<IEnumerable<Entry>>()))
+            .Returns<IEnumerable<Entry>>(entries => entries);
+
+        StubNothingStored();
+
+        List<Entry>? createInput = null;
+        _mockEntryService
+            .Setup(x =>
+                x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
+            )
+            .Callback<IEnumerable<Entry>, WriteOrigin, CancellationToken>((entries, _, _) => createInput = entries.ToList())
+            .ReturnsAsync((IEnumerable<Entry> entries, WriteOrigin _, CancellationToken _) => entries.ToList());
+
+        // Act
+        var result = await _controller.CreateEntries(submitted);
+
+        // Assert
+        var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(201);
+
+        var body = objectResult
+            .Value.Should()
+            .BeAssignableTo<IEnumerable<object>>()
+            .Subject.Cast<EntryV1Response>()
+            .ToList();
+
+        // One object per submitted entry, each in its submitted position.
+        body.Should().HaveCount(3);
+        body[0].Mills.Should().Be(1000);
+        body[2].Mills.Should().Be(3000);
+
+        // The refused entry is echoed as a well-formed v1 object — it carries an _id even though
+        // nothing was stored, so the uploader can decode the array.
+        body[1].Mills.Should().Be(0);
+        body[1].Id.Should().NotBeNullOrEmpty();
+
+        // ...but it is not written.
+        createInput.Should().NotBeNull();
+        createInput!.Select(e => e.Mills).Should().Equal(1000, 3000);
+    }
+
+    [Fact]
+    public async Task CreateEntries_RefusedAndDuplicate_KeepsEverySubmittedPosition()
+    {
+        // The two reasons an entry is not written — refused, and already stored — in one batch.
+        // Both still occupy their slot in the response.
+        var submitted = new[]
+        {
+            new Entry(), // refused
+            new Entry { Sgv = 130, Mills = 2000, Device = "Dexcom G7" }, // already stored
+            new Entry { Sgv = 140, Mills = 3000, Device = "Dexcom G7" }, // written
+        };
+        var storedDuplicate = new Entry { Id = "stored-dup", Sgv = 130, Mills = 2000, Device = "Dexcom G7", Type = "sgv" };
+
+        _mockDocumentProcessingService
+            .Setup(x => x.ProcessDocuments(It.IsAny<IEnumerable<Entry>>()))
+            .Returns<IEnumerable<Entry>>(entries => entries);
+
+        StubStoredAt((2000L, storedDuplicate));
+
+        List<Entry>? createInput = null;
+        _mockEntryService
+            .Setup(x =>
+                x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
+            )
+            .Callback<IEnumerable<Entry>, WriteOrigin, CancellationToken>((entries, _, _) => createInput = entries.ToList())
+            .ReturnsAsync((IEnumerable<Entry> entries, WriteOrigin _, CancellationToken _) => entries.ToList());
+
+        // Act
+        var result = await _controller.CreateEntries(submitted);
+
+        // Assert
+        var body = result
+            .Result.Should()
+            .BeOfType<ObjectResult>()
+            .Subject.Value.Should()
+            .BeAssignableTo<IEnumerable<object>>()
+            .Subject.Cast<EntryV1Response>()
+            .ToList();
+
+        body.Should().HaveCount(3);
+        body[0].Mills.Should().Be(0); // refused, echoed
+        body[1].Id.Should().Be("stored-dup"); // duplicate, echoed as the stored row
+        body[2].Mills.Should().Be(3000); // written
+
+        createInput.Should().NotBeNull();
+        createInput!.Select(e => e.Mills).Should().Equal(3000);
+    }
+
+    [Fact]
+    public async Task CreateEntries_EveryEntryRefused_StillReturnsBadRequest()
+    {
+        // Echoing refusals does not turn a wholly unusable batch into a success.
+        var result = await _controller.CreateEntries(new[] { new Entry(), new Entry() });
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+        _mockEntryService.Verify(
+            x => x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Never
+        );
+    }
+
+    [Fact]
+    public async Task CreateEntries_RefusedEntry_ReportsTheRefusalAndTheClient()
+    {
+        // A refusal is invisible in the response by design, so the log line is the only way to
+        // find a client sending readings that will never be stored.
+        _mockDocumentProcessingService
+            .Setup(x => x.ProcessDocuments(It.IsAny<IEnumerable<Entry>>()))
+            .Returns<IEnumerable<Entry>>(entries => entries);
+        StubNothingStored();
+        _controller.ControllerContext.HttpContext.Request.Headers.UserAgent = "Loop/57 CFNetwork Darwin";
+
+        await _controller.CreateEntries(new[] { new Entry { Sgv = 120, Mills = 1000 }, new Entry() });
+
+        VerifyInformationLogged("Refused 1 of 2 submitted entries", Times.Once());
+        VerifyInformationLogged("Loop/57 CFNetwork Darwin", Times.Once());
+    }
+
+    [Fact]
+    public async Task CreateEntries_NoEntryRefused_DoesNotReportARefusal()
+    {
+        _mockDocumentProcessingService
+            .Setup(x => x.ProcessDocuments(It.IsAny<IEnumerable<Entry>>()))
+            .Returns<IEnumerable<Entry>>(entries => entries);
+        StubNothingStored();
+
+        await _controller.CreateEntries(new[] { new Entry { Sgv = 120, Mills = 1000 } });
+
+        VerifyInformationLogged("Refused", Times.Never());
+    }
+
+    [Fact]
+    public async Task CreateEntries_EmptyTypeWithNoData_IsStillRefused()
+    {
+        // Derived fields are now filled in before the refusal check, and NormalizeEntry defaults an
+        // empty type to "sgv". That must not rescue an entry: HasMeaningfulData accepts a type only
+        // when it is neither empty nor "sgv", so both forms have to land the same way.
+        var result = await _controller.CreateEntries(new[] { new Entry { Type = "" } });
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    /// <summary>
+    /// The duplicate check finds nothing stored, so every submitted entry is written. Aligned with
+    /// the batch probe the controller uses: one result per submitted entry, in the same order.
+    /// </summary>
+    [Fact]
+    public async Task CreateEntries_LargeAllStoredBatch_ReportsTheUploaderOnce()
+    {
+        // The re-upload loop this exists to surface: a client re-sending a stored backlog every
+        // cycle. Without a log line the next tenant in this state is only findable in
+        // pg_stat_statements.
+        var submitted = StoredBacklog(120);
+        _controller.ControllerContext.HttpContext.Request.Headers.UserAgent = "Loop/57 CFNetwork Darwin";
+
+        await _controller.CreateEntries(submitted);
+
+        VerifyInformationLogged("re-sending stored readings", Times.Once());
+        VerifyInformationLogged("Loop/57 CFNetwork Darwin", Times.Once());
+    }
+
+    [Fact]
+    public async Task CreateEntries_ReuploadLine_StripsControlCharactersFromTheUserAgent()
+    {
+        // The only log sink is a line-oriented console exporter, so a control character in a
+        // caller-supplied header forges log lines.
+        var submitted = StoredBacklog(120);
+        _controller.ControllerContext.HttpContext.Request.Headers.UserAgent =
+            "Loop/57\r\nLogRecord.Body: forged";
+
+        await _controller.CreateEntries(submitted);
+
+        VerifyInformationLogged("Loop/57", Times.Once());
+        VerifyInformationLogged("\n", Times.Never());
+        VerifyInformationLogged("\r", Times.Never());
+    }
+
+    [Fact]
+    public async Task CreateEntries_ReuploadLine_CapsAndFoldsAwkwardUserAgents()
+    {
+        // Length is capped so one uploader cannot write unbounded log lines, and format and
+        // separator characters are folded as well as controls: a right-to-left override or a
+        // U+2028 spoofs how a line reads without being a control character.
+        var submitted = StoredBacklog(120);
+        _controller.ControllerContext.HttpContext.Request.Headers.UserAgent =
+            "Loop/57\u202e\u2028" + new string('x', 400);
+
+        await _controller.CreateEntries(submitted);
+
+        _mockLogger.Verify(
+            l => l.Log(
+                LogLevel.Information,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, _) =>
+                    v.ToString()!.Contains("Loop/57")
+                    && !v.ToString()!.Contains('\u202e')
+                    && !v.ToString()!.Contains('\u2028')
+                    && !v.ToString()!.Contains(new string('x', 250))),
+                It.IsAny<Exception?>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once());
+    }
+
+    [Fact]
+    public async Task CreateEntries_SmallAllStoredBatch_IsNotReported()
+    {
+        // A handful of duplicates is the normal overlap between an uploader's cycles.
+        var submitted = StoredBacklog(20);
+
+        await _controller.CreateEntries(submitted);
+
+        VerifyInformationLogged("re-sending stored readings", Times.Never());
+    }
+
+    [Fact]
+    public async Task CreateEntries_LargeBatchMostlyNew_IsNotReported()
+    {
+        var submitted = Enumerable.Range(0, 120)
+            .Select(i => new Entry { Sgv = 100 + i, Mills = 1000 + i, Device = "Dexcom G7", Type = "sgv" })
+            .ToArray();
+        _mockDocumentProcessingService
+            .Setup(x => x.ProcessDocuments(It.IsAny<IEnumerable<Entry>>()))
+            .Returns<IEnumerable<Entry>>(entries => entries);
+        // Half stored: below the share that marks a re-upload loop.
+        StubStoredAt(submitted.Take(60)
+            .Select(e => (e.Mills, new Entry { Id = $"stored-{e.Mills}", Mills = e.Mills, Type = "sgv" }))
+            .ToArray());
+        _mockEntryService
+            .Setup(x => x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<Entry> entries, WriteOrigin _, CancellationToken _) => entries.ToList());
+
+        await _controller.CreateEntries(submitted);
+
+        VerifyInformationLogged("re-sending stored readings", Times.Never());
+    }
+
+    /// <summary>
+    /// A batch of <paramref name="count"/> entries the server already holds, wired through the
+    /// processing and duplicate stubs.
+    /// </summary>
+    private Entry[] StoredBacklog(int count)
+    {
+        var submitted = Enumerable.Range(0, count)
+            .Select(i => new Entry { Sgv = 100 + i, Mills = 1000 + i, Device = "Dexcom G7", Type = "sgv" })
+            .ToArray();
+
+        _mockDocumentProcessingService
+            .Setup(x => x.ProcessDocuments(It.IsAny<IEnumerable<Entry>>()))
+            .Returns<IEnumerable<Entry>>(entries => entries);
+        StubStoredAt(submitted
+            .Select(e => (e.Mills, new Entry { Id = $"stored-{e.Mills}", Mills = e.Mills, Type = "sgv" }))
+            .ToArray());
+        _mockEntryService
+            .Setup(x => x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<Entry>());
+
+        return submitted;
+    }
+
+    private void VerifyInformationLogged(string fragment, Times times) =>
+        _mockLogger.Verify(
+            l => l.Log(
+                LogLevel.Information,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, _) => v.ToString()!.Contains(fragment)),
+                It.IsAny<Exception?>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            times);
+
+    private void StubNothingStored() => StubStoredAt();
+
+    /// <summary>
+    /// The duplicate check reports the given entries as already stored, keyed by the submitted
+    /// entry's <see cref="Entry.Mills"/>, and finds nothing for every other entry. Results are
+    /// aligned with the submitted batch, as the batch probe the controller uses returns them.
+    /// </summary>
+    private void StubStoredAt(params (long Mills, Entry Stored)[] stored)
+    {
+        var byMills = stored.ToDictionary(x => x.Mills, x => x.Stored);
+        _mockEntryService
+            .Setup(x =>
+                x.CheckForDuplicateEntriesAsync(
+                    It.IsAny<IReadOnlyList<EntryDuplicateProbe>>(),
+                    It.IsAny<int>(),
+                    It.IsAny<CancellationToken>()
+                )
+            )
+            .ReturnsAsync(
+                (IReadOnlyList<EntryDuplicateProbe> probes, int _, CancellationToken _) =>
+                    probes
+                        .Select(probe => byMills.GetValueOrDefault(probe.Mills))
+                        .ToArray()
+            );
+    }
+
 }

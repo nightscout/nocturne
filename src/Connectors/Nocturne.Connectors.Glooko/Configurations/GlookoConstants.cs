@@ -274,6 +274,38 @@ public static class GlookoConstants
     /// </summary>
     public static readonly TimeSpan SyncChunkSize = TimeSpan.FromDays(14);
 
+    /// <summary>
+    ///     How far back a full walk reads. Glooko posts pump data in batches, often days after the
+    ///     fact, so a background sync cannot resume from the newest stored record; it re-reads a
+    ///     short lookback every run and this whole span once per <see cref="FullWalkInterval"/>.
+    /// </summary>
+    public const int FullWalkMonths = 6;
+
+    /// <summary>
+    ///     How often a background sync sets its lookback aside and walks <see cref="FullWalkMonths"/>
+    ///     of history. Late arrivals older than the lookback land within this long of reaching Glooko.
+    /// </summary>
+    public static readonly TimeSpan FullWalkInterval = TimeSpan.FromDays(1);
+
+    /// <summary>
+    ///     How long after a failed full walk the next one is tried. Shorter than
+    ///     <see cref="FullWalkInterval"/> so a new connection whose first walk failed is not left on
+    ///     the lookback for a day; longer than a poll interval so a persistently failing window is
+    ///     not walked every cycle.
+    /// </summary>
+    public static readonly TimeSpan FullWalkRetryInterval = TimeSpan.FromHours(1);
+
+    /// <summary>
+    ///     The sync-cursor resource under which the last completed full walk is recorded.
+    /// </summary>
+    public const string FullWalkCursorResource = "full-walk";
+
+    /// <summary>
+    ///     The sync-cursor resource under which the last attempted full walk is recorded, written
+    ///     before the walk runs so a walk that never finishes still counts against the retry interval.
+    /// </summary>
+    public const string FullWalkAttemptCursorResource = "full-walk-attempt";
+
     // -- Device information (sent during sign-in) -----------------------------
 
     /// <summary>

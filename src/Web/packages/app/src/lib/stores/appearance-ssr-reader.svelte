@@ -9,7 +9,7 @@
     formatWeekdayDate,
     minutesAgo,
   } from "$lib/utils/formatting";
-  import { preferredLanguage, timeFormat } from "./appearance-store.svelte";
+  import { preferredLanguage, timeFormat, yearOverviewColors } from "./appearance-store.svelte";
 
   const derivedValue = $derived(bg(100));
 
@@ -25,3 +25,5 @@
 <span id="format-locale">{formatLocale()}</span>
 <span id="weekday-date">{formatWeekdayDate(SAMPLE_DATE)}</span>
 <span id="minutes-ago">{minutesAgo(SAMPLE_DATE.getTime() - 300000, SAMPLE_DATE.getTime())}</span>
+
+<span id="year-colors">{JSON.stringify(yearOverviewColors.current)}</span>

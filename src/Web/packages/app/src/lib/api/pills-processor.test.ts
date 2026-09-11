@@ -349,4 +349,38 @@ describe("processPillsData – legacy DeviceStatus fallback when no snapshots", 
 		expect(result.iob).not.toBeNull();
 		expect(result.iob!.iob).toBe(1.5);
 	});
+
+	// A device status is uploaded JSON, so an uploader writes an explicit null for
+	// a field it has no value for. The pill data types declare these `number |
+	// undefined`, and the components guard on absence before calling `.toFixed`,
+	// so a null that survives the lift crashes the dashboard's render.
+	it("drops a null OpenAPS basaliob rather than carrying it into pill data", () => {
+		const legacyStatus = [{
+			mills: NOW - 3 * MIN,
+			openaps: {
+				iob: { iob: 1.5, basaliob: null, activity: null }
+			}
+		}] as any[];
+		const result = processPillsData(legacyStatus, EMPTY, EMPTY, EMPTY, EMPTY, null, { now: NOW });
+		expect(result.iob).not.toBeNull();
+		expect(result.iob!.basalIob).toBeUndefined();
+		expect(result.iob!.activity).toBeUndefined();
+	});
+
+	it("drops a null legacy Loop iob and cob rather than carrying them into pill data", () => {
+		const legacyStatus = [{
+			mills: NOW - 3 * MIN,
+			loop: {
+				timestamp: new Date(NOW - 3 * MIN).toISOString(),
+				iob: { iob: null },
+				cob: { cob: null },
+				enacted: { timestamp: new Date(NOW - 3 * MIN).toISOString(), rate: null, duration: null }
+			}
+		}] as any[];
+		const result = processPillsData(legacyStatus, EMPTY, EMPTY, EMPTY, EMPTY, null, { now: NOW });
+		expect(result.loop).not.toBeNull();
+		expect(result.loop!.iob).toBeUndefined();
+		expect(result.loop!.cob).toBeUndefined();
+		expect(result.loop!.lastEnacted!.rate).toBeUndefined();
+	});
 });

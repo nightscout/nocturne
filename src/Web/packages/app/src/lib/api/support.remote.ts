@@ -4,6 +4,7 @@ import { error, redirect } from "@sveltejs/kit";
 export {
   getFallbackUrl,
   getSupportConfig,
+  getSupportDiagnostics,
 } from "$api/generated/supports.generated.remote";
 
 /**

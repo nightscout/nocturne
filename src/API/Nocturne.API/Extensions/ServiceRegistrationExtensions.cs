@@ -248,6 +248,7 @@ public static class ServiceRegistrationExtensions
         // GitHub issue creation
         services.Configure<GitHubIssueOptions>(configuration.GetSection("GitHub"));
         services.AddSingleton<GitHubIssueService>();
+        services.AddScoped<ISupportDiagnosticsService, SupportDiagnosticsService>();
 
         return services;
     }
@@ -602,6 +603,7 @@ public static class ServiceRegistrationExtensions
         // Canonical glucose stream (single-stream view for v1/v3, alarms, unfiltered analytics)
         services.AddScoped<ICanonicalGlucoseService, CanonicalGlucoseService>();
         services.AddScoped<ICanonicalAlertEvaluator, CanonicalAlertEvaluator>();
+        services.AddSingleton<AlertEvaluationWatermark>();
 
         // Coach marks
         services.AddScoped<ICoachMarkService, CoachMarkService>();
@@ -920,6 +922,10 @@ public static class ServiceRegistrationExtensions
             pollingService: typeof(ConnectorBackgroundService<,>)
         );
         services.AddSingleton(ConnectorSyncBudget.FromConfiguration(configuration, services));
+        // After AddConnectors: the installers register the token caches as IConnectorCacheInvalidator
+        // with TryAddSingleton, which a prior registration of the interface would silently suppress.
+        services.AddSingleton<ConnectorPollerNudge>();
+        services.AddSingleton<IConnectorCacheInvalidator>(sp => sp.GetRequiredService<ConnectorPollerNudge>());
 
         // Demo service health monitor
         services.AddHttpClient("DemoServiceHealth");

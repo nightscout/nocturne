@@ -102,3 +102,19 @@
     background-image: repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.55) 0 1px, transparent 1px 5px) !important;
   }
 }
+
+@media print {
+  .year-overview {
+    --background: #fff;
+    --foreground: #111;
+    --card: #fff;
+    --card-foreground: #111;
+    --muted: #f3f4f6;
+    --muted-foreground: #4b5563;
+    --border: #d1d5db;
+    --glucose-heatmap-1: #000;
+    --glucose-heatmap-2: var(--glucose-heatmap-1);
+    background: #fff;
+    color: #111;
+  }
+}

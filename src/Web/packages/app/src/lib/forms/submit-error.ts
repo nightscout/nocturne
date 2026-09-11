@@ -1,3 +1,5 @@
+import { recordApiFailure } from "$lib/support/api-failure-log";
+
 /** Fallback shown when a submission fails for a reason we can't safely surface. */
 export const GENERIC_SUBMIT_ERROR =
   "We couldn't save your changes. Please try again.";
@@ -199,6 +201,22 @@ export function describeRemoteError(
   policy: RemoteErrorPolicy
 ): string {
   const status = errorStatus(err);
+  const described = describe(err, fallback, policy, status);
+
+  // Every rejected API call the user is told about passes through here, and the
+  // transport carries no path or correlation id, so this is the only place the
+  // support form can learn what went wrong before the report was written.
+  recordApiFailure(status, described);
+
+  return described;
+}
+
+function describe(
+  err: unknown,
+  fallback: string,
+  policy: RemoteErrorPolicy,
+  status: number | undefined
+): string {
   if (status === 429) return RATE_LIMITED_ERROR;
   if (status === 404) return policy.missing ?? fallback;
   if (status === 403) {
