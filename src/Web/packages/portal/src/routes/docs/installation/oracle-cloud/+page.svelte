@@ -95,9 +95,12 @@
         </p>
         <p class="text-sm text-muted-foreground mb-2">
             What changes is that the card can now be charged if something outside the free tier
-            is ever created. To make sure that never goes unnoticed, the installer sets up a
-            spending alert that emails you the moment the account is billed one unit of your
-            currency. Nothing needs adding to the command in Step 2.
+            is ever created. The installer closes that off from both ends: it refuses a server
+            size above the free allowance, and it writes an Oracle quota policy that stops the
+            account creating anything outside the Always Free compute shapes at all, whether or
+            not you have upgraded. On top of that it sets a spending alert that emails you the
+            moment the account is billed one unit of your currency. Nothing needs adding to the
+            command in Step 2.
         </p>
     </details>
     <details class="mb-8">
@@ -163,7 +166,7 @@
     <details class="mb-4">
         <summary class="text-sm font-medium text-muted-foreground cursor-pointer hover:text-foreground">What the script does</summary>
         <ul class="list-disc list-inside space-y-1 text-sm text-muted-foreground mt-2 mb-2">
-            <li>Sets up a spending alert that emails you if the account is ever charged</li>
+            <li>Sets up a spending alert that emails you if the account is ever charged, and a quota policy that stops the account creating anything outside the Always Free compute shapes</li>
             <li>Creates a virtual network with ports 80 and 443 open, in your home region</li>
             <li>Reserves a public IP address so it never changes</li>
             <li>Generates an SSH key in your Cloud Shell home if you do not have one</li>

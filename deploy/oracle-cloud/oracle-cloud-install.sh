@@ -27,11 +27,13 @@
 #   BUDGET_EMAIL            where the spend alert goes (default: the Oracle account's email)
 #   COMPARTMENT_ID          where to create resources (default: tenancy root)
 #   NOCTURNE_VERSION        release tag to install (default: latest); re-run with this set to upgrade
-#   OCPUS / MEMORY_GB       A1 size (default 1 / 6; the free tier allows 4 / 24 in total)
+#   OCPUS / MEMORY_GB       A1 size (default 1 / 6; the free tier allows 2 / 12 in total)
 #   BOOT_VOLUME_GB          boot volume size (default 50; the free tier allows 200 in total)
 #   SSH_PUBLIC_KEY_FILE     key to authorise (default: generated at ~/.ssh/nocturne_oci)
 #   CAPACITY_RETRY_MINUTES  how long to keep retrying "out of host capacity" (default 30)
 #   DNS_WAIT_MINUTES        how long the instance waits for your DNS records (default 10)
+#   ALLOW_PAID=1            permit a size above the Always Free allowance, and skip the quota
+#                           policy that otherwise stops this tenancy creating anything billable
 
 set -euo pipefail
 
@@ -47,10 +49,35 @@ BOOT_VOLUME_GB="${BOOT_VOLUME_GB:-50}"
 SSH_PUBLIC_KEY_FILE="${SSH_PUBLIC_KEY_FILE:-$HOME/.ssh/nocturne_oci.pub}"
 CAPACITY_RETRY_MINUTES="${CAPACITY_RETRY_MINUTES:-30}"
 DNS_WAIT_MINUTES="${DNS_WAIT_MINUTES:-10}"
+ALLOW_PAID="${ALLOW_PAID:-}"
+
+# Oracle halved the Always Free Ampere allowance on 2026-06-15, without announcing
+# it, and terminated over-limit instances from 2026-08-18. One source for both the
+# size check below and the quota policy near the end.
+FREE_OCPUS=2
+FREE_MEMORY_GB=12
+FREE_BOOT_VOLUME_GB=200
+FREE_E2_MICRO_COUNT=2
 
 log()  { printf '\n\033[1;34m==>\033[0m %s\n' "$*"; }
 info() { printf '    %s\n' "$*"; }
 die()  { printf '\n\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
+
+# Always Free resources stay free on a Pay As You Go account, but a size above the
+# allowance is billed rather than refused, and upgrading to Pay As You Go is the
+# usual answer to an Ampere capacity error. Refuse before anything is created.
+if [[ -z "$ALLOW_PAID" ]]; then
+  OVER=()
+  (( OCPUS <= FREE_OCPUS )) || OVER+=("$OCPUS OCPUs, where Always Free allows $FREE_OCPUS")
+  (( MEMORY_GB <= FREE_MEMORY_GB )) || OVER+=("$MEMORY_GB GB of memory, where Always Free allows $FREE_MEMORY_GB")
+  (( BOOT_VOLUME_GB <= FREE_BOOT_VOLUME_GB )) || OVER+=("a $BOOT_VOLUME_GB GB boot volume, where Always Free allows $FREE_BOOT_VOLUME_GB")
+  if [[ ${#OVER[@]} -gt 0 ]]; then
+    printf '
+'
+    for over in "${OVER[@]}"; do info "you asked for $over"; done
+    die "that is outside the Always Free allowance, and is charged rather than refused once this account is on Pay As You Go. Set ALLOW_PAID=1 if you mean to pay for it."
+  fi
+fi
 
 # Runs an oci query and turns JMESPath's null into an empty string so callers can
 # test "does this exist" with [[ -n ]].
@@ -690,6 +717,59 @@ else
     info "The instance did not finish configuring itself. Nothing is lost: fix what it reported"
     info "and run this script again, which resumes from wherever it stopped."
     info "  ssh -i ${SSH_PRIVATE_KEY/#$HOME/\~} ubuntu@$PUBLIC_IP sudo /usr/local/sbin/nocturne-up"
+  fi
+fi
+
+# ── Spend cap ────────────────────────────────────────────────────────────────
+# A budget only sends email. A quota policy actually refuses the request, so an
+# account that gets upgraded to Pay As You Go later — the usual cure for Ampere
+# capacity errors — still cannot be billed for a resource nobody meant to create.
+# Compute quotas are scoped per availability domain, so in a multi-AD region this
+# caps each domain rather than the tenancy total.
+#
+# Written after the instance exists so a policy Oracle rejects, or one naming a
+# quota that has been renamed, can never block the launch it is meant to protect.
+
+log "Spend cap"
+QUOTA_STATEMENTS=(
+  "zero compute-core quota /*/ in tenancy"
+  "set compute-core quota standard-a1-core-count to $FREE_OCPUS in tenancy"
+  "set compute-core quota standard-e2-micro-core-count to $FREE_E2_MICRO_COUNT in tenancy"
+  "zero compute-memory quota /*/ in tenancy"
+  "set compute-memory quota standard-a1-memory-count to $FREE_MEMORY_GB in tenancy"
+)
+QUOTA_JSON=$(printf '%s
+' "${QUOTA_STATEMENTS[@]}" | jq -Rsc 'split("
+") | map(select(length > 0))')
+
+quota_error() {
+  info "$1 Nothing is enforced, so watch the spend alert instead. Oracle said:"
+  info "  $(grep -m1 '"message"' <<<"$2" || head -1 <<<"$2")"
+}
+
+OTHER_INSTANCES=$(q oci compute instance list --compartment-id "$TENANCY_ID" --all   --query "length(data[?\"lifecycle-state\"!=\`\"TERMINATED\"\` && \"display-name\"!='$NAME'])" --raw-output)
+
+if [[ -n "$ALLOW_PAID" ]]; then
+  info "skipped: ALLOW_PAID is set, so this tenancy is allowed to create paid resources"
+elif [[ "$COMPARTMENT_ID" != "$TENANCY_ID" ]]; then
+  info "skipped: Nocturne is in a compartment, and a tenancy-wide quota is yours to decide on"
+elif [[ -n "$OTHER_INSTANCES" && "$OTHER_INSTANCES" != "0" ]]; then
+  info "skipped: this tenancy runs $OTHER_INSTANCES other instance(s) and the policy would restrict them too"
+else
+  QUOTA_ID=$(q oci limits quota list --compartment-id "$TENANCY_ID" --name "$NAME" --query 'data[0].id' --raw-output)
+  if [[ -z "$QUOTA_ID" ]]; then
+    if out=$(oci limits quota create --compartment-id "$TENANCY_ID" --name "$NAME"         --description "Holds this tenancy to the Oracle Always Free allowance"         --statements "$QUOTA_JSON" 2>&1); then
+      info "this tenancy can now only create Always Free compute, upgraded to Pay As You Go or not"
+      info "(new quota policies take up to ten minutes to take effect)"
+    else
+      quota_error "could not create the quota policy." "$out"
+    fi
+  elif [[ "$(q oci limits quota get --quota-id "$QUOTA_ID" --query 'data.statements' --raw-output)" == "$QUOTA_JSON" ]]; then
+    info "exists"
+  elif out=$(oci limits quota update --quota-id "$QUOTA_ID" --statements "$QUOTA_JSON" --force 2>&1); then
+    info "updated to the current Always Free allowance"
+  else
+    quota_error "could not update the quota policy." "$out"
   fi
 fi
 
