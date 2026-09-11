@@ -226,6 +226,22 @@ describe("Date formatting", () => {
 			const result = formatDate("2025-06-15T10:30:00Z");
 			expect(result).not.toBe("N/A");
 		});
+
+		it("writes an abbreviated month and no seconds, in the regional format", () => {
+			// A bare toLocaleString gave "4/30/2026, 11:00:39 PM" on the token cards:
+			// all-numeric, so unreadable to anyone who does not share the locale's
+			// field order, and precise to a second that nothing on those rows needs.
+			// Built in local time for the reason "Shared date shapes" gives.
+			const date = new Date(2026, 7, 29, 14, 5, 9);
+			const british = withRegionValue("en-GB", () => formatDate(date));
+			expect(british).toContain("29 Aug 2026");
+			expect(british).toContain("14:05");
+			expect(british).not.toContain(":09");
+
+			// The month is named, not numbered, whatever the region writes.
+			expect(withRegionValue("de-DE", () => formatDate(date))).toMatch(/Aug/);
+			expect(withRegionValue("en-US", () => formatDate(date))).toMatch(/Aug 29, 2026/);
+		});
 	});
 
 	describe("formatDateDetailed", () => {

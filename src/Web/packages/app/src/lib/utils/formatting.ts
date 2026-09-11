@@ -302,14 +302,20 @@ export function formatDateTime(dateStr: string | undefined): string {
 }
 
 /**
- * Formats a date string or Date object to locale string
+ * {@link formatMediumDateTime} for the metadata rows that read "Created …" or
+ * "Last used …", with "N/A" for a missing value rather than an em dash.
+ *
+ * The abbreviated month is what makes this readable to everyone: a bare
+ * `toLocaleString` gives an all-numeric date, and a reader whose regional format
+ * is unset cannot tell "4/30/2026" apart from a day-first one. It also drops the
+ * seconds, which no surface here is precise enough to want.
  * @param date - Date object, ISO date string, or undefined
  * @returns Formatted date and time string, or "N/A"
  */
 export function formatDate(date: Date | string | number | undefined): string {
   if (date == null || date === "") return "N/A";
   const d = new Date(date);
-  return Number.isNaN(d.getTime()) ? "N/A" : d.toLocaleString(formatLocale());
+  return Number.isNaN(d.getTime()) ? "N/A" : formatMediumDateTime(d);
 }
 
 /**
