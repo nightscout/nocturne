@@ -33,6 +33,17 @@ public sealed class GoogleHealthConnectorService(
     public override string ServiceName => ServiceNames.GoogleHealthConnector;
     protected override DateTime? InitialSyncFloor => null;
 
+    public override Task<SyncResult> SyncDataAsync(
+        GoogleHealthConnectorConfiguration config,
+        CancellationToken cancellationToken = default,
+        DateTime? since = null,
+        ISyncProgressReporter? progressReporter = null) =>
+        base.SyncDataAsync(
+            config,
+            cancellationToken,
+            since ?? DateTime.UtcNow.AddDays(-config.HistoryDays),
+            progressReporter);
+
     protected override async Task<SyncResult> PerformSyncInternalAsync(
         SyncRequest request,
         GoogleHealthConnectorConfiguration config,
@@ -69,9 +80,10 @@ public sealed class GoogleHealthConnectorService(
                 config, session.AccessToken!, active, from, to, tenantId, cancellationToken);
 
             coordinator.Report(tenantId, GoogleHealthSyncPhase.Validating);
-            Validate(readings, sleepSessions);
+            readings = readings.DistinctBy(GoogleHealthClient.Key).ToList();
+            sleepSessions = sleepSessions.DistinctBy(session => session.OriginalId, StringComparer.Ordinal).ToList();
             coordinator.Report(tenantId, GoogleHealthSyncPhase.Integrating);
-            await writer.WriteAsync(readings, sleepSessions, active, from, to, cancellationToken);
+            await writer.WriteAsync(readings, sleepSessions, active, from, to, config.BatchSize, cancellationToken);
 
             AddCounts(result, readings, sleepSessions);
             var missingConsent = selected.Except(active, StringComparer.Ordinal).ToArray();
@@ -229,17 +241,6 @@ public sealed class GoogleHealthConnectorService(
         SyncDataType.Sleep => "sleep",
         _ => throw new GoogleHealthException("unsupported_type")
     };
-
-    private static void Validate(
-        IReadOnlyCollection<GoogleHealthReading> readings,
-        IReadOnlyCollection<Nocturne.Core.Models.SleepSession> sleepSessions)
-    {
-        if (readings.Select(GoogleHealthClient.Key).Distinct().Count() != readings.Count)
-            throw new GoogleHealthException("duplicate_google_data", stage: "data_validation");
-        if (sleepSessions.Select(session => session.OriginalId)
-                .Distinct(StringComparer.Ordinal).Count() != sleepSessions.Count)
-            throw new GoogleHealthException("duplicate_google_data", stage: "data_validation", dataType: "sleep");
-    }
 
     private static void AddCounts(
         SyncResult result,

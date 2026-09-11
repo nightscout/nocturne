@@ -1,6 +1,7 @@
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Connectors.GoogleHealth.Services;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Health;
 using Microsoft.EntityFrameworkCore;
@@ -15,7 +16,8 @@ public sealed class GoogleHealthReadingWriter(
     ISleepService sleep,
     NocturneDbContext db) : IGoogleHealthReadingWriter
 {
-    public const string Source = "google-health";
+    public const string Source = DataSources.GoogleHealthConnector;
+    private const string SourceApp = "Google Health";
 
     public async Task WriteAsync(
         IReadOnlyCollection<GoogleHealthReading> readings,
@@ -23,9 +25,10 @@ public sealed class GoogleHealthReadingWriter(
         IReadOnlyCollection<string> activeTypes,
         DateTimeOffset from,
         DateTimeOffset to,
+        int batchSize,
         CancellationToken ct)
     {
-        var heartRateBatch = readings.Where(reading => reading.DataType == "heart-rate").Select(reading => new HeartRate
+        foreach (var heartRateBatch in readings.Where(reading => reading.DataType == "heart-rate").Select(reading => new HeartRate
         {
             Mills = reading.Mills,
             UtcOffset = reading.UtcOffsetMinutes,
@@ -35,10 +38,10 @@ public sealed class GoogleHealthReadingWriter(
             EnteredBy = "Google Health",
             DataSource = Source,
             SyncIdentifier = GoogleHealthClient.Key(reading)
-        }).ToArray();
-        if (heartRateBatch.Length > 0) await heartRates.CreateHeartRatesAsync(heartRateBatch, ct);
+        }).Chunk(batchSize))
+            await heartRates.CreateHeartRatesAsync(heartRateBatch, ct);
 
-        var stepBatch = readings.Where(reading => reading.DataType == "steps").Select(reading => new StepCount
+        foreach (var stepBatch in readings.Where(reading => reading.DataType == "steps").Select(reading => new StepCount
         {
             Mills = reading.Mills,
             UtcOffset = reading.UtcOffsetMinutes,
@@ -48,10 +51,10 @@ public sealed class GoogleHealthReadingWriter(
             EnteredBy = "Google Health",
             DataSource = Source,
             SyncIdentifier = GoogleHealthClient.Key(reading)
-        }).ToArray();
-        if (stepBatch.Length > 0) await stepCounts.CreateStepCountsAsync(stepBatch, ct);
+        }).Chunk(batchSize))
+            await stepCounts.CreateStepCountsAsync(stepBatch, ct);
 
-        var weightBatch = readings.Where(reading => reading.DataType == "weight").Select(reading => new BodyWeight
+        foreach (var weightBatch in readings.Where(reading => reading.DataType == "weight").Select(reading => new BodyWeight
         {
             Mills = reading.Mills,
             UtcOffset = reading.UtcOffsetMinutes,
@@ -60,8 +63,8 @@ public sealed class GoogleHealthReadingWriter(
             EnteredBy = "Google Health",
             DataSource = Source,
             SyncIdentifier = GoogleHealthClient.Key(reading)
-        }).ToArray();
-        if (weightBatch.Length > 0) await bodyWeights.CreateBodyWeightsAsync(weightBatch, ct);
+        }).Chunk(batchSize))
+            await bodyWeights.CreateBodyWeightsAsync(weightBatch, ct);
 
         foreach (var session in sleepSessions)
             await sleep.UpsertSessionAsync(session, ct);
@@ -87,26 +90,26 @@ public sealed class GoogleHealthReadingWriter(
         var weightIds = Keys(readings, "weight");
         var sleepIds = sleepSessions.Select(session => session.OriginalId!).ToArray();
 
-        if (activeTypes.Contains("heart-rate")) await db.HeartRates
+        if (activeTypes.Contains("heart-rate") && heartRateIds.Length > 0) await db.HeartRates
             .Where(record => record.DataSource == Source && record.Timestamp >= first && record.Timestamp < last &&
                 !heartRateIds.Contains(record.SyncIdentifier!))
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(record => record.DeletedAt, deletedAt)
                 .SetProperty(record => EF.Property<bool>(record, "DeletedByUser"), false), ct);
-        if (activeTypes.Contains("steps")) await db.StepCounts
+        if (activeTypes.Contains("steps") && stepIds.Length > 0) await db.StepCounts
             .Where(record => record.DataSource == Source && record.Timestamp >= first && record.Timestamp < last &&
                 !stepIds.Contains(record.SyncIdentifier!))
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(record => record.DeletedAt, deletedAt)
                 .SetProperty(record => EF.Property<bool>(record, "DeletedByUser"), false), ct);
-        if (activeTypes.Contains("weight")) await db.BodyWeights
+        if (activeTypes.Contains("weight") && weightIds.Length > 0) await db.BodyWeights
             .Where(record => record.DataSource == Source && record.Mills >= firstMills && record.Mills < lastMills &&
                 !weightIds.Contains(record.SyncIdentifier!))
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(record => record.DeletedAt, deletedAt)
                 .SetProperty(record => EF.Property<bool>(record, "DeletedByUser"), false), ct);
-        if (activeTypes.Contains("sleep")) await db.SleepSessions
-            .Where(session => session.Source == SleepSource.Google.ToString() &&
+        if (activeTypes.Contains("sleep") && sleepIds.Length > 0) await db.SleepSessions
+            .Where(session => session.Source == SleepSource.Google.ToString() && session.SourceApp == SourceApp &&
                 session.StartTime >= first && session.StartTime < last &&
                 (session.OriginalId == null || !sleepIds.Contains(session.OriginalId)))
             .ExecuteDeleteAsync(ct);
@@ -134,7 +137,7 @@ public sealed class GoogleHealthReadingWriter(
                 .ExecuteUpdateAsync(setters => setters
                     .SetProperty(record => record.DeletedAt, deletedAt)
                     .SetProperty(record => EF.Property<bool>(record, "DeletedByUser"), false), ct);
-            await db.SleepSessions.Where(session => session.Source == SleepSource.Google.ToString())
+            await db.SleepSessions.Where(session => session.Source == SleepSource.Google.ToString() && session.SourceApp == SourceApp)
                 .ExecuteDeleteAsync(ct);
             await transaction.CommitAsync(ct);
         });

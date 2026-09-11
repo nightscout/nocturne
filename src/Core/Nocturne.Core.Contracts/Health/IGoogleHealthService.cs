@@ -35,6 +35,7 @@ public interface IGoogleHealthReadingWriter
         IReadOnlyCollection<string> activeTypes,
         DateTimeOffset from,
         DateTimeOffset to,
+        int batchSize,
         CancellationToken ct);
     Task PurgeAsync(CancellationToken ct);
 }

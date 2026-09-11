@@ -1,5 +1,6 @@
 using Nocturne.API.Services.Connectors;
 using Nocturne.Connectors.Core.Models;
+using Nocturne.Connectors.GoogleHealth.Models;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
 
@@ -31,7 +32,13 @@ public sealed class GoogleHealthWorker(
                     await SyncTenantAsync(tenant.Id, tenant.Slug, tenant.DisplayName, stoppingToken);
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
-                catch (Exception) { logger.LogWarning("Queued Google Health sync failed; details are not logged to protect health data and credentials"); }
+                catch (Exception ex)
+                {
+                    var error = ex as GoogleHealthException;
+                    logger.LogWarning(
+                        "Queued Google Health sync failed with code {Code} at stage {Stage}; details are not logged to protect health data and credentials",
+                        error?.Message ?? "internal_sync", error?.Stage ?? "worker");
+                }
                 finally { coordinator.Complete(tenantId); }
             }
         }

@@ -33,18 +33,26 @@ public sealed class GoogleHealthClient(HttpClient http)
     public const string SleepScope = "https://www.googleapis.com/auth/googlehealth.sleep.readonly";
     public static readonly GoogleHealthCapability[] Capabilities =
     [
-        new() { DataType = "steps", Supported = true, Destination = "step-counts" },
-        new() { DataType = "heart-rate", Supported = true, Destination = "heart-rates" },
-        new() { DataType = "weight", Supported = true, Destination = "body-weights" },
-        new() { DataType = "sleep", Supported = true, Destination = "sleep-sessions" }, new() { DataType = "body-fat" },
-        new() { DataType = "distance" }, new() { DataType = "oxygen-saturation" }, new() { DataType = "heart-rate-variability" }
+        new() { DataType = "steps", DisplayName = "Steps", Unit = "count", RequiredScope = ActivityScope, Supported = true, Destination = "step-counts" },
+        new() { DataType = "heart-rate", DisplayName = "Heart rate", Unit = "bpm", RequiredScope = MetricsScope, Supported = true, Destination = "heart-rates" },
+        new() { DataType = "weight", DisplayName = "Weight", Unit = "kg", RequiredScope = MetricsScope, Supported = true, Destination = "body-weights" },
+        new() { DataType = "sleep", DisplayName = "Sleep", Unit = "session", RequiredScope = SleepScope, Supported = true, Destination = "sleep-sessions" },
+        new() { DataType = "body-fat", DisplayName = "Body fat", Unit = "percent", RequiredScope = MetricsScope },
+        new() { DataType = "distance", DisplayName = "Distance", Unit = "m", RequiredScope = ActivityScope },
+        new() { DataType = "active-energy-burned", DisplayName = "Active energy", Unit = "kcal", RequiredScope = ActivityScope },
+        new() { DataType = "oxygen-saturation", DisplayName = "Oxygen saturation", Unit = "percent", RequiredScope = MetricsScope },
+        new() { DataType = "heart-rate-variability", DisplayName = "Heart rate variability", Unit = "ms", RequiredScope = MetricsScope },
+        new() { DataType = "respiratory-rate", DisplayName = "Respiratory rate", Unit = "breaths/min", RequiredScope = MetricsScope },
+        new() { DataType = "blood-pressure", DisplayName = "Blood pressure", Unit = "mmHg", RequiredScope = MetricsScope },
+        new() { DataType = "body-temperature", DisplayName = "Body temperature", Unit = "C", RequiredScope = MetricsScope }
     ];
     public static string[] SupportedTypes => Capabilities.Where(c => c.Supported).Select(c => c.DataType).ToArray();
     public static string ScopeFor(string type) => type switch
     {
         "steps" => ActivityScope,
-        "heart-rate" or "weight" or "body-fat" or "oxygen-saturation" or "heart-rate-variability" => MetricsScope,
-        "distance" => ActivityScope,
+        "heart-rate" or "weight" or "body-fat" or "oxygen-saturation" or "heart-rate-variability" or
+            "respiratory-rate" or "blood-pressure" or "body-temperature" => MetricsScope,
+        "distance" or "active-energy-burned" => ActivityScope,
         "sleep" => SleepScope,
         _ => throw new GoogleHealthException("unsupported_type")
     };
@@ -178,10 +186,16 @@ public sealed class GoogleHealthClient(HttpClient http)
                 if (json.RootElement.TryGetProperty("dataPoints", out var data))
                     foreach (var item in data.EnumerateArray())
                     {
-                        var point = Parse(type, item);
-                        if (point.Mills < from.ToUnixTimeMilliseconds() || point.Mills >= to.ToUnixTimeMilliseconds())
-                            throw new GoogleHealthException("unexpected_time_range", stage: "data_parse", dataType: type);
-                        points.Add(point);
+                        try
+                        {
+                            var point = Parse(type, item);
+                            if (point.Mills < from.ToUnixTimeMilliseconds() || point.Mills >= to.ToUnixTimeMilliseconds())
+                                continue;
+                            points.Add(point);
+                        }
+                        catch (GoogleHealthException ex) when (ex.Message is "invalid_google_data" or "unexpected_time_range")
+                        {
+                        }
                     }
                 pageToken = json.RootElement.TryGetProperty("nextPageToken", out var next) ? next.GetString() ?? "" : "";
                 onPageRead?.Invoke(page + 1);
@@ -292,7 +306,7 @@ public sealed class GoogleHealthClient(HttpClient http)
     }
 
     public static string Key(GoogleHealthReading reading) => Convert.ToHexString(SHA256.HashData(
-        Encoding.UTF8.GetBytes($"{reading.DataType}|{reading.Mills}|{reading.EndMills}")));
+        Encoding.UTF8.GetBytes($"{reading.DataType}|{reading.OriginalId ?? $"{reading.Mills}|{reading.EndMills}"}")));
 
     public static SleepSession ParseSleep(JsonElement point)
     {
@@ -428,7 +442,11 @@ public sealed class GoogleHealthClient(HttpClient http)
             }
             return new GoogleHealthReading
             {
-                DataType = type, Mills = start.ToUnixTimeMilliseconds(), EndMills = end, UtcOffsetMinutes = offset,
+                DataType = type,
+                OriginalId = point.TryGetProperty("name", out var name) && name.ValueKind == JsonValueKind.String
+                    ? name.GetString()
+                    : null,
+                Mills = start.ToUnixTimeMilliseconds(), EndMills = end, UtcOffsetMinutes = offset,
                 Value = type == "weight" ? value / 1000m : value,
                 Unit = type switch { "weight" => "kg", "heart-rate" => "bpm", _ => "steps" }
             };

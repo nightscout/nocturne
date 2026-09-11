@@ -44,8 +44,15 @@ public sealed class GoogleHealthAuthTokenProvider(
         var cached = await _tokenCache.GetAsync(ConnectorName, tenantId);
         if (cached is not null)
         {
-            storedSessions[tenantId] = FromCache(cached);
-            return;
+            try
+            {
+                storedSessions[tenantId] = FromCache(cached);
+                return;
+            }
+            catch (GoogleHealthException)
+            {
+                InvalidateToken();
+            }
         }
 
         storedSessions[tenantId] = session;

@@ -34,6 +34,7 @@ public class GoogleHealthConnectorServiceTests
             It.IsAny<IReadOnlyCollection<Nocturne.Core.Models.SleepSession>>(),
             It.IsAny<IReadOnlyCollection<string>>(),
             It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset>(),
+            It.IsAny<int>(),
             It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -61,6 +62,7 @@ public class GoogleHealthConnectorServiceTests
             It.Is<IReadOnlyCollection<Nocturne.Core.Models.SleepSession>>(items => items.Count == 0),
             It.Is<IReadOnlyCollection<string>>(types => types.SequenceEqual(new[] { "weight" })),
             It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset>(),
+            2,
             It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal("rotated", fixture.Secrets["refreshToken"]);
     }
@@ -88,7 +90,28 @@ public class GoogleHealthConnectorServiceTests
             It.IsAny<IReadOnlyCollection<Nocturne.Core.Models.SleepSession>>(),
             It.Is<IReadOnlyCollection<string>>(types => types.SequenceEqual(new[] { "weight" })),
             It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset>(),
+            It.IsAny<int>(),
             It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Scheduled_sync_uses_the_bounded_lookback_not_the_initial_import_date()
+    {
+        var requestedFrom = DateTimeOffset.MinValue;
+        var fixture = new Fixture(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/token" => Json($$"""{"access_token":"access","refresh_token":"refresh","expires_in":3600,"token_type":"Bearer","scope":"{{GoogleHealthClient.MetricsScope}}"}"""),
+            var path when path.Contains("/weight/") => CaptureRange(request, value => requestedFrom = value),
+            _ => throw new InvalidOperationException($"Unexpected request: {request.RequestUri}")
+        });
+        var config = fixture.Configuration();
+        config.ImportFrom = "2000-01-01T00:00:00.0000000+00:00";
+        config.HistoryDays = 7;
+
+        var result = await fixture.Service.SyncDataAsync(config, CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.InRange(requestedFrom, DateTimeOffset.UtcNow.AddDays(-8), DateTimeOffset.UtcNow.AddDays(-6));
     }
 
     private sealed class Fixture
@@ -123,6 +146,7 @@ public class GoogleHealthConnectorServiceTests
                     It.IsAny<IReadOnlyCollection<Nocturne.Core.Models.SleepSession>>(),
                     It.IsAny<IReadOnlyCollection<string>>(),
                     It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset>(),
+                    It.IsAny<int>(),
                     It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
             var handler = new StubHandler(responder);
@@ -158,7 +182,8 @@ public class GoogleHealthConnectorServiceTests
             SyncSteps = false,
             SyncHeartRate = false,
             SyncBodyWeight = true,
-            SyncSleep = false
+            SyncSleep = false,
+            BatchSize = 2
         };
     }
 
@@ -166,6 +191,16 @@ public class GoogleHealthConnectorServiceTests
     {
         Content = new StringContent(text, Encoding.UTF8, "application/json")
     };
+
+    private static HttpResponseMessage CaptureRange(
+        HttpRequestMessage request,
+        Action<DateTimeOffset> capture)
+    {
+        var filter = System.Web.HttpUtility.ParseQueryString(request.RequestUri!.Query)["filter"]!;
+        var timestamp = filter.Split('"')[1];
+        capture(DateTimeOffset.Parse(timestamp));
+        return Json("{\"dataPoints\":[]}");
+    }
 
     private sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> responder)
         : HttpMessageHandler

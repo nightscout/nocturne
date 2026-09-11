@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading.Channels;
 using Microsoft.AspNetCore.WebUtilities;
 using Nocturne.Connectors.Core.Interfaces;
@@ -167,21 +168,21 @@ public sealed class GoogleHealthService(
 
     private async Task SaveOptionsAsync(GoogleHealthOptions options, Guid subject, CancellationToken ct)
     {
-        using var configuration = JsonSerializer.SerializeToDocument(new
-        {
-            enabled = true,
-            clientId = options.ClientId,
-            callbackUrl = options.CallbackUrl,
-            lookbackDays = options.HistoryDays,
-            importFrom = options.ImportFrom?.ToString("O", CultureInfo.InvariantCulture),
-            previewOnly = options.PreviewOnly,
-            syncSteps = options.DataTypes.Contains("steps", StringComparer.Ordinal),
-            syncHeartRate = options.DataTypes.Contains("heart-rate", StringComparer.Ordinal),
-            syncBodyWeight = options.DataTypes.Contains("weight", StringComparer.Ordinal),
-            syncSleep = options.DataTypes.Contains("sleep", StringComparer.Ordinal)
-        }, Json);
+        var stored = await connectorConfigurations.GetConfigurationAsync(ConnectorName, ct);
+        var configuration = stored?.Configuration.RootElement.Deserialize<JsonObject>(Json) ?? new JsonObject();
+        configuration["enabled"] ??= true;
+        configuration["clientId"] = options.ClientId;
+        configuration["callbackUrl"] = options.CallbackUrl;
+        configuration["lookbackDays"] = options.HistoryDays;
+        configuration["importFrom"] = options.ImportFrom?.ToString("O", CultureInfo.InvariantCulture);
+        configuration["previewOnly"] = options.PreviewOnly;
+        configuration["syncSteps"] = options.DataTypes.Contains("steps", StringComparer.Ordinal);
+        configuration["syncHeartRate"] = options.DataTypes.Contains("heart-rate", StringComparer.Ordinal);
+        configuration["syncBodyWeight"] = options.DataTypes.Contains("weight", StringComparer.Ordinal);
+        configuration["syncSleep"] = options.DataTypes.Contains("sleep", StringComparer.Ordinal);
+        using var document = JsonDocument.Parse(configuration.ToJsonString(Json));
         await connectorConfigurations.SaveConfigurationAsync(
-            ConnectorName, configuration, subject.ToString(), ct);
+            ConnectorName, document, subject.ToString(), ct);
 
         var secrets = await connectorConfigurations.GetSecretsAsync(ConnectorName, ct);
         secrets["clientSecret"] = options.ClientSecret!;

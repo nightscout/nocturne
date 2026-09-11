@@ -62,7 +62,7 @@ public class GoogleHealthAuthTokenProviderTests
     }
 
     [Fact]
-    public async Task Maps_malformed_cached_scopes_to_an_actionable_error()
+    public async Task Malformed_cached_scopes_are_discarded_before_refreshing()
     {
         var tenantId = Guid.NewGuid();
         var cache = new ConnectorTokenCache();
@@ -75,13 +75,22 @@ public class GoogleHealthAuthTokenProviderTests
                 ["Scopes"] = "not-json",
                 ["AccessTokenExpiresAt"] = DateTimeOffset.UtcNow.AddHours(1).ToString("O")
             }));
-        var provider = CreateProvider(new StubHandler(_ => Json("{}")), cache, tenantId);
+        var provider = CreateProvider(new StubHandler(_ => Json("""
+            {
+              "access_token":"refreshed-access-token",
+              "expires_in":3600,
+              "token_type":"Bearer"
+            }
+            """)), cache, tenantId);
 
-        var action = () => provider.GetCurrentSessionAsync();
+        await provider.SeedSessionAsync(new GoogleHealthTokenSession("refresh-token", ["scope-a"]));
+        var token = await provider.GetValidTokenAsync(Configuration("refresh-token"));
+        var session = await provider.GetCurrentSessionAsync();
 
-        var exception = await action.Should().ThrowAsync<GoogleHealthException>();
-        exception.Which.Message.Should().Be("invalid_token_response");
-        exception.Which.Stage.Should().Be("token_cache");
+        token.Should().Be("refreshed-access-token");
+        session.Should().NotBeNull();
+        session!.RefreshToken.Should().Be("refresh-token");
+        session.Scopes.Should().Equal("scope-a");
     }
 
     private static GoogleHealthAuthTokenProvider CreateProvider(

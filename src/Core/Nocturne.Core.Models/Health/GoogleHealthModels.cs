@@ -80,6 +80,9 @@ public class GoogleHealthPreviewItem
 public class GoogleHealthCapability
 {
     public string DataType { get; set; } = "";
+    public string DisplayName { get; set; } = "";
+    public string Unit { get; set; } = "";
+    public string RequiredScope { get; set; } = "";
     public bool Supported { get; set; }
     public string? Destination { get; set; }
 }
@@ -94,6 +97,7 @@ public class GoogleHealthCallback
 public class GoogleHealthReading
 {
     public string DataType { get; set; } = "";
+    public string? OriginalId { get; set; }
     public long Mills { get; set; }
     public long? EndMills { get; set; }
     public int? UtcOffsetMinutes { get; set; }

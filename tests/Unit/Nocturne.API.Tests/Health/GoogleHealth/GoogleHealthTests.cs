@@ -122,6 +122,22 @@ public class GoogleHealthTests
     }
 
     [Fact]
+    public async Task Saving_options_preserves_unrelated_connector_values_and_enabled_state()
+    {
+        var tenantId = Guid.NewGuid();
+        var subject = Guid.NewGuid();
+        var store = new TestConnectorStore();
+        store.SetConfiguration("""{"enabled":false,"syncIntervalMinutes":30,"activeThresholdMinutes":45}""");
+        var service = Service(store, new StubHandler(_ => Json("{}")), tenantId);
+
+        await service.SaveAsync(Options(), subject, default);
+
+        Assert.False(store.Configuration.GetProperty("enabled").GetBoolean());
+        Assert.Equal(30, store.Configuration.GetProperty("syncIntervalMinutes").GetInt32());
+        Assert.Equal(45, store.Configuration.GetProperty("activeThresholdMinutes").GetInt32());
+    }
+
+    [Fact]
     public async Task Preview_reports_each_capability_without_importing()
     {
         var tenantId = Guid.NewGuid();
@@ -147,7 +163,7 @@ public class GoogleHealthTests
     }
 
     [Fact]
-    public async Task Writer_uses_native_health_tables_and_reconciles_only_active_types()
+    public async Task Writer_uses_native_health_tables_without_deleting_on_an_empty_response()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync();
@@ -186,10 +202,38 @@ public class GoogleHealthTests
             Mock.Of<IBodyWeightService>(), Mock.Of<ISleepService>(), db);
 
         await writer.WriteAsync([], [], ["weight"],
-            DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow, default);
+            DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow, 2, default);
 
         Assert.Single(await db.HeartRates.AsNoTracking().ToListAsync());
-        Assert.Empty(await db.BodyWeights.AsNoTracking().ToListAsync());
+        Assert.Single(await db.BodyWeights.AsNoTracking().ToListAsync());
+    }
+
+    [Fact]
+    public async Task Writer_uses_the_configured_batch_size_for_native_history_writes()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var db = new NocturneDbContext(
+            new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options);
+        await db.Database.EnsureCreatedAsync();
+        var heartRates = new Mock<IHeartRateService>();
+        var batches = new List<HeartRate[]>();
+        heartRates.Setup(service => service.CreateHeartRatesAsync(
+                It.IsAny<IEnumerable<HeartRate>>(), It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<HeartRate>, CancellationToken>((items, _) => batches.Add(items.ToArray()))
+            .ReturnsAsync([]);
+        var writer = new GoogleHealthReadingWriter(
+            heartRates.Object, Mock.Of<IStepCountService>(), Mock.Of<IBodyWeightService>(),
+            Mock.Of<ISleepService>(), db);
+        var readings = Enumerable.Range(0, 5).Select(index => new GoogleHealthReading
+        {
+            DataType = "heart-rate", Mills = index, Value = 60 + index
+        }).ToArray();
+
+        await writer.WriteAsync(readings, [], ["heart-rate"],
+            DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow, 2, default);
+
+        Assert.Equal([2, 2, 1], batches.Select(batch => batch.Length));
     }
 
     [Fact]
@@ -307,6 +351,19 @@ public class GoogleHealthTests
         public IConnectorConfigurationService Configurations { get; }
         public IConnectorConfigurationLoader<GoogleHealthConnectorConfiguration> Loader { get; }
         public IReadOnlyDictionary<string, string> Secrets => secrets;
+        public JsonElement Configuration => configuration!.RootElement;
+
+        public void SetConfiguration(string value)
+        {
+            configuration?.Dispose();
+            configuration = JsonDocument.Parse(value);
+            response = new ConnectorConfigurationResponse
+            {
+                ConnectorName = "GoogleHealth",
+                Configuration = configuration,
+                IsActive = true
+            };
+        }
     }
 
     private sealed class ThrowingGoogleHealthService : IGoogleHealthService
