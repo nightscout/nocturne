@@ -51,6 +51,43 @@
     "body-weights": "Weight history",
     "sleep-sessions": "Sleep history",
   };
+  const categoryOrder = [
+    "Vitals",
+    "Activity",
+    "Body measurement",
+    "Nutrition",
+    "Sleep",
+    "Cycle tracking",
+  ];
+  const categoryGroups = $derived.by(() => {
+    const capabilities = status?.capabilities ?? [];
+    const items = preview?.items ?? [];
+    return categoryOrder
+      .map((category) => {
+        const entries = items
+          .map((item) => ({
+            item,
+            capability: capabilities.find(
+              (entry) => entry.dataType === item.dataType
+            ),
+          }))
+          .filter((entry) => entry.capability?.category === category);
+        return {
+          category,
+          entries,
+          selectedCount: entries.filter((entry) =>
+            selected.includes(entry.item.dataType ?? "")
+          ).length,
+          hasSelectableItem: entries.some(
+            (entry) =>
+              entry.item.supported &&
+              entry.item.granted &&
+              !entry.item.errorCode
+          ),
+        };
+      })
+      .filter((group) => group.entries.length > 0);
+  });
   const errors: Record<string, string> = {
     configure_first: "Save the Google configuration first.",
     invalid_configuration: "Check the client ID and import start date.",
@@ -561,62 +598,75 @@
             Health. Empty results are not errors. Clear all selections and save
             to pause imports; previously imported data is kept.
           </p>
-          {#if preview}<div class="overflow-auto">
-              <table class="w-full text-left text-sm">
-                <thead>
-                  <tr class="border-b">
-                    <th class="p-3">Import</th>
-                    <th class="p-3">Data type</th>
-                    <th class="p-3">Found</th>
-                    <th class="p-3">Nocturne destination</th>
-                    <th class="p-3">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {#each preview.items ?? [] as item (item.dataType)}{@const capability =
-                      status.capabilities?.find(
-                        (entry) => entry.dataType === item.dataType
-                      )}
-                    <tr class="border-b">
-                      <td class="p-3">
-                        <input
-                          aria-label={`Import ${capability?.displayName ?? item.dataType}`}
-                          type="checkbox"
-                          bind:group={selected}
-                          value={item.dataType}
-                          disabled={busy ||
-                            status.isSyncing ||
-                            (!selected.includes(item.dataType ?? "") &&
-                              (!item.supported ||
-                                !item.granted ||
-                                !!item.errorCode))}
-                        />
-                      </td>
-                      <td class="p-3 font-medium">
-                        {capability?.displayName ?? item.dataType}
-                        <span class="block text-xs text-muted-foreground">
-                          {capability?.category}
-                        </span>
-                      </td>
-                      <td class="p-3">
-                        {!item.supported
-                          ? "Not scanned"
-                          : item.errorCode || !item.granted
-                            ? "Unknown"
-                            : item.count > 0
-                              ? `Yes (${item.count})`
-                              : "No"}
-                      </td>
-                      <td class="p-3">
-                        {capability?.destination
-                          ? (destinations[capability.destination] ??
-                            capability.destination)
-                          : "No destination yet"}
-                      </td>
-                      <td class="p-3">{itemStatus(item)}</td>
-                    </tr>{/each}
-                </tbody>
-              </table>
+          {#if preview}<div class="space-y-3">
+              {#each categoryGroups as group (group.category)}
+                <details
+                  class="overflow-hidden rounded-lg border"
+                  open={group.hasSelectableItem}
+                >
+                  <summary
+                    class="flex cursor-pointer items-center justify-between gap-3 px-4 py-3 font-medium"
+                  >
+                    <span>{group.category}</span>
+                    <span class="tabular-nums text-sm text-muted-foreground">
+                      {group.selectedCount}/{group.entries.length} selected
+                    </span>
+                  </summary>
+                  <div class="overflow-auto border-t">
+                    <table class="w-full text-left text-sm">
+                      <thead>
+                        <tr class="border-b">
+                          <th class="p-3">Import</th>
+                          <th class="p-3">Data type</th>
+                          <th class="p-3">Found</th>
+                          <th class="p-3">Nocturne destination</th>
+                          <th class="p-3">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {#each group.entries as entry (entry.item.dataType)}
+                          {@const { item, capability } = entry}
+                          <tr class="border-b last:border-b-0">
+                            <td class="p-3">
+                              <input
+                                aria-label={`Import ${capability?.displayName ?? item.dataType}`}
+                                type="checkbox"
+                                bind:group={selected}
+                                value={item.dataType}
+                                disabled={busy ||
+                                  status.isSyncing ||
+                                  (!selected.includes(item.dataType ?? "") &&
+                                    (!item.supported ||
+                                      !item.granted ||
+                                      !!item.errorCode))}
+                              />
+                            </td>
+                            <td class="p-3 font-medium">
+                              {capability?.displayName ?? item.dataType}
+                            </td>
+                            <td class="p-3">
+                              {!item.supported
+                                ? "Not scanned"
+                                : item.errorCode || !item.granted
+                                  ? "Unknown"
+                                  : item.count > 0
+                                    ? `Yes (${item.count})`
+                                    : "No"}
+                            </td>
+                            <td class="p-3">
+                              {capability?.destination
+                                ? (destinations[capability.destination] ??
+                                  capability.destination)
+                                : "No destination yet"}
+                            </td>
+                            <td class="p-3">{itemStatus(item)}</td>
+                          </tr>
+                        {/each}
+                      </tbody>
+                    </table>
+                  </div>
+                </details>
+              {/each}
             </div>
           {:else if inventoryBusy}<div class="space-y-2">
               <p>Scanning the selected history in Google Health…</p>
