@@ -56,7 +56,9 @@ public sealed class GoogleHealthConnectorService(
         try
         {
             var selected = ResolveActiveTypes(request, config)
-                .Select(TypeName)
+                .Select(type => GoogleHealthClient.TryGetDataType(type, out var dataType)
+                    ? dataType
+                    : throw new GoogleHealthException("unsupported_type"))
                 .ToArray();
             if (config.PreviewOnly || selected.Length == 0)
                 return Complete(result);
@@ -188,7 +190,9 @@ public sealed class GoogleHealthConnectorService(
             CancellationToken ct)
     {
         foreach (var type in active)
-            result.ItemsSynced[SyncDataTypeFor(type)] = 0;
+            result.ItemsSynced[GoogleHealthClient.TryGetSyncDataType(type, out var dataType)
+                ? dataType
+                : throw new GoogleHealthException("unsupported_type")] = 0;
         for (var index = 0; index < active.Length; index++)
         {
             var type = active[index];
@@ -264,27 +268,11 @@ public sealed class GoogleHealthConnectorService(
             ? to.AddDays(-config.HistoryDays)
             : DateTimeOffset.Parse(config.ImportFrom, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
 
-    private static string TypeName(SyncDataType type) => type switch
-    {
-        SyncDataType.Steps => "steps",
-        SyncDataType.HeartRate => "heart-rate",
-        SyncDataType.BodyWeight => "weight",
-        SyncDataType.Sleep => "sleep",
-        _ => throw new GoogleHealthException("unsupported_type")
-    };
-
     private static void AddCount(SyncResult result, string type, int count) =>
-        result.ItemsSynced[SyncDataTypeFor(type)] =
-            result.ItemsSynced.GetValueOrDefault(SyncDataTypeFor(type)) + count;
-
-    private static SyncDataType SyncDataTypeFor(string type) => type switch
-    {
-        "steps" => SyncDataType.Steps,
-        "heart-rate" => SyncDataType.HeartRate,
-        "weight" => SyncDataType.BodyWeight,
-        "sleep" => SyncDataType.Sleep,
-        _ => throw new GoogleHealthException("unsupported_type")
-    };
+        result.ItemsSynced[GoogleHealthClient.TryGetSyncDataType(type, out var dataType)
+            ? dataType
+            : throw new GoogleHealthException("unsupported_type")] =
+            result.ItemsSynced.GetValueOrDefault(dataType) + count;
 
     private static SyncResult Complete(SyncResult result, string message = "")
     {

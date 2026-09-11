@@ -10,6 +10,7 @@
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
   import { Progress } from "$lib/components/ui/progress";
+  import ConfirmDialog from "$lib/components/ui/confirm-dialog/confirm-dialog.svelte";
   import {
     Card,
     CardContent,
@@ -44,6 +45,7 @@
     inventoryBusy = $state(false),
     message = $state(""),
     notice = $state("");
+  let purgeDialogOpen = $state(false);
   const realtimeStore = getRealtimeStore();
   const syncProgressByConnector = $derived(
     realtimeStore.syncProgressByConnector
@@ -713,22 +715,30 @@
       Google setup documentation
     </a>
   </details>
-  {#if status?.configured && !status.connected}<Button
-      variant="destructive"
-      disabled={busy}
-      onclick={() => {
-        if (
-          confirm(
-            "Permanently delete measurements imported through Google Health? Data in Google is unchanged."
-          )
-        )
-          void run(async () => {
-            operation = "purge";
-            await purgeGoogleHealth();
-            await refresh();
-          });
-      }}
+  {#if status?.configured && !status.connected}
+    <ConfirmDialog
+      bind:open={purgeDialogOpen}
+      title="Delete imported Google Health data?"
+      confirmLabel="Delete imported data"
+      destructive
+      {busy}
+      onConfirm={() =>
+        void run(async () => {
+          operation = "purge";
+          await purgeGoogleHealth();
+          purgeDialogOpen = false;
+          await refresh();
+        })}
     >
-      Delete imported Google Health data
-    </Button>{/if}
+      {#snippet description()}
+        Measurements imported through Google Health will be deleted from
+        Nocturne. Data stored by Google is unchanged.
+      {/snippet}
+      {#snippet trigger(props)}
+        <Button variant="destructive" disabled={busy} {...props}>
+          Delete imported Google Health data
+        </Button>
+      {/snippet}
+    </ConfirmDialog>
+  {/if}
 </section>

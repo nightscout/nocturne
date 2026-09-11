@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Health;
 
@@ -62,6 +63,24 @@ public sealed class GoogleHealthClient(HttpClient http)
         new() { DataType = "sexual-activity", DisplayName = "Sexual activity", Category = "Cycle tracking", Unit = "observation", UnavailableReason = "Not exposed as a readable Google Health API data type." }
     ];
     public static string[] SupportedTypes => Capabilities.Where(c => c.Supported).Select(c => c.DataType).ToArray();
+    public static bool TryGetDataType(SyncDataType type, out string dataType) =>
+        SyncDataTypes.TryGetValue(type, out dataType!);
+
+    public static bool TryGetSyncDataType(string dataType, out SyncDataType type) =>
+        DataTypesByName.TryGetValue(dataType, out type);
+
+    private static readonly IReadOnlyDictionary<SyncDataType, string> SyncDataTypes =
+        new Dictionary<SyncDataType, string>
+        {
+            [SyncDataType.Steps] = "steps",
+            [SyncDataType.HeartRate] = "heart-rate",
+            [SyncDataType.BodyWeight] = "weight",
+            [SyncDataType.Sleep] = "sleep"
+        };
+
+    private static readonly IReadOnlyDictionary<string, SyncDataType> DataTypesByName =
+        SyncDataTypes.ToDictionary(pair => pair.Value, pair => pair.Key, StringComparer.Ordinal);
+
     public static string ScopeFor(string type) => type switch
     {
         "steps" => ActivityScope,

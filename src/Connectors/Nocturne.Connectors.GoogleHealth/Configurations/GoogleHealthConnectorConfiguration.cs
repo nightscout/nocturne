@@ -47,6 +47,18 @@ public sealed class GoogleHealthConnectorConfiguration : BaseConnectorConfigurat
     [ConnectorProperty(ConnectorPropertyKey.GrantedScopes, Hidden = true)]
     public string? GrantedScopes { get; set; }
 
+    [ConnectorProperty(ConnectorPropertyKey.SyncSteps, DefaultValue = "true")]
+    public bool SyncSteps { get; set; } = true;
+
+    [ConnectorProperty(ConnectorPropertyKey.SyncHeartRate, DefaultValue = "true")]
+    public bool SyncHeartRate { get; set; } = true;
+
+    [ConnectorProperty(ConnectorPropertyKey.SyncBodyWeight, DefaultValue = "true")]
+    public bool SyncBodyWeight { get; set; } = true;
+
+    [ConnectorProperty(ConnectorPropertyKey.SyncSleep, DefaultValue = "true")]
+    public bool SyncSleep { get; set; } = true;
+
     public static bool IsValidClientId(string clientId) =>
         !string.IsNullOrWhiteSpace(clientId) &&
         clientId.EndsWith(".apps.googleusercontent.com", StringComparison.Ordinal);
