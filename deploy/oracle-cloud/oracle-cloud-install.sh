@@ -88,6 +88,21 @@ q() {
   printf '%s' "$out"
 }
 
+# The CLI reports these objects in kebab-case but only accepts camelCase back, so
+# anything read, edited and rewritten has to be converted. Nulls are dropped
+# because the API rejects them for fields it did not send.
+JQ_OCI='
+def tocamel: gsub("-(?<c>[a-z])"; .c | ascii_upcase);
+def recamel: walk(if type == "object" then (with_entries(.key |= tocamel) | with_entries(select(.value != null))) else . end);
+def covers($p; $anysrc): any(.protocol == "6"
+  and ($anysrc or .source == "0.0.0.0/0")
+  and (."tcp-options" == null
+       or (."tcp-options"."destination-port-range" as $x | $x == null or ($x.min <= $p and $x.max >= $p))));
+def missing_tcp: [ (if covers(22; true) then empty else 22 end),
+                   (if covers(80; false) then empty else 80 end),
+                   (if covers(443; false) then empty else 443 end) ];
+'
+
 command -v oci >/dev/null || die "the oci command is not available. Open Cloud Shell from the Oracle Cloud console (terminal icon, top right) and run this there."
 command -v jq >/dev/null || die "jq is not available"
 [[ -n "$COMPARTMENT_ID" ]] || die "COMPARTMENT_ID is not set and OCI_TENANCY is empty. Are you in Cloud Shell?"
@@ -465,30 +480,32 @@ fi
 # Checking for the default route itself, not for an empty table: a table with
 # some other rule in it but no way out is the case that needs repairing most.
 RT_ID=$(oci network vcn get --vcn-id "$VCN_ID" --query 'data."default-route-table-id"' --raw-output)
-if ! oci network route-table get --rt-id "$RT_ID" --query 'data."route-rules"' \
-     | jq -e --arg igw "$IGW_ID" 'map(select(.destination == "0.0.0.0/0" and ."network-entity-id" == $igw)) | length > 0' >/dev/null; then
-  oci network route-table update --rt-id "$RT_ID" --force \
-    --route-rules "[{\"destination\":\"0.0.0.0/0\",\"destinationType\":\"CIDR_BLOCK\",\"networkEntityId\":\"$IGW_ID\"}]" >/dev/null
+RT_RULES=$(oci network route-table get --rt-id "$RT_ID" --query 'data."route-rules"')
+if ! jq -e --arg igw "$IGW_ID" 'map(select(.destination == "0.0.0.0/0" and ."network-entity-id" == $igw)) | length > 0' >/dev/null <<<"$RT_RULES"; then
+  # Only the default route is ours to rewrite. This table can carry routes for
+  # subnets the installer never created — a service gateway, a NAT gateway — and
+  # replacing the whole list would silently cut their egress.
+  oci network route-table update --rt-id "$RT_ID" --force --route-rules "$(jq -c --arg igw "$IGW_ID" "$JQ_OCI"'
+    [ .[] | select(.destination != "0.0.0.0/0") | recamel ]
+    + [{destination: "0.0.0.0/0", destinationType: "CIDR_BLOCK", networkEntityId: $igw}]' <<<"$RT_RULES")" >/dev/null
   info "added default route"
 fi
 
-# Likewise, check every port the server needs rather than just 443, so a
-# partially applied security list is put right instead of passing the check.
 SL_ID=$(oci network vcn get --vcn-id "$VCN_ID" --query 'data."default-security-list-id"' --raw-output)
-if ! oci network security-list get --security-list-id "$SL_ID" --query 'data."ingress-security-rules"' \
-     | jq -e '. as $rules | [22, 80, 443] | all(. as $p | $rules | any(
-         .protocol == "6" and (."tcp-options" == null
-           or (."tcp-options"."destination-port-range" as $r
-               | $r == null or ($r.min <= $p and $r.max >= $p)))))' >/dev/null; then
-  oci network security-list update --security-list-id "$SL_ID" --force --ingress-security-rules '[
-    {"protocol":"6","source":"0.0.0.0/0","tcpOptions":{"destinationPortRange":{"min":22,"max":22}}},
-    {"protocol":"6","source":"0.0.0.0/0","tcpOptions":{"destinationPortRange":{"min":80,"max":80}}},
-    {"protocol":"6","source":"0.0.0.0/0","tcpOptions":{"destinationPortRange":{"min":443,"max":443}}},
-    {"protocol":"17","source":"0.0.0.0/0","udpOptions":{"destinationPortRange":{"min":443,"max":443}}},
-    {"protocol":"1","source":"0.0.0.0/0","icmpOptions":{"type":3,"code":4}},
-    {"protocol":"1","source":"10.0.0.0/16","icmpOptions":{"type":3}}
-  ]' >/dev/null
-  info "opened ports 22, 80 and 443"
+SL_RULES=$(oci network security-list get --security-list-id "$SL_ID" --query 'data."ingress-security-rules"')
+# 80 and 443 have to be reachable from anywhere or certificates cannot be issued.
+# 22 only has to be reachable at all: a user who narrowed SSH to their own address
+# meant it, and re-opening it to the world behind their back would be worse than
+# the SSH wait below failing with a message.
+SL_MISSING=$(jq -c "$JQ_OCI"'missing_tcp' <<<"$SL_RULES")
+if [[ "$SL_MISSING" != "[]" ]]; then
+  oci network security-list update --security-list-id "$SL_ID" --force --ingress-security-rules "$(jq -c "$JQ_OCI"'
+    [ .[] | recamel ]
+    + [ missing_tcp[] | {protocol: "6", source: "0.0.0.0/0", tcpOptions: {destinationPortRange: {min: ., max: .}}} ]
+    + (if any(.protocol == "17") then [] else [{protocol: "17", source: "0.0.0.0/0", udpOptions: {destinationPortRange: {min: 443, max: 443}}}] end)
+    + (if any(.protocol == "1") then [] else [{protocol: "1", source: "0.0.0.0/0", icmpOptions: {type: 3, code: 4}},
+                                               {protocol: "1", source: "10.0.0.0/16", icmpOptions: {type: 3}}] end)' <<<"$SL_RULES")" >/dev/null
+  info "opened ports $(jq -r 'join(", ")' <<<"$SL_MISSING")"
 fi
 
 SUBNET_ID=$(q oci network subnet list --compartment-id "$COMPARTMENT_ID" --vcn-id "$VCN_ID" --display-name "$NAME" --lifecycle-state AVAILABLE --query 'data[0].id' --raw-output)
@@ -695,6 +712,11 @@ else
     sleep 10
   done
 
+  # Stop the boot-time run before replacing any of its files. install(1)
+  # truncates in place, and bash reads a running script by file offset, so
+  # rewriting nocturne-up underneath a live interpreter resumes it mid-line.
+  ssh_run "sudo systemctl stop nocturne" </dev/null >/dev/null 2>&1 || true
+
   info "Installing the setup scripts"
   install_env > "$WORK/install.env"
   push_file "$WORK/install.env" /opt/nocturne/install.env 0600
@@ -707,11 +729,10 @@ else
   log "Configuring the instance"
   info "Docker, the Nocturne $NOCTURNE_VERSION bundle, secrets, then the stack. Safe to repeat."
   printf '\n'
-  # Stop the boot-time run first so this one owns the lock and its output is
-  # visible here rather than only in the journal.
-  if ssh_run "sudo systemctl stop nocturne >/dev/null 2>&1; sudo env NOCTURNE_DNS_TIMEOUT=$((DNS_WAIT_MINUTES * 60)) /usr/local/sbin/nocturne-up" </dev/null 2>&1 | sed 's/^/    /'; then
-    # Leaves the unit active so a reboot brings the stack back; a no-op by now.
-    ssh_run "sudo systemctl start nocturne" </dev/null >/dev/null 2>&1 || true
+  if ssh_run "sudo env NOCTURNE_DNS_TIMEOUT=$((DNS_WAIT_MINUTES * 60)) /usr/local/sbin/nocturne-up" </dev/null 2>&1 | sed 's/^/    /'; then
+    # --no-block, because systemd's own run of nocturne-up has no DNS deadline:
+    # a blocking start could sit here for ever with its output going nowhere.
+    ssh_run "sudo systemctl start --no-block nocturne" </dev/null >/dev/null 2>&1 || true
   else
     printf '\n'
     info "The instance did not finish configuring itself. Nothing is lost: fix what it reported"
@@ -750,7 +771,19 @@ quota_error() {
   info "  $(grep -m1 '"message"' <<<"$2" || head -1 <<<"$2")"
 }
 
-OTHER_INSTANCES=$(q oci compute instance list --compartment-id "$TENANCY_ID" --all   --query "length(data[?\"lifecycle-state\"!=\`\"TERMINATED\"\` && \"display-name\"!='$NAME'])" --raw-output)
+# The policy is written "in tenancy", so this has to see every compartment. An
+# instance list is not recursive, so walk the tree rather than trusting the root.
+OTHER_INSTANCES=0
+while read -r cid; do
+  [[ -n "$cid" ]] || continue
+  found=$(q oci compute instance list --compartment-id "$cid" --all \
+    --query "length(data[?\"lifecycle-state\"!=\`\"TERMINATED\"\` && \"display-name\"!='$NAME'])" --raw-output)
+  OTHER_INSTANCES=$((OTHER_INSTANCES + ${found:-0}))
+done < <(
+  printf '%s\n' "$TENANCY_ID"
+  q oci iam compartment list --compartment-id "$TENANCY_ID" --compartment-id-in-subtree true \
+    --lifecycle-state ACTIVE --all --query 'data[].id' --raw-output | jq -r '.[]? // empty' 2>/dev/null
+)
 
 if [[ -n "$ALLOW_PAID" ]]; then
   info "skipped: ALLOW_PAID is set, so this tenancy is allowed to create paid resources"
@@ -764,7 +797,9 @@ else
   # comparing it to the compact form would rewrite the policy on every run.
   CURRENT_QUOTA=$(q oci limits quota get --quota-id "${QUOTA_ID:-none}" --query 'data.statements' | jq -c . 2>/dev/null || true)
   if [[ -z "$QUOTA_ID" ]]; then
-    if out=$(oci limits quota create --compartment-id "$TENANCY_ID" --name "$NAME"         --description "Holds this tenancy to the Oracle Always Free allowance"         --statements "$QUOTA_JSON" 2>&1); then
+    if out=$(oci limits quota create --compartment-id "$TENANCY_ID" --name "$NAME" \
+        --description "Holds this tenancy to the Oracle Always Free allowance" \
+        --statements "$QUOTA_JSON" 2>&1); then
       info "this tenancy can now only create Always Free compute, upgraded to Pay As You Go or not"
       info "(new quota policies take up to ten minutes to take effect)"
     else
