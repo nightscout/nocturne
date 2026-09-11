@@ -61,8 +61,8 @@ public sealed class GoogleHealthWorker(
                 "GoogleHealth",
                 lastSyncAttempt: now,
                 lastSuccessfulSync: now,
-                lastErrorMessage: string.Empty,
-                lastErrorAt: DateTime.MinValue,
+            lastErrorMessage: result.Message,
+            lastErrorAt: string.IsNullOrWhiteSpace(result.Message) ? DateTime.MinValue : now,
                 isHealthy: true,
                 ct: ct);
             return;

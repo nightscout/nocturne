@@ -128,15 +128,15 @@ public sealed class GoogleHealthReadingWriter(
             await db.HeartRates.Where(record => record.DataSource == Source)
                 .ExecuteUpdateAsync(setters => setters
                     .SetProperty(record => record.DeletedAt, deletedAt)
-                    .SetProperty(record => EF.Property<bool>(record, "DeletedByUser"), false), ct);
+                    .SetProperty(record => EF.Property<bool>(record, "DeletedByUser"), true), ct);
             await db.StepCounts.Where(record => record.DataSource == Source)
                 .ExecuteUpdateAsync(setters => setters
                     .SetProperty(record => record.DeletedAt, deletedAt)
-                    .SetProperty(record => EF.Property<bool>(record, "DeletedByUser"), false), ct);
+                    .SetProperty(record => EF.Property<bool>(record, "DeletedByUser"), true), ct);
             await db.BodyWeights.Where(record => record.DataSource == Source)
                 .ExecuteUpdateAsync(setters => setters
                     .SetProperty(record => record.DeletedAt, deletedAt)
-                    .SetProperty(record => EF.Property<bool>(record, "DeletedByUser"), false), ct);
+                    .SetProperty(record => EF.Property<bool>(record, "DeletedByUser"), true), ct);
             await db.SleepSessions.Where(session => session.Source == SleepSource.Google.ToString() && session.SourceApp == SourceApp)
                 .ExecuteDeleteAsync(ct);
             await transaction.CommitAsync(ct);

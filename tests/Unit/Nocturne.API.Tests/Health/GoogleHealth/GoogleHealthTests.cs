@@ -158,8 +158,16 @@ public class GoogleHealthTests
         var preview = await service.PreviewAsync(subject, default);
 
         Assert.Equal(GoogleHealthClient.Capabilities.Length, preview.Items.Length);
-        Assert.All(preview.Items, item => Assert.True(item.Granted));
-        Assert.All(preview.Items, item => Assert.Equal(1, item.Count));
+        Assert.All(preview.Items.Where(item => item.Supported), item =>
+        {
+            Assert.True(item.Granted);
+            Assert.Equal(1, item.Count);
+        });
+        Assert.All(preview.Items.Where(item => !item.Supported), item =>
+        {
+            Assert.False(item.Granted);
+            Assert.Equal(0, item.Count);
+        });
     }
 
     [Fact]

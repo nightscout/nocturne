@@ -81,10 +81,12 @@ public class GoogleHealthCapability
 {
     public string DataType { get; set; } = "";
     public string DisplayName { get; set; } = "";
+    public string Category { get; set; } = "";
     public string Unit { get; set; } = "";
     public string RequiredScope { get; set; } = "";
     public bool Supported { get; set; }
     public string? Destination { get; set; }
+    public string? UnavailableReason { get; set; }
 }
 
 public class GoogleHealthAuthorize { public string Url { get; set; } = ""; }

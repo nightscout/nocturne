@@ -508,6 +508,15 @@ public sealed class GoogleHealthService(
             foreach (var capability in GoogleHealthClient.Capabilities)
             {
                 var type = capability.DataType;
+                if (!capability.Supported)
+                {
+                    items.Add(new GoogleHealthPreviewItem
+                    {
+                        DataType = type,
+                        Supported = false
+                    });
+                    continue;
+                }
                 var granted = token.Scopes.Contains(GoogleHealthClient.ScopeFor(type), StringComparer.Ordinal);
                 if (!granted)
                 {

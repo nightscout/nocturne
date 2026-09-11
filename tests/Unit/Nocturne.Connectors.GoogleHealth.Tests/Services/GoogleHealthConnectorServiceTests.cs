@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.Connectors.Core.Interfaces;
@@ -114,6 +115,24 @@ public class GoogleHealthConnectorServiceTests
         Assert.InRange(requestedFrom, DateTimeOffset.UtcNow.AddDays(-8), DateTimeOffset.UtcNow.AddDays(-6));
     }
 
+    [Fact]
+    public async Task Manual_backfill_consumes_the_import_start_date_after_success()
+    {
+        var fixture = new Fixture(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/token" => Json($$"""{"access_token":"access","refresh_token":"refresh","expires_in":3600,"token_type":"Bearer","scope":"{{GoogleHealthClient.MetricsScope}}"}"""),
+            var path when path.Contains("/weight/") => Json("{\"dataPoints\":[]}"),
+            _ => throw new InvalidOperationException($"Unexpected request: {request.RequestUri}")
+        });
+        var config = fixture.Configuration();
+        config.ImportFrom = "2000-01-01T00:00:00.0000000+00:00";
+
+        var result = await fixture.Service.SyncDataAsync(new SyncRequest(), config, CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.True(fixture.ImportFromWasConsumed);
+    }
+
     private sealed class Fixture
     {
         private readonly Guid tenantId = Guid.NewGuid();
@@ -138,6 +157,18 @@ public class GoogleHealthConnectorServiceTests
                 .Callback<string, Dictionary<string, string>, string?, CancellationToken>((_, values, _, _) =>
                     secrets = new Dictionary<string, string>(values, StringComparer.OrdinalIgnoreCase))
                 .Returns(Task.CompletedTask);
+            configurations.Setup(value => value.GetConfigurationAsync(
+                    "GoogleHealth", It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() => new ConnectorConfigurationResponse
+                {
+                    ConnectorName = "GoogleHealth",
+                    Configuration = JsonDocument.Parse("{\"importFrom\":\"2000-01-01T00:00:00.0000000+00:00\"}")
+                });
+            configurations.Setup(value => value.SaveConfigurationAsync(
+                    "GoogleHealth", It.IsAny<JsonDocument>(), null, It.IsAny<CancellationToken>()))
+                .Callback<string, JsonDocument, string?, CancellationToken>((_, document, _, _) =>
+                    ImportFromWasConsumed = document.RootElement.GetProperty("importFrom").ValueKind == JsonValueKind.Null)
+                .ReturnsAsync(() => new ConnectorConfigurationResponse());
             var coordinator = new Mock<IGoogleHealthSyncCoordinator>();
             coordinator.Setup(value => value.Gate(tenantId)).Returns(new SemaphoreSlim(1));
             Writer = new Mock<IGoogleHealthReadingWriter>();
@@ -171,6 +202,7 @@ public class GoogleHealthConnectorServiceTests
         public GoogleHealthConnectorService Service { get; }
         public Mock<IGoogleHealthReadingWriter> Writer { get; }
         public IReadOnlyDictionary<string, string> Secrets => secrets;
+        public bool ImportFromWasConsumed { get; private set; }
 
         public GoogleHealthConnectorConfiguration Configuration() => new()
         {

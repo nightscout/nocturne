@@ -30,29 +30,45 @@ public sealed class GoogleHealthClient(HttpClient http)
 
     public const string ActivityScope = "https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly";
     public const string MetricsScope = "https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly";
+    public const string NutritionScope = "https://www.googleapis.com/auth/googlehealth.nutrition.readonly";
     public const string SleepScope = "https://www.googleapis.com/auth/googlehealth.sleep.readonly";
     public static readonly GoogleHealthCapability[] Capabilities =
     [
-        new() { DataType = "steps", DisplayName = "Steps", Unit = "count", RequiredScope = ActivityScope, Supported = true, Destination = "step-counts" },
-        new() { DataType = "heart-rate", DisplayName = "Heart rate", Unit = "bpm", RequiredScope = MetricsScope, Supported = true, Destination = "heart-rates" },
-        new() { DataType = "weight", DisplayName = "Weight", Unit = "kg", RequiredScope = MetricsScope, Supported = true, Destination = "body-weights" },
-        new() { DataType = "sleep", DisplayName = "Sleep", Unit = "session", RequiredScope = SleepScope, Supported = true, Destination = "sleep-sessions" },
-        new() { DataType = "body-fat", DisplayName = "Body fat", Unit = "percent", RequiredScope = MetricsScope },
-        new() { DataType = "distance", DisplayName = "Distance", Unit = "m", RequiredScope = ActivityScope },
-        new() { DataType = "active-energy-burned", DisplayName = "Active energy", Unit = "kcal", RequiredScope = ActivityScope },
-        new() { DataType = "oxygen-saturation", DisplayName = "Oxygen saturation", Unit = "percent", RequiredScope = MetricsScope },
-        new() { DataType = "heart-rate-variability", DisplayName = "Heart rate variability", Unit = "ms", RequiredScope = MetricsScope },
-        new() { DataType = "respiratory-rate", DisplayName = "Respiratory rate", Unit = "breaths/min", RequiredScope = MetricsScope },
-        new() { DataType = "blood-pressure", DisplayName = "Blood pressure", Unit = "mmHg", RequiredScope = MetricsScope },
-        new() { DataType = "body-temperature", DisplayName = "Body temperature", Unit = "C", RequiredScope = MetricsScope }
+        new() { DataType = "steps", DisplayName = "Steps", Category = "Activity", Unit = "count", RequiredScope = ActivityScope, Supported = true, Destination = "step-counts" },
+        new() { DataType = "heart-rate", DisplayName = "Heart rate", Category = "Vitals", Unit = "bpm", RequiredScope = MetricsScope, Supported = true, Destination = "heart-rates" },
+        new() { DataType = "weight", DisplayName = "Weight", Category = "Body measurement", Unit = "kg", RequiredScope = MetricsScope, Supported = true, Destination = "body-weights" },
+        new() { DataType = "sleep", DisplayName = "Sleep sessions and stages", Category = "Sleep", Unit = "session", RequiredScope = SleepScope, Supported = true, Destination = "sleep-sessions" },
+        new() { DataType = "active-energy-burned", DisplayName = "Active energy burned", Category = "Activity", Unit = "kcal", RequiredScope = ActivityScope },
+        new() { DataType = "total-calories", DisplayName = "Total calories", Category = "Activity", Unit = "kcal", RequiredScope = ActivityScope },
+        new() { DataType = "distance", DisplayName = "Distance", Category = "Activity", Unit = "m", RequiredScope = ActivityScope },
+        new() { DataType = "floors", DisplayName = "Floors", Category = "Activity", Unit = "count", RequiredScope = ActivityScope },
+        new() { DataType = "exercise", DisplayName = "Workouts", Category = "Activity", Unit = "session", RequiredScope = ActivityScope },
+        new() { DataType = "body-fat", DisplayName = "Body fat", Category = "Body measurement", Unit = "percent", RequiredScope = MetricsScope },
+        new() { DataType = "height", DisplayName = "Height", Category = "Body measurement", Unit = "m", RequiredScope = MetricsScope },
+        new() { DataType = "nutrition-log", DisplayName = "Nutrition log", Category = "Nutrition", Unit = "meal", RequiredScope = NutritionScope },
+        new() { DataType = "hydration-log", DisplayName = "Hydration", Category = "Nutrition", Unit = "mL", RequiredScope = NutritionScope },
+        new() { DataType = "blood-glucose", DisplayName = "Blood glucose", Category = "Vitals", Unit = "mg/dL", RequiredScope = MetricsScope },
+        new() { DataType = "oxygen-saturation", DisplayName = "Oxygen saturation", Category = "Vitals", Unit = "percent", RequiredScope = MetricsScope },
+        new() { DataType = "heart-rate-variability", DisplayName = "Heart rate variability", Category = "Vitals", Unit = "ms", RequiredScope = MetricsScope },
+        new() { DataType = "daily-resting-heart-rate", DisplayName = "Resting heart rate", Category = "Vitals", Unit = "bpm", RequiredScope = MetricsScope },
+        new() { DataType = "daily-oxygen-saturation", DisplayName = "Daily oxygen saturation", Category = "Vitals", Unit = "percent", RequiredScope = MetricsScope },
+        new() { DataType = "daily-respiratory-rate", DisplayName = "Daily respiratory rate", Category = "Vitals", Unit = "breaths/min", RequiredScope = MetricsScope },
+        new() { DataType = "respiratory-rate-sleep-summary", DisplayName = "Sleep respiratory rate", Category = "Vitals", Unit = "breaths/min", RequiredScope = MetricsScope },
+        new() { DataType = "core-body-temperature", DisplayName = "Core body temperature", Category = "Vitals", Unit = "C", RequiredScope = MetricsScope },
+        new() { DataType = "menstrual-period", DisplayName = "Menstrual period", Category = "Cycle tracking", Unit = "interval", UnavailableReason = "Google Health currently provides no read-only scope for this type." },
+        new() { DataType = "ovulation-test", DisplayName = "Ovulation test", Category = "Cycle tracking", Unit = "result", UnavailableReason = "Google Health currently provides no read-only scope for this type." },
+        new() { DataType = "cervical-mucus", DisplayName = "Cervical mucus", Category = "Cycle tracking", Unit = "observation", UnavailableReason = "Not exposed as a readable Google Health API data type." },
+        new() { DataType = "sexual-activity", DisplayName = "Sexual activity", Category = "Cycle tracking", Unit = "observation", UnavailableReason = "Not exposed as a readable Google Health API data type." }
     ];
     public static string[] SupportedTypes => Capabilities.Where(c => c.Supported).Select(c => c.DataType).ToArray();
     public static string ScopeFor(string type) => type switch
     {
         "steps" => ActivityScope,
-        "heart-rate" or "weight" or "body-fat" or "oxygen-saturation" or "heart-rate-variability" or
-            "respiratory-rate" or "blood-pressure" or "body-temperature" => MetricsScope,
-        "distance" or "active-energy-burned" => ActivityScope,
+        "heart-rate" or "weight" or "body-fat" or "height" or "blood-glucose" or "oxygen-saturation" or
+            "heart-rate-variability" or "daily-resting-heart-rate" or "daily-oxygen-saturation" or
+            "daily-respiratory-rate" or "respiratory-rate-sleep-summary" or "core-body-temperature" => MetricsScope,
+        "distance" or "active-energy-burned" or "total-calories" or "floors" or "exercise" => ActivityScope,
+        "nutrition-log" or "hydration-log" => NutritionScope,
         "sleep" => SleepScope,
         _ => throw new GoogleHealthException("unsupported_type")
     };

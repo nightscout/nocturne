@@ -86,6 +86,8 @@ public sealed class GoogleHealthConnectorService(
             await writer.WriteAsync(readings, sleepSessions, active, from, to, config.BatchSize, cancellationToken);
 
             AddCounts(result, readings, sleepSessions);
+            if (request.From is null && !string.IsNullOrWhiteSpace(config.ImportFrom))
+                await ConsumeImportFromAsync(cancellationToken);
             var missingConsent = selected.Except(active, StringComparer.Ordinal).ToArray();
             return Complete(result, missingConsent.Length == 0
                 ? string.Empty
@@ -226,6 +228,17 @@ public sealed class GoogleHealthConnectorService(
         secrets.Remove("refreshToken");
         secrets.Remove("grantedScopes");
         await connectorConfigurations.SaveSecretsAsync(ConnectorName, secrets, ct: ct);
+    }
+
+    private async Task ConsumeImportFromAsync(CancellationToken ct)
+    {
+        var stored = await connectorConfigurations.GetConfigurationAsync(ConnectorName, ct);
+        if (stored is null) return;
+        using var document = JsonDocument.Parse(stored.Configuration.RootElement.GetRawText());
+        var configuration = document.RootElement.Deserialize<Dictionary<string, JsonElement>>() ?? [];
+        configuration["importFrom"] = JsonSerializer.SerializeToElement<string?>(null);
+        using var updated = JsonSerializer.SerializeToDocument(configuration);
+        await connectorConfigurations.SaveConfigurationAsync(ConnectorName, updated, ct: ct);
     }
 
     private static DateTimeOffset ImportFrom(GoogleHealthConnectorConfiguration config, DateTimeOffset to) =>
