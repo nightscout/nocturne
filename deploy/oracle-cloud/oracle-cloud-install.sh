@@ -724,8 +724,9 @@ fi
 # A budget only sends email. A quota policy actually refuses the request, so an
 # account that gets upgraded to Pay As You Go later — the usual cure for Ampere
 # capacity errors — still cannot be billed for a resource nobody meant to create.
-# Compute quotas are scoped per availability domain, so in a multi-AD region this
-# caps each domain rather than the tenancy total.
+# Each shape has both a per-availability-domain quota and a regional one; the
+# regional pair is what makes this a real total rather than a per-domain cap, and
+# leaving them zeroed by the wildcard would block A1 launches outright.
 #
 # Written after the instance exists so a policy Oracle rejects, or one naming a
 # quota that has been renamed, can never block the launch it is meant to protect.
@@ -734,9 +735,11 @@ log "Spend cap"
 QUOTA_STATEMENTS=(
   "zero compute-core quota /*/ in tenancy"
   "set compute-core quota standard-a1-core-count to $FREE_OCPUS in tenancy"
+  "set compute-core quota standard-a1-core-regional-count to $FREE_OCPUS in tenancy"
   "set compute-core quota standard-e2-micro-core-count to $FREE_E2_MICRO_COUNT in tenancy"
   "zero compute-memory quota /*/ in tenancy"
   "set compute-memory quota standard-a1-memory-count to $FREE_MEMORY_GB in tenancy"
+  "set compute-memory quota standard-a1-memory-regional-count to $FREE_MEMORY_GB in tenancy"
 )
 QUOTA_JSON=$(printf '%s
 ' "${QUOTA_STATEMENTS[@]}" | jq -Rsc 'split("

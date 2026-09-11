@@ -27,8 +27,11 @@
     <ul class="list-disc list-inside space-y-2 text-muted-foreground mb-8">
         <li>
             An <a href="https://www.oracle.com/cloud/free/" class="text-primary hover:underline">Oracle Cloud account</a>.
-            Sign-up asks for a payment card to verify your identity. The resources this guide
-            creates are within the Always Free allowance, so nothing is charged.
+            Sign-up asks for a payment card to verify your identity. Always Free gives you
+            2 Ampere cores, 12 GB of memory and 200 GB of storage; this guide uses half the
+            processor and memory and a quarter of the storage, so nothing is charged. Oracle
+            reduced that allowance in June 2026, so older guides quoting 4 cores and 24 GB are
+            out of date.
         </li>
         <li>
             A domain name. Nocturne gives every site its own subdomain, so the DNS provider
@@ -98,7 +101,8 @@
             is ever created. The installer closes that off from both ends: it refuses a server
             size above the free allowance, and it writes an Oracle quota policy that stops the
             account creating anything outside the Always Free compute shapes at all, whether or
-            not you have upgraded. On top of that it sets a spending alert that emails you the
+            not you have upgraded. That policy is a real limit rather than a warning: Oracle
+            refuses the request instead of billing you for it. On top of that it sets a spending alert that emails you the
             moment the account is billed one unit of your currency. Nothing needs adding to the
             command in Step 2.
         </p>
@@ -170,7 +174,7 @@
             <li>Creates a virtual network with ports 80 and 443 open, in your home region</li>
             <li>Reserves a public IP address so it never changes</li>
             <li>Generates an SSH key in your Cloud Shell home if you do not have one</li>
-            <li>Starts an Ampere A1 server with 1 core and 6 GB of memory, retrying when Oracle has no free capacity</li>
+            <li>Starts an Ampere A1 server with 1 core and 6 GB of memory, half the Always Free allowance, retrying when Oracle has no free capacity</li>
             <li>Installs Folding@home on a nightly schedule if you asked for it above</li>
             <li>On the server: opens the firewall, installs Docker, downloads the Nocturne release bundle, generates the database passwords and starts everything once DNS resolves, checking each of these again on every run</li>
         </ul>
