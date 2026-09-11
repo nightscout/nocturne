@@ -760,6 +760,9 @@ elif [[ -n "$OTHER_INSTANCES" && "$OTHER_INSTANCES" != "0" ]]; then
   info "skipped: this tenancy runs $OTHER_INSTANCES other instance(s) and the policy would restrict them too"
 else
   QUOTA_ID=$(q oci limits quota list --compartment-id "$TENANCY_ID" --name "$NAME" --query 'data[0].id' --raw-output)
+  # Both sides through jq: the CLI renders the statement list indented, so
+  # comparing it to the compact form would rewrite the policy on every run.
+  CURRENT_QUOTA=$(q oci limits quota get --quota-id "${QUOTA_ID:-none}" --query 'data.statements' | jq -c . 2>/dev/null || true)
   if [[ -z "$QUOTA_ID" ]]; then
     if out=$(oci limits quota create --compartment-id "$TENANCY_ID" --name "$NAME"         --description "Holds this tenancy to the Oracle Always Free allowance"         --statements "$QUOTA_JSON" 2>&1); then
       info "this tenancy can now only create Always Free compute, upgraded to Pay As You Go or not"
@@ -767,7 +770,7 @@ else
     else
       quota_error "could not create the quota policy." "$out"
     fi
-  elif [[ "$(q oci limits quota get --quota-id "$QUOTA_ID" --query 'data.statements' --raw-output)" == "$QUOTA_JSON" ]]; then
+  elif [[ "$CURRENT_QUOTA" == "$QUOTA_JSON" ]]; then
     info "exists"
   elif out=$(oci limits quota update --quota-id "$QUOTA_ID" --statements "$QUOTA_JSON" --force 2>&1); then
     info "updated to the current Always Free allowance"
