@@ -48,6 +48,21 @@ public class GoogleHealthConnectorConfigurationTests
         configuration.Invoking(value => value.Validate()).Should().Throw<ArgumentException>();
     }
 
+    [Theory]
+    [InlineData("http://localhost/settings/connectors/google-health/callback", true)]
+    [InlineData("http://127.0.0.1/settings/connectors/google-health/callback", false)]
+    [InlineData("http://example.com/settings/connectors/google-health/callback", false)]
+    public void Allows_http_only_for_the_localhost_development_callback(string callbackUrl, bool valid)
+    {
+        var configuration = ValidConfiguration();
+        configuration.CallbackUrl = callbackUrl;
+
+        if (valid)
+            configuration.Invoking(value => value.Validate()).Should().NotThrow();
+        else
+            configuration.Invoking(value => value.Validate()).Should().Throw<ArgumentException>();
+    }
+
     [Fact]
     public void Shared_configuration_binder_loads_health_sync_preferences()
     {

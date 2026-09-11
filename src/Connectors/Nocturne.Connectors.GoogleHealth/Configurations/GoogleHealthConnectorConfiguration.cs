@@ -44,7 +44,7 @@ public sealed class GoogleHealthConnectorConfiguration : BaseConnectorConfigurat
     [ConnectorProperty(ConnectorPropertyKey.PreviewOnly, Hidden = true)]
     public bool PreviewOnly { get; set; }
 
-    [ConnectorProperty(ConnectorPropertyKey.GrantedScopes, Secret = true, Hidden = true)]
+    [ConnectorProperty(ConnectorPropertyKey.GrantedScopes, Hidden = true)]
     public string? GrantedScopes { get; set; }
 
     public static bool IsValidClientId(string clientId) =>
@@ -53,7 +53,8 @@ public sealed class GoogleHealthConnectorConfiguration : BaseConnectorConfigurat
 
     public static bool IsValidCallbackUrl(string callbackUrl) =>
         Uri.TryCreate(callbackUrl, UriKind.Absolute, out var callback) &&
-        callback.Scheme == Uri.UriSchemeHttps &&
+        (callback.Scheme == Uri.UriSchemeHttps ||
+         callback.Scheme == Uri.UriSchemeHttp && callback.IsLoopback) &&
         callback.HostNameType == UriHostNameType.Dns &&
         callback.UserInfo == string.Empty &&
         callback.Query == string.Empty &&
