@@ -29,6 +29,56 @@ public class GoogleHealthClientTests
     }
 
     [Fact]
+    public void Retains_the_provider_resource_id_for_same_timestamp_readings()
+    {
+        using var firstDocument = JsonDocument.Parse("""
+            {"name":"users/me/dataTypes/heart-rate/dataPoints/watch","heartRate":{"sampleTime":{"physicalTime":"2026-09-01T10:00:00Z"},"beatsPerMinute":"72"}}
+            """);
+        using var secondDocument = JsonDocument.Parse("""
+            {"name":"users/me/dataTypes/heart-rate/dataPoints/phone","heartRate":{"sampleTime":{"physicalTime":"2026-09-01T10:00:00Z"},"beatsPerMinute":"72"}}
+            """);
+
+        var first = GoogleHealthClient.Parse("heart-rate", firstDocument.RootElement);
+        var second = GoogleHealthClient.Parse("heart-rate", secondDocument.RootElement);
+
+        Assert.NotEqual(GoogleHealthClient.Key(first), GoogleHealthClient.Key(second));
+    }
+
+    [Fact]
+    public async Task Skips_a_fractional_heart_rate_without_failing_the_page()
+    {
+        var handler = new StubHandler(_ => Json("""
+            {"dataPoints":[
+              {"heartRate":{"sampleTime":{"physicalTime":"2026-09-01T10:00:00Z"},"beatsPerMinute":"72.5"}},
+              {"heartRate":{"sampleTime":{"physicalTime":"2026-09-01T10:01:00Z"},"beatsPerMinute":"73"}}
+            ]}
+            """));
+        var client = new GoogleHealthClient(new HttpClient(handler));
+
+        var readings = await client.ReadAsync("token", "heart-rate",
+            DateTimeOffset.Parse("2026-09-01T00:00:00Z"), DateTimeOffset.Parse("2026-09-02T00:00:00Z"), default);
+
+        Assert.Single(readings);
+        Assert.Equal(73, readings[0].Value);
+    }
+
+    [Fact]
+    public async Task Pagination_returns_all_valid_pages()
+    {
+        var calls = 0;
+        var handler = new StubHandler(_ => Json(++calls == 1
+            ? """{"dataPoints":[{"weight":{"sampleTime":{"physicalTime":"2026-09-01T10:00:00Z"},"weightGrams":70000}}],"nextPageToken":"next"}"""
+            : """{"dataPoints":[{"weight":{"sampleTime":{"physicalTime":"2026-09-01T11:00:00Z"},"weightGrams":71000}}]}"""));
+        var client = new GoogleHealthClient(new HttpClient(handler));
+
+        var readings = await client.ReadAsync("token", "weight",
+            DateTimeOffset.Parse("2026-09-01T00:00:00Z"), DateTimeOffset.Parse("2026-09-02T00:00:00Z"), default);
+
+        Assert.Equal(2, readings.Count);
+        Assert.Equal(2, calls);
+    }
+
+    [Fact]
     public void Maps_sleep_sessions_and_stages()
     {
         using var document = JsonDocument.Parse("""
