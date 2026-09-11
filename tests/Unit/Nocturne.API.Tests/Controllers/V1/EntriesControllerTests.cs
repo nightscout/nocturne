@@ -176,6 +176,7 @@ public class EntriesControllerTests
         {
             new Entry { Sgv = 120 }, // Valid
             new Entry { Type = "cal" }, // Valid - non-sgv type
+            new Entry(), // Invalid - sgv type with no value and no timestamp
         };
 
         // Track what gets passed to ProcessDocuments
@@ -485,6 +486,164 @@ public class EntriesControllerTests
         // Only the two non-duplicates are written
         createInput.Should().NotBeNull();
         createInput!.Select(e => e.Mills).Should().Equal(1000, 3000);
+    }
+
+    [Fact]
+    public async Task CreateEntries_RefusedEntry_StillEchoesOneResponsePerSubmittedEntry()
+    {
+        // A batch carrying one unusable reading — a CGM sentinel with no value and no timestamp —
+        // must still be echoed in full. A short array reads as a failed upload to NightscoutKit,
+        // which re-queues the batch and never uploads anything newer, so the tenant's CGM data
+        // stops arriving entirely.
+        var submitted = new[]
+        {
+            new Entry { Sgv = 120, Mills = 1000, Device = "Dexcom G7" },
+            new Entry(), // no value, no timestamp, type defaults to sgv
+            new Entry { Sgv = 140, Mills = 3000, Device = "Dexcom G7" },
+        };
+
+        _mockDocumentProcessingService
+            .Setup(x => x.ProcessDocuments(It.IsAny<IEnumerable<Entry>>()))
+            .Returns<IEnumerable<Entry>>(entries => entries);
+
+        StubNothingStored();
+
+        List<Entry>? createInput = null;
+        _mockEntryService
+            .Setup(x =>
+                x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
+            )
+            .Callback<IEnumerable<Entry>, WriteOrigin, CancellationToken>((entries, _, _) => createInput = entries.ToList())
+            .ReturnsAsync((IEnumerable<Entry> entries, WriteOrigin _, CancellationToken _) => entries.ToList());
+
+        // Act
+        var result = await _controller.CreateEntries(submitted);
+
+        // Assert
+        var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(201);
+
+        var body = objectResult
+            .Value.Should()
+            .BeAssignableTo<IEnumerable<object>>()
+            .Subject.Cast<EntryV1Response>()
+            .ToList();
+
+        // One object per submitted entry, each in its submitted position.
+        body.Should().HaveCount(3);
+        body[0].Mills.Should().Be(1000);
+        body[2].Mills.Should().Be(3000);
+
+        // The refused entry is echoed as a well-formed v1 object — it carries an _id even though
+        // nothing was stored, so the uploader can decode the array.
+        body[1].Mills.Should().Be(0);
+        body[1].Id.Should().NotBeNullOrEmpty();
+
+        // ...but it is not written.
+        createInput.Should().NotBeNull();
+        createInput!.Select(e => e.Mills).Should().Equal(1000, 3000);
+    }
+
+    [Fact]
+    public async Task CreateEntries_RefusedAndDuplicate_KeepsEverySubmittedPosition()
+    {
+        // The two reasons an entry is not written — refused, and already stored — in one batch.
+        // Both still occupy their slot in the response.
+        var submitted = new[]
+        {
+            new Entry(), // refused
+            new Entry { Sgv = 130, Mills = 2000, Device = "Dexcom G7" }, // already stored
+            new Entry { Sgv = 140, Mills = 3000, Device = "Dexcom G7" }, // written
+        };
+        var storedDuplicate = new Entry { Id = "stored-dup", Sgv = 130, Mills = 2000, Device = "Dexcom G7", Type = "sgv" };
+
+        _mockDocumentProcessingService
+            .Setup(x => x.ProcessDocuments(It.IsAny<IEnumerable<Entry>>()))
+            .Returns<IEnumerable<Entry>>(entries => entries);
+
+        StubStoredAt((2000L, storedDuplicate));
+
+        List<Entry>? createInput = null;
+        _mockEntryService
+            .Setup(x =>
+                x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
+            )
+            .Callback<IEnumerable<Entry>, WriteOrigin, CancellationToken>((entries, _, _) => createInput = entries.ToList())
+            .ReturnsAsync((IEnumerable<Entry> entries, WriteOrigin _, CancellationToken _) => entries.ToList());
+
+        // Act
+        var result = await _controller.CreateEntries(submitted);
+
+        // Assert
+        var body = result
+            .Result.Should()
+            .BeOfType<ObjectResult>()
+            .Subject.Value.Should()
+            .BeAssignableTo<IEnumerable<object>>()
+            .Subject.Cast<EntryV1Response>()
+            .ToList();
+
+        body.Should().HaveCount(3);
+        body[0].Mills.Should().Be(0); // refused, echoed
+        body[1].Id.Should().Be("stored-dup"); // duplicate, echoed as the stored row
+        body[2].Mills.Should().Be(3000); // written
+
+        createInput.Should().NotBeNull();
+        createInput!.Select(e => e.Mills).Should().Equal(3000);
+    }
+
+    [Fact]
+    public async Task CreateEntries_EveryEntryRefused_StillReturnsBadRequest()
+    {
+        // Echoing refusals does not turn a wholly unusable batch into a success.
+        var result = await _controller.CreateEntries(new[] { new Entry(), new Entry() });
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+        _mockEntryService.Verify(
+            x => x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Never
+        );
+    }
+
+    [Fact]
+    public async Task CreateEntries_RefusedEntry_ReportsTheRefusalAndTheClient()
+    {
+        // A refusal is invisible in the response by design, so the log line is the only way to
+        // find a client sending readings that will never be stored.
+        _mockDocumentProcessingService
+            .Setup(x => x.ProcessDocuments(It.IsAny<IEnumerable<Entry>>()))
+            .Returns<IEnumerable<Entry>>(entries => entries);
+        StubNothingStored();
+        _controller.ControllerContext.HttpContext.Request.Headers.UserAgent = "Loop/57 CFNetwork Darwin";
+
+        await _controller.CreateEntries(new[] { new Entry { Sgv = 120, Mills = 1000 }, new Entry() });
+
+        VerifyInformationLogged("Refused 1 of 2 submitted entries", Times.Once());
+        VerifyInformationLogged("Loop/57 CFNetwork Darwin", Times.Once());
+    }
+
+    [Fact]
+    public async Task CreateEntries_NoEntryRefused_DoesNotReportARefusal()
+    {
+        _mockDocumentProcessingService
+            .Setup(x => x.ProcessDocuments(It.IsAny<IEnumerable<Entry>>()))
+            .Returns<IEnumerable<Entry>>(entries => entries);
+        StubNothingStored();
+
+        await _controller.CreateEntries(new[] { new Entry { Sgv = 120, Mills = 1000 } });
+
+        VerifyInformationLogged("Refused", Times.Never());
+    }
+
+    [Fact]
+    public async Task CreateEntries_EmptyTypeWithNoData_IsStillRefused()
+    {
+        // Derived fields are now filled in before the refusal check, and NormalizeEntry defaults an
+        // empty type to "sgv". That must not rescue an entry: HasMeaningfulData accepts a type only
+        // when it is neither empty nor "sgv", so both forms have to land the same way.
+        var result = await _controller.CreateEntries(new[] { new Entry { Type = "" } });
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
     }
 
     /// <summary>

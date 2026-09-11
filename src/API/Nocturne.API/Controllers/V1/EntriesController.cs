@@ -530,10 +530,31 @@ public class EntriesController : ControllerBase
                 );
             }
 
-            // Validate entries have meaningful data
-            var validEntries = entriesToCreate.Where(HasMeaningfulData).ToList();
+            // Fill in derived fields for every submitted entry, not just the ones that will be
+            // written: a refused entry is still echoed, and the echo has to be a well-formed v1
+            // object. Doing this before the refusal check cannot change which entries are refused
+            // — NormalizeEntry only defaults an empty type to "sgv", which HasMeaningfulData
+            // treats the same as empty, and only fills dateString when mills > 0, which already
+            // made the entry meaningful.
+            foreach (var entry in entriesToCreate)
+            {
+                NormalizeEntry(entry);
+            }
 
-            if (validEntries.Count == 0)
+            // Entries carrying no usable data are refused rather than written, but a refused entry
+            // still occupies its position in the response: v1 uploaders require one response object
+            // per submitted entry and treat a shorter array as a failed upload, which wedges the
+            // client on that batch forever (see PartitionStoredEntriesAsync).
+            var acceptedIndices = new List<int>(entriesToCreate.Count);
+            for (var i = 0; i < entriesToCreate.Count; i++)
+            {
+                if (HasMeaningfulData(entriesToCreate[i]))
+                {
+                    acceptedIndices.Add(i);
+                }
+            }
+
+            if (acceptedIndices.Count == 0)
             {
                 return BadRequest(
                     new
@@ -545,11 +566,9 @@ public class EntriesController : ControllerBase
                 );
             }
 
-            // Validate and prepare entries
-            foreach (var entry in validEntries)
-            {
-                NormalizeEntry(entry);
-            }
+            LogRefusedEntries(entriesToCreate.Count, entriesToCreate.Count - acceptedIndices.Count);
+
+            var validEntries = acceptedIndices.ConvertAll(i => entriesToCreate[i]);
 
             // Process entries for sanitization and timestamp conversion
             var processedEntries = _documentProcessingService.ProcessDocuments(validEntries);
@@ -578,7 +597,9 @@ public class EntriesController : ControllerBase
             // Evaluate alert rules against the latest created entry
             await _alertEvaluator.EvaluateForEntriesAsync(createdArray, cancellationToken);
 
-            return StatusCode(201, responseEntries.ToV1Responses());
+            var echo = BuildSubmittedOrderEcho(entriesToCreate, acceptedIndices, responseEntries);
+
+            return StatusCode(201, echo.ToV1Responses());
         }
         catch (JsonException ex)
         {
@@ -593,6 +614,54 @@ public class EntriesController : ControllerBase
                 }
             );
         }
+    }
+
+    /// <summary>
+    /// Rebuilds the response in submitted order: the processed entry for every entry that was
+    /// accepted, and the submitted entry unchanged for every one that was refused. The result has
+    /// exactly one element per submitted entry, which is the contract v1 uploaders depend on —
+    /// see <see cref="PartitionStoredEntriesAsync"/>.
+    /// </summary>
+    private static Entry[] BuildSubmittedOrderEcho(
+        List<Entry> submitted,
+        List<int> acceptedIndices,
+        List<Entry> acceptedResponses
+    )
+    {
+        if (acceptedResponses.Count != acceptedIndices.Count)
+        {
+            throw new InvalidOperationException(
+                $"Echo has {acceptedResponses.Count} entries for {acceptedIndices.Count} accepted entries");
+        }
+
+        // Refused entries are already in place; accepted ones are replaced by what the write path
+        // resolved them to (the submitted entry, or the stored row it duplicated).
+        var echo = submitted.ToArray();
+        for (var i = 0; i < acceptedIndices.Count; i++)
+        {
+            echo[acceptedIndices[i]] = acceptedResponses[i];
+        }
+
+        return echo;
+    }
+
+    /// <summary>
+    /// Records one line when a batch carried entries with no usable data. A refusal is invisible in
+    /// the response by design — the entry is echoed so the uploader's batch is not rejected — so
+    /// this is the only signal that a client is sending readings we will never store.
+    /// </summary>
+    private void LogRefusedEntries(int submitted, int refused)
+    {
+        if (refused == 0)
+            return;
+
+        _logger.LogInformation(
+            "Refused {Refused} of {Submitted} submitted entries carrying no glucose value, "
+                + "timestamp or non-sgv type; they are echoed but not stored. Client {UserAgent}",
+            refused,
+            submitted,
+            SanitizeForLog(Request?.Headers.UserAgent.ToString())
+        );
     }
 
     /// <summary>
