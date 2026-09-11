@@ -1,6 +1,7 @@
 using Nocturne.API.Services.Connectors;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.GoogleHealth.Models;
+using Nocturne.Connectors.GoogleHealth.Services;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
 
