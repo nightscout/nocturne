@@ -24,6 +24,7 @@ public class SupportConfigTests
 
         var controller = new SupportController(
             githubService,
+            Mock.Of<ISupportDiagnosticsService>(),
             Options.Create(new GitHubIssueOptions()),
             Options.Create(config),
             NullLogger<SupportController>.Instance);
