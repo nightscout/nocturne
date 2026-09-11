@@ -9,6 +9,7 @@
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
 	import { Moon, Activity, AlertCircle, Globe, Weight, ChevronRight } from 'lucide-svelte';
 	import SettingsPageSkeleton from '$lib/components/settings/SettingsPageSkeleton.svelte';
+	import DataMaintenanceCard from '$lib/components/settings/DataMaintenanceCard.svelte';
 	import { resolve } from '$app/paths';
 	import { toast } from 'svelte-sonner';
 
@@ -245,4 +246,8 @@
 			</Card>
 		</a>
 	{/if}
+
+	<!-- Outside the branches above: these tools read no UI settings, so a
+	     settings load failure must not take them away. -->
+	<DataMaintenanceCard />
 </div>

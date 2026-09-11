@@ -430,12 +430,14 @@ export const items: CommandPaletteItem[] = [
 		href: "/settings/connectors",
 	},
 	{
+		// /settings/integrations has no page — only the Discord child does, and the
+		// card that used to lead there now sits under Alerts.
 		id: "settings-integrations",
-		label: "Integrations",
+		label: "Discord",
 		group: "settings",
-		keywords: ["integrations", "api", "webhooks"],
+		keywords: ["discord", "bot", "chat", "integrations", "alerts"],
 		icon: Link,
-		href: "/settings/integrations",
+		href: "/settings/integrations/discord",
 	},
 	{
 		id: "settings-data-quality",
