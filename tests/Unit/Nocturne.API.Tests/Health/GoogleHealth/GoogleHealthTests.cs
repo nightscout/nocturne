@@ -209,8 +209,12 @@ public class GoogleHealthTests
             Mock.Of<IHeartRateService>(), Mock.Of<IStepCountService>(),
             Mock.Of<IBodyWeightService>(), Mock.Of<ISleepService>(), db);
 
-        await writer.WriteAsync([], [], ["weight"],
-            DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow, 2, default);
+        var from = DateTimeOffset.UtcNow.AddDays(-1);
+        var to = DateTimeOffset.UtcNow;
+        await writer.WriteAsync([], [], 2, default);
+        await writer.ReconcileAsync(
+            new Dictionary<string, IReadOnlyCollection<string>> { ["weight"] = [] },
+            [], ["weight"], from, to, default);
 
         Assert.Single(await db.HeartRates.AsNoTracking().ToListAsync());
         Assert.Single(await db.BodyWeights.AsNoTracking().ToListAsync());
@@ -238,8 +242,7 @@ public class GoogleHealthTests
             DataType = "heart-rate", Mills = index, Value = 60 + index
         }).ToArray();
 
-        await writer.WriteAsync(readings, [], ["heart-rate"],
-            DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow, 2, default);
+        await writer.WriteAsync(readings, [], 2, default);
 
         Assert.Equal([2, 2, 1], batches.Select(batch => batch.Length));
     }

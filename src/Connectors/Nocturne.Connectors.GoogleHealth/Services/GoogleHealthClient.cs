@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using Nocturne.Core.Models;
@@ -120,13 +121,12 @@ public sealed class GoogleHealthClient(HttpClient http)
         throw new GoogleHealthException("history_too_large", stage: "inventory", dataType: type);
     }
 
-    public async Task<List<SleepSession>> ReadSleepAsync(
-        string token, DateTimeOffset from, DateTimeOffset to, CancellationToken ct,
+    public async IAsyncEnumerable<IReadOnlyCollection<SleepSession>> ReadSleepPagesAsync(
+        string token, DateTimeOffset from, DateTimeOffset to, [EnumeratorCancellation] CancellationToken ct,
         Action<int>? onPageRead = null)
     {
         var filter = $"sleep.interval.start_time >= \"{from.UtcDateTime:O}\" AND sleep.interval.start_time < \"{to.UtcDateTime:O}\"";
         var root = $"https://health.googleapis.com/v4/users/me/dataTypes/sleep/dataPoints:reconcile?pageSize=25&filter={Uri.EscapeDataString(filter)}";
-        var sessions = new List<SleepSession>();
         var seen = new HashSet<string>();
         var pageToken = "";
         for (var page = 0; page < MaximumHistoryPages; page++)
@@ -145,6 +145,7 @@ public sealed class GoogleHealthClient(HttpClient http)
                     System.Net.HttpStatusCode.NotFound => "google_resource_not_found",
                     _ => "google_unavailable"
                 }, "sleep", ct);
+            var sessions = new List<SleepSession>();
             try
             {
                 using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
@@ -170,20 +171,20 @@ public sealed class GoogleHealthClient(HttpClient http)
             {
                 throw new GoogleHealthException("invalid_google_response", stage: "data_read", dataType: "sleep");
             }
-            if (pageToken.Length == 0) return sessions;
+            yield return sessions;
+            if (pageToken.Length == 0) yield break;
             if (!seen.Add(pageToken)) throw new GoogleHealthException("pagination_failed", stage: "data_read", dataType: "sleep");
         }
         throw new GoogleHealthException("history_too_large", stage: "data_read", dataType: "sleep");
     }
 
-    public async Task<List<GoogleHealthReading>> ReadAsync(
-        string token, string type, DateTimeOffset from, DateTimeOffset to, CancellationToken ct,
+    public async IAsyncEnumerable<IReadOnlyCollection<GoogleHealthReading>> ReadPagesAsync(
+        string token, string type, DateTimeOffset from, DateTimeOffset to, [EnumeratorCancellation] CancellationToken ct,
         Action<int>? onPageRead = null)
     {
         var field = type == "steps" ? "steps.interval.start_time" : $"{type.Replace('-', '_')}.sample_time.physical_time";
         var filter = $"{field} >= \"{from.UtcDateTime:O}\" AND {field} < \"{to.UtcDateTime:O}\"";
         var root = $"https://health.googleapis.com/v4/users/me/dataTypes/{type}/dataPoints:reconcile?pageSize=10000&filter={Uri.EscapeDataString(filter)}";
-        var points = new List<GoogleHealthReading>();
         var seen = new HashSet<string>();
         var pageToken = "";
         for (var page = 0; page < MaximumHistoryPages; page++)
@@ -202,6 +203,7 @@ public sealed class GoogleHealthClient(HttpClient http)
                     System.Net.HttpStatusCode.NotFound => "google_resource_not_found",
                     _ => "google_unavailable"
                 }, type, ct);
+            var points = new List<GoogleHealthReading>();
             try
             {
                 using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
@@ -230,7 +232,8 @@ public sealed class GoogleHealthClient(HttpClient http)
             {
                 throw new GoogleHealthException("invalid_google_response", stage: "data_read", dataType: type);
             }
-            if (pageToken.Length == 0) return points;
+            yield return points;
+            if (pageToken.Length == 0) yield break;
             if (!seen.Add(pageToken)) throw new GoogleHealthException("pagination_failed", stage: "data_read", dataType: type);
         }
         throw new GoogleHealthException("history_too_large", stage: "data_read", dataType: type);

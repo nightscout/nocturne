@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Nocturne.Connectors.GoogleHealth.Services;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Health;
 using Xunit;
 
 namespace Nocturne.Connectors.GoogleHealth.Tests.Services;
@@ -55,8 +56,8 @@ public class GoogleHealthClientTests
             """));
         var client = new GoogleHealthClient(new HttpClient(handler));
 
-        var readings = await client.ReadAsync("token", "heart-rate",
-            DateTimeOffset.Parse("2026-09-01T00:00:00Z"), DateTimeOffset.Parse("2026-09-02T00:00:00Z"), default);
+        var readings = await ReadAllAsync(client.ReadPagesAsync("token", "heart-rate",
+            DateTimeOffset.Parse("2026-09-01T00:00:00Z"), DateTimeOffset.Parse("2026-09-02T00:00:00Z"), default));
 
         Assert.Single(readings);
         Assert.Equal(73, readings[0].Value);
@@ -71,8 +72,8 @@ public class GoogleHealthClientTests
             : """{"dataPoints":[{"weight":{"sampleTime":{"physicalTime":"2026-09-01T11:00:00Z"},"weightGrams":71000}}]}"""));
         var client = new GoogleHealthClient(new HttpClient(handler));
 
-        var readings = await client.ReadAsync("token", "weight",
-            DateTimeOffset.Parse("2026-09-01T00:00:00Z"), DateTimeOffset.Parse("2026-09-02T00:00:00Z"), default);
+        var readings = await ReadAllAsync(client.ReadPagesAsync("token", "weight",
+            DateTimeOffset.Parse("2026-09-01T00:00:00Z"), DateTimeOffset.Parse("2026-09-02T00:00:00Z"), default));
 
         Assert.Equal(2, readings.Count);
         Assert.Equal(2, calls);
@@ -118,7 +119,7 @@ public class GoogleHealthClientTests
         var client = new GoogleHealthClient(new HttpClient(handler));
 
         var exception = await Assert.ThrowsAsync<GoogleHealthException>(() =>
-            client.ReadAsync("token", "weight", from, to, default));
+            ReadAllAsync(client.ReadPagesAsync("token", "weight", from, to, default)));
 
         Assert.Equal("pagination_failed", exception.Message);
         Assert.Equal(2, calls);
@@ -144,8 +145,8 @@ public class GoogleHealthClientTests
                 Content = new StringContent(body, Encoding.UTF8, "application/json")
             })));
 
-        var exception = await Assert.ThrowsAsync<GoogleHealthException>(() => client.ReadAsync(
-            "token", "weight", DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow, default));
+        var exception = await Assert.ThrowsAsync<GoogleHealthException>(() => ReadAllAsync(client.ReadPagesAsync(
+            "token", "weight", DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow, default)));
 
         Assert.Equal(expected, exception.Message);
         Assert.DoesNotContain("sensitive", exception.Message);
@@ -155,6 +156,14 @@ public class GoogleHealthClientTests
     {
         Content = new StringContent(text, Encoding.UTF8, "application/json")
     };
+
+    private static async Task<List<GoogleHealthReading>> ReadAllAsync(
+        IAsyncEnumerable<IReadOnlyCollection<GoogleHealthReading>> pages)
+    {
+        var readings = new List<GoogleHealthReading>();
+        await foreach (var page in pages) readings.AddRange(page);
+        return readings;
+    }
 
     private sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> responder)
         : HttpMessageHandler

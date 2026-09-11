@@ -32,10 +32,14 @@ public interface IGoogleHealthReadingWriter
     Task WriteAsync(
         IReadOnlyCollection<GoogleHealthReading> readings,
         IReadOnlyCollection<SleepSession> sleepSessions,
+        int batchSize,
+        CancellationToken ct);
+    Task ReconcileAsync(
+        IReadOnlyDictionary<string, IReadOnlyCollection<string>> readingIds,
+        IReadOnlyCollection<string> sleepIds,
         IReadOnlyCollection<string> activeTypes,
         DateTimeOffset from,
         DateTimeOffset to,
-        int batchSize,
         CancellationToken ct);
     Task PurgeAsync(CancellationToken ct);
 }

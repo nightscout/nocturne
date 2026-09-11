@@ -76,16 +76,9 @@ public sealed class GoogleHealthConnectorService(
                 : ImportFrom(config, to);
 
             coordinator.Report(tenantId, GoogleHealthSyncPhase.Reading, totalDataTypes: active.Length);
-            var (readings, sleepSessions) = await ReadWithRefreshAsync(
-                config, session.AccessToken!, active, from, to, tenantId, cancellationToken);
-
             coordinator.Report(tenantId, GoogleHealthSyncPhase.Validating);
-            readings = readings.DistinctBy(GoogleHealthClient.Key).ToList();
-            sleepSessions = sleepSessions.DistinctBy(session => session.OriginalId, StringComparer.Ordinal).ToList();
             coordinator.Report(tenantId, GoogleHealthSyncPhase.Integrating);
-            await writer.WriteAsync(readings, sleepSessions, active, from, to, config.BatchSize, cancellationToken);
-
-            AddCounts(result, readings, sleepSessions);
+            await ReadWithRefreshAsync(config, session.AccessToken!, active, from, to, tenantId, result, cancellationToken);
             if (request.From is null && !string.IsNullOrWhiteSpace(config.ImportFrom))
                 await ConsumeImportFromAsync(cancellationToken);
             var missingConsent = selected.Except(active, StringComparer.Ordinal).ToArray();
@@ -149,19 +142,19 @@ public sealed class GoogleHealthConnectorService(
         return session;
     }
 
-    private async Task<(List<GoogleHealthReading> Readings, List<Nocturne.Core.Models.SleepSession> SleepSessions)>
-        ReadWithRefreshAsync(
+    private async Task ReadWithRefreshAsync(
             GoogleHealthConnectorConfiguration config,
             string accessToken,
             string[] active,
             DateTimeOffset from,
             DateTimeOffset to,
             Guid tenantId,
+            SyncResult result,
             CancellationToken ct)
     {
         try
         {
-            return await ReadOnceAsync(accessToken, active, from, to, tenantId, ct);
+            await ReadOnceAsync(config, accessToken, active, from, to, tenantId, result, ct);
         }
         catch (GoogleHealthException first) when (first.Message == "access_token_rejected")
         {
@@ -170,9 +163,10 @@ public sealed class GoogleHealthConnectorService(
                 tenantId);
             coordinator.Report(tenantId, GoogleHealthSyncPhase.RefreshingSession);
             var refreshed = await SessionAsync(config, ct, forceRefresh: true);
+            result.ItemsSynced.Clear();
             try
             {
-                return await ReadOnceAsync(refreshed.AccessToken!, active, from, to, tenantId, ct);
+                await ReadOnceAsync(config, refreshed.AccessToken!, active, from, to, tenantId, result, ct);
             }
             catch (GoogleHealthException second) when (second.Message == "access_token_rejected")
             {
@@ -183,30 +177,54 @@ public sealed class GoogleHealthConnectorService(
         }
     }
 
-    private async Task<(List<GoogleHealthReading> Readings, List<Nocturne.Core.Models.SleepSession> SleepSessions)>
-        ReadOnceAsync(
+    private async Task ReadOnceAsync(
+            GoogleHealthConnectorConfiguration config,
             string accessToken,
             string[] active,
             DateTimeOffset from,
             DateTimeOffset to,
             Guid tenantId,
+            SyncResult result,
             CancellationToken ct)
     {
-        var readings = new List<GoogleHealthReading>();
-        var sleepSessions = new List<Nocturne.Core.Models.SleepSession>();
+        foreach (var type in active)
+            result.ItemsSynced[SyncDataTypeFor(type)] = 0;
         for (var index = 0; index < active.Length; index++)
         {
             var type = active[index];
             coordinator.Report(tenantId, GoogleHealthSyncPhase.Reading, type, index, active.Length, 0);
             void PageRead(int pages) =>
                 coordinator.Report(tenantId, GoogleHealthSyncPhase.Reading, type, index, active.Length, pages);
+            var readingIds = new HashSet<string>(StringComparer.Ordinal);
+            var sleepIds = new HashSet<string>(StringComparer.Ordinal);
             if (type == "sleep")
-                sleepSessions.AddRange(await google.ReadSleepAsync(accessToken, from, to, ct, PageRead));
+            {
+                await foreach (var page in google.ReadSleepPagesAsync(accessToken, from, to, ct, PageRead))
+                {
+                    var unique = page
+                        .Where(session => sleepIds.Add(session.OriginalId!))
+                        .ToArray();
+                    result.ItemsSynced[SyncDataType.Sleep] =
+                        result.ItemsSynced.GetValueOrDefault(SyncDataType.Sleep) + unique.Length;
+                    await writer.WriteAsync([], unique, config.BatchSize, ct);
+                }
+            }
             else
-                readings.AddRange(await google.ReadAsync(accessToken, type, from, to, ct, PageRead));
+            {
+                await foreach (var page in google.ReadPagesAsync(accessToken, type, from, to, ct, PageRead))
+                {
+                    var unique = page
+                        .Where(reading => readingIds.Add(GoogleHealthClient.Key(reading)))
+                        .ToArray();
+                    AddCount(result, type, unique.Length);
+                    await writer.WriteAsync(unique, [], config.BatchSize, ct);
+                }
+            }
+            await writer.ReconcileAsync(
+                new Dictionary<string, IReadOnlyCollection<string>> { [type] = readingIds },
+                sleepIds, [type], from, to, ct);
             coordinator.Report(tenantId, GoogleHealthSyncPhase.Reading, type, index + 1, active.Length);
         }
-        return (readings, sleepSessions);
     }
 
     private async Task PersistSessionAsync(GoogleHealthTokenSession session, CancellationToken ct)
@@ -255,16 +273,18 @@ public sealed class GoogleHealthConnectorService(
         _ => throw new GoogleHealthException("unsupported_type")
     };
 
-    private static void AddCounts(
-        SyncResult result,
-        IReadOnlyCollection<GoogleHealthReading> readings,
-        IReadOnlyCollection<Nocturne.Core.Models.SleepSession> sleepSessions)
+    private static void AddCount(SyncResult result, string type, int count) =>
+        result.ItemsSynced[SyncDataTypeFor(type)] =
+            result.ItemsSynced.GetValueOrDefault(SyncDataTypeFor(type)) + count;
+
+    private static SyncDataType SyncDataTypeFor(string type) => type switch
     {
-        result.ItemsSynced[SyncDataType.Steps] = readings.Count(item => item.DataType == "steps");
-        result.ItemsSynced[SyncDataType.HeartRate] = readings.Count(item => item.DataType == "heart-rate");
-        result.ItemsSynced[SyncDataType.BodyWeight] = readings.Count(item => item.DataType == "weight");
-        result.ItemsSynced[SyncDataType.Sleep] = sleepSessions.Count;
-    }
+        "steps" => SyncDataType.Steps,
+        "heart-rate" => SyncDataType.HeartRate,
+        "weight" => SyncDataType.BodyWeight,
+        "sleep" => SyncDataType.Sleep,
+        _ => throw new GoogleHealthException("unsupported_type")
+    };
 
     private static SyncResult Complete(SyncResult result, string message = "")
     {
