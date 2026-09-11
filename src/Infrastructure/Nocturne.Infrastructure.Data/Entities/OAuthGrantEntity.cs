@@ -157,8 +157,22 @@ public class OAuthGrantEntity : ITenantScoped, IAuditable, IEntityCreated
     public string? LegacySecretHash { get; set; }
 
     /// <summary>
-    /// True when this grant was seeded from a pre-existing, full-access Nightscout master API secret
-    /// (via migration or the Nightscout connector) rather than minted as a scoped <c>noc_</c> token.
+    /// A classic Nightscout instance's 40-character subject digest, captured when its per-subject
+    /// access tokens were imported. Null on a minted <c>noc_</c> token.
+    /// <para>
+    /// Unlike the two hash columns this is matched by prefix, because that is how the source
+    /// instance matched it: any 16 to 40 character prefix of the digest is a valid presentation of
+    /// the same credential. <c>LegacyNightscoutToken</c> holds the rule and the derivation.
+    /// </para>
+    /// </summary>
+    [Column("legacy_token_digest")]
+    [MaxLength(40)]
+    [AuditRedacted]
+    public string? LegacyTokenDigest { get; set; }
+
+    /// <summary>
+    /// True when this grant was seeded from a pre-existing Nightscout credential, either the master
+    /// API secret or a per-subject access token, rather than minted as a scoped <c>noc_</c> token.
     /// Drives the rotation nudge and the "Legacy" badge in the UI; not part of authentication.
     /// </summary>
     [Column("is_migrated")]

@@ -261,12 +261,11 @@ public class MemberScopeMiddlewareTests
     [Theory]
     [InlineData(AuthType.SessionCookie)]
     [InlineData(AuthType.LegacyJwt)]
-    [InlineData(AuthType.LegacyAccessToken)]
     public async Task UnscopedCredential_ForAdminMember_ResolvesTheRoleIncludingAdministration(
         AuthType authType)
     {
-        // The real web-app credential shape: no scopes at all, because SessionCookieHandler and
-        // AccessTokenHandler never set them and a JWT reaching LegacyJwtHandler has no scope claim
+        // The real web-app credential shape: no scopes at all, because SessionCookieHandler
+        // never sets them and a JWT reaching LegacyJwtHandler has no scope claim
         // (OAuthAccessTokenHandler claims those first). Intersecting membership against that empty
         // set 403ed the whole scope-gated surface for every non-owner. Every administration gate
         // (MemberInviteController, RoleController, ShareLinkController, GuestLinkController,

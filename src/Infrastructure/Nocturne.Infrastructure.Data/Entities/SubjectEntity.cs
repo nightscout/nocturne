@@ -32,37 +32,6 @@ public class SubjectEntity : IEntityTimestamped
     public string? Username { get; set; }
 
     /// <summary>
-    /// SHA256 hash of legacy access token for secure lookup
-    /// </summary>
-    [MaxLength(64)]
-    [Column("access_token_hash")]
-    public string? AccessTokenHash { get; set; }
-
-    /// <summary>
-    /// Display prefix for access token (e.g., "rhys-a1b2..." for UI display)
-    /// </summary>
-    [MaxLength(50)]
-    [Column("access_token_prefix")]
-    public string? AccessTokenPrefix { get; set; }
-
-    /// <summary>
-    /// Legacy Nightscout subject digest (40-char SHA-1 hex of <c>sha1(api_secret) + mongo _id</c>),
-    /// captured at migration time. Only ever populated for subjects imported from a legacy
-    /// Nightscout instance — natively-created subjects use the strong random token + SHA-256
-    /// <see cref="AccessTokenHash"/> scheme and leave this null.
-    /// <para>
-    /// Legacy Nightscout derives a subject's access token as <c>{name-abbrev}-{first 16 chars of
-    /// this digest}</c> and authenticates by prefix-matching the part after the last dash against
-    /// the digest. Storing the digest lets Nocturne reproduce that matching 1:1 for migrated
-    /// tokens (see the legacy fallback in the auth handlers) so existing AAPS / legacy client
-    /// setups keep working without re-issuing tokens.
-    /// </para>
-    /// </summary>
-    [MaxLength(40)]
-    [Column("legacy_token_digest")]
-    public string? LegacyTokenDigest { get; set; }
-
-    /// <summary>
     /// Email address (from OIDC claims or manually set)
     /// </summary>
     [MaxLength(255)]

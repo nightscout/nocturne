@@ -6,12 +6,14 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.API.Extensions;
+using Nocturne.API.Services.Auth;
 
 namespace Nocturne.API.Middleware.Handlers;
 
 /// <summary>
 /// Authentication handler for opaque direct grant tokens.
-/// Validates tokens by SHA-256 hashing and looking up the grant in the database.
+/// Validates tokens by SHA-256 hashing and looking up the grant in the database, falling back to
+/// the digest-prefix rule for a token imported from a classic Nightscout instance.
 /// Accepts the token via the <c>Authorization: Bearer</c> header or the Nightscout-style
 /// <c>?token=</c> query parameter (how xDrip4iOS and other Nightscout uploaders send it).
 /// Skips JWT-formatted tokens (starting with "eyJ") to let other handlers process them.
@@ -53,7 +55,7 @@ public class DirectGrantTokenHandler : IAuthHandler
     /// <inheritdoc />
     public async Task<AuthResult> AuthenticateAsync(HttpContext context)
     {
-        var token = ExtractToken(context);
+        var (token, rawToken) = ExtractToken(context);
         if (string.IsNullOrEmpty(token))
         {
             return AuthResult.Skip();
@@ -74,7 +76,8 @@ public class DirectGrantTokenHandler : IAuthHandler
         }
 
         var grant = await FindActiveGrantAsync(
-            _dbContextFactory, token, tenantCtx.TenantId, _timeProvider.GetUtcNow().UtcDateTime);
+            _dbContextFactory, token, tenantCtx.TenantId, _timeProvider.GetUtcNow().UtcDateTime,
+            context.RequestAborted, rawToken);
 
         if (grant == null)
         {
@@ -118,20 +121,54 @@ public class DirectGrantTokenHandler : IAuthHandler
     /// <param name="tenantId">The tenant the grant must belong to.</param>
     /// <param name="now">The instant the grant must be active at.</param>
     /// <param name="ct">Cancellation token.</param>
+    /// <param name="legacyToken">
+    /// The credential exactly as presented, before the <c>noc_</c> prefix was normalized in, or null
+    /// when there is nothing to match the legacy rule against. Kept separate from
+    /// <paramref name="token"/> because a dashless Nightscout token, which is a bare digest, stops
+    /// parsing as one once a prefix is prepended.
+    /// </param>
     internal static async Task<OAuthGrantEntity?> FindActiveGrantAsync(
         IDbContextFactory<NocturneDbContext> dbContextFactory,
         string token,
         Guid tenantId,
         DateTime now,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? legacyToken = null)
     {
-        var tokenHash = HashUtils.Sha256Hex(token);
+        // Both spellings of the credential hash to a candidate: the query path normalizes the noc_
+        // prefix in, so a token stored under the hash of its bare form would otherwise authenticate
+        // over Authorization: Bearer and not over ?token=. Which transport carried a credential must
+        // not decide whether it works.
+        var candidateHashes = new List<string>(2) { HashUtils.Sha256Hex(token) };
+        if (legacyToken != null && !string.Equals(legacyToken, token, StringComparison.Ordinal))
+        {
+            candidateHashes.Add(HashUtils.Sha256Hex(legacyToken));
+        }
+
+        // Nightscout's own rule, reproduced: the part after the last dash authenticates when it is a
+        // prefix of the stored digest, so the name-abbrev is cosmetic and any prefix of 16-40 chars
+        // works. ExtractDigestPrefix validates it as hex, which is also what makes it safe to use as
+        // a LIKE pattern below.
+        var digestPrefix = LegacyNightscoutToken.ExtractDigestPrefix(legacyToken ?? token);
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(ct);
         dbContext.TenantId = tenantId;
 
-        return await ActiveDirectGrants(dbContext.OAuthGrants.AsNoTracking(), tenantId, now)
-            .FirstOrDefaultAsync(g => g.TokenHash == tokenHash, ct);
+        var grants = ActiveDirectGrants(dbContext.OAuthGrants.AsNoTracking(), tenantId, now);
+
+        // Two lookups rather than one OR'd predicate: the hash match is an equality hit on
+        // ix_oauth_grants_token_hash and is what almost every request takes, while the digest match
+        // is a filtered-index LIKE that only imported Nightscout tokens can satisfy. OR-ing them
+        // costs the common path its index.
+        var byHash = await grants.FirstOrDefaultAsync(
+            g => g.TokenHash != null && candidateHashes.Contains(g.TokenHash), ct);
+        if (byHash != null || digestPrefix == null)
+        {
+            return byHash;
+        }
+
+        return await grants.FirstOrDefaultAsync(
+            g => g.LegacyTokenDigest != null && g.LegacyTokenDigest.StartsWith(digestPrefix), ct);
     }
 
     /// <summary>
@@ -158,9 +195,8 @@ public class DirectGrantTokenHandler : IAuthHandler
     /// <remarks>
     /// Shared with the <c>/api/v2/authorization/request/{token}</c> exchange, which scopes by the
     /// global query filter rather than an explicit tenant id and so cannot reuse
-    /// <see cref="ActiveDirectGrants"/> wholesale. It previously restated the predicate and omitted
-    /// the expiry term, so a grant this handler and the hubs both refused could still be exchanged
-    /// for a one-hour JWT.
+    /// <see cref="ActiveDirectGrants"/> wholesale. Restating it there instead is how the expiry term
+    /// went missing once, letting a grant every other caller refused be exchanged for a fresh JWT.
     /// </remarks>
     /// <param name="now">The instant to judge expiry against.</param>
     internal static Expression<Func<OAuthGrantEntity, bool>> IsLiveDirectGrant(DateTime now) =>
@@ -176,27 +212,33 @@ public class DirectGrantTokenHandler : IAuthHandler
     /// <remarks>
     /// On the query-parameter path the <c>noc_</c> prefix is normalized in: uploaders routinely
     /// drop the human-facing marker and send only the secret suffix, so both <c>noc_&lt;secret&gt;</c>
-    /// and a bare <c>&lt;secret&gt;</c> resolve to the same grant. A value that isn't one of our
-    /// tokens simply won't match a grant and falls through (Skip) to <see cref="AccessTokenHandler"/>,
-    /// which owns the legacy <c>name-hash</c> <c>?token=</c> format.
+    /// and a bare <c>&lt;secret&gt;</c> resolve to the same grant. The raw value is returned alongside
+    /// it because a classic Nightscout <c>name-hash</c> token is matched by digest prefix rather
+    /// than by hash, and a bare digest stops parsing as one once a prefix is prepended.
+    /// A value that isn't one of our credentials matches no grant and falls through (Skip).
     /// </remarks>
-    private static string? ExtractToken(HttpContext context)
+    /// <returns>
+    /// The value to hash, and the value as presented. Both are null when no credential was sent.
+    /// </returns>
+    private static (string? Normalized, string? Raw) ExtractToken(HttpContext context)
     {
         var bearer = context.Request.GetAuthorizationCredential();
         if (!string.IsNullOrEmpty(bearer))
         {
-            return bearer;
+            return (bearer, bearer);
         }
 
         var queryToken = context.Request.Query["token"].FirstOrDefault();
         if (!string.IsNullOrEmpty(queryToken))
         {
-            return queryToken.StartsWith(TokenPrefix, StringComparison.Ordinal)
-                ? queryToken
-                : TokenPrefix + queryToken;
+            return (
+                queryToken.StartsWith(TokenPrefix, StringComparison.Ordinal)
+                    ? queryToken
+                    : TokenPrefix + queryToken,
+                queryToken);
         }
 
-        return null;
+        return (null, null);
     }
 
     /// <summary>

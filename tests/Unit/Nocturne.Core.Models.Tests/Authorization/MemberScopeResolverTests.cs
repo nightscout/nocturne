@@ -21,7 +21,6 @@ public class MemberScopeResolverTests
         AuthType.SessionCookie,
         AuthType.OidcToken,
         AuthType.LegacyJwt,
-        AuthType.LegacyAccessToken,
     ];
 
     private static IReadOnlySet<string> Resolve(

@@ -496,7 +496,6 @@ public class AuthenticationMiddleware
             AuthType.ApiKey => AuthenticationType.ApiSecret,
             AuthType.InstanceKey => AuthenticationType.ApiSecret,
             AuthType.LegacyJwt => AuthenticationType.JwtToken,
-            AuthType.LegacyAccessToken => AuthenticationType.JwtToken,
             AuthType.OidcToken => AuthenticationType.JwtToken,
             AuthType.SessionCookie => AuthenticationType.JwtToken,
             _ => AuthenticationType.None,

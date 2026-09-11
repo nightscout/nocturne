@@ -177,7 +177,15 @@ public class AuthorizationController : ControllerBase
         // Clear ID to ensure new object
         subject.Id = null;
 
-        var createdSubject = await _authorizationService.CreateSubjectAsync(subject);
+        Subject createdSubject;
+        try
+        {
+            createdSubject = await _authorizationService.CreateSubjectAsync(subject);
+        }
+        catch (ArgumentException ex)
+        {
+            return Problem(detail: ex.Message, statusCode: 400, title: "Bad Request");
+        }
 
         _logger.LogDebug(
             "Successfully created subject: {Name} with ID: {Id}",

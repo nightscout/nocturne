@@ -37,11 +37,6 @@ public static class MemberScopeResolver
     /// <c>client_id</c> claim, so a JWT that reaches <c>LegacyJwtHandler</c> has neither.
     /// <c>SessionService</c> mints session tokens through the same <c>IJwtService</c>, so this is
     /// the same credential as a session cookie presented on a different transport.</item>
-    /// <item><see cref="AuthType.LegacyAccessToken"/> — <c>AccessTokenHandler</c> never sets
-    /// <c>Scopes</c>. The token identifies a subject; every path that gives a subject a tenant
-    /// membership (invite acceptance, membership-request approval, platform admin, tenant setup)
-    /// assigns tenant roles deliberately, and none of them writes global <c>SubjectRoles</c>. The
-    /// membership is the grant.</item>
     /// </list>
     /// <see cref="AuthType.Guest"/>, <see cref="AuthType.InstanceKey"/> and
     /// <see cref="AuthType.PlatformAccess"/> are absent because <c>MemberScopeMiddleware</c>
@@ -58,7 +53,6 @@ public static class MemberScopeResolver
         AuthType.SessionCookie,
         AuthType.OidcToken,
         AuthType.LegacyJwt,
-        AuthType.LegacyAccessToken,
     };
 
     /// <summary>

@@ -4,13 +4,18 @@ using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Nocturne.API.Middleware.Handlers;
+using Nocturne.API.Services.Auth;
 using Nocturne.Connectors.Core.Utilities;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 using AuthRole = Nocturne.Core.Models.Authorization.Role;
 using AuthSubject = Nocturne.Core.Models.Authorization.Subject;
 using OAuthGrantTypes = Nocturne.Core.Models.Authorization.OAuthGrantTypes;
+using ScopeTranslator = Nocturne.Core.Models.Authorization.ScopeTranslator;
 
 namespace Nocturne.API.Services.Identity;
 
@@ -27,6 +32,7 @@ public class AuthorizationService : IAuthorizationService, IDisposable
     private readonly ILogger<AuthorizationService> _logger;
     private readonly ISubjectService _subjectService;
     private readonly IRoleService _roleService;
+    private readonly IDirectGrantService _directGrantService;
     private readonly IJwtService _jwtService;
     private readonly NocturneDbContext _dbContext;
     private readonly PermissionTrie _permissionTrie;
@@ -48,6 +54,7 @@ public class AuthorizationService : IAuthorizationService, IDisposable
         ILogger<AuthorizationService> logger,
         ISubjectService subjectService,
         IRoleService roleService,
+        IDirectGrantService directGrantService,
         IJwtService jwtService,
         NocturneDbContext dbContext
     )
@@ -56,6 +63,7 @@ public class AuthorizationService : IAuthorizationService, IDisposable
         _logger = logger;
         _subjectService = subjectService;
         _roleService = roleService;
+        _directGrantService = directGrantService;
         _jwtService = jwtService;
         _dbContext = dbContext;
         _permissionTrie = new PermissionTrie();
@@ -65,8 +73,12 @@ public class AuthorizationService : IAuthorizationService, IDisposable
     }
 
     /// <summary>
-    /// Generate JWT token from access token
+    /// Exchange an opaque access token for a JWT.
     /// </summary>
+    /// <remarks>
+    /// Every opaque credential is a row in <c>oauth_grants</c>, so one lookup answers all of them.
+    /// AAPS V3 exchanges its plaintext token here via <c>/api/v2/authorization/request/{token}</c>.
+    /// </remarks>
     /// <param name="accessToken">Access token to exchange</param>
     /// <returns>Authorization response with JWT token</returns>
     public async Task<AuthorizationResponse?> GenerateJwtFromAccessTokenAsync(string accessToken)
@@ -74,64 +86,7 @@ public class AuthorizationService : IAuthorizationService, IDisposable
         try
         {
             _logger.LogDebug("Generating JWT for access token");
-
-            // noc_ direct-grant tokens live in oauth_grants, not subjects
-            if (accessToken.StartsWith("noc_", StringComparison.Ordinal))
-            {
-                return await GenerateJwtFromDirectGrantAsync(accessToken);
-            }
-
-            // Hash the access token to look it up
-            var tokenHash = HashUtils.Sha256Hex(accessToken);
-
-            // Find subject by access token hash, falling back to legacy Nightscout digest matching
-            // for tokens migrated from a classic instance (AAPS V3 exchanges its plaintext token
-            // here via /api/v2/authorization/request/{token}).
-            var subject = await _subjectService.GetSubjectByAccessTokenHashAsync(tokenHash)
-                ?? await _subjectService.FindSubjectByLegacyTokenAsync(accessToken);
-
-            if (subject == null)
-            {
-                _logger.LogDebug("Access token not found");
-                return null;
-            }
-
-            if (!subject.IsActive)
-            {
-                _logger.LogDebug("Subject {SubjectId} is deactivated", subject.Id);
-                return null;
-            }
-
-            // Get permissions for the subject
-            var permissions = await _subjectService.GetSubjectPermissionsAsync(subject.Id);
-            var roles = await _subjectService.GetSubjectRolesAsync(subject.Id);
-
-            // Generate JWT using the new JWT service
-            var subjectInfo = new SubjectInfo
-            {
-                Id = subject.Id,
-                Name = subject.Name,
-                Email = subject.Email,
-            };
-
-            // 1 hour for legacy compatibility — explicit so the token's actual exp matches
-            // the response's Exp field (the configured default lifetime is shorter)
-            var jwt = _jwtService.GenerateAccessToken(
-                subjectInfo, permissions, roles, lifetime: ExchangedJwtLifetime);
-
-            // Update last login
-            _ = _subjectService.UpdateLastLoginAsync(subject.Id);
-
-            var now = DateTimeOffset.UtcNow;
-            var exp = now.Add(ExchangedJwtLifetime);
-
-            return new AuthorizationResponse
-            {
-                Token = jwt,
-                Sub = subject.Name,
-                Iat = now.ToUnixTimeSeconds(),
-                Exp = exp.ToUnixTimeSeconds(),
-            };
+            return await GenerateJwtFromDirectGrantAsync(accessToken);
         }
         catch (Exception ex)
         {
@@ -152,15 +107,24 @@ public class AuthorizationService : IAuthorizationService, IDisposable
     {
         var tokenHash = HashUtils.Sha256Hex(accessToken);
 
-        var grant = await _dbContext.OAuthGrants
+        var live = _dbContext.OAuthGrants
             .AsNoTracking()
-            .Where(g => g.TokenHash == tokenHash)
-            .Where(DirectGrantTokenHandler.IsLiveDirectGrant(DateTime.UtcNow))
-            .FirstOrDefaultAsync();
+            .Where(DirectGrantTokenHandler.IsLiveDirectGrant(DateTime.UtcNow));
+
+        var grant = await live.FirstOrDefaultAsync(g => g.TokenHash == tokenHash);
+
+        // An imported Nightscout token is matched by digest prefix rather than by hash, the same
+        // fallback DirectGrantTokenHandler takes; the prefix is validated hex, so it is safe here.
+        if (grant == null
+            && LegacyNightscoutToken.ExtractDigestPrefix(accessToken) is { } digestPrefix)
+        {
+            grant = await live.FirstOrDefaultAsync(
+                g => g.LegacyTokenDigest != null && g.LegacyTokenDigest.StartsWith(digestPrefix));
+        }
 
         if (grant == null)
         {
-            _logger.LogDebug("Direct grant token not found");
+            _logger.LogDebug("No grant matches the presented token");
             return null;
         }
 
@@ -397,7 +361,11 @@ public class AuthorizationService : IAuthorizationService, IDisposable
         return Task.CompletedTask;
     }
 
-    // Subject management methods
+    // A Nightscout "subject" is an API token, not a person: a name, a set of roles and an access
+    // token, with no way to sign in. These five methods are the Nightscout-compatible face of the
+    // direct grants that store it. A subject row instead would put a device on the member list and
+    // read as a locked-out account to <see cref="Infrastructure.Data.Extensions.OrphanedSubjectFilter"/>.
+
     /// <summary>
     /// Get all subjects
     /// </summary>
@@ -408,10 +376,16 @@ public class AuthorizationService : IAuthorizationService, IDisposable
         {
             _logger.LogDebug("Getting all subjects");
 
-            var subjects = await _subjectService.GetSubjectsAsync();
+            // A site nobody owns yet holds none of these, so the list is empty rather than an error.
+            if (await ResolveOwnerSubjectIdAsync() is not { } ownerSubjectId)
+            {
+                return [];
+            }
 
-            // Map from new Subject model to legacy Subject model
-            return subjects.Select(MapToLegacySubject).ToList();
+            var grants = await OwnerGrants(ownerSubjectId)
+                .OrderByDescending(g => g.CreatedAt)
+                .ToListAsync();
+            return grants.Select(MapGrantToLegacySubject).ToList();
         }
         catch (Exception ex)
         {
@@ -437,8 +411,13 @@ public class AuthorizationService : IAuthorizationService, IDisposable
                 return null;
             }
 
-            var subject = await _subjectService.GetSubjectByIdAsync(guid);
-            return subject != null ? MapToLegacySubject(subject) : null;
+            if (await ResolveOwnerSubjectIdAsync() is not { } ownerSubjectId)
+            {
+                return null;
+            }
+
+            var grant = await OwnerGrants(ownerSubjectId).FirstOrDefaultAsync(g => g.Id == guid);
+            return grant == null ? null : MapGrantToLegacySubject(grant);
         }
         catch (Exception ex)
         {
@@ -451,51 +430,59 @@ public class AuthorizationService : IAuthorizationService, IDisposable
     /// Create a new subject
     /// </summary>
     /// <param name="subject">Subject to create</param>
-    /// <returns>Created subject</returns>
+    /// <returns>Created subject, carrying the plaintext token this one time</returns>
     public async Task<Subject> CreateSubjectAsync(Subject subject)
     {
         try
         {
-            _logger.LogDebug("Creating new subject: {Name}", subject.Name);
+            var label = subject.Name ?? "Unknown";
+            _logger.LogDebug("Creating new subject: {Name}", label);
 
-            // Map to new Subject model
-            var newSubject = new AuthSubject
+            if (await ResolveOwnerSubjectIdAsync() is not { } ownerSubjectId)
             {
-                Name = subject.Name ?? "Unknown",
+                throw new ArgumentException(
+                    "This site has no owner to issue the token to.", nameof(subject));
+            }
+
+            var scopes = await ResolveScopesAsync(subject.Roles);
+
+            // Nightscout will create a subject that holds nothing; a grant needs at least one
+            // scope, so the caller has to be told rather than handed a token that refuses every
+            // request. Also catches a roles list Nocturne has no translation for.
+            if (scopes.Count == 0)
+            {
+                throw new ArgumentException(
+                    "A subject needs at least one role that maps to a Nocturne permission.",
+                    nameof(subject));
+            }
+
+            var result = await _directGrantService.CreateAsync(
+                _dbContext,
+                ownerSubjectId,
+                label,
+                [.. scopes],
+                expiresAt: null,
+                ipAddress: null,
+                userAgent: null);
+
+            if (result.Response is not { } created)
+            {
+                throw new ArgumentException(
+                    result.Error ?? "The subject could not be created.", nameof(subject));
+            }
+
+            _logger.LogDebug("Successfully created subject: {Name} with ID: {Id}", label, created.Id);
+
+            return new Subject
+            {
+                Id = created.Id.ToString(),
+                Name = created.Label,
                 Notes = subject.Notes,
-                Type = Nocturne.Core.Models.Authorization.SubjectType.Service,
-                IsActive = true,
+                Roles = [.. ScopeTranslator.ToPermissions(created.Scopes)],
+                Created = created.CreatedAt,
+                Modified = created.CreatedAt,
+                AccessToken = created.Token,
             };
-
-            var result = await _subjectService.CreateSubjectAsync(newSubject);
-
-            // Assign roles if specified
-            if (subject.Roles != null && subject.Roles.Count > 0)
-            {
-                foreach (var role in subject.Roles)
-                {
-                    await _subjectService.AssignRoleAsync(result.Subject.Id, role);
-                }
-            }
-
-            // Map back to legacy model and include the generated access token
-            var legacySubject = MapToLegacySubject(result.Subject);
-            if (result.AccessToken != null)
-            {
-                legacySubject.AccessToken = result.AccessToken;
-            }
-
-            // Get the roles we just assigned
-            var assignedRoles = await _subjectService.GetSubjectRolesAsync(result.Subject.Id);
-            legacySubject.Roles = assignedRoles;
-
-            _logger.LogDebug(
-                "Successfully created subject: {Name} with ID: {Id}",
-                legacySubject.Name,
-                legacySubject.Id
-            );
-
-            return legacySubject;
         }
         catch (Exception ex)
         {
@@ -521,42 +508,36 @@ public class AuthorizationService : IAuthorizationService, IDisposable
                 return null;
             }
 
-            // Get existing subject
-            var existing = await _subjectService.GetSubjectByIdAsync(guid);
-            if (existing == null)
+            if (await ResolveOwnerSubjectIdAsync() is not { } ownerSubjectId)
             {
                 return null;
             }
 
-            // Update fields
-            existing.Name = subject.Name ?? existing.Name;
-            existing.Notes = subject.Notes ?? existing.Notes;
+            var grant = await _dbContext.OAuthGrants
+                .Where(g => g.SubjectId == ownerSubjectId)
+                .Where(DirectGrantTokenHandler.IsLiveDirectGrant(DateTime.UtcNow))
+                .FirstOrDefaultAsync(g => g.Id == guid);
 
-            var updated = await _subjectService.UpdateSubjectAsync(existing);
-            if (updated == null)
+            if (grant == null)
             {
                 return null;
             }
 
-            // Update roles if specified
-            if (subject.Roles != null)
+            if (!string.IsNullOrWhiteSpace(subject.Name))
             {
-                var currentRoles = await _subjectService.GetSubjectRolesAsync(guid);
-
-                // Remove roles not in the new list
-                foreach (var role in currentRoles.Except(subject.Roles))
-                {
-                    await _subjectService.RemoveRoleAsync(guid, role);
-                }
-
-                // Add roles not in the current list
-                foreach (var role in subject.Roles.Except(currentRoles))
-                {
-                    await _subjectService.AssignRoleAsync(guid, role);
-                }
+                grant.Label = subject.Name;
             }
 
-            return MapToLegacySubject(updated);
+            // An absent roles list leaves the grant's authority alone; an empty one would otherwise
+            // read as "revoke every scope", which no Nightscout client means by omitting the field.
+            if (subject.Roles is { Count: > 0 })
+            {
+                grant.Scopes = [.. await ResolveScopesAsync(subject.Roles)];
+            }
+
+            await _dbContext.SaveChangesAsync();
+
+            return MapGrantToLegacySubject(grant);
         }
         catch (Exception ex)
         {
@@ -582,7 +563,11 @@ public class AuthorizationService : IAuthorizationService, IDisposable
                 return false;
             }
 
-            return await _subjectService.DeleteSubjectAsync(guid);
+            // Revoked rather than deleted: the row is the audit trail for everything the token did.
+            // Scoped to the owner for the reason given on OwnerGrants.
+            return await ResolveOwnerSubjectIdAsync() is { } ownerSubjectId
+                && await _directGrantService.RevokeAsync(
+                    _dbContext, guid, ownerSubjectId, ipAddress: null, userAgent: null);
         }
         catch (Exception ex)
         {
@@ -590,6 +575,72 @@ public class AuthorizationService : IAuthorizationService, IDisposable
             throw;
         }
     }
+
+    /// <summary>
+    /// The live grants this API owns: the ones issued to the tenant owner, which is who it issues
+    /// to. A member's own tokens are theirs to manage through <c>DirectGrantController</c>, so
+    /// listing them here would put every member's credentials on an admin screen and make
+    /// <see cref="DeleteSubjectAsync"/> able to revoke them.
+    /// </summary>
+    private IQueryable<OAuthGrantEntity> OwnerGrants(Guid ownerSubjectId) =>
+        _dbContext.OAuthGrants
+            .AsNoTracking()
+            .Where(g => g.SubjectId == ownerSubjectId)
+            .Where(DirectGrantTokenHandler.IsLiveDirectGrant(DateTime.UtcNow));
+
+    /// <summary>
+    /// The subject a Nightscout-style token is issued to. A token is authority the owner is handing
+    /// to a device, so it hangs off the owner's membership, which is also what bounds it:
+    /// <see cref="Middleware.MemberScopeMiddleware"/> intersects a grant's scopes with its subject's
+    /// membership on every request.
+    /// </summary>
+    private async Task<Guid?> ResolveOwnerSubjectIdAsync()
+    {
+        var ownerSubjectId = await _dbContext.TenantMembers
+            .OwnersOf(_dbContext.TenantId)
+            .Select(m => m.SubjectId)
+            .FirstOrDefaultAsync();
+
+        return ownerSubjectId == Guid.Empty ? null : ownerSubjectId;
+    }
+
+    /// <summary>
+    /// The scopes a Nightscout <c>roles</c> list confers. Each entry is looked up as a role name
+    /// first, covering both the seeded roles and any the instance defines itself, and is otherwise
+    /// taken as a bare permission string. That is the shape
+    /// <see cref="ScopeTranslator.ToPermissions"/> emits, so a list read off
+    /// <see cref="GetAllSubjectsAsync"/> can be written straight back without losing authority.
+    /// </summary>
+    private async Task<IReadOnlySet<string>> ResolveScopesAsync(List<string>? roleNames)
+    {
+        if (roleNames is not { Count: > 0 })
+        {
+            return new HashSet<string>();
+        }
+
+        var definitions = (await _roleService.GetAllRolesAsync())
+            .ToDictionary(r => r.Name, r => r.Permissions ?? [], StringComparer.OrdinalIgnoreCase);
+
+        var permissions = roleNames.SelectMany(name =>
+            definitions.TryGetValue(name, out var defined) ? defined : [name]);
+
+        return ScopeTranslator.FromPermissions(permissions);
+    }
+
+    /// <summary>
+    /// Presents a direct grant in the shape the Nightscout subjects API returns. Scopes are
+    /// rendered back as legacy permission strings so the list round-trips through
+    /// <see cref="UpdateSubjectAsync"/>.
+    /// </summary>
+    private static Subject MapGrantToLegacySubject(OAuthGrantEntity grant) =>
+        new()
+        {
+            Id = grant.Id.ToString(),
+            Name = grant.Label ?? "Unnamed",
+            Roles = [.. ScopeTranslator.ToPermissions(grant.Scopes)],
+            Created = grant.CreatedAt,
+            Modified = grant.CreatedAt,
+        };
 
     // Role management methods
     /// <summary>
@@ -917,23 +968,6 @@ public class AuthorizationService : IAuthorizationService, IDisposable
         {
             _logger.LogError(ex, "Error cleaning up permissions cache");
         }
-    }
-
-    /// <summary>
-    /// Map new Subject model to legacy Subject model for API compatibility
-    /// </summary>
-    private Subject MapToLegacySubject(AuthSubject subject)
-    {
-        return new Subject
-        {
-            Id = subject.Id.ToString(),
-            Name = subject.Name,
-            Notes = subject.Notes,
-            Roles = subject.Roles?.Select(r => r.Name).ToList() ?? new List<string>(),
-            Created = subject.CreatedAt,
-            Modified = subject.CreatedAt, // Use CreatedAt as fallback
-            IsPlatformAdmin = subject.IsPlatformAdmin,
-        };
     }
 
     /// <summary>

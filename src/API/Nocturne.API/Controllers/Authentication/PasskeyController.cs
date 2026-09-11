@@ -879,17 +879,7 @@ public class PasskeyController : ControllerBase
     {
         await using var db = await _dbContextFactory.CreateTenantPinnedContextAsync(tenantId, HttpContext.RequestAborted);
 
-        return await db.TenantMembers
-            .Where(tm => tm.TenantId == tenantId)
-            .Join(
-                db.Subjects.Where(s => s.IsActive && !s.IsSystemSubject),
-                tm => tm.SubjectId,
-                s => s.Id,
-                (tm, s) => s)
-            .Where(s =>
-                !db.SubjectOidcIdentities.Any(i => i.SubjectId == s.Id) &&
-                !db.PasskeyCredentials.Any(p => p.SubjectId == s.Id))
-            .AnyAsync();
+        return await db.OrphanedSubjectsOf(tenantId).AnyAsync();
     }
 
     /// <summary>
