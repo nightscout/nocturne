@@ -248,6 +248,7 @@ public static class ServiceRegistrationExtensions
         // GitHub issue creation
         services.Configure<GitHubIssueOptions>(configuration.GetSection("GitHub"));
         services.AddSingleton<GitHubIssueService>();
+        services.AddScoped<ISupportDiagnosticsService, SupportDiagnosticsService>();
 
         return services;
     }

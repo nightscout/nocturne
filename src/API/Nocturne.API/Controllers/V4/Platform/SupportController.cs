@@ -2,8 +2,11 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
+using Nocturne.API.Attributes;
+using Nocturne.API.Authorization;
 using Nocturne.API.Configuration;
 using Nocturne.API.Services;
+using Nocturne.Core.Models.Authorization;
 using OpenApi.Remote.Attributes;
 
 namespace Nocturne.API.Controllers.V4.Platform;
@@ -13,6 +16,7 @@ namespace Nocturne.API.Controllers.V4.Platform;
 [Route("api/v4/support")]
 public class SupportController(
     GitHubIssueService githubService,
+    ISupportDiagnosticsService diagnosticsService,
     IOptions<GitHubIssueOptions> options,
     IOptions<OperatorConfiguration> operatorOptions,
     ILogger<SupportController> logger) : ControllerBase
@@ -135,6 +139,25 @@ public class SupportController(
             return Problem(detail: "Failed to create issue. Try again or report directly on GitHub.",
                 statusCode: 502, title: "Bad Gateway");
         }
+    }
+
+    /// <summary>
+    /// Returns the tenant configuration a reporter may attach to a support issue.
+    /// </summary>
+    /// <remarks>
+    /// Gated like <see cref="V4.ConnectorStatusController"/>, whose connector health this reports a
+    /// subset of: reaching it with a narrower credential than that endpoint requires would make
+    /// support the way to read connector state without <c>tenant_settings</c>.
+    /// </remarks>
+    [HttpGet("diagnostics")]
+    [RemoteQuery]
+    [DenyDemoSubject]
+    [RequireScope(Scope.TenantSettings)]
+    [ProducesResponseType(typeof(SupportDiagnosticsResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<SupportDiagnosticsResponse>> GetSupportDiagnostics(
+        CancellationToken ct)
+    {
+        return Ok(await diagnosticsService.GetAsync(ct));
     }
 
     /// <summary>

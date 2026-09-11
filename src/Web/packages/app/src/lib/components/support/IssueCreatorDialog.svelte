@@ -21,9 +21,11 @@
     ArrowLeft,
     Copy,
   } from "lucide-svelte";
-  import { submitIssue, getFallbackUrl } from "$lib/api/support.remote";
+  import { submitIssue, getFallbackUrl, getSupportDiagnostics } from "$lib/api/support.remote";
+  import { readApiFailures, type ApiFailure } from "$lib/support/api-failure-log";
+  import { buildDiagnosticInfo } from "$lib/support/diagnostic-info";
   import { page } from "$app/state";
-  import type { CreateIssueResponse } from "$api-clients";
+  import type { CreateIssueResponse, SupportDiagnosticsResponse as SupportDiagnostics } from "$api-clients";
   import { copyToClipboard } from "$lib/utils";
   import { toast } from "svelte-sonner";
 
@@ -78,6 +80,12 @@
   let includeRecentLogs = $state(false);
   let includeSettings = $state(false);
 
+  // Snapshotted when the dialog opens rather than read live, so what the preview
+  // showed is what gets submitted even if a request fails while the form is open.
+  let recentFailures = $state<readonly ApiFailure[]>([]);
+  let collectedSettings = $state<SupportDiagnostics | null>(null);
+  const recentFailureCount = $derived(recentFailures.length);
+
   // UI state
   let formState = $state<"idle" | "preview" | "submitting" | "success" | "error">("idle");
   let issueUrl = $state("");
@@ -88,34 +96,31 @@
 
   const config = $derived(templateConfigs[template] ?? templateConfigs.bug);
 
-  const diagnosticInfo = $derived.by(() => {
-    const info: Record<string, unknown> = {
-      userAgent:
-        typeof navigator !== "undefined" ? navigator.userAgent : "unknown",
-      screenSize:
-        typeof window !== "undefined"
-          ? `${window.innerWidth}x${window.innerHeight}`
-          : "unknown",
-      route: typeof window !== "undefined" ? window.location.pathname : "unknown",
-      locale:
-        typeof navigator !== "undefined" ? navigator.language : "unknown",
-    };
-
-    if (includeTenantSlug) {
-      info.tenantSlug = page.data.tenantSlug ?? "unknown";
-    }
-    if (includeCgmSource) {
-      info.cgmSource = cgmSource || "not specified";
-    }
-    if (includeRecentLogs) {
-      info.recentLogs = "included";
-    }
-    if (includeSettings) {
-      info.settings = "included";
-    }
-
-    return JSON.stringify(info, null, 2);
-  });
+  const diagnosticInfo = $derived(
+    buildDiagnosticInfo(
+      {
+        userAgent:
+          typeof navigator !== "undefined" ? navigator.userAgent : "unknown",
+        screenSize:
+          typeof window !== "undefined"
+            ? `${window.innerWidth}x${window.innerHeight}`
+            : "unknown",
+        route:
+          typeof window !== "undefined" ? window.location.pathname : "unknown",
+        locale: typeof navigator !== "undefined" ? navigator.language : "unknown",
+        tenantSlug: page.data.tenantSlug ?? "unknown",
+        cgmSource,
+        recentFailures,
+        settings: collectedSettings,
+      },
+      {
+        tenantSlug: includeTenantSlug,
+        cgmSource: includeCgmSource,
+        recentErrors: includeRecentLogs,
+        settings: includeSettings,
+      }
+    )
+  );
 
   const isValid = $derived(
     title.trim().length > 0 &&
@@ -135,6 +140,32 @@
     if (fileInput) syncInputFiles(fileInput);
   });
 
+  // The failure log is a plain module buffer, not reactive state, so it is read once
+  // on open rather than tracked.
+  $effect(() => {
+    if (open) recentFailures = [...readApiFailures()];
+  });
+
+  $effect(() => {
+    if (!includeSettings) return;
+    if (collectedSettings) return;
+
+    let cancelled = false;
+    void getSupportDiagnostics()
+      .then((settings) => {
+        if (!cancelled) collectedSettings = settings;
+      })
+      .catch(() => {
+        // The report is worth more than the snapshot: a tenant whose settings cannot be
+        // read still gets to describe the problem.
+        if (!cancelled) includeSettings = false;
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  });
+
   function resetState() {
     title = "";
     description = "";
@@ -148,6 +179,8 @@
     includeCgmSource = false;
     includeRecentLogs = false;
     includeSettings = false;
+    recentFailures = [];
+    collectedSettings = null;
     formState = "idle";
     issueUrl = "";
     issueNumber = 0;
@@ -566,6 +599,11 @@
                 Browser, screen size, route, and locale are always included. Toggle
                 additional info below:
               </p>
+              <p class="text-xs text-muted-foreground">
+                Your report is filed as a public issue on GitHub. Anything you turn on
+                here is published with it and can be read by anyone — check the preview
+                before you send.
+              </p>
 
               <div class="space-y-3">
                 <div class="flex items-center justify-between">
@@ -590,19 +628,23 @@
 
                 <div class="flex items-center justify-between">
                   <div class="space-y-0.5">
-                    <Label class="text-sm">Recent logs</Label>
+                    <Label class="text-sm">Recent errors</Label>
                     <p class="text-xs text-muted-foreground">
-                      API calls and debug information
+                      {recentFailureCount === 0
+                        ? "No failed requests recorded this session"
+                        : `${recentFailureCount} failed ${recentFailureCount === 1 ? "request" : "requests"} — time, status, page and message`}
                     </p>
                   </div>
-                  <Switch bind:checked={includeRecentLogs} />
+                  <Switch bind:checked={includeRecentLogs} disabled={recentFailureCount === 0} />
                 </div>
 
                 <div class="flex items-center justify-between">
                   <div class="space-y-0.5">
                     <Label class="text-sm">Settings</Label>
                     <p class="text-xs text-muted-foreground">
-                      Your configuration (no passwords/tokens)
+                      {includeSettings && !collectedSettings
+                        ? "Collecting…"
+                        : "Units, timezone, CGM sources and connector names. Never passwords, tokens or glucose values."}
                     </p>
                   </div>
                   <Switch bind:checked={includeSettings} />
