@@ -356,8 +356,7 @@ public sealed class GoogleHealthService(
                 ["access_type"] = "offline",
                 ["include_granted_scopes"] = "true",
                 ["prompt"] = "consent select_account",
-                ["scope"] = "openid " + string.Join(' ', settings.DataTypes
-                    .Where(type => GoogleHealthClient.SupportedTypes.Contains(type, StringComparer.Ordinal))
+                ["scope"] = "openid " + string.Join(' ', GoogleHealthClient.SupportedTypes
                     .Select(GoogleHealthClient.ScopeFor).Distinct()),
                 ["state"] = state,
                 ["code_challenge_method"] = "S256",

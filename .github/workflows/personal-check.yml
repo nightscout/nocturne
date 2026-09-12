@@ -48,4 +48,4 @@ jobs:
         with:
           dotnet-version: '10.0.400'
       - name: Personal OAuth, import and access-control tests
-        run: dotnet test tests/Unit/Nocturne.API.Tests -c Release -p:GenerateNSwagClient=false --filter 'FullyQualifiedName~PersonalHealthTests|FullyQualifiedName~V4WriteScopeGatingTests|FullyQualifiedName~DevTenantMemberSelectionTests' --logger 'console;verbosity=minimal'
+        run: dotnet test tests/Unit/Nocturne.API.Tests -c Release -p:GenerateNSwagClient=false --filter 'FullyQualifiedName~GoogleHealthTests|FullyQualifiedName~V4WriteScopeGatingTests|FullyQualifiedName~DevTenantMemberSelectionTests' --logger 'console;verbosity=minimal'
