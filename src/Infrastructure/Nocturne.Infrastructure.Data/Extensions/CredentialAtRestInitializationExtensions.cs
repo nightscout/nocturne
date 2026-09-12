@@ -167,9 +167,14 @@ public static class CredentialAtRestInitializationExtensions
 
                 await using var update = connection.CreateCommand();
                 update.Transaction = transaction;
+                // Clearing the ciphertext matters more than it looks: this replaces the token
+                // itself, so a copy kept for the old one would decrypt to a link that no longer
+                // resolves, which the owner would be handed with no error at all.
                 update.CommandText = """
                     UPDATE tenants
-                    SET share_token = @digest, share_token_set_at = @setAt
+                    SET share_token = @digest,
+                        share_token_encrypted = NULL,
+                        share_token_set_at = @setAt
                     WHERE id = @id
                     """;
                 update.Parameters.AddWithValue("@digest", digest);

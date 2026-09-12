@@ -70,13 +70,35 @@ public class TenantEntity : ISystemTimestamped
     /// <summary>
     /// SHA-256 hex digest (<see cref="Security.CredentialHash.ShareToken"/>) of the unguessable
     /// token for the tenant's public read-only dashboard, served at {token}.share.{baseDomain}.
-    /// Null when public sharing is disabled. The token itself is never stored: it is returned once
-    /// when the link is generated and resolved thereafter by digest. Rotating replaces the value
-    /// and evicts the resolution cache, so the previous link stops resolving.
+    /// Null when public sharing is disabled. This is what an incoming request is resolved by:
+    /// the digest is compared, never the token. Rotating replaces the value and evicts the
+    /// resolution cache, so the previous link stops resolving.
     /// </summary>
     [Column("share_token")]
     [MaxLength(Security.CredentialHash.HexLength)]
     public string? ShareToken { get; set; }
+
+    /// <summary>
+    /// The same token again, AES-256-GCM ciphertext under the instance key
+    /// (<c>ISecretEncryptionService</c>), so the owner can be shown the link they are already
+    /// handing out instead of rotating it, which would break it for everyone holding it.
+    /// Nothing authenticates against this column; <see cref="ShareToken"/> remains the only
+    /// resolution path.
+    /// </summary>
+    /// <remarks>
+    /// The single site for why a live link can still be unshowable. Three ways that happens, and
+    /// all three must leave the link itself working, because resolution reads the digest:
+    /// <list type="bullet">
+    /// <item>the link was minted before this column existed, so nothing was kept;</item>
+    /// <item>the instance has no key, so nothing could be kept;</item>
+    /// <item>the key changed since, so what was kept no longer decrypts.</item>
+    /// </list>
+    /// Only the third is invisible in the columns, so it is knowable only by attempting the
+    /// decrypt. All three fall back to "regenerate to see a link", the behaviour every tenant had
+    /// before this column existed.
+    /// </remarks>
+    [Column("share_token_encrypted")]
+    public string? ShareTokenEncrypted { get; set; }
 
     /// <summary>When <see cref="ShareToken"/> was last minted or rotated.</summary>
     [Column("share_token_set_at")]

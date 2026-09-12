@@ -27,17 +27,31 @@ It is **off until you turn it on**, and you turn it on under
 The address pictured belongs to a local test instance; yours will end in your own
 domain, in the shape `https://<random>.share.<your domain>`.
 
-## The link is shown once
+## Seeing the link again
 
-When you first switch public access on, Nocturne creates the link and shows it to
-you **that one time**. Copy it there and then, and keep it somewhere you can get
-back to; a password manager is ideal. If you lose it, you can't ask Nocturne to
-show it again; you **Regenerate** to get a new one, which also stops the old one
-working.
+The link stays hidden behind dots on this page. Use the eye button to show it, or
+**Copy** to put it on your clipboard without showing it at all, which is worth
+doing if anyone can see your screen. Each time you show it, Nocturne records that
+in your audit log.
 
 The address is a long random code on its own web address, along the lines of
 `k7m2p9x4q1.share.example.com`. That random part is the whole of the security:
-there's no list of shares to browse and nothing to guess your way to.
+there's no list of shares to browse and nothing to guess your way to. Because
+anyone holding it gets in, treat it like a password: a password manager is a good
+place to keep it.
+
+**Regenerate** replaces the link with a new one. Reach for it if the current one
+has gone somewhere you did not intend, and bear in mind it stops the old one
+working for everyone you have already sent it to, so they will each need the new
+one.
+
+<Callout type="note">
+On some instances Nocturne cannot show you an existing link, and says so on the
+page. That happens if the link was created before this feature existed, if your
+instance has no encryption key set, or if that key has changed since the link was
+made. The link itself keeps working for anyone who has it; only showing it again
+is impossible, so regenerating is the only way to get a copy you can send.
+</Callout>
 
 ## Choosing what's visible
 
