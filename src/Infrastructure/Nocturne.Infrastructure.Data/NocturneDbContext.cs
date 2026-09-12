@@ -1484,6 +1484,17 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasDatabaseName("ix_oauth_grants_revoked_at")
             .HasFilter("revoked_at IS NULL");
 
+        // Every request carrying an opaque credential hashes it and looks for this, so without the
+        // index each one scans the tenant's grants. Mirrors ix_oauth_grants_tenant_legacy_secret_hash,
+        // which answers the same question for the api-secret spelling of the same credential.
+        // Not unique: one Nightscout token imported into two tenants is two grants sharing a hash,
+        // and the lookup is tenant-scoped anyway.
+        modelBuilder
+            .Entity<OAuthGrantEntity>()
+            .HasIndex(g => new { g.TenantId, g.TokenHash })
+            .HasDatabaseName("ix_oauth_grants_tenant_token_hash")
+            .HasFilter("token_hash IS NOT NULL");
+
         // A legacy Nightscout subject token is matched by digest prefix, not equality. A default
         // btree on a collated text column cannot answer LIKE 'abc%', so without varchar_pattern_ops
         // this index is unusable and an unauthenticated ?token= miss becomes a sequential scan of
