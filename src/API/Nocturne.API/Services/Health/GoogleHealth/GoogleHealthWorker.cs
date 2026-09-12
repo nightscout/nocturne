@@ -36,9 +36,9 @@ public sealed class GoogleHealthWorker(
                 catch (Exception ex)
                 {
                     var error = ex as GoogleHealthException;
-                    logger.LogWarning(
-                        "Queued Google Health sync failed with code {Code} at stage {Stage}; details are not logged to protect health data and credentials",
-                        error?.Message ?? "internal_sync", error?.Stage ?? "worker");
+                    logger.LogError(ex,
+                        "Queued Google Health sync failed for tenant {TenantId} with code {Code} at stage {Stage}. Exception: {Message}",
+                        tenantId, error?.Message ?? "internal_sync", error?.Stage ?? "worker", ex.Message);
                 }
                 finally { coordinator.Complete(tenantId); }
             }
@@ -57,16 +57,21 @@ public sealed class GoogleHealthWorker(
         var now = DateTime.UtcNow;
         if (result.Success)
         {
+            logger.LogInformation("Google Health worker sync succeeded for tenant {TenantId} ({Slug})", id, slug);
             await configurations.UpdateHealthStateAsync(
                 "GoogleHealth",
                 lastSyncAttempt: now,
                 lastSuccessfulSync: now,
-            lastErrorMessage: result.Message,
-            lastErrorAt: string.IsNullOrWhiteSpace(result.Message) ? DateTime.MinValue : now,
+                lastErrorMessage: result.Message,
+                lastErrorAt: string.IsNullOrWhiteSpace(result.Message) ? DateTime.MinValue : now,
                 isHealthy: true,
                 ct: ct);
             return;
         }
+
+        logger.LogError(
+            "Google Health worker sync failed for tenant {TenantId} ({Slug}) with result message: {Message}. Errors: {Errors}",
+            id, slug, result.Message, string.Join("; ", result.Errors));
 
         await configurations.UpdateHealthStateAsync(
             "GoogleHealth",

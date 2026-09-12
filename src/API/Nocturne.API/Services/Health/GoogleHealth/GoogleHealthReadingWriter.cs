@@ -27,46 +27,58 @@ public sealed class GoogleHealthReadingWriter(
         int batchSize,
         CancellationToken ct)
     {
-        foreach (var heartRateBatch in Map(readings, "heart-rate", reading => new HeartRate
-        {
-            Mills = reading.Mills,
-            UtcOffset = reading.UtcOffsetMinutes,
-            Bpm = checked((int)reading.Value),
-            Accuracy = 0,
-            Device = "Google Health",
-            EnteredBy = "Google Health",
-            DataSource = Source,
-            SyncIdentifier = GoogleHealthClient.Key(reading)
-        }).Chunk(batchSize))
-            await heartRates.CreateHeartRatesAsync(heartRateBatch, ct);
+        logger.LogInformation(
+            "GoogleHealthReadingWriter.WriteAsync: processing {ReadingsCount} readings and {SleepCount} sleep sessions",
+            readings.Count, sleepSessions.Count);
 
-        foreach (var stepBatch in Map(readings, "steps", reading => new StepCount
+        try
         {
-            Mills = reading.Mills,
-            UtcOffset = reading.UtcOffsetMinutes,
-            Metric = checked((int)reading.Value),
-            Source = 0,
-            Device = "Google Health",
-            EnteredBy = "Google Health",
-            DataSource = Source,
-            SyncIdentifier = GoogleHealthClient.Key(reading)
-        }).Chunk(batchSize))
-            await stepCounts.CreateStepCountsAsync(stepBatch, ct);
+            foreach (var heartRateBatch in Map(readings, "heart-rate", reading => new HeartRate
+            {
+                Mills = reading.Mills,
+                UtcOffset = reading.UtcOffsetMinutes,
+                Bpm = checked((int)reading.Value),
+                Accuracy = 0,
+                Device = "Google Health",
+                EnteredBy = "Google Health",
+                DataSource = Source,
+                SyncIdentifier = GoogleHealthClient.Key(reading)
+            }).Chunk(batchSize))
+                await heartRates.CreateHeartRatesAsync(heartRateBatch, ct);
 
-        foreach (var weightBatch in Map(readings, "weight", reading => new BodyWeight
+            foreach (var stepBatch in Map(readings, "steps", reading => new StepCount
+            {
+                Mills = reading.Mills,
+                UtcOffset = reading.UtcOffsetMinutes,
+                Metric = checked((int)reading.Value),
+                Source = 0,
+                Device = "Google Health",
+                EnteredBy = "Google Health",
+                DataSource = Source,
+                SyncIdentifier = GoogleHealthClient.Key(reading)
+            }).Chunk(batchSize))
+                await stepCounts.CreateStepCountsAsync(stepBatch, ct);
+
+            foreach (var weightBatch in Map(readings, "weight", reading => new BodyWeight
+            {
+                Mills = reading.Mills,
+                UtcOffset = reading.UtcOffsetMinutes,
+                WeightKg = reading.Value,
+                Device = "Google Health",
+                EnteredBy = "Google Health",
+                DataSource = Source,
+                SyncIdentifier = GoogleHealthClient.Key(reading)
+            }).Chunk(batchSize))
+                await bodyWeights.CreateBodyWeightsAsync(weightBatch, ct);
+
+            foreach (var session in sleepSessions)
+                await sleep.UpsertSessionAsync(session, ct);
+        }
+        catch (Exception ex)
         {
-            Mills = reading.Mills,
-            UtcOffset = reading.UtcOffsetMinutes,
-            WeightKg = reading.Value,
-            Device = "Google Health",
-            EnteredBy = "Google Health",
-            DataSource = Source,
-            SyncIdentifier = GoogleHealthClient.Key(reading)
-        }).Chunk(batchSize))
-            await bodyWeights.CreateBodyWeightsAsync(weightBatch, ct);
-
-        foreach (var session in sleepSessions)
-            await sleep.UpsertSessionAsync(session, ct);
+            logger.LogError(ex, "GoogleHealthReadingWriter.WriteAsync failed while persisting health records");
+            throw;
+        }
     }
 
     /// <summary>
@@ -112,6 +124,13 @@ public sealed class GoogleHealthReadingWriter(
         var heartRateIds = Ids(readingIds, "heart-rate");
         var stepIds = Ids(readingIds, "steps");
         var weightIds = Ids(readingIds, "weight");
+
+        logger.LogInformation(
+            "GoogleHealthReadingWriter.ReconcileAsync: active types {ActiveTypes} from {From} to {To}. Filter IDs: {HeartRateCount} heart-rates, {StepCount} steps, {WeightCount} weights, {SleepCount} sleep sessions",
+            string.Join(',', activeTypes), from, to, heartRateIds.Count, stepIds.Count, weightIds.Count, sleepIds.Count);
+
+        try
+        {
 
         if (activeTypes.Contains("heart-rate") && heartRateIds.Count > 0)
         {
@@ -189,6 +208,12 @@ public sealed class GoogleHealthReadingWriter(
                     .Where(session => batch.Contains(session.Id))
                     .ExecuteDeleteAsync(ct);
             }
+        }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "GoogleHealthReadingWriter.ReconcileAsync failed for active types {ActiveTypes}", string.Join(',', activeTypes));
+            throw;
         }
     }
 

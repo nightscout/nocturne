@@ -130,6 +130,10 @@ public sealed class GoogleHealthConnectorService(
                 ? new DateTimeOffset(DateTime.SpecifyKind(requestedFrom, DateTimeKind.Utc))
                 : ImportFrom(config, to);
 
+            logger.LogInformation(
+                "Starting Google Health connector sync for tenant {TenantId} from {From} to {To}. Active data types: {ActiveDataTypes}",
+                tenantId, from, to, string.Join(',', active));
+
             coordinator.Report(tenantId, GoogleHealthSyncPhase.Reading, completedDataTypes: 0, totalDataTypes: active.Length);
             await ReadWithRefreshAsync(config, session.AccessToken!, active, from, to, tenantId, result, cancellationToken);
             await PersistWatermarkAsync(to, cancellationToken);
@@ -142,6 +146,7 @@ public sealed class GoogleHealthConnectorService(
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            logger.LogInformation("Google Health import was cancelled for tenant {TenantId}", tenantId);
             throw;
         }
         catch (Exception ex) when (ex is GoogleHealthException or HttpRequestException or JsonException or TaskCanceledException)
@@ -149,7 +154,7 @@ public sealed class GoogleHealthConnectorService(
             var error = ex as GoogleHealthException ?? new GoogleHealthException(
                 ex is JsonException ? "invalid_google_response" : "google_unavailable",
                 stage: ex is JsonException ? "response_parse" : "network");
-            LogFailure(error, tenantId);
+            LogFailure(ex, error, tenantId);
             if (error.Message == "reconnect_required")
                 await ClearSessionAsync(cancellationToken);
             return Fail(result, GoogleHealthErrorCode.Encode(
@@ -160,8 +165,8 @@ public sealed class GoogleHealthConnectorService(
         {
             var diagnosticId = Guid.NewGuid().ToString("N")[..12];
             logger.LogError(ex,
-                "Unexpected Google Health import failure for tenant {TenantId}; diagnostic {DiagnosticId}",
-                tenantId, diagnosticId);
+                "Unexpected Google Health import failure for tenant {TenantId}; diagnostic {DiagnosticId}. Message: {ExceptionMessage}",
+                tenantId, diagnosticId, ex.Message);
             return Fail(result, "internal_sync");
         }
         finally
@@ -344,9 +349,9 @@ public sealed class GoogleHealthConnectorService(
         return result;
     }
 
-    private void LogFailure(GoogleHealthException error, Guid tenantId) => logger.LogWarning(
-        "Google Health import failed for tenant {TenantId} with code {Code} at stage {Stage} for data type {DataType}; provider status {ProviderStatus}, provider reason {ProviderReason}",
-        tenantId, error.Message, error.Stage, error.DataType, error.ProviderStatus, error.ProviderReason);
+    private void LogFailure(Exception ex, GoogleHealthException error, Guid tenantId) => logger.LogError(ex,
+        "Google Health import failed for tenant {TenantId} with code {Code} at stage {Stage} for data type {DataType}; provider status {ProviderStatus}, provider reason {ProviderReason}, raw response: {RawResponseBody}",
+        tenantId, error.Message, error.Stage, error.DataType, error.ProviderStatus, error.ProviderReason, error.RawResponseBody);
 }
 
 public static class GoogleHealthErrorCode

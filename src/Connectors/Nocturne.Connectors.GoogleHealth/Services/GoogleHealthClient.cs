@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Health;
@@ -16,16 +17,18 @@ public sealed class GoogleHealthException(
     string? stage = null,
     string? dataType = null,
     string? providerReason = null,
-    int? providerStatus = null) : Exception(code)
+    int? providerStatus = null,
+    string? rawResponseBody = null) : Exception(code)
 {
     public TimeSpan? RetryAfter { get; } = retryAfter;
     public string? Stage { get; } = stage;
     public string? DataType { get; } = dataType;
     public string? ProviderReason { get; } = providerReason;
     public int? ProviderStatus { get; } = providerStatus;
+    public string? RawResponseBody { get; } = rawResponseBody;
 }
 
-public sealed class GoogleHealthClient(HttpClient http)
+public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClient>? logger = null)
 {
     // A faulty provider can keep issuing unique cursors that bypass cycle detection.
     internal const int MaximumHistoryPages = 10_000;
@@ -261,27 +264,36 @@ public sealed class GoogleHealthClient(HttpClient http)
         throw new GoogleHealthException("history_too_large", stage: "data_read", dataType: type);
     }
 
-    private static async Task<GoogleHealthException> ErrorAsync(
+    private async Task<GoogleHealthException> ErrorAsync(
         HttpResponseMessage response, string fallback, string dataType, CancellationToken ct)
     {
         var code = response.StatusCode == System.Net.HttpStatusCode.TooManyRequests ? "rate_limited" : fallback;
         string? providerReason = null;
+        string? responseBody = null;
         try
         {
-            using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
-            if (json.RootElement.TryGetProperty("error", out var error) &&
-                error.TryGetProperty("details", out var details) && details.ValueKind == JsonValueKind.Array)
+            responseBody = await response.Content.ReadAsStringAsync(ct);
+            if (!string.IsNullOrWhiteSpace(responseBody))
             {
-                var reasons = GoogleReasons(details);
-                (code, providerReason) = MapGoogleReason(reasons, code);
-                providerReason = GoogleHealthHttpError.SafeProviderReason(providerReason);
+                logger?.LogWarning(
+                    "Google Health API returned error HTTP {StatusCode} for data type {DataType}: {ResponseBody}",
+                    (int)response.StatusCode, dataType, responseBody);
+                using var json = JsonDocument.Parse(responseBody);
+                if (json.RootElement.TryGetProperty("error", out var error) &&
+                    error.TryGetProperty("details", out var details) && details.ValueKind == JsonValueKind.Array)
+                {
+                    var reasons = GoogleReasons(details);
+                    (code, providerReason) = MapGoogleReason(reasons, code);
+                    providerReason = GoogleHealthHttpError.SafeProviderReason(providerReason);
+                }
             }
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException)
         {
+            logger?.LogWarning(ex, "Failed to parse Google API error response body for data type {DataType}", dataType);
         }
         return new GoogleHealthException(code, GoogleHealthHttpError.RetryAfter(response), "data_read", dataType, providerReason,
-            (int)response.StatusCode);
+            (int)response.StatusCode, responseBody);
     }
 
     private static (string Code, string? Reason) MapGoogleReason(HashSet<string> reasons, string fallback)

@@ -420,7 +420,7 @@ public sealed class GoogleHealthService(
             var error = ex as GoogleHealthException ?? new GoogleHealthException(
                 ex is JsonException ? "invalid_google_response" : "google_unavailable",
                 stage: ex is JsonException ? "token_response" : "network");
-            LogFailure(error);
+            LogFailure(ex, error);
             await connectorConfigurations.UpdateHealthStateAsync(
                 ConnectorName,
                 lastErrorMessage: GoogleHealthErrorCode.Encode(
@@ -610,10 +610,10 @@ public sealed class GoogleHealthService(
         (await connectorConfigurations.GetSecretsAsync(ConnectorName, ct))
         .GetValueOrDefault(AccountKeySecret);
 
-    private void LogFailure(GoogleHealthException error) => logger?.LogWarning(
-        "Google Health request failed for tenant {TenantId} with code {Code} at stage {Stage} for data type {DataType}; provider status {ProviderStatus}, provider reason {ProviderReason}",
+    private void LogFailure(Exception ex, GoogleHealthException error) => logger?.LogError(ex,
+        "Google Health request failed for tenant {TenantId} with code {Code} at stage {Stage} for data type {DataType}; provider status {ProviderStatus}, provider reason {ProviderReason}, raw response: {RawResponseBody}",
         TenantId, error.Message, error.Stage, error.DataType,
-        error.ProviderStatus, error.ProviderReason);
+        error.ProviderStatus, error.ProviderReason, error.RawResponseBody);
 
     private static DateTimeOffset? AsOffset(DateTime? value) => value is null
         ? null
