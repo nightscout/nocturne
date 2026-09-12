@@ -239,6 +239,19 @@ public class GoogleHealthTests
     }
 
     [Fact]
+    public async Task Purging_a_disconnected_account_removes_its_resume_watermark()
+    {
+        var tenantId = Guid.NewGuid();
+        var store = new TestConnectorStore();
+        store.SetConfiguration("""{"enabled":true,"lastSyncedTo":"2026-09-01T00:00:00.0000000Z"}""");
+        var service = Service(store, new StubHandler(_ => Json("{}")), tenantId);
+
+        await service.PurgeAsync(Guid.NewGuid(), default);
+
+        Assert.False(store.Configuration.TryGetProperty("lastSyncedTo", out _));
+    }
+
+    [Fact]
     public async Task Preview_reports_each_capability_without_importing()
     {
         var tenantId = Guid.NewGuid();

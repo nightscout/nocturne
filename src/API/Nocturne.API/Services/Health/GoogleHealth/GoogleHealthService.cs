@@ -481,6 +481,7 @@ public sealed class GoogleHealthService(
             if (await StoredSessionAsync(ct) is not null)
                 throw new GoogleHealthException("disconnect_first");
             if (writer is not null) await writer.PurgeAsync(ct);
+            await RemoveWatermarkAsync(ct);
             await RemoveSessionAsync(subject, removeAccount: true, ct);
         }
         finally
@@ -493,9 +494,11 @@ public sealed class GoogleHealthService(
     {
         var gate = coordinator.Gate(TenantId);
         await gate.WaitAsync(ct);
+        CancellationTokenSource? previewCancellation = null;
         try
         {
-            using var previewCancellation = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            using (previewCancellation = CancellationTokenSource.CreateLinkedTokenSource(ct))
+            {
             previewCancellation.CancelAfter(PreviewTimeout);
             var previewCt = previewCancellation.Token;
             var settings = await StoredOptionsAsync(ct);
@@ -559,6 +562,11 @@ public sealed class GoogleHealthService(
                 }
             }
             return new GoogleHealthPreview { Items = items.ToArray() };
+            }
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested && previewCancellation.IsCancellationRequested)
+        {
+            throw new GoogleHealthException("google_unavailable", stage: "preview_timeout");
         }
         catch (Exception ex) when (ex is JsonException or FormatException)
         {
@@ -610,6 +618,16 @@ public sealed class GoogleHealthService(
     private async Task<string?> AccountKeyAsync(CancellationToken ct) =>
         (await connectorConfigurations.GetSecretsAsync(ConnectorName, ct))
         .GetValueOrDefault(AccountKeySecret);
+
+    private async Task RemoveWatermarkAsync(CancellationToken ct)
+    {
+        var stored = await connectorConfigurations.GetConfigurationAsync(ConnectorName, ct);
+        if (stored is null) return;
+        var configuration = stored.Configuration.RootElement.Deserialize<JsonObject>(Json) ?? new JsonObject();
+        configuration.Remove("lastSyncedTo");
+        using var document = JsonDocument.Parse(configuration.ToJsonString(Json));
+        await connectorConfigurations.SaveConfigurationAsync(ConnectorName, document, ct: ct);
+    }
 
     private void LogFailure(Exception ex, GoogleHealthException error) => logger?.LogError(ex,
         "Google Health request failed for tenant {TenantId} with code {Code} at stage {Stage} for data type {DataType}; provider status {ProviderStatus}, provider reason {ProviderReason}",

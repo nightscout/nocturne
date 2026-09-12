@@ -125,6 +125,7 @@ public sealed class GoogleHealthConnectorService(
                 .ToArray();
             if (active.Length == 0)
                 throw new GoogleHealthException("permission_denied", stage: "scope_validation");
+            var missingConsent = selected.Except(active, StringComparer.Ordinal).ToArray();
 
             var to = request.To is { } requestedTo
                 ? new DateTimeOffset(DateTime.SpecifyKind(requestedTo, DateTimeKind.Utc))
@@ -139,12 +140,12 @@ public sealed class GoogleHealthConnectorService(
 
             coordinator.Report(tenantId, GoogleHealthSyncPhase.Reading, completedDataTypes: 0, totalDataTypes: active.Length);
             await ReadWithRefreshAsync(config, session.AccessToken!, active, from, to, tenantId, result, cancellationToken);
-            await PersistWatermarkAsync(to, cancellationToken);
-            if (request.From is null && !string.IsNullOrWhiteSpace(config.ImportFrom))
+            if (missingConsent.Length == 0)
             {
-                await ConsumeImportFromAsync(cancellationToken);
+                await PersistWatermarkAsync(to, cancellationToken);
+                if (request.From is null && !string.IsNullOrWhiteSpace(config.ImportFrom))
+                    await ConsumeImportFromAsync(cancellationToken);
             }
-            var missingConsent = selected.Except(active, StringComparer.Ordinal).ToArray();
             return Complete(result, missingConsent.Length == 0
                 ? string.Empty
                 : GoogleHealthErrorCode.Encode("partial_consent", missingConsent));

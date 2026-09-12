@@ -140,6 +140,30 @@ public class GoogleHealthConnectorServiceTests
     }
 
     [Fact]
+    public async Task Partial_consent_does_not_advance_the_shared_watermark_or_consume_history()
+    {
+        var fixture = new Fixture(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/token" => Json($$"""{"access_token":"access","refresh_token":"refresh","expires_in":3600,"token_type":"Bearer","scope":"{{GoogleHealthClient.MetricsScope}}"}"""),
+            var path when path.Contains("/weight/") => Json("{\"dataPoints\":[]}"),
+            _ => throw new InvalidOperationException($"Unexpected request: {request.RequestUri}")
+        });
+        var config = fixture.Configuration();
+        config.SyncSteps = true;
+        config.ImportFrom = "2026-09-01T00:00:00.0000000+00:00";
+
+        var result = await fixture.Service.SyncDataAsync(new SyncRequest(), config, CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.StartsWith("partial_consent", result.Message);
+        Assert.False(fixture.ImportFromWasConsumed);
+        using var stored = JsonDocument.Parse(fixture.StoredConfiguration);
+        Assert.True(stored.RootElement.TryGetProperty("importFrom", out var importFrom));
+        Assert.Equal(JsonValueKind.String, importFrom.ValueKind);
+        Assert.False(stored.RootElement.TryGetProperty("lastSyncedTo", out _));
+    }
+
+    [Fact]
     public async Task Requested_data_types_narrow_the_configured_selection()
     {
         var fixture = new Fixture(request => request.RequestUri!.AbsolutePath switch
