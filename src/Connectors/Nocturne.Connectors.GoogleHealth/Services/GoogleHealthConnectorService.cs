@@ -130,9 +130,7 @@ public sealed class GoogleHealthConnectorService(
                 ? new DateTimeOffset(DateTime.SpecifyKind(requestedFrom, DateTimeKind.Utc))
                 : ImportFrom(config, to);
 
-            coordinator.Report(tenantId, GoogleHealthSyncPhase.Reading, totalDataTypes: active.Length);
-            coordinator.Report(tenantId, GoogleHealthSyncPhase.Validating);
-            coordinator.Report(tenantId, GoogleHealthSyncPhase.Integrating);
+            coordinator.Report(tenantId, GoogleHealthSyncPhase.Reading, completedDataTypes: 0, totalDataTypes: active.Length);
             await ReadWithRefreshAsync(config, session.AccessToken!, active, from, to, tenantId, result, cancellationToken);
             await PersistWatermarkAsync(to, cancellationToken);
             if (request.From is null && !string.IsNullOrWhiteSpace(config.ImportFrom))
@@ -278,6 +276,7 @@ public sealed class GoogleHealthConnectorService(
                     await writer.WriteAsync(unique, [], config.BatchSize, ct);
                 }
             }
+            coordinator.Report(tenantId, GoogleHealthSyncPhase.Integrating, type, index, active.Length);
             await writer.ReconcileAsync(
                 new Dictionary<string, IReadOnlyCollection<string>> { [type] = readingIds },
                 sleepIds, [type], from, to, ct);
