@@ -246,10 +246,10 @@ export const definitions: ScreenshotDefinition[] = [
 	},
 	{
 		id: 'deduplication-card',
-		route: '/settings/connectors',
+		route: '/settings/data-quality',
 		scenario: 'patient',
 		clip: '[data-testid="deduplicate-records"]',
-		alt: 'The Deduplicate Records tool, under Data Maintenance on the Connectors and Apps settings page. It explains that it links records from different data sources that describe the same event, and offers a Run Deduplication button.',
+		alt: 'The Deduplicate Records tool, under Data Maintenance on the Data Quality settings page. It explains that it links records from different data sources that describe the same event, and offers a Run Deduplication button.',
 	},
 	{
 		id: 'alerts-configuration',

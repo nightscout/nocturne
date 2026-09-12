@@ -80,7 +80,7 @@ Three times, so that a duplicate is caught whichever way it arrives:
   recently created links and merges groups that ingest could not have seen —
   most often because two connectors synced out of order, and the second copy
   arrived hours after the first.
-- **On demand, as a full pass.** Under **Settings > Connectors & Apps**, the
+- **On demand, as a full pass.** Under **Settings > Data Quality**, the
   **Run Deduplication** action walks your entire history. It reports how many
   records it processed, how many groups it created and how many duplicates it
   found, and it can be cancelled while it runs.

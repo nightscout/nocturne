@@ -15,9 +15,8 @@ look; they can't change anything. It **expires on its own 48 hours after you mak
 it** and can only be used **once**, so there's nothing to remember to switch off
 afterwards.
 
-You create and manage guest links from **Settings > Sharing & Privacy**. The same
-list also appears on your **Active Access** page, alongside everything else that
-currently reaches your data:
+You create and manage guest links from **Settings > Sharing & Privacy**, where
+they sit alongside the people you have invited and your public link:
 
 <Screenshot id="sharing-guest-links" />
 

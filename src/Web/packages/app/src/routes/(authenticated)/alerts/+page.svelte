@@ -356,9 +356,7 @@
       </CardContent>
     </Card>
 
-    <!-- Delivery beyond the browser. Lives here rather than under Connectors
-         because it answers this page's "where you're notified", not "where the
-         data comes from". -->
+    <!-- Lives here because it answers this page's "where you're notified". -->
     <Card>
       <CardHeader>
         <CardTitle>Where alerts reach you</CardTitle>
