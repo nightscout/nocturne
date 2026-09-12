@@ -3,7 +3,7 @@
   import { Badge } from "$lib/components/ui/badge";
   import * as Card from "$lib/components/ui/card";
   import { Trash2, Link, Loader2, Check } from "lucide-svelte";
-  import { formatDate } from "$lib/utils/formatting";
+  import { formatMediumDateTime } from "$lib/utils/formatting";
   import type { TenantRoleDto } from "$lib/api/generated/nocturne-api-client";
 
   interface Props {
@@ -48,7 +48,7 @@
             {/if}
           </div>
           <p class="text-xs text-muted-foreground">
-            Expires {formatDate(invite.expiresAt)}
+            Expires {formatMediumDateTime(invite.expiresAt)}
             {#if invite.maxUses}
               &middot; {invite.useCount}/{invite.maxUses} uses
             {:else}
@@ -71,7 +71,7 @@
                   <Check class="inline h-3 w-3 mr-1 text-primary" />
                   {usage.name ?? "Unknown"}
                   <span class="text-muted-foreground ml-1">
-                    on {formatDate(usage.joinedAt)}
+                    on {formatMediumDateTime(usage.joinedAt)}
                   </span>
                 </p>
               {/each}

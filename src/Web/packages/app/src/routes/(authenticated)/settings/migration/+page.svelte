@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { formatDate } from "$lib/utils/formatting";
+  import { formatMediumDateTime } from "$lib/utils/formatting";
   import {
     Card,
     CardContent,
@@ -629,7 +629,7 @@
                           </Badge>
                         </div>
                         <div class="text-sm text-muted-foreground">
-                          Started: {formatDate(job.startedAt)}
+                          Started: {formatMediumDateTime(job.startedAt)}
                         </div>
                         {#if job.errorMessage}
                           <div
@@ -646,7 +646,7 @@
                     </div>
                     <div class="text-right text-sm text-muted-foreground">
                       {#if job.completedAt}
-                        <div>Completed: {formatDate(job.completedAt)}</div>
+                        <div>Completed: {formatMediumDateTime(job.completedAt)}</div>
                       {/if}
                     </div>
                   </div>
@@ -687,7 +687,7 @@
                             "Unknown"}
                         </div>
                         <div class="text-sm text-muted-foreground">
-                          Last migration: {formatDate(source.lastMigrationAt)}
+                          Last migration: {formatMediumDateTime(source.lastMigrationAt)}
                         </div>
                       </div>
                     </div>

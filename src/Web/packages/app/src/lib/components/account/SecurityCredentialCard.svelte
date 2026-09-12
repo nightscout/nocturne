@@ -3,7 +3,7 @@
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import { Clock, Plus, Trash2, Loader2 } from "lucide-svelte";
-  import { formatDate } from "$lib/utils/formatting";
+  import { formatMediumDateTime } from "$lib/utils/formatting";
 
   interface Credential {
     id: string;
@@ -97,12 +97,12 @@
             >
               <span class="flex items-center gap-1">
                 <Clock class="h-3 w-3" />
-                Created {credential.createdAt ? formatDate(credential.createdAt) : "Unknown"}
+                Created {credential.createdAt ? formatMediumDateTime(credential.createdAt) : "Unknown"}
               </span>
               {#if credential.lastUsedAt}
                 <span class="flex items-center gap-1">
                   <Clock class="h-3 w-3" />
-                  Last used {formatDate(credential.lastUsedAt)}
+                  Last used {formatMediumDateTime(credential.lastUsedAt)}
                 </span>
               {/if}
             </div>

@@ -15,7 +15,7 @@
     BadgeCheck,
     ExternalLink,
   } from "lucide-svelte";
-  import { formatDate } from "$lib/utils/formatting";
+  import { formatMediumDateTime } from "$lib/utils/formatting";
   import { list, revoke } from "$lib/api/generated/connectedApps.generated.remote";
   import { getOAuthScopeDescription } from "$lib/constants/oauth-scopes";
 
@@ -196,12 +196,12 @@
           >
             <span class="flex items-center gap-1.5">
               <Clock class="h-3 w-3" />
-              Created {formatDate(app.createdAt)}
+              Created {formatMediumDateTime(app.createdAt)}
             </span>
             {#if app.lastUsedAt}
               <span class="flex items-center gap-1.5">
                 <Clock class="h-3 w-3" />
-                Last used {formatDate(app.lastUsedAt)}
+                Last used {formatMediumDateTime(app.lastUsedAt)}
               </span>
             {/if}
           </div>

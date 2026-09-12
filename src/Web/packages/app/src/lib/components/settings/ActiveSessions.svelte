@@ -13,7 +13,7 @@
     LoaderCircle,
     LogOut,
   } from "lucide-svelte";
-  import { formatDate } from "$lib/utils/formatting";
+  import { formatMediumDateTime } from "$lib/utils/formatting";
   import {
     list,
     revoke,
@@ -210,7 +210,7 @@
                   >
                     <span class="flex items-center gap-1.5">
                       <Clock class="h-3 w-3" />
-                      Last active {formatDate(session.lastActiveAt)}
+                      Last active {formatMediumDateTime(session.lastActiveAt)}
                     </span>
                     {#if session.ipAddress}
                       <span>IP {session.ipAddress}</span>

@@ -21,7 +21,7 @@
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
   import { getReportsData } from "$api/reports.remote";
-  import { bg, bgLabel, bgRange, formatDate, formatNumber, formatNumericDate } from "$lib/utils/formatting";
+  import { bg, bgLabel, bgRange, formatMediumDateTime, formatNumber, formatNumericDate } from "$lib/utils/formatting";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
 
@@ -331,7 +331,7 @@
   <div class="text-xs text-muted-foreground text-center">
     Data from {formatNumericDate(startDate)} – {formatNumericDate(endDate)}.
     {#if lastUpdated}
-      Last updated {formatDate(new Date(lastUpdated))}.
+      Last updated {formatMediumDateTime(new Date(lastUpdated))}.
     {/if}
   </div>
 </div>

@@ -302,20 +302,6 @@ export function formatDateTime(dateStr: string | undefined): string {
 }
 
 /**
- * {@link formatMediumDateTime} with "N/A" for a missing value, for the rows that
- * read "Created ..." or "Last used ...".
- *
- * A reader whose regional format is unset resolves to their display language,
- * and the default "en" writes month-first, so an all-numeric date here cannot be
- * told apart from a day-first one.
- */
-export function formatDate(date: Date | string | number | undefined): string {
-  if (date == null || date === "") return "N/A";
-  const d = new Date(date);
-  return Number.isNaN(d.getTime()) ? "N/A" : formatMediumDateTime(d);
-}
-
-/**
  * Formats a date string with detailed formatting options
  * @param dateString - ISO date string or undefined
  * @returns Formatted date and time with full details, or "Unknown"
@@ -386,6 +372,20 @@ export function formatMediumDate(date: Date | string | number): string {
     month: "short",
     day: "numeric",
   });
+}
+
+/**
+ * A date range at {@link formatMediumDate}'s precision, e.g. "29 Aug - 3 Sep 2026".
+ *
+ * Built by ICU rather than by joining two formatted dates with a hyphen, so the parts the two
+ * share are collapsed and the separator is the one the region writes.
+ */
+export function formatMediumDateRange(start: Date, end: Date): string {
+  return new Intl.DateTimeFormat(formatLocale(), {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  }).formatRange(start, end);
 }
 
 /**

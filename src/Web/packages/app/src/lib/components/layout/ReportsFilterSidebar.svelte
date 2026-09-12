@@ -9,7 +9,7 @@
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { RangeCalendar } from "$lib/components/ui/range-calendar";
   import { dayCount } from "$lib/utils/date-range";
-  import { formatLocale } from "$lib/utils/formatting";
+  import { formatLocale, formatMediumDateRange } from "$lib/utils/formatting";
   import { Calendar, Filter, RotateCcw } from "lucide-svelte";
 
   interface Props {
@@ -122,12 +122,12 @@
     onOpenChange?.(false);
   }
 
-  // Get formatted date range for display
   const dateRangeText = $derived.by(() => {
     if (draftCalendarValue?.start && draftCalendarValue?.end) {
-      const start = draftCalendarValue.start.toDate(getLocalTimeZone());
-      const end = draftCalendarValue.end.toDate(getLocalTimeZone());
-      return `${start.toLocaleDateString(formatLocale())} - ${end.toLocaleDateString(formatLocale())}`;
+      return formatMediumDateRange(
+        draftCalendarValue.start.toDate(getLocalTimeZone()),
+        draftCalendarValue.end.toDate(getLocalTimeZone()),
+      );
     }
     return "Select dates";
   });
