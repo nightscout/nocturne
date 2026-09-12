@@ -93,6 +93,9 @@ public sealed class GoogleHealthClient(HttpClient http)
         _ => throw new GoogleHealthException("unsupported_type")
     };
 
+    private static string FormatFilterTime(DateTimeOffset time) =>
+        time.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture);
+
     public async Task<int> CountAsync(string token, string type, DateTimeOffset from, DateTimeOffset to, CancellationToken ct)
     {
         var field = type switch
@@ -101,7 +104,7 @@ public sealed class GoogleHealthClient(HttpClient http)
             "sleep" => "sleep.interval.start_time",
             _ => $"{type.Replace('-', '_')}.sample_time.physical_time"
         };
-        var filter = $"{field} >= \"{from.UtcDateTime:O}\" AND {field} < \"{to.UtcDateTime:O}\"";
+        var filter = $"{field} >= \"{FormatFilterTime(from)}\" AND {field} < \"{FormatFilterTime(to)}\"";
         var pageSize = type == "sleep" ? 25 : 10000;
         var root = $"https://health.googleapis.com/v4/users/me/dataTypes/{type}/dataPoints:reconcile?pageSize={pageSize}&filter={Uri.EscapeDataString(filter)}";
         var count = 0;
@@ -144,7 +147,7 @@ public sealed class GoogleHealthClient(HttpClient http)
         string token, DateTimeOffset from, DateTimeOffset to, [EnumeratorCancellation] CancellationToken ct,
         Action<int>? onPageRead = null)
     {
-        var filter = $"sleep.interval.start_time >= \"{from.UtcDateTime:O}\" AND sleep.interval.start_time < \"{to.UtcDateTime:O}\"";
+        var filter = $"sleep.interval.start_time >= \"{FormatFilterTime(from)}\" AND sleep.interval.start_time < \"{FormatFilterTime(to)}\"";
         var root = $"https://health.googleapis.com/v4/users/me/dataTypes/sleep/dataPoints:reconcile?pageSize=25&filter={Uri.EscapeDataString(filter)}";
         var seen = new HashSet<string>();
         var pageToken = "";
@@ -202,7 +205,7 @@ public sealed class GoogleHealthClient(HttpClient http)
         Action<int>? onPageRead = null)
     {
         var field = type == "steps" ? "steps.interval.start_time" : $"{type.Replace('-', '_')}.sample_time.physical_time";
-        var filter = $"{field} >= \"{from.UtcDateTime:O}\" AND {field} < \"{to.UtcDateTime:O}\"";
+        var filter = $"{field} >= \"{FormatFilterTime(from)}\" AND {field} < \"{FormatFilterTime(to)}\"";
         var root = $"https://health.googleapis.com/v4/users/me/dataTypes/{type}/dataPoints:reconcile?pageSize=10000&filter={Uri.EscapeDataString(filter)}";
         var seen = new HashSet<string>();
         var pageToken = "";
