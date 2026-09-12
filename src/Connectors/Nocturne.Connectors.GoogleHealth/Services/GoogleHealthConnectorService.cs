@@ -72,7 +72,7 @@ public sealed class GoogleHealthConnectorService(
             element.ValueKind != JsonValueKind.String)
             return null;
         return DateTime.TryParse(element.GetString(), CultureInfo.InvariantCulture,
-            DateTimeStyles.RoundtripKind | DateTimeStyles.AdjustToUniversal, out var value)
+            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var value)
             ? value
             : null;
     }
@@ -89,7 +89,7 @@ public sealed class GoogleHealthConnectorService(
         if (configuration.TryGetValue(LastSyncedToKey, out var existing) &&
             existing.ValueKind == JsonValueKind.String &&
             DateTime.TryParse(existing.GetString(), CultureInfo.InvariantCulture,
-                DateTimeStyles.RoundtripKind | DateTimeStyles.AdjustToUniversal, out var existingValue) &&
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var existingValue) &&
             existingValue >= to.UtcDateTime)
             return;
         configuration[LastSyncedToKey] = JsonSerializer.SerializeToElement(to.UtcDateTime.ToString("o"));

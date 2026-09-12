@@ -86,6 +86,59 @@ public class GoogleHealthConnectorServiceTests
 
         Assert.True(result.Success);
         Assert.Contains("lastSyncedTo", fixture.LastSavedConfiguration);
+
+        var repeated = await fixture.Service.SyncDataAsync(
+            new SyncRequest(), config, CancellationToken.None);
+
+        Assert.True(repeated.Success);
+        fixture.Coordinator.Verify(value => value.Finish(It.IsAny<Guid>(), "succeeded"), Times.Exactly(2));
+    }
+
+    [Theory]
+    [InlineData("2026-09-10T10:00:00Z")]
+    [InlineData("2026-09-10T12:00:00+02:00")]
+    [InlineData("2026-09-10T10:00:00")]
+    public async Task Scheduled_sync_resumes_from_a_persisted_watermark_in_utc(string watermark)
+    {
+        var requestedFrom = DateTimeOffset.MinValue;
+        var fixture = new Fixture(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/token" => Json($$"""{"access_token":"access","refresh_token":"refresh","expires_in":3600,"token_type":"Bearer","scope":"{{GoogleHealthClient.MetricsScope}}"}"""),
+            var path when path.Contains("/weight/") => CaptureRange(request, value => requestedFrom = value),
+            _ => throw new InvalidOperationException($"Unexpected request: {request.RequestUri}")
+        });
+        fixture.StoredConfiguration = JsonSerializer.Serialize(new { importFrom = (string?)null, lastSyncedTo = watermark });
+
+        var result = await fixture.Service.SyncDataAsync(fixture.Configuration(), CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Equal(new DateTimeOffset(2026, 9, 10, 9, 55, 0, TimeSpan.Zero), requestedFrom);
+        Assert.Contains(fixture.Events, entry => entry.Stage == "import_completed");
+    }
+
+    [Theory]
+    [InlineData("2026-09-10T10:00:00Z")]
+    [InlineData("2026-09-10T12:00:00+02:00")]
+    [InlineData("2026-09-10T10:00:00")]
+    public async Task Older_manual_backfill_does_not_move_the_watermark_backwards(string watermark)
+    {
+        var fixture = new Fixture(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/token" => Json($$"""{"access_token":"access","refresh_token":"refresh","expires_in":3600,"token_type":"Bearer","scope":"{{GoogleHealthClient.MetricsScope}}"}"""),
+            var path when path.Contains("/weight/") => Json("{\"dataPoints\":[]}"),
+            _ => throw new InvalidOperationException($"Unexpected request: {request.RequestUri}")
+        });
+        fixture.StoredConfiguration = JsonSerializer.Serialize(new { importFrom = (string?)null, lastSyncedTo = watermark });
+        var result = await fixture.Service.SyncDataAsync(new SyncRequest
+        {
+            From = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
+            To = new DateTime(2026, 9, 2, 0, 0, 0, DateTimeKind.Utc)
+        }, fixture.Configuration(), CancellationToken.None);
+
+        Assert.True(result.Success);
+        using var stored = JsonDocument.Parse(fixture.StoredConfiguration);
+        Assert.Equal(watermark, stored.RootElement.GetProperty("lastSyncedTo").GetString());
+        Assert.Null(fixture.LastSavedConfiguration);
     }
 
     [Fact]
@@ -240,7 +293,7 @@ public class GoogleHealthConnectorServiceTests
                 .ReturnsAsync(() => new ConnectorConfigurationResponse
                 {
                     ConnectorName = "GoogleHealth",
-                    Configuration = JsonDocument.Parse("{\"importFrom\":\"2000-01-01T00:00:00.0000000+00:00\"}")
+                    Configuration = JsonDocument.Parse(StoredConfiguration)
                 });
             configurations.Setup(value => value.SaveConfigurationAsync(
                     "GoogleHealth", It.IsAny<JsonDocument>(), null, It.IsAny<CancellationToken>()))
@@ -248,6 +301,7 @@ public class GoogleHealthConnectorServiceTests
                 {
                     ImportFromWasConsumed = document.RootElement.GetProperty("importFrom").ValueKind == JsonValueKind.Null;
                     LastSavedConfiguration = document.RootElement.GetRawText();
+                    StoredConfiguration = LastSavedConfiguration;
                 })
                 .ReturnsAsync(() => new ConnectorConfigurationResponse());
             var coordinator = Coordinator;
@@ -294,6 +348,7 @@ public class GoogleHealthConnectorServiceTests
         public IReadOnlyDictionary<string, string> Secrets => secrets;
         public bool ImportFromWasConsumed { get; private set; }
         public string? LastSavedConfiguration { get; private set; }
+        public string StoredConfiguration { get; set; } = "{\"importFrom\":\"2000-01-01T00:00:00.0000000+00:00\"}";
 
         public GoogleHealthConnectorConfiguration Configuration() => new()
         {
