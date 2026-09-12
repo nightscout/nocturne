@@ -141,7 +141,7 @@ public class OrphanedSubjectFilterTests : IDisposable
     [Fact]
     public async Task A_revoked_membership_does_not_count()
     {
-        // Revoking is how a member is removed, so the account is no longer this tenant's problem.
+        // Revoking is how a member is removed, so the account has left this tenant.
         SeedMember("Departed", revokedAt: DateTime.UtcNow);
 
         (await OrphansAsync()).Should().BeEmpty();

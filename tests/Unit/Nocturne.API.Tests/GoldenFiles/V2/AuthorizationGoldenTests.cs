@@ -48,17 +48,14 @@ public class AuthorizationGoldenTests : GoldenFileTestBase
         var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
         db.TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
 
-        // The facade reads the owner's grants, which is who it issues to.
-        var ownerSubjectId = await db.TenantMembers
-            .OwnersOf(db.TenantId)
-            .Select(m => m.SubjectId)
-            .FirstAsync();
+        // The facade reads the device subject's grants, which is who it issues to.
+        var deviceSubjectId = await db.DeviceSubjectOf(db.TenantId);
 
         db.OAuthGrants.Add(new OAuthGrantEntity
         {
             Id = Guid.CreateVersion7(),
             TenantId = db.TenantId,
-            SubjectId = ownerSubjectId,
+            SubjectId = deviceSubjectId,
             GrantType = OAuthGrantTypes.Direct,
             Scopes = scopes,
             Label = label,

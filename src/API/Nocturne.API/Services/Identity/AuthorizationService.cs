@@ -376,13 +376,13 @@ public class AuthorizationService : IAuthorizationService, IDisposable
         {
             _logger.LogDebug("Getting all subjects");
 
-            // A site nobody owns yet holds none of these, so the list is empty rather than an error.
-            if (await ResolveOwnerSubjectIdAsync() is not { } ownerSubjectId)
+            // A tenant that has never issued a token holds none, and asking must not create one.
+            if (await _dbContext.FindDeviceSubjectOf(_dbContext.TenantId) is not { } deviceSubjectId)
             {
                 return [];
             }
 
-            var grants = await OwnerGrants(ownerSubjectId)
+            var grants = await DeviceGrants(deviceSubjectId)
                 .OrderByDescending(g => g.CreatedAt)
                 .ToListAsync();
             return grants.Select(MapGrantToLegacySubject).ToList();
@@ -411,12 +411,12 @@ public class AuthorizationService : IAuthorizationService, IDisposable
                 return null;
             }
 
-            if (await ResolveOwnerSubjectIdAsync() is not { } ownerSubjectId)
+            if (await _dbContext.FindDeviceSubjectOf(_dbContext.TenantId) is not { } deviceSubjectId)
             {
                 return null;
             }
 
-            var grant = await OwnerGrants(ownerSubjectId).FirstOrDefaultAsync(g => g.Id == guid);
+            var grant = await DeviceGrants(deviceSubjectId).FirstOrDefaultAsync(g => g.Id == guid);
             return grant == null ? null : MapGrantToLegacySubject(grant);
         }
         catch (Exception ex)
@@ -438,12 +438,7 @@ public class AuthorizationService : IAuthorizationService, IDisposable
             var label = subject.Name ?? "Unknown";
             _logger.LogDebug("Creating new subject: {Name}", label);
 
-            if (await ResolveOwnerSubjectIdAsync() is not { } ownerSubjectId)
-            {
-                throw new ArgumentException(
-                    "This site has no owner to issue the token to.", nameof(subject));
-            }
-
+            var deviceSubjectId = await _dbContext.DeviceSubjectOf(_dbContext.TenantId);
             var scopes = await ResolveScopesAsync(subject.Roles);
 
             // Nightscout will create a subject that holds nothing; a grant needs at least one
@@ -458,7 +453,7 @@ public class AuthorizationService : IAuthorizationService, IDisposable
 
             var result = await _directGrantService.CreateAsync(
                 _dbContext,
-                ownerSubjectId,
+                deviceSubjectId,
                 label,
                 [.. scopes],
                 expiresAt: null,
@@ -508,13 +503,13 @@ public class AuthorizationService : IAuthorizationService, IDisposable
                 return null;
             }
 
-            if (await ResolveOwnerSubjectIdAsync() is not { } ownerSubjectId)
+            if (await _dbContext.FindDeviceSubjectOf(_dbContext.TenantId) is not { } deviceSubjectId)
             {
                 return null;
             }
 
             var grant = await _dbContext.OAuthGrants
-                .Where(g => g.SubjectId == ownerSubjectId)
+                .Where(g => g.SubjectId == deviceSubjectId)
                 .Where(DirectGrantTokenHandler.IsLiveDirectGrant(DateTime.UtcNow))
                 .FirstOrDefaultAsync(g => g.Id == guid);
 
@@ -564,10 +559,10 @@ public class AuthorizationService : IAuthorizationService, IDisposable
             }
 
             // Revoked rather than deleted: the row is the audit trail for everything the token did.
-            // Scoped to the owner for the reason given on OwnerGrants.
-            return await ResolveOwnerSubjectIdAsync() is { } ownerSubjectId
+            // Scoped to the device subject for the reason given on DeviceGrants.
+            return await _dbContext.FindDeviceSubjectOf(_dbContext.TenantId) is { } deviceSubjectId
                 && await _directGrantService.RevokeAsync(
-                    _dbContext, guid, ownerSubjectId, ipAddress: null, userAgent: null);
+                    _dbContext, guid, deviceSubjectId, ipAddress: null, userAgent: null);
         }
         catch (Exception ex)
         {
@@ -577,32 +572,17 @@ public class AuthorizationService : IAuthorizationService, IDisposable
     }
 
     /// <summary>
-    /// The live grants this API owns: the ones issued to the tenant owner, which is who it issues
-    /// to. A member's own tokens are theirs to manage through <c>DirectGrantController</c>, so
-    /// listing them here would put every member's credentials on an admin screen and make
-    /// <see cref="DeleteSubjectAsync"/> able to revoke them.
+    /// The live tokens this API owns: the ones issued to the tenant's device subject, which is who
+    /// it issues to. A member's own tokens are theirs to manage through
+    /// <c>DirectGrantController</c>, so listing them here would put every member's credentials on
+    /// an admin screen and let <see cref="DeleteSubjectAsync"/> revoke them.
     /// </summary>
-    private IQueryable<OAuthGrantEntity> OwnerGrants(Guid ownerSubjectId) =>
+    private IQueryable<OAuthGrantEntity> DeviceGrants(Guid deviceSubjectId) =>
         _dbContext.OAuthGrants
             .AsNoTracking()
-            .Where(g => g.SubjectId == ownerSubjectId)
+            .Where(g => g.SubjectId == deviceSubjectId)
             .Where(DirectGrantTokenHandler.IsLiveDirectGrant(DateTime.UtcNow));
 
-    /// <summary>
-    /// The subject a Nightscout-style token is issued to. A token is authority the owner is handing
-    /// to a device, so it hangs off the owner's membership, which is also what bounds it:
-    /// <see cref="Middleware.MemberScopeMiddleware"/> intersects a grant's scopes with its subject's
-    /// membership on every request.
-    /// </summary>
-    private async Task<Guid?> ResolveOwnerSubjectIdAsync()
-    {
-        var ownerSubjectId = await _dbContext.TenantMembers
-            .OwnersOf(_dbContext.TenantId)
-            .Select(m => m.SubjectId)
-            .FirstOrDefaultAsync();
-
-        return ownerSubjectId == Guid.Empty ? null : ownerSubjectId;
-    }
 
     /// <summary>
     /// The scopes a Nightscout <c>roles</c> list confers. Each entry is looked up as a role name

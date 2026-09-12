@@ -11,15 +11,16 @@ using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.API.Tests.Migration;
 
 /// <summary>
 /// A subject imported from a classic Nightscout instance is an API token, not a person, so it must
-/// come out of the migration as a direct grant on the tenant owner rather than as a subject with a
-/// membership of its own. Importing it as an account leaves a member with no way to sign in, which
-/// takes the whole tenant into recovery mode with no way back out of it.
+/// come out of the migration as a direct grant on the tenant's device subject rather than as an
+/// account of its own. An account leaves a member with no way to sign in, which takes the whole
+/// tenant into recovery mode with no way back out of it.
 /// </summary>
 public class MigrationSubjectGrantTests
 {
@@ -152,6 +153,15 @@ public class MigrationSubjectGrantTests
             IsActive = true,
             ApprovalStatus = "Approved",
         });
+        // With a passkey, so the owner is somebody who can sign in rather than another orphan.
+        db.PasskeyCredentials.Add(new PasskeyCredentialEntity
+        {
+            Id = Guid.CreateVersion7(),
+            SubjectId = ownerSubjectId,
+            CredentialId = [1],
+            PublicKey = [2],
+            SignCount = 0,
+        });
         db.TenantRoles.Add(new TenantRoleEntity
         {
             Id = roleId,
@@ -257,7 +267,7 @@ public class MigrationSubjectGrantTests
     }
 
     [Fact]
-    public async Task Imported_token_creates_no_subject_and_no_membership()
+    public async Task Imported_token_leaves_the_tenant_with_nobody_locked_out()
     {
         await using var provider = BuildProvider();
         var tenantId = await RunSubjectMigrationAsync(provider);
@@ -268,9 +278,30 @@ public class MigrationSubjectGrantTests
         // The regression this whole shape exists to prevent. A device imported as an account is a
         // member with no passkey and no provider, which takes the tenant into recovery mode for
         // every request and cannot be recovered from the UI.
-        db.Subjects.Should().ContainSingle().Which.Name.Should().Be("Owner");
-        (await db.TenantMembers.IgnoreQueryFilters()
-            .CountAsync(tm => tm.TenantId == tenantId)).Should().Be(1);
+        (await db.OrphanedSubjectsOf(tenantId).ToListAsync()).Should().BeEmpty();
+
+        // The only accounts are the owner and the device holder, which is a system subject.
+        db.Subjects.Should().HaveCount(2);
+        db.Subjects.Should().ContainSingle(s => s.IsSystemSubject && s.Name == "Devices");
+    }
+
+    [Fact]
+    public async Task Imported_tokens_are_held_by_a_subject_that_is_nobody()
+    {
+        await using var provider = BuildProvider();
+        var tenantId = await RunSubjectMigrationAsync(provider);
+
+        using var scope = provider.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+
+        var grant = await GrantForAsync(db, tenantId, "Reader");
+        var holder = await db.Subjects.SingleAsync(s => s.Id == grant!.SubjectId);
+
+        // Issuing to a person makes the token inherit what that person is, which on a self-hosted
+        // instance means the owner's platform-admin standing over every tenant.
+        holder.IsSystemSubject.Should().BeTrue();
+        holder.IsPlatformAdmin.Should().BeFalse();
+        holder.Name.Should().Be("Devices");
     }
 
     [Fact]
@@ -283,9 +314,8 @@ public class MigrationSubjectGrantTests
         var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
 
         // The other half of the round trip: what MemberScopeMiddleware makes of the grant when the
-        // imported token authenticates. A direct grant is a scoped credential, so the owner's full
-        // access is the ceiling and the grant's own scopes are what it gets, so the token cannot
-        // inherit the owner's authority just by hanging off them.
+        // imported token authenticates. A direct grant is a scoped credential, so the holder's full
+        // access is the ceiling and the grant's own scopes are what it gets.
         var grant = await GrantForAsync(db, tenantId, "Reader");
         var resolved = MemberScopeResolver.Resolve(
             new HashSet<string> { Scope.FullAccess },
@@ -375,7 +405,7 @@ public class MigrationSubjectGrantTests
     }
 
     [Fact]
-    public async Task A_tenant_with_no_owner_imports_nothing()
+    public async Task A_tenant_with_no_owner_still_imports()
     {
         await using var provider = BuildProvider();
         var tenantId = await RunSubjectMigrationAsync(provider, seedOwner: false);
@@ -383,10 +413,10 @@ public class MigrationSubjectGrantTests
         using var scope = provider.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
 
-        // There is nobody to issue the tokens to, and a grant on a non-member authenticates and is
-        // then dropped straight back to unauthenticated by AuthenticationMiddleware.
+        // The holder is created on demand and is not a person, so an import during first-run setup
+        // is not blocked on somebody having claimed the site yet.
         (await db.OAuthGrants.IgnoreQueryFilters()
-            .AnyAsync(g => g.TenantId == tenantId)).Should().BeFalse();
+            .CountAsync(g => g.TenantId == tenantId)).Should().Be(2);
     }
 
     [Fact]

@@ -997,10 +997,6 @@ internal class MigrationJob
     private const string SubjectsNeedAdminSecretMessage =
         "Skipped: listing the people and devices that can sign in needs an admin API secret.";
 
-    private const string SubjectsNeedOwnerMessage =
-        "Skipped: your device tokens are added to whoever owns this site, and nobody owns it yet. "
-        + "Finish setting up your account, then run the import again.";
-
     private const string PartialAccessMessage =
         "Nightscout refused to hand this over. The API secret was accepted for other data, so it "
         + "may not be allowed to read this.";
@@ -1694,22 +1690,10 @@ internal class MigrationJob
         UpdateCollectionProgress(collectionName, subjects.Length, 0, 0, false);
         UpdateOverallProgress();
 
-        // A Nightscout subject is an API token, so it is imported as a direct grant on the tenant
-        // owner rather than as an account of its own. See OrphanedSubjectFilter for what an account
-        // with no way to sign in costs the tenant.
-        var ownerSubjectId = await dbContext.TenantMembers
-            .OwnersOf(_tenantId)
-            .Select(m => m.SubjectId)
-            .FirstOrDefaultAsync(ct);
-
-        if (ownerSubjectId == Guid.Empty)
-        {
-            _logger.LogInformation(
-                "Skipping subject migration for tenant {TenantId}: it has no owner to attach the "
-                + "imported tokens to", _tenantId);
-            RecordCollectionSkipped(collectionName, SubjectsNeedOwnerMessage);
-            return;
-        }
+        // A Nightscout subject is an API token, so it is imported as a direct grant rather than as
+        // an account of its own. See OrphanedSubjectFilter for what an account with no way to sign
+        // in costs the tenant, and DeviceSubjectFilter for why the holder is not a person.
+        var deviceSubjectId = await dbContext.DeviceSubjectOf(_tenantId, ct);
 
         var existingHashes = await dbContext.OAuthGrants
             .Where(g => g.TenantId == _tenantId && g.TokenHash != null)
@@ -1775,7 +1759,7 @@ internal class MigrationJob
                     Id = Guid.CreateVersion7(),
                     TenantId = _tenantId,
                     ClientEntityId = null,
-                    SubjectId = ownerSubjectId,
+                    SubjectId = deviceSubjectId,
                     GrantType = OAuthGrantTypes.Direct,
 
                     // "*" is stored as the single superuser atom; Normalize expands it back, so

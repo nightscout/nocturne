@@ -11,6 +11,7 @@ using Nocturne.Core.Models.Authorization;
 using FluentAssertions;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using AuthSubjectModel = Nocturne.Core.Models.Authorization.Subject;
@@ -37,7 +38,7 @@ public class AuthorizationServiceCrudTests : IDisposable
     private readonly AuthorizationService _authorizationService;
 
     private readonly Guid _tenantId = Guid.CreateVersion7();
-    private readonly Guid _ownerSubjectId;
+    private readonly Guid _deviceSubjectId;
 
     public AuthorizationServiceCrudTests()
     {
@@ -62,7 +63,7 @@ public class AuthorizationServiceCrudTests : IDisposable
         });
         _dbContext.SaveChanges();
 
-        _ownerSubjectId = SeedOwner();
+        _deviceSubjectId = SeedDeviceSubject();
 
         // Setup configuration
         _mockConfiguration
@@ -88,46 +89,33 @@ public class AuthorizationServiceCrudTests : IDisposable
 
     #region Subject CRUD Tests
     /// <summary>
-    /// Gives the context's tenant the owner a newly minted token is issued to.
+    /// Gives the context's tenant the device subject a newly minted token is issued to, matching
+    /// what <see cref="DeviceSubjectFilter"/> creates on demand.
     /// </summary>
-    private Guid SeedOwner()
+    private Guid SeedDeviceSubject()
     {
-        var ownerSubjectId = Guid.CreateVersion7();
-        var memberId = Guid.CreateVersion7();
-        var roleId = Guid.CreateVersion7();
+        var subjectId = Guid.CreateVersion7();
 
         _dbContext.Subjects.Add(new SubjectEntity
         {
-            Id = ownerSubjectId,
-            Name = "Owner",
-            Username = "owner",
+            Id = subjectId,
+            Name = "Devices",
             IsActive = true,
+            IsSystemSubject = true,
             ApprovalStatus = "Approved",
-        });
-        _dbContext.TenantRoles.Add(new TenantRoleEntity
-        {
-            Id = roleId,
-            TenantId = _tenantId,
-            Name = "Owner",
-            Slug = RoleSeeds.Owner,
         });
         _dbContext.TenantMembers.Add(new TenantMemberEntity
         {
-            Id = memberId,
+            Id = Guid.CreateVersion7(),
             TenantId = _tenantId,
-            SubjectId = ownerSubjectId,
+            SubjectId = subjectId,
             DirectPermissions = [Scope.FullAccess],
             SysCreatedAt = DateTime.UtcNow,
             SysUpdatedAt = DateTime.UtcNow,
         });
-        _dbContext.TenantMemberRoles.Add(new TenantMemberRoleEntity
-        {
-            TenantMemberId = memberId,
-            TenantRoleId = roleId,
-        });
 
         _dbContext.SaveChanges();
-        return ownerSubjectId;
+        return subjectId;
     }
 
     /// <summary>
@@ -141,7 +129,7 @@ public class AuthorizationServiceCrudTests : IDisposable
         {
             Id = Guid.CreateVersion7(),
             TenantId = _tenantId,
-            SubjectId = _ownerSubjectId,
+            SubjectId = _deviceSubjectId,
             GrantType = OAuthGrantTypes.Direct,
             Scopes = scopes,
             Label = label,
@@ -178,40 +166,6 @@ public class AuthorizationServiceCrudTests : IDisposable
         // Round-trippable: what the list reports can be written straight back through
         // UpdateSubjectAsync without the grant losing authority.
         result.Single().Roles.Should().Contain("api:entries:read");
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    public async Task GetAllSubjectsAsync_OnASiteWithNoOwner_IsEmptyRatherThanAnError()
-    {
-        // Reached during first-run setup, before anyone owns the tenant. The list of tokens issued
-        // to a site nobody owns yet is empty; failing the read would surface as a 500.
-        foreach (var role in _dbContext.TenantMemberRoles)
-        {
-            _dbContext.TenantMemberRoles.Remove(role);
-        }
-        await _dbContext.SaveChangesAsync();
-
-        var result = await _authorizationService.GetAllSubjectsAsync();
-
-        result.Should().BeEmpty();
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    public async Task GetSubjectByIdAsync_OnASiteWithNoOwner_IsNullRatherThanAnError()
-    {
-        var grant = await SeedGrantAsync("Pump uploader", [Scope.GlucoseRead]);
-
-        foreach (var role in _dbContext.TenantMemberRoles)
-        {
-            _dbContext.TenantMemberRoles.Remove(role);
-        }
-        await _dbContext.SaveChangesAsync();
-
-        var result = await _authorizationService.GetSubjectByIdAsync(grant.Id.ToString());
-
-        result.Should().BeNull();
     }
 
     [Fact]
@@ -318,7 +272,7 @@ public class AuthorizationServiceCrudTests : IDisposable
 
     [Fact]
     [Trait("Category", "Unit")]
-    public async Task CreateSubjectAsync_MintsAGrantOnTheOwnerAndReturnsTheTokenOnce()
+    public async Task CreateSubjectAsync_MintsAGrantOnTheDeviceSubjectAndReturnsTheTokenOnce()
     {
         var grantId = Guid.CreateVersion7();
 
@@ -355,12 +309,13 @@ public class AuthorizationServiceCrudTests : IDisposable
         result.Id.Should().Be(grantId.ToString());
         result.AccessToken.Should().Be("noc_generated-token");
 
-        // The token hangs off the owner: MemberScopeMiddleware intersects a grant's scopes with its
-        // subject's membership, so a grant on a non-member would authenticate and then be dropped.
+        // The token hangs off the device subject, which is a member, so MemberScopeMiddleware has a
+        // membership to intersect the grant's scopes with. A grant on a non-member would
+        // authenticate and then be dropped straight back to unauthenticated.
         _mockDirectGrantService.Verify(
             d => d.CreateAsync(
                 It.IsAny<NocturneDbContext>(),
-                _ownerSubjectId,
+                _deviceSubjectId,
                 "New Device Subject",
                 It.Is<IReadOnlyCollection<string>>(scopes => scopes.Contains(Scope.GlucoseRead)),
                 null, null, null, null, It.IsAny<CancellationToken>()),
@@ -430,7 +385,7 @@ public class AuthorizationServiceCrudTests : IDisposable
 
         _mockDirectGrantService
             .Setup(d => d.RevokeAsync(
-                It.IsAny<NocturneDbContext>(), grantId, _ownerSubjectId, null, null,
+                It.IsAny<NocturneDbContext>(), grantId, _deviceSubjectId, null, null,
                 It.IsAny<AuthAuditActor>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
@@ -445,7 +400,7 @@ public class AuthorizationServiceCrudTests : IDisposable
     {
         _mockDirectGrantService
             .Setup(d => d.RevokeAsync(
-                It.IsAny<NocturneDbContext>(), It.IsAny<Guid>(), _ownerSubjectId, null, null,
+                It.IsAny<NocturneDbContext>(), It.IsAny<Guid>(), _deviceSubjectId, null, null,
                 It.IsAny<AuthAuditActor>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
 
