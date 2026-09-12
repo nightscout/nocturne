@@ -40,6 +40,16 @@ expire after seven days. Production use can require additional Google verificati
 Use **Sync now** for a manual retry. Errors include a stable technical code; correlate
 that code and the attempt time with the API server log when troubleshooting.
 
+Sleep scans and imports select sessions by their end time, as required by the
+[Google Health filter contract](https://developers.google.com/health/filters).
+The lower boundary is inclusive and the upper boundary exclusive. A night starting
+before the selected range is included if it ends within that range; its stages
+remain intact. Local filtering and reconciliation use the same end-time boundaries.
+After updating from a release that showed `invalid_google_filter` for sleep, use
+**Refresh inventory**, select **Sleep sessions and stages**, then **Save selection
+and import**. Reconnecting Google or deleting existing data is not required for
+this filter correction.
+
 ## Import diagnostics
 
 Open **Settings -> Connectors & Apps -> Google Health -> Import diagnostics**.

@@ -225,7 +225,7 @@ public sealed class GoogleHealthReadingWriter(
         if (activeTypes.Contains("sleep") && sleepIds.Count > 0)
         {
             var existing = await db.SleepSessions
-                .Where(session => session.Source == SleepSource.Google.ToString() && session.SourceApp == SourceApp && session.StartTime >= first && session.StartTime < last)
+                .Where(session => session.Source == SleepSource.Google.ToString() && session.SourceApp == SourceApp && session.EndTime >= first && session.EndTime < last)
                 .Select(session => new { session.Id, session.OriginalId })
                 .ToListAsync(ct);
             var toDelete = existing

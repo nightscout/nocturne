@@ -152,6 +152,51 @@ public class GoogleHealthClientTests
         Assert.DoesNotContain("sensitive", exception.Message);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Sleep_scan_and_import_use_end_time_filters_on_every_page(bool inventory)
+    {
+        var calls = 0;
+        var client = new GoogleHealthClient(new HttpClient(new StubHandler(request =>
+        {
+            var query = System.Web.HttpUtility.ParseQueryString(request.RequestUri!.Query);
+            Assert.Equal("sleep.interval.end_time >= \"2026-09-05T00:00:00Z\" AND sleep.interval.end_time < \"2026-09-06T00:00:00Z\"", query["filter"]);
+            Assert.Equal("25", query["pageSize"]);
+            Assert.Equal("/v4/users/me/dataTypes/sleep/dataPoints:reconcile", request.RequestUri.AbsolutePath);
+            Assert.Equal(calls == 0 ? null : "next", query["pageToken"]);
+            calls++;
+            return Json(calls == 1 ? "{\"dataPoints\":[],\"nextPageToken\":\"next\"}" : "{\"dataPoints\":[]}");
+        })));
+        var from = DateTimeOffset.Parse("2026-09-05T00:00:00Z");
+        if (inventory)
+            Assert.Equal(0, await client.CountAsync("token", "sleep", from, from.AddDays(1), default));
+        else
+            await foreach (var page in client.ReadSleepPagesAsync("token", from, from.AddDays(1), default))
+                Assert.Empty(page);
+        Assert.Equal(2, calls);
+    }
+
+    [Theory]
+    [InlineData("2026-09-04T22:00:00Z", "2026-09-05T06:00:00Z", true)]
+    [InlineData("2026-09-04T22:00:00Z", "2026-09-05T00:00:00Z", true)]
+    [InlineData("2026-09-04T20:00:00Z", "2026-09-04T23:59:59Z", false)]
+    [InlineData("2026-09-05T22:00:00Z", "2026-09-06T00:00:00Z", false)]
+    [InlineData("2026-09-05T22:00:00Z", "2026-09-06T06:00:00Z", false)]
+    public async Task Sleep_import_checks_the_session_end_against_the_half_open_window(string start, string end, bool included)
+    {
+        var body = JsonSerializer.Serialize(new
+        {
+            dataPoints = new[] { new { sleep = new { interval = new { startTime = start, endTime = end } } } }
+        });
+        var client = new GoogleHealthClient(new HttpClient(new StubHandler(_ => Json(body))));
+        var sessions = new List<SleepSession>();
+        var from = DateTimeOffset.Parse("2026-09-05T00:00:00Z");
+        await foreach (var page in client.ReadSleepPagesAsync("token", from, from.AddDays(1), default))
+            sessions.AddRange(page);
+        Assert.Equal(included ? 1 : 0, sessions.Count);
+    }
+
     private static HttpResponseMessage Json(string text) => new(HttpStatusCode.OK)
     {
         Content = new StringContent(text, Encoding.UTF8, "application/json")

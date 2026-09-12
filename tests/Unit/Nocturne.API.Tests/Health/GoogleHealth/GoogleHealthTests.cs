@@ -31,6 +31,60 @@ namespace Nocturne.API.Tests.Health.GoogleHealth;
 public class GoogleHealthTests
 {
     [Fact]
+    public async Task Sleep_reconciliation_uses_end_time_and_preserves_other_sources_and_tenants()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+        await using var db = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options);
+        await db.Database.EnsureCreatedAsync();
+        var tenantId = Guid.NewGuid();
+        var otherTenantId = Guid.NewGuid();
+        db.TenantId = tenantId;
+        db.Tenants.AddRange(
+            new TenantEntity { Id = tenantId, Slug = "sleep-window", DisplayName = "Sleep window", IsActive = true },
+            new TenantEntity { Id = otherTenantId, Slug = "other-sleep", DisplayName = "Other sleep", IsActive = true });
+        var from = new DateTimeOffset(2026, 9, 5, 0, 0, 0, TimeSpan.Zero);
+        var to = from.AddDays(1);
+        SleepSessionEntity Session(string identifier, DateTimeOffset end, string source = "Google", string app = "Google Health") => new()
+        {
+            Id = Guid.NewGuid(), OriginalId = identifier, Source = source, SourceApp = app,
+            StartTime = end.AddHours(-8).UtcDateTime, EndTime = end.UtcDateTime
+        };
+        db.SleepSessions.AddRange(
+            Session("before", from.AddSeconds(-1)),
+            Session("lower-bound", from),
+            Session("stale-overnight", from.AddHours(6)),
+            Session("retained", from.AddHours(7)),
+            Session("upper-bound", to),
+            Session("after", to.AddHours(6)),
+            Session("other-source", from.AddHours(6), "Manual"),
+            Session("other-app", from.AddHours(6), app: "Other app"));
+        await db.SaveChangesAsync();
+        db.TenantId = otherTenantId;
+        db.SleepSessions.Add(Session("other-tenant", from.AddHours(6)));
+        await db.SaveChangesAsync();
+        db.TenantId = tenantId;
+        var writer = new GoogleHealthReadingWriter(Mock.Of<IHeartRateService>(), Mock.Of<IStepCountService>(),
+            Mock.Of<IBodyWeightService>(), Mock.Of<ISleepService>(), db, NullLogger<GoogleHealthReadingWriter>.Instance);
+
+        await writer.ReconcileAsync(new Dictionary<string, IReadOnlyCollection<string>>(),
+            ["retained"], ["sleep"], from, to, default);
+
+        var remaining = await db.SleepSessions.AsNoTracking().Select(session => session.OriginalId).ToListAsync();
+        Assert.Equal(6, remaining.Count);
+        Assert.DoesNotContain("lower-bound", remaining);
+        Assert.DoesNotContain("stale-overnight", remaining);
+        Assert.Contains("retained", remaining);
+        Assert.Contains("upper-bound", remaining);
+        Assert.Contains("after", remaining);
+        Assert.Contains("before", remaining);
+        Assert.Contains("other-source", remaining);
+        Assert.Contains("other-app", remaining);
+        db.TenantId = otherTenantId;
+        Assert.Equal("other-tenant", (await db.SleepSessions.AsNoTracking().SingleAsync()).OriginalId);
+    }
+
+    [Fact]
     public async Task Reimporting_google_sleep_preserves_relational_keys_and_replaces_stages()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");

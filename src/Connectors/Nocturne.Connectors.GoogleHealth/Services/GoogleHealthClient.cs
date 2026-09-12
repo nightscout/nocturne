@@ -104,7 +104,7 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
         var field = type switch
         {
             "steps" or "distance" => $"{type.Replace('-', '_')}.interval.start_time",
-            "sleep" => "sleep.interval.start_time",
+            "sleep" => "sleep.interval.end_time",
             _ => $"{type.Replace('-', '_')}.sample_time.physical_time"
         };
         var filter = $"{field} >= \"{FormatFilterTime(from)}\" AND {field} < \"{FormatFilterTime(to)}\"";
@@ -150,7 +150,7 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
         string token, DateTimeOffset from, DateTimeOffset to, [EnumeratorCancellation] CancellationToken ct,
         Action<int>? onPageRead = null)
     {
-        var filter = $"sleep.interval.start_time >= \"{FormatFilterTime(from)}\" AND sleep.interval.start_time < \"{FormatFilterTime(to)}\"";
+        var filter = $"sleep.interval.end_time >= \"{FormatFilterTime(from)}\" AND sleep.interval.end_time < \"{FormatFilterTime(to)}\"";
         var root = $"https://health.googleapis.com/v4/users/me/dataTypes/sleep/dataPoints:reconcile?pageSize=25&filter={Uri.EscapeDataString(filter)}";
         var seen = new HashSet<string>();
         var pageToken = "";
@@ -180,7 +180,7 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
                         try
                         {
                             var session = ParseSleep(item);
-                            if (session.StartMills < from.ToUnixTimeMilliseconds() || session.StartMills >= to.ToUnixTimeMilliseconds())
+                            if (session.EndMills < from.ToUnixTimeMilliseconds() || session.EndMills >= to.ToUnixTimeMilliseconds())
                                 continue;
                             sessions.Add(session);
                         }

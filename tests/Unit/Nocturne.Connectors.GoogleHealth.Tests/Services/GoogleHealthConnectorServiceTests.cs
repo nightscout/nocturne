@@ -264,6 +264,52 @@ public class GoogleHealthConnectorServiceTests
         Assert.True(fixture.ImportFromWasConsumed);
     }
 
+    [Fact]
+    public async Task Sleep_import_preserves_overnight_stages_and_completes_repeated_runs()
+    {
+        var fixture = new Fixture(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/token" => Json($$"""{"access_token":"access","refresh_token":"refresh","expires_in":3600,"token_type":"Bearer","scope":"{{GoogleHealthClient.SleepScope}}"}"""),
+            var path when path.Contains("/sleep/") => Json("""
+                {"dataPoints":[{"name":"night-1","sleep":{
+                  "interval":{"startTime":"2026-09-04T22:00:00Z","endTime":"2026-09-05T06:00:00Z"},
+                  "stages":[
+                    {"startTime":"2026-09-04T22:00:00Z","endTime":"2026-09-05T02:00:00Z","type":"DEEP"},
+                    {"startTime":"2026-09-05T02:00:00Z","endTime":"2026-09-05T06:00:00Z","type":"REM"}
+                  ]}}]}
+                """),
+            _ => throw new InvalidOperationException($"Unexpected request: {request.RequestUri}")
+        });
+        var config = fixture.Configuration();
+        config.SyncBodyWeight = false;
+        config.SyncSleep = true;
+        config.GrantedScopes = GoogleHealthClient.SleepScope;
+        var from = new DateTime(2026, 9, 5, 0, 0, 0, DateTimeKind.Utc);
+        var request = new SyncRequest { From = from, To = from.AddDays(1) };
+
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            var result = await fixture.Service.SyncDataAsync(request, config, default);
+            Assert.True(result.Success);
+            Assert.Equal(1, result.ItemsSynced[SyncDataType.Sleep]);
+        }
+
+        fixture.Writer.Verify(value => value.WriteAsync(
+            It.Is<IReadOnlyCollection<GoogleHealthReading>>(items => items.Count == 0),
+            It.Is<IReadOnlyCollection<Nocturne.Core.Models.SleepSession>>(items =>
+                items.Count == 1 && items.Single().StartTime == from.AddHours(-2) &&
+                items.Single().EndTime == from.AddHours(6) && items.Single().Stages!.Count == 2),
+            2, It.IsAny<CancellationToken>()), Times.Exactly(2));
+        fixture.Writer.Verify(value => value.ReconcileAsync(
+            It.IsAny<IReadOnlyDictionary<string, IReadOnlyCollection<string>>>(),
+            It.Is<IReadOnlyCollection<string>>(identifiers => identifiers.Count == 1),
+            It.Is<IReadOnlyCollection<string>>(types => types.Contains("sleep")),
+            new DateTimeOffset(from), new DateTimeOffset(from.AddDays(1)), It.IsAny<CancellationToken>()), Times.Exactly(2));
+        fixture.Coordinator.Verify(value => value.Finish(It.IsAny<Guid>(), "succeeded"), Times.Exactly(2));
+        using var saved = JsonDocument.Parse(fixture.StoredConfiguration);
+        Assert.Equal(from.AddDays(1), saved.RootElement.GetProperty("lastSyncedTo").GetDateTime());
+    }
+
     private sealed class Fixture
     {
         private readonly Guid tenantId = Guid.NewGuid();
