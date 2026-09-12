@@ -3,13 +3,10 @@
   ContentType: application/json; charset=utf-8,
   Body: [
     {
-      name: Public,
-      accessToken: ,
-      created: {Scrubbed},
-      modified: {Scrubbed}
-    },
-    {
-      name: Test User,
+      name: Pump uploader,
+      roles: [
+        api:entries:read
+      ],
       accessToken: ,
       created: {Scrubbed},
       modified: {Scrubbed}

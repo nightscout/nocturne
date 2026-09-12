@@ -33,8 +33,10 @@ public class HubTokenAuthorizerTests
 {
     // Segment content is irrelevant — the authorizer only counts dots to route to the JWT path.
     private const string JwtShapedToken = "eyJhbGciOi.eyJzdWIiOi.c2ln";
-    private const string LegacyToken = "subject-abc123def456";
-    private const string ExchangedJwt = "exchanged.jwt.token";
+    private const string LegacyToken = "subject-0123456789abcdef";
+
+    /// <summary>The 40-character digest an imported token is matched against, prefix-first.</summary>
+    private const string LegacyDigest = "0123456789abcdef0123456789abcdef01234567";
     private const string DirectGrantToken = "noc_abc123def456";
 
     private static readonly Guid Tenant = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
@@ -44,7 +46,6 @@ public class HubTokenAuthorizerTests
     private readonly Mock<IJwtService> _jwtService = new();
     private readonly Mock<IOAuthTokenRevocationCache> _revocationCache = new();
     private readonly Mock<IOAuthGrantService> _grantService = new();
-    private readonly Mock<IAuthorizationService> _authorizationService = new();
     private readonly Mock<ITenantMemberService> _memberService = new();
     private readonly IDbContextFactory<NocturneDbContext> _dbContextFactory =
         new ServiceCollection()
@@ -62,9 +63,7 @@ public class HubTokenAuthorizerTests
         NullLogger<JwtCredentialValidator>.Instance);
 
     private HubTokenAuthorizer CreateAuthorizer(IConfiguration? configuration = null) => new(
-        _jwtService.Object,
         CreateCredentialValidator(),
-        _authorizationService.Object,
         _memberService.Object,
         _dbContextFactory,
         TimeProvider.System,
@@ -97,28 +96,6 @@ public class HubTokenAuthorizerTests
         _revocationCache
             .Setup(c => c.IsRevokedAsync(It.IsAny<string>()))
             .ReturnsAsync(false);
-    }
-
-    /// <summary>
-    /// Stubs the legacy subject-token exchange and the validation of the JWT it mints. That exchange
-    /// resolves a subject, so the JWT it returns carries permissions and no tenant pin.
-    /// </summary>
-    private void SetupExchangedToken(Guid subjectId, params string[] permissions)
-    {
-        _authorizationService
-            .Setup(s => s.GenerateJwtFromAccessTokenAsync(LegacyToken))
-            .ReturnsAsync(new AuthorizationResponse { Token = ExchangedJwt });
-        _jwtService
-            .Setup(s => s.ValidateAccessToken(ExchangedJwt))
-            .Returns(JwtValidationResult.Success(new JwtClaims
-            {
-                SubjectId = subjectId,
-                TenantId = null,
-                Scopes = [],
-                Permissions = [.. permissions],
-                IssuedAt = DateTimeOffset.UtcNow,
-                ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
-            }));
     }
 
     /// <summary>Makes <paramref name="subjectId"/> a member of <paramref name="tenantId"/> only.</summary>
@@ -159,6 +136,31 @@ public class HubTokenAuthorizerTests
         return grant.Id;
     }
 
+    /// <summary>
+    /// Writes a grant carrying a token imported from a classic Nightscout instance. Such a token is
+    /// matched by digest prefix rather than by hash, so it reaches the hub over the same path as a
+    /// minted one but resolves through a different rule.
+    /// </summary>
+    private async Task SeedImportedNightscoutGrantAsync(
+        Guid tenantId, Guid subjectId, params string[] scopes)
+    {
+        await using var db = await _dbContextFactory.CreateDbContextAsync();
+        db.TenantId = tenantId;
+
+        db.OAuthGrants.Add(new OAuthGrantEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = tenantId,
+            SubjectId = subjectId,
+            GrantType = OAuthGrantTypes.Direct,
+            LegacyTokenDigest = LegacyDigest,
+            IsMigrated = true,
+            Scopes = [.. scopes],
+        });
+
+        await db.SaveChangesAsync();
+    }
+
     [Fact]
     public async Task Jwt_pinned_to_connection_tenant_with_required_scope_is_authorized()
     {
@@ -170,9 +172,6 @@ public class HubTokenAuthorizerTests
 
         result.Should().NotBeNull();
         result!.Kind.Should().Be(HubCredentialKind.Subject);
-        // The JWT path must not fall through to the legacy hash lookup.
-        _authorizationService.Verify(
-            s => s.GenerateJwtFromAccessTokenAsync(It.IsAny<string>()), Times.Never);
     }
 
     [Fact]
@@ -253,7 +252,7 @@ public class HubTokenAuthorizerTests
     }
 
     [Fact]
-    public async Task Invalid_jwt_is_rejected_without_legacy_fallback()
+    public async Task Invalid_jwt_is_rejected()
     {
         _jwtService
             .Setup(s => s.ValidateAccessToken(JwtShapedToken))
@@ -264,8 +263,6 @@ public class HubTokenAuthorizerTests
             JwtShapedToken, Tenant, Scope.GlucoseRead);
 
         result.Should().BeNull();
-        _authorizationService.Verify(
-            s => s.GenerateJwtFromAccessTokenAsync(It.IsAny<string>()), Times.Never);
     }
 
     [Fact]
@@ -329,10 +326,10 @@ public class HubTokenAuthorizerTests
     }
 
     [Fact]
-    public async Task Legacy_opaque_token_for_a_member_of_the_connection_tenant_is_authorized()
+    public async Task Imported_Nightscout_token_for_a_member_of_the_connection_tenant_is_authorized()
     {
         var subjectId = Guid.CreateVersion7();
-        SetupExchangedToken(subjectId);
+        await SeedImportedNightscoutGrantAsync(Tenant, subjectId, Scope.GlucoseRead);
         SeedMember(Tenant, subjectId, Scope.GlucoseRead);
         var authorizer = CreateAuthorizer();
 
@@ -344,12 +341,27 @@ public class HubTokenAuthorizerTests
     }
 
     [Fact]
-    public async Task Legacy_opaque_token_from_another_tenants_member_is_rejected()
+    public async Task Imported_Nightscout_token_from_another_tenants_grant_is_rejected()
     {
-        // The exchange only proves the token exists. Without the membership check a token minted on
-        // another tenant would authorize this connection's tenant-scoped groups.
+        // The lookup is pinned to the connection's tenant, so a token imported into another tenant
+        // cannot reach this one's groups even when its subject is a member of both.
         var subjectId = Guid.CreateVersion7();
-        SetupExchangedToken(subjectId);
+        await SeedImportedNightscoutGrantAsync(OtherTenant, subjectId, Scope.GlucoseRead);
+        SeedMember(Tenant, subjectId, Scope.GlucoseRead);
+        var authorizer = CreateAuthorizer();
+
+        var result = await authorizer.AuthorizeTokenAsync(
+            LegacyToken, Tenant, Scope.GlucoseRead);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Imported_Nightscout_token_whose_subject_is_not_a_member_is_rejected()
+    {
+        // The grant proves the credential exists; membership is what admits it to the tenant.
+        var subjectId = Guid.CreateVersion7();
+        await SeedImportedNightscoutGrantAsync(Tenant, subjectId, Scope.GlucoseRead);
         SeedMember(OtherTenant, subjectId, Scope.GlucoseRead);
         var authorizer = CreateAuthorizer();
 
@@ -360,12 +372,12 @@ public class HubTokenAuthorizerTests
     }
 
     [Fact]
-    public async Task Legacy_opaque_token_without_the_required_scope_is_rejected()
+    public async Task Imported_Nightscout_token_without_the_required_scope_is_rejected()
     {
         var subjectId = Guid.CreateVersion7();
-        SetupExchangedToken(subjectId);
-        // Membership grants only therapy, so the glucose gate is not satisfied.
-        SeedMember(Tenant, subjectId, Scope.TherapyRead);
+        // The grant carries only therapy, so the glucose gate is not satisfied.
+        await SeedImportedNightscoutGrantAsync(Tenant, subjectId, Scope.TherapyRead);
+        SeedMember(Tenant, subjectId, Scope.GlucoseRead, Scope.TherapyRead);
         var authorizer = CreateAuthorizer();
 
         var result = await authorizer.AuthorizeTokenAsync(
@@ -393,9 +405,6 @@ public class HubTokenAuthorizerTests
             m => m.GetEffectivePermissionsAsync(
                 It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
             Times.Never);
-        // Direct grants never reach the subject-token exchange, whose grant read is unpinned.
-        _authorizationService.Verify(
-            s => s.GenerateJwtFromAccessTokenAsync(It.IsAny<string>()), Times.Never);
     }
 
     [Fact]
@@ -413,8 +422,6 @@ public class HubTokenAuthorizerTests
         result!.TenantId.Should().Be(Tenant);
         result.Kind.Should().Be(HubCredentialKind.Subject);
         result.SubjectId.Should().Be(subjectId);
-        _authorizationService.Verify(
-            s => s.GenerateJwtFromAccessTokenAsync(It.IsAny<string>()), Times.Never);
     }
 
     [Fact]
@@ -478,9 +485,7 @@ public class HubTokenAuthorizerTests
     [Fact]
     public async Task Unknown_legacy_token_is_rejected()
     {
-        _authorizationService
-            .Setup(s => s.GenerateJwtFromAccessTokenAsync(LegacyToken))
-            .ReturnsAsync((AuthorizationResponse?)null);
+        // Nothing seeded: a name-hash token matching no grant authorizes nothing.
         var authorizer = CreateAuthorizer();
 
         var result = await authorizer.AuthorizeTokenAsync(

@@ -90,8 +90,6 @@ public class SubjectEntityDto
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Username { get; set; }
-    public string? AccessTokenHash { get; set; }
-    public string? AccessTokenPrefix { get; set; }
     public string? Email { get; set; }
     public string? Notes { get; set; }
     public bool IsActive { get; set; }

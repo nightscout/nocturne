@@ -127,6 +127,7 @@ public class ApiKeyHandler : IAuthHandler
             AuthType = AuthType.ApiKey,
             SubjectId = grant.SubjectId,
             Scopes = grant.Scopes,
+            LimitTo24Hours = grant.LimitTo24Hours,
             TokenId = grant.Id,
             CredentialFingerprint = AuditFingerprint.Of(
                 AuditFingerprint.ApiSecretDomain, grant.TokenHash ?? grant.LegacySecretHash),

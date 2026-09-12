@@ -991,20 +991,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
         modelBuilder
             .Entity<SubjectEntity>()
-            .HasIndex(s => s.AccessTokenHash)
-            .HasDatabaseName("ix_subjects_access_token_hash")
-            .IsUnique();
-
-        // Legacy Nightscout digest is prefix-matched (not equality), so this index only
-        // narrows the candidate set; it is filtered to the small migrated-subject population.
-        modelBuilder
-            .Entity<SubjectEntity>()
-            .HasIndex(s => s.LegacyTokenDigest)
-            .HasDatabaseName("ix_subjects_legacy_token_digest")
-            .HasFilter("legacy_token_digest IS NOT NULL");
-
-        modelBuilder
-            .Entity<SubjectEntity>()
             .HasIndex(s => s.Email)
             .HasDatabaseName("ix_subjects_email");
 
@@ -1497,6 +1483,28 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasIndex(g => g.RevokedAt)
             .HasDatabaseName("ix_oauth_grants_revoked_at")
             .HasFilter("revoked_at IS NULL");
+
+        // Every request carrying an opaque credential hashes it and looks for this, so without the
+        // index each one scans the tenant's grants. Mirrors ix_oauth_grants_tenant_legacy_secret_hash,
+        // which answers the same question for the api-secret spelling of the same credential.
+        // Not unique: one Nightscout token imported into two tenants is two grants sharing a hash,
+        // and the lookup is tenant-scoped anyway.
+        modelBuilder
+            .Entity<OAuthGrantEntity>()
+            .HasIndex(g => new { g.TenantId, g.TokenHash })
+            .HasDatabaseName("ix_oauth_grants_tenant_token_hash")
+            .HasFilter("token_hash IS NOT NULL");
+
+        // A legacy Nightscout subject token is matched by digest prefix, not equality. A default
+        // btree on a collated text column cannot answer LIKE 'abc%', so without varchar_pattern_ops
+        // this index is unusable and an unauthenticated ?token= miss becomes a sequential scan of
+        // every grant on the instance. Filtered to the small imported-token population.
+        modelBuilder
+            .Entity<OAuthGrantEntity>()
+            .HasIndex(g => g.LegacyTokenDigest)
+            .HasDatabaseName("ix_oauth_grants_legacy_token_digest")
+            .HasOperators("varchar_pattern_ops")
+            .HasFilter("legacy_token_digest IS NOT NULL");
 
         modelBuilder
             .Entity<OAuthRefreshTokenEntity>()
