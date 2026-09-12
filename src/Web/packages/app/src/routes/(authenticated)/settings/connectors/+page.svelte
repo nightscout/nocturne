@@ -784,15 +784,11 @@
   }}
 />
 
-<<<<<<< HEAD
 <!-- Demo Data Management Dialog -->
 <DemoDataSection
   bind:open={showDemoDataDialog}
   onDeleteComplete={loadServices}
 />
-
-=======
->>>>>>> upstream/main
 <!-- Data Source Management Dialog -->
 <DataSourceManageDialog
   bind:open={showManageDataSourceDialog}
