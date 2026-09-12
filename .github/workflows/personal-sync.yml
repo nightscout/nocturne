@@ -1,0 +1,52 @@
+name: Follow approved Nocturne Daily
+on:
+  schedule:
+    - cron: '13 7 * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+concurrency:
+  group: personal-source-sync
+  cancel-in-progress: false
+jobs:
+  sync:
+    if: github.repository == 'smokkelaar/nocturne-personal'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: personal
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Merge the approved Daily source without discarding extensions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          python3 .personal/sync.py
+      - uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1
+        id: proposal
+        with:
+          token: ${{ github.token }}
+          branch: automation/approved-daily
+          title: 'Merge approved Daily into Personal'
+          commit-message: 'Record approved Daily base for Personal'
+          body: |
+            Preserves Personal commits and merges only the Daily base already accepted
+            by the HA repository. Conflicts stop synchronization; no reset or force-sync.
+            This source merge does not publish an HA update. The HA Personal pipeline
+            must still build both API and web from this source, smoke-test it and test
+            the previous Personal upgrade before offering a package.
+      - name: Dispatch metadata checks and request protected merge
+        if: steps.proposal.outputs.pull-request-number != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ steps.proposal.outputs.pull-request-number }}
+          BRANCH: ${{ steps.proposal.outputs.pull-request-branch }}
+        run: |
+          gh workflow run personal-check.yml --ref "$BRANCH"
+          gh pr merge "$PR" --auto --merge

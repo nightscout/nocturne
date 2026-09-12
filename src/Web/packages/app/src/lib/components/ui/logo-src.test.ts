@@ -37,12 +37,17 @@ describe("resolveLogoSrc", () => {
 		expect(resolveLogoName("carelink")).toBe("medtronic");
 		expect(resolveLogoSrc("carelink")).toBe("/logos/medtronic.jpg");
 	});
+
+	it("uses the generic device mark for OpenAPS", () => {
+		expect(resolveLogoName("openaps")).toBe("device");
+		expect(resolveLogoSrc("openaps")).toBe("/logos/device.svg");
+	});
 });
 
 describe("logo assets", () => {
 	// Regression: carelink, iaps and gluroo had no entry and no file, so each
 	// rendered a 404 broken image in the connectors UI.
-	it.each(["carelink", "iaps", "gluroo"])("ships an asset for %s", (icon) => {
+	it.each(["carelink", "iaps", "gluroo", "openaps"])("ships an asset for %s", (icon) => {
 		expect(existsSync(staticPath(resolveLogoSrc(icon)))).toBe(true);
 	});
 

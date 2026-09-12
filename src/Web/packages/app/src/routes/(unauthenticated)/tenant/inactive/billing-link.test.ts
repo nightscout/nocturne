@@ -1,7 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { resolveBillingLink } from "./billing-link";
+import * as pageModule from "./+page.server";
 
 describe("resolveBillingLink", () => {
+  it("keeps helper exports out of the SvelteKit page module", () => {
+    expect(Object.keys(pageModule)).toEqual(["load"]);
+  });
   it("links the operator's billing page in redirect mode", () => {
     expect(
       resolveBillingLink({
