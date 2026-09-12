@@ -17,7 +17,7 @@
     ChevronDown,
     ChevronUp,
   } from "lucide-svelte";
-  import { formatDate } from "$lib/utils/formatting";
+  import { formatMediumDateTime } from "$lib/utils/formatting";
   import type { TenantMemberDto, TenantRoleDto } from "$lib/api/generated/nocturne-api-client";
 
   interface Props {
@@ -306,12 +306,12 @@
         {/if}
         <span class="flex items-center gap-1.5">
           <Clock class="h-3 w-3" />
-          Joined {formatDate(member.sysCreatedAt)}
+          Joined {formatMediumDateTime(member.sysCreatedAt)}
         </span>
         {#if member.lastUsedAt}
           <span class="flex items-center gap-1.5">
             <Clock class="h-3 w-3" />
-            Last active {formatDate(member.lastUsedAt)}
+            Last active {formatMediumDateTime(member.lastUsedAt)}
           </span>
         {/if}
       </div>

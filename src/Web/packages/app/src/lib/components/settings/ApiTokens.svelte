@@ -16,7 +16,7 @@
     AlertTriangle,
     Loader2,
   } from "lucide-svelte";
-  import { formatDate } from "$lib/utils/formatting";
+  import { formatMediumDateTime } from "$lib/utils/formatting";
   import {
     list as listGrants,
     create as createGrant,
@@ -292,12 +292,12 @@
             >
               <span class="flex items-center gap-1">
                 <Clock class="h-3 w-3" />
-                Created {formatDate(grant.createdAt)}
+                Created {formatMediumDateTime(grant.createdAt)}
               </span>
               {#if grant.lastUsedAt}
                 <span class="flex items-center gap-1">
                   <Clock class="h-3 w-3" />
-                  Last used {formatDate(grant.lastUsedAt)}
+                  Last used {formatMediumDateTime(grant.lastUsedAt)}
                 </span>
               {/if}
             </div>

@@ -44,11 +44,11 @@ const {
 	formatDayTime,
 	formatNumber,
 	formatNumericDate,
+	formatMediumDateRange,
 	time,
 	formatShortDate,
 	formatWeekdayDate,
 	formatDateTime,
-	formatDate,
 	formatDateDetailed,
 	formatDateForInput,
 	formatDateTimeCompact,
@@ -200,6 +200,33 @@ describe("Date formatting", () => {
 		});
 	});
 
+	describe("formatMediumDateTime", () => {
+		it("reads every unusable value as no value rather than as 1970", () => {
+			// null is the case that needs the explicit guard: it coerces to the epoch and would
+			// otherwise render a date. The rest reach the NaN branch on their own.
+			expect(formatMediumDateTime(null)).toBe("—");
+			expect(formatMediumDateTime(undefined)).toBe("—");
+			expect(formatMediumDateTime("")).toBe("—");
+			expect(formatMediumDateTime("not a date")).toBe("—");
+		});
+
+		it("names the month and drops the seconds, whatever the region writes", () => {
+			// What the "Created"/"Last used" rows across the app are built from: a bare
+			// toLocaleString gave "4/30/2026, 11:00:39 PM", which is unreadable to anyone who
+			// does not share the locale's field order, and precise to a second nothing needs.
+			const stamp = new Date(2026, 7, 29, 14, 5, 9);
+			const british = withRegionValue("en-GB", () => formatMediumDateTime(stamp));
+			expect(british).toContain("29 Aug 2026");
+			expect(british).toContain("14:05");
+			expect(british).not.toContain(":09");
+
+			expect(withRegionValue("de-DE", () => formatMediumDateTime(stamp))).toMatch(/Aug/);
+			expect(withRegionValue("en-US", () => formatMediumDateTime(stamp))).toMatch(
+				/Aug 29, 2026/
+			);
+		});
+	});
+
 	describe("formatDateTime", () => {
 		it("returns — for undefined", () => {
 			expect(formatDateTime(undefined)).toBe("—");
@@ -209,22 +236,6 @@ describe("Date formatting", () => {
 			const result = formatDateTime("2025-06-15T10:30:00Z");
 			expect(result).toBeTruthy();
 			expect(result).not.toBe("—");
-		});
-	});
-
-	describe("formatDate", () => {
-		it("returns N/A for undefined", () => {
-			expect(formatDate(undefined)).toBe("N/A");
-		});
-
-		it("formats a Date object", () => {
-			const result = formatDate(new Date(2025, 0, 1));
-			expect(result).not.toBe("N/A");
-		});
-
-		it("formats a string date", () => {
-			const result = formatDate("2025-06-15T10:30:00Z");
-			expect(result).not.toBe("N/A");
 		});
 	});
 
@@ -459,6 +470,21 @@ describe("Shared date shapes", () => {
 				expect(formatDateTimeCompact(date)).toMatch(/02:05\s*pm/i);
 			});
 		});
+	});
+
+	it("writes a range through ICU rather than joining two dates", () => {
+		const end = new Date(2026, 8, 3, 9, 0);
+		// Collapsing the shared year is the tell that ICU formatted the range: hyphenating two
+		// whole dates by hand would repeat "2026" on both sides.
+		const british = withRegionValue("en-GB", () => formatMediumDateRange(date, end));
+		expect(british).toContain("29 Aug");
+		// "Sept", not "Sep": the abbreviation is ICU's to choose, and en-GB writes four letters.
+		expect(british).toContain("3 Sept 2026");
+		expect(british.match(/2026/g)).toHaveLength(1);
+
+		expect(withRegionValue("en-US", () => formatMediumDateRange(date, end))).toContain(
+			"Aug 29"
+		);
 	});
 
 	it("lets the locale glue the date to the time", () => {

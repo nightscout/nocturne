@@ -5,7 +5,7 @@
   import { queryParam } from "sveltekit-search-params";
 
   import { RangeCalendar } from "$lib/components/ui/range-calendar";
-  import { formatLocale } from "$lib/utils/formatting";
+  import { formatLocale, formatMediumDateRange } from "$lib/utils/formatting";
   import * as Popover from "$lib/components/ui/popover/index.js";
   import { ChevronDown as ChevronDownIcon } from "lucide-svelte";
 
@@ -170,7 +170,10 @@
           class="w-56 justify-between font-normal"
         >
           {value?.start && value?.end
-            ? `${value.start.toDate(getLocalTimeZone()).toLocaleDateString(formatLocale())} - ${value.end.toDate(getLocalTimeZone()).toLocaleDateString(formatLocale())}`
+            ? formatMediumDateRange(
+                value.start.toDate(getLocalTimeZone()),
+                value.end.toDate(getLocalTimeZone()),
+              )
             : "Select date"}
           <ChevronDownIcon />
         </Button>

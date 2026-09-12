@@ -24,7 +24,7 @@
   import HourlyBolusChart from "$lib/components/reports/HourlyBolusChart.svelte";
   import ScheduleFooter from "$lib/components/reports/ScheduleFooter.svelte";
   import { getIdpData } from "$api/idp.remote";
-  import { bg, bgLabel, formatDate, formatNumber, formatNumericDate } from "$lib/utils/formatting";
+  import { bg, bgLabel, formatMediumDateTime, formatNumber, formatNumericDate } from "$lib/utils/formatting";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
 
@@ -362,7 +362,7 @@
   <div class="text-xs text-muted-foreground text-center">
     Data from {formatNumericDate(startDate)} – {formatNumericDate(endDate)}.
     {#if lastUpdated}
-      Last updated {formatDate(new Date(lastUpdated))}.
+      Last updated {formatMediumDateTime(new Date(lastUpdated))}.
     {/if}
   </div>
 </div>

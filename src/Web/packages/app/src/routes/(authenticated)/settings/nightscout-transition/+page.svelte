@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { formatDate, formatNumber } from "$lib/utils/formatting";
+  import { formatMediumDateTime, formatNumber } from "$lib/utils/formatting";
 	import {
 		Card,
 		CardContent,
@@ -39,7 +39,7 @@
 	function formatTimestamp(ts: Date | string | null | undefined): string {
 		if (!ts) return 'Never';
 		try {
-			return formatDate(new Date(ts));
+			return formatMediumDateTime(new Date(ts));
 		} catch {
 			return 'Unknown';
 		}

@@ -11,7 +11,7 @@
     AlertTriangle,
     Check,
   } from "lucide-svelte";
-  import { formatDate } from "$lib/utils/formatting";
+  import { formatMediumDateTime } from "$lib/utils/formatting";
   import {
     getLinkedIdentities,
     unlinkIdentity,
@@ -191,13 +191,13 @@
               {#if identity.linkedAt}
                 <span class="flex items-center gap-1">
                   <Clock class="h-3 w-3" />
-                  Linked {formatDate(identity.linkedAt)}
+                  Linked {formatMediumDateTime(identity.linkedAt)}
                 </span>
               {/if}
               {#if identity.lastUsedAt}
                 <span class="flex items-center gap-1">
                   <Clock class="h-3 w-3" />
-                  Last used {formatDate(identity.lastUsedAt)}
+                  Last used {formatMediumDateTime(identity.lastUsedAt)}
                 </span>
               {/if}
             </div>

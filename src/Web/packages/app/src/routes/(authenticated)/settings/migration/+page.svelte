@@ -179,14 +179,6 @@
     }
   }
 
-  // Format date
-  function formatDate(dateStr: Date | string | undefined): string {
-    if (!dateStr) return "N/A";
-    const date = new Date(dateStr);
-    return formatMediumDateTime(date);
-  }
-
-  // Get state badge
   function getStateBadge(state: MigrationJobState | undefined) {
     switch (state) {
       case MigrationJobState.Pending:
@@ -637,7 +629,7 @@
                           </Badge>
                         </div>
                         <div class="text-sm text-muted-foreground">
-                          Started: {formatDate(job.startedAt)}
+                          Started: {formatMediumDateTime(job.startedAt)}
                         </div>
                         {#if job.errorMessage}
                           <div
@@ -654,7 +646,7 @@
                     </div>
                     <div class="text-right text-sm text-muted-foreground">
                       {#if job.completedAt}
-                        <div>Completed: {formatDate(job.completedAt)}</div>
+                        <div>Completed: {formatMediumDateTime(job.completedAt)}</div>
                       {/if}
                     </div>
                   </div>
@@ -695,7 +687,7 @@
                             "Unknown"}
                         </div>
                         <div class="text-sm text-muted-foreground">
-                          Last migration: {formatDate(source.lastMigrationAt)}
+                          Last migration: {formatMediumDateTime(source.lastMigrationAt)}
                         </div>
                       </div>
                     </div>
