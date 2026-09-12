@@ -61,38 +61,6 @@ public class GoogleHealthStatus
     public int SyncTotalDataTypes { get; set; }
     public int SyncPagesRead { get; set; }
     public int? SyncProgressPercent { get; set; }
-    public GoogleHealthSyncRun? SyncRun { get; set; }
-    public GoogleHealthSyncRun[] RecentSyncRuns { get; set; } = [];
-}
-
-public class GoogleHealthSyncRun
-{
-    public string? SourceCommit { get; set; }
-    public Guid RunId { get; set; } = Guid.NewGuid();
-    public DateTimeOffset StartedAt { get; set; } = DateTimeOffset.UtcNow;
-    public DateTimeOffset? FinishedAt { get; set; }
-    public string Outcome { get; set; } = "running";
-    public int RecordsWritten { get; set; }
-    public DateTimeOffset? LatestRecordAt { get; set; }
-    public GoogleHealthSyncEvent[] Events { get; set; } = [];
-}
-
-public class GoogleHealthSyncEvent
-{
-    public DateTimeOffset Timestamp { get; set; } = DateTimeOffset.UtcNow;
-    public string Stage { get; set; } = "";
-    public string? DataType { get; set; }
-    public int? Count { get; set; }
-    public long? DurationMilliseconds { get; set; }
-    public int? Pages { get; set; }
-    public DateTimeOffset? From { get; set; }
-    public DateTimeOffset? To { get; set; }
-    public string? ErrorCode { get; set; }
-    public int? ProviderStatus { get; set; }
-    public string? ProviderReason { get; set; }
-    public string? SqlState { get; set; }
-    public string[] ExceptionTypes { get; set; } = [];
-    public string[] StackFrames { get; set; } = [];
 }
 
 public class GoogleHealthPreview

@@ -16,8 +16,7 @@ public sealed class GoogleHealthReadingWriter(
     IBodyWeightService bodyWeights,
     ISleepService sleep,
     NocturneDbContext db,
-    ILogger<GoogleHealthReadingWriter> logger,
-    IGoogleHealthSyncCoordinator? coordinator = null) : IGoogleHealthReadingWriter
+    ILogger<GoogleHealthReadingWriter> logger) : IGoogleHealthReadingWriter
 {
     public const string Source = DataSources.GoogleHealthConnector;
     private const string SourceApp = "Google Health";
@@ -89,24 +88,12 @@ public sealed class GoogleHealthReadingWriter(
 
     private async Task WriteBatchAsync(string dataType, int count, long latestMills, Func<Task> write)
     {
-        var started = System.Diagnostics.Stopwatch.StartNew();
-        coordinator?.Record(db.TenantId, new() { Stage = "native_batch_started", DataType = dataType, Count = count });
         try
         {
             await write();
-            coordinator?.Record(db.TenantId, new()
-            {
-                Stage = "native_batch_completed", DataType = dataType, Count = count,
-                To = DateTimeOffset.FromUnixTimeMilliseconds(latestMills), DurationMilliseconds = started.ElapsedMilliseconds
-            });
         }
-        catch (Exception exception)
+        catch
         {
-            coordinator?.Record(db.TenantId, new()
-            {
-                Stage = "native_batch_failed", DataType = dataType, ErrorCode = "internal_sync_native_write",
-                DurationMilliseconds = started.ElapsedMilliseconds
-            }, exception);
             throw;
         }
     }

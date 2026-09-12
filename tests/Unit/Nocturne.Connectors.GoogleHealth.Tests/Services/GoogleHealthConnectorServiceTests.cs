@@ -91,7 +91,6 @@ public class GoogleHealthConnectorServiceTests
             new SyncRequest(), config, CancellationToken.None);
 
         Assert.True(repeated.Success);
-        fixture.Coordinator.Verify(value => value.Finish(It.IsAny<Guid>(), "succeeded"), Times.Exactly(2));
     }
 
     [Theory]
@@ -113,7 +112,6 @@ public class GoogleHealthConnectorServiceTests
 
         Assert.True(result.Success);
         Assert.Equal(new DateTimeOffset(2026, 9, 10, 9, 55, 0, TimeSpan.Zero), requestedFrom);
-        Assert.Contains(fixture.Events, entry => entry.Stage == "import_completed");
     }
 
     [Theory]
@@ -206,9 +204,6 @@ public class GoogleHealthConnectorServiceTests
 
         Assert.True(result.Success);
         Assert.Equal(2, result.ItemsSynced[SyncDataType.BodyWeight]);
-        Assert.Equal(2, fixture.Events.Count(entry => entry.Stage == "write_completed"));
-        Assert.Contains(fixture.Events, entry => entry.Stage == "watermark_save");
-        fixture.Coordinator.Verify(value => value.Finish(It.IsAny<Guid>(), "succeeded"), Times.Once);
         Assert.Equal(["WriteAsync", "WriteAsync", "ReconcileAsync"],
             fixture.Writer.Invocations.Select(invocation => invocation.Method.Name));
     }
@@ -232,9 +227,6 @@ public class GoogleHealthConnectorServiceTests
             new SyncRequest(), config, CancellationToken.None);
 
         Assert.False(result.Success);
-        Assert.Single(fixture.Events, entry => entry.Stage == "write_completed");
-        Assert.Contains(fixture.Events, entry => entry.ErrorCode == "google_unavailable");
-        fixture.Coordinator.Verify(value => value.Finish(It.IsAny<Guid>(), "failed"), Times.Once);
         fixture.Writer.Verify(value => value.WriteAsync(
             It.Is<IReadOnlyCollection<GoogleHealthReading>>(readings => readings.Count == 1),
             It.IsAny<IReadOnlyCollection<Nocturne.Core.Models.SleepSession>>(),
@@ -305,7 +297,6 @@ public class GoogleHealthConnectorServiceTests
             It.Is<IReadOnlyCollection<string>>(identifiers => identifiers.Count == 1),
             It.Is<IReadOnlyCollection<string>>(types => types.Contains("sleep")),
             new DateTimeOffset(from), new DateTimeOffset(from.AddDays(1)), It.IsAny<CancellationToken>()), Times.Exactly(2));
-        fixture.Coordinator.Verify(value => value.Finish(It.IsAny<Guid>(), "succeeded"), Times.Exactly(2));
         using var saved = JsonDocument.Parse(fixture.StoredConfiguration);
         Assert.Equal(from.AddDays(1), saved.RootElement.GetProperty("lastSyncedTo").GetDateTime());
     }
@@ -351,8 +342,6 @@ public class GoogleHealthConnectorServiceTests
                 })
                 .ReturnsAsync(() => new ConnectorConfigurationResponse());
             var coordinator = Coordinator;
-            coordinator.Setup(value => value.Record(It.IsAny<Guid>(), It.IsAny<GoogleHealthSyncEvent>(), It.IsAny<Exception?>()))
-                .Callback<Guid, GoogleHealthSyncEvent, Exception?>((_, entry, _) => Events.Add(entry));
             coordinator.Setup(value => value.Gate(tenantId)).Returns(new SemaphoreSlim(1));
             Writer = new Mock<IGoogleHealthReadingWriter>();
             Writer.Setup(value => value.WriteAsync(
@@ -389,7 +378,6 @@ public class GoogleHealthConnectorServiceTests
 
         public GoogleHealthConnectorService Service { get; }
         public Mock<IGoogleHealthSyncCoordinator> Coordinator { get; } = new();
-        public List<GoogleHealthSyncEvent> Events { get; } = [];
         public Mock<IGoogleHealthReadingWriter> Writer { get; }
         public IReadOnlyDictionary<string, string> Secrets => secrets;
         public bool ImportFromWasConsumed { get; private set; }

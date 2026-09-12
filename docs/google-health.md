@@ -55,26 +55,13 @@ history. A failure on a later page or type can leave earlier batches saved, whil
 the import watermark remains unchanged. Retrying is supported; an import is not
 one database transaction covering all types.
 
-## Diagnostics
+## Errors and progress
 
-Open **Import diagnostics** on the connector page. Status refreshes every two
-seconds without depending on websocket delivery. The percentage represents
-data-type stages, not record-count completion or estimated time remaining.
-
-The run log includes its ID, source commit when available, requested ranges, pages,
-native write batches, durations, processed counts, latest written record time,
-reconciliation and completion status. Errors include safe technical codes,
-provider status/reason, exception types and stack methods; database errors can
-include SQLSTATE. Counts include updates, not just newly inserted rows. A recent
-record timestamp alone does not prove the whole import completed.
-
-**Download diagnostics** exports the selected run as JSON. The current run and up
-to four prior runs are retained in bounded server memory for up to 24 hours, with
-at most 256 events per run. Restart or cache eviction removes them. Exports omit
-tokens, client secrets, measurement values, raw provider responses and arbitrary
-exception messages. Dates and counts remain sensitive: review an export before
-sharing it. Include the Nocturne version and failed run when reporting a problem;
-reconnecting or deleting data is not necessary to collect diagnostics.
+While the connector page is open, import progress refreshes every two seconds
+without depending on websocket delivery. The percentage represents data-type
+stages, not record-count completion or estimated time remaining. Errors expose a
+technical code and, where applicable, HTTP status. Use those with the API-server
+log; do not share credentials or health data.
 
 ## Verification limits
 

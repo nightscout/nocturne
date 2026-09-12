@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { resolve } from "$app/paths";
-  import { ArrowLeft, Download, HeartPulse, RefreshCw, Unplug } from "lucide-svelte";
+  import { ArrowLeft, HeartPulse, RefreshCw, Unplug } from "lucide-svelte";
   import {
     BiologicalSex,
     GoogleHealthSyncPhase,
@@ -48,10 +48,6 @@
     message = $state(""),
     notice = $state("");
   let purgeDialogOpen = $state(false);
-  let diagnosticRunId = $state("");
-  const diagnosticRun = $derived(
-    status?.recentSyncRuns?.find((run) => run.runId === diagnosticRunId) ?? status?.syncRun
-  );
   const patientRecordQuery = getPatientRecord();
   const patientRecord = $derived(patientRecordQuery.current ?? null);
   const isMale = $derived(patientRecord?.sex === BiologicalSex.Male);
@@ -285,18 +281,6 @@
       return "Updating Nocturne health records";
     return "Preparing the import";
   }
-  function downloadDiagnostics() {
-    if (!diagnosticRun) return;
-    const url = URL.createObjectURL(new Blob(
-      [JSON.stringify(diagnosticRun, null, 2)],
-      { type: "application/json" }
-    ));
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `google-health-${diagnosticRun.runId}.json`;
-    anchor.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
   const timestamp = (value?: string | Date | null) =>
     value ? new Date(value).toLocaleString() : "-";
   onMount(() => {
@@ -375,64 +359,6 @@
   {#if notice}<p role="status" class="rounded-lg border border-primary/40 p-4">
       {notice}
     </p>{/if}
-  <details id="diagnostics" class="min-w-0 border-y py-4" open={!status?.isSyncing && !!status?.errorCode}>
-    <summary class="cursor-pointer font-medium">Import diagnostics</summary>
-    {#if diagnosticRun}
-      {@const run = diagnosticRun}
-      <label class="mt-3 block text-sm">
-        Import run
-        <select class="mt-1 block max-w-full rounded border bg-background p-2" bind:value={diagnosticRunId}>
-          <option value="">Latest run</option>
-          {#each status?.recentSyncRuns ?? [] as previous}
-            <option value={previous.runId}>{timestamp(previous.startedAt)}: {previous.outcome}</option>
-          {/each}
-        </select>
-      </label>
-      <div class="mt-3 flex flex-wrap items-center justify-between gap-3">
-        <div class="min-w-0 text-sm">
-          <p class="break-all">Run: <code>{run.runId}</code></p>
-          {#if run.sourceCommit}<p class="break-all">Source: <code>{run.sourceCommit}</code></p>{/if}
-          <p>Outcome: {run.outcome}</p>
-          <p>Started: {timestamp(run.startedAt)} | Finished: {timestamp(run.finishedAt)}</p>
-          <p>Records processed: {run.recordsWritten ?? 0}</p>
-          <p>Latest written record: {timestamp(run.latestRecordAt)}</p>
-        </div>
-        <Button variant="outline" onclick={downloadDiagnostics}>
-          <Download class="mr-2 h-4 w-4" />Download diagnostics
-        </Button>
-      </div>
-      <div class="mt-3 max-h-96 overflow-auto">
-        <table class="w-full text-left text-xs">
-          <caption class="sr-only">Google Health import events</caption>
-          <thead><tr><th class="p-2">Time</th><th class="p-2">Stage</th><th class="p-2">Data type</th><th class="p-2">Details</th></tr></thead>
-          <tbody>
-            {#each run.events ?? [] as entry}
-              <tr class="border-t align-top">
-                <td class="whitespace-nowrap p-2">{timestamp(entry.timestamp)}</td>
-                <td class="p-2 font-mono">{entry.stage}</td>
-                <td class="p-2">{entry.dataType ?? "-"}</td>
-                <td class="min-w-48 break-words p-2">
-                  {#if entry.pages != null}<p>Page {entry.pages}</p>{/if}
-                  {#if entry.count != null}<p>{entry.count} records</p>{/if}
-                  {#if entry.durationMilliseconds != null}<p>{entry.durationMilliseconds} ms</p>{/if}
-                  {#if entry.from || entry.to}<p>{timestamp(entry.from)} to {timestamp(entry.to)}</p>{/if}
-                  {#if entry.errorCode}<p>{entry.errorCode}</p>{/if}
-                  {#if entry.providerStatus}<p>HTTP {entry.providerStatus}: {entry.providerReason ?? "-"}</p>{/if}
-                  {#if entry.sqlState}<p>SQLSTATE {entry.sqlState}</p>{/if}
-                  {#if entry.exceptionTypes?.length}
-                    <p class="break-all">{entry.exceptionTypes.join(" > ")}</p>
-                    <pre class="mt-1 whitespace-pre-wrap break-all">{entry.stackFrames?.join("\n")}</pre>
-                  {/if}
-                </td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
-    {:else}
-      <p class="mt-3 text-sm text-muted-foreground">No import diagnostics recorded in this server session.</p>
-    {/if}
-  </details>
   {#if status?.errorCode && !status.isSyncing}<div
       role="status"
       class="rounded-lg border p-4"
@@ -453,11 +379,6 @@
       <div>
         <p class="font-medium">Import running in the background</p>
         <p class="text-sm text-muted-foreground">{syncPhase()}</p>
-        {#if status.syncRun}
-          <p class="text-sm text-muted-foreground">Records processed: {status.syncRun.recordsWritten ?? 0}</p>
-          <p class="text-sm text-muted-foreground">Latest written record: {timestamp(status.syncRun.latestRecordAt)}</p>
-          <p class="text-sm text-muted-foreground">Last activity: {timestamp(status.syncRun.events?.at(-1)?.timestamp)}</p>
-        {/if}
       </div>
       <Progress
         value={status.syncProgressPercent ?? 0}

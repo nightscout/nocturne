@@ -32,51 +32,6 @@ function status(overrides: Partial<GoogleHealthStatus> = {}): GoogleHealthStatus
 }
 
 describe("Google Health connector page", () => {
-  it.each([390, 1280])("renders and exports diagnostics at viewport width %s", async (width) => {
-    const originalSize = [window.innerWidth, window.innerHeight];
-    await page.viewport(width, 844);
-    const createObjectURL = vi.spyOn(URL, "createObjectURL");
-    try {
-      googleHealthMocks.status.mockResolvedValue(status({
-        configured: true, connected: true, isSyncing: true, errorCode: "internal_sync",
-        syncPhase: GoogleHealthSyncPhase.Integrating, syncProgressPercent: 72,
-        syncRun: {
-          runId: "synthetic-run", outcome: "running", recordsWritten: 1200,
-          events: [{ stage: "native_batch_completed", dataType: "steps", count: 500, durationMilliseconds: 125 }],
-        },
-      }));
-      render(GoogleHealthPage);
-      await expect.element(page.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "72");
-      await page.getByText("Import diagnostics", { exact: true }).click();
-      await expect.element(page.getByText("native_batch_completed")).toBeVisible();
-      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
-      await page.getByRole("button", { name: "Download diagnostics" }).click();
-      const payload = JSON.parse(await (createObjectURL.mock.calls[0][0] as Blob).text());
-      expect(payload.runId).toBe("synthetic-run");
-      expect(payload.events[0].durationMilliseconds).toBe(125);
-      expect(payload.clientId).toBeUndefined();
-    } finally {
-      createObjectURL.mockRestore();
-      await page.viewport(originalSize[0], originalSize[1]);
-    }
-  });
-
-  it("keeps failed import diagnostics visible after syncing stops", async () => {
-    googleHealthMocks.status.mockResolvedValue(status({
-      configured: true, connected: true, isSyncing: false, errorCode: "internal_sync",
-      syncRun: {
-        runId: "test-run", outcome: "failed", recordsWritten: 12,
-        events: [{ stage: "native_write", dataType: "sleep", sqlState: "57014",
-          exceptionTypes: ["System.TimeoutException"], stackFrames: ["SleepSessionRepository.UpsertSessionAsync"] }],
-      },
-    }));
-    render(GoogleHealthPage);
-    await expect.element(page.getByText("Outcome: failed")).toBeVisible();
-    await expect.element(page.getByText("SQLSTATE 57014")).toBeVisible();
-    await expect.element(page.getByRole("button", { name: "Download diagnostics" })).toBeEnabled();
-    await expect.element(page.getByRole("progressbar")).not.toBeInTheDocument();
-  });
-
   it("polls progress and completion without a websocket event", async () => {
     googleHealthMocks.status.mockResolvedValue(status({
       configured: true, connected: true, isSyncing: true,
