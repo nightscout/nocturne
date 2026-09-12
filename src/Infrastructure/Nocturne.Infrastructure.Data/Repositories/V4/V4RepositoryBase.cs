@@ -100,7 +100,27 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         await V4RecordBroadcast.RaiseAsync(
             _broadcaster, created, updated, deleted.Select(m => m.Id).ToList(), origin, ct);
         await RaiseEntriesProjectionAsync(created, updated, deleted, origin, ct);
+        await RaiseLiveCreatedAsync(created, origin, ct);
     }
+
+    /// <summary>
+    /// Runs the type's domain reaction to just-created records, sharing the <see cref="WriteOrigin.Live"/>
+    /// gate with the broadcast and the legacy projection so backfill imports stay inert here too.
+    /// </summary>
+    private async Task RaiseLiveCreatedAsync(IReadOnlyList<TModel> created, WriteOrigin origin, CancellationToken ct)
+    {
+        if (origin != WriteOrigin.Live || created.Count == 0)
+            return;
+
+        await OnLiveCreatedAsync(created, ct);
+    }
+
+    /// <summary>
+    /// Hook for a post-commit domain reaction to live creates. Default is a no-op; only types that own a
+    /// reaction override it (device events advance tracker instances). Runs after the write has committed,
+    /// so an override that throws faults the caller on work the write itself no longer depends on.
+    /// </summary>
+    protected virtual Task OnLiveCreatedAsync(IReadOnlyList<TModel> created, CancellationToken ct) => Task.CompletedTask;
 
     /// <summary>
     /// The coarse substitute for per-record delete events when a delete matched more rows than
