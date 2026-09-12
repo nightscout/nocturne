@@ -1,0 +1,87 @@
+name: Helm chart lint
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "deploy/helm/**"
+      - ".github/workflows/helm-lint.yml"
+      - ".github/workflows/helm-publish.yml"
+  pull_request:
+    paths:
+      - "deploy/helm/**"
+      - ".github/workflows/helm-lint.yml"
+      - ".github/workflows/helm-publish.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-template:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.4
+
+      - name: Install kubeconform
+        run: |
+          KUBECONFORM_VERSION=v0.6.7
+          curl -sSLO "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
+          tar -xzf kubeconform-linux-amd64.tar.gz
+          sudo mv kubeconform /usr/local/bin/
+          kubeconform -v
+
+      - name: helm dependency build
+        working-directory: deploy/helm/nocturne
+        run: |
+          helm dependency update .
+          # Unpack subcharts so `helm template` resolves them reliably.
+          for tgz in charts/*.tgz; do
+            tar xzf "$tgz" -C charts/
+          done
+
+      - name: helm lint
+        working-directory: deploy/helm/nocturne
+        run: helm lint .
+
+      - name: helm template + kubeconform
+        working-directory: deploy/helm/nocturne
+        run: |
+          set -euo pipefail
+          for values_file in ci/*.yaml; do
+            echo "::group::$values_file"
+            helm template test . -f "$values_file" \
+              | kubeconform \
+                  -strict \
+                  -summary \
+                  -kubernetes-version 1.28.0 \
+                  -ignore-missing-schemas
+            echo "::endgroup::"
+          done
+
+      - name: Bootstrap SQL drift check
+        run: |
+          # The chart maintains its own copy of bootstrap-roles.sql under
+          # files/, adapted to use psql -v variables instead of upstream's
+          # REPLACE_ME placeholders. The chart copy is NOT a byte-for-byte
+          # mirror, so we can't diff directly — instead we record a hash
+          # of the upstream file and fail when it changes. When this check
+          # fails, review the upstream diff, apply equivalent changes to
+          # files/bootstrap-roles.sql, and update the recorded hash:
+          #
+          #   shasum -a 256 docs/postgres/bootstrap-roles.sql \
+          #     > deploy/helm/nocturne/files/bootstrap-roles.upstream.sha256
+          set -eu
+          recorded="$(awk '{print $1}' deploy/helm/nocturne/files/bootstrap-roles.upstream.sha256)"
+          actual="$(shasum -a 256 docs/postgres/bootstrap-roles.sql | awk '{print $1}')"
+          if [ "$recorded" != "$actual" ]; then
+            echo "::error file=docs/postgres/bootstrap-roles.sql::Upstream SQL changed (recorded=$recorded, actual=$actual). Review the upstream diff, update deploy/helm/nocturne/files/bootstrap-roles.sql to match, and re-record the hash with: shasum -a 256 docs/postgres/bootstrap-roles.sql > deploy/helm/nocturne/files/bootstrap-roles.upstream.sha256"
+            exit 1
+          fi
+          echo "Upstream bootstrap-roles.sql hash matches recorded value."

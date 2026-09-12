@@ -10,6 +10,4 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// the shared base.
 /// </summary>
 /// <remarks><inheritdoc cref="IOriginalIdentified" path="/remarks"/></remarks>
-public interface IV4TimeSeriesEntity : IV4Entity, ISourcedEntity, IObservationTimestamped
-{
-}
+public interface IV4TimeSeriesEntity : IV4Entity, ISourcedEntity, IObservationTimestamped;

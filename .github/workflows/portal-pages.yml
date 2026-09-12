@@ -1,0 +1,101 @@
+name: Deploy Portal to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/Web/packages/portal/**'
+      - 'src/Web/packages/ui/**'
+      - 'src/Web/packages/cms/**'
+      - 'src/Web/packages/screenshots/**'
+      # The portal bundles the app's appearance store and OAuth scope constants.
+      - 'src/Web/packages/app/src/lib/stores/**'
+      - 'src/Web/packages/app/src/lib/constants/**'
+      - 'src/Web/packages/app/src/lib/components/dashboard/top-widget-ids.ts'
+      - 'src/Web/pnpm-lock.yaml'
+      - '.github/workflows/portal-pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: "24"
+  PNPM_VERSION: "10"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: src/Web/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: src/Web
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Build bridge package
+        working-directory: src/Web/packages/bridge
+        run: pnpm run build
+
+      # The portal imports @nocturne/app constants that re-export from the
+      # generated API client, which is not tracked in git — generate it.
+      - name: Generate API client
+        working-directory: src/API/Nocturne.API
+        run: dotnet build -c Release
+
+      - name: Sync SvelteKit packages
+        working-directory: src/Web
+        run: |
+          pnpm --filter @nocturne/app exec svelte-kit sync
+          pnpm --filter @nocturne/portal exec svelte-kit sync
+
+      - name: Build portal
+        working-directory: src/Web/packages/portal
+        env:
+          VITE_DEMO_ENABLED: 'true'
+          VITE_DEMO_WEB_URL: 'https://demo.nocturne.run'
+          VITE_SCALAR_API_URL: 'https://nocturne.run'
+          # Unset in a fork or a self-hosted build, which then ships no tracker at all.
+          # The site of this name has to exist in Plausible first; CE cannot create it.
+          VITE_PLAUSIBLE_DOMAIN: ${{ vars.PLAUSIBLE_PORTAL_DOMAIN }}
+        run: pnpm run build
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: src/Web/packages/portal/build
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -126,9 +126,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<BodyWeightEntity> BodyWeights { get; set; }
 
-    public DbSet<PersonalGoogleConnectionEntity> PersonalGoogleConnections { get; set; }
-    public DbSet<PersonalHealthReadingEntity> PersonalHealthReadings { get; set; }
-
     public DbSet<DiscrepancyAnalysisEntity> DiscrepancyAnalyses { get; set; }
 
     public DbSet<DiscrepancyDetailEntity> DiscrepancyDetails { get; set; }
@@ -378,10 +375,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         ConfigureIndexes(modelBuilder);
 
         ConfigureEntities(modelBuilder);
-
-        foreach (var type in new[] { typeof(PersonalGoogleConnectionEntity), typeof(PersonalHealthReadingEntity) })
-            foreach (var property in modelBuilder.Entity(type).Metadata.GetProperties())
-                property.SetColumnName(System.Text.RegularExpressions.Regex.Replace(property.Name, "([a-z0-9])([A-Z])", "$1_$2").ToLowerInvariant());
 
         ConfigureCurrentTimestampDefaults(modelBuilder);
 

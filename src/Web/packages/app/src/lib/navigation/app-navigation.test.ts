@@ -48,7 +48,6 @@ describe("buildAppNavigation", () => {
     }
     expect(visible).toContain("Dashboard");
     expect(visible).toContain("Reports");
-    expect(visible).not.toContain("Personal");
   });
 
   it("offers a public share only the dashboard when it grants no reports", () => {

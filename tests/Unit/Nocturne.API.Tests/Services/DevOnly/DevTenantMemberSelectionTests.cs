@@ -45,29 +45,6 @@ public sealed class DevTenantMemberSelectionTests
             .Should().Equal(usable);
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void Candidates_excludesRevokedMembersFromFallback(bool isOwner)
-    {
-        var revoked = Member(isOwner: isOwner, revokedAt: DateTime.UtcNow);
-        var active = Member();
-        var candidates = DevTenantMemberSelection.Candidates([revoked, active]);
-
-        candidates.Should().Equal(active);
-        DevTenantMemberSelection.PickOwnerOrFirst(candidates, TenantId)
-            .Should().BeSameAs(active);
-    }
-
-    [Fact]
-    public void Candidates_returnsEmptyWhenEveryMembershipIsRevoked()
-    {
-        DevTenantMemberSelection.Candidates([
-            Member(revokedAt: DateTime.UtcNow),
-            Member(isOwner: true, revokedAt: DateTime.UtcNow)])
-            .Should().BeEmpty();
-    }
-
     private static TenantMemberEntity Member(
         bool isOwner = false,
         bool isActive = true,

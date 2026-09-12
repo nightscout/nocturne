@@ -1,0 +1,136 @@
+name: Desktop companion release
+
+# Builds the Nocturne desktop companion (Tauri) installers for Windows, macOS and
+# Linux and publishes them to a GitHub Release, plus the signed `latest.json` the
+# in-app updater reads.
+#
+# Trigger: push a tag like `companion-v0.1.0`. The version baked into the installers
+# comes from src/Web/packages/desktop/src-tauri/tauri.conf.json, not the tag.
+#
+# Releases:
+#   - companion-v{version}  per-version artifacts (prerelease, so it never takes the
+#                           repo "Latest" badge from the self-host `v*` releases)
+#   - companion-latest      rolling release the updater + download link point at;
+#                           refreshed from the versioned release on every run.
+#
+# Secrets required:
+#   TAURI_SIGNING_PRIVATE_KEY           minisign private key (from `tauri signer generate`)
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  its password (empty string if generated without one)
+
+on:
+  push:
+    tags:
+      - "companion-v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  NODE_VERSION: "24"
+  PNPM_VERSION: "10"
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Windows-only: the companion is a Windows app (taskbar widget, Credential Manager,
+          # WinRT toasts, tray-icon glucose rendering). macOS/Linux artifacts would be
+          # non-functional, and tauri-winrt-notification's `windows` dep pulls windows-future,
+          # which does not compile off-Windows.
+          - platform: windows-latest
+            args: ""
+            rust-targets: ""
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux build dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            build-essential
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+          cache-dependency-path: src/Web/pnpm-lock.yaml
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
+
+      - name: Cache Rust build
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src/Web/packages/desktop/src-tauri -> target
+
+      - name: Install web dependencies
+        working-directory: src/Web
+        run: pnpm install --frozen-lockfile
+
+      - name: Build and publish (tauri-action)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: src/Web/packages/desktop
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || 'companion-vdev' }}
+          releaseName: "Nocturne Companion __VERSION__"
+          releaseBody: "Nocturne desktop companion. See the connect flow in your Nocturne site to link CareLink."
+          releaseDraft: false
+          prerelease: true
+          includeUpdaterJson: true
+          args: ${{ matrix.args }}
+
+  # Refresh the stable `companion-latest` release (updater manifest + current installers)
+  # from the versioned release the matrix just published.
+  roll-latest:
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Roll companion-latest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          VERSION_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          work=$(mktemp -d)
+          gh release download "$VERSION_TAG" --repo "$REPO" --dir "$work"
+
+          # Ensure the rolling release exists (prerelease so it never takes the Latest badge).
+          if ! gh release view companion-latest --repo "$REPO" >/dev/null 2>&1; then
+            gh release create companion-latest --repo "$REPO" \
+              --title "Nocturne Companion (latest)" \
+              --notes "Rolling release: current installers and the auto-update manifest. Do not delete." \
+              --prerelease
+          fi
+
+          # Replace all existing assets so stale, version-named installers don't pile up.
+          existing=$(gh release view companion-latest --repo "$REPO" --json assets -q '.assets[].name')
+          for asset in $existing; do
+            gh release delete-asset companion-latest "$asset" --repo "$REPO" --yes || true
+          done
+
+          gh release upload companion-latest "$work"/* --repo "$REPO" --clobber
