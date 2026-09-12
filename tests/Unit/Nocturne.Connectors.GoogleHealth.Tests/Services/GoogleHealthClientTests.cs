@@ -29,14 +29,16 @@ public class GoogleHealthClientTests
         Assert.Equal(DateTimeOffset.Parse("2026-09-01T10:00:00Z").ToUnixTimeMilliseconds(), reading.Mills);
     }
 
-    [Fact]
-    public void Retains_the_provider_resource_id_for_same_timestamp_readings()
+    [Theory]
+    [InlineData("name")]
+    [InlineData("dataPointName")]
+    public void Retains_the_provider_resource_id_for_same_timestamp_readings(string identityField)
     {
-        using var firstDocument = JsonDocument.Parse("""
-            {"name":"users/me/dataTypes/heart-rate/dataPoints/watch","heartRate":{"sampleTime":{"physicalTime":"2026-09-01T10:00:00Z"},"beatsPerMinute":"72"}}
+        using var firstDocument = JsonDocument.Parse($$$"""
+            {"{{{identityField}}}":"users/me/dataTypes/heart-rate/dataPoints/watch","heartRate":{"sampleTime":{"physicalTime":"2026-09-01T10:00:00Z"},"beatsPerMinute":"72"}}
             """);
-        using var secondDocument = JsonDocument.Parse("""
-            {"name":"users/me/dataTypes/heart-rate/dataPoints/phone","heartRate":{"sampleTime":{"physicalTime":"2026-09-01T10:00:00Z"},"beatsPerMinute":"72"}}
+        using var secondDocument = JsonDocument.Parse($$$"""
+            {"{{{identityField}}}":"users/me/dataTypes/heart-rate/dataPoints/phone","heartRate":{"sampleTime":{"physicalTime":"2026-09-01T10:00:00Z"},"beatsPerMinute":"72"}}
             """);
 
         var first = GoogleHealthClient.Parse("heart-rate", firstDocument.RootElement);
@@ -84,7 +86,7 @@ public class GoogleHealthClientTests
     {
         using var document = JsonDocument.Parse("""
         {
-          "name":"users/me/dataTypes/sleep/dataPoints/night-1",
+          "dataPointName":"users/me/dataTypes/sleep/dataPoints/night-1",
           "sleep":{
             "interval":{"startTime":"2026-09-04T22:00:00Z","endTime":"2026-09-05T06:00:00Z"},
             "stages":[
@@ -98,6 +100,7 @@ public class GoogleHealthClientTests
         var session = GoogleHealthClient.ParseSleep(document.RootElement);
 
         Assert.Equal(SleepSource.Google, session.Source);
+        Assert.Equal("users/me/dataTypes/sleep/dataPoints/night-1", session.OriginalId);
         Assert.Equal(8 * 60 * 60 * 1000, session.TotalSleepMs);
         Assert.Equal(2, session.Stages!.Count);
     }

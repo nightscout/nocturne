@@ -682,7 +682,9 @@ public sealed class GoogleHealthService(
     {
         status.SyncRun = coordinator.Diagnostics(TenantId);
         status.RecentSyncRuns = coordinator.History(TenantId);
-        if (status.SyncRun is { FinishedAt: not null } run &&
+        if (status.Configured && status.Connected &&
+            status.ErrorCode is not ("unsupported_type" or "partial_consent" or "stored_google_configuration_unreadable") &&
+            status.SyncRun is { FinishedAt: not null } run &&
             (status.LastAttempt is null || run.FinishedAt >= status.LastAttempt))
             status.ErrorCode = run.Outcome switch
             {

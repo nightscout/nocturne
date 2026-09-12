@@ -17,15 +17,13 @@ public sealed class GoogleHealthException(
     string? stage = null,
     string? dataType = null,
     string? providerReason = null,
-    int? providerStatus = null,
-    string? rawResponseBody = null) : Exception(code)
+    int? providerStatus = null) : Exception(code)
 {
     public TimeSpan? RetryAfter { get; } = retryAfter;
     public string? Stage { get; } = stage;
     public string? DataType { get; } = dataType;
     public string? ProviderReason { get; } = providerReason;
     public int? ProviderStatus { get; } = providerStatus;
-    public string? RawResponseBody { get; } = rawResponseBody;
 }
 
 public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClient>? logger = null)
@@ -366,6 +364,15 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
     public static string Key(GoogleHealthReading reading) => Convert.ToHexString(SHA256.HashData(
         Encoding.UTF8.GetBytes($"{reading.DataType}|{reading.OriginalId ?? $"{reading.Mills}|{reading.EndMills}"}")));
 
+    private static string? ResourceName(JsonElement point)
+    {
+        foreach (var property in new[] { "dataPointName", "name" })
+            if (point.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String &&
+                !string.IsNullOrWhiteSpace(value.GetString()))
+                return value.GetString();
+        return null;
+    }
+
     public static SleepSession ParseSleep(JsonElement point)
     {
         try
@@ -419,7 +426,7 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
             var externalId = hasMetadata && metadata.TryGetProperty("externalId", out var external) && external.ValueKind == JsonValueKind.String
                 ? external.GetString()
                 : null;
-            var resourceName = point.TryGetProperty("name", out var name) && name.ValueKind == JsonValueKind.String ? name.GetString() : null;
+            var resourceName = ResourceName(point);
             var originalId = !string.IsNullOrWhiteSpace(resourceName) ? resourceName : externalId;
             originalId ??= Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"sleep|{start:O}|{end:O}")));
 
@@ -501,9 +508,7 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
             return new GoogleHealthReading
             {
                 DataType = type,
-                OriginalId = point.TryGetProperty("name", out var name) && name.ValueKind == JsonValueKind.String
-                    ? name.GetString()
-                    : null,
+                OriginalId = ResourceName(point),
                 Mills = start.ToUnixTimeMilliseconds(), EndMills = end, UtcOffsetMinutes = offset,
                 Value = type == "weight" ? value / 1000m : value,
                 Unit = type switch { "weight" => "kg", "heart-rate" => "bpm", _ => "steps" }

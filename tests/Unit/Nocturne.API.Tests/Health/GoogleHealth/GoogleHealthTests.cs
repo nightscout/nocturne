@@ -233,7 +233,8 @@ public class GoogleHealthTests
             "/revoke" => Json("{}"),
             _ => Json("{}")
         });
-        var service = Service(store, handler, tenantId);
+        var coordinator = new GoogleHealthCoordinator();
+        var service = Service(store, handler, tenantId, coordinator);
         var options = Options();
         options.DataTypes = ["weight", "steps"];
 
@@ -248,6 +249,8 @@ public class GoogleHealthTests
             Code = "code"
         }, subject, default);
 
+        coordinator.Begin(tenantId);
+        coordinator.Finish(tenantId, "succeeded");
         var status = await service.StatusAsync(default);
         Assert.True(status.Configured);
         Assert.True(status.Connected);
@@ -434,13 +437,14 @@ public class GoogleHealthTests
     private static GoogleHealthService Service(
         TestConnectorStore store,
         HttpMessageHandler handler,
-        Guid tenantId)
+        Guid tenantId,
+        GoogleHealthCoordinator? coordinator = null)
     {
         var tenant = new Mock<ITenantAccessor>();
         tenant.SetupGet(value => value.IsResolved).Returns(true);
         tenant.SetupGet(value => value.TenantId).Returns(tenantId);
         return new GoogleHealthService(
-            new GoogleHealthCoordinator(),
+            coordinator ?? new GoogleHealthCoordinator(),
             new GoogleHealthClient(new HttpClient(handler, false)),
             new GoogleHealthAuthTokenProvider(
                 new HttpClient(handler, false),

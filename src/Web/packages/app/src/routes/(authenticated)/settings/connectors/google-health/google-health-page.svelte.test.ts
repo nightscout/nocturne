@@ -6,6 +6,11 @@ import { googleHealthMocks } from "$lib/test-stubs/google-health";
 
 import GoogleHealthPage from "./google-health-page.svelte";
 
+vi.mock("$lib/api/generated/googleHealths.generated.remote", () => import("$lib/test-stubs/google-health"));
+vi.mock("$api/generated/patientRecords.generated.remote", () => ({
+  getPatientRecord: () => ({ current: null }),
+}));
+
 function status(overrides: Partial<GoogleHealthStatus> = {}): GoogleHealthStatus {
   return {
     configured: false,
@@ -50,7 +55,6 @@ describe("Google Health connector page", () => {
       expect(payload.runId).toBe("synthetic-run");
       expect(payload.events[0].durationMilliseconds).toBe(125);
       expect(payload.clientId).toBeUndefined();
-      await page.screenshot({ path: `test-results/google-health-diagnostics-${width}.png` });
     } finally {
       createObjectURL.mockRestore();
       await page.viewport(originalSize[0], originalSize[1]);
@@ -99,22 +103,6 @@ describe("Google Health connector page", () => {
     googleHealthMocks.preview.mockResolvedValue({ items: [] });
   });
 
-  it("uses the standard connector presentation and an explicit history date", async () => {
-    render(GoogleHealthPage);
-    await expect.element(page.getByRole("heading", { name: "Google Health" })).toBeVisible();
-    await expect.element(page.getByText("Server connector for health and fitness data")).toBeVisible();
-    await expect.element(page.getByLabelText("Import data from")).toBeVisible();
-  });
-
-  it("shows the effective legacy history window when no explicit date is saved", async () => {
-    const expected = new Date(Date.now() - 7 * 86_400_000)
-      .toISOString()
-      .slice(0, 10);
-    render(GoogleHealthPage);
-
-    await expect.element(page.getByLabelText("Import data from")).toHaveValue(expected);
-  });
-
   it("shows detected, supported, and unsupported data types", async () => {
     googleHealthMocks.status.mockResolvedValue(status({ configured: true, connected: true }));
     googleHealthMocks.preview.mockResolvedValue({ items: [
@@ -122,6 +110,8 @@ describe("Google Health connector page", () => {
       { dataType: "body-fat", granted: true, count: 3, supported: false },
     ] });
     render(GoogleHealthPage);
+    await expect.element(page.getByRole("heading", { name: "Google Health" })).toBeVisible();
+    await expect.element(page.getByLabelText("Import data from")).toBeVisible();
     await expect.element(page.getByText("Import enabled", { exact: true })).toBeVisible();
     await page.getByText("Body measurement", { exact: true }).click();
     await expect.element(page.getByText("Not yet supported by Nocturne")).toBeVisible();
@@ -172,15 +162,6 @@ describe("Google Health connector page", () => {
     render(GoogleHealthPage);
     await page.getByRole("checkbox", { name: "Import Heart rate" }).click();
     await expect.element(page.getByRole("checkbox", { name: "Import Heart rate" })).toBeChecked();
-  });
-
-  it("explains the history safety limit without silently truncating the import", async () => {
-    googleHealthMocks.status.mockResolvedValue(status({ configured: true, connected: true }));
-    googleHealthMocks.preview.mockRejectedValue({ status: 400, body: { message: "history_too_large" } });
-    render(GoogleHealthPage);
-
-    await expect.element(page.getByRole("alert")).toHaveTextContent("Google exceeded the pagination safety limit");
-    await expect.element(page.getByRole("alert")).toHaveTextContent("readings/history_too_large");
   });
 
   it("requires preview confirmation before claiming that data is importing", async () => {

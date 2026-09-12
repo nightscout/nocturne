@@ -23,5 +23,3 @@ export const disconnectGoogleHealth = googleHealthMocks.disconnect;
 export const syncGoogleHealth = googleHealthMocks.sync;
 export const purgeGoogleHealth = googleHealthMocks.purge;
 export const previewGoogleHealth = googleHealthMocks.preview;
-export const getPatientRecord = () => ({ current: null });
-export const getRealtimeStore = () => ({ syncProgressByConnector: {} });

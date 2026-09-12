@@ -7,6 +7,8 @@ import type { GoogleHealthStatus } from "$lib/api";
 import GoogleHealthSourceRow from "./GoogleHealthSourceRow.svelte";
 import ServerConnectorsCard from "./ServerConnectorsCard.svelte";
 
+vi.mock("$app/navigation", () => ({ goto: vi.fn() }));
+
 const connected: GoogleHealthStatus = {
   configured: true, connected: true, selectedTypes: ["steps", "sleep"],
   previewRequired: false, lastSync: new Date("2026-09-06T09:00:00Z"),
@@ -36,30 +38,23 @@ describe("Google Health source presentation", () => {
   });
 
   it.each([
-    { change: { previewRequired: true }, label: "Configured" },
-    { change: { selectedTypes: [] }, label: "Configured" },
-    { change: { errorCode: "google_unavailable" }, label: "Error" },
-    { change: { connected: false }, label: "Offline" },
-  ])("does not show a healthy active status for $label", async ({ change, label }) => {
+    { change: { previewRequired: true }, label: "Configured", guidance: "Review available data and confirm the import selection" },
+    { change: { selectedTypes: [] }, label: "Configured", guidance: "Choose at least one data type to start importing" },
+    { change: { errorCode: "google_unavailable" }, label: "Error", guidance: null },
+    { change: { connected: false }, label: "Offline", guidance: null },
+  ])("does not show a healthy active status for $label", async ({ change, label, guidance }) => {
     render(GoogleHealthSourceRow, { connection: { ...connected, ...change } });
     const row = page.getByRole("button", { name: /Google Health/ });
     await expect.element(row).toHaveTextContent(label);
     await expect.element(row).not.toHaveTextContent("Active");
     expect(row.element().className).not.toContain("border-green");
+    if (guidance) await expect.element(row).toHaveTextContent(guidance);
   });
 
   it("does not invent an import count or successful sync before the first import", async () => {
     render(GoogleHealthSourceRow, { connection: { ...connected, lastSync: undefined } });
     await expect.element(page.getByText("Waiting for the first successful sync")).toBeVisible();
     await expect.element(page.getByRole("button", { name: /Google Health/ })).not.toHaveTextContent("0 records");
-  });
-
-  it.each([
-    { change: { previewRequired: true }, guidance: "Review available data and confirm the import selection" },
-    { change: { selectedTypes: [] }, guidance: "Choose at least one data type to start importing" },
-  ])("explains the next action for $guidance", async ({ change, guidance }) => {
-    render(GoogleHealthSourceRow, { connection: { ...connected, ...change } });
-    await expect.element(page.getByRole("button", { name: /Google Health/ })).toHaveTextContent(guidance);
   });
 
   it("offers a working refresh when Google Health is the only configured connector", async () => {
