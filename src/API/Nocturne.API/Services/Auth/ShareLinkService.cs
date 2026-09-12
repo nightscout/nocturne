@@ -22,17 +22,16 @@ namespace Nocturne.API.Services.Auth;
 public interface IShareLinkService
 {
     /// <summary>
-    /// Reports the link's state. <see cref="ShareLinkDto.Url"/> is always null; the redacted form
-    /// and <see cref="ShareLinkDto.CanReveal"/> say whether <see cref="RevealAsync"/> can produce
-    /// it. Keeping the secret out of this response keeps it off every render of the settings page.
+    /// Reports the link's state. <see cref="ShareLinkDto.Url"/> is always null, so the secret
+    /// stays off every render of the settings page.
     /// </summary>
     Task<ShareLinkDto> GetAsync(Guid tenantId, CancellationToken ct = default);
 
     /// <summary>
-    /// Returns the live link's URL, decrypted from the stored ciphertext. The URL is null — with
-    /// the rest of the state still reported — when nothing recoverable was kept for this link:
-    /// it was minted before the token was stored recoverably, or the instance has no encryption
-    /// key. Callers audit this; it hands out a credential.
+    /// Returns the live link's URL, decrypted from the stored ciphertext, leaving the URL null and
+    /// <see cref="ShareLinkDto.CanReveal"/> false in the cases
+    /// <see cref="TenantEntity.ShareTokenEncrypted"/> lists. Callers audit this; it hands out a
+    /// credential.
     /// </summary>
     Task<ShareLinkDto> RevealAsync(Guid tenantId, CancellationToken ct = default);
 
@@ -95,21 +94,19 @@ public sealed class ShareLinkService : IShareLinkService
 
     public async Task<ShareLinkDto> GetAsync(Guid tenantId, CancellationToken ct = default)
     {
-        var tenant = await _dbContext.Tenants.AsNoTracking()
-            .FirstOrDefaultAsync(t => t.Id == tenantId, ct)
-            ?? throw new InvalidOperationException($"Tenant {tenantId} not found");
-
-        var member = await _dbContext.TenantMembers.AsNoTracking()
-            .Include(m => m.MemberRoles)
-                .ThenInclude(mr => mr.TenantRole)
-            .Include(m => m.Subject)
-            .FirstOrDefaultAsync(m => m.TenantId == tenantId
-                && m.Subject!.IsSystemSubject && m.Subject.Name == PublicSubjectName, ct);
-
+        var (tenant, member) = await ReadAsync(tenantId, ct);
         return ToDto(tenant, member);
     }
 
     public async Task<ShareLinkDto> RevealAsync(Guid tenantId, CancellationToken ct = default)
+    {
+        var (tenant, member) = await ReadAsync(tenantId, ct);
+        return ToDto(tenant, member, DecryptToken(tenant), attemptedDecrypt: true);
+    }
+
+    /// <summary>The tenant and its Public membership, read-only, for the reporting paths.</summary>
+    private async Task<(TenantEntity Tenant, TenantMemberEntity? Member)> ReadAsync(
+        Guid tenantId, CancellationToken ct)
     {
         var tenant = await _dbContext.Tenants.AsNoTracking()
             .FirstOrDefaultAsync(t => t.Id == tenantId, ct)
@@ -122,7 +119,7 @@ public sealed class ShareLinkService : IShareLinkService
             .FirstOrDefaultAsync(m => m.TenantId == tenantId
                 && m.Subject!.IsSystemSubject && m.Subject.Name == PublicSubjectName, ct);
 
-        return ToDto(tenant, member, DecryptToken(tenant));
+        return (tenant, member);
     }
 
     public async Task<ShareLinkDto> RotateAsync(Guid tenantId, CancellationToken ct = default)
@@ -157,7 +154,6 @@ public sealed class ShareLinkService : IShareLinkService
             _shareTokenCache.EvictByHash(oldTokenHash);
         _publicAccessCache.Evict(tenantId);
 
-        // The only moment the URL can be produced: the token itself is not stored.
         return ToDto(tenant, member, newToken);
     }
 
@@ -273,10 +269,20 @@ public sealed class ShareLinkService : IShareLinkService
 
     /// <summary>
     /// Projects the share link. <paramref name="token"/> is supplied by the paths entitled to hand
-    /// the secret back — rotate, which has just minted it, and reveal, which has just decrypted it.
+    /// the secret back: rotate, which has just minted it, and reveal, which has just decrypted it.
     /// Every other path reports only that a link exists, and in what shape.
     /// </summary>
-    private ShareLinkDto ToDto(TenantEntity tenant, TenantMemberEntity? member, string? token = null)
+    /// <param name="attemptedDecrypt">
+    /// True on the reveal path, where <paramref name="token"/> is the outcome of an actual decrypt
+    /// and so a null one settles <see cref="ShareLinkDto.CanReveal"/>. Off the reveal path the
+    /// columns are all there is to go on, and they cannot see the changed-key case
+    /// <see cref="TenantEntity.ShareTokenEncrypted"/> describes.
+    /// </param>
+    private ShareLinkDto ToDto(
+        TenantEntity tenant,
+        TenantMemberEntity? member,
+        string? token = null,
+        bool attemptedDecrypt = false)
     {
         var enabled = tenant.ShareToken != null;
         return new ShareLinkDto
@@ -284,7 +290,9 @@ public sealed class ShareLinkService : IShareLinkService
             Enabled = enabled,
             Url = token != null ? ShareUrl(token) : null,
             RedactedUrl = enabled ? ShareUrl(new string('•', ShareTokenGenerator.TokenLength)) : null,
-            CanReveal = enabled && tenant.ShareTokenEncrypted != null && _secrets.IsConfigured,
+            CanReveal = attemptedDecrypt
+                ? token != null
+                : enabled && tenant.ShareTokenEncrypted != null && _secrets.IsConfigured,
             FullHistory = member is { LimitTo24Hours: false },
             Scopes = ComputeScopes(member),
             LastAccessedAt = tenant.ShareLastAccessedAt,
@@ -294,9 +302,8 @@ public sealed class ShareLinkService : IShareLinkService
     private string ShareUrl(string token) => $"https://{token}.share.{_baseDomain}";
 
     /// <summary>
-    /// Ciphertext of <paramref name="token"/>, or null on an instance with no key. A share link is
-    /// not worth refusing to mint over — the tenant simply keeps the pre-existing behaviour of
-    /// having to rotate to see one.
+    /// Ciphertext of <paramref name="token"/>, or null when it could not be produced. Minting is
+    /// not refused over it; see <see cref="TenantEntity.ShareTokenEncrypted"/>.
     /// </summary>
     private string? EncryptToken(string token)
     {
@@ -315,10 +322,9 @@ public sealed class ShareLinkService : IShareLinkService
     }
 
     /// <summary>
-    /// The token behind <paramref name="tenant"/>'s live link, or null when none was kept or the
-    /// ciphertext no longer decrypts — which is what a changed instance key looks like. The link
-    /// itself still resolves in that case, since resolution reads the digest, so this is reported
-    /// as "cannot reveal" rather than as a broken link.
+    /// The token behind <paramref name="tenant"/>'s live link, or null in any of the cases
+    /// <see cref="TenantEntity.ShareTokenEncrypted"/> lists. This is the only place the third of
+    /// them is detectable.
     /// </summary>
     private string? DecryptToken(TenantEntity tenant)
     {

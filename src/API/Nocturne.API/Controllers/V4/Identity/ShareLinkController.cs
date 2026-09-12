@@ -51,13 +51,10 @@ public class ShareLinkController : ControllerBase
 
     /// <summary>
     /// Show the live link in the clear. A command rather than a query so the secret travels only
-    /// when the owner asks for it, instead of on every read of the sharing settings.
+    /// when the owner asks for it, instead of on every read of the sharing settings. Succeeds
+    /// with a null URL and <c>canReveal</c> false in the cases
+    /// <see cref="TenantEntity.ShareTokenEncrypted"/> lists.
     /// </summary>
-    /// <remarks>
-    /// Succeeds with a null URL where nothing recoverable was stored — a link minted before the
-    /// token was kept that way, or an instance with no encryption key. The response's
-    /// <c>canReveal</c> tells a caller which it is before it asks.
-    /// </remarks>
     [HttpPost("reveal")]
     [RemoteCommand]
     [ProducesResponseType(typeof(ShareLinkDto), StatusCodes.Status200OK)]
@@ -69,9 +66,8 @@ public class ShareLinkController : ControllerBase
 
         var link = await _shareLinkService.RevealAsync(_tenantAccessor.TenantId, ct);
 
-        // Anyone holding this link reads the tenant's data without signing in, so record who was
-        // handed it. Logged on the outcome, not the request: a reveal that produced nothing gave
-        // nothing away.
+        // Logged on the outcome, not the request: a reveal that produced nothing gave nothing away.
+        // Why it is audited at all: <see cref="AuthAuditEventType.ShareLinkRevealed"/>.
         if (link.Url != null)
         {
             await _auditService.LogAsync(

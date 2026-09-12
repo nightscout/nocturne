@@ -81,15 +81,21 @@ public class TenantEntity : ISystemTimestamped
     /// <summary>
     /// The same token again, AES-256-GCM ciphertext under the instance key
     /// (<c>ISecretEncryptionService</c>), so the owner can be shown the link they are already
-    /// handing out rather than being told to rotate it — which would break it for everyone
-    /// holding it. Nothing authenticates against this column; <see cref="ShareToken"/> remains
-    /// the only resolution path.
+    /// handing out instead of rotating it, which would break it for everyone holding it.
+    /// Nothing authenticates against this column; <see cref="ShareToken"/> remains the only
+    /// resolution path.
     /// </summary>
     /// <remarks>
-    /// Null on two kinds of tenant that must both keep working: one whose link was minted before
-    /// this column existed, and one on an instance with no instance key configured, where
-    /// encryption is unavailable. Both fall back to "regenerate to see a link", which is the
-    /// behaviour every tenant had before.
+    /// The single site for why a live link can still be unshowable. Three ways that happens, and
+    /// all three must leave the link itself working, because resolution reads the digest:
+    /// <list type="bullet">
+    /// <item>the link was minted before this column existed, so nothing was kept;</item>
+    /// <item>the instance has no key, so nothing could be kept;</item>
+    /// <item>the key changed since, so what was kept no longer decrypts.</item>
+    /// </list>
+    /// Only the third is invisible in the columns, so it is knowable only by attempting the
+    /// decrypt. All three fall back to "regenerate to see a link", the behaviour every tenant had
+    /// before this column existed.
     /// </remarks>
     [Column("share_token_encrypted")]
     public string? ShareTokenEncrypted { get; set; }

@@ -9,8 +9,8 @@ namespace Nocturne.API.Services.Auth;
 /// <summary>
 /// Tells a tenant's owner that their public share link no longer resolves and has to be
 /// regenerated. Used by the rotation pass in <see cref="CredentialAtRestStartupTask"/>, which
-/// retires a plaintext token. Only the digest of the replacement is stored, so the pass cannot hand
-/// back a URL — the owner is the only one who can produce a working link.
+/// retires a plaintext token. That pass keeps no recoverable copy of the replacement, so it cannot
+/// hand back a URL; the owner is the only one who can produce a working link.
 /// </summary>
 public interface IShareLinkRotatedNotifier
 {

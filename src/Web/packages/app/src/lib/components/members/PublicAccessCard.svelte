@@ -59,18 +59,22 @@
   let errorMessage = $state<string | null>(null);
   let scopeWritesInFlight = $state(0);
 
-  // The URL, once this visit has asked for it. The read that loads this card deliberately does
-  // not carry it: the link needs no credential to use, so it travels only when asked for, and
-  // each reveal is audited.
+  // The read that loads this card deliberately does not carry the URL; it travels only when asked
+  // for, and each reveal is audited.
   let revealedUrl = $state<string | null>(null);
   let revealing = $state(false);
-  /** Whether the URL is on screen, as opposed to merely fetched — copying does not show it. */
+  /** Whether the URL is on screen, as opposed to merely fetched. Copying does not show it. */
   let plainVisible = $state(false);
+  /**
+   * What a reveal found, once one has run. It outranks the query's answer, which is read off the
+   * columns and so cannot see a link whose stored copy no longer decrypts.
+   */
+  let revealSucceeded = $state<boolean | null>(null);
 
   const redactedUrl = $derived(share?.redactedUrl ?? null);
-  // False for a link minted before the token was stored recoverably, and on an instance with no
-  // encryption key. Both keep the older behaviour: regenerate to get a link you can send.
-  const canReveal = $derived(share?.canReveal ?? false);
+  const canReveal = $derived(revealSucceeded ?? share?.canReveal ?? false);
+  /** Whether there is a link to show or copy at all, as opposed to only to regenerate. */
+  const recoverable = $derived(canReveal || revealedUrl != null);
 
   const sharedLabels = $derived(
     publicDataCategories.filter((c) => scopes.includes(c.scope)).map((c) => c.name.toLowerCase()),
@@ -85,14 +89,12 @@
     errorMessage = null;
     pendingEnabled = on;
     try {
-      if (on) {
-        revealedUrl = (await rotateShareLink()).url ?? null;
-        // Just minted at the owner's request, so it starts on screen.
-        plainVisible = revealedUrl != null;
-      } else {
+      if (on) await mint(rotateShareLink);
+      else {
         await disableShareLink();
         revealedUrl = null;
         plainVisible = false;
+        revealSucceeded = null;
       }
     } catch (err) {
       errorMessage = describeSubmitError(
@@ -112,8 +114,7 @@
     errorMessage = null;
     confirmingRotate = false;
     try {
-      revealedUrl = (await rotateShareLink()).url ?? null;
-      plainVisible = revealedUrl != null;
+      await mint(rotateShareLink);
     } catch (err) {
       errorMessage = describeSubmitError(err, "Couldn't regenerate the link. Please try again.");
     } finally {
@@ -121,17 +122,25 @@
     }
   }
 
-  /**
-   * The URL, fetched once per visit and then reused. Null when the server kept nothing it could
-   * decrypt, which the card has already told the owner about via {@link canReveal}.
-   */
+  /** Takes a freshly minted link onto the screen: the owner just asked for it. */
+  async function mint(rotate: typeof rotateShareLink) {
+    revealedUrl = (await rotate()).url ?? null;
+    plainVisible = revealedUrl != null;
+    revealSucceeded = null;
+  }
+
+  /** The URL, fetched once per visit and then reused. */
   async function loadUrl(): Promise<string | null> {
     if (revealedUrl) return revealedUrl;
 
     revealing = true;
     errorMessage = null;
     try {
-      revealedUrl = (await revealShareLink()).url ?? null;
+      const link = await revealShareLink();
+      revealedUrl = link.url ?? null;
+      // Settles what the card could only guess at until now, which is what withdraws the show and
+      // copy controls when the stored copy turns out not to decrypt.
+      revealSucceeded = link.canReveal ?? revealedUrl != null;
       return revealedUrl;
     } catch (err) {
       errorMessage = describeSubmitError(err, "Couldn't show the link. Please try again.");
@@ -182,7 +191,6 @@
   }
 
   async function copyLink() {
-    // Fetches the URL if this visit has not yet, so copying never requires showing it first.
     const url = await loadUrl();
     if (!url) return;
     if (!(await copyToClipboard(url))) {
@@ -253,13 +261,15 @@
                   {redactedUrl}
                 </span>
               {:else}
+                <!-- The optimistic toggle turns this section on before the refreshed share
+                     arrives, so this is the moment between the two, not a steady state. -->
                 <span class="truncate font-sans text-muted-foreground">
-                  Your link is only shown when you create it
+                  Fetching your link...
                 </span>
               {/if}
             </div>
             <div class="flex gap-2">
-              {#if canReveal || revealedUrl}
+              {#if recoverable}
                 <Button
                   variant="ghost"
                   size="icon"
@@ -322,20 +332,18 @@
                 </Button>
               </div>
             </div>
-          {:else if canReveal || revealedUrl}
+          {:else if recoverable}
             <p class="text-xs text-muted-foreground">
-              Anyone you send this link to can open the read-only view — no sign-in
-              needed. It stays hidden here until you show or copy it. Last viewed
-              {formatDate(share?.lastAccessedAt)}.
+              Anyone you send this link to can open the read-only view without
+              signing in. It stays hidden here until you show or copy it. Last
+              viewed {formatDate(share?.lastAccessedAt)}.
             </p>
           {:else}
             <p class="text-xs text-muted-foreground">
-              Anyone who already has your link can open the read-only view — no
-              sign-in needed. This one was created before Nocturne could show it to
-              you again, so to get a link you can send, regenerate it; that also
-              stops the previous one from working. Last viewed {formatDate(
-                share?.lastAccessedAt,
-              )}.
+              Anyone who already has your link can still open the read-only view
+              without signing in, but Nocturne can no longer show you what it is.
+              To get a link you can send, regenerate it; that stops the current one
+              from working. Last viewed {formatDate(share?.lastAccessedAt)}.
             </p>
           {/if}
         </div>

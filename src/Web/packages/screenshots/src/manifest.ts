@@ -5,10 +5,7 @@ import type { ArrangeContext, ScreenshotDefinition } from './types.js';
 /** Rich enough that the public view is worth a screenshot; still short of everything on offer. */
 const SHARED_CATEGORIES = ['glucose.read', 'treatments.read', 'devices.read'];
 
-/**
- * Turns the tenant's public link on, widens what it shows, and hands back the link itself — the one
- * moment the URL is knowable, since the server keeps only its digest.
- */
+/** Turns the tenant's public link on, widens what it shows, and hands back the link to navigate to. */
 async function openPublicShare({ fetch }: ArrangeContext): Promise<Record<string, string>> {
 	const rotated = await fetch<{ url: string | null }>('/api/v4/share/rotate', { method: 'POST' });
 	await fetch('/api/v4/share/scopes', { method: 'PUT', body: { scopes: SHARED_CATEGORIES } });
@@ -19,22 +16,12 @@ async function openPublicShare({ fetch }: ArrangeContext): Promise<Record<string
 }
 
 /**
- * The card can show the link's address exactly once — at the moment the link is minted, since the
- * server keeps only its digest — so a share arranged through the API alone is photographed with an
- * empty link field. Regenerate mints one from the browser and is the card's own answer to "I no
- * longer have the address", which makes it the one control that reaches this state whether or not
- * public access was already on: the enable switch would only do it on a share that is currently
- * off, and both themes photograph the same tenant.
+ * The redacted address is what the card rests on, so a share arranged through the API is already in
+ * the state worth photographing, and the image no longer changes every capture the way a minted
+ * address did.
  */
-async function revealThePublicLink(page: Page): Promise<void> {
-	const regenerate = page.getByRole('button', { name: 'Regenerate' });
-	await regenerate.click();
-	await page.getByText('Regenerating invalidates the current link immediately.').waitFor();
-	// Confirming adds a second Regenerate after the first in the document.
-	await regenerate.last().click();
-	// Copy is offered only while the card is holding an address it can copy, so it is the receipt
-	// for a link that is actually in the frame.
-	await page.getByRole('button', { name: 'Copy', exact: true }).waitFor();
+async function settledPublicLink(page: Page): Promise<void> {
+	await page.getByTestId('public-access-url-redacted').waitFor();
 }
 
 async function inviteAGuest({ fetch }: ArrangeContext): Promise<Record<string, string>> {
@@ -279,10 +266,9 @@ export const definitions: ScreenshotDefinition[] = [
 		route: '/settings/members',
 		scenario: 'patient',
 		arrange: openPublicShare,
-		prepare: revealThePublicLink,
+		prepare: settledPublicLink,
 		clip: '[data-testid="public-access-card"]',
-		// The address is minted per run, so this one image differs every capture.
-		alt: 'The Public access card, switched on and holding a freshly minted link. The address is spelled out in full (the one time Nocturne shows it) with Copy and Regenerate beside it, then a tile for each kind of data you can share or keep back, a choice between all history and the last 24 hours, and a sentence spelling out what a viewer would see.',
+		alt: 'The Public access card, switched on. The address is hidden behind dots, with buttons to show it, copy it, and regenerate it beside them, then a tile for each kind of data you can share or keep back, a choice between all history and the last 24 hours, and a sentence spelling out what a viewer would see.',
 		anchors: {
 			enable: '[data-testid="public-access-toggle"]',
 			'time-window': '[data-testid="public-access-window"]',

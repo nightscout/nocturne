@@ -68,9 +68,12 @@ public sealed class ShareLinkControllerTests
 
         await controller.RevealShareLink(CancellationToken.None);
 
+        // detailsJson is pinned to null, not It.IsAny: writing the URL into the audit row is
+        // exactly the leak this endpoint exists to avoid, and an any-matcher cannot see it.
         _audit.Verify(a => a.LogAsync(
             AuthAuditEventType.ShareLinkRevealed, It.IsAny<Guid?>(), true,
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+            It.Is<string?>(detailsJson => detailsJson == null),
             It.IsAny<Guid?>(), It.IsAny<AuthAuditActor>(), It.IsAny<Guid?>()), Times.Once);
     }
 

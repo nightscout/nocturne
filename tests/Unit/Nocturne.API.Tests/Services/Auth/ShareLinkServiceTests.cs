@@ -174,6 +174,7 @@ public sealed class ShareLinkServiceTests : IDisposable
         dto.Url.Should().BeNull();
         dto.CanReveal.Should().BeFalse();
         dto.Enabled.Should().BeTrue("the link still resolves; only showing it is impossible");
+        dto.RedactedUrl.Should().NotBeNull("the owner should still see that a link exists");
     }
 
     [Fact]
@@ -189,7 +190,22 @@ public sealed class ShareLinkServiceTests : IDisposable
         var dto = await _service.RevealAsync(TenantId);
 
         dto.Url.Should().BeNull();
+        dto.CanReveal.Should().BeFalse("only the attempt can tell this case from a healthy one");
         dto.Enabled.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Get_cannot_tell_a_stale_ciphertext_from_a_good_one()
+    {
+        await _service.RotateAsync(TenantId);
+        var stored = await _db.Tenants.FirstAsync(t => t.Id == TenantId);
+        stored.ShareTokenEncrypted = Convert.ToBase64String(new byte[48]);
+        await _db.SaveChangesAsync();
+
+        // Pins the asymmetry the card is built around: the plain read sees a ciphertext and says
+        // so, and only the reveal that tries to use it can correct that.
+        (await _service.GetAsync(TenantId)).CanReveal.Should().BeTrue();
+        (await _service.RevealAsync(TenantId)).CanReveal.Should().BeFalse();
     }
 
     [Fact]
