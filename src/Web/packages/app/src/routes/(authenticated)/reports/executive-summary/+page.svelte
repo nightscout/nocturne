@@ -26,7 +26,7 @@
   import { getReportsData } from "$api/reports.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
-  import { bg, bgLabel, bgRange, formatDate, formatNumber } from "$lib/utils/formatting";
+  import { bg, bgLabel, bgRange, formatMediumDateTime, formatNumber } from "$lib/utils/formatting";
   import { formatMinutesDuration } from "$lib/utils/duration";
 
   // Format a nullable mg/dL value in the user's preferred units, or em dash if absent.
@@ -539,7 +539,7 @@
     <!-- Footer -->
     <div class="text-xs text-muted-foreground text-center space-y-1 print:mt-8">
       {#if lastUpdated}
-        <p>Report generated: {formatDate(new Date(lastUpdated))}</p>
+        <p>Report generated: {formatMediumDateTime(new Date(lastUpdated))}</p>
       {/if}
       <p class="text-muted-foreground/60">
         This report is for informational purposes. Always consult your

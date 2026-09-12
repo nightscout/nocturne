@@ -20,7 +20,10 @@ namespace Nocturne.API.Tests.Controllers.V4.Identity;
 /// </summary>
 public sealed class ShareAppearanceControllerTests
 {
-    private readonly Mock<IShareLinkService> _service = new();
+    // The narrow interface, not IShareLinkService: mocking the wide one would still compile if
+    // the controller took a dependency that can hand out the share token, which is the thing this
+    // seam exists to prevent.
+    private readonly Mock<IShareAppearanceReader> _service = new();
 
     private ShareAppearanceController BuildController(bool onShareHost)
     {

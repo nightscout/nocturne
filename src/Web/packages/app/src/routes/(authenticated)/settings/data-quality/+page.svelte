@@ -7,14 +7,31 @@
 	import { Switch } from '$lib/components/ui/switch';
 	import { Label } from '$lib/components/ui/label';
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
-	import { Moon, Activity, AlertCircle, Globe, Weight, ChevronRight } from 'lucide-svelte';
+	import { Moon, Activity, AlertCircle, Globe, Weight } from 'lucide-svelte';
 	import SettingsPageSkeleton from '$lib/components/settings/SettingsPageSkeleton.svelte';
-	import { resolve } from '$app/paths';
+	import DataMaintenanceCard from '$lib/components/settings/DataMaintenanceCard.svelte';
+	import SettingsLinkCard from '$lib/components/settings/SettingsLinkCard.svelte';
+	import type { SettingsLink } from '$lib/components/settings/settings-links';
 	import { toast } from 'svelte-sonner';
 
 	// Read via .current rather than an {#await} block: consuming a remote query
 	// through its thenable reads the hydration cache and throws
 	// hydratable_missing_but_required during hydration.
+	const historyLinks: SettingsLink[] = [
+		{
+			title: 'Timezone History',
+			description: "Where you've lived and travelled, for correct timestamps.",
+			href: '/settings/timezone',
+			icon: Globe
+		},
+		{
+			title: 'Weight History',
+			description: 'Your recorded weights over time.',
+			href: '/settings/weight',
+			icon: Weight
+		}
+	];
+
 	const settingsQuery = getUiSettings();
 	const dataQuality = $derived(settingsQuery.current?.dataQuality);
 
@@ -205,44 +222,14 @@
 			</CardContent>
 		</Card>
 
-		<!-- Timezone History (lives under Data Quality — correct timestamps are a data-quality concern) -->
-		<a href={resolve('/settings/timezone')} class="group block">
-			<Card class="transition-colors hover:border-primary/40 hover:bg-muted/40">
-				<CardContent class="flex items-center gap-4 p-4">
-					<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-						<Globe class="h-5 w-5 text-primary" />
-					</div>
-					<div class="min-w-0 flex-1">
-						<p class="font-medium">Timezone History</p>
-						<p class="text-sm text-muted-foreground">
-							Where you've lived and travelled, for correct timestamps.
-						</p>
-					</div>
-					<ChevronRight
-						class="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5"
-					/>
-				</CardContent>
-			</Card>
-		</a>
-
-		<!-- Weight History (lives under Data Quality — same pattern as Timezone History) -->
-		<a href={resolve('/settings/weight')} class="group block">
-			<Card class="transition-colors hover:border-primary/40 hover:bg-muted/40">
-				<CardContent class="flex items-center gap-4 p-4">
-					<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-						<Weight class="h-5 w-5 text-primary" />
-					</div>
-					<div class="min-w-0 flex-1">
-						<p class="font-medium">Weight History</p>
-						<p class="text-sm text-muted-foreground">
-							Your recorded weights over time.
-						</p>
-					</div>
-					<ChevronRight
-						class="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5"
-					/>
-				</CardContent>
-			</Card>
-		</a>
+		<!-- Both live here because correct timestamps and weights are what the rest of this
+		     page's analysis is computed from. -->
+		{#each historyLinks as link (link.href)}
+			<SettingsLinkCard {link} />
+		{/each}
 	{/if}
+
+	<!-- Outside the branches above: these tools read no UI settings, so a
+	     settings load failure must not take them away. -->
+	<DataMaintenanceCard />
 </div>

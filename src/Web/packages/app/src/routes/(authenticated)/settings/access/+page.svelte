@@ -2,8 +2,15 @@
   import { KeyRound } from "lucide-svelte";
   import ActiveSessions from "$lib/components/settings/ActiveSessions.svelte";
   import ApiReference from "$lib/components/settings/ApiReference.svelte";
-  import ConnectedApps from "$lib/components/settings/ConnectedApps.svelte";
-  import GuestLinksSection from "$lib/components/members/GuestLinksSection.svelte";
+  import SettingsLinkCard from "$lib/components/settings/SettingsLinkCard.svelte";
+  import {
+    connectorsLink,
+    sharingLink,
+  } from "$lib/components/settings/settings-links";
+
+  // Connected apps and guest links are granted and revoked on the pages below, and were rendered
+  // here as well. One home each keeps this page from claiming to own a section it cannot change.
+  const managedElsewhere = [connectorsLink, sharingLink];
 </script>
 
 <svelte:head>
@@ -20,15 +27,31 @@
     <div>
       <h1 class="text-2xl font-bold tracking-tight">Active Access</h1>
       <p class="text-muted-foreground">
-        Everything currently able to access this account's data.
+        The browsers signed in to this account, and where to find everything
+        else that can reach your data.
       </p>
     </div>
   </div>
 
   <div class="space-y-10">
     <ActiveSessions />
-    <GuestLinksSection />
-    <ConnectedApps />
+
+    <div class="space-y-4">
+      <div class="space-y-1">
+        <h2 class="text-lg font-semibold tracking-tight">
+          What else can reach your data
+        </h2>
+        <p class="text-sm text-muted-foreground">
+          Each of these is granted, and taken away again, on its own page.
+        </p>
+      </div>
+      <div class="space-y-3">
+        {#each managedElsewhere as link (link.href)}
+          <SettingsLinkCard {link} />
+        {/each}
+      </div>
+    </div>
+
     <ApiReference />
   </div>
 </div>

@@ -195,6 +195,12 @@ public static class AuthAuditEventType
     public const string ApiSecretUsed = "api_secret_used";
 
     /// <summary>
+    /// Event type when the tenant's public share link is shown to an owner in the clear. The link
+    /// needs no credential to use, so handing it back is worth a record of who asked and when.
+    /// </summary>
+    public const string ShareLinkRevealed = "share_link_revealed";
+
+    /// <summary>
     /// Event type when a session has expired.
     /// </summary>
     public const string SessionExpired = "session_expired";

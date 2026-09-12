@@ -29,12 +29,12 @@ namespace Nocturne.API.Controllers.V4.Identity;
 [Produces("application/json")]
 public class ShareAppearanceController : ControllerBase
 {
-    private readonly IShareLinkService _shareLinkService;
+    private readonly IShareAppearanceReader _appearance;
     private readonly ITenantAccessor _tenantAccessor;
 
-    public ShareAppearanceController(IShareLinkService shareLinkService, ITenantAccessor tenantAccessor)
+    public ShareAppearanceController(IShareAppearanceReader appearance, ITenantAccessor tenantAccessor)
     {
-        _shareLinkService = shareLinkService;
+        _appearance = appearance;
         _tenantAccessor = tenantAccessor;
     }
 
@@ -48,6 +48,6 @@ public class ShareAppearanceController : ControllerBase
         if (!HttpContext.IsShareAccess())
             return NotFound();
 
-        return Ok(await _shareLinkService.GetSharedAppearanceAsync(_tenantAccessor.TenantId, ct));
+        return Ok(await _appearance.GetSharedAppearanceAsync(_tenantAccessor.TenantId, ct));
     }
 }

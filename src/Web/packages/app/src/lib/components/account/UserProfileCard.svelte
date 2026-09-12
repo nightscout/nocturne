@@ -16,7 +16,7 @@
     Trash2,
   } from "lucide-svelte";
   import { formatSessionExpiry, getAuthStore } from "$lib/stores/auth-store.svelte";
-  import { formatDate } from "$lib/utils/formatting";
+  import { formatMediumDateTime } from "$lib/utils/formatting";
   import { upload as uploadAvatar, remove as deleteAvatar } from "$lib/api/generated/avatars.generated.remote";
   import { describeSubmitError } from "$lib/forms/submit-error";
 
@@ -207,7 +207,7 @@
             <p class="text-sm text-muted-foreground">Session Expires</p>
             <p class="text-sm flex items-center gap-2">
               <Clock class="h-4 w-4 text-muted-foreground" />
-              {formatDate(user.expiresAt)}
+              {formatMediumDateTime(user.expiresAt)}
               {#if timeUntilExpiry !== null}
                 <span class="text-muted-foreground">
                   ({formatSessionExpiry(timeUntilExpiry)})

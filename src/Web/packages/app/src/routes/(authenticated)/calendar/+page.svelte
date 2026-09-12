@@ -9,7 +9,7 @@
   import { NotificationUrgency as NotificationUrgencyEnum } from "$api";
   import { Button } from "$lib/components/ui/button";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import { getUnitLabel, formatLocale, formatDate, time } from "$lib/utils/formatting";
+  import { getUnitLabel, formatLocale, formatMediumDateTime, time } from "$lib/utils/formatting";
   import {
     leadingBlankDays,
     weekdayLabels,
@@ -397,7 +397,7 @@
         {currentYear}
       </h1>
       <p class="text-sm text-muted-foreground">
-        Generated {formatDate(new Date())}
+        Generated {formatMediumDateTime(new Date())}
       </p>
     </div>
 

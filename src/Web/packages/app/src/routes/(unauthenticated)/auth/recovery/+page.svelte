@@ -23,13 +23,22 @@
     parseCeremonyOptions,
   } from "$lib/components/auth/passkey-errors";
   import { goto } from "$app/navigation";
+  import { page } from "$app/state";
 
   // Steps: identify -> codes -> done
   type Step = "identify" | "codes" | "done";
   let step = $state<Step>("identify");
 
-  // Form state
-  let username = $state("");
+  // Form state.
+  //
+  // The username can be named in the URL, so a link can send someone straight here with the
+  // locked-out account already filled in — a hosted deployment mails one when it notices an
+  // instance has been stuck in recovery mode. Seeded rather than $derived: it is the starting
+  // value of a field the person can still correct.
+  //
+  // Nothing is trusted from it. The server resolves the account itself and refuses any that can
+  // still sign in, so naming one here only saves typing.
+  let username = $state(page.url.searchParams.get("username") ?? "");
   let displayName = $state("");
   let isRegistering = $state(false);
   let errorMessage = $state<string | null>(null);

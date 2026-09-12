@@ -34,10 +34,6 @@
     Database,
     Copy,
     Check,
-    Link2,
-    Wrench,
-    ChevronRight,
-    Loader2,
     KeyRound,
   } from "lucide-svelte";
   import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
@@ -47,8 +43,6 @@
   import ConnectedApps from "$lib/components/settings/ConnectedApps.svelte";
   import ClientDevices from "$lib/components/settings/ClientDevices.svelte";
   import ApiTokens from "$lib/components/settings/ApiTokens.svelte";
-  import DeduplicationDialog from "$lib/components/connectors/DeduplicationDialog.svelte";
-  import AppLogo from "$lib/components/ui/AppLogo.svelte";
   import UploaderSetupDialog from "$lib/components/connectors/UploaderSetupDialog.svelte";
   import { createUploaderTokenHandoff } from "./uploader-token-handoff";
   import ConnectorDetailsDialog from "$lib/components/connectors/ConnectorDetailsDialog.svelte";
@@ -62,8 +56,6 @@
   } from "$lib/components/connectors/ServerConnectorsCard.svelte";
   import DataSourceManageDialog from "$lib/components/connectors/DataSourceManageDialog.svelte";
   import { describeSubmitError } from "$lib/forms/submit-error";
-  import { resolve } from "$app/paths";
-  import { page } from "$app/state";
   import { toast } from "svelte-sonner";
   import { getUploaderName } from "$lib/utils/uploader-labels";
   import { coachmark } from "@nocturne/coach";
@@ -98,9 +90,6 @@
   let selectedUploader = $state<UploaderApp | null>(null);
   let showSetupDialog = $state(false);
   let copiedField = $state<string | null>(null);
-
-  // Demo data dialog state
-  let showDemoDataDialog = $state(false);
 
   // Data source management dialog state
   let selectedDataSource = $state<DataSourceInfo | null>(null);
@@ -152,10 +141,6 @@
   let apiTokenPrefillLabel = $state("");
   let apiTokenPrefillScopes = $state<string[]>([]);
   const uploaderHandoff = createUploaderTokenHandoff();
-
-  // Deduplication state
-  let showDeduplicationDialog = $state(false);
-  let isDeduplicating = $state(false);
 
   // Whether the user has already been told these lists are stale. The effect
   // below refreshes once per finished run, so a batch of them and the refresh
@@ -799,12 +784,15 @@
   }}
 />
 
+<<<<<<< HEAD
 <!-- Demo Data Management Dialog -->
 <DemoDataSection
   bind:open={showDemoDataDialog}
   onDeleteComplete={loadServices}
 />
 
+=======
+>>>>>>> upstream/main
 <!-- Data Source Management Dialog -->
 <DataSourceManageDialog
   bind:open={showManageDataSourceDialog}
@@ -827,4 +815,3 @@
   onSyncComplete={loadConnectorStatuses}
 />
 
-<DeduplicationDialog bind:open={showDeduplicationDialog} bind:isDeduplicating />

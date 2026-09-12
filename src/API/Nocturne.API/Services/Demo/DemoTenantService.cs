@@ -254,6 +254,7 @@ public sealed class DemoTenantService
             IsActive = tenant.IsActive,
             IsDemo = true,
             ShareToken = tenant.ShareToken,
+            ShareTokenEncrypted = tenant.ShareTokenEncrypted,
             ShareTokenSetAt = tenant.ShareTokenSetAt,
             SysCreatedAt = tenant.SysCreatedAt,
             SysUpdatedAt = DateTime.UtcNow,

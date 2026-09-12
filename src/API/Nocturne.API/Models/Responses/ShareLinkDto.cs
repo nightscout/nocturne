@@ -9,11 +9,26 @@ public class ShareLinkDto
     public bool Enabled { get; set; }
 
     /// <summary>
-    /// The full share URL, returned only by the call that generates the link. Null on every other
-    /// call, including when <see cref="Enabled"/> is true: only the token's digest is stored, so the
-    /// URL cannot be reproduced afterwards. Generating a new link is the only way to see one again.
+    /// The full share URL, carrying the token in the clear. Returned only by the calls that
+    /// generate and reveal the link, never by the plain read, so it does not ride along on every
+    /// page load of the sharing settings.
     /// </summary>
     public string? Url { get; set; }
+
+    /// <summary>
+    /// The share URL with the token replaced by bullets, e.g.
+    /// <c>https://••••••••••••••••.share.example.com</c>. Null when no link is active. Shows the
+    /// owner that a link exists, and its shape, without the secret crossing the wire.
+    /// </summary>
+    public string? RedactedUrl { get; set; }
+
+    /// <summary>
+    /// Whether <see cref="Url"/> can be produced for this link. A reveal reports this from what it
+    /// actually found; every other call can only read the columns, which cannot see the
+    /// changed-key case, so a true here is a guess until a reveal settles it. The cases are listed
+    /// on <c>TenantEntity.ShareTokenEncrypted</c>.
+    /// </summary>
+    public bool CanReveal { get; set; }
 
     /// <summary>When true the public view shows full history; when false, only the last 24 hours.</summary>
     public bool FullHistory { get; set; }
