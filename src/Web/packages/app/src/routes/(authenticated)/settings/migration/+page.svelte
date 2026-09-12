@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { formatMediumDateTime } from "$lib/utils/formatting";
+  import { formatDate } from "$lib/utils/formatting";
   import {
     Card,
     CardContent,
@@ -179,14 +179,6 @@
     }
   }
 
-  // Format date
-  function formatDate(dateStr: Date | string | undefined): string {
-    if (!dateStr) return "N/A";
-    const date = new Date(dateStr);
-    return formatMediumDateTime(date);
-  }
-
-  // Get state badge
   function getStateBadge(state: MigrationJobState | undefined) {
     switch (state) {
       case MigrationJobState.Pending:

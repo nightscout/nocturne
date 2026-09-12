@@ -227,20 +227,23 @@ describe("Date formatting", () => {
 			expect(result).not.toBe("N/A");
 		});
 
-		it("writes an abbreviated month and no seconds, in the regional format", () => {
-			// A bare toLocaleString gave "4/30/2026, 11:00:39 PM" on the token cards:
-			// all-numeric, so unreadable to anyone who does not share the locale's
-			// field order, and precise to a second that nothing on those rows needs.
-			// Built in local time for the reason "Shared date shapes" gives.
+		it("names the month and drops the seconds, whatever the region writes", () => {
+			// Local time, for the reason the "Shared date shapes" fixture gives.
 			const date = new Date(2026, 7, 29, 14, 5, 9);
 			const british = withRegionValue("en-GB", () => formatDate(date));
 			expect(british).toContain("29 Aug 2026");
 			expect(british).toContain("14:05");
 			expect(british).not.toContain(":09");
 
-			// The month is named, not numbered, whatever the region writes.
 			expect(withRegionValue("de-DE", () => formatDate(date))).toMatch(/Aug/);
 			expect(withRegionValue("en-US", () => formatDate(date))).toMatch(/Aug 29, 2026/);
+		});
+
+		it("reads a null as no value rather than as 1970", () => {
+			// Without the explicit guard, null coerces to the epoch and renders a
+			// date; undefined and "" fall through to the NaN branch and are caught
+			// either way, so null is the only case that pins it.
+			expect(formatDate(null as unknown as undefined)).toBe("N/A");
 		});
 	});
 
