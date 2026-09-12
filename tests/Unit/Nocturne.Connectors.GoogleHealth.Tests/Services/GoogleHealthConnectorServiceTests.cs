@@ -67,6 +67,28 @@ public class GoogleHealthConnectorServiceTests
     }
 
     [Fact]
+    public async Task Successful_sync_persists_its_own_resume_watermark()
+    {
+        var sampleTime = DateTimeOffset.UtcNow.AddMinutes(-10);
+        var fixture = new Fixture(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/token" => Json($$"""{"access_token":"access","refresh_token":"rotated","expires_in":3600,"token_type":"Bearer","scope":"{{GoogleHealthClient.MetricsScope}}"}"""),
+            var path when path.Contains("/weight/") => Json(
+                """{"dataPoints":[{"weight":{"sampleTime":{"physicalTime":"TIME"},"weightGrams":72500}}]}"""
+                    .Replace("TIME", sampleTime.ToString("O"))),
+            _ => throw new InvalidOperationException($"Unexpected request: {request.RequestUri}")
+        });
+        var config = fixture.Configuration();
+        config.HistoryDays = 30;
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest(), config, CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Contains("lastSyncedTo", fixture.LastSavedConfiguration);
+    }
+
+    [Fact]
     public async Task Requested_data_types_narrow_the_configured_selection()
     {
         var fixture = new Fixture(request => request.RequestUri!.AbsolutePath switch
@@ -217,7 +239,10 @@ public class GoogleHealthConnectorServiceTests
             configurations.Setup(value => value.SaveConfigurationAsync(
                     "GoogleHealth", It.IsAny<JsonDocument>(), null, It.IsAny<CancellationToken>()))
                 .Callback<string, JsonDocument, string?, CancellationToken>((_, document, _, _) =>
-                    ImportFromWasConsumed = document.RootElement.GetProperty("importFrom").ValueKind == JsonValueKind.Null)
+                {
+                    ImportFromWasConsumed = document.RootElement.GetProperty("importFrom").ValueKind == JsonValueKind.Null;
+                    LastSavedConfiguration = document.RootElement.GetRawText();
+                })
                 .ReturnsAsync(() => new ConnectorConfigurationResponse());
             var coordinator = new Mock<IGoogleHealthSyncCoordinator>();
             coordinator.Setup(value => value.Gate(tenantId)).Returns(new SemaphoreSlim(1));
@@ -258,6 +283,7 @@ public class GoogleHealthConnectorServiceTests
         public Mock<IGoogleHealthReadingWriter> Writer { get; }
         public IReadOnlyDictionary<string, string> Secrets => secrets;
         public bool ImportFromWasConsumed { get; private set; }
+        public string? LastSavedConfiguration { get; private set; }
 
         public GoogleHealthConnectorConfiguration Configuration() => new()
         {

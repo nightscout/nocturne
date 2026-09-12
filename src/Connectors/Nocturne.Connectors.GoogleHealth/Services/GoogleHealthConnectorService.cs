@@ -33,16 +33,69 @@ public sealed class GoogleHealthConnectorService(
     public override string ServiceName => ServiceNames.GoogleHealthConnector;
     protected override DateTime? InitialSyncFloor => null;
 
-    public override Task<SyncResult> SyncDataAsync(
+    // The base watermark (CalculateSinceTimestampAsync) only tracks the glucose/treatment
+    // families via IConnectorPublisher, which Google Health never publishes through — so its
+    // own resume point is persisted here instead of relying on (and bypassing) the base one.
+    private const string LastSyncedToKey = "lastSyncedTo";
+
+    public override async Task<SyncResult> SyncDataAsync(
         GoogleHealthConnectorConfiguration config,
         CancellationToken cancellationToken = default,
         DateTime? since = null,
         ISyncProgressReporter? progressReporter = null) =>
-        base.SyncDataAsync(
+        await base.SyncDataAsync(
             config,
             cancellationToken,
-            since ?? DateTime.UtcNow.AddDays(-config.HistoryDays),
+            since ?? await ResumeSinceAsync(config, cancellationToken),
             progressReporter);
+
+    /// <summary>
+    ///     Google Health's own resume point: the end of the last successfully completed sync
+    ///     (minus a small overlap for clock drift), or the configured history window when
+    ///     nothing has synced yet. Without this every periodic run would re-crawl the entire
+    ///     <see cref="GoogleHealthConnectorConfiguration.HistoryDays"/> window from scratch.
+    /// </summary>
+    private async Task<DateTime> ResumeSinceAsync(GoogleHealthConnectorConfiguration config, CancellationToken ct)
+    {
+        var watermark = await LoadWatermarkAsync(ct);
+        return watermark is { } lastSyncedTo
+            ? lastSyncedTo.AddMinutes(-5)
+            : DateTime.UtcNow.AddDays(-config.HistoryDays);
+    }
+
+    private async Task<DateTime?> LoadWatermarkAsync(CancellationToken ct)
+    {
+        var stored = await connectorConfigurations.GetConfigurationAsync(ConnectorName, ct);
+        if (stored is null) return null;
+        using var document = JsonDocument.Parse(stored.Configuration.RootElement.GetRawText());
+        if (!document.RootElement.TryGetProperty(LastSyncedToKey, out var element) ||
+            element.ValueKind != JsonValueKind.String)
+            return null;
+        return DateTime.TryParse(element.GetString(), CultureInfo.InvariantCulture,
+            DateTimeStyles.RoundtripKind | DateTimeStyles.AdjustToUniversal, out var value)
+            ? value
+            : null;
+    }
+
+    private async Task PersistWatermarkAsync(DateTimeOffset to, CancellationToken ct)
+    {
+        var stored = await connectorConfigurations.GetConfigurationAsync(ConnectorName, ct);
+        var configuration = stored is null
+            ? []
+            : JsonDocument.Parse(stored.Configuration.RootElement.GetRawText())
+                .RootElement.Deserialize<Dictionary<string, JsonElement>>() ?? [];
+        // Never move the resume point backwards: a manual/admin resync of an older window must
+        // not widen every later periodic sync back into a re-crawl of everything since.
+        if (configuration.TryGetValue(LastSyncedToKey, out var existing) &&
+            existing.ValueKind == JsonValueKind.String &&
+            DateTime.TryParse(existing.GetString(), CultureInfo.InvariantCulture,
+                DateTimeStyles.RoundtripKind | DateTimeStyles.AdjustToUniversal, out var existingValue) &&
+            existingValue >= to.UtcDateTime)
+            return;
+        configuration[LastSyncedToKey] = JsonSerializer.SerializeToElement(to.UtcDateTime.ToString("o"));
+        using var updated = JsonSerializer.SerializeToDocument(configuration);
+        await connectorConfigurations.SaveConfigurationAsync(ConnectorName, updated, ct: ct);
+    }
 
     protected override async Task<SyncResult> PerformSyncInternalAsync(
         SyncRequest request,
@@ -81,6 +134,7 @@ public sealed class GoogleHealthConnectorService(
             coordinator.Report(tenantId, GoogleHealthSyncPhase.Validating);
             coordinator.Report(tenantId, GoogleHealthSyncPhase.Integrating);
             await ReadWithRefreshAsync(config, session.AccessToken!, active, from, to, tenantId, result, cancellationToken);
+            await PersistWatermarkAsync(to, cancellationToken);
             if (request.From is null && !string.IsNullOrWhiteSpace(config.ImportFrom))
                 await ConsumeImportFromAsync(cancellationToken);
             var missingConsent = selected.Except(active, StringComparer.Ordinal).ToArray();

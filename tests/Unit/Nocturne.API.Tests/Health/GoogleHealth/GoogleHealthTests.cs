@@ -207,7 +207,8 @@ public class GoogleHealthTests
         await db.SaveChangesAsync();
         var writer = new GoogleHealthReadingWriter(
             Mock.Of<IHeartRateService>(), Mock.Of<IStepCountService>(),
-            Mock.Of<IBodyWeightService>(), Mock.Of<ISleepService>(), db);
+            Mock.Of<IBodyWeightService>(), Mock.Of<ISleepService>(), db,
+            NullLogger<GoogleHealthReadingWriter>.Instance);
 
         var from = DateTimeOffset.UtcNow.AddDays(-1);
         var to = DateTimeOffset.UtcNow;
@@ -236,7 +237,7 @@ public class GoogleHealthTests
             .ReturnsAsync([]);
         var writer = new GoogleHealthReadingWriter(
             heartRates.Object, Mock.Of<IStepCountService>(), Mock.Of<IBodyWeightService>(),
-            Mock.Of<ISleepService>(), db);
+            Mock.Of<ISleepService>(), db, NullLogger<GoogleHealthReadingWriter>.Instance);
         var readings = Enumerable.Range(0, 5).Select(index => new GoogleHealthReading
         {
             DataType = "heart-rate", Mills = index, Value = 60 + index
@@ -245,6 +246,37 @@ public class GoogleHealthTests
         await writer.WriteAsync(readings, [], 2, default);
 
         Assert.Equal([2, 2, 1], batches.Select(batch => batch.Length));
+    }
+
+    [Fact]
+    public async Task Writer_quarantines_a_single_malformed_reading_without_failing_the_batch()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var db = new NocturneDbContext(
+            new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options);
+        await db.Database.EnsureCreatedAsync();
+        var heartRates = new Mock<IHeartRateService>();
+        var batches = new List<HeartRate[]>();
+        heartRates.Setup(service => service.CreateHeartRatesAsync(
+                It.IsAny<IEnumerable<HeartRate>>(), It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<HeartRate>, CancellationToken>((items, _) => batches.Add(items.ToArray()))
+            .ReturnsAsync([]);
+        var writer = new GoogleHealthReadingWriter(
+            heartRates.Object, Mock.Of<IStepCountService>(), Mock.Of<IBodyWeightService>(),
+            Mock.Of<ISleepService>(), db, NullLogger<GoogleHealthReadingWriter>.Instance);
+        var readings = new[]
+        {
+            new GoogleHealthReading { DataType = "heart-rate", Mills = 1, Value = 60 },
+            // Out of int range: must be quarantined, not thrown, so the other reading still lands.
+            new GoogleHealthReading { DataType = "heart-rate", Mills = 2, Value = (decimal)int.MaxValue + 1 },
+            new GoogleHealthReading { DataType = "heart-rate", Mills = 3, Value = 70 },
+        };
+
+        await writer.WriteAsync(readings, [], 10, default);
+
+        Assert.Equal(2, Assert.Single(batches).Length);
+        Assert.Equal([60, 70], batches.Single().Select(record => record.Bpm));
     }
 
     [Fact]

@@ -5,6 +5,7 @@ using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Health;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Nocturne.Infrastructure.Data;
 
 namespace Nocturne.API.Services.Health.GoogleHealth;
@@ -14,7 +15,8 @@ public sealed class GoogleHealthReadingWriter(
     IStepCountService stepCounts,
     IBodyWeightService bodyWeights,
     ISleepService sleep,
-    NocturneDbContext db) : IGoogleHealthReadingWriter
+    NocturneDbContext db,
+    ILogger<GoogleHealthReadingWriter> logger) : IGoogleHealthReadingWriter
 {
     public const string Source = DataSources.GoogleHealthConnector;
     private const string SourceApp = "Google Health";
@@ -25,7 +27,7 @@ public sealed class GoogleHealthReadingWriter(
         int batchSize,
         CancellationToken ct)
     {
-        foreach (var heartRateBatch in readings.Where(reading => reading.DataType == "heart-rate").Select(reading => new HeartRate
+        foreach (var heartRateBatch in Map(readings, "heart-rate", reading => new HeartRate
         {
             Mills = reading.Mills,
             UtcOffset = reading.UtcOffsetMinutes,
@@ -38,7 +40,7 @@ public sealed class GoogleHealthReadingWriter(
         }).Chunk(batchSize))
             await heartRates.CreateHeartRatesAsync(heartRateBatch, ct);
 
-        foreach (var stepBatch in readings.Where(reading => reading.DataType == "steps").Select(reading => new StepCount
+        foreach (var stepBatch in Map(readings, "steps", reading => new StepCount
         {
             Mills = reading.Mills,
             UtcOffset = reading.UtcOffsetMinutes,
@@ -51,7 +53,7 @@ public sealed class GoogleHealthReadingWriter(
         }).Chunk(batchSize))
             await stepCounts.CreateStepCountsAsync(stepBatch, ct);
 
-        foreach (var weightBatch in readings.Where(reading => reading.DataType == "weight").Select(reading => new BodyWeight
+        foreach (var weightBatch in Map(readings, "weight", reading => new BodyWeight
         {
             Mills = reading.Mills,
             UtcOffset = reading.UtcOffsetMinutes,
@@ -65,6 +67,33 @@ public sealed class GoogleHealthReadingWriter(
 
         foreach (var session in sleepSessions)
             await sleep.UpsertSessionAsync(session, ct);
+    }
+
+    /// <summary>
+    ///     Maps one Google Health reading type to a storage record, quarantining (logging and
+    ///     skipping) any single reading whose value cannot be represented — e.g. a corrupt or
+    ///     out-of-range sample overflowing an int — instead of letting it fail the whole batch
+    ///     and, with it, every other data type in the same tenant sync.
+    /// </summary>
+    private IEnumerable<TRecord> Map<TRecord>(
+        IReadOnlyCollection<GoogleHealthReading> readings, string dataType, Func<GoogleHealthReading, TRecord> map)
+    {
+        foreach (var reading in readings.Where(reading => reading.DataType == dataType))
+        {
+            TRecord record;
+            try
+            {
+                record = map(reading);
+            }
+            catch (Exception ex) when (ex is OverflowException or FormatException or InvalidCastException)
+            {
+                logger.LogWarning(ex,
+                    "Quarantining malformed Google Health {DataType} reading {SyncIdentifier}",
+                    dataType, GoogleHealthClient.Key(reading));
+                continue;
+            }
+            yield return record;
+        }
     }
 
     public async Task ReconcileAsync(
