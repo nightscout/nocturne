@@ -31,8 +31,9 @@ public static class AuthTestHelpers
     private const int GuestCodeLength = 7;
 
     /// <summary>
-    /// Creates a subject with a passkey credential, tenant membership, and admin role.
-    /// Returns the subject ID and a plaintext access token (stored as SHA-256 hash).
+    /// Creates a subject with a passkey credential, tenant membership, and admin role, and issues
+    /// it a direct grant carrying the returned token. The grant is what makes that token
+    /// authenticate, since a subject holds no credential of its own.
     /// </summary>
     public static async Task<(Guid SubjectId, string AccessToken)> SeedAuthenticatedSubjectAsync(
         NpgsqlConnection conn,
@@ -41,20 +42,16 @@ public static class AuthTestHelpers
     {
         var subjectId = Guid.CreateVersion7();
         var accessToken = $"{name.ToLowerInvariant().Replace(" ", "-")}-{Guid.NewGuid():N}";
-        var tokenHash = HashUtils.Sha256Hex(accessToken);
-        var prefix = accessToken.Length > 10 ? accessToken[..10] + "..." : accessToken;
 
         // Insert subject
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = """
-                INSERT INTO subjects (id, name, access_token_hash, access_token_prefix, is_active, is_system_subject, created_at, updated_at, approval_status)
-                VALUES (@id, @name, @hash, @prefix, true, false, now(), now(), 'Approved');
+                INSERT INTO subjects (id, name, is_active, is_system_subject, created_at, updated_at, approval_status)
+                VALUES (@id, @name, true, false, now(), now(), 'Approved');
                 """;
             cmd.Parameters.AddWithValue("id", subjectId);
             cmd.Parameters.AddWithValue("name", name);
-            cmd.Parameters.AddWithValue("hash", tokenHash);
-            cmd.Parameters.AddWithValue("prefix", prefix);
             await cmd.ExecuteNonQueryAsync();
         }
 
@@ -76,8 +73,8 @@ public static class AuthTestHelpers
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = """
-                INSERT INTO tenant_members (id, tenant_id, subject_id, sys_created_at, sys_updated_at, limit_to_24_hours)
-                VALUES (@id, @tenantId, @subjectId, now(), now(), false);
+                INSERT INTO tenant_members (id, tenant_id, subject_id, direct_permissions, sys_created_at, sys_updated_at, limit_to_24_hours)
+                VALUES (@id, @tenantId, @subjectId, '["*"]'::jsonb, now(), now(), false);
                 """;
             cmd.Parameters.AddWithValue("id", Guid.CreateVersion7());
             cmd.Parameters.AddWithValue("tenantId", tenantId);
@@ -96,6 +93,25 @@ public static class AuthTestHelpers
                 """;
             cmd.Parameters.AddWithValue("id", Guid.CreateVersion7());
             cmd.Parameters.AddWithValue("subjectId", subjectId);
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        // The credential. Without it the returned token matches nothing, and a caller sending it
+        // alongside an api-secret would silently authenticate as the api-secret's principal
+        // instead, which is indistinguishable from success until a test asks who it is talking to.
+        await using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = """
+                SELECT set_config('app.current_tenant_id', @tenantText, true);
+                INSERT INTO oauth_grants (id, tenant_id, subject_id, grant_type, scopes, label, token_hash, created_at)
+                VALUES (@id, @tenantId, @subjectId, 'direct', ARRAY['*'], @label, @hash, now());
+                """;
+            cmd.Parameters.AddWithValue("id", Guid.CreateVersion7());
+            cmd.Parameters.AddWithValue("tenantId", tenantId);
+            cmd.Parameters.AddWithValue("tenantText", tenantId.ToString());
+            cmd.Parameters.AddWithValue("subjectId", subjectId);
+            cmd.Parameters.AddWithValue("label", name);
+            cmd.Parameters.AddWithValue("hash", HashUtils.Sha256Hex(accessToken));
             await cmd.ExecuteNonQueryAsync();
         }
 
@@ -162,20 +178,16 @@ public static class AuthTestHelpers
     {
         var subjectId = Guid.CreateVersion7();
         var accessToken = $"{name.ToLowerInvariant().Replace(" ", "-")}-{Guid.NewGuid():N}";
-        var tokenHash = HashUtils.Sha256Hex(accessToken);
-        var prefix = accessToken.Length > 10 ? accessToken[..10] + "..." : accessToken;
 
         // Insert subject
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = """
-                INSERT INTO subjects (id, name, access_token_hash, access_token_prefix, is_active, is_system_subject, created_at, updated_at, approval_status)
-                VALUES (@id, @name, @hash, @prefix, true, false, now(), now(), 'Approved');
+                INSERT INTO subjects (id, name, is_active, is_system_subject, created_at, updated_at, approval_status)
+                VALUES (@id, @name, true, false, now(), now(), 'Approved');
                 """;
             cmd.Parameters.AddWithValue("id", subjectId);
             cmd.Parameters.AddWithValue("name", name);
-            cmd.Parameters.AddWithValue("hash", tokenHash);
-            cmd.Parameters.AddWithValue("prefix", prefix);
             await cmd.ExecuteNonQueryAsync();
         }
 
@@ -183,8 +195,8 @@ public static class AuthTestHelpers
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = """
-                INSERT INTO tenant_members (id, tenant_id, subject_id, sys_created_at, sys_updated_at, limit_to_24_hours)
-                VALUES (@id, @tenantId, @subjectId, now(), now(), false);
+                INSERT INTO tenant_members (id, tenant_id, subject_id, direct_permissions, sys_created_at, sys_updated_at, limit_to_24_hours)
+                VALUES (@id, @tenantId, @subjectId, '["*"]'::jsonb, now(), now(), false);
                 """;
             cmd.Parameters.AddWithValue("id", Guid.CreateVersion7());
             cmd.Parameters.AddWithValue("tenantId", tenantId);

@@ -166,7 +166,10 @@ public class MemberScopeMiddleware
         memberTrie.Add(ScopeTranslator.ToPermissions(resolvedScopes));
         context.SetPermissionTrie(memberTrie);
 
-        authContext.LimitTo24Hours = membership.LimitTo24Hours;
+        // The narrower of the two wins. A credential may carry its own limit (a direct grant issued
+        // for a follower's phone), and overwriting rather than combining would let the membership
+        // widen a token that was deliberately restricted.
+        authContext.LimitTo24Hours = membership.LimitTo24Hours || authContext.LimitTo24Hours;
 
         _logger.LogDebug(
             "Member {SubjectId} on tenant {TenantId} resolved with {PermCount} effective permissions (LimitTo24Hours={LimitTo24Hours})",

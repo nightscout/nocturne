@@ -214,8 +214,8 @@ public class OidcLinkEndpointsTests : AspireIntegrationTestBase
     }
 
     /// <summary>
-    /// Seeds a subject with a known access token hash and links it to the test tenant.
-    /// Returns the subject ID.
+    /// Seeds a subject, links it to the test tenant and issues it a direct grant carrying the
+    /// known test token. Returns the subject ID.
     /// </summary>
     private async Task<Guid> SeedSubjectWithAccessTokenAsync()
     {
@@ -226,10 +226,10 @@ public class OidcLinkEndpointsTests : AspireIntegrationTestBase
         await using var conn = new NpgsqlConnection(connStr);
         await conn.OpenAsync();
 
-        // Delete any prior test subject with this token hash to avoid conflicts
+        // Drop any grant left by a prior run, so the token resolves to exactly one subject.
         await using (var delCmd = conn.CreateCommand())
         {
-            delCmd.CommandText = "DELETE FROM subjects WHERE access_token_hash = @hash;";
+            delCmd.CommandText = "DELETE FROM oauth_grants WHERE token_hash = @hash;";
             delCmd.Parameters.AddWithValue("hash", tokenHash);
             await delCmd.ExecuteNonQueryAsync();
         }
@@ -238,26 +238,42 @@ public class OidcLinkEndpointsTests : AspireIntegrationTestBase
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = """
-                INSERT INTO subjects (id, name, access_token_hash, access_token_prefix, is_active, is_system_subject, created_at, updated_at, approval_status)
-                VALUES (@id, @name, @hash, @prefix, true, false, now(), now(), 'Approved');
+                INSERT INTO subjects (id, name, is_active, is_system_subject, created_at, updated_at, approval_status)
+                VALUES (@id, @name, true, false, now(), now(), 'Approved');
                 """;
             cmd.Parameters.AddWithValue("id", subjectId);
             cmd.Parameters.AddWithValue("name", "OIDC Test Subject");
-            cmd.Parameters.AddWithValue("hash", tokenHash);
-            cmd.Parameters.AddWithValue("prefix", "oidctest-a1b2...");
             await cmd.ExecuteNonQueryAsync();
         }
 
-        // Link subject to tenant
+        // Link subject to tenant. The membership is the ceiling MemberScopeMiddleware intersects
+        // the grant's scopes against, so a grant on a member holding nothing resolves to nothing.
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = """
-                INSERT INTO tenant_members (id, tenant_id, subject_id, sys_created_at, sys_updated_at, limit_to_24_hours)
-                VALUES (@id, @tenantId, @subjectId, now(), now(), false);
+                INSERT INTO tenant_members (id, tenant_id, subject_id, direct_permissions, sys_created_at, sys_updated_at, limit_to_24_hours)
+                VALUES (@id, @tenantId, @subjectId, ARRAY['*'], now(), now(), false);
                 """;
             cmd.Parameters.AddWithValue("id", Guid.CreateVersion7());
             cmd.Parameters.AddWithValue("tenantId", _tenantId);
             cmd.Parameters.AddWithValue("subjectId", subjectId);
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        // The credential itself. Device and service tokens are grants on oauth_grants; subjects
+        // carry no token of their own.
+        await using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = """
+                SELECT set_config('app.current_tenant_id', @tenantText, true);
+                INSERT INTO oauth_grants (id, tenant_id, subject_id, grant_type, scopes, label, token_hash, created_at)
+                VALUES (@id, @tenantId, @subjectId, 'direct', ARRAY['*'], 'OIDC test token', @hash, now());
+                """;
+            cmd.Parameters.AddWithValue("id", Guid.CreateVersion7());
+            cmd.Parameters.AddWithValue("tenantId", _tenantId);
+            cmd.Parameters.AddWithValue("tenantText", _tenantId.ToString());
+            cmd.Parameters.AddWithValue("subjectId", subjectId);
+            cmd.Parameters.AddWithValue("hash", tokenHash);
             await cmd.ExecuteNonQueryAsync();
         }
 

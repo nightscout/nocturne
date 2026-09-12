@@ -148,8 +148,6 @@ public class DevAdminController : ControllerBase
                     Id = s.Id,
                     Name = s.Name,
                     Username = s.Username,
-                    AccessTokenHash = s.AccessTokenHash,
-                    AccessTokenPrefix = s.AccessTokenPrefix,
                     Email = s.Email,
                     Notes = s.Notes,
                     IsActive = s.IsActive,
@@ -401,8 +399,6 @@ public class DevAdminController : ControllerBase
                         Id = s.Id,
                         Name = s.Name,
                         Username = s.Username,
-                        AccessTokenHash = s.AccessTokenHash,
-                        AccessTokenPrefix = s.AccessTokenPrefix,
                         Email = s.Email,
                         Notes = s.Notes,
                         IsActive = s.IsActive,
@@ -821,7 +817,6 @@ public class DevAdminController : ControllerBase
                 _db.Subjects.Add(new()
                 {
                     Id = s.Id, Name = s.Name, Username = s.Username,
-                    AccessTokenHash = s.AccessTokenHash, AccessTokenPrefix = s.AccessTokenPrefix,
                     Email = s.Email, Notes = s.Notes, IsActive = s.IsActive,
                     IsSystemSubject = s.IsSystemSubject, CreatedAt = s.CreatedAt, UpdatedAt = s.UpdatedAt,
                     LastLoginAt = s.LastLoginAt, OriginalId = s.OriginalId,

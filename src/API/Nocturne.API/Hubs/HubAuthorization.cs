@@ -112,7 +112,6 @@ public sealed record HubAuthorization(
 
         AuthType.OidcToken
             or AuthType.LegacyJwt
-            or AuthType.LegacyAccessToken
             or AuthType.ApiKey
             or AuthType.SessionCookie
             or AuthType.OAuthAccessToken

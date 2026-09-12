@@ -255,11 +255,6 @@ public enum AuthType
     LegacyJwt,
 
     /// <summary>
-    /// Legacy access token
-    /// </summary>
-    LegacyAccessToken,
-
-    /// <summary>
     /// API key (resolved via DirectGrant lookup by SHA-256 or legacy SHA-1 hash)
     /// </summary>
     ApiKey,

@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Middleware.Handlers;
+using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Identity;
@@ -17,9 +18,9 @@ using AuthSubject = Nocturne.Core.Models.Authorization.Subject;
 namespace Nocturne.API.Tests.Services.Identity;
 
 /// <summary>
-/// Tests for the token-exchange path (/api/v2/authorization/request/{accessToken}):
-/// legacy subject access tokens resolve against subjects, noc_ direct-grant tokens
-/// resolve against oauth_grants.
+/// Tests for the token-exchange path (/api/v2/authorization/request/{accessToken}). Every opaque
+/// credential resolves against oauth_grants: a minted noc_ token by hash, and one imported from a
+/// classic Nightscout instance by the digest-prefix rule that instance used.
 /// </summary>
 public class AuthorizationServiceTokenExchangeTests : IDisposable
 {
@@ -60,6 +61,7 @@ public class AuthorizationServiceTokenExchangeTests : IDisposable
             Mock.Of<ILogger<AuthorizationService>>(),
             _mockSubjectService.Object,
             new Mock<IRoleService>().Object,
+            new Mock<IDirectGrantService>().Object,
             _mockJwtService.Object,
             _dbContext
         );
@@ -76,7 +78,8 @@ public class AuthorizationServiceTokenExchangeTests : IDisposable
         DateTime? revokedAt = null,
         List<string>? scopes = null,
         DateTime? expiresAt = null,
-        Guid? tenantId = null)
+        Guid? tenantId = null,
+        string? legacyTokenDigest = null)
     {
         _dbContext.OAuthGrants.Add(new OAuthGrantEntity
         {
@@ -85,6 +88,7 @@ public class AuthorizationServiceTokenExchangeTests : IDisposable
             TenantId = tenantId ?? _testTenantId,
             GrantType = OAuthGrantTypes.Direct,
             TokenHash = HashUtils.Sha256Hex(token),
+            LegacyTokenDigest = legacyTokenDigest,
             Scopes = scopes ?? ["glucose.read", "treatments.readwrite"],
             CreatedAt = DateTime.UtcNow,
             RevokedAt = revokedAt,
@@ -191,37 +195,38 @@ public class AuthorizationServiceTokenExchangeTests : IDisposable
     }
 
     [Fact]
-    public async Task GenerateJwtFromAccessTokenAsync_LegacyToken_StillResolvesViaSubjects()
+    public async Task GenerateJwtFromAccessTokenAsync_LegacyNightscoutToken_ResolvesByDigestPrefix()
     {
-        var legacyToken = "uploader-0123456789abcdef";
-        var subject = new AuthSubject
-        {
-            Id = _subjectId,
-            Name = "aaps-uploader",
-            IsActive = true,
-        };
-        _mockSubjectService
-            .Setup(s => s.GetSubjectByAccessTokenHashAsync(It.IsAny<string>()))
-            .ReturnsAsync(subject);
-        _mockSubjectService
-            .Setup(s => s.GetSubjectPermissionsAsync(_subjectId))
-            .ReturnsAsync(["api:*:read"]);
-        _mockSubjectService
-            .Setup(s => s.GetSubjectRolesAsync(_subjectId))
-            .ReturnsAsync(["readable"]);
-        _mockJwtService
-            .Setup(j => j.GenerateAccessToken(
-                It.IsAny<SubjectInfo>(),
-                It.IsAny<IEnumerable<string>>(),
-                It.IsAny<IEnumerable<string>>(),
-                It.IsAny<TimeSpan?>()))
-            .Returns("legacy.jwt.token");
+        // A token imported from a classic instance is matched the way that instance matched it: on
+        // the part after the last dash, as a prefix of the stored digest. AAPS V3 trades its
+        // plaintext token here, so this is what keeps an existing uploader working after the import.
+        SeedGrant(
+            "unrelated-hash-source",
+            legacyTokenDigest: "0123456789abcdef0123456789abcdef01234567");
+        SetupActiveSubject();
+        SetupMintedJwt();
 
-        var result = await _authorizationService.GenerateJwtFromAccessTokenAsync(legacyToken);
+        var result = await _authorizationService.GenerateJwtFromAccessTokenAsync(
+            "uploader-0123456789abcdef");
 
         Assert.NotNull(result);
-        Assert.Equal("legacy.jwt.token", result!.Token);
-        Assert.Equal("aaps-uploader", result.Sub);
+        Assert.Equal("minted.jwt.token", result!.Token);
+    }
+
+    [Fact]
+    public async Task GenerateJwtFromAccessTokenAsync_LegacyToken_TooShortAPrefix_ReturnsNull()
+    {
+        // Nightscout requires at least 16 hex characters after the dash. A shorter one is not a
+        // near miss to resolve generously; it is a credential nobody was ever issued.
+        SeedGrant(
+            "unrelated-hash-source",
+            legacyTokenDigest: "0123456789abcdef0123456789abcdef01234567");
+        SetupActiveSubject();
+        SetupMintedJwt();
+
+        var result = await _authorizationService.GenerateJwtFromAccessTokenAsync("uploader-0123456789");
+
+        Assert.Null(result);
     }
 
     /// <summary>

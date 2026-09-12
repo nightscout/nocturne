@@ -2,12 +2,17 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Nocturne.API.Controllers.Authentication;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
+using FluentAssertions;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using AuthSubjectModel = Nocturne.Core.Models.Authorization.Subject;
 using AuthRoleModel = Nocturne.Core.Models.Authorization.Role;
@@ -27,9 +32,13 @@ public class AuthorizationServiceCrudTests : IDisposable
     private readonly Mock<ISubjectService> _mockSubjectService;
     private readonly Mock<IRoleService> _mockRoleService;
     private readonly Mock<IJwtService> _mockJwtService;
+    private readonly Mock<IDirectGrantService> _mockDirectGrantService;
     private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _dbContext;
     private readonly AuthorizationService _authorizationService;
+
+    private readonly Guid _tenantId = Guid.CreateVersion7();
+    private readonly Guid _deviceSubjectId;
 
     public AuthorizationServiceCrudTests()
     {
@@ -38,9 +47,23 @@ public class AuthorizationServiceCrudTests : IDisposable
         _mockSubjectService = new Mock<ISubjectService>();
         _mockRoleService = new Mock<IRoleService>();
         _mockJwtService = new Mock<IJwtService>();
+        _mockDirectGrantService = new Mock<IDirectGrantService>();
 
         _db = TestDbContextFactory.CreateSqlite();
-        _dbContext = _db.CreateContext();
+
+        // Grants are tenant-scoped, so the context has to carry a tenant before anything can be
+        // written to oauth_grants at all.
+        _dbContext = _db.CreateContext(_tenantId);
+        _dbContext.Tenants.Add(new TenantEntity
+        {
+            Id = _tenantId,
+            Slug = "default",
+            DisplayName = "Default",
+            IsActive = true,
+        });
+        _dbContext.SaveChanges();
+
+        _deviceSubjectId = SeedDeviceSubject();
 
         // Setup configuration
         _mockConfiguration
@@ -52,6 +75,7 @@ public class AuthorizationServiceCrudTests : IDisposable
             _mockLogger.Object,
             _mockSubjectService.Object,
             _mockRoleService.Object,
+            _mockDirectGrantService.Object,
             _mockJwtService.Object,
             _dbContext
         );
@@ -64,296 +88,356 @@ public class AuthorizationServiceCrudTests : IDisposable
     }
 
     #region Subject CRUD Tests
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    public async Task GetAllSubjectsAsync_ReturnsSubjectsFromService()
+    /// <summary>
+    /// Gives the context's tenant the device subject a newly minted token is issued to, matching
+    /// what <see cref="DeviceSubjectFilter"/> creates on demand.
+    /// </summary>
+    private Guid SeedDeviceSubject()
     {
-        // Arrange
-        var authSubjects = new List<AuthSubjectModel>
+        var subjectId = Guid.CreateVersion7();
+
+        _dbContext.Subjects.Add(new SubjectEntity
         {
-            new AuthSubjectModel
-            {
-                Id = Guid.NewGuid(),
-                Name = "Test Subject 1",
-                Type = SubjectType.Device,
-                IsActive = true,
-                Roles = new List<AuthRoleModel>
-                {
-                    new AuthRoleModel { Name = "api", Permissions = new List<string> { "api:*" } }
-                }
-            },
-            new AuthSubjectModel
-            {
-                Id = Guid.NewGuid(),
-                Name = "Test Subject 2",
-                Type = SubjectType.User,
-                Email = "test@example.com",
-                IsActive = true,
-                Roles = new List<AuthRoleModel>()
-            }
+            Id = subjectId,
+            Name = "Devices",
+            IsActive = true,
+            IsSystemSubject = true,
+            ApprovalStatus = "Approved",
+        });
+        _dbContext.TenantMembers.Add(new TenantMemberEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = _tenantId,
+            SubjectId = subjectId,
+            DirectPermissions = [Scope.FullAccess],
+            SysCreatedAt = DateTime.UtcNow,
+            SysUpdatedAt = DateTime.UtcNow,
+        });
+
+        _dbContext.SaveChanges();
+        return subjectId;
+    }
+
+    /// <summary>
+    /// Puts a live direct grant on the context's tenant, which is what the Nightscout-compatible
+    /// subjects API reads and writes now that a "subject" is a token rather than an account.
+    /// </summary>
+    private async Task<OAuthGrantEntity> SeedGrantAsync(
+        string label, List<string> scopes, DateTime? revokedAt = null)
+    {
+        var grant = new OAuthGrantEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = _tenantId,
+            SubjectId = _deviceSubjectId,
+            GrantType = OAuthGrantTypes.Direct,
+            Scopes = scopes,
+            Label = label,
+            RevokedAt = revokedAt,
+            CreatedAt = DateTime.UtcNow,
         };
 
-        _mockSubjectService
-            .Setup(s => s.GetSubjectsAsync(null))
-            .ReturnsAsync(authSubjects);
-
-        // Act
-        var result = await _authorizationService.GetAllSubjectsAsync();
-
-        // Assert
-        Assert.NotNull(result);
-        Assert.Equal(2, result.Count);
-        Assert.Equal("Test Subject 1", result[0].Name);
-        Assert.Equal("Test Subject 2", result[1].Name);
-        _mockSubjectService.Verify(s => s.GetSubjectsAsync(null), Times.Once);
+        _dbContext.OAuthGrants.Add(grant);
+        await _dbContext.SaveChangesAsync();
+        return grant;
     }
 
     [Fact]
     [Trait("Category", "Unit")]
-    public async Task GetSubjectByIdAsync_WithValidId_ReturnsSubject()
+    public async Task GetAllSubjectsAsync_ReturnsLiveGrantsAsSubjects()
     {
-        // Arrange
-        var subjectId = Guid.NewGuid();
-        var authSubject = new AuthSubjectModel
+        await SeedGrantAsync("Pump uploader", [Scope.GlucoseRead]);
+        await SeedGrantAsync("Retired phone", [Scope.GlucoseRead], revokedAt: DateTime.UtcNow);
+
+        var result = await _authorizationService.GetAllSubjectsAsync();
+
+        // A revoked grant is gone as far as the API is concerned, but the row stays for audit.
+        result.Should().ContainSingle().Which.Name.Should().Be("Pump uploader");
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetAllSubjectsAsync_RendersScopesAsLegacyPermissions()
+    {
+        await SeedGrantAsync("Pump uploader", [Scope.GlucoseRead]);
+
+        var result = await _authorizationService.GetAllSubjectsAsync();
+
+        // Round-trippable: what the list reports can be written straight back through
+        // UpdateSubjectAsync without the grant losing authority.
+        result.Single().Roles.Should().Contain("api:entries:read");
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetAllSubjectsAsync_DoesNotReportAnotherMembersOwnTokens()
+    {
+        var member = Guid.CreateVersion7();
+        _dbContext.Subjects.Add(new SubjectEntity
         {
-            Id = subjectId,
-            Name = "Test Subject",
-            Type = SubjectType.Device,
+            Id = member,
+            Name = "Mum",
             IsActive = true,
-            Roles = new List<AuthRoleModel>()
-        };
+            ApprovalStatus = "Approved",
+        });
+        _dbContext.OAuthGrants.Add(new OAuthGrantEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = _tenantId,
+            SubjectId = member,
+            GrantType = OAuthGrantTypes.Direct,
+            Scopes = [Scope.GlucoseRead],
+            Label = "Mum's phone",
+            CreatedAt = DateTime.UtcNow,
+        });
+        await _dbContext.SaveChangesAsync();
 
-        _mockSubjectService
-            .Setup(s => s.GetSubjectByIdAsync(subjectId))
-            .ReturnsAsync(authSubject);
+        var result = await _authorizationService.GetAllSubjectsAsync();
 
-        // Act
-        var result = await _authorizationService.GetSubjectByIdAsync(subjectId.ToString());
+        // A member's own tokens are theirs to manage. Listing them on an admin screen would also
+        // put them within reach of DeleteSubjectAsync, which revokes whatever it is handed.
+        result.Should().BeEmpty();
+    }
 
-        // Assert
-        Assert.NotNull(result);
-        Assert.Equal("Test Subject", result.Name);
-        Assert.Equal(subjectId.ToString(), result.Id);
-        _mockSubjectService.Verify(s => s.GetSubjectByIdAsync(subjectId), Times.Once);
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task DeleteSubjectAsync_WillNotRevokeAnotherMembersToken()
+    {
+        var otherMembersGrant = Guid.CreateVersion7();
+
+        var result = await _authorizationService.DeleteSubjectAsync(otherMembersGrant.ToString());
+
+        result.Should().BeFalse();
+        _mockDirectGrantService.Verify(
+            d => d.RevokeAsync(
+                It.IsAny<NocturneDbContext>(), otherMembersGrant, It.Is<Guid?>(id => id == null),
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<AuthAuditActor>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CreateSubjectAsync_WithNoTranslatableRoles_IsRejectedRatherThanMinted()
+    {
+        _mockRoleService.Setup(r => r.GetAllRolesAsync()).ReturnsAsync([]);
+
+        // Nightscout will create a subject that holds nothing. A grant cannot, so the caller has to
+        // hear about it rather than receive a token that refuses every request it is used for.
+        var create = () => _authorizationService.CreateSubjectAsync(new LegacySubject
+        {
+            Name = "Holds nothing",
+            Roles = ["a-role-nocturne-cannot-translate"],
+        });
+
+        await create.Should().ThrowAsync<ArgumentException>();
+        _mockDirectGrantService.Verify(
+            d => d.CreateAsync(
+                It.IsAny<NocturneDbContext>(), It.IsAny<Guid>(), It.IsAny<string>(),
+                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime?>(),
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<AuthAuditActor>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetSubjectByIdAsync_WithValidId_ReturnsGrant()
+    {
+        var grant = await SeedGrantAsync("Pump uploader", [Scope.GlucoseRead]);
+
+        var result = await _authorizationService.GetSubjectByIdAsync(grant.Id.ToString());
+
+        result.Should().NotBeNull();
+        result!.Name.Should().Be("Pump uploader");
     }
 
     [Fact]
     [Trait("Category", "Unit")]
     public async Task GetSubjectByIdAsync_WithNonExistentId_ReturnsNull()
     {
-        // Arrange
-        var subjectId = Guid.NewGuid();
+        var result = await _authorizationService.GetSubjectByIdAsync(Guid.NewGuid().ToString());
 
-        _mockSubjectService
-            .Setup(s => s.GetSubjectByIdAsync(subjectId))
-            .ReturnsAsync((AuthSubjectModel?)null);
-
-        // Act
-        var result = await _authorizationService.GetSubjectByIdAsync(subjectId.ToString());
-
-        // Assert
-        Assert.Null(result);
-        _mockSubjectService.Verify(s => s.GetSubjectByIdAsync(subjectId), Times.Once);
+        result.Should().BeNull();
     }
 
     [Fact]
     [Trait("Category", "Unit")]
     public async Task GetSubjectByIdAsync_WithInvalidGuidFormat_ReturnsNull()
     {
-        // Arrange
-        var invalidId = "not-a-valid-guid";
+        var result = await _authorizationService.GetSubjectByIdAsync("not-a-guid");
 
-        // Act
-        var result = await _authorizationService.GetSubjectByIdAsync(invalidId);
-
-        // Assert
-        Assert.Null(result);
-        _mockSubjectService.Verify(s => s.GetSubjectByIdAsync(It.IsAny<Guid>()), Times.Never);
+        result.Should().BeNull();
     }
 
     [Fact]
     [Trait("Category", "Unit")]
-    public async Task CreateSubjectAsync_CreatesAndReturnsSubjectWithAccessToken()
+    public async Task CreateSubjectAsync_MintsAGrantOnTheDeviceSubjectAndReturnsTheTokenOnce()
     {
-        // Arrange
-        var legacySubject = new LegacySubject
+        var grantId = Guid.CreateVersion7();
+
+        _mockRoleService
+            .Setup(r => r.GetAllRolesAsync())
+            .ReturnsAsync([new AuthRoleModel
+            {
+                Id = Guid.NewGuid(),
+                Name = "readable",
+                Permissions = ["*:*:read"],
+            }]);
+
+        _mockDirectGrantService
+            .Setup(d => d.CreateAsync(
+                It.IsAny<NocturneDbContext>(), It.IsAny<Guid>(), It.IsAny<string>(),
+                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime?>(),
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<AuthAuditActor>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(DirectGrantCreationResult.Created(new CreateDirectGrantResponse
+            {
+                Id = grantId,
+                Token = "noc_generated-token",
+                Label = "New Device Subject",
+                Scopes = [Scope.GlucoseRead],
+                CreatedAt = DateTime.UtcNow,
+            }));
+
+        var result = await _authorizationService.CreateSubjectAsync(new LegacySubject
         {
             Name = "New Device Subject",
-            Roles = new List<string> { "api" }
-        };
+            Roles = ["readable"],
+        });
 
-        var createdSubject = new AuthSubjectModel
-        {
-            Id = Guid.NewGuid(),
-            Name = "New Device Subject",
-            Type = SubjectType.Service,
-            IsActive = true,
-            Roles = new List<AuthRoleModel>()
-        };
+        result.Id.Should().Be(grantId.ToString());
+        result.AccessToken.Should().Be("noc_generated-token");
 
-        var creationResult = new SubjectCreationResult
-        {
-            Subject = createdSubject,
-            AccessToken = "generated-access-token-12345"
-        };
-
-        _mockSubjectService
-            .Setup(s => s.CreateSubjectAsync(It.IsAny<AuthSubjectModel>()))
-            .ReturnsAsync(creationResult);
-
-        _mockSubjectService
-            .Setup(s => s.AssignRoleAsync(createdSubject.Id, "api", null))
-            .ReturnsAsync(true);
-
-        _mockSubjectService
-            .Setup(s => s.GetSubjectRolesAsync(createdSubject.Id))
-            .ReturnsAsync(new List<string> { "api" });
-
-        // Act
-        var result = await _authorizationService.CreateSubjectAsync(legacySubject);
-
-        // Assert
-        Assert.NotNull(result);
-        Assert.Equal("New Device Subject", result.Name);
-        Assert.Equal("generated-access-token-12345", result.AccessToken);
-        Assert.Contains("api", result.Roles);
-        _mockSubjectService.Verify(s => s.CreateSubjectAsync(It.IsAny<AuthSubjectModel>()), Times.Once);
-        _mockSubjectService.Verify(s => s.AssignRoleAsync(createdSubject.Id, "api", null), Times.Once);
+        // The token hangs off the device subject, which is a member, so MemberScopeMiddleware has a
+        // membership to intersect the grant's scopes with. A grant on a non-member would
+        // authenticate and then be dropped straight back to unauthenticated.
+        _mockDirectGrantService.Verify(
+            d => d.CreateAsync(
+                It.IsAny<NocturneDbContext>(),
+                _deviceSubjectId,
+                "New Device Subject",
+                It.Is<IReadOnlyCollection<string>>(scopes => scopes.Contains(Scope.GlucoseRead)),
+                null, null, null, null, It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     [Fact]
     [Trait("Category", "Unit")]
-    public async Task UpdateSubjectAsync_WithExistingSubject_ReturnsUpdated()
+    public async Task UpdateSubjectAsync_WithExistingGrant_RelabelsAndRescopesIt()
     {
-        // Arrange
-        var subjectId = Guid.NewGuid();
-        var legacySubject = new LegacySubject
+        var grant = await SeedGrantAsync("Old name", [Scope.GlucoseRead]);
+
+        _mockRoleService.Setup(r => r.GetAllRolesAsync()).ReturnsAsync([]);
+
+        var result = await _authorizationService.UpdateSubjectAsync(new LegacySubject
         {
-            Id = subjectId.ToString(),
-            Name = "Updated Subject Name",
-            Notes = "Updated notes",
-            Roles = new List<string> { "admin" }
-        };
+            Id = grant.Id.ToString(),
+            Name = "New name",
+            Roles = ["api:treatments:read"],
+        });
 
-        var existingSubject = new AuthSubjectModel
+        result.Should().NotBeNull();
+        result!.Name.Should().Be("New name");
+
+        var reloaded = await _dbContext.OAuthGrants.SingleAsync(g => g.Id == grant.Id);
+        reloaded.Scopes.Should().Equal(Scope.TreatmentsRead);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task UpdateSubjectAsync_WithoutRoles_LeavesTheGrantsAuthorityAlone()
+    {
+        var grant = await SeedGrantAsync("Pump uploader", [Scope.GlucoseRead]);
+
+        var result = await _authorizationService.UpdateSubjectAsync(new LegacySubject
         {
-            Id = subjectId,
-            Name = "Original Subject Name",
-            Type = SubjectType.Device,
-            IsActive = true,
-            Roles = new List<AuthRoleModel>()
-        };
+            Id = grant.Id.ToString(),
+            Name = "Renamed",
+        });
 
-        var updatedSubject = new AuthSubjectModel
+        result.Should().NotBeNull();
+
+        // Omitting roles is not the same as asking for none; a client that only renames must not
+        // silently strip the token of everything it could do.
+        var reloaded = await _dbContext.OAuthGrants.SingleAsync(g => g.Id == grant.Id);
+        reloaded.Scopes.Should().Equal(Scope.GlucoseRead);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task UpdateSubjectAsync_WithNoTranslatableRoles_IsRejectedRatherThanZeroed()
+    {
+        var grant = await SeedGrantAsync("Pump uploader", [Scope.GlucoseRead]);
+        _mockRoleService.Setup(r => r.GetAllRolesAsync()).ReturnsAsync([]);
+
+        var update = () => _authorizationService.UpdateSubjectAsync(new LegacySubject
         {
-            Id = subjectId,
-            Name = "Updated Subject Name",
-            Notes = "Updated notes",
-            Type = SubjectType.Device,
-            IsActive = true,
-            Roles = new List<AuthRoleModel>()
-        };
+            Id = grant.Id.ToString(),
+            Name = "Pump uploader",
+            Roles = ["a-role-nocturne-cannot-translate"],
+        });
 
-        _mockSubjectService
-            .Setup(s => s.GetSubjectByIdAsync(subjectId))
-            .ReturnsAsync(existingSubject);
+        await update.Should().ThrowAsync<ArgumentException>();
 
-        _mockSubjectService
-            .Setup(s => s.UpdateSubjectAsync(It.IsAny<AuthSubjectModel>()))
-            .ReturnsAsync(updatedSubject);
-
-        _mockSubjectService
-            .Setup(s => s.GetSubjectRolesAsync(subjectId))
-            .ReturnsAsync(new List<string>());
-
-        _mockSubjectService
-            .Setup(s => s.AssignRoleAsync(subjectId, "admin", null))
-            .ReturnsAsync(true);
-
-        // Act
-        var result = await _authorizationService.UpdateSubjectAsync(legacySubject);
-
-        // Assert
-        Assert.NotNull(result);
-        Assert.Equal("Updated Subject Name", result.Name);
-        _mockSubjectService.Verify(s => s.UpdateSubjectAsync(It.IsAny<AuthSubjectModel>()), Times.Once);
+        // Answering 200 here leaves a token that authenticates and then refuses every request it is
+        // used for, with nothing said about why.
+        var reloaded = await _dbContext.OAuthGrants.SingleAsync(g => g.Id == grant.Id);
+        reloaded.Scopes.Should().Equal(Scope.GlucoseRead);
     }
 
     [Fact]
     [Trait("Category", "Unit")]
     public async Task UpdateSubjectAsync_WithNonExistentSubject_ReturnsNull()
     {
-        // Arrange
-        var subjectId = Guid.NewGuid();
-        var legacySubject = new LegacySubject
+        var result = await _authorizationService.UpdateSubjectAsync(new LegacySubject
         {
-            Id = subjectId.ToString(),
-            Name = "Non-existent Subject"
-        };
+            Id = Guid.NewGuid().ToString(),
+            Name = "Nobody",
+        });
 
-        _mockSubjectService
-            .Setup(s => s.GetSubjectByIdAsync(subjectId))
-            .ReturnsAsync((AuthSubjectModel?)null);
-
-        // Act
-        var result = await _authorizationService.UpdateSubjectAsync(legacySubject);
-
-        // Assert
-        Assert.Null(result);
-        _mockSubjectService.Verify(s => s.UpdateSubjectAsync(It.IsAny<AuthSubjectModel>()), Times.Never);
+        result.Should().BeNull();
     }
 
     [Fact]
     [Trait("Category", "Unit")]
-    public async Task DeleteSubjectAsync_WithValidId_ReturnsTrue()
+    public async Task DeleteSubjectAsync_WithValidId_RevokesTheGrant()
     {
-        // Arrange
-        var subjectId = Guid.NewGuid();
+        var grantId = Guid.CreateVersion7();
 
-        _mockSubjectService
-            .Setup(s => s.DeleteSubjectAsync(subjectId))
+        _mockDirectGrantService
+            .Setup(d => d.RevokeAsync(
+                It.IsAny<NocturneDbContext>(), grantId, _deviceSubjectId, null, null,
+                It.IsAny<AuthAuditActor>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
-        // Act
-        var result = await _authorizationService.DeleteSubjectAsync(subjectId.ToString());
+        var result = await _authorizationService.DeleteSubjectAsync(grantId.ToString());
 
-        // Assert
-        Assert.True(result);
-        _mockSubjectService.Verify(s => s.DeleteSubjectAsync(subjectId), Times.Once);
+        result.Should().BeTrue();
     }
 
     [Fact]
     [Trait("Category", "Unit")]
     public async Task DeleteSubjectAsync_WithNonExistentId_ReturnsFalse()
     {
-        // Arrange
-        var subjectId = Guid.NewGuid();
-
-        _mockSubjectService
-            .Setup(s => s.DeleteSubjectAsync(subjectId))
+        _mockDirectGrantService
+            .Setup(d => d.RevokeAsync(
+                It.IsAny<NocturneDbContext>(), It.IsAny<Guid>(), _deviceSubjectId, null, null,
+                It.IsAny<AuthAuditActor>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
 
-        // Act
-        var result = await _authorizationService.DeleteSubjectAsync(subjectId.ToString());
+        var result = await _authorizationService.DeleteSubjectAsync(Guid.NewGuid().ToString());
 
-        // Assert
-        Assert.False(result);
+        result.Should().BeFalse();
     }
 
     [Fact]
     [Trait("Category", "Unit")]
     public async Task DeleteSubjectAsync_WithInvalidGuidFormat_ReturnsFalse()
     {
-        // Arrange
-        var invalidId = "not-a-valid-guid";
+        var result = await _authorizationService.DeleteSubjectAsync("not-a-guid");
 
-        // Act
-        var result = await _authorizationService.DeleteSubjectAsync(invalidId);
-
-        // Assert
-        Assert.False(result);
-        _mockSubjectService.Verify(s => s.DeleteSubjectAsync(It.IsAny<Guid>()), Times.Never);
+        result.Should().BeFalse();
     }
 
     #endregion

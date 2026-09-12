@@ -198,12 +198,86 @@ public class DirectGrantTokenHandlerTests : IDisposable
     }
 
     [Fact]
-    public async Task AuthenticateAsync_LegacyTokenQueryParam_ReturnsSkip()
+    public async Task AuthenticateAsync_UnknownLegacyTokenQueryParam_ReturnsSkip()
     {
-        // A legacy name-hash access token in ?token= matches no direct grant, so this handler
-        // must Skip (not Fail) and let it fall through to AccessTokenHandler.
+        // A name-hash token matching no grant must Skip rather than Fail, so a request carrying it
+        // alongside a valid api-secret still authenticates on the secret, as classic Nightscout did.
         var context = CreateHttpContext();
         context.Request.QueryString = new QueryString("?token=rhys-a1b2c3d4e5f6g7h8");
+
+        var result = await _handler.AuthenticateAsync(context);
+
+        Assert.True(result.ShouldSkip);
+        Assert.False(result.Succeeded);
+    }
+
+    [Theory]
+    // The token exactly as the source instance issued it: 16 digest characters after the dash.
+    [InlineData("phone-0123456789abcdef")]
+    // The name in front of the dash is cosmetic: only the part after it was ever compared.
+    [InlineData("somethingelse-0123456789abcdef")]
+    // Any longer prefix of the digest authenticates too, up to the full 40 characters.
+    [InlineData("phone-0123456789abcdef0123456789abcdef01234567")]
+    // A dashless token is the bare digest prefix.
+    [InlineData("0123456789abcdef")]
+    public async Task AuthenticateAsync_ImportedNightscoutToken_ResolvesByDigestPrefix(string token)
+    {
+        await SeedLegacyGrantAsync(LegacyDigest);
+
+        var context = CreateHttpContext();
+        context.Request.QueryString = new QueryString($"?token={token}");
+
+        var result = await _handler.AuthenticateAsync(context);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(_subjectId, result.AuthContext!.SubjectId);
+    }
+
+    [Fact]
+    public async Task AuthenticateAsync_ImportedNightscoutToken_ResolvesOverBearerToo()
+    {
+        // Which transport carried a credential must not decide whether it works: the query path
+        // normalizes the noc_ prefix in and the header path does not, so both spellings are tried.
+        await SeedLegacyGrantAsync(LegacyDigest);
+
+        var result = await _handler.AuthenticateAsync(BearerContext("phone-0123456789abcdef"));
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(_subjectId, result.AuthContext!.SubjectId);
+    }
+
+    [Theory]
+    // Under Nightscout's minimum of 16 characters: not a near miss, but a credential nobody holds.
+    [InlineData("phone-0123456789")]
+    // Right length, wrong digest.
+    [InlineData("phone-fedcba9876543210")]
+    // Not hex, so it can never be a prefix of a hex digest.
+    [InlineData("phone-zzzzzzzzzzzzzzzz")]
+    // A window taken from the middle of the digest. Nightscout matched a prefix, so widening the
+    // comparison to a substring would turn one credential into 25 working ones.
+    [InlineData("phone-456789abcdef0123")]
+    public async Task AuthenticateAsync_TokenThatIsNotThisDigest_ReturnsSkip(string token)
+    {
+        await SeedLegacyGrantAsync(LegacyDigest);
+
+        var context = CreateHttpContext();
+        context.Request.QueryString = new QueryString($"?token={token}");
+
+        var result = await _handler.AuthenticateAsync(context);
+
+        Assert.True(result.ShouldSkip);
+        Assert.False(result.Succeeded);
+    }
+
+    [Fact]
+    public async Task AuthenticateAsync_RevokedImportedToken_ReturnsSkip()
+    {
+        // Revoking a migrated token has to stop it on the digest path too, or the one lever a user
+        // has over a leaked legacy credential would do nothing.
+        await SeedLegacyGrantAsync(LegacyDigest, revokedAt: Now.AddMinutes(-1));
+
+        var context = CreateHttpContext();
+        context.Request.QueryString = new QueryString("?token=phone-0123456789abcdef");
 
         var result = await _handler.AuthenticateAsync(context);
 
@@ -314,6 +388,32 @@ public class DirectGrantTokenHandlerTests : IDisposable
         });
         await ctx.SaveChangesAsync();
         return token;
+    }
+
+    /// <summary>A digest as reconstructed at import time: 40 lowercase hex characters.</summary>
+    private const string LegacyDigest = "0123456789abcdef0123456789abcdef01234567";
+
+    /// <summary>
+    /// Seeds a grant carrying an imported Nightscout token, which holds a digest rather than a
+    /// hash: the source instance matched such a token by prefix, so no single hash can stand for
+    /// every spelling of it that authenticates.
+    /// </summary>
+    private async Task SeedLegacyGrantAsync(string digest, DateTime? revokedAt = null)
+    {
+        await using var ctx = _db.CreateContext(_testTenantId);
+        ctx.OAuthGrants.Add(new OAuthGrantEntity
+        {
+            Id = Guid.CreateVersion7(),
+            SubjectId = _subjectId,
+            TenantId = _testTenantId,
+            GrantType = OAuthGrantTypes.Direct,
+            LegacyTokenDigest = digest,
+            IsMigrated = true,
+            Scopes = ["glucose.read"],
+            CreatedAt = Now,
+            RevokedAt = revokedAt,
+        });
+        await ctx.SaveChangesAsync();
     }
 
     private DefaultHttpContext BearerContext(string token)

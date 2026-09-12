@@ -15,6 +15,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Services.Migration;
 
@@ -1689,13 +1690,11 @@ internal class MigrationJob
         UpdateCollectionProgress(collectionName, subjects.Length, 0, 0, false);
         UpdateOverallProgress();
 
-        // 3. Pre-load existing token hashes for duplicate detection
-        var existingHashes = await dbContext.Subjects
-            .Where(s => s.AccessTokenHash != null)
-            .Select(s => s.AccessTokenHash!)
+        var existingHashes = await dbContext.OAuthGrants
+            .Where(g => g.TenantId == _tenantId && g.TokenHash != null)
+            .Select(g => g.TokenHash!)
             .ToHashSetAsync(ct);
 
-        // 4. Pre-load existing Nocturne roles by name
         var nocturneRoles = await dbContext.Roles
             .ToDictionaryAsync(r => r.Name, r => r, ct);
 
@@ -1705,6 +1704,8 @@ internal class MigrationJob
         var hashedSecret = string.IsNullOrEmpty(_request.NightscoutApiSecret)
             ? null
             : HashApiSecret(_request.NightscoutApiSecret);
+
+        Guid? deviceSubjectId = null;
 
         foreach (var subject in subjects)
         {
@@ -1726,43 +1727,60 @@ internal class MigrationJob
                     continue;
                 }
 
-                var roles = await ResolveRolesAsync(dbContext, nocturneRoles, rolePermissions, subject.Roles, ct);
+                // "denied" is Nightscout's way of spelling "no access". Importing a working
+                // credential for it would hand out access the source instance had taken away, so the
+                // subject is passed over rather than imported as a revoked grant.
+                if (subject.Roles is ["denied"])
+                {
+                    totalSkipped++;
+                    continue;
+                }
 
-                // Determine if subject should be inactive ("denied" is only role)
-                var isDenied = subject.Roles is ["denied"];
+                var roles = await ResolveRolesAsync(dbContext, nocturneRoles, rolePermissions, subject.Roles, ct);
+                var scopes = ScopeTranslator.FromPermissions(GrantedPermissions(roles, rolePermissions));
+
+                // A subject whose permissions all fall outside Nocturne's vocabulary would get a
+                // credential that authorizes nothing. Skip it rather than leave a token on the list
+                // that fails every request it is used for.
+                if (scopes.Count == 0)
+                {
+                    totalSkipped++;
+                    continue;
+                }
 
                 var mongoId = subject.MongoId ?? subject.Id;
                 var legacyDigest = Auth.LegacyNightscoutToken.DeriveDigest(hashedSecret, mongoId, subject.AccessToken);
 
-                var entity = new SubjectEntity
+                // Resolved on the first token actually worth importing, so a run that converts
+                // nothing leaves no holder behind. See OrphanedSubjectFilter for what an account
+                // with no way to sign in costs the tenant, and DeviceSubjectFilter for why the
+                // holder is not a person.
+                deviceSubjectId ??= await dbContext.DeviceSubjectOf(_tenantId, ct);
+
+                dbContext.OAuthGrants.Add(new OAuthGrantEntity
                 {
                     Id = Guid.CreateVersion7(),
-                    Name = subject.Name ?? "Unnamed",
-                    AccessTokenHash = tokenHash,
-                    AccessTokenPrefix = $"{(subject.Name ?? "unknown").ToLowerInvariant()}-{subject.AccessToken[..Math.Min(8, subject.AccessToken.Length)]}",
+                    TenantId = _tenantId,
+                    ClientEntityId = null,
+                    SubjectId = deviceSubjectId.Value,
+                    GrantType = OAuthGrantTypes.Direct,
+
+                    // "*" is stored as the single superuser atom; Normalize expands it back, so
+                    // spelling the expansion out here would only bake today's scope list in.
+                    Scopes = scopes.Contains(Scope.FullAccess)
+                        ? [Scope.FullAccess]
+                        : [.. scopes],
+
+                    Label = subject.Name ?? "Unnamed",
+
+                    // Both spellings the source instance would have accepted: the token verbatim,
+                    // and any other digest prefix. Existing AAPS and xDrip setups keep uploading.
+                    TokenHash = tokenHash,
                     LegacyTokenDigest = legacyDigest,
-                    IsActive = !isDenied,
-                    Notes = "Migrated from Nightscout. Consider rotating to a Nocturne token.",
-                    OriginalId = mongoId,
+                    IsMigrated = true,
                     CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow,
-                    ApprovalStatus = "Approved",
-                };
+                });
 
-                dbContext.Subjects.Add(entity);
-                await dbContext.SaveChangesAsync(ct);
-
-                foreach (var role in roles)
-                {
-                    dbContext.SubjectRoles.Add(new SubjectRoleEntity
-                    {
-                        SubjectId = entity.Id,
-                        RoleId = role.Id,
-                        AssignedAt = DateTime.UtcNow,
-                    });
-                }
-
-                AddTenantMembership(dbContext, entity.Id, GrantedPermissions(roles, rolePermissions));
                 await dbContext.SaveChangesAsync(ct);
 
                 existingHashes.Add(tokenHash);
@@ -1844,45 +1862,6 @@ internal class MigrationJob
         roles.SelectMany(role => sourcePermissions.TryGetValue(role.Name, out var fromSource)
             ? fromSource
             : role.Permissions);
-
-    /// <summary>
-    /// Makes an imported subject a member of the tenant being migrated into. Without the membership
-    /// the subject authenticates and is then dropped straight back to unauthenticated:
-    /// <c>AuthenticationMiddleware</c> requires a membership row for every credential type it does
-    /// not exempt, and a legacy access token is not exempt.
-    /// </summary>
-    /// <remarks>
-    /// The imported permissions are carried directly rather than mapped onto the seed tenant roles,
-    /// which do not line up with Nightscout's — Viewer is narrower than <c>readable</c>, Caretaker
-    /// wider than <c>careportal</c> — and which have no answer at all for a custom Nightscout role.
-    /// <see cref="ScopeTranslator"/> drops anything it cannot translate, so a permission with no
-    /// Nocturne equivalent grants nothing, and a subject left with nothing gets no membership at
-    /// all rather than an entry on the member list that cannot do anything.
-    /// </remarks>
-    private void AddTenantMembership(
-        NocturneDbContext dbContext, Guid subjectId, IEnumerable<string> legacyPermissions)
-    {
-        var scopes = ScopeTranslator.FromPermissions(legacyPermissions);
-
-        if (scopes.Count == 0)
-            return;
-
-        // A "*" grant is stored as the single superuser atom: NormalizeMemberPermissions expands it
-        // back to every scope, so spelling out the expansion would only bake today's scope list in.
-        List<string> permissions = scopes.Contains(Scope.FullAccess)
-            ? [Scope.FullAccess]
-            : [.. scopes];
-
-        dbContext.TenantMembers.Add(new TenantMemberEntity
-        {
-            Id = Guid.CreateVersion7(),
-            TenantId = _tenantId,
-            SubjectId = subjectId,
-            DirectPermissions = permissions,
-            SysCreatedAt = DateTime.UtcNow,
-            SysUpdatedAt = DateTime.UtcNow,
-        });
-    }
 
     /// <summary>
     /// Fetches Nightscout role definitions and returns a name-to-permissions lookup.
