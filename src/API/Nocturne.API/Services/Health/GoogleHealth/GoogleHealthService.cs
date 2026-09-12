@@ -354,6 +354,7 @@ public sealed class GoogleHealthService(
                 ["redirect_uri"] = settings.CallbackUrl,
                 ["response_type"] = "code",
                 ["access_type"] = "offline",
+                ["include_granted_scopes"] = "true",
                 ["prompt"] = "consent select_account",
                 ["scope"] = "openid " + string.Join(' ', settings.DataTypes
                     .Where(type => GoogleHealthClient.SupportedTypes.Contains(type, StringComparer.Ordinal))
