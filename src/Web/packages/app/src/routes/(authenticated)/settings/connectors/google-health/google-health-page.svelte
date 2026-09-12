@@ -22,6 +22,7 @@
     describeGoogleHealthError,
     type GoogleHealthOperation,
   } from "$lib/connectors/google-health-error";
+  import { lastSeen } from "$lib/utils/formatting";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import {
     getGoogleHealth,
@@ -393,6 +394,8 @@
             {status.syncPagesRead} Google {status.syncPagesRead === 1
               ? "page"
               : "pages"} read for this data type
+          </span>{/if}{#if status.lastSync}<span>
+            Laatst succesvol gesynchroniseerd: {lastSeen(status.lastSync)}
           </span>{/if}
       </div>
       <p class="text-sm">
