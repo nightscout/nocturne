@@ -34,7 +34,9 @@
   } from "$lib/components/ui/card";
   import { Badge } from "$lib/components/ui/badge";
   import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
-  import { Bell, Plus, AlertTriangle, Check, Loader2 } from "lucide-svelte";
+  import { Bell, Plus, AlertTriangle, Check, ChevronRight, Loader2 } from "lucide-svelte";
+  import AppLogo from "$lib/components/ui/AppLogo.svelte";
+  import { resolve } from "$app/paths";
 
   import AlertRuleRow from "$lib/components/alerts/AlertRuleRow.svelte";
   import DndNoticeStrip from "$lib/components/alerts/DndNoticeStrip.svelte";
@@ -351,6 +353,32 @@
             {/each}
           </div>
         {/if}
+      </CardContent>
+    </Card>
+
+    <!-- Lives here because it answers this page's "where you're notified". -->
+    <Card>
+      <CardHeader>
+        <CardTitle>Where alerts reach you</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <a
+          href={resolve("/settings/integrations/discord")}
+          class="flex items-center justify-between rounded-lg border p-4 transition-colors hover:bg-accent"
+        >
+          <div class="flex items-center gap-3">
+            <div class="flex h-10 w-10 items-center justify-center overflow-hidden rounded-md bg-muted">
+              <AppLogo icon="discord" />
+            </div>
+            <div>
+              <p class="font-medium">Discord</p>
+              <p class="text-sm text-muted-foreground">
+                Link a Discord account to receive alerts and use the Nocturne bot
+              </p>
+            </div>
+          </div>
+          <ChevronRight class="h-4 w-4 text-muted-foreground" />
+        </a>
       </CardContent>
     </Card>
   </svelte:boundary>
