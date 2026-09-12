@@ -15,7 +15,9 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// <para>
 /// Deliberately not a definition of "has no credential at all". A device or service token is a
 /// direct grant on <c>oauth_grants</c> issued to somebody else's subject, so it never reaches this
-/// query; anything that does is a person.
+/// query. A demo tenant's visitor is credential-less by design and stands for nobody, so it is
+/// excluded here rather than relying on callers to check <c>IsDemo</c> first: a filter that is only
+/// correct because an unrelated early return happens to run before it is not correct.
 /// </para>
 /// <para>
 /// Revoked memberships fall out through <see cref="TenantMemberEntity"/>'s global query filter. A
@@ -41,6 +43,7 @@ public static class OrphanedSubjectFilter
             .Select(m => m.Subject!)
             .Where(s => s.IsActive
                 && !s.IsSystemSubject
+                && !s.IsDemoSubject
                 && !db.PasskeyCredentials.Any(p => p.SubjectId == s.Id)
                 && !db.SubjectOidcIdentities.Any(i => i.SubjectId == s.Id));
 }

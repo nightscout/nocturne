@@ -132,8 +132,11 @@ public class AuthenticationMiddleware
             context.SetLegacyAuthContext(MapToLegacyContext(authContext));
 
             // Load platform admin flag from subject before building claims,
-            // so [Authorize(Roles = "platform_admin")] works correctly.
-            if (authContext is { IsAuthenticated: true, SubjectId: not null })
+            // so [Authorize(Roles = "platform_admin")] works correctly. Only for a credential that
+            // speaks for the subject rather than for something they delegated; see
+            // <see cref="PlatformAdminCredentials"/>.
+            if (authContext is { IsAuthenticated: true, SubjectId: not null }
+                && PlatformAdminCredentials.Carries(authContext.AuthType))
             {
                 using var scope = _scopeFactory.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<Nocturne.Infrastructure.Data.NocturneDbContext>();
