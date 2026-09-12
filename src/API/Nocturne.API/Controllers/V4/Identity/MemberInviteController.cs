@@ -544,7 +544,6 @@ public class CreateMemberInviteRequest
     public int ExpiresInDays { get; set; } = 7;
     public int? MaxUses { get; set; }
     public bool LimitTo24Hours { get; set; }
-
 }
 
 public record SetMemberRolesRequest(List<Guid> RoleIds);

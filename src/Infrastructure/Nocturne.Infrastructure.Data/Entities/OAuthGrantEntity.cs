@@ -171,11 +171,18 @@ public class OAuthGrantEntity : ITenantScoped, IAuditable, IEntityCreated
     public string? LegacyTokenDigest { get; set; }
 
     /// <summary>
-    /// Restricts this credential to the last 24 hours of every time-series category, independently
-    /// of the membership it resolves through. A follower's phone can be held to a recent window
-    /// while the same person's other tokens are not, which a flag on the holder cannot express.
-    /// Applied on top of the membership's own limit, never instead of it: the narrower of the two
-    /// wins, so a credential cannot widen what its membership allows.
+    /// That this credential was meant to be held to the last 24 hours of every time-series
+    /// category. Recorded per credential rather than per membership because one holder carries
+    /// every API token on a tenant, so a flag there cannot say that a follower's phone is
+    /// restricted while the same person's other tokens are not.
+    /// <para>
+    /// <b>Not enforced on any read path.</b> The only place a 24-hour window is applied is the
+    /// public-share branch of <c>AuthenticationMiddleware</c>, which reads the Public subject's
+    /// membership; no member or grant credential is clamped anywhere. This column preserves the
+    /// intent so it is still there when that gap is closed, and
+    /// <c>MemberScopeMiddleware</c> already combines it with the membership's own flag, narrower
+    /// winning.
+    /// </para>
     /// </summary>
     [Column("limit_to_24_hours")]
     public bool LimitTo24Hours { get; set; }

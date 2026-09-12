@@ -11,11 +11,9 @@ namespace Nocturne.Infrastructure.Data.Tests.Migrations;
 /// Runs <c>MoveSubjectTokensToDirectGrants</c> over seeded rows on a real PostgreSQL.
 /// </summary>
 /// <remarks>
-/// The only other suite that executes migrations is deliberately seedless, so a data migration's
-/// <c>DO</c> block was previously syntax-checked and nothing more: its loop iterated zero tenants.
-/// Three separate defects shipped through that gap, including a <c>DELETE</c> wider than its
-/// <c>INSERT</c>, and each was found by a person running the SQL by hand. A migration that moves
-/// credentials needs a test that moves credentials.
+/// The sibling RLS suite is deliberately seedless, so on an empty database this migration's
+/// <c>DO</c> block is syntax-checked and nothing more: its loop iterates zero tenants. A migration
+/// that moves credentials needs a test that moves credentials.
 /// <para>
 /// Everything is asserted in one run against one seed, because the fixture cost is a container plus
 /// the full migration chain and the cases do not interact: each tenant below is independent.
@@ -125,8 +123,10 @@ public class SubjectTokenConversionFixture : IAsyncLifetime
               ('{LeftAlone}', 'leftalone', 'LeftAlone', true, now(), now());
 
             -- Converts: an owner who can sign in, plus one device per shape the migration decides on.
-            INSERT INTO subjects (id, name, username, is_active, is_system_subject, created_at, updated_at, approval_status)
-            VALUES ('11111111-0000-7000-8000-00000000a001', 'Owner', 'owner', true, false, now(), now(), 'Approved');
+            -- Carries a token as well as a passkey, so the passkey guard is the only thing keeping
+            -- this row out of the device set. Without one the guard could be deleted unnoticed.
+            INSERT INTO subjects (id, name, username, access_token_hash, is_active, is_system_subject, created_at, updated_at, approval_status)
+            VALUES ('11111111-0000-7000-8000-00000000a001', 'Owner', 'owner', repeat('9',64), true, false, now(), now(), 'Approved');
             INSERT INTO passkey_credentials (id, subject_id, credential_id, public_key, sign_count, transports, created_at)
             VALUES (gen_random_uuid(), '11111111-0000-7000-8000-00000000a001', 'c'::bytea, 'p'::bytea, 0, ARRAY[]::text[], now());
 
@@ -136,12 +136,18 @@ public class SubjectTokenConversionFixture : IAsyncLifetime
               ('11111111-0000-7000-8000-00000000d003', 'Scalar',    repeat('3',64), NULL,           true,  false, now(), now(), 'Approved'),
               ('11111111-0000-7000-8000-00000000d004', 'Parked',    repeat('4',64), NULL,           false, false, now(), now(), 'Approved');
 
+            -- A demo tenant is rebuilt on a schedule and its visitor stands for nobody, so neither
+            -- is this migration's business.
+            INSERT INTO subjects (id, name, access_token_hash, is_active, is_system_subject, is_demo_subject, created_at, updated_at, approval_status)
+            VALUES ('11111111-0000-7000-8000-00000000d005', 'DemoDevice', repeat('6',64), true, false, true, now(), now(), 'Approved');
+
             INSERT INTO tenant_members (id, tenant_id, subject_id, direct_permissions, sys_created_at, sys_updated_at, limit_to_24_hours) VALUES
               ('11111111-0000-7000-8000-00000000b001', '{Converts}', '11111111-0000-7000-8000-00000000a001', '["*"]'::jsonb, now(), now(), false),
               ('11111111-0000-7000-8000-00000000b002', '{Converts}', '11111111-0000-7000-8000-00000000d001', '["glucose.read"]'::jsonb, now(), now(), false),
               ('11111111-0000-7000-8000-00000000b003', '{Converts}', '11111111-0000-7000-8000-00000000d002', '[]'::jsonb, now(), now(), false),
               ('11111111-0000-7000-8000-00000000b004', '{Converts}', '11111111-0000-7000-8000-00000000d003', '42'::jsonb, now(), now(), false),
-              ('11111111-0000-7000-8000-00000000b005', '{Converts}', '11111111-0000-7000-8000-00000000d004', '["glucose.read"]'::jsonb, now(), now(), false);
+              ('11111111-0000-7000-8000-00000000b005', '{Converts}', '11111111-0000-7000-8000-00000000d004', '["glucose.read"]'::jsonb, now(), now(), false),
+              ('11111111-0000-7000-8000-00000000b006', '{Converts}', '11111111-0000-7000-8000-00000000d005', '["glucose.read"]'::jsonb, now(), now(), false);
 
             -- RoleOnly's authority is a tenant role, not direct permissions.
             INSERT INTO tenant_roles (id, tenant_id, name, slug, permissions, is_system, sys_created_at, sys_updated_at)
@@ -232,23 +238,11 @@ public class SubjectTokenConversionTests(SubjectTokenConversionFixture fixture)
     }
 
     [Fact]
-    public async Task A_deactivated_device_keeps_its_membership()
+    public async Task A_clamped_devices_limit_is_carried_across()
     {
-        // Deactivating is how a device is parked. Its token is not carried over, because a
-        // deactivated subject's token already refused every request, but taking the membership as
-        // well leaves nothing for ActivateSubjectAsync to switch back on.
-        var members = await ScalarAsync<long>(Converts,
-            "SELECT count(*) FROM tenant_members tm JOIN subjects s ON s.id = tm.subject_id"
-            + $" WHERE tm.tenant_id = '{Converts}' AND s.name = 'Parked';");
-
-        members.Should().Be(1);
-    }
-
-    [Fact]
-    public async Task A_clamped_device_stays_clamped()
-    {
-        // limit_to_24_hours drives what the credential can read. Losing it silently widens a token
-        // its owner deliberately restricted to the whole record.
+        // Nothing enforces it for this credential type yet, so this records the operator's intent
+        // rather than a restriction; see OAuthGrantEntity.LimitTo24Hours. Dropping it on the way
+        // through would lose the intent before the gap is closed.
         var clamped = await ScalarAsync<bool>(Clamped,
             "SELECT limit_to_24_hours FROM oauth_grants WHERE label = 'Follower';");
 
@@ -277,13 +271,56 @@ public class SubjectTokenConversionTests(SubjectTokenConversionFixture fixture)
     [Fact]
     public async Task The_owner_is_untouched()
     {
-        // The DELETE keying on anything wider than the device set takes the owner with it, which
-        // locks the tenant out permanently. A previous revision did exactly that.
+        // A DELETE keyed on anything wider than the device set takes the owner with it, and a
+        // tenant with no member who can sign in has no way back in.
         var owner = await ScalarAsync<long>(Converts,
             "SELECT count(*) FROM tenant_members tm JOIN subjects s ON s.id = tm.subject_id"
             + $" WHERE tm.tenant_id = '{Converts}' AND s.name = 'Owner';");
+        var ownerGrants = await ScalarAsync<long>(Converts,
+            "SELECT count(*) FROM oauth_grants WHERE label = 'Owner';");
 
         owner.Should().Be(1);
+
+        // A person who happens to hold a legacy token as well as a passkey is still a person. Their
+        // token is not a device credential and must not be reissued as one.
+        ownerGrants.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task A_deactivated_devices_token_is_not_reissued()
+    {
+        var grants = await ScalarAsync<long>(Converts,
+            "SELECT count(*) FROM oauth_grants WHERE label = 'Parked';");
+
+        // Deactivating is how a credential is switched off. Converting it would hand back access
+        // the instance had deliberately taken away, as a grant nothing has revoked.
+        grants.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task A_deactivated_device_leaves_nobody_locked_out()
+    {
+        // Its token columns are dropped either way, so keeping the membership preserves nothing and
+        // leaves a credential-less member that OrphanedSubjectFilter reports the moment anyone
+        // reactivates the subject.
+        var members = await ScalarAsync<long>(Converts,
+            "SELECT count(*) FROM tenant_members tm JOIN subjects s ON s.id = tm.subject_id"
+            + $" WHERE tm.tenant_id = '{Converts}' AND s.name = 'Parked';");
+
+        members.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task A_demo_subject_is_left_alone()
+    {
+        var grants = await ScalarAsync<long>(Converts,
+            "SELECT count(*) FROM oauth_grants WHERE label = 'DemoDevice';");
+        var members = await ScalarAsync<long>(Converts,
+            "SELECT count(*) FROM tenant_members tm JOIN subjects s ON s.id = tm.subject_id"
+            + $" WHERE tm.tenant_id = '{Converts}' AND s.name = 'DemoDevice';");
+
+        grants.Should().Be(0);
+        members.Should().Be(1);
     }
 
     [Fact]

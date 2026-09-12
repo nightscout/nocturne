@@ -1690,7 +1690,6 @@ internal class MigrationJob
         UpdateCollectionProgress(collectionName, subjects.Length, 0, 0, false);
         UpdateOverallProgress();
 
-
         var existingHashes = await dbContext.OAuthGrants
             .Where(g => g.TenantId == _tenantId && g.TokenHash != null)
             .Select(g => g.TokenHash!)

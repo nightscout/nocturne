@@ -151,9 +151,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                                    d.label,
                                    d.access_token_hash,
                                    d.legacy_token_digest,
-                                   -- A device its owner held to a recent window must stay held to
-                                   -- it. The flag lives on the credential rather than the holder,
-                                   -- because one holder carries every token on the tenant.
+                                   -- Carried so the operator's expressed intent survives, though
+                                   -- no read path enforces it for this credential type yet; see
+                                   -- OAuthGrantEntity.LimitTo24Hours. On the credential rather than
+                                   -- the holder, because one holder carries every token.
                                    d.limit_to_24_hours,
                                    true,
                                    now()
@@ -167,14 +168,14 @@ namespace Nocturne.Infrastructure.Data.Migrations
                                AND cardinality(d.scopes) > 0
                             RETURNING 1
                         )
-                        -- Active memberships only: converted, or resolving to no scopes and so
-                        -- carrying nothing to convert. A deactivated device is parked rather than
-                        -- retired, and it is not an orphan either, so its membership stays and
-                        -- reactivating it still finds one. The subject rows themselves stay in
-                        -- every case: audit trails point at them.
+                        -- Every device membership goes, converted or not. Keeping a deactivated
+                        -- one preserves nothing usable, because the columns holding its token are
+                        -- dropped below either way, and it leaves behind a member with no
+                        -- credential that OrphanedSubjectFilter would report the moment anybody
+                        -- reactivated the subject, taking the tenant into recovery mode. The
+                        -- subject rows themselves stay: audit trails point at them.
                         DELETE FROM tenant_members
-                         WHERE id IN (SELECT membership_id FROM device_memberships
-                                       WHERE is_active);
+                         WHERE id IN (SELECT membership_id FROM device_memberships);
 
                         DROP TABLE device_memberships;
                     END LOOP;

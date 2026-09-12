@@ -102,8 +102,15 @@ public class DirectGrantController : ControllerBase
         var grants = await _directGrantService.ListAsync(
             _dbContext, auth.SubjectId.Value, HttpContext.RequestAborted);
 
+        // An imported token authenticates as the holder itself, so a caller can be the holder and
+        // would otherwise see every site token twice.
         foreach (var holderId in await SiteTokenHolderAsync())
         {
+            if (holderId == auth.SubjectId.Value)
+            {
+                continue;
+            }
+
             grants.AddRange(await _directGrantService.ListAsync(
                 _dbContext, holderId, HttpContext.RequestAborted));
         }
@@ -137,7 +144,12 @@ public class DirectGrantController : ControllerBase
 
         foreach (var holderId in await SiteTokenHolderAsync())
         {
-            found |= await _directGrantService.RevokeAsync(
+            if (found || holderId == auth.SubjectId.Value)
+            {
+                continue;
+            }
+
+            found = await _directGrantService.RevokeAsync(
                 _dbContext, id, holderId,
                 HttpContext.Connection.RemoteIpAddress?.ToString(),
                 Request.Headers.UserAgent.ToString(),
@@ -161,10 +173,6 @@ public class DirectGrantController : ControllerBase
     /// reaches for when a phone is lost, so it cannot be the one thing this screen cannot do.
     /// Gated on <see cref="Scope.MembersManage"/> rather than shown to every member, because a
     /// site's tokens are not the business of everyone who can read its data.
-    /// <para>
-    /// Returns a sequence so the caller reads as "and the site's tokens, if any" rather than
-    /// branching on a nullable.
-    /// </para>
     /// </remarks>
     private async Task<IEnumerable<Guid>> SiteTokenHolderAsync()
     {
