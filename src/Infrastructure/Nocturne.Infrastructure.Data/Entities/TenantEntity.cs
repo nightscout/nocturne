@@ -70,13 +70,29 @@ public class TenantEntity : ISystemTimestamped
     /// <summary>
     /// SHA-256 hex digest (<see cref="Security.CredentialHash.ShareToken"/>) of the unguessable
     /// token for the tenant's public read-only dashboard, served at {token}.share.{baseDomain}.
-    /// Null when public sharing is disabled. The token itself is never stored: it is returned once
-    /// when the link is generated and resolved thereafter by digest. Rotating replaces the value
-    /// and evicts the resolution cache, so the previous link stops resolving.
+    /// Null when public sharing is disabled. This is what an incoming request is resolved by:
+    /// the digest is compared, never the token. Rotating replaces the value and evicts the
+    /// resolution cache, so the previous link stops resolving.
     /// </summary>
     [Column("share_token")]
     [MaxLength(Security.CredentialHash.HexLength)]
     public string? ShareToken { get; set; }
+
+    /// <summary>
+    /// The same token again, AES-256-GCM ciphertext under the instance key
+    /// (<c>ISecretEncryptionService</c>), so the owner can be shown the link they are already
+    /// handing out rather than being told to rotate it — which would break it for everyone
+    /// holding it. Nothing authenticates against this column; <see cref="ShareToken"/> remains
+    /// the only resolution path.
+    /// </summary>
+    /// <remarks>
+    /// Null on two kinds of tenant that must both keep working: one whose link was minted before
+    /// this column existed, and one on an instance with no instance key configured, where
+    /// encryption is unavailable. Both fall back to "regenerate to see a link", which is the
+    /// behaviour every tenant had before.
+    /// </remarks>
+    [Column("share_token_encrypted")]
+    public string? ShareTokenEncrypted { get; set; }
 
     /// <summary>When <see cref="ShareToken"/> was last minted or rotated.</summary>
     [Column("share_token_set_at")]

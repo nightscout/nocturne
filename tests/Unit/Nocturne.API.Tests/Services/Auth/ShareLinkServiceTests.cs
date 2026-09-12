@@ -10,8 +10,12 @@ using Moq;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Tests.Infrastructure;
+using Microsoft.Extensions.Configuration;
+using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
+using Nocturne.Infrastructure.Shared.Services;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Security;
@@ -26,10 +30,26 @@ public sealed class ShareLinkServiceTests : IDisposable
 
     private readonly NocturneDbContext _db;
     private readonly ShareLinkService _service;
+    private readonly string _dbName;
+
+    /// <summary>
+    /// The real AES-GCM service over a fixed instance key, so the reveal tests exercise an actual
+    /// round trip rather than a mock that would pass whatever it was handed.
+    /// </summary>
+    private static ISecretEncryptionService Encryption(string? instanceKey = "test-instance-key") =>
+        new SecretEncryptionService(
+            new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    [ServiceNames.ConfigKeys.InstanceKey] = instanceKey,
+                })
+                .Build(),
+            NullLogger<SecretEncryptionService>.Instance);
 
     public ShareLinkServiceTests()
     {
         var dbName = $"sharelink_{Guid.NewGuid()}";
+        _dbName = dbName;
         _db = TestDbContextFactory.CreateInMemoryContext(dbName);
         TestDatabaseSeeder.Seed(_db);
 
@@ -48,17 +68,25 @@ public sealed class ShareLinkServiceTests : IDisposable
         });
         _db.SaveChanges();
 
+        _service = CreateService(_db, Encryption());
+    }
+
+    /// <summary>A service over <paramref name="db"/> with the given encryption available to it.</summary>
+    private ShareLinkService CreateService(NocturneDbContext db, ISecretEncryptionService secrets)
+    {
         var factory = new Mock<IDbContextFactory<NocturneDbContext>>();
         factory.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => TestDbContextFactory.CreateInMemoryContext(dbName));
+            .ReturnsAsync(() => TestDbContextFactory.CreateInMemoryContext(_dbName));
 
-        _service = new ShareLinkService(
-            _db,
+        return new ShareLinkService(
+            db,
             new ShareTokenGenerator(),
             new ShareTokenCacheService(
                 new MemoryCache(new MemoryCacheOptions()), factory.Object, NullLogger<ShareTokenCacheService>.Instance),
             new PublicAccessCacheService(
                 new MemoryCache(new MemoryCacheOptions()), factory.Object, NullLogger<PublicAccessCacheService>.Instance),
+            secrets,
+            NullLogger<ShareLinkService>.Instance,
             Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.run" }));
     }
 
@@ -103,7 +131,80 @@ public sealed class ShareLinkServiceTests : IDisposable
         var dto = await _service.GetAsync(TenantId);
 
         dto.Enabled.Should().BeTrue();
-        dto.Url.Should().BeNull("the token is not stored, so the URL cannot be reproduced");
+        dto.Url.Should().BeNull("the secret travels only when the owner asks for it");
+        dto.RedactedUrl.Should().Be("https://••••••••••••••••.share.nocturne.run");
+        dto.CanReveal.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Rotate_keeps_a_copy_the_owner_can_be_shown_again()
+    {
+        var url = (await _service.RotateAsync(TenantId)).Url;
+        var token = new Uri(url!).Host.Split('.')[0];
+
+        var tenant = await _db.Tenants.AsNoTracking().FirstAsync(t => t.Id == TenantId);
+        tenant.ShareTokenEncrypted.Should().NotBeNull().And.NotBe(token,
+            "the column holds ciphertext, not the token");
+        Encryption().Decrypt(tenant.ShareTokenEncrypted!).Should().Be(token);
+    }
+
+    [Fact]
+    public async Task Reveal_returns_the_live_url_rather_than_a_new_one()
+    {
+        var minted = (await _service.RotateAsync(TenantId)).Url;
+
+        var dto = await _service.RevealAsync(TenantId);
+
+        dto.Url.Should().Be(minted, "revealing must not invalidate the link people already hold");
+        dto.Enabled.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Reveal_reports_a_link_it_cannot_reproduce_without_breaking_it()
+    {
+        await _service.RotateAsync(TenantId);
+
+        // What a link minted before the recoverable copy existed looks like.
+        var stored = await _db.Tenants.FirstAsync(t => t.Id == TenantId);
+        stored.ShareTokenEncrypted = null;
+        await _db.SaveChangesAsync();
+
+        var dto = await _service.RevealAsync(TenantId);
+
+        dto.Url.Should().BeNull();
+        dto.CanReveal.Should().BeFalse();
+        dto.Enabled.Should().BeTrue("the link still resolves; only showing it is impossible");
+    }
+
+    [Fact]
+    public async Task Reveal_survives_a_stored_copy_that_no_longer_decrypts()
+    {
+        await _service.RotateAsync(TenantId);
+
+        // What a changed instance key leaves behind.
+        var stored = await _db.Tenants.FirstAsync(t => t.Id == TenantId);
+        stored.ShareTokenEncrypted = Convert.ToBase64String(new byte[48]);
+        await _db.SaveChangesAsync();
+
+        var dto = await _service.RevealAsync(TenantId);
+
+        dto.Url.Should().BeNull();
+        dto.Enabled.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Rotate_still_mints_a_link_on_an_instance_with_no_key()
+    {
+        var service = CreateService(_db, Encryption(instanceKey: null));
+
+        var dto = await service.RotateAsync(TenantId);
+
+        dto.Url.Should().NotBeNull("a missing key must not stop someone sharing");
+        dto.CanReveal.Should().BeFalse();
+
+        var tenant = await _db.Tenants.AsNoTracking().FirstAsync(t => t.Id == TenantId);
+        tenant.ShareToken.Should().NotBeNull();
+        tenant.ShareTokenEncrypted.Should().BeNull();
     }
 
     [Fact]
@@ -142,6 +243,7 @@ public sealed class ShareLinkServiceTests : IDisposable
 
         var tenant = await _db.Tenants.AsNoTracking().FirstAsync(t => t.Id == TenantId);
         tenant.ShareToken.Should().BeNull();
+        tenant.ShareTokenEncrypted.Should().BeNull("a turned-off link leaves nothing to decrypt");
 
         var member = await GetPublicMemberAsync();
         member.MemberRoles.Should().BeEmpty();

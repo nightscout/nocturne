@@ -14,10 +14,12 @@
     Loader2,
     Link as LinkIcon,
     Eye,
+    EyeOff,
     Clock,
   } from "lucide-svelte";
   import {
     getShareLink,
+    revealShareLink,
     rotateShareLink,
     disableShareLink,
     setShareLinkFullHistory,
@@ -57,9 +59,18 @@
   let errorMessage = $state<string | null>(null);
   let scopeWritesInFlight = $state(0);
 
-  // The server stores only a fingerprint of the link, so it can return the URL once — when the
-  // link is created. Held here for the rest of the visit; a reload shows the hidden state.
+  // The URL, once this visit has asked for it. The read that loads this card deliberately does
+  // not carry it: the link needs no credential to use, so it travels only when asked for, and
+  // each reveal is audited.
   let revealedUrl = $state<string | null>(null);
+  let revealing = $state(false);
+  /** Whether the URL is on screen, as opposed to merely fetched — copying does not show it. */
+  let plainVisible = $state(false);
+
+  const redactedUrl = $derived(share?.redactedUrl ?? null);
+  // False for a link minted before the token was stored recoverably, and on an instance with no
+  // encryption key. Both keep the older behaviour: regenerate to get a link you can send.
+  const canReveal = $derived(share?.canReveal ?? false);
 
   const sharedLabels = $derived(
     publicDataCategories.filter((c) => scopes.includes(c.scope)).map((c) => c.name.toLowerCase()),
@@ -74,10 +85,14 @@
     errorMessage = null;
     pendingEnabled = on;
     try {
-      if (on) revealedUrl = (await rotateShareLink()).url ?? null;
-      else {
+      if (on) {
+        revealedUrl = (await rotateShareLink()).url ?? null;
+        // Just minted at the owner's request, so it starts on screen.
+        plainVisible = revealedUrl != null;
+      } else {
         await disableShareLink();
         revealedUrl = null;
+        plainVisible = false;
       }
     } catch (err) {
       errorMessage = describeSubmitError(
@@ -98,11 +113,40 @@
     confirmingRotate = false;
     try {
       revealedUrl = (await rotateShareLink()).url ?? null;
+      plainVisible = revealedUrl != null;
     } catch (err) {
       errorMessage = describeSubmitError(err, "Couldn't regenerate the link. Please try again.");
     } finally {
       busy = false;
     }
+  }
+
+  /**
+   * The URL, fetched once per visit and then reused. Null when the server kept nothing it could
+   * decrypt, which the card has already told the owner about via {@link canReveal}.
+   */
+  async function loadUrl(): Promise<string | null> {
+    if (revealedUrl) return revealedUrl;
+
+    revealing = true;
+    errorMessage = null;
+    try {
+      revealedUrl = (await revealShareLink()).url ?? null;
+      return revealedUrl;
+    } catch (err) {
+      errorMessage = describeSubmitError(err, "Couldn't show the link. Please try again.");
+      return null;
+    } finally {
+      revealing = false;
+    }
+  }
+
+  async function togglePlain() {
+    if (plainVisible) {
+      plainVisible = false;
+      return;
+    }
+    plainVisible = (await loadUrl()) != null;
   }
 
   async function toggleScope(scope: string) {
@@ -138,8 +182,10 @@
   }
 
   async function copyLink() {
-    if (!revealedUrl) return;
-    if (!(await copyToClipboard(revealedUrl))) {
+    // Fetches the URL if this visit has not yet, so copying never requires showing it first.
+    const url = await loadUrl();
+    if (!url) return;
+    if (!(await copyToClipboard(url))) {
       errorMessage = "Couldn't copy the link to the clipboard. Copy it manually instead.";
       return;
     }
@@ -200,8 +246,12 @@
               class="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-lg border border-border bg-background px-3 font-mono text-sm"
             >
               <LinkIcon class="h-4 w-4 shrink-0 text-muted-foreground" />
-              {#if revealedUrl}
-                <span class="truncate">{revealedUrl}</span>
+              {#if plainVisible && revealedUrl}
+                <span class="truncate" data-testid="public-access-url">{revealedUrl}</span>
+              {:else if redactedUrl}
+                <span class="truncate" data-testid="public-access-url-redacted">
+                  {redactedUrl}
+                </span>
               {:else}
                 <span class="truncate font-sans text-muted-foreground">
                   Your link is only shown when you create it
@@ -209,8 +259,30 @@
               {/if}
             </div>
             <div class="flex gap-2">
-              {#if revealedUrl}
-                <Button variant="outline" class="shrink-0" onclick={copyLink}>
+              {#if canReveal || revealedUrl}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="shrink-0"
+                  disabled={revealing}
+                  onclick={togglePlain}
+                  aria-label={plainVisible ? "Hide the link" : "Show the link"}
+                  data-testid="public-access-reveal"
+                >
+                  {#if revealing}
+                    <Loader2 class="h-4 w-4 animate-spin" />
+                  {:else if plainVisible}
+                    <EyeOff class="h-4 w-4" />
+                  {:else}
+                    <Eye class="h-4 w-4" />
+                  {/if}
+                </Button>
+                <Button
+                  variant="outline"
+                  class="shrink-0"
+                  disabled={revealing}
+                  onclick={copyLink}
+                >
                   {#if copied}
                     <Check class="mr-1.5 h-4 w-4 text-green-600" />
                   {:else}
@@ -250,16 +322,17 @@
                 </Button>
               </div>
             </div>
-          {:else if revealedUrl}
+          {:else if canReveal || revealedUrl}
             <p class="text-xs text-muted-foreground">
               Anyone you send this link to can open the read-only view — no sign-in
-              needed. Copy it now: it isn't shown again after you leave this page.
-              Last viewed {formatDate(share?.lastAccessedAt)}.
+              needed. It stays hidden here until you show or copy it. Last viewed
+              {formatDate(share?.lastAccessedAt)}.
             </p>
           {:else}
             <p class="text-xs text-muted-foreground">
               Anyone who already has your link can open the read-only view — no
-              sign-in needed. To get a link you can send, regenerate it; that also
+              sign-in needed. This one was created before Nocturne could show it to
+              you again, so to get a link you can send, regenerate it; that also
               stops the previous one from working. Last viewed {formatDate(
                 share?.lastAccessedAt,
               )}.

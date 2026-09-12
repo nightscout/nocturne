@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.API.Models.Responses;
 using Nocturne.API.Multitenancy;
 using Nocturne.Core.Models.Authorization;
@@ -20,14 +22,23 @@ namespace Nocturne.API.Services.Auth;
 public interface IShareLinkService
 {
     /// <summary>
-    /// Reports the link's state. <see cref="ShareLinkDto.Url"/> is always null — only the token's
-    /// digest is stored, so the URL is knowable only to the caller of <see cref="RotateAsync"/>.
+    /// Reports the link's state. <see cref="ShareLinkDto.Url"/> is always null; the redacted form
+    /// and <see cref="ShareLinkDto.CanReveal"/> say whether <see cref="RevealAsync"/> can produce
+    /// it. Keeping the secret out of this response keeps it off every render of the settings page.
     /// </summary>
     Task<ShareLinkDto> GetAsync(Guid tenantId, CancellationToken ct = default);
 
     /// <summary>
+    /// Returns the live link's URL, decrypted from the stored ciphertext. The URL is null — with
+    /// the rest of the state still reported — when nothing recoverable was kept for this link:
+    /// it was minted before the token was stored recoverably, or the instance has no encryption
+    /// key. Callers audit this; it hands out a credential.
+    /// </summary>
+    Task<ShareLinkDto> RevealAsync(Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
     /// Mints a new token, replacing any existing one, and returns the resulting
-    /// <see cref="ShareLinkDto.Url"/>. This is the only call that can return the URL.
+    /// <see cref="ShareLinkDto.Url"/>. The previous link stops resolving immediately.
     /// </summary>
     Task<ShareLinkDto> RotateAsync(Guid tenantId, CancellationToken ct = default);
     Task<ShareLinkDto> DisableAsync(Guid tenantId, CancellationToken ct = default);
@@ -60,6 +71,8 @@ public sealed class ShareLinkService : IShareLinkService
     private readonly IShareTokenGenerator _tokenGenerator;
     private readonly ShareTokenCacheService _shareTokenCache;
     private readonly PublicAccessCacheService _publicAccessCache;
+    private readonly ISecretEncryptionService _secrets;
+    private readonly ILogger<ShareLinkService> _logger;
     private readonly string _baseDomain;
 
     public ShareLinkService(
@@ -67,12 +80,16 @@ public sealed class ShareLinkService : IShareLinkService
         IShareTokenGenerator tokenGenerator,
         ShareTokenCacheService shareTokenCache,
         PublicAccessCacheService publicAccessCache,
+        ISecretEncryptionService secrets,
+        ILogger<ShareLinkService> logger,
         IOptions<BaseDomainOptions> baseDomain)
     {
         _dbContext = dbContext;
         _tokenGenerator = tokenGenerator;
         _shareTokenCache = shareTokenCache;
         _publicAccessCache = publicAccessCache;
+        _secrets = secrets;
+        _logger = logger;
         _baseDomain = baseDomain.Value.BaseDomain;
     }
 
@@ -90,6 +107,22 @@ public sealed class ShareLinkService : IShareLinkService
                 && m.Subject!.IsSystemSubject && m.Subject.Name == PublicSubjectName, ct);
 
         return ToDto(tenant, member);
+    }
+
+    public async Task<ShareLinkDto> RevealAsync(Guid tenantId, CancellationToken ct = default)
+    {
+        var tenant = await _dbContext.Tenants.AsNoTracking()
+            .FirstOrDefaultAsync(t => t.Id == tenantId, ct)
+            ?? throw new InvalidOperationException($"Tenant {tenantId} not found");
+
+        var member = await _dbContext.TenantMembers.AsNoTracking()
+            .Include(m => m.MemberRoles)
+                .ThenInclude(mr => mr.TenantRole)
+            .Include(m => m.Subject)
+            .FirstOrDefaultAsync(m => m.TenantId == tenantId
+                && m.Subject!.IsSystemSubject && m.Subject.Name == PublicSubjectName, ct);
+
+        return ToDto(tenant, member, DecryptToken(tenant));
     }
 
     public async Task<ShareLinkDto> RotateAsync(Guid tenantId, CancellationToken ct = default)
@@ -114,6 +147,7 @@ public sealed class ShareLinkService : IShareLinkService
         }
 
         tenant.ShareToken = CredentialHash.ShareToken(newToken);
+        tenant.ShareTokenEncrypted = EncryptToken(newToken);
         tenant.ShareTokenSetAt = now;
         member.SysUpdatedAt = now;
 
@@ -135,6 +169,7 @@ public sealed class ShareLinkService : IShareLinkService
         var oldTokenHash = tenant.ShareToken;
 
         tenant.ShareToken = null;
+        tenant.ShareTokenEncrypted = null;
         tenant.ShareTokenSetAt = null;
 
         if (member != null)
@@ -237,18 +272,69 @@ public sealed class ShareLinkService : IShareLinkService
     }
 
     /// <summary>
-    /// Projects the share link. <paramref name="token"/> is supplied only by the rotate path, which
-    /// has just minted it; every other path can only report that a link exists, because the stored
-    /// value is a digest and the URL cannot be reconstructed from it.
+    /// Projects the share link. <paramref name="token"/> is supplied by the paths entitled to hand
+    /// the secret back — rotate, which has just minted it, and reveal, which has just decrypted it.
+    /// Every other path reports only that a link exists, and in what shape.
     /// </summary>
-    private ShareLinkDto ToDto(TenantEntity tenant, TenantMemberEntity? member, string? token = null) => new()
+    private ShareLinkDto ToDto(TenantEntity tenant, TenantMemberEntity? member, string? token = null)
     {
-        Enabled = tenant.ShareToken != null,
-        Url = token != null ? $"https://{token}.share.{_baseDomain}" : null,
-        FullHistory = member is { LimitTo24Hours: false },
-        Scopes = ComputeScopes(member),
-        LastAccessedAt = tenant.ShareLastAccessedAt,
-    };
+        var enabled = tenant.ShareToken != null;
+        return new ShareLinkDto
+        {
+            Enabled = enabled,
+            Url = token != null ? ShareUrl(token) : null,
+            RedactedUrl = enabled ? ShareUrl(new string('•', ShareTokenGenerator.TokenLength)) : null,
+            CanReveal = enabled && tenant.ShareTokenEncrypted != null && _secrets.IsConfigured,
+            FullHistory = member is { LimitTo24Hours: false },
+            Scopes = ComputeScopes(member),
+            LastAccessedAt = tenant.ShareLastAccessedAt,
+        };
+    }
+
+    private string ShareUrl(string token) => $"https://{token}.share.{_baseDomain}";
+
+    /// <summary>
+    /// Ciphertext of <paramref name="token"/>, or null on an instance with no key. A share link is
+    /// not worth refusing to mint over — the tenant simply keeps the pre-existing behaviour of
+    /// having to rotate to see one.
+    /// </summary>
+    private string? EncryptToken(string token)
+    {
+        if (!_secrets.IsConfigured)
+            return null;
+
+        try
+        {
+            return _secrets.Encrypt(token);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not keep a recoverable copy of the share token; the owner will have to rotate to see the link");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The token behind <paramref name="tenant"/>'s live link, or null when none was kept or the
+    /// ciphertext no longer decrypts — which is what a changed instance key looks like. The link
+    /// itself still resolves in that case, since resolution reads the digest, so this is reported
+    /// as "cannot reveal" rather than as a broken link.
+    /// </summary>
+    private string? DecryptToken(TenantEntity tenant)
+    {
+        if (tenant.ShareToken == null || tenant.ShareTokenEncrypted == null || !_secrets.IsConfigured)
+            return null;
+
+        try
+        {
+            return _secrets.Decrypt(tenant.ShareTokenEncrypted);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Stored share token did not decrypt for tenant {TenantId}", tenant.Id);
+            return null;
+        }
+    }
 
     /// <summary>
     /// The public-shareable read scopes the Public subject currently resolves to — the union of any

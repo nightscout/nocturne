@@ -25,7 +25,10 @@ public interface IShareTokenGenerator
 public sealed class ShareTokenGenerator : IShareTokenGenerator
 {
     private const string Alphabet = "0123456789abcdefghjkmnpqrstvwxyz";
-    private const int TokenLength = 16;
+
+    /// <summary>How many characters a generated token has. Public so a redacted rendering of a
+    /// link can be the right length without guessing at it.</summary>
+    public const int TokenLength = 16;
 
     public string Generate() =>
         new(RandomNumberGenerator.GetItems<char>(Alphabet, TokenLength));

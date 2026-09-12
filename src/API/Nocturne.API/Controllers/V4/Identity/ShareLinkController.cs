@@ -3,7 +3,9 @@ using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Models.Responses;
 using Nocturne.API.Services.Auth;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Extensions;
 
@@ -22,11 +24,16 @@ public class ShareLinkController : ControllerBase
 {
     private readonly IShareLinkService _shareLinkService;
     private readonly ITenantAccessor _tenantAccessor;
+    private readonly IAuthAuditService _auditService;
 
-    public ShareLinkController(IShareLinkService shareLinkService, ITenantAccessor tenantAccessor)
+    public ShareLinkController(
+        IShareLinkService shareLinkService,
+        ITenantAccessor tenantAccessor,
+        IAuthAuditService auditService)
     {
         _shareLinkService = shareLinkService;
         _tenantAccessor = tenantAccessor;
+        _auditService = auditService;
     }
 
     /// <summary>Get the current public share link state.</summary>
@@ -40,6 +47,42 @@ public class ShareLinkController : ControllerBase
             return Forbid();
 
         return Ok(await _shareLinkService.GetAsync(_tenantAccessor.TenantId, ct));
+    }
+
+    /// <summary>
+    /// Show the live link in the clear. A command rather than a query so the secret travels only
+    /// when the owner asks for it, instead of on every read of the sharing settings.
+    /// </summary>
+    /// <remarks>
+    /// Succeeds with a null URL where nothing recoverable was stored — a link minted before the
+    /// token was kept that way, or an instance with no encryption key. The response's
+    /// <c>canReveal</c> tells a caller which it is before it asks.
+    /// </remarks>
+    [HttpPost("reveal")]
+    [RemoteCommand]
+    [ProducesResponseType(typeof(ShareLinkDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<ShareLinkDto>> RevealShareLink(CancellationToken ct)
+    {
+        if (!HttpContext.HasScope(Scope.SharingManage))
+            return Forbid();
+
+        var link = await _shareLinkService.RevealAsync(_tenantAccessor.TenantId, ct);
+
+        // Anyone holding this link reads the tenant's data without signing in, so record who was
+        // handed it. Logged on the outcome, not the request: a reveal that produced nothing gave
+        // nothing away.
+        if (link.Url != null)
+        {
+            await _auditService.LogAsync(
+                AuthAuditEventType.ShareLinkRevealed,
+                HttpContext.GetSubjectId(),
+                success: true,
+                ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
+                userAgent: Request.Headers.UserAgent.ToString());
+        }
+
+        return Ok(link);
     }
 
     /// <summary>
