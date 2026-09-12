@@ -386,7 +386,7 @@
         <Wifi class="h-6 w-6 text-primary" />
       </div>
       <div>
-        <h1 class="text-2xl font-bold tracking-tight">Connectors & Connected Apps</h1>
+        <h1 class="text-2xl font-bold tracking-tight">Connectors & Apps</h1>
         <p class="text-muted-foreground">
           Manage data sources, set up new connections, and control app access
         </p>

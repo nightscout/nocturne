@@ -16,7 +16,10 @@ import {
   Users,
 } from "lucide-svelte";
 
-/** One destination on the settings index, and anywhere else that links to a settings page. */
+/**
+ * One destination on the settings index, and anywhere else that links to a
+ * settings page.
+ */
 export type SettingsLink = {
   title: string;
   description: string;
@@ -25,8 +28,8 @@ export type SettingsLink = {
 };
 
 /**
- * Named where another page links to the same destination, so a retitled page cannot say one thing
- * on the index and another wherever else it is offered.
+ * Named where another page links to the same destination, so a retitled page
+ * cannot say one thing on the index and another wherever else it is offered.
  */
 export const connectorsLink: SettingsLink = {
   title: "Connectors & Apps",

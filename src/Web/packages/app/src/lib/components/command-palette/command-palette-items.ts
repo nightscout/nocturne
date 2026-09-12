@@ -430,8 +430,10 @@ export const items: CommandPaletteItem[] = [
 		href: "/settings/connectors",
 	},
 	{
-		// Points at the child: /settings/integrations itself has no page.
+		// Kept while the label and href moved on: pinned and recent ids persist in local storage,
+		// and one that no longer matches an item is dropped from a user's pins without a word.
 		id: "settings-integrations",
+		// The parent /settings/integrations has no page of its own; only this child does.
 		label: "Discord",
 		group: "settings",
 		keywords: ["discord", "bot", "chat", "integrations", "alerts"],
