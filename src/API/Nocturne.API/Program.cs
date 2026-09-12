@@ -136,7 +136,14 @@ builder.Services.AddCompatibilityProxyServices(builder.Configuration);
 builder.Services.AddNocturneMemoryCache();
 
 builder.Logging.ClearProviders();
-builder.Logging.AddOpenTelemetry(logging => logging.AddConsoleExporter());
+if (string.Equals(builder.Configuration["OTEL_SDK_DISABLED"], "true", StringComparison.OrdinalIgnoreCase))
+    builder.Logging.AddSimpleConsole(options =>
+    {
+        options.TimestampFormat = "yyyy-MM-ddTHH:mm:ssZ ";
+        options.UseUtcTimestamp = true;
+    });
+else
+    builder.Logging.AddOpenTelemetry(logging => logging.AddConsoleExporter());
 
 var loopApnsKeyId = builder.Configuration["Loop:ApnsKeyId"];
 Console.WriteLine(

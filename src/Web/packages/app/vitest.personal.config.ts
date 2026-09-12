@@ -21,6 +21,14 @@ export default defineConfig({
   resolve: {
     dedupe: ["svelte"],
     alias: [
+      ...[
+        "$lib/api/generated/googleHealths.generated.remote",
+        "$api/generated/patientRecords.generated.remote",
+        "$lib/stores/realtime-store.svelte",
+      ].map((find) => ({
+        find,
+        replacement: local("./src/lib/test-stubs/google-health.ts"),
+      })),
       {
         find: "$app/paths",
         replacement: local("./src/lib/test-stubs/year-overview-runtime.svelte.ts"),
@@ -36,7 +44,6 @@ export default defineConfig({
         replacement: local("./src/lib/test-stubs/year-overview-remote.ts"),
       },
       ...[
-        "$lib/stores/appearance-store.svelte",
         "$lib/hooks/date-params.svelte",
       ].map((find) => ({
         find,
@@ -58,6 +65,7 @@ export default defineConfig({
           "./src/lib/test-stubs/EmptyYearPanel.test-stub.svelte"
         ),
       })),
+      { find: "$api", replacement: local("./src/lib/api") },
       { find: "$lib", replacement: local("./src/lib") },
     ],
   },

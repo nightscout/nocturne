@@ -97,6 +97,8 @@ public class SleepSessionRepository : ISleepSessionRepository
 
             if (existing is not null)
             {
+                entity.Id = existing.Id;
+                entity.CreatedAt = existing.CreatedAt;
                 ctx.SleepBiometricSamples.RemoveRange(existing.BiometricSamples);
                 ctx.SleepStages.RemoveRange(existing.Stages);
 
@@ -145,6 +147,8 @@ public class SleepSessionRepository : ISleepSessionRepository
 
             var entity = SleepSessionMapper.ToEntity(session, ctx.TenantId);
 
+            entity.Id = existing.Id;
+            entity.CreatedAt = existing.CreatedAt;
             ctx.SleepBiometricSamples.RemoveRange(existing.BiometricSamples);
             ctx.SleepStages.RemoveRange(existing.Stages);
 

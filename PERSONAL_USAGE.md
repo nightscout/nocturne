@@ -10,7 +10,7 @@ step, heart-rate, body-weight, and sleep records.
 2. Configure the OAuth consent screen and add test users while the app is in testing.
 3. Create an OAuth client of type **Web application**.
 4. Register the callback URL shown by Nocturne. It must use HTTPS and end in
-   `/personal/google/callback`.
+  `/settings/connectors/google-health/callback`.
 5. Enter the client ID and client secret, choose the history start date, and sign in.
 6. Review the detected data types before confirming the first import.
 
@@ -39,6 +39,29 @@ expire after seven days. Production use can require additional Google verificati
 
 Use **Sync now** for a manual retry. Errors include a stable technical code; correlate
 that code and the attempt time with the API server log when troubleshooting.
+
+## Import diagnostics
+
+Open **Settings -> Connectors & Apps -> Google Health -> Import diagnostics**.
+The page refreshes server progress every two seconds without depending on a live
+websocket connection. Progress is based on completed data types, not a prediction
+of remaining time. The latest written record is not a guarantee that all earlier
+records or other data types have been imported.
+
+The diagnostic panel shows the run ID, source commit, outcome, page and native
+write stages, batch counts and durations, requested date range, provider status
+and reason, and exception types and stack methods. PostgreSQL failures include
+SQLSTATE when available. A failed import can leave earlier batches stored; only
+a successful completed import advances the resume watermark.
+
+Choose a run and use **Download diagnostics** to share its JSON. Only the latest
+run and up to four earlier runs are retained, for up to 24 hours in server memory.
+Download before restarting the app: a restart clears this history. Exports omit
+tokens, client secrets, raw health records and arbitrary exception messages, but
+include import dates and counts; treat them as private support information.
+
+When reporting a problem, include the installed HA package version and the JSON
+for the failed run. Do not reconnect or delete imported data merely to collect a log.
 
 ## Year overview color focus
 

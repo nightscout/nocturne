@@ -7,29 +7,6 @@ import { glucoseUnits, yearOverviewColors, applyPreferences, collectPreferences,
 import { getGlucoseHeatmapFill } from "$lib/utils/chart-colors";
 import { glucoseColorFocusStops } from "$lib/utils/metric-color-focus";
 
-vi.mock("$api/generated/dataOverviews.generated.remote", async () =>
-  import("$lib/test-stubs/year-overview-remote")
-);
-vi.mock("$lib/hooks/date-params.svelte", async () =>
-  import("$lib/test-stubs/year-overview-runtime.svelte")
-);
-vi.mock(
-  "$lib/components/reports/year-overview/YearHeatmap.svelte",
-  async () => import("$lib/test-stubs/YearHeatmap.test-stub.svelte")
-);
-vi.mock(
-  "$lib/components/reports/year-overview/YearOverviewFilters.svelte",
-  async () => import("$lib/test-stubs/EmptyYearPanel.test-stub.svelte")
-);
-vi.mock(
-  "$lib/components/reports/year-overview/DayDetailPanel.svelte",
-  async () => import("$lib/test-stubs/EmptyYearPanel.test-stub.svelte")
-);
-vi.mock(
-  "$lib/components/reports/GlycemicRiskIndexChart.svelte",
-  async () => import("$lib/test-stubs/EmptyYearPanel.test-stub.svelte")
-);
-
 import YearOverviewPage from "./+page.svelte";
 
 const storageKey = () => "nocturne-year-overview-colors";

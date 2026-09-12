@@ -2,6 +2,7 @@ import { vi } from "vitest";
 
 export const browser = true;
 export const building = false;
+export const resolve = (path: string) => path;
 export const goto = vi.fn();
 export const glucoseUnits = $state<{ current: "mg/dl" | "mmol" }>({
   current: "mg/dl",

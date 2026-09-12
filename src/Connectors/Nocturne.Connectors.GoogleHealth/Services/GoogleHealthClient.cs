@@ -275,9 +275,6 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
             responseBody = await response.Content.ReadAsStringAsync(ct);
             if (!string.IsNullOrWhiteSpace(responseBody))
             {
-                logger?.LogWarning(
-                    "Google Health API returned error HTTP {StatusCode} for data type {DataType}: {ResponseBody}",
-                    (int)response.StatusCode, dataType, responseBody);
                 using var json = JsonDocument.Parse(responseBody);
                 if (json.RootElement.TryGetProperty("error", out var error) &&
                     error.TryGetProperty("details", out var details) && details.ValueKind == JsonValueKind.Array)
@@ -292,8 +289,10 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
         {
             logger?.LogWarning(ex, "Failed to parse Google API error response body for data type {DataType}", dataType);
         }
+        logger?.LogWarning("Google Health API error HTTP {StatusCode} for {DataType}: {Code}, {ProviderReason}",
+            (int)response.StatusCode, dataType, code, providerReason);
         return new GoogleHealthException(code, GoogleHealthHttpError.RetryAfter(response), "data_read", dataType, providerReason,
-            (int)response.StatusCode, responseBody);
+            (int)response.StatusCode);
     }
 
     private static (string Code, string? Reason) MapGoogleReason(HashSet<string> reasons, string fallback)

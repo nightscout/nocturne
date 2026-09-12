@@ -17,6 +17,9 @@ public interface IGoogleHealthService
 
 public interface IGoogleHealthSyncCoordinator
 {
+    void Begin(Guid tenantId);
+    void Record(Guid tenantId, GoogleHealthSyncEvent entry, Exception? exception = null);
+    void Finish(Guid tenantId, string outcome);
     SemaphoreSlim Gate(Guid tenantId);
     void Report(
         Guid tenantId,

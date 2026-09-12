@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
+using Microsoft.Extensions.Caching.Memory;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
@@ -19,6 +21,93 @@ namespace Nocturne.API.Services.Health.GoogleHealth;
 
 public sealed class GoogleHealthCoordinator : IGoogleHealthSyncCoordinator
 {
+    private readonly MemoryCache diagnostics = new(new MemoryCacheOptions { SizeLimit = 128 });
+    private readonly object diagnosticLock = new();
+
+    public void Begin(Guid tenantId)
+    {
+        lock (diagnosticLock)
+        {
+            if (diagnostics.TryGetValue<GoogleHealthSyncRun>(tenantId, out var current) && current is { FinishedAt: null })
+                return;
+            if (current is not null)
+            {
+                var history = History(tenantId).Append(current).TakeLast(4).ToArray();
+                diagnostics.Set(("history", tenantId), history,
+                    new MemoryCacheEntryOptions().SetSize(1).SetAbsoluteExpiration(TimeSpan.FromHours(24)));
+            }
+            diagnostics.Set(tenantId, new GoogleHealthSyncRun { SourceCommit = Environment.GetEnvironmentVariable("GIT_COMMIT") },
+                new MemoryCacheEntryOptions().SetSize(1).SetAbsoluteExpiration(TimeSpan.FromHours(24)));
+            syncProgress.TryAdd(tenantId, new(GoogleHealthSyncPhase.Preparing, null, 0, 0, 0));
+        }
+    }
+
+    public void Record(Guid tenantId, GoogleHealthSyncEvent entry, Exception? exception = null)
+    {
+        lock (diagnosticLock)
+        {
+            if (!diagnostics.TryGetValue<GoogleHealthSyncRun>(tenantId, out var run) || run is null) return;
+            var types = new List<string>();
+            var frames = new List<string>();
+            for (var current = exception; current is not null && types.Count < 8; current = current.InnerException)
+            {
+                types.Add($"{current.GetType().FullName} (0x{current.HResult:X8})");
+                if (current is Npgsql.PostgresException postgres)
+                    entry.SqlState = postgres.SqlState;
+                frames.AddRange(new StackTrace(current).GetFrames().Take(12)
+                    .Select(frame => frame.GetMethod())
+                    .Where(method => method is not null)
+                    .Select(method => $"{method!.DeclaringType?.FullName}.{method.Name}"));
+            }
+            entry.ExceptionTypes = types.ToArray();
+            entry.StackFrames = frames.ToArray();
+            run.Events = run.Events.Append(entry).TakeLast(256).ToArray();
+            if (entry.Stage == "native_batch_completed")
+            {
+                run.RecordsWritten += entry.Count ?? 0;
+                if (entry.To is { } latest && (run.LatestRecordAt is null || latest > run.LatestRecordAt))
+                    run.LatestRecordAt = latest;
+            }
+        }
+    }
+
+    internal GoogleHealthSyncRun? Diagnostics(Guid tenantId)
+    {
+        lock (diagnosticLock)
+        {
+            if (!diagnostics.TryGetValue<GoogleHealthSyncRun>(tenantId, out var run) || run is null) return null;
+            return new()
+            {
+                SourceCommit = run.SourceCommit,
+                RunId = run.RunId, StartedAt = run.StartedAt, FinishedAt = run.FinishedAt,
+                Outcome = run.Outcome, RecordsWritten = run.RecordsWritten,
+                LatestRecordAt = run.LatestRecordAt, Events = run.Events.ToArray()
+            };
+        }
+    }
+
+    internal GoogleHealthSyncRun[] History(Guid tenantId)
+    {
+        lock (diagnosticLock)
+            return diagnostics.TryGetValue<GoogleHealthSyncRun[]>(("history", tenantId), out var history)
+                ? history!.Where(run => run.StartedAt > DateTimeOffset.UtcNow.AddHours(-24)).ToArray()
+                : [];
+    }
+
+    public void Finish(Guid tenantId, string outcome)
+    {
+        lock (diagnosticLock)
+        {
+            if (diagnostics.TryGetValue<GoogleHealthSyncRun>(tenantId, out var run) && run is not null)
+            {
+                run.Outcome = outcome;
+                run.FinishedAt = DateTimeOffset.UtcNow;
+            }
+            if (Progress(tenantId)?.WorkerOwned != true)
+                syncProgress.TryRemove(tenantId, out _);
+        }
+    }
+
     internal sealed record Flow(
         string State,
         string Verifier,
@@ -31,7 +120,8 @@ public sealed class GoogleHealthCoordinator : IGoogleHealthSyncCoordinator
         string? DataType,
         int CompletedDataTypes,
         int TotalDataTypes,
-        int PagesRead);
+        int PagesRead,
+        bool WorkerOwned = false);
 
     private readonly Channel<Guid> syncRequests = Channel.CreateUnbounded<Guid>(new()
     {
@@ -49,8 +139,10 @@ public sealed class GoogleHealthCoordinator : IGoogleHealthSyncCoordinator
     {
         if (!syncProgress.TryAdd(
                 tenantId,
-                new SyncProgress(GoogleHealthSyncPhase.Queued, null, 0, totalDataTypes, 0)))
+                new SyncProgress(GoogleHealthSyncPhase.Queued, null, 0, totalDataTypes, 0, true)))
             return false;
+        Begin(tenantId);
+        Record(tenantId, new() { Stage = "queued" });
         if (syncRequests.Writer.TryWrite(tenantId)) return true;
         syncProgress.TryRemove(tenantId, out _);
         return false;
@@ -588,6 +680,16 @@ public sealed class GoogleHealthService(
 
     private GoogleHealthStatus WithProgress(GoogleHealthStatus status)
     {
+        status.SyncRun = coordinator.Diagnostics(TenantId);
+        status.RecentSyncRuns = coordinator.History(TenantId);
+        if (status.SyncRun is { FinishedAt: not null } run &&
+            (status.LastAttempt is null || run.FinishedAt >= status.LastAttempt))
+            status.ErrorCode = run.Outcome switch
+            {
+                "failed" or "cancelled" => run.Events.FirstOrDefault(entry => entry.ErrorCode is not null)?.ErrorCode ?? "internal_sync",
+                "partial_consent" => "partial_consent",
+                _ => null
+            };
         var progress = coordinator.Progress(TenantId);
         if (progress is null) return status;
         status.IsSyncing = true;
@@ -598,9 +700,9 @@ public sealed class GoogleHealthService(
         status.SyncPagesRead = progress.PagesRead;
         status.SyncProgressPercent = progress.Phase switch
         {
-            GoogleHealthSyncPhase.Integrating => 95,
             _ when progress.TotalDataTypes > 0 =>
-                Math.Min(90, progress.CompletedDataTypes * 90 / progress.TotalDataTypes),
+                Math.Min(99, (progress.CompletedDataTypes * 100 +
+                    (progress.Phase == GoogleHealthSyncPhase.Integrating ? 90 : 0)) / progress.TotalDataTypes),
             _ => null
         };
         return status;
@@ -611,9 +713,9 @@ public sealed class GoogleHealthService(
         .GetValueOrDefault(AccountKeySecret);
 
     private void LogFailure(Exception ex, GoogleHealthException error) => logger?.LogError(ex,
-        "Google Health request failed for tenant {TenantId} with code {Code} at stage {Stage} for data type {DataType}; provider status {ProviderStatus}, provider reason {ProviderReason}, raw response: {RawResponseBody}",
+        "Google Health request failed for tenant {TenantId} with code {Code} at stage {Stage} for data type {DataType}; provider status {ProviderStatus}, provider reason {ProviderReason}",
         TenantId, error.Message, error.Stage, error.DataType,
-        error.ProviderStatus, error.ProviderReason, error.RawResponseBody);
+        error.ProviderStatus, error.ProviderReason);
 
     private static DateTimeOffset? AsOffset(DateTime? value) => value is null
         ? null

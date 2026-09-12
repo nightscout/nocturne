@@ -106,16 +106,24 @@ public sealed class GoogleHealthConnectorService(
         var tenantId = tenantAccessor.TenantId;
         var gate = coordinator.Gate(tenantId);
         await gate.WaitAsync(cancellationToken);
+        coordinator.Begin(tenantId);
+        var outcome = "failed";
         try
         {
+            coordinator.Record(tenantId, new() { Stage = "configuration" });
             var selected = ResolveActiveTypes(request, config)
                 .Select(type => GoogleHealthClient.TryGetDataType(type, out var dataType)
                     ? dataType
                     : throw new GoogleHealthException("unsupported_type"))
                 .ToArray();
             if (config.PreviewOnly || selected.Length == 0)
+            {
+                outcome = "skipped";
                 return Complete(result);
+            }
 
+            coordinator.Record(tenantId, new() { Stage = "session_refresh" });
+            coordinator.Report(tenantId, GoogleHealthSyncPhase.RefreshingSession);
             var session = await SessionAsync(config, cancellationToken);
             var active = selected
                 .Where(type => session.Scopes.Contains(GoogleHealthClient.ScopeFor(type), StringComparer.Ordinal))
@@ -135,17 +143,26 @@ public sealed class GoogleHealthConnectorService(
                 tenantId, from, to, string.Join(',', active));
 
             coordinator.Report(tenantId, GoogleHealthSyncPhase.Reading, completedDataTypes: 0, totalDataTypes: active.Length);
+            coordinator.Record(tenantId, new() { Stage = "read_started", From = from, To = to });
             await ReadWithRefreshAsync(config, session.AccessToken!, active, from, to, tenantId, result, cancellationToken);
+            coordinator.Record(tenantId, new() { Stage = "watermark_save", To = to });
             await PersistWatermarkAsync(to, cancellationToken);
             if (request.From is null && !string.IsNullOrWhiteSpace(config.ImportFrom))
+            {
+                coordinator.Record(tenantId, new() { Stage = "import_configuration_save" });
                 await ConsumeImportFromAsync(cancellationToken);
+            }
             var missingConsent = selected.Except(active, StringComparer.Ordinal).ToArray();
+            outcome = missingConsent.Length == 0 ? "succeeded" : "partial_consent";
+            coordinator.Record(tenantId, new() { Stage = "import_completed" });
             return Complete(result, missingConsent.Length == 0
                 ? string.Empty
                 : GoogleHealthErrorCode.Encode("partial_consent", missingConsent));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            outcome = "cancelled";
+            coordinator.Record(tenantId, new() { Stage = "cancelled", ErrorCode = "sync_cancelled" });
             logger.LogInformation("Google Health import was cancelled for tenant {TenantId}", tenantId);
             throw;
         }
@@ -155,6 +172,12 @@ public sealed class GoogleHealthConnectorService(
                 ex is JsonException ? "invalid_google_response" : "google_unavailable",
                 stage: ex is JsonException ? "response_parse" : "network");
             LogFailure(ex, error, tenantId);
+            coordinator.Record(tenantId, new()
+            {
+                Stage = error.Stage ?? "failed", DataType = error.DataType,
+                ErrorCode = error.Message, ProviderStatus = error.ProviderStatus,
+                ProviderReason = error.ProviderReason
+            }, ex);
             if (error.Message == "reconnect_required")
                 await ClearSessionAsync(cancellationToken);
             return Fail(result, GoogleHealthErrorCode.Encode(
@@ -163,6 +186,7 @@ public sealed class GoogleHealthConnectorService(
         }
         catch (Exception ex)
         {
+            coordinator.Record(tenantId, new() { Stage = "failed", ErrorCode = "internal_sync" }, ex);
             var diagnosticId = Guid.NewGuid().ToString("N")[..12];
             logger.LogError(ex,
                 "Unexpected Google Health import failure for tenant {TenantId}; diagnostic {DiagnosticId}. Message: {ExceptionMessage}",
@@ -171,6 +195,7 @@ public sealed class GoogleHealthConnectorService(
         }
         finally
         {
+            coordinator.Finish(tenantId, outcome);
             gate.Release();
         }
     }
@@ -254,8 +279,12 @@ public sealed class GoogleHealthConnectorService(
         {
             var type = active[index];
             coordinator.Report(tenantId, GoogleHealthSyncPhase.Reading, type, index, active.Length, 0);
-            void PageRead(int pages) =>
+            coordinator.Record(tenantId, new() { Stage = "page_request", DataType = type });
+            void PageRead(int pages)
+            {
                 coordinator.Report(tenantId, GoogleHealthSyncPhase.Reading, type, index, active.Length, pages);
+                coordinator.Record(tenantId, new() { Stage = "page_received", DataType = type, Pages = pages });
+            }
             var readingIds = new HashSet<string>(StringComparer.Ordinal);
             var sleepIds = new HashSet<string>(StringComparer.Ordinal);
             if (type == "sleep")
@@ -265,9 +294,16 @@ public sealed class GoogleHealthConnectorService(
                     var unique = page
                         .Where(session => session.OriginalId != null && sleepIds.Add(session.OriginalId))
                         .ToArray();
+                    coordinator.Record(tenantId, new() { Stage = "native_write", DataType = type, Count = unique.Length });
+                    await writer.WriteAsync([], unique, config.BatchSize, ct);
                     result.ItemsSynced[SyncDataType.Sleep] =
                         result.ItemsSynced.GetValueOrDefault(SyncDataType.Sleep) + unique.Length;
-                    await writer.WriteAsync([], unique, config.BatchSize, ct);
+                    coordinator.Record(tenantId, new()
+                    {
+                        Stage = "write_completed", DataType = type, Count = unique.Length,
+                        To = unique.Length == 0 ? null : new DateTimeOffset(DateTime.SpecifyKind(unique.Max(session => session.EndTime), DateTimeKind.Utc))
+                    });
+                    coordinator.Record(tenantId, new() { Stage = "page_request", DataType = type });
                 }
             }
             else
@@ -277,14 +313,23 @@ public sealed class GoogleHealthConnectorService(
                     var unique = page
                         .Where(reading => readingIds.Add(GoogleHealthClient.Key(reading)))
                         .ToArray();
-                    AddCount(result, type, unique.Length);
+                    coordinator.Record(tenantId, new() { Stage = "native_write", DataType = type, Count = unique.Length });
                     await writer.WriteAsync(unique, [], config.BatchSize, ct);
+                    AddCount(result, type, unique.Length);
+                    coordinator.Record(tenantId, new()
+                    {
+                        Stage = "write_completed", DataType = type, Count = unique.Length,
+                        To = unique.Length == 0 ? null : DateTimeOffset.FromUnixTimeMilliseconds(unique.Max(reading => reading.EndMills ?? reading.Mills))
+                    });
+                    coordinator.Record(tenantId, new() { Stage = "page_request", DataType = type });
                 }
             }
             coordinator.Report(tenantId, GoogleHealthSyncPhase.Integrating, type, index, active.Length);
+            coordinator.Record(tenantId, new() { Stage = "reconcile_started", DataType = type });
             await writer.ReconcileAsync(
                 new Dictionary<string, IReadOnlyCollection<string>> { [type] = readingIds },
                 sleepIds, [type], from, to, ct);
+            coordinator.Record(tenantId, new() { Stage = "reconcile_completed", DataType = type });
             coordinator.Report(tenantId, GoogleHealthSyncPhase.Reading, type, index + 1, active.Length);
         }
     }
@@ -350,8 +395,8 @@ public sealed class GoogleHealthConnectorService(
     }
 
     private void LogFailure(Exception ex, GoogleHealthException error, Guid tenantId) => logger.LogError(ex,
-        "Google Health import failed for tenant {TenantId} with code {Code} at stage {Stage} for data type {DataType}; provider status {ProviderStatus}, provider reason {ProviderReason}, raw response: {RawResponseBody}",
-        tenantId, error.Message, error.Stage, error.DataType, error.ProviderStatus, error.ProviderReason, error.RawResponseBody);
+        "Google Health import failed for tenant {TenantId} with code {Code} at stage {Stage} for data type {DataType}; provider status {ProviderStatus}, provider reason {ProviderReason}",
+        tenantId, error.Message, error.Stage, error.DataType, error.ProviderStatus, error.ProviderReason);
 }
 
 public static class GoogleHealthErrorCode

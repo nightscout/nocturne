@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { resolve } from "$app/paths";
-  import { ArrowLeft, HeartPulse, RefreshCw, Unplug } from "lucide-svelte";
+  import { ArrowLeft, Download, HeartPulse, RefreshCw, Unplug } from "lucide-svelte";
   import {
+    BiologicalSex,
     GoogleHealthSyncPhase,
     type GoogleHealthPreview,
     type GoogleHealthStatus,
@@ -23,7 +24,6 @@
     type GoogleHealthOperation,
   } from "$lib/connectors/google-health-error";
   import { lastSeen } from "$lib/utils/formatting";
-  import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import {
     getGoogleHealth,
     saveGoogleHealth,
@@ -48,20 +48,14 @@
     message = $state(""),
     notice = $state("");
   let purgeDialogOpen = $state(false);
+  let diagnosticRunId = $state("");
+  const diagnosticRun = $derived(
+    status?.recentSyncRuns?.find((run) => run.runId === diagnosticRunId) ?? status?.syncRun
+  );
   const patientRecordQuery = getPatientRecord();
   const patientRecord = $derived(patientRecordQuery.current ?? null);
-  const isMale = $derived(
-    patientRecord?.clinical?.sex === "Male" ||
-      patientRecord?.clinical?.sex === "male" ||
-      patientRecord?.sex === "Male" ||
-      patientRecord?.sex === "male"
-  );
+  const isMale = $derived(patientRecord?.sex === BiologicalSex.Male);
 
-  const realtimeStore = getRealtimeStore();
-  const syncProgressByConnector = $derived(
-    realtimeStore.syncProgressByConnector
-  );
-  let lastTerminalProgress = $state("");
   let operation: GoogleHealthOperation = "status";
   const destinations: Record<string, string> = {
     "step-counts": "Step history",
@@ -267,11 +261,11 @@
           status.errorDataTypes.includes(item.dataType ?? ""))
       )
         return "Import needs attention";
-      return item.count > 0
+      return (item.count ?? 0) > 0
         ? "Import enabled"
         : "Import enabled; no data found";
     }
-    return item.count > 0
+    return (item.count ?? 0) > 0
       ? "Available to connect"
       : "Supported, but no data found";
   }
@@ -283,7 +277,7 @@
       return "Refreshing the Google session";
     if (status.syncPhase === GoogleHealthSyncPhase.Reading)
       return status.syncDataType
-        ? `Reading ${status.capabilities?.find((entry) => entry.dataType === status.syncDataType)?.displayName ?? status.syncDataType}`
+        ? `Reading ${status.capabilities?.find((entry) => entry.dataType === status?.syncDataType)?.displayName ?? status.syncDataType}`
         : "Reading Google Health data";
     if (status.syncPhase === GoogleHealthSyncPhase.Validating)
       return "Validating the downloaded data";
@@ -291,24 +285,42 @@
       return "Updating Nocturne health records";
     return "Preparing the import";
   }
-  $effect(() => {
-    const progress = syncProgressByConnector.googlehealth;
-    if (
-      !status?.isSyncing ||
-      !progress ||
-      (progress.phase !== "Completed" && progress.phase !== "Failed")
-    )
-      return;
-    const marker = `${progress.connectorId}@${progress.timestamp}`;
-    if (marker === lastTerminalProgress) return;
-    lastTerminalProgress = marker;
-    void run(async () => {
-      await refresh(false);
-      notice = status?.errorCode ? "" : "Google Health import completed.";
-      if (!status?.errorCode) void loadPreview();
-    });
-  });
+  function downloadDiagnostics() {
+    if (!diagnosticRun) return;
+    const url = URL.createObjectURL(new Blob(
+      [JSON.stringify(diagnosticRun, null, 2)],
+      { type: "application/json" }
+    ));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `google-health-${diagnosticRun.runId}.json`;
+    anchor.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  const timestamp = (value?: string | Date | null) =>
+    value ? new Date(value).toLocaleString() : "-";
   onMount(() => {
+    let disposed = false;
+    let timer: ReturnType<typeof setTimeout>;
+    async function pollStatus() {
+      try {
+        if (!busy) {
+          const wasSyncing = status?.isSyncing;
+          const next = await getGoogleHealth().run();
+          if (disposed) return;
+          status = next;
+          if (notice === "Import status is temporarily unavailable. Retrying.") notice = "";
+          if (wasSyncing && !next.isSyncing) {
+            notice = next.errorCode ? "" : "Google Health import completed.";
+          }
+        }
+      } catch {
+        if (!disposed) notice = "Import status is temporarily unavailable. Retrying.";
+      } finally {
+        if (!disposed) timer = setTimeout(pollStatus, 2000);
+      }
+    }
+    timer = setTimeout(pollStatus, 2000);
     queueMicrotask(() => {
       void run(async () => {
         const outcome = new URLSearchParams(location.search).get("connection");
@@ -322,6 +334,10 @@
             "The Nocturne session was missing after the Google redirect. Sign in and reconnect in the same browser.";
       });
     });
+    return () => {
+      disposed = true;
+      clearTimeout(timer);
+    };
   });
 </script>
 
@@ -359,6 +375,64 @@
   {#if notice}<p role="status" class="rounded-lg border border-primary/40 p-4">
       {notice}
     </p>{/if}
+  <details id="diagnostics" class="min-w-0 border-y py-4" open={!status?.isSyncing && !!status?.errorCode}>
+    <summary class="cursor-pointer font-medium">Import diagnostics</summary>
+    {#if diagnosticRun}
+      {@const run = diagnosticRun}
+      <label class="mt-3 block text-sm">
+        Import run
+        <select class="mt-1 block max-w-full rounded border bg-background p-2" bind:value={diagnosticRunId}>
+          <option value="">Latest run</option>
+          {#each status?.recentSyncRuns ?? [] as previous}
+            <option value={previous.runId}>{timestamp(previous.startedAt)}: {previous.outcome}</option>
+          {/each}
+        </select>
+      </label>
+      <div class="mt-3 flex flex-wrap items-center justify-between gap-3">
+        <div class="min-w-0 text-sm">
+          <p class="break-all">Run: <code>{run.runId}</code></p>
+          {#if run.sourceCommit}<p class="break-all">Source: <code>{run.sourceCommit}</code></p>{/if}
+          <p>Outcome: {run.outcome}</p>
+          <p>Started: {timestamp(run.startedAt)} | Finished: {timestamp(run.finishedAt)}</p>
+          <p>Records processed: {run.recordsWritten ?? 0}</p>
+          <p>Latest written record: {timestamp(run.latestRecordAt)}</p>
+        </div>
+        <Button variant="outline" onclick={downloadDiagnostics}>
+          <Download class="mr-2 h-4 w-4" />Download diagnostics
+        </Button>
+      </div>
+      <div class="mt-3 max-h-96 overflow-auto">
+        <table class="w-full text-left text-xs">
+          <caption class="sr-only">Google Health import events</caption>
+          <thead><tr><th class="p-2">Time</th><th class="p-2">Stage</th><th class="p-2">Data type</th><th class="p-2">Details</th></tr></thead>
+          <tbody>
+            {#each run.events ?? [] as entry}
+              <tr class="border-t align-top">
+                <td class="whitespace-nowrap p-2">{timestamp(entry.timestamp)}</td>
+                <td class="p-2 font-mono">{entry.stage}</td>
+                <td class="p-2">{entry.dataType ?? "-"}</td>
+                <td class="min-w-48 break-words p-2">
+                  {#if entry.pages != null}<p>Page {entry.pages}</p>{/if}
+                  {#if entry.count != null}<p>{entry.count} records</p>{/if}
+                  {#if entry.durationMilliseconds != null}<p>{entry.durationMilliseconds} ms</p>{/if}
+                  {#if entry.from || entry.to}<p>{timestamp(entry.from)} to {timestamp(entry.to)}</p>{/if}
+                  {#if entry.errorCode}<p>{entry.errorCode}</p>{/if}
+                  {#if entry.providerStatus}<p>HTTP {entry.providerStatus}: {entry.providerReason ?? "-"}</p>{/if}
+                  {#if entry.sqlState}<p>SQLSTATE {entry.sqlState}</p>{/if}
+                  {#if entry.exceptionTypes?.length}
+                    <p class="break-all">{entry.exceptionTypes.join(" > ")}</p>
+                    <pre class="mt-1 whitespace-pre-wrap break-all">{entry.stackFrames?.join("\n")}</pre>
+                  {/if}
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    {:else}
+      <p class="mt-3 text-sm text-muted-foreground">No import diagnostics recorded in this server session.</p>
+    {/if}
+  </details>
   {#if status?.errorCode && !status.isSyncing}<div
       role="status"
       class="rounded-lg border p-4"
@@ -379,6 +453,11 @@
       <div>
         <p class="font-medium">Import running in the background</p>
         <p class="text-sm text-muted-foreground">{syncPhase()}</p>
+        {#if status.syncRun}
+          <p class="text-sm text-muted-foreground">Records processed: {status.syncRun.recordsWritten ?? 0}</p>
+          <p class="text-sm text-muted-foreground">Latest written record: {timestamp(status.syncRun.latestRecordAt)}</p>
+          <p class="text-sm text-muted-foreground">Last activity: {timestamp(status.syncRun.events?.at(-1)?.timestamp)}</p>
+        {/if}
       </div>
       <Progress
         value={status.syncProgressPercent ?? 0}
@@ -387,10 +466,10 @@
       />
       <div class="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
         <span>{status.syncProgressPercent ?? 0}% complete</span>
-        {#if status.syncTotalDataTypes > 0}<span>
+        {#if (status.syncTotalDataTypes ?? 0) > 0}<span>
             {status.syncCompletedDataTypes} of {status.syncTotalDataTypes} data types
             read
-          </span>{/if}{#if status.syncPagesRead > 0}<span>
+          </span>{/if}{#if (status.syncPagesRead ?? 0) > 0}<span>
             {status.syncPagesRead} Google {status.syncPagesRead === 1
               ? "page"
               : "pages"} read for this data type
@@ -661,7 +740,7 @@
                                   ? "No permission"
                                   : item.errorCode
                                     ? "Scan failed"
-                                    : item.count > 0
+                                    : (item.count ?? 0) > 0
                                       ? `Yes (${item.count})`
                                       : "No"}
                             </td>

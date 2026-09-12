@@ -4,8 +4,6 @@ import { page } from "vitest/browser";
 import { goto } from "$app/navigation";
 import type { GoogleHealthStatus } from "$lib/api";
 
-vi.mock("$app/navigation", () => ({ goto: vi.fn() }));
-
 import GoogleHealthSourceRow from "./GoogleHealthSourceRow.svelte";
 import ServerConnectorsCard from "./ServerConnectorsCard.svelte";
 
@@ -20,7 +18,7 @@ describe("Google Health source presentation", () => {
   it("uses the same active styling as other connectors and opens its settings", async () => {
     render(ServerConnectorsCard, {
       googleHealth: connected,
-      availableConnectors: [{ id: "dexcom", name: "Dexcom" }],
+      availableConnectors: [{ id: "dexcom", name: "Dexcom" }, { id: "googlehealth", name: "Google Health" }],
       connectorStatuses: [{ id: "dexcom", isEnabled: true, hasDatabaseConfig: true, isHealthy: true, state: "Active" }],
       connectorCapabilitiesById: {}, syncProgressByConnector: {}, activeDataSources: [],
       isLoadingConnectorStatuses: false, isManualSyncing: false, quickSyncingById: {},

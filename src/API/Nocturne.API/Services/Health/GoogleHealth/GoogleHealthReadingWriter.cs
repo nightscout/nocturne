@@ -16,7 +16,8 @@ public sealed class GoogleHealthReadingWriter(
     IBodyWeightService bodyWeights,
     ISleepService sleep,
     NocturneDbContext db,
-    ILogger<GoogleHealthReadingWriter> logger) : IGoogleHealthReadingWriter
+    ILogger<GoogleHealthReadingWriter> logger,
+    IGoogleHealthSyncCoordinator? coordinator = null) : IGoogleHealthReadingWriter
 {
     public const string Source = DataSources.GoogleHealthConnector;
     private const string SourceApp = "Google Health";
@@ -44,7 +45,8 @@ public sealed class GoogleHealthReadingWriter(
                 DataSource = Source,
                 SyncIdentifier = GoogleHealthClient.Key(reading)
             }).Chunk(batchSize))
-                await heartRates.CreateHeartRatesAsync(heartRateBatch, ct);
+                await WriteBatchAsync("heart-rate", heartRateBatch.Length, heartRateBatch.Max(record => record.Mills),
+                    () => heartRates.CreateHeartRatesAsync(heartRateBatch, ct));
 
             foreach (var stepBatch in Map(readings, "steps", reading => new StepCount
             {
@@ -57,7 +59,8 @@ public sealed class GoogleHealthReadingWriter(
                 DataSource = Source,
                 SyncIdentifier = GoogleHealthClient.Key(reading)
             }).Chunk(batchSize))
-                await stepCounts.CreateStepCountsAsync(stepBatch, ct);
+                await WriteBatchAsync("steps", stepBatch.Length, stepBatch.Max(record => record.Mills),
+                    () => stepCounts.CreateStepCountsAsync(stepBatch, ct));
 
             foreach (var weightBatch in Map(readings, "weight", reading => new BodyWeight
             {
@@ -69,14 +72,41 @@ public sealed class GoogleHealthReadingWriter(
                 DataSource = Source,
                 SyncIdentifier = GoogleHealthClient.Key(reading)
             }).Chunk(batchSize))
-                await bodyWeights.CreateBodyWeightsAsync(weightBatch, ct);
+                await WriteBatchAsync("weight", weightBatch.Length, weightBatch.Max(record => record.Mills),
+                    () => bodyWeights.CreateBodyWeightsAsync(weightBatch, ct));
 
             foreach (var session in sleepSessions)
-                await sleep.UpsertSessionAsync(session, ct);
+                await WriteBatchAsync("sleep", 1,
+                    new DateTimeOffset(DateTime.SpecifyKind(session.EndTime, DateTimeKind.Utc)).ToUnixTimeMilliseconds(),
+                    () => sleep.UpsertSessionAsync(session, ct));
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "GoogleHealthReadingWriter.WriteAsync failed while persisting health records");
+            throw;
+        }
+    }
+
+    private async Task WriteBatchAsync(string dataType, int count, long latestMills, Func<Task> write)
+    {
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        coordinator?.Record(db.TenantId, new() { Stage = "native_batch_started", DataType = dataType, Count = count });
+        try
+        {
+            await write();
+            coordinator?.Record(db.TenantId, new()
+            {
+                Stage = "native_batch_completed", DataType = dataType, Count = count,
+                To = DateTimeOffset.FromUnixTimeMilliseconds(latestMills), DurationMilliseconds = started.ElapsedMilliseconds
+            });
+        }
+        catch (Exception exception)
+        {
+            coordinator?.Record(db.TenantId, new()
+            {
+                Stage = "native_batch_failed", DataType = dataType, ErrorCode = "internal_sync_native_write",
+                DurationMilliseconds = started.ElapsedMilliseconds
+            }, exception);
             throw;
         }
     }
