@@ -113,29 +113,83 @@ public sealed class GoogleHealthReadingWriter(
         var stepIds = Ids(readingIds, "steps");
         var weightIds = Ids(readingIds, "weight");
 
-        if (activeTypes.Contains("heart-rate") && heartRateIds.Count > 0) await db.HeartRates
-            .Where(record => record.DataSource == Source && record.Timestamp >= first && record.Timestamp < last &&
-                !heartRateIds.Contains(record.SyncIdentifier!))
-            .ExecuteUpdateAsync(setters => setters
-                .SetProperty(record => record.DeletedAt, deletedAt)
-                .SetProperty(record => EF.Property<bool>(record, "DeletedByUser"), false), ct);
-        if (activeTypes.Contains("steps") && stepIds.Count > 0) await db.StepCounts
-            .Where(record => record.DataSource == Source && record.Timestamp >= first && record.Timestamp < last &&
-                !stepIds.Contains(record.SyncIdentifier!))
-            .ExecuteUpdateAsync(setters => setters
-                .SetProperty(record => record.DeletedAt, deletedAt)
-                .SetProperty(record => EF.Property<bool>(record, "DeletedByUser"), false), ct);
-        if (activeTypes.Contains("weight") && weightIds.Count > 0) await db.BodyWeights
-            .Where(record => record.DataSource == Source && record.Mills >= firstMills && record.Mills < lastMills &&
-                !weightIds.Contains(record.SyncIdentifier!))
-            .ExecuteUpdateAsync(setters => setters
-                .SetProperty(record => record.DeletedAt, deletedAt)
-                .SetProperty(record => EF.Property<bool>(record, "DeletedByUser"), false), ct);
-        if (activeTypes.Contains("sleep") && sleepIds.Count > 0) await db.SleepSessions
-            .Where(session => session.Source == SleepSource.Google.ToString() && session.SourceApp == SourceApp &&
-                session.StartTime >= first && session.StartTime < last &&
-                (session.OriginalId == null || !sleepIds.Contains(session.OriginalId)))
-            .ExecuteDeleteAsync(ct);
+        if (activeTypes.Contains("heart-rate") && heartRateIds.Count > 0)
+        {
+            var existing = await db.HeartRates
+                .Where(record => record.DataSource == Source && record.Timestamp >= first && record.Timestamp < last && record.DeletedAt == null)
+                .Select(record => new { record.Id, record.SyncIdentifier })
+                .ToListAsync(ct);
+            var toDelete = existing
+                .Where(record => record.SyncIdentifier != null && !heartRateIds.Contains(record.SyncIdentifier))
+                .Select(record => record.Id)
+                .ToList();
+            foreach (var batch in toDelete.Chunk(500))
+            {
+                await db.HeartRates
+                    .Where(record => batch.Contains(record.Id))
+                    .ExecuteUpdateAsync(setters => setters
+                        .SetProperty(record => record.DeletedAt, deletedAt)
+                        .SetProperty(record => EF.Property<bool>(record, "DeletedByUser"), false), ct);
+            }
+        }
+
+        if (activeTypes.Contains("steps") && stepIds.Count > 0)
+        {
+            var existing = await db.StepCounts
+                .Where(record => record.DataSource == Source && record.Timestamp >= first && record.Timestamp < last && record.DeletedAt == null)
+                .Select(record => new { record.Id, record.SyncIdentifier })
+                .ToListAsync(ct);
+            var toDelete = existing
+                .Where(record => record.SyncIdentifier != null && !stepIds.Contains(record.SyncIdentifier))
+                .Select(record => record.Id)
+                .ToList();
+            foreach (var batch in toDelete.Chunk(500))
+            {
+                await db.StepCounts
+                    .Where(record => batch.Contains(record.Id))
+                    .ExecuteUpdateAsync(setters => setters
+                        .SetProperty(record => record.DeletedAt, deletedAt)
+                        .SetProperty(record => EF.Property<bool>(record, "DeletedByUser"), false), ct);
+            }
+        }
+
+        if (activeTypes.Contains("weight") && weightIds.Count > 0)
+        {
+            var existing = await db.BodyWeights
+                .Where(record => record.DataSource == Source && record.Mills >= firstMills && record.Mills < lastMills && record.DeletedAt == null)
+                .Select(record => new { record.Id, record.SyncIdentifier })
+                .ToListAsync(ct);
+            var toDelete = existing
+                .Where(record => record.SyncIdentifier != null && !weightIds.Contains(record.SyncIdentifier))
+                .Select(record => record.Id)
+                .ToList();
+            foreach (var batch in toDelete.Chunk(500))
+            {
+                await db.BodyWeights
+                    .Where(record => batch.Contains(record.Id))
+                    .ExecuteUpdateAsync(setters => setters
+                        .SetProperty(record => record.DeletedAt, deletedAt)
+                        .SetProperty(record => EF.Property<bool>(record, "DeletedByUser"), false), ct);
+            }
+        }
+
+        if (activeTypes.Contains("sleep") && sleepIds.Count > 0)
+        {
+            var existing = await db.SleepSessions
+                .Where(session => session.Source == SleepSource.Google.ToString() && session.SourceApp == SourceApp && session.StartTime >= first && session.StartTime < last)
+                .Select(session => new { session.Id, session.OriginalId })
+                .ToListAsync(ct);
+            var toDelete = existing
+                .Where(session => session.OriginalId != null && !sleepIds.Contains(session.OriginalId))
+                .Select(session => session.Id)
+                .ToList();
+            foreach (var batch in toDelete.Chunk(500))
+            {
+                await db.SleepSessions
+                    .Where(session => batch.Contains(session.Id))
+                    .ExecuteDeleteAsync(ct);
+            }
+        }
     }
 
     private static IReadOnlyCollection<string> Ids(

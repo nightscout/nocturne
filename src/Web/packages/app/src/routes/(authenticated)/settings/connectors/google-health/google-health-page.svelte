@@ -32,6 +32,7 @@
     previewGoogleHealth,
     purgeGoogleHealth,
   } from "$lib/api/generated/googleHealths.generated.remote";
+  import { getPatientRecord } from "$api/generated/patientRecords.generated.remote";
 
   let status = $state<GoogleHealthStatus | null>(null),
     preview = $state<GoogleHealthPreview | null>(null);
@@ -46,6 +47,15 @@
     message = $state(""),
     notice = $state("");
   let purgeDialogOpen = $state(false);
+  const patientRecordQuery = getPatientRecord();
+  const patientRecord = $derived(patientRecordQuery.current ?? null);
+  const isMale = $derived(
+    patientRecord?.clinical?.sex === "Male" ||
+      patientRecord?.clinical?.sex === "male" ||
+      patientRecord?.sex === "Male" ||
+      patientRecord?.sex === "male"
+  );
+
   const realtimeStore = getRealtimeStore();
   const syncProgressByConnector = $derived(
     realtimeStore.syncProgressByConnector
@@ -70,6 +80,7 @@
     const capabilities = status?.capabilities ?? [];
     const items = preview?.items ?? [];
     return categoryOrder
+      .filter((category) => !(isMale && category === "Cycle tracking"))
       .map((category) => {
         const entries = items
           .map((item) => ({
@@ -643,11 +654,13 @@
                             <td class="p-3">
                               {!item.supported
                                 ? "Not scanned"
-                                : item.errorCode || !item.granted
-                                  ? "Unknown"
-                                  : item.count > 0
-                                    ? `Yes (${item.count})`
-                                    : "No"}
+                                : !item.granted
+                                  ? "No permission"
+                                  : item.errorCode
+                                    ? "Scan failed"
+                                    : item.count > 0
+                                      ? `Yes (${item.count})`
+                                      : "No"}
                             </td>
                             <td class="p-3">
                               {capability?.destination
