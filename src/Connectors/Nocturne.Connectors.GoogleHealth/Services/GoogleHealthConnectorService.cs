@@ -258,7 +258,7 @@ public sealed class GoogleHealthConnectorService(
                 await foreach (var page in google.ReadSleepPagesAsync(accessToken, from, to, ct, PageRead))
                 {
                     var unique = page
-                        .Where(session => sleepIds.Add(session.OriginalId!))
+                        .Where(session => session.OriginalId != null && sleepIds.Add(session.OriginalId))
                         .ToArray();
                     result.ItemsSynced[SyncDataType.Sleep] =
                         result.ItemsSynced.GetValueOrDefault(SyncDataType.Sleep) + unique.Length;
