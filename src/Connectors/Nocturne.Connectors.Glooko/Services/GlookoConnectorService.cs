@@ -1579,7 +1579,8 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                     + "GkInsulinBasal={GkBasal}, GkInsulinBolus={GkBolus}, "
                     + "CarbAll={Carbs}, "
                     + "ScheduledBasal={SchedBasal}, TemporaryBasal={TempBasal}, SuspendBasal={Suspend}, LgsPlgs={LgsPlgs}, "
-                    + "PumpAlarm={Alarms}, ReservoirChange={Reservoir}, SetSiteChange={SetSite}, ProfileChange={Profile}",
+                    + "PumpAlarm={Alarms}, ReservoirChange={Reservoir}, SetSiteChange={SetSite}, "
+                    + "CgmSensorChange={SensorChange}, ProfileChange={Profile}",
                     ConnectorSource,
                     (s.CgmHigh?.Length ?? 0) + (s.CgmNormal?.Length ?? 0) + (s.CgmLow?.Length ?? 0),
                     (s.BgHigh?.Length ?? 0) + (s.BgNormal?.Length ?? 0) + (s.BgLow?.Length ?? 0),
@@ -1596,6 +1597,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                     s.PumpAlarm?.Length ?? 0,
                     s.ReservoirChange?.Length ?? 0,
                     s.SetSiteChange?.Length ?? 0,
+                    s.CgmSensorChange?.Length ?? 0,
                     s.ProfileChange?.Length ?? 0);
             }
 
