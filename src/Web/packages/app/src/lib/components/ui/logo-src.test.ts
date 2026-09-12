@@ -40,9 +40,9 @@ describe("resolveLogoSrc", () => {
 });
 
 describe("logo assets", () => {
-	// Regression: carelink, iaps and gluroo had no entry and no file, so each
-	// rendered a 404 broken image in the connectors UI.
-	it.each(["carelink", "iaps", "gluroo"])("ships an asset for %s", (icon) => {
+	// Regression: carelink, iaps, gluroo and openaps had no file of their own, so each
+	// needed an alias or file to prevent broken images / 404 logs in production.
+	it.each(["carelink", "iaps", "gluroo", "openaps"])("ships an asset for %s", (icon) => {
 		expect(existsSync(staticPath(resolveLogoSrc(icon)))).toBe(true);
 	});
 
