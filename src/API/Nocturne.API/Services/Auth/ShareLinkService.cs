@@ -19,7 +19,27 @@ namespace Nocturne.API.Services.Auth;
 /// the membership tables are not RLS-scoped, so tenant isolation comes from the explicit tenant-id
 /// predicate on every query — those predicates must be preserved.
 /// </summary>
-public interface IShareLinkService
+/// <summary>
+/// The one member of <see cref="IShareLinkService"/> a public share viewer is allowed to reach.
+/// </summary>
+/// <remarks>
+/// Separate so that <c>ShareAppearanceController</c>, which answers unauthenticated requests on a
+/// share host, does not depend on an interface carrying <see cref="IShareLinkService.RevealAsync"/>.
+/// Nothing routes an anonymous caller there today; the narrower seam is what keeps that true when
+/// someone adds the next member.
+/// </remarks>
+public interface IShareAppearanceReader
+{
+    /// <summary>
+    /// The appearance an anonymous share viewer renders the tenant's data with: the owner's
+    /// display preferences, narrowed by <see cref="UserDisplayPreferences.ToPresentationOnly"/>.
+    /// All-null when the tenant has no owner or the owner saved nothing, which leaves the viewer
+    /// on the frontend's own defaults.
+    /// </summary>
+    Task<UserDisplayPreferences> GetSharedAppearanceAsync(Guid tenantId, CancellationToken ct = default);
+}
+
+public interface IShareLinkService : IShareAppearanceReader
 {
     /// <summary>
     /// Reports the link's state. <see cref="ShareLinkDto.Url"/> is always null, so the secret
@@ -50,14 +70,6 @@ public interface IShareLinkService
     /// authoritative.
     /// </summary>
     Task<ShareLinkDto> SetScopesAsync(Guid tenantId, IReadOnlyList<string> scopes, CancellationToken ct = default);
-
-    /// <summary>
-    /// The appearance an anonymous share viewer renders the tenant's data with: the owner's
-    /// display preferences, narrowed by <see cref="UserDisplayPreferences.ToPresentationOnly"/>.
-    /// All-null when the tenant has no owner or the owner saved nothing, which leaves the viewer
-    /// on the frontend's own defaults.
-    /// </summary>
-    Task<UserDisplayPreferences> GetSharedAppearanceAsync(Guid tenantId, CancellationToken ct = default);
 }
 
 /// <inheritdoc />
