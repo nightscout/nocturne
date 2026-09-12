@@ -171,6 +171,16 @@ public class OAuthGrantEntity : ITenantScoped, IAuditable, IEntityCreated
     public string? LegacyTokenDigest { get; set; }
 
     /// <summary>
+    /// Restricts this credential to the last 24 hours of every time-series category, independently
+    /// of the membership it resolves through. A follower's phone can be held to a recent window
+    /// while the same person's other tokens are not, which a flag on the holder cannot express.
+    /// Applied on top of the membership's own limit, never instead of it: the narrower of the two
+    /// wins, so a credential cannot widen what its membership allows.
+    /// </summary>
+    [Column("limit_to_24_hours")]
+    public bool LimitTo24Hours { get; set; }
+
+    /// <summary>
     /// True when this grant was seeded from a pre-existing Nightscout credential, either the master
     /// API secret or a per-subject access token, rather than minted as a scoped <c>noc_</c> token.
     /// Drives the rotation nudge and the "Legacy" badge in the UI; not part of authentication.

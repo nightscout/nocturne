@@ -1690,10 +1690,6 @@ internal class MigrationJob
         UpdateCollectionProgress(collectionName, subjects.Length, 0, 0, false);
         UpdateOverallProgress();
 
-        // A Nightscout subject is an API token, so it is imported as a direct grant rather than as
-        // an account of its own. See OrphanedSubjectFilter for what an account with no way to sign
-        // in costs the tenant, and DeviceSubjectFilter for why the holder is not a person.
-        var deviceSubjectId = await dbContext.DeviceSubjectOf(_tenantId, ct);
 
         var existingHashes = await dbContext.OAuthGrants
             .Where(g => g.TenantId == _tenantId && g.TokenHash != null)
@@ -1709,6 +1705,8 @@ internal class MigrationJob
         var hashedSecret = string.IsNullOrEmpty(_request.NightscoutApiSecret)
             ? null
             : HashApiSecret(_request.NightscoutApiSecret);
+
+        Guid? deviceSubjectId = null;
 
         foreach (var subject in subjects)
         {
@@ -1754,12 +1752,18 @@ internal class MigrationJob
                 var mongoId = subject.MongoId ?? subject.Id;
                 var legacyDigest = Auth.LegacyNightscoutToken.DeriveDigest(hashedSecret, mongoId, subject.AccessToken);
 
+                // Resolved on the first token actually worth importing, so a run that converts
+                // nothing leaves no holder behind. See OrphanedSubjectFilter for what an account
+                // with no way to sign in costs the tenant, and DeviceSubjectFilter for why the
+                // holder is not a person.
+                deviceSubjectId ??= await dbContext.DeviceSubjectOf(_tenantId, ct);
+
                 dbContext.OAuthGrants.Add(new OAuthGrantEntity
                 {
                     Id = Guid.CreateVersion7(),
                     TenantId = _tenantId,
                     ClientEntityId = null,
-                    SubjectId = deviceSubjectId,
+                    SubjectId = deviceSubjectId.Value,
                     GrantType = OAuthGrantTypes.Direct,
 
                     // "*" is stored as the single superuser atom; Normalize expands it back, so

@@ -101,7 +101,8 @@ public class DirectGrantTokenHandler : IAuthHandler
             SubjectId = grant.SubjectId,
             Scopes = grant.Scopes,
             TokenId = grant.Id,
-            LimitTo24Hours = false, // Direct grants defer to MemberScopeMiddleware for 24-hour limits
+            // MemberScopeMiddleware applies the membership's limit on top of this one.
+            LimitTo24Hours = grant.LimitTo24Hours,
         });
     }
 
@@ -156,10 +157,9 @@ public class DirectGrantTokenHandler : IAuthHandler
 
         var grants = ActiveDirectGrants(dbContext.OAuthGrants.AsNoTracking(), tenantId, now);
 
-        // Two lookups rather than one OR'd predicate: the hash match is an equality hit on
-        // ix_oauth_grants_token_hash and is what almost every request takes, while the digest match
-        // is a filtered-index LIKE that only imported Nightscout tokens can satisfy. OR-ing them
-        // costs the common path its index.
+        // Two lookups rather than one OR'd predicate. The hash match is what almost every request
+        // takes; the digest match is a filtered-index range scan only an imported Nightscout token
+        // can satisfy, and OR-ing the two would deny the planner the digest index on every request.
         var byHash = await grants.FirstOrDefaultAsync(
             g => g.TokenHash != null && candidateHashes.Contains(g.TokenHash), ct);
         if (byHash != null || digestPrefix == null)
@@ -195,8 +195,8 @@ public class DirectGrantTokenHandler : IAuthHandler
     /// <remarks>
     /// Shared with the <c>/api/v2/authorization/request/{token}</c> exchange, which scopes by the
     /// global query filter rather than an explicit tenant id and so cannot reuse
-    /// <see cref="ActiveDirectGrants"/> wholesale. Restating it there instead is how the expiry term
-    /// went missing once, letting a grant every other caller refused be exchanged for a fresh JWT.
+    /// <see cref="ActiveDirectGrants"/> wholesale. Both callers must agree on what is live, or a
+    /// grant one of them refuses is still exchangeable for a fresh JWT through the other.
     /// </remarks>
     /// <param name="now">The instant to judge expiry against.</param>
     internal static Expression<Func<OAuthGrantEntity, bool>> IsLiveDirectGrant(DateTime now) =>

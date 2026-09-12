@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Nocturne.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(NocturneDbContext))]
-    [Migration("20260912012700_MoveSubjectTokensToDirectGrants")]
+    [Migration("20260912055405_MoveSubjectTokensToDirectGrants")]
     partial class MoveSubjectTokensToDirectGrants
     {
         /// <inheritdoc />
@@ -2974,6 +2974,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)")
                         .HasColumnName("legacy_token_digest");
+
+                    b.Property<bool>("LimitTo24Hours")
+                        .HasColumnType("boolean")
+                        .HasColumnName("limit_to_24_hours");
 
                     b.Property<DateTime?>("RevokedAt")
                         .HasColumnType("timestamp with time zone")

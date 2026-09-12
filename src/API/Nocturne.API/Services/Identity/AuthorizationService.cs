@@ -527,7 +527,19 @@ public class AuthorizationService : IAuthorizationService, IDisposable
             // read as "revoke every scope", which no Nightscout client means by omitting the field.
             if (subject.Roles is { Count: > 0 })
             {
-                grant.Scopes = [.. await ResolveScopesAsync(subject.Roles)];
+                var scopes = await ResolveScopesAsync(subject.Roles);
+
+                // Same refusal as the create path. Writing an empty list would answer 200 and leave
+                // a token that authenticates and then 403s every request it is used for, with
+                // nothing said about why.
+                if (scopes.Count == 0)
+                {
+                    throw new ArgumentException(
+                        "A subject needs at least one role that maps to a Nocturne permission.",
+                        nameof(subject));
+                }
+
+                grant.Scopes = [.. scopes];
             }
 
             await _dbContext.SaveChangesAsync();

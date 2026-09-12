@@ -2972,6 +2972,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("character varying(40)")
                         .HasColumnName("legacy_token_digest");
 
+                    b.Property<bool>("LimitTo24Hours")
+                        .HasColumnType("boolean")
+                        .HasColumnName("limit_to_24_hours");
+
                     b.Property<DateTime?>("RevokedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("revoked_at");

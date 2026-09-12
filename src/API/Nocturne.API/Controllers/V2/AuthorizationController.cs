@@ -224,7 +224,15 @@ public class AuthorizationController : ControllerBase
             return Problem(detail: "Subject ID is required for update", statusCode: 400, title: "Bad Request");
         }
 
-        var updatedSubject = await _authorizationService.UpdateSubjectAsync(subject);
+        Subject? updatedSubject;
+        try
+        {
+            updatedSubject = await _authorizationService.UpdateSubjectAsync(subject);
+        }
+        catch (ArgumentException ex)
+        {
+            return Problem(detail: ex.Message, statusCode: 400, title: "Bad Request");
+        }
 
         if (updatedSubject == null)
         {

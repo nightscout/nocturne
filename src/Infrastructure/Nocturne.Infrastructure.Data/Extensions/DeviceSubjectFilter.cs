@@ -13,8 +13,8 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// instance's platform admin would hand every uploader token instance-wide reach, and a token
 /// outlives the person, so an ownership change or a revoked membership stops every device at once.
 /// <para>
-/// A system subject is the existing answer to "authenticated but stands for no one" — the Public
-/// subject a share link runs as is the other one. It is excluded from
+/// A system subject is the existing answer to "authenticated but stands for no one", as the
+/// Public subject a share link runs as already is. It is excluded from
 /// <see cref="OrphanedSubjectFilter"/>, so holding a membership without a passkey does not read as
 /// an account locked out of the tenant, and it is never a platform admin.
 /// </para>
@@ -29,6 +29,14 @@ public static class DeviceSubjectFilter
 {
     /// <summary>The name the device-holding system subject carries on every tenant.</summary>
     public const string DeviceSubjectName = "Devices";
+
+    /// <summary>
+    /// The holder's notes text. <c>MoveSubjectTokensToDirectGrants</c> writes the same words when it
+    /// creates a holder in SQL; a migration is frozen once shipped, so changing this reaches only
+    /// holders created from here on.
+    /// </summary>
+    public const string DeviceSubjectNotes =
+        "Holds the API tokens for this site. The scopes on each token decide what it can do.";
 
     /// <summary>
     /// The subject <paramref name="tenantId"/> issues API tokens to, or null when it has never
@@ -72,7 +80,7 @@ public static class DeviceSubjectFilter
         {
             Id = subjectId,
             Name = DeviceSubjectName,
-            Notes = "Holds this site's API tokens. Each token's own scopes decide what it can do.",
+            Notes = DeviceSubjectNotes,
             IsActive = true,
             IsSystemSubject = true,
             ApprovalStatus = "Approved",

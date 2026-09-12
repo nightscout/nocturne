@@ -17,6 +17,13 @@ namespace Nocturne.Infrastructure.Data.Migrations
                 maxLength: 40,
                 nullable: true);
 
+            migrationBuilder.AddColumn<bool>(
+                name: "limit_to_24_hours",
+                table: "oauth_grants",
+                type: "boolean",
+                nullable: false,
+                defaultValue: false);
+
             migrationBuilder.CreateIndex(
                 name: "ix_oauth_grants_legacy_token_digest",
                 table: "oauth_grants",
@@ -64,6 +71,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                                    s.access_token_hash,
                                    s.legacy_token_digest,
                                    s.is_active,
+                                   tm.limit_to_24_hours,
                                    ARRAY(
                                      SELECT DISTINCT p FROM (
                                        SELECT jsonb_array_elements_text(
@@ -131,8 +139,9 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                         WITH converted AS (
                             INSERT INTO oauth_grants (
-                                id, tenant_id, subject_id, grant_type, scopes,
-                                label, token_hash, legacy_token_digest, is_migrated, created_at
+                                id, tenant_id, subject_id, grant_type, scopes, label,
+                                token_hash, legacy_token_digest, limit_to_24_hours,
+                                is_migrated, created_at
                             )
                             SELECT gen_random_uuid(),
                                    r.tenant_id,
@@ -142,6 +151,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                                    d.label,
                                    d.access_token_hash,
                                    d.legacy_token_digest,
+                                   -- A device its owner held to a recent window must stay held to
+                                   -- it. The flag lives on the credential rather than the holder,
+                                   -- because one holder carries every token on the tenant.
+                                   d.limit_to_24_hours,
                                    true,
                                    now()
                               FROM device_memberships d
@@ -154,9 +167,14 @@ namespace Nocturne.Infrastructure.Data.Migrations
                                AND cardinality(d.scopes) > 0
                             RETURNING 1
                         )
-                        -- The subject rows themselves stay: audit trails point at them.
+                        -- Active memberships only: converted, or resolving to no scopes and so
+                        -- carrying nothing to convert. A deactivated device is parked rather than
+                        -- retired, and it is not an orphan either, so its membership stays and
+                        -- reactivating it still finds one. The subject rows themselves stay in
+                        -- every case: audit trails point at them.
                         DELETE FROM tenant_members
-                         WHERE id IN (SELECT membership_id FROM device_memberships);
+                         WHERE id IN (SELECT membership_id FROM device_memberships
+                                       WHERE is_active);
 
                         DROP TABLE device_memberships;
                     END LOOP;
@@ -199,6 +217,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
             migrationBuilder.DropColumn(
                 name: "legacy_token_digest",
+                table: "oauth_grants");
+
+            migrationBuilder.DropColumn(
+                name: "limit_to_24_hours",
                 table: "oauth_grants");
 
             migrationBuilder.AddColumn<string>(

@@ -366,6 +366,28 @@ public class AuthorizationServiceCrudTests : IDisposable
 
     [Fact]
     [Trait("Category", "Unit")]
+    public async Task UpdateSubjectAsync_WithNoTranslatableRoles_IsRejectedRatherThanZeroed()
+    {
+        var grant = await SeedGrantAsync("Pump uploader", [Scope.GlucoseRead]);
+        _mockRoleService.Setup(r => r.GetAllRolesAsync()).ReturnsAsync([]);
+
+        var update = () => _authorizationService.UpdateSubjectAsync(new LegacySubject
+        {
+            Id = grant.Id.ToString(),
+            Name = "Pump uploader",
+            Roles = ["a-role-nocturne-cannot-translate"],
+        });
+
+        await update.Should().ThrowAsync<ArgumentException>();
+
+        // Answering 200 here leaves a token that authenticates and then refuses every request it is
+        // used for, with nothing said about why.
+        var reloaded = await _dbContext.OAuthGrants.SingleAsync(g => g.Id == grant.Id);
+        reloaded.Scopes.Should().Equal(Scope.GlucoseRead);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
     public async Task UpdateSubjectAsync_WithNonExistentSubject_ReturnsNull()
     {
         var result = await _authorizationService.UpdateSubjectAsync(new LegacySubject

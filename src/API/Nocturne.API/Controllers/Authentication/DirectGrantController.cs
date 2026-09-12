@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Extensions;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.API.Middleware.Handlers;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Models.Authorization;
@@ -101,6 +102,12 @@ public class DirectGrantController : ControllerBase
         var grants = await _directGrantService.ListAsync(
             _dbContext, auth.SubjectId.Value, HttpContext.RequestAborted);
 
+        foreach (var holderId in await SiteTokenHolderAsync())
+        {
+            grants.AddRange(await _directGrantService.ListAsync(
+                _dbContext, holderId, HttpContext.RequestAborted));
+        }
+
         return Ok(grants);
     }
 
@@ -128,12 +135,48 @@ public class DirectGrantController : ControllerBase
             Request.Headers.UserAgent.ToString(),
             ct: HttpContext.RequestAborted);
 
+        foreach (var holderId in await SiteTokenHolderAsync())
+        {
+            found |= await _directGrantService.RevokeAsync(
+                _dbContext, id, holderId,
+                HttpContext.Connection.RemoteIpAddress?.ToString(),
+                Request.Headers.UserAgent.ToString(),
+                ct: HttpContext.RequestAborted);
+        }
+
         if (!found)
         {
             return Problem(detail: "Direct grant not found", statusCode: 404, title: "Not Found");
         }
 
         return NoContent();
+    }
+
+    /// <summary>
+    /// The tenant's device-token holder, when the caller may manage it, and nothing otherwise.
+    /// </summary>
+    /// <remarks>
+    /// A site's uploader tokens belong to nobody (see <see cref="DeviceSubjectFilter"/>), so no
+    /// person's own list would ever contain them. Revoking a device is the operation someone
+    /// reaches for when a phone is lost, so it cannot be the one thing this screen cannot do.
+    /// Gated on <see cref="Scope.MembersManage"/> rather than shown to every member, because a
+    /// site's tokens are not the business of everyone who can read its data.
+    /// <para>
+    /// Returns a sequence so the caller reads as "and the site's tokens, if any" rather than
+    /// branching on a nullable.
+    /// </para>
+    /// </remarks>
+    private async Task<IEnumerable<Guid>> SiteTokenHolderAsync()
+    {
+        if (!HttpContext.HasScope(Scope.MembersManage))
+        {
+            return [];
+        }
+
+        return await _dbContext.FindDeviceSubjectOf(
+            _dbContext.TenantId, HttpContext.RequestAborted) is { } holderId
+            ? [holderId]
+            : [];
     }
 }
 
