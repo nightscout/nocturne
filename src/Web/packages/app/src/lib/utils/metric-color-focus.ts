@@ -1,5 +1,6 @@
 import {
   GLUCOSE_HEATMAP_LEGEND_STOPS,
+  GLUCOSE_HEATMAP_OUTSIDE_COLOR,
   getGlucoseHeatmapFill,
 } from "./chart-colors";
 
@@ -71,6 +72,54 @@ export function glucoseColorFocusStops(candidate: GlucoseColorThresholds) {
   });
 }
 
+export function glucoseColorFocusBand(
+  candidate: GlucoseColorThresholds
+): ColorFocusRange {
+  const thresholds =
+    resolveGlucoseColorThresholds(candidate) ??
+    DEFAULT_GLUCOSE_COLOR_THRESHOLDS;
+  return [thresholds[0], thresholds[3]];
+}
+
+export function getFocusedGlucoseFill(
+  mgdl: number,
+  thresholds: GlucoseColorThresholds,
+  stops: ReadonlyArray<{
+    mgdl: number;
+    color: string;
+  }> = GLUCOSE_HEATMAP_LEGEND_STOPS
+): string {
+  const [low, high] = glucoseColorFocusBand(thresholds);
+  if (!Number.isFinite(mgdl) || mgdl < low || mgdl > high) {
+    return GLUCOSE_HEATMAP_OUTSIDE_COLOR;
+  }
+  return getGlucoseHeatmapFill(mgdl, stops);
+}
+
+export function glucoseColorFocusGradient(
+  stops: ReadonlyArray<{ mgdl: number; color: string }>,
+  thresholds: GlucoseColorThresholds,
+  min: number = GLUCOSE_COLOR_MIN,
+  max: number = GLUCOSE_COLOR_MAX
+): string {
+  const [low, high] = glucoseColorFocusBand(thresholds);
+  const outside = GLUCOSE_HEATMAP_OUTSIDE_COLOR;
+  const at = (mgdl: number) => ((mgdl - min) / (max - min)) * 100;
+  const ramp = stops
+    .filter((stop) => stop.mgdl > low && stop.mgdl < high)
+    .map((stop) => `${stop.color} ${at(stop.mgdl)}%`);
+  const positions = [
+    `${outside} 0%`,
+    `${outside} ${at(low)}%`,
+    `${getGlucoseHeatmapFill(low, stops)} ${at(low)}%`,
+    ...ramp,
+    `${getGlucoseHeatmapFill(high, stops)} ${at(high)}%`,
+    `${outside} ${at(high)}%`,
+    `${outside} 100%`,
+  ];
+  return `linear-gradient(to right in srgb, ${positions.join(", ")})`;
+}
+
 export function resolveColorFocusRange(
   candidate: unknown
 ): ColorFocusRange | null {
@@ -86,15 +135,18 @@ export function resolveColorFocusRange(
     : null;
 }
 
+// Clamping the top to full strength instead would leave the largest values permanently
+// at the loudest colour, so a narrowed range could only highlight a band and everything
+// above it.
 export function getFocusedIntensityFill(
   value: number,
   range: ColorFocusRange,
   cssVar: string
 ): string {
   const [min, max] = resolveColorFocusRange(range) ?? [0, 1];
-  const intensity = Number.isFinite(value)
-    ? Math.max(0, Math.min((value - min) / (max - min), 1))
-    : 0;
+  const position = (value - min) / (max - min);
+  const intensity =
+    Number.isFinite(value) && position >= 0 && position <= 1 ? position : 0;
   return `color-mix(in srgb, var(${cssVar}) ${Math.round(15 + intensity * 85)}%, transparent)`;
 }
 
@@ -108,9 +160,11 @@ export function colorFocusGradient(
     Number.isFinite(domainMax) ? domainMax : 1,
     validRange[1]
   );
-  const low = getFocusedIntensityFill(validRange[0], validRange, cssVar);
-  const high = getFocusedIntensityFill(validRange[1], validRange, cssVar);
-  return `linear-gradient(to right, ${low} 0%, ${low} ${(validRange[0] / domain) * 100}%, ${high} ${(validRange[1] / domain) * 100}%, ${high} 100%)`;
+  const outside = getFocusedIntensityFill(validRange[0], validRange, cssVar);
+  const peak = getFocusedIntensityFill(validRange[1], validRange, cssVar);
+  const start = (validRange[0] / domain) * 100;
+  const end = (validRange[1] / domain) * 100;
+  return `linear-gradient(to right, ${outside} 0%, ${outside} ${start}%, ${peak} ${end}%, ${outside} ${end}%, ${outside} 100%)`;
 }
 
 export function insertSliderSteps(base: readonly number[], extra: readonly number[]): number[] {
