@@ -17,9 +17,9 @@ using Xunit;
 namespace Nocturne.API.Integration.Tests.Health;
 
 [Trait("Category", "Integration")]
-public sealed class GoogleHealthReconciliationTests : IAsyncLifetime
+public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture fixture)
+    : IClassFixture<GoogleHealthPostgresFixture>, IAsyncLifetime
 {
-    private PostgreSqlContainer? container;
     private string adminConnection = string.Empty;
     private string connectionString = string.Empty;
     private readonly string databaseName = "google_health_test_" + Guid.NewGuid().ToString("N");
@@ -30,13 +30,7 @@ public sealed class GoogleHealthReconciliationTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        adminConnection = Environment.GetEnvironmentVariable("NOCTURNE_TEST_POSTGRES_ADMIN") ?? string.Empty;
-        if (string.IsNullOrEmpty(adminConnection))
-        {
-            container = new PostgreSqlBuilder().WithImage("postgres:17.6").Build();
-            await container.StartAsync();
-            adminConnection = container.GetConnectionString();
-        }
+        adminConnection = fixture.ConnectionString;
         await using var admin = new NpgsqlConnection(adminConnection);
         await admin.OpenAsync();
         await using (var command = new NpgsqlCommand($"CREATE DATABASE {databaseName}", admin))
@@ -70,7 +64,6 @@ public sealed class GoogleHealthReconciliationTests : IAsyncLifetime
             await command.ExecuteNonQueryAsync();
         await using (var command = new NpgsqlCommand($"DROP ROLE IF EXISTS {roleName}", admin))
             await command.ExecuteNonQueryAsync();
-        if (container is not null) await container.DisposeAsync();
     }
 
     [Fact]
@@ -205,5 +198,25 @@ public sealed class GoogleHealthReconciliationTests : IAsyncLifetime
             if (command.CommandText.StartsWith("INSERT INTO google_health_reconciliation_ids")) Inserts++;
             return ValueTask.FromResult(result);
         }
+    }
+}
+
+public sealed class GoogleHealthPostgresFixture : IAsyncLifetime
+{
+    private PostgreSqlContainer? container;
+    public string ConnectionString { get; private set; } = string.Empty;
+
+    public async Task InitializeAsync()
+    {
+        ConnectionString = Environment.GetEnvironmentVariable("NOCTURNE_TEST_POSTGRES_ADMIN") ?? string.Empty;
+        if (!string.IsNullOrEmpty(ConnectionString)) return;
+        container = new PostgreSqlBuilder().WithImage("postgres:17.6").Build();
+        await container.StartAsync();
+        ConnectionString = container.GetConnectionString();
+    }
+
+    public async Task DisposeAsync()
+    {
+        if (container is not null) await container.DisposeAsync();
     }
 }
