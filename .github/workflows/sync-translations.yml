@@ -35,8 +35,8 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Sync translations
-        working-directory: src/Web/packages/app
-        run: pnpm wuchale sync
+        working-directory: src/Web
+        run: pnpm run translations:sync
 
       - name: Commit translation changes
         uses: stefanzweifel/git-auto-commit-action@v5

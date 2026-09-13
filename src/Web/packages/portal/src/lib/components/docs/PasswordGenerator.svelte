@@ -9,6 +9,11 @@
 
     let { label = "password", length = 32 }: Props = $props();
 
+    // Charset for generation, not user-facing text; if extracted as a
+    // message, a missing catalog entry makes the sampling loop below spin
+    // forever during prerender (ALPHABET.length becomes 0). The directive
+    // comment must be exactly "@wc-ignore" on its own.
+    // @wc-ignore
     const ALPHABET =
         "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#%^&*-_=+";
 

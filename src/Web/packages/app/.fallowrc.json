@@ -3,7 +3,6 @@
   "ignoreDependencies": [
     "@eslint/js",
     "@wuchale/svelte",
-    "@wuchale/vite-plugin",
     "vite-plugin-lingo",
     "wuchale"
   ],

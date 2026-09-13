@@ -11,6 +11,7 @@
     "format": "pnpm --recursive format",
     "check": "pnpm --recursive check",
     "test": "pnpm --recursive test",
+    "translations:sync": "cd packages/app && wuchale",
     "clean": "pnpm --recursive clean && rm -rf node_modules",
     "generate-api-client": "cd ../API/Nocturne.API && nswag run nswag.json",
     "generate-zod-schemas": "node utils/generateZodSchemas/index.ts",
@@ -35,9 +36,8 @@
     "pnpm": ">=9"
   },
   "dependencies": {
-    "@wuchale/svelte": "^0.18.1",
-    "@wuchale/vite-plugin": "^0.16.3",
+    "@wuchale/svelte": "^0.20.4",
     "runed": "^0.37.0",
-    "wuchale": "^0.19.4"
+    "wuchale": "^0.25.6"
   }
 }

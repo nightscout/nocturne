@@ -31,15 +31,17 @@ import {
   installRequestScopedBitsIdCounter,
   withFreshBitsIdCounter,
 } from "$lib/server/bits-id";
-// WUCHALE-DISABLED: wuchale temporarily disabled
-// import { runWithLocale, loadLocales } from 'wuchale/load-utils/server';
-// import * as main from '../../../locales/main.loader.server.svelte.js'
-// import * as js from '../../../locales/js.loader.server.js'
-// import { locales } from '../../../locales/data.js'
+import { runWithLocale, loadLocales } from 'wuchale/load-utils/server';
+import * as main from '../../../locales/main.loader.server.svelte.js'
+import * as js from '../../../locales/js.loader.server.js'
+import { locales } from '../../../locales/data.js'
 import supportedLocales from '../../../supportedLocales.json';
 import { LANGUAGE_COOKIE_NAME } from "$lib/stores/appearance-store.svelte";
 
-// WUCHALE-DISABLED: wuchale temporarily disabled — locale catalogs not loaded at startup
+// Await so no request can render before catalogs are registered: a lookup
+// against an unloaded runtime silently renders every message as ''.
+await loadLocales(main.key, main.loadCount, main.loadCatalog, locales)
+await loadLocales(js.key, js.loadCount, js.loadCatalog, locales)
 
 // Turn off SSL validation during development for self-signed certs
 if (dev) {
@@ -474,13 +476,9 @@ function resolveLocale(event: Parameters<Handle>[0]["event"]): string {
   return "en";
 }
 
-// WUCHALE-DISABLED: wuchale temporarily disabled — resolveLocale still runs (so cookie-driven
-// locale selection logic stays exercised and helpers stay referenced) but
-// no runWithLocale wrapping happens. Re-enabling wuchale only requires
-// restoring the runWithLocale call below.
 export const locale: Handle = async ({ event, resolve }) => {
-  resolveLocale(event);
-  return resolve(event);
+  const locale = resolveLocale(event);
+  return await runWithLocale(locale, () => resolve(event));
 }
 
 installRequestScopedBitsIdCounter();

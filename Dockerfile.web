@@ -10,7 +10,7 @@ RUN npm install -g pnpm@10
 
 # Copy workspace files
 COPY src/Web/package.json src/Web/pnpm-lock.yaml src/Web/pnpm-workspace.yaml ./
-COPY src/Web/supportedLocales.json ./
+COPY src/Web/supportedLocales.json src/Web/wuchale.shared.js ./
 COPY src/Web/locales ./locales
 COPY src/Web/packages ./packages
 
