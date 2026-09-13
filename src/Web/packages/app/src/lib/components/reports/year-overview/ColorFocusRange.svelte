@@ -24,6 +24,7 @@
   } from "$lib/utils/metric-color-focus";
 
   let {
+    metricKey = "avgGlucose",
     metricLabel = "Average glucose",
     unit = "",
     observedMax = 1,
@@ -40,7 +41,12 @@
     onFocusBandChange = () => {},
     lowColor = undefined,
     highColor = undefined,
+    COLOR_PALETTES = [],
+    onCustomColorsChange = () => {},
+    transparencyPercent = 90,
+    onTransparencyChange = () => {},
   }: {
+    metricKey?: string;
     metricLabel?: string;
     unit?: string;
     observedMax?: number;
@@ -57,6 +63,10 @@
     onFocusBandChange?: (values: [number, number] | null) => void;
     lowColor?: string;
     highColor?: string;
+    COLOR_PALETTES?: Array<{ label: string; low?: string; high?: string }>;
+    onCustomColorsChange?: (low?: string, high?: string) => void;
+    transparencyPercent?: number;
+    onTransparencyChange?: (val: number | undefined) => void;
   } = $props();
 
   const id = $props.id();
