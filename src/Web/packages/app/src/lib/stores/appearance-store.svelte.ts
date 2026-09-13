@@ -160,7 +160,11 @@ function schedulePersist(): void {
   if (persistTimer) clearTimeout(persistTimer);
   persistTimer = setTimeout(() => {
     persistTimer = null;
-    writeThrough?.(prefs);
+    // A rejected write leaves the cookie ahead of the backend, so the next load reverts to
+    // the stored value; unhandled in a timer, that surfaces as nothing at all.
+    void Promise.resolve(writeThrough?.(prefs)).catch((error: unknown) => {
+      console.error("Failed to save display preferences:", error);
+    });
   }, 400);
 }
 

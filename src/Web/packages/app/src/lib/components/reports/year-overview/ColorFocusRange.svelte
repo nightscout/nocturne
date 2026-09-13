@@ -11,6 +11,7 @@
   } from "$lib/utils/formatting";
   import {
     colorFocusGradient,
+    glucoseColorFocusGradient,
     resolveColorFocusRange,
     resolveGlucoseColorThresholds,
     DEFAULT_GLUCOSE_COLOR_THRESHOLDS,
@@ -20,6 +21,8 @@
     type ColorFocusRange,
     type GlucoseColorThresholds,
   } from "$lib/utils/metric-color-focus";
+  import { GLUCOSE_HEATMAP_LEGEND_STOPS } from "$lib/utils/chart-colors";
+  import { untrack } from "svelte";
 
   let {
     metricLabel = "Average glucose",
@@ -32,7 +35,7 @@
     glucose = false,
     units = "mg/dl",
     thresholds = DEFAULT_GLUCOSE_COLOR_THRESHOLDS,
-    stops = [],
+    stops = GLUCOSE_HEATMAP_LEGEND_STOPS,
     onThresholdsChange = () => {},
   }: {
     metricLabel?: string;
@@ -70,7 +73,7 @@
   const inputStep = $derived(glucose ? (units === "mmol" ? 0.1 : 1) : "any");
   const gradient = $derived(
     glucose
-      ? `linear-gradient(to right in srgb, ${stops.map((stop) => `${stop.color} ${((stop.mgdl - minimum) / (maximum - minimum)) * 100}%`).join(", ")})`
+      ? glucoseColorFocusGradient(stops, thresholds, minimum, maximum)
       : colorFocusGradient(resolveColorFocusRange(values)!, maximum, cssVar)
   );
   const baseSliderSteps = $derived.by(() => {
@@ -106,12 +109,26 @@
   const accessibleLabel = (index: number) =>
     `${metricLabel} ${labels[index]} color ${glucose ? "boundary" : "value"}`;
 
+  // On an automatic range `values` tracks the observed maximum, which every lazily loaded
+  // year can raise; rewriting an unchanged draft would discard an edit in progress.
   $effect(() => {
-    drafts = values.map(display);
-    invalidBound = null;
+    const committed = values.map(display);
+    untrack(() => {
+      if (committed.every((value, index) => value === drafts[index])) return;
+      drafts = committed;
+      invalidBound = null;
+    });
   });
 
   function change(candidate: number[]): boolean {
+    // Bits UI re-runs its snap check on every flush, because the getter below hands it a
+    // fresh array each read; its re-offer of the held value must not persist.
+    if (
+      candidate.length === values.length &&
+      candidate.every((value, index) => value === values[index])
+    ) {
+      return true;
+    }
     if (glucose) {
       const next = resolveGlucoseColorThresholds(candidate);
       if (!next) return false;
@@ -278,17 +295,19 @@
       class="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 tabular-nums"
       aria-label="Glucose color zones"
     >
-      <span>Very low color: &lt; {formatted(values[0])}</span>
       <span>Low color: {formatted(values[0])}–{formatted(values[1])}</span>
       <span>In range color: {formatted(values[1])}–{formatted(values[2])}</span>
       <span>High color: {formatted(values[2])}–{formatted(values[3])}</span>
-      <span>Very high color: &gt; {formatted(values[3])} {unitLabel}</span>
+      <span>
+        One color outside {formatted(values[0])}–{formatted(values[3])}
+        {unitLabel}
+      </span>
     </div>
   {/if}
   <p id={id + "-description"} class="mt-2">
     {glucose
-      ? "Color scale only; glucose targets and Time in Range are unchanged. Controls reshape the continuous gradient."
-      : "Values outside the selected range use the end colors."}
+      ? "Color scale only; glucose targets and Time in Range are unchanged. Days below the first boundary and above the last share one color, so moving the boundaries inward colors only the middle of the scale."
+      : "Values outside the selected range share one faint color, so only the range you select is colored."}
   </p>
 </div>
 

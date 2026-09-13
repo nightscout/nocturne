@@ -5,8 +5,12 @@ import {
 } from "./chart-colors";
 import {
   colorFocusGradient,
+  glucoseColorFocusBand,
+  glucoseColorFocusGradient,
+  getFocusedGlucoseFill,
   insertSliderSteps,
   getFocusedIntensityFill,
+  outsideBandColor,
   resolveColorFocusRange,
   resolveGlucoseColorThresholds,
   glucoseColorFocusStops,
@@ -108,14 +112,27 @@ describe("glucoseColorFocusStops", () => {
 });
 
 describe("getFocusedIntensityFill", () => {
-  it("clamps outliers to the selected endpoint colors", () => {
+  it("gives both ends outside the range the same faint color", () => {
     const low = getFocusedIntensityFill(10, focus, cssVar);
     const high = getFocusedIntensityFill(70, focus, cssVar);
 
     expect(getFocusedIntensityFill(0, focus, cssVar)).toBe(low);
-    expect(getFocusedIntensityFill(500, focus, cssVar)).toBe(high);
+    expect(getFocusedIntensityFill(500, focus, cssVar)).toBe(low);
+    expect(getFocusedIntensityFill(9.99, focus, cssVar)).toBe(low);
+    expect(getFocusedIntensityFill(70.01, focus, cssVar)).toBe(low);
     expect(colorShare(low)).toBe(15);
     expect(colorShare(high)).toBe(100);
+  });
+
+  it("keeps the range itself inclusive at both boundaries", () => {
+    expect(colorShare(getFocusedIntensityFill(10, focus, cssVar))).toBe(15);
+    expect(colorShare(getFocusedIntensityFill(70, focus, cssVar))).toBe(100);
+  });
+
+  it("leaves a day with no value at the faintest color", () => {
+    expect(getFocusedIntensityFill(NaN, focus, cssVar)).toBe(
+      getFocusedIntensityFill(10, focus, cssVar)
+    );
   });
 
   it("makes 20, 40 and 60 distinguishable despite an observed outlier of 500", () => {
@@ -144,33 +161,100 @@ describe("getFocusedIntensityFill", () => {
 });
 
 describe("colorFocusGradient", () => {
-  it("uses the cell endpoint colors with flat ends outside the selected focus", () => {
-    const low = getFocusedIntensityFill(0, focus, cssVar);
-    const high = getFocusedIntensityFill(500, focus, cssVar);
+  it("ramps across the focus and cuts back to the same color at both ends", () => {
+    const outside = getFocusedIntensityFill(10, focus, cssVar);
+    const peak = getFocusedIntensityFill(70, focus, cssVar);
     const gradient = colorFocusGradient(focus, 500, cssVar);
 
-    expect(gradient).toContain(`${low} 0%, ${low} 2%`);
-    const highStop = gradient
-      .slice(gradient.indexOf(high) + high.length)
-      .match(/^ ([\d.]+)%/);
-    expect(Number(highStop?.[1])).toBeCloseTo(14);
-    expect(gradient).toContain(`${high} 100%)`);
     expect(gradient).toMatch(/^linear-gradient\(to right,/);
+    expect(gradient).toContain(`${outside} 0%, ${outside} 2%`);
+    const stops = gradient
+      .slice("linear-gradient(to right, ".length, -1)
+      .split(", color-mix")
+      .map((stop, index) => (index === 0 ? stop : `color-mix${stop}`));
+    const [peakStop, cutStop] = stops.slice(2, 4);
+    expect(peakStop.startsWith(peak)).toBe(true);
+    expect(cutStop.startsWith(outside)).toBe(true);
+    expect(peakStop.slice(peak.length)).toBe(cutStop.slice(outside.length));
+    expect(gradient).toContain(`${outside} 100%)`);
   });
 
   it("keeps the selected maximum in the legend when observed values decrease", () => {
-    const high = getFocusedIntensityFill(70, focus, cssVar);
+    const outside = getFocusedIntensityFill(10, focus, cssVar);
+    const peak = getFocusedIntensityFill(70, focus, cssVar);
 
     expect(colorFocusGradient(focus, 20, cssVar)).toContain(
-      `${high} 100%, ${high} 100%`
+      `${peak} 100%, ${outside} 100%`
     );
+  });
+});
+
+describe("glucose focus band", () => {
+  const stops = GLUCOSE_HEATMAP_LEGEND_STOPS;
+  const outside = "var(--glucose-heatmap-1)";
+
+  it("spans the outermost two boundaries", () => {
+    expect(glucoseColorFocusBand([60, 100, 200, 280])).toEqual([60, 280]);
+    expect(outsideBandColor(stops)).toBe(outside);
+  });
+
+  it("falls back to the defaults for an unusable saved value", () => {
+    expect(glucoseColorFocusBand([250, 180, 72, 54])).toEqual([54, 250]);
+  });
+
+  it("gives days on either side of the band the same color", () => {
+    const thresholds = [100, 120, 160, 180] as const;
+    const focused = glucoseColorFocusStops(thresholds);
+
+    expect(getFocusedGlucoseFill(60, thresholds, focused)).toBe(outside);
+    expect(getFocusedGlucoseFill(300, thresholds, focused)).toBe(outside);
+    expect(getFocusedGlucoseFill(300, thresholds, focused)).toBe(
+      getFocusedGlucoseFill(60, thresholds, focused)
+    );
+  });
+
+  it("colors the middle of the band from the ramp", () => {
+    const thresholds = [100, 120, 160, 180] as const;
+    const focused = glucoseColorFocusStops(thresholds);
+    const middle = getFocusedGlucoseFill(140, thresholds, focused);
+
+    expect(middle).not.toBe(outside);
+    expect(middle).toBe(getGlucoseHeatmapFill(140, focused));
+  });
+
+  it("includes both boundaries in the band", () => {
+    const thresholds = [100, 120, 160, 180] as const;
+    const focused = glucoseColorFocusStops(thresholds);
+
+    expect(getFocusedGlucoseFill(100, thresholds, focused)).toBe(
+      getGlucoseHeatmapFill(100, focused)
+    );
+    expect(getFocusedGlucoseFill(180, thresholds, focused)).toBe(
+      getGlucoseHeatmapFill(180, focused)
+    );
+    expect(getFocusedGlucoseFill(99, thresholds, focused)).toBe(outside);
+    expect(getFocusedGlucoseFill(181, thresholds, focused)).toBe(outside);
+  });
+
+  it("draws the legend as a flat block, the ramp, then the same flat block", () => {
+    const thresholds = [100, 120, 160, 180] as const;
+    const focused = glucoseColorFocusStops(thresholds);
+    const gradient = glucoseColorFocusGradient(focused, thresholds);
+    const at = (mgdl: number) => ((mgdl - 40) / (350 - 40)) * 100;
+
+    expect(gradient).toMatch(/^linear-gradient\(to right in srgb,/);
+    expect(gradient).toContain(`${outside} 0%, ${outside} ${at(100)}%`);
+    expect(gradient).toContain(`${outside} ${at(180)}%, ${outside} 100%)`);
+    expect(gradient).not.toContain("var(--glucose-heatmap-9)");
   });
 });
 
 describe("insertSliderSteps", () => {
   it("inserts exact bounds without mutating or sorting the base again", () => {
     const base = Object.freeze([0, 0.1, 0.2, 1]);
-    expect(insertSliderSteps(base, [0.15, 0.1, 2, 0.15])).toEqual([0, 0.1, 0.15, 0.2, 1, 2]);
+    expect(insertSliderSteps(base, [0.15, 0.1, 2, 0.15])).toEqual([
+      0, 0.1, 0.15, 0.2, 1, 2,
+    ]);
     expect(base).toEqual([0, 0.1, 0.2, 1]);
   });
 });
