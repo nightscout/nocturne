@@ -585,8 +585,10 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IBodyWeightService, BodyWeightService>();
         services.AddScoped<IStepCountService, StepCountService>();
 
-        // Tracker services
-        services.AddScoped<ITrackerTriggerService, TrackerTriggerService>();
+        // Tracker services. The trigger is the IDeviceEventReactor adapter rather than a service any
+        // caller invokes: it runs from the V4 device-event write chokepoint, which is what makes a
+        // connector-ingested site change advance a tracker the same way a hand-entered one does.
+        services.AddScoped<IDeviceEventReactor, TrackerTriggerService>();
         // Tracker notifications ride the alert engine: thresholds are synthesised into
         // managed tracker_age alert rules, backfilled once at startup for pre-existing
         // definitions (and self-healing if a managed rule is ever lost).
