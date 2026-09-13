@@ -26,6 +26,8 @@
     resolveColorFocusRange,
     resolveGlucoseColorThresholds,
     DEFAULT_GLUCOSE_COLOR_THRESHOLDS,
+    GLUCOSE_COLOR_MIN,
+    GLUCOSE_COLOR_MAX,
     glucoseColorFocusStops,
     type ColorFocusRange,
     type GlucoseColorThresholds,
@@ -79,6 +81,9 @@
   const glucoseThresholds = $derived(
     resolveGlucoseColorThresholds(colorFocusPreferences.avgGlucose) ?? DEFAULT_GLUCOSE_COLOR_THRESHOLDS
   );
+  const glucoseFocusBand = $derived(
+    resolveColorFocusRange(colorFocusPreferences.avgGlucoseBand)
+  );
   const glucoseLegendStops = $derived(
     glucoseColorFocusStops(glucoseThresholds)
   );
@@ -103,6 +108,15 @@
     const next = { ...colorFocusPreferences };
     if (thresholds) next.avgGlucose = [...thresholds];
     else delete next.avgGlucose;
+    yearOverviewColors.current = next;
+  }
+
+  function setGlucoseFocusBand(candidate: ColorFocusRange | null) {
+    const range = resolveColorFocusRange(candidate);
+    if (candidate !== null && !range) return;
+    const next = { ...colorFocusPreferences };
+    if (range) next.avgGlucoseBand = [...range];
+    else delete next.avgGlucoseBand;
     yearOverviewColors.current = next;
   }
 
@@ -217,8 +231,14 @@
     if (!data) return "rgb(0 0 0 / 5%)";
 
     if (selectedMetric === "avgGlucose") {
-      if (data.value != null && Number.isFinite(data.value))
-        return getGlucoseHeatmapFill(data.value, glucoseLegendStops);
+      if (data.value != null && Number.isFinite(data.value)) {
+        const baseColor = getGlucoseHeatmapFill(data.value, glucoseLegendStops);
+        const band = glucoseFocusBand ?? [GLUCOSE_COLOR_MIN, GLUCOSE_COLOR_MAX];
+        if (data.value < band[0] || data.value > band[1]) {
+          return `color-mix(in srgb, ${baseColor} 10%, transparent)`;
+        }
+        return baseColor;
+      }
       if (data.filteredCount > 0) return "var(--muted)";
       return "rgb(0 0 0 / 5%)";
     }
@@ -231,11 +251,16 @@
 
     const cssVar =
       METRIC_CSS_VARS[selectedMetric as Exclude<HeatmapMetric, "avgGlucose">];
-    return getFocusedIntensityFill(
+    const baseColor = getFocusedIntensityFill(
       metricValue,
-      focusRange ?? [0, metricMaxCached],
+      [0, metricMaxCached],
       cssVar
     );
+    const range = focusRange ?? [0, metricMaxCached];
+    if (metricValue < range[0] || metricValue > range[1]) {
+      return `color-mix(in srgb, ${baseColor} 10%, transparent)`;
+    }
+    return baseColor;
   }
 
   // =========================================================================
@@ -587,6 +612,8 @@
       onFocusRangeChange={setFocusRange}
       {glucoseThresholds}
       onGlucoseThresholdsChange={setGlucoseThresholds}
+      {glucoseFocusBand}
+      onGlucoseFocusBandChange={setGlucoseFocusBand}
     />
 
     <!-- Loading state for metadata -->

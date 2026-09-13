@@ -10,6 +10,26 @@ export const DEFAULT_GLUCOSE_COLOR_THRESHOLDS: GlucoseColorThresholds = [
 ];
 export const GLUCOSE_COLOR_MIN = GLUCOSE_HEATMAP_LEGEND_STOPS[0].mgdl;
 export const GLUCOSE_COLOR_MAX = GLUCOSE_HEATMAP_LEGEND_STOPS.at(-1)!.mgdl;
+export const DEFAULT_GLUCOSE_FOCUS_BAND: ColorFocusRange = [
+  GLUCOSE_COLOR_MIN,
+  GLUCOSE_COLOR_MAX,
+];
+
+export function resolveGlucoseFocusBand(
+  candidate: unknown
+): ColorFocusRange | null {
+  if (!Array.isArray(candidate) || candidate.length !== 2) return null;
+  const [min, max] = candidate;
+  return typeof min === "number" &&
+    typeof max === "number" &&
+    Number.isFinite(min) &&
+    Number.isFinite(max) &&
+    min >= GLUCOSE_COLOR_MIN &&
+    max > min &&
+    max <= GLUCOSE_COLOR_MAX
+    ? [min, max]
+    : null;
+}
 
 export function resolveGlucoseColorThresholds(
   candidate: unknown
