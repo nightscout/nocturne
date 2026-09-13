@@ -139,6 +139,7 @@
   let focusDrafts = $state<(number | undefined)[]>([]);
   let invalidBound = $state<number | null>(null);
   let invalidFocusBound = $state<number | null>(null);
+  let activeTab = $state<"focus" | "colors" | "settings">("focus");
 
   const display = (value: number) =>
     glucose ? convertToDisplayUnits(value, units) : value;
