@@ -446,8 +446,8 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
     }
 
     /// <summary>
-    /// Maps V3 consumable change series (ReservoirChange, SetSiteChange) to DeviceEvent records.
-    /// PumpAlarms are skipped here — they are handled by GlookoSystemEventMapper.
+    /// Maps V3 consumable change series (ReservoirChange, SetSiteChange, CgmSensorChange) to DeviceEvent
+    /// records. PumpAlarms are skipped here — they are handled by GlookoSystemEventMapper.
     /// </summary>
     public List<DeviceEvent> MapV3DeviceEvents(GlookoV3GraphResponse graphData)
     {
@@ -458,71 +458,63 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
 
         var series = graphData.Series;
 
-        if (series.ReservoirChange != null)
-        {
-            foreach (var change in series.ReservoirChange)
-            {
-                try
-                {
-                    var rawTimestamp = DateTimeOffset.FromUnixTimeSeconds(change.X).UtcDateTime;
-                    var correctedTimestamp = _timeMapper.GetCorrectedGlookoTime(change.X);
-                    var now = DateTime.UtcNow;
-
-                    deviceEvents.Add(new DeviceEvent
-                    {
-                        Id = Guid.CreateVersion7(),
-                        Timestamp = correctedTimestamp,
-                        LegacyId = GenerateLegacyId("reservoir_change", rawTimestamp),
-                        Device = _connectorSource,
-                        DataSource = _connectorSource,
-                        EventType = DeviceEventType.ReservoirChange,
-                        Notes = change.Label,
-                        CreatedAt = now,
-                        ModifiedAt = now
-                    });
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "[{ConnectorSource}] Error mapping V3 reservoir change at X={X}", _connectorSource, change.X);
-                }
-            }
-        }
-
-        if (series.SetSiteChange != null)
-        {
-            foreach (var change in series.SetSiteChange)
-            {
-                try
-                {
-                    var rawTimestamp = DateTimeOffset.FromUnixTimeSeconds(change.X).UtcDateTime;
-                    var correctedTimestamp = _timeMapper.GetCorrectedGlookoTime(change.X);
-                    var now = DateTime.UtcNow;
-
-                    deviceEvents.Add(new DeviceEvent
-                    {
-                        Id = Guid.CreateVersion7(),
-                        Timestamp = correctedTimestamp,
-                        LegacyId = GenerateLegacyId("site_change", rawTimestamp),
-                        Device = _connectorSource,
-                        DataSource = _connectorSource,
-                        EventType = DeviceEventType.SiteChange,
-                        Notes = change.Label,
-                        CreatedAt = now,
-                        ModifiedAt = now
-                    });
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "[{ConnectorSource}] Error mapping V3 site change at X={X}", _connectorSource, change.X);
-                }
-            }
-        }
+        // The legacy-id kind is the series' own identity, not the DeviceEventType name: it is hashed into
+        // the dedup key, so changing it would orphan every event already stored under the old spelling.
+        MapV3ConsumableSeries(series.ReservoirChange, DeviceEventType.ReservoirChange, "reservoir_change", deviceEvents);
+        MapV3ConsumableSeries(series.SetSiteChange, DeviceEventType.SiteChange, "site_change", deviceEvents);
+        MapV3ConsumableSeries(series.CgmSensorChange, DeviceEventType.SensorChange, "sensor_change", deviceEvents);
 
         _logger.LogInformation(
             "[{ConnectorSource}] Transformed {Count} device events from v3 data",
             _connectorSource, deviceEvents.Count);
 
         return deviceEvents;
+    }
+
+    /// <summary>
+    /// Appends one <see cref="DeviceEvent"/> per point of a v3 consumable-change series. The three series
+    /// share a point shape and differ only in the event type they carry, so one pass covers all of them.
+    /// </summary>
+    /// <param name="points">The series' points, or <c>null</c> when Glooko returned no such series.</param>
+    /// <param name="eventType">The device event type the series represents.</param>
+    /// <param name="legacyKind">Series identity hashed into the dedup key — see the call site.</param>
+    /// <param name="into">Accumulator the mapped events are appended to.</param>
+    private void MapV3ConsumableSeries(
+        GlookoV3ConsumableDataPoint[]? points,
+        DeviceEventType eventType,
+        string legacyKind,
+        List<DeviceEvent> into)
+    {
+        if (points == null)
+            return;
+
+        foreach (var change in points)
+        {
+            try
+            {
+                var rawTimestamp = DateTimeOffset.FromUnixTimeSeconds(change.X).UtcDateTime;
+                var correctedTimestamp = _timeMapper.GetCorrectedGlookoTime(change.X);
+                var now = DateTime.UtcNow;
+
+                into.Add(new DeviceEvent
+                {
+                    Id = Guid.CreateVersion7(),
+                    Timestamp = correctedTimestamp,
+                    LegacyId = GenerateLegacyId(legacyKind, rawTimestamp),
+                    Device = _connectorSource,
+                    DataSource = _connectorSource,
+                    EventType = eventType,
+                    Notes = change.Label,
+                    CreatedAt = now,
+                    ModifiedAt = now
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[{ConnectorSource}] Error mapping V3 {EventType} at X={X}",
+                    _connectorSource, eventType, change.X);
+            }
+        }
     }
 
     // ── V3 Histories: Meals → CarbIntake + ConnectorFoodEntryImport ────
