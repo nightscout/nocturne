@@ -52,6 +52,23 @@ describe("Google Health connector page", () => {
     await expect.element(page.getByRole("progressbar")).not.toBeInTheDocument();
   });
 
+  it("keeps category expansion choices while status polling refreshes", async () => {
+    googleHealthMocks.status.mockResolvedValue(status({ configured: true, connected: true }));
+    googleHealthMocks.preview.mockResolvedValue({ items: [
+      { dataType: "steps", granted: true, supported: true, count: 4 },
+      { dataType: "heart-rate", granted: true, supported: true, count: 6 },
+    ] });
+    render(GoogleHealthPage);
+
+    const vitals = page.getByTestId("google-health-category-Vitals");
+    await expect.element(vitals).toHaveAttribute("open");
+    await page.getByText("Vitals", { exact: true }).click();
+    await expect.element(vitals).not.toHaveAttribute("open");
+
+    await new Promise((resolve) => setTimeout(resolve, 2200));
+    await expect.element(vitals).not.toHaveAttribute("open");
+  });
+
   beforeEach(() => {
     vi.resetAllMocks();
     googleHealthMocks.status.mockResolvedValue(status());

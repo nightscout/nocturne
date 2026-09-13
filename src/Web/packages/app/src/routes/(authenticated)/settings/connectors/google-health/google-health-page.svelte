@@ -47,6 +47,7 @@
     inventoryBusy = $state(false),
     message = $state(""),
     notice = $state("");
+  let expandedGroups = $state<Record<string, boolean>>({});
   let purgeDialogOpen = $state(false);
   const patientRecordQuery = getPatientRecord();
   const patientRecord = $derived(patientRecordQuery.current ?? null);
@@ -612,7 +613,13 @@
               {#each categoryGroups as group (group.category)}
                 <details
                   class="overflow-hidden rounded-lg border"
-                  open={group.hasSelectableItem}
+                  data-testid={`google-health-category-${group.category}`}
+                  open={expandedGroups[group.category] ?? group.hasSelectableItem}
+                  ontoggle={(event) => {
+                    expandedGroups[group.category] = (
+                      event.currentTarget as HTMLDetailsElement
+                    ).open;
+                  }}
                 >
                   <summary
                     class="flex cursor-pointer items-center justify-between gap-3 px-4 py-3 font-medium"
