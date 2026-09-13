@@ -70,6 +70,11 @@
     connectorStatusesQuery.current ?? [],
   );
   const googleHealth = $derived(googleHealthQuery.current ?? null);
+  const otherDataSources = $derived(
+    (servicesOverview?.activeDataSources ?? []).filter(
+      (source) => source.sourceType !== "google-health-connector" && source.deviceId !== "google-health-connector",
+    ),
+  );
   const isLoading = $derived(
     servicesOverviewQuery.current === undefined,
   );
@@ -440,7 +445,7 @@
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {#if !googleHealth?.connected && (servicesOverview.activeDataSources?.length ?? 0) === 0}
+        {#if !googleHealth?.configured && otherDataSources.length === 0}
           <div class="text-center py-8 text-muted-foreground">
             <WifiOff class="h-12 w-12 mx-auto mb-4 opacity-50" />
             <p class="font-medium">No data sources detected</p>
@@ -450,10 +455,10 @@
           </div>
         {:else}
           <div class="space-y-3">
-            {#if googleHealth?.connected}
+            {#if googleHealth?.configured}
               <GoogleHealthSourceRow connection={googleHealth} />
             {/if}
-            {#each (servicesOverview.activeDataSources ?? []).filter((source) => source.sourceType !== "google-health-connector" && source.deviceId !== "google-health-connector") as source (source.id)}
+            {#each otherDataSources as source (source.id)}
               {@const matchingUploader = getMatchingUploader(source)}
               {@const isDemo = isDemoDataSource(source)}
               <DataSourceRow

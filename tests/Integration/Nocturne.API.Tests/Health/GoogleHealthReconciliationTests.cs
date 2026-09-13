@@ -40,13 +40,13 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         await using var db = Context();
         await db.Database.EnsureCreatedAsync();
         var migrations = db.GetService<IMigrationsAssembly>();
-        var generator = db.GetService<IMigrationsSqlGenerator>();
-        foreach (var entry in migrations.Migrations.Where(entry => entry.Key.Contains("GoogleHealthReconciliationStaging")))
+        var history = db.GetService<IHistoryRepository>();
+        await db.Database.ExecuteSqlRawAsync(history.GetCreateScript());
+        foreach (var migrationId in migrations.Migrations.Keys.Where(migrationId => !migrationId.Contains("GoogleHealthReconciliationStaging")))
         {
-            var migration = migrations.CreateMigration(entry.Value, db.Database.ProviderName!);
-            foreach (var command in generator.Generate(migration.UpOperations, db.Model))
-                await db.Database.ExecuteSqlRawAsync(command.CommandText);
+            await db.Database.ExecuteSqlRawAsync(history.GetInsertScript(new HistoryRow(migrationId, "10.0.0")));
         }
+        await db.Database.MigrateAsync();
         db.Tenants.AddRange(
             new TenantEntity { Id = tenantId, Slug = "google-test", DisplayName = "Synthetic", IsActive = true },
             new TenantEntity { Id = otherTenantId, Slug = "google-other", DisplayName = "Synthetic other", IsActive = true });
@@ -165,6 +165,88 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         await writer.AbandonReconciliationAsync(otherRun, default);
         Assert.Equal(0, await CountAsync(db, "google_health_reconciliation_ids"));
     }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Migration_replaces_unregistered_staging_without_changing_native_health_data(bool bothTables)
+    {
+        await using var db = Context();
+        await ResetStagingMigrationAsync(db);
+        await db.Database.ExecuteSqlRawAsync("CREATE TABLE google_health_reconciliation_runs (legacy_value text)");
+        if (bothTables)
+            await db.Database.ExecuteSqlRawAsync("CREATE TABLE google_health_reconciliation_ids (legacy_value text)");
+        db.TenantId = tenantId;
+        var timestamp = from.UtcDateTime;
+        db.HeartRates.Add(new HeartRateEntity { Id = Guid.NewGuid(), Timestamp = timestamp, Bpm = 60, DataSource = GoogleHealthReadingWriter.Source, SyncIdentifier = "preserved" });
+        db.StepCounts.Add(new StepCountEntity { Id = Guid.NewGuid(), Timestamp = timestamp, Metric = 42, DataSource = GoogleHealthReadingWriter.Source, SyncIdentifier = "preserved" });
+        db.BodyWeights.Add(new BodyWeightEntity { Id = Guid.NewGuid(), Mills = from.ToUnixTimeMilliseconds(), WeightKg = 70, DataSource = GoogleHealthReadingWriter.Source, SyncIdentifier = "preserved" });
+        db.SleepSessions.Add(new SleepSessionEntity { Id = Guid.NewGuid(), StartTime = timestamp, EndTime = timestamp.AddHours(8), Source = "Google", SourceApp = "Google Health", OriginalId = "preserved" });
+        await db.SaveChangesAsync();
+        var notices = new List<string>();
+        ((NpgsqlConnection)db.Database.GetDbConnection()).Notice += (_, args) => notices.Add(args.Notice.MessageText);
+
+        await db.Database.MigrateAsync();
+
+        Assert.Contains(notices, notice => notice.StartsWith("Replacing unregistered Google Health reconciliation staging tables."));
+        Assert.Equal(2, (await db.Database.GetAppliedMigrationsAsync()).Count(migration => migration.Contains("GoogleHealthReconciliationStaging")));
+        Assert.Equal("preserved", (await db.HeartRates.AsNoTracking().SingleAsync()).SyncIdentifier);
+        Assert.Equal("preserved", (await db.StepCounts.AsNoTracking().SingleAsync()).SyncIdentifier);
+        Assert.Equal("preserved", (await db.BodyWeights.AsNoTracking().SingleAsync()).SyncIdentifier);
+        Assert.Equal("preserved", (await db.SleepSessions.AsNoTracking().SingleAsync()).OriginalId);
+        var writer = Writer(db);
+        var run = await writer.BeginReconciliationAsync(["steps"], from, from.AddDays(1), default);
+        await writer.StageReconciliationIdsAsync(run, "steps", ["preserved"], default);
+        await writer.CompleteReconciliationAsync(run, default);
+        Assert.Equal(0, await CountAsync(db, "google_health_reconciliation_runs"));
+        Assert.Equal(1, await db.StepCounts.CountAsync());
+    }
+
+    [Fact]
+    public async Task Migration_conflict_with_an_external_dependency_rolls_back_without_cascade()
+    {
+        await using var db = Context();
+        await ResetStagingMigrationAsync(db);
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE google_health_reconciliation_runs (legacy_value text);
+            INSERT INTO google_health_reconciliation_runs VALUES ('preserved-run');
+            CREATE TABLE google_health_reconciliation_ids (legacy_value text);
+            INSERT INTO google_health_reconciliation_ids VALUES ('preserved-id');
+            CREATE VIEW external_staging_dependency AS SELECT * FROM google_health_reconciliation_runs;
+            """);
+
+        var exception = await Assert.ThrowsAsync<PostgresException>(() => db.Database.MigrateAsync());
+
+        Assert.Equal(PostgresErrorCodes.DependentObjectsStillExist, exception.SqlState);
+        Assert.Equal(1, await CountAsync(db, "google_health_reconciliation_runs"));
+        Assert.Equal(1, await CountAsync(db, "google_health_reconciliation_ids"));
+        Assert.Equal(1, await CountAsync(db, "external_staging_dependency"));
+        Assert.DoesNotContain(await db.Database.GetAppliedMigrationsAsync(), migration => migration.Contains("GoogleHealthReconciliationStaging"));
+    }
+
+    [Fact]
+    public async Task Registered_migrations_do_not_replace_existing_staging_on_restart()
+    {
+        await using var db = Context();
+        db.TenantId = tenantId;
+        var writer = Writer(db);
+        var run = await writer.BeginReconciliationAsync(["steps"], from, from.AddDays(1), default);
+        await writer.StageReconciliationIdsAsync(run, "steps", ["existing-id"], default);
+
+        await db.Database.MigrateAsync();
+
+        Assert.Equal(1, await CountAsync(db, "google_health_reconciliation_runs"));
+        Assert.Equal(1, await CountAsync(db, "google_health_reconciliation_ids"));
+        Assert.Empty(await db.Database.GetPendingMigrationsAsync());
+    }
+
+    private static Task ResetStagingMigrationAsync(NocturneDbContext db) => db.Database.ExecuteSqlRawAsync("""
+        DROP TABLE google_health_reconciliation_ids;
+        DROP TABLE google_health_reconciliation_runs;
+        DELETE FROM "__EFMigrationsHistory" WHERE "MigrationId" IN (
+            '20260913000000_AddGoogleHealthReconciliationStaging',
+            '20260913120000_SecureGoogleHealthReconciliationStaging');
+        """);
 
     private NocturneDbContext Context(DbCommandInterceptor? interceptor = null)
     {
