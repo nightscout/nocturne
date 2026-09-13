@@ -36,8 +36,8 @@
     thresholds = DEFAULT_GLUCOSE_COLOR_THRESHOLDS,
     stops = [],
     onThresholdsChange = () => {},
-    glucoseFocusBand = null,
-    onGlucoseFocusBandChange = () => {},
+    focusBand = null,
+    onFocusBandChange = () => {},
   }: {
     metricLabel?: string;
     unit?: string;
@@ -51,8 +51,8 @@
     thresholds?: GlucoseColorThresholds;
     stops?: ReadonlyArray<{ mgdl: number; color: string }>;
     onThresholdsChange?: (values: GlucoseColorThresholds | null) => void;
-    glucoseFocusBand?: ColorFocusRange | null;
-    onGlucoseFocusBandChange?: (values: [number, number] | null) => void;
+    focusBand?: ColorFocusRange | null;
+    onFocusBandChange?: (values: [number, number] | null) => void;
   } = $props();
 
   const id = $props.id();
@@ -63,18 +63,18 @@
   const values: readonly number[] = $derived(
     glucose ? thresholds : (focusRange ?? [0, automaticMax])
   );
-  const focusBandValues: readonly number[] = $derived(
-    glucoseFocusBand ?? DEFAULT_GLUCOSE_FOCUS_BAND
-  );
   const minimum = $derived(glucose ? GLUCOSE_COLOR_MIN : 0);
   const maximum = $derived(
     glucose
       ? GLUCOSE_COLOR_MAX
       : (fixedMax ?? Math.max(automaticMax, values[1], 1))
   );
+  const focusBandValues: readonly number[] = $derived(
+    focusBand ?? (glucose ? DEFAULT_GLUCOSE_FOCUS_BAND : [minimum, maximum])
+  );
   const unitLabel = $derived(glucose ? getUnitLabel(units) : unit);
   const labels = $derived(
-    glucose ? ["Very low", "Low", "High", "Very high"] : ["Min lijn", "Max lijn"]
+    glucose ? ["Very low", "Low", "High", "Very high"] : ["Min kleur", "Max kleur"]
   );
   const inputStep = $derived(glucose ? (units === "mmol" ? 0.1 : 1) : "any");
   const gradient = $derived(
@@ -84,13 +84,11 @@
   );
 
   const activeBandLeftPercent = $derived.by(() => {
-    const minVal = glucose ? focusBandValues[0] : values[0];
-    return Math.max(0, Math.min(100, ((minVal - minimum) / (maximum - minimum)) * 100));
+    return Math.max(0, Math.min(100, ((focusBandValues[0] - minimum) / (maximum - minimum)) * 100));
   });
 
   const activeBandRightPercent = $derived.by(() => {
-    const maxVal = glucose ? focusBandValues[1] : values[1];
-    return Math.max(0, Math.min(100, ((maxVal - minimum) / (maximum - minimum)) * 100));
+    return Math.max(0, Math.min(100, ((focusBandValues[1] - minimum) / (maximum - minimum)) * 100));
   });
 
   const baseSliderSteps = $derived.by(() => {
@@ -138,10 +136,8 @@
   $effect(() => {
     drafts = values.map(display);
     invalidBound = null;
-    if (glucose) {
-      focusDrafts = focusBandValues.map(display);
-      invalidFocusBound = null;
-    }
+    focusDrafts = focusBandValues.map(display);
+    invalidFocusBound = null;
   });
 
   function change(candidate: number[]): boolean {
@@ -158,9 +154,11 @@
   }
 
   function changeFocusBand(candidate: number[]): boolean {
-    const next = resolveGlucoseFocusBand(candidate);
-    if (!next) return false;
-    onGlucoseFocusBandChange([next[0], next[1]]);
+    const next = glucose
+      ? resolveGlucoseFocusBand(candidate)
+      : resolveColorFocusRange(candidate);
+    if (!next || (fixedMax !== undefined && next[1] > fixedMax)) return false;
+    onFocusBandChange([next[0], next[1]]);
     return true;
   }
 
@@ -198,27 +196,31 @@
       return;
     }
     const next = [...focusBandValues];
-    next[index] = convertFromDisplayUnits(input.valueAsNumber, units);
+    next[index] = glucose
+      ? convertFromDisplayUnits(input.valueAsNumber, units)
+      : input.valueAsNumber;
     invalidFocusBound = changeFocusBand(next) ? null : index;
   }
 
   function reset() {
     if (glucose) {
       onThresholdsChange(null);
-      onGlucoseFocusBandChange(null);
+      onFocusBandChange(null);
       drafts = DEFAULT_GLUCOSE_COLOR_THRESHOLDS.map(display);
       focusDrafts = DEFAULT_GLUCOSE_FOCUS_BAND.map(display);
     } else {
       onFocusRangeChange(null);
+      onFocusBandChange(null);
       drafts = [0, automaticMax].map(display);
+      focusDrafts = [0, automaticMax].map(display);
     }
     invalidBound = null;
     invalidFocusBound = null;
   }
 
   function resetFocusBand() {
-    onGlucoseFocusBandChange(null);
-    focusDrafts = DEFAULT_GLUCOSE_FOCUS_BAND.map(display);
+    onFocusBandChange(null);
+    focusDrafts = (glucose ? DEFAULT_GLUCOSE_FOCUS_BAND : [minimum, maximum]).map(display);
     invalidFocusBound = null;
   }
 </script>
@@ -229,6 +231,7 @@
 >
   <div class="print:hidden">
     <div class="relative flex h-10 w-full items-center">
+      <!-- 1. Color gradient & Color scaling bullets -->
       <Slider.Root
         type="multiple"
         min={minimum}
@@ -274,43 +277,40 @@
               index={thumb.index}
               aria-label={accessibleLabel(thumb.index)}
               aria-valuetext={`${formatted(thumb.value)} ${unitLabel}`}
-              class={glucose
-                ? "block size-5 shrink-0 rounded-full border-2 border-foreground bg-background shadow-sm before:absolute before:-inset-3 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/50"
-                : "block w-2.5 h-7 -mt-0.5 rounded-sm border-2 border-foreground bg-background shadow-md cursor-ew-resize before:absolute before:-inset-3 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/50"}
+              class="block size-5 shrink-0 rounded-full border-2 border-foreground bg-background shadow-sm before:absolute before:-inset-3 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/50 cursor-pointer"
             />
           {/each}
         {/snippet}
       </Slider.Root>
 
-      {#if glucose}
-        <Slider.Root
-          type="multiple"
-          min={minimum}
-          max={maximum}
-          step={focusSliderSteps}
-          autoSort={false}
-          thumbPositioning="exact"
-          bind:value={
-            () => [...focusBandValues],
-            (next) => {
-              changeFocusBand(next);
-            }
+      <!-- 2. Focus lines (90% transparency boundary) -->
+      <Slider.Root
+        type="multiple"
+        min={minimum}
+        max={maximum}
+        step={focusSliderSteps}
+        autoSort={false}
+        thumbPositioning="exact"
+        bind:value={
+          () => [...focusBandValues],
+          (next) => {
+            changeFocusBand(next);
           }
-          class="absolute inset-0 flex h-10 w-full touch-none select-none items-center pointer-events-none"
-          aria-label="Average glucose focus lines"
-        >
-          {#snippet children({ thumbItems })}
-            {#each thumbItems as thumb (thumb.index)}
-              <Slider.Thumb
-                index={thumb.index}
-                aria-label={thumb.index === 0 ? "Focus minimum line" : "Focus maximum line"}
-                aria-valuetext={`${formatted(thumb.value)} ${unitLabel}`}
-                class="pointer-events-auto block w-2.5 h-7 -mt-0.5 rounded-sm border-2 border-foreground bg-background shadow-md cursor-ew-resize before:absolute before:-inset-3 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/50"
-              />
-            {/each}
-          {/snippet}
-        </Slider.Root>
-      {/if}
+        }
+        class="absolute inset-0 flex h-10 w-full touch-none select-none items-center pointer-events-none"
+        aria-label={`${metricLabel} focus lines`}
+      >
+        {#snippet children({ thumbItems })}
+          {#each thumbItems as thumb (thumb.index)}
+            <Slider.Thumb
+              index={thumb.index}
+              aria-label={thumb.index === 0 ? "Focus minimum line" : "Focus maximum line"}
+              aria-valuetext={`${formatted(thumb.value)} ${unitLabel}`}
+              class="pointer-events-auto block w-2.5 h-7 -mt-0.5 rounded-sm border-2 border-foreground bg-background shadow-md cursor-ew-resize before:absolute before:-inset-3 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/50"
+            />
+          {/each}
+        {/snippet}
+      </Slider.Root>
     </div>
 
     <div class="mb-2 flex justify-between tabular-nums" aria-hidden="true">
@@ -318,104 +318,86 @@
       <span>{formatted(maximum)} {unitLabel}</span>
     </div>
 
-    {#if glucose}
-      <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {#each labels as label, index}
-          <div class="min-w-0">
-            <label for={id + "-bound-" + index} class="mb-1 block text-muted-foreground">
-              Color: {label.toLowerCase()}
-            </label>
-            <Input
-              id={id + "-bound-" + index}
-              type="number"
-              inputmode="decimal"
-              min={display(minimum)}
-              max={display(maximum)}
-              step={inputStep}
-              bind:value={drafts[index]}
-              oninput={(event: Event & { currentTarget: HTMLInputElement }) =>
-                changeBound(index, event)}
-              aria-label={accessibleLabel(index)}
-              aria-invalid={invalidBound === index}
-              class="h-8 w-full px-2 text-xs tabular-nums"
-            />
-          </div>
-        {/each}
-      </div>
+    <!-- Row 1: Kleur schaal bolletjes inputs -->
+    <div
+      class={glucose
+        ? "grid grid-cols-2 gap-2 sm:grid-cols-4"
+        : "flex flex-wrap items-end gap-2"}
+    >
+      {#each labels as label, index}
+        <div class="min-w-0">
+          <label for={id + "-bound-" + index} class="mb-1 block text-muted-foreground">
+            {glucose ? `Color: ${label.toLowerCase()}` : label}
+          </label>
+          <Input
+            id={id + "-bound-" + index}
+            type="number"
+            inputmode="decimal"
+            min={display(minimum)}
+            max={glucose ? display(maximum) : fixedMax}
+            step={inputStep}
+            bind:value={drafts[index]}
+            oninput={(event: Event & { currentTarget: HTMLInputElement }) =>
+              changeBound(index, event)}
+            aria-label={accessibleLabel(index)}
+            aria-invalid={invalidBound === index}
+            class={glucose
+              ? "h-8 w-full px-2 text-xs tabular-nums"
+              : "h-8 w-20 px-2 text-xs tabular-nums"}
+          />
+        </div>
+      {/each}
+      {#if !glucose}<span class="pb-2">{unitLabel}</span>{/if}
+    </div>
 
-      <div class="mt-2.5 pt-2 border-t border-border/50 flex flex-wrap items-center gap-2 text-xs">
-        <span class="font-medium text-foreground/80">Lijnen (90% transparant buiten):</span>
-        <div class="flex items-center gap-1.5">
-          <label for={id + "-focus-min"} class="text-muted-foreground">Min:</label>
-          <Input
-            id={id + "-focus-min"}
-            type="number"
-            inputmode="decimal"
-            min={display(minimum)}
-            max={display(maximum)}
-            step={inputStep}
-            bind:value={focusDrafts[0]}
-            oninput={(event: Event & { currentTarget: HTMLInputElement }) =>
-              changeFocusBound(0, event)}
-            aria-invalid={invalidFocusBound === 0}
-            class="h-7 w-20 px-2 text-xs tabular-nums"
-          />
-        </div>
-        <div class="flex items-center gap-1.5">
-          <label for={id + "-focus-max"} class="text-muted-foreground">Max:</label>
-          <Input
-            id={id + "-focus-max"}
-            type="number"
-            inputmode="decimal"
-            min={display(minimum)}
-            max={display(maximum)}
-            step={inputStep}
-            bind:value={focusDrafts[1]}
-            oninput={(event: Event & { currentTarget: HTMLInputElement }) =>
-              changeFocusBound(1, event)}
-            aria-invalid={invalidFocusBound === 1}
-            class="h-7 w-20 px-2 text-xs tabular-nums"
-          />
-        </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          class="h-7 px-2 text-xs text-muted-foreground"
-          onclick={resetFocusBand}
-        >
-          Reset lijnen
-        </Button>
+    <!-- Row 2: Focus lijnen (90% transparant) inputs -->
+    <div class="mt-2.5 pt-2 border-t border-border/50 flex flex-wrap items-center gap-2 text-xs">
+      <span class="font-medium text-foreground/80">Lijnen (90% transparant buiten):</span>
+      <div class="flex items-center gap-1.5">
+        <label for={id + "-focus-min"} class="text-muted-foreground">Min:</label>
+        <Input
+          id={id + "-focus-min"}
+          type="number"
+          inputmode="decimal"
+          min={display(minimum)}
+          max={glucose ? display(maximum) : fixedMax}
+          step={inputStep}
+          bind:value={focusDrafts[0]}
+          oninput={(event: Event & { currentTarget: HTMLInputElement }) =>
+            changeFocusBound(0, event)}
+          aria-invalid={invalidFocusBound === 0}
+          class="h-7 w-20 px-2 text-xs tabular-nums"
+        />
       </div>
-    {:else}
-      <div class="flex flex-wrap items-end gap-2">
-        {#each labels as label, index}
-          <div class="min-w-0">
-            <label for={id + "-bound-" + index} class="mb-1 block">
-              {label}
-            </label>
-            <Input
-              id={id + "-bound-" + index}
-              type="number"
-              inputmode="decimal"
-              min={0}
-              max={fixedMax}
-              step={inputStep}
-              bind:value={drafts[index]}
-              oninput={(event: Event & { currentTarget: HTMLInputElement }) =>
-                changeBound(index, event)}
-              aria-label={accessibleLabel(index)}
-              aria-invalid={invalidBound === index}
-              class="h-8 w-20 px-2 text-xs tabular-nums"
-            />
-          </div>
-        {/each}
-        <span class="pb-2">{unitLabel}</span>
+      <div class="flex items-center gap-1.5">
+        <label for={id + "-focus-max"} class="text-muted-foreground">Max:</label>
+        <Input
+          id={id + "-focus-max"}
+          type="number"
+          inputmode="decimal"
+          min={display(minimum)}
+          max={glucose ? display(maximum) : fixedMax}
+          step={inputStep}
+          bind:value={focusDrafts[1]}
+          oninput={(event: Event & { currentTarget: HTMLInputElement }) =>
+            changeFocusBound(1, event)}
+          aria-invalid={invalidFocusBound === 1}
+          class="h-7 w-20 px-2 text-xs tabular-nums"
+        />
       </div>
-    {/if}
+      <Button
+        variant="ghost"
+        size="sm"
+        class="h-7 px-2 text-xs text-muted-foreground"
+        onclick={resetFocusBand}
+      >
+        Reset lijnen
+      </Button>
+    </div>
 
     <div class="mt-2 flex items-center justify-between gap-2">
       <span class="text-[11px] text-muted-foreground">
-        {glucose ? unitLabel : "90% transparant buiten de lijnen"}
+        {glucose ? unitLabel : ""}
       </span>
       <Button
         variant="outline"
@@ -435,9 +417,9 @@
             ? "Voer vier oplopende kleurwaarden in."
             : "Voer een geldige min- en maxlijn in (min < max)."}
         {:else}
-          Voer een minimum van 0 of meer in en een maximum groter dan het minimum{fixedMax !== undefined
-            ? `, tot ${fixedMax} ${unitLabel}`
-            : ""}.
+          {invalidBound !== null
+            ? `Voer geldige kleurwaarden in (min < max).`
+            : `Voer geldige focuslijnen in (min < max).`}
         {/if}
       </p>
     {/if}
@@ -471,7 +453,7 @@
   <p id={id + "-description"} class="mt-2">
     {glucose
       ? "Kleurschaal en focuslijnen; waarden buiten de lijnen worden 90% transparant."
-      : "Waarden buiten de gekozen lijnen worden 90% transparant."}
+      : "Bolletjes bepalen de kleurintensiteit; waarden buiten de lijnen worden 90% transparant."}
   </p>
 </div>
 

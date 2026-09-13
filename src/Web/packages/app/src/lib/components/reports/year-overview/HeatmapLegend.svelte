@@ -23,8 +23,8 @@
     onFocusRangeChange = () => {},
     glucoseThresholds,
     onGlucoseThresholdsChange = () => {},
-    glucoseFocusBand = null,
-    onGlucoseFocusBandChange = () => {},
+    focusBand = null,
+    onFocusBandChange = () => {},
   } = $props<{
     selectedMetric: HeatmapMetric;
     units: GlucoseUnits;
@@ -36,8 +36,8 @@
     onFocusRangeChange?: (range: [number, number] | null) => void;
     glucoseThresholds: GlucoseThresholds;
     onGlucoseThresholdsChange?: (value: GlucoseThresholds | null) => void;
-    glucoseFocusBand?: readonly [number, number] | null;
-    onGlucoseFocusBandChange?: (value: [number, number] | null) => void;
+    focusBand?: readonly [number, number] | null;
+    onFocusBandChange?: (value: [number, number] | null) => void;
   }>();
 </script>
 
@@ -73,8 +73,8 @@
         thresholds={glucoseThresholds}
         stops={HEATMAP_STOPS}
         onThresholdsChange={onGlucoseThresholdsChange}
-        {glucoseFocusBand}
-        {onGlucoseFocusBandChange}
+        {focusBand}
+        {onFocusBandChange}
       />
       <div class="flex items-center gap-1.5 text-xs text-muted-foreground">
         <span
@@ -129,6 +129,8 @@
           fixedMax={selectedMetric === "tir" ? 100 : undefined}
           {focusRange}
           {onFocusRangeChange}
+          {focusBand}
+          {onFocusBandChange}
         />
       {/key}
       <div class="flex items-center gap-1.5 text-xs text-muted-foreground">

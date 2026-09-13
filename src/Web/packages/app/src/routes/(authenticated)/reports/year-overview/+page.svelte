@@ -78,11 +78,15 @@
       ? null
       : resolveColorFocusRange(colorFocusPreferences[selectedMetric])
   );
+  const focusBand = $derived.by(() => {
+    if (selectedMetric === "avgGlucose") {
+      return resolveColorFocusRange(colorFocusPreferences.avgGlucoseBand);
+    }
+    const bandKey = `${selectedMetric}Band` as keyof typeof colorFocusPreferences;
+    return resolveColorFocusRange(colorFocusPreferences[bandKey]);
+  });
   const glucoseThresholds = $derived(
     resolveGlucoseColorThresholds(colorFocusPreferences.avgGlucose) ?? DEFAULT_GLUCOSE_COLOR_THRESHOLDS
-  );
-  const glucoseFocusBand = $derived(
-    resolveColorFocusRange(colorFocusPreferences.avgGlucoseBand)
   );
   const glucoseLegendStops = $derived(
     glucoseColorFocusStops(glucoseThresholds)
@@ -111,12 +115,19 @@
     yearOverviewColors.current = next;
   }
 
-  function setGlucoseFocusBand(candidate: ColorFocusRange | null) {
+  function setFocusBand(candidate: ColorFocusRange | null) {
     const range = resolveColorFocusRange(candidate);
-    if (candidate !== null && !range) return;
+    if (
+      candidate !== null &&
+      (!range || (selectedMetric === "tir" && range[1] > 100))
+    )
+      return;
+    const bandKey = (selectedMetric === "avgGlucose"
+      ? "avgGlucoseBand"
+      : `${selectedMetric}Band`) as keyof typeof colorFocusPreferences;
     const next = { ...colorFocusPreferences };
-    if (range) next.avgGlucoseBand = [...range];
-    else delete next.avgGlucoseBand;
+    if (range) next[bandKey] = [...range];
+    else delete next[bandKey];
     yearOverviewColors.current = next;
   }
 
@@ -233,7 +244,7 @@
     if (selectedMetric === "avgGlucose") {
       if (data.value != null && Number.isFinite(data.value)) {
         const baseColor = getGlucoseHeatmapFill(data.value, glucoseLegendStops);
-        const band = glucoseFocusBand ?? [GLUCOSE_COLOR_MIN, GLUCOSE_COLOR_MAX];
+        const band = focusBand ?? [GLUCOSE_COLOR_MIN, GLUCOSE_COLOR_MAX];
         if (data.value < band[0] || data.value > band[1]) {
           return `color-mix(in srgb, ${baseColor} 10%, transparent)`;
         }
@@ -253,11 +264,11 @@
       METRIC_CSS_VARS[selectedMetric as Exclude<HeatmapMetric, "avgGlucose">];
     const baseColor = getFocusedIntensityFill(
       metricValue,
-      [0, metricMaxCached],
+      focusRange ?? [0, metricMaxCached],
       cssVar
     );
-    const range = focusRange ?? [0, metricMaxCached];
-    if (metricValue < range[0] || metricValue > range[1]) {
+    const band = focusBand ?? [0, metricMaxCached];
+    if (metricValue < band[0] || metricValue > band[1]) {
       return `color-mix(in srgb, ${baseColor} 10%, transparent)`;
     }
     return baseColor;
@@ -612,8 +623,8 @@
       onFocusRangeChange={setFocusRange}
       {glucoseThresholds}
       onGlucoseThresholdsChange={setGlucoseThresholds}
-      {glucoseFocusBand}
-      onGlucoseFocusBandChange={setGlucoseFocusBand}
+      {focusBand}
+      onFocusBandChange={setFocusBand}
     />
 
     <!-- Loading state for metadata -->
