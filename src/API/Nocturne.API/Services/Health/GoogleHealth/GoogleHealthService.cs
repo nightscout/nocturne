@@ -222,9 +222,11 @@ public sealed class GoogleHealthService(
     private async Task<GoogleHealthTokenSession> RefreshSessionAsync(
         GoogleHealthOptions settings,
         GoogleHealthTokenSession token,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool forceRefresh = false)
     {
         await oauth.SeedSessionAsync(token);
+        if (forceRefresh) oauth.InvalidateToken();
         var accessToken = await oauth.GetValidTokenAsync(Configuration(settings, token.RefreshToken), ct);
         if (string.IsNullOrWhiteSpace(accessToken))
             throw new GoogleHealthException("invalid_token_response", stage: "token_refresh");
@@ -323,12 +325,6 @@ public sealed class GoogleHealthService(
 
             coordinator.Flows.TryRemove(TenantId, out _);
             await SaveOptionsAsync(options, subject, ct);
-            await connectorConfigurations.UpdateHealthStateAsync(
-                ConnectorName,
-                lastErrorMessage: string.Empty,
-                lastErrorAt: DateTime.MinValue,
-                isHealthy: true,
-                ct: ct);
         }
         finally
         {
@@ -531,62 +527,76 @@ public sealed class GoogleHealthService(
             }
 
             var from = now - PreviewWindow;
-            var items = new List<GoogleHealthPreviewItem>();
-            foreach (var capability in GoogleHealthClient.Capabilities)
+            try
             {
-                var type = capability.DataType;
-                if (!capability.Supported)
-                {
-                    items.Add(new GoogleHealthPreviewItem
-                    {
-                        DataType = type,
-                        Supported = false
-                    });
-                    continue;
-                }
-                var granted = token.Scopes.Contains(GoogleHealthClient.ScopeFor(type), StringComparer.Ordinal);
-                if (!granted)
-                {
-                    items.Add(new GoogleHealthPreviewItem
-                    {
-                        DataType = type,
-                        Granted = false,
-                        Supported = capability.Supported
-                    });
-                    continue;
-                }
+                return await ReadInventoryAsync(token, from, now, previewCt);
+            }
+            catch (GoogleHealthException first) when (first.Message == "access_token_rejected")
+            {
+                token = await RefreshSessionAsync(settings, token, previewCt, forceRefresh: true);
+                var account = await AccountKeyAsync(previewCt) ??
+                    await oauth.AccountKeyAsync(token.AccessToken!, previewCt);
+                await SaveSessionAsync(settings, token, account, subject, previewCt);
                 try
                 {
-                    var count = await google.CountAsync(token.AccessToken!, type, from, now, previewCt);
-                    items.Add(new GoogleHealthPreviewItem
-                    {
-                        DataType = type,
-                        Granted = true,
-                        Count = count,
-                        Supported = capability.Supported
-                    });
+                    return await ReadInventoryAsync(token, from, now, previewCt);
                 }
-                catch (GoogleHealthException ex)
+                catch (GoogleHealthException second) when (second.Message == "access_token_rejected")
                 {
-                    items.Add(new GoogleHealthPreviewItem
-                    {
-                        DataType = type,
-                        Granted = true,
-                        ErrorCode = ex.Message,
-                        Supported = capability.Supported
-                    });
+                    throw new GoogleHealthException("reconnect_required", stage: second.Stage,
+                        dataType: second.DataType, providerReason: second.ProviderReason,
+                        providerStatus: second.ProviderStatus);
                 }
             }
-            return new GoogleHealthPreview { Items = items.ToArray() };
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
             throw new GoogleHealthException("google_unavailable", stage: "preview_timeout");
         }
+        catch (GoogleHealthException ex) when (ex.Message == "reconnect_required")
+        {
+            oauth.InvalidateToken();
+            await RemoveSessionAsync(subject, removeAccount: false, ct);
+            await connectorConfigurations.UpdateHealthStateAsync(ConnectorName,
+                lastErrorMessage: GoogleHealthErrorCode.Encode(ex.Message, ex.DataType is null ? null : [ex.DataType]),
+                lastErrorAt: DateTime.UtcNow, isHealthy: false, ct: ct);
+            throw;
+        }
         finally
         {
             gate.Release();
         }
+    }
+
+    private async Task<GoogleHealthPreview> ReadInventoryAsync(
+        GoogleHealthTokenSession token, DateTimeOffset from, DateTimeOffset to, CancellationToken ct)
+    {
+        var items = new List<GoogleHealthPreviewItem>();
+        foreach (var capability in GoogleHealthClient.Capabilities)
+        {
+            var type = capability.DataType;
+            if (!capability.Supported)
+            {
+                items.Add(new GoogleHealthPreviewItem { DataType = type, Supported = false });
+                continue;
+            }
+            var granted = token.Scopes.Contains(GoogleHealthClient.ScopeFor(type), StringComparer.Ordinal);
+            if (!granted)
+            {
+                items.Add(new GoogleHealthPreviewItem { DataType = type, Granted = false, Supported = true });
+                continue;
+            }
+            try
+            {
+                var count = await google.CountAsync(token.AccessToken!, type, from, to, ct);
+                items.Add(new GoogleHealthPreviewItem { DataType = type, Granted = true, Count = count, Supported = true });
+            }
+            catch (GoogleHealthException ex) when (ex.Message != "access_token_rejected")
+            {
+                items.Add(new GoogleHealthPreviewItem { DataType = type, Granted = true, ErrorCode = ex.Message, Supported = true });
+            }
+        }
+        return new GoogleHealthPreview { Items = items.ToArray() };
     }
 
     public async Task QueueSyncAsync(CancellationToken ct)
