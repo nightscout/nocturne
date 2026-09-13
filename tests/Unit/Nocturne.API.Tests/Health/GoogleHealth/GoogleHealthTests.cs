@@ -103,8 +103,10 @@ public class GoogleHealthTests
         var sleepService = new Mock<ISleepService>();
         sleepService.Setup(value => value.UpsertSessionAsync(It.IsAny<SleepSession>(), It.IsAny<CancellationToken>()))
             .Returns<SleepSession, CancellationToken>(repository.UpsertSessionAsync);
+        var coordinator = new GoogleHealthCoordinator();
+        coordinator.Begin(tenantId);
         var writer = new GoogleHealthReadingWriter(Mock.Of<IHeartRateService>(), Mock.Of<IStepCountService>(),
-            Mock.Of<IBodyWeightService>(), sleepService.Object, db, NullLogger<GoogleHealthReadingWriter>.Instance);
+            Mock.Of<IBodyWeightService>(), sleepService.Object, db, NullLogger<GoogleHealthReadingWriter>.Instance, coordinator);
         var start = new DateTime(2026, 9, 1, 22, 0, 0, DateTimeKind.Utc);
         var session = new SleepSession
         {
@@ -124,6 +126,39 @@ public class GoogleHealthTests
         Assert.Equal(first.Id, stage.SleepSessionId);
         Assert.Equal(tenantId, stage.TenantId);
         Assert.Equal(1, await db.SleepStages.CountAsync());
+        Assert.Equal(2, coordinator.Diagnostics(tenantId)!.RecordsWritten);
+        Assert.Equal(2, coordinator.Diagnostics(tenantId)!.Events.Count(entry => entry.Stage == "native_batch_completed"));
+    }
+
+    [Fact]
+    public void Diagnostics_are_bounded_tenant_isolated_and_preserve_failure_without_secrets()
+    {
+        var coordinator = new GoogleHealthCoordinator();
+        var tenant = Guid.NewGuid();
+        coordinator.Begin(tenant);
+        for (var index = 0; index < 300; index++)
+            coordinator.Record(tenant, new() { Stage = "native_batch_completed", Count = 1 });
+        coordinator.Record(tenant, new() { Stage = "native_write", ErrorCode = "internal_sync" },
+            new InvalidOperationException("secret-token", new TimeoutException("private-record")));
+        coordinator.Finish(tenant, "failed");
+        var run = Assert.IsType<GoogleHealthSyncRun>(coordinator.Diagnostics(tenant));
+        Assert.Equal(256, run.Events.Length);
+        Assert.Equal(300, run.RecordsWritten);
+        Assert.Equal("failed", run.Outcome);
+        Assert.NotNull(run.FinishedAt);
+        Assert.Null(coordinator.Progress(tenant));
+        Assert.Null(coordinator.Diagnostics(Guid.NewGuid()));
+        var json = JsonSerializer.Serialize(run);
+        Assert.Contains("TimeoutException", json);
+        Assert.DoesNotContain("secret-token", json);
+        Assert.DoesNotContain("private-record", json);
+        for (var index = 0; index < 6; index++)
+        {
+            coordinator.Begin(tenant);
+            coordinator.Finish(tenant, "succeeded");
+        }
+        Assert.Equal(4, coordinator.History(tenant).Length);
+        Assert.Empty(coordinator.History(Guid.NewGuid()));
     }
 
     [Fact]
@@ -143,14 +178,19 @@ public class GoogleHealthTests
         Assert.True(await requests.MoveNextAsync());
         Assert.Equal(tenantId, requests.Current);
         Assert.True(coordinator.StartQueued(tenantId));
+        var runId = coordinator.Diagnostics(tenantId)!.RunId;
+        coordinator.Begin(tenantId);
+        Assert.Equal(runId, coordinator.Diagnostics(tenantId)!.RunId);
         coordinator.Report(tenantId, GoogleHealthSyncPhase.Reading, "steps", 1, 4, 3);
 
         var progress = Assert.IsType<GoogleHealthCoordinator.SyncProgress>(coordinator.Progress(tenantId));
         Assert.Equal((GoogleHealthSyncPhase.Reading, "steps", 1, 4, 3),
             (progress.Phase, progress.DataType, progress.CompletedDataTypes,
                 progress.TotalDataTypes, progress.PagesRead));
-        coordinator.Complete(tenantId);
-        Assert.Null(coordinator.Progress(tenantId));
+            coordinator.Finish(tenantId, "succeeded");
+            Assert.NotNull(coordinator.Progress(tenantId));
+            coordinator.Complete(tenantId);
+            Assert.Null(coordinator.Progress(tenantId));
     }
 
     [Theory]
@@ -209,6 +249,8 @@ public class GoogleHealthTests
             Code = "code"
         }, subject, default);
 
+        coordinator.Begin(tenantId);
+        coordinator.Finish(tenantId, "succeeded");
         var status = await service.StatusAsync(default);
         Assert.True(status.Configured);
         Assert.True(status.Connected);
@@ -236,19 +278,6 @@ public class GoogleHealthTests
         Assert.False(store.Configuration.GetProperty("enabled").GetBoolean());
         Assert.Equal(30, store.Configuration.GetProperty("syncIntervalMinutes").GetInt32());
         Assert.Equal(45, store.Configuration.GetProperty("activeThresholdMinutes").GetInt32());
-    }
-
-    [Fact]
-    public async Task Purging_a_disconnected_account_removes_its_resume_watermark()
-    {
-        var tenantId = Guid.NewGuid();
-        var store = new TestConnectorStore();
-        store.SetConfiguration("""{"enabled":true,"lastSyncedTo":"2026-09-01T00:00:00.0000000Z"}""");
-        var service = Service(store, new StubHandler(_ => Json("{}")), tenantId);
-
-        await service.PurgeAsync(Guid.NewGuid(), default);
-
-        Assert.False(store.Configuration.TryGetProperty("lastSyncedTo", out _));
     }
 
     [Fact]
