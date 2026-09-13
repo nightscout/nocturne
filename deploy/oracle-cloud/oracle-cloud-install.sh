@@ -64,6 +64,7 @@ FREE_E2_MICRO_COUNT=2
 log()  { printf '\n\033[1;34m==>\033[0m %s\n' "$*"; }
 info() { printf '    %s\n' "$*"; }
 die()  { printf '\n\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
+warn() { printf '\n\033[1;33mwarning:\033[0m %s\n' "$*" >&2; }
 
 # Always Free resources stay free on a Pay As You Go account, but a size above the
 # allowance is billed rather than refused, and upgrading to Pay As You Go is the
@@ -537,35 +538,89 @@ PUBLIC_IP=$(oci network public-ip get --public-ip-id "$PUBLIC_IP_ID" --query 'da
 desec() { curl -fsS -H "Authorization: Token $DESEC_TOKEN" -H "Content-Type: application/json" "$@"; }
 resolves_to_ip() { getent ahostsv4 "$1" 2>/dev/null | awk '{print $1}' | grep -qx "$PUBLIC_IP"; }
 
+# curl fails the same way whatever went wrong, so read the status separately.
+# "deSEC rejected this token" and "this account does not hold that domain" have
+# different answers, and the first must not be reported as the second.
+desec_get() {
+  local out code
+  out=$(curl -sS -H "Authorization: Token $DESEC_TOKEN" -w '\n%{http_code}' "$1" 2>/dev/null) || return 2
+  code="${out##*$'\n'}"
+  DESEC_BODY="${out%$'\n'*}"
+  case "$code" in
+    2*)      return 0 ;;
+    401|403) return 3 ;;
+    *)       return 1 ;;
+  esac
+}
+
+# Points the apex and the wildcard at the instance, or says why it could not and
+# leaves the caller to print the records for the user to create by hand.
+desec_records() {
+  local zone="$BASE_DOMAIN" status subname ttl
+  # BASE_DOMAIN may sit below the zone deSEC hosts (nocturne.example.com in example.com).
+  while :; do
+    desec_get "https://desec.io/api/v1/domains/$zone/" && break
+    status=$?
+    if (( status == 3 )); then
+      warn "deSEC did not accept that token. Under Token management at desec.io, create a token and copy the long secret it shows once — not the token's name, and not its id."
+      return 1
+    fi
+    if (( status == 2 )); then
+      warn "could not reach desec.io to look up $zone."
+      return 1
+    fi
+    zone="${zone#*.}"
+    if [[ "$zone" != *.* ]]; then
+      warn "this deSEC account holds no domain that contains $BASE_DOMAIN. Add it at desec.io first — for a free name, a dynDNS domain under dedyn.io."
+      return 1
+    fi
+  done
+  subname="${BASE_DOMAIN%"$zone"}"
+  subname="${subname%.}"
+  # A body without minimum_ttl would otherwise reach jq --argjson as an empty
+  # string and fail the write, which reads as a permissions problem.
+  ttl=$(jq -r '.minimum_ttl // empty' <<<"$DESEC_BODY" 2>/dev/null) || ttl=
+  [[ "$ttl" =~ ^[0-9]+$ ]] || ttl=3600
+  desec -X PUT "https://desec.io/api/v1/domains/$zone/rrsets/" -d "$(jq -cn --arg ip "$PUBLIC_IP" --arg s "$subname" --arg w "*${subname:+.$subname}" --argjson ttl "$ttl" \
+    '[{subname:$s,type:"A",ttl:$ttl,records:[$ip]},{subname:$w,type:"A",ttl:$ttl,records:[$ip]}]')" >/dev/null \
+    || { warn "could not write the DNS records at deSEC. The token needs write access to $zone."; return 1; }
+  info "$BASE_DOMAIN and *.$BASE_DOMAIN point at $PUBLIC_IP"
+}
+
+DNS_DONE=
 if resolves_to_ip "$BASE_DOMAIN" && resolves_to_ip "dns-check.$BASE_DOMAIN"; then
-  DNS_READY=1
+  DNS_DONE=1
   info "DNS already points at $PUBLIC_IP"
-elif [[ -z "${DESEC_TOKEN:-}" && -t 0 ]]; then
-  printf '\n'
-  info "If $BASE_DOMAIN is managed at deSEC (desec.io, including free dedyn.io names), paste an"
-  info "API token and the DNS records are created for you. Otherwise press Enter to add them yourself."
-  read -rsp "    deSEC token: " DESEC_TOKEN
-  printf '\n'
 fi
 
-if [[ -n "${DNS_READY:-}" ]]; then
-  :
-elif [[ -n "${DESEC_TOKEN:-}" ]]; then
+# A token that turns out to be wrong is worth another go rather than an abort: it
+# is the one thing here the user can fix in a few seconds, and by now the network
+# and the address exist and a re-run would have to find them all again.
+while [[ -z "$DNS_DONE" ]]; do
+  if [[ -z "${DESEC_TOKEN:-}" ]]; then
+    [[ -t 0 ]] || break
+    printf '\n'
+    info "If $BASE_DOMAIN is managed at deSEC (desec.io, including free dedyn.io names), paste an"
+    info "API token and the DNS records are created for you. Otherwise press Enter to add them yourself."
+    # Nothing echoes as it is typed. In Cloud Shell's browser terminal a paste
+    # that did not land looks exactly like one that did, so say what was read:
+    # without that the next thing on screen is an unexplained failure.
+    read -rsp "    deSEC token: " DESEC_TOKEN
+    printf '\n'
+    DESEC_TOKEN="${DESEC_TOKEN//[[:space:]]/}"
+    [[ -n "$DESEC_TOKEN" ]] || break
+    info "read a ${#DESEC_TOKEN}-character token"
+  fi
   log "DNS records at deSEC"
-  # BASE_DOMAIN may sit below the zone deSEC hosts (nocturne.example.com in example.com).
-  ZONE="$BASE_DOMAIN"
-  while [[ "$ZONE" == *.* ]] && ! DOMAIN_JSON=$(desec "https://desec.io/api/v1/domains/$ZONE/" 2>/dev/null); do
-    ZONE="${ZONE#*.}"
-  done
-  [[ "$ZONE" == *.* ]] || die "no domain in this deSEC account contains $BASE_DOMAIN. Add it at desec.io first (for a free name, a dynDNS domain under dedyn.io), or run again without a token and create the records yourself."
-  SUBNAME="${BASE_DOMAIN%"$ZONE"}"
-  SUBNAME="${SUBNAME%.}"
-  TTL=$(jq -r '.minimum_ttl // 3600' <<<"$DOMAIN_JSON")
-  desec -X PUT "https://desec.io/api/v1/domains/$ZONE/rrsets/" -d "$(jq -cn --arg ip "$PUBLIC_IP" --arg s "$SUBNAME" --arg w "*${SUBNAME:+.$SUBNAME}" --argjson ttl "$TTL" \
-    '[{subname:$s,type:"A",ttl:$ttl,records:[$ip]},{subname:$w,type:"A",ttl:$ttl,records:[$ip]}]')" >/dev/null \
-    || die "could not write the DNS records at deSEC. The token needs write access to $ZONE."
-  info "$BASE_DOMAIN and *.$BASE_DOMAIN point at $PUBLIC_IP"
-else
+  if desec_records; then
+    DNS_DONE=1
+  else
+    DESEC_TOKEN=
+    [[ -t 0 ]] || break
+  fi
+done
+
+if [[ -z "$DNS_DONE" ]]; then
   printf '\n'
   info "Create these two DNS records at your domain provider now:"
   printf '\n      %-28s A   %s\n      %-28s A   %s\n\n' "$BASE_DOMAIN" "$PUBLIC_IP" "*.$BASE_DOMAIN" "$PUBLIC_IP"

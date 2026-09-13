@@ -82,6 +82,12 @@ public class GlookoV3Series
 
     [JsonPropertyName("setSiteChange")] public GlookoV3ConsumableDataPoint[]? SetSiteChange { get; set; }
 
+    /// <summary>
+    ///     CGM sensor changes. Glooko only carries these for uploaders that report sensor lifecycle;
+    ///     a CamAPS FX / Libre 3 account returns the series empty rather than omitting it.
+    /// </summary>
+    [JsonPropertyName("cgmSensorChange")] public GlookoV3ConsumableDataPoint[]? CgmSensorChange { get; set; }
+
     // LGS/PLGS events (Low Glucose Suspend / Predictive LGS)
     [JsonPropertyName("lgsPlgs")] public GlookoV3LgsPlgsDataPoint[]? LgsPlgs { get; set; }
 

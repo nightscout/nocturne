@@ -11,6 +11,7 @@
   } from "$lib/utils/formatting";
   import {
     colorFocusGradient,
+    glucoseColorFocusGradient,
     resolveColorFocusRange,
     resolveGlucoseColorThresholds,
     DEFAULT_GLUCOSE_COLOR_THRESHOLDS,
@@ -20,6 +21,8 @@
     type ColorFocusRange,
     type GlucoseColorThresholds,
   } from "$lib/utils/metric-color-focus";
+  import { GLUCOSE_HEATMAP_LEGEND_STOPS } from "$lib/utils/chart-colors";
+  import { untrack } from "svelte";
 
   let {
     metricLabel = "Average glucose",
@@ -32,7 +35,7 @@
     glucose = false,
     units = "mg/dl",
     thresholds = DEFAULT_GLUCOSE_COLOR_THRESHOLDS,
-    stops = [],
+    stops = GLUCOSE_HEATMAP_LEGEND_STOPS,
     onThresholdsChange = () => {},
   }: {
     metricLabel?: string;
@@ -70,7 +73,7 @@
   const inputStep = $derived(glucose ? (units === "mmol" ? 0.1 : 1) : "any");
   const gradient = $derived(
     glucose
-      ? `linear-gradient(to right in srgb, ${stops.map((stop) => `${stop.color} ${((stop.mgdl - minimum) / (maximum - minimum)) * 100}%`).join(", ")})`
+      ? glucoseColorFocusGradient(stops, thresholds, minimum, maximum)
       : colorFocusGradient(resolveColorFocusRange(values)!, maximum, cssVar)
   );
   const baseSliderSteps = $derived.by(() => {
@@ -106,12 +109,38 @@
   const accessibleLabel = (index: number) =>
     `${metricLabel} ${labels[index]} color ${glucose ? "boundary" : "value"}`;
 
+  // Every preference write re-derives `thresholds` into a fresh array holding the same
+  // numbers, and an automatic range tracks a maximum that rises as years load. Resync per
+  // field so neither discards an edit in a field whose committed value did not move.
   $effect(() => {
-    drafts = values.map(display);
-    invalidBound = null;
+    const committed = values.map(display);
+    untrack(() => {
+      if (drafts.length !== committed.length) {
+        drafts = committed;
+        invalidBound = null;
+        return;
+      }
+      committed.forEach((value, index) => {
+        if (drafts[index] !== value) drafts[index] = value;
+      });
+      if (
+        invalidBound !== null &&
+        drafts[invalidBound] === committed[invalidBound]
+      ) {
+        invalidBound = null;
+      }
+    });
   });
 
   function change(candidate: number[]): boolean {
+    // Bits UI re-runs its snap check on every flush, because the getter below hands it a
+    // fresh array each read; its re-offer of the held value must not persist.
+    if (
+      candidate.length === values.length &&
+      candidate.every((value, index) => value === values[index])
+    ) {
+      return true;
+    }
     if (glucose) {
       const next = resolveGlucoseColorThresholds(candidate);
       if (!next) return false;
@@ -133,14 +162,19 @@
       invalidBound = index;
       return;
     }
-    if (input.valueAsNumber === display(values[index])) {
+    const entered = glucose
+      ? convertFromDisplayUnits(input.valueAsNumber, units)
+      : input.valueAsNumber;
+    // A sub-step entry can round onto the boundary already held. Nothing is persisted, so
+    // `values` never moves and the effect above never fires: put the input back itself,
+    // or it keeps showing a number that was not stored.
+    if (entered === values[index]) {
+      drafts[index] = display(values[index]);
       invalidBound = null;
       return;
     }
     const next = [...values];
-    next[index] = glucose
-      ? convertFromDisplayUnits(input.valueAsNumber, units)
-      : input.valueAsNumber;
+    next[index] = entered;
     invalidBound = change(next) ? null : index;
   }
 
@@ -183,7 +217,7 @@
           class="h-3.5 w-full rounded-sm"
           style:background={gradient}
           role="img"
-          aria-label={`${metricLabel} color scale from ${formatted(minimum)} to ${formatted(maximum)} ${unitLabel}`}
+          aria-label={`${metricLabel} color scale from ${formatted(minimum)} to ${formatted(maximum)} ${unitLabel}, one color outside ${formatted(values[0])} to ${formatted(values[values.length - 1])}`}
           data-testid={glucose ? "glucose-color-track" : "color-focus-track"}
         ></span>
         {#each thumbItems as thumb (thumb.index)}
@@ -278,17 +312,19 @@
       class="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 tabular-nums"
       aria-label="Glucose color zones"
     >
-      <span>Very low color: &lt; {formatted(values[0])}</span>
       <span>Low color: {formatted(values[0])}–{formatted(values[1])}</span>
       <span>In range color: {formatted(values[1])}–{formatted(values[2])}</span>
       <span>High color: {formatted(values[2])}–{formatted(values[3])}</span>
-      <span>Very high color: &gt; {formatted(values[3])} {unitLabel}</span>
+      <span>
+        One color outside {formatted(values[0])}–{formatted(values[3])}
+        {unitLabel}
+      </span>
     </div>
   {/if}
   <p id={id + "-description"} class="mt-2">
     {glucose
-      ? "Color scale only; glucose targets and Time in Range are unchanged. Controls reshape the continuous gradient."
-      : "Values outside the selected range use the end colors."}
+      ? "Color scale only; glucose targets and Time in Range are unchanged. Days below the first boundary and above the last share one color, so moving the boundaries inward colors only the middle of the scale."
+      : "Values outside the selected range share one faint color, so only the range you select is colored."}
   </p>
 </div>
 

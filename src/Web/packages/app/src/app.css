@@ -114,6 +114,7 @@
     --border: #d1d5db;
     --glucose-heatmap-1: #000;
     --glucose-heatmap-2: var(--glucose-heatmap-1);
+    --glucose-heatmap-outside: #cdc4de;
     background: #fff;
     color: #111;
   }
