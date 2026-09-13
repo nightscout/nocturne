@@ -29,6 +29,18 @@ public interface IGoogleHealthSyncCoordinator
 
 public interface IGoogleHealthReadingWriter
 {
+    Task<Guid> BeginReconciliationAsync(
+        IReadOnlyCollection<string> activeTypes,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken ct);
+    Task StageReconciliationIdsAsync(
+        Guid runId,
+        string dataType,
+        IReadOnlyCollection<string> identifiers,
+        CancellationToken ct);
+    Task CompleteReconciliationAsync(Guid runId, CancellationToken ct);
+    Task AbandonReconciliationAsync(Guid runId, CancellationToken ct);
     Task WriteAsync(
         IReadOnlyCollection<GoogleHealthReading> readings,
         IReadOnlyCollection<SleepSession> sleepSessions,

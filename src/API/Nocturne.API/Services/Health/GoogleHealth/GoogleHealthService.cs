@@ -498,8 +498,19 @@ public sealed class GoogleHealthService(
             using var previewCancellation = CancellationTokenSource.CreateLinkedTokenSource(ct);
             previewCancellation.CancelAfter(PreviewTimeout);
             var previewCt = previewCancellation.Token;
-            var settings = await StoredOptionsAsync(ct);
-            var token = await StoredSessionAsync(ct) ??
+            GoogleHealthOptions settings;
+            GoogleHealthTokenSession? token;
+            try
+            {
+                settings = await StoredOptionsAsync(ct);
+                token = await StoredSessionAsync(ct);
+            }
+            catch (Exception ex) when (ex is JsonException or FormatException)
+            {
+                throw new GoogleHealthException("stored_google_configuration_unreadable", stage: "preview");
+            }
+
+            if (token is null)
                 throw new GoogleHealthException("configure_first");
             var now = DateTimeOffset.UtcNow;
             if (string.IsNullOrWhiteSpace(token.AccessToken) || token.AccessTokenExpiresAt is null ||
@@ -560,9 +571,9 @@ public sealed class GoogleHealthService(
             }
             return new GoogleHealthPreview { Items = items.ToArray() };
         }
-        catch (Exception ex) when (ex is JsonException or FormatException)
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
-            throw new GoogleHealthException("stored_google_configuration_unreadable", stage: "preview");
+            throw new GoogleHealthException("google_unavailable", stage: "preview_timeout");
         }
         finally
         {

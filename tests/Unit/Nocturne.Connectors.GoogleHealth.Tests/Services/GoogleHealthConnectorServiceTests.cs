@@ -228,7 +228,10 @@ public class GoogleHealthConnectorServiceTests
 
         Assert.True(result.Success);
         Assert.Equal(2, result.ItemsSynced[SyncDataType.BodyWeight]);
-        Assert.Equal(["WriteAsync", "WriteAsync", "ReconcileAsync"],
+        Assert.Equal([
+            "BeginReconciliationAsync", "StageReconciliationIdsAsync", "WriteAsync",
+            "StageReconciliationIdsAsync", "WriteAsync", "CompleteReconciliationAsync"
+        ],
             fixture.Writer.Invocations.Select(invocation => invocation.Method.Name));
     }
 
@@ -316,11 +319,12 @@ public class GoogleHealthConnectorServiceTests
                 items.Count == 1 && items.Single().StartTime == from.AddHours(-2) &&
                 items.Single().EndTime == from.AddHours(6) && items.Single().Stages!.Count == 2),
             2, It.IsAny<CancellationToken>()), Times.Exactly(2));
-        fixture.Writer.Verify(value => value.ReconcileAsync(
-            It.IsAny<IReadOnlyDictionary<string, IReadOnlyCollection<string>>>(),
+        fixture.Writer.Verify(value => value.StageReconciliationIdsAsync(
+            It.IsAny<Guid>(), "sleep",
             It.Is<IReadOnlyCollection<string>>(identifiers => identifiers.Count == 1),
-            It.Is<IReadOnlyCollection<string>>(types => types.Contains("sleep")),
-            new DateTimeOffset(from), new DateTimeOffset(from.AddDays(1)), It.IsAny<CancellationToken>()), Times.Exactly(2));
+            It.IsAny<CancellationToken>()), Times.Exactly(2));
+        fixture.Writer.Verify(value => value.CompleteReconciliationAsync(
+            It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
         using var saved = JsonDocument.Parse(fixture.StoredConfiguration);
         Assert.Equal(from.AddDays(1), saved.RootElement.GetProperty("lastSyncedTo").GetDateTime());
     }

@@ -256,44 +256,47 @@ public sealed class GoogleHealthConnectorService(
             result.ItemsSynced[GoogleHealthClient.TryGetSyncDataType(type, out var dataType)
                 ? dataType
                 : throw new GoogleHealthException("unsupported_type")] = 0;
-        for (var index = 0; index < active.Length; index++)
+            var reconciliationRun = await writer.BeginReconciliationAsync(active, from, to, ct);
+            try
         {
-            var type = active[index];
-            coordinator.Report(tenantId, GoogleHealthSyncPhase.Reading, type, index, active.Length, 0);
-            void PageRead(int pages)
+                for (var index = 0; index < active.Length; index++)
             {
-                coordinator.Report(tenantId, GoogleHealthSyncPhase.Reading, type, index, active.Length, pages);
+                    var type = active[index];
+                    coordinator.Report(tenantId, GoogleHealthSyncPhase.Reading, type, index, active.Length, 0);
+                    void PageRead(int pages)
+                    {
+                        coordinator.Report(tenantId, GoogleHealthSyncPhase.Reading, type, index, active.Length, pages);
+                    }
+                    if (type == "sleep")
+                        await foreach (var page in google.ReadSleepPagesAsync(accessToken, from, to, ct, PageRead))
+                        {
+                            var unique = page.Where(session => session.OriginalId != null).ToArray();
+                            await writer.StageReconciliationIdsAsync(
+                                reconciliationRun, type,
+                                unique.Select(session => session.OriginalId!).ToArray(), ct);
+                            await writer.WriteAsync([], unique, config.BatchSize, ct);
+                            result.ItemsSynced[SyncDataType.Sleep] =
+                                result.ItemsSynced.GetValueOrDefault(SyncDataType.Sleep) + unique.Length;
+                        }
+                    else
+                        await foreach (var page in google.ReadPagesAsync(accessToken, type, from, to, ct, PageRead))
+                        {
+                            var unique = page.ToArray();
+                            await writer.StageReconciliationIdsAsync(
+                                reconciliationRun, type,
+                                unique.Select(GoogleHealthClient.Key).ToArray(), ct);
+                            await writer.WriteAsync(unique, [], config.BatchSize, ct);
+                            AddCount(result, type, unique.Length);
+                        }
+                    coordinator.Report(tenantId, GoogleHealthSyncPhase.Integrating, type, index, active.Length);
+                    coordinator.Report(tenantId, GoogleHealthSyncPhase.Reading, type, index + 1, active.Length);
             }
-            var readingIds = new HashSet<string>(StringComparer.Ordinal);
-            var sleepIds = new HashSet<string>(StringComparer.Ordinal);
-            if (type == "sleep")
+                await writer.CompleteReconciliationAsync(reconciliationRun, ct);
+            }
+            catch
             {
-                await foreach (var page in google.ReadSleepPagesAsync(accessToken, from, to, ct, PageRead))
-                {
-                    var unique = page
-                        .Where(session => session.OriginalId != null && sleepIds.Add(session.OriginalId))
-                        .ToArray();
-                    await writer.WriteAsync([], unique, config.BatchSize, ct);
-                    result.ItemsSynced[SyncDataType.Sleep] =
-                        result.ItemsSynced.GetValueOrDefault(SyncDataType.Sleep) + unique.Length;
-                }
-            }
-            else
-            {
-                await foreach (var page in google.ReadPagesAsync(accessToken, type, from, to, ct, PageRead))
-                {
-                    var unique = page
-                        .Where(reading => readingIds.Add(GoogleHealthClient.Key(reading)))
-                        .ToArray();
-                    await writer.WriteAsync(unique, [], config.BatchSize, ct);
-                    AddCount(result, type, unique.Length);
-                }
-            }
-            coordinator.Report(tenantId, GoogleHealthSyncPhase.Integrating, type, index, active.Length);
-            await writer.ReconcileAsync(
-                new Dictionary<string, IReadOnlyCollection<string>> { [type] = readingIds },
-                sleepIds, [type], from, to, ct);
-            coordinator.Report(tenantId, GoogleHealthSyncPhase.Reading, type, index + 1, active.Length);
+                await writer.AbandonReconciliationAsync(reconciliationRun, CancellationToken.None);
+                throw;
         }
     }
 

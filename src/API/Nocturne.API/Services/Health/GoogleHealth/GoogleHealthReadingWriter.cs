@@ -21,6 +21,80 @@ public sealed class GoogleHealthReadingWriter(
     public const string Source = DataSources.GoogleHealthConnector;
     private const string SourceApp = "Google Health";
 
+    public async Task<Guid> BeginReconciliationAsync(
+        IReadOnlyCollection<string> activeTypes,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken ct)
+    {
+        var runId = Guid.CreateVersion7();
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO google_health_reconciliation_runs
+                (id, tenant_id, from_time, to_time, active_types)
+            VALUES ({runId}, {db.TenantId}, {from.UtcDateTime}, {to.UtcDateTime}, {string.Join(',', activeTypes)})
+            """, ct);
+        return runId;
+    }
+
+    public async Task StageReconciliationIdsAsync(
+        Guid runId,
+        string dataType,
+        IReadOnlyCollection<string> identifiers,
+        CancellationToken ct)
+    {
+        foreach (var identifier in identifiers.Distinct(StringComparer.Ordinal))
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO google_health_reconciliation_ids (run_id, tenant_id, data_type, identifier)
+                VALUES ({runId}, {db.TenantId}, {dataType}, {identifier})
+                ON CONFLICT (run_id, data_type, identifier) DO NOTHING
+                """, ct);
+    }
+
+    public async Task CompleteReconciliationAsync(Guid runId, CancellationToken ct)
+    {
+        var run = await db.Database.SqlQuery<ReconciliationRun>($"""
+            SELECT id, tenant_id AS "TenantId", from_time AS "FromTime", to_time AS "ToTime",
+                   active_types AS "ActiveTypes"
+            FROM google_health_reconciliation_runs
+            WHERE id = {runId} AND tenant_id = {db.TenantId}
+            """).SingleAsync(ct);
+        var activeTypes = run.ActiveTypes.Split(',', StringSplitOptions.RemoveEmptyEntries);
+        var deletedAt = DateTime.UtcNow;
+        foreach (var type in activeTypes)
+        {
+            var runText = runId.ToString();
+            var tenantText = db.TenantId.ToString();
+            var fromText = run.FromTime.ToString("O", System.Globalization.CultureInfo.InvariantCulture);
+            var toText = run.ToTime.ToString("O", System.Globalization.CultureInfo.InvariantCulture);
+            var deletedText = deletedAt.ToString("O", System.Globalization.CultureInfo.InvariantCulture);
+            var sql = type switch
+            {
+                "heart-rate" => $"UPDATE heart_rates SET deleted_at = '{deletedText}' WHERE data_source = '{Source}' AND deleted_at IS NULL AND timestamp >= '{fromText}' AND timestamp < '{toText}' AND sync_identifier IS NOT NULL AND NOT EXISTS (SELECT 1 FROM google_health_reconciliation_ids ids WHERE ids.run_id = '{runText}' AND ids.tenant_id = '{tenantText}' AND ids.data_type = 'heart-rate' AND ids.identifier = heart_rates.sync_identifier)",
+                "steps" => $"UPDATE step_counts SET deleted_at = '{deletedText}' WHERE data_source = '{Source}' AND deleted_at IS NULL AND timestamp >= '{fromText}' AND timestamp < '{toText}' AND sync_identifier IS NOT NULL AND NOT EXISTS (SELECT 1 FROM google_health_reconciliation_ids ids WHERE ids.run_id = '{runText}' AND ids.tenant_id = '{tenantText}' AND ids.data_type = 'steps' AND ids.identifier = step_counts.sync_identifier)",
+                "weight" => $"UPDATE body_weights SET deleted_at = '{deletedText}' WHERE data_source = '{Source}' AND deleted_at IS NULL AND mills >= {new DateTimeOffset(run.FromTime).ToUnixTimeMilliseconds()} AND mills < {new DateTimeOffset(run.ToTime).ToUnixTimeMilliseconds()} AND sync_identifier IS NOT NULL AND NOT EXISTS (SELECT 1 FROM google_health_reconciliation_ids ids WHERE ids.run_id = '{runText}' AND ids.tenant_id = '{tenantText}' AND ids.data_type = 'weight' AND ids.identifier = body_weights.sync_identifier)",
+                "sleep" => $"DELETE FROM sleep_sessions WHERE source = 'Google' AND source_app = '{SourceApp}' AND end_time >= '{fromText}' AND end_time < '{toText}' AND original_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM google_health_reconciliation_ids ids WHERE ids.run_id = '{runText}' AND ids.tenant_id = '{tenantText}' AND ids.data_type = 'sleep' AND ids.identifier = sleep_sessions.original_id)",
+                _ => throw new InvalidOperationException($"Unsupported Google Health type '{type}'")
+            };
+            await db.Database.ExecuteSqlRawAsync(sql, ct);
+        }
+        await AbandonReconciliationAsync(runId, ct);
+    }
+
+    public Task AbandonReconciliationAsync(Guid runId, CancellationToken ct) =>
+        db.Database.ExecuteSqlInterpolatedAsync($"""
+            DELETE FROM google_health_reconciliation_ids WHERE run_id = {runId} AND tenant_id = {db.TenantId};
+            DELETE FROM google_health_reconciliation_runs WHERE id = {runId} AND tenant_id = {db.TenantId};
+            """, ct);
+
+    private sealed class ReconciliationRun
+    {
+        public Guid Id { get; init; }
+        public Guid TenantId { get; init; }
+        public DateTime FromTime { get; init; }
+        public DateTime ToTime { get; init; }
+        public string ActiveTypes { get; init; } = string.Empty;
+    }
+
     public async Task WriteAsync(
         IReadOnlyCollection<GoogleHealthReading> readings,
         IReadOnlyCollection<SleepSession> sleepSessions,
