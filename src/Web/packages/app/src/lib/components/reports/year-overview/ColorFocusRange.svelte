@@ -109,14 +109,22 @@
   const accessibleLabel = (index: number) =>
     `${metricLabel} ${labels[index]} color ${glucose ? "boundary" : "value"}`;
 
-  // On an automatic range `values` tracks the observed maximum, which every lazily loaded
-  // year can raise; rewriting an unchanged draft would discard an edit in progress.
+  // Every preference write re-derives `thresholds` into a fresh array holding the same
+  // numbers, and an automatic range tracks a maximum that rises as years load. Resync per
+  // field so neither discards an edit in a field whose committed value did not move.
   $effect(() => {
     const committed = values.map(display);
     untrack(() => {
-      if (committed.every((value, index) => value === drafts[index])) return;
-      drafts = committed;
-      invalidBound = null;
+      if (drafts.length !== committed.length) {
+        drafts = committed;
+        invalidBound = null;
+        return;
+      }
+      committed.forEach((value, index) => {
+        if (drafts[index] === value) return;
+        drafts[index] = value;
+        if (invalidBound === index) invalidBound = null;
+      });
     });
   });
 
@@ -150,14 +158,19 @@
       invalidBound = index;
       return;
     }
-    if (input.valueAsNumber === display(values[index])) {
+    const entered = glucose
+      ? convertFromDisplayUnits(input.valueAsNumber, units)
+      : input.valueAsNumber;
+    // A sub-step entry can round onto the boundary already held. Nothing is persisted, so
+    // `values` never moves and the effect above never fires: put the input back itself,
+    // or it keeps showing a number that was not stored.
+    if (entered === values[index]) {
+      drafts[index] = display(values[index]);
       invalidBound = null;
       return;
     }
     const next = [...values];
-    next[index] = glucose
-      ? convertFromDisplayUnits(input.valueAsNumber, units)
-      : input.valueAsNumber;
+    next[index] = entered;
     invalidBound = change(next) ? null : index;
   }
 
@@ -200,7 +213,7 @@
           class="h-3.5 w-full rounded-sm"
           style:background={gradient}
           role="img"
-          aria-label={`${metricLabel} color scale from ${formatted(minimum)} to ${formatted(maximum)} ${unitLabel}`}
+          aria-label={`${metricLabel} color scale over ${formatted(values[0])} to ${formatted(values[values.length - 1])} ${unitLabel}, one color outside it`}
           data-testid={glucose ? "glucose-color-track" : "color-focus-track"}
         ></span>
         {#each thumbItems as thumb (thumb.index)}

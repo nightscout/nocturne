@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   GLUCOSE_HEATMAP_LEGEND_STOPS,
+  GLUCOSE_HEATMAP_OUTSIDE_COLOR,
   getGlucoseHeatmapFill,
 } from "./chart-colors";
 import {
@@ -10,7 +11,6 @@ import {
   getFocusedGlucoseFill,
   insertSliderSteps,
   getFocusedIntensityFill,
-  outsideBandColor,
   resolveColorFocusRange,
   resolveGlucoseColorThresholds,
   glucoseColorFocusStops,
@@ -124,9 +124,11 @@ describe("getFocusedIntensityFill", () => {
     expect(colorShare(high)).toBe(100);
   });
 
-  it("keeps the range itself inclusive at both boundaries", () => {
-    expect(colorShare(getFocusedIntensityFill(10, focus, cssVar))).toBe(15);
+  it("keeps the maximum itself inside the range", () => {
     expect(colorShare(getFocusedIntensityFill(70, focus, cssVar))).toBe(100);
+    expect(colorShare(getFocusedIntensityFill(70.000001, focus, cssVar))).toBe(
+      15
+    );
   });
 
   it("leaves a day with no value at the faintest color", () => {
@@ -191,11 +193,15 @@ describe("colorFocusGradient", () => {
 
 describe("glucose focus band", () => {
   const stops = GLUCOSE_HEATMAP_LEGEND_STOPS;
-  const outside = "var(--glucose-heatmap-1)";
+  const outside = GLUCOSE_HEATMAP_OUTSIDE_COLOR;
 
   it("spans the outermost two boundaries", () => {
     expect(glucoseColorFocusBand([60, 100, 200, 280])).toEqual([60, 280]);
-    expect(outsideBandColor(stops)).toBe(outside);
+  });
+
+  it("takes its outside color from the theme, not from either end of the ramp", () => {
+    expect(outside).toBe(GLUCOSE_HEATMAP_OUTSIDE_COLOR);
+    expect(stops.map((stop) => stop.color)).not.toContain(outside);
   });
 
   it("falls back to the defaults for an unusable saved value", () => {
@@ -246,6 +252,38 @@ describe("glucose focus band", () => {
     expect(gradient).toContain(`${outside} 0%, ${outside} ${at(100)}%`);
     expect(gradient).toContain(`${outside} ${at(180)}%, ${outside} 100%)`);
     expect(gradient).not.toContain("var(--glucose-heatmap-9)");
+  });
+
+  it("carries the ramp all the way to both boundaries", () => {
+    const thresholds = [100, 120, 160, 180] as const;
+    const focused = glucoseColorFocusStops(thresholds);
+    const gradient = glucoseColorFocusGradient(focused, thresholds);
+
+    for (const boundary of [thresholds[0], thresholds[3]]) {
+      const position = ((boundary - 40) / (350 - 40)) * 100;
+      const atBoundary = gradient
+        .split(", ")
+        .filter((stop) => stop.endsWith(`${position}%`));
+      // One stop closes the flat block, one opens or closes the ramp: a hard cut.
+      expect(atBoundary).toHaveLength(2);
+      expect(
+        atBoundary.filter((stop) => stop.startsWith(outside))
+      ).toHaveLength(1);
+      expect(gradient).toContain(
+        `${getFocusedGlucoseFill(boundary, thresholds, focused)} ${position}%`
+      );
+    }
+  });
+
+  it("never re-blends an anchor that already sits on a boundary", () => {
+    const thresholds = [54, 72, 180, 250] as const;
+    const gradient = glucoseColorFocusGradient(
+      glucoseColorFocusStops(thresholds),
+      thresholds
+    );
+
+    expect(gradient).not.toContain("color-mix(in srgb, color-mix");
+    expect(gradient).not.toContain(" 0.00%,");
   });
 });
 

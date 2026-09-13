@@ -1,5 +1,6 @@
 import {
   GLUCOSE_HEATMAP_LEGEND_STOPS,
+  GLUCOSE_HEATMAP_OUTSIDE_COLOR,
   getGlucoseHeatmapFill,
 } from "./chart-colors";
 
@@ -80,15 +81,6 @@ export function glucoseColorFocusBand(
   return [thresholds[0], thresholds[3]];
 }
 
-export function outsideBandColor(
-  stops: ReadonlyArray<{
-    mgdl: number;
-    color: string;
-  }> = GLUCOSE_HEATMAP_LEGEND_STOPS
-): string {
-  return stops[0].color;
-}
-
 export function getFocusedGlucoseFill(
   mgdl: number,
   thresholds: GlucoseColorThresholds,
@@ -99,7 +91,7 @@ export function getFocusedGlucoseFill(
 ): string {
   const [low, high] = glucoseColorFocusBand(thresholds);
   if (!Number.isFinite(mgdl) || mgdl < low || mgdl > high) {
-    return outsideBandColor(stops);
+    return GLUCOSE_HEATMAP_OUTSIDE_COLOR;
   }
   return getGlucoseHeatmapFill(mgdl, stops);
 }
@@ -111,7 +103,7 @@ export function glucoseColorFocusGradient(
   max: number = GLUCOSE_COLOR_MAX
 ): string {
   const [low, high] = glucoseColorFocusBand(thresholds);
-  const outside = outsideBandColor(stops);
+  const outside = GLUCOSE_HEATMAP_OUTSIDE_COLOR;
   const at = (mgdl: number) => ((mgdl - min) / (max - min)) * 100;
   const ramp = stops
     .filter((stop) => stop.mgdl > low && stop.mgdl < high)

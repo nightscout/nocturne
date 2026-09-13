@@ -150,6 +150,20 @@ export function registerPreferenceCookieDomain(
   syncLanguageCookie(preferredLanguage.current);
 }
 
+/**
+ * A rejected write leaves the cookie ahead of the backend, so the next load reverts to the
+ * stored value; unreported, that surfaces as the preference undoing itself.
+ */
+function writeThroughReporting(prefs: UserDisplayPreferences): void {
+  try {
+    void Promise.resolve(writeThrough?.(prefs)).catch((error: unknown) => {
+      console.error("Failed to save display preferences:", error);
+    });
+  } catch (error) {
+    console.error("Failed to save display preferences:", error);
+  }
+}
+
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
 
 /** Mirror to cookie immediately and debounce the backend write-through. */
@@ -160,11 +174,7 @@ function schedulePersist(): void {
   if (persistTimer) clearTimeout(persistTimer);
   persistTimer = setTimeout(() => {
     persistTimer = null;
-    // A rejected write leaves the cookie ahead of the backend, so the next load reverts to
-    // the stored value; unhandled in a timer, that surfaces as nothing at all.
-    void Promise.resolve(writeThrough?.(prefs)).catch((error: unknown) => {
-      console.error("Failed to save display preferences:", error);
-    });
+    writeThroughReporting(prefs);
   }, 400);
 }
 
@@ -663,7 +673,7 @@ export function reconcilePreferences(serverPrefs: UserDisplayPreferences | null 
     // uncustomized device never seeds all-defaults over another device's real preferences.
     const prefs = collectPreferences();
     writePrefsCookie(prefs);
-    writeThrough?.(prefs);
+    writeThroughReporting(prefs);
   }
 }
 
