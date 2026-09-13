@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace Nocturne.Infrastructure.Data.Migrations;
 
+[Migration("20260913000000_AddGoogleHealthReconciliationStaging")]
 public partial class AddGoogleHealthReconciliationStaging : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
