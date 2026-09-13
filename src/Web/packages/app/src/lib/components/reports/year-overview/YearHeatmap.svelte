@@ -2,7 +2,7 @@
   import { Chart, Calendar, Layer, Tooltip } from "layerchart";
   import { scaleThreshold } from "d3-scale";
   import { timeWeek, timeMonths } from "d3-time";
-  import { Loader2 } from "lucide-svelte";
+  import { Loader2, ChevronLeft, ChevronRight } from "lucide-svelte";
   import { fly } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
   import { formatGlucoseValue, formatMonthLabel, formatWeekdayDate } from "$lib/utils/formatting";
@@ -46,6 +46,44 @@
   const days = $derived(yearData.get(year));
   const chartData = $derived(days ? transformYearData(days) : []);
   const isYearLoading = $derived(loadingYears.has(year) && !days);
+
+  let scrollContainer: HTMLDivElement | undefined = $state();
+  let isDragging = $state(false);
+  let startX = $state(0);
+  let scrollLeftStart = $state(0);
+  let hasDragged = $state(false);
+
+  const months = $derived(timeMonths(bounds.start, bounds.end));
+
+  function scrollToMonth(monthDate: Date) {
+    if (!scrollContainer) return;
+    const weekIndex = timeWeek.count(bounds.start, timeWeek.ceil(monthDate));
+    const targetX = Math.max(0, weekIndex * 24 - 24);
+    scrollContainer.scrollTo({ left: targetX, behavior: "smooth" });
+  }
+
+  function handleMouseDown(e: MouseEvent) {
+    if (!scrollContainer) return;
+    isDragging = true;
+    hasDragged = false;
+    startX = e.pageX - scrollContainer.offsetLeft;
+    scrollLeftStart = scrollContainer.scrollLeft;
+  }
+
+  function handleMouseMove(e: MouseEvent) {
+    if (!isDragging || !scrollContainer) return;
+    e.preventDefault();
+    const x = e.pageX - scrollContainer.offsetLeft;
+    const walk = (x - startX) * 1.5;
+    if (Math.abs(walk) > 4) {
+      hasDragged = true;
+    }
+    scrollContainer.scrollLeft = scrollLeftStart - walk;
+  }
+
+  function handleMouseUp() {
+    isDragging = false;
+  }
 </script>
 
 <div
@@ -64,25 +102,48 @@
     class="pointer-events-none h-0"
   ></div>
 
-  <!-- Year Label -->
-  <div class="mb-3 flex items-center gap-3">
-    <h2 class="text-xl font-bold tabular-nums">{year}</h2>
-    {#if isYearLoading}
-      <Loader2 class="h-4 w-4 animate-spin text-muted-foreground" />
-    {/if}
-    {#if days}
-      <span class="text-sm text-muted-foreground">
-        {days.filter((d: any) => (d.totalCount ?? 0) > 0).length} days with data
-      </span>
-    {/if}
+  <!-- Year Label & Mobile Month Quick-Scroller -->
+  <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+    <div class="flex items-center gap-3">
+      <h2 class="text-xl font-bold tabular-nums">{year}</h2>
+      {#if isYearLoading}
+        <Loader2 class="h-4 w-4 animate-spin text-muted-foreground" />
+      {/if}
+      {#if days}
+        <span class="text-sm text-muted-foreground">
+          {days.filter((d: any) => (d.totalCount ?? 0) > 0).length} days with data
+        </span>
+      {/if}
+    </div>
+
+    <!-- Quick Month Jumper / Scroll Navigator -->
+    <div class="flex items-center gap-1 overflow-x-auto py-1 max-w-full text-xs print:hidden no-scrollbar">
+      {#each months as monthDate}
+        <button
+          type="button"
+          class="px-2 py-0.5 rounded-full text-[11px] font-medium bg-muted/60 hover:bg-primary/15 hover:text-primary transition-colors cursor-pointer shrink-0 border border-border/40"
+          onclick={() => scrollToMonth(monthDate)}
+        >
+          {formatMonthLabel(monthDate)}
+        </button>
+      {/each}
+    </div>
   </div>
 
-  <!-- Calendar Heatmap -->
+  <!-- Calendar Heatmap Card with Enhanced Touch & Grab Scrolling -->
   {#if chartData.length > 0}
     <div
-      class="w-full overflow-x-auto overflow-y-visible rounded-lg border border-border bg-card p-4 print:overflow-visible"
+      bind:this={scrollContainer}
+      class="heatmap-scroll-container w-full overflow-x-auto overflow-y-visible rounded-xl border border-border bg-card p-4 print:overflow-visible touch-pan-x cursor-grab active:cursor-grabbing select-none"
+      style="-webkit-overflow-scrolling: touch; overscroll-behavior-x: contain;"
+      onmousedown={handleMouseDown}
+      onmousemove={handleMouseMove}
+      onmouseup={handleMouseUp}
+      onmouseleave={handleMouseUp}
+      role="region"
+      aria-label={`${year} heatmap scrollable view`}
     >
-      <div class="min-w-[900px] h-60">
+      <div class="min-w-[920px] h-60 pt-2">
         <Chart
           data={chartData}
           x="date"
@@ -109,7 +170,7 @@
               >
                 {#snippet children({ cells, cellSize })}
                   <!-- Month labels (clickable → calendar) -->
-                  {#each timeMonths(bounds.start, bounds.end) as monthDate}
+                  {#each months as monthDate}
                     {@const monthX =
                       timeWeek.count(
                         bounds.start,
@@ -121,9 +182,9 @@
                     >
                       <text
                         x={monthX}
-                        y={-5}
+                        y={-6}
                         font-size="12"
-                        class="fill-muted-foreground hover:fill-primary cursor-pointer"
+                        class="fill-muted-foreground hover:fill-primary font-medium cursor-pointer"
                       >
                         {formatMonthLabel(monthDate)}
                       </text>
@@ -147,11 +208,12 @@
                       height={cellSize[1] - padding * 2}
                       rx={4}
                       fill={getCellFill(cell.data)}
-                      onpointermove={(e: PointerEvent) =>
-                        context.tooltip?.show(e, cell.data)}
+                      onpointermove={(e: PointerEvent) => {
+                        if (!isDragging) context.tooltip?.show(e, cell.data);
+                      }}
                       onpointerleave={() => context.tooltip?.hide()}
                       onclick={() => {
-                        if (cellDate) {
+                        if (cellDate && !hasDragged) {
                           navigateToDayInReview(cellDate);
                         }
                       }}
@@ -165,7 +227,7 @@
                     >
                       <text
                         x={wk.x + cellSize[0] / 2}
-                        y={7 * cellSize[1] + 14}
+                        y={7 * cellSize[1] + 16}
                         text-anchor="middle"
                         font-size="9"
                         class="fill-muted-foreground hover:fill-primary cursor-pointer"
