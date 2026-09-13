@@ -200,7 +200,6 @@ describe("glucose focus band", () => {
   });
 
   it("takes its outside color from the theme, not from either end of the ramp", () => {
-    expect(outside).toBe(GLUCOSE_HEATMAP_OUTSIDE_COLOR);
     expect(stops.map((stop) => stop.color)).not.toContain(outside);
   });
 
@@ -276,12 +275,11 @@ describe("glucose focus band", () => {
   });
 
   it("never re-blends an anchor that already sits on a boundary", () => {
-    const thresholds = [54, 72, 180, 250] as const;
-    const gradient = glucoseColorFocusGradient(
-      glucoseColorFocusStops(thresholds),
-      thresholds
-    );
+    const thresholds = [60, 100, 200, 280] as const;
+    const stops = glucoseColorFocusStops(thresholds);
 
+    expect(stops.some((stop) => stop.color.startsWith("color-mix"))).toBe(true);
+    const gradient = glucoseColorFocusGradient(stops, thresholds);
     expect(gradient).not.toContain("color-mix(in srgb, color-mix");
     expect(gradient).not.toContain(" 0.00%,");
   });

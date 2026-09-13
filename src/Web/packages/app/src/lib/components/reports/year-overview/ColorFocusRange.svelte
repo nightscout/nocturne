@@ -121,10 +121,14 @@
         return;
       }
       committed.forEach((value, index) => {
-        if (drafts[index] === value) return;
-        drafts[index] = value;
-        if (invalidBound === index) invalidBound = null;
+        if (drafts[index] !== value) drafts[index] = value;
       });
+      if (
+        invalidBound !== null &&
+        drafts[invalidBound] === committed[invalidBound]
+      ) {
+        invalidBound = null;
+      }
     });
   });
 
@@ -213,7 +217,7 @@
           class="h-3.5 w-full rounded-sm"
           style:background={gradient}
           role="img"
-          aria-label={`${metricLabel} color scale over ${formatted(values[0])} to ${formatted(values[values.length - 1])} ${unitLabel}, one color outside it`}
+          aria-label={`${metricLabel} color scale from ${formatted(minimum)} to ${formatted(maximum)} ${unitLabel}, one color outside ${formatted(values[0])} to ${formatted(values[values.length - 1])}`}
           data-testid={glucose ? "glucose-color-track" : "color-focus-track"}
         ></span>
         {#each thumbItems as thumb (thumb.index)}

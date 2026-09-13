@@ -23,8 +23,10 @@
 
   /* Days outside the focused band. Deliberately not a ramp anchor: it must recede into
      the page in both schemes, where --glucose-heatmap-1 inverts to contrast with it.
-     Kept clear of --muted (0.92-0.95 light, 0.22-0.25 dark), which means "no reading". */
-  --glucose-heatmap-outside: oklch(0.86 0.01 250);
+     Tinted rather than grey, and held at least 1.6:1 (light) / 2.7:1 (dark) against every
+     theme's --muted, which is the near-neutral already meaning "no reading" on this
+     heatmap: two greys separable only by luminance read as the same tile. */
+  --glucose-heatmap-outside: oklch(0.78 0.05 300);
 
   /* Day-of-week series (week-to-week comparison). Qualitative: the hues separate
      one weekday from another and say nothing about the readings. Okabe-Ito
@@ -116,7 +118,7 @@
 
 .dark {
   --glucose-heatmap-1: #ffffff;
-  --glucose-heatmap-outside: oklch(0.32 0.015 250);
+  --glucose-heatmap-outside: oklch(0.53 0.06 300);
   /* Insulin Types - Dark Mode - need higher opacity for visibility */
   --insulin-basal: rgba(100, 180, 255, 0.35);
   --insulin-temp-basal: rgba(140, 200, 255, 0.5);
