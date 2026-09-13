@@ -2,10 +2,29 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { goto } from "$app/navigation";
-import type { GoogleHealthStatus } from "$lib/api";
+import type { GoogleHealthStatus, ServicesOverview } from "$lib/api";
 
 import GoogleHealthSourceRow from "./GoogleHealthSourceRow.svelte";
 import ServerConnectorsCard from "./ServerConnectorsCard.svelte";
+import ConnectorsPage from "$routes/(authenticated)/settings/connectors/+page.svelte";
+
+const overviewMocks = vi.hoisted(() => ({ services: vi.fn(), google: vi.fn() }));
+vi.mock("$api/generated/services.generated.remote", () => ({
+  getServicesOverview: overviewMocks.services,
+  getConnectorCapabilities: () => ({ current: null }),
+  triggerConnectorSync: vi.fn(),
+}));
+vi.mock("$api/generated/googleHealths.generated.remote", () => ({ getGoogleHealth: overviewMocks.google }));
+vi.mock("$api/generated/connectorStatus.generated.remote", () => ({ getStatus: () => ({ current: [] }) }));
+vi.mock("$lib/stores/realtime-store.svelte", () => ({ getRealtimeStore: () => ({ syncProgressByConnector: {} }) }));
+vi.mock("@nocturne/coach", () => ({ coachmark: () => () => {} }));
+vi.mock("$lib/components/settings/ConnectedApps.svelte", () => ({ default: () => {} }));
+vi.mock("$lib/components/settings/ClientDevices.svelte", () => ({ default: () => {} }));
+vi.mock("$lib/components/settings/ApiTokens.svelte", () => ({ default: () => {} }));
+vi.mock("./UploaderSetupDialog.svelte", () => ({ default: () => {} }));
+vi.mock("./ConnectorDetailsDialog.svelte", () => ({ default: () => {} }));
+vi.mock("./ManualSyncDialog.svelte", () => ({ default: () => {} }));
+vi.mock("./DataSourceManageDialog.svelte", () => ({ default: () => {} }));
 
 vi.mock("$app/navigation", () => ({ goto: vi.fn() }));
 
@@ -67,5 +86,33 @@ describe("Google Health source presentation", () => {
     });
     await page.getByRole("button", { name: "Refresh", exact: true }).click();
     expect(refresh).toHaveBeenCalledOnce();
+  });
+
+  it.each(["sourceType", "deviceId"])("keeps the disconnected source visible without duplicating its generic %s row", async (identifier) => {
+    const overview: ServicesOverview = {
+      activeDataSources: [{ id: "google", name: "Generic Google source", [identifier]: "google-health-connector" }],
+      availableConnectors: [{ id: "googlehealth", name: "Google Health" }],
+    };
+    overviewMocks.services.mockReturnValue({ current: overview });
+    overviewMocks.google.mockReturnValue({ current: { ...connected, connected: false } });
+    render(ConnectorsPage);
+
+    await expect.element(page.getByText("Reconnect to resume importing").first()).toBeVisible();
+    expect(page.getByRole("button", { name: /Google Health/ }).elements()).toHaveLength(2);
+    await expect.element(page.getByText("Generic Google source", { exact: true })).not.toBeInTheDocument();
+    await expect.element(page.getByText("No data sources detected")).not.toBeInTheDocument();
+    await page.getByRole("button", { name: /Google Health/ }).first().click();
+    expect(goto).toHaveBeenCalledWith("/settings/connectors/google-health");
+  });
+
+  it.each([false, true])("shows the empty state when no configured or visible sources remain (stale source: %s)", async (staleSource) => {
+    overviewMocks.services.mockReturnValue({ current: {
+      activeDataSources: staleSource ? [{ id: "google", sourceType: "google-health-connector" }] : undefined,
+    } });
+    overviewMocks.google.mockReturnValue({ current: { configured: false, connected: false } });
+    render(ConnectorsPage);
+
+    await expect.element(page.getByText("No data sources detected")).toBeVisible();
+    await expect.element(page.getByText("Reconnect to resume importing")).not.toBeInTheDocument();
   });
 });

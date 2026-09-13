@@ -234,6 +234,40 @@ public class GoogleHealthTests
         Assert.Equal(accountKey, store.Secrets["accountKey"]);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task OAuth_scope_fallback_matches_the_authorization_request_unless_google_returns_scopes(bool explicitScopes)
+    {
+        var subject = Guid.NewGuid();
+        var store = new TestConnectorStore();
+        var handler = new StubHandler(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/token" => Json(explicitScopes
+                ? $$"""{"access_token":"access","refresh_token":"refresh","expires_in":3600,"token_type":"Bearer","scope":"openid {{GoogleHealthClient.MetricsScope}}"}"""
+                : """{"access_token":"access","refresh_token":"refresh","expires_in":3600,"token_type":"Bearer"}"""),
+            "/v1/userinfo" => Json("{\"sub\":\"account\"}"),
+            _ => Json("{}")
+        });
+        var service = Service(store, handler, Guid.NewGuid());
+        var options = Options();
+        options.DataTypes = ["weight"];
+        await service.SaveAsync(options, subject, default);
+        var authorization = await service.StartAsync(subject, default);
+        var query = QueryHelpers.ParseQuery(new Uri(authorization.Url).Query);
+
+        await service.CompleteAsync(new GoogleHealthCallback
+        {
+            State = query["state"].ToString(), Code = "code"
+        }, subject, default);
+
+        var expectedScopes = explicitScopes
+            ? new[] { "openid", GoogleHealthClient.MetricsScope }
+            : query["scope"].ToString().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(expectedScopes.Order(StringComparer.Ordinal),
+            store.Secrets["grantedScopes"].Split(' ').Order(StringComparer.Ordinal));
+    }
+
     [Fact]
     public async Task Purging_a_disconnected_account_removes_its_resume_watermark()
     {

@@ -388,8 +388,7 @@ public sealed class GoogleHealthService(
             if (Fingerprint(settings) != flow.Settings)
                 throw new GoogleHealthException("expired_signin");
 
-            var requestedScopes = settings.DataTypes
-                .Where(type => GoogleHealthClient.SupportedTypes.Contains(type, StringComparer.Ordinal))
+            var requestedScopes = GoogleHealthClient.SupportedTypes
                 .Select(GoogleHealthClient.ScopeFor).Append("openid")
                 .Distinct(StringComparer.Ordinal).ToArray();
             var token = await oauth.ExchangeAuthorizationCodeAsync(

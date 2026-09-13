@@ -5,6 +5,23 @@ The connector requests read-only Google access and writes steps, heart rate,
 body weight and sleep directly to Nocturne's existing health histories. It does
 not introduce a separate health database or provide treatment recommendations.
 
+## Database deployment
+
+Deployment applies two EF Core migrations for reconciliation staging in the
+existing database. They create `google_health_reconciliation_runs` and
+`google_health_reconciliation_ids`, followed by tenant row-level security,
+cascading cleanup of staged IDs and an index for expiring abandoned runs.
+These tables hold temporary import administration, not native health histories.
+
+If the initial migration is not registered but either staging table already
+exists, it warns in the migration log and recreates only these two tables in
+the migration transaction. Staged IDs from an interrupted import are discarded;
+retrying the import rebuilds them. Native health data, connector credentials and
+settings are not removed. Unexpected external dependencies prevent replacement
+and roll back the transaction; the migration never uses `DROP ... CASCADE`.
+Already registered migrations are skipped on upgrades and restarts, so existing
+staging is not routinely reset. Back up the database before upgrading.
+
 ## Google Cloud setup
 
 1. Enable the Google Health API in your Google Cloud project.
