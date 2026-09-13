@@ -183,7 +183,7 @@
 
   <!-- Sliders & Ranges -->
   {#if selectedMetric === "avgGlucose"}
-    <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+    <div class="w-full">
       {#if advancedMode}
         <ColorFocusRange
           glucose
@@ -221,7 +221,7 @@
       selectedMetric === "tir" ? 100 : getMetricMax(selectedMetric)}
     {@const cssVar =
       METRIC_CSS_VARS[selectedMetric as Exclude<HeatmapMetric, "avgGlucose">]}
-    <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+    <div class="w-full">
       {#if advancedMode}
         {#key `${selectedMetric}-${lowColor}-${highColor}`}
           <ColorFocusRange

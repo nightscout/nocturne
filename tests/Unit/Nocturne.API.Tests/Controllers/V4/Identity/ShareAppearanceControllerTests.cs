@@ -99,7 +99,7 @@ public sealed class ShareAppearanceControllerTests
         // declarations is what makes adding one a decision rather than a default.
         PropertyNames(typeof(YearOverviewColorPreferences)).Should().BeEquivalentTo(
             "AdvancedMode", "OutOfBandTransparency", "LowColor", "HighColor",
-            "AvgGlucose", "AvgGlucoseBand", "Tir", "TirBand", "Bolus", "BolusBand", "Basal", "BasalBand", "Tdd", "TddBand", "Carbs", "CarbsBand");
+            "AvgGlucose", "AvgGlucoseBand", "Tir", "TirBand", "TirColors", "Bolus", "BolusBand", "BolusColors", "Basal", "BasalBand", "BasalColors", "Tdd", "TddBand", "TddColors", "Carbs", "CarbsBand", "CarbsColors");
         PropertyNames(typeof(PredictionPreferences)).Should().BeEquivalentTo(
             "Enabled", "Minutes", "DisplayMode");
         PropertyNames(typeof(ChartPreferences)).Should().BeEquivalentTo(

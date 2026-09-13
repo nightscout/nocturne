@@ -77,8 +77,19 @@
   const transparencyPercent = $derived(
     Math.max(0, Math.min(100, colorFocusPreferences.outOfBandTransparency ?? 90))
   );
-  const lowColor = $derived(colorFocusPreferences.lowColor);
-  const highColor = $derived(colorFocusPreferences.highColor);
+
+  const currentMetricColors = $derived.by(() => {
+    if (selectedMetric === "avgGlucose") return { low: undefined, high: undefined };
+    const key = `${selectedMetric}Colors` as keyof typeof colorFocusPreferences;
+    const colors = colorFocusPreferences[key] as string[] | undefined;
+    if (colors && colors.length === 2) {
+      return { low: colors[0], high: colors[1] };
+    }
+    return { low: undefined, high: undefined };
+  });
+
+  const lowColor = $derived(currentMetricColors.low);
+  const highColor = $derived(currentMetricColors.high);
 
   const focusRange = $derived.by(() => {
     if (!advancedMode || selectedMetric === "avgGlucose") return null;
@@ -117,11 +128,14 @@
   }
 
   function setCustomColors(low: string | undefined, high: string | undefined) {
+    if (selectedMetric === "avgGlucose") return;
+    const key = `${selectedMetric}Colors` as keyof typeof colorFocusPreferences;
     const next = { ...colorFocusPreferences };
-    if (low) next.lowColor = low;
-    else delete next.lowColor;
-    if (high) next.highColor = high;
-    else delete next.highColor;
+    if (low && high) {
+      next[key] = [low, high];
+    } else {
+      delete next[key];
+    }
     yearOverviewColors.current = next;
   }
 
