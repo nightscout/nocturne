@@ -57,8 +57,8 @@
             then <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">yourname.dedyn.io</code>.
         </li>
         <li>
-            Under <strong>Token management</strong>, create a token and copy it. The installer
-            asks for it and hides what you paste. You can delete the token afterwards.
+            Under <strong>Token management</strong>, create a token and copy the long secret it
+            shows you once — not the name you gave the token. You can delete the token afterwards.
         </li>
     </ol>
     <p class="text-muted-foreground mb-8">
@@ -162,8 +162,10 @@
         </p>
     </Callout>
     <p class="text-muted-foreground mb-4">
-        Early on it asks for a deSEC token. Paste one and the DNS records are created for you;
-        press Enter instead and it prints two records for you to create by hand. Either way it
+        Early on it asks for a deSEC token. <strong>Nothing appears on screen as you paste it</strong>
+        — the token is hidden, and the installer tells you how many characters it read so you can
+        see the paste landed. If deSEC does not accept it you can paste another. Press Enter with
+        nothing pasted and it prints two records for you to create by hand instead. Either way it
         keeps working while the server boots, and waits for the records before it requests
         certificates.
     </p>
