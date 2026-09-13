@@ -27,6 +27,11 @@ public sealed class GoogleHealthReadingWriter(
         DateTimeOffset to,
         CancellationToken ct)
     {
+        var expiresBefore = DateTime.UtcNow.AddDays(-7);
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            DELETE FROM google_health_reconciliation_runs
+            WHERE tenant_id = {db.TenantId} AND created_at < {expiresBefore}
+            """, ct);
         var runId = Guid.CreateVersion7();
         await db.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO google_health_reconciliation_runs
@@ -42,18 +47,38 @@ public sealed class GoogleHealthReadingWriter(
         IReadOnlyCollection<string> identifiers,
         CancellationToken ct)
     {
-        foreach (var identifier in identifiers.Distinct(StringComparer.Ordinal))
-            await db.Database.ExecuteSqlInterpolatedAsync($"""
+        foreach (var batch in identifiers.Where(identifier => !string.IsNullOrWhiteSpace(identifier))
+                     .Distinct(StringComparer.Ordinal).Chunk(1000))
+        {
+            if (db.Database.IsNpgsql())
+                await db.Database.ExecuteSqlInterpolatedAsync($"""
+                    INSERT INTO google_health_reconciliation_ids (run_id, tenant_id, data_type, identifier)
+                    SELECT run.id, run.tenant_id, {dataType}, incoming.identifier
+                    FROM google_health_reconciliation_runs run
+                    CROSS JOIN unnest({batch}) AS incoming(identifier)
+                    WHERE run.id = {runId} AND run.tenant_id = {db.TenantId}
+                    ON CONFLICT (run_id, data_type, identifier) DO NOTHING
+                    """, ct);
+            else
+                await db.Database.ExecuteSqlInterpolatedAsync($"""
                 INSERT INTO google_health_reconciliation_ids (run_id, tenant_id, data_type, identifier)
-                VALUES ({runId}, {db.TenantId}, {dataType}, {identifier})
+                SELECT run.id, run.tenant_id, {dataType}, incoming.value
+                FROM google_health_reconciliation_runs run
+                CROSS JOIN json_each({System.Text.Json.JsonSerializer.Serialize(batch)}) AS incoming
+                WHERE run.id = {runId} AND run.tenant_id = {db.TenantId}
                 ON CONFLICT (run_id, data_type, identifier) DO NOTHING
                 """, ct);
+        }
     }
 
     public async Task CompleteReconciliationAsync(Guid runId, CancellationToken ct)
     {
+        var strategy = db.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
+        {
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
         var run = await db.Database.SqlQuery<ReconciliationRun>($"""
-            SELECT id, tenant_id AS "TenantId", from_time AS "FromTime", to_time AS "ToTime",
+            SELECT id AS "Id", tenant_id AS "TenantId", from_time AS "FromTime", to_time AS "ToTime",
                    active_types AS "ActiveTypes"
             FROM google_health_reconciliation_runs
             WHERE id = {runId} AND tenant_id = {db.TenantId}
@@ -62,27 +87,57 @@ public sealed class GoogleHealthReadingWriter(
         var deletedAt = DateTime.UtcNow;
         foreach (var type in activeTypes)
         {
-            var runText = runId.ToString();
-            var tenantText = db.TenantId.ToString();
-            var fromText = run.FromTime.ToString("O", System.Globalization.CultureInfo.InvariantCulture);
-            var toText = run.ToTime.ToString("O", System.Globalization.CultureInfo.InvariantCulture);
-            var deletedText = deletedAt.ToString("O", System.Globalization.CultureInfo.InvariantCulture);
-            var sql = type switch
+            var identifiers = db.Database.SqlQuery<string>($"""
+                SELECT identifier AS "Value" FROM google_health_reconciliation_ids
+                WHERE run_id = {runId} AND tenant_id = {db.TenantId} AND data_type = {type}
+                """);
+            if (!await identifiers.AnyAsync(ct)) continue;
+            switch (type)
             {
-                "heart-rate" => $"UPDATE heart_rates SET deleted_at = '{deletedText}' WHERE data_source = '{Source}' AND deleted_at IS NULL AND timestamp >= '{fromText}' AND timestamp < '{toText}' AND sync_identifier IS NOT NULL AND NOT EXISTS (SELECT 1 FROM google_health_reconciliation_ids ids WHERE ids.run_id = '{runText}' AND ids.tenant_id = '{tenantText}' AND ids.data_type = 'heart-rate' AND ids.identifier = heart_rates.sync_identifier)",
-                "steps" => $"UPDATE step_counts SET deleted_at = '{deletedText}' WHERE data_source = '{Source}' AND deleted_at IS NULL AND timestamp >= '{fromText}' AND timestamp < '{toText}' AND sync_identifier IS NOT NULL AND NOT EXISTS (SELECT 1 FROM google_health_reconciliation_ids ids WHERE ids.run_id = '{runText}' AND ids.tenant_id = '{tenantText}' AND ids.data_type = 'steps' AND ids.identifier = step_counts.sync_identifier)",
-                "weight" => $"UPDATE body_weights SET deleted_at = '{deletedText}' WHERE data_source = '{Source}' AND deleted_at IS NULL AND mills >= {new DateTimeOffset(run.FromTime).ToUnixTimeMilliseconds()} AND mills < {new DateTimeOffset(run.ToTime).ToUnixTimeMilliseconds()} AND sync_identifier IS NOT NULL AND NOT EXISTS (SELECT 1 FROM google_health_reconciliation_ids ids WHERE ids.run_id = '{runText}' AND ids.tenant_id = '{tenantText}' AND ids.data_type = 'weight' AND ids.identifier = body_weights.sync_identifier)",
-                "sleep" => $"DELETE FROM sleep_sessions WHERE source = 'Google' AND source_app = '{SourceApp}' AND end_time >= '{fromText}' AND end_time < '{toText}' AND original_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM google_health_reconciliation_ids ids WHERE ids.run_id = '{runText}' AND ids.tenant_id = '{tenantText}' AND ids.data_type = 'sleep' AND ids.identifier = sleep_sessions.original_id)",
-                _ => throw new InvalidOperationException($"Unsupported Google Health type '{type}'")
-            };
-            await db.Database.ExecuteSqlRawAsync(sql, ct);
+                case "heart-rate":
+                    await db.HeartRates.Where(record => record.TenantId == db.TenantId &&
+                            record.DataSource == Source && record.DeletedAt == null &&
+                            record.Timestamp >= run.FromTime && record.Timestamp < run.ToTime &&
+                            record.SyncIdentifier != null && !identifiers.Contains(record.SyncIdentifier))
+                        .ExecuteUpdateAsync(setters => setters.SetProperty(record => record.DeletedAt, deletedAt)
+                            .SetProperty(record => EF.Property<bool>(record, "DeletedByUser"), false), ct);
+                    break;
+                case "steps":
+                    await db.StepCounts.Where(record => record.TenantId == db.TenantId &&
+                            record.DataSource == Source && record.DeletedAt == null &&
+                            record.Timestamp >= run.FromTime && record.Timestamp < run.ToTime &&
+                            record.SyncIdentifier != null && !identifiers.Contains(record.SyncIdentifier))
+                        .ExecuteUpdateAsync(setters => setters.SetProperty(record => record.DeletedAt, deletedAt)
+                            .SetProperty(record => EF.Property<bool>(record, "DeletedByUser"), false), ct);
+                    break;
+                case "weight":
+                    var firstMills = new DateTimeOffset(DateTime.SpecifyKind(run.FromTime, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
+                    var lastMills = new DateTimeOffset(DateTime.SpecifyKind(run.ToTime, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
+                    await db.BodyWeights.Where(record => record.TenantId == db.TenantId &&
+                            record.DataSource == Source && record.DeletedAt == null &&
+                            record.Mills >= firstMills && record.Mills < lastMills &&
+                            record.SyncIdentifier != null && !identifiers.Contains(record.SyncIdentifier))
+                        .ExecuteUpdateAsync(setters => setters.SetProperty(record => record.DeletedAt, deletedAt)
+                            .SetProperty(record => EF.Property<bool>(record, "DeletedByUser"), false), ct);
+                    break;
+                case "sleep":
+                    await db.SleepSessions.Where(session => session.TenantId == db.TenantId &&
+                            session.Source == SleepSource.Google.ToString() && session.SourceApp == SourceApp &&
+                            session.EndTime >= run.FromTime && session.EndTime < run.ToTime &&
+                            session.OriginalId != null && !identifiers.Contains(session.OriginalId))
+                        .ExecuteDeleteAsync(ct);
+                    break;
+                default:
+                    throw new InvalidOperationException($"Unsupported Google Health type '{type}'");
+            }
         }
         await AbandonReconciliationAsync(runId, ct);
+        await transaction.CommitAsync(ct);
+        });
     }
 
     public Task AbandonReconciliationAsync(Guid runId, CancellationToken ct) =>
         db.Database.ExecuteSqlInterpolatedAsync($"""
-            DELETE FROM google_health_reconciliation_ids WHERE run_id = {runId} AND tenant_id = {db.TenantId};
             DELETE FROM google_health_reconciliation_runs WHERE id = {runId} AND tenant_id = {db.TenantId};
             """, ct);
 
@@ -198,119 +253,6 @@ public sealed class GoogleHealthReadingWriter(
             yield return record;
         }
     }
-
-    public async Task ReconcileAsync(
-        IReadOnlyDictionary<string, IReadOnlyCollection<string>> readingIds,
-        IReadOnlyCollection<string> sleepIds,
-        IReadOnlyCollection<string> activeTypes,
-        DateTimeOffset from,
-        DateTimeOffset to,
-        CancellationToken ct)
-    {
-        var first = from.UtcDateTime;
-        var last = to.UtcDateTime;
-        var firstMills = from.ToUnixTimeMilliseconds();
-        var lastMills = to.ToUnixTimeMilliseconds();
-        var deletedAt = DateTime.UtcNow;
-        var heartRateIds = Ids(readingIds, "heart-rate");
-        var stepIds = Ids(readingIds, "steps");
-        var weightIds = Ids(readingIds, "weight");
-
-        logger.LogInformation(
-            "GoogleHealthReadingWriter.ReconcileAsync: active types {ActiveTypes} from {From} to {To}. Filter IDs: {HeartRateCount} heart-rates, {StepCount} steps, {WeightCount} weights, {SleepCount} sleep sessions",
-            string.Join(',', activeTypes), from, to, heartRateIds.Count, stepIds.Count, weightIds.Count, sleepIds.Count);
-
-        try
-        {
-
-        if (activeTypes.Contains("heart-rate") && heartRateIds.Count > 0)
-        {
-            var existing = await db.HeartRates
-                .Where(record => record.DataSource == Source && record.Timestamp >= first && record.Timestamp < last && record.DeletedAt == null)
-                .Select(record => new { record.Id, record.SyncIdentifier })
-                .ToListAsync(ct);
-            var toDelete = existing
-                .Where(record => record.SyncIdentifier != null && !heartRateIds.Contains(record.SyncIdentifier))
-                .Select(record => record.Id)
-                .ToList();
-            foreach (var batch in toDelete.Chunk(500))
-            {
-                await db.HeartRates
-                    .Where(record => batch.Contains(record.Id))
-                    .ExecuteUpdateAsync(setters => setters
-                        .SetProperty(record => record.DeletedAt, deletedAt)
-                        .SetProperty(record => EF.Property<bool>(record, "DeletedByUser"), false), ct);
-            }
-        }
-
-        if (activeTypes.Contains("steps") && stepIds.Count > 0)
-        {
-            var existing = await db.StepCounts
-                .Where(record => record.DataSource == Source && record.Timestamp >= first && record.Timestamp < last && record.DeletedAt == null)
-                .Select(record => new { record.Id, record.SyncIdentifier })
-                .ToListAsync(ct);
-            var toDelete = existing
-                .Where(record => record.SyncIdentifier != null && !stepIds.Contains(record.SyncIdentifier))
-                .Select(record => record.Id)
-                .ToList();
-            foreach (var batch in toDelete.Chunk(500))
-            {
-                await db.StepCounts
-                    .Where(record => batch.Contains(record.Id))
-                    .ExecuteUpdateAsync(setters => setters
-                        .SetProperty(record => record.DeletedAt, deletedAt)
-                        .SetProperty(record => EF.Property<bool>(record, "DeletedByUser"), false), ct);
-            }
-        }
-
-        if (activeTypes.Contains("weight") && weightIds.Count > 0)
-        {
-            var existing = await db.BodyWeights
-                .Where(record => record.DataSource == Source && record.Mills >= firstMills && record.Mills < lastMills && record.DeletedAt == null)
-                .Select(record => new { record.Id, record.SyncIdentifier })
-                .ToListAsync(ct);
-            var toDelete = existing
-                .Where(record => record.SyncIdentifier != null && !weightIds.Contains(record.SyncIdentifier))
-                .Select(record => record.Id)
-                .ToList();
-            foreach (var batch in toDelete.Chunk(500))
-            {
-                await db.BodyWeights
-                    .Where(record => batch.Contains(record.Id))
-                    .ExecuteUpdateAsync(setters => setters
-                        .SetProperty(record => record.DeletedAt, deletedAt)
-                        .SetProperty(record => EF.Property<bool>(record, "DeletedByUser"), false), ct);
-            }
-        }
-
-        if (activeTypes.Contains("sleep") && sleepIds.Count > 0)
-        {
-            var existing = await db.SleepSessions
-                .Where(session => session.Source == SleepSource.Google.ToString() && session.SourceApp == SourceApp && session.EndTime >= first && session.EndTime < last)
-                .Select(session => new { session.Id, session.OriginalId })
-                .ToListAsync(ct);
-            var toDelete = existing
-                .Where(session => session.OriginalId != null && !sleepIds.Contains(session.OriginalId))
-                .Select(session => session.Id)
-                .ToList();
-            foreach (var batch in toDelete.Chunk(500))
-            {
-                await db.SleepSessions
-                    .Where(session => batch.Contains(session.Id))
-                    .ExecuteDeleteAsync(ct);
-            }
-        }
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "GoogleHealthReadingWriter.ReconcileAsync failed for active types {ActiveTypes}", string.Join(',', activeTypes));
-            throw;
-        }
-    }
-
-    private static IReadOnlyCollection<string> Ids(
-        IReadOnlyDictionary<string, IReadOnlyCollection<string>> readingIds,
-        string dataType) => readingIds.GetValueOrDefault(dataType, []);
 
     public async Task PurgeAsync(CancellationToken ct)
     {

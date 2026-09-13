@@ -496,7 +496,9 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
             long? end = interval ? DateTimeOffset.Parse(time.GetProperty("endTime").GetString()!, CultureInfo.InvariantCulture).ToUnixTimeMilliseconds() : null;
             var valueName = type switch { "steps" => "count", "heart-rate" => "beatsPerMinute", "weight" => "weightGrams", _ => throw new GoogleHealthException("unsupported_type", stage: "data_parse", dataType: type) };
             var value = decimal.Parse(payload.GetProperty(valueName).ToString(), CultureInfo.InvariantCulture);
-            if (value < 0 || (type != "steps" && value == 0) || (type != "weight" && decimal.Truncate(value) != value) || (end.HasValue && end.Value <= start.ToUnixTimeMilliseconds()))
+            if (value < 0 || (type != "steps" && value == 0) ||
+                (type != "weight" && (decimal.Truncate(value) != value || value > int.MaxValue)) ||
+                (end.HasValue && end.Value <= start.ToUnixTimeMilliseconds()))
                 throw new GoogleHealthException("invalid_google_data", stage: "data_parse", dataType: type);
             int? offset = null;
             if (time.TryGetProperty(interval ? "startUtcOffset" : "utcOffset", out var offsetValue))
