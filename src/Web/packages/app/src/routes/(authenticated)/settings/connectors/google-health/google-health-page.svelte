@@ -396,7 +396,7 @@
               ? "page"
               : "pages"} read for this data type
           </span>{/if}{#if status.lastSync}<span>
-            Laatst succesvol gesynchroniseerd: {lastSeen(status.lastSync)}
+            Last successful sync: {lastSeen(status.lastSync)}
           </span>{/if}
       </div>
       <p class="text-sm">

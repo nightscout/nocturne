@@ -481,6 +481,14 @@ public sealed class GoogleHealthService(
             if (await StoredSessionAsync(ct) is not null)
                 throw new GoogleHealthException("disconnect_first");
             if (writer is not null) await writer.PurgeAsync(ct);
+            var stored = await connectorConfigurations.GetConfigurationAsync(ConnectorName, ct);
+            if (stored?.Configuration is not null)
+            {
+                var configuration = JsonNode.Parse(stored.Configuration.RootElement.GetRawText())!.AsObject();
+                configuration.Remove("lastSyncedTo");
+                using var document = JsonDocument.Parse(configuration.ToJsonString(Json));
+                await connectorConfigurations.SaveConfigurationAsync(ConnectorName, document, subject.ToString(), ct);
+            }
             await RemoveSessionAsync(subject, removeAccount: true, ct);
         }
         finally

@@ -23,6 +23,7 @@ public sealed class GoogleHealthConnectorService(
     IGoogleHealthSyncCoordinator coordinator,
     IConnectorConfigurationService connectorConfigurations,
     ITenantAccessor tenantAccessor,
+    IConnectorConfigurationLoader<GoogleHealthConnectorConfiguration> configurationLoader,
     ILogger<GoogleHealthConnectorService> logger,
     IConnectorPublisher? publisher = null)
     : BaseConnectorService<GoogleHealthConnectorConfiguration>(httpClient, serverResolver, logger, publisher)
@@ -108,6 +109,8 @@ public sealed class GoogleHealthConnectorService(
         await gate.WaitAsync(cancellationToken);
         try
         {
+            config = await configurationLoader.LoadForTenantAsync(cancellationToken);
+            if (!config.Enabled) return Complete(result);
             var selected = ResolveActiveTypes(request, config)
                 .Select(type => GoogleHealthClient.TryGetDataType(type, out var dataType)
                     ? dataType
@@ -256,12 +259,12 @@ public sealed class GoogleHealthConnectorService(
             result.ItemsSynced[GoogleHealthClient.TryGetSyncDataType(type, out var dataType)
                 ? dataType
                 : throw new GoogleHealthException("unsupported_type")] = 0;
-            var reconciliationRun = await writer.BeginReconciliationAsync(active, from, to, ct);
-            try
+        for (var index = 0; index < active.Length; index++)
         {
-                for (var index = 0; index < active.Length; index++)
+            var type = active[index];
+            var reconciliationRun = await writer.BeginReconciliationAsync([type], from, to, ct);
+            try
             {
-                    var type = active[index];
                     coordinator.Report(tenantId, GoogleHealthSyncPhase.Reading, type, index, active.Length, 0);
                     void PageRead(int pages)
                     {
@@ -270,7 +273,8 @@ public sealed class GoogleHealthConnectorService(
                     if (type == "sleep")
                         await foreach (var page in google.ReadSleepPagesAsync(accessToken, from, to, ct, PageRead))
                         {
-                            var unique = page.Where(session => session.OriginalId != null).ToArray();
+                            var unique = page.Where(session => !string.IsNullOrWhiteSpace(session.OriginalId))
+                                .DistinctBy(session => session.OriginalId, StringComparer.Ordinal).ToArray();
                             await writer.StageReconciliationIdsAsync(
                                 reconciliationRun, type,
                                 unique.Select(session => session.OriginalId!).ToArray(), ct);
@@ -281,7 +285,7 @@ public sealed class GoogleHealthConnectorService(
                     else
                         await foreach (var page in google.ReadPagesAsync(accessToken, type, from, to, ct, PageRead))
                         {
-                            var unique = page.ToArray();
+                            var unique = page.DistinctBy(GoogleHealthClient.Key, StringComparer.Ordinal).ToArray();
                             await writer.StageReconciliationIdsAsync(
                                 reconciliationRun, type,
                                 unique.Select(GoogleHealthClient.Key).ToArray(), ct);
@@ -289,14 +293,22 @@ public sealed class GoogleHealthConnectorService(
                             AddCount(result, type, unique.Length);
                         }
                     coordinator.Report(tenantId, GoogleHealthSyncPhase.Integrating, type, index, active.Length);
+                    await writer.CompleteReconciliationAsync(reconciliationRun, ct);
                     coordinator.Report(tenantId, GoogleHealthSyncPhase.Reading, type, index + 1, active.Length);
-            }
-                await writer.CompleteReconciliationAsync(reconciliationRun, ct);
             }
             catch
             {
-                await writer.AbandonReconciliationAsync(reconciliationRun, CancellationToken.None);
+                try
+                {
+                    using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                    await writer.AbandonReconciliationAsync(reconciliationRun, cleanup.Token);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Could not clean up Google Health staging run {RunId}", reconciliationRun);
+                }
                 throw;
+            }
         }
     }
 

@@ -1,9 +1,11 @@
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace Nocturne.Infrastructure.Data.Migrations;
 
+[DbContext(typeof(NocturneDbContext))]
 [Migration("20260913000000_AddGoogleHealthReconciliationStaging")]
 public partial class AddGoogleHealthReconciliationStaging : Migration
 {

@@ -24,6 +24,7 @@ public class GoogleHealthConnectorServiceTests
         var fixture = new Fixture(_ => Json("{}"));
         var config = fixture.Configuration();
         config.RefreshToken = null;
+        fixture.SetSession(null, GoogleHealthClient.MetricsScope);
 
         var result = await fixture.Service.SyncDataAsync(
             new SyncRequest(), config, CancellationToken.None);
@@ -258,11 +259,11 @@ public class GoogleHealthConnectorServiceTests
             It.Is<IReadOnlyCollection<GoogleHealthReading>>(readings => readings.Count == 1),
             It.IsAny<IReadOnlyCollection<Nocturne.Core.Models.SleepSession>>(),
             It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Once);
-        fixture.Writer.Verify(value => value.ReconcileAsync(
-            It.IsAny<IReadOnlyDictionary<string, IReadOnlyCollection<string>>>(),
-            It.IsAny<IReadOnlyCollection<string>>(),
-            It.IsAny<IReadOnlyCollection<string>>(),
-            It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Never);
+        fixture.Writer.Verify(value => value.CompleteReconciliationAsync(
+            It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        fixture.Writer.Verify(value => value.AbandonReconciliationAsync(
+            It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Null(fixture.LastSavedConfiguration);
     }
 
     [Fact]
@@ -303,6 +304,7 @@ public class GoogleHealthConnectorServiceTests
         config.SyncBodyWeight = false;
         config.SyncSleep = true;
         config.GrantedScopes = GoogleHealthClient.SleepScope;
+        fixture.SetSession("refresh", GoogleHealthClient.SleepScope);
         var from = new DateTime(2026, 9, 5, 0, 0, 0, DateTimeKind.Utc);
         var request = new SyncRequest { From = from, To = from.AddDays(1) };
 
@@ -329,9 +331,55 @@ public class GoogleHealthConnectorServiceTests
         Assert.Equal(from.AddDays(1), saved.RootElement.GetProperty("lastSyncedTo").GetDateTime());
     }
 
+    [Fact]
+    public async Task Waiting_sync_reloads_rotated_tokens_after_acquiring_the_gate()
+    {
+        string? requestedRefresh = null;
+        var fixture = new Fixture(request =>
+        {
+            if (request.RequestUri!.AbsolutePath == "/token")
+            {
+                requestedRefresh = System.Web.HttpUtility.ParseQueryString(
+                    request.Content!.ReadAsStringAsync().GetAwaiter().GetResult())["refresh_token"];
+                return Json($$"""{"access_token":"access","refresh_token":"rotated-again","expires_in":3600,"scope":"{{GoogleHealthClient.MetricsScope}}"}""");
+            }
+            return Json("{\"dataPoints\":[]}");
+        });
+        var staleConfig = fixture.Configuration();
+        await fixture.Gate.WaitAsync();
+        var pending = fixture.Service.SyncDataAsync(new SyncRequest(), staleConfig, default);
+        Assert.False(pending.IsCompleted);
+        fixture.SetSession("newest-refresh", GoogleHealthClient.MetricsScope);
+        fixture.Gate.Release();
+
+        var result = await pending;
+
+        Assert.True(result.Success);
+        Assert.Equal("newest-refresh", requestedRefresh);
+        Assert.Equal("rotated-again", fixture.Secrets["refreshToken"]);
+    }
+
+    [Fact]
+    public async Task Waiting_sync_does_not_restore_a_disconnected_session()
+    {
+        var fixture = new Fixture(_ => throw new InvalidOperationException("Google must not be called"));
+        var config = fixture.Configuration();
+        await fixture.Gate.WaitAsync();
+        var pending = fixture.Service.SyncDataAsync(new SyncRequest(), config, default);
+        fixture.SetSession(null, "");
+        fixture.Gate.Release();
+
+        var result = await pending;
+
+        Assert.False(result.Success);
+        Assert.Equal("reconnect_required", result.Message);
+        Assert.False(fixture.Secrets.ContainsKey("refreshToken"));
+    }
+
     private sealed class Fixture
     {
         private readonly Guid tenantId = Guid.NewGuid();
+        private GoogleHealthConnectorConfiguration? currentConfiguration;
         private Dictionary<string, string> secrets = new(StringComparer.OrdinalIgnoreCase)
         {
             ["refreshToken"] = "refresh",
@@ -370,7 +418,7 @@ public class GoogleHealthConnectorServiceTests
                 })
                 .ReturnsAsync(() => new ConnectorConfigurationResponse());
             var coordinator = Coordinator;
-            coordinator.Setup(value => value.Gate(tenantId)).Returns(new SemaphoreSlim(1));
+            coordinator.Setup(value => value.Gate(tenantId)).Returns(Gate);
             Writer = new Mock<IGoogleHealthReadingWriter>();
             Writer.Setup(value => value.WriteAsync(
                     It.IsAny<IReadOnlyCollection<GoogleHealthReading>>(),
@@ -378,14 +426,20 @@ public class GoogleHealthConnectorServiceTests
                     It.IsAny<int>(),
                     It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
-            Writer.Setup(value => value.ReconcileAsync(
-                    It.IsAny<IReadOnlyDictionary<string, IReadOnlyCollection<string>>>(),
-                    It.IsAny<IReadOnlyCollection<string>>(),
-                    It.IsAny<IReadOnlyCollection<string>>(),
-                    It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset>(),
-                    It.IsAny<CancellationToken>()))
-                .Returns(Task.CompletedTask);
+            Writer.Setup(value => value.BeginReconciliationAsync(
+                    It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTimeOffset>(),
+                    It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() => Guid.NewGuid());
             var handler = new StubHandler(responder);
+            var loader = new Mock<IConnectorConfigurationLoader<GoogleHealthConnectorConfiguration>>();
+            loader.Setup(value => value.LoadForTenantAsync(It.IsAny<CancellationToken>())).ReturnsAsync(() =>
+            {
+                var loaded = JsonSerializer.Deserialize<GoogleHealthConnectorConfiguration>(
+                    JsonSerializer.Serialize(currentConfiguration!))!;
+                loaded.RefreshToken = secrets.GetValueOrDefault("refreshToken");
+                loaded.GrantedScopes = secrets.GetValueOrDefault("grantedScopes");
+                return loaded;
+            });
             var oauth = new GoogleHealthAuthTokenProvider(
                 new HttpClient(handler, false),
                 new ConnectorTokenCache(),
@@ -401,10 +455,12 @@ public class GoogleHealthConnectorServiceTests
                 coordinator.Object,
                 configurations.Object,
                 tenant.Object,
+                loader.Object,
                 NullLogger<GoogleHealthConnectorService>.Instance);
         }
 
         public GoogleHealthConnectorService Service { get; }
+        public SemaphoreSlim Gate { get; } = new(1);
         public Mock<IGoogleHealthSyncCoordinator> Coordinator { get; } = new();
         public Mock<IGoogleHealthReadingWriter> Writer { get; }
         public IReadOnlyDictionary<string, string> Secrets => secrets;
@@ -412,7 +468,14 @@ public class GoogleHealthConnectorServiceTests
         public string? LastSavedConfiguration { get; private set; }
         public string StoredConfiguration { get; set; } = "{\"importFrom\":\"2000-01-01T00:00:00.0000000+00:00\"}";
 
-        public GoogleHealthConnectorConfiguration Configuration() => new()
+        public void SetSession(string? refreshToken, string scopes)
+        {
+            if (refreshToken is null) secrets.Remove("refreshToken");
+            else secrets["refreshToken"] = refreshToken;
+            secrets["grantedScopes"] = scopes;
+        }
+
+        public GoogleHealthConnectorConfiguration Configuration() => currentConfiguration = new()
         {
             ClientId = "client.apps.googleusercontent.com",
             ClientSecret = "secret",

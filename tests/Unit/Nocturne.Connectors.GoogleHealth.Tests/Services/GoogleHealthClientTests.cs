@@ -66,6 +66,25 @@ public class GoogleHealthClientTests
     }
 
     [Fact]
+    public async Task Entirely_out_of_range_page_produces_no_reconciliation_identifiers()
+    {
+        var handler = new StubHandler(_ => Json("""
+            {"dataPoints":[
+              {"name":"overflow-heart","heartRate":{"sampleTime":{"physicalTime":"2026-09-01T10:00:00Z"},"beatsPerMinute":"2147483648"}},
+              {"name":"overflow-steps","steps":{"interval":{"startTime":"2026-09-01T10:00:00Z","endTime":"2026-09-01T10:01:00Z"},"count":"2147483648"}}
+            ]}
+            """));
+        var client = new GoogleHealthClient(new HttpClient(handler));
+
+        foreach (var type in new[] { "heart-rate", "steps" })
+        {
+            var readings = await ReadAllAsync(client.ReadPagesAsync("token", type,
+                DateTimeOffset.Parse("2026-09-01T00:00:00Z"), DateTimeOffset.Parse("2026-09-02T00:00:00Z"), default));
+            Assert.Empty(readings);
+        }
+    }
+
+    [Fact]
     public async Task Pagination_returns_all_valid_pages()
     {
         var calls = 0;
