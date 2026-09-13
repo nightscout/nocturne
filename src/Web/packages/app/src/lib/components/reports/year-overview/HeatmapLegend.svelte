@@ -1,7 +1,5 @@
 <script lang="ts">
   import * as Select from "$lib/components/ui/select";
-  import { Checkbox } from "$lib/components/ui/checkbox";
-  import { Input } from "$lib/components/ui/input";
   import { Button } from "$lib/components/ui/button";
   import type { GlucoseUnits } from "$lib/utils/formatting";
   import ColorFocusRange from "./ColorFocusRange.svelte";
@@ -66,22 +64,10 @@
     onTransparencyChange?: (val: number | undefined) => void;
     onCustomColorsChange?: (low: string | undefined, high: string | undefined) => void;
   }>();
-
-  let transparencyInput = $state(transparencyPercent);
-  $effect(() => {
-    transparencyInput = transparencyPercent;
-  });
-
-  function handleTransparencyInput(event: Event & { currentTarget: HTMLInputElement }) {
-    const val = event.currentTarget.valueAsNumber;
-    if (Number.isFinite(val)) {
-      onTransparencyChange(Math.max(0, Math.min(100, val)));
-    }
-  }
 </script>
 
-<div class="mb-6 rounded-lg border border-border bg-card p-3 space-y-3">
-  <!-- Top bar: Metric Selector & Advanced Options Toggle -->
+<div class="mb-6 rounded-lg border border-border bg-card p-3 space-y-3 max-w-[500px]">
+  <!-- Top bar: Metric Selector & Advanced Settings Toggle -->
   <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border/40 pb-2.5">
     <div class="flex items-center gap-3">
       <Select.Root
@@ -91,7 +77,7 @@
           if (v) selectedMetric = v as HeatmapMetric;
         }}
       >
-        <Select.Trigger class="w-[160px] h-8 text-xs print:hidden">
+        <Select.Trigger class="w-[150px] h-8 text-xs print:hidden">
           <span class="truncate">
             {METRIC_OPTIONS.find(
               (o: { value: HeatmapMetric; label: string }) =>
@@ -112,7 +98,7 @@
           class="inline-block h-3 w-3 rounded-sm"
           style="background: var(--muted)"
         ></span>
-        {selectedMetric === "avgGlucose" ? "Other Data (no glucose)" : `No ${METRIC_OPTIONS.find((o) => o.value === selectedMetric)?.label.toLowerCase()} data`}
+        {selectedMetric === "avgGlucose" ? "No glucose data" : `No ${METRIC_OPTIONS.find((o) => o.value === selectedMetric)?.label.toLowerCase()} data`}
       </div>
     </div>
 
@@ -130,62 +116,12 @@
     </div>
   </div>
 
-  <!-- Advanced Controls Banner (when enabled) -->
-  {#if advancedMode}
-    <div class="p-2.5 rounded-md bg-muted/40 border border-border/50 text-xs flex flex-wrap items-center gap-x-6 gap-y-2.5">
-      <!-- Out of band transparency input -->
-      <div class="flex items-center gap-2">
-        <label for="out-of-band-transparency" class="font-medium text-foreground/80">
-          Out-of-band transparency:
-        </label>
-        <div class="flex items-center gap-1">
-          <Input
-            id="out-of-band-transparency"
-            type="number"
-            min={0}
-            max={100}
-            step={1}
-            bind:value={transparencyInput}
-            oninput={handleTransparencyInput}
-            class="h-7 w-16 px-2 text-xs tabular-nums"
-          />
-          <span class="text-muted-foreground">%</span>
-        </div>
-      </div>
-
-      <!-- Color Palette (for non-glucose metrics) -->
-      {#if selectedMetric !== "avgGlucose"}
-        <div class="flex items-center gap-2">
-          <span class="font-medium text-foreground/80">Color palette:</span>
-          <div class="flex items-center gap-1.5 flex-wrap">
-            {#each COLOR_PALETTES as pal}
-              {@const isSelected = lowColor === pal.low && highColor === pal.high}
-              <Button
-                variant={isSelected ? "secondary" : "outline"}
-                size="sm"
-                class="h-7 px-2 text-xs gap-1.5"
-                onclick={() => onCustomColorsChange(pal.low, pal.high)}
-              >
-                {#if pal.low && pal.high}
-                  <span
-                    class="inline-block size-3 rounded-full border border-black/20"
-                    style:background="linear-gradient(to right, {pal.low}, {pal.high})"
-                  ></span>
-                {/if}
-                {pal.label}
-              </Button>
-            {/each}
-          </div>
-        </div>
-      {/if}
-    </div>
-  {/if}
-
-  <!-- Sliders & Ranges -->
+  <!-- Sliders & Ranges (Always fixed compact width) -->
   {#if selectedMetric === "avgGlucose"}
     <div class="w-full">
       {#if advancedMode}
         <ColorFocusRange
+          metricKey="avgGlucose"
           glucose
           {units}
           thresholds={glucoseThresholds}
@@ -193,10 +129,12 @@
           onThresholdsChange={onGlucoseThresholdsChange}
           {focusBand}
           onFocusBandChange={onFocusBandChange}
+          {transparencyPercent}
+          {onTransparencyChange}
         />
       {:else}
         <!-- Default simple scale preview -->
-        <div class="w-full max-w-[460px] text-xs text-muted-foreground space-y-1.5">
+        <div class="w-full text-xs text-muted-foreground space-y-1.5">
           <span
             class="block h-3.5 w-full rounded-sm"
             style:background="linear-gradient(to right in srgb, {HEATMAP_STOPS.map((s) => `${s.color} ${((s.mgdl - 40) / (350 - 40)) * 100}%`).join(', ')})"
@@ -225,6 +163,7 @@
       {#if advancedMode}
         {#key `${selectedMetric}-${lowColor}-${highColor}`}
           <ColorFocusRange
+            metricKey={selectedMetric}
             {metricLabel}
             unit={metricUnit}
             observedMax={metricMax}
@@ -236,11 +175,15 @@
             {onFocusBandChange}
             {lowColor}
             {highColor}
+            {COLOR_PALETTES}
+            {onCustomColorsChange}
+            {transparencyPercent}
+            {onTransparencyChange}
           />
         {/key}
       {:else}
         <!-- Default simple scale preview -->
-        <div class="w-full max-w-[460px] text-xs text-muted-foreground space-y-1.5">
+        <div class="w-full text-xs text-muted-foreground space-y-1.5">
           <span
             class="block h-3.5 w-full rounded-sm"
             style:background="linear-gradient(to right, color-mix(in srgb, var({cssVar}) 15%, transparent) 0%, var({cssVar}) 100%)"
