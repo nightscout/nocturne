@@ -20,5 +20,9 @@ public enum SyncDataType
     Profiles,
     DeviceStatus,
     Activity,
-    Food
+    Food,
+    Steps,
+    HeartRate,
+    BodyWeight,
+    Sleep
 }

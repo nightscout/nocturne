@@ -12,7 +12,9 @@ using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Services.DevOnly;
 using Nocturne.API.Services.Docs;
+using Nocturne.API.Services.Health.GoogleHealth;
 using Nocturne.API.Services.Seeding;
+using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.API.Extensions;
@@ -148,6 +150,12 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IAuditContext, AuditContext>();
 builder.Services.AddHostedService<AuditRetentionService>();
 builder.Services.AddHostedService<SoftDeleteCleanupService>();
+builder.Services.AddSingleton<GoogleHealthCoordinator>();
+builder.Services.AddSingleton<IGoogleHealthSyncCoordinator>(provider =>
+    provider.GetRequiredService<GoogleHealthCoordinator>());
+builder.Services.AddScoped<IGoogleHealthService, GoogleHealthService>();
+builder.Services.AddScoped<IGoogleHealthReadingWriter, GoogleHealthReadingWriter>();
+builder.Services.AddHostedService<GoogleHealthWorker>();
 
 // Consumed by the dev-only admin controllers (Development) and the demo admin
 // controller's seed-extras endpoint (demo container, all environments).

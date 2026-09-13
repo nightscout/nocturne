@@ -56,6 +56,8 @@ public static class DataSources
     /// </summary>
     public const string CareLinkConnector = "carelink-connector";
 
+    public const string GoogleHealthConnector = "google-health-connector";
+
     /// <summary>
     /// Data fetched from Glooko API via the Glooko connector.
     /// </summary>

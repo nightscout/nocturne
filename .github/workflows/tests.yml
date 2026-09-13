@@ -245,6 +245,13 @@ jobs:
             --logger "trx;LogFileName=integration-db.trx" \
             -p:GenerateNSwagClient=false \
             || exit 1
+      - name: Google Health staged reconciliation (PostgreSQL)
+        run: |
+          dotnet test tests/Integration/Nocturne.API.Tests/Nocturne.API.Tests.csproj \
+            --filter "FullyQualifiedName~GoogleHealthReconciliationTests" \
+            --logger "trx;LogFileName=google-health-db.trx" \
+            -p:GenerateNSwagClient=false \
+            || exit 1
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
