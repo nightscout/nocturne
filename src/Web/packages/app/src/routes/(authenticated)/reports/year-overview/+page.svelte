@@ -19,12 +19,9 @@
     GriTimelinePeriod,
   } from "$api/generated/nocturne-api-client";
   import { formatLongDate, getUnitLabel } from "$lib/utils/formatting";
+  import { getGlucoseHeatmapFill } from "$lib/utils/chart-colors";
+  import { glucoseUnits, yearOverviewColors } from "$lib/stores/appearance-store.svelte";
   import {
-    glucoseUnits,
-    yearOverviewColors,
-  } from "$lib/stores/appearance-store.svelte";
-  import {
-    getFocusedGlucoseFill,
     getFocusedIntensityFill,
     resolveColorFocusRange,
     resolveGlucoseColorThresholds,
@@ -80,8 +77,7 @@
       : resolveColorFocusRange(colorFocusPreferences[selectedMetric])
   );
   const glucoseThresholds = $derived(
-    resolveGlucoseColorThresholds(colorFocusPreferences.avgGlucose) ??
-      DEFAULT_GLUCOSE_COLOR_THRESHOLDS
+    resolveGlucoseColorThresholds(colorFocusPreferences.avgGlucose) ?? DEFAULT_GLUCOSE_COLOR_THRESHOLDS
   );
   const glucoseLegendStops = $derived(
     glucoseColorFocusStops(glucoseThresholds)
@@ -222,11 +218,7 @@
 
     if (selectedMetric === "avgGlucose") {
       if (data.value != null && Number.isFinite(data.value))
-        return getFocusedGlucoseFill(
-          data.value,
-          glucoseThresholds,
-          glucoseLegendStops
-        );
+        return getGlucoseHeatmapFill(data.value, glucoseLegendStops);
       if (data.filteredCount > 0) return "var(--muted)";
       return "rgb(0 0 0 / 5%)";
     }
