@@ -38,6 +38,8 @@
     onThresholdsChange = () => {},
     focusBand = null,
     onFocusBandChange = () => {},
+    lowColor = undefined,
+    highColor = undefined,
   }: {
     metricLabel?: string;
     unit?: string;
@@ -53,6 +55,8 @@
     onThresholdsChange?: (values: GlucoseColorThresholds | null) => void;
     focusBand?: ColorFocusRange | null;
     onFocusBandChange?: (values: [number, number] | null) => void;
+    lowColor?: string;
+    highColor?: string;
   } = $props();
 
   const id = $props.id();
@@ -74,13 +78,13 @@
   );
   const unitLabel = $derived(glucose ? getUnitLabel(units) : unit);
   const labels = $derived(
-    glucose ? ["Very low", "Low", "High", "Very high"] : ["Min kleur", "Max kleur"]
+    glucose ? ["Very low", "Low", "High", "Very high"] : ["Min color", "Max color"]
   );
   const inputStep = $derived(glucose ? (units === "mmol" ? 0.1 : 1) : "any");
   const gradient = $derived(
     glucose
       ? `linear-gradient(to right in srgb, ${stops.map((stop) => `${stop.color} ${((stop.mgdl - minimum) / (maximum - minimum)) * 100}%`).join(", ")})`
-      : colorFocusGradient(resolveColorFocusRange(values)!, maximum, cssVar)
+      : colorFocusGradient(resolveColorFocusRange(values)!, maximum, cssVar, lowColor, highColor)
   );
 
   const activeBandLeftPercent = $derived.by(() => {
@@ -350,9 +354,9 @@
       {#if !glucose}<span class="pb-2">{unitLabel}</span>{/if}
     </div>
 
-    <!-- Row 2: Focus lijnen (90% transparant) inputs -->
+    <!-- Row 2: Focus lines (transparent) inputs -->
     <div class="mt-2.5 pt-2 border-t border-border/50 flex flex-wrap items-center gap-2 text-xs">
-      <span class="font-medium text-foreground/80">Lijnen (90% transparant buiten):</span>
+      <span class="font-medium text-foreground/80">Focus lines (out-of-band transparent):</span>
       <div class="flex items-center gap-1.5">
         <label for={id + "-focus-min"} class="text-muted-foreground">Min:</label>
         <Input
@@ -391,7 +395,7 @@
         class="h-7 px-2 text-xs text-muted-foreground"
         onclick={resetFocusBand}
       >
-        Reset lijnen
+        Reset lines
       </Button>
     </div>
 
@@ -414,12 +418,12 @@
       <p id={id + "-error"} class="mt-2 text-destructive" role="alert">
         {#if glucose}
           {invalidBound !== null
-            ? "Voer vier oplopende kleurwaarden in."
-            : "Voer een geldige min- en maxlijn in (min < max)."}
+            ? "Enter four strictly increasing glucose color boundaries."
+            : "Enter valid focus line boundaries (min < max)."}
         {:else}
           {invalidBound !== null
-            ? `Voer geldige kleurwaarden in (min < max).`
-            : `Voer geldige focuslijnen in (min < max).`}
+            ? "Enter valid color scale boundaries (min < max)."
+            : "Enter valid focus line boundaries (min < max)."}
         {/if}
       </p>
     {/if}
@@ -452,8 +456,8 @@
   {/if}
   <p id={id + "-description"} class="mt-2">
     {glucose
-      ? "Kleurschaal en focuslijnen; waarden buiten de lijnen worden 90% transparant."
-      : "Bolletjes bepalen de kleurintensiteit; waarden buiten de lijnen worden 90% transparant."}
+      ? "Color scale and focus lines; values outside lines become transparent."
+      : "Color intensity scale and focus lines; values outside lines become transparent."}
   </p>
 </div>
 

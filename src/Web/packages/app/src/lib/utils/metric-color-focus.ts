@@ -109,27 +109,34 @@ export function resolveColorFocusRange(
 export function getFocusedIntensityFill(
   value: number,
   range: ColorFocusRange,
-  cssVar: string
+  cssVar: string,
+  lowColor?: string,
+  highColor?: string
 ): string {
   const [min, max] = resolveColorFocusRange(range) ?? [0, 1];
   const intensity = Number.isFinite(value)
     ? Math.max(0, Math.min((value - min) / (max - min), 1))
     : 0;
+  if (lowColor && highColor) {
+    return `color-mix(in srgb, ${highColor} ${Math.round(intensity * 100)}%, ${lowColor})`;
+  }
   return `color-mix(in srgb, var(${cssVar}) ${Math.round(15 + intensity * 85)}%, transparent)`;
 }
 
 export function colorFocusGradient(
   range: ColorFocusRange,
   domainMax: number,
-  cssVar: string
+  cssVar: string,
+  lowColor?: string,
+  highColor?: string
 ): string {
   const validRange = resolveColorFocusRange(range) ?? [0, 1];
   const domain = Math.max(
     Number.isFinite(domainMax) ? domainMax : 1,
     validRange[1]
   );
-  const low = getFocusedIntensityFill(validRange[0], validRange, cssVar);
-  const high = getFocusedIntensityFill(validRange[1], validRange, cssVar);
+  const low = getFocusedIntensityFill(validRange[0], validRange, cssVar, lowColor, highColor);
+  const high = getFocusedIntensityFill(validRange[1], validRange, cssVar, lowColor, highColor);
   return `linear-gradient(to right, ${low} 0%, ${low} ${(validRange[0] / domain) * 100}%, ${high} ${(validRange[1] / domain) * 100}%, ${high} 100%)`;
 }
 

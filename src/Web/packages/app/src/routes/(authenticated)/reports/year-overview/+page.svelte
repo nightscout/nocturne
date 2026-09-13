@@ -73,12 +73,19 @@
 
   let selectedMetric = $state<HeatmapMetric>("avgGlucose");
   const colorFocusPreferences = $derived(yearOverviewColors.current);
-  const focusRange = $derived(
-    selectedMetric === "avgGlucose"
-      ? null
-      : resolveColorFocusRange(colorFocusPreferences[selectedMetric])
+  const advancedMode = $derived(colorFocusPreferences.advancedMode ?? false);
+  const transparencyPercent = $derived(
+    Math.max(0, Math.min(100, colorFocusPreferences.outOfBandTransparency ?? 90))
   );
+  const lowColor = $derived(colorFocusPreferences.lowColor);
+  const highColor = $derived(colorFocusPreferences.highColor);
+
+  const focusRange = $derived.by(() => {
+    if (!advancedMode || selectedMetric === "avgGlucose") return null;
+    return resolveColorFocusRange(colorFocusPreferences[selectedMetric]);
+  });
   const focusBand = $derived.by(() => {
+    if (!advancedMode) return null;
     if (selectedMetric === "avgGlucose") {
       return resolveColorFocusRange(colorFocusPreferences.avgGlucoseBand);
     }
@@ -86,11 +93,37 @@
     return resolveColorFocusRange(colorFocusPreferences[bandKey]);
   });
   const glucoseThresholds = $derived(
-    resolveGlucoseColorThresholds(colorFocusPreferences.avgGlucose) ?? DEFAULT_GLUCOSE_COLOR_THRESHOLDS
+    advancedMode
+      ? (resolveGlucoseColorThresholds(colorFocusPreferences.avgGlucose) ?? DEFAULT_GLUCOSE_COLOR_THRESHOLDS)
+      : DEFAULT_GLUCOSE_COLOR_THRESHOLDS
   );
   const glucoseLegendStops = $derived(
     glucoseColorFocusStops(glucoseThresholds)
   );
+
+  function setAdvancedMode(value: boolean) {
+    const next = { ...colorFocusPreferences, advancedMode: value };
+    yearOverviewColors.current = next;
+  }
+
+  function setTransparency(value: number | undefined) {
+    const next = { ...colorFocusPreferences };
+    if (value !== undefined && Number.isFinite(value)) {
+      next.outOfBandTransparency = Math.max(0, Math.min(100, value));
+    } else {
+      delete next.outOfBandTransparency;
+    }
+    yearOverviewColors.current = next;
+  }
+
+  function setCustomColors(low: string | undefined, high: string | undefined) {
+    const next = { ...colorFocusPreferences };
+    if (low) next.lowColor = low;
+    else delete next.lowColor;
+    if (high) next.highColor = high;
+    else delete next.highColor;
+    yearOverviewColors.current = next;
+  }
 
   function setFocusRange(candidate: ColorFocusRange | null) {
     if (selectedMetric === "avgGlucose") return;
@@ -241,12 +274,16 @@
   function getCellFill(data: CalendarDatum | undefined): string {
     if (!data) return "rgb(0 0 0 / 5%)";
 
+    const opacity = advancedMode ? Math.round(100 - transparencyPercent) : 100;
+
     if (selectedMetric === "avgGlucose") {
       if (data.value != null && Number.isFinite(data.value)) {
         const baseColor = getGlucoseHeatmapFill(data.value, glucoseLegendStops);
-        const band = focusBand ?? [GLUCOSE_COLOR_MIN, GLUCOSE_COLOR_MAX];
-        if (data.value < band[0] || data.value > band[1]) {
-          return `color-mix(in srgb, ${baseColor} 10%, transparent)`;
+        if (advancedMode) {
+          const band = focusBand ?? [GLUCOSE_COLOR_MIN, GLUCOSE_COLOR_MAX];
+          if (data.value < band[0] || data.value > band[1]) {
+            return `color-mix(in srgb, ${baseColor} ${opacity}%, transparent)`;
+          }
         }
         return baseColor;
       }
@@ -265,11 +302,15 @@
     const baseColor = getFocusedIntensityFill(
       metricValue,
       focusRange ?? [0, metricMaxCached],
-      cssVar
+      cssVar,
+      advancedMode ? lowColor : undefined,
+      advancedMode ? highColor : undefined
     );
-    const band = focusBand ?? [0, metricMaxCached];
-    if (metricValue < band[0] || metricValue > band[1]) {
-      return `color-mix(in srgb, ${baseColor} 10%, transparent)`;
+    if (advancedMode) {
+      const band = focusBand ?? [0, metricMaxCached];
+      if (metricValue < band[0] || metricValue > band[1]) {
+        return `color-mix(in srgb, ${baseColor} ${opacity}%, transparent)`;
+      }
     }
     return baseColor;
   }
@@ -625,6 +666,13 @@
       onGlucoseThresholdsChange={setGlucoseThresholds}
       {focusBand}
       onFocusBandChange={setFocusBand}
+      {lowColor}
+      {highColor}
+      {advancedMode}
+      onAdvancedModeChange={setAdvancedMode}
+      {transparencyPercent}
+      onTransparencyChange={setTransparency}
+      onCustomColorsChange={setCustomColors}
     />
 
     <!-- Loading state for metadata -->

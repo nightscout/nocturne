@@ -2,6 +2,11 @@ namespace Nocturne.Core.Models.Configuration;
 
 public class YearOverviewColorPreferences
 {
+    public bool? AdvancedMode { get; set; }
+    public double? OutOfBandTransparency { get; set; }
+    public string? LowColor { get; set; }
+    public string? HighColor { get; set; }
+
     public double[]? AvgGlucose { get; set; }
     public double[]? AvgGlucoseBand { get; set; }
     public double[]? Tir { get; set; }
@@ -17,6 +22,11 @@ public class YearOverviewColorPreferences
 
     public string? Validate()
     {
+        if (OutOfBandTransparency.HasValue && (OutOfBandTransparency.Value < 0 || OutOfBandTransparency.Value > 100))
+        {
+            return "yearOverviewColors.outOfBandTransparency: invalid_transparency_value";
+        }
+
         foreach (var (field, values) in new[]
         {
             ("avgGlucose", AvgGlucose), ("avgGlucoseBand", AvgGlucoseBand),
