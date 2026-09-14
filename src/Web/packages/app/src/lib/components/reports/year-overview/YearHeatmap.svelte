@@ -2,7 +2,7 @@
   import { Chart, Calendar, Layer, Tooltip } from "layerchart";
   import { scaleThreshold } from "d3-scale";
   import { timeWeek, timeMonths } from "d3-time";
-  import { Loader2, ChevronLeft, ChevronRight } from "lucide-svelte";
+  import { Loader2 } from "lucide-svelte";
   import { fly } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
   import { formatGlucoseValue, formatMonthLabel, formatWeekdayDate } from "$lib/utils/formatting";
@@ -143,7 +143,7 @@
       role="region"
       aria-label={`${year} heatmap scrollable view`}
     >
-      <div class="min-w-[920px] h-60 pt-2">
+      <div class="min-w-[1320px] h-60 pt-2">
         <Chart
           data={chartData}
           x="date"

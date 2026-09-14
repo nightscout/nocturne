@@ -1,7 +1,7 @@
 <script lang="ts">
   import * as Select from "$lib/components/ui/select";
   import { Button } from "$lib/components/ui/button";
-  import { SlidersHorizontal, Minimize2, ChevronDown, Sparkles } from "lucide-svelte";
+  import { SlidersHorizontal } from "lucide-svelte";
   import type { GlucoseUnits } from "$lib/utils/formatting";
   import ColorFocusRange from "./ColorFocusRange.svelte";
   import type { GlucoseColorThresholds as GlucoseThresholds } from "$lib/utils/metric-color-focus";
@@ -66,7 +66,7 @@
     onCustomColorsChange?: (low: string | undefined, high: string | undefined) => void;
   }>();
 
-  let isMinimized = $state(false);
+  let isPoppedOut = $state(false);
 
   const currentMetricOption = $derived(
     METRIC_OPTIONS.find((o) => o.value === selectedMetric)
@@ -74,26 +74,8 @@
   const currentMetricLabel = $derived(currentMetricOption?.label ?? "Scale");
 </script>
 
-<!-- FLOATING TOP-RIGHT PANEL (Stays in view during scrolling) -->
-{#if isMinimized}
-  <div class="fixed top-20 right-6 z-40 print:hidden">
-    <Button
-      variant="secondary"
-      size="sm"
-      class="shadow-xl border border-border/80 bg-card/95 backdrop-blur-md gap-2 h-9 px-3.5 rounded-full hover:bg-accent text-xs font-medium transition-all transform hover:scale-105"
-      onclick={() => isMinimized = false}
-      title="Expand scale & focus controls"
-    >
-      <SlidersHorizontal class="h-3.5 w-3.5 text-primary" />
-      <span>{currentMetricLabel}</span>
-      {#if advancedMode}
-        <span class="size-2 rounded-full bg-primary" title="Advanced mode active"></span>
-      {/if}
-      <ChevronDown class="h-3.5 w-3.5 text-muted-foreground" />
-    </Button>
-  </div>
-{:else}
-  <div class="fixed top-20 right-6 z-40 print:static print:max-w-none print:shadow-none mb-6 rounded-xl border border-border/80 bg-card/95 backdrop-blur-md shadow-2xl p-3.5 space-y-3 w-[460px] max-w-[calc(100vw-2.5rem)] max-h-[calc(100vh-6rem)] overflow-y-auto transition-all">
+<!-- Scale panel: inline by default, optional floating top-right mode. -->
+<div class="{isPoppedOut ? 'fixed top-20 right-6 z-40 shadow-2xl max-h-[calc(100vh-6rem)] overflow-y-auto' : 'relative mb-6'} print:static print:max-w-none print:shadow-none rounded-xl border border-border/80 bg-card/95 backdrop-blur-md p-3.5 space-y-3 w-[460px] max-w-[calc(100vw-2.5rem)] transition-all">
     <!-- Top bar: Metric Selector, Advanced Checkbox & Minimize Button -->
     <div class="flex items-center justify-between gap-2 border-b border-border/40 pb-2.5">
       <div class="flex items-center gap-2 min-w-0">
@@ -130,15 +112,16 @@
         </label>
       </div>
 
-      <!-- Minimize Button -->
+      <!-- Dock / undock Button -->
       <Button
         variant="ghost"
         size="sm"
-        class="h-7 w-7 p-0 shrink-0 text-muted-foreground hover:text-foreground hover:bg-muted/80 rounded-md"
-        title="Minimize panel"
-        onclick={() => isMinimized = true}
+        class="h-7 px-2 shrink-0 text-muted-foreground hover:text-foreground hover:bg-muted/80 rounded-md gap-1.5 text-xs"
+        title={isPoppedOut ? "Return panel to the page" : "Float panel in the top-right corner"}
+        onclick={() => isPoppedOut = !isPoppedOut}
       >
-        <Minimize2 class="h-3.5 w-3.5" />
+        <SlidersHorizontal class="h-3.5 w-3.5" />
+        {isPoppedOut ? "Dock" : "Float"}
       </Button>
     </div>
 
@@ -220,4 +203,4 @@
       </div>
     {/if}
   </div>
-{/if}
+</div>
