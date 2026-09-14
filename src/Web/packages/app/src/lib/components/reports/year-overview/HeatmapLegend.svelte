@@ -15,13 +15,11 @@
     | "carbs";
 
   const COLOR_PALETTES = [
-    { label: "Theme Default", low: undefined, high: undefined },
-    { label: "Cool Blue → Hot Red", low: "#3b82f6", high: "#ef4444" },
-    { label: "Teal → Amber", low: "#14b8a6", high: "#f59e0b" },
-    { label: "Indigo → Rose", low: "#6366f1", high: "#f43f5e" },
-    { label: "Emerald → Violet", low: "#10b981", high: "#8b5cf6" },
-    { label: "Cyan → Orange", low: "#06b6d4", high: "#ea580c" },
-    { label: "Slate → Lime", low: "#64748b", high: "#84cc16" },
+    { label: "Theme", low: undefined, high: undefined },
+    { label: "Blue / Orange", low: "#0072b2", high: "#e69f00" },
+    { label: "Viridis", low: "#440154", high: "#fde725" },
+    { label: "Cividis", low: "#00204c", high: "#ffea46" },
+    { label: "Blue → Green → Yellow → Red", low: "#2563eb", high: "#dc2626" },
   ];
 
   let {

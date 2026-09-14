@@ -424,16 +424,13 @@
         </div>
       </div>
 
-    <!-- ========================================================================= -->
-    <!-- VARIANT 2: TIR — "Card Deck / Grouped Sections"                           -->
-    <!-- ========================================================================= -->
-    {:else if metricKey === "tir"}
+    {:else}
       <div class="space-y-2 pt-1">
         <div class="grid grid-cols-2 gap-2">
-          <!-- Card A: Color limits -->
           <div class="p-2 rounded border border-border/60 bg-muted/20 space-y-1.5">
             <div class="text-[11px] font-medium text-foreground/80 flex items-center gap-1">
-              <span>🎨</span> Color Range
+              <span class="size-2.5 rounded-full bg-primary/70"></span>
+              Color Range
             </div>
             <div class="flex items-center gap-1.5">
               <Input
@@ -459,10 +456,10 @@
             </div>
           </div>
 
-          <!-- Card B: Focus window -->
           <div class="p-2 rounded border border-border/60 bg-muted/20 space-y-1.5">
             <div class="text-[11px] font-medium text-foreground/80 flex items-center gap-1">
-              <span>🎯</span> Focus Window
+              <span class="w-1.5 h-3 rounded-sm bg-foreground/70"></span>
+              Focus Window
             </div>
             <div class="flex items-center gap-1.5">
               <Input
@@ -489,21 +486,19 @@
           </div>
         </div>
 
-        <!-- Palettes & Transparency footer -->
         <div class="flex flex-wrap items-center justify-between gap-2 p-2 rounded bg-muted/30 border border-border/40">
-          <div class="flex items-center gap-1 flex-wrap">
-            {#each COLOR_PALETTES.slice(0, 4) as pal}
-              <Button
-                variant={lowColor === pal.low && highColor === pal.high ? "secondary" : "ghost"}
-                size="sm"
-                class="h-6 px-1.5 text-[10px] gap-1"
+          <div class="flex items-center gap-2 flex-wrap" aria-label="Color palette presets">
+            {#each COLOR_PALETTES as pal}
+              {@const isSelected = lowColor === pal.low && highColor === pal.high}
+              <button
+                type="button"
+                title={pal.label}
+                aria-label={pal.label + " palette"}
+                aria-pressed={isSelected}
+                class="size-6 rounded-full border border-border shadow-sm transition-transform {isSelected ? 'scale-110 ring-2 ring-primary ring-offset-1 ring-offset-background' : 'hover:scale-105'}"
+                style:background={pal.low ? `linear-gradient(135deg, ${pal.low}, ${pal.high})` : `linear-gradient(135deg, color-mix(in srgb, var(${cssVar}) 18%, transparent), var(${cssVar}))`}
                 onclick={() => onCustomColorsChange?.(pal.low, pal.high)}
-              >
-                {#if pal.low}
-                  <span class="size-2.5 rounded-full" style:background="linear-gradient(to right, {pal.low}, {pal.high})"></span>
-                {/if}
-                {pal.label.split(" ")[0]}
-              </Button>
+              ></button>
             {/each}
           </div>
           <div class="flex items-center gap-1.5">
@@ -518,390 +513,6 @@
             />
             <span class="text-[10px] text-muted-foreground">%</span>
             <Button variant="outline" size="sm" class="h-6 px-2 text-[11px]" onclick={reset}>Auto</Button>
-          </div>
-        </div>
-      </div>
-
-    <!-- ========================================================================= -->
-    <!-- VARIANT 3: Bolus — "Compact Row-Pair Table Strip"                         -->
-    <!-- ========================================================================= -->
-    {:else if metricKey === "bolus"}
-      <div class="space-y-1.5 pt-1 text-[11px]">
-        <!-- Row 1: Color Ramp -->
-        <div class="flex items-center justify-between p-1.5 rounded bg-muted/20 border border-border/40 gap-2">
-          <div class="flex items-center gap-1.5">
-            <span class="font-medium text-foreground/80 w-16">🎨 Scale:</span>
-            <Input
-              type="number"
-              min={0}
-              max={fixedMax}
-              step={inputStep}
-              bind:value={drafts[0]}
-              oninput={(e: Event & { currentTarget: HTMLInputElement }) => changeBound(0, e)}
-              class="h-6 w-14 px-1 text-xs tabular-nums"
-            />
-            <span>→</span>
-            <Input
-              type="number"
-              min={0}
-              max={fixedMax}
-              step={inputStep}
-              bind:value={drafts[1]}
-              oninput={(e: Event & { currentTarget: HTMLInputElement }) => changeBound(1, e)}
-              class="h-6 w-14 px-1 text-xs tabular-nums"
-            />
-            <span>{unitLabel}</span>
-          </div>
-          <div class="flex items-center gap-1">
-            {#each COLOR_PALETTES.slice(1, 4) as pal}
-              <button
-                type="button"
-                title={pal.label}
-                class="size-4 rounded-full border border-black/20 {lowColor === pal.low ? 'ring-2 ring-primary ring-offset-1' : ''}"
-                style:background="linear-gradient(to right, {pal.low}, {pal.high})"
-                onclick={() => onCustomColorsChange?.(pal.low, pal.high)}
-              ></button>
-            {/each}
-          </div>
-        </div>
-
-        <!-- Row 2: Focus Lines -->
-        <div class="flex items-center justify-between p-1.5 rounded bg-muted/20 border border-border/40 gap-2">
-          <div class="flex items-center gap-1.5">
-            <span class="font-medium text-foreground/80 w-16">🎯 Focus:</span>
-            <Input
-              type="number"
-              min={0}
-              max={fixedMax}
-              step={inputStep}
-              bind:value={focusDrafts[0]}
-              oninput={(e: Event & { currentTarget: HTMLInputElement }) => changeFocusBound(0, e)}
-              class="h-6 w-14 px-1 text-xs tabular-nums"
-            />
-            <span>→</span>
-            <Input
-              type="number"
-              min={0}
-              max={fixedMax}
-              step={inputStep}
-              bind:value={focusDrafts[1]}
-              oninput={(e: Event & { currentTarget: HTMLInputElement }) => changeFocusBound(1, e)}
-              class="h-6 w-14 px-1 text-xs tabular-nums"
-            />
-            <span>{unitLabel}</span>
-          </div>
-          <div class="flex items-center gap-1">
-            <span class="text-muted-foreground">Dim:</span>
-            <Input
-              type="number"
-              min={0}
-              max={100}
-              value={transparencyPercent}
-              oninput={(e: Event & { currentTarget: HTMLInputElement }) => onTransparencyChange?.(e.currentTarget.valueAsNumber)}
-              class="h-6 w-12 px-1 text-xs tabular-nums"
-            />
-            <span>%</span>
-          </div>
-        </div>
-
-        <div class="flex justify-end pt-0.5">
-          <Button variant="outline" size="sm" class="h-6 px-2 text-[11px]" onclick={reset}>Auto</Button>
-        </div>
-      </div>
-
-    <!-- ========================================================================= -->
-    <!-- VARIANT 4: Basal — "Segmented Tabbed Inspector"                           -->
-    <!-- ========================================================================= -->
-    {:else if metricKey === "basal"}
-      <div class="space-y-2 pt-1 text-xs">
-        <!-- Segmented Tab bar -->
-        <div class="flex rounded-md bg-muted/60 p-0.5 border border-border/40 text-[11px]">
-          <button
-            type="button"
-            class="flex-1 py-1 rounded font-medium transition-colors {activeTab === 'focus' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}"
-            onclick={() => activeTab = 'focus'}
-          >
-            🎯 Focus Lines
-          </button>
-          <button
-            type="button"
-            class="flex-1 py-1 rounded font-medium transition-colors {activeTab === 'colors' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}"
-            onclick={() => activeTab = 'colors'}
-          >
-            🎨 Colors & Scale
-          </button>
-          <button
-            type="button"
-            class="flex-1 py-1 rounded font-medium transition-colors {activeTab === 'settings' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}"
-            onclick={() => activeTab = 'settings'}
-          >
-            ⚙️ Transparency
-          </button>
-        </div>
-
-        <!-- Tab content -->
-        <div class="p-2.5 rounded-md border border-border/40 bg-card space-y-2">
-          {#if activeTab === 'focus'}
-            <div class="flex items-center justify-between gap-2">
-              <span class="text-[11px] font-medium">Focus cutoffs:</span>
-              <div class="flex items-center gap-1.5">
-                <span class="text-[11px] text-muted-foreground">Min:</span>
-                <Input
-                  type="number"
-                  min={0}
-                  max={fixedMax}
-                  step={inputStep}
-                  bind:value={focusDrafts[0]}
-                  oninput={(e: Event & { currentTarget: HTMLInputElement }) => changeFocusBound(0, e)}
-                  class="h-7 w-16 px-1.5 text-xs tabular-nums"
-                />
-                <span class="text-[11px] text-muted-foreground">Max:</span>
-                <Input
-                  type="number"
-                  min={0}
-                  max={fixedMax}
-                  step={inputStep}
-                  bind:value={focusDrafts[1]}
-                  oninput={(e: Event & { currentTarget: HTMLInputElement }) => changeFocusBound(1, e)}
-                  class="h-7 w-16 px-1.5 text-xs tabular-nums"
-                />
-                <Button variant="ghost" size="sm" class="h-7 px-2 text-[11px]" onclick={resetFocusBand}>Reset</Button>
-              </div>
-            </div>
-          {:else if activeTab === 'colors'}
-            <div class="space-y-2">
-              <div class="flex items-center justify-between gap-2">
-                <span class="text-[11px] font-medium">Scale range:</span>
-                <div class="flex items-center gap-1.5">
-                  <Input
-                    type="number"
-                    min={0}
-                    max={fixedMax}
-                    step={inputStep}
-                    bind:value={drafts[0]}
-                    oninput={(e: Event & { currentTarget: HTMLInputElement }) => changeBound(0, e)}
-                    class="h-7 w-16 px-1.5 text-xs tabular-nums"
-                  />
-                  <span>→</span>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={fixedMax}
-                    step={inputStep}
-                    bind:value={drafts[1]}
-                    oninput={(e: Event & { currentTarget: HTMLInputElement }) => changeBound(1, e)}
-                    class="h-7 w-16 px-1.5 text-xs tabular-nums"
-                  />
-                  <span>{unitLabel}</span>
-                </div>
-              </div>
-              <div class="flex items-center gap-1.5 pt-1 border-t border-border/30 flex-wrap">
-                {#each COLOR_PALETTES.slice(0, 5) as pal}
-                  <Button
-                    variant={lowColor === pal.low ? "secondary" : "outline"}
-                    size="sm"
-                    class="h-6 px-1.5 text-[10px] gap-1"
-                    onclick={() => onCustomColorsChange?.(pal.low, pal.high)}
-                  >
-                    {#if pal.low}
-                      <span class="size-2 rounded-full" style:background="linear-gradient(to right, {pal.low}, {pal.high})"></span>
-                    {/if}
-                    {pal.label.split(" ")[0]}
-                  </Button>
-                {/each}
-              </div>
-            </div>
-          {:else}
-            <div class="flex items-center justify-between">
-              <span class="text-[11px] font-medium">Out-of-band dimming:</span>
-              <div class="flex items-center gap-1">
-                <Input
-                  type="number"
-                  min={0}
-                  max={100}
-                  value={transparencyPercent}
-                  oninput={(e: Event & { currentTarget: HTMLInputElement }) => onTransparencyChange?.(e.currentTarget.valueAsNumber)}
-                  class="h-7 w-16 px-1.5 text-xs tabular-nums"
-                />
-                <span class="text-muted-foreground text-xs">%</span>
-              </div>
-            </div>
-          {/if}
-        </div>
-      </div>
-
-    <!-- ========================================================================= -->
-    <!-- VARIANT 5: TDD — "Figma-Style Inline Input Badges & Swatches"               -->
-    <!-- ========================================================================= -->
-    {:else if metricKey === "tdd"}
-      <div class="space-y-2 pt-1 text-xs">
-        <div class="grid grid-cols-2 gap-2">
-          <!-- Scale limits badge -->
-          <div class="flex items-center rounded-md border border-border bg-muted/20 px-2 py-1 justify-between">
-            <span class="text-[11px] text-muted-foreground">Scale:</span>
-            <div class="flex items-center gap-1">
-              <Input
-                type="number"
-                min={0}
-                max={fixedMax}
-                step={inputStep}
-                bind:value={drafts[0]}
-                oninput={(e: Event & { currentTarget: HTMLInputElement }) => changeBound(0, e)}
-                class="h-6 w-12 px-1 text-xs border-0 bg-transparent text-right font-mono"
-              />
-              <span class="text-muted-foreground text-[10px]">..</span>
-              <Input
-                type="number"
-                min={0}
-                max={fixedMax}
-                step={inputStep}
-                bind:value={drafts[1]}
-                oninput={(e: Event & { currentTarget: HTMLInputElement }) => changeBound(1, e)}
-                class="h-6 w-12 px-1 text-xs border-0 bg-transparent font-mono"
-              />
-              <span class="text-[10px] text-muted-foreground">{unitLabel}</span>
-            </div>
-          </div>
-
-          <!-- Focus limits badge -->
-          <div class="flex items-center rounded-md border border-border bg-muted/20 px-2 py-1 justify-between">
-            <span class="text-[11px] text-muted-foreground">Focus:</span>
-            <div class="flex items-center gap-1">
-              <Input
-                type="number"
-                min={0}
-                max={fixedMax}
-                step={inputStep}
-                bind:value={focusDrafts[0]}
-                oninput={(e: Event & { currentTarget: HTMLInputElement }) => changeFocusBound(0, e)}
-                class="h-6 w-12 px-1 text-xs border-0 bg-transparent text-right font-mono"
-              />
-              <span class="text-muted-foreground text-[10px]">..</span>
-              <Input
-                type="number"
-                min={0}
-                max={fixedMax}
-                step={inputStep}
-                bind:value={focusDrafts[1]}
-                oninput={(e: Event & { currentTarget: HTMLInputElement }) => changeFocusBound(1, e)}
-                class="h-6 w-12 px-1 text-xs border-0 bg-transparent font-mono"
-              />
-              <span class="text-[10px] text-muted-foreground">{unitLabel}</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Palette Swatch strip & Transparency stepper -->
-        <div class="flex items-center justify-between pt-1 border-t border-border/40">
-          <div class="flex items-center gap-1.5">
-            {#each COLOR_PALETTES as pal}
-              <button
-                type="button"
-                title={pal.label}
-                class="size-5 rounded-full border border-black/20 transition-transform {lowColor === pal.low ? 'scale-125 ring-2 ring-primary ring-offset-1' : 'hover:scale-110'}"
-                style:background={pal.low ? `linear-gradient(to right, ${pal.low}, ${pal.high})` : "var(--primary)"}
-                onclick={() => onCustomColorsChange?.(pal.low, pal.high)}
-              ></button>
-            {/each}
-          </div>
-          <div class="flex items-center gap-1.5">
-            <span class="text-[10px] text-muted-foreground">Dim:</span>
-            <Input
-              type="number"
-              min={0}
-              max={100}
-              value={transparencyPercent}
-              oninput={(e: Event & { currentTarget: HTMLInputElement }) => onTransparencyChange?.(e.currentTarget.valueAsNumber)}
-              class="h-6 w-12 px-1 text-xs tabular-nums"
-            />
-            <span class="text-[10px] text-muted-foreground">%</span>
-            <Button variant="ghost" size="sm" class="h-6 px-1.5 text-[11px]" onclick={reset}>Auto</Button>
-          </div>
-        </div>
-      </div>
-
-    <!-- ========================================================================= -->
-    <!-- VARIANT 6: Carbs — "Minimalist Stacked Flow"                              -->
-    <!-- ========================================================================= -->
-    {:else}
-      <div class="space-y-2 pt-1 text-xs">
-        <div class="flex items-center justify-between gap-2 p-2 rounded bg-muted/20 border border-border/40">
-          <span class="font-medium text-foreground/80 text-[11px]">Scale limits:</span>
-          <div class="flex items-center gap-1.5">
-            <Input
-              type="number"
-              min={0}
-              max={fixedMax}
-              step={inputStep}
-              bind:value={drafts[0]}
-              oninput={(e: Event & { currentTarget: HTMLInputElement }) => changeBound(0, e)}
-              class="h-7 w-16 px-1.5 text-xs tabular-nums"
-            />
-            <span class="text-muted-foreground">to</span>
-            <Input
-              type="number"
-              min={0}
-              max={fixedMax}
-              step={inputStep}
-              bind:value={drafts[1]}
-              oninput={(e: Event & { currentTarget: HTMLInputElement }) => changeBound(1, e)}
-              class="h-7 w-16 px-1.5 text-xs tabular-nums"
-            />
-            <span class="text-muted-foreground text-[11px]">{unitLabel}</span>
-          </div>
-        </div>
-
-        <div class="flex items-center justify-between gap-2 p-2 rounded bg-muted/20 border border-border/40">
-          <span class="font-medium text-foreground/80 text-[11px]">Active window:</span>
-          <div class="flex items-center gap-1.5">
-            <Input
-              type="number"
-              min={0}
-              max={fixedMax}
-              step={inputStep}
-              bind:value={focusDrafts[0]}
-              oninput={(e: Event & { currentTarget: HTMLInputElement }) => changeFocusBound(0, e)}
-              class="h-7 w-16 px-1.5 text-xs tabular-nums"
-            />
-            <span class="text-muted-foreground">to</span>
-            <Input
-              type="number"
-              min={0}
-              max={fixedMax}
-              step={inputStep}
-              bind:value={focusDrafts[1]}
-              oninput={(e: Event & { currentTarget: HTMLInputElement }) => changeFocusBound(1, e)}
-              class="h-7 w-16 px-1.5 text-xs tabular-nums"
-            />
-            <span class="text-muted-foreground text-[11px]">{unitLabel}</span>
-          </div>
-        </div>
-
-        <div class="flex items-center justify-between pt-1 gap-2">
-          <div class="flex items-center gap-1">
-            {#each COLOR_PALETTES.slice(0, 4) as pal}
-              <Button
-                variant={lowColor === pal.low ? "secondary" : "outline"}
-                size="sm"
-                class="h-6 px-1.5 text-[10px]"
-                onclick={() => onCustomColorsChange?.(pal.low, pal.high)}
-              >
-                {pal.label.split(" ")[0]}
-              </Button>
-            {/each}
-          </div>
-          <div class="flex items-center gap-1">
-            <span class="text-[10px] text-muted-foreground">Fade:</span>
-            <Input
-              type="number"
-              min={0}
-              max={100}
-              value={transparencyPercent}
-              oninput={(e: Event & { currentTarget: HTMLInputElement }) => onTransparencyChange?.(e.currentTarget.valueAsNumber)}
-              class="h-6 w-12 px-1 text-xs tabular-nums"
-            />
-            <span class="text-[10px] text-muted-foreground">%</span>
-            <Button variant="ghost" size="sm" class="h-6 px-1.5 text-[11px]" onclick={reset}>Reset</Button>
           </div>
         </div>
       </div>
