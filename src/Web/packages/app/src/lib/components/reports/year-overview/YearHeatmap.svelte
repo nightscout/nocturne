@@ -110,13 +110,6 @@
 
   <!-- Calendar Heatmap Card with Enhanced Touch & Grab Scrolling -->
   {#if chartData.length > 0}
-                  <rect
-                    x={0}
-                    y={7 * cellSize[1] + 22}
-                    width={1320}
-                    height={42}
-                    fill="transparent"
-                  />
     <div
       bind:this={scrollContainer}
       class="heatmap-scroll-container w-full overflow-x-auto overflow-y-visible rounded-xl border border-border bg-card p-4 print:overflow-visible touch-pan-x cursor-grab active:cursor-grabbing select-none"
