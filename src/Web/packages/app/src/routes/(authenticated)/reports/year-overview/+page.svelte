@@ -25,6 +25,7 @@
     getFocusedIntensityFill,
     resolveColorFocusRange,
     resolveGlucoseColorThresholds,
+    applyGlucosePalette,
     DEFAULT_GLUCOSE_COLOR_THRESHOLDS,
     GLUCOSE_COLOR_MIN,
     GLUCOSE_COLOR_MAX,
@@ -79,7 +80,6 @@
   );
 
   const currentMetricColors = $derived.by(() => {
-    if (selectedMetric === "avgGlucose") return { low: undefined, high: undefined };
     const key = `${selectedMetric}Colors` as keyof typeof colorFocusPreferences;
     const colors = colorFocusPreferences[key] as string[] | undefined;
     if (colors && colors.length >= 2) {
@@ -90,6 +90,9 @@
 
   const lowColor = $derived(currentMetricColors.low);
   const highColor = $derived(currentMetricColors.high);
+  const invert = $derived(
+    !!colorFocusPreferences[`${selectedMetric}Invert` as keyof typeof colorFocusPreferences]
+  );
 
   const focusRange = $derived.by(() => {
     if (!advancedMode || selectedMetric === "avgGlucose") return null;
@@ -109,7 +112,14 @@
       : DEFAULT_GLUCOSE_COLOR_THRESHOLDS
   );
   const glucoseLegendStops = $derived(
-    glucoseColorFocusStops(glucoseThresholds)
+    advancedMode
+      ? applyGlucosePalette(
+          glucoseColorFocusStops(glucoseThresholds),
+          colorFocusPreferences.avgGlucoseColors?.[0],
+          colorFocusPreferences.avgGlucoseColors?.at(-1),
+          !!colorFocusPreferences.avgGlucoseInvert
+        )
+      : glucoseColorFocusStops(glucoseThresholds)
   );
 
   function setAdvancedMode(value: boolean) {
@@ -128,11 +138,21 @@
   }
 
   function setCustomColors(low: string | undefined, high: string | undefined) {
-    if (selectedMetric === "avgGlucose") return;
     const key = `${selectedMetric}Colors` as keyof typeof colorFocusPreferences;
     const next = { ...colorFocusPreferences };
     if (low && high) {
       next[key] = [low, high];
+    } else {
+      delete next[key];
+    }
+    yearOverviewColors.current = next;
+  }
+
+  function setInvert(value: boolean) {
+    const key = `${selectedMetric}Invert` as keyof typeof colorFocusPreferences;
+    const next = { ...colorFocusPreferences };
+    if (value) {
+      (next as Record<string, boolean>)[key] = true;
     } else {
       delete next[key];
     }
@@ -320,7 +340,8 @@
       focusRange ?? [0, metricMaxCached],
       cssVar,
       advancedMode ? lowColor : undefined,
-      advancedMode ? highColor : undefined
+      advancedMode ? highColor : undefined,
+      advancedMode ? invert : false
     );
     if (advancedMode) {
       const band = focusBand ?? [0, metricMaxCached];
@@ -691,6 +712,8 @@
       {transparencyPercent}
       onTransparencyChange={setTransparency}
       onCustomColorsChange={setCustomColors}
+      {invert}
+      onInvertChange={setInvert}
     />
 
     <!-- Loading state for metadata -->

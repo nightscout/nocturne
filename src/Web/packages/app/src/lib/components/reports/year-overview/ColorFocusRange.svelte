@@ -2,6 +2,7 @@
   import { Slider } from "bits-ui";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
+  import { getGlucoseHeatmapFill } from "$lib/utils/chart-colors";
   import {
     convertToDisplayUnits,
     convertFromDisplayUnits,
@@ -43,6 +44,8 @@
     highColor = undefined,
     COLOR_PALETTES = [],
     onCustomColorsChange = () => {},
+    invert = false,
+    onInvertChange = () => {},
     transparencyPercent = 90,
     onTransparencyChange = () => {},
   }: {
@@ -65,6 +68,8 @@
     highColor?: string;
     COLOR_PALETTES?: Array<{ label: string; low?: string; high?: string }>;
     onCustomColorsChange?: (low?: string, high?: string) => void;
+    invert?: boolean;
+    onInvertChange?: (value: boolean) => void;
     transparencyPercent?: number;
     onTransparencyChange?: (val: number | undefined) => void;
   } = $props();
@@ -88,13 +93,13 @@
   );
   const unitLabel = $derived(glucose ? getUnitLabel(units) : unit);
   const labels = $derived(
-    glucose ? ["Very low", "Low", "High", "Very high"] : ["minimum", "maximum"]
+    glucose ? ["Point 1", "Point 2", "Point 3", "Point 4"] : ["minimum", "maximum"]
   );
   const inputStep = $derived(glucose ? (units === "mmol" ? 0.1 : 1) : "any");
   const gradient = $derived(
     glucose
       ? `linear-gradient(to right in srgb, ${stops.map((stop) => `${stop.color} ${((stop.mgdl - minimum) / (maximum - minimum)) * 100}%`).join(", ")})`
-      : colorFocusGradient(resolveColorFocusRange(values)!, maximum, cssVar, lowColor, highColor)
+      : colorFocusGradient(resolveColorFocusRange(values)!, maximum, cssVar, lowColor, highColor, invert)
   );
 
   const activeBandLeftPercent = $derived.by(() => {
@@ -137,8 +142,10 @@
 
   let drafts = $state<(number | undefined)[]>([]);
   let focusDrafts = $state<(number | undefined)[]>([]);
+  let dimDraft = $state<number | undefined>(undefined);
   let invalidBound = $state<number | null>(null);
   let invalidFocusBound = $state<number | null>(null);
+  let invalidDim = $state(false);
 
   const display = (value: number) =>
     glucose ? convertToDisplayUnits(value, units) : value;
@@ -152,6 +159,8 @@
     invalidBound = null;
     focusDrafts = focusBandValues.map(display);
     invalidFocusBound = null;
+    dimDraft = transparencyPercent;
+    invalidDim = false;
   });
 
   function change(candidate: number[]): boolean {
@@ -216,6 +225,21 @@
     invalidFocusBound = changeFocusBand(next) ? null : index;
   }
 
+  function changeDim(event: Event & { currentTarget: HTMLInputElement }) {
+    const input = event.currentTarget;
+    if (
+      !input.value ||
+      !Number.isFinite(input.valueAsNumber) ||
+      input.valueAsNumber < 0 ||
+      input.valueAsNumber > 100
+    ) {
+      invalidDim = true;
+      return;
+    }
+    invalidDim = false;
+    onTransparencyChange?.(input.valueAsNumber);
+  }
+
   function reset() {
     if (glucose) {
       onThresholdsChange(null);
@@ -229,12 +253,6 @@
       focusDrafts = [0, automaticMax].map(display);
     }
     invalidBound = null;
-    invalidFocusBound = null;
-  }
-
-  function resetFocusBand() {
-    onFocusBandChange(null);
-    focusDrafts = (glucose ? DEFAULT_GLUCOSE_FOCUS_BAND : [minimum, maximum]).map(display);
     invalidFocusBound = null;
   }
 </script>
@@ -347,7 +365,8 @@
             <div class="grid grid-cols-2 gap-1.5">
               {#each labels as label, index}
                 <div class="min-w-0">
-                  <label for={id + "-bound-" + index} class="mb-0.5 block text-muted-foreground text-[10px] truncate">
+                  <label for={id + "-bound-" + index} class="mb-0.5 flex items-center gap-1 text-muted-foreground text-[10px] truncate">
+                    <span class="inline-block size-2 shrink-0 rounded-full" style:background={getGlucoseHeatmapFill(values[index], stops)}></span>
                     {label}
                   </label>
                   <Input
@@ -404,20 +423,33 @@
         </div>
 
         <div class="flex flex-wrap items-center justify-between gap-2 p-2 rounded bg-muted/30 border border-border/40">
-          <Button variant="ghost" size="sm" class="h-6 px-1.5 text-[11px]" onclick={resetFocusBand}>
-            Reset focus window
-          </Button>
+          <div class="flex items-center gap-2 flex-wrap" aria-label="Color palette presets">
+            {#each COLOR_PALETTES as pal}
+              {@const isSelected = lowColor === pal.low && highColor === pal.high}
+              <button
+                type="button"
+                title={pal.label}
+                aria-label={pal.label + " palette"}
+                aria-pressed={isSelected}
+                class="size-6 rounded-full border border-border shadow-sm transition-transform {isSelected ? 'scale-110 ring-2 ring-primary ring-offset-1 ring-offset-background' : 'hover:scale-105'}"
+                style:background={pal.low ? `linear-gradient(135deg, ${pal.low}, ${pal.high})` : `linear-gradient(135deg, ${stops[0]?.color ?? 'transparent'}, ${stops[stops.length - 1]?.color ?? 'transparent'})`}
+                onclick={() => onCustomColorsChange?.(pal.low, pal.high)}
+              ></button>
+            {/each}
+          </div>
           <div class="flex items-center gap-1.5">
             <span class="text-[10px] text-muted-foreground">Dim:</span>
             <Input
               type="number"
               min={0}
               max={100}
-              value={transparencyPercent}
-              oninput={(e: Event & { currentTarget: HTMLInputElement }) => onTransparencyChange?.(e.currentTarget.valueAsNumber)}
+              bind:value={dimDraft}
+              oninput={changeDim}
+              aria-invalid={invalidDim}
               class="h-6 w-12 px-1 text-[11px] tabular-nums"
             />
             <span class="text-[10px] text-muted-foreground">%</span>
+            <Button variant="outline" size="sm" class="h-6 px-2 text-[11px]" aria-pressed={invert} onclick={() => onInvertChange?.(!invert)}>Invert</Button>
             <Button variant="outline" size="sm" class="h-6 px-2 text-[11px]" aria-label={resetLabel} onclick={reset}>Reset</Button>
           </div>
         </div>
@@ -506,11 +538,13 @@
               type="number"
               min={0}
               max={100}
-              value={transparencyPercent}
-              oninput={(e: Event & { currentTarget: HTMLInputElement }) => onTransparencyChange?.(e.currentTarget.valueAsNumber)}
+              bind:value={dimDraft}
+              oninput={changeDim}
+              aria-invalid={invalidDim}
               class="h-6 w-12 px-1 text-[11px] tabular-nums"
             />
             <span class="text-[10px] text-muted-foreground">%</span>
+            <Button variant="outline" size="sm" class="h-6 px-2 text-[11px]" aria-pressed={invert} onclick={() => onInvertChange?.(!invert)}>Invert</Button>
             <Button variant="outline" size="sm" class="h-6 px-2 text-[11px]" aria-label={resetLabel} onclick={reset}>Reset</Button>
           </div>
         </div>
@@ -518,9 +552,11 @@
     {/if}
 
     <!-- Validation error alert -->
-    {#if invalidBound !== null || invalidFocusBound !== null}
+    {#if invalidBound !== null || invalidFocusBound !== null || invalidDim}
       <p id={id + "-error"} class="text-destructive text-[11px] pt-1" role="alert">
-        {#if glucose}
+        {#if invalidDim}
+          Enter a dim percentage between 0 and 100.
+        {:else if glucose}
           {invalidBound !== null
             ? "Enter four strictly increasing glucose color boundaries."
             : "Enter valid focus line boundaries (min < max)."}

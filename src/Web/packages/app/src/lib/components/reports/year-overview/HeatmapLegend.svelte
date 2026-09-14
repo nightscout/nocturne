@@ -45,6 +45,8 @@
     transparencyPercent = 90,
     onTransparencyChange = () => {},
     onCustomColorsChange = () => {},
+    invert = false,
+    onInvertChange = () => {},
   } = $props<{
     selectedMetric: HeatmapMetric;
     units: GlucoseUnits;
@@ -65,6 +67,8 @@
     transparencyPercent?: number;
     onTransparencyChange?: (val: number | undefined) => void;
     onCustomColorsChange?: (low: string | undefined, high: string | undefined) => void;
+    invert?: boolean;
+    onInvertChange?: (value: boolean) => void;
   }>();
 
   let isPoppedOut = $state(false);
@@ -130,18 +134,26 @@
     {#if selectedMetric === "avgGlucose"}
       <div class="w-full">
         {#if advancedMode}
-          <ColorFocusRange
-            metricKey="avgGlucose"
-            glucose
-            {units}
-            thresholds={glucoseThresholds}
-            stops={HEATMAP_STOPS}
-            onThresholdsChange={onGlucoseThresholdsChange}
-            {focusBand}
-            onFocusBandChange={onFocusBandChange}
-            {transparencyPercent}
-            {onTransparencyChange}
-          />
+          {#key `avgGlucose-${lowColor}-${highColor}-${invert}`}
+            <ColorFocusRange
+              metricKey="avgGlucose"
+              glucose
+              {units}
+              thresholds={glucoseThresholds}
+              stops={HEATMAP_STOPS}
+              onThresholdsChange={onGlucoseThresholdsChange}
+              {focusBand}
+              onFocusBandChange={onFocusBandChange}
+              {lowColor}
+              {highColor}
+              {COLOR_PALETTES}
+              {onCustomColorsChange}
+              {invert}
+              {onInvertChange}
+              {transparencyPercent}
+              {onTransparencyChange}
+            />
+          {/key}
         {:else}
           <!-- Default simple scale preview -->
           <div class="w-full text-xs text-muted-foreground space-y-1.5">
@@ -167,7 +179,7 @@
         METRIC_CSS_VARS[selectedMetric as Exclude<HeatmapMetric, "avgGlucose">]}
       <div class="w-full">
         {#if advancedMode}
-          {#key `${selectedMetric}-${lowColor}-${highColor}`}
+          {#key `${selectedMetric}-${lowColor}-${highColor}-${invert}`}
             <ColorFocusRange
               metricKey={selectedMetric}
               {metricLabel}
@@ -183,6 +195,8 @@
               {highColor}
               {COLOR_PALETTES}
               {onCustomColorsChange}
+              {invert}
+              {onInvertChange}
               {transparencyPercent}
               {onTransparencyChange}
             />

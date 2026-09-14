@@ -9,21 +9,28 @@ public class YearOverviewColorPreferences
 
     public double[]? AvgGlucose { get; set; }
     public double[]? AvgGlucoseBand { get; set; }
+    public string[]? AvgGlucoseColors { get; set; }
+    public bool? AvgGlucoseInvert { get; set; }
     public double[]? Tir { get; set; }
     public double[]? TirBand { get; set; }
     public string[]? TirColors { get; set; }
+    public bool? TirInvert { get; set; }
     public double[]? Bolus { get; set; }
     public double[]? BolusBand { get; set; }
     public string[]? BolusColors { get; set; }
+    public bool? BolusInvert { get; set; }
     public double[]? Basal { get; set; }
     public double[]? BasalBand { get; set; }
     public string[]? BasalColors { get; set; }
+    public bool? BasalInvert { get; set; }
     public double[]? Tdd { get; set; }
     public double[]? TddBand { get; set; }
     public string[]? TddColors { get; set; }
+    public bool? TddInvert { get; set; }
     public double[]? Carbs { get; set; }
     public double[]? CarbsBand { get; set; }
     public string[]? CarbsColors { get; set; }
+    public bool? CarbsInvert { get; set; }
 
     public string? Validate()
     {
