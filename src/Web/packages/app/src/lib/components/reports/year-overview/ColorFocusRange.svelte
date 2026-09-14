@@ -12,6 +12,7 @@
   } from "$lib/utils/formatting";
   import {
     colorFocusGradient,
+    paletteSwatchGradient,
     resolveColorFocusRange,
     resolveGlucoseColorThresholds,
     resolveGlucoseFocusBand,
@@ -37,11 +38,13 @@
     units = "mg/dl",
     thresholds = DEFAULT_GLUCOSE_COLOR_THRESHOLDS,
     stops = [],
+    themeStops = undefined,
     onThresholdsChange = () => {},
     focusBand = null,
     onFocusBandChange = () => {},
     lowColor = undefined,
     highColor = undefined,
+    colors = undefined,
     COLOR_PALETTES = [],
     onCustomColorsChange = () => {},
     invert = false,
@@ -61,13 +64,15 @@
     units?: GlucoseUnits;
     thresholds?: GlucoseColorThresholds;
     stops?: ReadonlyArray<{ mgdl: number; color: string }>;
+    themeStops?: ReadonlyArray<{ mgdl: number; color: string }>;
     onThresholdsChange?: (values: GlucoseColorThresholds | null) => void;
     focusBand?: ColorFocusRange | null;
     onFocusBandChange?: (values: [number, number] | null) => void;
     lowColor?: string;
     highColor?: string;
-    COLOR_PALETTES?: Array<{ label: string; low?: string; high?: string }>;
-    onCustomColorsChange?: (low?: string, high?: string) => void;
+    colors?: readonly string[];
+    COLOR_PALETTES?: Array<{ label: string; colors?: readonly string[] }>;
+    onCustomColorsChange?: (colors: string[] | undefined) => void;
     invert?: boolean;
     onInvertChange?: (value: boolean) => void;
     transparencyPercent?: number;
@@ -103,7 +108,7 @@
   const gradient = $derived(
     glucose
       ? `linear-gradient(to right in srgb, ${stops.map((stop) => `${stop.color} ${((stop.mgdl - minimum) / (maximum - minimum)) * 100}%`).join(", ")})`
-      : colorFocusGradient(resolveColorFocusRange(values)!, maximum, cssVar, lowColor, highColor, invert)
+      : colorFocusGradient(resolveColorFocusRange(values)!, maximum, cssVar, lowColor, highColor, invert, colors)
   );
 
   const activeBandLeftPercent = $derived.by(() => {
@@ -517,15 +522,16 @@
         <div class="flex flex-wrap items-center justify-between gap-2 p-2 rounded bg-muted/30 border border-border/40">
           <div class="flex items-center gap-2 flex-wrap" aria-label="Color palette presets">
             {#each COLOR_PALETTES as pal}
-              {@const isSelected = lowColor === pal.low && highColor === pal.high}
+              {@const isSelected = (colors?.join(",") ?? "") === (pal.colors?.join(",") ?? "")}
+              {@const themeColors = (themeStops ?? stops).map((stop) => stop.color)}
               <button
                 type="button"
                 title={pal.label}
                 aria-label={pal.label + " palette"}
                 aria-pressed={isSelected}
                 class="size-6 rounded-full border border-border shadow-sm transition-transform {isSelected ? 'scale-110 ring-2 ring-primary ring-offset-1 ring-offset-background' : 'hover:scale-105'}"
-                style:background={pal.low ? `linear-gradient(135deg, ${pal.low}, ${pal.high})` : `linear-gradient(135deg, ${stops[0]?.color ?? 'transparent'}, ${stops[stops.length - 1]?.color ?? 'transparent'})`}
-                onclick={() => onCustomColorsChange?.(pal.low, pal.high)}
+                style:background={paletteSwatchGradient(pal.colors ?? themeColors)}
+                onclick={() => onCustomColorsChange?.(pal.colors ? [...pal.colors] : undefined)}
               ></button>
             {/each}
           </div>
@@ -622,15 +628,15 @@
         <div class="flex flex-wrap items-center justify-between gap-2 p-2 rounded bg-muted/30 border border-border/40">
           <div class="flex items-center gap-2 flex-wrap" aria-label="Color palette presets">
             {#each COLOR_PALETTES as pal}
-              {@const isSelected = lowColor === pal.low && highColor === pal.high}
+              {@const isSelected = (colors?.join(",") ?? "") === (pal.colors?.join(",") ?? "")}
               <button
                 type="button"
                 title={pal.label}
                 aria-label={pal.label + " palette"}
                 aria-pressed={isSelected}
                 class="size-6 rounded-full border border-border shadow-sm transition-transform {isSelected ? 'scale-110 ring-2 ring-primary ring-offset-1 ring-offset-background' : 'hover:scale-105'}"
-                style:background={pal.low ? `linear-gradient(135deg, ${pal.low}, ${pal.high})` : `linear-gradient(135deg, color-mix(in srgb, var(${cssVar}) 18%, transparent), var(${cssVar}))`}
-                onclick={() => onCustomColorsChange?.(pal.low, pal.high)}
+                style:background={pal.colors ? paletteSwatchGradient(pal.colors) : `linear-gradient(135deg, color-mix(in srgb, var(${cssVar}) 18%, transparent), var(${cssVar}))`}
+                onclick={() => onCustomColorsChange?.(pal.colors ? [...pal.colors] : undefined)}
               ></button>
             {/each}
           </div>

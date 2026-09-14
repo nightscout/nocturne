@@ -82,14 +82,11 @@
   const currentMetricColors = $derived.by(() => {
     const key = `${selectedMetric}Colors` as keyof typeof colorFocusPreferences;
     const colors = colorFocusPreferences[key] as string[] | undefined;
-    if (colors && colors.length >= 2) {
-      return { low: colors[0], high: colors.at(-1) };
-    }
-    return { low: undefined, high: undefined };
+    return colors && colors.length >= 2 ? colors : undefined;
   });
 
-  const lowColor = $derived(currentMetricColors.low);
-  const highColor = $derived(currentMetricColors.high);
+  const lowColor = $derived(currentMetricColors?.[0]);
+  const highColor = $derived(currentMetricColors?.at(-1));
   const invert = $derived(
     !!colorFocusPreferences[`${selectedMetric}Invert` as keyof typeof colorFocusPreferences]
   );
@@ -111,17 +108,20 @@
       ? (resolveGlucoseColorThresholds(colorFocusPreferences.avgGlucose) ?? DEFAULT_GLUCOSE_COLOR_THRESHOLDS)
       : DEFAULT_GLUCOSE_COLOR_THRESHOLDS
   );
+  // Unrecolored ramp, used by the Theme swatch preview so it never reflects the currently active palette.
+  const glucoseThemeStops = $derived(glucoseColorFocusStops(glucoseThresholds));
   const glucoseLegendStops = $derived(
     advancedMode
       ? applyGlucosePalette(
-          glucoseColorFocusStops(glucoseThresholds),
+          glucoseThemeStops,
           glucoseThresholds[0],
           glucoseThresholds[3],
           colorFocusPreferences.avgGlucoseColors?.[0],
           colorFocusPreferences.avgGlucoseColors?.at(-1),
-          !!colorFocusPreferences.avgGlucoseInvert
+          !!colorFocusPreferences.avgGlucoseInvert,
+          colorFocusPreferences.avgGlucoseColors
         )
-      : glucoseColorFocusStops(glucoseThresholds)
+      : glucoseThemeStops
   );
 
   function setAdvancedMode(value: boolean) {
@@ -139,11 +139,11 @@
     yearOverviewColors.current = next;
   }
 
-  function setCustomColors(low: string | undefined, high: string | undefined) {
+  function setCustomColors(colors: string[] | undefined) {
     const key = `${selectedMetric}Colors` as keyof typeof colorFocusPreferences;
     const next = { ...colorFocusPreferences };
-    if (low && high) {
-      next[key] = [low, high];
+    if (colors && colors.length >= 2) {
+      next[key] = [...colors];
     } else {
       delete next[key];
     }
@@ -343,7 +343,8 @@
       cssVar,
       advancedMode ? lowColor : undefined,
       advancedMode ? highColor : undefined,
-      advancedMode ? invert : false
+      advancedMode ? invert : false,
+      advancedMode ? currentMetricColors : undefined
     );
     if (advancedMode) {
       const band = focusBand ?? [0, metricMaxCached];
@@ -699,6 +700,7 @@
       {units}
       {METRIC_OPTIONS}
       HEATMAP_STOPS={glucoseLegendStops}
+      themeStops={glucoseThemeStops}
       {METRIC_CSS_VARS}
       {getMetricMax}
       {focusRange}
@@ -709,6 +711,7 @@
       onFocusBandChange={setFocusBand}
       {lowColor}
       {highColor}
+      metricColors={currentMetricColors}
       {advancedMode}
       onAdvancedModeChange={setAdvancedMode}
       {transparencyPercent}

@@ -112,13 +112,21 @@ export function getFocusedIntensityFill(
   cssVar: string,
   lowColor?: string,
   highColor?: string,
-  invert = false
+  invert = false,
+  colors?: readonly string[]
 ): string {
   const [min, max] = resolveColorFocusRange(range) ?? [0, 1];
   let intensity = Number.isFinite(value)
     ? Math.max(0, Math.min((value - min) / (max - min), 1))
     : 0;
   if (invert) intensity = 1 - intensity;
+  if (colors && colors.length >= 2) {
+    const last = colors.length - 1;
+    const scaled = intensity * last;
+    const index = Math.min(last - 1, Math.floor(scaled));
+    const share = Math.round((scaled - index) * 100);
+    return `color-mix(in srgb, ${colors[index + 1]} ${share}%, ${colors[index]})`;
+  }
   if (lowColor && highColor) {
     return `color-mix(in srgb, ${highColor} ${Math.round(intensity * 100)}%, ${lowColor})`;
   }
@@ -131,31 +139,60 @@ export function colorFocusGradient(
   cssVar: string,
   lowColor?: string,
   highColor?: string,
-  invert = false
+  invert = false,
+  colors?: readonly string[]
 ): string {
   const validRange = resolveColorFocusRange(range) ?? [0, 1];
   const domain = Math.max(
     Number.isFinite(domainMax) ? domainMax : 1,
     validRange[1]
   );
+  if (colors && colors.length >= 2) {
+    const [min, max] = validRange;
+    const span = Math.max(max - min, 1);
+    const ordered = invert ? [...colors].reverse() : colors;
+    const stops = ordered.map((color, index) => {
+      const position = min + (index / (ordered.length - 1)) * span;
+      return `${color} ${(position / domain) * 100}%`;
+    });
+    const first = ordered[0];
+    const last = ordered[ordered.length - 1];
+    return `linear-gradient(to right, ${first} 0%, ${stops.join(", ")}, ${last} 100%)`;
+  }
   const low = getFocusedIntensityFill(validRange[0], validRange, cssVar, lowColor, highColor, invert);
   const high = getFocusedIntensityFill(validRange[1], validRange, cssVar, lowColor, highColor, invert);
   return `linear-gradient(to right, ${low} 0%, ${low} ${(validRange[0] / domain) * 100}%, ${high} ${(validRange[1] / domain) * 100}%, ${high} 100%)`;
 }
 
 /** Recolors the glucose ramp between a custom low/high pair, clamped outside [low, high] and optionally
- *  reversed. The built-in Theme ramp (no custom colors) keeps its fixed red-to-white/black order; invert
- *  only makes sense for a custom two-color palette. */
+ *  reversed. A multi-stop palette (`colors`) blends through every stop instead of just the two ends. The
+ *  built-in Theme ramp (no custom colors) keeps its fixed red-to-white/black order; invert only makes
+ *  sense for a custom palette. */
 export function applyGlucosePalette(
   stops: ReadonlyArray<{ mgdl: number; color: string }>,
   low: number,
   high: number,
   lowColor?: string,
   highColor?: string,
-  invert = false
+  invert = false,
+  colors?: readonly string[]
 ): ReadonlyArray<{ mgdl: number; color: string }> {
-  if (!lowColor || !highColor) return stops;
   const domain = Math.max(high - low, 1);
+  if (colors && colors.length >= 2) {
+    const ordered = invert ? [...colors].reverse() : colors;
+    const last = ordered.length - 1;
+    return stops.map((stop) => {
+      const fraction = Math.max(0, Math.min(1, (stop.mgdl - low) / domain));
+      const scaled = fraction * last;
+      const index = Math.min(last - 1, Math.floor(scaled));
+      const share = Math.round((scaled - index) * 100);
+      return {
+        mgdl: stop.mgdl,
+        color: `color-mix(in srgb, ${ordered[index + 1]} ${share}%, ${ordered[index]})`,
+      };
+    });
+  }
+  if (!lowColor || !highColor) return stops;
   return stops.map((stop) => {
     const fraction = Math.max(0, Math.min(1, (stop.mgdl - low) / domain));
     const t = invert ? 1 - fraction : fraction;
@@ -164,6 +201,11 @@ export function applyGlucosePalette(
       color: `color-mix(in srgb, ${highColor} ${Math.round(t * 100)}%, ${lowColor})`,
     };
   });
+}
+
+/** A diagonal preview swatch spanning every stop of a palette, for picker buttons. */
+export function paletteSwatchGradient(colors: readonly string[]): string {
+  return `linear-gradient(135deg, ${colors.join(", ")})`;
 }
 
 export function insertSliderSteps(base: readonly number[], extra: readonly number[]): number[] {

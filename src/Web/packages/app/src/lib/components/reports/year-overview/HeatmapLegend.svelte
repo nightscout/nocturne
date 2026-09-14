@@ -18,16 +18,18 @@
     | "tdd"
     | "carbs";
 
+  // Approximate stops for each colormap (https://sjmgarnier.github.io/viridis/articles/intro-to-viridis.html),
+  // sampled at 0/25/50/75/100% so the picker previews and the actual scale both show the full spectrum.
   const COLOR_PALETTES = [
-    { label: "Theme", low: undefined, high: undefined },
-    { label: "Viridis", low: "#440154", high: "#fde725" },
-    { label: "Plasma", low: "#0d0887", high: "#f0f921" },
-    { label: "Inferno", low: "#000004", high: "#fcffa4" },
-    { label: "Magma", low: "#000004", high: "#fcfdbf" },
-    { label: "Cividis", low: "#00204c", high: "#ffea46" },
-    { label: "Turbo", low: "#30123b", high: "#7a0403" },
-    { label: "Mako", low: "#0b0405", high: "#dbf6d7" },
-    { label: "Rocket", low: "#03051a", high: "#fbeae3" },
+    { label: "Theme", colors: undefined },
+    { label: "Viridis", colors: ["#440154", "#3b528b", "#21908d", "#5dc963", "#fde725"] },
+    { label: "Plasma", colors: ["#0d0887", "#7e03a8", "#cc4778", "#f89441", "#f0f921"] },
+    { label: "Inferno", colors: ["#000004", "#57106e", "#bc3754", "#f98c0a", "#fcffa4"] },
+    { label: "Magma", colors: ["#000004", "#51127c", "#b73779", "#fc8961", "#fcfdbf"] },
+    { label: "Cividis", colors: ["#00204d", "#414d6b", "#7c7b78", "#b6a069", "#ffe945"] },
+    { label: "Turbo", colors: ["#30123b", "#4675ed", "#1ae4b6", "#a4fc3c", "#fb8022", "#7a0403"] },
+    { label: "Mako", colors: ["#0b0405", "#35264c", "#2f6b8e", "#52c2ac", "#dbf6d7"] },
+    { label: "Rocket", colors: ["#03051a", "#521635", "#a52c60", "#f2703a", "#fbeae3"] },
   ];
 
   let {
@@ -45,6 +47,7 @@
     onFocusBandChange = () => {},
     lowColor = undefined,
     highColor = undefined,
+    metricColors = undefined,
     advancedMode = false,
     onAdvancedModeChange = () => {},
     transparencyPercent = 90,
@@ -52,6 +55,7 @@
     onCustomColorsChange = () => {},
     invert = false,
     onInvertChange = () => {},
+    themeStops = undefined,
   } = $props<{
     selectedMetric: HeatmapMetric;
     units: GlucoseUnits;
@@ -67,13 +71,15 @@
     onFocusBandChange?: (value: [number, number] | null) => void;
     lowColor?: string;
     highColor?: string;
+    metricColors?: readonly string[];
     advancedMode?: boolean;
     onAdvancedModeChange?: (val: boolean) => void;
     transparencyPercent?: number;
     onTransparencyChange?: (val: number | undefined) => void;
-    onCustomColorsChange?: (low: string | undefined, high: string | undefined) => void;
+    onCustomColorsChange?: (colors: string[] | undefined) => void;
     invert?: boolean;
     onInvertChange?: (value: boolean) => void;
+    themeStops?: ReadonlyArray<{ mgdl: number; color: string }>;
   }>();
 
   let isPoppedOut = $state(false);
@@ -146,11 +152,13 @@
               {units}
               thresholds={glucoseThresholds}
               stops={HEATMAP_STOPS}
+              {themeStops}
               onThresholdsChange={onGlucoseThresholdsChange}
               {focusBand}
               onFocusBandChange={onFocusBandChange}
               {lowColor}
               {highColor}
+              colors={metricColors}
               {COLOR_PALETTES}
               {onCustomColorsChange}
               {invert}
@@ -198,6 +206,7 @@
               {onFocusBandChange}
               {lowColor}
               {highColor}
+              colors={metricColors}
               {COLOR_PALETTES}
               {onCustomColorsChange}
               {invert}
