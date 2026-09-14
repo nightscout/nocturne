@@ -31,6 +31,12 @@ public abstract class ConnectorCredentialVerifier<TConfig> : IConnectorCredentia
                 $"Missing required fields: {string.Join(", ", missing)}");
         }
 
+        // One attempt, whatever the submitted budget says. A sync retries a provider that is
+        // briefly unwell; a caller waiting on "test these credentials" wants an answer, and
+        // ProductionRetryDelayStrategy's backoff starts at two and a half minutes — at the
+        // default three attempts a retryable 503 would hold the request for seven and a half.
+        config.MaxRetryAttempts = 0;
+
         return await VerifyConfiguredAsync(config, ct);
     }
 

@@ -22,8 +22,17 @@ public class ConfigurationControllerVerifyTests
 {
     private readonly Mock<IConnectorConfigurationService> _configService = new(MockBehavior.Strict);
 
-    private ConfigurationController BuildController() =>
-        new(_configService.Object, NullLogger<ConfigurationController>.Instance);
+    private ConfigurationController BuildController()
+    {
+        // Verification runs the same schema gate the configuration PUT runs, so the schema read is
+        // the one configuration-service call it is allowed to make.
+        _configService
+            .Setup(s => s.GetSchemaAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(JsonDocument.Parse("""{"properties":{"email":{"type":"string"}}}"""));
+
+        return new ConfigurationController(
+            _configService.Object, NullLogger<ConfigurationController>.Instance);
+    }
 
     private static VerifyConnectorCredentialsRequest BuildRequest() => new()
     {
@@ -82,8 +91,49 @@ public class ConfigurationControllerVerifyTests
         await controller.VerifyCredentials(
             "glooko", BuildRequest(), [verifier.Object], CancellationToken.None);
 
-        // Strict mock: any call to the configuration service (save, secrets, anything) would throw.
+        // The schema read is set up; a strict mock throws on anything else, so a save of either
+        // the configuration or the secrets could not pass unseen.
+        _configService.Verify(
+            s => s.GetSchemaAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
         _configService.VerifyNoOtherCalls();
+    }
+
+    /// <summary>
+    /// Verification binds the submitted values to a live configuration and signs in with them, so
+    /// it runs the same schema gate the configuration PUT runs rather than only the required-field
+    /// check. Without it the endpoint accepts values the PUT rejects.
+    /// </summary>
+    [Fact]
+    public async Task VerifyCredentials_OutOfRangeValue_IsRefusedBeforeReachingTheVerifier()
+    {
+        var verifier = new Mock<IConnectorCredentialVerifier>(MockBehavior.Strict);
+        verifier.SetupGet(v => v.ConnectorId).Returns("glooko");
+
+        _configService.Reset();
+        _configService
+            .Setup(s => s.GetSchemaAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(JsonDocument.Parse(
+                """{"properties":{"maxRetryAttempts":{"type":"integer","minimum":0,"maximum":10}}}"""));
+
+        var controller = new ConfigurationController(
+            _configService.Object, NullLogger<ConfigurationController>.Instance);
+
+        var request = new VerifyConnectorCredentialsRequest
+        {
+            Configuration = JsonDocument.Parse("""{"maxRetryAttempts":9999}"""),
+            Secrets = new Dictionary<string, string> { ["password"] = "secret" },
+        };
+
+        var result = await controller.VerifyCredentials(
+            "glooko", request, [verifier.Object], CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        // Strict verifier mock: no live sign-in was attempted with the refused value.
+        verifier.Verify(v => v.VerifyAsync(
+                It.IsAny<JsonDocument?>(),
+                It.IsAny<Dictionary<string, string>>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]

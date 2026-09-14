@@ -65,6 +65,32 @@ public class GlookoCredentialVerifierTests
         handler.SignInRequests.Should().Be(0, "required-field validation must run before any network call");
     }
 
+    /// <summary>
+    /// A retryable provider failure ends the verification rather than entering the sync path's
+    /// backoff: ProductionRetryDelayStrategy waits two and a half minutes before the second
+    /// attempt, so honouring the submitted attempt budget would hold the caller's request for
+    /// minutes to hours for an answer they asked for interactively.
+    /// </summary>
+    [Fact]
+    public async Task VerifyAsync_RetryableProviderFailure_TriesOnceAndDoesNotBackOff()
+    {
+        var handler = new SignInHandler(
+            acceptCredentials: false, rejectWith: HttpStatusCode.ServiceUnavailable);
+        var retryDelay = new Mock<IRetryDelayStrategy>(MockBehavior.Strict);
+        var verifier = BuildVerifier(handler, retryDelay);
+
+        var configuration = JsonDocument.Parse(
+            $$"""{"email":"{{Email}}","server":"{{GlookoConstants.RegionEU}}","useV3Api":false,"maxRetryAttempts":10}""");
+
+        var result = await verifier.VerifyAsync(configuration, BuildSecrets(), CancellationToken.None);
+
+        result.Supported.Should().BeTrue();
+        result.Success.Should().BeFalse();
+        handler.SignInRequests.Should().Be(
+            1, "a submitted attempt budget must not buy extra sign-ins on the verification path");
+        retryDelay.VerifyNoOtherCalls();
+    }
+
     // ── Test infrastructure ─────────────────────────────────────────────
 
     private static JsonDocument BuildConfigurationJson() => JsonDocument.Parse(
@@ -79,9 +105,10 @@ public class GlookoCredentialVerifierTests
     /// The token cache is a strict mock and the tenant accessor reports unresolved: verification
     /// must neither read or write a cached session nor require a tenant context.
     /// </summary>
-    private static GlookoCredentialVerifier BuildVerifier(SignInHandler handler)
+    private static GlookoCredentialVerifier BuildVerifier(
+        SignInHandler handler, Mock<IRetryDelayStrategy>? retryDelayStrategy = null)
     {
-        var retryDelay = new Mock<IRetryDelayStrategy>();
+        var retryDelay = retryDelayStrategy ?? new Mock<IRetryDelayStrategy>();
         retryDelay.Setup(r => r.ApplyRetryDelayAsync(It.IsAny<int>())).Returns(Task.CompletedTask);
 
         var tokenProvider = new GlookoAuthTokenProvider(
@@ -106,7 +133,8 @@ public class GlookoCredentialVerifierTests
     /// <summary>
     /// Answers the v2 sign-in endpoint: 200 with a session cookie when accepting, 401 otherwise.
     /// </summary>
-    private sealed class SignInHandler(bool acceptCredentials) : HttpMessageHandler
+    private sealed class SignInHandler(bool acceptCredentials, HttpStatusCode? rejectWith = null)
+        : HttpMessageHandler
     {
         public int SignInRequests { get; private set; }
 
@@ -121,11 +149,12 @@ public class GlookoCredentialVerifierTests
 
                 if (!acceptCredentials)
                 {
-                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Unauthorized)
-                    {
-                        Content = new StringContent(
-                            "{\"error\":\"Invalid email or password.\"}", Encoding.UTF8, "application/json"),
-                    });
+                    return Task.FromResult(
+                        new HttpResponseMessage(rejectWith ?? HttpStatusCode.Unauthorized)
+                        {
+                            Content = new StringContent(
+                                "{\"error\":\"Invalid email or password.\"}", Encoding.UTF8, "application/json"),
+                        });
                 }
 
                 var response = new HttpResponseMessage(HttpStatusCode.OK)

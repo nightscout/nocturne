@@ -398,6 +398,7 @@ public class ConfigurationController : ControllerBase
     [RequireScope(Scope.TenantSettings)]
     [EnableRateLimiting(ServiceRegistrationExtensions.ConnectorVerifyRateLimitPolicy)]
     [ProducesResponseType(typeof(ConnectorCredentialVerificationResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<ConnectorCredentialVerificationResult>> VerifyCredentials(
         string connectorName,
         [FromBody] VerifyConnectorCredentialsRequest request,
@@ -411,6 +412,16 @@ public class ConfigurationController : ControllerBase
         if (verifier == null)
         {
             return Ok(ConnectorCredentialVerificationResult.NotSupported());
+        }
+
+        // The same schema gate the configuration PUT runs. Verification binds the submitted values
+        // to a live configuration and signs in with them, so a value this endpoint waves through is
+        // one the connector acts on without the bounds its schema declares.
+        if (request.Configuration is { } submitted)
+        {
+            var validationErrors = await ValidateConfigurationAsync(connectorName, submitted, ct);
+            if (validationErrors.Count > 0)
+                return BadRequest(new { message = "Configuration validation failed", errors = validationErrors });
         }
 
         var result = await verifier.VerifyAsync(

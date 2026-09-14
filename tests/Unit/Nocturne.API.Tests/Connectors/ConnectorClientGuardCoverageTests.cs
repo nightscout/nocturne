@@ -13,7 +13,8 @@ namespace Nocturne.API.Tests.Connectors;
 
 /// <summary>
 /// Every HTTP client a connector installer registers must carry
-/// <see cref="LinkLocalGuardHandler"/> and have transport-level redirects off.
+/// <see cref="LinkLocalGuardHandler"/>, and have transport-level redirects and the automatic
+/// cookie jar off.
 /// </summary>
 /// <remarks>
 /// The guard is installed by <c>ConfigureConnectorClient</c>, and nothing forces an installer to
@@ -123,6 +124,22 @@ public class ConnectorClientGuardCoverageTests
                 "{0}'s '{1}' client is a connector: private and LAN targets are supported and only " +
                 "link-local is refused",
                 connectorName, clientName);
+
+            var usesCookies = primary switch
+            {
+                SocketsHttpHandler sockets => sockets.UseCookies,
+                HttpClientHandler legacy => legacy.UseCookies,
+                // Same rule as the redirect check: a handler this test cannot read counts as
+                // keeping a cookie jar rather than being skipped.
+                _ => true,
+            };
+
+            usesCookies.Should().BeFalse(
+                "{0}'s '{1}' client must have the automatic cookie jar off on its primary handler " +
+                "(a {2}); the handler is pooled across tenants, so a Set-Cookie one tenant's " +
+                "sign-in returns would be replayed on another's requests and override the Cookie " +
+                "header the connector manages per session",
+                connectorName, clientName, primary.GetType().Name);
         }
     }
 
