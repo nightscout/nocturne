@@ -287,6 +287,7 @@
       drafts = [0, automaticMax].map(display);
       focusDrafts = [0, automaticMax].map(display);
     }
+    onInvertChange?.(false);
     invalidBound = null;
     invalidFocusBound = null;
   }
@@ -497,6 +498,19 @@
               />
               <span class="text-muted-foreground text-[11px]">{unitLabel}</span>
             </div>
+            <div class="flex items-center gap-1.5 pt-1 mt-1 border-t border-border/30">
+              <span class="text-[10px] text-muted-foreground">Dim:</span>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                bind:value={dimDraft}
+                oninput={changeDim}
+                aria-invalid={invalidDim}
+                class="h-6 w-12 px-1 text-[11px] tabular-nums"
+              />
+              <span class="text-[10px] text-muted-foreground">%</span>
+            </div>
           </div>
         </div>
 
@@ -516,17 +530,6 @@
             {/each}
           </div>
           <div class="flex items-center gap-1.5">
-            <span class="text-[10px] text-muted-foreground">Dim:</span>
-            <Input
-              type="number"
-              min={0}
-              max={100}
-              bind:value={dimDraft}
-              oninput={changeDim}
-              aria-invalid={invalidDim}
-              class="h-6 w-12 px-1 text-[11px] tabular-nums"
-            />
-            <span class="text-[10px] text-muted-foreground">%</span>
             <Button
               variant="outline"
               size="sm"
@@ -600,6 +603,19 @@
               />
               <span class="text-muted-foreground text-[11px]">{unitLabel}</span>
             </div>
+            <div class="flex items-center gap-1.5 pt-1 mt-1 border-t border-border/30">
+              <span class="text-[10px] text-muted-foreground">Dim:</span>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                bind:value={dimDraft}
+                oninput={changeDim}
+                aria-invalid={invalidDim}
+                class="h-6 w-12 px-1 text-[11px] tabular-nums"
+              />
+              <span class="text-[10px] text-muted-foreground">%</span>
+            </div>
           </div>
         </div>
 
@@ -619,17 +635,6 @@
             {/each}
           </div>
           <div class="flex items-center gap-1.5">
-            <span class="text-[10px] text-muted-foreground">Dim:</span>
-            <Input
-              type="number"
-              min={0}
-              max={100}
-              bind:value={dimDraft}
-              oninput={changeDim}
-              aria-invalid={invalidDim}
-              class="h-6 w-12 px-1 text-[11px] tabular-nums"
-            />
-            <span class="text-[10px] text-muted-foreground">%</span>
             <Button variant="outline" size="sm" class="h-6 px-2 text-[11px]" aria-pressed={invert} onclick={() => onInvertChange?.(!invert)}>Invert</Button>
             <Button variant="outline" size="sm" class="h-6 px-2 text-[11px]" aria-label={resetLabel} onclick={reset}>Reset</Button>
           </div>

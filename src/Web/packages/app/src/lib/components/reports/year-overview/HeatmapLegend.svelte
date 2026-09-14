@@ -20,9 +20,14 @@
 
   const COLOR_PALETTES = [
     { label: "Theme", low: undefined, high: undefined },
-    { label: "Blue / Orange", low: "#0072b2", high: "#e69f00" },
     { label: "Viridis", low: "#440154", high: "#fde725" },
+    { label: "Plasma", low: "#0d0887", high: "#f0f921" },
+    { label: "Inferno", low: "#000004", high: "#fcffa4" },
+    { label: "Magma", low: "#000004", high: "#fcfdbf" },
     { label: "Cividis", low: "#00204c", high: "#ffea46" },
+    { label: "Turbo", low: "#30123b", high: "#7a0403" },
+    { label: "Mako", low: "#0b0405", high: "#dbf6d7" },
+    { label: "Rocket", low: "#03051a", high: "#fbeae3" },
   ];
 
   let {
