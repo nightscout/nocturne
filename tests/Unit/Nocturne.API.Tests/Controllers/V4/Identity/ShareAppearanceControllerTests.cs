@@ -98,7 +98,13 @@ public sealed class ShareAppearanceControllerTests
         // field added inside them: everything these two types declare is disclosed. Pinning the
         // declarations is what makes adding one a decision rather than a default.
         PropertyNames(typeof(YearOverviewColorPreferences)).Should().BeEquivalentTo(
-            "AvgGlucose", "Tir", "Bolus", "Basal", "Tdd", "Carbs");
+            "AdvancedMode", "OutOfBandTransparency", "LowColor", "HighColor",
+            "AvgGlucose", "AvgGlucoseBand", "AvgGlucoseColors", "AvgGlucoseInvert",
+            "Tir", "TirBand", "TirColors", "TirInvert",
+            "Bolus", "BolusBand", "BolusColors", "BolusInvert",
+            "Basal", "BasalBand", "BasalColors", "BasalInvert",
+            "Tdd", "TddBand", "TddColors", "TddInvert",
+            "Carbs", "CarbsBand", "CarbsColors", "CarbsInvert");
         PropertyNames(typeof(PredictionPreferences)).Should().BeEquivalentTo(
             "Enabled", "Minutes", "DisplayMode");
         PropertyNames(typeof(ChartPreferences)).Should().BeEquivalentTo(

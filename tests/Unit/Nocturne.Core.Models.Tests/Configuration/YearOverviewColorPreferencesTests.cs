@@ -51,6 +51,9 @@ public class YearOverviewColorPreferencesTests
     public void Tir_is_bounded_but_doses_are_not()
     {
         new YearOverviewColorPreferences { Tir = [70, 101] }.Validate().Should().NotBeNull();
-        new YearOverviewColorPreferences { Tir = [70, 100], Tdd = [0, 1000], AvgGlucose = [41, 42, 43, 44] }.Validate().Should().BeNull();
+        new YearOverviewColorPreferences { AvgGlucoseBand = [39, 350] }.Validate().Should().NotBeNull();
+        new YearOverviewColorPreferences { AvgGlucoseBand = [40, 351] }.Validate().Should().NotBeNull();
+        new YearOverviewColorPreferences { AvgGlucoseBand = [100, 80] }.Validate().Should().NotBeNull();
+        new YearOverviewColorPreferences { Tir = [70, 100], Tdd = [0, 1000], AvgGlucose = [41, 42, 43, 44], AvgGlucoseBand = [40, 350] }.Validate().Should().BeNull();
     }
 }
