@@ -58,7 +58,6 @@ public class ExperimentsControllerTests : IClassFixture<AuthenticationTestFactor
                 SubjectId = TestDatabaseSeeder.TestSubjectId,
                 GrantType = OAuthGrantTypes.Direct,
                 LegacySecretHash = TestDatabaseSeeder.Sha1Hex(uploaderToken),
-                IsMigrated = false,
                 Scopes =
                 [
                     Scope.GlucoseReadWrite,

@@ -147,16 +147,11 @@ public class HubTokenAuthorizerTests
         await using var db = await _dbContextFactory.CreateDbContextAsync();
         db.TenantId = tenantId;
 
-        db.OAuthGrants.Add(new OAuthGrantEntity
-        {
-            Id = Guid.CreateVersion7(),
-            TenantId = tenantId,
-            SubjectId = subjectId,
-            GrantType = OAuthGrantTypes.Direct,
-            LegacyTokenDigest = LegacyDigest,
-            IsMigrated = true,
-            Scopes = [.. scopes],
-        });
+        var grant = OAuthGrantEntity.AdoptedLegacyCredential(
+            subjectId, "Imported token", scopes, legacyTokenDigest: LegacyDigest);
+        grant.TenantId = tenantId;
+
+        db.OAuthGrants.Add(grant);
 
         await db.SaveChangesAsync();
     }

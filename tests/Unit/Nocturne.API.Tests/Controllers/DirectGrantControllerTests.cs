@@ -374,18 +374,9 @@ public class DirectGrantControllerTests : IDisposable
     private async Task<Guid> SeedSiteTokenAsync()
     {
         var holderId = await _dbContext.DeviceSubjectOf(_testTenantId);
-        var grant = new OAuthGrantEntity
-        {
-            Id = Guid.CreateVersion7(),
-            TenantId = _testTenantId,
-            SubjectId = holderId,
-            GrantType = OAuthGrantTypes.Direct,
-            Scopes = [Scope.GlucoseRead],
-            Label = "xDrip on the old phone",
-            TokenHash = "hash",
-            IsMigrated = true,
-            CreatedAt = DateTime.UtcNow,
-        };
+        var grant = OAuthGrantEntity.AdoptedLegacyCredential(
+            holderId, "xDrip on the old phone", [Scope.GlucoseRead], tokenHash: "hash");
+        grant.TenantId = _testTenantId;
 
         _dbContext.OAuthGrants.Add(grant);
         await _dbContext.SaveChangesAsync();
@@ -408,7 +399,39 @@ public class DirectGrantControllerTests : IDisposable
         // screen cannot show them, nothing can, and revoking a lost phone stops being self-service.
         var grants = Assert.IsType<List<DirectGrantDto>>(
             Assert.IsType<OkObjectResult>(result.Result).Value);
-        grants.Should().ContainSingle(g => g.Id == siteToken);
+        grants.Should().ContainSingle(g => g.Id == siteToken)
+            .Which.IsLegacy.Should().BeTrue();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task List_tells_an_adopted_credential_apart_from_a_minted_one()
+    {
+        var adopted = await SeedSiteTokenAsync();
+
+        var minted = new OAuthGrantEntity
+        {
+            Id = Guid.CreateVersion7(),
+            SubjectId = await _dbContext.DeviceSubjectOf(_testTenantId),
+            GrantType = OAuthGrantTypes.Direct,
+            Scopes = [Scope.GlucoseRead],
+            Label = "Minted here",
+            TokenHash = "minted",
+            CreatedAt = DateTime.UtcNow,
+        };
+        _dbContext.OAuthGrants.Add(minted);
+        await _dbContext.SaveChangesAsync();
+
+        GrantCallerScopes(Scope.MembersManage);
+
+        var result = await _controller.List();
+
+        // The only thing standing between the two on this screen is the rotation prompt, so the
+        // flag has to survive the trip from the grant row to the response.
+        var grants = Assert.IsType<List<DirectGrantDto>>(
+            Assert.IsType<OkObjectResult>(result.Result).Value);
+        grants.Single(g => g.Id == adopted).IsLegacy.Should().BeTrue();
+        grants.Single(g => g.Id == minted.Id).IsLegacy.Should().BeFalse();
     }
 
     [Fact]

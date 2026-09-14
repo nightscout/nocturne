@@ -1757,29 +1757,14 @@ internal class MigrationJob
                 // holder is not a person.
                 deviceSubjectId ??= await dbContext.DeviceSubjectOf(_tenantId, ct);
 
-                dbContext.OAuthGrants.Add(new OAuthGrantEntity
-                {
-                    Id = Guid.CreateVersion7(),
-                    TenantId = _tenantId,
-                    ClientEntityId = null,
-                    SubjectId = deviceSubjectId.Value,
-                    GrantType = OAuthGrantTypes.Direct,
-
-                    // "*" is stored as the single superuser atom; Normalize expands it back, so
-                    // spelling the expansion out here would only bake today's scope list in.
-                    Scopes = scopes.Contains(Scope.FullAccess)
-                        ? [Scope.FullAccess]
-                        : [.. scopes],
-
-                    Label = subject.Name ?? "Unnamed",
-
-                    // Both spellings the source instance would have accepted: the token verbatim,
-                    // and any other digest prefix. Existing AAPS and xDrip setups keep uploading.
-                    TokenHash = tokenHash,
-                    LegacyTokenDigest = legacyDigest,
-                    IsMigrated = true,
-                    CreatedAt = DateTime.UtcNow,
-                });
+                // Both spellings the source instance would have accepted: the token verbatim, and
+                // any other digest prefix. Existing AAPS and xDrip setups keep uploading.
+                dbContext.OAuthGrants.Add(OAuthGrantEntity.AdoptedLegacyCredential(
+                    deviceSubjectId.Value,
+                    subject.Name ?? "Unnamed",
+                    scopes,
+                    tokenHash: tokenHash,
+                    legacyTokenDigest: legacyDigest));
 
                 await dbContext.SaveChangesAsync(ct);
 
