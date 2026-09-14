@@ -55,13 +55,6 @@
 
   const months = $derived(timeMonths(bounds.start, bounds.end));
 
-  function scrollToMonth(monthDate: Date) {
-    if (!scrollContainer) return;
-    const weekIndex = timeWeek.count(bounds.start, timeWeek.ceil(monthDate));
-    const targetX = Math.max(0, weekIndex * 24 - 24);
-    scrollContainer.scrollTo({ left: targetX, behavior: "smooth" });
-  }
-
   function handleMouseDown(e: MouseEvent) {
     if (!scrollContainer) return;
     isDragging = true;
@@ -102,36 +95,28 @@
     class="pointer-events-none h-0"
   ></div>
 
-  <!-- Year Label & Mobile Month Quick-Scroller -->
-  <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
-    <div class="flex items-center gap-3">
-      <h2 class="text-xl font-bold tabular-nums">{year}</h2>
-      {#if isYearLoading}
-        <Loader2 class="h-4 w-4 animate-spin text-muted-foreground" />
-      {/if}
-      {#if days}
-        <span class="text-sm text-muted-foreground">
-          {days.filter((d: any) => (d.totalCount ?? 0) > 0).length} days with data
-        </span>
-      {/if}
-    </div>
-
-    <!-- Quick Month Jumper / Scroll Navigator -->
-    <div class="flex items-center gap-1 overflow-x-auto py-1 max-w-full text-xs print:hidden no-scrollbar">
-      {#each months as monthDate}
-        <button
-          type="button"
-          class="px-2 py-0.5 rounded-full text-[11px] font-medium bg-muted/60 hover:bg-primary/15 hover:text-primary transition-colors cursor-pointer shrink-0 border border-border/40"
-          onclick={() => scrollToMonth(monthDate)}
-        >
-          {formatMonthLabel(monthDate)}
-        </button>
-      {/each}
-    </div>
+  <!-- Year Label -->
+  <div class="mb-2 flex items-center gap-3">
+    <h2 class="text-xl font-bold tabular-nums">{year}</h2>
+    {#if isYearLoading}
+      <Loader2 class="h-4 w-4 animate-spin text-muted-foreground" />
+    {/if}
+    {#if days}
+      <span class="text-sm text-muted-foreground">
+        {days.filter((d: any) => (d.totalCount ?? 0) > 0).length} days with data
+      </span>
+    {/if}
   </div>
 
   <!-- Calendar Heatmap Card with Enhanced Touch & Grab Scrolling -->
   {#if chartData.length > 0}
+                  <rect
+                    x={0}
+                    y={7 * cellSize[1] + 22}
+                    width={1320}
+                    height={42}
+                    fill="transparent"
+                  />
     <div
       bind:this={scrollContainer}
       class="heatmap-scroll-container w-full overflow-x-auto overflow-y-visible rounded-xl border border-border bg-card p-4 print:overflow-visible touch-pan-x cursor-grab active:cursor-grabbing select-none"
@@ -360,6 +345,7 @@
           {/snippet}
         </Chart>
       </div>
+      <div class="min-w-[1320px] h-10" aria-hidden="true"></div>
     </div>
   {:else if isYearLoading}
     <div

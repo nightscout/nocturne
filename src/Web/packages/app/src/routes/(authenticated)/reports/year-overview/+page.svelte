@@ -79,17 +79,18 @@
   );
 
   const currentMetricColors = $derived.by(() => {
-    if (selectedMetric === "avgGlucose") return { low: undefined, high: undefined };
+    if (selectedMetric === "avgGlucose") return { low: undefined, high: undefined, colors: undefined };
     const key = `${selectedMetric}Colors` as keyof typeof colorFocusPreferences;
     const colors = colorFocusPreferences[key] as string[] | undefined;
-    if (colors && colors.length === 2) {
-      return { low: colors[0], high: colors[1] };
+    if (colors && colors.length >= 2) {
+      return { low: colors[0], high: colors.at(-1), colors };
     }
-    return { low: undefined, high: undefined };
+    return { low: undefined, high: undefined, colors: undefined };
   });
 
   const lowColor = $derived(currentMetricColors.low);
   const highColor = $derived(currentMetricColors.high);
+  const metricColors = $derived(currentMetricColors.colors);
 
   const focusRange = $derived.by(() => {
     if (!advancedMode || selectedMetric === "avgGlucose") return null;
@@ -127,12 +128,12 @@
     yearOverviewColors.current = next;
   }
 
-  function setCustomColors(low: string | undefined, high: string | undefined) {
+  function setCustomColors(low: string | undefined, high: string | undefined, colors?: readonly string[]) {
     if (selectedMetric === "avgGlucose") return;
     const key = `${selectedMetric}Colors` as keyof typeof colorFocusPreferences;
     const next = { ...colorFocusPreferences };
     if (low && high) {
-      next[key] = [low, high];
+      next[key] = [...(colors ?? [low, high])];
     } else {
       delete next[key];
     }
@@ -318,7 +319,8 @@
       focusRange ?? [0, metricMaxCached],
       cssVar,
       advancedMode ? lowColor : undefined,
-      advancedMode ? highColor : undefined
+      advancedMode ? highColor : undefined,
+      advancedMode ? metricColors : undefined
     );
     if (advancedMode) {
       const band = focusBand ?? [0, metricMaxCached];

@@ -19,7 +19,7 @@
     { label: "Blue / Orange", low: "#0072b2", high: "#e69f00" },
     { label: "Viridis", low: "#440154", high: "#fde725" },
     { label: "Cividis", low: "#00204c", high: "#ffea46" },
-    { label: "Blue → Green → Yellow → Red", low: "#2563eb", high: "#dc2626" },
+    { label: "Blue / Green / Yellow / Red", low: "#2563eb", high: "#dc2626", colors: ["#2563eb", "#16a34a", "#facc15", "#dc2626"] },
   ];
 
   let {
@@ -61,7 +61,7 @@
     onAdvancedModeChange?: (val: boolean) => void;
     transparencyPercent?: number;
     onTransparencyChange?: (val: number | undefined) => void;
-    onCustomColorsChange?: (low: string | undefined, high: string | undefined) => void;
+    onCustomColorsChange?: (low: string | undefined, high: string | undefined, colors?: readonly string[]) => void;
   }>();
 
   let isPoppedOut = $state(false);
@@ -178,6 +178,7 @@
               {onFocusBandChange}
               {lowColor}
               {highColor}
+              colors={COLOR_PALETTES.find((palette) => palette.low === lowColor && palette.high === highColor)?.colors}
               {COLOR_PALETTES}
               {onCustomColorsChange}
               {transparencyPercent}

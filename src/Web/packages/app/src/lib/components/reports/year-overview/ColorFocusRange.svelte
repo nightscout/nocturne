@@ -41,6 +41,7 @@
     onFocusBandChange = () => {},
     lowColor = undefined,
     highColor = undefined,
+    colors = undefined,
     COLOR_PALETTES = [],
     onCustomColorsChange = () => {},
     transparencyPercent = 90,
@@ -63,8 +64,9 @@
     onFocusBandChange?: (values: [number, number] | null) => void;
     lowColor?: string;
     highColor?: string;
-    COLOR_PALETTES?: Array<{ label: string; low?: string; high?: string }>;
-    onCustomColorsChange?: (low?: string, high?: string) => void;
+    colors?: readonly string[];
+    COLOR_PALETTES?: Array<{ label: string; low?: string; high?: string; colors?: readonly string[] }>;
+    onCustomColorsChange?: (low?: string, high?: string, colors?: readonly string[]) => void;
     transparencyPercent?: number;
     onTransparencyChange?: (val: number | undefined) => void;
   } = $props();
@@ -94,7 +96,7 @@
   const gradient = $derived(
     glucose
       ? `linear-gradient(to right in srgb, ${stops.map((stop) => `${stop.color} ${((stop.mgdl - minimum) / (maximum - minimum)) * 100}%`).join(", ")})`
-      : colorFocusGradient(resolveColorFocusRange(values)!, maximum, cssVar, lowColor, highColor)
+      : colorFocusGradient(resolveColorFocusRange(values)!, maximum, cssVar, lowColor, highColor, colors)
   );
 
   const activeBandLeftPercent = $derived.by(() => {
@@ -139,7 +141,6 @@
   let focusDrafts = $state<(number | undefined)[]>([]);
   let invalidBound = $state<number | null>(null);
   let invalidFocusBound = $state<number | null>(null);
-  let activeTab = $state<"focus" | "colors" | "settings">("focus");
 
   const display = (value: number) =>
     glucose ? convertToDisplayUnits(value, units) : value;
@@ -248,7 +249,36 @@
     <!-- SLIDER BAR (Strictly identical width across all views) -->
     <div class="space-y-1">
       <div class="relative flex h-10 w-full items-center">
-        <!-- 1. Color gradient & Color scaling bullets -->
+        <!-- 1. Focus lines (transparency boundary) -->
+        <Slider.Root
+          type="multiple"
+          min={minimum}
+          max={maximum}
+          step={focusSliderSteps}
+          autoSort={false}
+          thumbPositioning="exact"
+          bind:value={
+            () => [...focusBandValues],
+            (next) => {
+              changeFocusBand(next);
+            }
+          }
+          class="absolute inset-0 flex h-10 w-full touch-none select-none items-center pointer-events-none"
+          aria-label={`${metricLabel} focus lines`}
+        >
+          {#snippet children({ thumbItems })}
+            {#each thumbItems as thumb (thumb.index)}
+              <Slider.Thumb
+                index={thumb.index}
+                aria-label={thumb.index === 0 ? "Focus minimum line" : "Focus maximum line"}
+                aria-valuetext={`${formatted(thumb.value)} ${unitLabel}`}
+                class="pointer-events-auto block w-2.5 h-7 -mt-0.5 rounded-sm border-2 border-foreground bg-background shadow-md cursor-ew-resize before:absolute before:-inset-3 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/50"
+              />
+            {/each}
+          {/snippet}
+        </Slider.Root>
+
+        <!-- 2. Color gradient & color scaling bullets stay above focus lines. -->
         <Slider.Root
           type="multiple"
           min={minimum}
@@ -294,36 +324,7 @@
                 index={thumb.index}
                 aria-label={accessibleLabel(thumb.index)}
                 aria-valuetext={`${formatted(thumb.value)} ${unitLabel}`}
-                class="block size-5 shrink-0 rounded-full border-2 border-foreground bg-background shadow-sm before:absolute before:-inset-3 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/50 cursor-pointer"
-              />
-            {/each}
-          {/snippet}
-        </Slider.Root>
-
-        <!-- 2. Focus lines (transparency boundary) -->
-        <Slider.Root
-          type="multiple"
-          min={minimum}
-          max={maximum}
-          step={focusSliderSteps}
-          autoSort={false}
-          thumbPositioning="exact"
-          bind:value={
-            () => [...focusBandValues],
-            (next) => {
-              changeFocusBand(next);
-            }
-          }
-          class="absolute inset-0 flex h-10 w-full touch-none select-none items-center pointer-events-none"
-          aria-label={`${metricLabel} focus lines`}
-        >
-          {#snippet children({ thumbItems })}
-            {#each thumbItems as thumb (thumb.index)}
-              <Slider.Thumb
-                index={thumb.index}
-                aria-label={thumb.index === 0 ? "Focus minimum line" : "Focus maximum line"}
-                aria-valuetext={`${formatted(thumb.value)} ${unitLabel}`}
-                class="pointer-events-auto block w-2.5 h-7 -mt-0.5 rounded-sm border-2 border-foreground bg-background shadow-md cursor-ew-resize before:absolute before:-inset-3 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/50"
+                class="relative z-10 block size-5 shrink-0 rounded-full border-2 border-foreground bg-background shadow-sm before:absolute before:-inset-3 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/50 cursor-pointer"
               />
             {/each}
           {/snippet}
@@ -496,8 +497,8 @@
                 aria-label={pal.label + " palette"}
                 aria-pressed={isSelected}
                 class="size-6 rounded-full border border-border shadow-sm transition-transform {isSelected ? 'scale-110 ring-2 ring-primary ring-offset-1 ring-offset-background' : 'hover:scale-105'}"
-                style:background={pal.low ? `linear-gradient(135deg, ${pal.low}, ${pal.high})` : `linear-gradient(135deg, color-mix(in srgb, var(${cssVar}) 18%, transparent), var(${cssVar}))`}
-                onclick={() => onCustomColorsChange?.(pal.low, pal.high)}
+                style:background={pal.colors ? `linear-gradient(135deg, ${pal.colors.join(", ")})` : pal.low ? `linear-gradient(135deg, ${pal.low}, ${pal.high})` : `linear-gradient(135deg, color-mix(in srgb, var(${cssVar}) 18%, transparent), var(${cssVar}))`}
+                onclick={() => onCustomColorsChange?.(pal.low, pal.high, pal.colors)}
               ></button>
             {/each}
           </div>
