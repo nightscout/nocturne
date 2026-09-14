@@ -79,18 +79,17 @@
   );
 
   const currentMetricColors = $derived.by(() => {
-    if (selectedMetric === "avgGlucose") return { low: undefined, high: undefined, colors: undefined };
+    if (selectedMetric === "avgGlucose") return { low: undefined, high: undefined };
     const key = `${selectedMetric}Colors` as keyof typeof colorFocusPreferences;
     const colors = colorFocusPreferences[key] as string[] | undefined;
     if (colors && colors.length >= 2) {
-      return { low: colors[0], high: colors.at(-1), colors };
+      return { low: colors[0], high: colors.at(-1) };
     }
-    return { low: undefined, high: undefined, colors: undefined };
+    return { low: undefined, high: undefined };
   });
 
   const lowColor = $derived(currentMetricColors.low);
   const highColor = $derived(currentMetricColors.high);
-  const metricColors = $derived(currentMetricColors.colors);
 
   const focusRange = $derived.by(() => {
     if (!advancedMode || selectedMetric === "avgGlucose") return null;
@@ -128,12 +127,12 @@
     yearOverviewColors.current = next;
   }
 
-  function setCustomColors(low: string | undefined, high: string | undefined, colors?: readonly string[]) {
+  function setCustomColors(low: string | undefined, high: string | undefined) {
     if (selectedMetric === "avgGlucose") return;
     const key = `${selectedMetric}Colors` as keyof typeof colorFocusPreferences;
     const next = { ...colorFocusPreferences };
     if (low && high) {
-      next[key] = [...(colors ?? [low, high])];
+      next[key] = [low, high];
     } else {
       delete next[key];
     }
@@ -296,7 +295,9 @@
         const baseColor = getGlucoseHeatmapFill(data.value, glucoseLegendStops);
         if (advancedMode) {
           const band = focusBand ?? [GLUCOSE_COLOR_MIN, GLUCOSE_COLOR_MAX];
-          if (data.value < band[0] || data.value > band[1]) {
+          const lower = band[0] <= GLUCOSE_COLOR_MIN ? -Infinity : band[0];
+          const upper = band[1] >= GLUCOSE_COLOR_MAX ? Infinity : band[1];
+          if (data.value < lower || data.value > upper) {
             return `color-mix(in srgb, ${baseColor} ${opacity}%, transparent)`;
           }
         }
@@ -319,12 +320,13 @@
       focusRange ?? [0, metricMaxCached],
       cssVar,
       advancedMode ? lowColor : undefined,
-      advancedMode ? highColor : undefined,
-      advancedMode ? metricColors : undefined
+      advancedMode ? highColor : undefined
     );
     if (advancedMode) {
       const band = focusBand ?? [0, metricMaxCached];
-      if (metricValue < band[0] || metricValue > band[1]) {
+      const lower = band[0] <= 0 ? -Infinity : band[0];
+      const upper = band[1] >= metricMaxCached ? Infinity : band[1];
+      if (metricValue < lower || metricValue > upper) {
         return `color-mix(in srgb, ${baseColor} ${opacity}%, transparent)`;
       }
     }

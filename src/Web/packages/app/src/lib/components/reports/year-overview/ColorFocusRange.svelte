@@ -41,7 +41,6 @@
     onFocusBandChange = () => {},
     lowColor = undefined,
     highColor = undefined,
-    colors = undefined,
     COLOR_PALETTES = [],
     onCustomColorsChange = () => {},
     transparencyPercent = 90,
@@ -64,9 +63,8 @@
     onFocusBandChange?: (values: [number, number] | null) => void;
     lowColor?: string;
     highColor?: string;
-    colors?: readonly string[];
-    COLOR_PALETTES?: Array<{ label: string; low?: string; high?: string; colors?: readonly string[] }>;
-    onCustomColorsChange?: (low?: string, high?: string, colors?: readonly string[]) => void;
+    COLOR_PALETTES?: Array<{ label: string; low?: string; high?: string }>;
+    onCustomColorsChange?: (low?: string, high?: string) => void;
     transparencyPercent?: number;
     onTransparencyChange?: (val: number | undefined) => void;
   } = $props();
@@ -96,7 +94,7 @@
   const gradient = $derived(
     glucose
       ? `linear-gradient(to right in srgb, ${stops.map((stop) => `${stop.color} ${((stop.mgdl - minimum) / (maximum - minimum)) * 100}%`).join(", ")})`
-      : colorFocusGradient(resolveColorFocusRange(values)!, maximum, cssVar, lowColor, highColor, colors)
+      : colorFocusGradient(resolveColorFocusRange(values)!, maximum, cssVar, lowColor, highColor)
   );
 
   const activeBandLeftPercent = $derived.by(() => {
@@ -272,7 +270,7 @@
                 index={thumb.index}
                 aria-label={thumb.index === 0 ? "Focus minimum line" : "Focus maximum line"}
                 aria-valuetext={`${formatted(thumb.value)} ${unitLabel}`}
-                class="pointer-events-auto block w-2.5 h-7 -mt-0.5 rounded-sm border-2 border-foreground bg-background shadow-md cursor-ew-resize before:absolute before:-inset-3 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/50"
+                class="relative z-[5] pointer-events-auto block w-2.5 h-7 -mt-0.5 rounded-sm border-2 border-foreground bg-background shadow-md cursor-ew-resize before:absolute before:-inset-3 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/50"
               />
             {/each}
           {/snippet}
@@ -337,90 +335,90 @@
       </div>
     </div>
 
-    <!-- ========================================================================= -->
-    <!-- VARIANT 1: Avg Glucose — "Classic Polished Card"                         -->
-    <!-- ========================================================================= -->
+    <!-- Color Boundaries / Focus Window cards, shared layout for every metric. -->
     {#if metricKey === "avgGlucose"}
-      <div class="space-y-2.5 pt-1">
-        <!-- 4 Glucose thresholds -->
-        <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {#each labels as label, index}
-            <div class="min-w-0">
-              <label for={id + "-bound-" + index} class="mb-1 block text-muted-foreground text-[11px]">
-                {label}
-              </label>
+      <div class="space-y-2 pt-1">
+        <div class="grid grid-cols-2 gap-2">
+          <div class="p-2 rounded border border-border/60 bg-muted/20 space-y-1.5">
+            <div class="text-[11px] font-medium text-foreground/80 flex items-center gap-1">
+              <span class="size-2.5 rounded-full bg-primary/70"></span>
+              Color Boundaries
+            </div>
+            <div class="grid grid-cols-2 gap-1.5">
+              {#each labels as label, index}
+                <div class="min-w-0">
+                  <label for={id + "-bound-" + index} class="mb-0.5 block text-muted-foreground text-[10px] truncate">
+                    {label}
+                  </label>
+                  <Input
+                    id={id + "-bound-" + index}
+                    type="number"
+                    inputmode="decimal"
+                    min={display(minimum)}
+                    max={display(maximum)}
+                    step={inputStep}
+                    bind:value={drafts[index]}
+                    oninput={(event: Event & { currentTarget: HTMLInputElement }) =>
+                      changeBound(index, event)}
+                    aria-label={accessibleLabel(index)}
+                    aria-invalid={invalidBound === index}
+                    class="h-7 w-full px-1.5 text-xs tabular-nums"
+                  />
+                </div>
+              {/each}
+            </div>
+          </div>
+
+          <div class="p-2 rounded border border-border/60 bg-muted/20 space-y-1.5">
+            <div class="text-[11px] font-medium text-foreground/80 flex items-center gap-1">
+              <span class="w-1.5 h-3 rounded-sm bg-foreground/70"></span>
+              Focus Window
+            </div>
+            <div class="flex items-center gap-1.5">
               <Input
-                id={id + "-bound-" + index}
                 type="number"
                 inputmode="decimal"
                 min={display(minimum)}
                 max={display(maximum)}
                 step={inputStep}
-                bind:value={drafts[index]}
-                oninput={(event: Event & { currentTarget: HTMLInputElement }) =>
-                  changeBound(index, event)}
-                aria-label={accessibleLabel(index)}
-                aria-invalid={invalidBound === index}
-                class="h-7 w-full px-2 text-xs tabular-nums"
+                bind:value={focusDrafts[0]}
+                oninput={(e: Event & { currentTarget: HTMLInputElement }) => changeFocusBound(0, e)}
+                aria-label={`${metricLabel} focus minimum value`}
+                class="h-7 w-16 px-1.5 text-xs tabular-nums"
               />
-            </div>
-          {/each}
-        </div>
-
-        <!-- Focus lines & Transparency row -->
-        <div class="p-2 rounded-md bg-muted/30 border border-border/40 space-y-2">
-          <div class="flex items-center justify-between gap-2">
-            <span class="font-medium text-foreground/80 text-[11px]">Focus Lines:</span>
-            <div class="flex items-center gap-2">
-              <div class="flex items-center gap-1">
-                <span class="text-[11px] text-muted-foreground">Min:</span>
-                <Input
-                  type="number"
-                  inputmode="decimal"
-                  min={display(minimum)}
-                  max={display(maximum)}
-                  step={inputStep}
-                  bind:value={focusDrafts[0]}
-                  oninput={(e: Event & { currentTarget: HTMLInputElement }) => changeFocusBound(0, e)}
-                  class="h-6 w-16 px-1.5 text-xs tabular-nums"
-                />
-              </div>
-              <div class="flex items-center gap-1">
-                <span class="text-[11px] text-muted-foreground">Max:</span>
-                <Input
-                  type="number"
-                  inputmode="decimal"
-                  min={display(minimum)}
-                  max={display(maximum)}
-                  step={inputStep}
-                  bind:value={focusDrafts[1]}
-                  oninput={(e: Event & { currentTarget: HTMLInputElement }) => changeFocusBound(1, e)}
-                  class="h-6 w-16 px-1.5 text-xs tabular-nums"
-                />
-              </div>
-              <Button variant="ghost" size="sm" class="h-6 px-1.5 text-[11px]" onclick={resetFocusBand}>
-                Reset
-              </Button>
-            </div>
-          </div>
-
-          <div class="flex items-center justify-between gap-2 border-t border-border/30 pt-1.5">
-            <div class="flex items-center gap-1.5">
-              <span class="text-muted-foreground text-[11px]">Transparency:</span>
+              <span class="text-muted-foreground text-xs">→</span>
               <Input
                 type="number"
-                min={0}
-                max={100}
-                step={1}
-                value={transparencyPercent}
-                oninput={(e: Event & { currentTarget: HTMLInputElement }) => onTransparencyChange?.(e.currentTarget.valueAsNumber)}
-                class="h-6 w-14 px-1 text-xs tabular-nums"
+                inputmode="decimal"
+                min={display(minimum)}
+                max={display(maximum)}
+                step={inputStep}
+                bind:value={focusDrafts[1]}
+                oninput={(e: Event & { currentTarget: HTMLInputElement }) => changeFocusBound(1, e)}
+                aria-label={`${metricLabel} focus maximum value`}
+                class="h-7 w-16 px-1.5 text-xs tabular-nums"
               />
-              <span class="text-muted-foreground text-[11px]">%</span>
+              <span class="text-muted-foreground text-[11px]">{unitLabel}</span>
             </div>
-            <Button variant="outline" size="sm" class="h-6 px-2 text-[11px]" onclick={reset}>
-              Reset all
-            </Button>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-between gap-2 p-2 rounded bg-muted/30 border border-border/40">
+          <Button variant="ghost" size="sm" class="h-6 px-1.5 text-[11px]" onclick={resetFocusBand}>
+            Reset focus window
+          </Button>
+          <div class="flex items-center gap-1.5">
+            <span class="text-[10px] text-muted-foreground">Dim:</span>
+            <Input
+              type="number"
+              min={0}
+              max={100}
+              value={transparencyPercent}
+              oninput={(e: Event & { currentTarget: HTMLInputElement }) => onTransparencyChange?.(e.currentTarget.valueAsNumber)}
+              class="h-6 w-12 px-1 text-[11px] tabular-nums"
+            />
+            <span class="text-[10px] text-muted-foreground">%</span>
+            <Button variant="outline" size="sm" class="h-6 px-2 text-[11px]" onclick={reset}>Reset</Button>
           </div>
         </div>
       </div>
@@ -497,8 +495,8 @@
                 aria-label={pal.label + " palette"}
                 aria-pressed={isSelected}
                 class="size-6 rounded-full border border-border shadow-sm transition-transform {isSelected ? 'scale-110 ring-2 ring-primary ring-offset-1 ring-offset-background' : 'hover:scale-105'}"
-                style:background={pal.colors ? `linear-gradient(135deg, ${pal.colors.join(", ")})` : pal.low ? `linear-gradient(135deg, ${pal.low}, ${pal.high})` : `linear-gradient(135deg, color-mix(in srgb, var(${cssVar}) 18%, transparent), var(${cssVar}))`}
-                onclick={() => onCustomColorsChange?.(pal.low, pal.high, pal.colors)}
+                style:background={pal.low ? `linear-gradient(135deg, ${pal.low}, ${pal.high})` : `linear-gradient(135deg, color-mix(in srgb, var(${cssVar}) 18%, transparent), var(${cssVar}))`}
+                onclick={() => onCustomColorsChange?.(pal.low, pal.high)}
               ></button>
             {/each}
           </div>
@@ -513,7 +511,7 @@
               class="h-6 w-12 px-1 text-[11px] tabular-nums"
             />
             <span class="text-[10px] text-muted-foreground">%</span>
-            <Button variant="outline" size="sm" class="h-6 px-2 text-[11px]" onclick={reset}>Auto</Button>
+            <Button variant="outline" size="sm" class="h-6 px-2 text-[11px]" onclick={reset}>Reset</Button>
           </div>
         </div>
       </div>

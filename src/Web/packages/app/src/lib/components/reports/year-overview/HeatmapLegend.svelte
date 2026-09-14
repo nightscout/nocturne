@@ -2,9 +2,13 @@
   import * as Select from "$lib/components/ui/select";
   import { Button } from "$lib/components/ui/button";
   import { SlidersHorizontal } from "lucide-svelte";
-  import type { GlucoseUnits } from "$lib/utils/formatting";
+  import { formatGlucoseValue, getUnitLabel, type GlucoseUnits } from "$lib/utils/formatting";
   import ColorFocusRange from "./ColorFocusRange.svelte";
-  import type { GlucoseColorThresholds as GlucoseThresholds } from "$lib/utils/metric-color-focus";
+  import {
+    GLUCOSE_COLOR_MIN,
+    GLUCOSE_COLOR_MAX,
+    type GlucoseColorThresholds as GlucoseThresholds,
+  } from "$lib/utils/metric-color-focus";
 
   type HeatmapMetric =
     | "avgGlucose"
@@ -19,7 +23,6 @@
     { label: "Blue / Orange", low: "#0072b2", high: "#e69f00" },
     { label: "Viridis", low: "#440154", high: "#fde725" },
     { label: "Cividis", low: "#00204c", high: "#ffea46" },
-    { label: "Blue / Green / Yellow / Red", low: "#2563eb", high: "#dc2626", colors: ["#2563eb", "#16a34a", "#facc15", "#dc2626"] },
   ];
 
   let {
@@ -61,7 +64,7 @@
     onAdvancedModeChange?: (val: boolean) => void;
     transparencyPercent?: number;
     onTransparencyChange?: (val: number | undefined) => void;
-    onCustomColorsChange?: (low: string | undefined, high: string | undefined, colors?: readonly string[]) => void;
+    onCustomColorsChange?: (low: string | undefined, high: string | undefined) => void;
   }>();
 
   let isPoppedOut = $state(false);
@@ -144,12 +147,12 @@
           <div class="w-full text-xs text-muted-foreground space-y-1.5">
             <span
               class="block h-3.5 w-full rounded-sm"
-              style:background="linear-gradient(to right in srgb, {HEATMAP_STOPS.map((s) => `${s.color} ${((s.mgdl - 40) / (350 - 40)) * 100}%`).join(', ')})"
+              style:background="linear-gradient(to right in srgb, {HEATMAP_STOPS.map((s) => `${s.color} ${((s.mgdl - GLUCOSE_COLOR_MIN) / (GLUCOSE_COLOR_MAX - GLUCOSE_COLOR_MIN)) * 100}%`).join(', ')})"
             ></span>
             <div class="flex justify-between text-[11px] tabular-nums">
-              <span>40 {units === "mmol" ? "mmol/L" : "mg/dL"}</span>
+              <span>{formatGlucoseValue(GLUCOSE_COLOR_MIN, units)} {getUnitLabel(units)}</span>
               <span class="text-muted-foreground">Default scale</span>
-              <span>350 {units === "mmol" ? "mmol/L" : "mg/dL"}</span>
+              <span>{formatGlucoseValue(GLUCOSE_COLOR_MAX, units)} {getUnitLabel(units)}</span>
             </div>
           </div>
         {/if}
@@ -178,7 +181,6 @@
               {onFocusBandChange}
               {lowColor}
               {highColor}
-              colors={COLOR_PALETTES.find((palette) => palette.low === lowColor && palette.high === highColor)?.colors}
               {COLOR_PALETTES}
               {onCustomColorsChange}
               {transparencyPercent}
