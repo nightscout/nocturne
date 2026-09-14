@@ -81,12 +81,16 @@ public class GlookoCredentialVerifierTests
     /// </summary>
     private static GlookoCredentialVerifier BuildVerifier(SignInHandler handler)
     {
+        var retryDelay = new Mock<IRetryDelayStrategy>();
+        retryDelay.Setup(r => r.ApplyRetryDelayAsync(It.IsAny<int>())).Returns(Task.CompletedTask);
+
         var tokenProvider = new GlookoAuthTokenProvider(
             new HttpClient(handler),
             new Mock<IConnectorTokenCache>(MockBehavior.Strict).Object,
             new ConnectorServerResolver<GlookoConnectorConfiguration>(null, null, null),
             new UnresolvedTenantAccessor(),
-            NullLogger<GlookoAuthTokenProvider>.Instance);
+            NullLogger<GlookoAuthTokenProvider>.Instance,
+            retryDelay.Object);
 
         return new GlookoCredentialVerifier(tokenProvider);
     }

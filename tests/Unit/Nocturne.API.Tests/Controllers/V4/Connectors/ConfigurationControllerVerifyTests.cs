@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Extensions;
 using Nocturne.API.Controllers.V4.Connectors;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
@@ -106,11 +107,13 @@ public class ConfigurationControllerVerifyTests
         var scope = method!.GetCustomAttribute<Nocturne.API.Attributes.RequireScopeAttribute>();
         Assert.NotNull(scope);
         Assert.Contains(
-            Nocturne.Core.Models.Authorization.TenantPermissions.TenantSettings,
+            Nocturne.Core.Models.Authorization.Scope.TenantSettings,
             scope!.RequiredScopes);
         var rateLimit = method.GetCustomAttribute<
             Microsoft.AspNetCore.RateLimiting.EnableRateLimitingAttribute>();
         Assert.NotNull(rateLimit);
-        Assert.Equal("connector-verify", rateLimit!.PolicyName);
+        Assert.Equal(
+            ServiceRegistrationExtensions.ConnectorVerifyRateLimitPolicy,
+            rateLimit!.PolicyName);
     }
 }
