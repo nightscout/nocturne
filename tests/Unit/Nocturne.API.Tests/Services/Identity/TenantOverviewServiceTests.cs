@@ -188,7 +188,6 @@ public class TenantOverviewServiceTests
         SeedMembership(options, subjectId, "direct-only", rolePermissions: null,
             directPermissions: [Scope.GlucoseRead]);
         SeedMembership(options, subjectId, "no-glucose", [Scope.TreatmentsRead]);
-        SeedMembership(options, subjectId, "revoked", [Scope.GlucoseRead], revoked: true);
         SeedMembership(options, subjectId, "inactive", [Scope.GlucoseRead], tenantActive: false);
         SeedMembership(options, Guid.NewGuid(), "other-subject", [Scope.GlucoseRead]);
 
@@ -553,7 +552,6 @@ public class TenantOverviewServiceTests
         string slug,
         List<string>? rolePermissions,
         List<string>? directPermissions = null,
-        bool revoked = false,
         bool tenantActive = true)
     {
         using var db = new NocturneDbContext(options);
@@ -572,7 +570,6 @@ public class TenantOverviewServiceTests
             TenantId = tenant.Id,
             SubjectId = subjectId,
             DirectPermissions = directPermissions,
-            RevokedAt = revoked ? DateTime.UtcNow.AddDays(-1) : null,
         };
         db.TenantMembers.Add(member);
 

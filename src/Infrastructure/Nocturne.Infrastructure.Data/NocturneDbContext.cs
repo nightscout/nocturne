@@ -390,13 +390,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
         ConfigureTenantFilters(modelBuilder);
 
-        // Tenant membership is "active" only while not revoked. Enforcing this once here
-        // keeps every membership query (auth gates, setup detection, admin listings) from
-        // having to repeat `RevokedAt == null`. The matching partial unique index
-        // (ix_tenant_members_tenant_subject, filtered on revoked_at IS NULL) lets a revoked
-        // membership coexist with a fresh active one, so re-adds remain valid.
-        modelBuilder.Entity<TenantMemberEntity>().HasQueryFilter(tm => tm.RevokedAt == null);
-
         ConfigureTenantCascadeDeletes(modelBuilder);
 
         // EF Core's default convention emits the C# property name verbatim for the column, which
@@ -2287,14 +2280,13 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<TenantMemberEntity>()
             .HasIndex(e => new { e.TenantId, e.SubjectId })
             .HasDatabaseName("ix_tenant_members_tenant_subject")
-            .IsUnique()
-            .HasFilter("revoked_at IS NULL");
+            .IsUnique();
 
         modelBuilder.Entity<TenantMemberEntity>()
             .HasIndex(e => new { e.TenantId, e.Username })
             .HasDatabaseName("ix_tenant_members_tenant_username")
             .IsUnique()
-            .HasFilter("username IS NOT NULL AND revoked_at IS NULL");
+            .HasFilter("username IS NOT NULL");
 
         modelBuilder.Entity<TenantRoleEntity>(entity =>
         {
