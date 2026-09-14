@@ -196,7 +196,7 @@
             ></span>
             <div class="flex justify-between text-[11px] tabular-nums">
               <span>0 {metricUnit}</span>
-              <span class="text-muted-foreground">Default {metricLabel.toLowerCase()} scale</span>
+              <span class="text-muted-foreground">{metricLabel} default scale</span>
               <span>{metricMax} {metricUnit}</span>
             </div>
           </div>

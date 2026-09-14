@@ -88,7 +88,7 @@
   );
   const unitLabel = $derived(glucose ? getUnitLabel(units) : unit);
   const labels = $derived(
-    glucose ? ["Very low", "Low", "High", "Very high"] : ["Min color", "Max color"]
+    glucose ? ["Very low", "Low", "High", "Very high"] : ["minimum", "maximum"]
   );
   const inputStep = $derived(glucose ? (units === "mmol" ? 0.1 : 1) : "any");
   const gradient = $derived(
@@ -418,7 +418,7 @@
               class="h-6 w-12 px-1 text-[11px] tabular-nums"
             />
             <span class="text-[10px] text-muted-foreground">%</span>
-            <Button variant="outline" size="sm" class="h-6 px-2 text-[11px]" onclick={reset}>Reset</Button>
+            <Button variant="outline" size="sm" class="h-6 px-2 text-[11px]" aria-label={resetLabel} onclick={reset}>Reset</Button>
           </div>
         </div>
       </div>
@@ -511,7 +511,7 @@
               class="h-6 w-12 px-1 text-[11px] tabular-nums"
             />
             <span class="text-[10px] text-muted-foreground">%</span>
-            <Button variant="outline" size="sm" class="h-6 px-2 text-[11px]" onclick={reset}>Reset</Button>
+            <Button variant="outline" size="sm" class="h-6 px-2 text-[11px]" aria-label={resetLabel} onclick={reset}>Reset</Button>
           </div>
         </div>
       </div>
