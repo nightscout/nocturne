@@ -95,6 +95,8 @@
   const labels = $derived(
     glucose ? ["Point 1", "Point 2", "Point 3", "Point 4"] : ["minimum", "maximum"]
   );
+  // A straight low/high mix has no meaningful middle bands, so a custom palette only exposes the two ends.
+  const usesCustomPalette = $derived(glucose && !!lowColor && !!highColor);
   const inputStep = $derived(glucose ? (units === "mmol" ? 0.1 : 1) : "any");
   const gradient = $derived(
     glucose
@@ -202,6 +204,28 @@
     next[index] = glucose
       ? convertFromDisplayUnits(input.valueAsNumber, units)
       : input.valueAsNumber;
+    invalidBound = change(next) ? null : index;
+  }
+
+  function changeCustomPaletteBound(
+    edge: 0 | 1,
+    event: Event & { currentTarget: HTMLInputElement }
+  ) {
+    const index = edge === 0 ? 0 : 3;
+    const input = event.currentTarget;
+    if (!input.value || !Number.isFinite(input.valueAsNumber)) {
+      invalidBound = index;
+      return;
+    }
+    if (input.valueAsNumber === display(values[index])) {
+      invalidBound = null;
+      return;
+    }
+    const raw = convertFromDisplayUnits(input.valueAsNumber, units);
+    const low = edge === 0 ? raw : values[0];
+    const high = edge === 1 ? raw : values[3];
+    const step = (high - low) / 3;
+    const next = [low, low + step, low + 2 * step, high];
     invalidBound = change(next) ? null : index;
   }
 
@@ -363,28 +387,71 @@
               Color Boundaries
             </div>
             <div class="grid grid-cols-2 gap-1.5">
-              {#each labels as label, index}
+              {#if usesCustomPalette}
                 <div class="min-w-0">
-                  <label for={id + "-bound-" + index} class="mb-0.5 flex items-center gap-1 text-muted-foreground text-[10px] truncate">
-                    <span class="inline-block size-2 shrink-0 rounded-full" style:background={getGlucoseHeatmapFill(values[index], stops)}></span>
-                    {label}
+                  <label for={id + "-bound-0"} class="mb-0.5 flex items-center gap-1 text-muted-foreground text-[10px] truncate">
+                    <span class="inline-block size-2 shrink-0 rounded-full" style:background={getGlucoseHeatmapFill(values[0], stops)}></span>
+                    Low
                   </label>
                   <Input
-                    id={id + "-bound-" + index}
+                    id={id + "-bound-0"}
                     type="number"
                     inputmode="decimal"
                     min={display(minimum)}
                     max={display(maximum)}
                     step={inputStep}
-                    bind:value={drafts[index]}
+                    bind:value={drafts[0]}
                     oninput={(event: Event & { currentTarget: HTMLInputElement }) =>
-                      changeBound(index, event)}
-                    aria-label={accessibleLabel(index)}
-                    aria-invalid={invalidBound === index}
+                      changeCustomPaletteBound(0, event)}
+                    aria-label={`${metricLabel} low color point`}
+                    aria-invalid={invalidBound === 0}
                     class="h-7 w-full px-1.5 text-xs tabular-nums"
                   />
                 </div>
-              {/each}
+                <div class="min-w-0">
+                  <label for={id + "-bound-3"} class="mb-0.5 flex items-center gap-1 text-muted-foreground text-[10px] truncate">
+                    <span class="inline-block size-2 shrink-0 rounded-full" style:background={getGlucoseHeatmapFill(values[3], stops)}></span>
+                    High
+                  </label>
+                  <Input
+                    id={id + "-bound-3"}
+                    type="number"
+                    inputmode="decimal"
+                    min={display(minimum)}
+                    max={display(maximum)}
+                    step={inputStep}
+                    bind:value={drafts[3]}
+                    oninput={(event: Event & { currentTarget: HTMLInputElement }) =>
+                      changeCustomPaletteBound(1, event)}
+                    aria-label={`${metricLabel} high color point`}
+                    aria-invalid={invalidBound === 3}
+                    class="h-7 w-full px-1.5 text-xs tabular-nums"
+                  />
+                </div>
+              {:else}
+                {#each labels as label, index}
+                  <div class="min-w-0">
+                    <label for={id + "-bound-" + index} class="mb-0.5 flex items-center gap-1 text-muted-foreground text-[10px] truncate">
+                      <span class="inline-block size-2 shrink-0 rounded-full" style:background={getGlucoseHeatmapFill(values[index], stops)}></span>
+                      {label}
+                    </label>
+                    <Input
+                      id={id + "-bound-" + index}
+                      type="number"
+                      inputmode="decimal"
+                      min={display(minimum)}
+                      max={display(maximum)}
+                      step={inputStep}
+                      bind:value={drafts[index]}
+                      oninput={(event: Event & { currentTarget: HTMLInputElement }) =>
+                        changeBound(index, event)}
+                      aria-label={accessibleLabel(index)}
+                      aria-invalid={invalidBound === index}
+                      class="h-7 w-full px-1.5 text-xs tabular-nums"
+                    />
+                  </div>
+                {/each}
+              {/if}
             </div>
           </div>
 
