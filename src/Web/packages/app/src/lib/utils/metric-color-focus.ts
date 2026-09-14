@@ -143,32 +143,27 @@ export function colorFocusGradient(
   return `linear-gradient(to right, ${low} 0%, ${low} ${(validRange[0] / domain) * 100}%, ${high} ${(validRange[1] / domain) * 100}%, ${high} 100%)`;
 }
 
-/** Same anchor positions, colors reversed end-to-end. */
-export function reverseStopColors<T extends { mgdl: number; color: string }>(
-  stops: ReadonlyArray<T>
-): T[] {
-  const colors = stops.map((stop) => stop.color);
-  return stops.map((stop, index) => ({ ...stop, color: colors[colors.length - 1 - index] }));
-}
-
-/** Recolors the glucose ramp between a custom low/high pair, optionally reversed; Theme (no colors) can still be inverted. */
+/** Recolors the glucose ramp between a custom low/high pair, clamped outside [low, high] and optionally
+ *  reversed. The built-in Theme ramp (no custom colors) keeps its fixed red-to-white/black order; invert
+ *  only makes sense for a custom two-color palette. */
 export function applyGlucosePalette(
   stops: ReadonlyArray<{ mgdl: number; color: string }>,
+  low: number,
+  high: number,
   lowColor?: string,
   highColor?: string,
   invert = false
 ): ReadonlyArray<{ mgdl: number; color: string }> {
-  let result = stops;
-  if (lowColor && highColor && stops.length > 0) {
-    const min = stops[0].mgdl;
-    const max = stops[stops.length - 1].mgdl;
-    const domain = Math.max(max - min, 1);
-    result = stops.map((stop) => ({
+  if (!lowColor || !highColor) return stops;
+  const domain = Math.max(high - low, 1);
+  return stops.map((stop) => {
+    const fraction = Math.max(0, Math.min(1, (stop.mgdl - low) / domain));
+    const t = invert ? 1 - fraction : fraction;
+    return {
       mgdl: stop.mgdl,
-      color: `color-mix(in srgb, ${highColor} ${Math.round(Math.max(0, Math.min(1, (stop.mgdl - min) / domain)) * 100)}%, ${lowColor})`,
-    }));
-  }
-  return invert ? reverseStopColors(result) : result;
+      color: `color-mix(in srgb, ${highColor} ${Math.round(t * 100)}%, ${lowColor})`,
+    };
+  });
 }
 
 export function insertSliderSteps(base: readonly number[], extra: readonly number[]): number[] {

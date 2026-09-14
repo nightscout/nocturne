@@ -115,6 +115,8 @@
     advancedMode
       ? applyGlucosePalette(
           glucoseColorFocusStops(glucoseThresholds),
+          glucoseThresholds[0],
+          glucoseThresholds[3],
           colorFocusPreferences.avgGlucoseColors?.[0],
           colorFocusPreferences.avgGlucoseColors?.at(-1),
           !!colorFocusPreferences.avgGlucoseInvert

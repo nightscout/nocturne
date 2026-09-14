@@ -97,6 +97,8 @@
   );
   // A straight low/high mix has no meaningful middle bands, so a custom palette only exposes the two ends.
   const usesCustomPalette = $derived(glucose && !!lowColor && !!highColor);
+  // The two hidden middle points still need valid values; keep them evenly spaced between low and high.
+  const sliderValues = $derived(usesCustomPalette ? [values[0], values[3]] : values);
   const inputStep = $derived(glucose ? (units === "mmol" ? 0.1 : 1) : "any");
   const gradient = $derived(
     glucose
@@ -130,7 +132,7 @@
 
   // Bits UI snaps even untouched values; insert exact selections into the cached steps.
   const sliderSteps = $derived(
-    insertSliderSteps(baseSliderSteps, glucose ? values : [...values, maximum])
+    insertSliderSteps(baseSliderSteps, glucose ? sliderValues : [...values, maximum])
   );
   const focusSliderSteps = $derived(
     insertSliderSteps(baseSliderSteps, [minimum, ...focusBandValues, maximum])
@@ -154,7 +156,9 @@
   const formatted = (value: number) =>
     glucose ? formatGlucoseValue(value, units) : String(value);
   const accessibleLabel = (index: number) =>
-    `${metricLabel} ${labels[index]} color ${glucose ? "boundary" : "value"}`;
+    usesCustomPalette
+      ? `${metricLabel} ${index === 0 ? "low" : "high"} color point`
+      : `${metricLabel} ${labels[index]} color ${glucose ? "boundary" : "value"}`;
 
   $effect(() => {
     drafts = values.map(display);
@@ -165,9 +169,18 @@
     invalidDim = false;
   });
 
+  function expandCustomPaletteBounds(low: number, high: number): number[] {
+    const step = (high - low) / 3;
+    return [low, low + step, low + 2 * step, high];
+  }
+
   function change(candidate: number[]): boolean {
     if (glucose) {
-      const next = resolveGlucoseColorThresholds(candidate);
+      const next = resolveGlucoseColorThresholds(
+        usesCustomPalette && candidate.length === 2
+          ? expandCustomPaletteBounds(candidate[0], candidate[1])
+          : candidate
+      );
       if (!next) return false;
       onThresholdsChange(next);
     } else {
@@ -224,9 +237,7 @@
     const raw = convertFromDisplayUnits(input.valueAsNumber, units);
     const low = edge === 0 ? raw : values[0];
     const high = edge === 1 ? raw : values[3];
-    const step = (high - low) / 3;
-    const next = [low, low + step, low + 2 * step, high];
-    invalidBound = change(next) ? null : index;
+    invalidBound = change(expandCustomPaletteBounds(low, high)) ? null : index;
   }
 
   function changeFocusBound(
@@ -327,7 +338,7 @@
           autoSort={false}
           thumbPositioning="exact"
           bind:value={
-            () => [...values],
+            () => [...sliderValues],
             (next) => {
               change(next);
             }
@@ -403,7 +414,7 @@
                     bind:value={drafts[0]}
                     oninput={(event: Event & { currentTarget: HTMLInputElement }) =>
                       changeCustomPaletteBound(0, event)}
-                    aria-label={`${metricLabel} low color point`}
+                    aria-label={accessibleLabel(0)}
                     aria-invalid={invalidBound === 0}
                     class="h-7 w-full px-1.5 text-xs tabular-nums"
                   />
@@ -423,7 +434,7 @@
                     bind:value={drafts[3]}
                     oninput={(event: Event & { currentTarget: HTMLInputElement }) =>
                       changeCustomPaletteBound(1, event)}
-                    aria-label={`${metricLabel} high color point`}
+                    aria-label={accessibleLabel(1)}
                     aria-invalid={invalidBound === 3}
                     class="h-7 w-full px-1.5 text-xs tabular-nums"
                   />
@@ -516,7 +527,15 @@
               class="h-6 w-12 px-1 text-[11px] tabular-nums"
             />
             <span class="text-[10px] text-muted-foreground">%</span>
-            <Button variant="outline" size="sm" class="h-6 px-2 text-[11px]" aria-pressed={invert} onclick={() => onInvertChange?.(!invert)}>Invert</Button>
+            <Button
+              variant="outline"
+              size="sm"
+              class="h-6 px-2 text-[11px]"
+              aria-pressed={invert}
+              disabled={!usesCustomPalette}
+              title={usesCustomPalette ? undefined : "Theme colors are fixed; pick a palette to invert"}
+              onclick={() => onInvertChange?.(!invert)}
+            >Invert</Button>
             <Button variant="outline" size="sm" class="h-6 px-2 text-[11px]" aria-label={resetLabel} onclick={reset}>Reset</Button>
           </div>
         </div>
