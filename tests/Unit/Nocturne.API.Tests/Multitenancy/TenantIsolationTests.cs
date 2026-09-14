@@ -785,7 +785,10 @@ public class TenantIsolationTests
             {
                 var (slug, id, _) = activeTenants[0];
                 var singleCtx = new TenantContext(id, slug, slug, true, IsDemo: false);
-                cache.Set("tenant:__sole__", singleCtx, TimeSpan.FromMinutes(5));
+                cache.Set(
+                    TenantResolutionMiddleware.SoleTenantCacheKey,
+                    new TenantResolutionMiddleware.ApexTenants(singleCtx, AnyTenantExists: true),
+                    TimeSpan.FromMinutes(5));
             }
         }
 
