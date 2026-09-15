@@ -244,7 +244,10 @@
       newRecoveryCodes = result.codes ?? [];
       showNewCodesDialog = true;
     } catch (err) {
-      errorMessage = "Failed to regenerate recovery codes.";
+      errorMessage = describeSubmitError(
+        err,
+        "Failed to regenerate recovery codes."
+      );
     } finally {
       isRegenerating = false;
     }

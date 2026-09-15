@@ -3,11 +3,15 @@ import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 /**
- * A `catch` binding nothing around a generated remote call throws the server's
- * reason away and assigns fixed copy in its place, so someone is told "please
- * try again" about a duplicate name or a validation failure that retrying
- * cannot fix. `describeSubmitError` and `remoteErrorMessage` both take that
- * copy as their fallback, so converting a site never loses the wording it had.
+ * A `catch` around a generated remote call that never reads the reason throws
+ * it away and assigns fixed copy in its place, so someone is told "please try
+ * again" about a duplicate name or a validation failure that retrying cannot
+ * fix. `describeSubmitError` and `remoteErrorMessage` both take that copy as
+ * their fallback, so converting a site never loses the wording it had.
+ *
+ * Binding nothing is one way; binding a name and never reading it is the same
+ * loss, and the one a grep for `catch {` does not see. Both are asked the same
+ * question here.
  *
  * Swallowing is sometimes right — a poll that runs again, an optimistic
  * rollback that reports itself by reappearing — and those say why in a comment
@@ -71,11 +75,42 @@ function callsRemote(block: string, imported: string[]): boolean {
   return imported.some((name) => new RegExp(`\\b${name}\\s*[(.]`).test(block));
 }
 
+/** The catch body at `catchIndex`, without its braces. */
+function catchBody(source: string, catchIndex: number): string {
+  const open = source.indexOf("{", catchIndex);
+  let depth = 0;
+
+  for (let i = open; i < source.length; i++) {
+    const char = source[i];
+    if (char === "{") depth++;
+    else if (char === "}") {
+      depth--;
+      if (depth === 0) return source.slice(open + 1, i);
+    }
+  }
+
+  return source.slice(open + 1);
+}
+
 /** Whether the catch body opens with a comment explaining the silence. */
 function explainsItself(source: string, catchIndex: number): boolean {
-  const body = source.slice(source.indexOf("{", catchIndex) + 1);
-  return /^\s*(\/\/|\/\*)/.test(body);
+  return /^\s*(\/\/|\/\*)/.test(catchBody(source, catchIndex));
 }
+
+/**
+ * A binding the body never reads discards the reason exactly as a bare `catch`
+ * does, and costs a grep for `catch {` nothing to miss. Both forms are held to
+ * the same rule below.
+ */
+function readsBinding(
+  source: string,
+  catchIndex: number,
+  binding: string
+): boolean {
+  return new RegExp(`\\b${binding}\\b`).test(catchBody(source, catchIndex));
+}
+
+const CATCH = /\}\s*catch\s*(?:\(\s*(\w+)[^)]*\)\s*)?\{/g;
 
 interface Offence {
   file: string;
@@ -127,8 +162,10 @@ function offences(): { found: Offence[]; scanned: number } {
     if (imported.length === 0) continue;
     scanned++;
 
-    for (const match of source.matchAll(/\}\s*catch\s*\{/g)) {
+    for (const match of source.matchAll(CATCH)) {
       const index = match.index!;
+      const binding = match[1];
+      if (binding && readsBinding(source, index, binding)) continue;
       if (!callsRemote(tryBlockBefore(source, index), imported)) continue;
       if (explainsItself(source, index)) continue;
 
@@ -238,6 +275,42 @@ describe("catches around generated remote calls", () => {
       true
     );
     expect(explainsItself(lossy, index)).toBe(false);
+  });
+
+  it("recognises a bound reason the body never reads", () => {
+    const lossy = `
+      import { revoke } from "$api/generated/sessions.generated.remote";
+      async function handle() {
+        try {
+          await revoke(id);
+        } catch (err) {
+          errorMessage = "Failed to sign out the session. Please try again.";
+        }
+      }
+    `;
+
+    const index = lossy.indexOf("} catch (err) {");
+    const [match] = [...lossy.matchAll(CATCH)];
+
+    expect(match[1]).toBe("err");
+    expect(readsBinding(lossy, index, "err")).toBe(false);
+    expect(callsRemote(tryBlockBefore(lossy, index), ["revoke"])).toBe(true);
+  });
+
+  it("leaves a bound reason the body reads alone", () => {
+    const routed = `
+      import { revoke } from "$api/generated/sessions.generated.remote";
+      async function handle() {
+        try {
+          await revoke(id);
+        } catch (err) {
+          errorMessage = describeSubmitError(err, "Failed to sign out.");
+        }
+      }
+    `;
+
+    const index = routed.indexOf("} catch (err) {");
+    expect(readsBinding(routed, index, "err")).toBe(true);
   });
 
   it("passes a swallow that explains itself", () => {
