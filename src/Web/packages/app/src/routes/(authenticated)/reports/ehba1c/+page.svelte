@@ -120,15 +120,6 @@
     return `${fmt(band.minPercent)}–${fmt(band.maxPercent)}${unit}`;
   }
 
-  const annotations = $derived(
-    zoneBands.map((band) => ({
-      type: "range" as const,
-      layer: "below" as const,
-      y: [band.yMin, band.yMax] as [number, number],
-      fill: band.fill,
-    }))
-  );
-
   /** Fixed floor at the never-goes-lower bound; auto-scaled ceiling with a little headroom. */
   const yDomain = $derived.by((): [number, number] => {
     const dataMaxPercent =
@@ -138,6 +129,25 @@
     const maxPercent = Math.max(dataMaxPercent + 0.5, A1C_ZONES[1].maxPercent);
     return [toDisplayUnit(MIN_A1C_PERCENT), toDisplayUnit(maxPercent)];
   });
+
+  // Clamped to yDomain so a band never computes to a pixel position outside the plot area —
+  // an unclamped "gevaarlijk hoog" band (up to 14%) otherwise rendered above the chart's actual
+  // top edge and, since the chart container doesn't clip by default, bled out over the toggle.
+  const annotations = $derived(
+    zoneBands
+      .map((band) => {
+        const yMin = Math.max(band.yMin, yDomain[0]);
+        const yMax = Math.min(band.yMax, yDomain[1]);
+        if (yMax <= yMin) return null;
+        return {
+          type: "range" as const,
+          layer: "below" as const,
+          y: [yMin, yMax] as [number, number],
+          fill: band.fill,
+        };
+      })
+      .filter((band) => band !== null)
+  );
 
   async function loadAll() {
     loading = true;
@@ -238,6 +248,7 @@
             x="date"
             y="displayValue"
             {yDomain}
+            clip
             series={[
               {
                 key: "displayValue",
