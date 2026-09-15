@@ -19,7 +19,14 @@ import { fileURLToPath } from "node:url";
  * knowing the limits:
  *
  * - It reads text, pairing a bare `catch` with the nearest `try` by brace depth,
- *   so a brace inside a string or comment can mispair it.
+ *   so a brace inside a string or comment can mispair it, and a `}` inside a
+ *   string ends the catch body early.
+ * - Whether a binding is read is a word match over that body text, so naming it
+ *   in a string or a comment counts — `catch (e)` beside copy containing a
+ *   standalone "e", or a `// TODO surface err`, passes without surfacing
+ *   anything. A destructured binding, `catch ({ status })`, is not matched at
+ *   all and so is never asked. Closing these needs an AST, which this is
+ *   deliberately not.
  * - A comment satisfies it. It cannot tell a reason from an excuse; a site that
  *   keeps its fixed copy and adds a comment passes, and only review catches
  *   that.
