@@ -335,7 +335,6 @@ public class MemberInviteController : ControllerBase
                 Id = Guid.CreateVersion7(),
                 TenantMemberId = member.Id,
                 TenantRoleId = roleId,
-                SysCreatedAt = now,
             });
         }
 

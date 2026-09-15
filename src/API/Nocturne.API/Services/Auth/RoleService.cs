@@ -111,7 +111,6 @@ public class RoleService : IRoleService
             Description = role.Description,
             Permissions = role.Permissions,
             IsSystemRole = role.IsSystemRole,
-            CreatedAt = DateTime.UtcNow,
         };
 
         _dbContext.Roles.Add(entity);
@@ -237,7 +236,6 @@ public class RoleService : IRoleService
                     Description = description,
                     Permissions = permissions.ToList(),
                     IsSystemRole = true,
-                    CreatedAt = DateTime.UtcNow,
                 };
 
                 _dbContext.Roles.Add(entity);

@@ -92,7 +92,6 @@ public class OAuthGrantService : IOAuthGrantService
             GrantType = grantType,
             Scopes = scopeList,
             Label = label,
-            CreatedAt = DateTime.UtcNow,
         };
 
         _dbContext.OAuthGrants.Add(entity);

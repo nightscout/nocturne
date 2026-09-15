@@ -109,7 +109,6 @@ public class SubjectService : ISubjectService
             Name = name ?? email ?? oidcSubjectId,
             Email = email,
             IsActive = true,
-            CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
         };
 
@@ -179,7 +178,6 @@ public class SubjectService : ISubjectService
             Email = subject.Email,
             Notes = subject.Notes,
             IsActive = subject.IsActive,
-            CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
         };
 
@@ -530,7 +528,6 @@ public class SubjectService : ISubjectService
             Notes = "Represents unauthenticated access. Assign roles to control what the public can see.",
             IsActive = true,
             IsSystemSubject = true,
-            CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
         };
 

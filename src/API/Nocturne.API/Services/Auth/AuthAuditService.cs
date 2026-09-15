@@ -72,7 +72,6 @@ public class AuthAuditService : IAuthAuditService
                 DetailsJson = detailsJson,
                 RefreshTokenId = refreshTokenId,
                 TraceId = _auditContext.TraceId,
-                CreatedAt = DateTime.UtcNow,
             });
             await _dbContext.SaveChangesAsync();
         }
