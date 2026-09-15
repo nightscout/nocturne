@@ -226,7 +226,10 @@ public class FeatureSettings
     public DisplaySettings Display { get; set; } = new();
 
     /// <summary>
-    /// Dashboard widget configurations. Array position determines display order within each category.
+    /// Which main dashboard sections this tenant shows. Array position determines display order.
+    /// Top-grid widgets are not here: which of them a viewer sees, and in what order, is a per-user
+    /// preference (<c>UserDisplayPreferences.DashboardTopWidgets</c>) the client owns, so a row for
+    /// one here would gate nothing.
     /// </summary>
     [JsonPropertyName("widgets")]
     public List<WidgetConfig> Widgets { get; set; } = WidgetCatalog.Defaults();
@@ -303,9 +306,10 @@ public enum WidgetId
 }
 
 /// <summary>
-/// The one description of every dashboard widget: what it is called, where it sits, and whether a
-/// fresh tenant gets it. <see cref="FeatureSettings.Widgets"/> and the widget metadata endpoint both
-/// read from here, so adding a widget means adding a <see cref="WidgetId"/> and a row below.
+/// The one description of every dashboard widget: what it is called, where it sits, and — for a main
+/// section — whether a fresh tenant gets it. <see cref="FeatureSettings.Widgets"/> and the widget
+/// metadata endpoint both read from here, so adding a widget means adding a <see cref="WidgetId"/>
+/// and a row below.
 /// </summary>
 public static class WidgetCatalog
 {
@@ -317,13 +321,13 @@ public static class WidgetCatalog
     [
         Top(WidgetId.BgDelta, "BG Delta",
             "Blood glucose change with connection status and last updated time",
-            "TrendingUp", WidgetUICategory.Glucose, on: true),
+            "TrendingUp", WidgetUICategory.Glucose),
         Top(WidgetId.LastUpdated, "Last Updated",
             "Time since last glucose reading with device info",
-            "Clock", WidgetUICategory.Device, on: true),
+            "Clock", WidgetUICategory.Device),
         Top(WidgetId.ConnectionStatus, "Connection Status",
             "Real-time data connection status",
-            "Wifi", WidgetUICategory.Status, on: true),
+            "Wifi", WidgetUICategory.Status),
         Top(WidgetId.Meals, "Recent Meals",
             "Recent meal entries and carb intake",
             "UtensilsCrossed", WidgetUICategory.Meals),
@@ -365,15 +369,18 @@ public static class WidgetCatalog
             "Battery", WidgetUICategory.Device, renderable: false),
     ];
 
+    /// <summary>
+    /// A top-grid row, which takes no default: nothing server-side decides the top grid, so the
+    /// factory gives a caller no way to say otherwise.
+    /// </summary>
     private static WidgetDefinition Top(
         WidgetId id,
         string name,
         string description,
         string icon,
         WidgetUICategory category,
-        bool on = false,
         bool renderable = true
-    ) => Row(id, WidgetPlacement.Top, name, description, icon, category, on, renderable);
+    ) => Row(id, WidgetPlacement.Top, name, description, icon, category, null, renderable);
 
     private static WidgetDefinition Main(
         WidgetId id,
@@ -392,7 +399,7 @@ public static class WidgetCatalog
         string description,
         string icon,
         WidgetUICategory category,
-        bool on,
+        bool? on,
         bool renderable
     ) =>
         new()
@@ -408,19 +415,27 @@ public static class WidgetCatalog
         };
 
     /// <summary>
-    /// The widget configuration a tenant starts with: one entry per renderable widget, at its
-    /// catalogued placement and default.
+    /// The widget configuration a tenant starts with: one entry per renderable widget the catalogue
+    /// gives a default, which is every main section and no top-grid widget.
     /// </summary>
     public static List<WidgetConfig> Defaults() =>
         [
-            .. All.Where(d => d.Renderable)
+            .. All.Where(d => d.Renderable && d.DefaultEnabled.HasValue)
                 .Select(d => new WidgetConfig
                 {
                     Id = d.Id,
-                    Enabled = d.DefaultEnabled,
+                    Enabled = d.DefaultEnabled!.Value,
                     Placement = d.Placement,
                 }),
         ];
+
+    /// <summary>
+    /// <paramref name="stored"/> narrowed to the rows that still gate something. Settings written
+    /// before the top grid became a per-user preference carry top rows nothing reads, and serving
+    /// them invites a reader to act on them.
+    /// </summary>
+    public static List<WidgetConfig> MainSectionsOf(IEnumerable<WidgetConfig> stored) =>
+        [.. stored.Where(w => w.Placement == WidgetPlacement.Main)];
 }
 
 /// <summary>
@@ -478,8 +493,13 @@ public class WidgetDefinition
     [JsonPropertyName("description")]
     public string Description { get; init; } = string.Empty;
 
+    /// <summary>
+    /// Whether a fresh tenant's <see cref="FeatureSettings.Widgets"/> enables this. Null on a
+    /// top-grid widget: the top grid is a per-user preference, so no tenant default exists to
+    /// report, and reporting <c>false</c> would read as "off by default".
+    /// </summary>
     [JsonPropertyName("defaultEnabled")]
-    public bool DefaultEnabled { get; init; } = true;
+    public bool? DefaultEnabled { get; init; }
 
     /// <summary>
     /// Whether a dashboard surface exists for this widget. Ids kept only so that stored settings

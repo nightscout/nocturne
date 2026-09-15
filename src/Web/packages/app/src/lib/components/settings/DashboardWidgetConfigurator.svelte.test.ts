@@ -83,6 +83,15 @@ describe("DashboardWidgetConfigurator", () => {
     expect(page.getByRole("button").elements()).toHaveLength(OFFERED.length);
   });
 
+  it("invents no selection of its own", async () => {
+    // @ts-expect-error - `value` is required: the top-grid default lives in one
+    // place, and it is not here.
+    render(DashboardWidgetConfigurator, { props: {} });
+
+    await expect.element(page.getByText("No widgets selected")).toBeVisible();
+    expect(page.getByRole("listitem").elements()).toHaveLength(0);
+  });
+
   it("does not offer a top widget the server marks unrenderable", async () => {
     current = {
       definitions: [

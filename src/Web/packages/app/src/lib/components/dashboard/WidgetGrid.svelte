@@ -1,20 +1,16 @@
 <script lang="ts">
   import type { WidgetId } from "$lib/api/generated/nocturne-api-client";
-  import {
-    DEFAULT_TOP_WIDGETS,
-    knownTopWidgets,
-    loadTopWidget,
-  } from "./widget-registry";
+  import { knownTopWidgets, loadTopWidget } from "./widget-registry";
   import WidgetCard from "./widgets/WidgetCard.svelte";
 
   interface Props {
     /** Ordered list of widget IDs to display */
-    widgets?: WidgetId[];
+    widgets: WidgetId[];
     /** Maximum number of widgets to show (default 3) */
     maxWidgets?: number;
   }
 
-  let { widgets = DEFAULT_TOP_WIDGETS, maxWidgets = 3 }: Props = $props();
+  let { widgets, maxWidgets = 3 }: Props = $props();
 
   const displayWidgets = $derived(knownTopWidgets(widgets).slice(0, maxWidgets));
 </script>

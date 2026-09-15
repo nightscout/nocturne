@@ -34,15 +34,20 @@ export const WIDGET_ICONS: Record<TopWidgetId, ComponentType> = {
 };
 
 /**
- * Helper to check if a widget is enabled
+ * Whether the dashboard shows a main section. The one place that decides what
+ * an id the stored list does not name means, and it means shown: tenant
+ * settings arrive after first paint, so the list is undefined for the first
+ * render of every visit, and a list written before a section was catalogued
+ * names nothing about it. A section is therefore hidden only by a stored row
+ * saying so — dropping it from the backend defaults hides it from nobody, and
+ * hiding it everywhere means removing its surface here.
+ *
+ * The top grid is not decided here: it is a per-user preference
+ * (`dashboardTopWidgets`), and `widgets` carries no top-placement rows.
  */
-export function isWidgetEnabled(
+export function isMainSectionEnabled(
   widgets: WidgetConfig[] | undefined,
   widgetId: WidgetId
 ): boolean {
-  if (!widgets) {
-    return true; // Default to enabled if no config
-  }
-  const widget = widgets.find((w) => w.id === widgetId);
-  return widget?.enabled ?? true;
+  return widgets?.find((w) => w.id === widgetId)?.enabled ?? true;
 }
