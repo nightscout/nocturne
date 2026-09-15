@@ -3,7 +3,7 @@
   import { LineChart } from "layerchart";
   import { Loader2, Activity } from "lucide-svelte";
   import * as Card from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
+  import * as ToggleGroup from "$lib/components/ui/toggle-group";
   import {
     getAvailableYears,
     getEHbA1cTimeline,
@@ -22,16 +22,25 @@
   type A1cUnit = "percent" | "mmol";
 
   /**
+   * No lab reference range for a non-diabetic adult goes below this, so the chart neither
+   * draws nor colors that region — it would only be empty space.
+   */
+  const MIN_A1C_PERCENT = 4.0;
+
+  /**
    * Reference zones for the legend/bands, in DCCT/NGSP %. Bounds are the widely-cited ADA
    * thresholds (normal < 5.7%, prediabetes 5.7–6.4%, diabetes ≥ 6.5%); "Doel Type 1 diabetes"
    * uses the general ADA adult target of < 7.0%, and "Te hoog"/"Gevaarlijk hoog" split the
-   * range above that at 9.0%, where complication risk rises sharply.
+   * range above that at 9.0%, where complication risk rises sharply. Swatches reuse the GRI
+   * report's green/yellow-green/orange/red severity scale; band fills use dedicated,
+   * dark-mode-tuned tokens (the swatch colors are too subtle at chart-fill opacity, and
+   * --glucose-in-range/--chart-2 turned out to be the same color when tried here).
    */
-  const A1C_ZONES: { key: string; label: string; maxPercent: number; color: string }[] = [
-    { key: "healthy", label: "Gezond persoon range", maxPercent: 5.7, color: "var(--glucose-in-range)" },
-    { key: "target", label: "Doel Type 1 diabetes", maxPercent: 7.0, color: "var(--chart-2)" },
-    { key: "high", label: "Te hoog", maxPercent: 9.0, color: "var(--glucose-high)" },
-    { key: "veryHigh", label: "Gevaarlijk hoog", maxPercent: 14.0, color: "var(--glucose-very-high)" },
+  const A1C_ZONES: { key: string; label: string; maxPercent: number; swatch: string; fill: string }[] = [
+    { key: "healthy", label: "Gezond persoon range", maxPercent: 5.7, swatch: "var(--gri-zone-a)", fill: "var(--ehba1c-zone-healthy)" },
+    { key: "target", label: "Doel Type 1 diabetes", maxPercent: 7.0, swatch: "var(--gri-zone-b)", fill: "var(--ehba1c-zone-target)" },
+    { key: "high", label: "Te hoog", maxPercent: 9.0, swatch: "var(--gri-zone-d)", fill: "var(--ehba1c-zone-high)" },
+    { key: "veryHigh", label: "Gevaarlijk hoog", maxPercent: 14.0, swatch: "var(--gri-zone-e)", fill: "var(--ehba1c-zone-very-high)" },
   ];
 
   let loading = $state(true);
@@ -93,11 +102,10 @@
 
   const zoneBands = $derived(
     A1C_ZONES.map((zone, i) => {
-      const minPercent = i === 0 ? 0 : A1C_ZONES[i - 1].maxPercent;
+      const minPercent = i === 0 ? MIN_A1C_PERCENT : A1C_ZONES[i - 1].maxPercent;
       return {
         ...zone,
         minPercent,
-        isFirst: i === 0,
         isLast: i === A1C_ZONES.length - 1,
         yMin: toDisplayUnit(minPercent),
         yMax: toDisplayUnit(zone.maxPercent),
@@ -108,7 +116,6 @@
   function formatZoneRange(band: (typeof zoneBands)[number]): string {
     const unit = a1cUnit === "percent" ? "%" : " mmol/mol";
     const fmt = (p: number) => (a1cUnit === "percent" ? p.toFixed(1) : `${Math.round(toIfccMmolMol(p))}`);
-    if (band.isFirst) return `< ${fmt(band.maxPercent)}${unit}`;
     if (band.isLast) return `> ${fmt(band.minPercent)}${unit}`;
     return `${fmt(band.minPercent)}–${fmt(band.maxPercent)}${unit}`;
   }
@@ -118,10 +125,19 @@
       type: "range" as const,
       layer: "below" as const,
       y: [band.yMin, band.yMax] as [number, number],
-      fill: band.color,
-      class: "opacity-10",
+      fill: band.fill,
     }))
   );
+
+  /** Fixed floor at the never-goes-lower bound; auto-scaled ceiling with a little headroom. */
+  const yDomain = $derived.by((): [number, number] => {
+    const dataMaxPercent =
+      chartData.length > 0
+        ? Math.max(...chartData.map((p) => p.estimatedA1cPercent))
+        : A1C_ZONES[1].maxPercent;
+    const maxPercent = Math.max(dataMaxPercent + 0.5, A1C_ZONES[1].maxPercent);
+    return [toDisplayUnit(MIN_A1C_PERCENT), toDisplayUnit(maxPercent)];
+  });
 
   async function loadAll() {
     loading = true;
@@ -163,24 +179,21 @@
           hemoglobin actually reflects glucose exposure over time.
         </Card.Description>
       </div>
-      <div class="inline-flex shrink-0 rounded-md border">
-        <Button
-          size="sm"
-          variant={a1cUnit === "percent" ? "default" : "ghost"}
-          class="rounded-r-none"
-          onclick={() => (a1cUnit = "percent")}
-        >
+      <ToggleGroup.Root
+        type="single"
+        value={a1cUnit}
+        onValueChange={(next: string) => {
+          if (next === "percent" || next === "mmol") a1cUnit = next;
+        }}
+        class="shrink-0 rounded-md border bg-background p-0.5"
+      >
+        <ToggleGroup.Item value="percent" class="h-8 px-3 text-xs" aria-label="Toon in procent">
           %
-        </Button>
-        <Button
-          size="sm"
-          variant={a1cUnit === "mmol" ? "default" : "ghost"}
-          class="rounded-l-none"
-          onclick={() => (a1cUnit = "mmol")}
-        >
+        </ToggleGroup.Item>
+        <ToggleGroup.Item value="mmol" class="h-8 px-3 text-xs" aria-label="Toon in mmol/mol">
           mmol/mol
-        </Button>
-      </div>
+        </ToggleGroup.Item>
+      </ToggleGroup.Root>
     </Card.Header>
     <Card.Content>
       {#if loading}
@@ -224,6 +237,7 @@
             data={displayChartData}
             x="date"
             y="displayValue"
+            {yDomain}
             series={[
               {
                 key: "displayValue",
@@ -238,7 +252,7 @@
         <div class="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm">
           {#each zoneBands as band (band.key)}
             <div class="flex items-center gap-1.5">
-              <span class="h-2.5 w-2.5 rounded-full" style="background-color: {band.color}"></span>
+              <span class="h-2.5 w-2.5 rounded-full" style="background-color: {band.swatch}"></span>
               <span>{band.label}</span>
               <span class="text-muted-foreground">({formatZoneRange(band)})</span>
             </div>
