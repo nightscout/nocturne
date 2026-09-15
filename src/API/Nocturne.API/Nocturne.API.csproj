@@ -80,6 +80,7 @@
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Eversense\Nocturne.Connectors.Eversense.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Gluroo\Nocturne.Connectors.Gluroo.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Glooko\Nocturne.Connectors.Glooko.csproj" />
+    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.GoogleHealth\Nocturne.Connectors.GoogleHealth.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.FreeStyle\Nocturne.Connectors.FreeStyle.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.MyLife\Nocturne.Connectors.MyLife.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Tidepool\Nocturne.Connectors.Tidepool.csproj" />

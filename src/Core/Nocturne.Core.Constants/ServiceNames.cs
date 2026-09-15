@@ -124,6 +124,8 @@ public static class ServiceNames
     /// <seealso cref="DataSources.CareLinkConnector"/>
     public const string CareLinkConnector = "carelink-connector";
 
+    public const string GoogleHealthConnector = "google-health-connector";
+
     /// <summary>
     /// Aspire resource name for the Tandem Source (t:connect) connector service,
     /// which imports t:slim X2 / Mobi pump data.
