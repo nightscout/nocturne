@@ -42,8 +42,7 @@ public class EversenseAuthTokenProvider(
                     attempt + 1,
                     maxRetries);
 
-                var result = await RequestTokenAsync(config, cancellationToken);
-                return (result, result == null);
+                return await RequestTokenAsync(config, cancellationToken);
             },
             _retryDelayStrategy,
             maxRetries,
@@ -62,7 +61,11 @@ public class EversenseAuthTokenProvider(
         return (token.AccessToken, expiresAt, null);
     }
 
-    private async Task<EversenseTokenResponse?> RequestTokenAsync(
+    /// <summary>
+    ///     Requests one token, or null plus whether the failure is worth another attempt. A 2xx
+    ///     carrying no access token is Eversense's answer for these credentials, not a transient fault.
+    /// </summary>
+    private async Task<(EversenseTokenResponse? Token, bool ShouldRetry)> RequestTokenAsync(
         EversenseConnectorConfiguration config, CancellationToken cancellationToken)
     {
         var authBaseUrl = config.Server.ToUpperInvariant() switch
@@ -88,10 +91,7 @@ public class EversenseAuthTokenProvider(
         var response = await _httpClient.SendAsync(request, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
-        {
-            await HandleErrorResponseAsync(response, "Eversense token request", cancellationToken);
-            return null;
-        }
+            return (null, await HandleErrorResponseAsync(response, "Eversense token request", cancellationToken));
 
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         var tokenResponse = JsonSerializer.Deserialize<EversenseTokenResponse>(json);
@@ -99,9 +99,9 @@ public class EversenseAuthTokenProvider(
         if (string.IsNullOrEmpty(tokenResponse?.AccessToken))
         {
             _logger.LogError("Eversense token response contained empty access token");
-            return null;
+            return (null, false);
         }
 
-        return tokenResponse;
+        return (tokenResponse, false);
     }
 }

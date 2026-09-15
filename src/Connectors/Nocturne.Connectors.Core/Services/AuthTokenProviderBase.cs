@@ -219,13 +219,20 @@ public abstract class AuthTokenProviderBase<TConfig>(
                 }
                 catch (HttpRequestException ex)
                 {
-                    _logger.LogWarning(
+                    // A status is the source's verdict on the request, so a rejected credential
+                    // (401/403/400) must not be sent again. No status means no answer arrived at
+                    // all — a transport failure, which another attempt can change.
+                    var shouldRetry = ex.StatusCode is not { } status
+                                      || HttpResponseExtensions.IsRetryableStatusCode(status);
+
+                    _logger.Log(
+                        shouldRetry ? LogLevel.Warning : LogLevel.Error,
                         ex,
                         "HTTP error during {OperationName} attempt {Attempt}",
                         operationName,
                         attempt + 1);
 
-                    return RetryStep<T>.RetryAfterDelay;
+                    return shouldRetry ? RetryStep<T>.RetryAfterDelay : RetryStep<T>.Complete(default);
                 }
                 catch (Exception ex)
                 {

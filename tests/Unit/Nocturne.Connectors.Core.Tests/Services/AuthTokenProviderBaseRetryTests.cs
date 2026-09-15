@@ -1,3 +1,4 @@
+using System.Net;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -56,6 +57,80 @@ public class AuthTokenProviderBaseRetryTests
         token.Should().BeNull();
         attempts.Should().Be(3, "maxRetries counts attempts, not retries on top of a first try");
         delays.DelayedAttempts.Should().Equal([0, 1], "three attempts leave two gaps to delay in");
+    }
+
+    /// <summary>
+    ///     A status on the exception is the source's verdict. Sending a rejected credential again
+    ///     cannot change the answer and risks vendor-side lockout.
+    /// </summary>
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized)]
+    [InlineData(HttpStatusCode.Forbidden)]
+    [InlineData(HttpStatusCode.BadRequest)]
+    public async Task ExecuteWithRetryAsync_HttpFailureCarryingARejection_AttemptsExactlyOnce(
+        HttpStatusCode status)
+    {
+        using var provider = BuildProvider();
+        var delays = new RecordingRetryDelayStrategy();
+        var attempts = 0;
+
+        var token = await provider.InvokeExecuteWithRetryAsync(
+            _ =>
+            {
+                attempts++;
+                throw new HttpRequestException("rejected", null, status);
+            },
+            delays,
+            maxRetries: 3);
+
+        token.Should().BeNull();
+        attempts.Should().Be(1);
+        delays.DelayedAttempts.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.TooManyRequests)]
+    [InlineData(HttpStatusCode.ServiceUnavailable)]
+    public async Task ExecuteWithRetryAsync_HttpFailureCarryingARetryableStatus_AttemptsUpToMaxRetries(
+        HttpStatusCode status)
+    {
+        using var provider = BuildProvider();
+        var attempts = 0;
+
+        var token = await provider.InvokeExecuteWithRetryAsync(
+            _ =>
+            {
+                attempts++;
+                throw new HttpRequestException("busy", null, status);
+            },
+            new RecordingRetryDelayStrategy(),
+            maxRetries: 3);
+
+        token.Should().BeNull();
+        attempts.Should().Be(3);
+    }
+
+    /// <summary>
+    ///     A transport failure carries no status because no answer arrived, and that is exactly the
+    ///     failure another attempt can change.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteWithRetryAsync_HttpFailureCarryingNoStatus_AttemptsUpToMaxRetries()
+    {
+        using var provider = BuildProvider();
+        var attempts = 0;
+
+        var token = await provider.InvokeExecuteWithRetryAsync(
+            _ =>
+            {
+                attempts++;
+                throw new HttpRequestException("connection reset");
+            },
+            new RecordingRetryDelayStrategy(),
+            maxRetries: 3);
+
+        token.Should().BeNull();
+        attempts.Should().Be(3);
     }
 
     /// <summary>
