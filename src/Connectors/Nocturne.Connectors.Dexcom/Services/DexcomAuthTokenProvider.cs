@@ -99,7 +99,7 @@ public class DexcomAuthTokenProvider(
             cancellationToken);
 
         if (!response.IsSuccessStatusCode)
-            return (null, await HandleErrorResponseAsync(response, "Dexcom authentication", cancellationToken));
+            return (null, await ShouldRetryFailureAsync(response, "Dexcom authentication", cancellationToken));
 
         var accountId = await response.Content.ReadAsStringAsync(cancellationToken);
         accountId = accountId.Trim('"');
@@ -129,7 +129,7 @@ public class DexcomAuthTokenProvider(
             cancellationToken);
 
         if (!response.IsSuccessStatusCode)
-            return (null, await HandleErrorResponseAsync(response, "Dexcom session creation", cancellationToken));
+            return (null, await ShouldRetryFailureAsync(response, "Dexcom session creation", cancellationToken));
 
         var sessionId = await response.Content.ReadAsStringAsync(cancellationToken);
         sessionId = sessionId.Trim('"');
@@ -137,5 +137,42 @@ public class DexcomAuthTokenProvider(
         if (!string.IsNullOrEmpty(sessionId)) return (sessionId, false);
         _logger.LogError("Dexcom session creation returned empty session ID");
         return (null, false);
+    }
+
+    /// <summary>
+    ///     Classifies a failed login response. The status alone is not enough here: Dexcom answers a
+    ///     refused credential with a 500, which the shared status rule reads as a transient server
+    ///     fault, so the error code in the body decides — see
+    ///     <see cref="DexcomConstants.RejectedCredentialCodes"/>.
+    /// </summary>
+    private async Task<bool> ShouldRetryFailureAsync(
+        HttpResponseMessage response, string operationName, CancellationToken cancellationToken)
+    {
+        if (!await HandleErrorResponseAsync(response, operationName, cancellationToken))
+            return false;
+
+        var code = ReadErrorCode(await response.Content.ReadAsStringAsync(cancellationToken));
+        if (code == null || !DexcomConstants.RejectedCredentialCodes.Contains(code))
+            return true;
+
+        _logger.LogError("{OperationName} was refused by Dexcom: {Code}", operationName, code);
+        return false;
+    }
+
+    private static string? ReadErrorCode(string body)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(body);
+            return document.RootElement.ValueKind == JsonValueKind.Object
+                   && document.RootElement.TryGetProperty("Code", out var code)
+                   && code.ValueKind == JsonValueKind.String
+                ? code.GetString()
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 }

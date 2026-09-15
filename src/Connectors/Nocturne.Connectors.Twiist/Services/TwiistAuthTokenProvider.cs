@@ -110,7 +110,12 @@ public class TwiistAuthTokenProvider(
 
         var result = await PostCognitoAsync(body, cancellationToken);
         if (result?.AuthenticationResult == null)
+        {
+            _logger.LogError(
+                "Twiist Cognito login returned no tokens; challenge: {ChallengeName}",
+                result?.ChallengeName ?? "none");
             return (null, null);
+        }
 
         return (result.AuthenticationResult.AccessToken, result.AuthenticationResult.RefreshToken);
     }

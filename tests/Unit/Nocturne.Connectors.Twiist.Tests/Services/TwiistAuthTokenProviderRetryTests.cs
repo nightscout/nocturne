@@ -1,5 +1,6 @@
 using System.Net;
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.Connectors.Core.Interfaces;
@@ -48,16 +49,20 @@ public class TwiistAuthTokenProviderRetryTests
 
     /// <summary>
     ///     Cognito answers a challenge (new password, MFA) with 200 and no AuthenticationResult.
+    ///     Nothing the connector holds can satisfy one, so the challenge name is the only evidence of
+    ///     why this tenant will never authenticate again.
     /// </summary>
     [Fact]
-    public async Task GetValidTokenAsync_DoesNotRetry_WhenCognitoAnswersWithoutAnAuthenticationResult()
+    public async Task GetValidTokenAsync_DoesNotRetry_AndNamesTheChallenge_WhenCognitoIssuesOne()
     {
-        var handler = new CognitoHandler { LoginBody = "{\"ChallengeName\":\"NEW_PASSWORD_REQUIRED\"}" };
+        var handler = new CognitoHandler { LoginBody = "{\"ChallengeName\":\"SOFTWARE_TOKEN_MFA\"}" };
+        var logger = new RecordingLogger();
 
-        var token = await AuthenticateAsync(handler);
+        var token = await AuthenticateAsync(handler, logger: logger);
 
         token.Should().BeNull();
         handler.LoginCalls.Should().Be(1, "a challenge is Cognito's answer, not a transient failure");
+        logger.Errors.Should().ContainMatch("*SOFTWARE_TOKEN_MFA*");
     }
 
     /// <summary>
@@ -78,7 +83,7 @@ public class TwiistAuthTokenProviderRetryTests
     }
 
     private static async Task<string?> AuthenticateAsync(
-        CognitoHandler handler, int maxRetryAttempts = 3)
+        CognitoHandler handler, int maxRetryAttempts = 3, ILogger<TwiistAuthTokenProvider>? logger = null)
     {
         using var httpClient = new HttpClient(handler);
 
@@ -94,7 +99,7 @@ public class TwiistAuthTokenProviderRetryTests
             new ConnectorTokenCache(),
             new ConnectorServerResolver<TwiistConnectorConfiguration>(null, null, null),
             tenantAccessor.Object,
-            NullLogger<TwiistAuthTokenProvider>.Instance,
+            logger ?? NullLogger<TwiistAuthTokenProvider>.Instance,
             retryDelay.Object);
 
         var config = new TwiistConnectorConfiguration
@@ -105,6 +110,26 @@ public class TwiistAuthTokenProviderRetryTests
         };
 
         return await provider.GetValidTokenAsync(config, CancellationToken.None);
+    }
+
+    private sealed class RecordingLogger : ILogger<TwiistAuthTokenProvider>
+    {
+        public List<string> Errors { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            if (logLevel == LogLevel.Error)
+                Errors.Add(formatter(state, exception));
+        }
     }
 
     /// <summary>Answers the Cognito InitiateAuth call, with per-test failure injection.</summary>
