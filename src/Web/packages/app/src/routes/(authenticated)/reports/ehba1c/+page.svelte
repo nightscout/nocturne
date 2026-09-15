@@ -1,15 +1,21 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { LineChart } from "layerchart";
-  import { Loader2, Activity } from "lucide-svelte";
+  import { Loader2, Activity, Plus, Trash2 } from "lucide-svelte";
   import * as Card from "$lib/components/ui/card";
   import * as ToggleGroup from "$lib/components/ui/toggle-group";
+  import { Button } from "$lib/components/ui/button";
+  import { Input } from "$lib/components/ui/input";
+  import { Label } from "$lib/components/ui/label";
+  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import {
     getAvailableYears,
     getEHbA1cTimeline,
   } from "$api/generated/dataOverviews.generated.remote";
-  import type { EHbA1cPoint } from "$api/generated/nocturne-api-client";
+  import * as labResultsApi from "$api/generated/labHbA1cs.generated.remote";
+  import type { EHbA1cPoint, LabHbA1cResult } from "$api/generated/nocturne-api-client";
   import { bg, bgLabel, formatLongDate } from "$lib/utils/formatting";
+  import { describeSubmitError } from "$lib/forms/submit-error";
 
   type ChartPoint = {
     date: Date;
@@ -48,6 +54,14 @@
   let pointsByYear = $state<Map<number, EHbA1cPoint[]>>(new Map());
   let a1cUnit = $state<A1cUnit>("percent");
 
+  let labResults = $state<LabHbA1cResult[]>([]);
+  let newLabDate = $state("");
+  let newLabValue = $state("");
+  let newLabNote = $state("");
+  let savingLabResult = $state(false);
+  let labResultError = $state<string | null>(null);
+  let pendingDeleteLabResult = $state<LabHbA1cResult | null>(null);
+
   /** NGSP % to IFCC mmol/mol, the standard dual-reporting conversion for HbA1c. */
   function toIfccMmolMol(percent: number): number {
     return (percent - 2.15) * 10.929;
@@ -55,6 +69,16 @@
 
   function toDisplayUnit(percent: number): number {
     return a1cUnit === "percent" ? percent : toIfccMmolMol(percent);
+  }
+
+  /** Normalizes a lab result's measuredAt (Date instance or ISO string) to a Date. */
+  function toDate(value: Date | string | undefined): Date {
+    return value instanceof Date ? value : new Date(value ?? 0);
+  }
+
+  /** IFCC mmol/mol to NGSP %, the inverse of toIfccMmolMol — used to store a mmol/mol entry as %. */
+  function toPercentFromDisplayUnit(value: number): number {
+    return a1cUnit === "percent" ? value : value / 10.929 + 2.15;
   }
 
   function formatA1c(percent: number): string {
@@ -153,19 +177,69 @@
     loading = true;
     error = null;
     try {
-      const { years } = await getAvailableYears().run();
-      const results = await Promise.all(
+      const [{ years }, results] = await Promise.all([
+        getAvailableYears().run(),
+        labResultsApi.getAll().run(),
+      ]);
+      labResults = results ?? [];
+      const pointResults = await Promise.all(
         (years ?? []).map(async (year) => {
           const response = await getEHbA1cTimeline({ year }).run();
           return [year, response.points ?? []] as const;
         })
       );
-      pointsByYear = new Map(results);
+      pointsByYear = new Map(pointResults);
     } catch (err) {
       error = err;
       console.error("Failed to load eHbA1c timeline:", err);
     } finally {
       loading = false;
+    }
+  }
+
+  /** Lab draws are shown as standalone markers — never connected by a line and never fed back
+   * into the eHbA1c calculation, which only ever reads SensorGlucose/MeterGlucose. */
+  const labChartPoints = $derived(
+    labResults.map((r) => ({
+      id: r.id,
+      date: toDate(r.measuredAt),
+      valuePercent: r.valuePercent ?? 0,
+      displayValue: toDisplayUnit(r.valuePercent ?? 0),
+      note: r.note,
+    }))
+  );
+
+  async function addLabResult() {
+    const value = Number(newLabValue);
+    if (!newLabDate || !newLabValue || Number.isNaN(value)) return;
+    savingLabResult = true;
+    labResultError = null;
+    try {
+      await labResultsApi.create({
+        measuredAt: new Date(`${newLabDate}T00:00:00.000Z`).toISOString() as unknown as Date,
+        valuePercent: toPercentFromDisplayUnit(value),
+        note: newLabNote || undefined,
+      });
+      labResults = (await labResultsApi.getAll().run()) ?? [];
+      newLabDate = "";
+      newLabValue = "";
+      newLabNote = "";
+    } catch (err) {
+      labResultError = describeSubmitError(err, "Failed to save lab result");
+    } finally {
+      savingLabResult = false;
+    }
+  }
+
+  async function confirmDeleteLabResult() {
+    const target = pendingDeleteLabResult;
+    pendingDeleteLabResult = null;
+    if (!target?.id) return;
+    try {
+      await labResultsApi.remove(target.id);
+      labResults = (await labResultsApi.getAll().run()) ?? [];
+    } catch (err) {
+      labResultError = describeSubmitError(err, "Failed to delete lab result");
     }
   }
 
@@ -253,9 +327,11 @@
               {
                 key: "displayValue",
                 label: a1cUnit === "percent" ? "eHbA1c %" : "eHbA1c mmol/mol",
-                color: "var(--chart-1)",
+                color: "var(--ehba1c-line)",
               },
             ]}
+            props={{ spline: { "stroke-width": 3, "stroke-linecap": "round" } }}
+            points={{ data: labChartPoints, x: (d) => d.date, y: (d) => d.displayValue, children: labMarkers }}
             {annotations}
           />
         </div>
@@ -268,8 +344,110 @@
               <span class="text-muted-foreground">({formatZoneRange(band)})</span>
             </div>
           {/each}
+          {#if labChartPoints.length > 0}
+            <div class="flex items-center gap-1.5">
+              <span class="inline-block h-0 w-0 border-x-4 border-b-[7px] border-x-transparent border-b-foreground"
+              ></span>
+              <span>Labwaarde (niet meegenomen in de berekening)</span>
+            </div>
+          {/if}
         </div>
       {/if}
     </Card.Content>
   </Card.Root>
+
+  <Card.Root>
+    <Card.Header>
+      <Card.Title>Labwaarden</Card.Title>
+      <Card.Description>
+        Vul hier de HbA1c-uitslag van een bloedprikker in — zichtbaar als driehoekje op de
+        grafiek, zodat je kunt zien hoeveel de eHbA1c-schatting normaal afwijkt van de
+        laboratoriumwaarde. Deze waarden tellen niet mee in de berekening zelf.
+      </Card.Description>
+    </Card.Header>
+    <Card.Content class="space-y-4">
+      {#if labResults.length === 0}
+        <p class="text-sm text-muted-foreground">Nog geen labwaarden toegevoegd.</p>
+      {:else}
+        <ul class="divide-border divide-y">
+          {#each [...labResults].sort((a, b) => toDate(b.measuredAt).getTime() - toDate(a.measuredAt).getTime()) as result (result.id)}
+            <li class="flex items-center justify-between gap-3 py-2">
+              <div>
+                <div class="text-sm font-medium">
+                  {formatA1c(result.valuePercent ?? 0)}
+                  {#if result.note}<span class="text-muted-foreground font-normal"> — {result.note}</span>{/if}
+                </div>
+                <div class="text-xs text-muted-foreground">
+                  {formatLongDate(toDate(result.measuredAt))}
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Labwaarde verwijderen"
+                onclick={() => (pendingDeleteLabResult = result)}
+              >
+                <Trash2 class="size-4" />
+              </Button>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+
+      <div class="grid gap-3 sm:grid-cols-3">
+        <div class="space-y-1.5">
+          <Label for="lab-date">Datum</Label>
+          <Input id="lab-date" type="date" bind:value={newLabDate} />
+        </div>
+        <div class="space-y-1.5">
+          <Label for="lab-value">Uitslag ({a1cUnit === "percent" ? "%" : "mmol/mol"})</Label>
+          <Input id="lab-value" type="number" step="0.1" bind:value={newLabValue} placeholder={a1cUnit === "percent" ? "bv. 7.0" : "bv. 53"} />
+        </div>
+        <div class="space-y-1.5">
+          <Label for="lab-note">Notitie (optioneel)</Label>
+          <Input id="lab-note" type="text" bind:value={newLabNote} placeholder="bv. huisartsenlab" />
+        </div>
+      </div>
+
+      {#if labResultError}
+        <p class="text-destructive text-sm">{labResultError}</p>
+      {/if}
+
+      <Button onclick={addLabResult} disabled={savingLabResult || !newLabDate || !newLabValue}>
+        {#if savingLabResult}
+          <Loader2 class="size-4 animate-spin" />
+        {:else}
+          <Plus class="size-4" />
+        {/if}
+        Labwaarde toevoegen
+      </Button>
+    </Card.Content>
+  </Card.Root>
 </div>
+
+{#snippet labMarkers({ points }: { points: { x: number; y: number; data: (typeof labChartPoints)[number] }[] })}
+  {#each points as point (point.data.id)}
+    <polygon
+      points="{point.x},{point.y - 7} {point.x - 6},{point.y + 5} {point.x + 6},{point.y + 5}"
+      class="fill-foreground stroke-background"
+      stroke-width="1"
+    >
+      <title>Labwaarde: {formatA1c(point.data.valuePercent)} ({formatLongDate(point.data.date)}){point.data.note ? ` — ${point.data.note}` : ""}</title>
+    </polygon>
+  {/each}
+{/snippet}
+
+<ConfirmDialog
+  open={pendingDeleteLabResult !== null}
+  onOpenChange={(o) => { if (!o) pendingDeleteLabResult = null; }}
+  title="Labwaarde verwijderen?"
+  confirmLabel="Verwijderen"
+  onConfirm={confirmDeleteLabResult}
+>
+  {#snippet description()}
+    {#if pendingDeleteLabResult}
+      Verwijder de labwaarde {formatA1c(pendingDeleteLabResult.valuePercent ?? 0)} van
+      {formatLongDate(toDate(pendingDeleteLabResult.measuredAt))}.
+    {/if}
+  {/snippet}
+</ConfirmDialog>
