@@ -390,7 +390,7 @@ public class DataOverviewService : IDataOverviewService
         _logger.LogDebug(
             "Getting eHbA1c timeline for year {Year}, dataSources={DataSources}",
             year,
-            dataSources != null ? string.Join(",", dataSources) : "(all)"
+            dataSources != null ? string.Join(",", dataSources.Select(SanitizeForLog)) : "(all)"
         );
 
         var sourceKey = dataSources is { Length: > 0 }
@@ -571,6 +571,12 @@ public class DataOverviewService : IDataOverviewService
 
         return points.ToArray();
     }
+
+    /// <summary>
+    /// Strips CR/LF from a caller-supplied value before it reaches a log message, so a crafted
+    /// data-source name cannot forge additional log lines (CWE-117 log injection).
+    /// </summary>
+    private static string SanitizeForLog(string value) => value.Replace("\r", "").Replace("\n", "");
 
     /// <summary>
     /// The half-open UTC interval covering <paramref name="year"/> in <paramref name="tz"/>, so a
