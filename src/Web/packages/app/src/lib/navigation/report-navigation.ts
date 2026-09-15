@@ -1,6 +1,7 @@
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type IconComponent = any;
 import {
+  Activity,
   BarChart3,
   BatteryFull,
   ArrowLeftRight,
@@ -111,6 +112,15 @@ export const reportCategories: ReportCategory[] = [
         href: "/reports/data-quality",
         scopes: [READ.glucose, READ.reports],
         icon: Layers,
+        status: "available",
+      },
+      {
+        title: "Estimated HbA1c",
+        sidebarTitle: "eHbA1c",
+        description: "How your estimated HbA1c has trended over the years",
+        href: "/reports/ehba1c",
+        scopes: [READ.glucose, READ.reports],
+        icon: Activity,
         status: "available",
       },
     ],
