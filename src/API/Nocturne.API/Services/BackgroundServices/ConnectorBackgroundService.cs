@@ -512,7 +512,13 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
         var progressReporter = scope.ServiceProvider.GetService<ISyncProgressReporter>();
         var result = await PerformSyncAsync(scope.ServiceProvider, config, stoppingToken, progressReporter);
 
-        if (result.Success)
+        // A run that never got a token has nothing to fetch, which several connectors report as a
+        // successful sync that found no data. Reading the refusal here rather than in each connector
+        // is what makes a rejected credential visible for all of them.
+        var signInRefusal = scope.ServiceProvider.GetService<IConnectorTokenCache>()
+            ?.GetSignInRefusal(ConnectorName, tenantId);
+
+        if (result.Success && signInRefusal == null)
         {
             Logger.LogInformation(
                 "{ConnectorName} sync completed for tenant {TenantSlug}",
@@ -529,12 +535,14 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
         else
         {
             // Distinct because the same message repeats per chunk; see
-            // ConnectorConfigurationEntity.LastErrorMessageMaxLength.
-            var errorMessage = result.Errors.Count > 0
-                ? string.Join("; ", result.Errors.Distinct(StringComparer.Ordinal))
-                : !string.IsNullOrWhiteSpace(result.Message)
-                    ? result.Message
-                    : "Sync failed";
+            // ConnectorConfigurationEntity.LastErrorMessageMaxLength. A refused sign-in outranks
+            // whatever the run made of it, because it is the one failure the tenant can act on.
+            var errorMessage = signInRefusal
+                ?? (result.Errors.Count > 0
+                    ? string.Join("; ", result.Errors.Distinct(StringComparer.Ordinal))
+                    : !string.IsNullOrWhiteSpace(result.Message)
+                        ? result.Message
+                        : "Sync failed");
 
             Logger.LogWarning(
                 "{ConnectorName} sync failed for tenant {TenantSlug}: {ErrorMessage}",

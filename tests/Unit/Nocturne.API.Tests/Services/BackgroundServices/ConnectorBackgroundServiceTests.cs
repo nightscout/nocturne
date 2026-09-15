@@ -10,6 +10,7 @@ using Nocturne.API.Services.BackgroundServices;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
+using Nocturne.Connectors.Core.Services;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -201,9 +202,13 @@ public class ConnectorBackgroundServiceTests
         string connectionString,
         Mock<IConnectorConfigurationService> configServiceMock,
         TestConnectorConfig config,
-        Action? onConfigLoad = null)
+        Action? onConfigLoad = null,
+        IConnectorTokenCache? tokenCache = null)
     {
         var services = new ServiceCollection();
+
+        if (tokenCache != null)
+            services.AddSingleton(tokenCache);
 
         // Register IDbContextFactory<NocturneDbContext> and scoped NocturneDbContext,
         // both backed by the shared in-memory SQLite database.
@@ -563,6 +568,112 @@ public class ConnectorBackgroundServiceTests
                 It.IsAny<CancellationToken>()),
             Times.Once,
             "Expected error message to be cleared on successful sync");
+    }
+
+    /// <summary>
+    ///     A connector that could not sign in has no token, so it fetches nothing and reports a run
+    ///     that found no data — indistinguishable from a healthy source with nothing new. The refusal
+    ///     the token provider recorded is what has to override that.
+    /// </summary>
+    [Fact]
+    public async Task RefusedSignIn_MarksTheConnectorUnhealthy_EvenWhenTheRunReportedSuccess()
+    {
+        var (cleanup, connStr, tenantId) = CreateSqliteDbWithTenantId();
+        using var _ = cleanup;
+
+        const string refusal = "TestConnector did not accept this sign-in.";
+        var tokenCache = new ConnectorTokenCache();
+        tokenCache.SetSignInRefusal("TestConnector", tenantId, refusal);
+
+        var configServiceMock = HealthRecordingConfigService();
+        var serviceProvider = BuildServiceProvider(
+            connStr,
+            configServiceMock,
+            new TestConnectorConfig { Enabled = true, SyncIntervalMinutes = 5 },
+            tokenCache: tokenCache);
+
+        var sut = new TestConnectorBackgroundService(
+            serviceProvider,
+            new SyncResult { Success = true, Message = "OK" },
+            NullLogger<TestConnectorBackgroundService>.Instance);
+
+        await sut.ExecuteOnceAsync(CancellationToken.None);
+
+        configServiceMock.Verify(
+            x => x.UpdateHealthStateAsync(
+                "TestConnector",
+                It.IsAny<DateTime?>(),
+                It.IsAny<DateTime?>(),
+                refusal,
+                It.IsAny<DateTime?>(),
+                false,
+                It.IsAny<CancellationToken>()),
+            Times.Once,
+            "a run that never signed in is not a healthy sync");
+    }
+
+    /// <summary>
+    ///     A transient failure records no refusal, so it must not tell anyone their password is wrong.
+    /// </summary>
+    [Fact]
+    public async Task NoSignInRefusal_LeavesASuccessfulRunHealthy()
+    {
+        var (cleanup, connStr, _) = CreateSqliteDbWithTenantId();
+        using var __ = cleanup;
+
+        var configServiceMock = HealthRecordingConfigService();
+        var serviceProvider = BuildServiceProvider(
+            connStr,
+            configServiceMock,
+            new TestConnectorConfig { Enabled = true, SyncIntervalMinutes = 5 },
+            tokenCache: new ConnectorTokenCache());
+
+        var sut = new TestConnectorBackgroundService(
+            serviceProvider,
+            new SyncResult { Success = true, Message = "OK" },
+            NullLogger<TestConnectorBackgroundService>.Instance);
+
+        await sut.ExecuteOnceAsync(CancellationToken.None);
+
+        configServiceMock.Verify(
+            x => x.UpdateHealthStateAsync(
+                "TestConnector",
+                It.IsAny<DateTime?>(),
+                It.IsAny<DateTime?>(),
+                string.Empty,
+                It.IsAny<DateTime?>(),
+                true,
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    /// <summary>Answers the reads the sync path makes and accepts every health write.</summary>
+    private static Mock<IConnectorConfigurationService> HealthRecordingConfigService()
+    {
+        var mock = new Mock<IConnectorConfigurationService>();
+
+        mock.Setup(x => x.GetConfigurationAsync("TestConnector", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ConnectorConfigurationResponse
+            {
+                ConnectorName = "TestConnector",
+                IsActive = true,
+                Configuration = JsonDocument.Parse("{\"enabled\": true, \"syncIntervalMinutes\": 5}")
+            });
+
+        mock.Setup(x => x.GetSecretsAsync("TestConnector", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, string>());
+
+        mock.Setup(x => x.UpdateHealthStateAsync(
+                It.IsAny<string>(),
+                It.IsAny<DateTime?>(),
+                It.IsAny<DateTime?>(),
+                It.IsAny<string?>(),
+                It.IsAny<DateTime?>(),
+                It.IsAny<bool?>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        return mock;
     }
 
     [Fact]

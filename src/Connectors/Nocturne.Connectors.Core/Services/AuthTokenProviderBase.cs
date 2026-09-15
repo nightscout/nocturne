@@ -29,6 +29,13 @@ public abstract class AuthTokenProviderBase<TConfig>(
     private bool _disposed;
 
     /// <summary>
+    ///     Whether the last login attempt ended with a verdict another attempt cannot change — the
+    ///     source answered and refused. Distinct from a login that merely ran out of attempts, which
+    ///     <see cref="ExecuteWithRetryAsync{T}"/> also reports as a null token.
+    /// </summary>
+    private bool _credentialsRefused;
+
+    /// <summary>
     ///     Default token lifetime buffer in minutes.
     ///     Tokens will be refreshed this many minutes before actual expiry to prevent edge cases.
     /// </summary>
@@ -96,6 +103,7 @@ public abstract class AuthTokenProviderBase<TConfig>(
 
             _logger.LogDebug("Token expired or missing, acquiring new token for {ProviderName}", GetType().Name);
 
+            _credentialsRefused = false;
             var result = await AcquireTokenAsync(config, cancellationToken);
 
             if (result.Token != null)
@@ -103,6 +111,7 @@ public abstract class AuthTokenProviderBase<TConfig>(
                 var expiresAt = result.ExpiresAt.AddMinutes(-TokenLifetimeBufferMinutes);
                 await _tokenCache.SetAsync(ConnectorName, tenantId,
                     new ConnectorSession(result.Token, expiresAt, result.Metadata));
+                _tokenCache.SetSignInRefusal(ConnectorName, tenantId, null);
 
                 _logger.LogInformation(
                     "Successfully acquired token for {ProviderName}, expires at {ExpiresAt}",
@@ -110,6 +119,9 @@ public abstract class AuthTokenProviderBase<TConfig>(
 
                 return result.Token;
             }
+
+            if (_credentialsRefused)
+                _tokenCache.SetSignInRefusal(ConnectorName, tenantId, CredentialsRefusedMessage);
 
             _logger.LogWarning("Failed to acquire token for {ProviderName}", GetType().Name);
             return null;
@@ -183,6 +195,16 @@ public abstract class AuthTokenProviderBase<TConfig>(
         TConfig config, CancellationToken cancellationToken);
 
     /// <summary>
+    ///     What the tenant is told when the source refuses their credentials. Deliberately carries
+    ///     no status code and none of the source's own error text: the reader is managing their own
+    ///     diabetes data, and the sign-in details they entered are the only part they can act on.
+    /// </summary>
+    private string CredentialsRefusedMessage =>
+        $"{ConnectorName} did not accept this sign-in. Check the username and password in the "
+        + $"connector settings and save them again. If they are correct, the account may need "
+        + $"attention on {ConnectorName}'s own site.";
+
+    /// <summary>
     ///     The number of login attempts a token acquisition makes.
     ///     <see cref="BaseConnectorConfiguration.MaxRetryAttempts"/> counts total attempts and
     ///     permits 0; authenticating at all needs one.
@@ -215,7 +237,11 @@ public abstract class AuthTokenProviderBase<TConfig>(
                     if (result != null)
                         return RetryStep<T>.Complete(result);
 
-                    return shouldRetry ? RetryStep<T>.RetryAfterDelay : RetryStep<T>.Complete(default);
+                    if (shouldRetry)
+                        return RetryStep<T>.RetryAfterDelay;
+
+                    _credentialsRefused = true;
+                    return RetryStep<T>.Complete(default);
                 }
                 catch (HttpRequestException ex)
                 {
@@ -232,7 +258,11 @@ public abstract class AuthTokenProviderBase<TConfig>(
                         operationName,
                         attempt + 1);
 
-                    return shouldRetry ? RetryStep<T>.RetryAfterDelay : RetryStep<T>.Complete(default);
+                    if (shouldRetry)
+                        return RetryStep<T>.RetryAfterDelay;
+
+                    _credentialsRefused = true;
+                    return RetryStep<T>.Complete(default);
                 }
                 catch (Exception ex)
                 {
