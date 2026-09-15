@@ -513,12 +513,12 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
         var result = await PerformSyncAsync(scope.ServiceProvider, config, stoppingToken, progressReporter);
 
         // A run that never got a token has nothing to fetch, which several connectors report as a
-        // successful sync that found no data. Reading the refusal here rather than in each connector
-        // is what makes a rejected credential visible for all of them.
-        var signInRefusal = scope.ServiceProvider.GetService<IConnectorTokenCache>()
-            ?.GetSignInRefusal(ConnectorName, tenantId);
+        // successful sync that found no data. Reading the failure here rather than in each connector
+        // is what makes a connector that cannot sign in visible for all of them.
+        var signInFailure = scope.ServiceProvider.GetRequiredService<IConnectorTokenCache>()
+            .GetSignInFailure(ConnectorName, tenantId);
 
-        if (result.Success && signInRefusal == null)
+        if (result.Success && signInFailure == null)
         {
             Logger.LogInformation(
                 "{ConnectorName} sync completed for tenant {TenantSlug}",
@@ -535,9 +535,9 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
         else
         {
             // Distinct because the same message repeats per chunk; see
-            // ConnectorConfigurationEntity.LastErrorMessageMaxLength. A refused sign-in outranks
-            // whatever the run made of it, because it is the one failure the tenant can act on.
-            var errorMessage = signInRefusal
+            // ConnectorConfigurationEntity.LastErrorMessageMaxLength. A failed sign-in outranks
+            // whatever the run made of it, because it names the step that stopped the run.
+            var errorMessage = signInFailure
                 ?? (result.Errors.Count > 0
                     ? string.Join("; ", result.Errors.Distinct(StringComparer.Ordinal))
                     : !string.IsNullOrWhiteSpace(result.Message)

@@ -1,3 +1,5 @@
+using System.Net;
+using System.Reflection;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
@@ -29,11 +31,25 @@ public abstract class AuthTokenProviderBase<TConfig>(
     private bool _disposed;
 
     /// <summary>
-    ///     Whether the last login attempt ended with a verdict another attempt cannot change — the
-    ///     source answered and refused. Distinct from a login that merely ran out of attempts, which
-    ///     <see cref="ExecuteWithRetryAsync{T}"/> also reports as a null token.
+    ///     What a login that ended without a token lets us say, when another attempt could not have
+    ///     changed it. Null while a login has not failed that way — including one that merely ran out
+    ///     of attempts, which <see cref="ExecuteWithRetryAsync{T}"/> also reports as a null token.
     /// </summary>
-    private bool _credentialsRefused;
+    private SignInFailure? _signInFailure;
+
+    /// <summary>
+    ///     How much a failed login says about the credentials. Only a source that refused them earns
+    ///     the wording that sends someone to their password: telling a person to change a working one
+    ///     during a source's outage costs them their data while they chase a fault that is not theirs.
+    /// </summary>
+    private enum SignInFailure
+    {
+        /// <summary>The source could not be signed in to. Says nothing about the credentials.</summary>
+        Unavailable,
+
+        /// <summary>The source rejected the credentials: it answered 401 or 403.</summary>
+        CredentialsRefused,
+    }
 
     /// <summary>
     ///     Default token lifetime buffer in minutes.
@@ -103,7 +119,7 @@ public abstract class AuthTokenProviderBase<TConfig>(
 
             _logger.LogDebug("Token expired or missing, acquiring new token for {ProviderName}", GetType().Name);
 
-            _credentialsRefused = false;
+            _signInFailure = null;
             var result = await AcquireTokenAsync(config, cancellationToken);
 
             if (result.Token != null)
@@ -111,7 +127,7 @@ public abstract class AuthTokenProviderBase<TConfig>(
                 var expiresAt = result.ExpiresAt.AddMinutes(-TokenLifetimeBufferMinutes);
                 await _tokenCache.SetAsync(ConnectorName, tenantId,
                     new ConnectorSession(result.Token, expiresAt, result.Metadata));
-                _tokenCache.SetSignInRefusal(ConnectorName, tenantId, null);
+                _tokenCache.SetSignInFailure(ConnectorName, tenantId, null);
 
                 _logger.LogInformation(
                     "Successfully acquired token for {ProviderName}, expires at {ExpiresAt}",
@@ -120,8 +136,8 @@ public abstract class AuthTokenProviderBase<TConfig>(
                 return result.Token;
             }
 
-            if (_credentialsRefused)
-                _tokenCache.SetSignInRefusal(ConnectorName, tenantId, CredentialsRefusedMessage);
+            if (_signInFailure is { } failure)
+                _tokenCache.SetSignInFailure(ConnectorName, tenantId, SignInFailureMessage(failure));
 
             _logger.LogWarning("Failed to acquire token for {ProviderName}", GetType().Name);
             return null;
@@ -195,14 +211,29 @@ public abstract class AuthTokenProviderBase<TConfig>(
         TConfig config, CancellationToken cancellationToken);
 
     /// <summary>
-    ///     What the tenant is told when the source refuses their credentials. Deliberately carries
-    ///     no status code and none of the source's own error text: the reader is managing their own
-    ///     diabetes data, and the sign-in details they entered are the only part they can act on.
+    ///     The source's name as the tenant knows it. <see cref="ConnectorName"/> is a cache-key
+    ///     prefix, which is not always what the UI calls the connector.
     /// </summary>
-    private string CredentialsRefusedMessage =>
-        $"{ConnectorName} did not accept this sign-in. Check the username and password in the "
-        + $"connector settings and save them again. If they are correct, the account may need "
-        + $"attention on {ConnectorName}'s own site.";
+    private string ConnectorDisplayName =>
+        typeof(TConfig).GetCustomAttribute<ConnectorRegistrationAttribute>(inherit: false)?.DisplayName
+        ?? ConnectorName;
+
+    /// <summary>
+    ///     What the tenant is told when a login gets no token. Deliberately carries no status code
+    ///     and none of the source's own error text: the reader is managing their own diabetes data,
+    ///     and the sign-in details they entered are the only part they could act on — so only a
+    ///     refusal names them, and everything else says to wait.
+    /// </summary>
+    private string SignInFailureMessage(SignInFailure failure) => failure switch
+    {
+        SignInFailure.CredentialsRefused =>
+            $"{ConnectorDisplayName} did not accept this sign-in. Check the username and password in "
+            + $"the connector settings and save them again. If they are correct, the account may need "
+            + $"attention on {ConnectorDisplayName}'s own site.",
+        _ =>
+            $"Could not sign in to {ConnectorDisplayName}. This is usually temporary; the next sync "
+            + "will try again.",
+    };
 
     /// <summary>
     ///     The number of login attempts a token acquisition makes.
@@ -240,7 +271,10 @@ public abstract class AuthTokenProviderBase<TConfig>(
                     if (shouldRetry)
                         return RetryStep<T>.RetryAfterDelay;
 
-                    _credentialsRefused = true;
+                    // The source answered with something no further attempt can change, but nothing
+                    // here says the credentials were the problem — that verdict only ever arrives as
+                    // a status, on the exception path below.
+                    _signInFailure = SignInFailure.Unavailable;
                     return RetryStep<T>.Complete(default);
                 }
                 catch (HttpRequestException ex)
@@ -261,7 +295,13 @@ public abstract class AuthTokenProviderBase<TConfig>(
                     if (shouldRetry)
                         return RetryStep<T>.RetryAfterDelay;
 
-                    _credentialsRefused = true;
+                    // 401 and 403 are the only answers about the credentials themselves. Every other
+                    // non-retryable status — a 404, a 405, a source's own 5xx variant — says the
+                    // source could not be signed in to, which is not the same claim.
+                    _signInFailure = ex.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden
+                        ? SignInFailure.CredentialsRefused
+                        : SignInFailure.Unavailable;
+
                     return RetryStep<T>.Complete(default);
                 }
                 catch (Exception ex)

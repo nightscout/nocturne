@@ -13,14 +13,14 @@ public interface IConnectorTokenCache : IConnectorCacheInvalidator
     Task<SemaphoreSlim> GetLockAsync(string connectorName, Guid tenantId);
 
     /// <summary>
-    ///     Why the source last refused this key's credentials, or null when it last accepted them.
+    ///     What to tell the tenant about this key's last sign-in, or null when it produced a session.
     ///     Recorded here because it is the other outcome of the same sign-in the session comes from,
     ///     and because a sync that never got a token has nothing else to report: with nothing to
     ///     fetch, several connectors finish looking like a successful sync that found no data.
     /// </summary>
-    string? GetSignInRefusal(string connectorName, Guid tenantId);
+    string? GetSignInFailure(string connectorName, Guid tenantId);
 
-    /// <param name="reason">Null when the source accepted the credentials.</param>
-    /// <inheritdoc cref="GetSignInRefusal"/>
-    void SetSignInRefusal(string connectorName, Guid tenantId, string? reason);
+    /// <param name="reason">Null when the sign-in succeeded.</param>
+    /// <inheritdoc cref="GetSignInFailure"/>
+    void SetSignInFailure(string connectorName, Guid tenantId, string? reason);
 }

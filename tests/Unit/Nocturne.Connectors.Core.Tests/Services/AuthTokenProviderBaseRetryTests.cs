@@ -168,30 +168,74 @@ public class AuthTokenProviderBaseRetryTests
 
     /// <summary>
     ///     A run that never got a token fetches nothing, which several connectors report as a
-    ///     successful sync that found no data. The refusal recorded here is the only thing that tells
-    ///     the tenant their credentials were the reason.
+    ///     successful sync that found no data. What is recorded here is the only thing that tells the
+    ///     tenant the sign-in was the reason.
     /// </summary>
-    [Fact]
-    public async Task AcquireToken_RefusedByTheSource_RecordsASignInRefusalForTheTenant()
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized)]
+    [InlineData(HttpStatusCode.Forbidden)]
+    public async Task AcquireToken_RefusedByTheSource_NamesTheCredentials(HttpStatusCode status)
     {
         var cache = new ConnectorTokenCache();
         var tenantId = Guid.NewGuid();
         using var provider = BuildSignInProvider(cache, tenantId,
-            _ => throw new HttpRequestException("rejected", null, HttpStatusCode.Unauthorized));
+            _ => throw new HttpRequestException("rejected", null, status));
 
         var token = await provider.GetValidTokenAsync(new TestConnectorConfig(), CancellationToken.None);
 
         token.Should().BeNull();
-        cache.GetSignInRefusal(SignInProvider.Name, tenantId)
+        cache.GetSignInFailure(SignInProvider.Name, tenantId)
             .Should().Contain("username and password", "the tenant can only act on what they entered");
     }
 
     /// <summary>
-    ///     A transient failure must not tell someone their password is wrong, however many attempts
-    ///     it consumes.
+    ///     Everything else a source answers is about the source, not the credentials. Telling someone
+    ///     to change a working password during an outage costs them their data while they chase a
+    ///     fault that is not theirs — 400 is Cognito's throttling answer, 404 and 405 are routing, and
+    ///     a null result with no retry is any vendor body the connector could not use.
+    /// </summary>
+    [Theory]
+    [InlineData(HttpStatusCode.BadRequest)]
+    [InlineData(HttpStatusCode.NotFound)]
+    [InlineData(HttpStatusCode.MethodNotAllowed)]
+    [InlineData(HttpStatusCode.NotImplemented)]
+    public async Task AcquireToken_UnusableAnswerFromTheSource_SaysNothingAboutTheCredentials(
+        HttpStatusCode status)
+    {
+        var cache = new ConnectorTokenCache();
+        var tenantId = Guid.NewGuid();
+        using var provider = BuildSignInProvider(cache, tenantId,
+            _ => throw new HttpRequestException("unusable", null, status));
+
+        await provider.GetValidTokenAsync(new TestConnectorConfig(), CancellationToken.None);
+
+        var failure = cache.GetSignInFailure(SignInProvider.Name, tenantId);
+        failure.Should().NotBeNull("the connector still could not sign in, and that has to be visible");
+        failure.Should().NotContain("password").And.NotContain("username");
+    }
+
+    /// <inheritdoc cref="AcquireToken_UnusableAnswerFromTheSource_SaysNothingAboutTheCredentials"/>
+    [Fact]
+    public async Task AcquireToken_GivenUpOnByTheProvider_SaysNothingAboutTheCredentials()
+    {
+        var cache = new ConnectorTokenCache();
+        var tenantId = Guid.NewGuid();
+        using var provider = BuildSignInProvider(cache, tenantId,
+            _ => Task.FromResult<(string? Result, bool ShouldRetry)>((null, false)));
+
+        await provider.GetValidTokenAsync(new TestConnectorConfig(), CancellationToken.None);
+
+        var failure = cache.GetSignInFailure(SignInProvider.Name, tenantId);
+        failure.Should().NotBeNull();
+        failure.Should().NotContain("password").And.NotContain("username");
+    }
+
+    /// <summary>
+    ///     A transient failure must not tell someone their password is wrong, or anything else,
+    ///     however many attempts it consumes.
     /// </summary>
     [Fact]
-    public async Task AcquireToken_ExhaustedByTransportFailures_RecordsNoSignInRefusal()
+    public async Task AcquireToken_ExhaustedByTransportFailures_RecordsNoSignInFailure()
     {
         var cache = new ConnectorTokenCache();
         var tenantId = Guid.NewGuid();
@@ -201,15 +245,34 @@ public class AuthTokenProviderBaseRetryTests
         var token = await provider.GetValidTokenAsync(new TestConnectorConfig(), CancellationToken.None);
 
         token.Should().BeNull();
-        cache.GetSignInRefusal(SignInProvider.Name, tenantId).Should().BeNull();
+        cache.GetSignInFailure(SignInProvider.Name, tenantId).Should().BeNull();
+    }
+
+    /// <summary>
+    ///     One tenant's refused credentials say nothing about another's, and the two share both the
+    ///     cache and the connector name.
+    /// </summary>
+    [Fact]
+    public async Task AcquireToken_RefusedForOneTenant_LeavesAnotherTenantsSignInAlone()
+    {
+        var cache = new ConnectorTokenCache();
+        var refused = Guid.NewGuid();
+        var unaffected = Guid.NewGuid();
+
+        using var provider = BuildSignInProvider(cache, refused,
+            _ => throw new HttpRequestException("rejected", null, HttpStatusCode.Unauthorized));
+        await provider.GetValidTokenAsync(new TestConnectorConfig(), CancellationToken.None);
+
+        cache.GetSignInFailure(SignInProvider.Name, refused).Should().NotBeNull();
+        cache.GetSignInFailure(SignInProvider.Name, unaffected).Should().BeNull();
     }
 
     [Fact]
-    public async Task AcquireToken_AcceptedAfterARefusal_ClearsTheSignInRefusal()
+    public async Task AcquireToken_AcceptedAfterARefusal_ClearsTheSignInFailure()
     {
         var cache = new ConnectorTokenCache();
         var tenantId = Guid.NewGuid();
-        cache.SetSignInRefusal(SignInProvider.Name, tenantId, "recorded by an earlier run");
+        cache.SetSignInFailure(SignInProvider.Name, tenantId, "recorded by an earlier run");
 
         using var provider = BuildSignInProvider(cache, tenantId,
             _ => Task.FromResult<(string? Result, bool ShouldRetry)>(("token-1", false)));
@@ -217,7 +280,7 @@ public class AuthTokenProviderBaseRetryTests
         var token = await provider.GetValidTokenAsync(new TestConnectorConfig(), CancellationToken.None);
 
         token.Should().Be("token-1");
-        cache.GetSignInRefusal(SignInProvider.Name, tenantId).Should().BeNull();
+        cache.GetSignInFailure(SignInProvider.Name, tenantId).Should().BeNull();
     }
 
     private static SignInProvider BuildSignInProvider(

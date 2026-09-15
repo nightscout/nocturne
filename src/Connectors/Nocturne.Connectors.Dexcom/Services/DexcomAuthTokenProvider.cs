@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -140,23 +141,21 @@ public class DexcomAuthTokenProvider(
     }
 
     /// <summary>
-    ///     Classifies a failed login response. The status alone is not enough here: Dexcom answers a
-    ///     refused credential with a 500, which the shared status rule reads as a transient server
-    ///     fault, so the error code in the body decides — see
-    ///     <see cref="DexcomConstants.RejectedCredentialCodes"/>.
+    ///     Classifies a failed login response. The body is read before the status because the status
+    ///     is the part Dexcom gets wrong: a refused credential arrives as a 500, and a status Dexcom
+    ///     does get right would otherwise short-circuit the codes in
+    ///     <see cref="DexcomConstants.RejectedCredentialCodes"/> before they are looked at. A refusal
+    ///     leaves as the status it stands for, so the shared retry loop classifies it like any other.
     /// </summary>
     private async Task<bool> ShouldRetryFailureAsync(
         HttpResponseMessage response, string operationName, CancellationToken cancellationToken)
     {
-        if (!await HandleErrorResponseAsync(response, operationName, cancellationToken))
-            return false;
-
         var code = ReadErrorCode(await response.Content.ReadAsStringAsync(cancellationToken));
-        if (code == null || !DexcomConstants.RejectedCredentialCodes.Contains(code))
-            return true;
+        if (code != null && DexcomConstants.RejectedCredentialCodes.Contains(code))
+            throw new HttpRequestException(
+                $"{operationName} was refused by Dexcom: {code}", null, HttpStatusCode.Unauthorized);
 
-        _logger.LogError("{OperationName} was refused by Dexcom: {Code}", operationName, code);
-        return false;
+        return await HandleErrorResponseAsync(response, operationName, cancellationToken);
     }
 
     private static string? ReadErrorCode(string body)

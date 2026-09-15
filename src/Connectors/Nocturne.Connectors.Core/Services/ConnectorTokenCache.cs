@@ -12,7 +12,7 @@ public class ConnectorTokenCache : IConnectorTokenCache
 {
     private readonly ConcurrentDictionary<(string ConnectorName, Guid TenantId), ConnectorSession> _sessions = new();
     private readonly ConcurrentDictionary<(string ConnectorName, Guid TenantId), SemaphoreSlim> _locks = new();
-    private readonly ConcurrentDictionary<(string ConnectorName, Guid TenantId), string> _signInRefusals = new();
+    private readonly ConcurrentDictionary<(string ConnectorName, Guid TenantId), string> _signInFailures = new();
 
     public Task<ConnectorSession?> GetAsync(string connectorName, Guid tenantId)
     {
@@ -34,17 +34,17 @@ public class ConnectorTokenCache : IConnectorTokenCache
     }
 
     /// <inheritdoc />
-    public string? GetSignInRefusal(string connectorName, Guid tenantId) =>
-        _signInRefusals.GetValueOrDefault(Key(connectorName, tenantId));
+    public string? GetSignInFailure(string connectorName, Guid tenantId) =>
+        _signInFailures.GetValueOrDefault(Key(connectorName, tenantId));
 
     /// <inheritdoc />
-    public void SetSignInRefusal(string connectorName, Guid tenantId, string? reason)
+    public void SetSignInFailure(string connectorName, Guid tenantId, string? reason)
     {
         var key = Key(connectorName, tenantId);
         if (reason == null)
-            _signInRefusals.TryRemove(key, out _);
+            _signInFailures.TryRemove(key, out _);
         else
-            _signInRefusals[key] = reason;
+            _signInFailures[key] = reason;
     }
 
     public void Invalidate(string connectorName, Guid tenantId)
