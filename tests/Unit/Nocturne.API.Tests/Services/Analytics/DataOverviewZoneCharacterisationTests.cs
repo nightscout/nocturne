@@ -3,8 +3,10 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Analytics;
 using Nocturne.Core.Contracts.Analytics;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models;
+using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Services;
@@ -60,10 +62,16 @@ public class DataOverviewZoneCharacterisationTests : IDisposable
             .Callback<TimeInRangeMetrics>(_griInputs.Add)
             .Returns(new GlycemicRiskIndex());
 
+        var cacheService = new Mock<ICacheService>();
+        var tenantAccessor = new Mock<ITenantAccessor>();
+        tenantAccessor.SetupGet(a => a.Context).Returns(new TenantContext(TenantId, "test-tenant", "Test Tenant", true, false));
+
         _service = new DataOverviewService(
             factory.Object,
             _therapySettings.Object,
             statistics.Object,
+            cacheService.Object,
+            tenantAccessor.Object,
             NullLogger<DataOverviewService>.Instance
         );
     }

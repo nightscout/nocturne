@@ -288,6 +288,11 @@ public class V4WriteScopeGatingTests
             ["CalibrationController"] = Scope.GlucoseReadWrite,
             ["BGCheckController"] = Scope.GlucoseReadWrite,
 
+            // glucose: manually-entered lab HbA1c results are compared against the glucose-derived
+            // eHbA1c estimate; not part of the V4 sync/dedup family, but the same category as the
+            // other glucose observation tables above.
+            ["LabHbA1cController"] = Scope.GlucoseReadWrite,
+
             // glucose: accepting a compression-low suggestion writes a DataExclusion state span,
             // which decides whether the flagged readings count towards analytics and reports —
             // the category StateSpanWriteScopeGuard maps to glucose.readwrite. Dismiss, delete and

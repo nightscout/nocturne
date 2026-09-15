@@ -27,4 +27,14 @@ public interface IDataOverviewService
     /// <param name="dataSources">Optional data source filters</param>
     /// <param name="cancellationToken">Cancellation token</param>
     Task<GriTimelineResponse> GetGriTimelineAsync(int year, string[]? dataSources = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get the estimated-HbA1c timeline for a given year: one point per day whose trailing
+    /// 90-day glucose window has enough readings, each day's contribution weighted by recency
+    /// so the estimate tracks how a lab HbA1c reflects glucose exposure.
+    /// </summary>
+    /// <param name="year">The year to compute the eHbA1c timeline for</param>
+    /// <param name="dataSources">Optional data source filters</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task<EHbA1cTimelineResponse> GetEHbA1cTimelineAsync(int year, string[]? dataSources = null, CancellationToken cancellationToken = default);
 }

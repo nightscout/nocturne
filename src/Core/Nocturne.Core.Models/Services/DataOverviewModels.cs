@@ -69,6 +69,41 @@ public class DailySummaryResponse
 }
 
 /// <summary>
+/// Response for GET /api/v4/year-overview/ehba1c-timeline
+/// </summary>
+public class EHbA1cTimelineResponse
+{
+    [JsonPropertyName("year")]
+    public int Year { get; set; }
+
+    [JsonPropertyName("points")]
+    public EHbA1cPoint[] Points { get; set; } = [];
+}
+
+/// <summary>
+/// One day's estimated HbA1c, derived from a recency-weighted average of the trailing 90-day
+/// glucose window. Days with too little trailing data are omitted rather than emitted with a
+/// low-confidence guess — see <see cref="IDataOverviewService.GetEHbA1cTimelineAsync"/>.
+/// </summary>
+public class EHbA1cPoint
+{
+    [JsonPropertyName("date")]
+    public string Date { get; set; } = string.Empty;
+
+    [JsonPropertyName("estimatedA1cPercent")]
+    public double EstimatedA1cPercent { get; set; }
+
+    [JsonPropertyName("weightedAverageGlucoseMgdl")]
+    public double WeightedAverageGlucoseMgdl { get; set; }
+
+    [JsonPropertyName("readingCount")]
+    public int ReadingCount { get; set; }
+
+    [JsonPropertyName("daysWithData")]
+    public int DaysWithData { get; set; }
+}
+
+/// <summary>
 /// Aggregated data for a single day
 /// </summary>
 public class DailySummaryDay

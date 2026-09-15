@@ -114,6 +114,20 @@
   /* Health Overlays */
   --heart-rate: oklch(0.6 0.2 25);
   --steps: oklch(0.6 0.15 300);
+
+  /* eHbA1c reference zone bands (day-level estimate report). Reuses the GRI
+     severity hues (green/yellow-green/orange/red) for the swatches so "how good
+     is this number" reads consistently with the GRI report; these translucent
+     fills are distinct from --glucose-in-range/--chart-2, which happen to share
+     the same value and were indistinguishable as adjacent bands. */
+  --ehba1c-zone-healthy: oklch(0.72 0.17 145 / 12%);
+  --ehba1c-zone-target: oklch(0.78 0.15 120 / 14%);
+  --ehba1c-zone-high: oklch(0.7 0.17 55 / 16%);
+  --ehba1c-zone-very-high: oklch(0.6 0.2 25 / 16%);
+
+  /* eHbA1c trend line — a distinct vivid accent (not reused from --chart-1) so the line pops
+     against the reference bands in both themes. */
+  --ehba1c-line: oklch(0.55 0.22 300);
 }
 
 .dark {
@@ -132,6 +146,16 @@
   /* Data Exclusion - Dark Mode - slightly higher opacity for visibility on dark backgrounds */
   --data-exclusion-compression-low: rgba(255, 165, 0, 0.2);
   --data-exclusion-sensor-error: rgba(255, 0, 0, 0.15);
+
+  /* eHbA1c reference zone bands - Dark Mode - brighter and more saturated; the light-mode
+     alpha and lightness read as flat/muddy against a dark card background */
+  --ehba1c-zone-healthy: oklch(0.78 0.19 145 / 26%);
+  --ehba1c-zone-target: oklch(0.82 0.17 120 / 28%);
+  --ehba1c-zone-high: oklch(0.76 0.2 55 / 32%);
+  --ehba1c-zone-very-high: oklch(0.68 0.24 25 / 34%);
+
+  /* eHbA1c trend line - Dark Mode - a brighter, more saturated pop of the same hue */
+  --ehba1c-line: oklch(0.78 0.19 300);
 }
 
 /* Tailwind theme integration */
