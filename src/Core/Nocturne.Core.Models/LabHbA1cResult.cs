@@ -6,6 +6,7 @@ namespace Nocturne.Core.Models;
 /// </summary>
 public class LabHbA1cResult
 {
+    /// <summary>Primary key.</summary>
     public Guid Id { get; set; }
 
     /// <summary>Local calendar date the blood was drawn.</summary>
@@ -14,7 +15,9 @@ public class LabHbA1cResult
     /// <summary>Lab-reported HbA1c in DCCT/NGSP percent.</summary>
     public double ValuePercent { get; set; }
 
+    /// <summary>Optional free-text note (e.g. lab name).</summary>
     public string? Note { get; set; }
 
+    /// <summary>When this row was created.</summary>
     public DateTime CreatedAt { get; set; }
 }

@@ -25,6 +25,8 @@ public class LabHbA1cController : ControllerBase
 {
     private readonly ILabHbA1cResultRepository _repository;
 
+    /// <summary>Initializes a new instance of <see cref="LabHbA1cController"/>.</summary>
+    /// <param name="repository">The lab HbA1c result store.</param>
     public LabHbA1cController(ILabHbA1cResultRepository repository)
     {
         _repository = repository;
