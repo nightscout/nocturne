@@ -369,10 +369,6 @@ public static class WidgetCatalog
             "Battery", WidgetUICategory.Device, renderable: false),
     ];
 
-    /// <summary>
-    /// A top-grid row, which takes no default: nothing server-side decides the top grid, so the
-    /// factory gives a caller no way to say otherwise.
-    /// </summary>
     private static WidgetDefinition Top(
         WidgetId id,
         string name,
@@ -434,8 +430,8 @@ public static class WidgetCatalog
     /// before the top grid became a per-user preference carry top rows nothing reads, and serving
     /// them invites a reader to act on them.
     /// </summary>
-    public static List<WidgetConfig> MainSectionsOf(IEnumerable<WidgetConfig> stored) =>
-        [.. stored.Where(w => w.Placement == WidgetPlacement.Main)];
+    public static List<WidgetConfig> MainSectionsOf(IEnumerable<WidgetConfig>? stored) =>
+        [.. (stored ?? []).Where(w => w.Placement == WidgetPlacement.Main)];
 }
 
 /// <summary>

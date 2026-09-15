@@ -119,20 +119,28 @@ public class WidgetCatalogTests
     }
 
     [Fact]
-    public void MainSectionsOf_drops_the_top_rows_settings_were_stored_with()
+    public void MainSectionsOf_reads_an_absent_widget_list_as_empty()
     {
-        var stored = new List<WidgetConfig>
-        {
-            new() { Id = WidgetId.BgDelta, Enabled = true, Placement = WidgetPlacement.Top },
-            new() { Id = WidgetId.Statistics, Enabled = false, Placement = WidgetPlacement.Main },
-        };
+        WidgetCatalog.MainSectionsOf(null).Should().BeEmpty();
+    }
+
+    // WidgetPlacement's zero value is Top, so only WidgetConfig's initialiser keeps a row written
+    // before placement existed out of MainSectionsOf's discard pile.
+    [Fact]
+    public void Stored_row_naming_no_placement_is_a_main_section()
+    {
+        const string json = """
+            { "widgets": [ { "id": "Statistics", "enabled": false } ] }
+            """;
+
+        var settings = JsonSerializer.Deserialize<FeatureSettings>(json)!;
 
         WidgetCatalog
-            .MainSectionsOf(stored)
+            .MainSectionsOf(settings.Widgets)
             .Should()
             .ContainSingle()
-            .Which.Should()
-            .BeEquivalentTo(new { Id = WidgetId.Statistics, Enabled = false });
+            .Which.Id.Should()
+            .Be(WidgetId.Statistics);
     }
 
     [Fact]

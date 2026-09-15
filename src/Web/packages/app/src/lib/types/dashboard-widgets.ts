@@ -39,8 +39,7 @@ export const WIDGET_ICONS: Record<TopWidgetId, ComponentType> = {
  * settings arrive after first paint, so the list is undefined for the first
  * render of every visit, and a list written before a section was catalogued
  * names nothing about it. A section is therefore hidden only by a stored row
- * saying so — dropping it from the backend defaults hides it from nobody, and
- * hiding it everywhere means removing its surface here.
+ * saying so.
  *
  * The top grid is not decided here: it is a per-user preference
  * (`dashboardTopWidgets`), and `widgets` carries no top-placement rows.
