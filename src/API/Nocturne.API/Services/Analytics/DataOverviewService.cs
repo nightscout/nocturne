@@ -469,10 +469,10 @@ public class DataOverviewService : IDataOverviewService
             dailyCount[dayIndex]++;
         }
 
-        var points = BuildEHbA1cPoints(dailySum, dailyCount, localRangeStart, EHbA1cWindowDays, year);
+        var localNow = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, tz);
+        var points = BuildEHbA1cPoints(dailySum, dailyCount, localRangeStart, EHbA1cWindowDays, year, localNow.Date);
         var response = new EHbA1cTimelineResponse { Year = year, Points = points };
 
-        var localNow = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, tz);
         var isCurrentYear = year == localNow.Year;
         // Completed years don't change (barring rare backfills), so cache them for a long time; the
         // current year is still accumulating days, so refresh it more often.
@@ -500,7 +500,8 @@ public class DataOverviewService : IDataOverviewService
         int[] dailyCount,
         DateTime rangeStart,
         int windowDays,
-        int year
+        int year,
+        DateTime maxDate
     )
     {
         var totalDays = dailySum.Length;
@@ -539,6 +540,11 @@ public class DataOverviewService : IDataOverviewService
         {
             var i = yearStartIndex + k;
             if (i < 0 || i >= totalDays)
+                continue;
+
+            // A day within 90 days of today still has a full trailing window of real data even
+            // though the day itself hasn't happened yet — skip it rather than project a value.
+            if (rangeStart.AddDays(i) > maxDate)
                 continue;
 
             var windowStart = Math.Max(0, i - windowDays + 1);
