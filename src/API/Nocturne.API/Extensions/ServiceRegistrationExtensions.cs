@@ -38,6 +38,7 @@ using Nocturne.API.Services.Platform;
 using Nocturne.API.Services.Profiles;
 using Nocturne.API.Services.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
+using Nocturne.Core.Contracts;
 using Nocturne.API.Services.Realtime;
 using Nocturne.API.Services.Treatments;
 using Nocturne.API.Services.V4;
@@ -675,6 +676,9 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IDeviceEventRepository, DeviceEventRepository>();
         services.AddScoped<IBolusCalculationRepository, BolusCalculationRepository>();
         services.AddScoped<IDeviceRepository, DeviceRepository>();
+
+        // Manually-entered lab results (outside the V4 sync/dedup family)
+        services.AddScoped<ILabHbA1cResultRepository, LabHbA1cResultRepository>();
 
         // V4 Snapshot Repositories
         services.AddScoped<IApsSnapshotRepository, ApsSnapshotRepository>();
