@@ -31,9 +31,11 @@ public class LabHbA1cResultEntity : ITenantScoped, ISoftDeletable
     [MaxLength(500)]
     public string? Note { get; set; }
 
+    /// <summary>When this row was created.</summary>
     [Column("created_at")]
     public DateTime CreatedAt { get; set; }
 
+    /// <summary>When this row was soft-deleted, or null while it is live.</summary>
     [Column("deleted_at")]
     public DateTime? DeletedAt { get; set; }
 }

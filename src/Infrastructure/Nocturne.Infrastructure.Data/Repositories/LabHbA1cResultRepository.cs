@@ -15,6 +15,8 @@ public class LabHbA1cResultRepository : ILabHbA1cResultRepository
 {
     private readonly ITenantDbContextFactory _factory;
 
+    /// <summary>Initializes a new instance of <see cref="LabHbA1cResultRepository"/>.</summary>
+    /// <param name="factory">Tenant-scoped DbContext factory.</param>
     public LabHbA1cResultRepository(ITenantDbContextFactory factory)
     {
         _factory = factory;
