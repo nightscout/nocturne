@@ -414,6 +414,49 @@ public class EntriesController : BaseV3Controller<Entry>
     }
 
     /// <summary>
+    /// Partially update an entry via V3 API (JSON merge-patch).
+    /// </summary>
+    /// <remarks>
+    /// AAPS's NSClientV3 sends <c>PATCH</c> rather than <c>PUT</c> to update entries (e.g. marking
+    /// a value invalid); without this endpoint every such update returns 405.
+    /// </remarks>
+    /// <param name="id">Entry ID to patch</param>
+    /// <param name="patchData">JSON merge-patch data to apply to the existing entry</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>The patched entry</returns>
+    [HttpPatch("{id}")]
+    [Authorize]
+    [RequireScope(Scope.GlucoseReadWrite)]
+    [NightscoutEndpoint("/api/v3/entries/:id")]
+    [ProducesResponseType(typeof(Entry), 200)]
+    [ProducesResponseType(typeof(V3ErrorResponse), 404)]
+    [ProducesResponseType(500)]
+    [ErrorEnvelope]
+    public async Task<ActionResult> PatchEntry(
+        string id,
+        [FromBody] JsonElement patchData,
+        CancellationToken cancellationToken = default
+    )
+    {
+        _logger.LogDebug("V3 entry PATCH requested for {Id}", id);
+
+        var patchedEntry = await _entryService.PatchEntryAsync(id, patchData, cancellationToken);
+
+        if (patchedEntry == null)
+        {
+            return CreateV3ErrorResponse(
+                404,
+                "Entry not found",
+                $"No entry found with ID: {id}"
+            );
+        }
+
+        _logger.LogDebug("Successfully patched V3 entry {Id}", id);
+
+        return Ok(patchedEntry.ToV3Response());
+    }
+
+    /// <summary>
     /// Delete an entry via V3 API
     /// </summary>
     /// <param name="id">Entry ID</param>

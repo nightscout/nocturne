@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Events;
@@ -215,6 +216,62 @@ public class EntryService : IEntryService
         await _decomposer.DecomposeAsync(entry, WriteOrigin.Live, cancellationToken);
 
         return entry;
+    }
+
+    /// <inheritdoc />
+    /// <returns>The patched <see cref="Entry"/>, or <see langword="null"/> if no entry with the given <paramref name="id"/> exists.</returns>
+    /// <remarks>
+    /// JSON merge-patch: overlays <paramref name="patchData"/> onto the existing entry, then
+    /// upserts through <see cref="IEntryDecomposer.DecomposeAsync"/> (LegacyId match), same as
+    /// <see cref="UpdateEntryAsync"/>. AAPS's NSClientV3 PATCHes rather than PUTs entry updates.
+    /// </remarks>
+    public async Task<Entry?> PatchEntryAsync(
+        string id,
+        JsonElement patchData,
+        CancellationToken cancellationToken = default)
+    {
+        var existing = await _store.GetByIdAsync(id, cancellationToken);
+        if (existing is null) return null;
+
+        ApplyJsonPatch(existing, patchData);
+        existing.Id = id;
+
+        await _decomposer.DecomposeAsync(existing, WriteOrigin.Live, cancellationToken);
+
+        return existing;
+    }
+
+    private static void ApplyJsonPatch(Entry entry, JsonElement patchData)
+    {
+        // The identity used to upsert (LegacyId matching) must survive the round-trip; restore it
+        // after the merge unless the patch explicitly changes _id (mirrors TreatmentService).
+        var originalId = entry.Id;
+
+        var existingJson = JsonSerializer.Serialize(entry);
+        using var existingDoc = JsonDocument.Parse(existingJson);
+
+        var merged = new Dictionary<string, object?>();
+        foreach (var prop in existingDoc.RootElement.EnumerateObject())
+            merged[prop.Name] = prop.Value.Clone();
+        foreach (var prop in patchData.EnumerateObject())
+            merged[prop.Name] = prop.Value.Clone();
+
+        var mergedJson = JsonSerializer.Serialize(merged);
+        var patched = JsonSerializer.Deserialize<Entry>(mergedJson);
+        if (patched == null) return;
+
+        var props = typeof(Entry).GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+        foreach (var prop in props)
+        {
+            if (!prop.CanWrite) continue;
+            try
+            {
+                prop.SetValue(entry, prop.GetValue(patched));
+            }
+            catch { /* skip computed properties that throw on set */ }
+        }
+
+        entry.Id = originalId;
     }
 
     /// <inheritdoc />
