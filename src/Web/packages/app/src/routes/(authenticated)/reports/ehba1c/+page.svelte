@@ -3,6 +3,7 @@
   import { LineChart } from "layerchart";
   import { Loader2, Activity } from "lucide-svelte";
   import * as Card from "$lib/components/ui/card";
+  import { Button } from "$lib/components/ui/button";
   import {
     getAvailableYears,
     getEHbA1cTimeline,
@@ -18,9 +19,40 @@
     daysWithData: number;
   };
 
+  type A1cUnit = "percent" | "mmol";
+
+  /**
+   * Reference zones for the legend/bands, in DCCT/NGSP %. Bounds are the widely-cited ADA
+   * thresholds (normal < 5.7%, prediabetes 5.7–6.4%, diabetes ≥ 6.5%); "Doel Type 1 diabetes"
+   * uses the general ADA adult target of < 7.0%, and "Te hoog"/"Gevaarlijk hoog" split the
+   * range above that at 9.0%, where complication risk rises sharply.
+   */
+  const A1C_ZONES: { key: string; label: string; maxPercent: number; color: string }[] = [
+    { key: "healthy", label: "Gezond persoon range", maxPercent: 5.7, color: "var(--glucose-in-range)" },
+    { key: "target", label: "Doel Type 1 diabetes", maxPercent: 7.0, color: "var(--chart-2)" },
+    { key: "high", label: "Te hoog", maxPercent: 9.0, color: "var(--glucose-high)" },
+    { key: "veryHigh", label: "Gevaarlijk hoog", maxPercent: 14.0, color: "var(--glucose-very-high)" },
+  ];
+
   let loading = $state(true);
   let error = $state<unknown>(null);
   let pointsByYear = $state<Map<number, EHbA1cPoint[]>>(new Map());
+  let a1cUnit = $state<A1cUnit>("percent");
+
+  /** NGSP % to IFCC mmol/mol, the standard dual-reporting conversion for HbA1c. */
+  function toIfccMmolMol(percent: number): number {
+    return (percent - 2.15) * 10.929;
+  }
+
+  function toDisplayUnit(percent: number): number {
+    return a1cUnit === "percent" ? percent : toIfccMmolMol(percent);
+  }
+
+  function formatA1c(percent: number): string {
+    return a1cUnit === "percent"
+      ? `${percent.toFixed(1)}%`
+      : `${Math.round(toIfccMmolMol(percent))} mmol/mol`;
+  }
 
   function toChartPoints(pointsMap: Map<number, EHbA1cPoint[]>): ChartPoint[] {
     const all: ChartPoint[] = [];
@@ -42,7 +74,54 @@
 
   const chartData = $derived(toChartPoints(pointsByYear));
 
+  const displayChartData = $derived(
+    chartData.map((p) => ({ ...p, displayValue: toDisplayUnit(p.estimatedA1cPercent) }))
+  );
+
   const latest = $derived(chartData.length > 0 ? chartData[chartData.length - 1] : undefined);
+
+  const extremes = $derived.by(() => {
+    if (chartData.length === 0) return undefined;
+    let highest = chartData[0];
+    let lowest = chartData[0];
+    for (const p of chartData) {
+      if (p.estimatedA1cPercent > highest.estimatedA1cPercent) highest = p;
+      if (p.estimatedA1cPercent < lowest.estimatedA1cPercent) lowest = p;
+    }
+    return { highest, lowest };
+  });
+
+  const zoneBands = $derived(
+    A1C_ZONES.map((zone, i) => {
+      const minPercent = i === 0 ? 0 : A1C_ZONES[i - 1].maxPercent;
+      return {
+        ...zone,
+        minPercent,
+        isFirst: i === 0,
+        isLast: i === A1C_ZONES.length - 1,
+        yMin: toDisplayUnit(minPercent),
+        yMax: toDisplayUnit(zone.maxPercent),
+      };
+    })
+  );
+
+  function formatZoneRange(band: (typeof zoneBands)[number]): string {
+    const unit = a1cUnit === "percent" ? "%" : " mmol/mol";
+    const fmt = (p: number) => (a1cUnit === "percent" ? p.toFixed(1) : `${Math.round(toIfccMmolMol(p))}`);
+    if (band.isFirst) return `< ${fmt(band.maxPercent)}${unit}`;
+    if (band.isLast) return `> ${fmt(band.minPercent)}${unit}`;
+    return `${fmt(band.minPercent)}–${fmt(band.maxPercent)}${unit}`;
+  }
+
+  const annotations = $derived(
+    zoneBands.map((band) => ({
+      type: "range" as const,
+      layer: "below" as const,
+      y: [band.yMin, band.yMax] as [number, number],
+      fill: band.color,
+      class: "opacity-10",
+    }))
+  );
 
   async function loadAll() {
     loading = true;
@@ -71,17 +150,37 @@
 
 <div class="@container space-y-6 p-3 @md:p-6">
   <Card.Root>
-    <Card.Header>
-      <Card.Title class="flex items-center gap-2">
-        <Activity class="h-5 w-5 text-muted-foreground" />
-        Estimated HbA1c (eHbA1c)
-      </Card.Title>
-      <Card.Description>
-        A day-by-day estimate of what a lab HbA1c would read, based on a recency-weighted
-        average of your trailing 90-day glucose readings — the most recent 30 days count for
-        roughly half the estimate, tapering off smoothly for older days, the way glycated
-        hemoglobin actually reflects glucose exposure over time.
-      </Card.Description>
+    <Card.Header class="flex flex-row flex-wrap items-start justify-between gap-4">
+      <div>
+        <Card.Title class="flex items-center gap-2">
+          <Activity class="h-5 w-5 text-muted-foreground" />
+          Estimated HbA1c (eHbA1c)
+        </Card.Title>
+        <Card.Description>
+          A day-by-day estimate of what a lab HbA1c would read, based on a recency-weighted
+          average of your trailing 90-day glucose readings — the most recent 30 days count for
+          roughly half the estimate, tapering off smoothly for older days, the way glycated
+          hemoglobin actually reflects glucose exposure over time.
+        </Card.Description>
+      </div>
+      <div class="inline-flex shrink-0 rounded-md border">
+        <Button
+          size="sm"
+          variant={a1cUnit === "percent" ? "default" : "ghost"}
+          class="rounded-r-none"
+          onclick={() => (a1cUnit = "percent")}
+        >
+          %
+        </Button>
+        <Button
+          size="sm"
+          variant={a1cUnit === "mmol" ? "default" : "ghost"}
+          class="rounded-l-none"
+          onclick={() => (a1cUnit = "mmol")}
+        >
+          mmol/mol
+        </Button>
+      </div>
     </Card.Header>
     <Card.Content>
       {#if loading}
@@ -98,10 +197,10 @@
           the trailing 90 days.
         </div>
       {:else}
-        {#if latest}
+        {#if latest && extremes}
           <div class="mb-4 flex flex-wrap items-baseline gap-x-6 gap-y-1">
             <div>
-              <span class="text-3xl font-semibold">{latest.estimatedA1cPercent.toFixed(1)}%</span>
+              <span class="text-3xl font-semibold">{formatA1c(latest.estimatedA1cPercent)}</span>
               <span class="ml-2 text-sm text-muted-foreground">
                 latest estimate ({formatLongDate(latest.date)})
               </span>
@@ -109,22 +208,41 @@
             <div class="text-sm text-muted-foreground">
               Weighted mean glucose: {bg(latest.weightedAverageGlucoseMgdl)} {bgLabel()}
             </div>
+            <div class="text-sm text-muted-foreground">
+              Highest: <span class="font-medium text-foreground">{formatA1c(extremes.highest.estimatedA1cPercent)}</span>
+              ({formatLongDate(extremes.highest.date)})
+            </div>
+            <div class="text-sm text-muted-foreground">
+              Lowest: <span class="font-medium text-foreground">{formatA1c(extremes.lowest.estimatedA1cPercent)}</span>
+              ({formatLongDate(extremes.lowest.date)})
+            </div>
           </div>
         {/if}
 
         <div class="h-[320px] w-full @md:h-[400px]">
           <LineChart
-            data={chartData}
+            data={displayChartData}
             x="date"
-            y="estimatedA1cPercent"
+            y="displayValue"
             series={[
               {
-                key: "estimatedA1cPercent",
-                label: "eHbA1c %",
+                key: "displayValue",
+                label: a1cUnit === "percent" ? "eHbA1c %" : "eHbA1c mmol/mol",
                 color: "var(--chart-1)",
               },
             ]}
+            {annotations}
           />
+        </div>
+
+        <div class="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm">
+          {#each zoneBands as band (band.key)}
+            <div class="flex items-center gap-1.5">
+              <span class="h-2.5 w-2.5 rounded-full" style="background-color: {band.color}"></span>
+              <span>{band.label}</span>
+              <span class="text-muted-foreground">({formatZoneRange(band)})</span>
+            </div>
+          {/each}
         </div>
       {/if}
     </Card.Content>
