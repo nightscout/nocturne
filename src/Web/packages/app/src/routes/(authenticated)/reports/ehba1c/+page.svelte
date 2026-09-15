@@ -35,18 +35,18 @@
 
   /**
    * Reference zones for the legend/bands, in DCCT/NGSP %. Bounds are the widely-cited ADA
-   * thresholds (normal < 5.7%, prediabetes 5.7–6.4%, diabetes ≥ 6.5%); "Doel Type 1 diabetes"
-   * uses the general ADA adult target of < 7.0%, and "Te hoog"/"Gevaarlijk hoog" split the
+   * thresholds (normal < 5.7%, prediabetes 5.7–6.4%, diabetes ≥ 6.5%); "Type 1 diabetes
+   * target" uses the general ADA adult target of < 7.0%, and "Elevated"/"Very high" split the
    * range above that at 9.0%, where complication risk rises sharply. Swatches reuse the GRI
    * report's green/yellow-green/orange/red severity scale; band fills use dedicated,
    * dark-mode-tuned tokens (the swatch colors are too subtle at chart-fill opacity, and
    * --glucose-in-range/--chart-2 turned out to be the same color when tried here).
    */
   const A1C_ZONES: { key: string; label: string; maxPercent: number; swatch: string; fill: string }[] = [
-    { key: "healthy", label: "Gezond persoon range", maxPercent: 5.7, swatch: "var(--gri-zone-a)", fill: "var(--ehba1c-zone-healthy)" },
-    { key: "target", label: "Doel Type 1 diabetes", maxPercent: 7.0, swatch: "var(--gri-zone-b)", fill: "var(--ehba1c-zone-target)" },
-    { key: "high", label: "Te hoog", maxPercent: 9.0, swatch: "var(--gri-zone-d)", fill: "var(--ehba1c-zone-high)" },
-    { key: "veryHigh", label: "Gevaarlijk hoog", maxPercent: 14.0, swatch: "var(--gri-zone-e)", fill: "var(--ehba1c-zone-very-high)" },
+    { key: "healthy", label: "Non-diabetic range", maxPercent: 5.7, swatch: "var(--gri-zone-a)", fill: "var(--ehba1c-zone-healthy)" },
+    { key: "target", label: "Type 1 diabetes target", maxPercent: 7.0, swatch: "var(--gri-zone-b)", fill: "var(--ehba1c-zone-target)" },
+    { key: "high", label: "Elevated", maxPercent: 9.0, swatch: "var(--gri-zone-d)", fill: "var(--ehba1c-zone-high)" },
+    { key: "veryHigh", label: "Very high", maxPercent: 14.0, swatch: "var(--gri-zone-e)", fill: "var(--ehba1c-zone-very-high)" },
   ];
 
   let loading = $state(true);
@@ -155,7 +155,7 @@
   });
 
   // Clamped to yDomain so a band never computes to a pixel position outside the plot area —
-  // an unclamped "gevaarlijk hoog" band (up to 14%) otherwise rendered above the chart's actual
+  // an unclamped "very high" band (up to 14%) otherwise rendered above the chart's actual
   // top edge and, since the chart container doesn't clip by default, bled out over the toggle.
   const annotations = $derived(
     zoneBands
@@ -257,10 +257,13 @@
           Estimated HbA1c (eHbA1c)
         </Card.Title>
         <Card.Description>
-          A day-by-day estimate of what a lab HbA1c would read, based on a recency-weighted
-          average of your trailing 90-day glucose readings — the most recent 30 days count for
-          roughly half the estimate, tapering off smoothly for older days, the way glycated
-          hemoglobin actually reflects glucose exposure over time.
+          eHbA1c estimates what a lab HbA1c test would read on a given day. For each day, it
+          takes the average glucose from every reading in the trailing 90 days and weights each
+          day's contribution by recency — the most recent ~30 days count for roughly half the
+          estimate, tapering off exponentially for older days, similar to how glycated hemoglobin
+          reflects glucose exposure over a red blood cell's ~90–120 day lifespan. That weighted
+          average glucose is then converted to %HbA1c with the ADAG formula: HbA1c (%) = (average
+          glucose in mg/dL + 46.7) / 28.7.
         </Card.Description>
       </div>
       <ToggleGroup.Root
@@ -271,10 +274,10 @@
         }}
         class="shrink-0 rounded-md border bg-background p-0.5"
       >
-        <ToggleGroup.Item value="percent" class="h-8 px-3 text-xs" aria-label="Toon in procent">
+        <ToggleGroup.Item value="percent" class="h-8 px-3 text-xs" aria-label="Show as percent">
           %
         </ToggleGroup.Item>
-        <ToggleGroup.Item value="mmol" class="h-8 px-3 text-xs" aria-label="Toon in mmol/mol">
+        <ToggleGroup.Item value="mmol" class="h-8 px-3 text-xs" aria-label="Show as mmol/mol">
           mmol/mol
         </ToggleGroup.Item>
       </ToggleGroup.Root>
@@ -348,7 +351,7 @@
             <div class="flex items-center gap-1.5">
               <span class="inline-block h-0 w-0 border-x-4 border-b-[7px] border-x-transparent border-b-foreground"
               ></span>
-              <span>Labwaarde (niet meegenomen in de berekening)</span>
+              <span>Lab result (not included in the calculation)</span>
             </div>
           {/if}
         </div>
@@ -358,16 +361,17 @@
 
   <Card.Root>
     <Card.Header>
-      <Card.Title>Labwaarden</Card.Title>
+      <Card.Title>Lab results</Card.Title>
       <Card.Description>
-        Vul hier de HbA1c-uitslag van een bloedprikker in — zichtbaar als driehoekje op de
-        grafiek, zodat je kunt zien hoeveel de eHbA1c-schatting normaal afwijkt van de
-        laboratoriumwaarde. Deze waarden tellen niet mee in de berekening zelf.
+        Enter a lab HbA1c result here — shown as a triangle marker on the chart above, so you
+        can see how closely the eHbA1c estimate tracks an actual lab draw. Lab results are not
+        included in the eHbA1c calculation itself. The date below is the date the blood was
+        drawn, not the date you enter it here.
       </Card.Description>
     </Card.Header>
     <Card.Content class="space-y-4">
       {#if labResults.length === 0}
-        <p class="text-sm text-muted-foreground">Nog geen labwaarden toegevoegd.</p>
+        <p class="text-sm text-muted-foreground">No lab results added yet.</p>
       {:else}
         <ul class="divide-border divide-y">
           {#each [...labResults].sort((a, b) => toDate(b.measuredAt).getTime() - toDate(a.measuredAt).getTime()) as result (result.id)}
@@ -384,7 +388,7 @@
               <Button
                 variant="ghost"
                 size="icon"
-                aria-label="Labwaarde verwijderen"
+                aria-label="Delete lab result"
                 onclick={() => (pendingDeleteLabResult = result)}
               >
                 <Trash2 class="size-4" />
@@ -396,16 +400,16 @@
 
       <div class="grid gap-3 sm:grid-cols-3">
         <div class="space-y-1.5">
-          <Label for="lab-date">Datum</Label>
+          <Label for="lab-date">Date of blood draw</Label>
           <Input id="lab-date" type="date" bind:value={newLabDate} />
         </div>
         <div class="space-y-1.5">
-          <Label for="lab-value">Uitslag ({a1cUnit === "percent" ? "%" : "mmol/mol"})</Label>
-          <Input id="lab-value" type="number" step="0.1" bind:value={newLabValue} placeholder={a1cUnit === "percent" ? "bv. 7.0" : "bv. 53"} />
+          <Label for="lab-value">Result ({a1cUnit === "percent" ? "%" : "mmol/mol"})</Label>
+          <Input id="lab-value" type="number" step="0.1" bind:value={newLabValue} placeholder={a1cUnit === "percent" ? "e.g. 7.0" : "e.g. 53"} />
         </div>
         <div class="space-y-1.5">
-          <Label for="lab-note">Notitie (optioneel)</Label>
-          <Input id="lab-note" type="text" bind:value={newLabNote} placeholder="bv. huisartsenlab" />
+          <Label for="lab-note">Note (optional)</Label>
+          <Input id="lab-note" type="text" bind:value={newLabNote} placeholder="e.g. GP lab" />
         </div>
       </div>
 
@@ -419,7 +423,7 @@
         {:else}
           <Plus class="size-4" />
         {/if}
-        Labwaarde toevoegen
+        Add lab result
       </Button>
     </Card.Content>
   </Card.Root>
@@ -432,7 +436,7 @@
       class="fill-foreground stroke-background"
       stroke-width="1"
     >
-      <title>Labwaarde: {formatA1c(point.data.valuePercent)} ({formatLongDate(point.data.date)}){point.data.note ? ` — ${point.data.note}` : ""}</title>
+      <title>Lab result: {formatA1c(point.data.valuePercent)} ({formatLongDate(point.data.date)}){point.data.note ? ` — ${point.data.note}` : ""}</title>
     </polygon>
   {/each}
 {/snippet}
@@ -440,13 +444,13 @@
 <ConfirmDialog
   open={pendingDeleteLabResult !== null}
   onOpenChange={(o) => { if (!o) pendingDeleteLabResult = null; }}
-  title="Labwaarde verwijderen?"
-  confirmLabel="Verwijderen"
+  title="Delete this lab result?"
+  confirmLabel="Delete"
   onConfirm={confirmDeleteLabResult}
 >
   {#snippet description()}
     {#if pendingDeleteLabResult}
-      Verwijder de labwaarde {formatA1c(pendingDeleteLabResult.valuePercent ?? 0)} van
+      Delete the {formatA1c(pendingDeleteLabResult.valuePercent ?? 0)} lab result from
       {formatLongDate(toDate(pendingDeleteLabResult.measuredAt))}.
     {/if}
   {/snippet}
