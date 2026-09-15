@@ -25,6 +25,7 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 /// <seealso cref="DataOverviewYearsResponse"/>
 /// <seealso cref="DailySummaryResponse"/>
 /// <seealso cref="GriTimelineResponse"/>
+/// <seealso cref="EHbA1cTimelineResponse"/>
 [ApiController]
 [Tags("Analytics")]
 [Route("api/v4/year-overview")]
@@ -127,6 +128,42 @@ public class DataOverviewController : ControllerBase
             cleanSources = null;
 
         var result = await _dataOverviewService.GetGriTimelineAsync(
+            year,
+            cleanSources,
+            cancellationToken
+        );
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Get the estimated-HbA1c timeline for a given year: one point per day whose trailing 90-day
+    /// glucose window has enough readings, weighted by recency.
+    /// </summary>
+    /// <param name="year">The year to compute the eHbA1c timeline for</param>
+    /// <param name="dataSources">Optional data source filters (multiple allowed)</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    [HttpGet("ehba1c-timeline")]
+    [RemoteQuery]
+    [ResponseCache(Duration = 300, VaryByQueryKeys = new[] { "*" })]
+    [ProducesResponseType(typeof(EHbA1cTimelineResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [ErrorEnvelope]
+    public async Task<ActionResult<EHbA1cTimelineResponse>> GetEHbA1cTimeline(
+        [FromQuery] int year,
+        [FromQuery] string[]? dataSources = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (year < 1970 || year > 2100)
+            return Problem(detail: "Year must be between 1970 and 2100", statusCode: 400, title: "Bad Request");
+
+        // Filter out empty strings
+        var cleanSources = dataSources?.Where(s => !string.IsNullOrWhiteSpace(s)).ToArray();
+        if (cleanSources is { Length: 0 })
+            cleanSources = null;
+
+        var result = await _dataOverviewService.GetEHbA1cTimelineAsync(
             year,
             cleanSources,
             cancellationToken
