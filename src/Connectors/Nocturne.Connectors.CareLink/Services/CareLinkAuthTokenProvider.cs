@@ -24,8 +24,6 @@ public class CareLinkAuthTokenProvider(
     private readonly IRetryDelayStrategy _retryDelayStrategy =
         retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
 
-    protected override string ConnectorName => "CareLink";
-
     /// <summary>
     ///     Per-tenant state seeded by <see cref="InitializeFromSecrets"/>.
     ///     Only used as a fallback when the token cache has no prior session for this tenant.

@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Nocturne.Core.Contracts.Connectors;
 
 namespace Nocturne.Infrastructure.Data.Entities;
 
@@ -27,12 +28,23 @@ public class ConnectorConfigurationEntity : ITenantScoped, ISystemTimestamped
     public Guid Id { get; set; }
 
     /// <summary>
-    /// The connector name (e.g., "Dexcom", "Glooko", "LibreLinkUp")
+    /// The connector name (e.g., "dexcom", "glooko", "librelinkup").
     /// </summary>
+    /// <remarks>
+    /// Stored canonical whatever spelling the writer had, because the unique index over
+    /// (connector_name, tenant_id) is case-sensitive: two spellings of one connector are two rows
+    /// for the same tenant, and every later read picks one of them arbitrarily.
+    /// </remarks>
     [Column("connector_name")]
     [Required]
     [MaxLength(100)]
-    public string ConnectorName { get; set; } = string.Empty;
+    public string ConnectorName
+    {
+        get => _connectorName;
+        set => _connectorName = ConnectorNames.Canonical(value);
+    }
+
+    private string _connectorName = string.Empty;
 
     /// <summary>
     /// Runtime configuration as JSON (non-secret properties marked with [RuntimeConfigurable])

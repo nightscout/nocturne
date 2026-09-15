@@ -31,8 +31,6 @@ public class DexcomAuthTokenProvider(
     /// </summary>
     protected override int TokenLifetimeBufferMinutes => 60;
 
-    protected override string ConnectorName => "Dexcom";
-
     protected override async Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
         DexcomConnectorConfiguration config, CancellationToken cancellationToken)
     {

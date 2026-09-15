@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Infrastructure.Data;
 
 namespace Nocturne.API.Services.Connectors;
@@ -26,9 +27,9 @@ public class ConnectorSyncCursorStore : IConnectorSyncCursorStore
     public async Task<ConnectorSyncCursor?> GetAsync(
         string connectorName, string resource, CancellationToken cancellationToken = default)
     {
-        var connectorNameLower = connectorName.ToLowerInvariant();
+        var canonicalName = ConnectorNames.Canonical(connectorName);
         var json = await _context.ConnectorConfigurations
-            .Where(c => c.ConnectorName.ToLower() == connectorNameLower)
+            .Where(c => c.ConnectorName == canonicalName)
             .Select(c => c.SyncCursorsJson)
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -40,9 +41,9 @@ public class ConnectorSyncCursorStore : IConnectorSyncCursorStore
     public async Task SetAsync(
         string connectorName, string resource, ConnectorSyncCursor cursor, CancellationToken cancellationToken = default)
     {
-        var connectorNameLower = connectorName.ToLowerInvariant();
+        var canonicalName = ConnectorNames.Canonical(connectorName);
         var config = await _context.ConnectorConfigurations
-            .FirstOrDefaultAsync(c => c.ConnectorName.ToLower() == connectorNameLower, cancellationToken);
+            .FirstOrDefaultAsync(c => c.ConnectorName == canonicalName, cancellationToken);
 
         if (config == null)
         {

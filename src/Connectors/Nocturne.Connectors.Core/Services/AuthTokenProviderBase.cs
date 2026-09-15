@@ -35,10 +35,10 @@ public abstract class AuthTokenProviderBase<TConfig>(
     protected virtual int TokenLifetimeBufferMinutes => 5;
 
     /// <summary>
-    ///     The connector name used as the cache key prefix.
-    ///     Concrete providers must supply this.
+    ///     The connector name used as the cache key prefix, taken from the configuration type's own
+    ///     registration so a provider cannot key its tokens under a name no other component knows.
     /// </summary>
-    protected abstract string ConnectorName { get; }
+    protected virtual string ConnectorName => ConnectorRegistrationAttribute.NameFor(typeof(TConfig));
 
     /// <inheritdoc />
     public bool IsTokenExpired

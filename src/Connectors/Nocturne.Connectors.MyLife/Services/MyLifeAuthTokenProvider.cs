@@ -27,8 +27,6 @@ public class MyLifeAuthTokenProvider(
 
     protected override int TokenLifetimeBufferMinutes => 60;
 
-    protected override string ConnectorName => "MyLife";
-
     protected override async Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
         MyLifeConnectorConfiguration config, CancellationToken cancellationToken)
     {

@@ -490,9 +490,10 @@ internal sealed class MetadataPublisher : IMetadataPublisher
         CancellationToken cancellationToken)
     {
         const string suffix = "-connector";
-        var name = source.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)
-            ? source[..^suffix.Length]
-            : source;
+        var canonicalSource = ConnectorNames.Canonical(source);
+        var canonicalName = canonicalSource.EndsWith(suffix, StringComparison.Ordinal)
+            ? canonicalSource[..^suffix.Length]
+            : canonicalSource;
 
         var query = _db.Database.IsNpgsql()
             ? _db.ConnectorConfigurations.AsNoTracking()
@@ -500,8 +501,7 @@ internal sealed class MetadataPublisher : IMetadataPublisher
 
         return await query
             .FirstOrDefaultAsync(
-                c => c.ConnectorName.ToLower() == name.ToLower()
-                    || c.ConnectorName.ToLower() == source.ToLower(),
+                c => c.ConnectorName == canonicalName || c.ConnectorName == canonicalSource,
                 cancellationToken);
     }
 }

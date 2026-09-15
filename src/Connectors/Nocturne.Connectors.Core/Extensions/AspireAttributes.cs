@@ -1,5 +1,6 @@
 using System.Reflection;
 using Nocturne.Connectors.Core.Models;
+using Nocturne.Core.Contracts.Connectors;
 
 namespace Nocturne.Connectors.Core.Extensions;
 
@@ -70,7 +71,7 @@ public class ConnectorRegistrationAttribute(
     ///     <c>ConnectorConfiguration.ConnectorName</c> lowered, and the id the tenant UI sends back
     ///     (e.g. "librelinkup"). Derived so the name and the key cannot drift apart.
     /// </summary>
-    public string ConnectorId { get; } = connectorName.ToLowerInvariant();
+    public string ConnectorId { get; } = ConnectorNames.Canonical(connectorName);
 
     /// <summary>
     ///     Service name constant (e.g., "ServiceNames.LibreConnector")

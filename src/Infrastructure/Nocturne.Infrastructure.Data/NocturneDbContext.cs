@@ -1397,6 +1397,17 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasDatabaseName("ix_connector_configurations_connector_name_tenant")
             .IsUnique();
 
+        // The index above is case-sensitive, so it only means "one row per connector per tenant"
+        // while the column holds one spelling of each name. Enforced here rather than trusted to
+        // the writers: a writer that predates the rule — an instance still serving during a rolling
+        // deploy, or an operator's own SQL — would otherwise insert a row that satisfies the index
+        // and that no lookup can ever find again.
+        modelBuilder
+            .Entity<ConnectorConfigurationEntity>()
+            .ToTable(t => t.HasCheckConstraint(
+                "ck_connector_configurations_connector_name_lower",
+                "connector_name = lower(connector_name)"));
+
         modelBuilder.Entity<PlatformSettingsEntity>()
             .HasIndex(ps => ps.Category)
             .HasDatabaseName("ix_platform_settings_category")

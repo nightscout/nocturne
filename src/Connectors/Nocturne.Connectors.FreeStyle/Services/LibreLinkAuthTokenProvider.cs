@@ -35,8 +35,6 @@ public class LibreLinkAuthTokenProvider(
     /// </summary>
     protected override int TokenLifetimeBufferMinutes => 60;
 
-    protected override string ConnectorName => "FreeStyle";
-
     protected override async Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
         LibreLinkUpConnectorConfiguration config, CancellationToken cancellationToken)
     {

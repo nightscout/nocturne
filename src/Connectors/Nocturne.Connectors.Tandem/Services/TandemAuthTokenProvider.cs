@@ -37,8 +37,6 @@ public class TandemAuthTokenProvider(
     /// <summary>Access tokens are short-lived; refresh a few minutes early.</summary>
     protected override int TokenLifetimeBufferMinutes => 5;
 
-    protected override string ConnectorName => "Tandem";
-
     protected override async Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)>
         AcquireTokenAsync(TandemConnectorConfiguration config, CancellationToken cancellationToken)
     {
