@@ -24,7 +24,7 @@
     halfLife30DayPercent: number | null;
     unweighted90DayPercent: number | null;
     weighted120DayPercent: number | null;
-    gmi14DayPercent: number | null;
+    unweighted14DayPercent: number | null;
     weightedAverageGlucoseMgdl: number;
     readingCount: number;
     daysWithData: number;
@@ -60,7 +60,7 @@
     { key: "halfLife", label: "30-day half-life", color: "var(--ehba1c-half-life)" },
     { key: "unweighted", label: "Unweighted 90-day", color: "var(--ehba1c-unweighted)" },
     { key: "weighted120", label: "120-day 50/25/25", color: "var(--ehba1c-weighted-120)" },
-    { key: "gmi", label: "GMI 14-day", color: "var(--ehba1c-gmi)" },
+    { key: "short14", label: "Unweighted 14-day", color: "var(--ehba1c-short-14)" },
   ] as const;
 
   let loading = $state(true);
@@ -114,7 +114,7 @@
           halfLife30DayPercent: point.halfLife30DayPercent ?? null,
           unweighted90DayPercent: point.unweighted90DayPercent ?? null,
           weighted120DayPercent: point.weighted120DayPercent ?? null,
-          gmi14DayPercent: point.gmi14DayPercent ?? null,
+          unweighted14DayPercent: point.unweighted14DayPercent ?? null,
           weightedAverageGlucoseMgdl: point.weightedAverageGlucoseMgdl ?? 0,
           readingCount: point.readingCount ?? 0,
           daysWithData: point.daysWithData ?? 0,
@@ -134,7 +134,7 @@
       halfLife: p.halfLife30DayPercent == null ? null : toDisplayUnit(p.halfLife30DayPercent),
       unweighted: p.unweighted90DayPercent == null ? null : toDisplayUnit(p.unweighted90DayPercent),
       weighted120: p.weighted120DayPercent == null ? null : toDisplayUnit(p.weighted120DayPercent),
-      gmi: p.gmi14DayPercent == null ? null : toDisplayUnit(p.gmi14DayPercent),
+      short14: p.unweighted14DayPercent == null ? null : toDisplayUnit(p.unweighted14DayPercent),
     }))
   );
 
@@ -179,7 +179,7 @@
       p.halfLife30DayPercent,
       p.unweighted90DayPercent,
       p.weighted120DayPercent,
-      p.gmi14DayPercent,
+      p.unweighted14DayPercent,
     ]).filter((value): value is number => value != null);
     const dataMaxPercent = estimates.length > 0
       ? Math.max(...estimates)
@@ -374,7 +374,7 @@
           <p><strong class="text-foreground">30-day half-life:</strong> exponential decay; a reading's weight halves every 30 days.</p>
           <p><strong class="text-foreground">Unweighted 90-day:</strong> every reading in the trailing 90 days contributes equally; converted with ADAG.</p>
           <p><strong class="text-foreground">120-day 50/25/25:</strong> a common clinical approximation: 50% emphasis on days 0–29, 25% on days 30–59, and 25% on days 60–119; converted with ADAG.</p>
-          <p><strong class="text-foreground">GMI 14-day:</strong> the existing Bergenstal GMI formula applied to the trailing 14-day mean glucose.</p>
+          <p><strong class="text-foreground">Unweighted 14-day:</strong> the same ADAG conversion as the 90-day line, but over only 14 days. It should cross the 90-day line after a trend reversal and converge during a stable period.</p>
         </div>
 
         <div class="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm">

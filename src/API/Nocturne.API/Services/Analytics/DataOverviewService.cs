@@ -366,13 +366,15 @@ public class DataOverviewService : IDataOverviewService
 
     private const int EHbA1cMaximumWindowDays = 120;
 
-    private const int GmiWindowDays = 14;
+    private const int ShortComparisonWindowDays = 14;
 
     /// <summary>
     /// Minimum raw (unweighted) reading count across the trailing window before a day's estimate is
     /// trusted enough to emit — otherwise a handful of finger-sticks could swing the estimate wildly.
     /// </summary>
     private const int EHbA1cMinimumReadings = 30;
+
+    private const int EHbA1cMinimumDaysWithData = 30;
 
     /// <summary>
     /// Per-day decay ratio for the recency weighting: the largest <c>r &lt; 1</c> such that the most
@@ -402,7 +404,7 @@ public class DataOverviewService : IDataOverviewService
         var sourceKey = dataSources is { Length: > 0 }
             ? string.Join(",", dataSources.OrderBy(s => s, StringComparer.OrdinalIgnoreCase))
             : "all";
-        var cacheKey = $"ehba1c:v2:{TenantCacheId}:{year}:{sourceKey}";
+        var cacheKey = $"ehba1c:v4:{TenantCacheId}:{year}:{sourceKey}";
 
         // Computed once per tenant/year/source combination and reused until it expires below —
         // only a cache miss (new day, first view, or expiry) triggers recomputation.
@@ -574,12 +576,20 @@ public class DataOverviewService : IDataOverviewService
                 continue;
 
             var daysWithData = prefixDaysWithData[i + 1] - prefixDaysWithData[windowStart];
+            if (daysWithData < EHbA1cMinimumDaysWithData)
+                continue;
+
             var weightedMeanMgdl = weightedSum[i] / weightedCount[i];
             var linearMean = linearSum[i] / linearCount[i];
             var halfLifeMean = halfLifeSum[i] / halfLifeCount[i];
             var unweightedMean = RangeMean(prefixGlucoseSum, prefixCount, i - windowDays + 1, i);
             var weighted120Mean = WeightedBlockMean(prefixGlucoseSum, prefixCount, i);
-            var gmi14Mean = RangeMean(prefixGlucoseSum, prefixCount, i - GmiWindowDays + 1, i);
+            var unweighted14Mean = RangeMean(
+                prefixGlucoseSum,
+                prefixCount,
+                i - ShortComparisonWindowDays + 1,
+                i
+            );
 
             points.Add(
                 new EHbA1cPoint
@@ -594,8 +604,8 @@ public class DataOverviewService : IDataOverviewService
                     Weighted120DayPercent = weighted120Mean.HasValue
                         ? Math.Round(GlucoseStatistics.EstimatedA1C(weighted120Mean.Value), 2)
                         : null,
-                    Gmi14DayPercent = gmi14Mean.HasValue
-                        ? Math.Round(GlucoseStatistics.Gmi(gmi14Mean.Value), 2)
+                    Unweighted14DayPercent = unweighted14Mean.HasValue
+                        ? Math.Round(ToAdagPercent(unweighted14Mean.Value), 2)
                         : null,
                     WeightedAverageGlucoseMgdl = Math.Round(weightedMeanMgdl, 1),
                     ReadingCount = rawCount,

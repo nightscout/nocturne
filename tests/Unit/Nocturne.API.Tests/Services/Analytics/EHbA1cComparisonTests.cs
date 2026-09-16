@@ -23,7 +23,7 @@ public class EHbA1cComparisonTests
         point.HalfLife30DayPercent.Should().Be(8.6);
         point.Unweighted90DayPercent.Should().Be(8.6);
         point.Weighted120DayPercent.Should().Be(8.6);
-        point.Gmi14DayPercent.Should().Be(8.09);
+        point.Unweighted14DayPercent.Should().Be(8.6);
     }
 
     [Fact]
@@ -43,14 +43,74 @@ public class EHbA1cComparisonTests
         var halfLifeMean = WeightedMean(sums, end, 90, age => Math.Pow(halfLifeDecay, age));
         var unweightedMean = WeightedMean(sums, end, 90, _ => 1);
         var weighted120Mean = WeightedMean(sums, end, 120, age => age < 30 ? 4 : age < 60 ? 2 : 1);
-        var gmiMean = WeightedMean(sums, end, 14, _ => 1);
+        var unweighted14Mean = WeightedMean(sums, end, 14, _ => 1);
 
         point.EstimatedA1cPercent.Should().Be(Adag(currentMean));
         point.Linear90DayPercent.Should().Be(Adag(linearMean));
         point.HalfLife30DayPercent.Should().Be(Adag(halfLifeMean));
         point.Unweighted90DayPercent.Should().Be(Adag(unweightedMean));
         point.Weighted120DayPercent.Should().Be(Adag(weighted120Mean));
-        point.Gmi14DayPercent.Should().Be(Math.Round(3.31 + 0.02392 * gmiMean, 2));
+        point.Unweighted14DayPercent.Should().Be(Adag(unweighted14Mean));
+    }
+
+    [Fact]
+    public void ShortWindow_CrossesLongWindowAfterTrendReversal()
+    {
+        var rising = Enumerable.Repeat(100.0, 107)
+            .Concat(Enumerable.Repeat(250.0, 14))
+            .ToArray();
+        var falling = Enumerable.Repeat(250.0, 107)
+            .Concat(Enumerable.Repeat(100.0, 14))
+            .ToArray();
+        var counts = Enumerable.Repeat(1, 121).ToArray();
+
+        var risingPoint = DataOverviewService.BuildEHbA1cPoints(
+            rising, counts, RangeStart, 90, 2024, PointDate).Single();
+        var fallingPoint = DataOverviewService.BuildEHbA1cPoints(
+            falling, counts, RangeStart, 90, 2024, PointDate).Single();
+
+        risingPoint.Unweighted14DayPercent.Should().NotBeNull();
+        risingPoint.Unweighted90DayPercent.Should().NotBeNull();
+        fallingPoint.Unweighted14DayPercent.Should().NotBeNull();
+        fallingPoint.Unweighted90DayPercent.Should().NotBeNull();
+        risingPoint.Unweighted14DayPercent!.Value.Should()
+            .BeGreaterThan(risingPoint.Unweighted90DayPercent!.Value);
+        fallingPoint.Unweighted14DayPercent!.Value.Should()
+            .BeLessThan(fallingPoint.Unweighted90DayPercent!.Value);
+    }
+
+    [Fact]
+    public void SparseRecentData_DoesNotEmitAnEstimate()
+    {
+        var sums = new double[121];
+        var counts = new int[121];
+        for (var i = 92; i < sums.Length; i++)
+        {
+            sums[i] = 250;
+            counts[i] = 1;
+        }
+
+        var points = DataOverviewService.BuildEHbA1cPoints(
+            sums, counts, RangeStart, 90, 2024, PointDate);
+
+        points.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ThirtyDaysWithData_EmitsAnEstimate()
+    {
+        var sums = new double[121];
+        var counts = new int[121];
+        for (var i = 91; i < sums.Length; i++)
+        {
+            sums[i] = 250;
+            counts[i] = 1;
+        }
+
+        var points = DataOverviewService.BuildEHbA1cPoints(
+            sums, counts, RangeStart, 90, 2024, PointDate);
+
+        points.Should().ContainSingle();
     }
 
     private static double WeightedMean(

@@ -125,7 +125,7 @@
   --ehba1c-half-life: oklch(0.62 0.2 340);
   --ehba1c-unweighted: oklch(0.62 0.15 155);
   --ehba1c-weighted-120: oklch(0.65 0.18 70);
-  --ehba1c-gmi: oklch(0.58 0.2 25);
+  --ehba1c-short-14: oklch(0.58 0.2 25);
 }
 
 .dark {
@@ -157,7 +157,7 @@
   --ehba1c-half-life: oklch(0.78 0.18 340);
   --ehba1c-unweighted: oklch(0.8 0.15 155);
   --ehba1c-weighted-120: oklch(0.82 0.17 80);
-  --ehba1c-gmi: oklch(0.75 0.2 30);
+  --ehba1c-short-14: oklch(0.75 0.2 30);
 }
 
 /* Tailwind theme integration */
