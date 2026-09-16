@@ -76,6 +76,8 @@ public class UISettingsService : IUISettingsService
                     as UserAlarmConfiguration
                 ?? settings.Notifications.AlarmConfiguration;
 
+            settings.Features.Widgets = WidgetCatalog.MainSectionsOf(settings.Features.Widgets);
+
             return settings;
         }
         catch (Exception ex)

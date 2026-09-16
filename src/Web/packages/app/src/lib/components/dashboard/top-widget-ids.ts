@@ -28,9 +28,12 @@ export function isTopWidgetId(id: string): id is TopWidgetId {
   return TOP_WIDGET_ID_SET.has(id);
 }
 
-/** What the picker falls back to offering when the catalogue cannot be fetched. */
-export const LOADABLE_TOP_WIDGETS: TopWidgetId[] = [...TOP_WIDGET_IDS];
-
+/**
+ * The top grid a user who has never picked one gets. The backend catalogue
+ * deliberately carries no default for a top widget: only this build knows which
+ * of them it can render, and the selection is a per-user preference rather than
+ * tenant settings.
+ */
 export const DEFAULT_TOP_WIDGETS: TopWidgetId[] = [
   WidgetId.BgDelta,
   WidgetId.TirChart,

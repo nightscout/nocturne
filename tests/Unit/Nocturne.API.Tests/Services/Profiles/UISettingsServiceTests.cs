@@ -25,6 +25,8 @@ public class UISettingsServiceTests
     private const string NotificationsKey = "ui:settings:notifications";
     private const string AlarmsKey = "ui:settings:notifications:alarms";
     private const string ServicesKey = "ui:settings:services";
+    private const string FeaturesKey = "ui:settings:features";
+    private const string DevicesKey = "ui:settings:devices";
 
     private static readonly Guid TenantId = Guid.Parse("33333333-3333-3333-3333-333333333333");
 
@@ -427,6 +429,62 @@ public class UISettingsServiceTests
             .Where(r => r.Value!.Contains("retired-connector", StringComparison.Ordinal))
             .Should()
             .BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetSettingsAsync_dropsTheTopGridRowsAnEarlierVersionStored()
+    {
+        var context = NewContext();
+        Seed(
+            context,
+            FeaturesKey,
+            new FeatureSettings
+            {
+                Widgets =
+                [
+                    new()
+                    {
+                        Id = WidgetId.BgDelta,
+                        Enabled = true,
+                        Placement = WidgetPlacement.Top,
+                    },
+                    new()
+                    {
+                        Id = WidgetId.Statistics,
+                        Enabled = false,
+                        Placement = WidgetPlacement.Main,
+                    },
+                ],
+            }
+        );
+        await context.SaveChangesAsync();
+
+        var stored = await NewService(context).GetSettingsAsync();
+
+        stored
+            .Features.Widgets.Should()
+            .ContainSingle()
+            .Which.Should()
+            .BeEquivalentTo(new { Id = WidgetId.Statistics, Enabled = false });
+    }
+
+    /// <summary>
+    /// A features row whose widget list is an explicit JSON null binds over the property
+    /// initialiser, so the narrowing on read has to survive it: the aggregate is assembled in one
+    /// try block, and anything thrown there costs the caller every section, not just this one.
+    /// </summary>
+    [Fact]
+    public async Task GetSettingsAsync_readsAFeaturesRowWithNoWidgetListAtAll()
+    {
+        var context = NewContext();
+        Seed(context, FeaturesKey, new { widgets = (object?)null });
+        Seed(context, DevicesKey, new DeviceSettings { AutoConnect = false });
+        await context.SaveChangesAsync();
+
+        var stored = await NewService(context).GetSettingsAsync();
+
+        stored.Features.Widgets.Should().BeEmpty();
+        stored.Devices.AutoConnect.Should().BeFalse();
     }
 
     [Fact]

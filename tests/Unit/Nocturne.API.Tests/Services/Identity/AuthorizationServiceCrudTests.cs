@@ -346,6 +346,29 @@ public class AuthorizationServiceCrudTests : IDisposable
 
     [Fact]
     [Trait("Category", "Unit")]
+    public async Task UpdateSubjectAsync_ReadingBackAFullAccessGrant_DoesNotFreezeItsScopes()
+    {
+        var grant = await SeedGrantAsync("Boss", [Scope.FullAccess]);
+
+        _mockRoleService.Setup(r => r.GetAllRolesAsync()).ReturnsAsync([]);
+
+        // A client that reads a subject and writes it straight back changes nothing it meant to
+        // change.
+        var read = await _authorizationService.GetSubjectByIdAsync(grant.Id.ToString());
+
+        await _authorizationService.UpdateSubjectAsync(new LegacySubject
+        {
+            Id = grant.Id.ToString(),
+            Name = read!.Name,
+            Roles = read.Roles,
+        });
+
+        var reloaded = await _dbContext.OAuthGrants.SingleAsync(g => g.Id == grant.Id);
+        reloaded.Scopes.Should().Equal(Scope.FullAccess);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
     public async Task UpdateSubjectAsync_WithoutRoles_LeavesTheGrantsAuthorityAlone()
     {
         var grant = await SeedGrantAsync("Pump uploader", [Scope.GlucoseRead]);

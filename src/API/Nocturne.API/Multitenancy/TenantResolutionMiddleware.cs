@@ -290,7 +290,7 @@ public class TenantResolutionMiddleware
         // multiple tenants exist, so multi-tenant apex behavior is unchanged.
         if (slug == null && path.Equals("/api/v4/status", StringComparison.OrdinalIgnoreCase))
         {
-            var soleStatusTenant = await GetSoleTenantAsync(context.RequestServices);
+            var soleStatusTenant = (await GetApexTenantsAsync(context.RequestServices)).SoleTenant;
             if (soleStatusTenant != null)
             {
                 tenantAccessor.SetTenant(soleStatusTenant);
@@ -314,11 +314,11 @@ public class TenantResolutionMiddleware
         // If exactly one tenant exists, auto-resolve to it (single-tenant mode).
         if (slug == null)
         {
-            var soleTenant = await GetSoleTenantAsync(context.RequestServices);
+            var apex = await GetApexTenantsAsync(context.RequestServices);
+            var soleTenant = apex.SoleTenant;
             if (soleTenant == null)
             {
-                var anyTenantExists = await AnyTenantExistsAsync(context.RequestServices);
-                if (!anyTenantExists)
+                if (!apex.AnyTenantExists)
                 {
                     _logger.LogInformation("No tenants exist — returning 503 setup_required");
                     context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
@@ -409,8 +409,21 @@ public class TenantResolutionMiddleware
     /// <summary>Cache key holding the resolved <see cref="TenantContext"/> for a slug.</summary>
     public static string TenantCacheKey(string slug) => $"tenant:{slug}";
 
-    /// <summary>Cache key holding the sole-tenant context used to resolve the apex.</summary>
+    /// <summary>Cache key holding the <see cref="ApexTenants"/> answer the apex resolves through.</summary>
     public const string SoleTenantCacheKey = "tenant:__sole__";
+
+    /// <summary>
+    /// What the apex needs to know about the tenant table, as one cache entry.
+    /// </summary>
+    /// <param name="SoleTenant">
+    /// The <see cref="SoleTenantQuery.SoleTenantAsync">sole servable tenant</see>, or null when
+    /// there is none or several.
+    /// </param>
+    /// <param name="AnyTenantExists">
+    /// Whether any tenant a caller could be served exists at all, which separates a fresh install
+    /// (503 setup_required) from one whose tenants are ambiguous or inactive (404).
+    /// </param>
+    public sealed record ApexTenants(TenantContext? SoleTenant, bool AnyTenantExists);
 
     /// <summary>
     /// Drops the cached <see cref="TenantContext"/> for a tenant, so the next request rebuilds it
@@ -424,7 +437,16 @@ public class TenantResolutionMiddleware
     /// working demo sign-in.
     /// <para>
     /// Both keys go: the apex resolves single-tenant installs through
-    /// <see cref="SoleTenantCacheKey"/>, which holds a copy of the same context.
+    /// <see cref="SoleTenantCacheKey"/>, which holds a copy of the same context. Call this on
+    /// every write that adds, removes, activates or deactivates a tenant, not only on writes to
+    /// the columns <see cref="TenantContext"/> carries — an install that gains a second tenant
+    /// otherwise keeps serving the first one from its apex.
+    /// </para>
+    /// <para>
+    /// Both caches are per-process, so on a deployment running more than one API replica
+    /// (<c>api.autoscaling</c> in the Helm chart) this reaches only the replica that handled the
+    /// write; the others carry the previous answer until it expires. Staleness is bounded by
+    /// <see cref="CacheDuration"/> on every replica.
     /// </para>
     /// </remarks>
     public static void EvictTenant(IMemoryCache cache, string slug)
@@ -458,30 +480,25 @@ public class TenantResolutionMiddleware
     }
 
     /// <summary>
-    /// Checks whether any tenant a caller could be served exists at all (used to distinguish
-    /// "no tenants yet" from "tenant not found" on the apex domain).
-    /// </summary>
-    private async Task<bool> AnyTenantExistsAsync(IServiceProvider services)
-    {
-        var factory = services.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
-        await using var context = await factory.CreateDbContextAsync();
-        return await context.Tenants.AsNoTracking().ExcludeDemo().AnyAsync();
-    }
-
-    /// <summary>
-    /// Returns the install's <see cref="SoleTenantQuery.SoleTenantAsync">sole servable tenant</see>,
-    /// enabling single-tenant mode where the apex domain auto-resolves without a subdomain, or null
-    /// when there is none or several.
+    /// Reads the <see cref="ApexTenants"/> answer, from the rows on a miss.
     /// </summary>
     /// <remarks>
     /// A demo tenant is an ordinary active tenant, so it would otherwise be counted here; see
     /// <see cref="DemoExclusionFilter"/>.
+    /// <para>
+    /// The fresh-install answer — no tenant exists at all — is deliberately not cached, and is the
+    /// one answer worth a query per request. It is true only until an install's first tenant is
+    /// created, and every way of holding it stale ends in an instance that answers
+    /// <c>setup_required</c> at its apex while its database has a tenant: a create on another
+    /// replica never reaches this process, and the setup page's own <c>/api/v4/status</c> poll can
+    /// read zero tenants, lose the race to the create, and then write the answer it read. Every
+    /// other answer changes only when a tenant is created, removed or toggled, all of which call
+    /// <see cref="EvictTenant"/>.
+    /// </para>
     /// </remarks>
-    private async Task<TenantContext?> GetSoleTenantAsync(IServiceProvider services)
+    private async Task<ApexTenants> GetApexTenantsAsync(IServiceProvider services)
     {
-        var cacheKey = SoleTenantCacheKey;
-
-        if (_cache.TryGetValue(cacheKey, out TenantContext? cached))
+        if (_cache.TryGetValue(SoleTenantCacheKey, out ApexTenants? cached) && cached is not null)
             return cached;
 
         var factory = services.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
@@ -489,11 +506,15 @@ public class TenantResolutionMiddleware
 
         var tenant = await context.Tenants.SoleTenantAsync();
 
-        if (tenant is null)
-            return null;
+        var answer = tenant is null
+            ? new ApexTenants(null, await context.Tenants.AsNoTracking().ExcludeDemo().AnyAsync())
+            : new ApexTenants(
+                new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive, tenant.IsDemo),
+                true);
 
-        var tenantContext = new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive, tenant.IsDemo);
-        _cache.Set(cacheKey, tenantContext, CacheDuration);
-        return tenantContext;
+        if (answer.AnyTenantExists)
+            _cache.Set(SoleTenantCacheKey, answer, CacheDuration);
+
+        return answer;
     }
 }

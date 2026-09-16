@@ -15,6 +15,7 @@ using Nocturne.Infrastructure.Data.Extensions;
 using AuthRole = Nocturne.Core.Models.Authorization.Role;
 using AuthSubject = Nocturne.Core.Models.Authorization.Subject;
 using OAuthGrantTypes = Nocturne.Core.Models.Authorization.OAuthGrantTypes;
+using Scope = Nocturne.Core.Models.Authorization.Scope;
 using ScopeTranslator = Nocturne.Core.Models.Authorization.ScopeTranslator;
 
 namespace Nocturne.API.Services.Identity;
@@ -539,7 +540,7 @@ public class AuthorizationService : IAuthorizationService, IDisposable
                         nameof(subject));
                 }
 
-                grant.Scopes = [.. scopes];
+                grant.Scopes = Scope.NormalizeForStorage(scopes);
             }
 
             await _dbContext.SaveChangesAsync();

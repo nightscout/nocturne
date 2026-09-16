@@ -624,6 +624,7 @@ public partial class TenantService : ITenantService
                 // 5. Commit transaction
                 await transaction.CommitAsync(ct);
 
+                TenantResolutionMiddleware.EvictTenant(_cache, tenant.Slug);
                 return new ProvisionResult(tenant.Id, subject.Id, tenant.Slug);
             }
             catch

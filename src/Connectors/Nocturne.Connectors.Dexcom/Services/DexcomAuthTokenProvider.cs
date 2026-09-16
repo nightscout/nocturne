@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -47,13 +48,15 @@ public class DexcomAuthTokenProvider(
                     attempt + 1,
                     maxRetries);
 
-                var accountId = await AuthenticatePublisherAccountAsync(config, cancellationToken);
+                var (accountId, retryAuthentication) =
+                    await AuthenticatePublisherAccountAsync(config, cancellationToken);
                 if (string.IsNullOrEmpty(accountId))
-                    return (null, true);
+                    return (null, retryAuthentication);
 
-                var token = await LoginPublisherAccountAsync(config, accountId, cancellationToken);
+                var (token, retryLogin) =
+                    await LoginPublisherAccountAsync(config, accountId, cancellationToken);
                 if (string.IsNullOrEmpty(token))
-                    return (null, true);
+                    return (null, retryLogin);
 
                 return (token, false);
             },
@@ -74,7 +77,11 @@ public class DexcomAuthTokenProvider(
         return (sessionId, expiresAt, null);
     }
 
-    private async Task<string?> AuthenticatePublisherAccountAsync(
+    /// <summary>
+    ///     Resolves the publisher account id, or null plus whether the failure is worth another
+    ///     attempt. An empty id on a 2xx is Dexcom's answer for this account, not a transient fault.
+    /// </summary>
+    private async Task<(string? AccountId, bool ShouldRetry)> AuthenticatePublisherAccountAsync(
         DexcomConnectorConfiguration config, CancellationToken cancellationToken)
     {
         var authPayload = new
@@ -93,20 +100,18 @@ public class DexcomAuthTokenProvider(
             cancellationToken);
 
         if (!response.IsSuccessStatusCode)
-        {
-            await HandleErrorResponseAsync(response, "Dexcom authentication", cancellationToken);
-            return null;
-        }
+            return (null, await ShouldRetryFailureAsync(response, "Dexcom authentication", cancellationToken));
 
         var accountId = await response.Content.ReadAsStringAsync(cancellationToken);
         accountId = accountId.Trim('"');
 
-        if (!string.IsNullOrEmpty(accountId)) return accountId;
+        if (!string.IsNullOrEmpty(accountId)) return (accountId, false);
         _logger.LogError("Dexcom authentication returned empty account ID");
-        return null;
+        return (null, false);
     }
 
-    private async Task<string?> LoginPublisherAccountAsync(
+    /// <inheritdoc cref="AuthenticatePublisherAccountAsync"/>
+    private async Task<(string? SessionId, bool ShouldRetry)> LoginPublisherAccountAsync(
         DexcomConnectorConfiguration config, string accountId, CancellationToken cancellationToken)
     {
         var sessionPayload = new
@@ -125,16 +130,48 @@ public class DexcomAuthTokenProvider(
             cancellationToken);
 
         if (!response.IsSuccessStatusCode)
-        {
-            await HandleErrorResponseAsync(response, "Dexcom session creation", cancellationToken);
-            return null;
-        }
+            return (null, await ShouldRetryFailureAsync(response, "Dexcom session creation", cancellationToken));
 
         var sessionId = await response.Content.ReadAsStringAsync(cancellationToken);
         sessionId = sessionId.Trim('"');
 
-        if (!string.IsNullOrEmpty(sessionId)) return sessionId;
+        if (!string.IsNullOrEmpty(sessionId)) return (sessionId, false);
         _logger.LogError("Dexcom session creation returned empty session ID");
-        return null;
+        return (null, false);
+    }
+
+    /// <summary>
+    ///     Classifies a failed login response. The body is read before the status because the status
+    ///     is the part Dexcom gets wrong: a refused credential arrives as a 500, and a status Dexcom
+    ///     does get right would otherwise short-circuit the codes in
+    ///     <see cref="DexcomConstants.RejectedCredentialCodes"/> before they are looked at. A refusal
+    ///     leaves as the status it stands for, so the shared retry loop classifies it like any other.
+    /// </summary>
+    private async Task<bool> ShouldRetryFailureAsync(
+        HttpResponseMessage response, string operationName, CancellationToken cancellationToken)
+    {
+        var code = ReadErrorCode(await response.Content.ReadAsStringAsync(cancellationToken));
+        if (code != null && DexcomConstants.RejectedCredentialCodes.Contains(code))
+            throw new HttpRequestException(
+                $"{operationName} was refused by Dexcom: {code}", null, HttpStatusCode.Unauthorized);
+
+        return await HandleErrorResponseAsync(response, operationName, cancellationToken);
+    }
+
+    private static string? ReadErrorCode(string body)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(body);
+            return document.RootElement.ValueKind == JsonValueKind.Object
+                   && document.RootElement.TryGetProperty("Code", out var code)
+                   && code.ValueKind == JsonValueKind.String
+                ? code.GetString()
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 }

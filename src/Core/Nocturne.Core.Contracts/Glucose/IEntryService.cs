@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Contracts.Entries;
@@ -117,6 +118,24 @@ public interface IEntryService
     Task<Entry?> UpdateEntryAsync(
         string id,
         Entry entry,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
+    /// Partially update an entry via JSON merge-patch.
+    /// </summary>
+    /// <remarks>
+    /// AAPS's NSClientV3 uses <c>PATCH v3/entries/{id}</c> rather than <c>PUT</c> to update entries;
+    /// see <c>TreatmentService.PatchTreatmentAsync</c> for the equivalent treatments implementation
+    /// this mirrors.
+    /// </remarks>
+    /// <param name="id">Entry ID to patch</param>
+    /// <param name="patchData">JSON merge-patch data</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Patched entry if successful, null otherwise</returns>
+    Task<Entry?> PatchEntryAsync(
+        string id,
+        JsonElement patchData,
         CancellationToken cancellationToken = default
     );
 

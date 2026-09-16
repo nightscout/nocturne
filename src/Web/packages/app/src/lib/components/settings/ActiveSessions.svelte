@@ -19,6 +19,7 @@
     revoke,
     revokeOthers,
   } from "$lib/api/generated/sessions.generated.remote";
+  import { describeSubmitError } from "$lib/forms/submit-error";
 
   type SessionInfo = {
     sessionId?: string;
@@ -74,7 +75,10 @@
       successMessage = "Session signed out.";
       clearMessages();
     } catch (err) {
-      errorMessage = "Failed to sign out the session. Please try again.";
+      errorMessage = describeSubmitError(
+        err,
+        "Failed to sign out the session. Please try again."
+      );
       clearMessages();
     } finally {
       isRevoking = null;
@@ -90,7 +94,10 @@
       successMessage = "All other sessions signed out.";
       clearMessages();
     } catch (err) {
-      errorMessage = "Failed to sign out other sessions. Please try again.";
+      errorMessage = describeSubmitError(
+        err,
+        "Failed to sign out other sessions. Please try again."
+      );
       clearMessages();
     } finally {
       isRevokingOthers = false;

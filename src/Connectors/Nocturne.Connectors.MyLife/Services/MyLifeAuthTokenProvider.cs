@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging;
-using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.MyLife.Configurations;
@@ -60,9 +59,8 @@ public class MyLifeAuthTokenProvider(
     /// <remarks>
     ///     Only a failed status or a transport failure can buy another attempt. Every non-2xx leaves
     ///     <see cref="MyLifeSoapClient"/> as an <see cref="HttpRequestException"/> carrying the status,
-    ///     which is classified by the shared
-    ///     <see cref="HttpResponseExtensions.IsRetryableStatusCode"/>; a transport failure carries no
-    ///     status and reaches the base class, which retries it.
+    ///     which <see cref="AuthTokenProviderBase{TConfig}.ExecuteWithRetryAsync{T}"/> classifies; a
+    ///     transport failure carries no status and is retried there.
     ///     <para>
     ///     Everything else here is a 2xx that did not carry what the next step needs — an unknown
     ///     username, a login MyLife declined, an account with no matching patient. Asking again
@@ -155,11 +153,6 @@ public class MyLifeAuthTokenProvider(
             ));
 
             return (login.AuthToken, false);
-        }
-        catch (HttpRequestException ex) when (ex.StatusCode is { } status && !HttpResponseExtensions.IsRetryableStatusCode(status))
-        {
-            _logger.LogError("MyLife auth failed with non-retryable HTTP {StatusCode}", (int)status);
-            return (null, false);
         }
         catch (InvalidOperationException ex)
         {
