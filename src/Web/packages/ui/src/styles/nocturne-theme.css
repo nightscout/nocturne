@@ -121,6 +121,11 @@
   /* eHbA1c trend line — a distinct vivid accent (not reused from --chart-1) so the line pops
      against the reference bands in both themes. */
   --ehba1c-line: oklch(0.55 0.22 300);
+  --ehba1c-linear: oklch(0.58 0.18 230);
+  --ehba1c-half-life: oklch(0.62 0.2 340);
+  --ehba1c-unweighted: oklch(0.62 0.15 155);
+  --ehba1c-weighted-120: oklch(0.65 0.18 70);
+  --ehba1c-gmi: oklch(0.58 0.2 25);
 }
 
 .dark {
@@ -148,6 +153,11 @@
 
   /* eHbA1c trend line - Dark Mode - a brighter, more saturated pop of the same hue */
   --ehba1c-line: oklch(0.78 0.19 300);
+  --ehba1c-linear: oklch(0.78 0.16 230);
+  --ehba1c-half-life: oklch(0.78 0.18 340);
+  --ehba1c-unweighted: oklch(0.8 0.15 155);
+  --ehba1c-weighted-120: oklch(0.82 0.17 80);
+  --ehba1c-gmi: oklch(0.75 0.2 30);
 }
 
 /* Tailwind theme integration */

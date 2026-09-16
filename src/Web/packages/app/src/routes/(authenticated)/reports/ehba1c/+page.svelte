@@ -20,6 +20,11 @@
   type ChartPoint = {
     date: Date;
     estimatedA1cPercent: number;
+    linear90DayPercent: number | null;
+    halfLife30DayPercent: number | null;
+    unweighted90DayPercent: number | null;
+    weighted120DayPercent: number | null;
+    gmi14DayPercent: number | null;
     weightedAverageGlucoseMgdl: number;
     readingCount: number;
     daysWithData: number;
@@ -48,6 +53,15 @@
     { key: "high", label: "Elevated", maxPercent: 9.0, swatch: "var(--gri-zone-d)", fill: "var(--ehba1c-zone-high)" },
     { key: "veryHigh", label: "Very high", maxPercent: 14.0, swatch: "var(--gri-zone-e)", fill: "var(--ehba1c-zone-very-high)" },
   ];
+
+  const METHOD_SERIES = [
+    { key: "current", label: "Current smooth 90-day", color: "var(--ehba1c-line)" },
+    { key: "linear", label: "Linear 90-to-1", color: "var(--ehba1c-linear)" },
+    { key: "halfLife", label: "30-day half-life", color: "var(--ehba1c-half-life)" },
+    { key: "unweighted", label: "Unweighted 90-day", color: "var(--ehba1c-unweighted)" },
+    { key: "weighted120", label: "120-day 50/25/25", color: "var(--ehba1c-weighted-120)" },
+    { key: "gmi", label: "GMI 14-day", color: "var(--ehba1c-gmi)" },
+  ] as const;
 
   let loading = $state(true);
   let error = $state<unknown>(null);
@@ -96,6 +110,11 @@
         all.push({
           date: new Date(y, m - 1, d),
           estimatedA1cPercent: point.estimatedA1cPercent ?? 0,
+          linear90DayPercent: point.linear90DayPercent ?? null,
+          halfLife30DayPercent: point.halfLife30DayPercent ?? null,
+          unweighted90DayPercent: point.unweighted90DayPercent ?? null,
+          weighted120DayPercent: point.weighted120DayPercent ?? null,
+          gmi14DayPercent: point.gmi14DayPercent ?? null,
           weightedAverageGlucoseMgdl: point.weightedAverageGlucoseMgdl ?? 0,
           readingCount: point.readingCount ?? 0,
           daysWithData: point.daysWithData ?? 0,
@@ -108,7 +127,15 @@
   const chartData = $derived(toChartPoints(pointsByYear));
 
   const displayChartData = $derived(
-    chartData.map((p) => ({ ...p, displayValue: toDisplayUnit(p.estimatedA1cPercent) }))
+    chartData.map((p) => ({
+      ...p,
+      current: toDisplayUnit(p.estimatedA1cPercent),
+      linear: p.linear90DayPercent == null ? null : toDisplayUnit(p.linear90DayPercent),
+      halfLife: p.halfLife30DayPercent == null ? null : toDisplayUnit(p.halfLife30DayPercent),
+      unweighted: p.unweighted90DayPercent == null ? null : toDisplayUnit(p.unweighted90DayPercent),
+      weighted120: p.weighted120DayPercent == null ? null : toDisplayUnit(p.weighted120DayPercent),
+      gmi: p.gmi14DayPercent == null ? null : toDisplayUnit(p.gmi14DayPercent),
+    }))
   );
 
   const latest = $derived(chartData.length > 0 ? chartData[chartData.length - 1] : undefined);
@@ -146,10 +173,17 @@
 
   /** Fixed floor at the never-goes-lower bound; auto-scaled ceiling with a little headroom. */
   const yDomain = $derived.by((): [number, number] => {
-    const dataMaxPercent =
-      chartData.length > 0
-        ? Math.max(...chartData.map((p) => p.estimatedA1cPercent))
-        : A1C_ZONES[1].maxPercent;
+    const estimates = chartData.flatMap((p) => [
+      p.estimatedA1cPercent,
+      p.linear90DayPercent,
+      p.halfLife30DayPercent,
+      p.unweighted90DayPercent,
+      p.weighted120DayPercent,
+      p.gmi14DayPercent,
+    ]).filter((value): value is number => value != null);
+    const dataMaxPercent = estimates.length > 0
+      ? Math.max(...estimates)
+      : A1C_ZONES[1].maxPercent;
     const maxPercent = Math.max(dataMaxPercent + 0.5, A1C_ZONES[1].maxPercent);
     return [toDisplayUnit(MIN_A1C_PERCENT), toDisplayUnit(maxPercent)];
   });
@@ -257,13 +291,9 @@
           Estimated HbA1c (eHbA1c)
         </Card.Title>
         <Card.Description>
-          eHbA1c estimates what a lab HbA1c test would read on a given day. For each day, it
-          takes the average glucose from every reading in the trailing 90 days and weights each
-          day's contribution by recency — the most recent ~30 days count for roughly half the
-          estimate, tapering off exponentially for older days, similar to how glycated hemoglobin
-          reflects glucose exposure over a red blood cell's ~90–120 day lifespan. That weighted
-          average glucose is then converted to %HbA1c with the ADAG formula: HbA1c (%) = (average
-          glucose in mg/dL + 46.7) / 28.7.
+          Experimental comparison of six glucose-derived estimates. Five alternatives are plotted
+          beside the current smooth 90-day method; saved lab results remain independent triangle
+          markers and are never used to alter any estimate.
         </Card.Description>
       </div>
       <ToggleGroup.Root
@@ -323,20 +353,28 @@
           <LineChart
             data={displayChartData}
             x="date"
-            y="displayValue"
+            y="current"
             {yDomain}
             clip
-            series={[
-              {
-                key: "displayValue",
-                label: a1cUnit === "percent" ? "eHbA1c %" : "eHbA1c mmol/mol",
-                color: "var(--ehba1c-line)",
-              },
-            ]}
-            props={{ spline: { "stroke-width": 3, "stroke-linecap": "round" } }}
+            legend
+            series={METHOD_SERIES.map((method) => ({
+              key: method.key,
+              label: method.label,
+              color: method.color,
+            }))}
+            props={{ spline: { "stroke-width": 2.5, "stroke-linecap": "round" } }}
             points={{ data: labChartPoints, x: (d) => d.date, y: (d) => d.displayValue, children: labMarkers }}
             {annotations}
           />
+        </div>
+
+        <div class="mt-4 grid gap-2 text-sm text-muted-foreground @md:grid-cols-2">
+          <p><strong class="text-foreground">Current smooth 90-day:</strong> existing ADAG estimate; smooth decay calibrated so the newest 30 days contribute about half.</p>
+          <p><strong class="text-foreground">Linear 90-to-1:</strong> today has weight 90, yesterday 89, down to weight 1 for the oldest day in the 90-day window.</p>
+          <p><strong class="text-foreground">30-day half-life:</strong> exponential decay; a reading's weight halves every 30 days.</p>
+          <p><strong class="text-foreground">Unweighted 90-day:</strong> every reading in the trailing 90 days contributes equally; converted with ADAG.</p>
+          <p><strong class="text-foreground">120-day 50/25/25:</strong> a common clinical approximation: 50% emphasis on days 0–29, 25% on days 30–59, and 25% on days 60–119; converted with ADAG.</p>
+          <p><strong class="text-foreground">GMI 14-day:</strong> the existing Bergenstal GMI formula applied to the trailing 14-day mean glucose.</p>
         </div>
 
         <div class="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm">

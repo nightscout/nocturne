@@ -158,8 +158,7 @@ public class StatisticsService : IStatisticsService
             };
         }
 
-        // GMI formula: 3.31 + (0.02392 × mean glucose in mg/dL)
-        var gmiValue = 3.31 + (0.02392 * meanGlucose);
+        var gmiValue = GlucoseStatistics.Gmi(meanGlucose);
         gmiValue = Math.Round(gmiValue * 10) / 10; // Round to 1 decimal
 
         return new GlucoseManagementIndicator

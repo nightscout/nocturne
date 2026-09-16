@@ -73,6 +73,10 @@ public static class GlucoseStatistics
     /// </summary>
     public static double EstimatedA1C(double meanGlucose) =>
         meanGlucose == 0 ? 0 : (meanGlucose + 46.7) / 28.7;
+
+    /// <summary>Glucose Management Indicator from mean glucose in mg/dL (Bergenstal et al. 2018).</summary>
+    public static double Gmi(double meanGlucose) =>
+        meanGlucose <= 0 ? 0 : 3.31 + 0.02392 * meanGlucose;
 }
 
 /// <summary>
