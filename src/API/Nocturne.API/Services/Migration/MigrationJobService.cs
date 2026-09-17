@@ -255,7 +255,8 @@ public class MigrationJobService : IMigrationJobService
 
         try
         {
-            await MigrationJob.ReadFromSourceAsync(httpClient, "/api/v1/status", "status", ct);
+            await MigrationJob.ReadFromSourceAsync(
+                httpClient, "/api/v1/status", "status", ct, NightscoutRead.ImportProbe);
 
             return new TestMigrationConnectionResult
             {
@@ -956,8 +957,13 @@ internal class MigrationJob
     /// single place a migration read decides whether a response is usable, so that no page loop can
     /// mistake a rejection for the end of the data.
     /// </summary>
+    /// <param name="read">
+    ///     What this read is, for the wording a failure gets. Collections are the ordinary case and
+    ///     the default; the connection test names itself, because a 404 means something else there.
+    /// </param>
     internal static async Task<string> ReadFromSourceAsync(
-        HttpClient httpClient, string url, string label, CancellationToken ct)
+        HttpClient httpClient, string url, string label, CancellationToken ct,
+        NightscoutRead read = NightscoutRead.ImportCollection)
     {
         HttpResponseMessage response;
         try
@@ -970,7 +976,7 @@ internal class MigrationJob
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
         {
-            throw new MigrationSourceException(UnreachableMessage, MigrationFailureCause.Unreachable, ex);
+            throw new MigrationSourceException(NightscoutMessages.Unreachable, MigrationFailureCause.Unreachable, ex);
         }
 
         using (response)
@@ -978,21 +984,16 @@ internal class MigrationJob
             if (response.IsSuccessStatusCode)
                 return await response.Content.ReadAsStringAsync(ct);
 
-            throw response.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden
-                ? new MigrationSourceException(ApiSecretRejectedMessage, MigrationFailureCause.ApiSecretRejected)
-                : new MigrationSourceException(
-                    $"Nightscout answered {(int)response.StatusCode} for {label}.",
-                    MigrationFailureCause.Status);
+            // 403 is worded as a refusal rather than a rejected secret, but keeps the
+            // ApiSecretRejected cause. That is how Nightscout's admin routes turn down a
+            // non-admin secret, which the subjects step skips over rather than failing on.
+            throw new MigrationSourceException(
+                NightscoutMessages.ForStatus(response.StatusCode, label, read),
+                response.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden
+                    ? MigrationFailureCause.ApiSecretRejected
+                    : MigrationFailureCause.Status);
         }
     }
-
-    private const string ApiSecretRejectedMessage =
-        "Nightscout rejected the API secret. Check it matches your Nightscout API_SECRET exactly, "
-        + "or leave it blank if your site allows reading without one.";
-
-    private const string UnreachableMessage =
-        "Could not reach your Nightscout server. Check it is online and that it allows connections "
-        + "from Nocturne.";
 
     private const string SubjectsNeedAdminSecretMessage =
         "Skipped: listing the people and devices that can sign in needs an admin API secret.";

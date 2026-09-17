@@ -66,7 +66,7 @@ describe("settings/migration history", () => {
   it("shows a summary naming a failed collection in the error colour", async () => {
     history = [
       entry({
-        errorMessage: "1 of 2 collections imported, 1 failed. treatments: Nightscout answered 500 for treatments.",
+        errorMessage: "1 of 2 collections imported, 1 failed. treatments: Nightscout answered with a server error (500). It may be down or restarting; try again shortly.",
         hasFailures: true,
       }),
     ];

@@ -8,6 +8,7 @@ using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Net;
 
 namespace Nocturne.Connectors.Nightscout.Services;
 
@@ -55,10 +56,10 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         // Legacy no-config overload; uses whatever config the service was last primed
         // with (startup defaults until AuthenticateWithConfigAsync replaces it).
         // Per-tenant sync uses AuthenticateWithConfigAsync instead.
-        return await AuthenticateWithConfigAsync(_currentConfig);
+        return await AuthenticateWithConfigAsync(_currentConfig, CancellationToken.None);
     }
 
-    private async Task<bool> AuthenticateWithConfigAsync(TConfig config)
+    private async Task<bool> AuthenticateWithConfigAsync(TConfig config, CancellationToken cancellationToken)
     {
         _currentConfig = config;
         _resolvedBaseUrl = ConnectorUrl.ResolveBase(config.Url, "Nightscout");
@@ -68,7 +69,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             _logger.LogError(
                 "[{ConnectorSource}] API secret is not configured",
                 ConnectorSource);
-            TrackFailedRequest("API secret is not configured");
+            TrackFailedAuthentication(NightscoutMessages.ApiSecretMissing);
             return false;
         }
 
@@ -83,20 +84,19 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         {
             var headers = GetAuthHeaders();
             var response = await GetWithHeadersAsync(
-                $"{_resolvedBaseUrl}/api/v1/entries.json?count=1", headers);
+                $"{_resolvedBaseUrl}/api/v1/entries.json?count=1", headers, cancellationToken);
 
             if (!response.IsSuccessStatusCode)
             {
-                var body = await response.Content.ReadAsStringAsync();
+                var body = await response.Content.ReadAsStringAsync(cancellationToken);
 
-                // Detect Cloudflare/WAF challenge pages that block server-to-server requests
                 if (IsWafChallengePage(response, body))
                 {
                     _logger.LogError(
                         "[{ConnectorSource}] Nightscout instance at {Url} is behind a WAF (e.g. Cloudflare) that is blocking API requests",
                         ConnectorSource,
                         _resolvedBaseUrl);
-                    TrackFailedRequest(
+                    TrackFailedAuthentication(
                         "Your Nightscout instance is behind a firewall (e.g. Cloudflare) that is blocking Nocturne from syncing. " +
                         "Please add a WAF bypass rule for API paths (e.g. /api/*) or allowlist the Nocturne server IP.");
                     return false;
@@ -107,7 +107,8 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                     ConnectorSource,
                     (int)response.StatusCode,
                     body);
-                TrackFailedRequest($"Nightscout auth check failed: HTTP {(int)response.StatusCode}");
+                TrackFailedAuthentication(NightscoutMessages.ForStatus(
+                    response.StatusCode, "the connection check", NightscoutRead.ConnectorProbe));
                 return false;
             }
 
@@ -117,9 +118,19 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                 ConnectorSource);
             return true;
         }
-        catch (Exception ex)
+        // A request that never got an answer says nothing about the credential, so it must not be
+        // reported as one. DNS, a refused connection, dropped packets and a client timeout all land
+        // here. OutboundRefusedException carries its own wording and names more than "unreachable"
+        // can. A cancellation the caller asked for is the run being withdrawn, not a failure.
+        catch (Exception ex) when (ex is not OperationCanceledException
+                                   || !cancellationToken.IsCancellationRequested)
         {
-            TrackFailedRequest($"Nightscout authentication failed: {ex.Message}");
+            TrackFailedAuthentication(ex switch
+            {
+                OutboundRefusedException => ex.Message,
+                HttpRequestException or OperationCanceledException => NightscoutMessages.Unreachable,
+                _ => NightscoutMessages.CheckFailed,
+            });
             _logger.LogError(ex,
                 "[{ConnectorSource}] Failed to connect to Nightscout instance at {Url}",
                 ConnectorSource,
@@ -143,7 +154,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
 
     protected override Task<bool> EnsureAuthenticatedAsync(
         TConfig config,
-        CancellationToken cancellationToken) => AuthenticateWithConfigAsync(config);
+        CancellationToken cancellationToken) => AuthenticateWithConfigAsync(config, cancellationToken);
 
     protected override async Task<SyncResult> PerformSyncInternalAsync(
         SyncRequest request,

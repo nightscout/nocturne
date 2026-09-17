@@ -60,12 +60,12 @@ describe("ImportProgress", () => {
     status = {
       state: MigrationJobState.Completed,
       progressPercentage: 100,
-      errorMessage: "1 of 2 collections imported, 1 failed. treatments: Nightscout answered 500 for treatments.",
+      errorMessage: "1 of 2 collections imported, 1 failed. treatments: Nightscout answered with a server error (500). It may be down or restarting; try again shortly.",
       collectionProgress: {
         treatments: {
           collectionName: "treatments",
           isComplete: true,
-          failureReason: "Nightscout answered 500 for treatments.",
+          failureReason: "Nightscout answered with a server error (500). It may be down or restarting; try again shortly.",
         },
       },
     } as unknown as MigrationJobStatus;

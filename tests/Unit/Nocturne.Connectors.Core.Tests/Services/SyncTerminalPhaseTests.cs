@@ -36,6 +36,8 @@ public class SyncTerminalPhaseTests
 
         public bool AuthenticationSucceeds { get; init; } = true;
 
+        public string? AuthenticationFailureReason { get; init; }
+
         public int AuthenticateCalls { get; private set; }
         public int EnsureAuthenticatedCalls { get; private set; }
 
@@ -45,6 +47,7 @@ public class SyncTerminalPhaseTests
         public override Task<bool> AuthenticateAsync()
         {
             AuthenticateCalls++;
+            RecordAuthenticationFailure();
             return Task.FromResult(AuthenticationSucceeds);
         }
 
@@ -53,7 +56,14 @@ public class SyncTerminalPhaseTests
             CancellationToken cancellationToken)
         {
             EnsureAuthenticatedCalls++;
+            RecordAuthenticationFailure();
             return Task.FromResult(AuthenticationSucceeds);
+        }
+
+        private void RecordAuthenticationFailure()
+        {
+            if (!AuthenticationSucceeds && AuthenticationFailureReason is not null)
+                TrackFailedAuthentication(AuthenticationFailureReason);
         }
 
         protected override async Task<SyncResult> PerformSyncInternalAsync(
@@ -209,6 +219,49 @@ public class SyncTerminalPhaseTests
         result.Success.Should().BeFalse();
         reported.Should().ContainSingle().Which.Phase.Should().Be(SyncPhase.Failed);
         reported[0].ErrorMessage.Should().Be("Authentication failed for test");
+    }
+
+    /// <summary>
+    /// The connector that tried is the only thing that knows why it failed, so its reason is the
+    /// tenant's whole explanation. A source that could not be reached has no credential to fix,
+    /// and "authentication failed" sends that person after the wrong thing.
+    /// </summary>
+    [Fact]
+    public async Task BackgroundSync_AuthenticationFailureWithARecordedReason_ReportsThatReason()
+    {
+        // Arrange
+        var (reporter, reported) = BuildReporter();
+        var service = new TestConnectorService(_ => Task.CompletedTask)
+        {
+            AuthenticationSucceeds = false,
+            AuthenticationFailureReason = "Could not reach the source",
+        };
+
+        // Act
+        var result = await service.SyncDataAsync(new TestConfig(), CancellationToken.None, null, reporter.Object);
+
+        // Assert
+        result.Message.Should().Be("Could not reach the source");
+        result.Errors.Should().ContainSingle().Which.Should().Be("Could not reach the source");
+        reported.Should().ContainSingle().Which.ErrorMessage.Should().Be("Could not reach the source");
+    }
+
+    [Fact]
+    public async Task RequestedSync_AuthenticationFailureWithARecordedReason_ReportsThatReason()
+    {
+        // Arrange
+        var service = new TestConnectorService(_ => Task.CompletedTask)
+        {
+            AuthenticationSucceeds = false,
+            AuthenticationFailureReason = "Could not reach the source",
+        };
+
+        // Act
+        var result = await service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose] }, new TestConfig(), CancellationToken.None);
+
+        // Assert
+        result.Message.Should().Be("Could not reach the source");
     }
 
     [Fact]

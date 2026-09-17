@@ -20,6 +20,12 @@ public class MigrationFailureReportingTests
 {
     private const string ApiSecretMessage = "Nightscout rejected the API secret.";
     private const string UnreachableMessage = "Could not reach your Nightscout server.";
+    private const string RefusedMessage = "Nightscout refused the request.";
+
+    private const string NotNightscoutMessage = "Nothing at that address answered as Nightscout.";
+
+    private const string ServerErrorMessage =
+        "Nightscout answered with a server error (500). It may be down or restarting; try again shortly.";
 
     /// <summary>Answers each request from <paramref name="respond"/>, keyed on the path alone.</summary>
     private sealed class RoutedNightscout(Func<string, HttpResponseMessage> respond) : HttpMessageHandler
@@ -65,6 +71,7 @@ public class MigrationFailureReportingTests
 
         status.State.Should().Be(MigrationJobState.Failed);
         status.ErrorMessage.Should().StartWith(ApiSecretMessage);
+        status.ErrorMessage.Should().Contain("leave it blank", "the import reads without a secret");
         status.CollectionProgress.Values.Sum(c => c.DocumentsMigrated).Should().Be(0);
     }
 
@@ -119,6 +126,22 @@ public class MigrationFailureReportingTests
         result.ErrorMessage.Should().StartWith(ApiSecretMessage);
     }
 
+    /// <summary>
+    /// The connection test asks for /api/v1/status, which every Nightscout serves, so a 404 there
+    /// is about the address rather than about anything the site is missing.
+    /// </summary>
+    [Fact]
+    public async Task The_connection_test_reads_a_404_as_a_wrong_address()
+    {
+        await using var provider = MigrationJobHarness.BuildProvider(
+            new RoutedNightscout(_ => Json(HttpStatusCode.NotFound)));
+
+        var result = await BuildService(provider).TestConnectionAsync(TestRequest());
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorMessage.Should().StartWith(NotNightscoutMessage);
+    }
+
     [Fact]
     public async Task The_connection_test_reports_an_unreachable_host_in_the_same_words_as_a_run()
     {
@@ -131,18 +154,20 @@ public class MigrationFailureReportingTests
     }
 
     [Fact]
-    public async Task A_forbidden_response_is_a_rejected_secret_and_not_just_a_status()
+    public async Task A_forbidden_response_is_a_refusal_and_not_just_a_status()
     {
-        // Nightscout answers 403 for a secret it will not honour as readily as 401, and the two
-        // need the same advice; classifying 403 as an ordinary status would print the number.
+        // Nightscout answers 401 for a secret it does not recognise, so a 403 is as likely to be an
+        // IP rule or a proxy in front of the site. Naming the secret, or printing the bare number,
+        // both send the person somewhere they cannot fix it.
         var handler = new RoutedNightscout(_ => Json(HttpStatusCode.Forbidden));
 
         await using var provider = MigrationJobHarness.BuildProvider(handler);
         var status = await MigrationJobHarness.RunAsync(provider, "entries");
 
         status.State.Should().Be(MigrationJobState.Failed);
-        status.ErrorMessage.Should().StartWith(ApiSecretMessage);
+        status.ErrorMessage.Should().StartWith(RefusedMessage);
         status.ErrorMessage.Should().NotContain("403");
+        status.ErrorMessage.Should().NotContain("API_SECRET");
     }
 
     [Fact]
@@ -190,7 +215,23 @@ public class MigrationFailureReportingTests
         var status = await MigrationJobHarness.RunAsync(provider, "entries");
 
         status.State.Should().Be(MigrationJobState.Failed);
-        status.ErrorMessage.Should().Be("Nightscout answered 500 for entries.");
+        status.ErrorMessage.Should().Be(ServerErrorMessage);
+    }
+
+    /// <summary>
+    /// An old Nightscout that never served a collection answers 404 for it. The import reaches
+    /// that route by name, so the 404 is about the collection and not about the site address.
+    /// </summary>
+    [Fact]
+    public async Task A_collection_that_is_not_there_is_reported_by_its_status_not_as_a_wrong_address()
+    {
+        var handler = new RoutedNightscout(_ => Json(HttpStatusCode.NotFound));
+
+        await using var provider = MigrationJobHarness.BuildProvider(handler);
+        var status = await MigrationJobHarness.RunAsync(provider, "entries");
+
+        status.ErrorMessage.Should().Be("Nightscout answered 404 for entries.");
+        status.ErrorMessage.Should().NotContain("site address");
     }
 
     [Fact]
@@ -231,8 +272,7 @@ public class MigrationFailureReportingTests
         var status = await MigrationJobHarness.RunAsync(provider, "subjects");
 
         status.CollectionProgress["subjects"].SkippedReason.Should().BeNull();
-        status.CollectionProgress["subjects"].FailureReason.Should()
-            .Be("Nightscout answered 500 for subjects.");
+        status.CollectionProgress["subjects"].FailureReason.Should().Be(ServerErrorMessage);
     }
 
     [Fact]
@@ -337,7 +377,7 @@ public class MigrationFailureReportingTests
             State = nameof(MigrationJobState.Completed),
             CollectionOutcomes = """
                 [{"collectionName":"entries","totalDocuments":9,"documentsMigrated":9,"documentsFailed":0,"isComplete":true,"failureReason":null},
-                 {"collectionName":"treatments","totalDocuments":0,"documentsMigrated":0,"documentsFailed":0,"isComplete":true,"failureReason":"Nightscout answered 500 for treatments."}]
+                 {"collectionName":"treatments","totalDocuments":0,"documentsMigrated":0,"documentsFailed":0,"isComplete":true,"failureReason":"Nightscout answered with a server error (500)."}]
                 """,
         };
 
@@ -345,7 +385,7 @@ public class MigrationFailureReportingTests
 
         status.CollectionProgress["entries"].DocumentsMigrated.Should().Be(9);
         status.CollectionProgress["treatments"].FailureReason.Should()
-            .Be("Nightscout answered 500 for treatments.");
+            .Be("Nightscout answered with a server error (500).");
     }
 
     [Fact]
@@ -367,7 +407,7 @@ public class MigrationFailureReportingTests
 
     [Theory]
     [InlineData("""[{"collectionName":"subjects","isComplete":true,"skippedReason":"Skipped: needs an admin API secret."}]""", false)]
-    [InlineData("""[{"collectionName":"treatments","isComplete":true,"failureReason":"Nightscout answered 500 for treatments."}]""", true)]
+    [InlineData("""[{"collectionName":"treatments","isComplete":true,"failureReason":"Nightscout answered with a server error (500)."}]""", true)]
     [InlineData(null, false)]
     public void History_marks_a_run_at_fault_only_when_a_collection_failed(string? outcomes, bool expected)
     {
@@ -407,8 +447,7 @@ public class MigrationFailureReportingTests
         status.State.Should().Be(MigrationJobState.Completed);
         status.CollectionProgress["entries"].DocumentsMigrated.Should().Be(1);
         status.CollectionProgress["entries"].FailureReason.Should().BeNull();
-        status.CollectionProgress["treatments"].FailureReason.Should()
-            .Be("Nightscout answered 500 for treatments.");
+        status.CollectionProgress["treatments"].FailureReason.Should().Be(ServerErrorMessage);
         status.ErrorMessage.Should().StartWith("1 of 2 collections imported, 1 failed.");
     }
 }
