@@ -24,8 +24,8 @@ public partial class ConnectorSyncExecutorRegistrationTests
     /// </summary>
     private static readonly string[] Expected =
     [
-        "carelink", "dexcom", "eversense", "glooko", "gluroo", "librelinkup", "myfitnesspal",
-        "mylife", "nightscout", "nocturneremote", "tandem", "tidepool", "twiist",
+        "carelink", "dexcom", "eversense", "glooko", "gluroo", "googlehealth", "librelinkup",
+        "myfitnesspal", "mylife", "nightscout", "nocturneremote", "tandem", "tidepool", "twiist",
     ];
 
     public static TheoryData<string> ExpectedConnectorIds() => [.. Expected];
