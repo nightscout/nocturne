@@ -7,6 +7,7 @@
   } from "$lib/utils/formatting";
   import { getDirectionInfo } from "$lib/utils";
   import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
+  import { createConnectionIndicator } from "$lib/stores/connection-indicator.svelte";
 
   const realtimeStore = getRealtimeStore();
 
@@ -14,7 +15,6 @@
   const currentBG = $derived(realtimeStore.currentBG);
   const bgDelta = $derived(realtimeStore.bgDelta);
   const lastUpdated = $derived(realtimeStore.lastUpdated);
-  const isConnected = $derived(realtimeStore.isConnected);
   const currentTime = $derived(realtimeStore.now);
   const timeSince = $derived(realtimeStore.timeSinceReading);
 
@@ -23,7 +23,8 @@
   const directionInfo = $derived(getDirectionInfo(realtimeStore.direction));
 
   const isStale = $derived(currentTime - lastUpdated > STALE_THRESHOLD_MS);
-  const isDisconnected = $derived(!isConnected);
+  const connection = createConnectionIndicator(() => realtimeStore.connectionStatus);
+  const isDisconnected = $derived(connection.isDisconnected);
   const isDimmed = $derived(isStale || isDisconnected);
   const hasData = $derived(currentBG > 0);
 

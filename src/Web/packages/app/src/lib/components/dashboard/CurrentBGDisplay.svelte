@@ -24,6 +24,7 @@
     prefersHour12,
   } from "$lib/utils/formatting";
   import { Clock } from "lucide-svelte";
+  import { createConnectionIndicator } from "$lib/stores/connection-indicator.svelte";
 
   interface ComponentProps {
     /** Show status pills (COB, IOB, CAGE, SAGE, etc.) */
@@ -44,8 +45,7 @@
   const rawBgDelta = $derived(realtimeStore.bgDelta);
   const lastUpdated = $derived(realtimeStore.lastUpdated);
 
-  // Connection status
-  const isConnected = $derived(realtimeStore.isConnected);
+  const connection = createConnectionIndicator(() => realtimeStore.connectionStatus);
 
 
   // Format values based on user's unit preference
@@ -61,7 +61,7 @@
   const isStale = $derived(
     currentTime.getTime() - lastUpdated > STALE_THRESHOLD_MS
   );
-  const isDisconnected = $derived(!isConnected);
+  const isDisconnected = $derived(connection.isDisconnected);
 
   // Loading state - no data received yet
   const isLoading = $derived(

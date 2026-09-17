@@ -44,6 +44,13 @@
           text: "Disconnected",
           description: "Using cached data",
         };
+      case "unauthorized":
+        return {
+          variant: "outline" as const,
+          color: "bg-gray-500",
+          text: "Not available",
+          description: "Live updates are not permitted for this view",
+        };
       case "error":
         return {
           variant: "destructive" as const,

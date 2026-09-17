@@ -24,6 +24,9 @@ export type WebSocketConnectionStatus =
   | 'connected'
   | 'disconnected'
   | 'reconnecting'
+  // The API's read policy denied this viewer realtime for the tenant. Terminal,
+  // and not a fault: the UI shows "no live updates" rather than an error.
+  | 'unauthorized'
   | 'error';
 
 // WebSocket client configuration
