@@ -18,10 +18,15 @@
 
 \set ON_ERROR_STOP on
 
--- Passwords come in via PostgreSQL session custom-GUCs set by run.sh
--- before this file is sourced. psql's `:'var'` substitution doesn't reach
--- inside dollar-quoted DO blocks (psql 14+), so we read from session
--- settings instead.
+-- Passwords arrive via psql -v variables and are placed into session
+-- custom-GUCs here, OUTSIDE the dollar-quoted DO block (psql :'var'
+-- substitution doesn't reach inside DO blocks, psql 14+). This matches the
+-- compose bundle's `psql -v ... :'var'` pattern: psql quotes the values
+-- safely regardless of embedded quotes, dollar signs or backslashes.
+SELECT set_config('nocturne.migrator_password', :'migrator_password', false);
+SELECT set_config('nocturne.app_password',      :'app_password',      false);
+SELECT set_config('nocturne.web_password',      :'web_password',      false);
+
 DO $$
 DECLARE
     migrator_password text := current_setting('nocturne.migrator_password');
