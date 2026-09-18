@@ -70,7 +70,6 @@ public class GuestLinkService : IGuestLinkService
             Scopes = scopeList,
             Label = label,
             TokenHash = hash,
-            CreatedAt = now,
             ExpiresAt = now + LinkLifetime,
         };
 

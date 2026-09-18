@@ -101,7 +101,6 @@ public class ClockFaceService : IClockFaceService
                 UserId = userId,
                 Name = request.Name,
                 ConfigJson = JsonSerializer.Serialize(request.Config, JsonOptions),
-                CreatedAt = DateTime.UtcNow
             };
 
             _dbContext.ClockFaces.Add(entity);

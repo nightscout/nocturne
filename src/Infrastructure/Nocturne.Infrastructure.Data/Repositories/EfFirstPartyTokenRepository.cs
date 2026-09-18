@@ -58,7 +58,6 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
             UserAgent = scrub ? null : record.UserAgent,
             IssuedAt = record.IssuedAt,
             ExpiresAt = record.ExpiresAt,
-            CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
 

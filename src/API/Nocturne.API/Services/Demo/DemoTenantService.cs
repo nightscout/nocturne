@@ -256,7 +256,6 @@ public sealed class DemoTenantService
             ShareToken = tenant.ShareToken,
             ShareTokenEncrypted = tenant.ShareTokenEncrypted,
             ShareTokenSetAt = tenant.ShareTokenSetAt,
-            SysCreatedAt = tenant.SysCreatedAt,
             SysUpdatedAt = DateTime.UtcNow,
         };
 
@@ -390,7 +389,6 @@ public sealed class DemoTenantService
                 Slug = DemoRoleSlug,
                 Permissions = new List<string>(Scope.DemoVisitorPermissions),
                 IsSystem = true,
-                SysCreatedAt = DateTime.UtcNow,
                 SysUpdatedAt = DateTime.UtcNow,
             };
             db.TenantRoles.Add(role);
@@ -490,7 +488,6 @@ public sealed class DemoTenantService
                 Username = DemoMemberUsername,
                 LimitTo24Hours = false,
                 Label = DemoMemberName,
-                SysCreatedAt = DateTime.UtcNow,
                 SysUpdatedAt = DateTime.UtcNow,
             };
             db.TenantMembers.Add(member);
@@ -519,7 +516,6 @@ public sealed class DemoTenantService
             Id = Guid.CreateVersion7(),
             TenantMemberId = memberId,
             TenantRoleId = roleId,
-            SysCreatedAt = DateTime.UtcNow,
         });
     }
 }

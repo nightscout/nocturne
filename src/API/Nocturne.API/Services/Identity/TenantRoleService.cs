@@ -74,7 +74,6 @@ public partial class TenantRoleService(
             Description = description,
             Permissions = permissions,
             IsSystem = false,
-            SysCreatedAt = now,
             SysUpdatedAt = now,
         };
 
@@ -217,7 +216,6 @@ public partial class TenantRoleService(
                 Description = null,
                 Permissions = new List<string>(permissions),
                 IsSystem = true,
-                SysCreatedAt = now,
                 SysUpdatedAt = now,
             });
         }
