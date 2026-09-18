@@ -102,7 +102,6 @@ public sealed class DemoTenantService
             .AsNoTracking()
             .Where(m => m.TenantId == tenantId
                 && m.Username == DemoMemberUsername
-                && m.RevokedAt == null
                 && m.Subject!.IsDemoSubject)
             .Select(m => (Guid?)m.SubjectId)
             .FirstOrDefaultAsync(ct);
@@ -498,7 +497,6 @@ public sealed class DemoTenantService
         }
         else
         {
-            member.RevokedAt = null;
             member.LimitTo24Hours = false;
         }
 

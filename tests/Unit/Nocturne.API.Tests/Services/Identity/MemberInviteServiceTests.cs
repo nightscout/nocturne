@@ -381,13 +381,11 @@ public class MemberInviteServiceTests : IDisposable
             OwnerPermissions,
             [_followerRoleId]);
 
-        // Add an existing active membership
         _dbContext.TenantMembers.Add(new TenantMemberEntity
         {
             Id = Guid.CreateVersion7(),
             TenantId = _tenantId,
             SubjectId = _acceptorSubjectId,
-            RevokedAt = null,
         });
         await _dbContext.SaveChangesAsync();
 

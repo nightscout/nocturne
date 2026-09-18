@@ -205,7 +205,6 @@ public class DevAdminController : ControllerBase
                     LastUsedAt = m.LastUsedAt,
                     LastUsedIp = m.LastUsedIp,
                     LastUsedUserAgent = m.LastUsedUserAgent,
-                    RevokedAt = m.RevokedAt,
                 }).ToList(),
                 MemberRoles = memberRoles.Select(mr => new TenantMemberRoleEntityDto
                 {
@@ -489,7 +488,6 @@ public class DevAdminController : ControllerBase
                             LastUsedAt = m.LastUsedAt,
                             LastUsedIp = m.LastUsedIp,
                             LastUsedUserAgent = m.LastUsedUserAgent,
-                            RevokedAt = m.RevokedAt,
                         });
                     }
 
@@ -879,7 +877,7 @@ public class DevAdminController : ControllerBase
                     DirectPermissions = m.DirectPermissions, Label = m.Label,
                     LimitTo24Hours = m.LimitTo24Hours, CreatedFromInviteId = m.CreatedFromInviteId,
                     LastUsedAt = m.LastUsedAt, LastUsedIp = m.LastUsedIp,
-                    LastUsedUserAgent = m.LastUsedUserAgent, RevokedAt = m.RevokedAt,
+                    LastUsedUserAgent = m.LastUsedUserAgent,
                 });
             }
 

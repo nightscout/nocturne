@@ -81,9 +81,8 @@ public class TenantOverviewService : ITenantOverviewService
         Guid subjectId, IReadOnlySet<string> tokenScopes, AuthType authType,
         CancellationToken ct = default)
     {
-        // tenant_members has a global RevokedAt == null query filter, so revoked
-        // memberships are already excluded here. The read spans tenants for one person, so the
-        // context is pinned to the subject rather than to a tenant.
+        // The read spans tenants for one person, so the context is pinned to the subject rather
+        // than to a tenant.
         await using var context = await _factory.CreateSubjectPinnedContextAsync(subjectId, ct);
         var memberships = await context.TenantMembers.AsNoTracking()
             .Include(tm => tm.Tenant)

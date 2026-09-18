@@ -154,7 +154,6 @@ public static class TestDatabaseSeeder
         string? name = null,
         bool isActive = true,
         bool isSystemSubject = false,
-        DateTime? revokedAt = null,
         DateTime? joinedAt = null,
         string? preferences = null)
     {
@@ -165,7 +164,6 @@ public static class TestDatabaseSeeder
             Id = Guid.CreateVersion7(),
             TenantId = tenantId,
             SubjectId = subjectId,
-            RevokedAt = revokedAt,
         };
 
         db.Subjects.Add(new SubjectEntity
