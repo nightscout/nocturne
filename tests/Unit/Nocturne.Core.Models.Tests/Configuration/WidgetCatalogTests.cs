@@ -159,4 +159,39 @@ public class WidgetCatalogTests
 
         settings.Widgets.Select(w => w.Id).Should().Equal(WidgetId.Agp, WidgetId.BatteryStatus);
     }
+
+    // Rows written while WidgetConfig carried a size and a per-widget settings bag are still out
+    // there. Reading one must keep the widget, not throw and cost the tenant the whole section.
+    [Fact]
+    public void Stored_row_carrying_a_size_and_widget_settings_still_deserialises()
+    {
+        const string json = """
+            {
+              "widgets": [
+                {
+                  "id": "Statistics",
+                  "enabled": false,
+                  "placement": "Main",
+                  "size": "Large",
+                  "settings": { "foo": 1 }
+                }
+              ]
+            }
+            """;
+
+        var settings = JsonSerializer.Deserialize<FeatureSettings>(json)!;
+
+        settings
+            .Widgets.Should()
+            .ContainSingle()
+            .Which.Should()
+            .BeEquivalentTo(
+                new
+                {
+                    Id = WidgetId.Statistics,
+                    Enabled = false,
+                    Placement = WidgetPlacement.Main,
+                }
+            );
+    }
 }

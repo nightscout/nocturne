@@ -321,52 +321,52 @@ public static class WidgetCatalog
     [
         Top(WidgetId.BgDelta, "BG Delta",
             "Blood glucose change with connection status and last updated time",
-            "TrendingUp", WidgetUICategory.Glucose),
+            "TrendingUp"),
         Top(WidgetId.LastUpdated, "Last Updated",
             "Time since last glucose reading with device info",
-            "Clock", WidgetUICategory.Device),
+            "Clock"),
         Top(WidgetId.ConnectionStatus, "Connection Status",
             "Real-time data connection status",
-            "Wifi", WidgetUICategory.Status),
+            "Wifi"),
         Top(WidgetId.Meals, "Recent Meals",
             "Recent meal entries and carb intake",
-            "UtensilsCrossed", WidgetUICategory.Meals),
+            "UtensilsCrossed"),
         Top(WidgetId.Trackers, "Trackers",
             "Active tracker status and progress",
-            "ListChecks", WidgetUICategory.Status),
+            "ListChecks"),
         Top(WidgetId.TirChart, "Time in Range",
             "Stacked chart showing time in glucose ranges",
-            "BarChart3", WidgetUICategory.Glucose),
+            "BarChart3"),
         Top(WidgetId.DailySummary, "Daily Summary",
             "Today's glucose statistics overview",
-            "CalendarDays", WidgetUICategory.Glucose),
+            "CalendarDays"),
         Top(WidgetId.Clock, "Clock",
             "Current time and date display",
-            "Clock", WidgetUICategory.Status),
+            "Clock"),
         Top(WidgetId.Tdd, "Total Daily Dose",
             "Today's insulin with basal/bolus breakdown",
-            "PieChart", WidgetUICategory.Glucose),
+            "PieChart"),
         Main(WidgetId.GlucoseChart, "Glucose Chart",
             "Main glucose trend chart with treatments",
-            "LineChart", WidgetUICategory.Glucose, on: true),
+            "LineChart", on: true),
         Main(WidgetId.Statistics, "Statistics",
             "BG statistics cards",
-            "BarChart2", WidgetUICategory.Glucose, on: true),
+            "BarChart2", on: true),
         Main(WidgetId.Predictions, "Predictions",
             "Glucose prediction lines on chart",
-            "TrendingUp", WidgetUICategory.Glucose, on: true),
+            "TrendingUp", on: true),
         Main(WidgetId.DailyStats, "Daily Stats",
             "Recent entries card",
-            "CalendarDays", WidgetUICategory.Glucose, on: true),
+            "CalendarDays", on: true),
         Main(WidgetId.Treatments, "Treatments",
             "Recent treatments card",
-            "Syringe", WidgetUICategory.Glucose, on: true),
+            "Syringe", on: true),
         Main(WidgetId.Agp, "AGP",
             "Ambulatory glucose profile",
-            "Activity", WidgetUICategory.Glucose, renderable: false),
+            "Activity", renderable: false),
         Main(WidgetId.BatteryStatus, "Battery Status",
             "Device battery status",
-            "Battery", WidgetUICategory.Device, renderable: false),
+            "Battery", renderable: false),
     ];
 
     private static WidgetDefinition Top(
@@ -374,19 +374,17 @@ public static class WidgetCatalog
         string name,
         string description,
         string icon,
-        WidgetUICategory category,
         bool renderable = true
-    ) => Row(id, WidgetPlacement.Top, name, description, icon, category, null, renderable);
+    ) => Row(id, WidgetPlacement.Top, name, description, icon, null, renderable);
 
     private static WidgetDefinition Main(
         WidgetId id,
         string name,
         string description,
         string icon,
-        WidgetUICategory category,
         bool on = false,
         bool renderable = true
-    ) => Row(id, WidgetPlacement.Main, name, description, icon, category, on, renderable);
+    ) => Row(id, WidgetPlacement.Main, name, description, icon, on, renderable);
 
     private static WidgetDefinition Row(
         WidgetId id,
@@ -394,7 +392,6 @@ public static class WidgetCatalog
         string name,
         string description,
         string icon,
-        WidgetUICategory category,
         bool? on,
         bool renderable
     ) =>
@@ -405,7 +402,6 @@ public static class WidgetCatalog
             Name = name,
             Description = description,
             Icon = icon,
-            UICategory = category,
             DefaultEnabled = on,
             Renderable = renderable,
         };
@@ -452,29 +448,6 @@ public enum WidgetPlacement
 }
 
 /// <summary>
-/// Widget size variants for layout.
-/// </summary>
-[JsonConverter(typeof(JsonStringEnumConverter))]
-public enum WidgetSize
-{
-    Small,
-    Medium,
-    Large
-}
-
-/// <summary>
-/// Widget UI category for grouping in settings.
-/// </summary>
-[JsonConverter(typeof(JsonStringEnumConverter))]
-public enum WidgetUICategory
-{
-    Glucose,
-    Meals,
-    Device,
-    Status
-}
-
-/// <summary>
 /// Widget definition with metadata for UI display.
 /// Served from the API so frontend doesn't need to maintain widget definitions.
 /// </summary>
@@ -512,12 +485,6 @@ public class WidgetDefinition
     public string Icon { get; init; } = string.Empty;
 
     /// <summary>
-    /// UI category for grouping in settings
-    /// </summary>
-    [JsonPropertyName("uiCategory")]
-    public WidgetUICategory UICategory { get; init; }
-
-    /// <summary>
     /// Where the widget is displayed (top grid or main section)
     /// </summary>
     [JsonPropertyName("placement")]
@@ -538,15 +505,6 @@ public class WidgetConfig
 
     [JsonPropertyName("placement")]
     public WidgetPlacement Placement { get; set; } = WidgetPlacement.Main;
-
-    [JsonPropertyName("size")]
-    public WidgetSize? Size { get; set; }
-
-    /// <summary>
-    /// Widget-specific settings (future extensibility)
-    /// </summary>
-    [JsonPropertyName("settings")]
-    public Dictionary<string, object>? Settings { get; set; }
 }
 
 /// <summary>

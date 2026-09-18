@@ -1,4 +1,3 @@
-using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
@@ -178,9 +177,6 @@ public class MetadataController : ControllerBase
             new WidgetDefinitionsMetadata
             {
                 Definitions = [.. WidgetCatalog.All],
-                AvailablePlacements = Enum.GetValues<WidgetPlacement>(),
-                AvailableSizes = Enum.GetValues<WidgetSize>(),
-                AvailableUICategories = Enum.GetValues<WidgetUICategory>(),
                 Description = "Available dashboard widget definitions for configuration",
             }
         );
@@ -338,21 +334,6 @@ public class WidgetDefinitionsMetadata
     /// Array of all widget definitions with full metadata
     /// </summary>
     public WidgetDefinition[] Definitions { get; set; } = [];
-
-    /// <summary>
-    /// All available placement options
-    /// </summary>
-    public WidgetPlacement[] AvailablePlacements { get; set; } = [];
-
-    /// <summary>
-    /// All available size options
-    /// </summary>
-    public WidgetSize[] AvailableSizes { get; set; } = [];
-
-    /// <summary>
-    /// All available UI category options
-    /// </summary>
-    public WidgetUICategory[] AvailableUICategories { get; set; } = [];
 
     /// <summary>
     /// Description of the widget definitions
