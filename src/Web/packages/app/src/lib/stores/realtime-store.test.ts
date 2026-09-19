@@ -29,21 +29,26 @@ vi.mock("svelte-sonner", () => ({
 }));
 
 import { RealtimeStore } from "./realtime-store.svelte";
-import type { StorageEvent, SyncProgressEvent } from "$lib/websocket/types";
+import type { ConnectionInfo, StorageEvent, SyncProgressEvent } from "$lib/websocket/types";
 
 /** The realtime/backfill entry points, which the class keeps private. */
 interface StoreInternals {
   handleCreate(event: StorageEvent): void;
   performBackfillIfNeeded(force?: boolean): Promise<void>;
   websocketClient: {
-    eventHandlers: { syncProgress?: (event: SyncProgressEvent) => void };
+    eventHandlers: {
+      connect?: (info: ConnectionInfo) => void;
+      disconnect?: (reason: string) => void;
+      connect_error?: (error: Error) => void;
+      syncProgress?: (event: SyncProgressEvent) => void;
+    };
   };
 }
 
 type TestStore = StoreInternals &
   Pick<
     RealtimeStore,
-    "currentReservoir" | "entries" | "direction" | "syncProgressByConnector" | "destroy"
+    "connectionUnavailable" | "currentReservoir" | "entries" | "direction" | "syncProgressByConnector" | "destroy"
   >;
 
 /** Store instance with an empty socket URL, so nothing connects. */
@@ -65,6 +70,66 @@ function deviceStatus(id: string): StorageEvent {
     doc: { _id: id, mills: Date.now(), pump: {} },
   };
 }
+
+describe("RealtimeStore connection presentation", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    api.getCurrentTherapyState.mockResolvedValue({ reservoir: null });
+    api.apsGetAll.mockResolvedValue({ data: [] });
+    api.emptyPage.mockResolvedValue({ data: [] });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+    vi.clearAllMocks();
+  });
+
+  it("waits before presenting a foreground disconnect and clears it on reconnect", async () => {
+    const store = makeStore();
+    store.websocketClient.eventHandlers.connect?.({ clientId: "one", serverTime: "", version: "" });
+    store.websocketClient.eventHandlers.disconnect?.("transport close");
+
+    await vi.advanceTimersByTimeAsync(9_999);
+    expect(store.connectionUnavailable).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(store.connectionUnavailable).toBe(true);
+
+    store.websocketClient.eventHandlers.connect?.({ clientId: "two", serverTime: "", version: "" });
+    expect(store.connectionUnavailable).toBe(false);
+    store.destroy();
+  });
+
+  it("does not present a transient connection error", async () => {
+    const store = makeStore();
+    store.websocketClient.eventHandlers.connect_error?.(new Error("temporary"));
+    await vi.advanceTimersByTimeAsync(5_000);
+    store.websocketClient.eventHandlers.connect?.({ clientId: "one", serverTime: "", version: "" });
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(store.connectionUnavailable).toBe(false);
+    store.destroy();
+  });
+
+  it("does not present a disconnect while the page is hidden", async () => {
+    const page = {
+      visibilityState: "hidden",
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    };
+    vi.stubGlobal("document", page);
+    const store = makeStore();
+    store.websocketClient.eventHandlers.disconnect?.("transport close");
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(store.connectionUnavailable).toBe(false);
+
+    page.visibilityState = "visible";
+    store.websocketClient.eventHandlers.disconnect?.("transport close");
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(store.connectionUnavailable).toBe(true);
+    store.destroy();
+  });
+});
 
 describe("RealtimeStore reservoir freshness", () => {
   beforeEach(() => {

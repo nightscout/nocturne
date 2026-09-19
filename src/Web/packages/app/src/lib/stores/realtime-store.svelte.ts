@@ -157,6 +157,7 @@ export class RealtimeStore {
   );
   isConnected = $derived(this.websocketClient?.isConnected || false);
   connectionError = $derived(this.websocketClient?.lastError || null);
+  connectionUnavailable = $state(false);
   connectionStats = $derived(
     this.websocketClient?.stats || {
       connectedClients: 0,
@@ -318,11 +319,18 @@ export class RealtimeStore {
           // Snap now immediately so time-since displays don't lag
           this.now = Date.now();
           this.stopBackgroundPolling();
+          this.connectionUnavailable = false;
+          this.clearDisconnectNotice();
+          this.websocketClient.ensureConnected();
+          this.scheduleDisconnectNotice();
           console.log('[RealtimeStore] Page became visible, backfilling missed data...');
           // Always backfill on return — timers are unreliable in hidden tabs
           // so we can't trust lastDataReceived to be meaningful
           this.performBackfillIfNeeded(true);
         } else {
+          this.connectionUnavailable = false;
+          this.clearDisconnectNotice();
+          this.announcedDisconnect = false;
           console.log('[RealtimeStore] Page hidden, starting background polling...');
           this.startBackgroundPolling();
         }
@@ -463,12 +471,13 @@ export class RealtimeStore {
   private setupEventHandlers(): void {
     this.websocketClient.on("connect", () => {
       this.clearDisconnectNotice();
+      this.connectionUnavailable = false;
       // Connecting on page load is expected and needs no announcement; only
       // report a recovery from a loss the user was actually told about.
-      if (this.announcedDisconnect) {
+      if (this.announcedDisconnect && this.hasEverConnected) {
         toast.success("Reconnected to real-time data");
-        this.announcedDisconnect = false;
       }
+      this.announcedDisconnect = false;
       this.hasEverConnected = true;
       // Always force backfill on reconnection — any disconnection may have
       // caused missed data, even if the gap was under 5 minutes.
@@ -476,17 +485,11 @@ export class RealtimeStore {
     });
 
     this.websocketClient.on("disconnect", () => {
-      if (!this.hasEverConnected || this.announcedDisconnect) return;
-      if (this.disconnectNoticeTimer) return;
-      this.disconnectNoticeTimer = setTimeout(() => {
-        this.disconnectNoticeTimer = null;
-        this.announcedDisconnect = true;
-        toast.warning("Real-time data disconnected");
-      }, RealtimeStore.DISCONNECT_NOTICE_DELAY_MS);
+      this.scheduleDisconnectNotice();
     });
 
     this.websocketClient.on("connect_error", () => {
-      toast.error("Failed to connect to real-time data");
+      this.scheduleDisconnectNotice();
     });
 
     this.websocketClient.on("dataUpdate", (event: DataUpdateEvent) => {
@@ -933,6 +936,19 @@ export class RealtimeStore {
       clearTimeout(this.disconnectNoticeTimer);
       this.disconnectNoticeTimer = null;
     }
+  }
+
+  private scheduleDisconnectNotice(): void {
+    if (this.announcedDisconnect || this.disconnectNoticeTimer) return;
+    if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+    this.disconnectNoticeTimer = setTimeout(() => {
+      this.disconnectNoticeTimer = null;
+      if (this.websocketClient.isConnected) return;
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      this.connectionUnavailable = true;
+      this.announcedDisconnect = true;
+      toast.warning("Real-time data unavailable");
+    }, RealtimeStore.DISCONNECT_NOTICE_DELAY_MS);
   }
 
   /** Cleanup */

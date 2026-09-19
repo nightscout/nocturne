@@ -14,7 +14,6 @@
   const currentBG = $derived(realtimeStore.currentBG);
   const bgDelta = $derived(realtimeStore.bgDelta);
   const lastUpdated = $derived(realtimeStore.lastUpdated);
-  const isConnected = $derived(realtimeStore.isConnected);
   const currentTime = $derived(realtimeStore.now);
   const timeSince = $derived(realtimeStore.timeSinceReading);
 
@@ -23,7 +22,7 @@
   const directionInfo = $derived(getDirectionInfo(realtimeStore.direction));
 
   const isStale = $derived(currentTime - lastUpdated > STALE_THRESHOLD_MS);
-  const isDisconnected = $derived(!isConnected);
+  const isDisconnected = $derived(realtimeStore.connectionUnavailable);
   const isDimmed = $derived(isStale || isDisconnected);
   const hasData = $derived(currentBG > 0);
 

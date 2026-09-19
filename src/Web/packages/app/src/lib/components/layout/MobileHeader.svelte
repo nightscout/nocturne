@@ -30,7 +30,7 @@
   const now = $derived(realtimeStore?.now ?? Date.now());
   const displayCurrentBG = $derived(formatGlucoseValue(rawCurrentBG, units));
   const isStale = $derived(now - lastUpdated > STALE_THRESHOLD_MS);
-  const isDisconnected = $derived(!(realtimeStore?.isConnected ?? false));
+  const isDisconnected = $derived(realtimeStore?.connectionUnavailable ?? false);
   // No reading yet: show the skeleton rather than rendering the 0 sentinel as a
   // glucose value.
   const isLoading = $derived(rawCurrentBG <= 0);

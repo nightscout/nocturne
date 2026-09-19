@@ -49,24 +49,9 @@
   const rawCurrentBG = $derived(realtimeStore?.currentBG ?? 0);
   const lastUpdated = $derived(realtimeStore?.lastUpdated ?? 0);
   const now = $derived(realtimeStore?.now ?? Date.now());
-  const isConnected = $derived(realtimeStore?.isConnected ?? false);
   const isStale = $derived(now - lastUpdated > STALE_THRESHOLD_MS);
 
-  // Debounce the connected→disconnected transition so a brief blip (e.g. the
-  // socket reconnecting during page load) doesn't flash the "Connection error"
-  // state. Reconnecting clears it immediately; dropping waits this long first.
-  const DISCONNECT_GRACE_MS = 3000;
-  let isDisconnected = $state(false);
-  $effect(() => {
-    if (isConnected) {
-      isDisconnected = false;
-      return;
-    }
-    const timeout = setTimeout(() => {
-      isDisconnected = true;
-    }, DISCONNECT_GRACE_MS);
-    return () => clearTimeout(timeout);
-  });
+  const isDisconnected = $derived(realtimeStore?.connectionUnavailable ?? false);
   const isLoading = $derived(
     rawCurrentBG === 0 && (realtimeStore?.entries.length ?? 0) === 0
   );
