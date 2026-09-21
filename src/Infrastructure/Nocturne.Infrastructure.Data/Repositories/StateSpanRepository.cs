@@ -33,6 +33,30 @@ public class StateSpanRepository : IStateSpanRepository
     };
 
     /// <summary>
+    ///     Categories whose spans are device-reported states: a pump that reports its mode as a
+    ///     stream of short readings — a retry every couple of minutes, a mode confirmed again at
+    ///     each sync — describes one continuous state in many rows. Those rows fold into one span
+    ///     at write time (<see cref="TryFoldIntoNeighbourAsync"/>). Patient-entered categories
+    ///     (exercise, illness, travel) are left as entered: two workouts back to back are two.
+    ///     Overrides are not folded either: every override carries the same <c>Custom</c> state
+    ///     and differs only by name, so two adjacent ones are as likely two overrides as one.
+    /// </summary>
+    private static readonly HashSet<string> FoldableCategories = new(StringComparer.OrdinalIgnoreCase)
+    {
+        nameof(StateSpanCategory.PumpMode),
+        nameof(StateSpanCategory.PumpConnectivity),
+    };
+
+    /// <summary>
+    ///     How far apart two same-state spans may sit and still be one state. A minute absorbs the
+    ///     minute rounding of an export and the second-level jitter of a device clock; a longer
+    ///     gap is a real interruption the timeline should show.
+    /// </summary>
+    public static readonly TimeSpan FoldTolerance = TimeSpan.FromMinutes(1);
+
+    private const string FoldedSpansKey = "foldedSpans";
+
+    /// <summary>
     /// The stored <c>Category</c> values that represent v1 Activity records, as strings for
     /// translation into SQL.
     /// </summary>
@@ -216,6 +240,10 @@ public class StateSpanRepository : IStateSpanRepository
         }
         else
         {
+            var folded = await TryFoldIntoNeighbourAsync(stateSpan, cancellationToken);
+            if (folded != null)
+                return StateSpanMapper.ToDomainModel(folded);
+
             entity = StateSpanMapper.ToEntity(stateSpan);
             _context.StateSpans.Add(entity);
             isNew = true;
@@ -291,6 +319,79 @@ public class StateSpanRepository : IStateSpanRepository
     }
 
     /// <summary>
+    ///     Absorbs <paramref name="incoming"/> into a stored span of the same category, state and
+    ///     source that touches it — overlapping, or within <see cref="FoldTolerance"/> on either
+    ///     side — by widening that span to cover both. Returns the widened span, or null when there
+    ///     is nothing to fold into. Only connector-keyed, closed spans fold: a span without an
+    ///     <c>OriginalId</c> is a person's own entry, and an open span says nothing about when the
+    ///     state ended, so a later same-state reading supersedes it (see the caller) rather than
+    ///     claiming the state ran unbroken in between.
+    /// </summary>
+    /// <remarks>
+    ///     Folding is what makes a stream of short same-state readings one span, and what keeps a
+    ///     re-read idempotent without remembering which ids were absorbed: a folded reading, seen
+    ///     again, lies inside the span it widened and folds again to no effect. The number of
+    ///     readings that widened the span is kept in its metadata.
+    /// </remarks>
+    private async Task<StateSpanEntity?> TryFoldIntoNeighbourAsync(StateSpan incoming, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(incoming.OriginalId) || string.IsNullOrEmpty(incoming.State)) return null;
+        if (!FoldableCategories.Contains(incoming.Category.ToString())) return null;
+
+        var category = incoming.Category.ToString();
+        var start = incoming.StartTimestamp;
+        var end = incoming.EndTimestamp;
+        var reachStart = start - FoldTolerance;
+        var reachEnd = (end ?? start) + FoldTolerance;
+
+        var neighbour = await _context.StateSpans
+            .Where(s => s.Category == category
+                        && s.State == incoming.State
+                        && s.Source == incoming.Source
+                        && s.DeletedAt == null
+                        && s.SupersededById == null
+                        && s.EndTimestamp != null
+                        && s.StartTimestamp <= reachEnd
+                        && s.EndTimestamp >= reachStart)
+            .OrderBy(s => s.StartTimestamp)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (neighbour == null) return null;
+
+        var widened = false;
+        if (start < neighbour.StartTimestamp)
+        {
+            neighbour.StartTimestamp = start;
+            widened = true;
+        }
+
+        if (end == null || end > neighbour.EndTimestamp)
+        {
+            neighbour.EndTimestamp = end;
+            widened = true;
+        }
+
+        // A reading that lies inside the span already — a re-read, or a retry nested in a longer
+        // report — changes nothing and is not counted.
+        if (!widened) return neighbour;
+
+        var metadata = MapperHelpers.DeserializeJson<Dictionary<string, object>>(neighbour.MetadataJson) ?? new Dictionary<string, object>();
+        var foldedBefore = metadata.TryGetValue(FoldedSpansKey, out var raw) && raw is System.Text.Json.JsonElement je && je.TryGetInt32(out var n) ? n : 0;
+        metadata[FoldedSpansKey] = foldedBefore + 1;
+        if (metadata.ContainsKey("durationSeconds"))
+            metadata["durationSeconds"] = neighbour.EndTimestamp is { } e ? (long)(e - neighbour.StartTimestamp).TotalSeconds : 0L;
+
+        neighbour.MetadataJson = System.Text.Json.JsonSerializer.Serialize(metadata);
+        neighbour.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync(cancellationToken);
+
+        _logger.LogDebug(
+            "Folded {Category}/{State} span {OriginalId} into {NeighbourId} ({Start:O}..{End:O})",
+            category, incoming.State, incoming.OriginalId, neighbour.Id, neighbour.StartTimestamp, neighbour.EndTimestamp);
+
+        return neighbour;
+    }
+
+    /// <summary>
     /// The soft-deleted row, if any, that forbids re-creating <paramref name="originalId"/>.
     /// State spans are keyed by <c>OriginalId</c> where the V4 tables are keyed by
     /// <c>LegacyId</c>, so the lookup is local while the rule stays shared.
@@ -304,6 +405,72 @@ public class StateSpanRepository : IStateSpanRepository
             .WhereBlocksRecreation()
             .OrderByDescending(s => s.DeletedAt)
             .FirstOrDefaultAsync(cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<StateSpanFoldResult> FoldStoredSpansAsync(CancellationToken cancellationToken = default)
+    {
+        var result = new StateSpanFoldResult();
+        var categories = FoldableCategories.ToList();
+
+        var spans = await _context.StateSpans
+            .Where(s => categories.Contains(s.Category)
+                        && s.OriginalId != null
+                        && s.EndTimestamp != null
+                        && s.DeletedAt == null
+                        && s.SupersededById == null)
+            .OrderBy(s => s.Category).ThenBy(s => s.Source).ThenBy(s => s.State).ThenBy(s => s.StartTimestamp)
+            .ToListAsync(cancellationToken);
+        result.Examined = spans.Count;
+
+        var now = DateTime.UtcNow;
+        foreach (var run in spans.GroupBy(s => (s.Category, s.Source, s.State)))
+        {
+            StateSpanEntity? keeper = null;
+            var absorbedIntoKeeper = 0;
+
+            foreach (var span in run)
+            {
+                if (keeper != null && span.StartTimestamp <= keeper.EndTimestamp!.Value + FoldTolerance)
+                {
+                    if (span.EndTimestamp > keeper.EndTimestamp)
+                        keeper.EndTimestamp = span.EndTimestamp;
+                    span.DeletedAt = now;
+                    absorbedIntoKeeper++;
+                    result.Removed++;
+                    continue;
+                }
+
+                if (keeper != null && absorbedIntoKeeper > 0)
+                    MarkFolded(keeper, absorbedIntoKeeper, now, result);
+
+                keeper = span;
+                absorbedIntoKeeper = 0;
+            }
+
+            if (keeper != null && absorbedIntoKeeper > 0)
+                MarkFolded(keeper, absorbedIntoKeeper, now, result);
+        }
+
+        if (result.Removed > 0)
+            await _context.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "Folded stored state spans: {Examined} examined, {Widened} widened, {Removed} removed",
+            result.Examined, result.Widened, result.Removed);
+        return result;
+    }
+
+    private static void MarkFolded(StateSpanEntity keeper, int absorbed, DateTime now, StateSpanFoldResult result)
+    {
+        var metadata = MapperHelpers.DeserializeJson<Dictionary<string, object>>(keeper.MetadataJson) ?? new Dictionary<string, object>();
+        var before = metadata.TryGetValue(FoldedSpansKey, out var raw) && raw is System.Text.Json.JsonElement je && je.TryGetInt32(out var n) ? n : 0;
+        metadata[FoldedSpansKey] = before + absorbed;
+        if (metadata.ContainsKey("durationSeconds"))
+            metadata["durationSeconds"] = (long)(keeper.EndTimestamp!.Value - keeper.StartTimestamp).TotalSeconds;
+        keeper.MetadataJson = System.Text.Json.JsonSerializer.Serialize(metadata);
+        keeper.UpdatedAt = now;
+        result.Widened++;
+    }
 
     /// <summary>
     /// Bulk upsert state spans (for connector imports)

@@ -6,6 +6,7 @@ using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Glooko.Configurations;
+using Nocturne.Connectors.Glooko.Xt;
 using Nocturne.Connectors.Glooko.Models;
 using Nocturne.Connectors.Glooko.Utilities;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -32,9 +33,15 @@ public class GlookoAuthTokenProvider(
 
     protected override string ConnectorName => "Glooko";
 
+    /// <summary>Why the last XT token request answered null, worded for the tenant's sync card.</summary>
+    public string? XtSignInFailure { get; private set; }
+
     protected override async Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
         GlookoConnectorConfiguration config, CancellationToken cancellationToken)
     {
+        if (config.IsXt)
+            return AcquireXtToken(config);
+
         var maxRetries = LoginAttempts(config);
         IReadOnlyDictionary<string, string>? metadata = null;
 
@@ -64,6 +71,36 @@ public class GlookoAuthTokenProvider(
 
         _logger.LogInformation("Glooko authentication successful");
         return (sessionCookie, DateTime.UtcNow.Add(GlookoConstants.SessionLifetime), metadata);
+    }
+
+    /// <summary>
+    ///     Glooko XT: nothing is acquired. The service signs a patient in with a code it emails
+    ///     them, which no background job can read, so the connect flow stores the resulting JWT
+    ///     as <see cref="GlookoConnectorConfiguration.AccessToken"/> and this hands it out until
+    ///     it lapses; an absent or lapsed token is answered with null and the sync tells the
+    ///     tenant to reconnect.
+    /// </summary>
+    private (string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata) AcquireXtToken(GlookoConnectorConfiguration config)
+    {
+        var token = config.AccessToken?.Trim();
+        if (string.IsNullOrEmpty(token))
+        {
+            XtSignInFailure = "Glooko XT is not connected yet. Open the connector settings and sign in with the code Glooko XT emails you.";
+            _logger.LogInformation("Glooko XT has no stored access token for this tenant");
+            return (null, DateTime.MinValue, null);
+        }
+
+        var expiry = GlookoXtJwt.TryGetExpiry(token);
+        var now = DateTime.UtcNow;
+        if (expiry is not null && expiry <= now.AddMinutes(GlookoXtConstants.TokenLifetimeBufferMinutes))
+        {
+            XtSignInFailure = "The Glooko XT sign-in has expired. Open the connector settings and sign in again with a new emailed code.";
+            _logger.LogInformation("Glooko XT access token expired at {ExpiresAt:O}", expiry);
+            return (null, DateTime.MinValue, null);
+        }
+
+        XtSignInFailure = null;
+        return (token, expiry ?? now + GlookoXtConstants.UnknownExpiryLifetime, null);
     }
 
     /// <summary>

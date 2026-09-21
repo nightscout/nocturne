@@ -101,6 +101,23 @@
       return;
     }
 
+    // A connector asking for a new sign-in is answered in its settings page, which the server
+    // cannot open; the notice comes down by itself once a sync no longer asks.
+    if (
+      notification.type?.startsWith("connector.") &&
+      actionId === "open" &&
+      notification.sourceId
+    ) {
+      if (notification.id) {
+        realtimeStore?.markNotificationRead(notification.id);
+        markAsRead(notification.id).catch((err) =>
+          console.error("Failed to mark notification read:", err)
+        );
+      }
+      goto(`/settings/connectors/${notification.sourceId}`);
+      return;
+    }
+
     try {
       await executeAction({
         id: notification.id!,

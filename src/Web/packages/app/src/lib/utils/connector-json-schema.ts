@@ -18,6 +18,11 @@ export interface JsonSchemaProperty {
   "x-hidden"?: boolean;
   /** Whether this property holds a secret (x-secret extension) */
   "x-secret"?: boolean;
+  /**
+   * Shown only while another property holds one of these values (x-visibleWhen extension).
+   * The backend also stops requiring the property outside that condition.
+   */
+  "x-visibleWhen"?: { property: string; values: string[] };
 }
 
 export interface JsonSchema {

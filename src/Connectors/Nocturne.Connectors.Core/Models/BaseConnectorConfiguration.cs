@@ -229,12 +229,28 @@ public abstract class BaseConnectorConfiguration : IConnectorConfiguration
                 displayName = property.Name;
 
             var connectorProp = property.GetCustomAttribute<ConnectorPropertyAttribute>();
-            if (connectorProp is { Required: true })
+            if (connectorProp is { Required: true } && IsPropertyApplicable(connectorProp))
                 displayName = connectorProp.GetKeyName();
 
             if (displayName != null)
                 yield return (property, displayName, connectorProp);
         }
+    }
+
+    /// <summary>
+    ///     Whether <paramref name="connectorProp"/> applies to this configuration as it stands: a
+    ///     property conditioned on another (<see cref="ConnectorPropertyAttribute.VisibleWhen"/>)
+    ///     applies only while that other property holds one of the listed values. A condition
+    ///     naming a key this type does not carry never applies.
+    /// </summary>
+    public bool IsPropertyApplicable(ConnectorPropertyAttribute connectorProp)
+    {
+        if (!connectorProp.HasVisibilityCondition) return true;
+
+        var master = GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .FirstOrDefault(p => p.GetCustomAttribute<ConnectorPropertyAttribute>()?.Key == connectorProp.VisibleWhen);
+
+        return master is not null && connectorProp.AppliesFor(master.GetValue(this));
     }
 
     /// <summary>

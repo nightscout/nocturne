@@ -85,6 +85,9 @@ public class StateSpanService : IStateSpanService
     }
 
     /// <inheritdoc />
+    public Task<StateSpanFoldResult> FoldStoredSpansAsync(CancellationToken cancellationToken = default) =>
+        _repository.FoldStoredSpansAsync(cancellationToken);
+
     public async Task<StateSpan> UpsertStateSpanAsync(
         StateSpan stateSpan,
         CancellationToken cancellationToken = default)

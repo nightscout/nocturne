@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Nocturne.API.Services.Audit;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.API.Services.Connectors;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Connectors;
@@ -555,6 +556,12 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
                 lastErrorAt: DateTime.UtcNow,
                 cancellationToken: stoppingToken);
         }
+
+        // A connector whose credential only the tenant can renew says so here; the owner is told
+        // once and the notice is taken down when a later run no longer asks.
+        if (scope.ServiceProvider.GetService<IConnectorAttentionNotifier>() is { } attentionNotifier)
+            await attentionNotifier.ApplyAsync(
+                tenantId, Registration.ConnectorId, Registration.DisplayName, result.Attention, stoppingToken);
     }
 
     public override async Task StopAsync(CancellationToken cancellationToken)

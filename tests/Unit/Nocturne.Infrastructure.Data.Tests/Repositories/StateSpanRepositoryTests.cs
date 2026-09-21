@@ -72,6 +72,122 @@ public class StateSpanRepositoryTests : IDisposable
         GC.SuppressFinalize(this);
     }
 
+    private static StateSpan DeviceSpan(string originalId, string state, DateTime start, DateTime? end, StateSpanCategory category = StateSpanCategory.PumpMode) => new()
+    {
+        OriginalId = originalId,
+        Category = category,
+        State = state,
+        StartTimestamp = start,
+        EndTimestamp = end,
+        Source = "glookoxt-connector",
+        Metadata = new Dictionary<string, object> { ["durationSeconds"] = end is { } e ? (long)(e - start).TotalSeconds : 0L },
+    };
+
+    [Fact]
+    public async Task UpsertStateSpanAsync_ContiguousSameStateDeviceSpans_FoldIntoOne()
+    {
+        var t0 = new DateTime(2026, 9, 7, 0, 0, 0, DateTimeKind.Utc);
+        await _repository.UpsertStateSpanAsync(DeviceSpan("a", "Limited", t0, t0.AddSeconds(225)));
+        await _repository.UpsertStateSpanAsync(DeviceSpan("b", "Limited", t0.AddMinutes(3), t0.AddMinutes(3).AddSeconds(1)));
+        var folded = await _repository.UpsertStateSpanAsync(DeviceSpan("c", "Limited", t0.AddMinutes(3), t0.AddMinutes(9)));
+
+        var stored = (await _repository.GetStateSpansAsync(category: StateSpanCategory.PumpMode)).ToList();
+        stored.Should().ContainSingle("three readings of one continuous state are one span");
+        stored[0].OriginalId.Should().Be("a");
+        stored[0].StartTimestamp.Should().Be(t0);
+        stored[0].EndTimestamp.Should().Be(t0.AddMinutes(9));
+        folded.Id.Should().Be(stored[0].Id);
+        stored[0].Metadata!["foldedSpans"].ToString().Should().Be("1", "the nested one-second retry widened nothing and is not counted");
+        stored[0].Metadata!["durationSeconds"].ToString().Should().Be("540");
+    }
+
+    [Fact]
+    public async Task FoldStoredSpansAsync_MergesStoredRunsAndSoftDeletesTheAbsorbed()
+    {
+        var t0 = new DateTime(2026, 9, 7, 0, 0, 0, DateTimeKind.Utc);
+        // Stored before folding existed: written straight to the context, not through the upsert.
+        foreach (var (id, state, start, end) in new[]
+                 {
+                     ("a", "Limited", t0, t0.AddMinutes(3)),
+                     ("b", "Limited", t0.AddMinutes(3), t0.AddMinutes(9)),
+                     ("c", "Automatic", t0.AddMinutes(9), t0.AddHours(2)),
+                     ("d", "Automatic", t0.AddHours(2), t0.AddHours(3)),
+                     ("e", "Automatic", t0.AddHours(5), t0.AddHours(6)),
+                 })
+        {
+            _context.StateSpans.Add(Nocturne.Infrastructure.Data.Mappers.StateSpanMapper.ToEntity(DeviceSpan(id, state, start, end)));
+        }
+        await _context.SaveChangesAsync();
+
+        var result = await _repository.FoldStoredSpansAsync();
+
+        result.Examined.Should().Be(5);
+        result.Widened.Should().Be(2);
+        result.Removed.Should().Be(2);
+        var stored = (await _repository.GetStateSpansAsync(category: StateSpanCategory.PumpMode, descending: false)).ToList();
+        stored.Select(s => (s.OriginalId, s.EndTimestamp)).Should().Equal(
+            ("a", t0.AddMinutes(9)), ("c", t0.AddHours(3)), ("e", t0.AddHours(6)));
+        stored[0].Metadata!["foldedSpans"].ToString().Should().Be("1");
+
+        (await _repository.FoldStoredSpansAsync()).Removed.Should().Be(0, "a second pass finds nothing left to fold");
+    }
+
+    [Fact]
+    public async Task UpsertStateSpanAsync_GapBeyondTolerance_KeepsSeparateSpans()
+    {
+        var t0 = new DateTime(2026, 9, 7, 0, 0, 0, DateTimeKind.Utc);
+        await _repository.UpsertStateSpanAsync(DeviceSpan("a", "Automatic", t0, t0.AddHours(1)));
+        await _repository.UpsertStateSpanAsync(DeviceSpan("b", "Automatic", t0.AddHours(1).AddMinutes(2), t0.AddHours(2)));
+
+        (await _repository.GetStateSpansAsync(category: StateSpanCategory.PumpMode)).Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task UpsertStateSpanAsync_DifferentState_DoesNotFold()
+    {
+        var t0 = new DateTime(2026, 9, 7, 0, 0, 0, DateTimeKind.Utc);
+        await _repository.UpsertStateSpanAsync(DeviceSpan("a", "Automatic", t0, t0.AddHours(1)));
+        await _repository.UpsertStateSpanAsync(DeviceSpan("b", "Limited", t0.AddHours(1), t0.AddHours(1).AddMinutes(2)));
+
+        (await _repository.GetStateSpansAsync(category: StateSpanCategory.PumpMode)).Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task UpsertStateSpanAsync_FoldedReadingSeenAgain_ChangesNothing()
+    {
+        var t0 = new DateTime(2026, 9, 7, 0, 0, 0, DateTimeKind.Utc);
+        await _repository.UpsertStateSpanAsync(DeviceSpan("a", "Automatic", t0, t0.AddHours(1)));
+        await _repository.UpsertStateSpanAsync(DeviceSpan("b", "Automatic", t0.AddHours(1), t0.AddHours(2)));
+        await _repository.UpsertStateSpanAsync(DeviceSpan("b", "Automatic", t0.AddHours(1), t0.AddHours(2)));
+
+        var stored = (await _repository.GetStateSpansAsync(category: StateSpanCategory.PumpMode)).ToList();
+        stored.Should().ContainSingle();
+        stored[0].Metadata!["foldedSpans"].ToString().Should().Be("1");
+    }
+
+    [Fact]
+    public async Task UpsertStateSpanAsync_ReadingBeforeAStoredSpan_WidensItBackwards()
+    {
+        var t0 = new DateTime(2026, 9, 7, 0, 0, 0, DateTimeKind.Utc);
+        await _repository.UpsertStateSpanAsync(DeviceSpan("later", "Automatic", t0.AddHours(1), t0.AddHours(2)));
+        await _repository.UpsertStateSpanAsync(DeviceSpan("earlier", "Automatic", t0, t0.AddHours(1)));
+
+        var stored = (await _repository.GetStateSpansAsync(category: StateSpanCategory.PumpMode)).ToList();
+        stored.Should().ContainSingle();
+        stored[0].StartTimestamp.Should().Be(t0);
+        stored[0].EndTimestamp.Should().Be(t0.AddHours(2));
+    }
+
+    [Fact]
+    public async Task UpsertStateSpanAsync_PatientEnteredCategory_NeverFolds()
+    {
+        var t0 = new DateTime(2026, 9, 7, 0, 0, 0, DateTimeKind.Utc);
+        await _repository.UpsertStateSpanAsync(DeviceSpan("a", "Running", t0, t0.AddMinutes(30), StateSpanCategory.Exercise));
+        await _repository.UpsertStateSpanAsync(DeviceSpan("b", "Running", t0.AddMinutes(30), t0.AddMinutes(60), StateSpanCategory.Exercise));
+
+        (await _repository.GetStateSpansAsync(category: StateSpanCategory.Exercise)).Should().HaveCount(2);
+    }
+
     [Fact]
     public async Task UpsertStateSpanAsync_NewOverride_SupersedesExistingOpenOverride()
     {

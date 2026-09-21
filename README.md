@@ -13,7 +13,7 @@ A modern, high-performance diabetes management platform built with .NET 10. Noct
 Nocturne is a comprehensive diabetes data platform that provides:
 
 - **Complete Nightscout API Implementation** - All Nightscout endpoints natively implemented in C# with full compatibility
-- **Data Connectors** - Native integration with major diabetes platforms (Dexcom, Glooko, LibreLinkUp, MiniMed CareLink, MyFitnessPal, Nightscout)
+- **Data Connectors** - Native integration with major diabetes platforms (Dexcom, Glooko incl. Glooko XT, LibreLinkUp, MiniMed CareLink, MyFitnessPal, Nightscout)
 - **Real-time Updates** - WebSocket/SignalR support for live glucose readings and alerts
 - **Advanced Analytics** - Comprehensive glucose statistics, time-in-range calculations, and reports
 - **Cloud-Native** - Built on Aspire for seamless local development and cloud deployment
@@ -43,7 +43,7 @@ Nocturne/
 - **High Performance** - Optimized queries with PostgreSQL
 - **Authentication** - JWT-based auth with API_SECRET support
 - **Real-time** - SignalR hubs for live data streaming
-- **Data Connectors** - Dexcom Share, Glooko, LibreLinkUp, MiniMed CareLink, MyFitnessPal, Nightscout, and MyLife
+- **Data Connectors** - Dexcom Share, Glooko (incl. XT), LibreLinkUp, MiniMed CareLink, MyFitnessPal, Nightscout, and MyLife
 - **PostgreSQL** - Modern relational database with EF Core migrations
 - **Observability** - OpenTelemetry (OTLP) export for metrics, traces, and logs
 - **Containerized** - Docker support for all services

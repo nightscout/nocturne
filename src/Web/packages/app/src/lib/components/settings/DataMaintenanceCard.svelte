@@ -7,6 +7,10 @@
     CardTitle,
   } from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
+  import { foldStoredSpans } from "$lib/api/generated/stateSpanMaintenances.generated.remote";
+  import type { StateSpanFoldResult } from "$lib/api/generated/nocturne-api-client";
+  import { describeSubmitError } from "$lib/forms/submit-error";
+  import Layers from "lucide-svelte/icons/layers";
   import {
     Link2,
     Loader2,
@@ -38,6 +42,26 @@
 
   let showDeduplicationDialog = $state(false);
   let isDeduplicating = $state(false);
+
+  // Fold contiguous pump-mode spans: a pump that reports its mode as a stream of short readings
+  // leaves many same-state spans that the write path now merges; this applies the rule to what
+  // is already stored.
+  let isFolding = $state(false);
+  let foldResult = $state<StateSpanFoldResult | null>(null);
+  let foldError = $state<string | null>(null);
+
+  async function handleFoldSpans() {
+    isFolding = true;
+    foldError = null;
+    foldResult = null;
+    try {
+      foldResult = await foldStoredSpans();
+    } catch (e) {
+      foldError = describeSubmitError(e, "Could not fold state spans.");
+    } finally {
+      isFolding = false;
+    }
+  }
   let showDemoDataDialog = $state(false);
 </script>
 
@@ -83,6 +107,48 @@
               Run Deduplication
             {/if}
           </Button>
+        </div>
+      </div>
+
+      <div
+        data-testid="fold-state-spans"
+        class="flex items-start gap-4 p-4 rounded-lg border bg-card"
+      >
+        <div
+          class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10"
+        >
+          <Layers class="h-5 w-5 text-primary" />
+        </div>
+        <div class="flex-1">
+          <h4 class="font-medium">Fold Contiguous Pump Modes</h4>
+          <p class="text-sm text-muted-foreground mt-1">
+            Merge pump-mode and connectivity spans that touch or sit within a minute of each
+            other into one span per continuous state. New imports are folded as they arrive; this
+            applies the same rule to spans already stored.
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            class="mt-3 gap-2"
+            onclick={handleFoldSpans}
+            disabled={isFolding}
+          >
+            {#if isFolding}
+              <Loader2 class="h-4 w-4 animate-spin" />
+              Folding...
+            {:else}
+              <Layers class="h-4 w-4" />
+              Fold Spans
+            {/if}
+          </Button>
+          {#if foldResult}
+            <p class="text-sm text-muted-foreground mt-2">
+              {foldResult.examined} spans examined, {foldResult.widened} merges, {foldResult.removed} spans absorbed.
+            </p>
+          {/if}
+          {#if foldError}
+            <p class="text-sm text-destructive mt-2">{foldError}</p>
+          {/if}
         </div>
       </div>
 

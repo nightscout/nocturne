@@ -1,4 +1,5 @@
 using System;
+using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Models;
 using Xunit;
 
@@ -128,6 +129,67 @@ public class BaseConnectorConfigurationTests
 /// <summary>
 /// Test implementation of BaseConnectorConfiguration
 /// </summary>
+/// <summary>A connector with two sign-in modes: a password for the classic regions, a stored token for the other.</summary>
+internal class ModeConditionedConfiguration : BaseConnectorConfiguration
+{
+    [ConnectorProperty(ConnectorPropertyKey.Server, DefaultValue = "EU", AllowedValues = ["EU", "US", "XT"])]
+    public string Server { get; init; } = "EU";
+
+    [ConnectorProperty(ConnectorPropertyKey.Password, Required = true, Secret = true,
+        VisibleWhen = ConnectorPropertyKey.Server, VisibleWhenValues = ["EU", "US"])]
+    public string? Password { get; init; }
+
+    [ConnectorProperty(ConnectorPropertyKey.AccessToken, Required = true, Secret = true, Hidden = true,
+        VisibleWhen = ConnectorPropertyKey.Server, VisibleWhenValues = ["XT"])]
+    public string? AccessToken { get; init; }
+}
+
+public class ConditionalRequiredPropertyTests
+{
+    [Fact]
+    public void ClassicRegion_RequiresThePassword_NotTheToken()
+    {
+        var config = new ModeConditionedConfiguration { Server = "eu", ConnectSource = ConnectSource.Dexcom };
+
+        Assert.Equal(["Password"], config.MissingRequiredProperties());
+        Assert.False(config.HasRequiredConfiguration());
+    }
+
+    [Fact]
+    public void TokenRegion_RequiresTheToken_NotThePassword()
+    {
+        var config = new ModeConditionedConfiguration { Server = "XT", ConnectSource = ConnectSource.Dexcom };
+
+        Assert.Equal(["AccessToken"], config.MissingRequiredProperties());
+
+        var connected = new ModeConditionedConfiguration { Server = "XT", AccessToken = "jwt", ConnectSource = ConnectSource.Dexcom };
+        Assert.True(connected.HasRequiredConfiguration());
+        connected.Validate();
+    }
+
+    [Fact]
+    public void AConditionOnAKeyTheTypeLacks_NeverApplies()
+    {
+        var attr = new ConnectorPropertyAttribute(ConnectorPropertyKey.Password)
+        {
+            Required = true, VisibleWhen = ConnectorPropertyKey.Region, VisibleWhenValues = ["X"],
+        };
+
+        Assert.False(new ModeConditionedConfiguration().IsPropertyApplicable(attr));
+    }
+
+    [Fact]
+    public void AppliesFor_ComparesWithoutCase_AndRefusesNull()
+    {
+        var attr = new ConnectorPropertyAttribute(ConnectorPropertyKey.Password) { VisibleWhenValues = ["XT"] };
+
+        Assert.True(attr.AppliesFor("xt"));
+        Assert.False(attr.AppliesFor("EU"));
+        Assert.False(attr.AppliesFor(null));
+        Assert.True(new ConnectorPropertyAttribute(ConnectorPropertyKey.Password).AppliesFor(null));
+    }
+}
+
 internal class TestConnectorConfiguration : BaseConnectorConfiguration
 {
     protected override void ValidateSourceSpecificConfiguration()

@@ -82,6 +82,13 @@ public interface IStateSpanRepository
     /// <param name="stateSpans">The state spans to upsert.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The number of records upserted.</returns>
+    /// <summary>
+    ///     Folds every stored run of touching same-state, same-source device spans into one span,
+    ///     the way <see cref="UpsertStateSpanAsync"/> does for a span as it arrives. Absorbed spans
+    ///     are soft-deleted.
+    /// </summary>
+    Task<StateSpanFoldResult> FoldStoredSpansAsync(CancellationToken cancellationToken = default);
+
     Task<int> BulkUpsertAsync(
         IEnumerable<StateSpan> stateSpans,
         CancellationToken cancellationToken = default);

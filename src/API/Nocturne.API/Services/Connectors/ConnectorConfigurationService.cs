@@ -599,7 +599,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     /// Generates a JSON Schema from a configuration type based on attributes.
     /// Includes default values and environment variable names for UI display.
     /// </summary>
-    private static JsonDocument GenerateSchemaFromType(Type configType)
+    internal static JsonDocument GenerateSchemaFromType(Type configType)
     {
         var properties = new Dictionary<string, object>();
         var required = new List<string>();
@@ -650,6 +650,11 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
                 if (connectorPropAttr.Hidden)
                 {
                     secretSchema["x-hidden"] = true;
+                }
+
+                if (VisibilityCondition(connectorPropAttr) is { } secretCondition)
+                {
+                    secretSchema["x-visibleWhen"] = secretCondition;
                 }
 
                 if (!string.IsNullOrEmpty(envPrefix))
@@ -845,8 +850,26 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
             schema["x-hidden"] = true;
         }
 
+        if (VisibilityCondition(connectorAttr) is { } condition)
+        {
+            schema["x-visibleWhen"] = condition;
+        }
+
         return schema;
     }
+
+    /// <summary>
+    ///     The <c>x-visibleWhen</c> extension: the master property, camelCased as the form names
+    ///     it, and the values under which this property is shown. Null when unconditional.
+    /// </summary>
+    private static Dictionary<string, object>? VisibilityCondition(ConnectorPropertyAttribute connectorAttr) =>
+        connectorAttr.HasVisibilityCondition
+            ? new Dictionary<string, object>
+            {
+                ["property"] = ToCamelCase(connectorAttr.VisibleWhen.ToString()),
+                ["values"] = connectorAttr.VisibleWhenValues!,
+            }
+            : null;
 
     /// <summary>
     /// Checks if a value is the default/empty value for its type.

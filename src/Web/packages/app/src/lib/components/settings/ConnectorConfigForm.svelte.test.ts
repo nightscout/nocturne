@@ -152,4 +152,32 @@ describe("ConnectorConfigForm", () => {
 		const toggleButton = page.getByRole("button").first();
 		await expect.element(toggleButton).toBeVisible();
 	});
+
+	it("shows a conditioned field only while its governing field holds a listed value", async () => {
+		const schema = {
+			type: "object",
+			properties: {
+				server: { type: "string", default: "EU", enum: ["EU", "XT"] },
+				lookbackDays: {
+					type: "integer",
+					default: 10,
+					"x-visibleWhen": { property: "server", values: ["EU"] },
+				},
+				glucoseUnit: {
+					type: "string",
+					default: "Auto",
+					enum: ["Auto", "mgdl", "mmol"],
+					"x-visibleWhen": { property: "server", values: ["xt"] },
+				},
+			},
+			secrets: [],
+		};
+
+		render(ConnectorConfigForm, {
+			props: { schema, configuration: { server: "XT" }, onSave: vi.fn() },
+		});
+
+		await expect.element(page.getByText("Glucose Unit")).toBeVisible();
+		await expect.element(page.getByText("Lookback Days")).not.toBeInTheDocument();
+	});
 });

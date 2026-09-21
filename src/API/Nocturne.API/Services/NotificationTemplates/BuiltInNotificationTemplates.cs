@@ -114,6 +114,24 @@ public static class BuiltInNotificationTemplates
 
         registry.Register(new NotificationTemplate
         {
+            Type = Connectors.ConnectorAttentionNotifier.ReconnectRequiredType,
+            Category = NotificationCategory.ActionRequired,
+            DefaultUrgency = NotificationUrgency.Warn,
+            Icon = "plug-zap",
+            Source = "connectors"
+        });
+
+        registry.Register(new NotificationTemplate
+        {
+            Type = Connectors.ConnectorAttentionNotifier.ReconnectSoonType,
+            Category = NotificationCategory.Reminder,
+            DefaultUrgency = NotificationUrgency.Info,
+            Icon = "plug-zap",
+            Source = "connectors"
+        });
+
+        registry.Register(new NotificationTemplate
+        {
             Type = "sharing.link_rotated",
             Category = NotificationCategory.ActionRequired,
             DefaultUrgency = NotificationUrgency.Info,

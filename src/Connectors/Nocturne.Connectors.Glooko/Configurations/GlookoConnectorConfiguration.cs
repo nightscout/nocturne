@@ -25,12 +25,12 @@ namespace Nocturne.Connectors.Glooko.Configurations;
         SyncDataType.Glucose,
         SyncDataType.ManualBG,
         SyncDataType.Boluses,
+        SyncDataType.BolusCalculations,
         SyncDataType.BasalInjections,
         SyncDataType.CarbIntake,
         SyncDataType.Food,
         SyncDataType.TempBasals,
         SyncDataType.StateSpans,
-        SyncDataType.TempBasals,
         SyncDataType.DeviceEvents,
         SyncDataType.Profiles,
         SyncDataType.Notes,
@@ -51,31 +51,48 @@ public class GlookoConnectorConfiguration : BaseConnectorConfiguration
     public string Email { get; init; } = string.Empty;
 
     /// <summary>
-    ///     Glooko account password
+    ///     Glooko account password. The classic regions sign in with it on every session; Glooko XT
+    ///     signs in with a code emailed to the patient and runs on <see cref="AccessToken"/>, so
+    ///     there it is neither asked for nor required.
     /// </summary>
-    [ConnectorProperty(ConnectorPropertyKey.Password, Required = true, Secret = true)]
+    [ConnectorProperty(ConnectorPropertyKey.Password, Required = true, Secret = true,
+        VisibleWhen = ConnectorPropertyKey.Server,
+        VisibleWhenValues = [GlookoConstants.RegionCA, GlookoConstants.RegionEU, GlookoConstants.RegionUS])]
     public string Password { get; init; } = string.Empty;
+
+    /// <summary>
+    ///     The JWT the Glooko XT sign-in code was traded for. Issued for about a year; the connect
+    ///     flow stores it here and every XT sync presents it on the Socket.IO handshake.
+    /// </summary>
+    [ConnectorProperty(ConnectorPropertyKey.AccessToken, Required = true, Secret = true, Hidden = true,
+        VisibleWhen = ConnectorPropertyKey.Server, VisibleWhenValues = [GlookoConstants.RegionXT])]
+    public string? AccessToken { get; init; }
+
+    /// <summary>Whether this account lives on Glooko XT rather than a Glooko data centre.</summary>
+    public bool IsXt => GlookoConstants.IsXt(Server);
 
     /// <summary>
     ///     Glooko server region.
     /// </summary>
     [ConnectorProperty(ConnectorPropertyKey.Server,
         DefaultValue = GlookoConstants.RegionUS,
-        AllowedValues = [GlookoConstants.RegionCA, GlookoConstants.RegionEU, GlookoConstants.RegionUS])]
+        AllowedValues = [GlookoConstants.RegionCA, GlookoConstants.RegionEU, GlookoConstants.RegionUS, GlookoConstants.RegionXT])]
     public string Server { get; init; } = GlookoConstants.RegionUS;
 
     /// <summary>
     ///     Use v3 API for additional data types (alarms, automatic boluses, consumables).
     ///     This provides a single API call instead of multiple v2 calls.
     /// </summary>
-    [ConnectorProperty(ConnectorPropertyKey.UseV3Api, DefaultValue = "true")]
+    [ConnectorProperty(ConnectorPropertyKey.UseV3Api, DefaultValue = "true",
+        VisibleWhen = ConnectorPropertyKey.Server, VisibleWhenValues = [GlookoConstants.RegionCA, GlookoConstants.RegionEU, GlookoConstants.RegionUS])]
     public bool UseV3Api { get; set; } = true;
 
     /// <summary>
     ///     Include CGM readings from v3 as backup to primary CGM source (e.g., xDrip).
     ///     Only use this if you want Glooko to fill gaps in your primary CGM data.
     /// </summary>
-    [ConnectorProperty(ConnectorPropertyKey.V3IncludeCgmBackfill, DefaultValue = "false")]
+    [ConnectorProperty(ConnectorPropertyKey.V3IncludeCgmBackfill, DefaultValue = "false",
+        VisibleWhen = ConnectorPropertyKey.Server, VisibleWhenValues = [GlookoConstants.RegionCA, GlookoConstants.RegionEU, GlookoConstants.RegionUS])]
     public bool V3IncludeCgmBackfill { get; set; } = false;
 
     /// <summary>
@@ -99,6 +116,7 @@ public class GlookoConnectorConfiguration : BaseConnectorConfiguration
     ///     v2/v3 path is bypassed entirely, so <see cref="UseV3Api"/> has no effect while this is on.
     ///     Experimental; off by default.
     /// </summary>
-    [ConnectorProperty(ConnectorPropertyKey.UseSsv2Sync, DefaultValue = "false")]
+    [ConnectorProperty(ConnectorPropertyKey.UseSsv2Sync, DefaultValue = "false",
+        VisibleWhen = ConnectorPropertyKey.Server, VisibleWhenValues = [GlookoConstants.RegionCA, GlookoConstants.RegionEU, GlookoConstants.RegionUS])]
     public bool UseSsv2Sync { get; set; } = false;
 }

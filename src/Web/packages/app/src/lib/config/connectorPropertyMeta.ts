@@ -274,6 +274,7 @@ export const connectorPropertyMeta = {
     description: 'Skip basal entries that resolve to a near-zero rate',
     category: 'Advanced',
   },
+
   // OAuth and Webhooks
   AccessToken: {
     label: 'Access Token',

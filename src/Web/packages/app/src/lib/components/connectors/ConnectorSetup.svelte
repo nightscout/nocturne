@@ -38,6 +38,7 @@
   import { Label } from "$lib/components/ui/label";
   import ConnectorConfigForm from "$lib/components/settings/ConnectorConfigForm.svelte";
   import CareLinkConnectPanel from "$lib/components/connectors/CareLinkConnectPanel.svelte";
+  import GlookoXtConnectPanel from "$lib/components/connectors/GlookoXtConnectPanel.svelte";
   import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
 
   import { AlertCircle, ExternalLink } from "lucide-svelte";
@@ -155,6 +156,19 @@
     if (info.country && !configuration.countryCode) {
       configuration = { ...configuration, countryCode: info.country.toLowerCase() };
     }
+  }
+
+  // Glooko XT is the Glooko connector pointed at the XT region: it signs in with an emailed
+  // one-time code, so the token comes from its own panel instead of a stored password.
+  const isGlookoXt = $derived(
+    connectorInfo?.id?.toLowerCase() === "glooko" &&
+      String(configuration.server ?? effectiveConfig?.server ?? "").toUpperCase() === "XT"
+  );
+
+  function onGlookoXtConnected(info: { email: string; server?: string | null }) {
+    // The server already recorded the email and the region; mirror both so a save from the form
+    // keeps them.
+    configuration = { ...configuration, email: info.email, server: info.server ?? "XT" };
   }
 
   // --- UI state ---
@@ -320,6 +334,18 @@
 </script>
 
 <!-- SELECTION STEP -->
+<!-- Glooko XT emailed-code sign-in (Glooko connector, Server = XT), rendered inside the
+     credentials card so the token flow sits with the connector's other credentials. -->
+{#snippet glookoXtCredentials()}
+  <GlookoXtConnectPanel
+    bind:email={
+      () => (typeof configuration.email === "string" ? configuration.email : ""),
+      (v) => (configuration = { ...configuration, email: v })
+    }
+    onConnected={onGlookoXtConnected}
+  />
+{/snippet}
+
 {#if step === "selection"}
   <ConnectorSelectionGrid
     {servicesOverview}
@@ -425,6 +451,7 @@
           {effectiveConfig}
           {hasSecrets}
           {showEnvVarHints}
+          credentials={isGlookoXt ? glookoXtCredentials : undefined}
           onSave={handleSave}
         />
       {:else}

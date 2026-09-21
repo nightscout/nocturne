@@ -97,6 +97,9 @@ public interface IStateSpanService
     /// <param name="id">State span ID to delete</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>True if deleted successfully, false otherwise</returns>
+    /// <inheritdoc cref="Repositories.IStateSpanRepository.FoldStoredSpansAsync"/>
+    Task<StateSpanFoldResult> FoldStoredSpansAsync(CancellationToken cancellationToken = default);
+
     Task<bool> DeleteStateSpanAsync(
         string id,
         CancellationToken cancellationToken = default);
