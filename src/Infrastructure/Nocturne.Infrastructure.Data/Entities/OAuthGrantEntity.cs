@@ -192,8 +192,9 @@ public class OAuthGrantEntity : ITenantScoped, IAuditable, IEntityCreated
     /// API secret or a per-subject access token, rather than minted as a scoped <c>noc_</c> token.
     /// Drives the rotation nudge and the "Legacy" badge in the UI; not part of authentication.
     /// </summary>
+    /// <seealso cref="AdoptedLegacyCredential"/>
     [Column("is_migrated")]
-    public bool IsMigrated { get; set; }
+    public bool IsMigrated { get; private set; }
 
     /// <summary>
     /// Whether this grant has been revoked
@@ -223,4 +224,58 @@ public class OAuthGrantEntity : ITenantScoped, IAuditable, IEntityCreated
     /// </summary>
     public ICollection<OAuthRefreshTokenEntity> RefreshTokens { get; set; } =
         new List<OAuthRefreshTokenEntity>();
+
+    /// <summary>
+    /// A grant seeded from a credential the instance did not mint: a classic Nightscout site's
+    /// master <c>api-secret</c>, or one of its per-subject access tokens. Callers differ only in
+    /// which credential column they can fill, so all three are optional individually;
+    /// <see cref="TokenHash"/>, <see cref="LegacySecretHash"/> and <see cref="LegacyTokenDigest"/>
+    /// each describe the presentation they match.
+    /// <para>
+    /// This is the only thing that sets <see cref="IsMigrated"/>, which is why that flag has no
+    /// public setter. A direct grant is the only kind that can carry one of these credentials, so
+    /// <see cref="GrantType"/> is fixed here with it and nothing can make the pair disagree.
+    /// </para>
+    /// <para>
+    /// No <c>AuthAuditEventType.TokenIssued</c> row is written, unlike minting. Nothing was issued:
+    /// the holder could already present this exact credential to the source instance, and filing it
+    /// as an issuance would have a bulk import claim to have handed out one new credential per
+    /// imported subject at the same instant. This row, with its <see cref="CreatedAt"/> and
+    /// <see cref="IsMigrated"/>, is the record that the credential was taken on.
+    /// </para>
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// None of the three credential columns was supplied. Such a grant matches no presentation of
+    /// anything, so it would sit on the token list as an adopted credential that refuses every
+    /// request made with it.
+    /// </exception>
+    public static OAuthGrantEntity AdoptedLegacyCredential(
+        Guid subjectId,
+        string label,
+        IEnumerable<string> scopes,
+        string? tokenHash = null,
+        string? legacySecretHash = null,
+        string? legacyTokenDigest = null)
+    {
+        if (tokenHash is null && legacySecretHash is null && legacyTokenDigest is null)
+        {
+            throw new ArgumentException(
+                "An adopted legacy credential needs at least one of tokenHash, legacySecretHash or "
+                    + "legacyTokenDigest.");
+        }
+
+        return new OAuthGrantEntity
+        {
+            Id = Guid.CreateVersion7(),
+            SubjectId = subjectId,
+            GrantType = OAuthGrantTypes.Direct,
+            Scopes = Scope.NormalizeForStorage(scopes),
+            Label = label,
+            TokenHash = tokenHash,
+            LegacySecretHash = legacySecretHash,
+            LegacyTokenDigest = legacyTokenDigest,
+            IsMigrated = true,
+            CreatedAt = DateTime.UtcNow,
+        };
+    }
 }

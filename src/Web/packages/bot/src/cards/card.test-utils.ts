@@ -46,6 +46,13 @@ export function cardTexts(node: unknown): string[] {
     .filter((text): text is string => text !== undefined);
 }
 
+/** The `style` of every element carrying one: a `CardText`'s emphasis, a `Button`'s variant. */
+export function cardStyles(node: unknown): string[] {
+  return props(node)
+    .map((p) => str(p.style))
+    .filter((style): style is string => style !== undefined);
+}
+
 /** Each `Field` rendered, as `label: value`. */
 export function cardFields(node: unknown): string[] {
   return props(node)

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Glooko.Configurations;
@@ -13,4 +14,9 @@ public class GlookoConnectorInstaller()
             Timeout = TimeSpan.FromMinutes(5),
             ConnectTimeout = TimeSpan.FromSeconds(15),
             AddResilience = true,
-        });
+        })
+{
+    /// <inheritdoc />
+    protected override void InstallAdditional(IServiceCollection services, GlookoConnectorConfiguration config) =>
+        services.AddConnectorCredentialVerifier<GlookoCredentialVerifier>();
+}

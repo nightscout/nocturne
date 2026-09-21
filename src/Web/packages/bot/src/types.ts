@@ -125,6 +125,9 @@ export interface HeartbeatRequest {
   service?: string;
 }
 
+/** Wire form of `AlertRuleSeverity` (Core), which serialises as these lowercase names. */
+export type AlertSeverity = "critical" | "warning" | "info";
+
 export interface AlertPayload {
   alertType: string;
   ruleName: string;
@@ -137,6 +140,7 @@ export interface AlertPayload {
   tenantId: string;
   subjectName: string;
   activeExcursionCount: number;
+  severity: AlertSeverity;
 }
 
 export interface AlertDispatchEvent {

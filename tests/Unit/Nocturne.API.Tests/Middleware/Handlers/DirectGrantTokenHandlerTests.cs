@@ -400,19 +400,13 @@ public class DirectGrantTokenHandlerTests : IDisposable
     /// </summary>
     private async Task SeedLegacyGrantAsync(string digest, DateTime? revokedAt = null)
     {
+        var grant = OAuthGrantEntity.AdoptedLegacyCredential(
+            _subjectId, "Imported token", [Scope.GlucoseRead], legacyTokenDigest: digest);
+        grant.CreatedAt = Now;
+        grant.RevokedAt = revokedAt;
+
         await using var ctx = _db.CreateContext(_testTenantId);
-        ctx.OAuthGrants.Add(new OAuthGrantEntity
-        {
-            Id = Guid.CreateVersion7(),
-            SubjectId = _subjectId,
-            TenantId = _testTenantId,
-            GrantType = OAuthGrantTypes.Direct,
-            LegacyTokenDigest = digest,
-            IsMigrated = true,
-            Scopes = ["glucose.read"],
-            CreatedAt = Now,
-            RevokedAt = revokedAt,
-        });
+        ctx.OAuthGrants.Add(grant);
         await ctx.SaveChangesAsync();
     }
 

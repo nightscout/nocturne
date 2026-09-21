@@ -2,7 +2,10 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.BackgroundServices;
+using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.Glucose;
+using Nocturne.API.Services.Profiles;
+using Nocturne.Infrastructure.Data;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -56,6 +59,59 @@ public class CompressionLowServiceTests
             _tenantOwnerResolver.Object,
             tenantAccessor.Object,
             NullLogger<CompressionLowService>.Instance);
+    }
+
+    /// <summary>
+    /// The overnight window comes from the tenant's own bedtime and wake time, so a settings read
+    /// that failed leaves nothing to window on: serving entries from the default 23:00-07:00 window
+    /// would present another tenant's night as this one's.
+    /// </summary>
+    [Fact]
+    public async Task GetSuggestionWithEntriesAsync_failsRatherThanWindowingOnDefaultSleepHours()
+    {
+        var suggestion = PendingSuggestion(stillPendingAfterReview: 1);
+        var entryService = new Mock<IEntryService>();
+        entryService
+            .Setup(e => e.GetEntriesAsync(
+                It.IsAny<string?>(),
+                It.IsAny<int?>(),
+                It.IsAny<int?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<Entry>());
+        var treatmentService = new Mock<ITreatmentService>();
+        treatmentService
+            .Setup(t => t.GetTreatmentsAsync(
+                It.IsAny<string?>(),
+                It.IsAny<int?>(),
+                It.IsAny<int?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<Treatment>());
+
+        var tenantAccessor = new Mock<ITenantAccessor>();
+        tenantAccessor.SetupGet(a => a.TenantId).Returns(TenantId);
+
+        var options = new DbContextOptionsBuilder<NocturneDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        var context = new NocturneDbContext(options) { TenantId = TenantId };
+        var uiSettings = new UISettingsService(context, NullLogger<UISettingsService>.Instance);
+        await context.DisposeAsync();
+
+        var sut = new CompressionLowService(
+            _repository.Object,
+            _stateSpanService.Object,
+            entryService.Object,
+            treatmentService.Object,
+            _notificationService.Object,
+            Mock.Of<ITherapySettingsResolver>(),
+            uiSettings,
+            _tenantOwnerResolver.Object,
+            tenantAccessor.Object,
+            NullLogger<CompressionLowService>.Instance);
+
+        await sut.Invoking(s => s.GetSuggestionWithEntriesAsync(suggestion.Id))
+            .Should()
+            .ThrowAsync<SettingsUnavailableException>();
     }
 
     private CompressionLowSuggestion PendingSuggestion(int stillPendingAfterReview)

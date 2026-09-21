@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Authorization;
 using Nocturne.API.Models.DevOnly;
@@ -38,6 +39,7 @@ public class DevAdminController : ControllerBase
     private readonly IConnectorSyncService _syncService;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly ITenantService _tenantService;
+    private readonly IMemoryCache _cache;
     private readonly ILogger<DevAdminController> _logger;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -53,6 +55,7 @@ public class DevAdminController : ControllerBase
     /// <param name="syncService">Service for triggering connector synchronisation.</param>
     /// <param name="tenantAccessor">Accessor for the current request tenant context.</param>
     /// <param name="tenantService">Service for tenant lifecycle management.</param>
+    /// <param name="cache">Tenant-resolution cache, which a restored snapshot invalidates.</param>
     /// <param name="logger">Logger instance.</param>
     public DevAdminController(
         NocturneDbContext db,
@@ -60,6 +63,7 @@ public class DevAdminController : ControllerBase
         IConnectorSyncService syncService,
         ITenantAccessor tenantAccessor,
         ITenantService tenantService,
+        IMemoryCache cache,
         ILogger<DevAdminController> logger
     )
     {
@@ -68,6 +72,7 @@ public class DevAdminController : ControllerBase
         _syncService = syncService;
         _tenantAccessor = tenantAccessor;
         _tenantService = tenantService;
+        _cache = cache;
         _logger = logger;
     }
 
@@ -299,6 +304,9 @@ public class DevAdminController : ControllerBase
             {
                 await using var tx = await _db.Database.BeginTransactionAsync(ct);
 
+                // Declared inside the retryable body so a second attempt starts from an empty set.
+                var resolvableSlugs = new HashSet<string>(StringComparer.Ordinal);
+
                 // Collect all subject IDs and passkey IDs from the snapshot for non-scoped upsert
                 var allSubjectDtos = snapshot.Tenants.SelectMany(t => t.Subjects).ToList();
                 var allPasskeyDtos = snapshot.Tenants.SelectMany(t => t.PasskeyCredentials).ToList();
@@ -363,6 +371,9 @@ public class DevAdminController : ControllerBase
 
                     if (existingTenant is not null)
                     {
+                        // A rename leaves the outgoing slug cached and still resolving to this row.
+                        resolvableSlugs.Add(existingTenant.Slug);
+
                         // Update scalar properties in-place
                         existingTenant.Slug = td.Slug;
                         existingTenant.DisplayName = td.DisplayName;
@@ -386,6 +397,8 @@ public class DevAdminController : ControllerBase
                             SysUpdatedAt = td.SysUpdatedAt,
                         });
                     }
+
+                    resolvableSlugs.Add(td.Slug);
                 }
                 await _db.SaveChangesAsync(ct);
 
@@ -556,6 +569,11 @@ public class DevAdminController : ControllerBase
                 }
 
                 await tx.CommitAsync(ct);
+
+                // After the commit, not beside the writes: a request served mid-transaction reads
+                // the pre-restore rows and would re-cache them for the full duration.
+                foreach (var slug in resolvableSlugs)
+                    TenantResolutionMiddleware.EvictTenant(_cache, slug);
             });
 
             _logger.LogInformation("Dev snapshot import completed successfully");

@@ -42,8 +42,12 @@
 
   const activeKey = $derived(ctx.activeKey);
   const mountedSteps = $derived(activeKey ? ctx.getMountedSteps(activeKey) : []);
-  const currentRegistration = $derived(mountedSteps[currentLocalStep] ?? null);
   const totalLocalSteps = $derived(mountedSteps.length);
+  // The reset of `currentLocalStep` below lands after the template has read it,
+  // so a mark left on a later local step would hand over to one with fewer and
+  // unmount the overlay for a frame. Clamping keeps it up.
+  const localStep = $derived(Math.min(currentLocalStep, Math.max(totalLocalSteps - 1, 0)));
+  const currentRegistration = $derived(mountedSteps[localStep] ?? null);
 
   // Reset local step when active mark changes
   $effect(() => {
@@ -57,59 +61,58 @@
 
   // History management for back-button dismissal.
   // Push a sentinel entry when the overlay appears; pop it when it disappears.
+  // The effect tracks whether an overlay is up, never which mark is up: keying
+  // it on `activeKey` tore the sentinel down on every step of a sequence, and
+  // the teardown's own `ctx.activeKey` read cannot tell a step change from a
+  // dismissal — a derived read outside a reaction sees the batch's earlier
+  // value, which for a step change is the momentary null between the two marks.
+  const overlayVisible = $derived(activeKey !== null);
+
   $effect(() => {
-    const key = activeKey;
+    if (!overlayVisible) return;
 
-    if (key) {
-      // Overlay just appeared — push sentinel if we haven't already
-      if (!historyEntryPushed) {
-        dismissedByUI = false; // reset stale flag from any previous cycle
-        history.pushState({ ...history.state, __coachMark: true }, "");
-        historyEntryPushed = true;
-      }
-
-      function onPopState() {
-        // Guard: if the UI already dismissed (Escape/backdrop/button),
-        // this popstate is just the history.back() cleanup — ignore it.
-        if (dismissedByUI) {
-          dismissedByUI = false;
-          return;
-        }
-
-        // The user pressed back. Dismiss with quiet so no follow-on sequence appears.
-        historyEntryPushed = false;
-        if (key) ctx.dismiss(key, { quiet: true });
-      }
-
-      window.addEventListener("popstate", onPopState);
-
-      return () => {
-        window.removeEventListener("popstate", onPopState);
-
-        // If transitioning directly to another coach mark (activeKey went
-        // from truthy A to truthy B), keep the sentinel entry — the new
-        // effect run will reuse it via the historyEntryPushed guard.
-        if (ctx.activeKey) return;
-
-        // Cleanup: overlay is disappearing, remove the sentinel entry.
-        if (historyEntryPushed) {
-          historyEntryPushed = false;
-          if (navigationFlag.navigating) {
-            // SvelteKit is navigating — don't call history.back() which
-            // would fight the router. Replace the current state to strip
-            // our marker (the router's pushState has already happened).
-            navigationFlag.navigating = false;
-            const cleaned = { ...history.state };
-            delete cleaned.__coachMark;
-            history.replaceState(cleaned, "");
-          } else {
-            // Natural dismiss (Escape, backdrop, "Got it") — pop our entry.
-            dismissedByUI = true;
-            history.back();
-          }
-        }
-      };
+    if (!historyEntryPushed) {
+      dismissedByUI = false; // reset stale flag from any previous cycle
+      history.pushState({ ...history.state, __coachMark: true }, "");
+      historyEntryPushed = true;
     }
+
+    function onPopState() {
+      // Guard: if the UI already dismissed (Escape/backdrop/button),
+      // this popstate is just the history.back() cleanup — ignore it.
+      if (dismissedByUI) {
+        dismissedByUI = false;
+        return;
+      }
+
+      // The user pressed back. Dismiss with quiet so no follow-on sequence appears.
+      historyEntryPushed = false;
+      const key = ctx.activeKey;
+      if (key) ctx.dismiss(key, { quiet: true });
+    }
+
+    window.addEventListener("popstate", onPopState);
+
+    return () => {
+      window.removeEventListener("popstate", onPopState);
+
+      if (!historyEntryPushed) return;
+      historyEntryPushed = false;
+
+      if (navigationFlag.navigating) {
+        // SvelteKit is navigating — don't call history.back() which
+        // would fight the router. Replace the current state to strip
+        // our marker (the router's pushState has already happened).
+        navigationFlag.navigating = false;
+        const cleaned = { ...history.state };
+        delete cleaned.__coachMark;
+        history.replaceState(cleaned, "");
+      } else {
+        // Natural dismiss (Escape, backdrop, "Got it") — pop our entry.
+        dismissedByUI = true;
+        history.back();
+      }
+    };
   });
 
   function updateSpotlightRect(element: Element) {
@@ -228,10 +231,10 @@
     if (activeKey) ctx.complete(activeKey);
   }
   function handleBack() {
-    if (currentLocalStep > 0) currentLocalStep--;
+    if (localStep > 0) currentLocalStep = localStep - 1;
   }
   function handleNext() {
-    if (currentLocalStep < totalLocalSteps - 1) currentLocalStep++;
+    if (localStep < totalLocalSteps - 1) currentLocalStep = localStep + 1;
   }
 
   function handleKeydown(e: KeyboardEvent) {
@@ -249,6 +252,7 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="coach-backdrop"
+    data-testid="coach-backdrop"
     style:clip-path={spotlightClipPath}
     onkeydown={handleKeydown}
     onclick={handleDismiss}
@@ -272,7 +276,7 @@
     <h3 class="coach-popover__title">{currentRegistration.title}</h3>
     <p class="coach-popover__description">{currentRegistration.description}</p>
     <StepControls
-      currentStep={currentLocalStep}
+      currentStep={localStep}
       totalSteps={totalLocalSteps}
       action={currentRegistration.action}
       onback={handleBack}

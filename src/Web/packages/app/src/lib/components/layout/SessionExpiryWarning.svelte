@@ -64,7 +64,12 @@
           {isRefreshing ? "Refreshing..." : "Refresh Session"}
         </Button>
         {#if onDismiss}
-          <Button size="sm" variant="ghost" onclick={onDismiss}>
+          <Button
+            size="sm"
+            variant="ghost"
+            aria-label="Dismiss"
+            onclick={onDismiss}
+          >
             <X class="h-3 w-3" />
           </Button>
         {/if}

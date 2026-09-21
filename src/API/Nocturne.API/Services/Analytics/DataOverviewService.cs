@@ -2,9 +2,11 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Analytics;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Services;
+using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Services;
 
@@ -24,7 +26,13 @@ public class DataOverviewService : IDataOverviewService
     private readonly ITenantDbContextFactory _factory;
     private readonly ITherapySettingsResolver _therapySettingsResolver;
     private readonly IStatisticsService _statisticsService;
+    private readonly ICacheService _cacheService;
+    private readonly ITenantAccessor _tenantAccessor;
     private readonly ILogger<DataOverviewService> _logger;
+
+    private string TenantCacheId =>
+        _tenantAccessor.Context?.TenantId.ToString()
+        ?? throw new InvalidOperationException("Tenant context is not resolved");
 
     /// <summary>
     /// Initializes a new instance of <see cref="DataOverviewService"/>.
@@ -34,17 +42,23 @@ public class DataOverviewService : IDataOverviewService
     /// the categories they were granted.</param>
     /// <param name="therapySettingsResolver">Resolver for the user's active timezone and therapy settings.</param>
     /// <param name="statisticsService">Statistics service for per-day metric aggregation.</param>
+    /// <param name="cacheService">Cross-request cache for the eHbA1c timeline, keyed per tenant and year.</param>
+    /// <param name="tenantAccessor">Resolves the current tenant for cache-key scoping.</param>
     /// <param name="logger">The logger instance.</param>
     public DataOverviewService(
         ITenantDbContextFactory factory,
         ITherapySettingsResolver therapySettingsResolver,
         IStatisticsService statisticsService,
+        ICacheService cacheService,
+        ITenantAccessor tenantAccessor,
         ILogger<DataOverviewService> logger
     )
     {
         _factory = factory;
         _therapySettingsResolver = therapySettingsResolver;
         _statisticsService = statisticsService;
+        _cacheService = cacheService;
+        _tenantAccessor = tenantAccessor;
         _logger = logger;
     }
 
@@ -343,6 +357,226 @@ public class DataOverviewService : IDataOverviewService
 
         return new GriTimelineResponse { Year = year, Periods = periods.ToArray() };
     }
+
+    /// <summary>
+    /// The trailing window an eHbA1c estimate is drawn from, mirroring how a lab HbA1c reflects
+    /// roughly the last three months of glucose exposure.
+    /// </summary>
+    private const int EHbA1cWindowDays = 90;
+
+    /// <summary>
+    /// Minimum raw (unweighted) reading count across the trailing window before a day's estimate is
+    /// trusted enough to emit — otherwise a handful of finger-sticks could swing the estimate wildly.
+    /// </summary>
+    private const int EHbA1cMinimumReadings = 30;
+
+    /// <summary>
+    /// Per-day decay ratio for the recency weighting: the largest <c>r &lt; 1</c> such that the most
+    /// recent 30 days already carry half of the full 90-day weight — a smooth, per-day generalisation
+    /// of the textbook "50% last month / 25% / 25%" HbA1c teaching, without computing it in three
+    /// discontinuous blocks. Solving <c>(1-r^30)/(1-r^90) = 1/2</c> and substituting <c>x = r^30</c>
+    /// gives <c>x^3 - 2x + 1 = 0</c>, whose non-trivial root is the golden ratio conjugate
+    /// <c>x = (√5-1)/2</c>.
+    /// </summary>
+    private static readonly double EHbA1cDailyDecay = Math.Pow((Math.Sqrt(5) - 1) / 2, 1.0 / 30.0);
+
+    /// <inheritdoc />
+    public async Task<EHbA1cTimelineResponse> GetEHbA1cTimelineAsync(
+        int year,
+        string[]? dataSources = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        _logger.LogDebug(
+            "Getting eHbA1c timeline for year {Year}, dataSources={DataSources}",
+            year,
+            dataSources != null ? string.Join(",", dataSources.Select(SanitizeForLog)) : "(all)"
+        );
+
+        var sourceKey = dataSources is { Length: > 0 }
+            ? string.Join(",", dataSources.OrderBy(s => s, StringComparer.OrdinalIgnoreCase))
+            : "all";
+        var cacheKey = $"ehba1c:{TenantCacheId}:{year}:{sourceKey}";
+
+        // Computed once per tenant/year/source combination and reused until it expires below —
+        // only a cache miss (new day, first view, or expiry) triggers recomputation.
+        var cached = await _cacheService.GetAsync<EHbA1cTimelineResponse>(cacheKey, cancellationToken);
+        if (cached != null)
+            return cached;
+
+        await using var context = await _factory.CreateAsync(cancellationToken);
+
+        var tz = await GetUserTimeZoneAsync(cancellationToken);
+        var hasFilter = dataSources is { Length: > 0 };
+
+        var localYearStart = new DateTime(year, 1, 1, 0, 0, 0, DateTimeKind.Unspecified);
+        var localYearEnd = new DateTime(year + 1, 1, 1, 0, 0, 0, DateTimeKind.Unspecified);
+        var localRangeStart = localYearStart.AddDays(-EHbA1cWindowDays);
+
+        var lookbackStartUtc = TimeZoneInfo.ConvertTimeToUtc(localRangeStart, tz);
+        var yearEndUtc = TimeZoneInfo.ConvertTimeToUtc(localYearEnd, tz);
+
+        var npSensorGlucoseIds = NonPrimaryRecordIds(context, RecordType.SensorGlucose);
+        var allReadings = new List<(DateTime Timestamp, double Mgdl)>();
+
+        // Each source is queried independently so one failure doesn't prevent the other.
+        try
+        {
+            var sensorReadings = await context
+                .SensorGlucose.Where(e => e.Timestamp >= lookbackStartUtc && e.Timestamp < yearEndUtc)
+                .Where(e => e.Mgdl > 0 && !double.IsNaN(e.Mgdl))
+                .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
+                .Where(e => !npSensorGlucoseIds.Contains(e.Id))
+                .Select(e => new { e.Timestamp, e.Mgdl })
+                .ToListAsync(cancellationToken);
+            allReadings.AddRange(sensorReadings.Select(r => (r.Timestamp, r.Mgdl)));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to collect SensorGlucose for eHbA1c timeline {Year}", year);
+        }
+
+        try
+        {
+            var meterReadings = await context
+                .MeterGlucose.Where(e => e.Timestamp >= lookbackStartUtc && e.Timestamp < yearEndUtc)
+                .Where(e => e.Mgdl > 0 && !double.IsNaN(e.Mgdl))
+                .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
+                .Select(e => new { e.Timestamp, e.Mgdl })
+                .ToListAsync(cancellationToken);
+            allReadings.AddRange(meterReadings.Select(r => (r.Timestamp, r.Mgdl)));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to collect MeterGlucose for eHbA1c timeline {Year}", year);
+        }
+
+        // Dense per-local-day buckets spanning the 90-day lookback plus the target year, so the
+        // rolling window below is a single O(n) pass rather than a per-day re-scan.
+        var totalDays = (int)(localYearEnd - localRangeStart).TotalDays;
+        var dailySum = new double[totalDays];
+        var dailyCount = new int[totalDays];
+
+        foreach (var (timestamp, mgdl) in allReadings)
+        {
+            if (!GlucoseStatistics.IsReading(mgdl))
+                continue;
+            var localDate = TimeZoneInfo.ConvertTime(new DateTimeOffset(timestamp, TimeSpan.Zero), tz).Date;
+            var dayIndex = (int)(localDate - localRangeStart).TotalDays;
+            if (dayIndex < 0 || dayIndex >= totalDays)
+                continue;
+            dailySum[dayIndex] += mgdl;
+            dailyCount[dayIndex]++;
+        }
+
+        var localNow = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, tz);
+        var points = BuildEHbA1cPoints(dailySum, dailyCount, localRangeStart, EHbA1cWindowDays, year, localNow.Date);
+        var response = new EHbA1cTimelineResponse { Year = year, Points = points };
+
+        var isCurrentYear = year == localNow.Year;
+        // Completed years don't change (barring rare backfills), so cache them for a long time; the
+        // current year is still accumulating days, so refresh it more often.
+        var expiry = isCurrentYear ? DateTime.UtcNow.AddHours(1) : DateTime.UtcNow.AddDays(14);
+        await _cacheService.SetAsync(cacheKey, response, expiry, cancellationToken);
+
+        return response;
+    }
+
+    /// <summary>
+    /// Builds one eHbA1c point per day in <paramref name="year"/> whose trailing
+    /// <paramref name="windowDays"/>-day window has at least <see cref="EHbA1cMinimumReadings"/>
+    /// readings. <paramref name="dailySum"/>/<paramref name="dailyCount"/> are dense arrays (index 0
+    /// = <paramref name="rangeStart"/>) covering the lookback window plus the target year, in local
+    /// calendar days.
+    /// </summary>
+    /// <remarks>
+    /// The weighted rolling sums are built with a linear recurrence — <c>weightedSum(i) = dailySum(i)
+    /// + r*weightedSum(i-1) - r^windowDays*dailySum(i-windowDays)</c> — so the whole timeline is a
+    /// single O(n) pass instead of re-summing a 90-day window per day. Internal for the test
+    /// assembly; not part of the service's contract.
+    /// </remarks>
+    internal static EHbA1cPoint[] BuildEHbA1cPoints(
+        double[] dailySum,
+        int[] dailyCount,
+        DateTime rangeStart,
+        int windowDays,
+        int year,
+        DateTime maxDate
+    )
+    {
+        var totalDays = dailySum.Length;
+
+        // Prefix sums for the *raw* (unweighted) window — used only to gate whether a day has
+        // enough data, independent of the recency weighting below.
+        var prefixSum = new int[totalDays + 1];
+        var prefixDaysWithData = new int[totalDays + 1];
+        for (var i = 0; i < totalDays; i++)
+        {
+            prefixSum[i + 1] = prefixSum[i] + dailyCount[i];
+            prefixDaysWithData[i + 1] = prefixDaysWithData[i] + (dailyCount[i] > 0 ? 1 : 0);
+        }
+
+        var weightedSum = new double[totalDays];
+        var weightedCount = new double[totalDays];
+        var r = EHbA1cDailyDecay;
+        var rWindow = Math.Pow(r, windowDays);
+        for (var i = 0; i < totalDays; i++)
+        {
+            var prevWeightedSum = i > 0 ? weightedSum[i - 1] : 0.0;
+            var prevWeightedCount = i > 0 ? weightedCount[i - 1] : 0.0;
+            var agedOutIndex = i - windowDays;
+            var agedOutSum = agedOutIndex >= 0 ? dailySum[agedOutIndex] : 0.0;
+            var agedOutCount = agedOutIndex >= 0 ? dailyCount[agedOutIndex] : 0;
+
+            weightedSum[i] = dailySum[i] + r * prevWeightedSum - rWindow * agedOutSum;
+            weightedCount[i] = dailyCount[i] + r * prevWeightedCount - rWindow * agedOutCount;
+        }
+
+        var points = new List<EHbA1cPoint>();
+        var yearStartIndex = (int)(new DateTime(year, 1, 1) - rangeStart).TotalDays;
+        var daysInYear = DateTime.IsLeapYear(year) ? 366 : 365;
+
+        for (var k = 0; k < daysInYear; k++)
+        {
+            var i = yearStartIndex + k;
+            if (i < 0 || i >= totalDays)
+                continue;
+
+            // A day within 90 days of today still has a full trailing window of real data even
+            // though the day itself hasn't happened yet — skip it rather than project a value.
+            if (rangeStart.AddDays(i) > maxDate)
+                continue;
+
+            var windowStart = Math.Max(0, i - windowDays + 1);
+            var rawCount = prefixSum[i + 1] - prefixSum[windowStart];
+            if (rawCount < EHbA1cMinimumReadings)
+                continue;
+
+            var daysWithData = prefixDaysWithData[i + 1] - prefixDaysWithData[windowStart];
+            var weightedMeanMgdl = weightedSum[i] / weightedCount[i];
+            // ADAG-derived eA1C formula (Nathan et al., 2008): %A1C = (mean mg/dL + 46.7) / 28.7.
+            var estimatedA1c = (weightedMeanMgdl + 46.7) / 28.7;
+
+            points.Add(
+                new EHbA1cPoint
+                {
+                    Date = rangeStart.AddDays(i).ToString("yyyy-MM-dd"),
+                    EstimatedA1cPercent = Math.Round(estimatedA1c, 2),
+                    WeightedAverageGlucoseMgdl = Math.Round(weightedMeanMgdl, 1),
+                    ReadingCount = rawCount,
+                    DaysWithData = daysWithData,
+                }
+            );
+        }
+
+        return points.ToArray();
+    }
+
+    /// <summary>
+    /// Strips CR/LF from a caller-supplied value before it reaches a log message, so a crafted
+    /// data-source name cannot forge additional log lines (CWE-117 log injection).
+    /// </summary>
+    private static string SanitizeForLog(string value) => value.Replace("\r", "").Replace("\n", "");
 
     /// <summary>
     /// The half-open UTC interval covering <paramref name="year"/> in <paramref name="tz"/>, so a

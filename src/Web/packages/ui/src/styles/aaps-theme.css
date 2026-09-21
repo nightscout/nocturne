@@ -53,7 +53,8 @@
   --pred-zt: rgb(64, 187, 170);             /* AAPS accent teal */
   --pred-uam: rgb(201, 189, 96);            /* #c9bd60 - standard UAM */
 
-  /* Status Colors - AAPS traffic light */
+  /* Status Colors. Chat cards and e-mail use the default theme's values
+     (see @nocturne/ui/tokens); overrides here apply in-browser only. */
   --status-warning: oklch(0.8 0.2 100);     /* Yellow */
   --status-critical: oklch(0.55 0.25 29);   /* Red */
   --status-normal: oklch(0.75 0.3 142);     /* Green */

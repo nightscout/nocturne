@@ -223,6 +223,11 @@ export const connectorPropertyMeta = {
     description: 'Site URL (e.g., https://yoursite.herokuapp.com)',
     category: 'General',
   },
+  RealtimeUrl: {
+    label: 'Realtime URL',
+    description: 'Optional Nightscout origin used for live Socket.IO updates when the data URL is an adapter',
+    category: 'Advanced',
+  },
   ApiSecret: {
     label: 'API Secret',
     description: 'Nightscout API_SECRET for authentication',

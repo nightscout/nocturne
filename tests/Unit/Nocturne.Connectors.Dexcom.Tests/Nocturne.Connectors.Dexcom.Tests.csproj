@@ -17,7 +17,9 @@
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
             <PrivateAssets>all</PrivateAssets>
         </PackageReference>
+        <PackageReference Include="Moq"/>
         <PackageReference Include="FluentAssertions"/>
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="../../../src/Connectors/Nocturne.Connectors.Dexcom/Nocturne.Connectors.Dexcom.csproj"/>

@@ -86,6 +86,17 @@
   // On mobile, drop the card chrome so the chart can use the full width.
   const isMobile = new IsMobile();
 
+  // Axis gutters. The desktop 48px each side is a quarter of a phone's width,
+  // so a phone gets only what the tick labels need. Left: a three-digit or
+  // one-decimal glucose value at 12px. Right: a one- or two-character
+  // basal/IOB tick at 9px plus its 4px tick mark. The overview strip shares
+  // the horizontal values so its brush lines up with the main plot.
+  const chartPadding = $derived(
+    isMobile.current
+      ? { left: 36, right: 22, top: 8, bottom: 28 }
+      : { left: 48, right: 48, top: 8, bottom: 30 }
+  );
+
   // ===== ENGINE =====
   const engine = createChartDataEngine({
     get dateRange() { return dateRange; },
@@ -348,12 +359,16 @@
   <CardContent class={isMobile.current ? "-mx-2 p-0" : "p-1 @md:p-2"}>
     <ZoomIndicator {isZoomed} brushXDomain={brushDomain} onResetZoom={resetZoom} />
 
-    <div class={heightClass ?? "h-80 @md:h-[450px]"}>
+    <!-- The basal, mode and IOB/COB tracks take fixed shares of the height, so
+         a 320px chart left them 38px, 13px and 58px tall on a phone: too little
+         for their labels. 400px is what a portrait phone shows above the fold. -->
+    <div class={heightClass ?? "h-[400px] @md:h-[450px]"}>
       <GlucoseChartShell
         {engine}
         {inspection}
         {legend}
         brushDomain={brushDomain}
+        padding={chartPadding}
       >
         {#snippet tracks()}
           <BasalTrack />
@@ -397,6 +412,13 @@
         onSelectionChange={(domain) => handleMiniChartBrush(domain)}
         predictionData={miniPredictionData}
         showPredictions={effectiveShowPredictions && predictionEnabled.current}
+        {isZoomed}
+        padding={{
+          left: chartPadding.left,
+          right: chartPadding.right,
+          top: 20,
+          bottom: 20,
+        }}
       />
     {/if}
 

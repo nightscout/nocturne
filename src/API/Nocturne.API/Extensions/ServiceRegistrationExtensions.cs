@@ -38,6 +38,7 @@ using Nocturne.API.Services.Platform;
 using Nocturne.API.Services.Profiles;
 using Nocturne.API.Services.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
+using Nocturne.Core.Contracts;
 using Nocturne.API.Services.Realtime;
 using Nocturne.API.Services.Treatments;
 using Nocturne.API.Services.V4;
@@ -92,6 +93,12 @@ public static class ServiceRegistrationExtensions
     /// controller actions and so cannot carry the attribute.
     /// </summary>
     public const string DocsRateLimitPolicy = "docs";
+
+    /// <summary>
+    /// Rate-limiting policy for connector credential verification, which is named here rather than
+    /// inline so the action's attribute and the registration read the same value.
+    /// </summary>
+    public const string ConnectorVerifyRateLimitPolicy = "connector-verify";
 
     /// <summary>
     /// The rate-limiting policies partitioned on the calling client, with the ceiling and window
@@ -152,6 +159,10 @@ public static class ServiceRegistrationExtensions
         // real ceiling is DemoSessionLimits.MaxLiveSessions, enforced on the subject id.
         ("demo-session", 10, TimeSpan.FromMinutes(5)),
         ("support-issues", 5, TimeSpan.FromHours(1)),
+        // Connector credential verification drives a live sign-in against the external provider
+        // from this deployment's address, so the ceiling bounds both provider-side lockouts and
+        // use of the API as a credential-testing proxy.
+        (ConnectorVerifyRateLimitPolicy, 5, TimeSpan.FromMinutes(5)),
         // The documentation surface (/scalar, /openapi) runs before tenant resolution and
         // authentication, and the reference reads the tenants table and may write that tenant's
         // OAuth client, so it is the one unauthenticated path that reaches the database that
@@ -585,8 +596,10 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IBodyWeightService, BodyWeightService>();
         services.AddScoped<IStepCountService, StepCountService>();
 
-        // Tracker services
-        services.AddScoped<ITrackerTriggerService, TrackerTriggerService>();
+        // Tracker services. The trigger is the IDeviceEventReactor adapter rather than a service any
+        // caller invokes: it runs from the V4 device-event write chokepoint, which is what makes a
+        // connector-ingested site change advance a tracker the same way a hand-entered one does.
+        services.AddScoped<IDeviceEventReactor, TrackerTriggerService>();
         // Tracker notifications ride the alert engine: thresholds are synthesised into
         // managed tracker_age alert rules, backfilled once at startup for pre-existing
         // definitions (and self-healing if a managed rule is ever lost).
@@ -663,6 +676,9 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IDeviceEventRepository, DeviceEventRepository>();
         services.AddScoped<IBolusCalculationRepository, BolusCalculationRepository>();
         services.AddScoped<IDeviceRepository, DeviceRepository>();
+
+        // Manually-entered lab results (outside the V4 sync/dedup family)
+        services.AddScoped<ILabHbA1cResultRepository, LabHbA1cResultRepository>();
 
         // V4 Snapshot Repositories
         services.AddScoped<IApsSnapshotRepository, ApsSnapshotRepository>();

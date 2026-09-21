@@ -273,7 +273,6 @@ public class ApiKeyHandlerTests : IDisposable
                 GrantType = OAuthGrantTypes.Direct,
                 TokenHash = tokenHash,
                 LegacySecretHash = sha1Hash,
-                IsMigrated = false,
                 Scopes = ["health.readwrite"],
                 CreatedAt = DateTime.UtcNow,
                 LastUsedAt = null,
@@ -554,22 +553,14 @@ public class ApiKeyHandlerTests : IDisposable
     {
         var legacySecret = "firstusesecret";
         var sha1Hash = HashUtils.Sha1Hex(legacySecret);
-        var grantId = Guid.CreateVersion7();
+
+        var grant = OAuthGrantEntity.AdoptedLegacyCredential(
+            _subjectId, "Legacy API Secret", [Scope.FullAccess], legacySecretHash: sha1Hash);
+        var grantId = grant.Id;
 
         await using (var ctx = _db.CreateContext(_testTenantId))
         {
-            ctx.OAuthGrants.Add(new OAuthGrantEntity
-            {
-                Id = grantId,
-                SubjectId = _subjectId,
-                TenantId = _testTenantId,
-                GrantType = OAuthGrantTypes.Direct,
-                LegacySecretHash = sha1Hash,
-                IsMigrated = true,
-                Scopes = ["*"],
-                CreatedAt = DateTime.UtcNow,
-                LastUsedAt = null,
-            });
+            ctx.OAuthGrants.Add(grant);
             await ctx.SaveChangesAsync();
         }
 
@@ -618,18 +609,11 @@ public class ApiKeyHandlerTests : IDisposable
 
         await using (var ctx = _db.CreateContext(_testTenantId))
         {
-            ctx.OAuthGrants.Add(new OAuthGrantEntity
-            {
-                Id = Guid.CreateVersion7(),
-                SubjectId = _subjectId,
-                TenantId = _testTenantId,
-                GrantType = OAuthGrantTypes.Direct,
-                LegacySecretHash = sha1Hash,
-                IsMigrated = true,
-                Scopes = ["*"],
-                CreatedAt = DateTime.UtcNow,
-                LastUsedAt = DateTime.UtcNow.AddDays(-1),
-            });
+            var grant = OAuthGrantEntity.AdoptedLegacyCredential(
+                _subjectId, "Legacy API Secret", [Scope.FullAccess], legacySecretHash: sha1Hash);
+            grant.LastUsedAt = DateTime.UtcNow.AddDays(-1);
+
+            ctx.OAuthGrants.Add(grant);
             await ctx.SaveChangesAsync();
         }
 

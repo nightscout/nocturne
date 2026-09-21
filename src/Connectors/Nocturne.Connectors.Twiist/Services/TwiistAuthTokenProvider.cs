@@ -61,10 +61,12 @@ public class TwiistAuthTokenProvider(
                     refreshToken = null;
                 }
 
-                // Fall back to password auth
+                // Fall back to password auth. A failed status leaves PostCognitoAsync as an exception,
+                // so reaching here with no token means Cognito answered 2xx without one — a challenge
+                // (new password, MFA) that a second identical request cannot clear.
                 var (loginAccessToken, loginRefreshToken) = await LoginWithPasswordAsync(config, cancellationToken);
                 if (loginAccessToken == null)
-                    return (null, true);
+                    return (null, false);
 
                 if (!string.IsNullOrEmpty(loginRefreshToken))
                     refreshToken = loginRefreshToken;
@@ -108,7 +110,12 @@ public class TwiistAuthTokenProvider(
 
         var result = await PostCognitoAsync(body, cancellationToken);
         if (result?.AuthenticationResult == null)
+        {
+            _logger.LogError(
+                "Twiist Cognito login returned no tokens; challenge: {ChallengeName}",
+                result?.ChallengeName ?? "none");
             return (null, null);
+        }
 
         return (result.AuthenticationResult.AccessToken, result.AuthenticationResult.RefreshToken);
     }
@@ -147,6 +154,8 @@ public class TwiistAuthTokenProvider(
 
         var response = await _httpClient.SendAsync(request, cancellationToken);
 
+        // The status is carried on the exception so ExecuteWithRetryAsync decides whether another
+        // attempt is worth making; a refresh caller treats every failure as a fallback to password auth.
         if (!response.IsSuccessStatusCode)
         {
             var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -155,13 +164,10 @@ public class TwiistAuthTokenProvider(
                 (int)response.StatusCode,
                 errorBody);
 
-            if ((int)response.StatusCode == 401 || (int)response.StatusCode == 400)
-                throw new HttpRequestException(
-                    $"Cognito auth failed: {response.StatusCode}",
-                    null,
-                    response.StatusCode);
-
-            return null;
+            throw new HttpRequestException(
+                $"Cognito auth failed: {response.StatusCode}",
+                null,
+                response.StatusCode);
         }
 
         return await JsonSerializer.DeserializeAsync<CognitoAuthResponse>(

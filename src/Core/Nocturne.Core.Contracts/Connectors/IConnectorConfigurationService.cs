@@ -230,3 +230,21 @@ public class SetActiveRequest
     /// </summary>
     public bool IsActive { get; set; }
 }
+
+/// <summary>
+/// Request model for verifying connector credentials. Carries the same field shapes the
+/// configuration and secrets PUT endpoints accept; the values are used for a single live
+/// authentication attempt and are never persisted.
+/// </summary>
+public class VerifyConnectorCredentialsRequest
+{
+    /// <summary>
+    /// The non-secret configuration values, keyed by camelCase property name.
+    /// </summary>
+    public JsonDocument? Configuration { get; set; }
+
+    /// <summary>
+    /// The secret values (passwords, tokens), keyed by camelCase property name.
+    /// </summary>
+    public Dictionary<string, string>? Secrets { get; set; }
+}

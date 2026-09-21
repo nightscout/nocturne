@@ -25,6 +25,7 @@ public class DeviceEventRepository : SyncKeyedRepositoryBase<DeviceEvent, Device
 {
     private readonly IDeduplicationService _deduplicationService;
     private readonly ILogger<DeviceEventRepository> _logger;
+    private readonly IDeviceEventReactor? _reactor;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DeviceEventRepository"/> class.
@@ -33,16 +34,43 @@ public class DeviceEventRepository : SyncKeyedRepositoryBase<DeviceEvent, Device
     /// <param name="deduplicationService">The deduplication service.</param>
     /// <param name="auditContext">The audit context for tracking mutations.</param>
     /// <param name="logger">The logger instance.</param>
+    /// <param name="broadcaster">Optional realtime broadcaster for native V4 record shapes.</param>
+    /// <param name="reactor">Optional domain reaction to live creates — the tracker trigger. Null when
+    /// the repository is constructed without DI, in which case creates simply run no reaction.</param>
     public DeviceEventRepository(
         ITenantDbContextFactory contextFactory,
         IDeduplicationService deduplicationService,
         IAuditContext auditContext,
         ILogger<DeviceEventRepository> logger,
-        IV4RecordBroadcaster<DeviceEvent>? broadcaster = null)
+        IV4RecordBroadcaster<DeviceEvent>? broadcaster = null,
+        IDeviceEventReactor? reactor = null)
         : base(contextFactory, auditContext, broadcaster)
     {
         _deduplicationService = deduplicationService;
         _logger = logger;
+        _reactor = reactor;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Device events are the one V4 type carrying a domain reaction: a site or sensor change advances
+    /// the tracker instances configured to trigger on it. Failures are logged and swallowed — the event
+    /// itself is already committed, and a tracker that misses a change is recoverable in a way that
+    /// failing the ingest of the underlying record is not.
+    /// </remarks>
+    protected override async Task OnLiveCreatedAsync(IReadOnlyList<DeviceEvent> created, CancellationToken ct)
+    {
+        if (_reactor is null)
+            return;
+
+        try
+        {
+            await _reactor.OnCreatedAsync(created, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "Device event reaction failed for {Count} created event(s)", created.Count);
+        }
     }
 
     /// <inheritdoc />

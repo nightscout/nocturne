@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
 using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 
@@ -43,6 +44,13 @@ public class CompressionLowController : ControllerBase
     /// What accepting or dismissing tells the reader when the suggestion has already been acted on
     /// or removed. The service says which id and which state, which is of no use to them.
     /// </summary>
+    /// <summary>
+    /// What a read tells the reader when the tenant's settings could not be read. The condition is
+    /// transient, so the page is worth retrying. <see cref="SettingsUnavailableException"/>.
+    /// </summary>
+    private const string SettingsUnavailable =
+        "Your settings could not be read just now, so this cannot be shown. Try again in a moment.";
+
     private const string SuggestionUnavailable =
         "That suggestion is no longer waiting for a decision. Refresh the page to see the current list.";
 
@@ -87,10 +95,20 @@ public class CompressionLowController : ControllerBase
         Guid id,
         CancellationToken cancellationToken = default)
     {
-        var suggestion = await _compressionLowService.GetSuggestionWithEntriesAsync(id, cancellationToken);
-        if (suggestion == null)
-            return NotFound();
-        return Ok(suggestion);
+        try
+        {
+            var suggestion = await _compressionLowService.GetSuggestionWithEntriesAsync(id, cancellationToken);
+            if (suggestion == null)
+                return NotFound();
+            return Ok(suggestion);
+        }
+        catch (SettingsUnavailableException)
+        {
+            return Problem(
+                detail: SettingsUnavailable,
+                statusCode: StatusCodes.Status503ServiceUnavailable,
+                title: "Settings Unavailable");
+        }
     }
 
     /// <summary>

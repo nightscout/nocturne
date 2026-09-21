@@ -8,6 +8,7 @@
     "./ui/*": "./src/lib/components/ui/*/index.ts",
     "./utils": "./src/lib/utils/index.ts",
     "./glucose": "./src/lib/glucose.ts",
+    "./tokens": "./src/lib/tokens.ts",
     "./glucose-icon": "./src/lib/glucose-icon.ts",
     "./theme.css": "./src/theme.css"
   },

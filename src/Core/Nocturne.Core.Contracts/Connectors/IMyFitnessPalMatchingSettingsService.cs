@@ -8,9 +8,11 @@ namespace Nocturne.Core.Contracts.Connectors;
 public interface IMyFitnessPalMatchingSettingsService
 {
     /// <summary>
-    /// Get current global MyFitnessPal matching settings.
+    /// Get current global MyFitnessPal matching settings. A tenant that has saved none reads back
+    /// defaults, so null means the read itself failed.
     /// </summary>
-    Task<MyFitnessPalMatchingSettings> GetSettingsAsync(
+    /// <returns>The matching settings, or null if they could not be read</returns>
+    Task<MyFitnessPalMatchingSettings?> GetSettingsAsync(
         CancellationToken cancellationToken = default
     );
 

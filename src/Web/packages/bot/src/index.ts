@@ -22,6 +22,7 @@ export type {
   BotApiClient,
   AlertDispatchEvent,
   AlertPayload,
+  AlertSeverity,
   SensorGlucoseReading,
   DirectoryCandidate,
   PendingDeliveryResponse,

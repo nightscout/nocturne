@@ -18,6 +18,7 @@
   import { formatMediumDateTime } from "$lib/utils/formatting";
   import { list, revoke } from "$lib/api/generated/connectedApps.generated.remote";
   import { getOAuthScopeDescription } from "$lib/constants/oauth-scopes";
+  import { describeSubmitError } from "$lib/forms/submit-error";
 
   // Remote queries
   const appsQuery = list();
@@ -45,7 +46,10 @@
       successMessage = "App access revoked successfully.";
       clearMessages();
     } catch (err) {
-      errorMessage = "Failed to revoke access. Please try again.";
+      errorMessage = describeSubmitError(
+        err,
+        "Failed to revoke access. Please try again."
+      );
       clearMessages();
     } finally {
       isRevoking = null;

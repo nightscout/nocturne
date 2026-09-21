@@ -38,7 +38,16 @@ public abstract class TenantResolutionMiddlewareTestBase : IDisposable
         services.AddSingleton<ShareTokenCacheService>();
         services.AddMemoryCache();
         services.AddLogging();
+        ConfigureServices(services);
         Root = services.BuildServiceProvider();
+    }
+
+    /// <summary>
+    /// The last word on the request scope's registrations, for a suite that needs to observe one
+    /// the middleware resolves — register over it here rather than rebuilding the scope.
+    /// </summary>
+    protected virtual void ConfigureServices(IServiceCollection services)
+    {
     }
 
     protected ServiceProvider Root { get; }

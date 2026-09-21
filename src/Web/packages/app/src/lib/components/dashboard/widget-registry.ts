@@ -11,7 +11,6 @@ import type { TopWidgetId } from "./top-widget-ids";
 
 export {
   DEFAULT_TOP_WIDGETS,
-  LOADABLE_TOP_WIDGETS,
   TOP_WIDGET_IDS,
   isTopWidgetId,
   knownTopWidgets,

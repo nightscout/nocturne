@@ -211,7 +211,7 @@ public static class GlookoConstants
     [
         "automaticBolus", "deliveredBolus", "injectionBolus",
         "gkInsulinBasal", "gkInsulinBolus",
-        "pumpAlarm", "reservoirChange", "setSiteChange",
+        "pumpAlarm", "reservoirChange", "setSiteChange", "cgmSensorChange",
         "carbAll", "scheduledBasal", "temporaryBasal",
         "suspendBasal", "lgsPlgs", "profileChange",
         "bgHigh", "bgNormal", "bgLow",

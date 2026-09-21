@@ -5,6 +5,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Services.Profiles;
+using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -25,6 +26,8 @@ public class UISettingsServiceTests
     private const string NotificationsKey = "ui:settings:notifications";
     private const string AlarmsKey = "ui:settings:notifications:alarms";
     private const string ServicesKey = "ui:settings:services";
+    private const string FeaturesKey = "ui:settings:features";
+    private const string DevicesKey = "ui:settings:devices";
 
     private static readonly Guid TenantId = Guid.Parse("33333333-3333-3333-3333-333333333333");
 
@@ -113,7 +116,7 @@ public class UISettingsServiceTests
 
         await service.SaveAlarmConfigurationAsync(AlarmConfiguration("first", 55));
 
-        var settings = await service.GetSettingsAsync();
+        var settings = (await service.GetSettingsAsync())!;
         settings.Notifications.AlarmConfiguration = AlarmConfiguration("second", 123);
         await service.SaveSettingsAsync(settings);
 
@@ -130,7 +133,7 @@ public class UISettingsServiceTests
         var service = NewService(context);
 
         await service.SaveAlarmConfigurationAsync(AlarmConfiguration("fresh", 123));
-        await service.SaveSettingsAsync(await service.GetSettingsAsync());
+        await service.SaveSettingsAsync((await service.GetSettingsAsync())!);
 
         foreach (var config in await EveryAlarmReadPath(service))
         {
@@ -195,7 +198,7 @@ public class UISettingsServiceTests
             }
         );
 
-        var stored = await service.GetSettingsAsync();
+        var stored = (await service.GetSettingsAsync())!;
 
         stored.Devices.AutoConnect.Should().BeFalse();
         stored.Algorithm.Prediction.Minutes.Should().Be(45);
@@ -217,7 +220,7 @@ public class UISettingsServiceTests
         await context.SaveChangesAsync();
 
         var service = NewService(context);
-        var stored = await service.GetSettingsAsync();
+        var stored = (await service.GetSettingsAsync())!;
 
         stored.Devices.AutoConnect.Should().BeFalse();
         stored.DataQuality.SleepSchedule.BedtimeHour.Should().Be(1);
@@ -265,7 +268,7 @@ public class UISettingsServiceTests
             new FeatureSettings { Display = new DisplaySettings { Units = "mmol/L" } }
         );
 
-        var stored = await service.GetSettingsAsync();
+        var stored = (await service.GetSettingsAsync())!;
         stored.Features.Display.Units.Should().Be("mmol/L");
         stored.Devices.AutoConnect.Should().BeFalse();
         stored.DataQuality.SleepSchedule.BedtimeHour.Should().Be(1);
@@ -309,7 +312,7 @@ public class UISettingsServiceTests
             }
         );
 
-        (await service.GetSettingsAsync()).DataQuality.SleepSchedule.BedtimeHour.Should().Be(1);
+        (await service.GetSettingsAsync())!.DataQuality.SleepSchedule.BedtimeHour.Should().Be(1);
     }
 
     [Theory]
@@ -354,8 +357,9 @@ public class UISettingsServiceTests
     {
         var service = NewService(NewContext());
 
-        var stored = await service.GetSettingsAsync();
+        var stored = (await service.GetSettingsAsync())!;
 
+        stored.Should().NotBeNull();
         stored.Should().BeEquivalentTo(new UISettingsConfiguration());
     }
 
@@ -386,7 +390,7 @@ public class UISettingsServiceTests
             .Should()
             .BeEmpty();
 
-        var stored = await service.GetSettingsAsync();
+        var stored = (await service.GetSettingsAsync())!;
         stored.Services.AvailableServices.Should().BeEmpty();
         stored.Services.SyncSettings.AutoSync.Should().BeFalse();
     }
@@ -421,12 +425,68 @@ public class UISettingsServiceTests
         await context.SaveChangesAsync();
 
         var service = NewService(context);
-        await service.SaveSettingsAsync(await service.GetSettingsAsync());
+        await service.SaveSettingsAsync((await service.GetSettingsAsync())!);
 
         StoredRows(context)
             .Where(r => r.Value!.Contains("retired-connector", StringComparison.Ordinal))
             .Should()
             .BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetSettingsAsync_dropsTheTopGridRowsAnEarlierVersionStored()
+    {
+        var context = NewContext();
+        Seed(
+            context,
+            FeaturesKey,
+            new FeatureSettings
+            {
+                Widgets =
+                [
+                    new()
+                    {
+                        Id = WidgetId.BgDelta,
+                        Enabled = true,
+                        Placement = WidgetPlacement.Top,
+                    },
+                    new()
+                    {
+                        Id = WidgetId.Statistics,
+                        Enabled = false,
+                        Placement = WidgetPlacement.Main,
+                    },
+                ],
+            }
+        );
+        await context.SaveChangesAsync();
+
+        var stored = (await NewService(context).GetSettingsAsync())!;
+
+        stored
+            .Features.Widgets.Should()
+            .ContainSingle()
+            .Which.Should()
+            .BeEquivalentTo(new { Id = WidgetId.Statistics, Enabled = false });
+    }
+
+    /// <summary>
+    /// A features row whose widget list is an explicit JSON null binds over the property
+    /// initialiser, so the narrowing on read has to survive it: the aggregate is assembled in one
+    /// try block, and anything thrown there costs the caller every section, not just this one.
+    /// </summary>
+    [Fact]
+    public async Task GetSettingsAsync_readsAFeaturesRowWithNoWidgetListAtAll()
+    {
+        var context = NewContext();
+        Seed(context, FeaturesKey, new { widgets = (object?)null });
+        Seed(context, DevicesKey, new DeviceSettings { AutoConnect = false });
+        await context.SaveChangesAsync();
+
+        var stored = (await NewService(context).GetSettingsAsync())!;
+
+        stored.Features.Widgets.Should().BeEmpty();
+        stored.Devices.AutoConnect.Should().BeFalse();
     }
 
     [Fact]
@@ -444,6 +504,21 @@ public class UISettingsServiceTests
                 .OmittedProperties.Should()
                 .BeSubsetOf(declared!, $"section {section.Name} can only omit what it declares");
         }
+    }
+
+    /// <summary>
+    /// A failed read and a tenant that has saved nothing are different answers, as
+    /// <see cref="IUISettingsService.GetAlarmConfigurationAsync"/> already has them: a caller that
+    /// cannot run on defaults has to be able to tell the two apart.
+    /// </summary>
+    [Fact]
+    public async Task GetSettingsAsync_returnsNullWhenTheReadFails()
+    {
+        var context = NewContext();
+        var service = NewService(context);
+        await context.DisposeAsync();
+
+        (await service.GetSettingsAsync()).Should().BeNull();
     }
 
     // ----- helpers -----
@@ -470,7 +545,7 @@ public class UISettingsServiceTests
         return
         [
             (await service.GetAlarmConfigurationAsync())!,
-            (await service.GetSettingsAsync()).Notifications.AlarmConfiguration,
+            (await service.GetSettingsAsync())!.Notifications.AlarmConfiguration,
             (await service.GetNotificationSettingsAsync()).AlarmConfiguration,
             (await service.GetSectionAsync<NotificationSettings>("notifications"))!
                 .AlarmConfiguration,

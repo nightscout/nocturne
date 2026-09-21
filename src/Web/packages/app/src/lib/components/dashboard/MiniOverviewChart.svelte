@@ -46,6 +46,16 @@
     predictionData?: PredictionPoint[] | null;
     /** Whether to show predictions */
     showPredictions?: boolean;
+    /**
+     * Whether the main chart is zoomed by a brush. Governs the reset button;
+     * when omitted, any selection narrower than the full domain counts.
+     */
+    isZoomed?: boolean;
+    /**
+     * Plot gutters. Keep `left`/`right` equal to the main chart's so the brush
+     * lines up with it. `top` must hold the range label: 18px plus a gap.
+     */
+    padding?: { left: number; right: number; top: number; bottom: number };
   }
 
   let {
@@ -59,7 +69,12 @@
     lowThreshold: _lowThreshold = 70,
     predictionData = null,
     showPredictions = false,
+    isZoomed,
+    padding = { left: 48, right: 48, top: 20, bottom: 20 },
   }: Props = $props();
+
+  /** Widest range label at this font, used to keep it inside the strip. */
+  const RANGE_LABEL_HALF_WIDTH = 60;
 
   // Reserved for future threshold coloring
   // svelte-ignore state_referenced_locally
@@ -73,6 +88,9 @@
       (selectedXDomain[0].getTime() !== fullXDomain[0].getTime() ||
         selectedXDomain[1].getTime() !== fullXDomain[1].getTime())
   );
+  // The dashboard always hands us a selection (its viewing window), so left to
+  // hasSelection the reset button would never go away.
+  const showReset = $derived(isZoomed ?? hasSelection);
 
   // Format date for longer displays
   function formatDateTime(date: Date): string {
@@ -108,7 +126,7 @@
     class="w-full flex items-center justify-between px-3 py-1.5 text-xs text-muted-foreground"
   >
     <span class="font-medium">Full Range Overview</span>
-    {#if hasSelection}
+    {#if showReset}
       <Button variant="ghost" size="sm" class="flex items-center gap-1 text-[10px] text-primary" onclick={resetSelection}>
         <RotateCcw size={10} />
         Reset zoom
@@ -118,7 +136,8 @@
 
   <!-- Mini chart -->
   {#if expanded}
-    <div class="h-[80px] px-2 pb-2">
+    <!-- Tall enough for the range label to sit in the top gutter above the plot. -->
+    <div class="h-[96px] px-2 pb-2">
       <Chart
         {data}
         x={(d: GlucosePoint) => d.time}
@@ -127,7 +146,7 @@
         xDomain={[fullXDomain[0], fullXDomain[1]]}
         yScale={scaleLinear()}
         {yDomain}
-        padding={{ left: 48, bottom: 20, top: 4, right: 48 }}
+        {padding}
       >
         {#snippet children()}
           <Svg>
@@ -185,24 +204,24 @@
             }}
           >
             {#snippet children({ state: bc })}
-              <!-- Handle labels showing time values -->
+              <!-- One label for the selected range, centred over the brush.
+                   This snippet renders in a container anchored at the chart's
+                   outer corner, while bc.range is measured from the plot's,
+                   so add the padding back or the label lands a gutter to the
+                   left and above the strip. Clamped to stay inside the strip
+                   when the brush hugs an edge, as it does at "now". -->
               {#if bc.active && bc.x?.[0] != null && bc.x?.[1] != null}
-                <!-- Left handle label -->
                 <div
                   class="absolute text-[9px] font-medium text-primary bg-background/90 px-1 py-0.5 rounded shadow-sm border border-border whitespace-nowrap pointer-events-none z-20"
-                  style="left: {bc.range.x + bc.range.width / 2 - 2}px; top: {bc
-                    .range.y - 18}px; transform: translateX(-100%)"
+                  style="left: clamp({RANGE_LABEL_HALF_WIDTH}px, {padding.left +
+                    bc.range.x +
+                    bc.range.width / 2}px, calc(100% - {RANGE_LABEL_HALF_WIDTH}px)); top: {padding.top +
+                    bc.range.y -
+                    18}px; transform: translateX(-50%)"
                 >
-                  {formatDateTime(new Date(bc.x[0]))}
-                </div>
-
-                <!-- Right handle label -->
-                <div
-                  class="absolute text-[9px] font-medium text-primary bg-background/90 px-1 py-0.5 rounded shadow-sm border border-border whitespace-nowrap pointer-events-none z-20"
-                  style="left: {bc.range.x + bc.range.width + 2}px; top: {bc
-                    .range.y - 18}px;"
-                >
-                  {formatDateTime(new Date(bc.x[1]))}
+                  {formatDateTime(new Date(bc.x[0]))} - {formatDateTime(
+                    new Date(bc.x[1])
+                  )}
                 </div>
               {/if}
             {/snippet}

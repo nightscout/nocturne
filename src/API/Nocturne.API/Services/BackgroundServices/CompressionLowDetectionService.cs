@@ -127,6 +127,14 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
                 var entryService = scope.ServiceProvider.GetRequiredService<IEntryService>();
 
                 var settings = await uiSettingsService.GetSettingsAsync(cancellationToken);
+                if (settings == null)
+                {
+                    _logger.LogWarning(
+                        "Could not read UI settings for tenant {TenantSlug}; leaving it out of the schedule",
+                        tenant.Slug);
+                    continue;
+                }
+
                 var sleepSchedule = settings.DataQuality.SleepSchedule;
                 var wakeTimeHour = sleepSchedule.WakeTimeHour;
                 var lastNightGuess = DateOnly.FromDateTime(nowUtc.AddDays(-1));
@@ -193,6 +201,14 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
                 var entryService = scope.ServiceProvider.GetRequiredService<IEntryService>();
                 var uiSettingsService = scope.ServiceProvider.GetRequiredService<IUISettingsService>();
                 var settings = await uiSettingsService.GetSettingsAsync(cancellationToken);
+                if (settings == null)
+                {
+                    _logger.LogWarning(
+                        "Could not read UI settings for tenant {TenantSlug}; skipping its detection run",
+                        tenant.Slug);
+                    continue;
+                }
+
                 var lastNightGuess = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1));
                 var userTimeZone = ResolveTimeZone(settings.DataQuality.SleepSchedule.Timezone)
                     ?? await GetUserTimeZoneFromProfileAsync(therapySettingsResolver, cancellationToken)
@@ -250,8 +266,18 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
         var uiSettingsService = scopedProvider.GetRequiredService<IUISettingsService>();
         var tenantAccessor = scopedProvider.GetRequiredService<ITenantAccessor>();
 
-        // Check if detection is enabled
+        // The enable flag and the sleep hours are the tenant's own, so a read that failed leaves
+        // nothing to run against: the defaults would both override a tenant who turned detection
+        // off and judge the night by hours they never chose.
         var settings = await uiSettingsService.GetSettingsAsync(cancellationToken);
+        if (settings == null)
+        {
+            _logger.LogWarning(
+                "Could not read UI settings; skipping compression low detection for night of {NightOf}",
+                nightOf);
+            return 0;
+        }
+
         if (!settings.DataQuality.CompressionLowDetection.Enabled)
         {
             _logger.LogDebug("Compression low detection is disabled");

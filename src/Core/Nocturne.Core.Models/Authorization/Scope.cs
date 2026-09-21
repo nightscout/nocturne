@@ -467,6 +467,25 @@ public static class Scope
         return Normalize(permissions, MemberGrantableScopes);
     }
 
+    /// <summary>
+    /// The form a granted scope set is written to a credential in.
+    /// <para>
+    /// Every read path normalizes again — <c>AuthenticationMiddleware</c> and
+    /// <see cref="MemberScopeResolver"/> both do — so the bare <see cref="FullAccess"/> atom and its
+    /// expansion authorize identically today. They stop being identical the moment a scope is added
+    /// to <see cref="AllScopes"/>: a stored expansion is a snapshot of the vocabulary on the day it
+    /// was written, and silently narrows from then on.
+    /// </para>
+    /// </summary>
+    public static List<string> NormalizeForStorage(IEnumerable<string> scopes)
+    {
+        var normalized = Normalize(scopes);
+
+        return normalized.Contains(FullAccess)
+            ? [FullAccess]
+            : [.. normalized.Order(StringComparer.Ordinal)];
+    }
+
     private static IReadOnlySet<string> Normalize(
         IEnumerable<string> requestedScopes, IReadOnlySet<string> recognizedScopes)
     {

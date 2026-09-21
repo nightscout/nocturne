@@ -1,5 +1,6 @@
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -54,7 +55,16 @@ public class MealMatchingService : IMealMatchingService
 
     public async Task ProcessNewFoodEntriesAsync(string userId, IEnumerable<Guid> foodEntryIds, CancellationToken ct = default)
     {
+        // The defaults have notifications on and a 30-minute window, neither of which is this
+        // tenant's answer when the read failed. <see cref="SettingsUnavailableException"/>.
         var settings = await GetSettingsAsync(ct);
+        if (settings == null)
+        {
+            _logger.LogWarning(
+                "Could not read MyFitnessPal matching settings; leaving this batch of food entries unprocessed");
+            return;
+        }
+
         if (!settings.EnableMatchNotifications)
         {
             _logger.LogDebug("Match notifications disabled, skipping processing");
@@ -161,7 +171,11 @@ public class MealMatchingService : IMealMatchingService
         from = from.ToUniversalTime();
         to = to.ToUniversalTime();
 
-        var settings = await GetSettingsAsync(ct);
+        // Which entries pair at all is decided by the tenant's own window and tolerances, and
+        // every suggestion returned is one the reader can accept into a carb breakdown.
+        // <see cref="SettingsUnavailableException"/>.
+        var settings = await GetSettingsAsync(ct)
+            ?? throw new SettingsUnavailableException("MyFitnessPal matching settings");
         var timeWindow = TimeSpan.FromMinutes(settings.MatchTimeWindowMinutes);
 
         // Get pending food entries in the date range
@@ -388,7 +402,7 @@ public class MealMatchingService : IMealMatchingService
         }
     }
 
-    private async Task<MyFitnessPalMatchingSettings> GetSettingsAsync(CancellationToken ct)
+    private async Task<MyFitnessPalMatchingSettings?> GetSettingsAsync(CancellationToken ct)
     {
         return await _settingsService.GetSettingsAsync(ct);
     }

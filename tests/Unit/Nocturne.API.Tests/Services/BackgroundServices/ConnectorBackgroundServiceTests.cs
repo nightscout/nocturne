@@ -10,6 +10,7 @@ using Nocturne.API.Services.BackgroundServices;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
+using Nocturne.Connectors.Core.Services;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -164,6 +165,16 @@ public class ConnectorBackgroundServiceTests
     /// </summary>
     private static (IDisposable cleanup, string connectionString) CreateSqliteDbWithTwoTenants()
     {
+        var (cleanup, connectionString, _) = CreateSqliteDbWithTwoTenantIds();
+        return (cleanup, connectionString);
+    }
+
+    /// <summary>
+    /// Sets up an in-memory SQLite NocturneDbContext with two active tenants, returning both ids for
+    /// tests that must tell one tenant's state from the other's.
+    /// </summary>
+    private static (IDisposable cleanup, string connectionString, Guid[] tenantIds) CreateSqliteDbWithTwoTenantIds()
+    {
         var dbPath = Path.Combine(Path.GetTempPath(), $"ConnectorBgTest_{Guid.NewGuid():N}.db");
         var connectionString = $"Data Source={dbPath}";
         var cleanup = new TempFileCleanup(dbPath);
@@ -186,24 +197,32 @@ public class ConnectorBackgroundServiceTests
                 sys_updated_at TEXT NOT NULL
             )");
 
+        var tenantIds = new List<Guid>();
         foreach (var slug in new[] { "tenant-a", "tenant-b" })
         {
+            var tenantId = Guid.NewGuid();
+            tenantIds.Add(tenantId);
             context.Database.ExecuteSqlRaw(
                 "INSERT INTO tenants (Id, slug, display_name, is_active, allow_access_requests, sys_created_at, sys_updated_at) VALUES ({0}, {1}, {2}, 1, 1, {3}, {4})",
-                Guid.NewGuid().ToString(), slug, slug,
+                tenantId.ToString(), slug, slug,
                 DateTime.UtcNow.ToString("O"), DateTime.UtcNow.ToString("O"));
         }
 
-        return (cleanup, connectionString);
+        return (cleanup, connectionString, [.. tenantIds]);
     }
 
     private static IServiceProvider BuildServiceProvider(
         string connectionString,
         Mock<IConnectorConfigurationService> configServiceMock,
         TestConnectorConfig config,
-        Action? onConfigLoad = null)
+        Action? onConfigLoad = null,
+        IConnectorTokenCache? tokenCache = null)
     {
         var services = new ServiceCollection();
+
+        // Registered unconditionally, as production does: a harness that leaves it out would let
+        // every test that does not pass one run down a path production never takes.
+        services.AddSingleton(tokenCache ?? new ConnectorTokenCache());
 
         // Register IDbContextFactory<NocturneDbContext> and scoped NocturneDbContext,
         // both backed by the shared in-memory SQLite database.
@@ -563,6 +582,155 @@ public class ConnectorBackgroundServiceTests
                 It.IsAny<CancellationToken>()),
             Times.Once,
             "Expected error message to be cleared on successful sync");
+    }
+
+    /// <summary>
+    ///     A connector that could not sign in has no token, so it fetches nothing and reports a run
+    ///     that found no data — indistinguishable from a healthy source with nothing new. What the
+    ///     token provider recorded about the sign-in is what has to override that.
+    /// </summary>
+    [Fact]
+    public async Task FailedSignIn_MarksTheConnectorUnhealthy_EvenWhenTheRunReportedSuccess()
+    {
+        var (cleanup, connStr, tenantId) = CreateSqliteDbWithTenantId();
+        using var _ = cleanup;
+
+        const string refusal = "TestConnector did not accept this sign-in.";
+        var tokenCache = new ConnectorTokenCache();
+        tokenCache.SetSignInFailure("TestConnector", tenantId, refusal);
+
+        var configServiceMock = HealthRecordingConfigService();
+        var serviceProvider = BuildServiceProvider(
+            connStr,
+            configServiceMock,
+            new TestConnectorConfig { Enabled = true, SyncIntervalMinutes = 5 },
+            tokenCache: tokenCache);
+
+        var sut = new TestConnectorBackgroundService(
+            serviceProvider,
+            new SyncResult { Success = true, Message = "OK" },
+            NullLogger<TestConnectorBackgroundService>.Instance);
+
+        await sut.ExecuteOnceAsync(CancellationToken.None);
+
+        configServiceMock.Verify(
+            x => x.UpdateHealthStateAsync(
+                "TestConnector",
+                It.IsAny<DateTime?>(),
+                It.IsAny<DateTime?>(),
+                refusal,
+                It.IsAny<DateTime?>(),
+                false,
+                It.IsAny<CancellationToken>()),
+            Times.Once,
+            "a run that never signed in is not a healthy sync");
+    }
+
+    /// <summary>
+    ///     A transient failure records nothing, so a run that carried on regardless stays healthy.
+    /// </summary>
+    [Fact]
+    public async Task NoSignInFailure_LeavesASuccessfulRunHealthy()
+    {
+        var (cleanup, connStr, _) = CreateSqliteDbWithTenantId();
+        using var __ = cleanup;
+
+        var configServiceMock = HealthRecordingConfigService();
+        var serviceProvider = BuildServiceProvider(
+            connStr,
+            configServiceMock,
+            new TestConnectorConfig { Enabled = true, SyncIntervalMinutes = 5 },
+            tokenCache: new ConnectorTokenCache());
+
+        var sut = new TestConnectorBackgroundService(
+            serviceProvider,
+            new SyncResult { Success = true, Message = "OK" },
+            NullLogger<TestConnectorBackgroundService>.Instance);
+
+        await sut.ExecuteOnceAsync(CancellationToken.None);
+
+        configServiceMock.Verify(
+            x => x.UpdateHealthStateAsync(
+                "TestConnector",
+                It.IsAny<DateTime?>(),
+                It.IsAny<DateTime?>(),
+                string.Empty,
+                It.IsAny<DateTime?>(),
+                true,
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    /// <summary>
+    ///     One tenant's failed sign-in says nothing about another's, and the two share both the cache
+    ///     and the connector name that keys it.
+    /// </summary>
+    [Fact]
+    public async Task FailedSignIn_ForOneTenant_LeavesTheOtherTenantHealthy()
+    {
+        var (cleanup, connStr, tenantIds) = CreateSqliteDbWithTwoTenantIds();
+        using var _ = cleanup;
+
+        const string failure = "Could not sign in to TestConnector.";
+        var tokenCache = new ConnectorTokenCache();
+        tokenCache.SetSignInFailure("TestConnector", tenantIds[0], failure);
+
+        var configServiceMock = HealthRecordingConfigService();
+        var serviceProvider = BuildServiceProvider(
+            connStr,
+            configServiceMock,
+            new TestConnectorConfig { Enabled = true, SyncIntervalMinutes = 5 },
+            tokenCache: tokenCache);
+
+        var sut = new TestConnectorBackgroundService(
+            serviceProvider,
+            new SyncResult { Success = true, Message = "OK" },
+            NullLogger<TestConnectorBackgroundService>.Instance);
+
+        await sut.ExecuteOnceAsync(CancellationToken.None);
+
+        configServiceMock.Verify(
+            x => x.UpdateHealthStateAsync(
+                "TestConnector", It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                failure, It.IsAny<DateTime?>(), false, It.IsAny<CancellationToken>()),
+            Times.Once,
+            "the tenant whose sign-in failed");
+
+        configServiceMock.Verify(
+            x => x.UpdateHealthStateAsync(
+                "TestConnector", It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                string.Empty, It.IsAny<DateTime?>(), true, It.IsAny<CancellationToken>()),
+            Times.Once,
+            "the other tenant, whose sign-in was never in question");
+    }
+
+    /// <summary>Answers the reads the sync path makes and accepts every health write.</summary>
+    private static Mock<IConnectorConfigurationService> HealthRecordingConfigService()
+    {
+        var mock = new Mock<IConnectorConfigurationService>();
+
+        mock.Setup(x => x.GetConfigurationAsync("TestConnector", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ConnectorConfigurationResponse
+            {
+                ConnectorName = "TestConnector",
+                IsActive = true,
+                Configuration = JsonDocument.Parse("{\"enabled\": true, \"syncIntervalMinutes\": 5}")
+            });
+
+        mock.Setup(x => x.GetSecretsAsync("TestConnector", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, string>());
+
+        mock.Setup(x => x.UpdateHealthStateAsync(
+                It.IsAny<string>(),
+                It.IsAny<DateTime?>(),
+                It.IsAny<DateTime?>(),
+                It.IsAny<string?>(),
+                It.IsAny<DateTime?>(),
+                It.IsAny<bool?>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        return mock;
     }
 
     [Fact]

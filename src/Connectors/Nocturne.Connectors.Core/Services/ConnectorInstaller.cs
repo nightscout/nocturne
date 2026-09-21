@@ -12,7 +12,7 @@ namespace Nocturne.Connectors.Core.Services;
 ///     <paramref name="options"/> and its three types. A connector that has no token provider and
 ///     takes its base URL from per-tenant configuration derives from
 ///     <see cref="TenantUrlConnectorInstaller{TConfig,TService}"/>; one that needs anything else
-///     again (a hand-rolled client, extra services) implements <see cref="IConnectorInstaller"/>
+///     again (a hand-rolled client) implements <see cref="IConnectorInstaller"/>
 ///     directly and calls the pieces itself.
 /// </summary>
 /// <typeparam name="TConfig">Configuration type</typeparam>
@@ -26,6 +26,18 @@ public abstract class ConnectorInstaller<TConfig, TService, TTokenProvider>(Conn
     where TTokenProvider : class
 {
     /// <inheritdoc />
-    public void Install(IServiceCollection services, IConfiguration configuration) =>
-        services.AddConnector<TConfig, TService, TTokenProvider>(configuration, options);
+    public void Install(IServiceCollection services, IConfiguration configuration)
+    {
+        var config = services.AddConnector<TConfig, TService, TTokenProvider>(configuration, options);
+
+        if (config.Enabled)
+            InstallAdditional(services, config);
+    }
+
+    /// <summary>
+    ///     Registrations beyond the standard set, made only for an enabled connector.
+    /// </summary>
+    protected virtual void InstallAdditional(IServiceCollection services, TConfig config)
+    {
+    }
 }

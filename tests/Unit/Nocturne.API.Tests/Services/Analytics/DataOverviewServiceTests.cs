@@ -3,7 +3,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Analytics;
 using Nocturne.Core.Contracts.Analytics;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
+using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
@@ -57,10 +59,15 @@ public class DataOverviewServiceTests : IDisposable
         var mockTherapySettingsResolver = new Mock<ITherapySettingsResolver>();
         mockTherapySettingsResolver.Setup(p => p.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync((string?)null);
         var mockStatisticsService = new Mock<IStatisticsService>();
+        var mockCacheService = new Mock<ICacheService>();
+        var mockTenantAccessor = new Mock<ITenantAccessor>();
+        mockTenantAccessor.SetupGet(a => a.Context).Returns(new TenantContext(TenantId, "test-tenant", "Test Tenant", true, false));
         _service = new DataOverviewService(
             mockFactory.Object,
             mockTherapySettingsResolver.Object,
             mockStatisticsService.Object,
+            mockCacheService.Object,
+            mockTenantAccessor.Object,
             NullLogger<DataOverviewService>.Instance
         );
     }

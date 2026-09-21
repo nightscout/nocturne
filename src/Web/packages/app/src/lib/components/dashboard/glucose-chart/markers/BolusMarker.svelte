@@ -15,6 +15,11 @@
     bolusType?: string;
     treatmentId: string;
     onMarkerClick: (treatmentId: string) => void;
+    /**
+     * Whether to draw the units label. The track turns it off where the text
+     * would collide with a neighbour's; the glyph itself always draws.
+     */
+    showLabel?: boolean;
   }
 
   let {
@@ -25,6 +30,7 @@
     bolusType,
     treatmentId,
     onMarkerClick,
+    showLabel = true,
   }: Props = $props();
 
   // Algorithm-delivered doses (SMBs / auto-boluses) render outlined so they read
@@ -62,13 +68,15 @@
       class="opacity-90 fill-insulin-bolus hover:opacity-100 transition-opacity"
     />
   {/if}
-  <text
-    y={BOLUS_LABEL_Y}
-    dy="-0.355em"
-    text-anchor="middle"
-    pointer-events="none"
-    class="text-[8px] fill-insulin-bolus font-medium"
-  >
-    {insulin.toFixed(1)}U
-  </text>
+  {#if showLabel}
+    <text
+      y={BOLUS_LABEL_Y}
+      dy="-0.355em"
+      text-anchor="middle"
+      pointer-events="none"
+      class="text-[8px] fill-insulin-bolus font-medium"
+    >
+      {insulin.toFixed(1)}U
+    </text>
+  {/if}
 </g>

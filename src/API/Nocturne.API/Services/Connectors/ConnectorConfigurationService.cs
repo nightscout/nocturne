@@ -309,21 +309,11 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
             return;
         }
 
-        var normalizedScopes = Scope.Normalize([Scope.HealthReadWrite]).ToList();
-
-        var grant = new OAuthGrantEntity
-        {
-            Id = Guid.CreateVersion7(),
-            ClientEntityId = null,
-            SubjectId = subjectId.Value,
-            GrantType = OAuthGrantTypes.Direct,
-            Scopes = normalizedScopes,
-            Label = "Nightscout (migrated)",
-            TokenHash = null,
-            LegacySecretHash = sha1Hash,
-            IsMigrated = true,
-            CreatedAt = DateTime.UtcNow,
-        };
+        var grant = OAuthGrantEntity.AdoptedLegacyCredential(
+            subjectId.Value,
+            "Nightscout (migrated)",
+            [Scope.HealthReadWrite],
+            legacySecretHash: sha1Hash);
 
         _context.OAuthGrants.Add(grant);
         await _context.SaveChangesAsync(ct);

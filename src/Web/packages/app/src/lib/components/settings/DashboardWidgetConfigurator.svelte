@@ -15,8 +15,7 @@
   } from "$lib/api/generated/nocturne-api-client";
   import { getWidgetDefinitions } from "$api/generated/metadatas.generated.remote";
   import {
-    DEFAULT_TOP_WIDGETS,
-    LOADABLE_TOP_WIDGETS,
+    TOP_WIDGET_IDS,
     isTopWidgetId,
     knownTopWidgets,
     type TopWidgetId,
@@ -32,11 +31,7 @@
     maxWidgets?: number;
   }
 
-  let {
-    value = [...DEFAULT_TOP_WIDGETS],
-    onchange,
-    maxWidgets = 3,
-  }: Props = $props();
+  let { value, onchange, maxWidgets = 3 }: Props = $props();
 
   let draggedIndex: number | null = $state(null);
   let dragOverIndex: number | null = $state(null);
@@ -53,7 +48,7 @@
    */
   const offered: { id: TopWidgetId; name: string }[] = $derived(
     unnamed
-      ? LOADABLE_TOP_WIDGETS.map((id) => ({ id, name: id }))
+      ? TOP_WIDGET_IDS.map((id) => ({ id, name: id }))
       : (definitions.current?.definitions ?? []).flatMap((d) => {
           const id = d.id ?? "";
           return d.placement === WidgetPlacement.Top &&
