@@ -30,6 +30,10 @@ public class StatisticsControllerTests
     private readonly Mock<IBasalInjectionRepository> _basalInjectionRepoMock = new();
     private readonly Mock<IActiveProfileResolver> _activeProfileResolverMock = new();
     private readonly Mock<IBasalSegmentService> _basalSegmentsMock = new();
+    private readonly Mock<IPatientDeviceRepository> _patientDeviceRepoMock = new();
+    private readonly Mock<IApsSnapshotRepository> _apsSnapshotRepoMock = new();
+    private readonly Mock<IDeviceEventRepository> _deviceEventRepoMock = new();
+    private readonly Mock<IAidMetricsService> _aidMetricsServiceMock = new();
 
     private StatisticsController CreateController(ICanonicalGlucoseService? canonicalGlucose = null)
     {
@@ -45,10 +49,10 @@ public class StatisticsControllerTests
             _carbIntakeRepoMock.Object,
             _tempBasalRepoMock.Object,
             Mock.Of<ITenantAccessor>(),
-            Mock.Of<IAidMetricsService>(),
-            Mock.Of<IPatientDeviceRepository>(),
-            Mock.Of<IApsSnapshotRepository>(),
-            Mock.Of<IDeviceEventRepository>(),
+            _aidMetricsServiceMock.Object,
+            _patientDeviceRepoMock.Object,
+            _apsSnapshotRepoMock.Object,
+            _deviceEventRepoMock.Object,
             _targetRangeScheduleRepoMock.Object,
             _basalInjectionRepoMock.Object,
             _activeProfileResolverMock.Object,
@@ -610,6 +614,46 @@ public class StatisticsControllerTests
         month.Summary!.TotalReadings.Should().Be(60);
     }
 
+    private void SetupPumps(params PatientDevice[] pumps)
+    {
+        _patientDeviceRepoMock
+            .Setup(r => r.GetByDateRangeAsync(
+                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(pumps);
+        SetupAidMetricsEcho();
+    }
+
+    private void SetupAidMetricsEcho() =>
+        _aidMetricsServiceMock
+            .Setup(s => s.Calculate(
+                It.IsAny<IReadOnlyList<DeviceSegmentInput>>(),
+                It.IsAny<IReadOnlyList<ApsSnapshot>>(),
+                It.IsAny<IReadOnlyList<TempBasal>>(),
+                It.IsAny<int>(),
+                It.IsAny<string?>(),
+                It.IsAny<string?>(),
+                It.IsAny<double?>(),
+                It.IsAny<double?>(),
+                It.IsAny<double?>(),
+                It.IsAny<DateTime>(),
+                It.IsAny<DateTime>()))
+            .Returns((
+                IReadOnlyList<DeviceSegmentInput> _,
+                IReadOnlyList<ApsSnapshot> _,
+                IReadOnlyList<TempBasal> _,
+                int _,
+                string? cgmNames,
+                string? pumpNames,
+                double? _,
+                double? _,
+                double? _,
+                DateTime _,
+                DateTime _) => new AidSystemMetrics
+                {
+                    CgmDeviceNames = cgmNames,
+                    PumpDeviceNames = pumpNames,
+                });
+
     [Fact]
     public async Task GetAidSystemMetrics_MeasuresCgmActiveTimeOnTheCanonicalReadings()
     {
@@ -647,5 +691,263 @@ public class StatisticsControllerTests
             .GetAidSystemMetrics(start, start.AddDays(1));
 
         measured.Should().BeEquivalentTo(canonical);
+    }
+
+    [Fact]
+    public async Task GetAidSystemMetrics_FetchesTheWholeWindowRatherThanACappedFirstPage()
+    {
+        var start = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        await CreateController().GetAidSystemMetrics(start, start.AddDays(90), CancellationToken.None);
+
+        _apsSnapshotRepoMock.Verify(r => r.GetAsync(
+            It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+            It.IsAny<string?>(), It.IsAny<string?>(),
+            int.MaxValue, It.IsAny<int>(), false, It.IsAny<CancellationToken>()), Times.Once);
+
+        _tempBasalRepoMock.Verify(r => r.GetAsync(
+            It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+            It.IsAny<string?>(), It.IsAny<string?>(),
+            int.MaxValue, It.IsAny<int>(), false, It.IsAny<CancellationToken>()), Times.Once);
+
+        _deviceEventRepoMock.Verify(r => r.GetAsync(
+            It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+            It.IsAny<string?>(), It.IsAny<string?>(),
+            int.MaxValue, It.IsAny<int>(), false,
+            It.IsAny<bool>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Once);
+
+        _glucoseRepoMock.Verify(r => r.GetAsync(
+            It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+            It.IsAny<string?>(), It.IsAny<string?>(),
+            int.MaxValue, It.IsAny<int>(), false,
+            It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
+            It.IsAny<CancellationToken>(), It.IsAny<Guid?>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetAidSystemMetrics_MeasuresGlucoseThroughToTheEndOfTheWindow()
+    {
+        // A one-minute sensor over 90 days: 129,600 readings, well past the 50,000 the
+        // endpoint used to ask for. The stub honours the limit it is given, so a capped,
+        // oldest-first fetch stops around day 35.
+        var start = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+        var end = start.AddDays(90);
+        var readings = Enumerable
+            .Range(0, 129_600)
+            .Select(i => new SensorGlucose { Timestamp = start.AddMinutes(i), Mgdl = 100 })
+            .ToArray();
+
+        _glucoseRepoMock
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
+                It.IsAny<CancellationToken>(), It.IsAny<Guid?>()))
+            .ReturnsAsync((
+                DateTime? _, DateTime? _, string? _, string? _,
+                int limit, int offset, bool descending,
+                bool _, DateTime? _, Guid? _, CancellationToken _, Guid? _) =>
+                    (descending ? readings.OrderByDescending(r => r.Timestamp) : readings.OrderBy(r => r.Timestamp))
+                        .Skip(offset)
+                        .Take(limit));
+
+        List<SensorGlucose>? measured = null;
+        _statsServiceMock
+            .Setup(s => s.CalculateCgmActivePercent(
+                It.IsAny<IEnumerable<SensorGlucose>>(),
+                It.IsAny<DateTime?>(),
+                It.IsAny<DateTime?>(),
+                It.IsAny<IReadOnlyCollection<CgmDeviceWindow>?>()))
+            .Callback((
+                IEnumerable<SensorGlucose> captured,
+                DateTime? _,
+                DateTime? _,
+                IReadOnlyCollection<CgmDeviceWindow>? _) => measured = captured.ToList())
+            .Returns(100.0);
+
+        await CreateController().GetAidSystemMetrics(start, end, CancellationToken.None);
+
+        measured.Should().NotBeNull();
+        measured!.Count.Should().Be(readings.Length);
+        measured.Max(r => r.Timestamp).Should().Be(end.AddMinutes(-1));
+    }
+
+    [Fact]
+    public async Task GetAidSystemMetrics_PropagatesCancellationRatherThanReturningAPartialReport()
+    {
+        var start = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+        using var cts = new CancellationTokenSource();
+
+        _activeProfileResolverMock
+            .Setup(r => r.GetActiveProfileNameAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new OperationCanceledException(cts.Token));
+
+        var act = async () => await CreateController()
+            .GetAidSystemMetrics(start, start.AddDays(1), cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
+    public async Task GetAidSystemMetrics_FallsBackToTheModelForAnUncataloguedPump()
+    {
+        var start = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        _patientDeviceRepoMock
+            .Setup(r => r.GetByDateRangeAsync(
+                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[]
+            {
+                new PatientDevice
+                {
+                    Id = Guid.NewGuid(),
+                    DeviceCategory = DeviceCategory.InsulinPump,
+                    CatalogId = null,
+                    Manufacturer = "Roche",
+                    Model = "Accu-Chek Combo",
+                    AidAlgorithm = null,
+                },
+            });
+        SetupAidMetricsEcho();
+
+        var result = await CreateController()
+            .GetAidSystemMetrics(start, start.AddDays(1), CancellationToken.None);
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var payload = ok.Value.Should().BeOfType<AidSystemMetrics>().Subject;
+        payload.PumpDeviceNames.Should().Be("Accu-Chek Combo");
+    }
+
+    [Fact]
+    public async Task GetAidSystemMetrics_FallsBackToTheManufacturerWhenThePumpHasNoModel()
+    {
+        var start = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        SetupPumps(new PatientDevice
+        {
+            Id = Guid.NewGuid(),
+            DeviceCategory = DeviceCategory.InsulinPump,
+            CatalogId = null,
+            Manufacturer = "Roche",
+            Model = "",
+            AidAlgorithm = null,
+        });
+
+        var result = await CreateController()
+            .GetAidSystemMetrics(start, start.AddDays(1), CancellationToken.None);
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var payload = ok.Value.Should().BeOfType<AidSystemMetrics>().Subject;
+        payload.PumpDeviceNames.Should().Be("Roche");
+    }
+
+    [Fact]
+    public async Task GetAidSystemMetrics_ReportsAnUnnameablePumpAsUnknownRatherThanBlank()
+    {
+        // IAidMetricsService documents null for "unknown"; the report renders null as "--"
+        // and an empty string as an empty box.
+        var start = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        SetupPumps(new PatientDevice
+        {
+            Id = Guid.NewGuid(),
+            DeviceCategory = DeviceCategory.InsulinPump,
+            CatalogId = null,
+            Manufacturer = "",
+            Model = "",
+            AidAlgorithm = null,
+        });
+
+        var result = await CreateController()
+            .GetAidSystemMetrics(start, start.AddDays(1), CancellationToken.None);
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var payload = ok.Value.Should().BeOfType<AidSystemMetrics>().Subject;
+        payload.PumpDeviceNames.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetAidSystemMetrics_StillReturnsTheReportWhenTheTargetRangeFetchFails()
+    {
+        var start = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        _activeProfileResolverMock
+            .Setup(r => r.GetActiveProfileNameAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("no active profile"));
+        SetupAidMetricsEcho();
+
+        var result = await CreateController()
+            .GetAidSystemMetrics(start, start.AddDays(1), CancellationToken.None);
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        ok.Value.Should().BeOfType<AidSystemMetrics>();
+    }
+
+    [Fact]
+    public async Task GetAidSystemMetrics_PassesTheCallersCancellationTokenToEveryFetch()
+    {
+        var start = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+        using var cts = new CancellationTokenSource();
+        var token = cts.Token;
+
+        await CreateController().GetAidSystemMetrics(start, start.AddDays(1), token);
+
+        _patientDeviceRepoMock.Verify(r => r.GetByDateRangeAsync(
+            It.IsAny<DateTime>(), It.IsAny<DateTime>(), token), Times.Once);
+
+        _apsSnapshotRepoMock.Verify(r => r.GetAsync(
+            It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+            It.IsAny<string?>(), It.IsAny<string?>(),
+            It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), token), Times.Once);
+
+        _tempBasalRepoMock.Verify(r => r.GetAsync(
+            It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+            It.IsAny<string?>(), It.IsAny<string?>(),
+            It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), token), Times.Once);
+
+        _deviceEventRepoMock.Verify(r => r.GetAsync(
+            It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+            It.IsAny<string?>(), It.IsAny<string?>(),
+            It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+            It.IsAny<bool>(), It.IsAny<Guid?>(), token), Times.Once);
+
+        _glucoseRepoMock.Verify(r => r.GetAsync(
+            It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+            It.IsAny<string?>(), It.IsAny<string?>(),
+            It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+            It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
+            token, It.IsAny<Guid?>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetAidSystemMetrics_NamesARegisteredPumpThatRunsNoAidAlgorithm()
+    {
+        var start = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        _patientDeviceRepoMock
+            .Setup(r => r.GetByDateRangeAsync(
+                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[]
+            {
+                new PatientDevice
+                {
+                    Id = Guid.NewGuid(),
+                    DeviceCategory = DeviceCategory.InsulinPump,
+                    CatalogId = "ypsopump",
+                    Manufacturer = "Ypsomed",
+                    Model = "YpsoPump",
+                    AidAlgorithm = null,
+                },
+            });
+
+        SetupAidMetricsEcho();
+
+        var result = await CreateController()
+            .GetAidSystemMetrics(start, start.AddDays(1), CancellationToken.None);
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var payload = ok.Value.Should().BeOfType<AidSystemMetrics>().Subject;
+        payload.PumpDeviceNames.Should().Be("YpsoPump");
     }
 }

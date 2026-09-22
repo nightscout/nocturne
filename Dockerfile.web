@@ -48,7 +48,12 @@ COPY --from=builder /app/packages/bridge/dist ./packages/bridge/dist
 # Install only runtime dependencies required by the app workspace package.
 # This ensures server-side imports (e.g. zod) are installed in packages/app/node_modules
 # where the adapter-node build resolves modules at runtime.
-RUN pnpm install --prod --frozen-lockfile --filter @nocturne/app...
+#
+# Pin the pnpm store to /usr/local/share/pnpm. pnpm defaults it under $HOME
+# (/root under the root build user, mode 0700), which the non-root runtime
+# (runAsUser 1000) cannot traverse, leaving prod deps linked there unresolvable
+# at runtime. /usr/local/share is world-traversable in the base image.
+RUN pnpm install --prod --frozen-lockfile --filter @nocturne/app... --store-dir /usr/local/share/pnpm
 
 # Run from the app package directory so Node resolves dependencies from
 # /app/packages/app/node_modules instead of relying on root hoisting.

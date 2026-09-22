@@ -51,6 +51,7 @@ public enum ConnectorPropertyKey
 
     // Nightscout-specific
     Url,
+    RealtimeUrl,
     ApiSecret,
     MaxCount,
 

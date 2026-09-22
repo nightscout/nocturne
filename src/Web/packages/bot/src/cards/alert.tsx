@@ -1,7 +1,22 @@
 import { Card, CardText, Fields, Field, Actions, Button } from "chat";
-import type { ActiveExcursion, AlertPayload } from "../types.js";
+import type { ActiveExcursion, AlertPayload, AlertSeverity } from "../types.js";
 import { formatGlucose, timeAgo, trendArrow } from "../lib/format.js";
 import { encodeActionValue } from "../lib/action-value.js";
+import { isKnownSeverity } from "../lib/severity.js";
+
+/**
+ * Card titles per severity. Every platform gets this, including the ones with
+ * no colour to carry (Telegram, WhatsApp, e-mail); on Discord and Slack it sits
+ * alongside the coloured bar that `../adapters/accented-discord.ts` applies.
+ *
+ * Labels mirror `severity.ts` in `@nocturne/app`, and an unrecognised value
+ * degrades to a neutral title as the app degrades to a muted style.
+ */
+const SEVERITY_TITLES: Record<AlertSeverity, string> = {
+  critical: "CRITICAL",
+  warning: "Warning",
+  info: "Info",
+};
 
 export function AlertCard(props: {
   payload: AlertPayload;
@@ -18,9 +33,14 @@ export function AlertCard(props: {
     excursionId: payload.excursionId,
   });
 
+  const severity = isKnownSeverity(payload.severity) ? payload.severity : undefined;
+  const titlePrefix = severity ? SEVERITY_TITLES[severity] : "Alert";
+
   return (
-    <Card title={`Alert: ${payload.ruleName}`}>
-      <CardText>{`${payload.subjectName} is ${value} ${arrow}`}</CardText>
+    <Card title={`${titlePrefix}: ${payload.ruleName}`}>
+      <CardText style={severity === "critical" ? "bold" : "plain"}>
+        {`${payload.subjectName} is ${value} ${arrow}`}
+      </CardText>
       <Fields>
         <Field
           label="Time"

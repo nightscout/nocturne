@@ -1,10 +1,10 @@
 import { Chat } from "chat";
-import { createDiscordAdapter } from "@chat-adapter/discord";
-import { createSlackAdapter } from "@chat-adapter/slack";
 import { createTelegramAdapter } from "@chat-adapter/telegram";
 import { createWhatsAppAdapter } from "@chat-adapter/whatsapp";
 import { createResendAdapter } from "@resend/chat-sdk-adapter";
 import { createPostgresState } from "@chat-adapter/state-pg";
+import { AccentedDiscordAdapter } from "./adapters/accented-discord.js";
+import { AccentedSlackAdapter } from "./adapters/accented-slack.js";
 import { createLogger } from "./lib/logger.js";
 
 const logger = createLogger();
@@ -44,13 +44,13 @@ export function createBot(options: BotOptions): Chat {
   if (discord) {
     logger.info("Enabling Discord adapter");
     if (typeof discord === "object") {
-      adapters.discord = createDiscordAdapter({
+      adapters.discord = new AccentedDiscordAdapter({
         botToken: discord.botToken!,
         publicKey: discord.publicKey!,
         applicationId: discord.applicationId!,
       });
     } else {
-      adapters.discord = createDiscordAdapter(); // env var fallback
+      adapters.discord = new AccentedDiscordAdapter(); // env var fallback
     }
   }
 
@@ -58,12 +58,12 @@ export function createBot(options: BotOptions): Chat {
   if (slack) {
     logger.info("Enabling Slack adapter");
     if (typeof slack === "object") {
-      adapters.slack = createSlackAdapter({
+      adapters.slack = new AccentedSlackAdapter({
         botToken: slack.botToken!,
         signingSecret: slack.signingSecret!,
       });
     } else {
-      adapters.slack = createSlackAdapter(); // env var fallback
+      adapters.slack = new AccentedSlackAdapter(); // env var fallback
     }
   }
 

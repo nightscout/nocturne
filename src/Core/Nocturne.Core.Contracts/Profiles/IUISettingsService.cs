@@ -9,11 +9,12 @@ namespace Nocturne.Core.Contracts.Profiles;
 public interface IUISettingsService
 {
     /// <summary>
-    /// Gets the complete UI settings configuration for the user.
+    /// Gets the complete UI settings configuration for the user. A tenant that has saved nothing
+    /// reads back a configuration of defaults, so null means the read itself failed.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>The UI settings configuration</returns>
-    Task<UISettingsConfiguration> GetSettingsAsync(CancellationToken cancellationToken = default);
+    /// <returns>The UI settings configuration, or null if it could not be read</returns>
+    Task<UISettingsConfiguration?> GetSettingsAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Saves the complete UI settings configuration.

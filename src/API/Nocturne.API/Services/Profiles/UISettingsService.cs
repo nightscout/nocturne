@@ -48,7 +48,7 @@ public class UISettingsService : IUISettingsService
     }
 
     /// <inheritdoc />
-    public async Task<UISettingsConfiguration> GetSettingsAsync(
+    public async Task<UISettingsConfiguration?> GetSettingsAsync(
         CancellationToken cancellationToken = default
     )
     {
@@ -83,7 +83,7 @@ public class UISettingsService : IUISettingsService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error retrieving UI settings");
-            return new UISettingsConfiguration();
+            return null;
         }
     }
 
@@ -134,7 +134,9 @@ public class UISettingsService : IUISettingsService
 
             if (UISettingsSections.Find(sectionName) is { } section)
             {
-                return section.Get(await GetSettingsAsync(cancellationToken)) as T;
+                return await GetSettingsAsync(cancellationToken) is { } settings
+                    ? section.Get(settings) as T
+                    : null;
             }
 
             return await ReadAsync(key, typeof(T), cancellationToken) as T;

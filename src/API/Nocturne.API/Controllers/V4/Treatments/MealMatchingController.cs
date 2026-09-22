@@ -5,6 +5,7 @@ using Nocturne.API.Attributes;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
@@ -78,6 +79,7 @@ public class MealMatchingController : ControllerBase
     [HttpGet("suggestions")]
     [RemoteQuery]
     [ProducesResponseType(typeof(SuggestedMealMatch[]), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<ActionResult<SuggestedMealMatch[]>> GetSuggestions(
         [FromQuery] DateTimeOffset? from,
         [FromQuery] DateTimeOffset? to)
@@ -85,10 +87,21 @@ public class MealMatchingController : ControllerBase
         var fromDate = from ?? DateTimeOffset.UtcNow.AddDays(-1);
         var toDate = to ?? DateTimeOffset.UtcNow;
 
-        var suggestions = await _mealMatchingService.GetSuggestionsAsync(
-            fromDate,
-            toDate,
-            HttpContext.RequestAborted);
+        IReadOnlyList<SuggestedMealMatchResult> suggestions;
+        try
+        {
+            suggestions = await _mealMatchingService.GetSuggestionsAsync(
+                fromDate,
+                toDate,
+                HttpContext.RequestAborted);
+        }
+        catch (SettingsUnavailableException)
+        {
+            return Problem(
+                detail: "Your matching settings could not be read just now, so no suggestions can be offered. Try again in a moment.",
+                statusCode: StatusCodes.Status503ServiceUnavailable,
+                title: "Settings Unavailable");
+        }
 
         var result = suggestions.Select(s => new SuggestedMealMatch
         {

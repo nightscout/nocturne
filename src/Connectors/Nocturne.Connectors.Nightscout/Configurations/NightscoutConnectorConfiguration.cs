@@ -41,6 +41,9 @@ public class NightscoutConnectorConfiguration : BaseConnectorConfiguration
     [ConnectorProperty(ConnectorPropertyKey.Url, Required = true, Format = "uri")]
     public string Url { get; set; } = string.Empty;
 
+    [ConnectorProperty(ConnectorPropertyKey.RealtimeUrl, Format = "uri")]
+    public string RealtimeUrl { get; set; } = string.Empty;
+
     [ConnectorProperty(ConnectorPropertyKey.ApiSecret, Required = true, Secret = true)]
     public string ApiSecret { get; set; } = string.Empty;
 

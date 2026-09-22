@@ -1273,6 +1273,7 @@ public class StatisticsController : ControllerBase
     /// </summary>
     /// <param name="startDate">Inclusive start of the analysis period (UTC).</param>
     /// <param name="endDate">Inclusive end of the analysis period (UTC).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>An <see cref="AidSystemMetrics"/> object containing loop-on time, site-change counts,
     /// CGM active percent, and per-algorithm segment breakdowns.</returns>
     /// <remarks>
@@ -1287,14 +1288,15 @@ public class StatisticsController : ControllerBase
     [RemoteQuery]
     public async Task<ActionResult<AidSystemMetrics>> GetAidSystemMetrics(
         [FromQuery] DateTime startDate,
-        [FromQuery] DateTime endDate
+        [FromQuery] DateTime endDate,
+        CancellationToken cancellationToken = default
     )
     {
         var startDt = DateTime.SpecifyKind(startDate, DateTimeKind.Utc);
         var endDt = DateTime.SpecifyKind(endDate, DateTimeKind.Utc);
 
         // Fetch patient devices overlapping the date range
-        var devices = await _patientDeviceRepository.GetByDateRangeAsync(startDt, endDt);
+        var devices = await _patientDeviceRepository.GetByDateRangeAsync(startDt, endDt, ct: cancellationToken);
 
         // Map patient devices to segment inputs
         var deviceSegments = devices
@@ -1313,17 +1315,18 @@ public class StatisticsController : ControllerBase
             })
             .ToList();
 
-        var apsTask     = _apsSnapshotRepository.GetAsync(startDt, endDt, null, null, 50000, descending: false);
-        var basalTask   = _tempBasalRepository.GetAsync(startDt, endDt, null, null, 50000, descending: false);
-        var eventTask   = _deviceEventRepository.GetAsync(startDt, endDt, null, null, 10000, descending: false);
-        var glucoseTask = _sensorGlucoseRepository.GetAsync(startDt, endDt, null, null, 50000, descending: false);
+        // Limits follow <see cref="GetRangeAnalytics"/>.
+        var apsTask     = _apsSnapshotRepository.GetAsync(startDt, endDt, null, null, int.MaxValue, descending: false, ct: cancellationToken);
+        var basalTask   = _tempBasalRepository.GetAsync(startDt, endDt, null, null, int.MaxValue, descending: false, ct: cancellationToken);
+        var eventTask   = _deviceEventRepository.GetAsync(startDt, endDt, null, null, int.MaxValue, descending: false, ct: cancellationToken);
+        var glucoseTask = _sensorGlucoseRepository.GetAsync(startDt, endDt, null, null, int.MaxValue, descending: false, ct: cancellationToken);
 
         await Task.WhenAll(apsTask, basalTask, eventTask, glucoseTask);
 
         var apsSnapshots = (await apsTask).ToList();
         var tempBasals   = (await basalTask).ToList();
         var deviceEvents = (await eventTask).ToList();
-        var glucose      = await _canonicalGlucose.SelectAsync((await glucoseTask).ToList(), HttpContext.RequestAborted);
+        var glucose      = await _canonicalGlucose.SelectAsync((await glucoseTask).ToList(), cancellationToken);
 
         // Count site changes
         var siteChangeCount = deviceEvents.Count(e =>
@@ -1340,13 +1343,17 @@ public class StatisticsController : ControllerBase
             : null;
 
         // Resolve pump device names
-        var pumpDeviceNames = deviceSegments.Count > 0
-            ? string.Join(", ", devices
-                .Where(d => d.DeviceCategory == DeviceCategory.InsulinPump)
-                .Select(d => d.CatalogId != null ? DeviceCatalog.GetById(d.CatalogId)?.Name : null)
-                .Where(n => n != null)
-                .Distinct())
-            : null;
+        var pumpDevices = devices.Where(d => d.DeviceCategory == DeviceCategory.InsulinPump).ToList();
+        var pumpCatalogNames = pumpDevices
+            .Select(d => d.CatalogId != null ? DeviceCatalog.GetById(d.CatalogId)?.Name : null)
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Distinct()
+            .ToList();
+        var pumpDeviceNames = pumpCatalogNames.Count > 0
+            ? string.Join(", ", pumpCatalogNames)
+            : pumpDevices
+                .Select(d => !string.IsNullOrWhiteSpace(d.Model) ? d.Model : d.Manufacturer)
+                .FirstOrDefault(n => !string.IsNullOrWhiteSpace(n));
 
         var cgmActivePercent = _statisticsService.CalculateCgmActivePercent(
             glucose,
@@ -1365,14 +1372,14 @@ public class StatisticsController : ControllerBase
         double? targetHigh = null;
         try
         {
-            var activeSchedule = await GetActiveTargetRangeScheduleAsync(HttpContext.RequestAborted);
+            var activeSchedule = await GetActiveTargetRangeScheduleAsync(cancellationToken);
             if (activeSchedule?.Entries.Count > 0)
             {
                 targetLow = activeSchedule.Entries.Min(e => e.Low);
                 targetHigh = activeSchedule.Entries.Max(e => e.High);
             }
         }
-        catch
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // Target range is optional — continue without it
         }

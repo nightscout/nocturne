@@ -68,7 +68,8 @@
   --pred-zt: rgb(113, 97, 239);         /* Purple */
   --pred-uam: rgb(255, 132, 69);        /* Orange UAM */
 
-  /* Status Colors */
+  /* Status Colors. Chat cards and e-mail use the default theme's values
+     (see @nocturne/ui/tokens); overrides here apply in-browser only. */
   --status-warning: rgb(255, 193, 69);
   --status-critical: rgb(235, 87, 87);
   --status-normal: rgb(111, 207, 151);

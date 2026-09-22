@@ -70,8 +70,12 @@
       <CurrentBGDisplay />
     </div>
 
-  <div class="flex flex-col-reverse @md:flex-col gap-3 @md:gap-6">
-    {#if isMainSectionEnabled(widgets, WidgetId.Statistics)}
+    <div class="flex flex-col-reverse @md:flex-col gap-3 @md:gap-6">
+      <!--
+        Ungated: the grid's contents are a per-user preference
+        (`dashboardTopWidgets`), and tenant settings carry no top-placement row
+        to gate it with.
+      -->
       <div
         {@attach coachmark({
           key: "quick-tour.widgets",
@@ -82,7 +86,6 @@
       >
         <WidgetGrid widgets={topWidgets} maxWidgets={3} />
       </div>
-    {/if}
 
       {#if isMainSectionEnabled(widgets, WidgetId.GlucoseChart)}
         {#snippet glucoseChart(chartVisible)}
