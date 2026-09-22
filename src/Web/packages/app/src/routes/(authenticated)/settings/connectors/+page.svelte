@@ -1,5 +1,6 @@
 <script lang="ts">
   import { getStatus as getConnectorStatuses } from "$api/generated/connectorStatus.generated.remote";
+  import { getGoogleHealth } from "$api/generated/googleHealths.generated.remote";
   import {
     getServicesOverview,
     getConnectorCapabilities,
@@ -37,6 +38,7 @@
   } from "lucide-svelte";
   import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
   import DataSourceRow from "$lib/components/settings/DataSourceRow.svelte";
+  import GoogleHealthSourceRow from "$lib/components/connectors/GoogleHealthSourceRow.svelte";
   import type { DataSourceStatus } from "$lib/components/settings/DataSourceRow.svelte";
   import ConnectedApps from "$lib/components/settings/ConnectedApps.svelte";
   import ClientDevices from "$lib/components/settings/ClientDevices.svelte";
@@ -59,12 +61,19 @@
   // Queries — fire on the server during SSR; results land in cache for hydration.
   const servicesOverviewQuery = getServicesOverview();
   const connectorStatusesQuery = getConnectorStatuses();
+  const googleHealthQuery = getGoogleHealth();
 
   const servicesOverview = $derived<ServicesOverview | null>(
     servicesOverviewQuery.current ?? null,
   );
   const connectorStatuses = $derived<ConnectorStatusDto[]>(
     connectorStatusesQuery.current ?? [],
+  );
+  const googleHealth = $derived(googleHealthQuery.current ?? null);
+  const otherDataSources = $derived(
+    (servicesOverview?.activeDataSources ?? []).filter(
+      (source) => source.sourceType !== "google-health-connector" && source.deviceId !== "google-health-connector",
+    ),
   );
   const isLoading = $derived(
     servicesOverviewQuery.current === undefined,
@@ -166,7 +175,8 @@
   async function refreshAll() {
     await refreshQuietly(
       () => servicesOverviewQuery.refresh(),
-      () => connectorStatusesQuery.refresh()
+      () => connectorStatusesQuery.refresh(),
+      () => googleHealthQuery.refresh()
     );
   }
 
@@ -175,7 +185,10 @@
   }
 
   async function loadConnectorStatuses() {
-    await refreshQuietly(() => connectorStatusesQuery.refresh());
+    await refreshQuietly(
+      () => connectorStatusesQuery.refresh(),
+      () => googleHealthQuery.refresh()
+    );
   }
 
   async function loadConnectorCapabilitiesFor(connectorId?: string) {
@@ -432,7 +445,7 @@
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {#if !servicesOverview.activeDataSources || servicesOverview.activeDataSources.length === 0}
+        {#if !googleHealth?.configured && otherDataSources.length === 0}
           <div class="text-center py-8 text-muted-foreground">
             <WifiOff class="h-12 w-12 mx-auto mb-4 opacity-50" />
             <p class="font-medium">No data sources detected</p>
@@ -442,7 +455,10 @@
           </div>
         {:else}
           <div class="space-y-3">
-            {#each servicesOverview.activeDataSources as source (source.id)}
+            {#if googleHealth?.configured}
+              <GoogleHealthSourceRow connection={googleHealth} />
+            {/if}
+            {#each otherDataSources as source (source.id)}
               {@const matchingUploader = getMatchingUploader(source)}
               {@const isDemo = isDemoDataSource(source)}
               <DataSourceRow
@@ -508,6 +524,7 @@
           await loadConnectorCapabilitiesFor(connectorId);
           showConnectorDialog = true;
         }}
+        {googleHealth}
       />
     </div>
 

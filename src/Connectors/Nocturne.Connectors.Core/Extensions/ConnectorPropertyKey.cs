@@ -93,4 +93,15 @@ public enum ConnectorPropertyKey
     PumpSerialNumber,
     FetchAllEventTypes,
     IgnoreZeroUnitBasal,
+
+    ClientId,
+    ClientSecret,
+    CallbackUrl,
+    ImportFrom,
+    PreviewOnly,
+    GrantedScopes,
+    SyncSteps,
+    SyncHeartRate,
+    SyncBodyWeight,
+    SyncSleep,
 }
