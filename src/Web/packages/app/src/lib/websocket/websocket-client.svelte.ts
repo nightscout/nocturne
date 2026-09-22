@@ -108,6 +108,16 @@ export class WebSocketClient {
     }
   }
 
+  ensureConnected(): void {
+    if (this.socket?.connected) return;
+    this.intentionallyClosed = false;
+    if (this.socket) {
+      this.socket.connect();
+      return;
+    }
+    this.connect();
+  }
+
   /** Fetch a realtime handshake ticket from the BFF. Returns the token, or null
    *  when no ticket was minted. Sets `lastTicketDenied` only for a definitive
    *  denial (`retry` not set by the endpoint); transient failures (timeout,

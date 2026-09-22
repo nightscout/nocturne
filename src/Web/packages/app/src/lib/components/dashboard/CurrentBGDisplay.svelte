@@ -45,9 +45,6 @@
   const lastUpdated = $derived(realtimeStore.lastUpdated);
 
   // Connection status
-  const isConnected = $derived(realtimeStore.isConnected);
-
-
   // Format values based on user's unit preference
   const units = $derived(glucoseUnits.current);
   const displayCurrentBG = $derived(formatGlucoseValue(rawCurrentBG, units));
@@ -61,7 +58,7 @@
   const isStale = $derived(
     currentTime.getTime() - lastUpdated > STALE_THRESHOLD_MS
   );
-  const isDisconnected = $derived(!isConnected);
+  const isDisconnected = $derived(realtimeStore.connectionUnavailable);
 
   // Loading state - no data received yet
   const isLoading = $derived(

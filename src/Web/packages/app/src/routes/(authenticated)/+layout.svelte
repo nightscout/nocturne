@@ -142,7 +142,7 @@
   const lastUpdated = $derived(realtimeStore.lastUpdated);
   const timeSinceReading = $derived(realtimeStore.timeSinceReading);
 
-  const isDisconnected = $derived(!realtimeStore.isConnected);
+  const isDisconnected = $derived(realtimeStore.connectionUnavailable);
   const isStale = $derived(now - lastUpdated > STALE_THRESHOLD_MS);
 
   $effect(() => {
