@@ -10,8 +10,6 @@ export default [
     rules: { "security/detect-non-literal-fs-filename": "off" }
   },
   ...debt({
-    "@typescript-eslint/consistent-type-assertions": 117,
-    "@typescript-eslint/no-explicit-any": 24,
     "shadcn/no-inline-styles": 18,
     "shadcn/no-unknown-classes": 9,
     "svelte/require-each-key": 3,

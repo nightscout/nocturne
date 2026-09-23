@@ -4,6 +4,7 @@
   import { Switch } from '@nocturne/ui/ui/switch';
   import { X } from '@lucide/svelte';
   import type { Editor } from '@tiptap/core';
+  import { parseComponentProps } from './extensions/svelte-component.ts';
 
   let {
     editor,
@@ -18,8 +19,8 @@
     if (node?.type.name !== 'svelteComponent') return null;
     return {
       pos: selection.from,
-      name: node.attrs.componentName as string,
-      props: JSON.parse(node.attrs.props || '{}') as Record<string, string>,
+      name: String(node.attrs.componentName),
+      props: parseComponentProps(node.attrs.props),
     };
   });
 

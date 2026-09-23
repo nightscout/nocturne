@@ -73,7 +73,7 @@
 			{/if}
 			<Textarea
 				value={values[n] ?? ''}
-				oninput={(e: Event) => update(n, (e.currentTarget as HTMLTextAreaElement).value)}
+				oninput={(e) => update(n, e.currentTarget.value)}
 				placeholder={message.upstream[n]?.length ? '' : 'No translation yet'}
 				rows={Math.min(4, Math.max(1, Math.ceil(message.msgid.length / 80)))}
 				class="font-normal"

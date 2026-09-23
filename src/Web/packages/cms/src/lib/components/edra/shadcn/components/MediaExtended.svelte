@@ -114,7 +114,7 @@
 
 	onMount(() => {
 		// Attach id to nodeRef
-		nodeRef = document.getElementById('resizable-container-media') as HTMLDivElement;
+		nodeRef = document.getElementById('resizable-container-media') ?? undefined;
 
 		// Mouse events
 		window.addEventListener('mousemove', resize);
@@ -150,10 +150,7 @@
 				value={node.attrs.title}
 				type="text"
 				class="text-muted-foreground my-1 w-full bg-transparent text-center text-sm outline-none"
-				onchange={(e) => {
-					const target = e.target as HTMLInputElement;
-					updateAttributes({ title: target.value });
-				}}
+				onchange={(e) => updateAttributes({ title: e.currentTarget.value })}
 			/>
 		{/if}
 		{#if editor.isEditable}

@@ -19,9 +19,9 @@ export const CalloutExtension = Node.create({
 	addAttributes() {
 		return {
 			type: {
-				default: 'info' as CalloutType,
+				default: 'info' satisfies CalloutType,
 				parseHTML: (element: HTMLElement) => element.getAttribute('data-type') || 'info',
-				renderHTML: (attributes: Record<string, any>) => ({
+				renderHTML: (attributes: Record<string, unknown>) => ({
 					'data-type': attributes.type
 				})
 			}

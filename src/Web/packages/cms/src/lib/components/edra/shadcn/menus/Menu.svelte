@@ -46,9 +46,7 @@
 			}
 		} = editor;
 		// check if the selection is a table grip
-		const domAtPos = view.domAtPos(from || 0).node as HTMLElement;
-		const nodeDOM = view.nodeDOM(from || 0) as HTMLElement;
-		const node = nodeDOM || domAtPos;
+		const node = view.nodeDOM(from || 0) || view.domAtPos(from || 0).node;
 
 		if (isTableGripSelected(node)) {
 			return false;
@@ -63,17 +61,13 @@
 		return !editor.state.selection.empty;
 	}
 
-	const isTableGripSelected = (node: HTMLElement) => {
-		let container = node;
-		while (container && !['TD', 'TH'].includes(container.tagName)) {
-			container = container.parentElement!;
-		}
-		const gripColumn =
-			container && container.querySelector && container.querySelector('a.grip-column.selected');
-		const gripRow =
-			container && container.querySelector && container.querySelector('a.grip-row.selected');
-		if (gripColumn || gripRow) {
-			return true;
+	const isTableGripSelected = (node: Node) => {
+		let current: Node | null = node;
+		while (current) {
+			if (current instanceof HTMLElement && ['TD', 'TH'].includes(current.tagName)) {
+				return !!current.querySelector('a.grip-column.selected, a.grip-row.selected');
+			}
+			current = current.parentElement;
 		}
 		return false;
 	};

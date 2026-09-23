@@ -40,6 +40,9 @@
 		drafts: 'With drafts',
 	};
 
+	const isFilter = (v: string | undefined): v is Filter =>
+		v === 'all' || v === 'untranslated' || v === 'drafts';
+
 	const filtered = $derived.by(() => {
 		const needle = search.trim().toLowerCase();
 		return messages.filter((m) => {
@@ -80,8 +83,8 @@
 	<div class="flex flex-wrap items-center gap-2">
 		<Input
 			value={search}
-			oninput={(e: Event) => {
-				search = (e.currentTarget as HTMLInputElement).value;
+			oninput={(e) => {
+				search = e.currentTarget.value;
 				page = 0;
 				touched = new Set();
 			}}
@@ -92,7 +95,7 @@
 			type="single"
 			value={filter}
 			onValueChange={(v: string | undefined) => {
-				filter = (v as Filter) ?? 'all';
+				filter = isFilter(v) ? v : 'all';
 				page = 0;
 				touched = new Set();
 			}}

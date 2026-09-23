@@ -5,6 +5,8 @@ import { CellSelection, type Rect, TableMap } from '@tiptap/pm/tables';
 import type { EditorView } from '@tiptap/pm/view';
 import Table from './table.ts';
 
+type CellInfo = { pos: number; start: number; node: Node | null | undefined };
+
 export const isRectSelected = (rect: Rect) => (selection: CellSelection) => {
 	const map = TableMap.get(selection.$anchorCell.node(-1));
 	const start = selection.$anchorCell.start(-1);
@@ -81,7 +83,7 @@ export const getCellsInColumn = (columnIndex: number | number[]) => (selection: 
 		const map = TableMap.get(table.node);
 		const indexes = Array.isArray(columnIndex) ? columnIndex : Array.from([columnIndex]);
 
-		return indexes.reduce(
+		return indexes.reduce<CellInfo[]>(
 			(acc, index) => {
 				if (index >= 0 && index <= map.width - 1) {
 					const cells = map.cellsInRect({
@@ -103,7 +105,7 @@ export const getCellsInColumn = (columnIndex: number | number[]) => (selection: 
 
 				return acc;
 			},
-			[] as { pos: number; start: number; node: Node | null | undefined }[]
+			[]
 		);
 	}
 	return null;
@@ -116,7 +118,7 @@ export const getCellsInRow = (rowIndex: number | number[]) => (selection: Select
 		const map = TableMap.get(table.node);
 		const indexes = Array.isArray(rowIndex) ? rowIndex : Array.from([rowIndex]);
 
-		return indexes.reduce(
+		return indexes.reduce<CellInfo[]>(
 			(acc, index) => {
 				if (index >= 0 && index <= map.height - 1) {
 					const cells = map.cellsInRect({
@@ -137,7 +139,7 @@ export const getCellsInRow = (rowIndex: number | number[]) => (selection: Select
 
 				return acc;
 			},
-			[] as { pos: number; start: number; node: Node | null | undefined }[]
+			[]
 		);
 	}
 
@@ -259,6 +261,17 @@ export const selectTable = (tr: Transaction) => {
 	return tr;
 };
 
+const closestTableCell = (node: globalThis.Node | null | undefined): HTMLElement | null => {
+	let current = node;
+	while (current) {
+		if (current instanceof HTMLElement && (current.tagName === 'TD' || current.tagName === 'TH')) {
+			return current;
+		}
+		current = current.parentElement;
+	}
+	return null;
+};
+
 export const isColumnGripSelected = ({
 	editor,
 	view,
@@ -270,19 +283,13 @@ export const isColumnGripSelected = ({
 	state: EditorState;
 	from: number;
 }) => {
-	const domAtPos = view.domAtPos(from).node as HTMLElement;
-	const nodeDOM = view.nodeDOM(from) as HTMLElement;
-	const node = nodeDOM || domAtPos;
+	const node = view.nodeDOM(from) || view.domAtPos(from).node;
 
 	if (!editor.isActive(Table.name) || !node || isTableSelected(state.selection)) {
 		return false;
 	}
 
-	let container = node;
-
-	while (container && !['TD', 'TH'].includes(container.tagName)) {
-		container = container.parentElement!;
-	}
+	const container = closestTableCell(node);
 
 	const gripColumn =
 		container && container.querySelector && container.querySelector('a.grip-column.selected');
@@ -301,19 +308,13 @@ export const isRowGripSelected = ({
 	state: EditorState;
 	from: number;
 }) => {
-	const domAtPos = view.domAtPos(from).node as HTMLElement;
-	const nodeDOM = view.nodeDOM(from) as HTMLElement;
-	const node = nodeDOM || domAtPos;
+	const node = view.nodeDOM(from) || view.domAtPos(from).node;
 
 	if (!editor.isActive(Table.name) || !node || isTableSelected(state.selection)) {
 		return false;
 	}
 
-	let container = node;
-
-	while (container && !['TD', 'TH'].includes(container.tagName)) {
-		container = container.parentElement!;
-	}
+	const container = closestTableCell(node);
 
 	const gripRow =
 		container && container.querySelector && container.querySelector('a.grip-row.selected');
@@ -336,24 +337,14 @@ export const isRowActiveFromSelection = ({
 	if (!editor.isActive(Table.name)) return false;
 
 	// Container at the BubbleMenu anchor
-	const domAtPos = view.domAtPos(from).node as HTMLElement;
-	const nodeDOM = view.nodeDOM(from) as HTMLElement;
-	let container = nodeDOM || domAtPos;
-
-	while (container && !['TD', 'TH'].includes(container.tagName)) {
-		container = container.parentElement!;
-	}
+	const container = closestTableCell(view.nodeDOM(from) || view.domAtPos(from).node);
 	if (!container) return false;
 
 	const rowEl = container.closest('tr');
 	if (!rowEl) return false;
 
 	// Current selection anchor cell
-	const anchorDom = view.domAtPos(state.selection.$from.pos).node as HTMLElement;
-	let anchorCell = anchorDom;
-	while (anchorCell && !['TD', 'TH'].includes(anchorCell.tagName)) {
-		anchorCell = anchorCell.parentElement!;
-	}
+	const anchorCell = closestTableCell(view.domAtPos(state.selection.$from.pos).node);
 	if (!anchorCell) return false;
 
 	const anchorRow = anchorCell.closest('tr');
@@ -375,36 +366,26 @@ export const isColumnActiveFromSelection = ({
 	if (!editor.isActive(Table.name)) return false;
 
 	// Container at the BubbleMenu anchor (header cell)
-	const domAtPos = view.domAtPos(from).node as HTMLElement;
-	const nodeDOM = view.nodeDOM(from) as HTMLElement;
-	let container = nodeDOM || domAtPos;
-
-	while (container && !['TD', 'TH'].includes(container.tagName)) {
-		container = container.parentElement!;
-	}
+	const container = closestTableCell(view.nodeDOM(from) || view.domAtPos(from).node);
 	if (!container) return false;
 
 	const headerRow = container.closest('tr');
 	if (!headerRow) return false;
 
 	const headerCells = Array.from(headerRow.children).filter(
-		(el) => (el as HTMLElement).tagName === 'TD' || (el as HTMLElement).tagName === 'TH'
+		(el) => el.tagName === 'TD' || el.tagName === 'TH'
 	);
 	const containerIndex = headerCells.indexOf(container);
 	if (containerIndex < 0) return false;
 
 	// Current selection anchor cell DOM index in its row
-	const anchorDom = view.domAtPos(state.selection.$from.pos).node as HTMLElement;
-	let anchorCell = anchorDom;
-	while (anchorCell && !['TD', 'TH'].includes(anchorCell.tagName)) {
-		anchorCell = anchorCell.parentElement!;
-	}
+	const anchorCell = closestTableCell(view.domAtPos(state.selection.$from.pos).node);
 	if (!anchorCell) return false;
 
 	const anchorRow = anchorCell.closest('tr');
 	if (!anchorRow) return false;
 	const anchorCells = Array.from(anchorRow.children).filter(
-		(el) => (el as HTMLElement).tagName === 'TD' || (el as HTMLElement).tagName === 'TH'
+		(el) => el.tagName === 'TD' || el.tagName === 'TH'
 	);
 	const anchorIndex = anchorCells.indexOf(anchorCell);
 
@@ -419,17 +400,16 @@ const getCurrentCellRect = (tr: Transaction) => {
 	return { table, map, cell };
 };
 
-type CellInfo = { pos: number; start: number; node: Node | null | undefined };
-
 const getSpanMetrics = (n: Node | null | undefined) => {
-	const attrs = (n?.attrs ?? {}) as Record<string, unknown>;
-	const rowspan = typeof attrs.rowspan === 'number' ? attrs.rowspan : 1;
-	const colspan = typeof attrs.colspan === 'number' ? attrs.colspan : 1;
-	return { rowspan, colspan };
+	const rowspan: unknown = n?.attrs.rowspan;
+	const colspan: unknown = n?.attrs.colspan;
+	return {
+		rowspan: typeof rowspan === 'number' ? rowspan : 1,
+		colspan: typeof colspan === 'number' ? colspan : 1
+	};
 };
 
-const hasSpans = (cellsA: CellInfo[] | null, cellsB: CellInfo[] | null) => {
-	if (!cellsA || !cellsB) return true;
+const hasSpans = (cellsA: CellInfo[], cellsB: CellInfo[]) => {
 	if (cellsA.length !== cellsB.length) return true;
 	// Disallow operation if any cell has rowspan/colspan > 1
 	for (let i = 0; i < cellsA.length; i++) {
@@ -443,6 +423,20 @@ const hasSpans = (cellsA: CellInfo[] | null, cellsB: CellInfo[] | null) => {
 	return false;
 };
 
+const swapCells = (tr: Transaction, sourceCells: CellInfo[], targetCells: CellInfo[]) => {
+	for (let i = 0; i < sourceCells.length; i++) {
+		const posA = tr.mapping.map(sourceCells[i].pos);
+		const posB = tr.mapping.map(targetCells[i].pos);
+		const nodeA = tr.doc.nodeAt(posA);
+		const nodeB = tr.doc.nodeAt(posB);
+		if (!nodeA || !nodeB) continue;
+		tr = tr.replaceWith(posA, posA + nodeA.nodeSize, nodeB.copy(nodeB.content));
+		const mappedB = tr.mapping.map(posB);
+		tr = tr.replaceWith(mappedB, mappedB + nodeB.nodeSize, nodeA.copy(nodeA.content));
+	}
+	return tr;
+};
+
 export const moveColumnLeft = (tr: Transaction) => {
 	const ctx = getCurrentCellRect(tr);
 	if (!ctx) return tr;
@@ -451,29 +445,10 @@ export const moveColumnLeft = (tr: Transaction) => {
 	const target = source - 1;
 	if (target < 0) return tr;
 
-	const sel = tr.selection as CellSelection;
-	const sourceCells = getCellsInColumn(source)(sel);
-	const targetCells = getCellsInColumn(target)(sel);
-	if (hasSpans(sourceCells, targetCells)) return tr;
-
-	for (let i = 0; i < sourceCells!.length; i++) {
-		const a = sourceCells![i];
-		const b = targetCells![i];
-		const posA = tr.mapping.map(a.pos);
-		const posB = tr.mapping.map(b.pos);
-		const nodeA = tr.doc.nodeAt(posA);
-		const nodeB = tr.doc.nodeAt(posB);
-		if (!nodeA || !nodeB) continue;
-		tr = tr.replaceWith(posA, posA + nodeA.nodeSize, (nodeB as Node).copy((nodeB as Node).content));
-		const mappedB = tr.mapping.map(posB);
-		const newNodeA = nodeA as Node;
-		tr = tr.replaceWith(
-			mappedB,
-			mappedB + (nodeB as Node).nodeSize,
-			newNodeA.copy(newNodeA.content)
-		);
-	}
-	return tr;
+	const sourceCells = getCellsInColumn(source)(tr.selection);
+	const targetCells = getCellsInColumn(target)(tr.selection);
+	if (!sourceCells || !targetCells || hasSpans(sourceCells, targetCells)) return tr;
+	return swapCells(tr, sourceCells, targetCells);
 };
 
 export const moveColumnRight = (tr: Transaction) => {
@@ -484,29 +459,10 @@ export const moveColumnRight = (tr: Transaction) => {
 	const target = source + 1;
 	if (target >= map.width) return tr;
 
-	const sel = tr.selection as CellSelection;
-	const sourceCells = getCellsInColumn(source)(sel);
-	const targetCells = getCellsInColumn(target)(sel);
-	if (hasSpans(sourceCells, targetCells)) return tr;
-
-	for (let i = 0; i < sourceCells!.length; i++) {
-		const a = sourceCells![i];
-		const b = targetCells![i];
-		const posA = tr.mapping.map(a.pos);
-		const posB = tr.mapping.map(b.pos);
-		const nodeA = tr.doc.nodeAt(posA);
-		const nodeB = tr.doc.nodeAt(posB);
-		if (!nodeA || !nodeB) continue;
-		tr = tr.replaceWith(posA, posA + nodeA.nodeSize, (nodeB as Node).copy((nodeB as Node).content));
-		const mappedB = tr.mapping.map(posB);
-		const newNodeA = nodeA as Node;
-		tr = tr.replaceWith(
-			mappedB,
-			mappedB + (nodeB as Node).nodeSize,
-			newNodeA.copy(newNodeA.content)
-		);
-	}
-	return tr;
+	const sourceCells = getCellsInColumn(source)(tr.selection);
+	const targetCells = getCellsInColumn(target)(tr.selection);
+	if (!sourceCells || !targetCells || hasSpans(sourceCells, targetCells)) return tr;
+	return swapCells(tr, sourceCells, targetCells);
 };
 
 export const moveRowUp = (tr: Transaction) => {
@@ -516,28 +472,10 @@ export const moveRowUp = (tr: Transaction) => {
 	const source = cell.top;
 	const target = source - 1;
 	if (target < 0) return tr;
-	const sel = tr.selection as CellSelection;
-	const sourceRow = getCellsInRow(source)(sel);
-	const targetRow = getCellsInRow(target)(sel);
-	if (hasSpans(sourceRow, targetRow)) return tr;
-	for (let i = 0; i < sourceRow!.length; i++) {
-		const a = sourceRow![i];
-		const b = targetRow![i];
-		const posA = tr.mapping.map(a.pos);
-		const posB = tr.mapping.map(b.pos);
-		const nodeA = tr.doc.nodeAt(posA);
-		const nodeB = tr.doc.nodeAt(posB);
-		if (!nodeA || !nodeB) continue;
-		tr = tr.replaceWith(posA, posA + nodeA.nodeSize, (nodeB as Node).copy((nodeB as Node).content));
-		const mappedB = tr.mapping.map(posB);
-		const newNodeA = nodeA as Node;
-		tr = tr.replaceWith(
-			mappedB,
-			mappedB + (nodeB as Node).nodeSize,
-			newNodeA.copy(newNodeA.content)
-		);
-	}
-	return tr;
+	const sourceRow = getCellsInRow(source)(tr.selection);
+	const targetRow = getCellsInRow(target)(tr.selection);
+	if (!sourceRow || !targetRow || hasSpans(sourceRow, targetRow)) return tr;
+	return swapCells(tr, sourceRow, targetRow);
 };
 
 export const moveRowDown = (tr: Transaction) => {
@@ -547,26 +485,8 @@ export const moveRowDown = (tr: Transaction) => {
 	const source = cell.top;
 	const target = source + 1;
 	if (target >= map.height) return tr;
-	const sel = tr.selection as CellSelection;
-	const sourceRow = getCellsInRow(source)(sel);
-	const targetRow = getCellsInRow(target)(sel);
-	if (hasSpans(sourceRow, targetRow)) return tr;
-	for (let i = 0; i < sourceRow!.length; i++) {
-		const a = sourceRow![i];
-		const b = targetRow![i];
-		const posA = tr.mapping.map(a.pos);
-		const posB = tr.mapping.map(b.pos);
-		const nodeA = tr.doc.nodeAt(posA);
-		const nodeB = tr.doc.nodeAt(posB);
-		if (!nodeA || !nodeB) continue;
-		tr = tr.replaceWith(posA, posA + nodeA.nodeSize, (nodeB as Node).copy((nodeB as Node).content));
-		const mappedB = tr.mapping.map(posB);
-		const newNodeA = nodeA as Node;
-		tr = tr.replaceWith(
-			mappedB,
-			mappedB + (nodeB as Node).nodeSize,
-			newNodeA.copy(newNodeA.content)
-		);
-	}
-	return tr;
+	const sourceRow = getCellsInRow(source)(tr.selection);
+	const targetRow = getCellsInRow(target)(tr.selection);
+	if (!sourceRow || !targetRow || hasSpans(sourceRow, targetRow)) return tr;
+	return swapCells(tr, sourceRow, targetRow);
 };

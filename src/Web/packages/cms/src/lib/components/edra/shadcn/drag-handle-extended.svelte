@@ -67,8 +67,10 @@
 
 	const handleDuplicate = () => {
 		editor.commands.setNodeSelection(currentNodePos);
+		const { selection } = editor.state;
 		const selectedNode =
-			editor.state.selection.$anchor.node(1) || (editor.state.selection as NodeSelection).node;
+			selection.$anchor.node(1) || (selection instanceof NodeSelection ? selection.node : undefined);
+		if (!selectedNode) return;
 		editor
 			.chain()
 			.setMeta('hideDragHandle', true)
