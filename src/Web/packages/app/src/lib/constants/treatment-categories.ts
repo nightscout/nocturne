@@ -71,12 +71,10 @@ export type TreatmentCategory = (typeof TREATMENT_CATEGORIES)[TreatmentCategoryI
  * Get the category for an event type
  */
 export function getCategoryForEventType(eventType: string): TreatmentCategoryId | null {
-  for (const [categoryId, category] of Object.entries(TREATMENT_CATEGORIES)) {
-    if ((category.eventTypes as readonly string[]).includes(eventType)) {
-      return categoryId as TreatmentCategoryId;
-    }
-  }
-  return null;
+  const category = Object.values(TREATMENT_CATEGORIES).find((c) =>
+    c.eventTypes.some((type) => type === eventType)
+  );
+  return category?.id ?? null;
 }
 
 /**

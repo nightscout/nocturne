@@ -3,6 +3,8 @@
  * Designed for comparing Zod-schema-shaped form values — not a general-purpose utility.
  * Treats undefined values and missing keys as equivalent.
  */
+import { isRecord } from "$lib/utils/type-guards";
+
 export function deepEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true;
   if (a == null || b == null) return false;
@@ -14,9 +16,9 @@ export function deepEqual(a: unknown, b: unknown): boolean {
     return a.every((item, i) => deepEqual(item, b[i]));
   }
 
-  if (typeof a === "object" && typeof b === "object" && !Array.isArray(a) && !Array.isArray(b)) {
-    const aObj = a as Record<string, unknown>;
-    const bObj = b as Record<string, unknown>;
+  if (isRecord(a) && isRecord(b)) {
+    const aObj = a;
+    const bObj = b;
     const keys = new Set([...Object.keys(aObj), ...Object.keys(bObj)]);
     for (const key of keys) {
       const aVal = aObj[key];

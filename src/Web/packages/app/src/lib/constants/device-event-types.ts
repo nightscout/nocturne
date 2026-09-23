@@ -1,4 +1,7 @@
 import { DeviceEventType } from '$lib/api';
+import { isOneOf } from '$lib/utils/type-guards';
+
+const DEVICE_EVENT_TYPE_VALUES: readonly DeviceEventType[] = Object.values(DeviceEventType);
 
 /** Human-readable labels for DeviceEventType enum values. */
 export const DEVICE_EVENT_TYPE_LABELS: Record<DeviceEventType, string> = {
@@ -28,10 +31,12 @@ export const DEVICE_EVENT_TYPE_LABELS: Record<DeviceEventType, string> = {
 };
 
 /** All DeviceEventType values in display order. */
-export const DEVICE_EVENT_TYPES = Object.keys(DEVICE_EVENT_TYPE_LABELS) as DeviceEventType[];
+export const DEVICE_EVENT_TYPES = Object.keys(DEVICE_EVENT_TYPE_LABELS).filter(
+	(key): key is DeviceEventType => isOneOf(DEVICE_EVENT_TYPE_VALUES, key)
+);
 
 /** Get the human-readable label for a device event type, falling back to the raw value. */
 export function getDeviceEventTypeLabel(type: string | undefined): string {
 	if (!type) return '';
-	return DEVICE_EVENT_TYPE_LABELS[type as DeviceEventType] ?? type;
+	return isOneOf(DEVICE_EVENT_TYPE_VALUES, type) ? DEVICE_EVENT_TYPE_LABELS[type] : type;
 }

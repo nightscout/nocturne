@@ -4,8 +4,19 @@ import type { z, ZodIssue } from "zod";
 import { deepEqual } from "./deep-equal";
 import { describeSubmitError, GENERIC_SUBMIT_ERROR } from "./submit-error";
 
+/** The part of SvelteKit's `RemoteForm` the guard drives. */
+export interface GuardedForm {
+  enhance(
+    callback: (helpers: { submit: () => Promise<boolean> }) => Promise<void>,
+  ): {
+    method: "POST";
+    action: string;
+    [attachment: symbol]: (node: HTMLFormElement) => void;
+  };
+}
+
 export interface FormGuardOptions<T extends Record<string, unknown>> {
-  form: any;
+  form: GuardedForm;
   schema: z.ZodType<T>;
   el: () => HTMLFormElement | null;
   initial: () => T | null | undefined;
@@ -54,7 +65,7 @@ export class FormGuard<T extends Record<string, unknown>> {
 
     // Navigation blocking
     if (options.navBlockMessage) {
-      beforeNavigate((navigation: any) => {
+      beforeNavigate((navigation) => {
         if (this.dirty && this.#touched) {
           if (!confirm(options.navBlockMessage!)) {
             navigation.cancel();

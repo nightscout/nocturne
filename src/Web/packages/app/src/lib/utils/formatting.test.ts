@@ -15,7 +15,7 @@ import type { RegionFormat } from "$lib/stores/appearance-store.svelte";
 vi.mock("$app/environment", () => ({ browser: false }));
 vi.mock("mode-watcher", () => ({}));
 vi.mock("runed", () => ({
-	PersistedState: class { current: any; constructor(v: any) { this.current = v; } },
+	PersistedState: class { current: unknown; constructor(v: unknown) { this.current = v; } },
 }));
 vi.mock("$lib/stores/appearance-store.svelte", () => ({
 	glucoseUnits: { current: "mg/dl" },
@@ -280,7 +280,7 @@ describe("Treatment formatting", () => {
 		});
 
 		it("returns N/A for null", () => {
-			expect(formatInsulinDisplay(null as any)).toBe("N/A");
+			expect(formatInsulinDisplay(null)).toBe("N/A");
 		});
 
 		it("formats to 2 decimal places", () => {
@@ -314,56 +314,56 @@ describe("Treatment formatting", () => {
 
 	describe("formatGlucose", () => {
 		it("returns - when glucose is falsy", () => {
-			expect(formatGlucose({} as any)).toBe("-");
+			expect(formatGlucose({})).toBe("-");
 		});
 
 		it("returns - when glucose is 0", () => {
-			expect(formatGlucose({ glucose: 0 } as any)).toBe("-");
+			expect(formatGlucose({ glucose: 0 })).toBe("-");
 		});
 
 		it("formats glucose with type", () => {
 			expect(
-				formatGlucose({ glucose: 120, glucoseType: "Finger" } as any),
+				formatGlucose({ glucose: 120, glucoseType: "Finger" }),
 			).toBe("120 (Finger)");
 		});
 
 		it("formats glucose without type", () => {
-			expect(formatGlucose({ glucose: 120 } as any)).toBe("120");
+			expect(formatGlucose({ glucose: 120 })).toBe("120");
 		});
 	});
 
 	describe("formatEventType", () => {
 		it("returns event type", () => {
-			expect(formatEventType({ eventType: "BG Check" } as any)).toBe("BG Check");
+			expect(formatEventType({ eventType: "BG Check" })).toBe("BG Check");
 		});
 
 		it("appends reason when present", () => {
 			expect(
-				formatEventType({ eventType: "Correction", reason: "High BG" } as any),
+				formatEventType({ eventType: "Correction", reason: "High BG" }),
 			).toBe("Correction - High BG");
 		});
 
 		it("returns Unknown when eventType is missing", () => {
-			expect(formatEventType({} as any)).toBe("Unknown");
+			expect(formatEventType({})).toBe("Unknown");
 		});
 	});
 
 	describe("formatNotes", () => {
 		it("returns empty string when no notes or enteredBy", () => {
-			expect(formatNotes({} as any)).toBe("");
+			expect(formatNotes({})).toBe("");
 		});
 
 		it("returns notes when present", () => {
-			expect(formatNotes({ notes: "Test note" } as any)).toBe("Test note");
+			expect(formatNotes({ notes: "Test note" })).toBe("Test note");
 		});
 
 		it("returns enteredBy when present", () => {
-			expect(formatNotes({ enteredBy: "admin" } as any)).toBe("by admin");
+			expect(formatNotes({ enteredBy: "admin" })).toBe("by admin");
 		});
 
 		it("combines notes and enteredBy", () => {
 			expect(
-				formatNotes({ notes: "Test note", enteredBy: "admin" } as any),
+				formatNotes({ notes: "Test note", enteredBy: "admin" }),
 			).toBe("Test note by admin");
 		});
 	});

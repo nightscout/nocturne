@@ -214,9 +214,7 @@ describe("the 403 arm", () => {
   it("prefers the sentence the server wrote to the status phrase beside it", async () => {
     const crossed = await crossThe403Arm(problemDetails(403, NEEDS_SCOPE));
 
-    expect((crossed as { body: { message: string } }).body.message).toBe(
-      NEEDS_SCOPE
-    );
+    expect(crossed).toHaveProperty("body.message", NEEDS_SCOPE);
   });
 });
 

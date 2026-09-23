@@ -327,6 +327,10 @@ export const connectorPropertyMeta = {
 /** String key names, taken from the entries above. */
 export type ConnectorPropertyKeyName = keyof typeof connectorPropertyMeta;
 
+const PROPERTY_META_BY_KEY: ReadonlyMap<string, PropertyMeta> = new Map<string, PropertyMeta>(
+  Object.entries(connectorPropertyMeta)
+);
+
 /**
  * Convert PascalCase/camelCase to Title Case with spaces.
  * Used as fallback for unknown property keys.
@@ -346,14 +350,16 @@ export function formatPropertyName(name: string): string {
  */
 export function getPropertyMeta(key: string): PropertyMeta {
   // Direct match (PascalCase from enum)
-  if (key in connectorPropertyMeta) {
-    return connectorPropertyMeta[key as ConnectorPropertyKeyName];
+  const direct = PROPERTY_META_BY_KEY.get(key);
+  if (direct) {
+    return direct;
   }
 
   // Convert camelCase to PascalCase for lookup (schema keys are camelCased)
   const pascalKey = key.charAt(0).toUpperCase() + key.slice(1);
-  if (pascalKey in connectorPropertyMeta) {
-    return connectorPropertyMeta[pascalKey as ConnectorPropertyKeyName];
+  const pascal = PROPERTY_META_BY_KEY.get(pascalKey);
+  if (pascal) {
+    return pascal;
   }
 
   return {

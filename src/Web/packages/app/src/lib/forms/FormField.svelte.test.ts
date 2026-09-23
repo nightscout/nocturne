@@ -3,6 +3,12 @@ import { page } from "vitest/browser";
 import { describe, it, expect } from "vitest";
 import FormFieldHarness from "./FormField.test-harness.svelte";
 
+function inputLabelled(label: string): HTMLInputElement {
+  const el = page.getByLabelText(label).element();
+  if (!(el instanceof HTMLInputElement)) throw new Error(`no input labelled ${label}`);
+  return el;
+}
+
 describe("FormField", () => {
   it("pairs the label with the control via a generated id", async () => {
     render(FormFieldHarness, { label: "Username" });
@@ -10,7 +16,7 @@ describe("FormField", () => {
     const input = page.getByLabelText("Username");
     await expect.element(input).toBeInTheDocument();
 
-    const el = input.element() as HTMLInputElement;
+    const el = inputLabelled("Username");
     expect(el.id).not.toBe("");
     expect(document.querySelector(`label[for="${el.id}"]`)).not.toBeNull();
   });
@@ -18,17 +24,15 @@ describe("FormField", () => {
   it("uses an explicit id when given one", async () => {
     render(FormFieldHarness, { label: "Username", id: "login-username" });
 
-    const el = page.getByLabelText("Username").element() as HTMLInputElement;
+    const el = inputLabelled("Username");
     expect(el.id).toBe("login-username");
   });
 
   it("generates a distinct id per instance", async () => {
     render(FormFieldHarness, { label: "Username", second: "Display name" });
 
-    const first = page.getByLabelText("Username").element() as HTMLInputElement;
-    const second = page
-      .getByLabelText("Display name")
-      .element() as HTMLInputElement;
+    const first = inputLabelled("Username");
+    const second = inputLabelled("Display name");
 
     expect(first.id).not.toBe(second.id);
   });
@@ -36,7 +40,7 @@ describe("FormField", () => {
   it("marks the control required and says so to assistive tech", async () => {
     render(FormFieldHarness, { label: "Username", required: true });
 
-    const el = page.getByLabelText("Username").element() as HTMLInputElement;
+    const el = inputLabelled("Username");
     expect(el.required).toBe(true);
     await expect.element(page.getByText("(required)")).toBeInTheDocument();
   });
@@ -47,7 +51,7 @@ describe("FormField", () => {
       description: "3-32 characters.",
     });
 
-    const el = page.getByLabelText("Username").element() as HTMLInputElement;
+    const el = inputLabelled("Username");
     const describedBy = el.getAttribute("aria-describedby");
     expect(describedBy).not.toBeNull();
     expect(document.getElementById(describedBy!)?.textContent).toContain(
@@ -63,7 +67,7 @@ describe("FormField", () => {
       issues: ["That username is taken"],
     });
 
-    const el = page.getByLabelText("Username").element() as HTMLInputElement;
+    const el = inputLabelled("Username");
     expect(el.getAttribute("aria-invalid")).toBe("true");
 
     const describedBy = el.getAttribute("aria-describedby");
