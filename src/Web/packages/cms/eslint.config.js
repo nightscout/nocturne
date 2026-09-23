@@ -14,12 +14,10 @@ export default [
     "@typescript-eslint/no-explicit-any": 24,
     "shadcn/no-inline-styles": 18,
     "shadcn/no-unknown-classes": 9,
-    "svelte/no-at-html-tags": 3,
     "svelte/require-each-key": 3,
     "no-useless-assignment": 3,
     "shadcn/no-raw-colors": 1,
     "shadcn/require-static-classes": 6,
-    "security/detect-unsafe-regex": 2,
     "shadcn/no-arbitrary-values": 1,
     "shadcn/no-restyle": 93,
     "no-restricted-syntax": 20

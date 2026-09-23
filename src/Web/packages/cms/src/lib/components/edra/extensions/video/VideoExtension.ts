@@ -26,6 +26,7 @@ declare module '@tiptap/core' {
 	}
 }
 
+// eslint-disable-next-line security/detect-unsafe-regex -- backtracking is polynomial, not exponential, and runs only over the author's own text before the cursor
 const VIDEO_INPUT_REGEX = /!\[(.+|:?)]\((\S+)(?:(?:\s+)["'](\S+)["'])?\)/;
 
 export const Video = (onDrop?: (file: File) => Promise<string>) =>
@@ -44,7 +45,7 @@ export const Video = (onDrop?: (file: File) => Promise<string>) =>
 			return {
 				src: {
 					default: null,
-					parseHTML: (el) => (el as HTMLSpanElement).getAttribute('src'),
+					parseHTML: (el) => el.getAttribute('src'),
 					renderHTML: (attrs) => ({ src: attrs.src })
 				}
 			};
@@ -53,7 +54,7 @@ export const Video = (onDrop?: (file: File) => Promise<string>) =>
 			return [
 				{
 					tag: 'video',
-					getAttrs: (el) => ({ src: (el as HTMLVideoElement).getAttribute('src') })
+					getAttrs: (el) => ({ src: el.getAttribute('src') })
 				}
 			];
 		},

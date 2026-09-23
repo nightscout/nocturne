@@ -78,6 +78,7 @@
       <article class="prose prose-neutral dark:prose-invert max-w-none">
         {#each segments as segment}
           {#if segment.type === 'html'}
+            <!-- eslint-disable-next-line svelte/no-at-html-tags -- editor.getHTML() output: schema-serialised with text escaped; the one scriptable attribute, iframe src, is filtered by safeFrameSrc -->
             {@html segment.content}
           {:else if segment.type === 'component' && segment.componentName && componentMap[segment.componentName]}
             <div class="not-prose my-4">
@@ -90,6 +91,7 @@
       <div class="rounded-lg border border-border/40 bg-muted/20 p-4">
         <p class="text-sm text-muted-foreground">Email preview will use better-svelte-email renderer.</p>
         <article class="mt-4 prose prose-neutral dark:prose-invert max-w-none">
+          <!-- eslint-disable-next-line svelte/no-at-html-tags -- editor.getHTML() output, as above -->
           {@html content}
         </article>
       </div>
