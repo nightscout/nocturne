@@ -17,7 +17,7 @@
 <div class="grid grid-cols-3 gap-4">
   <div class="space-y-2">
     <Label for="carbs">
-      <Apple class="h-3.5 w-3.5 text-green-500" />
+      <Apple class="h-3.5 w-3.5 text-entry-carbs" />
       Carbs (g)
     </Label>
     <Input

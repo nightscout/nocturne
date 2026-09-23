@@ -173,7 +173,7 @@
     </ChartClipPath>
     <AnnotationLine
       x={staleBasalData.start}
-      class="stroke-yellow-500/50 stroke-1"
+      class="stroke-warning/50 stroke-1"
       stroke-dasharray="2,2"
     />
     <AnnotationPoint
@@ -181,7 +181,7 @@
       y={basalScale(maxBasalRate)}
       label="Last pump sync"
       labelPlacement="bottom-right"
-      fill="yellow"
+      fill="var(--warning)"
       class="hover:bg-background hover:text-foreground"
     />
   {/if}

@@ -167,7 +167,7 @@
       >
         <Star
           class="h-4 w-4 {favorites.some((fav) => fav._id === selectedFood?._id)
-            ? 'text-yellow-500 fill-yellow-500'
+            ? 'text-favorite fill-favorite'
             : 'text-muted-foreground'}"
         />
       </Button>

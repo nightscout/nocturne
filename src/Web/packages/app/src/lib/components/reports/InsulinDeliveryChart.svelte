@@ -133,21 +133,21 @@
         <div class="rounded-lg border bg-card p-3">
           <div class="text-lg font-bold">{morning.toFixed(1)}U</div>
           <div class="text-xs text-muted-foreground">Morning (6am-12pm)</div>
-          <div class="text-xs font-medium text-amber-600">
+          <div class="text-xs font-medium text-muted-foreground">
             {totalDaily > 0 ? ((morning / totalDaily) * 100).toFixed(0) : 0}%
           </div>
         </div>
         <div class="rounded-lg border bg-card p-3">
           <div class="text-lg font-bold">{afternoon.toFixed(1)}U</div>
           <div class="text-xs text-muted-foreground">Afternoon (12pm-6pm)</div>
-          <div class="text-xs font-medium text-blue-600">
+          <div class="text-xs font-medium text-muted-foreground">
             {totalDaily > 0 ? ((afternoon / totalDaily) * 100).toFixed(0) : 0}%
           </div>
         </div>
         <div class="rounded-lg border bg-card p-3">
           <div class="text-lg font-bold">{evening.toFixed(1)}U</div>
           <div class="text-xs text-muted-foreground">Evening/Night</div>
-          <div class="text-xs font-medium text-purple-600">
+          <div class="text-xs font-medium text-muted-foreground">
             {totalDaily > 0 ? ((evening / totalDaily) * 100).toFixed(0) : 0}%
           </div>
         </div>

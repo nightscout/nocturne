@@ -163,7 +163,7 @@
               x={(d: { time: Date; sgv: number }) => d.time}
               y="sgv"
               curve={curveMonotoneX}
-              class="stroke-purple-400/60 stroke-1 fill-none"
+              class="stroke-pred-main/60 stroke-1 fill-none"
               stroke-dasharray="4,2"
             />
           {/if}

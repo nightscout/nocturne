@@ -92,7 +92,7 @@
             with your healthcare provider.
           </span>
         {:else if averageBolusPercent > 60}
-          <span class="text-blue-600 dark:text-blue-400">
+          <span class="text-info">
             Your bolus percentage is higher than typical — this may indicate
             high carb meals or frequent corrections.
           </span>

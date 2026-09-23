@@ -349,9 +349,9 @@
           <Tabs.Content value="targets" class="mt-0 space-y-6">
             <div class="flex items-center gap-3 mb-4">
               <div
-                class="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10"
+                class="flex h-10 w-10 items-center justify-center rounded-lg bg-glucose-in-range/10"
               >
-                <Target class="h-5 w-5 text-amber-600" />
+                <Target class="h-5 w-5 text-glucose-in-range" />
               </div>
               <div>
                 <h3 class="font-medium">Target Blood Glucose Range</h3>

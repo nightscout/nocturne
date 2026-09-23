@@ -114,7 +114,7 @@
     <Card class="border-2">
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
-          <Syringe class="w-5 h-5 text-blue-600" />
+          <Syringe class="w-5 h-5 text-insulin" />
           Insulin Summary
         </CardTitle>
         <CardDescription>
@@ -200,7 +200,7 @@
     <Card class="border-2">
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
-          <Droplets class="w-5 h-5 text-green-600" />
+          <Droplets class="w-5 h-5 text-glucose-in-range" />
           Glucose Metrics
         </CardTitle>
         <CardDescription>
@@ -228,7 +228,7 @@
             <div>
               <div class="text-2xl font-bold">{variability.coefficientOfVariation?.toFixed(0) ?? "--"}%</div>
               <div class="text-xs text-muted-foreground">CV</div>
-              <div class="text-2xs {(variability.coefficientOfVariation ?? 50) <= 33 ? 'text-green-600' : 'text-orange-600'}">
+              <div class="text-2xs {(variability.coefficientOfVariation ?? 50) <= 33 ? 'text-status-normal' : 'text-status-warning'}">
                 Target: ≤33%
               </div>
             </div>
@@ -262,7 +262,7 @@
     <Card class="border-2">
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
-          <Activity class="w-5 h-5 text-purple-600" />
+          <Activity class="w-5 h-5" />
           AID System Use
         </CardTitle>
         <CardDescription>
@@ -303,7 +303,7 @@
     <Card class="border-2">
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
-          <Target class="w-5 h-5 text-red-600" />
+          <Target class="w-5 h-5" />
           Glycemic Risk Index
         </CardTitle>
         <CardDescription>

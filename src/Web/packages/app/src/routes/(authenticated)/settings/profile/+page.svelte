@@ -378,7 +378,6 @@
               description="Background insulin delivery rates"
               unit="U/hr"
               icon={Activity}
-              iconClass="text-blue-600"
               entries={basal.entries}
             />
           {/if}
@@ -400,7 +399,6 @@
               description="BG drop per unit of insulin"
               unit="{bgLabel()}/U"
               icon={TrendingUp}
-              iconClass="text-purple-600"
               entries={sensitivity.entries}
               sourceUnits="mg/dl"
             />

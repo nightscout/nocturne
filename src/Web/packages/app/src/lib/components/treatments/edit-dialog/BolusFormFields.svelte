@@ -59,7 +59,7 @@
 <div class="grid grid-cols-2 gap-4">
   <div class="space-y-2">
     <Label for="insulin">
-      <Syringe class="h-3.5 w-3.5 text-blue-500" />
+      <Syringe class="h-3.5 w-3.5 text-entry-bolus" />
       Insulin (U)
     </Label>
     <Input

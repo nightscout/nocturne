@@ -93,7 +93,7 @@
       <div class="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 class="flex items-center gap-3 text-2xl font-bold @md:text-3xl">
-            <Layers class="h-6 w-6 text-amber-600 @md:h-8 @md:w-8" />
+            <Layers class="h-6 w-6 text-report-treatment @md:h-8 @md:w-8" />
             Basal Rate Analysis
           </h1>
           <p class="mt-1 text-muted-foreground">
@@ -137,11 +137,11 @@
 
     <!-- What is this report - Educational Card -->
     <Card
-      class="border-2 border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/30"
+      class="border-2 border-report-treatment/30 bg-report-treatment/5"
     >
       <CardHeader class="pb-3">
         <CardTitle class="flex items-center gap-2 text-base">
-          <HelpCircle class="h-5 w-5 text-amber-600" />
+          <HelpCircle class="h-5 w-5 text-report-treatment" />
           Understanding This Report
         </CardTitle>
       </CardHeader>
@@ -209,11 +209,11 @@
       <Card>
         <CardContent class="pt-6 text-center">
           <div class="flex items-center justify-center gap-2">
-            <span class="text-lg font-bold text-green-600">
+            <span class="text-lg font-bold">
               {tempBasalInfo.highTemps}
             </span>
             <span class="text-muted-foreground">/</span>
-            <span class="text-lg font-bold text-red-600">
+            <span class="text-lg font-bold">
               {tempBasalInfo.lowTemps}
             </span>
           </div>
@@ -301,8 +301,8 @@
             <!-- Temp Basal Usage -->
             <div class="rounded-lg border bg-card p-4">
               <div class="flex items-start gap-3">
-                <div class="rounded-lg bg-amber-500/10 p-2">
-                  <Layers class="h-4 w-4 text-amber-600" />
+                <div class="rounded-lg bg-report-treatment/10 p-2">
+                  <Layers class="h-4 w-4 text-report-treatment" />
                 </div>
                 <div>
                   <h4 class="font-medium">Temp Basal Activity</h4>
@@ -328,14 +328,14 @@
             <!-- Zero Temps -->
             {#if tempBasalInfo.zeroTemps > 0}
               <div
-                class="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-950/30"
+                class="rounded-lg border border-pump-mode-suspended/30 bg-pump-mode-suspended/5 p-4"
               >
                 <div class="flex items-start gap-3">
-                  <div class="rounded-lg bg-red-500/10 p-2">
-                    <TrendingDown class="h-4 w-4 text-red-600" />
+                  <div class="rounded-lg bg-pump-mode-suspended/10 p-2">
+                    <TrendingDown class="h-4 w-4 text-pump-mode-suspended" />
                   </div>
                   <div>
-                    <h4 class="font-medium text-red-700 dark:text-red-400">
+                    <h4 class="font-medium text-pump-mode-suspended">
                       Suspend/Zero Temp Basals
                     </h4>
                     <p class="text-sm text-muted-foreground">
@@ -351,8 +351,8 @@
             <!-- Daily Average -->
             <div class="rounded-lg border bg-card p-4">
               <div class="flex items-start gap-3">
-                <div class="rounded-lg bg-blue-500/10 p-2">
-                  <Calendar class="h-4 w-4 text-blue-600" />
+                <div class="rounded-lg bg-insulin/10 p-2">
+                  <Calendar class="h-4 w-4 text-insulin" />
                 </div>
                 <div>
                   <h4 class="font-medium">Daily Basal Insulin</h4>

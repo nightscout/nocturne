@@ -81,8 +81,8 @@
         };
       case "demo":
         return {
-          bg: "bg-purple-100 dark:bg-purple-900/30",
-          text: "text-purple-600 dark:text-purple-400",
+          bg: "bg-demo/10",
+          text: "text-demo",
         };
       case "configured":
         return {
@@ -117,7 +117,7 @@
       case "syncing":
         return "border-success/30 bg-success/5";
       case "demo":
-        return "border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-950/20";
+        return "border-demo/30 bg-demo/5";
       case "error":
         return "border-destructive/30 bg-destructive/5";
       default:

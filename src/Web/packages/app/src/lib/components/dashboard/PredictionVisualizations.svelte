@@ -142,7 +142,7 @@
       x={50}
       y={glucoseTrackTop + 20}
       dy="-0.355em"
-      class="text-xs fill-red-400"
+      class="text-xs fill-destructive"
     >
       {remoteErrorMessage(error, PREDICTIONS_UNAVAILABLE)}
     </text>
@@ -156,7 +156,7 @@
         y0={(d) => glucoseScale(d.max)}
         y1={(d) => glucoseScale(d.min)}
         curve={curveMonotoneX}
-        class="fill-purple-500/20 stroke-none"
+        class="fill-pred-main/20 stroke-none"
         motion="spring"
       />
       <Spline
@@ -165,7 +165,7 @@
         y={(d) => glucoseScale(d.mid)}
         curve={curveMonotoneX}
         motion="spring"
-        class="stroke-purple-400 stroke-1 fill-none"
+        class="stroke-pred-main stroke-1 fill-none"
         stroke-dasharray="4,2"
       />
     {:else if predictionDisplayMode === "lines"}
@@ -176,7 +176,7 @@
           y={(d) => glucoseScale(d.sgv)}
           curve={curveMonotoneX}
           motion="spring"
-          class="stroke-purple-400 stroke-2 fill-none"
+          class="stroke-pred-main stroke-2 fill-none"
           stroke-dasharray="6,3"
         />
       {/if}
@@ -187,7 +187,7 @@
           y={(d) => glucoseScale(d.sgv)}
           curve={curveMonotoneX}
           motion="spring"
-          class="stroke-cyan-400 stroke-1 fill-none opacity-80"
+          class="stroke-pred-iob stroke-1 fill-none opacity-80"
           stroke-dasharray="4,2"
         />
       {/if}
@@ -198,7 +198,7 @@
           y={(d) => glucoseScale(d.sgv)}
           curve={curveMonotoneX}
           motion="spring"
-          class="stroke-orange-400 stroke-1 fill-none opacity-80"
+          class="stroke-pred-zt stroke-1 fill-none opacity-80"
           stroke-dasharray="4,2"
         />
       {/if}
@@ -209,7 +209,7 @@
           y={(d) => glucoseScale(d.sgv)}
           curve={curveMonotoneX}
           motion="spring"
-          class="stroke-green-400 stroke-1 fill-none opacity-80"
+          class="stroke-pred-uam stroke-1 fill-none opacity-80"
           stroke-dasharray="4,2"
         />
       {/if}
@@ -220,7 +220,7 @@
           y={(d) => glucoseScale(d.sgv)}
           motion="spring"
           curve={curveMonotoneX}
-          class="stroke-yellow-400 stroke-1 fill-none opacity-80"
+          class="stroke-pred-cob stroke-1 fill-none opacity-80"
           stroke-dasharray="4,2"
         />
       {/if}
@@ -231,7 +231,7 @@
         y={(d) => glucoseScale(d.sgv)}
         motion="spring"
         curve={curveMonotoneX}
-        class="stroke-purple-400 stroke-2 fill-none"
+        class="stroke-pred-main stroke-2 fill-none"
         stroke-dasharray="6,3"
       />
     {:else if predictionDisplayMode === "iob" && iobPredictionData.length > 0}
@@ -241,7 +241,7 @@
         y={(d) => glucoseScale(d.sgv)}
         motion="spring"
         curve={curveMonotoneX}
-        class="stroke-cyan-400 stroke-2 fill-none"
+        class="stroke-pred-iob stroke-2 fill-none"
         stroke-dasharray="6,3"
       />
     {:else if predictionDisplayMode === "zt" && zeroTempPredictionData.length > 0}
@@ -251,7 +251,7 @@
         y={(d) => glucoseScale(d.sgv)}
         motion="spring"
         curve={curveMonotoneX}
-        class="stroke-orange-400 stroke-2 fill-none"
+        class="stroke-pred-zt stroke-2 fill-none"
         stroke-dasharray="6,3"
       />
     {:else if predictionDisplayMode === "uam" && uamPredictionData.length > 0}
@@ -261,7 +261,7 @@
         y={(d) => glucoseScale(d.sgv)}
         motion="spring"
         curve={curveMonotoneX}
-        class="stroke-green-400 stroke-2 fill-none"
+        class="stroke-pred-uam stroke-2 fill-none"
         stroke-dasharray="6,3"
       />
     {:else if predictionDisplayMode === "cob" && cobPredictionData.length > 0}
@@ -271,7 +271,7 @@
         y={(d) => glucoseScale(d.sgv)}
         motion="spring"
         curve={curveMonotoneX}
-        class="stroke-yellow-400 stroke-2 fill-none"
+        class="stroke-pred-cob stroke-2 fill-none"
         stroke-dasharray="6,3"
       />
     {/if}
@@ -281,7 +281,7 @@
       x={50}
       y={glucoseTrackTop + 20}
       dy="-0.355em"
-      class="text-xs fill-red-400"
+      class="text-xs fill-destructive"
     >
       {predictionError}
     </text>

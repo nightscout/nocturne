@@ -228,8 +228,8 @@
         <!-- Target range overlay (70-180 mg/dL, plotted in display units) -->
         {#snippet aboveMarks()}
           <!-- Horizontal reference lines for target range -->
-          <Rule y={bgValue(70)} class="stroke-success/50 stroke-1 stroke-dashed" />
-          <Rule y={bgValue(180)} class="stroke-warning/50 stroke-1 stroke-dashed" />
+          <Rule y={bgValue(70)} class="stroke-success/50 stroke-1" stroke-dasharray="4,4" />
+          <Rule y={bgValue(180)} class="stroke-warning/50 stroke-1" stroke-dasharray="4,4" />
           <!-- Vertical line at site change point -->
           <Rule x={0} class="stroke-primary stroke-2" />
         {/snippet}

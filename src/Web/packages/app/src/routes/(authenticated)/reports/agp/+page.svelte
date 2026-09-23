@@ -150,13 +150,13 @@
     <!-- Quick Stats Grid -->
     <div class="grid grid-cols-2 @lg:grid-cols-4 @3xl:grid-cols-6 gap-4">
       <Card
-        class="p-4 text-center border-2 border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/30"
+        class="p-4 text-center border-2 border-glucose-in-range/30 bg-glucose-in-range/5"
       >
-        <div class="text-3xl font-bold text-green-600">
+        <div class="text-3xl font-bold text-glucose-in-range">
           {tir.target?.toFixed(0) ?? "–"}%
         </div>
         <div class="text-xs text-muted-foreground">Time in Range</div>
-        <div class="text-2xs text-green-600">Target: ≥70%</div>
+        <div class="text-2xs text-glucose-in-range">Target: ≥70%</div>
       </Card>
       <Card class="p-4 text-center">
         <div class="text-3xl font-bold">{stats.mean ? bg(stats.mean) : "–"}</div>
@@ -164,32 +164,32 @@
         <div class="text-2xs text-muted-foreground/70">{bgLabel()}</div>
       </Card>
       <Card class="p-4 text-center">
-        <div class="text-3xl font-bold text-red-600">
+        <div class="text-3xl font-bold">
           {variability.estimatedA1c?.toFixed(1) ?? "–"}%
         </div>
         <div class="text-xs text-muted-foreground">Est. A1C</div>
         <div class="text-2xs text-muted-foreground/70">GMI</div>
       </Card>
       <Card class="p-4 text-center">
-        <div class="text-3xl font-bold text-purple-600">
+        <div class="text-3xl font-bold">
           {variability.coefficientOfVariation?.toFixed(0) ?? "–"}%
         </div>
         <div class="text-xs text-muted-foreground">CV</div>
-        <div class="text-2xs text-purple-600">Target: ≤33%</div>
+        <div class="text-2xs text-muted-foreground/70">Target: ≤33%</div>
       </Card>
       <Card class="p-4 text-center">
-        <div class="text-3xl font-bold text-red-500">
+        <div class="text-3xl font-bold text-glucose-very-low">
           {((tir.low ?? 0) + (tir.veryLow ?? 0)).toFixed(1)}%
         </div>
         <div class="text-xs text-muted-foreground">Below Range</div>
-        <div class="text-2xs text-red-500">Target: &lt;4%</div>
+        <div class="text-2xs text-glucose-very-low">Target: &lt;4%</div>
       </Card>
       <Card class="p-4 text-center">
-        <div class="text-3xl font-bold text-orange-500">
+        <div class="text-3xl font-bold text-glucose-high">
           {((tir.high ?? 0) + (tir.veryHigh ?? 0)).toFixed(1)}%
         </div>
         <div class="text-xs text-muted-foreground">Above Range</div>
-        <div class="text-2xs text-orange-500">Target: &lt;25%</div>
+        <div class="text-2xs text-glucose-high">Target: &lt;25%</div>
       </Card>
     </div>
 
@@ -217,7 +217,7 @@
       <Card class="border-2">
         <CardHeader>
           <CardTitle class="flex items-center gap-2">
-            <Target class="w-5 h-5 text-green-600" />
+            <Target class="w-5 h-5 text-glucose-in-range" />
             Time in Range Distribution
           </CardTitle>
           <CardDescription>
@@ -233,7 +233,7 @@
       <Card class="border-2">
         <CardHeader>
           <CardTitle class="flex items-center gap-2">
-            <TrendingUp class="w-5 h-5 text-purple-600" />
+            <TrendingUp class="w-5 h-5" />
             Measured Against Consensus Targets
           </CardTitle>
           <CardDescription>

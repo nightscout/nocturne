@@ -46,7 +46,7 @@
           <div class="space-y-2 text-sm">
             {#if totalInsulin > 0}
               <div class="flex items-center gap-2">
-                <Syringe class="w-4 h-4 text-blue-600" />
+                <Syringe class="w-4 h-4 text-insulin" />
                 <span>
                   Insulin: {formatInsulinDisplay(totalInsulin)}U
                 </span>
@@ -54,7 +54,7 @@
             {/if}
             {#if totalCarbs > 0}
               <div class="flex items-center gap-2">
-                <Apple class="w-4 h-4 text-orange-600" />
+                <Apple class="w-4 h-4 text-carbs" />
                 <span>
                   Carbs: {formatCarbDisplay(totalCarbs)}g
                 </span>
@@ -62,7 +62,7 @@
             {/if}
             {#if totalProtein > 0}
               <div class="flex items-center gap-2">
-                <Utensils class="w-4 h-4 text-green-600" />
+                <Utensils class="w-4 h-4 text-muted-foreground" />
                 <span>
                   Protein: {formatCarbDisplay(totalProtein)}g
                 </span>
@@ -70,7 +70,7 @@
             {/if}
             {#if totalFat > 0}
               <div class="flex items-center gap-2">
-                <Utensils class="w-4 h-4 text-yellow-600" />
+                <Utensils class="w-4 h-4 text-muted-foreground" />
                 <span>
                   Fat: {formatCarbDisplay(totalFat)}g
                 </span>

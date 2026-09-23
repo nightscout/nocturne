@@ -25,7 +25,7 @@
     class="h-full w-full"
   />
 {:else if preview?.loading}
-  <div class="flex h-full items-center justify-center bg-neutral-950">
+  <div class="flex h-full items-center justify-center bg-black">
     <Loader2 class="size-6 animate-spin text-muted-foreground" />
   </div>
 {:else if preview?.error}
@@ -38,7 +38,7 @@
     </Button>
   </div>
 {:else}
-  <div class="flex h-full items-center justify-center bg-neutral-950">
+  <div class="flex h-full items-center justify-center bg-black">
     <ClockIcon class="size-6 text-muted-foreground" />
   </div>
 {/if}

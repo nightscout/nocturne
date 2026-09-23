@@ -91,7 +91,7 @@
             <a
               href={resolve("/(authenticated)/reports/sleep/[date]", { date: cell.date })}
               title={cell.title}
-              class="flex size-6 items-center justify-center rounded-md bg-indigo-500/15 text-xs font-medium text-foreground transition-colors hover:bg-indigo-500/30"
+              class="flex size-6 items-center justify-center rounded-md bg-report-lifestyle/15 text-xs font-medium text-foreground transition-colors hover:bg-report-lifestyle/30"
             >
               {cell.initial}
             </a>

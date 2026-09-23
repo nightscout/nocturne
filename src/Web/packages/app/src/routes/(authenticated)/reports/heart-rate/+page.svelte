@@ -90,7 +90,7 @@
       </CardHeader>
       <CardContent>
         <div class="flex items-center gap-2">
-          <HeartPulse class="h-5 w-5 text-red-500" />
+          <HeartPulse class="h-5 w-5 text-heart-rate" />
           <span class="text-2xl font-bold tabular-nums">{avgBpm}</span>
           <span class="text-sm text-muted-foreground">bpm</span>
         </div>
@@ -105,7 +105,7 @@
       </CardHeader>
       <CardContent>
         <div class="flex items-center gap-2">
-          <TrendingDown class="h-5 w-5 text-blue-500" />
+          <TrendingDown class="h-5 w-5 text-muted-foreground" />
           <span class="text-2xl font-bold tabular-nums">{restingBpm}</span>
           <span class="text-sm text-muted-foreground">bpm</span>
         </div>
@@ -150,7 +150,7 @@
   <Card>
     <CardHeader>
       <CardTitle class="flex items-center gap-2">
-        <HeartPulse class="h-5 w-5 text-red-500" />
+        <HeartPulse class="h-5 w-5 text-heart-rate" />
         Heart Rate Actogram
       </CardTitle>
     </CardHeader>

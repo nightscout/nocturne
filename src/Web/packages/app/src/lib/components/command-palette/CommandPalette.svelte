@@ -224,7 +224,7 @@
         onclick={(e) => handlePinClick(e, item.id)}
       >
         <Star
-          class="h-3.5 w-3.5 {pinned ? 'fill-current text-yellow-500' : 'text-muted-foreground'}"
+          class="h-3.5 w-3.5 {pinned ? 'fill-current text-favorite' : 'text-muted-foreground'}"
         />
       </button>
     </Command.LinkItem>
@@ -253,7 +253,7 @@
         onclick={(e) => handlePinClick(e, item.id)}
       >
         <Star
-          class="h-3.5 w-3.5 {pinned ? 'fill-current text-yellow-500' : 'text-muted-foreground'}"
+          class="h-3.5 w-3.5 {pinned ? 'fill-current text-favorite' : 'text-muted-foreground'}"
         />
       </button>
     </Command.Item>

@@ -68,7 +68,7 @@
   <Dialog.Content class="max-w-md">
     <Dialog.Header>
       <Dialog.Title class="flex items-center gap-2">
-        <Sparkles class="h-5 w-5 text-purple-500" />
+        <Sparkles class="h-5 w-5 text-demo" />
         Demo Data
       </Dialog.Title>
       <Dialog.Description>
@@ -107,9 +107,9 @@
         {/if}
       {:else}
         <div
-          class="rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/20 p-4"
+          class="rounded-lg border border-demo/30 bg-demo/5 p-4"
         >
-          <p class="text-sm text-purple-800 dark:text-purple-200">
+          <p class="text-sm text-demo">
             <strong>This is demo data</strong>
             — synthetic glucose readings generated for testing and demonstration purposes.
           </p>

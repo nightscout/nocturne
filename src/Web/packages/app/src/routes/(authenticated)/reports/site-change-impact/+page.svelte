@@ -66,7 +66,7 @@
     <div class="flex flex-wrap items-center justify-between gap-4">
       <div>
         <h1 class="flex items-center gap-3 text-2xl font-bold @md:text-3xl">
-          <SiteChangeIcon class="h-6 w-6 text-rose-600 @md:h-8 @md:w-8" />
+          <SiteChangeIcon class="h-6 w-6 text-report-treatment @md:h-8 @md:w-8" />
           Site Change Impact
         </h1>
         <p class="mt-1 text-muted-foreground">

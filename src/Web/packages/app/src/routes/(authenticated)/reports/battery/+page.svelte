@@ -215,7 +215,7 @@
                 <span class="font-medium ml-1">
                   {stat.currentLevel ?? "?"}%
                   {#if stat.isCharging}
-                    <Zap class="inline h-3 w-3 text-yellow-500" />
+                    <Zap class="inline h-3 w-3" />
                   {/if}
                 </span>
               </div>
@@ -318,7 +318,7 @@
                   </div>
                   <div class="h-2 bg-muted rounded-full overflow-hidden">
                     <div
-                      class="h-full bg-blue-500 w-(--share)"
+                      class="h-full bg-info w-(--share)"
                       style:--share="{stat?.timeBetween30And80Percent ?? 0}%"
                     ></div>
                   </div>

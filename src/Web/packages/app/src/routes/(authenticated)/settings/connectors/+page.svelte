@@ -457,10 +457,7 @@
               >
                 {#snippet badges()}
                   {#if isDemo}
-                    <Badge
-                      variant="secondary"
-                      class="bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-100"
-                    >
+                    <Badge variant="demo">
                       <Sparkles class="h-3 w-3 mr-1" />
                       Demo
                     </Badge>

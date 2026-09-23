@@ -58,7 +58,7 @@
 <div class="space-y-3">
   <div class="flex items-center justify-between">
     <div class="flex items-center gap-2 text-sm font-medium">
-      <Syringe class="h-4 w-4 text-indigo-500" />
+      <Syringe class="h-4 w-4 text-entry-basal-injection" />
       Long-acting injection
     </div>
     {#if onRemove}

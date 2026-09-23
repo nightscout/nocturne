@@ -69,7 +69,7 @@
             <div
               class="px-2 py-1.5 text-xs font-medium text-muted-foreground flex items-center gap-1"
             >
-              <Star class="h-3 w-3 text-yellow-500" />
+              <Star class="h-3 w-3 text-favorite" />
               Favorites
             </div>
             {#each favorites as food (food._id)}
@@ -100,7 +100,7 @@
             <div
               class="px-2 py-1.5 text-xs font-medium text-muted-foreground flex items-center gap-1"
             >
-              <Clock class="h-3 w-3 text-sky-500" />
+              <Clock class="h-3 w-3" />
               Recent
             </div>
             {#each recents as food (food._id)}

@@ -51,6 +51,8 @@
   --pred-acob: oklch(0.7 0.18 50);       /* orange, was #FB8C00 */
   --pred-zt: oklch(0.75 0.15 195);       /* teal, was #00d2d2 */
   --pred-uam: oklch(0.75 0.12 85);       /* yellow-green, was #c9bd60 */
+  /* The combined prediction the loop acts on, drawn over or instead of the per-input lines. */
+  --pred-main: oklch(0.714 0.203 305.504);
 
   /* Insulin Types */
   --insulin: rgb(30, 150, 252);
@@ -140,6 +142,31 @@
   /* eHbA1c trend line — a distinct vivid accent (not reused from --chart-1) so the line pops
      against the reference bands in both themes. */
   --ehba1c-line: oklch(0.55 0.22 300);
+
+  /* Record kinds (bolus, carbs, BG check...) as labelled in lists, chips and forms, looked
+     up through ENTRY_CATEGORIES / TREATMENT_CATEGORIES. Unlike the chart tokens above
+     (--insulin, --carbs), these are read as text on their own /10 tints, so each scheme
+     has its own lightness. */
+  --entry-bolus: oklch(0.546 0.245 262.881);
+  --entry-basal: oklch(0.558 0.288 302.321);
+  --entry-basal-injection: oklch(0.511 0.262 276.966);
+  --entry-carbs: oklch(0.627 0.194 149.214);
+  --entry-bg-check: oklch(0.577 0.245 27.325);
+  --entry-device-event: oklch(0.646 0.222 41.116);
+
+  /* Synthetic demo data, kept apart from every clinical and outcome hue so it is never
+     mistaken for a real reading or a real sync state. */
+  --demo: oklch(0.558 0.288 302.321);
+
+  /* A pinned or favourited item's star. */
+  --favorite: oklch(0.795 0.184 86.047);
+
+  /* Report categories (report-navigation.ts). Identity only: a report takes its
+     category's accent on the reports hub and in its own page header. */
+  --report-overview: oklch(0.546 0.245 262.881);
+  --report-patterns: oklch(0.541 0.281 293.009);
+  --report-lifestyle: oklch(0.596 0.145 163.225);
+  --report-treatment: oklch(0.666 0.179 58.318);
 }
 
 .dark {
@@ -176,6 +203,20 @@
 
   /* eHbA1c trend line - Dark Mode - a brighter, more saturated pop of the same hue */
   --ehba1c-line: oklch(0.78 0.19 300);
+
+  --entry-bolus: oklch(0.707 0.165 254.624);
+  --entry-basal: oklch(0.714 0.203 305.504);
+  --entry-basal-injection: oklch(0.673 0.182 276.935);
+  --entry-carbs: oklch(0.792 0.209 151.711);
+  --entry-bg-check: oklch(0.704 0.191 22.216);
+  --entry-device-event: oklch(0.75 0.183 55.934);
+
+  --demo: oklch(0.714 0.203 305.504);
+
+  --report-overview: oklch(0.809 0.105 251.813);
+  --report-patterns: oklch(0.811 0.111 293.571);
+  --report-lifestyle: oklch(0.845 0.143 164.978);
+  --report-treatment: oklch(0.879 0.169 91.605);
 }
 
 /* Tailwind theme integration */
@@ -199,6 +240,7 @@
   --color-pred-acob: var(--pred-acob);
   --color-pred-zt: var(--pred-zt);
   --color-pred-uam: var(--pred-uam);
+  --color-pred-main: var(--pred-main);
 
   /* Insulin Types */
   --color-insulin: var(--insulin);
@@ -240,4 +282,27 @@
   --color-gri-zone-c: var(--gri-zone-c);
   --color-gri-zone-d: var(--gri-zone-d);
   --color-gri-zone-e: var(--gri-zone-e);
+
+  /* Health overlays */
+  --color-heart-rate: var(--heart-rate);
+
+  /* Pump modes */
+  --color-pump-mode-suspended: var(--pump-mode-suspended);
+
+  /* Record kinds */
+  --color-entry-bolus: var(--entry-bolus);
+  --color-entry-basal: var(--entry-basal);
+  --color-entry-basal-injection: var(--entry-basal-injection);
+  --color-entry-carbs: var(--entry-carbs);
+  --color-entry-bg-check: var(--entry-bg-check);
+  --color-entry-device-event: var(--entry-device-event);
+
+  --color-demo: var(--demo);
+  --color-favorite: var(--favorite);
+
+  /* Report categories */
+  --color-report-overview: var(--report-overview);
+  --color-report-patterns: var(--report-patterns);
+  --color-report-lifestyle: var(--report-lifestyle);
+  --color-report-treatment: var(--report-treatment);
 }

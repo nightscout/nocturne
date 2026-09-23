@@ -43,7 +43,7 @@
 
 <div class="space-y-2">
   <Label>
-    <Smartphone class="h-3.5 w-3.5 text-orange-500" />
+    <Smartphone class="h-3.5 w-3.5 text-entry-device-event" />
     Event Type
   </Label>
   <Popover.Root bind:open={popoverOpen}>

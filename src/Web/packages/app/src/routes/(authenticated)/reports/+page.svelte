@@ -7,38 +7,30 @@
       iconWrap:
         "flex h-14 w-14 items-center justify-center rounded-xl transition-transform duration-500 group-hover:scale-110",
       icon: "h-7 w-7",
-      title: "text-xl font-semibold tracking-tight",
-      subtitle: "text-sm font-medium opacity-80",
+      title: "text-xl font-semibold tracking-tight text-foreground",
+      subtitle: "text-sm font-medium text-muted-foreground",
     },
     variants: {
       category: {
         overview: {
-          card: "from-blue-50 to-indigo-100/80 dark:from-blue-950/50 dark:to-indigo-900/30",
-          iconWrap: "bg-blue-500/20 dark:bg-blue-400/20",
-          icon: "text-blue-600 dark:text-blue-300",
-          title: "text-blue-900 dark:text-blue-100",
-          subtitle: "text-blue-700/80 dark:text-blue-300/80",
+          card: "from-report-overview/5 to-report-overview/15",
+          iconWrap: "bg-report-overview/15",
+          icon: "text-report-overview",
         },
         patterns: {
-          card: "from-violet-50 to-purple-100/80 dark:from-violet-950/50 dark:to-purple-900/30",
-          iconWrap: "bg-violet-500/20 dark:bg-violet-400/20",
-          icon: "text-violet-600 dark:text-violet-300",
-          title: "text-violet-900 dark:text-violet-100",
-          subtitle: "text-violet-700/80 dark:text-violet-300/80",
+          card: "from-report-patterns/5 to-report-patterns/15",
+          iconWrap: "bg-report-patterns/15",
+          icon: "text-report-patterns",
         },
         lifestyle: {
-          card: "from-emerald-50 to-teal-100/80 dark:from-emerald-950/50 dark:to-teal-900/30",
-          iconWrap: "bg-emerald-500/20 dark:bg-emerald-400/20",
-          icon: "text-emerald-600 dark:text-emerald-300",
-          title: "text-emerald-900 dark:text-emerald-100",
-          subtitle: "text-emerald-700/80 dark:text-emerald-300/80",
+          card: "from-report-lifestyle/5 to-report-lifestyle/15",
+          iconWrap: "bg-report-lifestyle/15",
+          icon: "text-report-lifestyle",
         },
         treatment: {
-          card: "from-amber-50 to-orange-100/80 dark:from-amber-950/50 dark:to-orange-900/30",
-          iconWrap: "bg-amber-500/20 dark:bg-amber-400/20",
-          icon: "text-amber-600 dark:text-amber-300",
-          title: "text-amber-900 dark:text-amber-100",
-          subtitle: "text-amber-700/80 dark:text-amber-300/80",
+          card: "from-report-treatment/5 to-report-treatment/15",
+          iconWrap: "bg-report-treatment/15",
+          icon: "text-report-treatment",
         },
       },
     },
@@ -191,17 +183,17 @@
     {#if canLoadSummary}
     <!-- Hero Section with Key Metrics -->
     <section
-      class="relative overflow-hidden bg-linear-to-b from-slate-50 via-white to-transparent pb-8 pt-6 dark:from-slate-900 dark:via-slate-950 dark:to-transparent"
+      class="relative overflow-hidden bg-linear-to-b from-muted/60 via-background to-transparent pb-8 pt-6"
     >
       <!-- Subtle decorative background -->
       <div
         class="pointer-events-none absolute inset-0 overflow-hidden opacity-30 dark:opacity-20"
       >
         <div
-          class="absolute -right-20 -top-20 h-96 w-96 rounded-full bg-linear-to-br from-blue-200 to-purple-200 blur-3xl dark:from-blue-900 dark:to-purple-900"
+          class="absolute -right-20 -top-20 h-96 w-96 rounded-full bg-linear-to-br from-report-overview/40 to-report-patterns/40 blur-3xl"
         ></div>
         <div
-          class="absolute -bottom-32 -left-20 h-80 w-80 rounded-full bg-linear-to-br from-emerald-200 to-teal-200 blur-3xl dark:from-emerald-900 dark:to-teal-900"
+          class="absolute -bottom-32 -left-20 h-80 w-80 rounded-full bg-linear-to-br from-report-lifestyle/40 to-report-lifestyle/20 blur-3xl"
         ></div>
       </div>
 
@@ -218,7 +210,7 @@
             {formatShortDate(startDate)} – {formatShortDate(endDate, true)}
           </div>
           <h1
-            class="bg-linear-to-r from-slate-900 via-slate-700 to-slate-800 bg-clip-text text-4xl font-bold tracking-tight text-transparent dark:from-white dark:via-slate-200 dark:to-slate-300 @lg:text-5xl"
+            class="bg-linear-to-r from-foreground via-foreground/80 to-foreground/90 bg-clip-text text-4xl font-bold tracking-tight text-transparent @lg:text-5xl"
           >
             Your Glucose Report
           </h1>
@@ -235,7 +227,7 @@
             in:fly={{ y: 30, duration: 700, delay: 200, easing: cubicOut }}
           >
             <div
-              class="relative overflow-hidden rounded-3xl bg-white p-5 shadow-xl shadow-slate-200/50 @lg:p-6 @3xl:p-8 dark:bg-slate-900 dark:shadow-none dark:ring-1 dark:ring-white/10"
+              class="relative overflow-hidden rounded-3xl bg-card p-5 shadow-xl shadow-border/50 @lg:p-6 @3xl:p-8 dark:shadow-none dark:ring-1 dark:ring-white/10"
             >
               <!-- Accent bar -->
               <div
@@ -372,7 +364,7 @@
 
           <!-- AGP Preview -->
           <div
-            class="rounded-2xl bg-white p-4 shadow-lg shadow-slate-200/30 @sm:p-6 dark:bg-slate-900/80 dark:shadow-none dark:ring-1 dark:ring-white/5"
+            class="rounded-2xl bg-card p-4 shadow-lg shadow-border/30 @sm:p-6 dark:bg-card/80 dark:shadow-none dark:ring-1 dark:ring-white/5"
             in:fly={{ y: 30, duration: 600, delay: 350, easing: cubicOut }}
           >
             <div
@@ -404,7 +396,7 @@
         {:else if !isLoading}
           <!-- No Data State -->
           <div
-            class="rounded-3xl bg-white p-12 text-center shadow-lg dark:bg-slate-900"
+            class="rounded-3xl bg-card p-12 text-center shadow-lg"
             in:fade={{ duration: 400 }}
           >
             <div
@@ -515,7 +507,7 @@
                       class="group/report flex items-center gap-3 rounded-xl bg-white/60 p-3 transition-all hover:bg-white hover:shadow-md dark:bg-white/5 dark:hover:bg-white/10"
                     >
                       <div
-                        class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white shadow-sm dark:bg-slate-800"
+                        class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-card shadow-sm dark:bg-muted"
                       >
                         <ReportIcon
                           class="h-5 w-5 text-muted-foreground"
@@ -542,7 +534,7 @@
                       class="flex items-center gap-3 rounded-xl bg-white/30 p-3 opacity-60 dark:bg-white/5"
                     >
                       <div
-                        class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/50 dark:bg-slate-800/50"
+                        class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-card/50 dark:bg-muted/50"
                       >
                         <ReportIcon
                           class="h-5 w-5 text-muted-foreground"

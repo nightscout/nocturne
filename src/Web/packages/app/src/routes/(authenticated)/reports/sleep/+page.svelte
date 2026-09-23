@@ -255,7 +255,7 @@
       {#if hasTrendsNights}
         <SleepSummaryTile
           icon={Moon}
-          iconClass="text-indigo-500"
+          iconClass="text-report-lifestyle"
           label="Average Sleep"
           value={formatHoursMinutes((sleepSummary?.meanAsleepMinutes ?? 0) / 60)}
           caption="per night"
@@ -328,7 +328,7 @@
       <Card>
         <CardHeader>
           <CardTitle class="flex items-center gap-2">
-            <CalendarRange class="h-5 w-5 text-indigo-500" />
+            <CalendarRange class="h-5 w-5 text-report-lifestyle" />
             Weekly Breakdown
           </CardTitle>
           <CardDescription>Each tracked night links to its full report.</CardDescription>
@@ -344,7 +344,7 @@
       <Card>
         <CardHeader>
           <CardTitle class="flex items-center gap-2">
-            <Moon class="h-5 w-5 text-indigo-500" />
+            <Moon class="h-5 w-5 text-report-lifestyle" />
             Sleep Composition
           </CardTitle>
           {#if sourceFilter !== "all"}
@@ -387,7 +387,7 @@
     <Card>
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
-          <Moon class="h-5 w-5 text-indigo-500" />
+          <Moon class="h-5 w-5 text-report-lifestyle" />
           Sleep Actogram
         </CardTitle>
       </CardHeader>

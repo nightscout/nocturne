@@ -147,13 +147,13 @@
           class="flex flex-col items-center gap-1 p-3 rounded-lg bg-background/50"
         >
           <div class="flex items-center gap-1 text-muted-foreground">
-            <Syringe class="h-4 w-4 text-blue-500" />
+            <Syringe class="h-4 w-4 text-insulin" />
             <span class="text-xs font-medium">IOB</span>
           </div>
           {#if data?.iob}
             <div class="flex items-center gap-1">
               <span
-                class="text-2xl font-bold tabular-nums text-blue-600 dark:text-blue-400"
+                class="text-2xl font-bold tabular-nums"
               >
                 {(data.iob.total ?? 0).toFixed(2)}
               </span>
@@ -176,13 +176,13 @@
           class="flex flex-col items-center gap-1 p-3 rounded-lg bg-background/50"
         >
           <div class="flex items-center gap-1 text-muted-foreground">
-            <Apple class="h-4 w-4 text-orange-500" />
+            <Apple class="h-4 w-4 text-carbs-on-board" />
             <span class="text-xs font-medium">COB</span>
           </div>
           {#if data?.cob}
             <div class="flex items-center gap-1">
               <span
-                class="text-2xl font-bold tabular-nums text-orange-600 dark:text-orange-400"
+                class="text-2xl font-bold tabular-nums"
               >
                 {(data.cob.total ?? 0).toFixed(0)}
               </span>
@@ -200,13 +200,13 @@
           class="flex flex-col items-center gap-1 p-3 rounded-lg bg-background/50"
         >
           <div class="flex items-center gap-1 text-muted-foreground">
-            <Activity class="h-4 w-4 text-cyan-500" />
+            <Activity class="h-4 w-4 text-insulin-scheduled-basal" />
             <span class="text-xs font-medium">Basal</span>
           </div>
           {#if data?.basal}
             <div class="flex items-center gap-1">
               <span
-                class="text-2xl font-bold tabular-nums text-cyan-600 dark:text-cyan-400"
+                class="text-2xl font-bold tabular-nums"
               >
                 {(data.basal.rate ?? 0).toFixed(2)}
               </span>

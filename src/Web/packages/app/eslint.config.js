@@ -14,6 +14,11 @@ const HEIGHT_CLASSES = ["h-*", "size-*", "min-h-*", "max-h-*"];
 const CONTROL_HEIGHT_HINT =
   "\"{{className}}\" is not allowed on <{{component}}>: its height comes from size. Use size=\"xs\" (h-7), \"sm\" (h-8) or the default (h-9); each matches the same size on Button, Input, SelectTrigger and Toggle.";
 
+// no-raw-colors reads `none` as an undeclared colour; fill-none and stroke-none paint nothing.
+const RAW_COLOR_ALLOW = ["fill-none", "stroke-none"];
+const RAW_COLOR_HINT =
+  "\"{{className}}\" is a raw colour. Use the token for what it means: glucose-* for a glucose range; insulin, carbs, iob-*, pred-* for a chart series; entry-* for a record kind's label or icon (entry-bolus, entry-carbs...); report-* for a report category's accent; status-* for a clinical state; success, warning, info, destructive for a UI outcome; demo for demo data; favorite for a pinned or favourite star. Otherwise a surface token (card, muted, foreground, border). All are declared in {{file}}.";
+
 // svelte-check types the bindings destructured from $props<T>() as any inside the
 // component. Beside a top-level binding named after a rune, svelte-check reads that
 // rune's other calls as store reads and leaves them untyped.
@@ -184,7 +189,7 @@ export default ts.config(
           }
         ]
       }],
-      "shadcn/no-raw-colors": "warn",
+      "shadcn/no-raw-colors": ["error", { allow: RAW_COLOR_ALLOW, message: RAW_COLOR_HINT }],
       "shadcn/no-arbitrary-values": ["warn", { allow: ["layout"], deny: ["text-[10px]", "text-[11px]"] }],
       "shadcn/no-inline-styles": "error",
       // `lead` is a hook the typography plugin styles inside `prose`.
@@ -204,7 +209,8 @@ export default ts.config(
       "src/routes/(authenticated)/notifications/**"
     ],
     rules: {
-      "shadcn/no-raw-colors": ["warn", {
+      "shadcn/no-raw-colors": ["error", {
+        allow: RAW_COLOR_ALLOW,
         message: "\"{{className}}\" is a raw colour. For urgency use the severity tokens, which order urgent > hazard > warn > info (text-severity-hazard, bg-severity-warn/10, border-severity-info/20), or <Badge variant=\"severity-hazard\"> for a solid chip; anything else takes a theme token from {{file}}."
       }]
     }
@@ -219,6 +225,14 @@ export default ts.config(
     ],
     rules: {
       "shadcn/no-inline-styles": "off"
+    }
+  },
+  {
+    // First-run setup is its own visual language: a fixed navy backdrop in its own --onb-*
+    // palette. Its header draws the brand mark in the brand's colours.
+    files: ["src/routes/(unauthenticated)/setup/+page@.svelte"],
+    rules: {
+      "shadcn/no-raw-colors": "off"
     }
   },
   {

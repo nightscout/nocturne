@@ -164,7 +164,7 @@ export function getInsightColor(type: "success" | "warning" | "info" | "action")
     case "info":
       return "text-info";
     case "action":
-      return "text-violet-600";
+      return "text-primary";
   }
 }
 

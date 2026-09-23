@@ -127,7 +127,7 @@
         <Card class="border-2 @2xl:col-span-2 @4xl:col-span-1 @4xl:row-span-2">
           <CardHeader>
             <CardTitle class="flex items-center gap-2">
-              <Target class="w-5 h-5 text-green-600" />
+              <Target class="w-5 h-5 text-glucose-in-range" />
               Time in Range
             </CardTitle>
             <CardDescription>
@@ -145,7 +145,7 @@
               <h4 class="font-medium text-sm">Time Breakdown (per day avg)</h4>
               <div class="grid grid-cols-3 gap-2">
                 <div class="flex flex-col">
-                  <span class="text-green-600 font-medium">In Range</span>
+                  <span class="text-glucose-in-range font-medium">In Range</span>
                   <span>
                     {formatMinutesDuration(
                       (durations?.target ?? 0) / dayCount
@@ -153,7 +153,7 @@
                   </span>
                 </div>
                 <div class="flex flex-col">
-                  <span class="text-red-600 font-medium">Low</span>
+                  <span class="text-glucose-very-low font-medium">Low</span>
                   <span>
                     {formatMinutesDuration(
                       ((durations?.low ?? 0) + (durations?.veryLow ?? 0)) /
@@ -162,7 +162,7 @@
                   </span>
                 </div>
                 <div class="flex flex-col">
-                  <span class="text-orange-500 font-medium">High</span>
+                  <span class="text-glucose-high font-medium">High</span>
                   <span>
                     {formatMinutesDuration(
                       ((durations?.high ?? 0) + (durations?.veryHigh ?? 0)) /
@@ -210,7 +210,7 @@
                 This estimates what your lab A1C would be based on your average glucose.
               </p>
               <details class="text-xs">
-                <summary class="cursor-pointer text-blue-600 hover:underline">
+                <summary class="cursor-pointer text-primary hover:underline">
                   Clinical details
                 </summary>
                 <p class="mt-2 text-muted-foreground">
@@ -297,11 +297,11 @@
               </div>
               <div class="text-right text-sm">
                 <div class="flex items-center gap-2">
-                  <div class="w-3 h-3 rounded-full bg-red-500"></div>
+                  <div class="w-3 h-3 rounded-full bg-glucose-very-low"></div>
                   <span>&lt;{bg(54)}: {tir?.veryLow?.toFixed(1) ?? 0}%</span>
                 </div>
                 <div class="flex items-center gap-2">
-                  <div class="w-3 h-3 rounded-full bg-red-300"></div>
+                  <div class="w-3 h-3 rounded-full bg-glucose-low"></div>
                   <span>{bg(54)}-{bg(70)}: {tir?.low?.toFixed(1) ?? 0}%</span>
                 </div>
               </div>
@@ -350,11 +350,11 @@
               </div>
               <div class="text-right text-sm">
                 <div class="flex items-center gap-2">
-                  <div class="w-3 h-3 rounded-full bg-orange-400"></div>
+                  <div class="w-3 h-3 rounded-full bg-glucose-high"></div>
                   <span>{bg(180)}-{bg(250)}: {tir?.high?.toFixed(1) ?? 0}%</span>
                 </div>
                 <div class="flex items-center gap-2">
-                  <div class="w-3 h-3 rounded-full bg-orange-600"></div>
+                  <div class="w-3 h-3 rounded-full bg-glucose-very-high"></div>
                   <span>&gt;{bg(250)}: {tir?.veryHigh?.toFixed(1) ?? 0}%</span>
                 </div>
               </div>

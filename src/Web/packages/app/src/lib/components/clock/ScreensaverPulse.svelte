@@ -21,9 +21,9 @@
     cx={x}
     cy={y}
     fill="none"
-    stroke="white"
+    stroke="currentColor"
     stroke-width="2"
-    class="pulse"
+    class="pulse text-white"
   />
 </svg>
 

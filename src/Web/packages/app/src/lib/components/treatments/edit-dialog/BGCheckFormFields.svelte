@@ -20,7 +20,7 @@
 
 <div class="space-y-2">
   <Label for="glucose">
-    <Droplet class="h-3.5 w-3.5 text-red-500" />
+    <Droplet class="h-3.5 w-3.5 text-entry-bg-check" />
     Glucose
   </Label>
   <Input

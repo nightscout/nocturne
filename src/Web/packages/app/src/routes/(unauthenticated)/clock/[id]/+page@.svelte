@@ -111,11 +111,11 @@
 <svelte:body class:embed-transparent={embed} />
 
 {#if loading}
-  <div class="fixed inset-0 flex items-center justify-center bg-neutral-950">
+  <div class="fixed inset-0 flex items-center justify-center bg-black">
     <Loader2 class="size-12 animate-spin text-white/50" />
   </div>
 {:else if error}
-  <div class="fixed inset-0 flex flex-col items-center justify-center gap-4 bg-neutral-950 text-white">
+  <div class="fixed inset-0 flex flex-col items-center justify-center gap-4 bg-black text-white">
     <ClockIcon class="size-12 text-white/30" />
     <p class="text-lg">{error}</p>
     <Button variant="outline" onclick={() => goto(resolve("/clock"))}>

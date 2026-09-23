@@ -17,6 +17,8 @@ export const badgeVariants = tv({
       warning:
         "bg-warning/15 text-warning [a&]:hover:bg-warning/25 border-transparent",
       info: "bg-info/15 text-info [a&]:hover:bg-info/25 border-transparent",
+      // Marks synthetic demo data wherever it appears beside real data.
+      demo: "bg-demo/15 text-demo [a&]:hover:bg-demo/25 border-transparent",
       // Notification and tracker urgency, as a solid count or level chip.
       "severity-urgent":
         "bg-severity-urgent text-severity-urgent-foreground [a&]:hover:bg-severity-urgent/90 border-transparent",

@@ -92,35 +92,30 @@
       >
         <ToggleGroup.Item
           value="cone"
-          class="data-[state=on]:bg-purple-700 data-[state=on]:text-white"
           title="Cone of probabilities"
         >
           Cone
         </ToggleGroup.Item>
         <ToggleGroup.Item
           value="lines"
-          class="data-[state=on]:bg-purple-700 data-[state=on]:text-white"
           title="All prediction lines"
         >
           Lines
         </ToggleGroup.Item>
         <ToggleGroup.Item
           value="iob"
-          class="data-[state=on]:bg-cyan-700 data-[state=on]:text-white"
           title="IOB only"
         >
           IOB
         </ToggleGroup.Item>
         <ToggleGroup.Item
           value="zt"
-          class="data-[state=on]:bg-orange-700 data-[state=on]:text-white"
           title="Zero Temp"
         >
           ZT
         </ToggleGroup.Item>
         <ToggleGroup.Item
           value="uam"
-          class="data-[state=on]:bg-green-700 data-[state=on]:text-white"
           title="UAM"
         >
           UAM

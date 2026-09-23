@@ -29,7 +29,7 @@
 <div class="space-y-3">
   <div class="flex items-center justify-between">
     <div class="flex items-center gap-2 text-sm font-medium">
-      <Droplet class="h-4 w-4 text-red-500" />
+      <Droplet class="h-4 w-4 text-entry-bg-check" />
       BG Check
     </div>
     {#if onRemove}

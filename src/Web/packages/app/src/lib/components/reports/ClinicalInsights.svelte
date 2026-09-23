@@ -25,11 +25,9 @@
           badge: "bg-info/10 text-info",
         },
         action: {
-          container:
-            "border-violet-200 bg-violet-50/50 dark:border-violet-800/50 dark:bg-violet-950/20",
-          icon: "text-violet-600 dark:text-violet-400",
-          badge:
-            "bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300",
+          container: "border-primary/30 bg-primary/5",
+          icon: "text-primary",
+          badge: "bg-primary/10 text-primary",
         },
       },
     },
@@ -164,7 +162,7 @@
 <Card>
   <CardHeader>
     <CardTitle class="flex items-center gap-2">
-      <Lightbulb class="h-5 w-5 text-amber-500" />
+      <Lightbulb class="h-5 w-5" />
       What Your Data is Telling Us
     </CardTitle>
   </CardHeader>

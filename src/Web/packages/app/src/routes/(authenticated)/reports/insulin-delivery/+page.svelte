@@ -120,7 +120,7 @@
     <div class="flex flex-wrap items-center justify-between gap-4">
       <div>
         <h1 class="flex items-center gap-3 text-2xl font-bold @md:text-3xl">
-          <PieChart class="h-7 w-7 text-blue-600 @md:h-8 @md:w-8" />
+          <PieChart class="h-7 w-7 text-report-treatment @md:h-8 @md:w-8" />
           Insulin Delivery Report
         </h1>
         <p class="mt-1 text-muted-foreground">
@@ -207,7 +207,7 @@
     </Card>
     <Card>
       <CardContent class="pt-6 text-center">
-        <div class="text-2xl font-bold tabular-nums text-amber-600">
+        <div class="text-2xl font-bold tabular-nums">
           {(insulinStats.basalPercent ?? 0).toFixed(0)}%
         </div>
         <div class="text-xs font-medium text-muted-foreground">Basal</div>
@@ -218,7 +218,7 @@
     </Card>
     <Card>
       <CardContent class="pt-6 text-center">
-        <div class="text-2xl font-bold tabular-nums text-blue-600">
+        <div class="text-2xl font-bold tabular-nums">
           {(insulinStats.bolusPercent ?? 0).toFixed(0)}%
         </div>
         <div class="text-xs font-medium text-muted-foreground">Bolus</div>
@@ -321,7 +321,7 @@
       <CardContent>
         <div class="grid gap-4 @3xl:grid-cols-3">
           <div class="rounded-lg border bg-card p-4 text-center">
-            <div class="text-3xl font-bold text-blue-600">
+            <div class="text-3xl font-bold">
               {insulinStats.bolusCount ?? 0}
             </div>
             <div class="text-sm font-medium text-muted-foreground">
@@ -333,7 +333,7 @@
           </div>
 
           <div class="rounded-lg border bg-card p-4 text-center">
-            <div class="text-3xl font-bold text-green-600">
+            <div class="text-3xl font-bold">
               {insulinStats.mealBoluses ?? 0}
             </div>
             <div class="text-sm font-medium text-muted-foreground">
@@ -350,7 +350,7 @@
           </div>
 
           <div class="rounded-lg border bg-card p-4 text-center">
-            <div class="text-3xl font-bold text-amber-600">
+            <div class="text-3xl font-bold">
               {insulinStats.correctionBoluses ?? 0}
             </div>
             <div class="text-sm font-medium text-muted-foreground">
@@ -401,7 +401,7 @@
             {/if}
             {#if (insulinStats.avgBolus ?? 0) > 0}
               <li class="flex items-start gap-2">
-                <TrendingUp class="mt-0.5 h-4 w-4 shrink-0 text-green-500" />
+                <TrendingUp class="mt-0.5 h-4 w-4 shrink-0 text-info" />
                 <span>
                   Average bolus size of {(insulinStats.avgBolus ?? 0).toFixed(1)}U —
                   {#if (insulinStats.avgBolus ?? 0) < 2}

@@ -59,7 +59,7 @@
 <div class="space-y-3">
   <div class="flex items-center justify-between">
     <div class="flex items-center gap-2 text-sm font-medium">
-      <Apple class="h-4 w-4 text-green-500" />
+      <Apple class="h-4 w-4 text-entry-carbs" />
       Carb Intake
     </div>
     {#if onRemove}

@@ -50,7 +50,7 @@
 
 <div class="space-y-2">
   <Label>
-    <Syringe class="h-3.5 w-3.5 text-blue-500" />
+    <Syringe class="h-3.5 w-3.5 text-entry-basal-injection" />
     Basal Insulin
   </Label>
   <Select.Root
@@ -86,7 +86,7 @@
 
 <div class="space-y-2">
   <Label for="basal-units">
-    <Syringe class="h-3.5 w-3.5 text-blue-500" />
+    <Syringe class="h-3.5 w-3.5 text-entry-basal-injection" />
     Units (U)
   </Label>
   <Input

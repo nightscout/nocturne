@@ -23,7 +23,7 @@
     y2={lineHeight}
     stroke-width={1.5}
     stroke-dasharray="4 4"
-    class="stroke-indigo-500/60 dark:stroke-indigo-400/60"
+    class="stroke-entry-basal-injection/60"
   />
 </g>
 
@@ -37,14 +37,14 @@
     height={18}
     rx="9"
     fill="var(--background)"
-    class="stroke-indigo-500 dark:stroke-indigo-400"
+    class="stroke-entry-basal-injection"
     stroke-width="1"
     opacity={0.9}
   />
   <!-- Triangle pointing along the time axis, sized to sit inside the pill -->
   <polygon
     points={trianglePoints("right", 5, 9, -10, 0)}
-    class="fill-indigo-600 dark:fill-indigo-400"
+    class="fill-entry-basal-injection"
   />
   <!-- Units label -->
   <text
@@ -52,7 +52,7 @@
     y={0}
     text-anchor="start"
     class="text-[8px] font-medium"
-    fill="var(--color-indigo-600)"
+    fill="var(--entry-basal-injection)"
     dy="0.35em"
   >
     {units.toFixed(1)}U
