@@ -23,9 +23,12 @@ const AUTO_LOGIN_MARKER = "__autologin";
 const DEV_LOGIN_ENDPOINT = "/api/v4/dev-only/auth/login";
 const DEMO_LOGIN_ENDPOINT = "/api/v4/demo/session";
 
-export const load: PageServerLoad = async ({ url, locals }) => {
+export const load: PageServerLoad = async ({ url, locals, parent }) => {
   const endpoint = await resolveAutoLoginEndpoint(locals);
-  if (!endpoint) return;
+  if (!endpoint) {
+    const { tenantless } = await parent();
+    return { guestCodePending: await hasPendingGuestCode(locals, tenantless) };
+  }
 
   const raw = url.searchParams.get("returnUrl") || "/";
   // Same-origin paths only, mirroring the endpoint's IsLocalUrl guard: a
@@ -71,6 +74,25 @@ async function resolveAutoLoginEndpoint(
     return status?.isDemo ? DEMO_LOGIN_ENDPOINT : null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Whether the tenant has an unredeemed guest code, in which case the page opens
+ * on code entry so a guest can be sent to the bare site rather than /guest.
+ * The share host has no sessions and a tenantless host has no codes.
+ */
+async function hasPendingGuestCode(
+  locals: App.Locals,
+  tenantless: boolean,
+): Promise<boolean> {
+  if (tenantless || locals.isShareHost) return false;
+
+  try {
+    const { pending } = await locals.apiClient.guestLink.getGuestCodePending();
+    return pending === true;
+  } catch {
+    return false;
   }
 }
 

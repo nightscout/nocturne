@@ -5,7 +5,7 @@ import { RATE_LIMITED_ERROR } from "$lib/forms/submit-error";
 import {
   classifyActivationError,
   type ActivationFailure,
-} from "./activation-error";
+} from "./guest-activation-error";
 
 const FAILURE_MESSAGES: Record<ActivationFailure, string> = {
   rejected:

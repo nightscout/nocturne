@@ -254,6 +254,19 @@ public class GuestLinkService : IGuestLinkService
                 && g.ExpiresAt > now, ct);
     }
 
+    /// <inheritdoc />
+    public async Task<bool> HasRedeemableCodeAsync(CancellationToken ct = default)
+    {
+        var now = DateTime.UtcNow;
+
+        return await _dbContext.OAuthGrants
+            .AnyAsync(g =>
+                g.GrantType == OAuthGrantTypes.Guest
+                && g.RevokedAt == null
+                && g.ActivatedAt == null
+                && g.ExpiresAt > now, ct);
+    }
+
     private static string GenerateCode()
     {
         Span<byte> bytes = stackalloc byte[CodeLength];

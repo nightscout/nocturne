@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { classifyActivationError } from "./activation-error";
+import { classifyActivationError } from "./guest-activation-error";
 
 describe("classifyActivationError", () => {
   it("treats the API's refusal as a refused code", () => {

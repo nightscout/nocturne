@@ -33,6 +33,12 @@ public interface IGuestLinkService
     Task<bool> DismissAsync(Guid grantId, Guid requestingSubjectId, CancellationToken ct = default);
 
     Task<int> GetActiveCountAsync(Guid dataOwnerSubjectId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Whether the current tenant has a guest code that can still be redeemed: not yet used,
+    /// revoked or expired.
+    /// </summary>
+    Task<bool> HasRedeemableCodeAsync(CancellationToken ct = default);
 }
 
 public record GuestLinkCreationResult(string Code, string FullUrl, GuestLinkInfo Info);
