@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { resolve } from "$app/paths";
     import SystemRequirements from "$lib/components/docs/SystemRequirements.svelte";
     import VerificationSteps from "$lib/components/docs/VerificationSteps.svelte";
     import NextSteps from "$lib/components/docs/NextSteps.svelte";
@@ -97,7 +98,7 @@
         along with <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">X-Forwarded-Proto</code> and
         <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">X-Forwarded-Host</code>, or logins will
         fail with a 403. See
-        <a href="/docs/installation/reverse-proxy" class="text-primary hover:underline">Bring your own reverse proxy</a>
+        <a href={resolve("/docs/installation/reverse-proxy")} class="text-primary hover:underline">Bring your own reverse proxy</a>
         for worked nginx, Traefik, and Caddy configurations.
     </p>
 

@@ -3,17 +3,17 @@
     import { REPORTS } from "$lib/data/reports";
 
     // Palette shared by every preview: the app's glucose range colours plus a neutral ink ramp.
-    const IN_RANGE = "oklch(0.6 0.118 184.704)";
-    const LOW = "oklch(0.646 0.222 41.116)";
-    const VERY_LOW = "oklch(0.577 0.245 27.325)";
-    const HIGH = "oklch(0.65 0.18 270)";
-    const VERY_HIGH = "oklch(0.55 0.25 15)";
-    const INSULIN = "rgb(30,150,252)";
-    const CARBS = "oklch(0.769 0.188 70)";
-    const INK = "oklch(0.97 0.005 261)";
-    const INK_SOFT = "oklch(0.65 0.02 261)";
-    const INK_FAINT = "oklch(0.50 0.02 261)";
-    const PANEL = "oklch(0.16 0.03 261)";
+    const IN_RANGE = "var(--glucose-in-range)";
+    const LOW = "var(--glucose-low)";
+    const VERY_LOW = "var(--glucose-very-low)";
+    const HIGH = "var(--glucose-high)";
+    const VERY_HIGH = "var(--glucose-very-high)";
+    const INSULIN = "var(--insulin)";
+    const CARBS = "var(--carbs)";
+    const HEART_RATE = "var(--heart-rate)";
+    const INK = "var(--foreground)";
+    const INK_SOFT = "var(--muted-foreground)";
+    const INK_FAINT = "color-mix(in oklch, var(--muted-foreground) 70%, transparent)";
     const MONO = "ui-monospace,monospace";
     const SANS = "system-ui,sans-serif";
 
@@ -51,29 +51,29 @@
     let sidebarEl: HTMLDivElement | null = $state(null);
     $effect(() => {
         const list = sidebarEl;
-        const row = list?.children[idx] as HTMLElement | undefined;
-        if (!list || !row) return;
+        const row = list?.children[idx];
+        if (!list || !(row instanceof HTMLElement)) return;
         const top = row.offsetTop - list.clientHeight / 2 + row.offsetHeight / 2;
         list.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
     });
 </script>
 
-<div class="@container" style:height="{height}px">
+<div class="@container h-(--demo-h)" style:--demo-h="{height}px">
 <div
-    class="h-full rounded-[14px] overflow-hidden border border-white/10 bg-[oklch(0.10_0.025_261)] grid
+    class="h-full rounded-xl overflow-hidden border border-white/10 bg-sunken grid
         grid-cols-[104px_minmax(0,1fr)] @sm:grid-cols-[140px_minmax(0,1fr)] @lg:grid-cols-[176px_minmax(0,1fr)]"
 >
     <!-- Sidebar list: the app's report navigation -->
     <div
         bind:this={sidebarEl}
-        class="relative bg-[oklch(0.15_0.03_261)] border-r border-white/[0.08] py-2 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden flex flex-col"
+        class="relative bg-card/40 border-r border-white/8 py-2 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden flex flex-col"
     >
         {#each REPORTS as r, i (r.preview)}
             <div
-                class="px-3 @sm:px-4 py-[3px] text-[11px] @sm:text-[12px] leading-[1.35] flex items-center justify-between gap-1 transition-all duration-300 border-l-[3px] shrink-0
+                class="px-3 @sm:px-4 py-0.75 text-2xs @sm:text-xs leading-snug flex items-center justify-between gap-1 transition-all duration-300 border-l-3 shrink-0
                     {i === idx
-                        ? 'text-foreground bg-glucose-in-range/[0.14] border-glucose-in-range font-semibold'
-                        : 'text-[oklch(0.65_0.02_261)] border-transparent font-medium'}"
+                        ? 'text-foreground bg-glucose-in-range/14 border-glucose-in-range font-semibold'
+                        : 'text-muted-foreground border-transparent font-medium'}"
             >
                 <span class="truncate">{r.short}</span>
                 {#if i === idx}
@@ -84,23 +84,21 @@
     </div>
 
     <!-- Preview pane -->
-    <div class="p-3 @sm:p-[18px] flex flex-col gap-2.5 min-h-0 min-w-0">
+    <div class="p-3 @sm:p-4.5 flex flex-col gap-2.5 min-h-0 min-w-0">
         <div class="flex items-baseline justify-between gap-2 shrink-0">
             <div class="min-w-0">
-                <div class="text-[17px] font-bold text-foreground truncate">{current.name}</div>
-                <div class="font-mono text-[11px] text-muted-foreground mt-0.5">{current.group} · last 14 days</div>
+                <div class="text-lg font-bold text-foreground truncate">{current.name}</div>
+                <div class="font-mono text-xs text-muted-foreground mt-0.5">{current.group} · last 14 days</div>
             </div>
-            <span class="font-mono text-[11px] text-muted-foreground shrink-0">
+            <span class="font-mono text-xs text-muted-foreground shrink-0">
                 {String(idx + 1).padStart(2, '0')} / {REPORTS.length}
             </span>
         </div>
-        <div class="flex-1 rounded-lg overflow-hidden bg-[oklch(0.16_0.03_261)] min-h-0">
+        <div class="flex-1 rounded-lg overflow-hidden bg-card/50 min-h-0">
             <svg viewBox="0 0 400 200" class="w-full h-full" preserveAspectRatio="xMidYMid meet">
-                <rect width="400" height="200" fill={PANEL}/>
-
                 {#if current.preview === "summary"}
                     {#each [["Average", "142", "mg/dL"], ["GMI", "6.7", "%"], ["Time in range", "72", "%"], ["Variability", "33", "% CV"]] as [label, value, unit], i (label)}
-                        <rect x={16 + i * 94} y="22" width="84" height="70" rx="6" fill="oklch(0.20 0.03 261)"/>
+                        <rect x={16 + i * 94} y="22" width="84" height="70" rx="6" class="fill-card"/>
                         <text x={26 + i * 94} y="44" fill={INK_SOFT} font-size="9" font-family={MONO}>{label}</text>
                         <text x={26 + i * 94} y="74" fill={INK} font-size="22" font-weight="700" font-family={SANS}>{value}</text>
                         <text x={26 + i * 94} y="86" fill={INK_FAINT} font-size="8" font-family={MONO}>{unit}</text>
@@ -113,12 +111,12 @@
                     <text x="16" y="172" fill={INK_SOFT} font-size="10" font-family={MONO}>4% low · 72% in range · 24% high</text>
 
                 {:else if current.preview === "agp"}
-                    <rect x="0" y="68" width="400" height="64" fill="oklch(0.6 0.118 184.704 / 12%)"/>
-                    <line x1="0" y1="68" x2="400" y2="68" stroke="oklch(0.6 0.118 184.704 / 50%)" stroke-dasharray="2 4"/>
-                    <line x1="0" y1="132" x2="400" y2="132" stroke="oklch(0.6 0.118 184.704 / 50%)" stroke-dasharray="2 4"/>
-                    <path d="M0,100 C50,40 100,140 150,90 S250,150 300,80 S400,120 400,100 L400,170 C350,180 300,140 250,160 S150,110 100,140 S50,170 0,160 Z" fill="oklch(0.38 0.12 264 / 35%)"/>
-                    <path d="M0,100 C50,70 100,120 150,95 S250,120 300,90 S400,110 400,100 L400,150 C350,150 300,130 250,140 S150,120 100,130 S50,150 0,140 Z" fill="oklch(0.75 0.18 264 / 40%)"/>
-                    <path d="M0,100 C50,80 100,110 150,95 S250,110 300,95 S400,105 400,100" stroke="oklch(0.85 0.10 264)" stroke-width="2" fill="none"/>
+                    <rect x="0" y="68" width="400" height="64" class="fill-glucose-in-range/12"/>
+                    <line x1="0" y1="68" x2="400" y2="68" class="stroke-glucose-in-range/50" stroke-dasharray="2 4"/>
+                    <line x1="0" y1="132" x2="400" y2="132" class="stroke-glucose-in-range/50" stroke-dasharray="2 4"/>
+                    <path d="M0,100 C50,40 100,140 150,90 S250,150 300,80 S400,120 400,100 L400,170 C350,180 300,140 250,160 S150,110 100,140 S50,170 0,160 Z" fill="var(--percentile-inner)" fill-opacity="0.35"/>
+                    <path d="M0,100 C50,70 100,120 150,95 S250,120 300,90 S400,110 400,100 L400,150 C350,150 300,130 250,140 S150,120 100,130 S50,150 0,140 Z" fill="var(--percentile-median)" fill-opacity="0.4"/>
+                    <path d="M0,100 C50,80 100,110 150,95 S250,110 300,95 S400,105 400,100" stroke="var(--percentile-median)" stroke-width="2" fill="none"/>
                     {#each [0, 1, 2, 3, 4, 5, 6] as i (i)}
                         <text x={i * 66 + 8} y="195" fill={INK_FAINT} font-size="9" font-family={MONO}>{i * 4}:00</text>
                     {/each}
@@ -169,8 +167,8 @@
                 {:else if current.preview === "readings"}
                     {#each DAY_TRACES as d, i (i)}
                         <text x="16" y={38 + i * 34} fill={INK_SOFT} font-size="10" font-family={MONO}>Mar {12 - i}</text>
-                        <rect x="70" y={22 + i * 34} width="230" height="28" rx="3" fill="oklch(0.20 0.03 261)"/>
-                        <rect x="70" y={30 + i * 34} width="230" height="12" fill="oklch(0.6 0.118 184.704 / 14%)"/>
+                        <rect x="70" y={22 + i * 34} width="230" height="28" rx="3" class="fill-card"/>
+                        <rect x="70" y={30 + i * 34} width="230" height="12" class="fill-glucose-in-range/14"/>
                         <g transform="translate(90, {24 + i * 34}) scale(1.05, 0.7)">
                             <path d={d} stroke={IN_RANGE} stroke-width="2.4" fill="none"/>
                         </g>
@@ -191,7 +189,7 @@
                     {/each}
 
                 {:else if current.preview === "week"}
-                    <rect x="20" y="78" width="360" height="50" fill="oklch(0.6 0.118 184.704 / 12%)"/>
+                    <rect x="20" y="78" width="360" height="50" class="fill-glucose-in-range/12"/>
                     {#each WEEK_TRACES as d, i (i)}
                         <path d={d} stroke={INK_SOFT} stroke-width="1.2" fill="none" opacity="0.45"/>
                     {/each}
@@ -213,7 +211,7 @@
                     <text x="20" y="48" fill={INK_SOFT} font-size="10" font-family={MONO}>down 23 mg/dL since December</text>
 
                 {:else if current.preview === "comparison"}
-                    <rect x="20" y="78" width="360" height="50" fill="oklch(0.6 0.118 184.704 / 12%)"/>
+                    <rect x="20" y="78" width="360" height="50" class="fill-glucose-in-range/12"/>
                     <path d="M20,128 C70,80 120,150 170,104 S270,158 320,96 S380,128 380,112" stroke={INK_SOFT} stroke-width="2" fill="none" stroke-dasharray="5 4"/>
                     <path d="M20,112 C70,72 120,134 170,96 S270,140 320,86 S380,118 380,100" stroke={IN_RANGE} stroke-width="2.6" fill="none"/>
                     <text x="16" y="32" fill={INK} font-size="14" font-weight="700" font-family={SANS}>Before vs after the basal change</text>
@@ -234,8 +232,8 @@
                     <text x="330" y="70" fill={INK_FAINT} font-size="9" font-family={MONO}>8,000 goal</text>
 
                 {:else if current.preview === "heart"}
-                    <path d="M20,120 C50,118 60,90 90,96 S130,60 160,74 S210,130 240,122 S290,80 320,92 S360,124 380,118" stroke={LOW} stroke-width="2.4" fill="none"/>
-                    <path d="M20,120 C50,118 60,90 90,96 S130,60 160,74 S210,130 240,122 S290,80 320,92 S360,124 380,118 L380,165 L20,165 Z" fill="oklch(0.646 0.222 41.116 / 15%)"/>
+                    <path d="M20,120 C50,118 60,90 90,96 S130,60 160,74 S210,130 240,122 S290,80 320,92 S360,124 380,118" stroke={HEART_RATE} stroke-width="2.4" fill="none"/>
+                    <path d="M20,120 C50,118 60,90 90,96 S130,60 160,74 S210,130 240,122 S290,80 320,92 S360,124 380,118 L380,165 L20,165 Z" class="fill-heart-rate/15"/>
                     <line x1="20" y1="140" x2="380" y2="140" stroke={INK_SOFT} stroke-dasharray="3 4"/>
                     <text x="20" y="34" fill={INK} font-size="20" font-weight="700" font-family={SANS}>58</text>
                     <text x="48" y="34" fill={INK_SOFT} font-size="12" font-family={SANS}>bpm resting estimate</text>
@@ -245,8 +243,8 @@
                     {/each}
 
                 {:else if current.preview === "sleep"}
-                    <rect x="60" y="56" width="220" height="110" fill="oklch(0.65 0.18 270 / 14%)" rx="4"/>
-                    <rect x="20" y="96" width="360" height="40" fill="oklch(0.6 0.118 184.704 / 12%)"/>
+                    <rect x="60" y="56" width="220" height="110" class="fill-info/14" rx="4"/>
+                    <rect x="20" y="96" width="360" height="40" class="fill-glucose-in-range/12"/>
                     <path d="M20,112 C60,100 90,124 130,116 S200,104 240,110 S300,126 340,108 S370,98 380,100" stroke={IN_RANGE} stroke-width="2.6" fill="none"/>
                     <text x="16" y="34" fill={INK} font-size="14" font-weight="700" font-family={SANS}>Asleep 23:10 to 06:45</text>
                     <text x="16" y="50" fill={INK_SOFT} font-size="10" font-family={MONO}>84% in range overnight · no lows</text>
@@ -271,7 +269,7 @@
                     <path d="M0,140 L60,140 L60,100 L120,100 L120,140 L180,140 L180,80 L240,80 L240,130 L300,130 L300,110 L360,110 L360,140 L400,140"
                           stroke={INSULIN} stroke-width="2" fill="none"/>
                     <path d="M0,140 L60,140 L60,100 L120,100 L120,140 L180,140 L180,80 L240,80 L240,130 L300,130 L300,110 L360,110 L360,140 L400,140 L400,170 L0,170 Z"
-                          fill="rgba(100,180,255,0.18)"/>
+                          class="fill-insulin-scheduled-basal/18"/>
                     <path d="M0,150 L60,150 L60,118 L120,118 L120,146 L180,146 L180,96 L240,96 L240,138 L300,138 L300,124 L360,124 L360,150 L400,150"
                           stroke={INK_SOFT} stroke-width="1.5" fill="none" stroke-dasharray="4 3"/>
                     <text x="16" y="24" fill={INK} font-size="13" font-weight="700" font-family={SANS}>Scheduled basal vs what was delivered</text>
@@ -310,14 +308,14 @@
                         ["Average glucose", "142 mg/dL"],
                         ["Time in range", "72%"],
                     ] as [k, v], i (k)}
-                        <line x1="16" y1={66 + i * 21} x2="384" y2={66 + i * 21} stroke="oklch(1 0 0 / 8%)"/>
+                        <line x1="16" y1={66 + i * 21} x2="384" y2={66 + i * 21} class="stroke-foreground/8"/>
                         <text x="16" y={81 + i * 21} fill={INK_SOFT} font-size="11" font-family={SANS}>{k}</text>
                         <text x="384" y={81 + i * 21} text-anchor="end" fill={INK} font-size="11" font-weight="600" font-family={MONO}>{v}</text>
                     {/each}
 
                 {:else if current.preview === "battery"}
                     <path d="M20,60 L120,120 L124,60 L230,130 L234,60 L340,138 L344,60 L380,82" stroke={IN_RANGE} stroke-width="2.2" fill="none"/>
-                    <path d="M20,60 L120,120 L124,60 L230,130 L234,60 L340,138 L344,60 L380,82 L380,160 L20,160 Z" fill="oklch(0.6 0.118 184.704 / 14%)"/>
+                    <path d="M20,60 L120,120 L124,60 L230,130 L234,60 L340,138 L344,60 L380,82 L380,160 L20,160 Z" class="fill-glucose-in-range/14"/>
                     <line x1="20" y1="140" x2="380" y2="140" stroke={LOW} stroke-dasharray="3 4"/>
                     <text x="16" y="34" fill={INK} font-size="14" font-weight="700" font-family={SANS}>Pump battery</text>
                     <text x="16" y="50" fill={INK_SOFT} font-size="10" font-family={MONO}>a charge lasts 6.4 days · last change 2 days ago</text>

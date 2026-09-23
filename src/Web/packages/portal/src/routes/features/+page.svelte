@@ -14,37 +14,37 @@
             title: "Your server, your data",
             copy: "Self-hosted with Docker Compose, Portainer, or Helm. No cloud middleman and no third-party analytics. Your health data never leaves your infrastructure.",
             icon: "shield",
-            color: "oklch(0.577 0.245 27.325)",
+            color: "var(--feature-privacy)",
         },
         {
             title: "One install, many people",
             copy: "Run a household, a clinic, or a community on a single deployment. Each tenant lives in its own database schema, behind its own subdomain.",
             icon: "users",
-            color: "oklch(0.65 0.18 270)",
+            color: "var(--feature-sign-in)",
         },
         {
             title: "Real-time updates",
             copy: "New readings reach every open dashboard and follower the moment they are written, over WebSockets rather than polling.",
             icon: "zap",
-            color: "oklch(0.769 0.188 70)",
+            color: "var(--feature-realtime)",
         },
         {
             title: "Drop-in Nightscout",
             copy: "Speaks the Nightscout v1, v2, and v3 APIs. xDrip+, Loop, AndroidAPS, Trio, and watch faces keep working after you switch.",
             icon: "plug",
-            color: "oklch(0.72 0.16 150)",
+            color: "var(--feature-connectors)",
         },
         {
             title: "Built for years of data",
             copy: "PostgreSQL underneath, with the reports written to query years of readings. Jumping to a date from years ago stays quick.",
             icon: "chart",
-            color: "oklch(0.6 0.118 184.704)",
+            color: "var(--feature-reports)",
         },
         {
             title: "Free and open source",
             copy: "AGPL-3.0 licensed, so you can read it, fork it, and self-host it for nothing. Stewarded by the Nightscout Foundation.",
             icon: "sparkle",
-            color: "oklch(0.488 0.243 264.376)",
+            color: "var(--feature-open-source)",
         },
     ] as const;
 
@@ -65,15 +65,15 @@
     <div class="pt-20 pb-16 border-b border-border relative overflow-hidden">
         <div class="aurora-subtle absolute inset-0 pointer-events-none" aria-hidden="true"></div>
         <div class="relative flex flex-col gap-6 max-w-[900px]">
-            <div class="flex items-center gap-3 text-[17px] font-semibold uppercase tracking-[0.02em] text-glucose-in-range">
+            <div class="flex items-center gap-3 text-lg font-semibold uppercase tracking-wide text-glucose-in-range">
                 <span class="size-2.5 rounded-full bg-glucose-in-range eyebrow-dot"></span>
                 Everything Nocturne does
             </div>
-            <h1 class="text-[clamp(2.4rem,5.5vw,4.5rem)] font-bold leading-[1.04] tracking-[-0.025em] text-foreground m-0">
+            <h1 class="text-display font-bold text-foreground m-0">
                 Big features.<br/>
                 <em class="not-italic text-glucose-in-range font-semibold">Plain English.</em>
             </h1>
-            <p class="text-[1.1rem] leading-[1.6] text-muted-foreground m-0 max-w-[680px]">
+            <p class="text-lead text-muted-foreground m-0 max-w-[680px]">
                 Nocturne is a free, open-source diabetes dashboard you run on your own
                 server. It connects to your CGM, pump, and apps; shows your numbers
                 the way you want; and tells you the moment something needs attention.
@@ -93,36 +93,35 @@
     {#each PILLARS as p, i (p.n)}
         {@const flip = i % 2 === 1}
         <section class="py-20 border-t border-border grid gap-16 items-center
-                        {flip ? 'md:grid-cols-[1.05fr_1fr]' : 'md:grid-cols-[1fr_1.05fr]'}">
+                        {flip ? 'md:grid-cols-[1.05fr_1fr]' : 'md:grid-cols-[1fr_1.05fr]'}"
+                 style:--highlight={p.color}>
 
             <!-- Text -->
             <div class="flex flex-col gap-5 min-w-0 {flip ? 'md:order-2' : 'md:order-1'}">
                 <!-- Eyebrow -->
-                <div class="flex items-center gap-3 text-[17px] font-semibold tracking-[0.02em] uppercase"
-                     style:color={p.color}>
-                    <span class="font-mono text-[14px] px-2.5 py-0.5 rounded-full border border-current leading-6">
+                <div class="flex items-center gap-3 text-lg font-semibold tracking-wide uppercase text-highlight">
+                    <span class="font-mono text-sm px-2.5 py-0.5 rounded-full border border-current leading-6">
                         {String(p.n).padStart(2, '0')}
                     </span>
-                    <span class="size-2.5 rounded-full shrink-0 eyebrow-dot" style:background={p.color} style:--dot-color={p.color}></span>
+                    <span class="size-2.5 rounded-full shrink-0 eyebrow-dot bg-highlight"></span>
                     <span>{p.eyebrow}</span>
                 </div>
 
                 <!-- Heading -->
-                <h2 class="text-[clamp(2rem,3.8vw,3.25rem)] font-bold leading-[1.06] tracking-[-0.025em] text-foreground m-0">
+                <h2 class="text-headline font-bold text-foreground m-0">
                     {p.title}<br/>
-                    <em class="not-italic font-semibold" style:color={p.color}>{p.accent}</em>
+                    <em class="not-italic font-semibold text-highlight">{p.accent}</em>
                 </h2>
 
                 <!-- Body -->
-                <p class="text-[1.0625rem] leading-[1.6] text-muted-foreground m-0 max-w-[520px]">{p.body}</p>
+                <p class="text-lead text-muted-foreground m-0 max-w-[520px]">{p.body}</p>
 
                 <!-- Bullets -->
                 <ul class="m-0 mt-2 p-0 list-none flex flex-col gap-3.5">
                     {#each p.bullets as b (b)}
-                        <li class="flex items-start gap-3.5 text-[1rem] text-foreground/85">
-                            <span class="shrink-0 size-[26px] rounded-full border-[1.5px] grid place-items-center mt-0.5"
-                                  style:border-color={p.color}>
-                                <Check class="size-3.5" style="color: {p.color}" />
+                        <li class="flex items-start gap-3.5 text-base text-foreground/85">
+                            <span class="shrink-0 size-[26px] rounded-full border-2 border-highlight grid place-items-center mt-0.5">
+                                <Check class="size-3.5 text-highlight" />
                             </span>
                             {b}
                         </li>
@@ -132,8 +131,7 @@
 
             <!-- Demo -->
             <div class="relative min-w-0 {flip ? 'md:order-1' : 'md:order-2'}">
-                <div class="absolute -inset-10 rounded-3xl pointer-events-none"
-                     style="background: radial-gradient(60% 60% at 50% 50%, color-mix(in oklch, {p.color}, transparent 80%), transparent 70%); filter: blur(24px);"
+                <div class="absolute -inset-10 rounded-3xl pointer-events-none bg-radial from-highlight/20 to-transparent to-60% blur-xl"
                      aria-hidden="true"></div>
                 <div class="relative">
                     {#if p.n === 1}
@@ -152,28 +150,27 @@
 
     <!-- Supporting: security, multitenant, developer -->
     <section class="py-20 border-t border-border">
-        <div class="flex items-center gap-3 text-[17px] font-semibold tracking-[0.02em] uppercase text-muted-foreground mb-4">
+        <div class="flex items-center gap-3 text-lg font-semibold tracking-wide uppercase text-muted-foreground mb-4">
             <span class="size-2.5 rounded-full bg-muted-foreground/40 shrink-0"></span>
             Also inside
         </div>
-        <h2 class="text-[clamp(1.6rem,3.2vw,2.5rem)] font-bold leading-[1.1] tracking-[-0.025em] text-foreground m-0 mb-10">
+        <h2 class="text-section font-bold text-foreground m-0 mb-10">
             The unglamorous stuff <em class="text-glucose-in-range">still matters.</em>
         </h2>
 
         <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {#each SUPPORTING as card (card.title)}
-                <div class="p-7 rounded-2xl border border-border/60 bg-card/50 backdrop-blur-sm flex flex-col gap-3.5">
-                    <div class="size-[52px] rounded-xl grid place-items-center"
-                         style:background="color-mix(in oklch, {card.color}, transparent 85%)"
-                         style:border="1px solid color-mix(in oklch, {card.color}, transparent 60%)">
-                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none"
-                             stroke={card.color} stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"
+                <div class="p-7 rounded-2xl border border-border/60 bg-card/50 backdrop-blur-sm flex flex-col gap-3.5"
+                     style:--highlight={card.color}>
+                    <div class="size-[52px] rounded-xl grid place-items-center bg-highlight/15 border border-highlight/40">
+                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" class="stroke-highlight"
+                             stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"
                              aria-hidden="true">
                             <path d={ICON_PATHS[card.icon]}/>
                         </svg>
                     </div>
-                    <h3 class="text-[1.15rem] font-bold text-foreground m-0 leading-[1.25]">{card.title}</h3>
-                    <p class="text-[0.9375rem] leading-[1.6] text-muted-foreground m-0">{card.copy}</p>
+                    <h3 class="text-xl font-bold text-foreground m-0 leading-tight">{card.title}</h3>
+                    <p class="text-sm leading-relaxed text-muted-foreground m-0">{card.copy}</p>
                 </div>
             {/each}
         </div>
@@ -181,21 +178,21 @@
 
     <!-- Compare: plain-English before/after -->
     <section class="py-20 border-t border-border">
-        <div class="flex items-center gap-3 text-[17px] font-semibold tracking-[0.02em] uppercase text-glucose-in-range mb-4">
+        <div class="flex items-center gap-3 text-lg font-semibold tracking-wide uppercase text-glucose-in-range mb-4">
             <span class="size-2.5 rounded-full bg-glucose-in-range shrink-0"></span>
             What changes
         </div>
-        <h2 class="text-[clamp(1.6rem,3.2vw,2.5rem)] font-bold leading-[1.1] tracking-[-0.025em] text-foreground m-0 mb-10">
+        <h2 class="text-section font-bold text-foreground m-0 mb-10">
             The same data. <em class="text-glucose-in-range">A new home for it.</em>
         </h2>
 
         <div class="rounded-2xl overflow-hidden border border-border grid md:grid-cols-2">
             <!-- Old -->
-            <div class="p-8 md:p-10 bg-[oklch(0.10_0.025_261)] flex flex-col gap-5">
-                <div class="font-mono text-[13px] tracking-[0.08em] uppercase text-muted-foreground font-bold">
+            <div class="p-8 md:p-10 bg-sunken flex flex-col gap-5">
+                <div class="font-mono text-sm tracking-widest uppercase text-muted-foreground font-bold">
                     The old way
                 </div>
-                <h3 class="text-[1.5rem] font-bold text-muted-foreground m-0">Nightscout</h3>
+                <h3 class="text-2xl font-bold text-muted-foreground m-0">Nightscout</h3>
                 {#each [
                     "One instance per person",
                     "Readings arrive through uploader apps or bridge plugins you configure",
@@ -203,23 +200,22 @@
                     "One shared API secret for every app and follower",
                     "A fixed set of report pages",
                 ] as line (line)}
-                    <div class="flex items-center gap-3 text-[1rem] text-muted-foreground/70">
-                        <span class="size-5 rounded-full bg-white/[0.06] grid place-items-center shrink-0
-                                     font-mono text-[13px] text-muted-foreground/50">&middot;</span>
+                    <div class="flex items-center gap-3 text-base text-muted-foreground/70">
+                        <span class="size-5 rounded-full bg-foreground/6 grid place-items-center shrink-0
+                                     font-mono text-sm text-muted-foreground/50">&middot;</span>
                         {line}
                     </div>
                 {/each}
             </div>
 
             <!-- New -->
-            <div class="p-8 md:p-10 bg-gradient-to-b from-[oklch(0.16_0.03_261)] to-background flex flex-col gap-5 border-t md:border-t-0 md:border-l border-border relative overflow-hidden">
-                <div class="absolute -top-5 -right-5 size-40 rounded-full pointer-events-none"
-                     style="background: radial-gradient(circle, oklch(0.6 0.118 184.704 / 18%), transparent 60%)"
+            <div class="p-8 md:p-10 bg-gradient-to-b from-card/60 to-background flex flex-col gap-5 border-t md:border-t-0 md:border-l border-border relative overflow-hidden">
+                <div class="absolute -top-5 -right-5 size-40 rounded-full pointer-events-none bg-radial from-glucose-in-range/18 to-transparent to-60%"
                      aria-hidden="true"></div>
-                <div class="font-mono text-[13px] tracking-[0.08em] uppercase text-glucose-in-range font-bold relative">
+                <div class="font-mono text-sm tracking-widest uppercase text-glucose-in-range font-bold relative">
                     Nocturne
                 </div>
-                <h3 class="text-[1.5rem] font-bold text-foreground m-0 relative">Nocturne</h3>
+                <h3 class="text-2xl font-bold text-foreground m-0 relative">Nocturne</h3>
                 {#each [
                     "One install for a household, a clinic, or a community",
                     `Sign in to ${DATA_SOURCES.length} sources from the dashboard; uploaders still work`,
@@ -227,8 +223,8 @@
                     "Passkeys and social sign-in, with a scoped token per app",
                     `${AVAILABLE_REPORT_COUNT} reports, with your own target range drawn on them`,
                 ] as line (line)}
-                    <div class="flex items-center gap-3 text-[1rem] text-foreground/90 font-medium relative">
-                        <span class="size-5 rounded-full bg-glucose-in-range/[0.18] border border-glucose-in-range/40
+                    <div class="flex items-center gap-3 text-base text-foreground/90 font-medium relative">
+                        <span class="size-5 rounded-full bg-glucose-in-range/18 border border-glucose-in-range/40
                                      grid place-items-center shrink-0">
                             <Check class="size-3 text-glucose-tight-range" />
                         </span>
@@ -243,11 +239,11 @@
     <section class="border-t border-border py-20 relative overflow-hidden">
         <div class="aurora-subtle absolute inset-0 pointer-events-none" aria-hidden="true"></div>
         <div class="relative max-w-[680px]">
-            <h2 class="text-[clamp(2rem,4vw,3.5rem)] font-bold leading-[1.06] tracking-[-0.025em] text-foreground m-0 mb-4">
+            <h2 class="text-headline font-bold text-foreground m-0 mb-4">
                 Ready to take a look?<br/>
                 <em class="not-italic text-glucose-in-range font-semibold">Start with the demo.</em>
             </h2>
-            <p class="text-[1.0625rem] leading-[1.6] text-muted-foreground m-0 mb-8">
+            <p class="text-lead text-muted-foreground m-0 mb-8">
                 Poke around the demo, then run your own copy with Docker Compose.
                 No account, no credit card, no waitlist.
             </p>
@@ -274,11 +270,12 @@
     }
 
     @keyframes eyebrow-pulse {
-        0%, 100% { box-shadow: 0 0 0 3px color-mix(in oklch, var(--dot-color, var(--glucose-in-range)), transparent 80%); }
-        50%       { box-shadow: 0 0 0 7px color-mix(in oklch, var(--dot-color, var(--glucose-in-range)), transparent 92%); }
+        0%, 100% { box-shadow: 0 0 0 3px color-mix(in oklch, var(--highlight, var(--glucose-in-range)), transparent 80%); }
+        50%       { box-shadow: 0 0 0 7px color-mix(in oklch, var(--highlight, var(--glucose-in-range)), transparent 92%); }
     }
     .eyebrow-dot {
-        box-shadow: 0 0 0 3px color-mix(in oklch, var(--dot-color, var(--glucose-in-range)), transparent 80%);
+        box-shadow: 0 0 0 3px color-mix(in oklch, var(--highlight, var(--glucose-in-range)), transparent 80%);
+
         animation: eyebrow-pulse 2.4s ease-in-out infinite;
     }
 </style>

@@ -105,13 +105,13 @@
 
 <div class="max-w-[900px] mx-auto px-6">
     <!-- Page heading -->
-    <div class="pt-20 pb-[60px] border-b border-border">
-        <div class="font-mono text-[11px] tracking-[0.14em] uppercase text-muted-foreground mb-4">FAQ</div>
-        <h1 class="text-[clamp(2rem,4vw,3.2rem)] font-bold leading-[1.15] tracking-[-0.025em] text-foreground m-0 mb-4">
+    <div class="pt-20 pb-15 border-b border-border">
+        <div class="font-mono text-xs tracking-eyebrow uppercase text-muted-foreground mb-4">FAQ</div>
+        <h1 class="text-headline font-bold text-foreground m-0 mb-4">
             Common questions.<br />
             <em class="text-glucose-in-range">Straight answers.</em>
         </h1>
-        <p class="text-base leading-[1.65] text-muted-foreground max-w-[520px] m-0">
+        <p class="text-base leading-relaxed text-muted-foreground max-w-[520px] m-0">
             Answers to frequent questions about Nocturne, installation, migration,
             and the technology stack.
         </p>
@@ -119,14 +119,14 @@
 
     <!-- FAQ Categories -->
     <div class="flex flex-col">
-        {#each faqCategories as category, ci}
+        {#each faqCategories as category, ci (category.title)}
             <section class="py-16 border-t border-border">
                 <div class="mb-8">
-                    <div class="font-brand text-[12px] font-bold tracking-[0.14em] uppercase text-muted-foreground">0{ci + 1} &middot; {category.title}</div>
+                    <div class="font-brand text-xs font-bold tracking-eyebrow uppercase text-muted-foreground">0{ci + 1} &middot; {category.title}</div>
                 </div>
 
                 <Accordion.Root type="multiple" class="space-y-3">
-                    {#each category.questions as faq, index}
+                    {#each category.questions as faq, index (faq.question)}
                         <Accordion.Item
                             value="{category.title}-{index}"
                             class="rounded-lg border border-border/60 bg-card/50 px-6 overflow-hidden"
@@ -148,8 +148,8 @@
 
     <!-- Still Have Questions -->
     <section class="border-t border-border py-20">
-        <div class="font-mono text-[11px] tracking-[0.14em] uppercase text-muted-foreground">Still have questions?</div>
-        <h2 class="text-[clamp(1.4rem,2.5vw,2rem)] font-bold tracking-[-0.02em] text-foreground mt-3">Check the docs or ask the community.</h2>
+        <div class="font-mono text-xs tracking-eyebrow uppercase text-muted-foreground">Still have questions?</div>
+        <h2 class="text-subsection font-bold text-foreground mt-3">Check the docs or ask the community.</h2>
         <div class="flex flex-col sm:flex-row gap-4 mt-6">
             <Button href="/docs" size="lg" class="gap-2">
                 Browse documentation

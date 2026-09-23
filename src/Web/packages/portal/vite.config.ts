@@ -107,6 +107,7 @@ export default defineConfig({
     // runs, and wuchale reads references relative to its config's directory. Loaded from here,
     // no portal reference matched, so every portal string compiled to empty.
     wuchale({ configPath: '../app/wuchale.config.js' }),
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- vite-plugin-lingo resolves vite 8's Plugin type; this package builds on vite 6
     lingo({
       route: '/_translations',
       localesDir: '../../locales',

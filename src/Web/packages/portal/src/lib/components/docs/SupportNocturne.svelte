@@ -3,10 +3,6 @@
     import { LINKS } from "$lib/data/links";
     import { track } from "$lib/analytics";
 
-    // Matches the portal accent used on the get-involved page. Not the
-    // --glucose-in-range token, which theme packs swap to green.
-    const ACCENT = "oklch(0.6 0.118 184.704)";
-
     let { class: className = "" }: { class?: string } = $props();
 
     const TIERS = [
@@ -39,7 +35,7 @@
 
 <section class="not-prose mt-12 pt-8 border-t border-border/60 {className}">
     <h2 class="text-2xl font-bold mb-3 flex items-center gap-2.5">
-        <Heart class="w-5 h-5 shrink-0" color={ACCENT} aria-hidden="true" />
+        <Heart class="w-5 h-5 shrink-0 text-brand" aria-hidden="true" />
         Support Nocturne
     </h2>
     <p class="text-muted-foreground mb-5">
@@ -53,12 +49,11 @@
             <a
                 href={tier.href}
                 target="_blank"
-                rel="noopener noreferrer"
+                rel="external noopener noreferrer"
                 onclick={() => track("Support Tier Click", { tier: tier.tier })}
                 class="group flex flex-col p-5 rounded-xl border transition-colors {tier.featured
                     ? 'sn-featured'
                     : 'border-border/60 bg-card/50 hover:bg-card'}"
-                style="--sn-accent: {ACCENT}"
             >
                 <div class="flex items-baseline gap-1.5">
                     <span class="text-3xl font-bold tracking-tight tabular-nums"
@@ -67,20 +62,16 @@
                     <span class="text-sm text-muted-foreground">/ month</span>
                 </div>
                 <div
-                    class="mt-1 text-xs font-semibold tracking-[0.08em] uppercase"
-                    style={tier.featured
-                        ? `color: ${ACCENT}`
-                        : "color: var(--muted-foreground)"}
+                    class="mt-1 text-xs font-semibold tracking-widest uppercase {tier.featured
+                        ? 'text-brand'
+                        : 'text-muted-foreground'}"
                 >
                     {tier.name}
                 </div>
                 <p class="mt-3 text-sm text-muted-foreground leading-relaxed flex-1">
                     {tier.desc}
                 </p>
-                <span
-                    class="sn-cta mt-4 inline-flex items-center gap-1.5 text-sm font-semibold"
-                    style="color: {ACCENT}"
-                >
+                <span class="sn-cta mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-brand">
                     Subscribe
                     <ArrowUpRight class="w-4 h-4" aria-hidden="true" />
                 </span>
@@ -94,22 +85,21 @@
         <a
             href={LINKS.donate}
             target="_blank"
-            rel="noopener noreferrer"
+            rel="external noopener noreferrer"
             onclick={() => track("Donate Click", { destination: "foundation" })}
-            class="font-semibold hover:underline"
-            style="color: {ACCENT}">Nightscout Foundation</a
+            class="font-semibold hover:underline text-brand">Nightscout Foundation</a
         >.
     </p>
 </section>
 
 <style>
     .sn-featured {
-        border-color: color-mix(in oklch, var(--sn-accent), transparent 45%);
-        background: color-mix(in oklch, var(--sn-accent), var(--card) 88%);
+        border-color: color-mix(in oklch, var(--brand), transparent 45%);
+        background: color-mix(in oklch, var(--brand), var(--card) 88%);
     }
 
     a:hover:not(.sn-featured) {
-        border-color: color-mix(in oklch, var(--sn-accent), transparent 55%);
+        border-color: color-mix(in oklch, var(--brand), transparent 55%);
     }
 
     .sn-cta :global(svg) {

@@ -28,9 +28,9 @@
     function getProgressBarColor(status: "completed" | "in-progress" | "upcoming"): string {
         switch (status) {
             case "completed":
-                return "bg-green-500";
+                return "bg-success";
             case "in-progress":
-                return "bg-blue-500";
+                return "bg-info";
             case "upcoming":
                 return "bg-muted-foreground";
         }
@@ -43,13 +43,13 @@
     <a
         href={issue.html_url}
         target="_blank"
-        rel="noopener noreferrer"
+        rel="external noopener noreferrer"
         class="flex items-center gap-3 px-6 py-3 hover:bg-muted/30 transition-colors"
     >
         {#if issue.state === "closed"}
-            <CheckCircle2 class="w-4 h-4 text-green-500 flex-shrink-0" />
+            <CheckCircle2 class="w-4 h-4 text-success flex-shrink-0" />
         {:else}
-            <Circle class="w-4 h-4 text-blue-500 flex-shrink-0" />
+            <Circle class="w-4 h-4 text-info flex-shrink-0" />
         {/if}
         <span class="flex-1 text-sm {issue.state === 'closed' ? 'text-muted-foreground line-through' : ''}">
             {issue.title}
@@ -57,8 +57,8 @@
         <div class="flex items-center gap-2 flex-shrink-0">
             {#each issue.labels.slice(0, 3) as label (label.id)}
                 <span
-                    class="px-2 py-0.5 text-xs rounded-full"
-                    style="background-color: #{label.color}20; color: #{label.color};"
+                    class="px-2 py-0.5 text-xs rounded-full bg-(--label)/12 text-(--label)"
+                    style:--label="#{label.color}"
                 >
                     {label.name}
                 </span>
@@ -81,9 +81,9 @@
                     <div class="flex-1">
                         <div class="flex items-center gap-2 mb-2">
                             {#if status === "completed"}
-                                <CheckCircle2 class="w-5 h-5 text-green-500" />
+                                <CheckCircle2 class="w-5 h-5 text-success" />
                             {:else if status === "in-progress"}
-                                <Circle class="w-5 h-5 text-blue-500" />
+                                <Circle class="w-5 h-5 text-info" />
                             {:else}
                                 <Circle class="w-5 h-5 text-muted-foreground" />
                             {/if}
@@ -110,7 +110,7 @@
                         <a
                             href={milestone.html_url}
                             target="_blank"
-                            rel="noopener noreferrer"
+                            rel="external noopener noreferrer"
                             class="p-2 rounded-md hover:bg-muted transition-colors"
                             onclick={(e: MouseEvent) => e.stopPropagation()}
                         >
@@ -123,8 +123,8 @@
                 <!-- Progress Bar -->
                 <div class="h-2 bg-muted rounded-full overflow-hidden">
                     <div
-                        class="h-full transition-all duration-500 {getProgressBarColor(status)}"
-                        style="width: {milestone.progress}%"
+                        class="h-full w-(--progress) transition-all duration-500 {getProgressBarColor(status)}"
+                        style:--progress="{milestone.progress}%"
                     ></div>
                 </div>
             </div>

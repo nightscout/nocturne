@@ -39,7 +39,7 @@
     aria-label={copied ? "Copied" : failed ? "Copy failed. Select the text and copy it manually" : label}
 >
     {#if copied}
-        <Check class="h-4 w-4 text-green-500" />
+        <Check class="h-4 w-4 text-success" />
     {:else if failed}
         <X class="h-4 w-4 text-destructive" />
     {:else}

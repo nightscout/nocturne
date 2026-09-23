@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { resolve } from "$app/paths";
     import { Github, Heart } from "@lucide/svelte";
     import LanguageSelector from "./LanguageSelector.svelte";
     import { track } from "$lib/analytics";
@@ -9,7 +10,7 @@
         <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
             <!-- Brand -->
             <div class="md:col-span-1">
-                <a href="/" class="flex items-center gap-2.5 mb-4">
+                <a href={resolve("/")} class="flex items-center gap-2.5 mb-4">
                     <img src="/logos/nocturne.png" alt="Nocturne" class="w-8 h-8" />
                     <span class="text-lg font-semibold font-brand">Nocturne</span>
                 </a>
@@ -25,7 +26,7 @@
                 <ul class="space-y-2.5">
                     <li>
                         <a
-                            href="/features"
+                            href={resolve("/features")}
                             class="text-sm text-muted-foreground hover:text-foreground transition-colors"
                         >
                             Features
@@ -33,7 +34,7 @@
                     </li>
                     <li>
                         <a
-                            href="/roadmap"
+                            href={resolve("/roadmap")}
                             class="text-sm text-muted-foreground hover:text-foreground transition-colors"
                         >
                             Roadmap
@@ -41,7 +42,7 @@
                     </li>
                     <li>
                         <a
-                            href="/changelog"
+                            href={resolve("/changelog")}
                             class="text-sm text-muted-foreground hover:text-foreground transition-colors"
                         >
                             Changelog
@@ -49,7 +50,7 @@
                     </li>
                     <li>
                         <a
-                            href="/faq"
+                            href={resolve("/faq")}
                             class="text-sm text-muted-foreground hover:text-foreground transition-colors"
                         >
                             FAQ
@@ -64,7 +65,7 @@
                 <ul class="space-y-2.5">
                     <li>
                         <a
-                            href="/docs/getting-started"
+                            href={resolve("/docs/getting-started")}
                             class="text-sm text-muted-foreground hover:text-foreground transition-colors"
                         >
                             Getting Started
@@ -72,7 +73,7 @@
                     </li>
                     <li>
                         <a
-                            href="/docs/installation"
+                            href={resolve("/docs/installation")}
                             class="text-sm text-muted-foreground hover:text-foreground transition-colors"
                         >
                             Installation
@@ -80,7 +81,7 @@
                     </li>
                     <li>
                         <a
-                            href="/docs/configuration"
+                            href={resolve("/docs/configuration")}
                             class="text-sm text-muted-foreground hover:text-foreground transition-colors"
                         >
                             Configuration
@@ -88,7 +89,7 @@
                     </li>
                     <li>
                         <a
-                            href="/scalar"
+                            href={resolve("/scalar")}
                             class="text-sm text-muted-foreground hover:text-foreground transition-colors"
                         >
                             API Documentation
@@ -103,7 +104,7 @@
                 <ul class="space-y-2.5">
                     <li>
                         <a
-                            href="/get-involved"
+                            href={resolve("/get-involved")}
                             class="text-sm text-muted-foreground hover:text-foreground transition-colors"
                         >
                             Get Involved
@@ -146,7 +147,7 @@
             <div class="flex items-center gap-4">
                 <LanguageSelector compact />
                 <p class="text-sm text-muted-foreground flex items-center gap-1.5">
-                    Made with <Heart class="w-4 h-4 text-red-500 fill-red-500" /> by the
+                    Made with <Heart class="w-4 h-4 text-contribute-donate fill-contribute-donate" /> by the
                     diabetes community
                 </p>
             </div>

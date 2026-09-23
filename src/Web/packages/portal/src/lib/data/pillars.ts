@@ -12,6 +12,7 @@ export interface Pillar {
   accent: string;
   body: string;
   bullets: readonly string[];
+  /** A --feature-* token from app.css, as var(); the pillar sets it as --highlight. */
   color: string;
 }
 
@@ -30,7 +31,7 @@ export const PILLARS: readonly Pillar[] = [
       "AGP, insulin, and site-change reports laid out for printing",
       "Your own target range drawn alongside the clinical consensus bands",
     ],
-    color: "oklch(0.6 0.118 184.704)",
+    color: "var(--feature-reports)",
   },
   {
     n: 2,
@@ -45,7 +46,7 @@ export const PILLARS: readonly Pillar[] = [
       "Pull your Nightscout history in and run both while you switch",
       "Every app that uploads to Nightscout uploads to Nocturne",
     ],
-    color: "oklch(0.72 0.16 150)",
+    color: "var(--feature-connectors)",
   },
   {
     n: 3,
@@ -60,7 +61,7 @@ export const PILLARS: readonly Pillar[] = [
       "Deliver by push, email, Discord, Slack, Telegram, WhatsApp, Home Assistant, or a webhook",
       "Snooze one alarm, or set quiet hours for the night",
     ],
-    color: "oklch(0.646 0.222 41.116)",
+    color: "var(--feature-alarms)",
   },
   {
     n: 4,
@@ -75,6 +76,6 @@ export const PILLARS: readonly Pillar[] = [
       "Google, GitHub, or any OpenID Connect provider",
       "Apps get their own scoped tokens, never your login",
     ],
-    color: "oklch(0.65 0.18 270)",
+    color: "var(--feature-sign-in)",
   },
 ] as const;

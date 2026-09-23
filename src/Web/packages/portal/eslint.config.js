@@ -7,15 +7,7 @@ export default [
     rules: { "svelte/no-useless-mustaches": ["error", { ignoreStringEscape: true }] }
   },
   ...debt({
-    "shadcn/no-arbitrary-values": 282,
-    "shadcn/no-raw-colors": 76,
-    "shadcn/no-inline-styles": 67,
-    "svelte/no-navigation-without-resolve": 50,
-    "@typescript-eslint/consistent-type-assertions": 13,
-    "svelte/require-each-key": 10,
-    "svelte/prefer-svelte-reactivity": 2,
-    "security/detect-non-literal-fs-filename": 1,
-    "shadcn/no-restyle": 52,
+    "shadcn/no-restyle": 50,
     "no-restricted-syntax": 19
   }),
   {

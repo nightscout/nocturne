@@ -145,7 +145,7 @@
                             <a
                                 href={release.html_url}
                                 target="_blank"
-                                rel="noopener noreferrer"
+                                rel="external noopener noreferrer"
                                 class="text-lg font-semibold font-mono hover:text-primary transition-colors"
                             >
                                 {release.tag_name}
@@ -154,7 +154,7 @@
                                 {formatMonthYear(release.published_at)}
                             </span>
                             {#if release.prerelease}
-                                <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-yellow-500/15 text-yellow-600">
+                                <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-warning/15 text-warning">
                                     Pre-release
                                 </span>
                             {/if}
@@ -178,7 +178,7 @@
                                     <a
                                         href={release.author.html_url}
                                         target="_blank"
-                                        rel="noopener noreferrer"
+                                        rel="external noopener noreferrer"
                                         class="hover:text-foreground transition-colors"
                                     >
                                         {release.author.login}

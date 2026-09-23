@@ -1,5 +1,6 @@
 <script lang="ts">
     import { onMount } from "svelte";
+    import { SvelteSet } from "svelte/reactivity";
     import { afterNavigate } from "$app/navigation";
     import { track } from "$lib/analytics";
 
@@ -10,7 +11,7 @@
     // is measured until the layout has had this long to settle.
     const SETTLE_MS = 1000;
 
-    let reached = new Set<number>();
+    const reached = new SvelteSet<number>();
     let settled = false;
     let settleTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -32,7 +33,7 @@
     }
 
     function restart() {
-        reached = new Set();
+        reached.clear();
         settled = false;
         clearTimeout(settleTimer);
         settleTimer = setTimeout(() => {

@@ -5,11 +5,11 @@
 <a
     href="https://feedback.pikapods.com/posts/1118/nocturne-diabetes-management-platform"
     target="_blank"
-    rel="noopener noreferrer"
+    rel="external noopener noreferrer"
     class="p-6 rounded-xl border border-dashed border-border/60 bg-card/30 hover:bg-card/50 hover:border-primary/30 transition-colors group"
 >
     <div class="flex items-start gap-4">
-        <div class="w-12 h-12 rounded-lg bg-violet-500/15 flex items-center justify-center shrink-0">
+        <div class="w-12 h-12 rounded-lg bg-docs-cloud/15 flex items-center justify-center shrink-0">
             <img
                 src="/logos/pikapods.png"
                 alt="PikaPods"

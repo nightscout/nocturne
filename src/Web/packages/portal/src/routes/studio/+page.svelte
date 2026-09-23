@@ -233,7 +233,7 @@
         <a
           href={proposedPr.url}
           target="_blank"
-          rel="noopener noreferrer"
+          rel="external noopener noreferrer"
           class="text-primary underline underline-offset-4"
         >
           #{proposedPr.number}

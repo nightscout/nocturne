@@ -3,6 +3,7 @@
     // no API calls. Wire to the real ReplayPanel once the portal auth story is done.
 
     import { onDestroy } from "svelte";
+    import { SvelteSet } from "svelte/reactivity";
     import { Play, Pause, RotateCcw, ChevronRight, Droplet, Timer } from "@lucide/svelte";
     import * as Collapsible from "@nocturne/ui/ui/collapsible";
     import { Switch } from "@nocturne/ui/ui/switch";
@@ -171,7 +172,7 @@
     const currentGlucose = $derived(interpGlucose((currentMs - BASE_MS) / 3600_000));
 
     // Per-rule live state at the playhead
-    let disabledRuleIds = $state(new Set<string>());
+    const disabledRuleIds = new SvelteSet<string>();
 
     const ruleStates = $derived(
         RULES.map(r => {
@@ -213,26 +214,28 @@
     );
 
     function handleStripPointer(e: PointerEvent): void {
-        const r = (e.currentTarget as SVGSVGElement).getBoundingClientRect();
+        if (!(e.currentTarget instanceof Element)) return;
+        const r = e.currentTarget.getBoundingClientRect();
         seek(Math.max(0, Math.min(100, ((e.clientX - r.left) / r.width) * 100)));
     }
     function handleSpeedChange(e: Event): void {
-        const v = Number((e.target as HTMLSelectElement).value);
+        if (!(e.currentTarget instanceof HTMLSelectElement)) return;
+        const v = Number(e.currentTarget.value);
         if (Number.isFinite(v)) speed = v;
     }
 </script>
 
 
 <div
-    class="rounded-[14px] border border-white/10 bg-[oklch(0.10_0.025_261)] flex flex-col gap-0 overflow-hidden"
-    style:max-height="{height}px"
+    class="rounded-xl border border-white/10 bg-sunken flex flex-col gap-0 overflow-hidden max-h-(--demo-h)"
+    style:--demo-h="{height}px"
 >
     <!-- Stacked: rules → chart+playback → events log -->
     <div class="flex-1 min-h-0 flex flex-col overflow-hidden">
 
         <!-- Rules sidebar -->
         <div class="shrink-0 overflow-y-auto border-b border-white/8 p-2" data-testid="rule-sidebar">
-            <div class="font-mono text-[10px] tracking-widest uppercase text-muted-foreground/60 px-1 pb-1.5">Rules</div>
+            <div class="font-mono text-2xs tracking-widest uppercase text-muted-foreground/60 px-1 pb-1.5">Rules</div>
             {#each ruleStates as r (r.id)}
                 <Collapsible.Root open class="rounded-md border bg-background mb-1.5">
                     <div class="flex items-center gap-2 px-2 py-1.5">
@@ -240,23 +243,22 @@
                             <ChevronRight class="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
                             <span
                                 data-testid="rule-status-pip"
-                                class="inline-block h-2.5 w-2.5 shrink-0 rounded-full transition-colors duration-200"
+                                class="inline-block h-2.5 w-2.5 shrink-0 rounded-full border-2 border-(--severity) transition-colors duration-200 {r.active
+                                    ? 'bg-(--severity)'
+                                    : 'bg-transparent'}"
                                 class:opacity-50={r.disabled}
-                                style:background-color={r.active ? severityVar(r.severity) : "transparent"}
-                                style:border="1.5px solid {severityVar(r.severity)}"
+                                style:--severity={severityVar(r.severity)}
                                 aria-hidden="true"
                             ></span>
                             <span class="flex-1 min-w-0 truncate">{r.name}</span>
-                            <span class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide {severityChip(r.severity)}">
+                            <span class="shrink-0 rounded px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-wide {severityChip(r.severity)}">
                                 {r.disabled ? "Off" : "On"}
                             </span>
                         </Collapsible.Trigger>
                         <Switch
                             checked={!r.disabled}
                             onCheckedChange={(c) => {
-                                const next = new Set(disabledRuleIds);
-                                if (c) next.delete(r.id); else next.add(r.id);
-                                disabledRuleIds = next;
+                                if (c) disabledRuleIds.delete(r.id); else disabledRuleIds.add(r.id);
                             }}
                             aria-label={r.disabled ? `Enable ${r.name}` : `Disable ${r.name}`}
                         />
@@ -267,11 +269,11 @@
                                 <span
                                     class="inline-block h-2 w-2 shrink-0 rounded-full transition-colors duration-200"
                                     class:bg-status-normal={r.leafTrue}
+                                    class:bg-muted-foreground={!r.leafTrue}
                                     class:opacity-30={!r.leafTrue}
-                                    style:background={r.leafTrue ? undefined : "var(--muted-foreground)"}
                                     aria-hidden="true"
                                 ></span>
-                                <span class="grid h-5 w-5 shrink-0 place-items-center rounded bg-blue-500/10 text-blue-400" aria-hidden="true">
+                                <span class="grid h-5 w-5 shrink-0 place-items-center rounded bg-glucose-in-range/10 text-glucose-in-range" aria-hidden="true">
                                     <Droplet class="h-3 w-3" />
                                 </span>
                                 {#if r.leaf.sustained}
@@ -297,13 +299,12 @@
             <div class="px-3 pt-2 shrink-0">
                 <svg
                     viewBox="0 0 {SVG_W} {SVG_H}"
-                    class="w-full rounded-lg overflow-hidden"
-                    style:height="120px"
+                    class="w-full h-30 rounded-lg overflow-hidden"
                     preserveAspectRatio="none"
                     aria-hidden="true"
                 >
-                    <rect width={SVG_W} height={SVG_H} fill="oklch(0.14 0.025 261)" />
-                    <rect x="0" y={yHigh} width={SVG_W} height={yLow - yHigh} fill="oklch(0.6 0.118 184.704 / 0.06)" />
+                    <rect width={SVG_W} height={SVG_H} class="fill-background" />
+                    <rect x="0" y={yHigh} width={SVG_W} height={yLow - yHigh} class="fill-glucose-in-range/6" />
                     <line x1="0" y1={yLow}  x2={SVG_W} y2={yLow}  stroke="var(--glucose-low)"  stroke-width="0.8" stroke-dasharray="4 3" opacity="0.5" />
                     <line x1="0" y1={yHigh} x2={SVG_W} y2={yHigh} stroke="var(--glucose-high)" stroke-width="0.8" stroke-dasharray="4 3" opacity="0.5" />
                     {#each SEGS as seg (seg.color + (seg.pts[0]?.h ?? 0))}
@@ -325,7 +326,7 @@
                         {/if}
                     {/each}
                     <line x1={playheadX} x2={playheadX} y1="0" y2={SVG_H}
-                          stroke="oklch(0.97 0.005 261)" stroke-width="1.5" opacity="0.7" />
+                          class="stroke-foreground" stroke-width="1.5" opacity="0.7" />
                 </svg>
             </div>
 
@@ -343,7 +344,7 @@
                         <RotateCcw class="size-3.5 text-foreground/80" />
                     </button>
                     <select value={String(speed)} onchange={handleSpeedChange}
-                        class="h-7 rounded-md border border-white/15 bg-white/5 px-2 text-[12px] text-foreground/80 shrink-0 w-16"
+                        class="h-7 rounded-md border border-white/15 bg-white/5 px-2 text-xs text-foreground/80 shrink-0 w-16"
                         aria-label="Playback speed">
                         {#each [0.25, 0.5, 1, 2] as opt (opt)}
                             <option value={String(opt)} selected={speed === opt}>{opt}x</option>
@@ -353,10 +354,10 @@
                         class="h-7 flex-1 cursor-pointer rounded border border-white/10 bg-white/4"
                         viewBox="0 0 100 28" preserveAspectRatio="none"
                         onpointerdown={handleStripPointer}>
-                        <rect x="0" y="0" width={maxPct} height="28" fill="oklch(1 0 0 / 0.06)" />
+                        <rect x="0" y="0" width={maxPct} height="28" class="fill-foreground/6" />
                         <line x1={playPct} x2={playPct} y1="0" y2="28"
                               vector-effect="non-scaling-stroke"
-                              stroke="oklch(0.97 0.005 261 / 0.8)" stroke-width="1.5" />
+                              class="stroke-foreground/80" stroke-width="1.5" />
                         {#each visibleStripTicks as tick (`${tick.kind}-${tick.tMs}`)}
                             {@const dimmed = tick.xPct > playPct}
                             {@const isResolved = tick.kind === "auto_resolved"}
@@ -368,7 +369,7 @@
                                   opacity={dimmed ? 0.25 : 1} />
                         {/each}
                     </svg>
-                    <span class="font-mono text-[11px] text-muted-foreground tabular-nums shrink-0 w-[68px] text-right">
+                    <span class="font-mono text-xs text-muted-foreground tabular-nums shrink-0 w-[68px] text-right">
                         {formatTime(currentDate)}
                     </span>
                 </div>
@@ -384,13 +385,14 @@
                     {#each firedEvents as ev (`${ev.kind}-${ev.tMs}`)}
                         {@const isResolved = ev.kind === "auto_resolved"}
                         <div class="flex items-center gap-3 px-3 py-2">
-                            <span class="size-2 rounded-full shrink-0"
-                                  style:background={isResolved ? "var(--glucose-in-range)" : severityVar(ev.severity)}></span>
+                            <span class="size-2 rounded-full shrink-0 bg-(--severity)"
+                                  style:--severity={isResolved ? "var(--glucose-in-range)" : severityVar(ev.severity)}></span>
                             <span class="font-mono text-xs text-muted-foreground tabular-nums w-12 shrink-0">
                                 {formatTime(new Date(ev.tMs))}
                             </span>
-                            <span class="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-semibold {severityChip(ev.severity)}"
-                                  style:color={isResolved ? "var(--glucose-in-range)" : undefined}>
+                            <span class="shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold {isResolved
+                                ? 'bg-glucose-in-range/15 text-glucose-in-range'
+                                : severityChip(ev.severity)}">
                                 {isResolved ? "Resolved" : severityLabel(ev.severity)}
                             </span>
                             <span class="flex-1 min-w-0 truncate">{ev.ruleName}</span>

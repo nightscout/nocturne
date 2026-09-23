@@ -72,11 +72,11 @@
         </li>
     </ol>
 
-    <div class="p-4 rounded-lg border border-blue-500/30 bg-blue-500/5 mb-8 not-prose">
+    <div class="p-4 rounded-lg border border-info/30 bg-info/5 mb-8 not-prose">
         <div class="flex items-start gap-3">
-            <Info class="w-5 h-5 text-blue-500 mt-0.5 shrink-0" />
+            <Info class="w-5 h-5 text-info mt-0.5 shrink-0" />
             <p class="text-sm text-muted-foreground">
-                <strong class="text-blue-700 dark:text-blue-400">Bot integrations are optional.</strong>
+                <strong class="text-info">Bot integrations are optional.</strong>
                 Leave Discord, Telegram, Slack, and WhatsApp fields blank if you don't need them.
                 They can be configured later by updating the stack.
             </p>

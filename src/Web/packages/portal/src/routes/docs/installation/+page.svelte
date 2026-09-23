@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { resolve } from "$app/paths";
   import {
     ArrowRight,
     Cloud,
@@ -48,12 +49,12 @@
   <h2 class="text-2xl font-bold mt-8 mb-4">Choose Your Platform</h2>
   <div class="grid gap-4 not-prose">
     <a
-      href="/docs/installation/docker-compose"
+      href={resolve("/docs/installation/docker-compose")}
       class="p-6 rounded-xl border border-border/60 bg-card/50 hover:bg-card hover:border-primary/30 transition-colors group"
     >
       <div class="flex items-start gap-4">
         <div
-          class="w-12 h-12 rounded-lg bg-blue-500/15 flex items-center justify-center shrink-0"
+          class="w-12 h-12 rounded-lg bg-docs-install/15 flex items-center justify-center shrink-0"
         >
           <img
             src="/logos/docker-compose.png"
@@ -79,12 +80,12 @@
     </a>
 
     <a
-      href="/docs/installation/portainer"
+      href={resolve("/docs/installation/portainer")}
       class="p-6 rounded-xl border border-border/60 bg-card/50 hover:bg-card hover:border-primary/30 transition-colors group"
     >
       <div class="flex items-start gap-4">
         <div
-          class="w-12 h-12 rounded-lg bg-cyan-500/15 flex items-center justify-center shrink-0 overflow-hidden"
+          class="w-12 h-12 rounded-lg flex items-center justify-center shrink-0 overflow-hidden"
         >
           <img
             src="/logos/portainer.jpg"
@@ -110,14 +111,14 @@
     </a>
 
     <a
-      href="/docs/installation/oracle-cloud"
+      href={resolve("/docs/installation/oracle-cloud")}
       class="p-6 rounded-xl border border-border/60 bg-card/50 hover:bg-card hover:border-primary/30 transition-colors group"
     >
       <div class="flex items-start gap-4">
         <div
-          class="w-12 h-12 rounded-lg bg-red-500/15 flex items-center justify-center shrink-0"
+          class="w-12 h-12 rounded-lg bg-docs-oracle/15 flex items-center justify-center shrink-0"
         >
-          <Cloud class="w-7 h-7 text-red-600" />
+          <Cloud class="w-7 h-7 text-docs-oracle" />
         </div>
         <div class="flex-1">
           <h3
@@ -137,14 +138,14 @@
     </a>
 
     <a
-      href="/docs/installation/byo-postgres"
+      href={resolve("/docs/installation/byo-postgres")}
       class="p-6 rounded-xl border border-border/60 bg-card/50 hover:bg-card hover:border-primary/30 transition-colors group"
     >
       <div class="flex items-start gap-4">
         <div
-          class="w-12 h-12 rounded-lg bg-emerald-500/15 flex items-center justify-center shrink-0"
+          class="w-12 h-12 rounded-lg bg-docs-postgres/15 flex items-center justify-center shrink-0"
         >
-          <Database class="w-6 h-6 text-emerald-500" />
+          <Database class="w-6 h-6 text-docs-postgres" />
         </div>
         <div class="flex-1">
           <h3
@@ -165,14 +166,14 @@
     </a>
 
     <a
-      href="/docs/installation/reverse-proxy"
+      href={resolve("/docs/installation/reverse-proxy")}
       class="p-6 rounded-xl border border-border/60 bg-card/50 hover:bg-card hover:border-primary/30 transition-colors group"
     >
       <div class="flex items-start gap-4">
         <div
-          class="w-12 h-12 rounded-lg bg-sky-500/15 flex items-center justify-center shrink-0"
+          class="w-12 h-12 rounded-lg bg-docs-proxy/15 flex items-center justify-center shrink-0"
         >
-          <Network class="w-6 h-6 text-sky-500" />
+          <Network class="w-6 h-6 text-docs-proxy" />
         </div>
         <div class="flex-1">
           <h3
@@ -194,9 +195,9 @@
     <div class="p-6 rounded-xl border border-border/60 bg-card/30 opacity-60">
       <div class="flex items-start gap-4">
         <div
-          class="w-12 h-12 rounded-lg bg-purple-500/15 flex items-center justify-center shrink-0"
+          class="w-12 h-12 rounded-lg bg-docs-cloud/15 flex items-center justify-center shrink-0"
         >
-          <Cloud class="w-6 h-6 text-purple-500" />
+          <Cloud class="w-6 h-6 text-docs-cloud" />
         </div>
         <div class="flex-1">
           <h3 class="text-lg font-semibold mb-1">Cloud Providers</h3>
@@ -215,18 +216,18 @@
     infrastructure so you can focus on your diabetes management.
   </p>
   <div class="grid gap-4 not-prose mb-4">
-    {#each managedProviders as provider}
+    {#each managedProviders as provider (provider.url)}
       <a
         href={provider.url}
         target="_blank"
-        rel="noopener noreferrer"
+        rel="external noopener noreferrer"
         class="p-6 rounded-xl border border-border/60 bg-card/50 hover:bg-card hover:border-primary/30 transition-colors group"
       >
         <div class="flex items-start gap-4">
           <div
-            class="w-12 h-12 rounded-lg bg-amber-500/15 flex items-center justify-center shrink-0"
+            class="w-12 h-12 rounded-lg bg-docs-managed/15 flex items-center justify-center shrink-0"
           >
-            <Globe class="w-6 h-6 text-amber-500" />
+            <Globe class="w-6 h-6 text-docs-managed" />
           </div>
           <div class="flex-1">
             <h3

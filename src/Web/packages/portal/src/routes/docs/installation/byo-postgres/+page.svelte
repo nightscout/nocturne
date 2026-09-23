@@ -7,8 +7,8 @@
 
 <div class="max-w-3xl">
     <div class="flex items-center gap-3 mb-4">
-        <div class="w-10 h-10 rounded-lg bg-emerald-500/15 flex items-center justify-center">
-            <Database class="w-5 h-5 text-emerald-500" />
+        <div class="w-10 h-10 rounded-lg bg-docs-postgres/15 flex items-center justify-center">
+            <Database class="w-5 h-5 text-docs-postgres" />
         </div>
         <h1 class="text-4xl font-bold tracking-tight">Bring Your Own PostgreSQL</h1>
     </div>
@@ -18,7 +18,7 @@
         instead of Nocturne's bundled Postgres container.
     </p>
 
-    <div class="p-4 rounded-lg border border-amber-500/30 bg-amber-500/5 text-sm text-foreground mb-8">
+    <div class="p-4 rounded-lg border border-warning/30 bg-warning/5 text-sm text-foreground mb-8">
         <p class="font-medium mb-1">Three non-privileged roles are required</p>
         <p class="text-muted-foreground">
             Nocturne enforces Row Level Security on every medical-data table. RLS is only meaningful

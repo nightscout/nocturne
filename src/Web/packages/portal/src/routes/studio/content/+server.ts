@@ -19,6 +19,7 @@ export const GET: RequestHandler = async () => {
 
 	const posts = [];
 	for (const file of svxFiles) {
+		// eslint-disable-next-line security/detect-non-literal-fs-filename -- file is an entry readdir listed in CONTENT_DIR, not request input
 		const content = await readFile(resolve(CONTENT_DIR, file), 'utf-8');
 		const meta = parseFrontmatter(content, file);
 		const slug = basename(file, '.svx');

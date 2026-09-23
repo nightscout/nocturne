@@ -171,8 +171,8 @@
       cs[i].cy = ch * (def.topPct / 100);
       cs[i].cx =
         "left" in def.hPos
-          ? cw * ((def.hPos as { left: number }).left / 100)
-          : cw * (1 - (def.hPos as { right: number }).right / 100);
+          ? cw * (def.hPos.left / 100)
+          : cw * (1 - def.hPos.right / 100);
     });
     applyTransforms();
   }
@@ -560,14 +560,14 @@
     <div class="flex flex-wrap gap-x-1.5 gap-y-2 justify-center">
       {#each CHIP_DEFS as def (def.id)}
         <div
-          class="flex items-center gap-1.5 bg-[oklch(0.10_0.028_261/85%)] border border-[oklch(1_0_0/20%)] rounded-full py-0.5 pr-2 pl-0.5 backdrop-blur-sm max-w-full"
+          class="flex items-center gap-1.5 bg-sunken/85 border border-foreground/20 rounded-full py-0.5 pr-2 pl-0.5 backdrop-blur-sm max-w-full"
         >
           <img
             src="/logos/{def.file}"
             alt=""
             class="size-3.5 rounded object-cover shrink-0"
           />
-          <span class="text-[10px] font-semibold text-white whitespace-nowrap"
+          <span class="text-2xs font-semibold text-white whitespace-nowrap"
             >{def.name}</span
           >
         </div>
@@ -584,16 +584,16 @@
     -->
   {#each CHIP_DEFS as def, i (def.id)}
     <div
-      class="hidden md:flex absolute top-0 left-0 items-center gap-[7px]
-                   bg-[oklch(0.10_0.028_261/85%)] border border-[oklch(1_0_0/20%)]
-                   rounded-full py-[5px] pr-3 pl-1.5 backdrop-blur-[6px] mix-blend-screen
+      class="hidden md:flex absolute top-0 left-0 items-center gap-1.75
+                   bg-sunken/85 border border-foreground/20
+                   rounded-full py-1.25 pr-3 pl-1.5 backdrop-blur-sm mix-blend-screen
                    pointer-events-auto cursor-grab active:cursor-grabbing select-none touch-none"
       use:assignRef={i}
       onpointerdown={(e) => onPointerDown(e, i)}
       onpointerup={onPointerUp}
     >
       <img src="/logos/{def.file}" alt="" class="size-5 rounded object-cover" />
-      <span class="text-[11px] font-semibold text-white whitespace-nowrap"
+      <span class="text-xs font-semibold text-white whitespace-nowrap"
         >{def.name}</span
       >
     </div>

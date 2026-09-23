@@ -12,8 +12,8 @@
 
 <div class="max-w-3xl">
     <div class="flex items-center gap-4 mb-4">
-        <div class="w-12 h-12 rounded-lg bg-red-500/15 flex items-center justify-center shrink-0">
-            <Cloud class="w-7 h-7 text-red-600" />
+        <div class="w-12 h-12 rounded-lg bg-docs-oracle/15 flex items-center justify-center shrink-0">
+            <Cloud class="w-7 h-7 text-docs-oracle" />
         </div>
         <h1 class="text-4xl font-bold tracking-tight">Oracle Cloud</h1>
     </div>

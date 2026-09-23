@@ -6,7 +6,6 @@
     supportedLocales,
     getNativeLanguageLabel,
     setLanguage,
-    type SupportedLocale,
   } from "@nocturne/app/stores/appearance-store.svelte";
 
   interface Props {
@@ -21,8 +20,9 @@
   let { compact = false, onLanguageChange, class: className }: Props = $props();
 
   async function handleChange(value: string | undefined) {
-    if (!value) return;
-    await setLanguage(value as SupportedLocale, onLanguageChange);
+    const locale = supportedLocales.find((l) => l === value);
+    if (!locale) return;
+    await setLanguage(locale, onLanguageChange);
   }
 </script>
 
@@ -36,7 +36,7 @@
     {/if}
   </Select.Trigger>
   <Select.Content>
-    {#each supportedLocales as locale}
+    {#each supportedLocales as locale (locale)}
       <Select.Item value={locale}>
         {getNativeLanguageLabel(locale)}
       </Select.Item>

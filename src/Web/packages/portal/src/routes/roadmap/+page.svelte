@@ -47,13 +47,13 @@
 
 <div class="max-w-[900px] mx-auto px-6">
     <!-- Page heading -->
-    <div class="pt-20 pb-[60px] border-b border-border">
-        <div class="font-mono text-[11px] tracking-[0.14em] uppercase text-muted-foreground mb-4">Roadmap</div>
-        <h1 class="text-[clamp(2rem,4vw,3.2rem)] font-bold leading-[1.15] tracking-[-0.025em] text-foreground m-0 mb-4">
+    <div class="pt-20 pb-15 border-b border-border">
+        <div class="font-mono text-xs tracking-eyebrow uppercase text-muted-foreground mb-4">Roadmap</div>
+        <h1 class="text-headline font-bold text-foreground m-0 mb-4">
             What's next.<br />
             <em class="text-glucose-in-range">What's done.</em>
         </h1>
-        <p class="text-base leading-[1.65] text-muted-foreground max-w-[520px] m-0 mb-6">
+        <p class="text-base leading-relaxed text-muted-foreground max-w-[520px] m-0 mb-6">
             Track Nocturne's development milestones. See what's shipping,
             what's in progress, and what's already shipped.
         </p>
@@ -83,15 +83,14 @@
     </div>
 
     {#if loading}
-        <div class="flex flex-col items-center justify-center gap-3 py-[100px] text-muted-foreground text-[0.9375rem]">
+        <div class="flex flex-col items-center justify-center gap-3 py-25 text-muted-foreground text-sm">
             <Loader2 class="w-6 h-6 animate-spin text-primary" />
             <p>Loading milestones from GitHub&hellip;</p>
         </div>
     {:else if error}
-        <div class="flex flex-col items-center justify-center gap-3 py-[100px] text-muted-foreground text-[0.9375rem]">
+        <div class="flex flex-col items-center justify-center gap-3 py-25 text-muted-foreground text-sm">
             <div
-                class="size-10 rounded-full flex items-center justify-center text-destructive"
-                style="background:color-mix(in oklab, var(--destructive) 15%, transparent)"
+                class="size-10 rounded-full flex items-center justify-center text-destructive bg-destructive/15"
             >
                 <AlertCircle class="w-5 h-5" />
             </div>
@@ -100,7 +99,7 @@
             <Button onclick={loadRoadmap} variant="outline" size="sm">Try again</Button>
         </div>
     {:else if roadmapData.length === 0}
-        <div class="flex flex-col items-center justify-center gap-3 py-[100px] text-muted-foreground text-[0.9375rem]">
+        <div class="flex flex-col items-center justify-center gap-3 py-25 text-muted-foreground text-sm">
             <div class="size-10 rounded-full bg-muted flex items-center justify-center">
                 <Milestone class="w-5 h-5 text-muted-foreground" />
             </div>
@@ -111,8 +110,8 @@
         {#if grouped.inProgress.length > 0}
             <section class="py-16 border-t border-border">
                 <div class="mb-8">
-                    <div class="font-brand text-[12px] font-bold tracking-[0.14em] uppercase text-muted-foreground mb-2.5">01 &middot; In Progress</div>
-                    <h2 class="text-[clamp(1.4rem,2.5vw,2rem)] font-bold leading-[1.2] tracking-[-0.02em] text-foreground m-0">Currently <em class="text-glucose-in-range">building.</em></h2>
+                    <div class="font-brand text-xs font-bold tracking-eyebrow uppercase text-muted-foreground mb-2.5">01 &middot; In Progress</div>
+                    <h2 class="text-subsection font-bold text-foreground m-0">Currently <em class="text-glucose-in-range">building.</em></h2>
                 </div>
                 <div class="grid gap-4">
                     {#each grouped.inProgress as milestone (milestone.id)}
@@ -126,8 +125,8 @@
         {#if grouped.upcoming.length > 0}
             <section class="py-16 border-t border-border">
                 <div class="mb-8">
-                    <div class="font-brand text-[12px] font-bold tracking-[0.14em] uppercase text-muted-foreground mb-2.5">0{grouped.inProgress.length > 0 ? 2 : 1} &middot; Upcoming</div>
-                    <h2 class="text-[clamp(1.4rem,2.5vw,2rem)] font-bold leading-[1.2] tracking-[-0.02em] text-foreground m-0">On the <em class="text-glucose-in-range">horizon.</em></h2>
+                    <div class="font-brand text-xs font-bold tracking-eyebrow uppercase text-muted-foreground mb-2.5">0{grouped.inProgress.length > 0 ? 2 : 1} &middot; Upcoming</div>
+                    <h2 class="text-subsection font-bold text-foreground m-0">On the <em class="text-glucose-in-range">horizon.</em></h2>
                 </div>
                 <div class="grid gap-4">
                     {#each grouped.upcoming as milestone (milestone.id)}
@@ -141,8 +140,8 @@
         {#if grouped.completed.length > 0}
             <section class="py-16 border-t border-border">
                 <div class="mb-8">
-                    <div class="font-brand text-[12px] font-bold tracking-[0.14em] uppercase text-muted-foreground mb-2.5">0{[grouped.inProgress.length > 0, grouped.upcoming.length > 0].filter(Boolean).length + 1} &middot; Completed</div>
-                    <h2 class="text-[clamp(1.4rem,2.5vw,2rem)] font-bold leading-[1.2] tracking-[-0.02em] text-foreground m-0">Already <em class="text-glucose-in-range">shipped.</em></h2>
+                    <div class="font-brand text-xs font-bold tracking-eyebrow uppercase text-muted-foreground mb-2.5">0{[grouped.inProgress.length > 0, grouped.upcoming.length > 0].filter(Boolean).length + 1} &middot; Completed</div>
+                    <h2 class="text-subsection font-bold text-foreground m-0">Already <em class="text-glucose-in-range">shipped.</em></h2>
                 </div>
                 <div class="grid gap-4">
                     {#each grouped.completed as milestone (milestone.id)}

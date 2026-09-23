@@ -72,16 +72,16 @@
 </script>
 
 <div
-  class="rounded-[14px] overflow-hidden border border-white/10 bg-[oklch(0.10_0.025_261)] flex flex-col"
-  style:height="{height}px"
+  class="rounded-xl overflow-hidden border border-white/10 bg-sunken flex flex-col h-(--demo-h)"
+  style:--demo-h="{height}px"
 >
   <!-- Search bar -->
   <div
-    class="px-[18px] py-3.5 border-b border-white/[0.08] flex items-center gap-3 bg-[oklch(0.12_0.025_261)] shrink-0"
+    class="px-4.5 py-3.5 border-b border-white/8 flex items-center gap-3 bg-card/20 shrink-0"
   >
     <Search class="size-5 text-muted-foreground shrink-0" />
     <input
-      class="flex-1 bg-transparent border-none outline-none text-[17px] text-foreground font-medium placeholder:text-muted-foreground/60 min-h-7 w-0"
+      class="flex-1 bg-transparent border-none outline-none text-lg text-foreground font-medium placeholder:text-muted-foreground/60 min-h-7 w-0"
       placeholder="Find your device or app"
       aria-label="Search connectors"
       bind:value={query}
@@ -98,7 +98,7 @@
         aria-hidden="true"
       ></span>
     {/if}
-    <span class="font-mono text-[12px] shrink-0 flex items-center gap-1.5">
+    <span class="font-mono text-xs shrink-0 flex items-center gap-1.5">
       {#if query}
         <span class="text-glucose-in-range px-2.5 py-1 rounded-full bg-glucose-in-range/15 border border-glucose-in-range/30">
           {activeMatches} match{activeMatches === 1 ? "" : "es"}
@@ -121,8 +121,7 @@
 
   <!-- Connector grid -->
   <div
-    class="flex-1 p-3.5 overflow-y-auto grid content-start gap-2"
-    style="grid-template-columns: repeat(auto-fill, minmax(130px, 1fr))"
+    class="flex-1 p-3.5 overflow-y-auto grid grid-cols-[repeat(auto-fill,minmax(130px,1fr))] content-start gap-2"
   >
     {#each filtered as c (c.file)}
       {@const isMatch = !!query && matches(c, query)}
@@ -135,16 +134,16 @@
                     {c.comingSoon
           ? 'opacity-50 bg-white/2 border-white/4 cursor-pointer hover:opacity-70'
           : isMatch
-            ? 'bg-glucose-in-range/[0.14] border-glucose-in-range/50'
+            ? 'bg-glucose-in-range/14 border-glucose-in-range/50'
             : 'bg-white/4 border-white/6'}"
       >
         <img
           src="/logos/{c.file}"
           alt={c.name}
           class="size-5 rounded object-cover shrink-0 {c.comingSoon ? 'grayscale' : ''}"
-          onerror={(e) => { (e.currentTarget as HTMLImageElement).src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff30' stroke-width='1.5'%3E%3Crect x='3' y='3' width='18' height='18' rx='3'/%3E%3C/svg%3E"; }}
+          onerror={(e) => { if (e.currentTarget instanceof HTMLImageElement) e.currentTarget.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff30' stroke-width='1.5'%3E%3Crect x='3' y='3' width='18' height='18' rx='3'/%3E%3C/svg%3E"; }}
         />
-        <span class="text-[13px] text-foreground font-medium truncate"
+        <span class="text-sm text-foreground font-medium truncate"
           >{c.name}</span
         >
         {#if c.comingSoon}

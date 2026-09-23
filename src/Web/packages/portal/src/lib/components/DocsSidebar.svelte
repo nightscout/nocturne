@@ -48,8 +48,8 @@
             <ul class="space-y-1 ml-6">
                 {#each section.items as item (item.href)}
                     <li>
-                        <a
-                            href={item.href}
+                        <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- item.href is a Pathname from docs-nav.ts, checked against the route manifest -->
+                        <a href={item.href}
                             onclick={() => track("Docs Nav", { section: section.id })}
                             class="flex items-center gap-2 py-1.5 text-sm transition-colors {isActive(item.href)
                                 ? 'text-primary font-medium'

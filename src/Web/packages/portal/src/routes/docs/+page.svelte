@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { resolve } from "$app/paths";
     import Content from "../../content/docs/index.svx";
     import SupportNocturne from "$lib/components/docs/SupportNocturne.svelte";
     import {
@@ -16,14 +17,14 @@
 
     <div class="grid gap-4 not-prose">
         <a
-            href="/docs/getting-started"
+            href={resolve("/docs/getting-started")}
             class="p-6 rounded-xl border border-border/60 bg-card/50 hover:bg-card hover:border-primary/30 transition-colors group"
         >
             <div class="flex items-start gap-4">
                 <div
-                    class="w-12 h-12 rounded-lg bg-green-500/15 flex items-center justify-center shrink-0"
+                    class="w-12 h-12 rounded-lg bg-docs-quick-start/15 flex items-center justify-center shrink-0"
                 >
-                    <Rocket class="w-6 h-6 text-green-500" />
+                    <Rocket class="w-6 h-6 text-docs-quick-start" />
                 </div>
                 <div class="flex-1">
                     <h2
@@ -42,14 +43,14 @@
         </a>
 
         <a
-            href="/docs/installation"
+            href={resolve("/docs/installation")}
             class="p-6 rounded-xl border border-border/60 bg-card/50 hover:bg-card hover:border-primary/30 transition-colors group"
         >
             <div class="flex items-start gap-4">
                 <div
-                    class="w-12 h-12 rounded-lg bg-blue-500/15 flex items-center justify-center shrink-0"
+                    class="w-12 h-12 rounded-lg bg-docs-install/15 flex items-center justify-center shrink-0"
                 >
-                    <Download class="w-6 h-6 text-blue-500" />
+                    <Download class="w-6 h-6 text-docs-install" />
                 </div>
                 <div class="flex-1">
                     <h2
@@ -69,14 +70,14 @@
         </a>
 
         <a
-            href="/docs/configuration"
+            href={resolve("/docs/configuration")}
             class="p-6 rounded-xl border border-border/60 bg-card/50 hover:bg-card hover:border-primary/30 transition-colors group"
         >
             <div class="flex items-start gap-4">
                 <div
-                    class="w-12 h-12 rounded-lg bg-purple-500/15 flex items-center justify-center shrink-0"
+                    class="w-12 h-12 rounded-lg bg-docs-configure/15 flex items-center justify-center shrink-0"
                 >
-                    <Settings class="w-6 h-6 text-purple-500" />
+                    <Settings class="w-6 h-6 text-docs-configure" />
                 </div>
                 <div class="flex-1">
                     <h2
@@ -96,14 +97,14 @@
         </a>
 
         <a
-            href="/scalar"
+            href={resolve("/scalar")}
             class="p-6 rounded-xl border border-border/60 bg-card/50 hover:bg-card hover:border-primary/30 transition-colors group"
         >
             <div class="flex items-start gap-4">
                 <div
-                    class="w-12 h-12 rounded-lg bg-orange-500/15 flex items-center justify-center shrink-0"
+                    class="w-12 h-12 rounded-lg bg-docs-api/15 flex items-center justify-center shrink-0"
                 >
-                    <Code2 class="w-6 h-6 text-orange-500" />
+                    <Code2 class="w-6 h-6 text-docs-api" />
                 </div>
                 <div class="flex-1">
                     <h2
@@ -125,12 +126,12 @@
 
     <SupportNocturne />
 
-    <div class="mt-12 p-6 rounded-xl border border-amber-500/30 bg-amber-500/5">
+    <div class="mt-12 p-6 rounded-xl border border-warning/30 bg-warning/5">
         <div class="flex items-start gap-3">
-            <Book class="w-5 h-5 text-amber-500 mt-0.5 shrink-0" />
+            <Book class="w-5 h-5 text-warning mt-0.5 shrink-0" />
             <div>
                 <h3
-                    class="font-semibold text-amber-700 dark:text-amber-400 mb-1"
+                    class="font-semibold text-warning mb-1"
                 >
                     Documentation In Progress
                 </h3>
