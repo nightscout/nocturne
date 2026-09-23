@@ -83,7 +83,7 @@
       <Separator orientation="vertical" class="h-5" />
 
       <Select.Root type="single" bind:value={state.sort}>
-        <Select.Trigger data-testid="food-sort" class="h-8 rounded-lg border-border bg-white/4 px-2.5 text-xs">
+        <Select.Trigger data-testid="food-sort" size="xs" class="h-8">
           {state.sort === 'name' ? 'Sort: A → Z' : state.sort === 'carbs' ? 'Sort: Carbs (high)' : 'Sort: Recently added'}
         </Select.Trigger>
         <Select.Content>

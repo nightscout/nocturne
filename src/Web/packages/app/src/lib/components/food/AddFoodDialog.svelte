@@ -181,7 +181,7 @@
           </h3>
           <div class="grid gap-4 @lg:grid-cols-4">
             <div class="space-y-2">
-              <Label for="food-carbs" class="text-base font-semibold">
+              <Label for="food-carbs" size="lg">
                 Carbs (g)
               </Label>
               <Input
@@ -193,7 +193,7 @@
               />
             </div>
             <div class="space-y-2">
-              <Label for="food-gi" class="text-base font-semibold">
+              <Label for="food-gi" size="lg">
                 Glycemic Index
               </Label>
               <input type="hidden" name="n:gi" value={foodGi} />
@@ -278,7 +278,7 @@
           </h3>
           <div class="grid gap-4 @lg:grid-cols-4">
             <div class="space-y-2">
-              <Label for="food-carbs" class="text-base font-semibold">
+              <Label for="food-carbs" size="lg">
                 Carbs (g)
               </Label>
               <Input
@@ -290,7 +290,7 @@
               />
             </div>
             <div class="space-y-2">
-              <Label for="food-gi" class="text-base font-semibold">
+              <Label for="food-gi" size="lg">
                 Glycemic Index
               </Label>
               <input type="hidden" name="n:gi" value={foodGi} />

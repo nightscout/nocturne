@@ -50,7 +50,7 @@
 </script>
 
 <div class="space-y-2">
-  <Label class="flex items-center gap-1.5">
+  <Label>
     <Syringe class="h-3.5 w-3.5 text-blue-500" />
     Basal Insulin
   </Label>
@@ -86,7 +86,7 @@
 </div>
 
 <div class="space-y-2">
-  <Label for="basal-units" class="flex items-center gap-1.5">
+  <Label for="basal-units">
     <Syringe class="h-3.5 w-3.5 text-blue-500" />
     Units (U)
   </Label>

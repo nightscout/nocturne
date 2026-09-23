@@ -127,7 +127,7 @@
             {/if}
           </div>
           <div class="flex items-center gap-2">
-            <Label for="switch-{category}" class="text-muted-foreground">
+            <Label for="switch-{category}" variant="muted">
               {state.enabled ? "Enabled" : "Disabled"}
             </Label>
             <Switch

@@ -223,7 +223,6 @@
               autofocus
               bind:value={displayName}
               disabled={isRedirecting || isRegistering}
-              class="bg-white/5 border-white/10 text-white placeholder:text-white/25"
             />
           {/snippet}
         </FormField>
@@ -247,11 +246,7 @@
               minlength={3}
               bind:value={username}
               disabled={isRedirecting || isRegistering}
-              class="bg-white/5 border-white/10 text-white placeholder:text-white/25 {availability.error
-                ? 'border-red-500/50'
-                : availability.valid
-                  ? 'border-green-500/50'
-                  : ''}"
+              class={availability.valid && !availability.error ? 'border-green-500/50' : ''}
             />
           {/snippet}
           {#snippet hint()}

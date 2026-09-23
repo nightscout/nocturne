@@ -312,7 +312,8 @@
       <Input
         type="number"
         min="1"
-        class="h-7 w-16 px-2 text-right text-xs tabular-nums"
+        size="xs"
+        class="w-16 text-right tabular-nums"
         value={sustainedNode.sustained.minutes ?? 15}
         oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
           if (sustainedNode?.sustained) {

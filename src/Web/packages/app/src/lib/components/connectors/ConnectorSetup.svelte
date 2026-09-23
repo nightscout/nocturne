@@ -397,7 +397,7 @@
         <Card data-testid="connector-enable">
           <CardContent class="flex items-center justify-between gap-4 py-4">
             <div class="space-y-0.5 min-w-0">
-              <Label class="text-base">Enable Connector</Label>
+              <Label size="lg">Enable Connector</Label>
               <p class="text-sm text-muted-foreground">
                 When enabled, the connector will actively sync data
               </p>

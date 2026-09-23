@@ -58,7 +58,7 @@
 
 <div class="grid grid-cols-2 gap-4">
   <div class="space-y-2">
-    <Label for="insulin" class="flex items-center gap-1.5">
+    <Label for="insulin">
       <Syringe class="h-3.5 w-3.5 text-blue-500" />
       Insulin (U)
     </Label>
@@ -172,7 +172,7 @@
 <div class="flex gap-6">
   <div class="flex items-center gap-2">
     <Checkbox id="automatic" bind:checked={form.automatic} />
-    <Label for="automatic" class="font-normal cursor-pointer">
+    <Label for="automatic" variant="option" class="cursor-pointer">
       Automatic
     </Label>
   </div>
@@ -183,7 +183,8 @@
     />
     <Label
       for="isBasalInsulin"
-      class="font-normal cursor-pointer"
+      variant="option"
+      class="cursor-pointer"
     >
       Basal Insulin
     </Label>

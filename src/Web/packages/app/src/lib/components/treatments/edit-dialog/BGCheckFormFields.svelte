@@ -19,7 +19,7 @@
 </script>
 
 <div class="space-y-2">
-  <Label for="glucose" class="flex items-center gap-1.5">
+  <Label for="glucose">
     <Droplet class="h-3.5 w-3.5 text-red-500" />
     Glucose
   </Label>

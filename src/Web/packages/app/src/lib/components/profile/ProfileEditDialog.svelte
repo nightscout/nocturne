@@ -356,7 +356,7 @@
               <!-- Target Low -->
               <div class="space-y-3">
                 <div class="flex items-center justify-between">
-                  <Label class="text-base">Target Low</Label>
+                  <Label size="lg">Target Low</Label>
                   <Button
                     variant="outline"
                     size="sm"
@@ -428,7 +428,7 @@
               <!-- Target High -->
               <div class="space-y-3">
                 <div class="flex items-center justify-between">
-                  <Label class="text-base">Target High</Label>
+                  <Label size="lg">Target High</Label>
                   <Button
                     variant="outline"
                     size="sm"

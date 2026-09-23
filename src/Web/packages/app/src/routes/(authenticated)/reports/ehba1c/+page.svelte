@@ -272,12 +272,14 @@
         onValueChange={(next: string) => {
           if (next === "percent" || next === "mmol") a1cUnit = next;
         }}
-        class="shrink-0 border bg-background p-0.5"
+        variant="segmented"
+        size="xs"
+        class="shrink-0"
       >
-        <ToggleGroup.Item value="percent" class="h-8 px-3 text-xs" aria-label="Show as percent">
+        <ToggleGroup.Item value="percent" aria-label="Show as percent">
           %
         </ToggleGroup.Item>
-        <ToggleGroup.Item value="mmol" class="h-8 px-3 text-xs" aria-label="Show as mmol/mol">
+        <ToggleGroup.Item value="mmol" aria-label="Show as mmol/mol">
           mmol/mol
         </ToggleGroup.Item>
       </ToggleGroup.Root>

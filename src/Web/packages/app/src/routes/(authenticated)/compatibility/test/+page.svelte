@@ -439,7 +439,7 @@
               onCheckedChange={(checked: boolean) =>
                 (hashApiSecret = checked === true)}
             />
-            <Label for="hashApiSecret" class="font-normal">
+            <Label for="hashApiSecret" variant="option">
               Hash API secret (SHA1)
             </Label>
           </div>
@@ -488,7 +488,7 @@
             onCheckedChange={(checked: boolean) =>
               (ignoreNocturneFields = checked === true)}
           />
-          <Label for="ignoreNocturneFields" class="font-normal">
+          <Label for="ignoreNocturneFields" variant="option">
             Ignore Nocturne-specific fields
             <span class="text-muted-foreground ml-1">
               ({nocturneOnlyFields.join(", ")})
@@ -502,7 +502,7 @@
             onCheckedChange={(checked: boolean) =>
               (hideNullValues = checked === true)}
           />
-          <Label for="hideNullValues" class="font-normal">
+          <Label for="hideNullValues" variant="option">
             Hide null values
           </Label>
         </div>
@@ -513,7 +513,7 @@
             onCheckedChange={(checked: boolean) =>
               (showSideBySide = checked === true)}
           />
-          <Label for="showSideBySide" class="font-normal">
+          <Label for="showSideBySide" variant="option">
             Show side-by-side view
           </Label>
         </div>

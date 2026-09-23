@@ -108,7 +108,7 @@
         {@const config = getUrgencyConfig(notification.urgency)}
         <div class="flex gap-2 items-start p-3 border rounded-lg bg-muted/30">
           <div class="flex-shrink-0 w-28">
-            <Label class="text-xs text-muted-foreground mb-1 block">
+            <Label size="sm" variant="muted" class="mb-1 block">
               Level
             </Label>
             <Select.Root
@@ -130,7 +130,7 @@
           </div>
 
           <div class="flex-shrink-0 w-36">
-            <Label class="text-xs text-muted-foreground mb-1 block">
+            <Label size="sm" variant="muted" class="mb-1 block">
               {mode === "Event" ? "Hours" : "After (hours)"}
             </Label>
             <DurationInput
@@ -143,7 +143,7 @@
           </div>
 
           <div class="flex-1 min-w-0">
-            <Label class="text-xs text-muted-foreground mb-1 block">
+            <Label size="sm" variant="muted" class="mb-1 block">
               Description (optional)
             </Label>
             <Input

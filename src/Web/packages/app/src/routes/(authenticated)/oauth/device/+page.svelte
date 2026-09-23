@@ -305,7 +305,7 @@
             placeholder="XXXX-YYYY"
             maxlength={9}
             autocomplete="off"
-            class="text-center text-lg tracking-widest uppercase"
+            variant="code"
             bind:value={codeInput}
             disabled={!!lookupDeviceForm.pending}
           />

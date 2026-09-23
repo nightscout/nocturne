@@ -158,7 +158,7 @@
 			<span id="food-edit-gi-label" class="text-muted-foreground font-semibold" style="font-size: 11px">Glycemic Index</span>
 			<ToggleGroup.Root aria-labelledby="food-edit-gi-label" type="single" value={giFromInt(draft.gi)} onValueChange={(v: string) => { if (v) draft.gi = giToInt(v as GiLevel); }} variant="outline" size="sm" class="w-full">
 				{#each giLevels as g (g)}
-					<ToggleGroup.Item value={g} class="flex-1 capitalize gap-1.5">
+					<ToggleGroup.Item value={g} class="capitalize">
 						<GiIcon level={g} size={7} />{g}
 					</ToggleGroup.Item>
 				{/each}

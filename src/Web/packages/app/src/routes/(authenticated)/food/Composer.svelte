@@ -196,7 +196,7 @@
 			<span id="composer-gi-label" class="text-muted-foreground font-medium uppercase" style="font-size: 10px">GI</span>
 			<ToggleGroup.Root aria-labelledby="composer-gi-label" type="single" value={giFromInt(draft.gi)} onValueChange={(v: string) => { if (v) draft = { ...draft, gi: giToInt(v as GiLevel) }; }} variant="outline" size="sm" class="w-full flex-1">
 				{#each giLevels as g (g)}
-					<ToggleGroup.Item value={g} class="flex-1 capitalize gap-1.5">
+					<ToggleGroup.Item value={g} class="capitalize">
 						<GiIcon level={g} size={7} />{g}
 					</ToggleGroup.Item>
 				{/each}
@@ -268,7 +268,7 @@
 				<div class="flex flex-col gap-1">
 					<label for="composer-category" class="text-muted-foreground font-medium uppercase" style="font-size: 10px">Category</label>
 					<Select.Root type="single" name="category" value={draft.category ?? ''} onValueChange={(v) => { draft = { ...draft, category: v }; }}>
-						<Select.Trigger id="composer-category" class="h-9 w-full text-xs">
+						<Select.Trigger id="composer-category" class="w-full">
 							{draft.category || 'Category'}
 						</Select.Trigger>
 						<Select.Content>
@@ -284,7 +284,7 @@
 				<div class="flex flex-col gap-1">
 					<label for="composer-subcategory" class="text-muted-foreground font-medium uppercase" style="font-size: 10px">Subcategory</label>
 					<Select.Root type="single" name="subcategory" value={draft.subcategory ?? ''} onValueChange={(v) => { draft = { ...draft, subcategory: v }; }}>
-						<Select.Trigger id="composer-subcategory" class="h-9 w-full text-xs">
+						<Select.Trigger id="composer-subcategory" class="w-full">
 							{draft.subcategory || 'Subcategory'}
 						</Select.Trigger>
 						<Select.Content>

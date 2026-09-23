@@ -16,7 +16,7 @@
 
 <div class="grid grid-cols-3 gap-4">
   <div class="space-y-2">
-    <Label for="carbs" class="flex items-center gap-1.5">
+    <Label for="carbs">
       <Apple class="h-3.5 w-3.5 text-green-500" />
       Carbs (g)
     </Label>

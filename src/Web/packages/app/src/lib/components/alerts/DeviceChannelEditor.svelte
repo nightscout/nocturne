@@ -77,7 +77,7 @@
 
 <div class="space-y-3">
   <div class="space-y-1.5">
-    <Label class="text-xs" for="device-kind-{index}">Device kind</Label>
+    <Label size="sm" for="device-kind-{index}">Device kind</Label>
     <Select.Root
       type="single"
       value={selectedKind}
@@ -103,7 +103,7 @@
 
   {#if selectedKind}
     <div class="space-y-2">
-      <Label class="text-xs">Capabilities</Label>
+      <Label size="sm">Capabilities</Label>
       {#if kindCapabilities.length === 0}
         <p class="text-xs text-muted-foreground">
           No capabilities are available for this kind.
@@ -121,7 +121,7 @@
               />
               <div class="grid gap-0.5 leading-none">
                 <Label
-                  class="font-normal"
+                  variant="option"
                   for="device-cap-{index}-{key}"
                 >
                   {cap.label}

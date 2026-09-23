@@ -294,7 +294,7 @@
           placeholder="XXXX-YYYY"
           maxlength={9}
           autocomplete="off"
-          class="text-center uppercase tracking-widest"
+          variant="code"
           bind:value={deviceCodeInput}
           disabled={deviceLookupLoading}
         />

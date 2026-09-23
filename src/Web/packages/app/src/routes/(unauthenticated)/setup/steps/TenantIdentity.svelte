@@ -106,11 +106,7 @@
           spellcheck={false}
           autofocus
           minlength={3}
-          class="font-mono bg-white/5 border-white/10 text-white placeholder:text-white/25 {availability.error
-            ? 'border-red-500/50'
-            : availability.valid
-              ? 'border-green-500/50'
-              : ''}"
+          class="font-mono {availability.valid && !availability.error ? 'border-green-500/50' : ''}"
         />
       {/snippet}
       {#snippet hint()}
@@ -143,7 +139,6 @@
           bind:value={displayName}
           placeholder="My Nocturne"
           autocomplete="organization"
-          class="bg-white/5 border-white/10 text-white placeholder:text-white/25"
         />
       {/snippet}
     </FormField>

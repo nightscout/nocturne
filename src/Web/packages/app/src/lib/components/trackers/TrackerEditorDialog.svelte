@@ -365,7 +365,7 @@
     </p>
 
     <div class="space-y-2">
-      <Label for="startEventType" class="text-xs">Create event on start</Label>
+      <Label for="startEventType" size="sm">Create event on start</Label>
       <EventTypeCombobox
         bind:value={formStartEventType}
         onSelect={(type) => (formStartEventType = type)}
@@ -374,7 +374,7 @@
     </div>
 
     <div class="space-y-2">
-      <Label for="completionEventType" class="text-xs">
+      <Label for="completionEventType" size="sm">
         Create event on completion
       </Label>
       <EventTypeCombobox

@@ -67,12 +67,13 @@
         value={viewMode}
         onValueChange={(value: string) =>
           value && setViewMode(value as ViewMode)}
-        class="border"
+        variant="segmented"
+        size="xs"
       >
-        <ToggleGroup.Item value="tir" class="text-xs px-3">
+        <ToggleGroup.Item value="tir">
           TIR
         </ToggleGroup.Item>
-        <ToggleGroup.Item value="profile" class="text-xs px-3">
+        <ToggleGroup.Item value="profile">
           Profile
         </ToggleGroup.Item>
       </ToggleGroup.Root>

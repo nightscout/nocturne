@@ -199,7 +199,8 @@
                 bind:value={newQty}
                 min={1}
                 step={1}
-                class="w-16 h-8 text-xs"
+                size="xs"
+                class="w-16 h-8"
               />
               <Input
                 bind:value={newLabel}
@@ -238,7 +239,8 @@
               bind:value={newQty}
               min={1}
               step={1}
-              class="w-16 h-8 text-xs"
+              size="xs"
+              class="w-16 h-8"
             />
             <Input
               bind:value={newLabel}

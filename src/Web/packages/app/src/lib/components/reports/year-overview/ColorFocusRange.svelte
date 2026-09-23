@@ -422,7 +422,8 @@
                       changeCustomPaletteBound(0, event)}
                     aria-label={accessibleLabel(0)}
                     aria-invalid={invalidBound === 0}
-                    class="h-7 w-full px-1.5 text-xs tabular-nums"
+                    size="xs"
+                    class="w-full tabular-nums"
                   />
                 </div>
                 <div class="min-w-0">
@@ -442,7 +443,8 @@
                       changeCustomPaletteBound(1, event)}
                     aria-label={accessibleLabel(1)}
                     aria-invalid={invalidBound === 3}
-                    class="h-7 w-full px-1.5 text-xs tabular-nums"
+                    size="xs"
+                    class="w-full tabular-nums"
                   />
                 </div>
               {:else}
@@ -464,7 +466,8 @@
                         changeBound(index, event)}
                       aria-label={accessibleLabel(index)}
                       aria-invalid={invalidBound === index}
-                      class="h-7 w-full px-1.5 text-xs tabular-nums"
+                      size="xs"
+                      class="w-full tabular-nums"
                     />
                   </div>
                 {/each}
@@ -487,7 +490,8 @@
                 bind:value={focusDrafts[0]}
                 oninput={(e: Event & { currentTarget: HTMLInputElement }) => changeFocusBound(0, e)}
                 aria-label={`${metricLabel} focus minimum value`}
-                class="h-7 w-16 px-1.5 text-xs tabular-nums"
+                size="xs"
+                class="w-16 tabular-nums"
               />
               <span class="text-muted-foreground text-xs">→</span>
               <Input
@@ -499,7 +503,8 @@
                 bind:value={focusDrafts[1]}
                 oninput={(e: Event & { currentTarget: HTMLInputElement }) => changeFocusBound(1, e)}
                 aria-label={`${metricLabel} focus maximum value`}
-                class="h-7 w-16 px-1.5 text-xs tabular-nums"
+                size="xs"
+                class="w-16 tabular-nums"
               />
               <span class="text-muted-foreground text-[11px]">{unitLabel}</span>
             </div>
@@ -512,7 +517,8 @@
                 bind:value={dimDraft}
                 oninput={changeDim}
                 aria-invalid={invalidDim}
-                class="h-6 w-12 px-1 text-[11px] tabular-nums"
+                size="xs"
+                class="h-6 w-12 tabular-nums"
               />
               <span class="text-[10px] text-muted-foreground">%</span>
             </div>
@@ -565,7 +571,8 @@
                 step={inputStep}
                 bind:value={drafts[0]}
                 oninput={(e: Event & { currentTarget: HTMLInputElement }) => changeBound(0, e)}
-                class="h-7 w-16 px-1.5 text-xs tabular-nums"
+                size="xs"
+                class="w-16 tabular-nums"
               />
               <span class="text-muted-foreground text-xs">→</span>
               <Input
@@ -575,7 +582,8 @@
                 step={inputStep}
                 bind:value={drafts[1]}
                 oninput={(e: Event & { currentTarget: HTMLInputElement }) => changeBound(1, e)}
-                class="h-7 w-16 px-1.5 text-xs tabular-nums"
+                size="xs"
+                class="w-16 tabular-nums"
               />
               <span class="text-muted-foreground text-[11px]">{unitLabel}</span>
             </div>
@@ -594,7 +602,8 @@
                 step={inputStep}
                 bind:value={focusDrafts[0]}
                 oninput={(e: Event & { currentTarget: HTMLInputElement }) => changeFocusBound(0, e)}
-                class="h-7 w-16 px-1.5 text-xs tabular-nums"
+                size="xs"
+                class="w-16 tabular-nums"
               />
               <span class="text-muted-foreground text-xs">→</span>
               <Input
@@ -604,7 +613,8 @@
                 step={inputStep}
                 bind:value={focusDrafts[1]}
                 oninput={(e: Event & { currentTarget: HTMLInputElement }) => changeFocusBound(1, e)}
-                class="h-7 w-16 px-1.5 text-xs tabular-nums"
+                size="xs"
+                class="w-16 tabular-nums"
               />
               <span class="text-muted-foreground text-[11px]">{unitLabel}</span>
             </div>
@@ -617,7 +627,8 @@
                 bind:value={dimDraft}
                 oninput={changeDim}
                 aria-invalid={invalidDim}
-                class="h-6 w-12 px-1 text-[11px] tabular-nums"
+                size="xs"
+                class="h-6 w-12 tabular-nums"
               />
               <span class="text-[10px] text-muted-foreground">%</span>
             </div>

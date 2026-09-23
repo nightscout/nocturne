@@ -149,7 +149,7 @@
 <div class="space-y-4">
   <div class="flex items-center justify-between">
     <div>
-      <Label class="text-base">Custom Sounds</Label>
+      <Label size="lg">Custom Sounds</Label>
       <p class="text-sm text-muted-foreground">
         Upload your own alarm sounds (MP3, WAV, OGG, up to 5MB)
       </p>

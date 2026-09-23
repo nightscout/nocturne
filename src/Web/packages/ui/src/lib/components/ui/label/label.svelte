@@ -1,20 +1,27 @@
 <script lang="ts">
   import { Label as LabelPrimitive } from "bits-ui";
   import { cn } from "../../../utils";
+  import {
+    labelVariants,
+    type LabelSize,
+    type LabelVariant,
+  } from "./label-variants";
 
   let {
     ref = $bindable(null),
     class: className,
+    size = "default",
+    variant = "default",
     ...restProps
-  }: LabelPrimitive.RootProps = $props();
+  }: LabelPrimitive.RootProps & {
+    size?: LabelSize;
+    variant?: LabelVariant;
+  } = $props();
 </script>
 
 <LabelPrimitive.Root
   bind:ref
   data-slot="label"
-  class={cn(
-    "flex select-none items-center gap-2 text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-50 group-data-[disabled=true]:pointer-events-none group-data-[disabled=true]:opacity-50",
-    className
-  )}
+  class={cn(labelVariants({ size, variant }), className)}
   {...restProps}
 />

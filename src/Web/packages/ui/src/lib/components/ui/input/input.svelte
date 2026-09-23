@@ -4,15 +4,24 @@
     HTMLInputTypeAttribute,
   } from "svelte/elements";
   import { cn, type WithElementRef } from "../../../utils";
+  import {
+    inputVariants,
+    type InputSize,
+    type InputVariant,
+  } from "./input-variants";
 
   type InputType = Exclude<HTMLInputTypeAttribute, "file">;
 
+  // The native `size` attribute (width in characters) gives way to the design-system size.
   type Props = WithElementRef<
-    Omit<HTMLInputAttributes, "type"> &
+    Omit<HTMLInputAttributes, "type" | "size"> &
       (
         | { type: "file"; files?: FileList }
         | { type?: InputType; files?: undefined }
-      )
+      ) & {
+        size?: InputSize;
+        variant?: InputVariant;
+      }
   >;
 
   let {
@@ -20,6 +29,8 @@
     value = $bindable(),
     type,
     files = $bindable(),
+    size = "default",
+    variant = "default",
     class: className,
     ...restProps
   }: Props = $props();
@@ -29,10 +40,11 @@
   <input
     bind:this={ref}
     data-slot="input"
+    data-size={size}
     class={cn(
-      "selection:bg-primary dark:bg-input/30 selection:text-primary-foreground border-input ring-offset-background placeholder:text-muted-foreground shadow-xs flex h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-2 text-sm font-medium outline-none transition-[color,box-shadow] disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
-      "focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
-      "aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
+      inputVariants({ size, variant }),
+      "bg-transparent py-2 font-medium",
+      size === "default" && "text-sm",
       className
     )}
     type="file"
@@ -44,12 +56,8 @@
   <input
     bind:this={ref}
     data-slot="input"
-    class={cn(
-      "border-input bg-background selection:bg-primary dark:bg-input/30 selection:text-primary-foreground ring-offset-background placeholder:text-muted-foreground shadow-xs flex h-9 w-full min-w-0 rounded-md border px-3 py-1 text-base outline-none transition-[color,box-shadow] disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
-      "focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
-      "aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
-      className
-    )}
+    data-size={size}
+    class={cn(inputVariants({ size, variant }), "bg-background py-1", className)}
     {type}
     bind:value
     {...restProps}

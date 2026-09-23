@@ -29,11 +29,7 @@
 
   let allText = $derived(allLabel ?? (size === "compact" ? "all" : "all of"));
   let anyText = $derived(anyLabel ?? (size === "compact" ? "any" : "any of"));
-  let itemClass = $derived(
-    size === "compact"
-      ? "h-6 px-1.5 text-xs data-[state=on]:bg-muted"
-      : "h-7 px-2 text-xs data-[state=on]:bg-muted"
-  );
+  let itemClass = $derived(size === "compact" ? "h-6" : undefined);
 </script>
 
 <ToggleGroup.Root
@@ -42,7 +38,8 @@
   onValueChange={(next: string) => {
     if (next === "and" || next === "or") onChange(next);
   }}
-  class="border bg-background p-0.5 font-medium"
+  variant="segmented"
+  size="xs"
 >
   <ToggleGroup.Item
     value="and"

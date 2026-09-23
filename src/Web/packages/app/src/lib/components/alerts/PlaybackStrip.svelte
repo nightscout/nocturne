@@ -103,7 +103,7 @@
     value={String(speed)}
     onValueChange={handleSpeedChange}
   >
-    <Select.Trigger class="h-8 w-20 px-2 text-xs" aria-label="Playback speed">
+    <Select.Trigger size="xs" class="h-8 w-20" aria-label="Playback speed">
       {speed}x
     </Select.Trigger>
     <Select.Content>

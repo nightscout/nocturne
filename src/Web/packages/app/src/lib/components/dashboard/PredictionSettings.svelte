@@ -83,39 +83,40 @@
         type="single"
         value={predictionMode}
         onValueChange={handleModeChange}
-        class="bg-muted rounded-lg p-0.5"
+        variant="segmented"
+        size="xs"
       >
         <ToggleGroup.Item
           value="cone"
-          class="px-2 py-1 text-xs font-medium text-muted-foreground data-[state=on]:bg-purple-700 data-[state=on]:text-white rounded-md transition-colors"
+          class="data-[state=on]:bg-purple-700 data-[state=on]:text-white"
           title="Cone of probabilities"
         >
           Cone
         </ToggleGroup.Item>
         <ToggleGroup.Item
           value="lines"
-          class="px-2 py-1 text-xs font-medium text-muted-foreground data-[state=on]:bg-purple-700 data-[state=on]:text-white rounded-md transition-colors"
+          class="data-[state=on]:bg-purple-700 data-[state=on]:text-white"
           title="All prediction lines"
         >
           Lines
         </ToggleGroup.Item>
         <ToggleGroup.Item
           value="iob"
-          class="px-2 py-1 text-xs font-medium text-muted-foreground data-[state=on]:bg-cyan-700 data-[state=on]:text-white rounded-md transition-colors"
+          class="data-[state=on]:bg-cyan-700 data-[state=on]:text-white"
           title="IOB only"
         >
           IOB
         </ToggleGroup.Item>
         <ToggleGroup.Item
           value="zt"
-          class="px-2 py-1 text-xs font-medium text-muted-foreground data-[state=on]:bg-orange-700 data-[state=on]:text-white rounded-md transition-colors"
+          class="data-[state=on]:bg-orange-700 data-[state=on]:text-white"
           title="Zero Temp"
         >
           ZT
         </ToggleGroup.Item>
         <ToggleGroup.Item
           value="uam"
-          class="px-2 py-1 text-xs font-medium text-muted-foreground data-[state=on]:bg-green-700 data-[state=on]:text-white rounded-md transition-colors"
+          class="data-[state=on]:bg-green-700 data-[state=on]:text-white"
           title="UAM"
         >
           UAM
@@ -141,7 +142,8 @@
           }}
         >
           <SelectTrigger
-            class="h-7 w-[90px] border-none text-xs text-muted-foreground focus:ring-0 focus:ring-offset-0 px-2"
+            size="xs"
+            class="w-[90px] border-none text-muted-foreground focus:ring-0 focus:ring-offset-0"
           >
             <div class="flex items-center gap-1.5 truncate">
               {#if !predictionEnabled.current}

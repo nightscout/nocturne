@@ -46,7 +46,7 @@
         spellcheck={false}
         autofocus
         disabled={pending}
-        class="text-center text-lg tracking-wider"
+        variant="code"
       />
     {/snippet}
   </FormField>

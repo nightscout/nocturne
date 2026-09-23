@@ -4,7 +4,6 @@
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import * as Select from "$lib/components/ui/select";
-  import { cn } from "$lib/utils";
   import { BG_UNITS, DEFAULT_PROFILE_ICON } from "$lib/constants/profile-icons";
   import ProfileIconPicker from "./ProfileIconPicker.svelte";
   import { Plus } from "lucide-svelte";
@@ -125,7 +124,7 @@
           id="profile-name"
           bind:value={formState.defaultProfile}
           placeholder="e.g., Weekday, Weekend, Exercise"
-          class={cn(errors.defaultProfile && "border-destructive")}
+          aria-invalid={!!errors.defaultProfile}
         />
         {#if errors.defaultProfile}
           <p class="text-sm text-destructive">{errors.defaultProfile}</p>
@@ -185,7 +184,7 @@
             min="0"
             max="10"
             bind:value={formState.dia}
-            class={cn(errors.dia && "border-destructive")}
+            aria-invalid={!!errors.dia}
           />
           {#if errors.dia}
             <p class="text-xs text-destructive">{errors.dia}</p>
@@ -201,7 +200,7 @@
             min="0"
             max="100"
             bind:value={formState.carbs_hr}
-            class={cn(errors.carbs_hr && "border-destructive")}
+            aria-invalid={!!errors.carbs_hr}
           />
           {#if errors.carbs_hr}
             <p class="text-xs text-destructive">{errors.carbs_hr}</p>

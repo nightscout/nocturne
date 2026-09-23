@@ -162,7 +162,7 @@
           {#if opt && needsDestination(ch.channelType)}
             {@const error = destinationError(opt, ch.destination)}
             <div class="space-y-1.5">
-              <Label class="text-xs" for="channel-dest-{i}">{opt.destinationLabel}</Label>
+              <Label size="sm" for="channel-dest-{i}">{opt.destinationLabel}</Label>
               <Input
                 id="channel-dest-{i}"
                 type="text"
@@ -194,7 +194,7 @@
           {/if}
           {#if ch.channelType === ChannelType.Webhook}
             <div class="space-y-1.5">
-              <Label class="text-xs" for="channel-secret-{i}">Signing secret (optional)</Label>
+              <Label size="sm" for="channel-secret-{i}">Signing secret (optional)</Label>
               <div class="flex items-center gap-2">
                 <Input
                   id="channel-secret-{i}"
@@ -233,7 +233,7 @@
             </div>
           {/if}
           <div class="space-y-1.5">
-            <Label class="text-xs" for="channel-label-{i}">Label (optional)</Label>
+            <Label size="sm" for="channel-label-{i}">Label (optional)</Label>
             <Input
               id="channel-label-{i}"
               type="text"

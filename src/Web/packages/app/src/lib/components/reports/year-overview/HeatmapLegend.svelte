@@ -102,7 +102,7 @@
             if (v) selectedMetric = v as HeatmapMetric;
           }}
         >
-          <Select.Trigger class="w-[145px] h-8 text-xs print:hidden">
+          <Select.Trigger size="xs" class="w-[145px] h-8 print:hidden">
             <span class="truncate">
               {currentMetricLabel}
             </span>

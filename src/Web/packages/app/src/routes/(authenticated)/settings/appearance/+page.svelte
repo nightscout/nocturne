@@ -619,15 +619,15 @@
       <CardContent>
         <div class="grid gap-4 @sm:grid-cols-2">
           <div class="space-y-1">
-            <Label class="text-muted-foreground text-xs">Timezone</Label>
+            <Label size="sm" variant="muted">Timezone</Label>
             <p class="font-medium">{browserTimezone}</p>
           </div>
           <div class="space-y-1">
-            <Label class="text-muted-foreground text-xs">UTC Offset</Label>
+            <Label size="sm" variant="muted">UTC Offset</Label>
             <p class="font-medium">{timezoneOffset}</p>
           </div>
           <div class="space-y-1">
-            <Label class="text-muted-foreground text-xs">Current Time</Label>
+            <Label size="sm" variant="muted">Current Time</Label>
             <p class="font-medium font-mono">{currentTime}</p>
           </div>
         </div>

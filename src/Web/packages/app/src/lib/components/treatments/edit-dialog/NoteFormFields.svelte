@@ -17,7 +17,7 @@
 </script>
 
 <div class="space-y-2">
-  <Label for="text" class="flex items-center gap-1.5">
+  <Label for="text">
     <FileText class="h-3.5 w-3.5" />
     Text
   </Label>
@@ -45,7 +45,8 @@
   />
   <Label
     for="isAnnouncement"
-    class="font-normal cursor-pointer"
+    variant="option"
+    class="cursor-pointer"
   >
     Announcement
   </Label>

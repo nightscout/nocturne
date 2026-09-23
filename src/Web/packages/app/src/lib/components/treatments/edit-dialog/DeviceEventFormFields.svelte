@@ -42,7 +42,7 @@
 </script>
 
 <div class="space-y-2">
-  <Label class="flex items-center gap-1.5">
+  <Label>
     <Smartphone class="h-3.5 w-3.5 text-orange-500" />
     Event Type
   </Label>
