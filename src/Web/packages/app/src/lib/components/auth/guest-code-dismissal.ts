@@ -11,3 +11,7 @@ const MAX_AGE_SECONDS = 48 * 60 * 60;
 export function dismissGuestCode(): void {
   document.cookie = `${GUEST_CODE_DISMISSED_COOKIE}=1; path=/; max-age=${MAX_AGE_SECONDS}; samesite=lax`;
 }
+
+export function restoreGuestCode(): void {
+  document.cookie = `${GUEST_CODE_DISMISSED_COOKIE}=; path=/; max-age=0; samesite=lax`;
+}

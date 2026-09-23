@@ -9,7 +9,10 @@
   import LoginForm from "$lib/components/auth/LoginForm.svelte";
   import RequestMembershipDialog from "$lib/components/members/RequestMembershipDialog.svelte";
   import GuestCodeForm from "$lib/components/auth/GuestCodeForm.svelte";
-  import { dismissGuestCode } from "$lib/components/auth/guest-code-dismissal";
+  import {
+    dismissGuestCode,
+    restoreGuestCode,
+  } from "$lib/components/auth/guest-code-dismissal";
 
   let { data } = $props();
 
@@ -22,8 +25,12 @@
 
   let showRequestDialog = $state(false);
 
-  let guestCodeDismissed = $state(false);
-  const showGuestCode = $derived(data.guestCodePending === true && !guestCodeDismissed);
+  let guestCodeChoice = $state<"dismissed" | "restored" | null>(null);
+  const guestCodePending = $derived(data.guestCodePending === true);
+  const guestCodeDismissed = $derived(
+    guestCodeChoice ? guestCodeChoice === "dismissed" : data.guestCodeDismissed === true
+  );
+  const showGuestCode = $derived(guestCodePending && !guestCodeDismissed);
 
   // Get return URL from query params
   const returnUrl = $derived(page.url.searchParams.get("returnUrl") || "/");
@@ -83,7 +90,7 @@
           data-testid="dismiss-guest-code"
           onclick={() => {
             dismissGuestCode();
-            guestCodeDismissed = true;
+            guestCodeChoice = "dismissed";
           }}
         >
           <ArrowLeft class="mr-1 h-4 w-4" />
@@ -96,6 +103,21 @@
       </Card.Content>
 
       <Card.Footer class="flex flex-col space-y-2">
+        {#if guestCodePending}
+          <div class="text-center">
+            <Button
+              variant="link"
+              data-testid="restore-guest-code"
+              onclick={() => {
+                restoreGuestCode();
+                guestCodeChoice = "restored";
+              }}
+            >
+              <KeyRound class="mr-1 h-4 w-4" />
+              Have a one-time guest code?
+            </Button>
+          </div>
+        {/if}
         {#if allowAccessRequests}
           <div class="text-center">
             <Button

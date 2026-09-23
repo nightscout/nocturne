@@ -265,11 +265,7 @@ public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
     public async Task CrossTenant_PendingGuestCode_NotReported()
     {
         using var clientA = AuthTestHelpers.CreateAuthenticatedTenantClient(Fixture, _slugA, _baseDomain, _accessTokenA);
-        var createResponse = await clientA.PostAsJsonAsync("/api/v4/guest-links", new
-        {
-            label = "Pending Probe",
-            scopes = new[] { "entries.read" }
-        });
+        var createResponse = await clientA.PostAsJsonAsync("/api/v4/guest-links", new { label = "Pending Probe" });
         createResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
         using var anonymousA = AuthTestHelpers.CreateTenantClient(Fixture, _slugA, _baseDomain);

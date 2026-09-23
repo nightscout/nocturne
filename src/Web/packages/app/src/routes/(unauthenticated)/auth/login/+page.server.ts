@@ -27,11 +27,11 @@ const DEMO_LOGIN_ENDPOINT = "/api/v4/demo/session";
 export const load: PageServerLoad = async ({ url, locals, cookies, parent }) => {
   const endpoint = await resolveAutoLoginEndpoint(locals);
   if (!endpoint) {
-    if (cookies.get(GUEST_CODE_DISMISSED_COOKIE) === "1") {
-      return { guestCodePending: false };
-    }
     const { tenantless } = await parent();
-    return { guestCodePending: await hasPendingGuestCode(locals, tenantless) };
+    return {
+      guestCodePending: await hasPendingGuestCode(locals, tenantless),
+      guestCodeDismissed: cookies.get(GUEST_CODE_DISMISSED_COOKIE) === "1",
+    };
   }
 
   const raw = url.searchParams.get("returnUrl") || "/";
