@@ -35,11 +35,11 @@
 		</span>
 	</Button>
 
-	<span class="col-label">Portion</span>
+	<span class="col-label text-xs">Portion</span>
 
-	<span class="col-label">GI</span>
+	<span class="col-label text-xs">GI</span>
 
-	<span class="col-label text-right">Energy</span>
+	<span class="col-label text-xs text-right">Energy</span>
 
 	<span></span>
 </div>
@@ -59,7 +59,6 @@
 	}
 
 	.col-label {
-		font-size: 11px;
 		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
