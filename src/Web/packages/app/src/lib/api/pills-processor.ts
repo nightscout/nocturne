@@ -33,8 +33,8 @@ export interface DeviceStatus {
 	loop?: {
 		timestamp?: string;
 		name?: string;
-		iob?: { iob?: number; timestamp?: string };
-		cob?: { cob?: number; timestamp?: string };
+		iob?: { iob?: number | null; timestamp?: string };
+		cob?: { cob?: number | null; timestamp?: string };
 		enacted?: LoopEnactedData;
 		predicted?: { values?: number[] };
 	};
@@ -45,8 +45,8 @@ export interface DeviceStatus {
 		enacted?: OpenApsSuggestedEnacted;
 	};
 	pump?: {
-		iob?: number | { iob?: number; bolusiob?: number };
-		bolusiob?: number;
+		iob?: number | null | { iob?: number | null; bolusiob?: number | null };
+		bolusiob?: number | null;
 	};
 	connect?: unknown;
 }
@@ -61,20 +61,20 @@ export { DEFAULT_PILLS_CONFIG } from '$lib/types/status-pills';
  */
 interface OpenApsSuggestedEnacted {
 	timestamp?: string;
-	rate?: number;
-	duration?: number;
+	rate?: number | null;
+	duration?: number | null;
 	reason?: string;
-	COB?: number;
-	eventualBG?: number;
+	COB?: number | null;
+	eventualBG?: number | null;
 	received?: boolean;
 }
 
 interface OpenApsIobEntry {
 	timestamp?: string;
 	time?: string;
-	iob?: number;
-	basaliob?: number;
-	activity?: number;
+	iob?: number | null;
+	basaliob?: number | null;
+	activity?: number | null;
 }
 
 /**
@@ -83,9 +83,9 @@ interface OpenApsIobEntry {
  */
 interface LoopEnactedData {
 	timestamp?: string;
-	rate?: number;
-	duration?: number;
-	bolusVolume?: number;
+	rate?: number | null;
+	duration?: number | null;
+	bolusVolume?: number | null;
 	reason?: string;
 	failureReason?: string;
 }
@@ -827,7 +827,7 @@ export function processBasal(
 	// Check for temp basal from various sources
 	if (openaps?.enacted) {
 		const enacted = openaps.enacted;
-		if (enacted.rate !== undefined && enacted.duration !== undefined) {
+		if (enacted.rate != null && enacted.duration != null) {
 			// Check if the temp basal is still active
 			const enactedTimestamp = enacted.timestamp ? new Date(enacted.timestamp).getTime() : now;
 			const elapsedMinutes = (now - enactedTimestamp) / 60000;
@@ -848,7 +848,7 @@ export function processBasal(
 
 	if (loopData?.enacted) {
 		const enacted = loopData.enacted;
-		if (enacted.rate !== undefined && enacted.duration !== undefined) {
+		if (enacted.rate != null && enacted.duration != null) {
 			// Check if temp basal is still active
 			const enactedTimestamp = enacted.timestamp ? new Date(enacted.timestamp).getTime() : now;
 			const elapsedMinutes = (now - enactedTimestamp) / 60000;

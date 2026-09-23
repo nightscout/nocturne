@@ -25,6 +25,7 @@
 import type { RequestEvent } from "@sveltejs/kit";
 import type { ApiClient } from "$lib/api";
 import { isTimeZone } from "$lib/utils/date-range";
+import { errorStatus } from "$lib/forms/submit-error";
 
 /**
  * Read `fetch`, treating a refusal as "no zone named here" and nothing else.
@@ -41,7 +42,7 @@ async function readable<T>(fetch: () => Promise<T>): Promise<T | null> {
   try {
     return await fetch();
   } catch (err) {
-    const status = (err as { status?: number })?.status;
+    const status = errorStatus(err);
     if (status === 401 || status === 403) return null;
     throw err;
   }

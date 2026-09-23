@@ -6,6 +6,7 @@ import { error, isHttpError } from "@sveltejs/kit";
 import config from "../../../../../remote-codegen.config";
 import {
   describeSubmitError,
+  errorStatus,
   MISSING_ITEM_ERROR,
   RATE_LIMITED_ERROR,
 } from "../forms/submit-error";
@@ -40,15 +41,15 @@ async function crossTheBoundary(thrown: unknown): Promise<unknown> {
   const source = compiled.code.trim().replace(/;$/, "");
 
   // The helpers are passed in because the real arm reaches them by import.
-  const flatten = new Function(`return ${source}`)() as (
+  const flatten: (
     err: unknown,
     status: unknown,
     error: typeof import("@sveltejs/kit").error,
     parseErrorBody: typeof import("./error-body").parseErrorBody
-  ) => never;
+  ) => never = new Function(`return ${source}`)();
 
   try {
-    flatten(thrown, (thrown as { status?: number })?.status, error, parseErrorBody);
+    flatten(thrown, errorStatus(thrown), error, parseErrorBody);
   } catch (crossed) {
     return crossed;
   }
@@ -118,7 +119,7 @@ describe("the status a generated remote function lets through", () => {
     const crossed = await crossTheBoundary(nswagApiException(429, RATE_LIMIT_BODY));
 
     expect(isHttpError(crossed)).toBe(true);
-    expect((crossed as { status: number }).status).toBe(429);
+    expect(errorStatus(crossed)).toBe(429);
   });
 
   it("keeps NSwag's boilerplate out of the message it carries", async () => {
@@ -236,7 +237,7 @@ describe("the status a generated remote function lets through", () => {
       )
     );
 
-    expect((crossed as { status: number }).status).toBe(409);
+    expect(errorStatus(crossed)).toBe(409);
     expect(describeSubmitError(crossed, "Couldn't save your changes.")).toBe(
       "Already redeemed."
     );
@@ -260,13 +261,13 @@ describe("the status a generated remote function lets through", () => {
       nswagApiException(503, "<html>503 Service Unavailable</html>")
     );
 
-    expect((crossed as { status: number }).status).toBe(500);
+    expect(errorStatus(crossed)).toBe(500);
   });
 
   it("still flattens a status it does not forward", async () => {
     const crossed = await crossTheBoundary(nswagApiException(503, "unavailable"));
 
-    expect((crossed as { status: number }).status).toBe(500);
+    expect(errorStatus(crossed)).toBe(500);
     expect(describeSubmitError(crossed, "Couldn't load the invite.")).toBe(
       "Couldn't load the invite."
     );
@@ -390,7 +391,7 @@ describe("an error body that is not RFC-7807", () => {
 
     const crossed = await crossTheBoundary(withoutStatus);
 
-    expect((crossed as { status: number }).status).toBe(500);
+    expect(errorStatus(crossed)).toBe(500);
   });
 });
 
@@ -460,7 +461,7 @@ describe("every typed error body a remote operation declares", () => {
 
   it("declares a status, so the status arm can forward it", (ctx) => {
     if (!existsSync(fileURLToPath(SPEC_URL))) ctx.skip(SPEC_ABSENT);
-    const spec = JSON.parse(readFileSync(SPEC_URL, "utf8")) as Spec;
+    const spec: Spec = JSON.parse(readFileSync(SPEC_URL, "utf8"));
 
     const bodies = declaredErrorBodies(spec);
     expect(bodies.length).toBeGreaterThan(0);

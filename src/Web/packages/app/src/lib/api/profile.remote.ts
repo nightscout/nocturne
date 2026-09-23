@@ -16,9 +16,9 @@ export interface Profile {
   mills?: number;
   created_at?: string;
   units?: string;
-  store?: Record<string, any>;
+  store?: Record<string, unknown>;
   enteredBy?: string;
-  loopSettings?: any;
+  loopSettings?: unknown;
   isExternallyManaged?: boolean;
   icon?: string;
   timezone?: string;

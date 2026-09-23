@@ -3,7 +3,6 @@
  * intakes, device events, and analysis data for all report pages
  */
 import { z } from "zod";
-import { DiabetesPopulationSchema } from "$lib/api/generated/schemas";
 import { getRequestEvent, query } from "$app/server";
 import { DiabetesPopulation, ClusterConfidence } from "$lib/api";
 import { fetchAllGlucose } from "./glucose-pagination";
@@ -111,7 +110,7 @@ export const getAnalysis = query(
     entries: z.array(z.any()),
     boluses: z.array(z.any()),
     carbIntakes: z.array(z.any()),
-    population: DiabetesPopulationSchema.optional(),
+    population: z.enum(DiabetesPopulation).optional(),
   }),
   async ({
     entries,
@@ -126,7 +125,7 @@ export const getAnalysis = query(
       entries,
       boluses,
       carbIntakes,
-      population: population as DiabetesPopulation,
+      population,
     });
   }
 );

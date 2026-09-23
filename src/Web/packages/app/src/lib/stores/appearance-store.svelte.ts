@@ -27,27 +27,34 @@ import { getContext, setContext } from "svelte";
 import { PersistedState } from "runed";
 import { setMode, mode, userPrefersMode } from "mode-watcher";
 import supportedLocales from "../../../../../supportedLocales.json";
-import type { WidgetId } from "../api/generated/nocturne-api-client";
+import { WidgetId } from "../api/generated/nocturne-api-client";
 import { DEFAULT_TOP_WIDGETS } from "../components/dashboard/top-widget-ids";
 import type { UserDisplayPreferences } from "$lib/api";
 import { weekStartName } from "../components/calendar/calendar-date";
 import { resolveCookieDomain } from "../utils/tenant-host";
+import { isRecord } from "../utils/type-guards";
 
 // ==========================================
 // Type Definitions
 // ==========================================
 
+const COLOR_THEMES = ["nocturne", "trio", "aaps", "classic"] as const;
+
 /** Color theme - visual styling */
-export type ColorTheme = "nocturne" | "trio" | "aaps" | "classic";
+export type ColorTheme = (typeof COLOR_THEMES)[number];
 
 /** Color scheme - light/dark mode preference */
 export type ColorScheme = "system" | "light" | "dark";
 
+const GLUCOSE_UNITS = ["mg/dl", "mmol"] as const;
+
 /** Glucose units preference */
-export type GlucoseUnits = "mg/dl" | "mmol";
+export type GlucoseUnits = (typeof GLUCOSE_UNITS)[number];
+
+const TIME_FORMATS = ["12", "24"] as const;
 
 /** Time format preference */
-export type TimeFormat = "12" | "24";
+export type TimeFormat = (typeof TIME_FORMATS)[number];
 
 /**
  * Regional format: a BCP-47 tag driving date ordering, month/weekday names and the
@@ -78,9 +85,15 @@ export type SupportedLocale = (typeof supportedLocales)[number];
 export const PREFS_COOKIE_NAME = "nocturne-prefs";
 const PREFS_COOKIE_MAX_AGE = 31536000; // 1 year
 
+/** The type-independent face of a `SyncedPref`, so prefs of every type share one registry. */
+interface SyncedEntry {
+  hydrateFrom(prefs: UserDisplayPreferences): void;
+  hydrateJson(json: string): void;
+}
+
 /** Registry of synced prefs by their localStorage key — powers cross-tab sync. */
 // eslint-disable-next-line svelte/prefer-svelte-reactivity -- module-level registry; nothing renders from it
-const syncedRegistry = new Map<string, SyncedPref<unknown>>();
+const syncedRegistry = new Map<string, SyncedEntry>();
 
 const PREFERENCES_CONTEXT_KEY = Symbol("nocturne-display-preferences");
 
@@ -179,15 +192,46 @@ function schedulePersist(): void {
   }, 400);
 }
 
-function readInitial<T>(key: string, fallback: T): T {
+/**
+ * Narrows a stored or server-sent value to a preference's type, or `undefined`
+ * when it is absent or malformed. localStorage, the cookie and the storage event
+ * hold whatever some build of the app last wrote there.
+ */
+type PrefParser<T> = (raw: unknown) => T | undefined;
+
+const booleanPref: PrefParser<boolean> = (raw) =>
+  typeof raw === "boolean" ? raw : undefined;
+
+const numberPref: PrefParser<number> = (raw) =>
+  typeof raw === "number" && Number.isFinite(raw) ? raw : undefined;
+
+const stringPref: PrefParser<string> = (raw) =>
+  typeof raw === "string" ? raw : undefined;
+
+function oneOfPref<T extends string>(values: readonly T[]): PrefParser<T> {
+  return (raw) => values.find((value) => value === raw);
+}
+
+const WIDGET_IDS: readonly WidgetId[] = Object.values(WidgetId);
+
+const widgetListPref: PrefParser<WidgetId[]> = (raw) =>
+  Array.isArray(raw)
+    ? raw.flatMap((id) => WIDGET_IDS.find((known) => known === id) ?? [])
+    : undefined;
+
+function parseJson(json: string): unknown {
+  try {
+    return JSON.parse(json);
+  } catch {
+    return undefined;
+  }
+}
+
+function readInitial<T>(key: string, fallback: T, parse: PrefParser<T>): T {
   if (!browser) return fallback;
   const raw = localStorage.getItem(key);
   if (raw === null) return fallback;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
+  return parse(parseJson(raw)) ?? fallback;
 }
 
 function persistLocal<T>(key: string, value: T): void {
@@ -207,20 +251,27 @@ function persistLocal<T>(key: string, value: T): void {
  * `read` locates this preference inside a `UserDisplayPreferences` payload, and is
  * the single mapping used for both hydration and server-side resolution.
  */
-class SyncedPref<T> {
-  private _value = $state<T>(undefined as T);
+class SyncedPref<T> implements SyncedEntry {
+  private _value: T;
   private _key: string;
-  private _read: (prefs: UserDisplayPreferences) => T | undefined;
+  private _select: (prefs: UserDisplayPreferences) => unknown;
+  private _parse: PrefParser<T>;
 
   constructor(
     key: string,
     initial: T,
-    read: (prefs: UserDisplayPreferences) => T | undefined
+    select: (prefs: UserDisplayPreferences) => unknown,
+    parse: PrefParser<T>
   ) {
     this._key = key;
-    this._read = read;
-    this._value = readInitial(key, initial);
-    syncedRegistry.set(key, this as SyncedPref<unknown>);
+    this._select = select;
+    this._parse = parse;
+    this._value = $state(readInitial(key, initial, parse));
+    syncedRegistry.set(key, this);
+  }
+
+  private _read(prefs: UserDisplayPreferences): T | undefined {
+    return this._parse(this._select(prefs));
   }
 
   get current(): T {
@@ -255,6 +306,12 @@ class SyncedPref<T> {
     const value = this._read(prefs);
     if (value !== undefined && value !== null) this.hydrate(value);
   }
+
+  /** Hydrate from another tab's localStorage write, ignoring a malformed one. */
+  hydrateJson(json: string): void {
+    const value = this._parse(parseJson(json));
+    if (value !== undefined) this.hydrate(value);
+  }
 }
 
 // ==========================================
@@ -268,7 +325,8 @@ class SyncedPref<T> {
 export const colorTheme = new SyncedPref<ColorTheme>(
   "nocturne-color-theme",
   "nocturne",
-  (p) => p.colorTheme as ColorTheme | undefined
+  (p) => p.colorTheme,
+  oneOfPref(COLOR_THEMES)
 );
 
 /**
@@ -277,7 +335,8 @@ export const colorTheme = new SyncedPref<ColorTheme>(
 export const glucoseUnits = new SyncedPref<GlucoseUnits>(
   "nocturne-glucose-units",
   "mg/dl",
-  (p) => p.glucoseUnits as GlucoseUnits | undefined
+  (p) => p.glucoseUnits,
+  oneOfPref(GLUCOSE_UNITS)
 );
 
 /**
@@ -286,7 +345,8 @@ export const glucoseUnits = new SyncedPref<GlucoseUnits>(
 export const timeFormat = new SyncedPref<TimeFormat>(
   "nocturne-time-format",
   "12",
-  (p) => p.timeFormat as TimeFormat | undefined
+  (p) => p.timeFormat,
+  oneOfPref(TIME_FORMATS)
 );
 
 /**
@@ -298,7 +358,8 @@ export const timeFormat = new SyncedPref<TimeFormat>(
 export const regionFormat = new SyncedPref<RegionFormat>(
   "nocturne-region-format",
   "",
-  (p) => p.regionFormat as RegionFormat | undefined
+  (p) => p.regionFormat,
+  oneOfPref(REGION_FORMATS)
 );
 
 /**
@@ -308,13 +369,15 @@ export const regionFormat = new SyncedPref<RegionFormat>(
 export const nightModeSchedule = new SyncedPref<boolean>(
   "nocturne-night-mode-schedule",
   false,
-  (p) => p.nightModeSchedule
+  (p) => p.nightModeSchedule,
+  booleanPref
 );
 
 export const yearOverviewColors = new SyncedPref<NonNullable<UserDisplayPreferences["yearOverviewColors"]>>(
   "nocturne-year-overview-colors",
   {},
-  (p) => p.yearOverviewColors
+  (p) => p.yearOverviewColors,
+  (raw) => (isRecord(raw) ? raw : undefined)
 );
 
 /**
@@ -324,7 +387,8 @@ export const yearOverviewColors = new SyncedPref<NonNullable<UserDisplayPreferen
 export const dashboardTopWidgets = new SyncedPref<WidgetId[]>(
   "nocturne-dashboard-top-widgets",
   DEFAULT_TOP_WIDGETS,
-  (p) => p.dashboardTopWidgets
+  (p) => p.dashboardTopWidgets,
+  widgetListPref
 );
 
 // ==========================================
@@ -443,7 +507,8 @@ export function setGlucoseUnits(units: GlucoseUnits): void {
 export const predictionMinutes = new SyncedPref<number>(
   "nocturne-prediction-minutes",
   30,
-  (p) => p.prediction?.minutes
+  (p) => p.prediction?.minutes,
+  numberPref
 );
 
 /**
@@ -453,7 +518,8 @@ export const predictionMinutes = new SyncedPref<number>(
 export const predictionEnabled = new SyncedPref<boolean>(
   "nocturne-prediction-enabled",
   true,
-  (p) => p.prediction?.enabled
+  (p) => p.prediction?.enabled,
+  booleanPref
 );
 
 /**
@@ -488,17 +554,14 @@ export function setPredictionEnabled(enabled: boolean): void {
 // Prediction Display Mode
 // ==========================================
 
-export type PredictionDisplayMode =
-  | "cone"
-  | "lines"
-  | "main"
-  | "iob"
-  | "zt"
-  | "uam"
-  | "cob";
+const PREDICTION_DISPLAY_MODES = ["cone", "lines", "main", "iob", "zt", "uam", "cob"] as const;
+export type PredictionDisplayMode = (typeof PREDICTION_DISPLAY_MODES)[number];
 
-export type LineColorMode = "single" | "threshold" | "continuous";
-export type AreaMode = "off" | "baseline" | "deviation";
+const LINE_COLOR_MODES = ["single", "threshold", "continuous"] as const;
+export type LineColorMode = (typeof LINE_COLOR_MODES)[number];
+
+const AREA_MODES = ["off", "baseline", "deviation"] as const;
+export type AreaMode = (typeof AREA_MODES)[number];
 
 /**
  * Prediction display mode preference
@@ -506,7 +569,8 @@ export type AreaMode = "off" | "baseline" | "deviation";
 export const predictionDisplayMode = new SyncedPref<PredictionDisplayMode>(
   "nocturne-prediction-display-mode",
   "cone",
-  (p) => p.prediction?.displayMode as PredictionDisplayMode | undefined
+  (p) => p.prediction?.displayMode,
+  oneOfPref(PREDICTION_DISPLAY_MODES)
 );
 
 // ==========================================
@@ -523,7 +587,8 @@ export type TimeRangeOption = "2" | "4" | "6" | "12" | "24" | "48";
 export const glucoseChartLookback = new SyncedPref<number>(
   "nocturne-glucose-chart-lookback",
   12,
-  (p) => p.chart?.lookback
+  (p) => p.chart?.lookback,
+  numberPref
 );
 
 /**
@@ -539,43 +604,50 @@ export const GLUCOSE_CHART_FETCH_HOURS = 48;
 export const chartLineColorMode = new SyncedPref<LineColorMode>(
   "nocturne-chart-line-color-mode",
   "threshold",
-  (p) => p.chart?.lineColorMode as LineColorMode | undefined
+  (p) => p.chart?.lineColorMode,
+  oneOfPref(LINE_COLOR_MODES)
 );
 
 export const chartLineColor = new SyncedPref<string>(
   "nocturne-chart-line-color",
   "#22c55e",
-  (p) => p.chart?.lineColor
+  (p) => p.chart?.lineColor,
+  stringPref
 );
 
 export const chartPointColorMode = new SyncedPref<LineColorMode>(
   "nocturne-chart-point-color-mode",
   "threshold",
-  (p) => p.chart?.pointColorMode as LineColorMode | undefined
+  (p) => p.chart?.pointColorMode,
+  oneOfPref(LINE_COLOR_MODES)
 );
 
 export const chartPointColor = new SyncedPref<string>(
   "nocturne-chart-point-color",
   "#22c55e",
-  (p) => p.chart?.pointColor
+  (p) => p.chart?.pointColor,
+  stringPref
 );
 
 export const chartShowPoints = new SyncedPref<boolean>(
   "nocturne-chart-show-points",
   true,
-  (p) => p.chart?.showPoints
+  (p) => p.chart?.showPoints,
+  booleanPref
 );
 
 export const chartAreaMode = new SyncedPref<AreaMode>(
   "nocturne-chart-area-mode",
   "off",
-  (p) => p.chart?.areaMode as AreaMode | undefined
+  (p) => p.chart?.areaMode,
+  oneOfPref(AREA_MODES)
 );
 
 export const chartAreaOpacity = new SyncedPref<number>(
   "nocturne-chart-area-opacity",
   0.5,
-  (p) => p.chart?.areaOpacity
+  (p) => p.chart?.areaOpacity,
+  numberPref
 );
 
 /**
@@ -586,7 +658,8 @@ export const chartAreaOpacity = new SyncedPref<number>(
 export const chartAlwaysShowPatterns = new SyncedPref<boolean>(
   "nocturne-chart-always-show-patterns",
   false,
-  (p) => p.chart?.alwaysShowPatterns
+  (p) => p.chart?.alwaysShowPatterns,
+  booleanPref
 );
 
 // ==========================================
@@ -622,7 +695,7 @@ export function collectPreferences(): UserDisplayPreferences {
       alwaysShowPatterns: chartAlwaysShowPatterns.current,
       lookback: glucoseChartLookback.current,
     },
-  } as UserDisplayPreferences;
+  };
 }
 
 /**
@@ -734,7 +807,8 @@ export function parsePrefsCookie(
   if (!value) return null;
   try {
     const parsed: unknown = JSON.parse(decodeURIComponent(value));
-    return parsed && typeof parsed === "object" ? (parsed as UserDisplayPreferences) : null;
+    // Fields are left unchecked here: each SyncedPref parses its own on hydration.
+    return isRecord(parsed) ? parsed : null;
   } catch {
     return null;
   }
@@ -774,11 +848,7 @@ if (browser) {
     if (!event.key || event.newValue === null) return;
     const pref = syncedRegistry.get(event.key);
     if (!pref) return;
-    try {
-      pref.hydrate(JSON.parse(event.newValue));
-    } catch {
-      // Ignore malformed cross-tab payloads.
-    }
+    pref.hydrateJson(event.newValue);
     if (event.key === "nocturne-color-theme") applyColorTheme(colorTheme.current);
   });
 }
@@ -926,7 +996,7 @@ export function getNativeLanguageLabel(code: SupportedLocale): string {
  * Check if a locale is supported
  */
 export function isSupportedLocale(locale: string): locale is SupportedLocale {
-  return supportedLocales.includes(locale as SupportedLocale);
+  return supportedLocales.some((supported) => supported === locale);
 }
 
 /**

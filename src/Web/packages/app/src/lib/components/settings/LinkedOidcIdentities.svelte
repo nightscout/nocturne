@@ -16,7 +16,8 @@
     getLinkedIdentities,
     unlinkIdentity,
   } from "$lib/api/generated/oidcs.generated.remote";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  import { describeSubmitError, errorStatus } from "$lib/forms/submit-error";
+  import { isRecord } from "$lib/utils/type-guards";
   import { getProvidersInfo } from "$routes/(unauthenticated)/auth/auth.remote";
 
   interface Props {
@@ -47,7 +48,7 @@
   const canRemove = $derived(primaryAuthFactorCount > 1);
 
   const linkedProviderIds = $derived(
-    new Set(identities.map((i) => i.providerId).filter(Boolean) as string[])
+    new Set(identities.map((i) => i.providerId).filter((id): id is string => Boolean(id)))
   );
 
   const availableProviders = $derived(
@@ -72,6 +73,10 @@
     showRemoveDialog = true;
   }
 
+  function errorBodyCode(err: unknown): unknown {
+    return isRecord(err) && isRecord(err.body) ? err.body.error : undefined;
+  }
+
   async function handleRemove() {
     if (!removeTarget?.id) return;
     isRemoving = removeTarget.id;
@@ -83,9 +88,7 @@
       successMessage = "Sign-in method removed.";
       clearMessagesSoon();
     } catch (err) {
-      const status = (err as { status?: number })?.status;
-      const body = (err as { body?: { error?: string } })?.body;
-      if (status === 409 || body?.error === "last_factor") {
+      if (errorStatus(err) === 409 || errorBodyCode(err) === "last_factor") {
         errorMessage =
           "Cannot remove your only sign-in method. Add another first.";
       } else {
