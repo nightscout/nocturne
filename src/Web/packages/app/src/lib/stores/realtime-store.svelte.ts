@@ -32,15 +32,9 @@ import type {
  * Nightscout v1/v2 device status shape received via WebSocket and legacy API.
  * The generated client no longer exports this type; define it locally.
  */
-export interface DeviceStatus {
+export interface DeviceStatus extends PillsDeviceStatus {
   _id?: string;
-  mills?: number;
-  device?: string;
-  loop?: Record<string, any>;
-  openaps?: Record<string, any>;
-  pump?: Record<string, any>;
-  uploader?: Record<string, any>;
-  [key: string]: any;
+  uploader?: Record<string, unknown>;
 }
 import { NotificationUrgency } from "$lib/api";
 import {
@@ -51,7 +45,14 @@ import { toast } from "svelte-sonner";
 import * as alarmState from "$lib/stores/alarm-state.svelte";
 import { getContext, setContext } from "svelte";
 import { getApiClient } from "$lib/api/client";
-import { processPillsData, type ProcessedPillsData } from "$api/pills-processor";
+import {
+  processPillsData,
+  type DeviceStatus as PillsDeviceStatus,
+  type ProcessedPillsData,
+} from "$api/pills-processor";
+import { isEntryDocument } from "$lib/websocket/payloads";
+import { isRecord } from "$lib/utils/type-guards";
+import { toIsoString } from "$lib/utils/api-date";
 
 /**
  * Normalize a V4 SensorGlucose DTO (REST shape: `id` + `mgdl`, no `_id`/`sgv`) into the Entry
@@ -60,13 +61,17 @@ import { processPillsData, type ProcessedPillsData } from "$api/pills-processor"
  * dedupe on `_id`.
  */
 export function sensorGlucoseToEntry(sg: SensorGlucose): Entry {
+  // `trend` is dropped: SensorGlucose names it (GlucoseTrend) where Entry holds
+  // the legacy numeric code, and nothing reads it off a store entry.
+  const { createdAt, trend: _trend, ...rest } = sg;
   return {
-    ...sg,
+    ...rest,
+    createdAt: toIsoString(createdAt) ?? undefined,
     _id: sg.id,
     type: "sgv",
     sgv: sg.mgdl,
     data_source: sg.dataSource,
-  } as unknown as Entry;
+  };
 }
 
 const REALTIME_STORE_KEY = Symbol("realtime-store");
@@ -367,8 +372,8 @@ export class RealtimeStore {
         historicalApsSnapshots,
         currentTherapyState,
       ] = await Promise.all([
-        apiClient.sensorGlucose.getAll(undefined, undefined, 1000).then((r) => (r.data ?? []).map(sensorGlucoseToEntry)).catch(() => [] as Entry[]),
-        Promise.resolve([] as DeviceStatus[]),
+        apiClient.sensorGlucose.getAll(undefined, undefined, 1000).then((r) => (r.data ?? []).map(sensorGlucoseToEntry)).catch((): Entry[] => []),
+        Promise.resolve<DeviceStatus[]>([]),
         apiClient.profile.getProfileSummary().catch(() => null),
         apiClient.trackers.getDefinitions().catch(() => []),
         apiClient.trackers.getActiveInstances().catch(() => []),
@@ -652,7 +657,7 @@ export class RealtimeStore {
   private handleDelete(event: StorageEvent): void {
     const { colName, doc } = event;
 
-    if (colName === "entries") {
+    if (colName === "entries" && isEntryDocument(doc)) {
       this.pendingEntryCreates.delete(entryIdentity(doc));
       this.entries = this.entries.filter((entry) => entry._id !== doc._id);
     }
@@ -778,18 +783,18 @@ export class RealtimeStore {
   }
 
   /* Type guards for runtime type checking */
-  private isEntry(obj: any): obj is Entry {
+  private isEntry(obj: unknown): obj is Entry {
     return (
-      obj &&
-      typeof obj === "object" &&
+      isEntryDocument(obj) &&
       ("sgv" in obj || "mgdl" in obj || "mmol" in obj)
     );
   }
 
-  private isDeviceStatus(obj: any): obj is DeviceStatus {
+  /** The nested loop/openaps/pump shapes are the Nightscout uploader contract
+   *  and are taken on trust; the pills processor reads them null-safely. */
+  private isDeviceStatus(obj: unknown): obj is DeviceStatus {
     return (
-      obj &&
-      typeof obj === "object" &&
+      isRecord(obj) &&
       ("device" in obj || "loop" in obj || "openaps" in obj || "pump" in obj)
     );
   }
@@ -1045,8 +1050,8 @@ export class RealtimeStore {
       // Fetch all data types since last received using existing API methods
       const reservoirRefresh = this.refreshCurrentReservoir();
       const [entries, deviceStatuses, boluses, carbIntakes, bgChecks, notes, devEvents, newApsSnapshots] = await Promise.all([
-        apiClient.sensorGlucose.getAll(backfillFromDate, nowDate, 1000).then((r) => (r.data ?? []).map(sensorGlucoseToEntry)).catch(() => [] as Entry[]),
-        Promise.resolve([] as DeviceStatus[]),
+        apiClient.sensorGlucose.getAll(backfillFromDate, nowDate, 1000).then((r) => (r.data ?? []).map(sensorGlucoseToEntry)).catch((): Entry[] => []),
+        Promise.resolve<DeviceStatus[]>([]),
         apiClient.bolus.getAll(backfillFromDate, nowDate, 500).then((r) => r.data ?? []).catch(() => []),
         apiClient.nutrition.getCarbIntakes(backfillFromDate, nowDate, 500).then((r) => r.data ?? []).catch(() => []),
         apiClient.bGCheck.getAll(backfillFromDate, nowDate, 500).then((r) => r.data ?? []).catch(() => []),

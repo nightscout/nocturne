@@ -9,15 +9,6 @@ import type {
 // Re-export API client types for convenience
 export type { Entry, Treatment };
 
-// Local type definitions for WebSocket events
-export type WebSocketEvents = {
-  [key: string]: any;
-};
-
-export type WebSocketEventsMetadata = {
-  [key: string]: any;
-};
-
 // WebSocket connection states
 export type WebSocketConnectionStatus =
   // No connection has been attempted yet. Distinct from 'disconnected', which
@@ -58,7 +49,8 @@ export interface DataUpdateEvent {
 
 export interface StorageEvent {
   colName: string;
-  doc: Entry | Treatment | any;
+  /** Unvalidated: the collection decides the shape, so consumers narrow it. */
+  doc: unknown;
 }
 
 export interface AnnouncementEvent {
@@ -159,5 +151,5 @@ export interface WebSocketError {
   type: 'connection' | 'authentication' | 'message' | 'timeout';
   message: string;
   timestamp: number;
-  details?: any;
+  details?: unknown;
 }

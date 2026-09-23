@@ -7,13 +7,19 @@ import type {
   WebSocketError,
   WebSocketEventHandlers,
   ConnectionInfo,
-  DataUpdateEvent,
-  StorageEvent,
-  AnnouncementEvent,
-  AlarmEvent,
-  StatusEvent,
 } from "./types";
 import { realtimeSocketOptions } from "./socket-options";
+import {
+  parseAlarm,
+  parseAnnouncement,
+  parseDataUpdate,
+  parseNotification,
+  parseStatus,
+  parseStorageEvent,
+  parseSyncProgress,
+  parseUrgentAlarm,
+} from "./payloads";
+import { isRecord } from "$lib/utils/type-guards";
 import { isoNow } from "$lib/utils/now";
 
 /** Per-socket record of whether its handshake carried a ticket. The bridge
@@ -165,13 +171,12 @@ export class WebSocketClient {
       if (!res.ok) {
         return { token: null, denied: false }; // redirect / 5xx — transient
       }
-      const body = (await res.json().catch(() => null)) as
-        | { token?: string | null; retry?: boolean }
-        | null;
-      const token = body?.token ?? null;
+      const body: unknown = await res.json().catch(() => null);
+      const fields = isRecord(body) ? body : {};
+      const token = typeof fields.token === "string" ? fields.token : null;
       // 200 + null token = no ticket; a definitive denial unless the endpoint
       // flagged it transient.
-      return { token, denied: token == null && body?.retry !== true };
+      return { token, denied: token == null && fields.retry !== true };
     } catch {
       return { token: null, denied: false }; // network error / timeout
     }
@@ -316,73 +321,40 @@ export class WebSocketClient {
     });
 
     // Data events matching WebSocketBridge message format
-    this.socket.on("dataUpdate", (data: any) => {
+    this.socket.on("dataUpdate", (data: unknown) => {
       this.updateMessageStats();
-      const event: DataUpdateEvent = {
-        data: Array.isArray(data) ? data : [data],
-      };
-      this.eventHandlers.dataUpdate?.(event);
+      this.eventHandlers.dataUpdate?.({ data: parseDataUpdate(data) });
     });
 
-    this.socket.on("create", (data: any) => {
+    this.socket.on("create", (data: unknown) => {
       this.updateMessageStats();
-      const event: StorageEvent = {
-        colName: data.colName || data.collection || "entries",
-        doc: data.doc || data.document || data,
-      };
-      this.eventHandlers.create?.(event);
+      this.eventHandlers.create?.(parseStorageEvent(data));
     });
 
-    this.socket.on("update", (data: any) => {
+    this.socket.on("update", (data: unknown) => {
       this.updateMessageStats();
-      const event: StorageEvent = {
-        colName: data.colName || data.collection || "entries",
-        doc: data.doc || data.document || data,
-      };
-      this.eventHandlers.update?.(event);
+      this.eventHandlers.update?.(parseStorageEvent(data));
     });
 
-    this.socket.on("delete", (data: any) => {
+    this.socket.on("delete", (data: unknown) => {
       this.updateMessageStats();
-      const event: StorageEvent = {
-        colName: data.colName || data.collection || "entries",
-        doc: data.doc || data.document || data,
-      };
-      this.eventHandlers.delete?.(event);
+      this.eventHandlers.delete?.(parseStorageEvent(data));
     });
 
     // Notification events
-    this.socket.on("announcement", (data: any) => {
+    this.socket.on("announcement", (data: unknown) => {
       this.updateMessageStats();
-      const event: AnnouncementEvent = {
-        message: data.message || data.text || String(data),
-        title: data.title || "Announcement",
-        level: data.level || "info",
-        timestamp: data.timestamp || isoNow(),
-      };
-      this.eventHandlers.announcement?.(event);
+      this.eventHandlers.announcement?.(parseAnnouncement(data));
     });
 
-    this.socket.on("alarm", (data: any) => {
+    this.socket.on("alarm", (data: unknown) => {
       this.updateMessageStats();
-      const event: AlarmEvent = {
-        level: data.level || "warn",
-        title: data.title || "Alarm",
-        message: data.message,
-        plugin: data.plugin || data.source,
-        timestamp: data.timestamp || isoNow(),
-        key: data.key || data.id,
-      };
-      this.eventHandlers.alarm?.(event);
+      this.eventHandlers.alarm?.(parseAlarm(data));
     });
 
-    this.socket.on("urgent_alarm", (data: any) => {
+    this.socket.on("urgent_alarm", (data: unknown) => {
       this.updateMessageStats();
-      const event: AlarmEvent = {
-        ...data,
-        level: "urgent",
-      };
-      this.eventHandlers.alarm?.(event);
+      this.eventHandlers.alarm?.(parseUrgentAlarm(data));
     });
 
     this.socket.on("clear_alarm", () => {
@@ -390,35 +362,34 @@ export class WebSocketClient {
       this.eventHandlers.clear_alarm?.();
     });
 
-    this.socket.on("status", (data: any) => {
+    this.socket.on("status", (data: unknown) => {
       this.updateMessageStats();
-      const event: StatusEvent = {
-        status: data.status || data.state,
-        message: data.message,
-        timestamp: data.timestamp || isoNow(),
-      };
-      this.eventHandlers.status?.(event);
+      this.eventHandlers.status?.(parseStatus(data));
     });
 
     // In-app notification events
-    this.socket.on("notificationCreated", (data: any) => {
+    this.socket.on("notificationCreated", (data: unknown) => {
       this.updateMessageStats();
-      this.eventHandlers.notificationCreated?.(data);
+      const notification = parseNotification(data);
+      if (notification) this.eventHandlers.notificationCreated?.(notification);
     });
 
-    this.socket.on("notificationArchived", (data: any) => {
+    this.socket.on("notificationArchived", (data: unknown) => {
       this.updateMessageStats();
-      this.eventHandlers.notificationArchived?.(data);
+      const notification = parseNotification(data);
+      if (notification) this.eventHandlers.notificationArchived?.(notification);
     });
 
-    this.socket.on("notificationUpdated", (data: any) => {
+    this.socket.on("notificationUpdated", (data: unknown) => {
       this.updateMessageStats();
-      this.eventHandlers.notificationUpdated?.(data);
+      const notification = parseNotification(data);
+      if (notification) this.eventHandlers.notificationUpdated?.(notification);
     });
 
-    this.socket.on("syncProgress", (data: any) => {
+    this.socket.on("syncProgress", (data: unknown) => {
       this.updateMessageStats();
-      this.eventHandlers.syncProgress?.(data);
+      const event = parseSyncProgress(data);
+      if (event) this.eventHandlers.syncProgress?.(event);
     });
   }
 
@@ -427,7 +398,7 @@ export class WebSocketClient {
     event: K,
     handler: WebSocketEventHandlers[K]
   ): void {
-    (this.eventHandlers as WebSocketEventHandlers)[event] = handler;
+    this.eventHandlers[event] = handler;
   }
 
   /** Remove event handlers */
@@ -454,7 +425,7 @@ export class WebSocketClient {
   private handleError(
     type: WebSocketError["type"],
     message: string,
-    details?: any
+    details?: unknown
   ): void {
     this.connectionStatus = "error";
     this.lastError = {

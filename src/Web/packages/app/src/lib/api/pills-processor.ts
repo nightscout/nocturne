@@ -35,20 +35,20 @@ export interface DeviceStatus {
 		name?: string;
 		iob?: { iob?: number; timestamp?: string };
 		cob?: { cob?: number; timestamp?: string };
-		enacted?: any;
+		enacted?: LoopEnactedData;
 		predicted?: { values?: number[] };
 	};
 	openaps?: {
 		timestamp?: string;
-		iob?: any;
-		suggested?: any;
-		enacted?: any;
+		iob?: OpenApsIobEntry | OpenApsIobEntry[];
+		suggested?: OpenApsSuggestedEnacted;
+		enacted?: OpenApsSuggestedEnacted;
 	};
 	pump?: {
 		iob?: number | { iob?: number; bolusiob?: number };
 		bolusiob?: number;
 	};
-	connect?: any;
+	connect?: unknown;
 }
 
 
@@ -106,12 +106,14 @@ function statusNumber(value: number | null | undefined): number | undefined {
 /**
  * Helper to safely access OpenAPS IOB data which can be an array or single object
  */
-function getOpenApsIob(iob: unknown): OpenApsIobEntry | null {
+function getOpenApsIob(
+	iob: OpenApsIobEntry | OpenApsIobEntry[] | undefined
+): OpenApsIobEntry | null {
 	if (!iob) return null;
 	if (Array.isArray(iob)) {
-		return iob[0] as OpenApsIobEntry;
+		return iob[0] ?? null;
 	}
-	return iob as OpenApsIobEntry;
+	return iob;
 }
 
 /**
@@ -510,8 +512,8 @@ export function processCOB(
 		// Check OpenAPS COB (from suggested or enacted)
 		const openaps = status.openaps;
 		if (openaps) {
-			const suggested = openaps.suggested as OpenApsSuggestedEnacted | undefined;
-			const enacted = openaps.enacted as OpenApsSuggestedEnacted | undefined;
+			const suggested = openaps.suggested;
+			const enacted = openaps.enacted;
 
 			let lastCOB: number | null = null;
 			let lastMoment: number | null = null;
@@ -824,7 +826,7 @@ export function processBasal(
 
 	// Check for temp basal from various sources
 	if (openaps?.enacted) {
-		const enacted = openaps.enacted as OpenApsSuggestedEnacted;
+		const enacted = openaps.enacted;
 		if (enacted.rate !== undefined && enacted.duration !== undefined) {
 			// Check if the temp basal is still active
 			const enactedTimestamp = enacted.timestamp ? new Date(enacted.timestamp).getTime() : now;
@@ -845,7 +847,7 @@ export function processBasal(
 	}
 
 	if (loopData?.enacted) {
-		const enacted = loopData.enacted as LoopEnactedData;
+		const enacted = loopData.enacted;
 		if (enacted.rate !== undefined && enacted.duration !== undefined) {
 			// Check if temp basal is still active
 			const enactedTimestamp = enacted.timestamp ? new Date(enacted.timestamp).getTime() : now;
@@ -950,7 +952,7 @@ export function processLoop(
 
 		// Get enacted/recommended
 		if (loopData.enacted) {
-			const enacted = loopData.enacted as LoopEnactedData;
+			const enacted = loopData.enacted;
 			const enactedTime = enacted.timestamp ? new Date(enacted.timestamp).getTime() : loopTimestamp;
 
 			result.lastEnacted = {
