@@ -1,6 +1,7 @@
 <script lang="ts" module>
   import type { MutationAuditDto } from "$lib/api/generated/nocturne-api-client";
   import type {
+    Column,
     ColumnDef,
     SortingState,
     ColumnFiltersState,
@@ -52,6 +53,20 @@
 
   // Expanded row
   let expandedId = $state<string | null>(null);
+
+  interface ActionFilterHeaderProps {
+    actionFilterOptions: { value: string; label: string }[];
+    selectedActions: string[];
+    toggleActionFilter: (action: string) => void;
+    clearActionFilter: () => void;
+  }
+
+  interface EntityTypeFilterHeaderProps {
+    uniqueEntityTypes: string[];
+    selectedEntityTypes: string[];
+    toggleEntityTypeFilter: (entityType: string) => void;
+    clearEntityTypeFilter: () => void;
+  }
 
   // Column filter states
   let selectedActions = $state<string[]>([]);
@@ -150,8 +165,7 @@
       if (typeof parsed === "object" && parsed !== null) {
         return Object.entries(parsed).map(([field, value]: [string, unknown]) => {
           if (typeof value === "object" && value !== null && "old" in value && "new" in value) {
-            const v = value as { old: unknown; new: unknown };
-            return { field, oldValue: String(v.old ?? ""), newValue: String(v.new ?? "") };
+            return { field, oldValue: String(value.old ?? ""), newValue: String(value.new ?? "") };
           }
           return { field, oldValue: "", newValue: String(value ?? "") };
         });
@@ -169,7 +183,7 @@
       id: "time",
       accessorFn: (row) => row.createdAt,
       header: ({ column }) =>
-        renderSnippet(sortableHeaderSnippet as any, { column, label: "Time" }),
+        renderSnippet(sortableHeaderSnippet, { column, label: "Time" }),
       cell: ({ row }) => formatCompactDate(row.original.createdAt),
       sortingFn: (rowA, rowB) => {
         const a = rowA.original.createdAt ? new Date(rowA.original.createdAt).getTime() : 0;
@@ -182,7 +196,7 @@
       id: "subject",
       accessorFn: (row) => row.subjectName ?? row.subjectId ?? "system",
       header: ({ column }) =>
-        renderSnippet(sortableHeaderSnippet as any, { column, label: "Subject" }),
+        renderSnippet(sortableHeaderSnippet, { column, label: "Subject" }),
       cell: ({ row }) => {
         const r = row.original;
         return r.subjectName ?? truncateId(r.subjectId ?? "system");
@@ -193,14 +207,14 @@
       id: "action",
       accessorFn: (row) => row.action,
       header: () =>
-        renderSnippet(actionFilterHeaderSnippet as any, {
+        renderSnippet(actionFilterHeaderSnippet, {
           actionFilterOptions,
           selectedActions,
           toggleActionFilter,
           clearActionFilter,
         }),
       cell: ({ row }) =>
-        renderSnippet(actionBadgeSnippet as any, { action: row.original.action }),
+        renderSnippet(actionBadgeSnippet, { action: row.original.action }),
       filterFn: (row, _id, filterValue: string[]) => {
         if (!filterValue.length) return true;
         return filterValue.includes(row.original.action ?? "");
@@ -211,7 +225,7 @@
       id: "entityType",
       accessorFn: (row) => row.entityType,
       header: () =>
-        renderSnippet(entityTypeFilterHeaderSnippet as any, {
+        renderSnippet(entityTypeFilterHeaderSnippet, {
           uniqueEntityTypes,
           selectedEntityTypes,
           toggleEntityTypeFilter,
@@ -229,7 +243,7 @@
       accessorFn: (row) => row.entityId,
       header: "Entity ID",
       cell: ({ row }) =>
-        renderSnippet(entityIdSnippet as any, { entityId: row.original.entityId }),
+        renderSnippet(entityIdSnippet, { entityId: row.original.entityId }),
       enableSorting: false,
     },
     // Endpoint column
@@ -238,7 +252,7 @@
       accessorFn: (row) => row.endpoint,
       header: "Endpoint",
       cell: ({ row }) =>
-        renderSnippet(mutedTextSnippet as any, { text: row.original.endpoint }),
+        renderSnippet(mutedTextSnippet, { text: row.original.endpoint }),
       enableSorting: false,
     },
     // IP Address column
@@ -247,7 +261,7 @@
       accessorFn: (row) => row.ipAddress,
       header: "IP Address",
       cell: ({ row }) =>
-        renderSnippet(mutedTextSnippet as any, { text: row.original.ipAddress }),
+        renderSnippet(mutedTextSnippet, { text: row.original.ipAddress }),
       enableSorting: false,
     },
   ];
@@ -375,7 +389,7 @@
   column,
   label,
 }: {
-  column: any;
+  column: Column<MutationAuditDto, unknown>;
   label: string;
 })}
   <Button
@@ -401,7 +415,7 @@
   </Badge>
 {/snippet}
 
-{#snippet actionFilterHeaderSnippet({ actionFilterOptions, selectedActions, toggleActionFilter, clearActionFilter }: any)}
+{#snippet actionFilterHeaderSnippet({ actionFilterOptions, selectedActions, toggleActionFilter, clearActionFilter }: ActionFilterHeaderProps)}
   <ColumnFilterPopover
     label="Action"
     options={actionFilterOptions}
@@ -411,7 +425,7 @@
   />
 {/snippet}
 
-{#snippet entityTypeFilterHeaderSnippet({ uniqueEntityTypes, selectedEntityTypes, toggleEntityTypeFilter, clearEntityTypeFilter }: any)}
+{#snippet entityTypeFilterHeaderSnippet({ uniqueEntityTypes, selectedEntityTypes, toggleEntityTypeFilter, clearEntityTypeFilter }: EntityTypeFilterHeaderProps)}
   <ColumnFilterPopover
     label="Entity Type"
     options={uniqueEntityTypes.map((type: string) => ({
@@ -477,8 +491,8 @@
           <Table.Row
             class="cursor-pointer"
             onclick={(e: MouseEvent) => {
-              const target = e.target as HTMLElement;
-              if (target.closest('button, input[type="checkbox"], [role="checkbox"]')) return;
+              const target = e.target;
+              if (target instanceof Element && target.closest('button, input[type="checkbox"], [role="checkbox"]')) return;
               toggleExpanded(row.original.id);
             }}
           >
