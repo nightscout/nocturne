@@ -23,6 +23,7 @@ surrounding detail.
 | Stability sweep | 500 ticks at parameter extremes stay finite and bounded |
 | Edge darkening | wet-on-dry disc rims heavier than centre (asserted `> 1.15x`) |
 | Wet-on-wet spread | pre-wetted area spreads 90 % pigment radius `> 1.3x` further |
+| Pooling | the free-surface flux conserves water, and a dried disc's interior deposit correlates with the paper's valleys more than without it |
 | Playback | `tests/playback.rs`: seek-vs-replay bit-equality, finish-immediately dryness, front-loaded elapsed-time advance, checkpoint bound |
 | Mask raster | `tests/mask_raster.rs`: FNV-1a snapshot of `rasterize_mask_aspect` over 64 synthetic masks, captured from the original code and green on the accelerated one; degenerate polygons (fewer than three points) do not panic |
 

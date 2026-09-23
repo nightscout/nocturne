@@ -43,6 +43,10 @@ struct Params {
     max_suspended: f32,
     wet_threshold: f32,
     _pad: f32,
+    pool_rate: f32,
+    pool_relief: f32,
+    edge_flow: f32,
+    _pad_water: f32,
 };
 
 struct Stroke {
