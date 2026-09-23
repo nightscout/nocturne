@@ -121,6 +121,7 @@ public class TenantlessDemoSubjectCoverageTests
             ["SetupController.OidcCallback"] = FirstRunOnly,
 
             ["StatusController.GetStatus"] = "reports the deployment's version, settings and setup state to any caller, signed in or not; reads no session",
+            ["SupportController.AcceptRelayedIssue"] = "files the posted form as a GitHub issue on the operator's PAT, for another instance's server; reads no session and names no tenant, and is 404 unless the instance opted in to relaying",
             ["SupportController.GetSupportConfig"] = "returns the operator's own support and billing links from deployment configuration; reads no session and names no tenant",
             ["TlsAuthorizationController.Authorize"] = "answers the edge's on-demand-TLS ask for a hostname; it takes no credential and reads no session",
             ["TotpController.Login"] = "mints the session; the subject comes from the passkey step-up token, and it additionally requires membership of the resolved tenant, which a tenantless host has none of",

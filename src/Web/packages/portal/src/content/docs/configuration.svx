@@ -103,6 +103,41 @@ nothing here is required for a working install.
 GHCR. Pin them to a specific version tag to control exactly when your instance
 updates.
 
+### The in-app support form
+
+The **Report a problem** form in Nocturne files your report as a **public**
+issue on GitHub. It works out of the box, with nothing to configure:
+
+- **Default (no GitHub token set):** your instance forwards the report to
+  `nocturne.run`, which files it on
+  [github.com/nightscout/nocturne](https://github.com/nightscout/nocturne).
+  Screenshots are limited to 4 images, 5 MB each and 10 MB in total. If the
+  report cannot be sent, the form offers a pre-filled GitHub link instead, and
+  you can paste your screenshots there yourself.
+- **Your own repository:** to file reports somewhere else, add these to the
+  `nocturne-api` service's environment. A GitHub token (a "personal access
+  token", or PAT) is a password for the GitHub API: keep it out of anything you
+  share.
+
+| Variable | What it does |
+|----------|--------------|
+| `GitHub__IssuesPat` | A token that can create issues, and write contents if screenshots are uploaded. Setting it stops the forwarding to `nocturne.run`. |
+| `GitHub__Owner`, `GitHub__Repo` | The repository reports go to. Both default to `nightscout` / `nocturne`, so set them whenever you set the token. |
+| `GitHub__AssetsBranch` | The branch screenshots are committed to (default `support-assets`). It must already exist. Set it empty to skip screenshot uploads. |
+
+Everything you leave switched on under **Diagnostic Info** in the form is
+published with the report, so check the preview before you send it.
+
+<Callout type="info" title="Accepting forwarded reports and contributions">
+  <code>GitHub__AcceptRelayedIssues=true</code> lets other instances forward
+  support reports to yours, and <code>GitHub__AcceptRelayedContributions=true</code>
+  does the same for translation and content contributions. Each one opens an
+  endpoint that anyone can reach anonymously, and it files work on your token
+  (<code>GitHub__IssuesPat</code> and <code>GitHub__ContributionsPat</code>
+  respectively). Leave both off unless you run a relay on purpose, as
+  <code>nocturne.run</code> does.
+</Callout>
+
 ## Beyond environment variables
 
 The rest of Nocturne's configuration lives in the running app, not the

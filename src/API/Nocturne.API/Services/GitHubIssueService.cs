@@ -8,7 +8,14 @@ namespace Nocturne.API.Services;
 public class GitHubIssueOptions
 {
     public string? IssuesPat { get; set; }
-    public string RelayUrl { get; set; } = "https://nocturne.run/api/v4/support/issues";
+    public string RelayUrl { get; set; } = "https://nocturne.run/api/v4/support/relay";
+
+    /// <summary>
+    /// Accept anonymous relayed issues from other instances (the nocturne.run side of the
+    /// relay). Requires IssuesPat. Off by default so a regular instance never exposes an
+    /// anonymous endpoint that files issues and commits screenshots on its operator's PAT.
+    /// </summary>
+    public bool AcceptRelayedIssues { get; set; }
     public string Owner { get; set; } = GitHubApi.DefaultOwner;
     public string Repo { get; set; } = GitHubApi.DefaultRepo;
 
@@ -82,6 +89,8 @@ public class GitHubIssueService(
 
     public bool HasLocalPat => !string.IsNullOrEmpty(options.Value.IssuesPat);
 
+    public bool AcceptsRelay => options.Value.AcceptRelayedIssues && HasLocalPat;
+
     public async Task<CreateIssueResponse> CreateIssueAsync(
         CreateIssueRequest request,
         IReadOnlyList<(string FileName, string ContentType, Stream Content)> images,
@@ -127,6 +136,10 @@ public class GitHubIssueService(
     /// <summary>
     /// Forward a complete multipart request to the relay (nocturne.run) when no local PAT is configured.
     /// </summary>
+    /// <remarks>
+    /// Carries no credential: the receiving instance has no relationship with this one, so its
+    /// relay ingress is anonymous and opt-in (<see cref="GitHubIssueOptions.AcceptRelayedIssues"/>).
+    /// </remarks>
     public async Task<CreateIssueResponse> RelayAsync(
         HttpContent originalContent, CancellationToken ct)
     {

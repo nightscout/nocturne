@@ -104,6 +104,9 @@ public class TenantResolutionMiddleware
         "/api/v4/user/preferences",
         // A host that resolves no tenant still needs somewhere to send the visitor.
         SupportConfigPath,
+        // Another instance's server relaying a support issue to the apex it was configured with
+        // (GitHubIssueOptions.RelayUrl). The issue goes to GitHub, not to any tenant here.
+        new TenantlessPath("/api/v4/support/relay", HttpMethods.Post),
         "/api/v4/chat-identity/directory/resolve",
         "/api/v4/chat-identity/directory/pending-links",
         // OIDC login can be initiated from the apex (no subdomain) — e.g. the
