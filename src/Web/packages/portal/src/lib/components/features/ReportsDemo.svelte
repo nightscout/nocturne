@@ -97,7 +97,7 @@
         <div class="flex-1 rounded-lg overflow-hidden bg-card/50 min-h-0">
             <svg viewBox="0 0 400 200" class="w-full h-full" preserveAspectRatio="xMidYMid meet">
                 {#if current.preview === "summary"}
-                    {#each [["Average", "142", "mg/dL"], ["GMI", "6.7", "%"], ["Time in range", "72", "%"], ["Variability", "33", "% CV"]] as [label, value, unit], i (label)}
+                    {#each [["Average", "142", "mg/dL"], ["GMI", "6.7", "%"], ["Time in range", "72", "%"], ["Variability", "33", "% CV"]] as [label, value, unit], i (i)}
                         <rect x={16 + i * 94} y="22" width="84" height="70" rx="6" class="fill-card"/>
                         <text x={26 + i * 94} y="44" fill={INK_SOFT} font-size="9" font-family={MONO}>{label}</text>
                         <text x={26 + i * 94} y="74" fill={INK} font-size="22" font-weight="700" font-family={SANS}>{value}</text>
@@ -201,7 +201,7 @@
                     {/each}
 
                 {:else if current.preview === "month"}
-                    {#each MONTHS as [m, avg], i (m)}
+                    {#each MONTHS as [m, avg], i (i)}
                         {@const h = (avg - 100) * 1.6}
                         <rect x={28 + i * 60} y={150 - h} width="40" height={h} fill={avg > 145 ? HIGH : IN_RANGE} opacity="0.75" rx="3"/>
                         <text x={48 + i * 60} y="170" text-anchor="middle" fill={INK_SOFT} font-size="11" font-family={MONO}>{m}</text>
@@ -307,7 +307,7 @@
                         ["Carbohydrates", "182 g / day"],
                         ["Average glucose", "142 mg/dL"],
                         ["Time in range", "72%"],
-                    ] as [k, v], i (k)}
+                    ] as [k, v], i (i)}
                         <line x1="16" y1={66 + i * 21} x2="384" y2={66 + i * 21} class="stroke-foreground/8"/>
                         <text x="16" y={81 + i * 21} fill={INK_SOFT} font-size="11" font-family={SANS}>{k}</text>
                         <text x="384" y={81 + i * 21} text-anchor="end" fill={INK} font-size="11" font-weight="600" font-family={MONO}>{v}</text>

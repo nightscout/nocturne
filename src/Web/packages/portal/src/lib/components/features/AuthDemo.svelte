@@ -67,7 +67,7 @@
             { label: "Nothing leaves your server",    icon: "shield" },
             { label: "Passkeys are device-locked",    icon: "key" },
             { label: "Open source · auditable code",  icon: "check" },
-        ] as b (b.label)}
+        ] as b (b.icon)}
             <div class="flex items-center gap-2.5 text-sm text-foreground/80">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" class="stroke-glucose-in-range"
                      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

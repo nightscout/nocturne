@@ -259,7 +259,7 @@
 
     <!-- Stat widgets -->
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-10">
-      {#each STATS as stat (stat.label)}
+      {#each STATS as stat, si (si)}
         <div class="bg-card border border-border rounded-xl p-5">
           <p class="text-xs font-semibold tracking-widest uppercase text-muted-foreground m-0 mb-2.5">
             {stat.label}

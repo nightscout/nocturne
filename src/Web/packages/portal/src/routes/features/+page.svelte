@@ -118,7 +118,7 @@
 
                 <!-- Bullets -->
                 <ul class="m-0 mt-2 p-0 list-none flex flex-col gap-3.5">
-                    {#each p.bullets as b (b)}
+                    {#each p.bullets as b, bi (bi)}
                         <li class="flex items-start gap-3.5 text-base text-foreground/85">
                             <span class="shrink-0 size-[26px] rounded-full border-2 border-highlight grid place-items-center mt-0.5">
                                 <Check class="size-3.5 text-highlight" />
@@ -159,7 +159,7 @@
         </h2>
 
         <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {#each SUPPORTING as card (card.title)}
+            {#each SUPPORTING as card (card.icon)}
                 <div class="p-7 rounded-2xl border border-border/60 bg-card/50 backdrop-blur-sm flex flex-col gap-3.5"
                      style:--highlight={card.color}>
                     <div class="size-[52px] rounded-xl grid place-items-center bg-highlight/15 border border-highlight/40">
@@ -199,7 +199,7 @@
                     "Alarms are high and low thresholds, with a snooze",
                     "One shared API secret for every app and follower",
                     "A fixed set of report pages",
-                ] as line (line)}
+                ] as line, li (li)}
                     <div class="flex items-center gap-3 text-base text-muted-foreground/70">
                         <span class="size-5 rounded-full bg-foreground/6 grid place-items-center shrink-0
                                      font-mono text-sm text-muted-foreground/50">&middot;</span>
@@ -222,7 +222,7 @@
                     "Rules with thresholds, durations, and trends, delivered anywhere",
                     "Passkeys and social sign-in, with a scoped token per app",
                     `${AVAILABLE_REPORT_COUNT} reports, with your own target range drawn on them`,
-                ] as line (line)}
+                ] as line, li (li)}
                     <div class="flex items-center gap-3 text-base text-foreground/90 font-medium relative">
                         <span class="size-5 rounded-full bg-glucose-in-range/18 border border-glucose-in-range/40
                                      grid place-items-center shrink-0">

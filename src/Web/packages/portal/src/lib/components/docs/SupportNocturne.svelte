@@ -45,7 +45,7 @@
     </p>
 
     <div class="grid gap-4 sm:grid-cols-3">
-        {#each TIERS as tier (tier.name)}
+        {#each TIERS as tier (tier.tier)}
             <a
                 href={tier.href}
                 target="_blank"

@@ -119,14 +119,14 @@
 
     <!-- FAQ Categories -->
     <div class="flex flex-col">
-        {#each faqCategories as category, ci (category.title)}
+        {#each faqCategories as category, ci (ci)}
             <section class="py-16 border-t border-border">
                 <div class="mb-8">
                     <div class="font-brand text-xs font-bold tracking-eyebrow uppercase text-muted-foreground">0{ci + 1} &middot; {category.title}</div>
                 </div>
 
                 <Accordion.Root type="multiple" class="space-y-3">
-                    {#each category.questions as faq, index (faq.question)}
+                    {#each category.questions as faq, index (index)}
                         <Accordion.Item
                             value="{category.title}-{index}"
                             class="rounded-lg border border-border/60 bg-card/50 px-6 overflow-hidden"

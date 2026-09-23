@@ -53,7 +53,7 @@
 
                 <!-- Bullets -->
                 <ul class="m-0 mt-1 p-0 list-none flex flex-col gap-3">
-                    {#each p.bullets as b (b)}
+                    {#each p.bullets as b, bi (bi)}
                         <li class="flex items-start gap-3.5 text-base text-foreground/85">
                             <span class="shrink-0 size-6 rounded-full border border-highlight grid place-items-center mt-0.5">
                                 <Check class="size-3.5 text-highlight" />
