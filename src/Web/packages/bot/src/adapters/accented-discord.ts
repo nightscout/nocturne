@@ -8,7 +8,8 @@ interface EmbedBody {
 const hasEmbeds = (body: unknown): body is EmbedBody =>
   typeof body === "object" &&
   body !== null &&
-  Array.isArray((body as EmbedBody).embeds);
+  "embeds" in body &&
+  Array.isArray(body.embeds);
 
 /**
  * `@chat-adapter/discord` fixes every embed to one brand colour and exposes no

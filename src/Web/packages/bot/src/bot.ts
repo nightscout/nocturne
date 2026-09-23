@@ -1,4 +1,5 @@
 import { Chat } from "chat";
+import type { Adapter } from "chat";
 import { createTelegramAdapter } from "@chat-adapter/telegram";
 import { createWhatsAppAdapter } from "@chat-adapter/whatsapp";
 import { createResendAdapter } from "@resend/chat-sdk-adapter";
@@ -37,7 +38,7 @@ export interface BotOptions {
 }
 
 export function createBot(options: BotOptions): Chat {
-  const adapters: Record<string, any> = {};
+  const adapters: Record<string, Adapter> = {};
   const platforms = options.platforms ?? {};
 
   const discord = platforms.discord;

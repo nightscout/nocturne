@@ -3,6 +3,9 @@ export interface CardButton {
   value: string | undefined;
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
 const str = (value: unknown) => (typeof value === "string" ? value : undefined);
 
 interface CardElement {
@@ -17,7 +20,10 @@ function cardElements(node: unknown, found: CardElement[] = []): CardElement[] {
     return found;
   }
   if (node === null || typeof node !== "object") return found;
-  const el = node as CardElement;
+  const el: CardElement = {
+    props: "props" in node && isRecord(node.props) ? node.props : undefined,
+    children: "children" in node ? node.children : undefined,
+  };
   found.push(el);
   return cardElements(el.children, found);
 }
@@ -27,8 +33,7 @@ const props = (node: unknown) =>
 
 export function cardButtons(node: unknown): CardButton[] {
   return props(node)
-    .filter((p) => typeof p.id === "string")
-    .map((p) => ({ id: p.id as string, value: str(p.value) }));
+    .flatMap((p) => (typeof p.id === "string" ? [{ id: p.id, value: str(p.value) }] : []));
 }
 
 export function cardTitle(node: unknown): string | undefined {

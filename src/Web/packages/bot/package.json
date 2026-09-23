@@ -13,7 +13,7 @@
     "test:watch": "vitest",
     "bot:register-discord-commands": "node dist/scripts/register-discord-commands.js",
     "lint": "eslint .",
-    "lint:ci": "eslint . --max-warnings 9 --report-unused-disable-directives-severity error"
+    "lint:ci": "eslint . --max-warnings 0 --report-unused-disable-directives-severity error"
   },
   "author": "Nocturne Project",
   "license": "AGPL-3.0-only",

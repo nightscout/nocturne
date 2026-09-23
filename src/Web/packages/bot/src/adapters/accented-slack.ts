@@ -7,7 +7,7 @@ const asCard = (message: AdapterPostableMessage): CardElement | undefined => {
   if (isCardElement(message)) {
     return message;
   }
-  const card = (message as { card?: unknown }).card;
+  const card = typeof message === "object" && "card" in message ? message.card : undefined;
   return isCardElement(card) ? card : undefined;
 };
 
@@ -61,7 +61,9 @@ export class AccentedSlackAdapter extends SlackAdapter {
       );
 
       // `ts` is absent only on a response Slack does not document as ok; stock
-      // leaves the id undefined there rather than inventing one.
+      // leaves the id undefined there rather than inventing one, although
+      // `RawMessage` types it as a string.
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- matches stock, see above
       return { id: result.ts as string, threadId, raw: result };
     } catch (error) {
       // Maps `ratelimited` onto the typed error the retry path expects; it

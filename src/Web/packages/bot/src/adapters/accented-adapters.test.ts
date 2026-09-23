@@ -87,7 +87,14 @@ describe("AccentedDiscordAdapter", () => {
 });
 
 describe("AccentedSlackAdapter", () => {
-  const postMessage = vi.fn(async () => ({ ok: true, ts: "1700000000.000100" }));
+  interface PostedBody {
+    attachments?: Array<{ color: string; blocks: unknown[] }>;
+    blocks: unknown[];
+  }
+  const postMessage = vi.fn(async (_body: PostedBody) => ({
+    ok: true,
+    ts: "1700000000.000100",
+  }));
 
   const adapter = () => {
     const slack = new AccentedSlackAdapter({
@@ -102,7 +109,11 @@ describe("AccentedSlackAdapter", () => {
 
   beforeEach(() => postMessage.mockClear());
 
-  const posted = () => postMessage.mock.calls.at(-1)?.[0] as Record<string, any>;
+  const posted = () => {
+    const body = postMessage.mock.calls.at(-1)?.[0];
+    if (!body) throw new Error("nothing was posted");
+    return body;
+  };
 
   it("wraps a critical alert in an attachment carrying the critical colour", async () => {
     await withAlertAccent("critical", () =>
@@ -110,8 +121,8 @@ describe("AccentedSlackAdapter", () => {
     );
 
     expect(posted().attachments).toHaveLength(1);
-    expect(posted().attachments[0].color).toBe("#e7000b");
-    expect(posted().attachments[0].blocks.length).toBeGreaterThan(0);
+    expect(posted().attachments?.[0].color).toBe("#e7000b");
+    expect(posted().attachments?.[0].blocks.length).toBeGreaterThan(0);
   });
 
   it("gives a warning a different colour from a critical", async () => {
@@ -119,7 +130,7 @@ describe("AccentedSlackAdapter", () => {
       adapter().postMessage("slack:C123", card("warning")),
     );
 
-    expect(posted().attachments[0].color).toBe("#f54900");
+    expect(posted().attachments?.[0].color).toBe("#f54900");
   });
 
   it("posts plain blocks for an unrecognised severity", async () => {
