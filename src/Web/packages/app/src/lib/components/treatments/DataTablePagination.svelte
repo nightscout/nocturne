@@ -1,4 +1,4 @@
-<script lang="ts">
+<script lang="ts" generics="TData">
   import { Button } from "$lib/components/ui/button";
   import * as Select from "$lib/components/ui/select";
   import {
@@ -10,7 +10,7 @@
   import type { Table } from "@tanstack/table-core";
 
   interface Props {
-    table: Table<any>;
+    table: Table<TData>;
     selectedCount: number;
     totalCount: number;
   }

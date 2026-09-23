@@ -104,10 +104,10 @@
         protein: foodProtein,
         energy: foodEnergy,
         gi: foodGi,
-      } as Food;
+      };
 
       if (submitAction === "create" || submitAction === "saveAsNew") {
-        const newFood = (await createNewFood(foodPayload)) as Food;
+        const newFood: Food = await createNewFood(foodPayload);
         allFoods = [...allFoods, newFood];
         selectedFood = newFood;
         originalFood = { ...newFood };
@@ -117,10 +117,10 @@
         request.foodId = newFood._id!;
         onSubmit(request, newFood.name ?? foodName.trim());
       } else if (submitAction === "update" && selectedFood?._id) {
-        const updated = (await updateExistingFood({
+        const updated: Food = await updateExistingFood({
           foodId: selectedFood._id,
           request: foodPayload,
-        })) as Food;
+        });
 
         const idx = allFoods.findIndex((f) => f._id === selectedFood?._id);
         if (idx !== -1) {

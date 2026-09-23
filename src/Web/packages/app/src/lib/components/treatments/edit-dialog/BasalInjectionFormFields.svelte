@@ -2,7 +2,6 @@
   import type {
     CreateBasalInjectionRequest,
     PatientInsulin,
-    InsulinCategory,
   } from "$lib/api";
   import * as Select from "$lib/components/ui/select";
   import { Input } from "$lib/components/ui/input";
@@ -68,7 +67,7 @@
           <div>
             <div>{insulin.name}</div>
             <div class="text-xs text-muted-foreground">
-              {insulinCategoryLabels[insulin.insulinCategory as InsulinCategory] ?? insulin.insulinCategory}
+              {(insulin.insulinCategory ? insulinCategoryLabels[insulin.insulinCategory] : undefined) ?? insulin.insulinCategory}
             </div>
           </div>
         </Select.Item>

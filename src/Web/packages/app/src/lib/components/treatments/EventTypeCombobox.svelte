@@ -51,7 +51,7 @@
   // Get all known event types from categories + additional provided
   let allEventTypes = $derived.by(() => {
     const categoryTypes = Object.values(TREATMENT_CATEGORIES).flatMap(
-      (cat) => cat.eventTypes as readonly string[]
+      (cat): readonly string[] => cat.eventTypes
     );
     const combined = new Set([...categoryTypes, ...additionalEventTypes]);
     return Array.from(combined).sort();

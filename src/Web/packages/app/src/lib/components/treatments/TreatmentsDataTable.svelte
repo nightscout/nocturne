@@ -5,7 +5,9 @@
   } from "$lib/constants/entry-categories";
   import { getEntryStyle } from "$lib/constants/entry-categories";
   import type {
+    Column,
     ColumnDef,
+    Row,
     SortingState,
     ColumnFiltersState,
     VisibilityState,
@@ -58,6 +60,25 @@
   let rowSelection = $state<Record<string, boolean>>({});
   let pagination = $state<PaginationState>({ pageIndex: 0, pageSize: 50 });
   let globalFilter = $state("");
+
+  interface FilterOption {
+    value: string;
+    label: string;
+  }
+
+  interface TypeFilterHeaderProps {
+    typeFilterOptions: FilterOption[];
+    selectedTypes: string[];
+    toggleTypeFilter: (kind: string) => void;
+    clearTypeFilter: () => void;
+  }
+
+  interface SourceFilterHeaderProps {
+    uniqueSources: string[];
+    selectedSources: string[];
+    toggleSourceFilter: (source: string) => void;
+    clearSourceFilter: () => void;
+  }
 
   // Column filter states
   let selectedTypes = $state<string[]>([]);
@@ -155,7 +176,7 @@
       header: ({ table }) => {
         const checked = table.getIsAllPageRowsSelected();
         const indeterminate = table.getIsSomePageRowsSelected();
-        return renderSnippet(selectHeaderSnippet as any, {
+        return renderSnippet(selectHeaderSnippet, {
           checked,
           indeterminate,
           table,
@@ -163,7 +184,7 @@
       },
       cell: ({ row }) => {
         const checked = row.getIsSelected();
-        return renderSnippet(selectCellSnippet as any, { checked, row });
+        return renderSnippet(selectCellSnippet, { checked, row });
       },
       enableSorting: false,
       enableHiding: false,
@@ -174,7 +195,7 @@
       id: "time",
       accessorFn: (row) => row.data.mills,
       header: ({ column }) =>
-        renderSnippet(sortableHeaderSnippet as any, { column, label: "Time" }),
+        renderSnippet(sortableHeaderSnippet, { column, label: "Time" }),
       cell: ({ row }) => formatMills(row.original.data.mills),
       sortingFn: (rowA, rowB) =>
         (rowA.original.data.mills ?? 0) - (rowB.original.data.mills ?? 0),
@@ -183,11 +204,11 @@
     {
       id: "type",
       accessorFn: (row) => row.kind,
-      header: () => renderSnippet(typeFilterHeaderSnippet as any, { typeFilterOptions, selectedTypes, toggleTypeFilter, clearTypeFilter }),
+      header: () => renderSnippet(typeFilterHeaderSnippet, { typeFilterOptions, selectedTypes, toggleTypeFilter, clearTypeFilter }),
       cell: ({ row }) => {
         const label = categoryLabels[row.original.kind];
         const styles = getEntryStyle(row.original.kind);
-        return renderSnippet(typeBadgeSnippet as any, { label, styles });
+        return renderSnippet(typeBadgeSnippet, { label, styles });
       },
       filterFn: (row, _id, filterValue: string[]) => {
         if (!filterValue.length) return true;
@@ -198,7 +219,7 @@
     {
       id: "value",
       header: ({ column }) =>
-        renderSnippet(sortableHeaderSnippet as any, {
+        renderSnippet(sortableHeaderSnippet, {
           column,
           label: "Value",
         }),
@@ -254,7 +275,7 @@
     {
       id: "source",
       accessorFn: (row) => row.data.dataSource || row.data.app,
-      header: () => renderSnippet(sourceFilterHeaderSnippet as any, { uniqueSources, selectedSources, toggleSourceFilter, clearSourceFilter }),
+      header: () => renderSnippet(sourceFilterHeaderSnippet, { uniqueSources, selectedSources, toggleSourceFilter, clearSourceFilter }),
       cell: ({ row }) => {
         const source = row.original.data.dataSource || row.original.data.app;
         if (!source) return "\u2014";
@@ -271,7 +292,7 @@
       id: "actions",
       header: "",
       cell: ({ row }) =>
-        renderSnippet(actionsSnippet as any, { entry: row.original }),
+        renderSnippet(actionsSnippet, { entry: row.original }),
       enableSorting: false,
       enableHiding: false,
       size: 50,
@@ -431,7 +452,7 @@
     }
   }
 
-  const typeFilterOptions = Object.entries(ENTRY_CATEGORIES).map(([id, cat]) => ({
+  const typeFilterOptions: FilterOption[] = Object.entries(ENTRY_CATEGORIES).map(([id, cat]) => ({
     value: id,
     label: cat.name,
   }));
@@ -455,7 +476,7 @@
   />
 {/snippet}
 
-{#snippet selectCellSnippet({ checked, row }: { checked: boolean; row: any })}
+{#snippet selectCellSnippet({ checked, row }: { checked: boolean; row: Row<EntryRecord> })}
   <Checkbox
     {checked}
     onCheckedChange={(value: boolean) => row.toggleSelected(!!value)}
@@ -467,7 +488,7 @@
   column,
   label,
 }: {
-  column: any;
+  column: Column<EntryRecord, unknown>;
   label: string;
 })}
   <Button
@@ -492,7 +513,7 @@
   styles,
 }: {
   label: string;
-  styles: any;
+  styles: ReturnType<typeof getEntryStyle>;
 })}
   <Badge
     variant="outline"
@@ -502,7 +523,7 @@
   </Badge>
 {/snippet}
 
-{#snippet typeFilterHeaderSnippet({ typeFilterOptions, selectedTypes, toggleTypeFilter, clearTypeFilter }: any)}
+{#snippet typeFilterHeaderSnippet({ typeFilterOptions, selectedTypes, toggleTypeFilter, clearTypeFilter }: TypeFilterHeaderProps)}
   <ColumnFilterPopover
     label="Type"
     options={typeFilterOptions}
@@ -512,7 +533,7 @@
   />
 {/snippet}
 
-{#snippet sourceFilterHeaderSnippet({ uniqueSources, selectedSources, toggleSourceFilter, clearSourceFilter }: any)}
+{#snippet sourceFilterHeaderSnippet({ uniqueSources, selectedSources, toggleSourceFilter, clearSourceFilter }: SourceFilterHeaderProps)}
   <ColumnFilterPopover
     label="Source"
     options={uniqueSources.map((source: string) => ({
@@ -584,8 +605,8 @@
             data-state={row.getIsSelected() ? "selected" : undefined}
             class={onRowClick ? "cursor-pointer" : ""}
             onclick={(e: MouseEvent) => {
-              const target = e.target as HTMLElement;
-              if (target.closest('button, input[type="checkbox"], [role="checkbox"]')) return;
+              const target = e.target;
+              if (target instanceof Element && target.closest('button, input[type="checkbox"], [role="checkbox"]')) return;
               onRowClick?.(row.original);
             }}
           >

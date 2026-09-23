@@ -2,31 +2,13 @@
   import * as Card from "$lib/components/ui/card";
   import { Badge } from "$lib/components/ui/badge";
   import type { EntryCategoryId } from "$lib/constants/entry-categories";
+  import type { TreatmentSummary } from "$lib/api";
   import { ENTRY_CATEGORIES } from "$lib/constants/entry-categories";
   import { Activity } from "lucide-svelte";
   import { BolusIcon, CarbsIcon } from "$lib/components/icons";
 
-  // Local type definition for treatment summary
-  interface TreatmentSummaryData {
-    id?: string;
-    mills?: number;
-    eventType?: string;
-    insulin?: number;
-    carbs?: number;
-    totals?: {
-      insulin?: {
-        bolus?: number;
-        basal?: number;
-      };
-      food?: {
-        carbs?: number;
-      };
-    };
-    [key: string]: any;
-  }
-
   interface Props {
-    treatmentSummary: TreatmentSummaryData;
+    treatmentSummary: TreatmentSummary;
     counts: Record<EntryCategoryId | "all", number>;
     /** Calendar days the selected range covers, counting both end days. */
     dayCount: number;
@@ -72,10 +54,10 @@
         </div>
       </div>
       <div class="mt-2 flex flex-wrap gap-1">
-        {#each Object.entries(ENTRY_CATEGORIES) as [id, cat] (id)}
-          {#if counts[id as EntryCategoryId] > 0}
+        {#each Object.values(ENTRY_CATEGORIES) as cat (cat.id)}
+          {#if counts[cat.id] > 0}
             <Badge variant="secondary" class="text-[10px] px-1.5 py-0">
-              {cat.name} <span class="opacity-70">{counts[id as EntryCategoryId]}</span>
+              {cat.name} <span class="opacity-70">{counts[cat.id]}</span>
             </Badge>
           {/if}
         {/each}

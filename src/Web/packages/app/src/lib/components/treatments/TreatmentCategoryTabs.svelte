@@ -23,11 +23,19 @@
     deviceEvent: Smartphone,
     basalInjection: Syringe,
   } as const;
+
+  function toCategory(value: string): EntryCategoryId | "all" | undefined {
+    if (value === "all") return "all";
+    return Object.values(ENTRY_CATEGORIES).find((cat) => cat.id === value)?.id;
+  }
 </script>
 
 <Tabs.Root
   value={activeCategory}
-  onValueChange={(v: string) => onChange(v as EntryCategoryId | "all")}
+  onValueChange={(v: string) => {
+    const category = toCategory(v);
+    if (category) onChange(category);
+  }}
 >
   <Tabs.List
     class="grid h-auto w-full grid-cols-[repeat(auto-fit,minmax(4.5rem,1fr))] gap-2 bg-transparent p-0"
@@ -43,16 +51,16 @@
       </Badge>
     </Tabs.Trigger>
 
-    {#each Object.entries(ENTRY_CATEGORIES) as [id, cat] (id)}
-      {@const Icon = categoryIcons[id as EntryCategoryId]}
+    {#each Object.values(ENTRY_CATEGORIES) as cat (cat.id)}
+      {@const Icon = categoryIcons[cat.id]}
       <Tabs.Trigger
-        value={id}
+        value={cat.id}
         class="flex flex-col items-center gap-1 p-3 data-[state=active]:bg-primary/10 data-[state=active]:text-primary rounded-lg data-[state=active]:border-primary/30"
       >
         <Icon class="h-5 w-5 {cat.colorClass}" />
         <span class="text-xs font-medium">{cat.name}</span>
         <Badge variant="secondary" class="text-[10px] px-1.5 py-0">
-          {categoryCounts[id as EntryCategoryId]}
+          {categoryCounts[cat.id]}
         </Badge>
       </Tabs.Trigger>
     {/each}

@@ -1,4 +1,4 @@
-<script lang="ts">
+<script lang="ts" generics="TData">
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
@@ -7,7 +7,7 @@
 
   interface Props {
     globalFilter: string;
-    table: Table<any>;
+    table: Table<TData>;
     selectedCount: number;
     onClearSelection: () => void;
     onBulkDelete?: () => void;
@@ -24,8 +24,8 @@
       <Input
         placeholder="Search records..."
         value={globalFilter}
-        oninput={(e: Event) => {
-          globalFilter = (e.currentTarget as HTMLInputElement).value;
+        oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
+          globalFilter = e.currentTarget.value;
         }}
         class="max-w-sm"
       />
@@ -41,7 +41,7 @@
       <!-- Column visibility dropdown -->
       <DropdownMenu.Root>
         <DropdownMenu.Trigger>
-          {#snippet child({ props }: any)}
+          {#snippet child({ props }: { props: Record<string, unknown> })}
             <Button variant="outline" size="sm" class="ml-auto" {...props}>
               <Columns3 class="mr-2 h-4 w-4" />
               Columns
@@ -54,7 +54,7 @@
             .filter((col) => col.getCanHide()) as column (column.id)}
             <DropdownMenu.CheckboxItem
               checked={column.getIsVisible()}
-              onCheckedChange={(value: any) => column.toggleVisibility(!!value)}
+              onCheckedChange={(value: boolean) => column.toggleVisibility(!!value)}
             >
               {column.id}
             </DropdownMenu.CheckboxItem>
