@@ -124,7 +124,7 @@
 </script>
 
 <div bind:this={element} class="drag-handle">
-	<Button variant="ghost" class="size-6! rounded-sm p-0" onclick={() => (open = true)}>
+	<Button variant="ghost" size="icon-xs" class="size-6" onclick={() => (open = true)}>
 		<GripVertical />
 	</Button>
 	<DropdownMenu.Root bind:open>
@@ -133,15 +133,15 @@
 		</DropdownMenu.Trigger>
 		<DropdownMenu.Content portalProps={{ to: editorElement ?? undefined }}>
 			<DropdownMenu.Group>
-				<DropdownMenu.GroupHeading class="text-muted-foreground capitalize">
-					{currentNode?.type.name}
+				<DropdownMenu.GroupHeading>
+					<span class="capitalize">{currentNode?.type.name}</span>
 				</DropdownMenu.GroupHeading>
 				<DropdownMenu.Sub>
 					<DropdownMenu.SubTrigger openDelay={300}>
 						<Repeat2 />
 						{strings.dragHandle.turnInto}
 					</DropdownMenu.SubTrigger>
-					<DropdownMenu.SubContent class="max-h-96 overflow-auto duration-300">
+					<DropdownMenu.SubContent class="max-h-96 overflow-auto">
 						{#each turnIntoCommand as command (command)}
 							{@const Icon = command.icon}
 							<DropdownMenu.Item
@@ -152,9 +152,7 @@
 							>
 								<Icon />
 								<span>{command.tooltip}</span>
-								<DropdownMenu.Shortcut class="bg-background rounded border p-0.5"
-									>{command.shortCut}</DropdownMenu.Shortcut
-								>
+								<DropdownMenu.Shortcut>{command.shortCut}</DropdownMenu.Shortcut>
 							</DropdownMenu.Item>
 						{/each}
 					</DropdownMenu.SubContent>
@@ -165,11 +163,9 @@
 					<Palette />
 					{strings.toolbar.color.buttonTitle}
 				</DropdownMenu.SubTrigger>
-				<DropdownMenu.Content side="right" class="max-h-96 overflow-auto duration-300">
+				<DropdownMenu.Content side="right" class="max-h-96 overflow-auto">
 					<DropdownMenu.Group>
-						<DropdownMenu.Label class="text-muted-foreground text-sm"
-							>{strings.toolbar.color.textColor}</DropdownMenu.Label
-						>
+						<DropdownMenu.Label>{strings.toolbar.color.textColor}</DropdownMenu.Label>
 						{#each quickcolors as color (color.label)}
 							<DropdownMenu.Item
 								title={color.label}
@@ -188,9 +184,7 @@
 					</DropdownMenu.Group>
 					<DropdownMenu.Separator />
 					<DropdownMenu.Group>
-						<DropdownMenu.Label class="text-muted-foreground text-sm"
-							>{strings.toolbar.color.highlightColor}</DropdownMenu.Label
-						>
+						<DropdownMenu.Label>{strings.toolbar.color.highlightColor}</DropdownMenu.Label>
 						<!-- {@const currentHighlight = editor.getAttributes('highlight').color as string} -->
 						{#each quickcolors as color (color.label)}
 							<DropdownMenu.Item

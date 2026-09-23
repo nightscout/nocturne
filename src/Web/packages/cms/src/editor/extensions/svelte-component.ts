@@ -1,6 +1,8 @@
 import { Node, mergeAttributes, type Editor } from '@tiptap/core';
-import { z } from 'zod';
+import { parseComponentProps } from './svelte-component-svx.ts';
 import { registerComponentActions, ComponentIcon } from '../../lib/components/edra/extensions/slash-command/groups.ts';
+
+export { parseComponentProps, serializeComponentToSvx } from './svelte-component-svx.ts';
 
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {
@@ -9,18 +11,6 @@ declare module '@tiptap/core' {
       updateSvelteComponentProps: (props: Record<string, string>) => ReturnType;
     };
   }
-}
-
-const componentPropsSchema = z.record(z.string(), z.string());
-
-/**
- * Reads a node's `props` attribute. Malformed JSON throws, as it always has; well-formed JSON
- * that is not a string map reads as no props.
- */
-export function parseComponentProps(propsJson: unknown): Record<string, string> {
-  if (typeof propsJson !== 'string' || propsJson === '') return {};
-  const parsed = componentPropsSchema.safeParse(JSON.parse(propsJson));
-  return parsed.success ? parsed.data : {};
 }
 
 export interface ComponentDefinition {
@@ -122,30 +112,6 @@ export const SvelteComponentExtension = (components: ComponentDefinition[]) => {
     },
   });
 };
-
-/**
- * Serialize a SvelteComponent node to .svx component syntax.
- */
-export function serializeComponentToSvx(
-  componentName: string,
-  propsJson: string,
-  content?: string,
-): string {
-  const props = parseComponentProps(propsJson);
-  const propsStr = Object.entries(props)
-    .map(([key, value]) => {
-      if (value === 'true') return key;
-      return `${key}="${value}"`;
-    })
-    .join(' ');
-
-  const tag = propsStr ? `<${componentName} ${propsStr}` : `<${componentName}`;
-
-  if (content) {
-    return `${tag}>\n${content}\n</${componentName}>`;
-  }
-  return `${tag} />`;
-}
 
 /**
  * Collect unique imports needed for the .svx file based on which components are used.

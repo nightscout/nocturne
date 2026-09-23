@@ -77,7 +77,7 @@ const COMPONENT_SCRIPT_SYNTAX = [
 export const RAW_BUTTON_SYNTAX = [
   {
     selector: 'SvelteElement[kind="html"][name.name="button"]',
-    message: "Use <Button> with a variant and size instead of a raw <button>. A pressed state is <Toggle>; a clickable card or row is <Item> with onclick or href; a single-select option card is <RadioGroup.Card>; an option in a popover list is <DropdownMenu.Item>; a chip's remove is <Badge onremove>; a remove that shows on hover is <Button reveal>."
+    message: "Use <Button> with a variant and size instead of a raw <button>. A pressed state is <Toggle>; a clickable card or row is <Item> with onclick or href; a single-select option card is <RadioGroup.Card>; an option in a popover list is <DropdownMenu.Item>, or <Button variant=\"menu\" size=\"menu\"> in a menu the editor floats itself (a bubble or slash menu); a chip's remove is <Badge onremove>; a remove that shows on hover is <Button reveal>."
   }
 ];
 

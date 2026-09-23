@@ -54,13 +54,8 @@
 	class="bg-popover flex h-fit w-fit items-center gap-1 rounded-lg border p-0!"
 >
 	{#if !isEditing}
-		<Button
-			variant="link"
-			href={link}
-			class="max-w-120 truncate overflow-hidden p-1 text-ellipsis underline"
-			target="_blank"
-		>
-			{link}
+		<Button variant="link" size="sm" href={link} class="max-w-120" target="_blank">
+			<span class="min-w-0 truncate">{link}</span>
 		</Button>
 		<SimpleTooltip tooltip={strings.menu.link.edit}>
 			<Button

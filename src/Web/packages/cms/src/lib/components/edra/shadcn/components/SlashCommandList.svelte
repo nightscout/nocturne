@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { Button } from '@nocturne/ui/ui/button';
-	import { cn } from '@nocturne/ui/utils';
 
 	interface Props {
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -107,8 +106,9 @@
 					selectedGroupIndex === groupIndex && selectedCommandIndex === commandIndex}
 				<Button
 					id={`${groupIndex}-${commandIndex}`}
-					variant="ghost"
-					class={cn('h-8 w-full justify-start gap-2 rounded-sm', isActive && 'bg-muted')}
+					variant="menu"
+					size="menu"
+					data-highlighted={isActive || undefined}
 					onclick={() => selectItem(groupIndex, commandIndex)}
 				>
 					<Icon />

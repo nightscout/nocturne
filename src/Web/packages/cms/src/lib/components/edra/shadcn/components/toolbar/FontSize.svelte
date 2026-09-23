@@ -1,18 +1,16 @@
 <script lang="ts">
-	import { buttonVariants } from '@nocturne/ui/ui/button';
+	import { Button } from '@nocturne/ui/ui/button';
 	import * as DropdownMenu from '@nocturne/ui/ui/dropdown-menu';
-	import { cn } from '@nocturne/ui/utils';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import { Editor } from '@tiptap/core';
 	import EdraToolTip from '../EdraToolTip.svelte';
 	import strings from '../../../strings.ts';
 
 	interface Props {
-		class?: string;
 		editor: Editor;
 	}
 
-	const { class: className = '', editor }: Props = $props();
+	const { editor }: Props = $props();
 
 	const FONT_SIZE = [
 		{ label: strings.toolbar.font.tiny, value: '0.7rem' },
@@ -34,19 +32,15 @@
 
 <DropdownMenu.Root>
 	<EdraToolTip tooltip={strings.toolbar.font.buttonTitle}>
-		<DropdownMenu.Trigger
-			class={buttonVariants({
-				variant: 'ghost',
-				size: 'sm',
-				class: cn(
-					'gap-0 p-0',
-					'text-primary! hover:bg-accent dark:hover:bg-accent/50! border-0 bg-transparent! ring-0 [&_svg]:size-2',
-					className
-				)
-			})}
-		>
-			<span>{currentLabel}</span>
-			<ChevronDown class="text-muted-foreground size-2!" />
+		<DropdownMenu.Trigger>
+			{#snippet child({ props }: { props: Record<string, unknown> })}
+				<Button {...props} variant="ghost" size="sm">
+					<span class="flex items-center">
+						{currentLabel}
+						<ChevronDown class="text-muted-foreground size-2!" />
+					</span>
+				</Button>
+			{/snippet}
 		</DropdownMenu.Trigger>
 	</EdraToolTip>
 	<DropdownMenu.Content portalProps={{ to: document.getElementById('edra-editor') ?? 'undefined' }}>

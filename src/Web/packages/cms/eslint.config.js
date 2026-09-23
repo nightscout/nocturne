@@ -1,8 +1,20 @@
-import { debt, SHADCN_FILES, svelteConfig } from "@nocturne/eslint-config";
+import { SHADCN_FILES, svelteConfig } from "@nocturne/eslint-config";
 
 export default [
   // components.json points the theme at @nocturne/ui's, which portal renders cms with.
-  ...svelteConfig({ shadcnSettings: { ui: "@nocturne/ui/ui" } }),
+  ...svelteConfig({
+    shadcnSettings: { ui: "@nocturne/ui/ui" },
+    noRestyle: {
+      allow: ["layout"],
+      // The same allowances @nocturne/app grants: a popover or tab panel cannot know the
+      // padding of the form or list it holds, and a trigger that draws nothing lays out
+      // the caller's own children.
+      contracts: [
+        { pattern: "^(Popover|Tabs)Content$", allow: ["layout", "spacing"] },
+        { pattern: "^(Popover|Tooltip)Trigger$", allow: ["layout", "gap"] }
+      ]
+    }
+  }),
   {
     // Build-time tooling over the repo's own files: every path is built from the package
     // root or a checked-in manifest, never from a request.
@@ -19,10 +31,5 @@ export default [
         { allow: ["lead", "not-prose", "edra-editor", "code-wrapper", "code-wrapper-tile", "drag-handle"] }
       ]
     }
-  },
-  ...debt({
-    "shadcn/require-static-classes": 6,
-    "shadcn/no-restyle": 87,
-    "no-restricted-syntax": 15
-  })
+  }
 ];

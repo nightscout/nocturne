@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { Button } from '@nocturne/ui/ui/button';
 	import { Separator } from '@nocturne/ui/ui/separator';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import ArrowLeftFromLine from '@lucide/svelte/icons/arrow-left-from-line';
@@ -47,56 +48,61 @@
 	}}
 	class="bg-popover! z-50 flex h-fit w-fit flex-col gap-1 rounded-lg border"
 >
-	<button
-		class="hover:bg-accent hover:text-accent-foreground data-[variant=destructive]:text-destructive data-[variant=destructive]:hover:bg-destructive/10 dark:data-[variant=destructive]:hover:bg-destructive/20 data-[variant=destructive]:hover:text-destructive data-[variant=destructive]:*:[svg]:text-destructive! [&_svg:not([class*='text-'])]:text-muted-foreground relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none data-disabled:pointer-events-none data-disabled:opacity-50 data-inset:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+	<Button
+		variant="menu"
+		size="menu"
 		title={strings.menu.table.headerColumn}
 		onclick={() => editor.chain().focus().toggleHeaderColumn().run()}
 	>
 		<Sheet />
 		{strings.menu.table.headerColumn}
-	</button>
+	</Button>
 	<Separator />
-	<button
-		class="hover:bg-accent hover:text-accent-foreground data-[variant=destructive]:text-destructive data-[variant=destructive]:hover:bg-destructive/10 dark:data-[variant=destructive]:hover:bg-destructive/20 data-[variant=destructive]:hover:text-destructive data-[variant=destructive]:*:[svg]:text-destructive! [&_svg:not([class*='text-'])]:text-muted-foreground relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none data-disabled:pointer-events-none data-disabled:opacity-50 data-inset:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+	<Button
+		variant="menu"
+		size="menu"
 		title={strings.menu.table.addColumnAfter}
 		onclick={() => editor.chain().focus().addColumnAfter().run()}
 	>
 		<ArrowRightFromLine />
 		{strings.menu.table.addColumnAfter}
-	</button>
-	<button
-		class="hover:bg-accent hover:text-accent-foreground data-[variant=destructive]:text-destructive data-[variant=destructive]:hover:bg-destructive/10 dark:data-[variant=destructive]:hover:bg-destructive/20 data-[variant=destructive]:hover:text-destructive data-[variant=destructive]:*:[svg]:text-destructive! [&_svg:not([class*='text-'])]:text-muted-foreground relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none data-disabled:pointer-events-none data-disabled:opacity-50 data-inset:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+	</Button>
+	<Button
+		variant="menu"
+		size="menu"
 		title={strings.menu.table.addColumnBefore}
 		onclick={() => editor.chain().focus().addColumnBefore().run()}
 	>
 		<ArrowLeftFromLine />
 		{strings.menu.table.addColumnBefore}
-	</button>
+	</Button>
 	<Separator />
-	<button
-		class="hover:bg-accent hover:text-accent-foreground data-[variant=destructive]:text-destructive data-[variant=destructive]:hover:bg-destructive/10 dark:data-[variant=destructive]:hover:bg-destructive/20 data-[variant=destructive]:hover:text-destructive data-[variant=destructive]:*:[svg]:text-destructive! [&_svg:not([class*='text-'])]:text-muted-foreground relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none data-disabled:pointer-events-none data-disabled:opacity-50 data-inset:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+	<Button
+		variant="menu"
+		size="menu"
 		title={strings.menu.table.moveColumnLeft}
 		onclick={() => editor.view.dispatch(moveColumnLeft(editor.state.tr))}
 	>
 		<ArrowLeft />
 		{strings.menu.table.moveColumnLeft}
-	</button>
-	<button
-		class="hover:bg-accent hover:text-accent-foreground data-[variant=destructive]:text-destructive data-[variant=destructive]:hover:bg-destructive/10 dark:data-[variant=destructive]:hover:bg-destructive/20 data-[variant=destructive]:hover:text-destructive data-[variant=destructive]:*:[svg]:text-destructive! [&_svg:not([class*='text-'])]:text-muted-foreground relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none data-disabled:pointer-events-none data-disabled:opacity-50 data-inset:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+	</Button>
+	<Button
+		variant="menu"
+		size="menu"
 		title={strings.menu.table.moveColumnRight}
 		onclick={() => editor.view.dispatch(moveColumnRight(editor.state.tr))}
 	>
 		<ArrowRight />
 		{strings.menu.table.moveColumnRight}
-	</button>
+	</Button>
 	<Separator />
-	<button
-		class="hover:bg-accent hover:text-accent-foreground data-[variant=destructive]:text-destructive data-[variant=destructive]:hover:bg-destructive/10 dark:data-[variant=destructive]:hover:bg-destructive/20 data-[variant=destructive]:hover:text-destructive data-[variant=destructive]:*:[svg]:text-destructive! [&_svg:not([class*='text-'])]:text-muted-foreground relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none data-disabled:pointer-events-none data-disabled:opacity-50 data-inset:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+	<Button
+		variant="ghost-destructive"
+		size="menu"
 		title={strings.menu.table.deleteColumn}
-		data-variant="destructive"
 		onclick={() => editor.chain().focus().deleteColumn().run()}
 	>
 		<Trash />
 		{strings.menu.table.deleteColumn}
-	</button>
+	</Button>
 </BubbleMenu>

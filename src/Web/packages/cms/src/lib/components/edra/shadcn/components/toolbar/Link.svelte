@@ -47,7 +47,7 @@
 	</Popover.Trigger>
 	<Popover.Content
 		portalProps={{ to: document.getElementById('edra-editor') ?? undefined }}
-		class="h-fit w-80 rounded-lg p-0!"
+		class="h-fit w-80 p-0"
 	>
 		<form class="flex items-center gap-0.5" onsubmit={handleSubmit}>
 			<Input

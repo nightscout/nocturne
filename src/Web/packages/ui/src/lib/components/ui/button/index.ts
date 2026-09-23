@@ -38,6 +38,9 @@ export const buttonVariants = tv({
       // The add-item placeholder at the end of a list.
       dashed:
         "text-muted-foreground hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50 border border-dashed",
+      // An option in a menu that is not a DropdownMenu, e.g. an editor's bubble or slash menu;
+      // data-highlighted marks the keyboard-selected one. Pair with size="menu".
+      menu: "hover:bg-accent hover:text-accent-foreground data-highlighted:bg-accent data-highlighted:text-accent-foreground [&_svg:not([class*='text-'])]:text-muted-foreground",
       // Over a full-screen display whose background the theme does not own, e.g. a clock face.
       overlay: "text-white/80 hover:bg-white/10 hover:text-white",
       // A colour the theme does not own, e.g. an admin-configured sign-in provider. Pass
@@ -59,6 +62,8 @@ export const buttonVariants = tv({
       "icon-sm": "size-8",
       // A round remove pip pinned to the corner of a thumbnail or tile, or a remove in a dense row.
       "icon-2xs": "size-5 rounded-full [&_svg:not([class*='size-'])]:size-3",
+      // Matches DropdownMenu.Item: a full-width, left-aligned row in a menu. A remove is variant="ghost-destructive".
+      menu: "h-8 w-full justify-start gap-2 rounded-sm px-2 py-1.5 font-normal",
       // A link-style button that sits in running text or a label row.
       inline: "h-auto gap-1 p-0",
       // The same, beside a caption or other text-xs copy.

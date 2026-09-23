@@ -81,6 +81,6 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint .",
-    "lint:ci": "eslint . --max-warnings 108 --report-unused-disable-directives-severity error"
+    "lint:ci": "eslint . --max-warnings 0 --report-unused-disable-directives-severity error"
   }
 }

@@ -77,7 +77,7 @@
 		<Popover.Content
 			onCloseAutoFocus={(e) => e.preventDefault()}
 			contenteditable={false}
-			class="bg-popover w-96 rounded-lg p-0 transition-all duration-500"
+			class="w-96 p-0"
 			portalProps={{ disabled: true, to: undefined }}
 		>
 			<Tabs.Root value="local">

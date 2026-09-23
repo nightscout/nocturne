@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { quickcolors } from '../../../utils.ts';
-	import { Button, buttonVariants } from '@nocturne/ui/ui/button';
+	import { buttonVariants } from '@nocturne/ui/ui/button';
 	import * as Popover from '@nocturne/ui/ui/popover';
+	import { Toggle } from '@nocturne/ui/ui/toggle';
 	import { cn } from '@nocturne/ui/utils';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import type { Editor } from '@tiptap/core';
@@ -16,6 +17,13 @@
 
 	const currentColor = $derived.by(() => editor.getAttributes('textStyle').color);
 	const currentHighlight = $derived.by(() => editor.getAttributes('highlight').color);
+
+	// The default swatch has no colour of its own, so it keeps a thin outline to stay visible.
+	function swatchStyle(value: string, active: boolean, tinted: boolean): string {
+		const border = active ? '2px solid' : value === '' ? '1px solid' : '0 solid';
+		const text = tinted ? `color: ${value}; font-weight: ${active ? 800 : 400};` : 'font-weight: 400;';
+		return `${text} background-color: ${value}50; border: ${border} ${value};`;
+	}
 </script>
 
 <Popover.Root>
@@ -40,20 +48,17 @@
 			</div>
 		</EdraToolTip>
 	</Popover.Trigger>
-	<Popover.Content class="size-fit shadow-lg" portalProps={{ disabled: true, to: undefined }}>
+	<Popover.Content class="size-fit" portalProps={{ disabled: true, to: undefined }}>
 		<div class="text-muted-foreground my-2 text-xs">{strings.toolbar.color.textColors}</div>
 		<!-- Each swatch is painted in the author's content colour, which the theme does not own. -->
 		<!-- eslint-disable shadcn/no-inline-styles -->
 		<div class="grid grid-cols-5 gap-2">
 			{#each quickcolors as color (color)}
-				<Button
-					variant="ghost"
-					class={cn(
-						`size-6 border-0 p-0 font-normal`,
-						editor.isActive('textStyle', { color: color.value }) && 'border-2 font-extrabold',
-						color.value === '' && 'border'
-					)}
-					style={`color: ${color.value}; background-color: ${color.value}50; border-color: ${color.value};`}
+				{@const active = editor.isActive('textStyle', { color: color.value })}
+				<Toggle
+					size="icon-xs"
+					bind:pressed={() => active, () => {}}
+					style={swatchStyle(color.value, active, true)}
 					title={color.label}
 					onclick={() => {
 						if (color.value === '' || color.label === strings.toolbar.color.default)
@@ -67,20 +72,17 @@
 					}}
 				>
 					{strings.toolbar.color.templateCharacter}
-				</Button>
+				</Toggle>
 			{/each}
 		</div>
 		<div class="text-muted-foreground my-2 text-xs">{strings.toolbar.color.highlightColors}</div>
 		<div class="grid grid-cols-5 gap-2">
 			{#each quickcolors as color (color)}
-				<Button
-					variant="ghost"
-					class={cn(
-						`size-6 border-0 p-0 font-normal`,
-						editor.isActive('highlight', { color: color.value }) && 'border-2',
-						color.value === '' && 'border'
-					)}
-					style={`background-color: ${color.value}50; border-color: ${color.value};`}
+				{@const active = editor.isActive('highlight', { color: color.value })}
+				<Toggle
+					size="icon-xs"
+					bind:pressed={() => active, () => {}}
+					style={swatchStyle(color.value, active, false)}
 					title={color.label}
 					onclick={() => {
 						if (color.value === '' || color.label === strings.toolbar.color.default)
@@ -88,7 +90,7 @@
 						else editor.chain().focus().toggleHighlight({ color: color.value }).run();
 					}}
 					>{strings.toolbar.color.templateCharacter}
-				</Button>
+				</Toggle>
 			{/each}
 		</div>
 		<!-- eslint-enable shadcn/no-inline-styles -->

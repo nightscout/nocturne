@@ -2,6 +2,7 @@ import { Node, nodeInputRule } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { toast } from 'svelte-sonner';
 import strings from '../../strings.ts';
+import { VIDEO_INPUT_REGEX } from '../media-input-rules.ts';
 
 export interface VideoOptions {
 	HTMLAttributes: Record<string, unknown>;
@@ -25,9 +26,6 @@ declare module '@tiptap/core' {
 		};
 	}
 }
-
-// eslint-disable-next-line security/detect-unsafe-regex -- backtracking is polynomial, not exponential, and runs only over the author's own text before the cursor
-const VIDEO_INPUT_REGEX = /!\[(.+|:?)]\((\S+)(?:(?:\s+)["'](\S+)["'])?\)/;
 
 export const Video = (onDrop?: (file: File) => Promise<string>) =>
 	Node.create<VideoOptions>({
@@ -91,7 +89,7 @@ export const Video = (onDrop?: (file: File) => Promise<string>) =>
 					find: VIDEO_INPUT_REGEX,
 					type: this.type,
 					getAttributes: (match) => {
-						const [, , src] = match;
+						const [, , , src] = match;
 
 						return { src };
 					}

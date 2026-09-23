@@ -2,6 +2,7 @@
 	import { Button } from '@nocturne/ui/ui/button';
 	import { Input } from '@nocturne/ui/ui/input';
 	import * as Popover from '@nocturne/ui/ui/popover';
+	import { Toggle } from '@nocturne/ui/ui/toggle';
 	import { cn } from '@nocturne/ui/utils';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import ArrowRight from '@lucide/svelte/icons/arrow-right';
@@ -108,15 +109,13 @@
 		class="flex w-fit items-center gap-1 p-2"
 		portalProps={{ disabled: true, to: undefined }}
 	>
-		<Button
-			variant="ghost"
-			size="icon"
-			class={cn('size-7 transition-transform', showMore && 'bg-muted rotate-90')}
-			onclick={() => (showMore = !showMore)}
+		<Toggle
+			size="icon-xs"
+			bind:pressed={showMore}
 			title={strings.toolbar.searchAndReplace.showMore}
 		>
-			<ChevronRight />
-		</Button>
+			<ChevronRight class={cn('size-4 transition-transform', showMore && 'rotate-90')} />
+		</Toggle>
 		<div class="flex size-full flex-col gap-1">
 			<div class="flex w-full items-center gap-1">
 				<Input
@@ -129,17 +128,16 @@
 					>{searchCount > 0 ? searchIndex + 1 : 0}/{searchCount}
 				</span>
 				<EdraToolTip tooltip={strings.toolbar.searchAndReplace.caseSensitive}>
-					<Button
-						variant="ghost"
-						size="icon"
-						class={cn('size-7', caseSensitive && 'bg-muted')}
-						onclick={() => {
-							caseSensitive = !caseSensitive;
+					<Toggle
+						size="icon-xs"
+						bind:pressed={caseSensitive}
+						onPressedChange={(pressed) => {
+							caseSensitive = pressed;
 							updateSearchTerm();
 						}}
 					>
-						<CaseSensitive />
-					</Button>
+						<CaseSensitive class="size-4" />
+					</Toggle>
 				</EdraToolTip>
 				<EdraToolTip tooltip={strings.toolbar.searchAndReplace.goToPrevious}>
 					<Button

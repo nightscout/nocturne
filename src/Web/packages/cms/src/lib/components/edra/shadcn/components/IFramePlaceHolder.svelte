@@ -39,7 +39,7 @@
 		<Popover.Content
 			onCloseAutoFocus={(e) => e.preventDefault()}
 			contenteditable={false}
-			class="bg-popover w-96 p-4 transition-all duration-300"
+			class="w-96"
 			portalProps={{ disabled: true, to: undefined }}
 		>
 			<form onsubmit={handleSubmit} class="flex flex-col gap-2">
