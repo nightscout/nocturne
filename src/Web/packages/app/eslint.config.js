@@ -97,7 +97,7 @@ export default ts.config(
             }
           },
           {
-            pattern: "^(Badge|Alert|Card)(\.Root)?$",
+            pattern: "^(Badge|Alert|Card)(\\.Root)?$",
             allow: ["layout"],
             message: {
               color: "Pick a variant (destructive, success, warning, info) instead of colouring it by hand."
