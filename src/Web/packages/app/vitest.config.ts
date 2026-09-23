@@ -5,7 +5,7 @@ import { svelte } from "@sveltejs/vite-plugin-svelte";
 export default defineConfig({
   plugins: [svelte()],
   test: {
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/*.test.ts", "tools/**/*.test.js"],
     exclude: [
       "node_modules/**",
       "e2e/**",

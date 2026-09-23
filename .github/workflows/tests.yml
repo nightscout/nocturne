@@ -214,7 +214,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Typecheck library packages
         run: |
-          pnpm --filter @nightscout/glucose-chart                --filter @nocturne/coach                run check
+          pnpm --filter @nightscout/glucose-chart --filter @nocturne/coach run check
       - name: Bot unit tests
         run: pnpm --filter @nocturne/bot run test
       # Renders pages through the translation transform. The build cannot see
@@ -250,9 +250,7 @@ jobs:
           cache-dependency-path: src/Web/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       # Errors fail the job, and `lint:ci` caps the warnings at today's count. Lower the cap
-      # in app/package.json as warnings are fixed; never raise it. The count is taken without
-      # the generated API client, which this job never builds: with it present,
-      # nocturne/no-imperative-remote-query can see more *.remote.ts queries and reports more.
+      # in app/package.json as warnings are fixed; never raise it.
       - name: Lint app
         run: pnpm --filter @nocturne/app run lint:ci
 

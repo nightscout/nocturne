@@ -30,8 +30,7 @@ dotnet test tests/E2E/Nocturne.E2E.Tests -p:RunE2E=true
 # Frontend type checking
 cd src/Web/packages/app && pnpm run check
 
-# Lint the frontend before pushing (CI gate: no errors, warnings capped in app/package.json).
-# CI lints without the generated API client; with it built, a few more warnings show.
+# Lint the frontend before pushing (CI gate: no errors, warnings capped in app/package.json)
 cd src/Web && pnpm --filter @nocturne/app lint:ci
 
 # Seed a loginable tenant with sample data (stack must be running; see README
