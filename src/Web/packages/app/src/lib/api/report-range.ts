@@ -27,10 +27,10 @@ export const DateRangeSchema = z.object({
 export type DateRangeInput = z.infer<typeof DateRangeSchema>;
 
 export interface ReportRange {
-  /** UTC instant at which the patient's first day begins. */
-  startDate: Date;
-  /** UTC instant of the last millisecond of the patient's last day. */
-  endDate: Date;
+  /** ISO 8601 UTC instant at which the patient's first day begins. */
+  startDate: string;
+  /** ISO 8601 UTC instant of the last millisecond of the patient's last day. */
+  endDate: string;
   /** Calendar days the window covers, counting both end days. */
   dayCount: number;
 }
@@ -58,5 +58,9 @@ export async function resolveReportRange(
     throw error(400, "Invalid date parameters provided");
   }
 
-  return { startDate, endDate, dayCount: dayCount(from, to) };
+  return {
+    startDate: startDate.toISOString(),
+    endDate: endDate.toISOString(),
+    dayCount: dayCount(from, to),
+  };
 }

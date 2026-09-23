@@ -67,12 +67,15 @@
   const currentYear = $derived(viewDate.getFullYear());
 
   // Calculate date range for current view (full month)
-  // Pass ISO strings (not Date objects) so the hydration key is stable across SSR/client timezones
+  // Timezone-free strings keep the hydration key stable across SSR/client timezones.
+  // The endpoint reads only each bound's date, so a day travels as its UTC midnight.
   const dateRangeInput = $derived.by(() => {
-    const startDate = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-01`;
+    const month = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}`;
     const lastDay = new Date(currentYear, currentMonth + 1, 0).getDate();
-    const endDate = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
-    return { startDate, endDate };
+    return {
+      startDate: `${month}-01T00:00:00Z`,
+      endDate: `${month}-${String(lastDay).padStart(2, "0")}T00:00:00Z`,
+    };
   });
 
   // Query responses
@@ -285,7 +288,7 @@
     const event = (
       instance: TrackerInstanceDto,
       eventType: TrackerEventType,
-      at: Date | undefined
+      at: string | undefined
     ): TrackerEvent[] =>
       at ? [{ instance, eventType, date: toDayString(new Date(at)) }] : [];
     return groupBy(
@@ -310,7 +313,7 @@
     return level;
   }
 
-  function formatTrackerStartTime(startedAt: Date | undefined): string | null {
+  function formatTrackerStartTime(startedAt: string | undefined): string | null {
     if (!startedAt) return null;
     const date = new Date(startedAt);
     if (Number.isNaN(date.getTime())) return null;

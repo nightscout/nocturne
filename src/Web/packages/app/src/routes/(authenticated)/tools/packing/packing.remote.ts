@@ -61,8 +61,8 @@ export const getPackingHints = query(async () => {
 
   try {
     const events = await apiClient.deviceEvent.getAll(
-      ninetyDaysAgo,
-      now,
+      ninetyDaysAgo.toISOString(),
+      now.toISOString(),
       500,
       0,
       "timestamp_asc"

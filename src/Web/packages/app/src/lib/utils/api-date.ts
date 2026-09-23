@@ -1,7 +1,6 @@
 /**
- * The generated API client types date fields as `Date`, but it parses responses with a
- * plain `JSON.parse` and no reviver — the values arrive as ISO strings. Calling a `Date`
- * method straight off a client field throws, so normalise through here first.
+ * The ISO 8601 form the API's date-time fields and parameters take, or null when the
+ * value names no valid instant (so a cleared input sends no bound rather than throwing).
  */
 export function toIsoString(value: Date | string | null | undefined): string | null {
   if (value == null || value === "") return null;

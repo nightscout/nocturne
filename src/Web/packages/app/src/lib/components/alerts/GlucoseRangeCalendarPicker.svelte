@@ -121,8 +121,8 @@
   // from `.current` instead of flicking back through a loading state.
   const punchCardQuery = $derived(
     getPunchCardData({
-      startDate: startOfMonth(viewMonth).toDate(tz),
-      endDate: endOfMonth(viewMonth).toDate(tz),
+      startDate: startOfMonth(viewMonth).toDate(tz).toISOString(),
+      endDate: endOfMonth(viewMonth).toDate(tz).toISOString(),
     })
   );
   const entriesByDate = $derived.by<EntriesByDate>(() => {

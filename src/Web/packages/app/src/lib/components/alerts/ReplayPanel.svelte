@@ -253,15 +253,15 @@
         ? await replayDryRun({
             date,
             timezone: browserTimezone,
-            from: range?.from,
-            to: range?.to,
+            from: range?.from.toISOString(),
+            to: range?.to.toISOString(),
             rule: typeof rule === "function" ? rule() : rule,
           })
         : await replay({
             date,
             timezone: browserTimezone,
-            from: range?.from,
-            to: range?.to,
+            from: range?.from.toISOString(),
+            to: range?.to.toISOString(),
           });
       result = replayResult ?? null;
 

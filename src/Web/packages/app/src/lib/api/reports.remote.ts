@@ -21,8 +21,8 @@ export const getEntries = query(DateRangeSchema.optional(), async (input) => {
   return {
     entries,
     dateRange: {
-      from: startDate.toISOString(),
-      to: endDate.toISOString(),
+      from: startDate,
+      to: endDate,
     },
   };
 });
@@ -97,8 +97,8 @@ export const getBolusesAndCarbs = query(
       boluses: allBoluses!,
       carbIntakes: allCarbIntakes!,
       dateRange: {
-        from: startDate.toISOString(),
-        to: endDate.toISOString(),
+        from: startDate,
+        to: endDate,
       },
     };
   }
@@ -153,8 +153,8 @@ export const getReportsData = query(
       averagedStats,
       personalRange,
       dateRange: {
-        from: startDate.toISOString(),
-        to: endDate.toISOString(),
+        from: startDate,
+        to: endDate,
         lastUpdated: new Date().toISOString(),
       },
     };
@@ -181,8 +181,8 @@ export const getReportsAnalysis = query(
       personalRange,
       contributingDevices,
       dateRange: {
-        from: startDate.toISOString(),
-        to: endDate.toISOString(),
+        from: startDate,
+        to: endDate,
       },
     };
   }
@@ -244,8 +244,8 @@ export const getDataQualityReport = query(
       entries,
       integrity,
       dateRange: {
-        from: startDate.toISOString(),
-        to: endDate.toISOString(),
+        from: startDate,
+        to: endDate,
         lastUpdated: new Date().toISOString(),
       },
     };
@@ -321,8 +321,8 @@ export const getSiteChangeImpact = query(
     return {
       analysis,
       dateRange: {
-        from: startDate.toISOString(),
-        to: endDate.toISOString(),
+        from: startDate,
+        to: endDate,
       },
     };
   }
