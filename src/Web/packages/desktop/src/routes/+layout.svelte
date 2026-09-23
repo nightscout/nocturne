@@ -3,6 +3,7 @@
   import { onMount } from "svelte";
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
   import { check, type Update } from "@tauri-apps/plugin-updater";
@@ -24,10 +25,10 @@
     if (isOverlay) return;
     invoke<string | null>("pending_link_server")
       .then((server) => {
-        if (server) goto("/settings");
+        if (server) goto(resolve("/settings"));
       })
       .catch(() => {});
-    const unlisten = listen("link-code-received", () => goto("/settings"));
+    const unlisten = listen("link-code-received", () => goto(resolve("/settings")));
     return () => {
       unlisten.then((fn) => fn());
     };

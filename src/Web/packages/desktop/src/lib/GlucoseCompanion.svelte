@@ -13,6 +13,7 @@
   import { Label } from "@nocturne/ui/ui/label";
   import { Alert, AlertDescription } from "@nocturne/ui/ui/alert";
   import { Activity, CheckCircle2, Loader2 } from "@lucide/svelte";
+  import { commandErrorMessage } from "$lib/command-error";
 
   // Matches the camelCase DeviceFlowInfo returned by the `companion_link_start` Rust command.
   type DeviceFlowInfo = {
@@ -44,10 +45,7 @@
 
   function describeError(e: unknown): string {
     if (typeof e === "string") return e;
-    if (e && typeof e === "object" && "message" in e) {
-      return String((e as { message: unknown }).message);
-    }
-    return "Something went wrong.";
+    return commandErrorMessage(e) ?? "Something went wrong.";
   }
 
   async function refreshLinked() {
@@ -164,8 +162,8 @@
         </p>
         {#if openUrl}
           <!-- Plain anchor opens in the default handler; no Tauri opener plugin wired up. -->
-          <a
-            href={openUrl}
+          <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- the server's device-flow verification URL, not a route of this app -->
+          <a href={openUrl}
             target="_blank"
             rel="noreferrer"
             class="text-primary block break-all text-center text-sm underline"
@@ -185,7 +183,7 @@
 
     {#if phase === "linked"}
       <div class="flex items-start gap-2">
-        <CheckCircle2 class="mt-0.5 h-5 w-5 shrink-0 text-green-600" />
+        <CheckCircle2 class="mt-0.5 h-5 w-5 shrink-0 text-success" />
         <div class="text-sm">
           <p class="font-medium">Connected — glucose is syncing to your taskbar.</p>
           {#if needsRelink}

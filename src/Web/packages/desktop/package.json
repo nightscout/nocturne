@@ -11,7 +11,7 @@
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "tauri": "tauri",
     "lint": "eslint .",
-    "lint:ci": "eslint . --max-warnings 40 --report-unused-disable-directives-severity error"
+    "lint:ci": "eslint . --max-warnings 0 --report-unused-disable-directives-severity error"
   },
   "dependencies": {
     "@nocturne/ui": "workspace:*",

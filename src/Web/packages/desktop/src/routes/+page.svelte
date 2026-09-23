@@ -2,6 +2,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { onMount } from "svelte";
   import { Card, CardContent } from "@nocturne/ui/ui/card";
   import { Button } from "@nocturne/ui/ui/button";
@@ -52,7 +53,7 @@
       variant="ghost"
       size="icon"
       class="ml-auto"
-      onclick={() => goto("/settings")}
+      onclick={() => goto(resolve("/settings"))}
       aria-label="Settings"
     >
       <Settings class="h-4 w-4" />
@@ -75,7 +76,7 @@
         <p class="text-muted-foreground text-sm">
           Connect a data source to start syncing your glucose.
         </p>
-        <Button size="sm" onclick={() => goto("/settings")}>Open Settings</Button>
+        <Button size="sm" onclick={() => goto(resolve("/settings"))}>Open Settings</Button>
       </CardContent>
     </Card>
   {/if}
