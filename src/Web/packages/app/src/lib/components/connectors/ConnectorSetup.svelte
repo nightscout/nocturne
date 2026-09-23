@@ -527,7 +527,7 @@
             <a
               href={connectorInfo.documentationUrl}
               target="_blank"
-              rel="noopener noreferrer"
+              rel="external noopener noreferrer"
               class="flex items-center gap-2 text-sm text-primary hover:underline"
             >
               <ExternalLink class="h-4 w-4" />

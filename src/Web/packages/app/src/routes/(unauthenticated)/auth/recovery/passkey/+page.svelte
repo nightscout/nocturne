@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { resolve } from "$app/paths";
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import { FormError } from "$lib/forms";
@@ -25,7 +26,7 @@
   const username = $derived(page.url.searchParams.get("username") ?? "");
   const returnUrl = $derived(page.url.searchParams.get("returnUrl") ?? "/");
   const loginUrl = $derived(
-    `/auth/login?${new URLSearchParams({ returnUrl })}`
+    resolve(`/auth/login?${new URLSearchParams({ returnUrl })}`)
   );
 
   let isRegistering = $state(false);
@@ -129,6 +130,7 @@
     </Card.Content>
 
     <Card.Footer class="justify-center">
+      <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- loginUrl is built with resolve() above; the rule cannot see through $derived -->
       <a href={loginUrl} class="text-xs text-muted-foreground hover:underline">
         Back to sign in
       </a>

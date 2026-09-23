@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { getAlertHistory } from "$api/generated/alerts.generated.remote";
   import { remoteErrorMessage } from "$lib/api/remote-error";
   import type { HistoryExcursionResponse } from "$api-clients";
@@ -28,7 +29,7 @@
       type="button"
       variant="ghost"
       size="icon"
-      onclick={() => goto("/alerts")}
+      onclick={() => goto(resolve("/alerts"))}
       aria-label="Back to alerts"
     >
       <ArrowLeft class="h-4 w-4" />

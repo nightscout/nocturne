@@ -1,6 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { Button } from "$lib/components/ui/button";
   import {
     Card,
@@ -42,7 +43,7 @@
     showCapabilities
     primaryAction="save-only"
     showEnvVarHints={page.data.isPlatformAdmin === true}
-    onCancel={() => goto("/settings/connectors")}
+    onCancel={() => goto(resolve("/settings/connectors"))}
   >
     {#snippet extras()}
       {#if isHomeAssistant}

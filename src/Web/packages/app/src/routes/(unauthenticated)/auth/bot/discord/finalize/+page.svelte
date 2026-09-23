@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from "$app/state";
 	import { goto } from "$app/navigation";
+	import { resolve } from "$app/paths";
 	import { Loader2 } from "lucide-svelte";
 	import { claimLink } from "$lib/api/generated/chatIdentities.generated.remote";
 
@@ -11,7 +12,7 @@
 	$effect(() => {
 		if (!page.data.isAuthenticated && token) {
 			const returnUrl = `/auth/bot/discord/finalize?token=${token}`;
-			goto(`/auth/login?returnUrl=${encodeURIComponent(returnUrl)}`, { replaceState: true });
+			goto(resolve(`/auth/login?returnUrl=${encodeURIComponent(returnUrl)}`), { replaceState: true });
 		}
 	});
 
@@ -60,7 +61,7 @@
 			(label <code>{result.label}</code>). Run <code>/bg</code> in Discord to get started.
 		</p>
 		<a
-			href="/settings/integrations/discord"
+			href={resolve("/settings/integrations/discord")}
 			class="px-6 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
 		>
 			Back to Settings
@@ -69,7 +70,7 @@
 		<h1 class="text-2xl font-bold">Link failed</h1>
 		<p class="text-destructive max-w-md">{result.message}</p>
 		<a
-			href="/settings/integrations/discord"
+			href={resolve("/settings/integrations/discord")}
 			class="px-6 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
 		>
 			Back to Settings

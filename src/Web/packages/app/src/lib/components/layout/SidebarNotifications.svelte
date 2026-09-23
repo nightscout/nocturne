@@ -5,6 +5,7 @@
   import { cn } from "$lib/utils";
   import { tryGetRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import {
     executeAction,
     markAsRead,
@@ -97,7 +98,7 @@
           console.error("Failed to mark notification read:", err)
         );
       }
-      goto("/reports/data-quality/compression-lows");
+      goto(resolve("/reports/data-quality/compression-lows"));
       return;
     }
 
@@ -168,7 +169,7 @@
           {/if}
           {#if sortedNotifications.length > 0}
             <a
-              href="/settings/trackers"
+              href={resolve("/settings/trackers")}
               class="text-xs text-muted-foreground hover:underline"
             >
               Manage
@@ -184,7 +185,7 @@
           <Bell class="h-8 w-8 text-muted-foreground/50 mb-2" />
           <p class="text-sm text-muted-foreground">No active notifications</p>
           <a
-            href="/settings/trackers"
+            href={resolve("/settings/trackers")}
             class="mt-2 text-xs text-primary hover:underline"
           >
             Set up trackers
@@ -203,7 +204,7 @@
 
       <div class="border-t p-2">
         <a
-          href="/notifications"
+          href={resolve("/notifications")}
           class="flex items-center justify-between rounded-md px-2 py-1.5 text-sm hover:bg-muted"
           onclick={() => (isOpen = false)}
         >

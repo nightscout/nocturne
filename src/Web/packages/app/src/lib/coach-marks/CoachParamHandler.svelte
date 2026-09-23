@@ -18,6 +18,7 @@
       // Strip the param immediately
       const url = new URL(page.url);
       url.searchParams.delete("coach");
+      // eslint-disable-next-line svelte/no-navigation-without-resolve -- the current page's URL minus one param, already resolved
       replaceState(url, {});
 
       // Start the sequence (slight delay to let page elements mount)

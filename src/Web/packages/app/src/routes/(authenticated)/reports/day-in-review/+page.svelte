@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { page } from "$app/state";
   import type { Bolus, CarbIntake } from "$lib/api";
   import type { EntryRecord } from "$lib/constants/entry-categories";
@@ -77,7 +78,7 @@
   function goToDayOffset(days: number) {
     const target = new Date(currentDate);
     target.setDate(target.getDate() + days);
-    goto(`/reports/day-in-review?date=${toDayString(target)}`, {
+    goto(resolve(`/reports/day-in-review?date=${toDayString(target)}`), {
       invalidateAll: true,
       replaceState: true,
     });
@@ -87,7 +88,7 @@
     if (window.history.length > 1) {
       window.history.back();
     } else {
-      goto("/calendar");
+      goto(resolve("/calendar"));
     }
   }
 

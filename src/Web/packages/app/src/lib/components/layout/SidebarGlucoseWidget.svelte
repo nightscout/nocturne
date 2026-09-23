@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { resolve } from "$app/paths";
   import { tryGetRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
   import {
@@ -108,7 +109,7 @@
     <div
       class="px-2 border border-sidebar-border hover:border-sidebar-ring rounded"
     >
-      <a href="/">
+      <a href={resolve("/")}>
         <GlucoseChartShell
           engine={sidebarEngine}
           legend={sidebarLegend}

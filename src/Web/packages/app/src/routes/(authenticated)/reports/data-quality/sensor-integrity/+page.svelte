@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { resolve } from "$app/paths";
   import {
     Card,
     CardContent,
@@ -57,7 +58,7 @@
     <!-- Header -->
     <div class="space-y-3">
       <a
-        href="/reports/data-quality"
+        href={resolve("/reports/data-quality")}
         class="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground print:hidden"
       >
         <ArrowLeft class="h-4 w-4" />

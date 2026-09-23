@@ -2,6 +2,7 @@
   import { parseDate } from "@internationalized/date";
   import { formatLongDate, formatShortDate } from "$lib/utils/formatting";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { page } from "$app/state";
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
@@ -92,13 +93,13 @@
     const newFirst = anchor.add({ days: direction * (direction === -1 ? dayCount : 1) });
     const newLast = newFirst.add({ days: dayCount - 1 });
     goto(
-      `/time-spans?from=${newFirst.toString()}&to=${newLast.toString()}`,
+      resolve(`/time-spans?from=${newFirst.toString()}&to=${newLast.toString()}`),
       { invalidateAll: true }
     );
   }
 
   function goBack() {
-    goto("/dashboard");
+    goto(resolve("/"));
   }
 
   // Format date range for display

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { resolve } from "$app/paths";
   import { Chart, Calendar, Layer, Tooltip } from "layerchart";
   import { scaleThreshold } from "d3-scale";
   import { timeWeek, timeMonths } from "d3-time";
@@ -116,8 +117,9 @@
                         timeWeek.ceil(monthDate)
                       ) * cellSize[0]}
                     <a
-                      href="/calendar?year={monthDate.getFullYear()}&month={monthDate.getMonth() +
-                        1}"
+                      href={resolve(
+                        `/calendar?year=${monthDate.getFullYear()}&month=${monthDate.getMonth() + 1}`
+                      )}
                     >
                       <text
                         x={monthX}
@@ -161,7 +163,7 @@
                   {@const weekCols = getWeekColumns(cells)}
                   {#each weekCols as wk (wk.x)}
                     <a
-                      href="/reports/week-to-week?from={wk.from}&to={wk.to}&isDefault=false"
+                      href={resolve(`/reports/week-to-week?from=${wk.from}&to=${wk.to}&isDefault=false`)}
                     >
                       <text
                         x={wk.x + cellSize[0] / 2}

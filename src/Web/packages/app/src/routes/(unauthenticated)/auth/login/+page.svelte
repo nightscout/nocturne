@@ -6,6 +6,7 @@
   import { getAuthStatus } from "$lib/api/generated";
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import LoginForm from "$lib/components/auth/LoginForm.svelte";
   import RequestMembershipDialog from "$lib/components/members/RequestMembershipDialog.svelte";
   import GuestCodeForm from "$lib/components/auth/GuestCodeForm.svelte";
@@ -42,6 +43,7 @@
   $effect(() => {
     const currentAuth = authStateQuery.current;
     if (currentAuth?.isAuthenticated && currentAuth?.user) {
+      // eslint-disable-next-line svelte/no-navigation-without-resolve -- returnUrl is a caller-supplied same-origin path, not a route; goto() rejects cross-origin URLs
       goto(returnUrl, { replaceState: true });
     }
   });
@@ -132,11 +134,11 @@
         <div class="text-center text-xs text-muted-foreground">
           <p>
             By signing in, you agree to our
-            <a href="/terms" class="underline hover:text-foreground">
+            <a href={resolve("/terms")} class="underline hover:text-foreground">
               Terms of Service
             </a>
             and
-            <a href="/privacy" class="underline hover:text-foreground">
+            <a href={resolve("/privacy")} class="underline hover:text-foreground">
               Privacy Policy
             </a>
           </p>
@@ -144,7 +146,7 @@
         <div class="text-center text-xs text-muted-foreground">
           <p>
             Having trouble signing in?
-            <a href="/auth/help" class="underline hover:text-foreground">
+            <a href={resolve("/auth/help")} class="underline hover:text-foreground">
               Get help
             </a>
           </p>

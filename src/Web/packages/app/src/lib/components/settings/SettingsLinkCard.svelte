@@ -6,6 +6,7 @@
   let { link }: { link: SettingsLink } = $props();
 </script>
 
+<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- link.href is a literal in-app path from settings-links.ts or its caller -->
 <a href={link.href} class="group block">
   <Card.Root
     class="h-full transition-colors hover:border-primary/40 hover:bg-muted/40"

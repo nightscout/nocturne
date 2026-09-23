@@ -1,6 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { onMount, onDestroy } from "svelte";
   import {
     getCompatibilityData,
@@ -150,7 +151,7 @@
     if (filterPath) params.set("requestPath", filterPath);
     if (filterMethod) params.set("requestMethod", filterMethod);
     if (filterMatch) params.set("overallMatch", filterMatch);
-    goto(`/compatibility?${params.toString()}`);
+    goto(resolve(`/compatibility?${params.toString()}`));
   }
 
   // Clear filters
@@ -158,7 +159,7 @@
     filterPath = "";
     filterMethod = "";
     filterMatch = "";
-    goto("/compatibility");
+    goto(resolve("/compatibility"));
   }
 
   // Filtered analyses based on showCompatible
@@ -362,7 +363,7 @@
               class="hover:bg-muted/50 cursor-pointer transition {compatible
                 ? 'opacity-60'
                 : ''}"
-              onclick={() => goto(`/compatibility/${analysis.id}`)}
+              onclick={() => goto(resolve(`/compatibility/${analysis.id}`))}
             >
               <td class="px-6 py-4 whitespace-nowrap text-sm">
                 {formatDateTimeCompact(analysis.analysisTimestamp)}

@@ -87,6 +87,7 @@
       <div class="border-t border-border px-5 py-4 @md:px-6">
         <a
           href="/scalar"
+          rel="external"
           class="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
         >
           Open the API reference

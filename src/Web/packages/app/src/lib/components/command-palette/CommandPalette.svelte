@@ -3,6 +3,7 @@
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { getAuthStore } from "$lib/stores/auth-store.svelte";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import {
     glucoseChartLookback,
     setColorScheme,
@@ -142,9 +143,11 @@
 
     if (item.href) {
       open = false;
+      // eslint-disable-next-line svelte/no-navigation-without-resolve -- item.href is a literal in-app path from command-palette-items.ts
       goto(item.href);
     } else if (item.linkedHref) {
       open = false;
+      // eslint-disable-next-line svelte/no-navigation-without-resolve -- item.linkedHref is a literal in-app path from command-palette-items.ts
       goto(item.linkedHref);
     } else {
       handleAction(item.id);
@@ -172,15 +175,15 @@
       }
       case "action-add-treatment":
         open = false;
-        goto("/reports/treatments");
+        goto(resolve("/reports/treatments"));
         break;
       case "action-add-food":
         open = false;
-        goto("/food");
+        goto(resolve("/food"));
         break;
       case "action-manual-sync":
         open = false;
-        goto("/settings/connectors");
+        goto(resolve("/settings/connectors"));
         break;
     }
   }

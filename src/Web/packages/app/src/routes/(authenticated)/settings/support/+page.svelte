@@ -216,7 +216,7 @@
         <a
           href={link.href}
           target="_blank"
-          rel="noopener noreferrer"
+          rel="external noopener noreferrer"
           class="flex items-center justify-between p-4 rounded-lg border hover:border-primary/50 hover:bg-accent/50 transition-colors"
         >
           <div class="flex items-center gap-4">
@@ -259,7 +259,7 @@
             <a
               href={supportConfig.accountBilling.url}
               target="_blank"
-              rel="noopener noreferrer"
+              rel="external noopener noreferrer"
               class="flex flex-col items-center text-center p-4 rounded-lg border hover:border-primary/50 hover:bg-accent/50 transition-colors"
             >
               <div

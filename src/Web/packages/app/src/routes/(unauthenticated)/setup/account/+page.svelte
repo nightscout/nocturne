@@ -6,6 +6,7 @@
     type PublicKeyCredentialCreationOptionsJSON,
   } from "@simplewebauthn/browser";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import {
     setupOwnerOptions,
     setupOwnerComplete,
@@ -39,7 +40,7 @@
   // the user needs to see their recovery codes before navigating away.
   $effect(() => {
     if (isAuthenticated && !registrationComplete) {
-      goto("/setup", { replaceState: true, invalidateAll: true });
+      goto(resolve("/setup"), { replaceState: true, invalidateAll: true });
     }
   });
 
@@ -106,7 +107,7 @@
   }
 
   function handleContinueToSetup() {
-    goto("/setup", { replaceState: true, invalidateAll: true });
+    goto(resolve("/setup"), { replaceState: true, invalidateAll: true });
   }
 </script>
 

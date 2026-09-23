@@ -1,6 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
   import { Input } from "$lib/components/ui/input";
@@ -28,7 +29,7 @@
   $effect(() => {
     if (!page.data.isAuthenticated) {
       const returnUrl = encodeURIComponent(page.url.pathname + page.url.search);
-      goto(`/auth/login?returnUrl=${returnUrl}`, { replaceState: true });
+      goto(resolve(`/auth/login?returnUrl=${returnUrl}`), { replaceState: true });
     }
   });
 

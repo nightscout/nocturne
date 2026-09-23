@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { resolve } from "$app/paths";
   import { startOfDay, toDayString } from "$lib/utils/date-range";
   import { formatDayTime, formatLongDate } from "$lib/utils/formatting";
   import {
@@ -240,7 +241,7 @@
             {#if warnCount > 0}
               <Badge variant="secondary">{warnCount} warning</Badge>
             {/if}
-            <a href="/settings/trackers">
+            <a href={resolve("/settings/trackers")}>
               <Button variant="outline" size="sm">
                 <Settings2 class="h-4 w-4 mr-2" />
                 Manage

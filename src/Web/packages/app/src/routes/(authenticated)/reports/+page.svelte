@@ -510,8 +510,8 @@
                 {#each category.reports as report (report.href)}
                   {@const ReportIcon = report.icon}
                   {#if report.status === "available"}
-                    <a
-                      href={report.href}
+                    <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- report.href is a literal in-app path from report-navigation.ts -->
+                    <a href={report.href}
                       class="group/report flex items-center gap-3 rounded-xl bg-white/60 p-3 transition-all hover:bg-white hover:shadow-md dark:bg-white/5 dark:hover:bg-white/10"
                     >
                       <div

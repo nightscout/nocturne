@@ -150,11 +150,11 @@
   }
 
   function newRule(): void {
-    goto("/alerts/new");
+    goto(resolve("/alerts/new"));
   }
 
   function editRule(rule: AlertRuleResponse): void {
-    goto(`/alerts/${rule.id}`);
+    goto(resolve(`/alerts/${rule.id}`));
   }
 </script>
 
@@ -249,7 +249,7 @@
         </CardContent>
       </Card>
       <a
-        href="/alerts/history"
+        href={resolve("/alerts/history")}
         class="block rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <Card class="transition-colors hover:bg-muted/40">

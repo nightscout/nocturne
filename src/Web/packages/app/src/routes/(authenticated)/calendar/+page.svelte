@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { page } from "$app/state";
   import * as Card from "$lib/components/ui/card";
   import { getPunchCardData } from "$api/generated/statistics.generated.remote";
@@ -100,6 +101,7 @@
       url.searchParams.set("year", String(date.getFullYear()));
       url.searchParams.set("month", String(date.getMonth() + 1)); // 1-indexed
     }
+    // eslint-disable-next-line svelte/no-navigation-without-resolve -- the current page's URL with its month params changed, already resolved
     goto(url.toString(), { invalidateAll: true });
   }
 
@@ -208,7 +210,7 @@
   });
 
   function handleDayClick(day: DayStats) {
-    goto(`/reports/day-in-review?date=${day.date}`);
+    goto(resolve(`/reports/day-in-review?date=${day.date}`));
   }
 
   const monthSummary = $derived.by(() => {
@@ -365,6 +367,7 @@
     completingInstance = null;
     completingDefinition = null;
     completingDefaultDate = null;
+    // eslint-disable-next-line svelte/no-navigation-without-resolve -- reloads the current page's URL, already resolved
     goto(page.url.toString(), { invalidateAll: true });
   }
 </script>

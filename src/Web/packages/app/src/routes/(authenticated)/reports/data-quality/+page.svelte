@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from "$app/paths";
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import {
@@ -138,7 +139,7 @@
 			<h2 class="text-lg font-semibold">Data Quality Categories</h2>
 
 			<!-- Compression Lows Card -->
-			<a href="/reports/data-quality/compression-lows" class="block">
+			<a href={resolve("/reports/data-quality/compression-lows")} class="block">
 				<Card class="transition-colors hover:bg-muted/50">
 					<CardHeader class="pb-3">
 						<div class="flex items-center justify-between">
@@ -176,7 +177,7 @@
 			</a>
 
 			<!-- Signal Integrity Card -->
-			<a href="/reports/data-quality/sensor-integrity" class="block">
+			<a href={resolve("/reports/data-quality/sensor-integrity")} class="block">
 				<Card class="transition-colors hover:bg-muted/50">
 					<CardHeader class="pb-3">
 						<div class="flex items-center justify-between">
@@ -200,7 +201,7 @@
 			</a>
 
 			<!-- CGM Comparison Card -->
-			<a href="/reports/data-quality/cgm-comparison" class="block">
+			<a href={resolve("/reports/data-quality/cgm-comparison")} class="block">
 				<Card class="transition-colors hover:bg-muted/50">
 					<CardHeader class="pb-3">
 						<div class="flex items-center justify-between">

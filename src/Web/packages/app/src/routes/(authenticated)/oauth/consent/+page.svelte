@@ -1,6 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
   import { Separator } from "$lib/components/ui/separator";
@@ -24,7 +25,7 @@
   $effect(() => {
     if (!page.data.isAuthenticated) {
       const returnUrl = encodeURIComponent(page.url.pathname + page.url.search);
-      goto(`/auth/login?returnUrl=${returnUrl}`, { replaceState: true });
+      goto(resolve(`/auth/login?returnUrl=${returnUrl}`), { replaceState: true });
     }
   });
 
@@ -153,7 +154,7 @@
             <a
               href={clientInfo.homepage}
               target="_blank"
-              rel="noopener noreferrer"
+              rel="external noopener noreferrer"
               class="inline-flex items-center gap-1 hover:text-foreground"
             >
               {clientInfo.homepage}

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { formatNumericDate } from "$lib/utils/formatting";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import * as Card from "$lib/components/ui/card";
   import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import { Button } from "$lib/components/ui/button";
@@ -36,7 +37,7 @@
         config: createDefaultConfig(),
       });
       if (result.id) {
-        goto(`/clock/config/${result.id}`);
+        goto(resolve("/(authenticated)/clock/config/[id]", { id: result.id }));
       } else {
         toast.error("Failed to create clock face");
       }
@@ -175,14 +176,14 @@
                   variant="outline"
                   size="sm"
                   class="flex-1"
-                  onclick={() => goto(`/clock/config/${face.id}`)}
+                  onclick={() => goto(resolve(`/clock/config/${face.id}`))}
                 >
                   Edit
                 </Button>
                 <Button
                   size="sm"
                   class="flex-1"
-                  onclick={() => goto(`/clock/${face.id}`)}
+                  onclick={() => goto(resolve(`/clock/${face.id}`))}
                 >
                   Open
                 </Button>

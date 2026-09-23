@@ -1,6 +1,7 @@
 <script lang="ts">
   import { browser } from "$app/environment";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { page } from "$app/state";
   import {
     ArrowRight,
@@ -172,11 +173,12 @@
 
   async function handleEnterDashboard() {
     await markSetupComplete();
-    await goto("/", { invalidateAll: true });
+    await goto(resolve("/"), { invalidateAll: true });
   }
 
   async function handleNavigateWithCoach(url: string) {
     await markSetupComplete();
+    // eslint-disable-next-line svelte/no-navigation-without-resolve -- url is one of Finish.svelte's literal in-app paths with a ?coach= param
     await goto(url, { invalidateAll: true });
   }
 
@@ -645,8 +647,8 @@
   >
     <div class="flex flex-wrap items-center gap-5">
       <span>&copy; 2026 Nocturne</span>
-      <a href="/privacy" class="hover:text-white/60">Privacy</a>
-      <a href="/docs" class="hover:text-white/60">Docs</a>
+      <a href={resolve("/privacy")} class="hover:text-white/60">Privacy</a>
+      <a href="/docs" rel="external" class="hover:text-white/60">Docs</a>
     </div>
     <div class="flex flex-wrap items-center gap-5">
       <span class="font-mono">v1.4.2</span>

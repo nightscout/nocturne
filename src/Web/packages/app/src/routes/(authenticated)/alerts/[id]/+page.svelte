@@ -2,6 +2,7 @@
   import { formatDayTime } from "$lib/utils/formatting";
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { untrack } from "svelte";
   import {
     getRule,
@@ -147,7 +148,11 @@
       const body = buildBody(editor);
       if (isNew) {
         const created = await createRule(body as never);
-        await goto(`/alerts/${created?.id ?? ""}`);
+        await goto(
+          created?.id
+            ? resolve("/(authenticated)/alerts/[id]", { id: created.id })
+            : resolve("/alerts")
+        );
       } else {
         await updateRule({ id: ruleId, request: body as never });
         savedBody = buildBody(editor);
@@ -166,7 +171,7 @@
     error = null;
     try {
       await deleteRule(ruleId);
-      await goto("/alerts");
+      await goto(resolve("/alerts"));
     } catch (e) {
       error = describeSubmitError(e, "Failed to delete the alert rule. Please try again.");
     } finally {
@@ -274,7 +279,7 @@
         type="button"
         variant="ghost"
         size="icon"
-        onclick={() => goto("/alerts")}
+        onclick={() => goto(resolve("/alerts"))}
         aria-label="Back to alerts"
       >
         <ArrowLeft class="h-4 w-4" />

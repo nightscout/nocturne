@@ -82,6 +82,7 @@
     const encoded = encodeBase64Utf8(JSON.stringify(items));
     const url = new URL(page.url);
     url.searchParams.set("d", encodeURIComponent(encoded));
+    // eslint-disable-next-line svelte/no-navigation-without-resolve -- the current page's URL with one param changed, already resolved
     goto(url.toString(), { replaceState: true, noScroll: true });
   }
 

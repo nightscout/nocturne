@@ -91,6 +91,7 @@ export function useDialogHistory(
         pushed = true;
         const url = new URL(page.url);
         url.searchParams.set(param.name, param.value());
+        // eslint-disable-next-line svelte/no-navigation-without-resolve -- the current page's URL plus one param, already resolved
         pushState(url, { ...page.state });
       } else {
         pushed = true;
@@ -104,6 +105,7 @@ export function useDialogHistory(
         adopted = false;
         const url = new URL(page.url);
         url.searchParams.delete(param!.name);
+        // eslint-disable-next-line svelte/no-navigation-without-resolve -- the current page's URL minus one param, already resolved
         replaceState(url, { ...page.state });
       }
     }

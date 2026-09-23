@@ -153,6 +153,7 @@
     if (onSuccess) {
       onSuccess();
     } else {
+      // eslint-disable-next-line svelte/no-navigation-without-resolve -- returnUrl is a caller-supplied same-origin path, not a route; goto() rejects cross-origin URLs
       await goto(returnUrl, { invalidateAll: true });
     }
   }

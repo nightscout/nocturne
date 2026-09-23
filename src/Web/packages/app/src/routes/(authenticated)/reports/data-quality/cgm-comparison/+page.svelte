@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { resolve } from "$app/paths";
   import {
     Card,
     CardContent,
@@ -77,7 +78,7 @@
   <div class="@container container mx-auto max-w-5xl space-y-6 p-3 @md:p-6">
     <div class="space-y-3">
       <a
-        href="/reports/data-quality"
+        href={resolve("/reports/data-quality")}
         class="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground print:hidden"
       >
         <ArrowLeft class="h-4 w-4" />

@@ -13,6 +13,7 @@
   } from "@simplewebauthn/browser";
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import {
     getInviteInfo,
     acceptInvite,
@@ -77,7 +78,7 @@
     acceptError = null;
     try {
       await acceptInvite(token);
-      await goto("/", { replaceState: true });
+      await goto(resolve("/"), { replaceState: true });
     } catch (err) {
       console.error("Accepting the invite failed:", err);
       acceptError = describeSubmitError(
@@ -155,7 +156,7 @@
   }
 
   function goHome() {
-    goto("/", { replaceState: true });
+    goto(resolve("/"), { replaceState: true });
   }
 </script>
 

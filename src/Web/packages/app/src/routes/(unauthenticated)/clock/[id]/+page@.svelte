@@ -1,6 +1,7 @@
 <script lang="ts">
   import { browser } from "$app/environment";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { page } from "$app/state";
   import { onMount } from "svelte";
   import { setClockGlucoseSource } from "$lib/stores/realtime-store.svelte";
@@ -117,7 +118,7 @@
   <div class="fixed inset-0 flex flex-col items-center justify-center gap-4 bg-neutral-950 text-white">
     <ClockIcon class="size-12 text-white/30" />
     <p class="text-lg">{error}</p>
-    <Button variant="outline" onclick={() => goto("/clock")}>
+    <Button variant="outline" onclick={() => goto(resolve("/clock"))}>
       <ArrowLeft class="mr-2 size-4" />
       Back to Clock Faces
     </Button>
@@ -134,7 +135,7 @@
       variant="ghost"
       size="sm"
       class="text-white/80 hover:text-white"
-      onclick={() => goto("/clock")}
+      onclick={() => goto(resolve("/clock"))}
     >
       <ArrowLeft class="size-4" />
       Back
@@ -149,7 +150,7 @@
         variant="ghost"
         size="sm"
         class="text-white/80 hover:text-white"
-        onclick={() => goto(`/clock/config/${id}`)}
+        onclick={() => goto(resolve("/(authenticated)/clock/config/[id]", { id }))}
       >
         <Settings class="size-4" />
         Edit

@@ -2,6 +2,7 @@
   import { page } from "$app/state";
   import { browser } from "$app/environment";
   import { beforeNavigate } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import * as Dialog from "$lib/components/ui/dialog";
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
   import { Button } from "$lib/components/ui/button";
@@ -323,7 +324,7 @@
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
           <a
-            href="/settings/translations"
+            href={resolve("/settings/translations")}
             class="mb-1 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft class="h-3.5 w-3.5" />
@@ -393,7 +394,7 @@
           <a
             href={submitResult.prUrl}
             target="_blank"
-            rel="noopener noreferrer"
+            rel="external noopener noreferrer"
             class="text-sm text-primary underline underline-offset-4"
           >
             View the pull request

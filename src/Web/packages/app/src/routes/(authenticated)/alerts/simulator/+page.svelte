@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { getRules } from "$api/generated/alertRules.generated.remote";
   import { Button } from "$lib/components/ui/button";
   import {
@@ -25,7 +26,7 @@
       type="button"
       variant="ghost"
       size="icon"
-      onclick={() => goto("/alerts")}
+      onclick={() => goto(resolve("/alerts"))}
       aria-label="Back to alerts"
     >
       <ArrowLeft class="h-4 w-4" />

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { resolve } from "$app/paths";
   import {
     Card,
     CardDescription,
@@ -15,7 +16,7 @@
   </div>
 
   <div class="grid gap-4 @xl:grid-cols-2">
-    <a href="/tools/packing" class="block">
+    <a href={resolve("/tools/packing")} class="block">
       <Card class="h-full hover:bg-muted/50 transition-colors cursor-pointer">
         <CardHeader>
           <div class="flex items-center gap-3">

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from "$app/state";
 	import { goto } from "$app/navigation";
+	import { resolve } from "$app/paths";
 	import * as Card from "$lib/components/ui/card";
 	import { Button } from "$lib/components/ui/button";
 	import { Input } from "$lib/components/ui/input";
@@ -19,7 +20,7 @@
 	// Auth guard
 	$effect(() => {
 		if (!page.data.isAuthenticated) {
-			goto(`/auth/login?returnUrl=${encodeURIComponent(page.url.pathname)}`, {
+			goto(resolve(`/auth/login?returnUrl=${encodeURIComponent(page.url.pathname)}`), {
 				replaceState: true,
 			});
 		}

@@ -35,6 +35,7 @@
   } from "lucide-svelte";
   import { tick } from "svelte";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { page } from "$app/state";
   import * as trackersRemote from "$api/generated/trackers.generated.remote";
   import { remoteErrorMessage } from "$lib/api/remote-error";
@@ -295,7 +296,7 @@
   function requireAuth(): boolean {
     if (!isAuthenticated) {
       const returnUrl = encodeURIComponent(window.location.pathname);
-      goto(`/auth/login?returnUrl=${returnUrl}`);
+      goto(resolve(`/auth/login?returnUrl=${returnUrl}`));
       return false;
     }
     return true;

@@ -136,6 +136,7 @@
       // Stale / out-of-range link: drop the param so the URL isn't misleading.
       const url = new URL(page.url);
       url.searchParams.delete(EDIT_PARAM);
+      // eslint-disable-next-line svelte/no-navigation-without-resolve -- the current page's URL minus one param, already resolved
       replaceState(url, page.state);
     }
   });
@@ -212,6 +213,7 @@
     const url = new URL(page.url);
     if (value) url.searchParams.set(name, value);
     else url.searchParams.delete(name);
+    // eslint-disable-next-line svelte/no-navigation-without-resolve -- the current page's URL with one param changed, already resolved
     replaceState(url, page.state);
   }
 

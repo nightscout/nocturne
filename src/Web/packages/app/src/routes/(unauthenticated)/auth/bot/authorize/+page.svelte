@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from "$app/state";
 	import { goto } from "$app/navigation";
+	import { resolve } from "$app/paths";
 	import { Loader2 } from "lucide-svelte";
 	import { Button } from "$lib/components/ui/button";
 	import { Input } from "$lib/components/ui/input";
@@ -75,7 +76,7 @@
 		claimError = null;
 		try {
 			await claimLink({ token: stateToken });
-			goto("/auth/bot/authorize/done");
+			goto(resolve("/auth/bot/authorize/done"));
 		} catch (err) {
 			claimError = describeSubmitError(err, "Failed to link account. Please try again.");
 			isClaiming = false;
@@ -131,7 +132,7 @@
 				Sign in to your Nocturne account to finish connecting your chat account.
 			</p>
 			<a
-				href="/auth/login?returnUrl={encodeURIComponent(returnUrl)}"
+				href={resolve(`/auth/login?returnUrl=${encodeURIComponent(returnUrl)}`)}
 				class="px-6 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
 			>
 				Sign in

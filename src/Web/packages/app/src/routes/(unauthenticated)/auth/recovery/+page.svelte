@@ -23,6 +23,7 @@
     parseCeremonyOptions,
   } from "$lib/components/auth/passkey-errors";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { page } from "$app/state";
 
   // Steps: identify -> codes -> done
@@ -107,7 +108,7 @@
   }
 
   function handleContinue() {
-    goto("/", { replaceState: true });
+    goto(resolve("/"), { replaceState: true });
   }
 </script>
 

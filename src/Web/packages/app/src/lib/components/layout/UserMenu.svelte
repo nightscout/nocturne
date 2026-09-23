@@ -4,6 +4,7 @@
   import { Button } from "$lib/components/ui/button";
   import { User, LogOut, Settings, Shield, ChevronDown, UserPlus } from "lucide-svelte";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import type { AuthUser } from "$lib/stores/auth-store.svelte";
   import RequestMembershipDialog from "$lib/components/members/RequestMembershipDialog.svelte";
 
@@ -113,16 +114,16 @@
 
         {#if !tenantless}
           <DropdownMenu.Group>
-            <DropdownMenu.Item onSelect={() => goto("/settings/account")}>
+            <DropdownMenu.Item onSelect={() => goto(resolve("/settings/account"))}>
               <User class="mr-2 h-4 w-4" />
               <span>Account</span>
             </DropdownMenu.Item>
-            <DropdownMenu.Item onSelect={() => goto("/settings")}>
+            <DropdownMenu.Item onSelect={() => goto(resolve("/settings"))}>
               <Settings class="mr-2 h-4 w-4" />
               <span>Settings</span>
             </DropdownMenu.Item>
             {#if isPlatformAdmin}
-              <DropdownMenu.Item onSelect={() => goto("/settings/admin")}>
+              <DropdownMenu.Item onSelect={() => goto(resolve("/settings/admin"))}>
                 <Shield class="mr-2 h-4 w-4" />
                 <span>Admin</span>
               </DropdownMenu.Item>

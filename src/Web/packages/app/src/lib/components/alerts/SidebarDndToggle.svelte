@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { page } from "$app/state";
+  import { resolve } from "$app/paths";
   import {
     get as getDnd,
     update as updateDnd,
@@ -79,7 +80,7 @@
     data-slot="sidebar-menu-sub-button"
   >
     <a
-      {href}
+      href={resolve(href)}
       class="flex flex-1 items-center gap-2 min-w-0 text-sm hover:text-sidebar-accent-foreground"
       title={isScheduled && !isManualActive
         ? "Scheduled Do Not Disturb window configured"

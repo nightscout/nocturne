@@ -1,6 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { getAnalysisDetail } from "../data.remote";
   import { formatDateTimeCompact } from "$lib/utils/formatting";
   import { formatElapsedMs } from "$lib/utils/duration";
@@ -48,7 +49,7 @@
 <div class="@container container mx-auto p-6 space-y-6">
   <!-- Header with Back Button -->
   <div class="flex items-center gap-4">
-    <Button variant="secondary" onclick={() => goto("/compatibility")}>
+    <Button variant="secondary" onclick={() => goto(resolve("/compatibility"))}>
       ← Back
     </Button>
     <h1 class="text-3xl font-bold">Request Analysis Detail</h1>

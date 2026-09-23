@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import { resolve } from "$app/paths";
   import {
     Card,
     CardContent,
@@ -227,7 +228,7 @@
                 {@const isDefault = profileTherapy?.isDefault === true}
                 {@const isExternal = profileTherapy?.isExternallyManaged === true}
                 <a
-                  href="?name={encodeURIComponent(profileName)}"
+                  href={resolve(`/settings/profile?name=${encodeURIComponent(profileName)}`)}
                   data-sveltekit-noscroll
                   data-sveltekit-replacestate
                   class="flex items-center gap-3 p-3 rounded-lg border text-left transition-colors

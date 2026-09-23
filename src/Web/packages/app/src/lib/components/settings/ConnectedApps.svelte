@@ -136,7 +136,7 @@
                   <a
                     href={app.clientUri}
                     target="_blank"
-                    rel="noopener noreferrer"
+                    rel="external noopener noreferrer"
                     class="inline-flex items-center gap-1 text-xs hover:underline"
                   >
                     {app.clientUri}

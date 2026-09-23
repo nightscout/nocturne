@@ -2,6 +2,7 @@
   import { formatLocale } from "$lib/utils/formatting";
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { page } from "$app/state";
   import {
     get as getDnd,
@@ -156,7 +157,7 @@
           class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted"
           onclick={() => {
             onNavigate?.();
-            goto("/alerts/dnd");
+            goto(resolve("/alerts/dnd"));
           }}
         >
           <SettingsIcon class="h-3.5 w-3.5" /> Configure…

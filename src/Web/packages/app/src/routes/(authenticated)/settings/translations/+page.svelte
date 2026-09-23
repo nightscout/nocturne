@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { resolve } from "$app/paths";
   import * as Card from "$lib/components/ui/card";
   import { Badge } from "$lib/components/ui/badge";
   import { Languages, ChevronRight } from "@lucide/svelte";
@@ -33,7 +34,7 @@
 
     <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {#each targetLocales as locale (locale)}
-        <a href="/settings/translations/{locale}" class="group">
+        <a href={resolve("/(authenticated)/settings/translations/[locale]", { locale })} class="group">
           <Card.Root class="transition-colors group-hover:border-primary/50">
             <Card.Content class="flex items-center justify-between p-4">
               <div>

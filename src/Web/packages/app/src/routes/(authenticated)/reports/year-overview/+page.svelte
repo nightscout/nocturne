@@ -1,6 +1,7 @@
 <script lang="ts">
   import { browser } from "$app/environment";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { Loader2, CalendarDays } from "lucide-svelte";
   import { scaleThreshold } from "d3-scale";
   import { Button } from "$lib/components/ui/button";
@@ -551,7 +552,7 @@
   }
 
   function navigateToDayInReview(dateStr: string) {
-    goto(`/reports/day-in-review?date=${dateStr}`);
+    goto(resolve(`/reports/day-in-review?date=${dateStr}`));
   }
 
   // =========================================================================

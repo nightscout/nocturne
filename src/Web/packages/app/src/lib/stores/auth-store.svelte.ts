@@ -12,6 +12,7 @@
 import { getContext, setContext } from "svelte";
 import { browser } from "$app/environment";
 import { goto } from "$app/navigation";
+import { resolve } from "$app/paths";
 import {
   getSessionInfo,
   refreshSession as refreshSessionRemote,
@@ -229,7 +230,7 @@ export class AuthStore {
     this._state = "unauthenticated";
 
     // Redirect to home
-    goto("/");
+    goto(resolve("/"));
   }
 
   /**

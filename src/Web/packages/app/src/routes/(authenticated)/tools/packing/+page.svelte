@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { Card, CardContent } from "$lib/components/ui/card";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
@@ -55,7 +56,7 @@
     });
 
     const encoded = encodeBase64Utf8(JSON.stringify(items));
-    goto(`/tools/packing/list?d=${encodeURIComponent(encoded)}`);
+    goto(resolve(`/tools/packing/list?d=${encodeURIComponent(encoded)}`));
   }
 
   const totalItems = $derived(

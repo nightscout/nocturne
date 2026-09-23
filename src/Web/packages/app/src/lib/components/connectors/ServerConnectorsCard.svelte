@@ -1,4 +1,5 @@
 <script module lang="ts">
+  import { resolve } from "$app/paths";
   import type { ConnectorStatusDto } from "$lib/api/generated/nocturne-api-client";
 
   export interface ConnectorStatusWithDescription extends ConnectorStatusDto {
@@ -280,7 +281,7 @@
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2 flex-wrap">
                 <a
-                  href="/settings/connectors/{connector.id?.toLowerCase()}"
+                  href={resolve(`/settings/connectors/${connector.id?.toLowerCase()}`)}
                   class="font-medium before:absolute before:inset-0 before:content-[''] hover:underline"
                 >
                   {connector.name}
