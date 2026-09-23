@@ -1,8 +1,7 @@
-// Fails the deploy when the prerendered site has no copy. A build whose
+// Fails the deploy when the prerendered site has no copy: a build whose
 // translations compile to empty strings still succeeds and prerenders blank
-// headings, so the workflow reported success on a blank site for hours before
-// this guard existed. Run after `pnpm run build`, before uploading the
-// artifact. Pass a build directory as the first argument (defaults to `build`).
+// headings. Run after `pnpm run build`, before uploading the artifact. Pass a
+// build directory as the first argument (defaults to `build`).
 
 import { readFileSync, existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
