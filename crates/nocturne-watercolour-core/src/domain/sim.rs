@@ -31,6 +31,14 @@
 //!   so concentrates pigment, harder than a thin film on a high spot. The
 //!   dried rim therefore varies in weight along the edge instead of reading
 //!   as a uniform outline.
+//! - Deposition is gated by film depth: a thinning film settles hard
+//!   (`settle_base + dry_deposition * (1 - wet)^settle_curve`), while a deep
+//!   film still settles by density (`wet_settle`) and stains by staining power
+//!   (`stain_bite`), so a wash centre keeps colour instead of all of it riding
+//!   the outward flow to the rim. Flow speed scales deposition down
+//!   (`carry`), less for dense pigment, and lift scales with the wet fraction
+//!   and flow speed (`lift_still`, `lift_flow_gain`): still or thin water
+//!   barely re-suspends a deposit.
 //! - Stroke water is modulated by paper height at the stamp
 //!   (`paint::STROKE_WATER_PAPER_GAIN`), so a wash starts with pools in the
 //!   paper's low regions rather than as a flat slab.
@@ -45,8 +53,8 @@
 //!   `pigment_diffusion <= 1.0` since it is divided by four).
 //! - Divergence relaxation is a fixed `jacobi_iterations` (`8`) count, not
 //!   iterated to a tolerance, so both backends do identical work.
-//! - Deposited pigment is clamped to `1.0` per pigment; suspended pigment to
-//!   `MAX_SUSPENDED`; water depth to `MAX_WATER_DEPTH`.
+//! - Deposited pigment is clamped to `MAX_DEPOSITED` per pigment; suspended
+//!   pigment to `MAX_SUSPENDED`; water depth to `MAX_WATER_DEPTH`.
 //! - Every field is clamped after each pass; a NaN in the inputs is not
 //!   tolerated, `Scene::validate` rejects it upstream.
 
@@ -59,6 +67,15 @@ use super::seed::Seed;
 pub const DT: f32 = 1.0;
 pub const MAX_WATER_DEPTH: f32 = 8.0;
 pub const MAX_SUSPENDED: f32 = 8.0;
+/// Deposited pigment per cell. Above `1.0` so a drying rim that concentrates
+/// several cells' pigment keeps it instead of clipping; optics saturates
+/// thickness, so the headroom reads as a darker rim, not black.
+pub const MAX_DEPOSITED: f32 = MAX_SUSPENDED;
+/// Floor on the flow carry factor: even fast water lets some pigment settle.
+pub const CARRY_MIN: f32 = 0.1;
+/// Density at which flow would stop carrying pigment; just past the heaviest
+/// pigment (`1.0`), so moving water keeps every pigment partly suspended.
+pub const CARRY_REACH: f32 = 1.2;
 /// Water depth at which the flow-outward drain runs at its nominal rate.
 pub const DRAIN_DEPTH: f32 = 0.5;
 pub const DRAIN_MIN: f32 = 0.15;
@@ -117,6 +134,20 @@ pub struct SimParams {
     pub mask_evaporation: f32,
     pub stamp: StampParams,
     pub flow: paint::FlowParams,
+    /// Settling in standing water, scaled by density: heavy pigment keeps
+    /// dropping out of a deep film instead of riding it all to the rim.
+    pub wet_settle: f32,
+    /// Staining bite while wet, scaled by staining power and independent of
+    /// density: a dye-like pigment adsorbs onto the fibres, so a wash centre
+    /// keeps its colour.
+    pub stain_bite: f32,
+    /// How strongly flow speed keeps pigment suspended, reduced for dense
+    /// pigment (`CARRY_REACH - density`).
+    pub carry: f32,
+    /// Share of lift a still film exerts; the rest needs moving water.
+    pub lift_still: f32,
+    /// Flow speed (cells/tick) gain at which lift reaches full strength.
+    pub lift_flow_gain: f32,
 }
 
 impl Default for SimParams {
@@ -152,6 +183,11 @@ impl Default for SimParams {
             mask_evaporation: 5.0,
             stamp: StampParams::default(),
             flow: paint::FlowParams::default(),
+            wet_settle: 0.3,
+            stain_bite: 0.6,
+            carry: 2.0,
+            lift_still: 0.25,
+            lift_flow_gain: 3.0,
         }
     }
 }
@@ -327,7 +363,7 @@ pub fn dry_all(grid: &mut SimulationGrid) {
         for k in 0..grid.pigment_count {
             let idx = k * n + i;
             let d = grid.pigments_deposited[idx] + grid.pigments_in_water[idx];
-            grid.pigments_deposited[idx] = d.min(1.0);
+            grid.pigments_deposited[idx] = d.min(MAX_DEPOSITED);
             grid.pigments_in_water[idx] = 0.0;
         }
         grid.pressure[i] = 0.0;
@@ -570,23 +606,30 @@ pub fn pass_transfer(
         let wet = smoothstep(params.wet_lo, params.wet_hi, p);
         let settle_gate =
             params.settle_base + params.dry_deposition * (1.0 - wet).powf(params.settle_curve);
+        let speed = (grid.velocity_u[i] * grid.velocity_u[i]
+            + grid.velocity_v[i] * grid.velocity_v[i])
+            .sqrt();
+        let lift_flow = wet
+            * (params.lift_still
+                + (1.0 - params.lift_still) * (speed * params.lift_flow_gain).min(1.0));
         for (k, coef) in pigments.iter().enumerate().take(grid.pigment_count) {
             let idx = k * n + i;
             let g = grid.pigments_in_water[idx];
             let d = grid.pigments_deposited[idx];
-            let mut down = g
-                * (1.0 - h * coef.granulation)
-                * coef.density
-                * params.deposition_rate
-                * settle_gate
-                * DT;
+            let carry =
+                (1.0 - speed * params.carry * (CARRY_REACH - coef.density)).clamp(CARRY_MIN, 1.0);
+            let settle = coef.density * (settle_gate + params.wet_settle * wet)
+                + params.stain_bite * coef.staining_power * wet;
+            let mut down =
+                g * (1.0 - h * coef.granulation) * settle * carry * params.deposition_rate * DT;
             let mut up = d * (1.0 + (h - 1.0) * coef.granulation) * coef.density
                 / coef.staining_power
                 * params.lift_rate
+                * lift_flow
                 * DT;
-            down = down.clamp(0.0, (1.0 - d).max(0.0));
+            down = down.clamp(0.0, (MAX_DEPOSITED - d).max(0.0));
             up = up.clamp(0.0, (MAX_SUSPENDED - g).max(0.0));
-            grid.pigments_deposited[idx] = (d + down - up).clamp(0.0, 1.0);
+            grid.pigments_deposited[idx] = (d + down - up).clamp(0.0, MAX_DEPOSITED);
             grid.pigments_in_water[idx] = (g + up - down).clamp(0.0, MAX_SUSPENDED);
         }
         let boost = 1.0 + params.mask_evaporation * (1.0 - m);
@@ -603,7 +646,7 @@ pub fn pass_transfer(
             for k in 0..grid.pigment_count {
                 let idx = k * n + i;
                 grid.pigments_deposited[idx] =
-                    (grid.pigments_deposited[idx] + grid.pigments_in_water[idx]).min(1.0);
+                    (grid.pigments_deposited[idx] + grid.pigments_in_water[idx]).min(MAX_DEPOSITED);
                 grid.pigments_in_water[idx] = 0.0;
             }
             np = 0.0;

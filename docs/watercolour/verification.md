@@ -22,6 +22,7 @@ surrounding detail.
 | Determinism | `tests/simulation.rs`: same seed is bit-identical, different seed differs |
 | Stability sweep | 500 ticks at parameter extremes stay finite and bounded |
 | Edge darkening | wet-on-dry disc rims heavier than centre (asserted `> 1.15x`) |
+| Wash centre | a staining pigment's dried disc keeps at least 60 % of its rim density at the centre, clearly more than a sedimentary pigment of the same density; a full-load disc dries without losing pigment to the deposit clamp |
 | Wet-on-wet spread | pre-wetted area spreads 90 % pigment radius `> 1.3x` further |
 | Playback | `tests/playback.rs`: seek-vs-replay bit-equality, finish-immediately dryness, front-loaded elapsed-time advance, checkpoint bound |
 | Mask raster | `tests/mask_raster.rs`: FNV-1a snapshot of `rasterize_mask_aspect` over 64 synthetic masks, captured from the original code and green on the accelerated one; degenerate polygons (fewer than three points) do not panic |
