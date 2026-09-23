@@ -280,7 +280,7 @@
 
 				<!-- Subcategory -->
 				<div class="flex flex-col gap-1">
-					<label for="composer-subcategory" class="text-muted-foreground font-medium uppercase text-2xs">Subcategory</label>
+					<Label for="composer-subcategory" size="sm" variant="muted">Subcategory</Label>
 					<Select.Root type="single" name="subcategory" value={draft.subcategory ?? ''} onValueChange={(v) => { draft = { ...draft, subcategory: v }; }}>
 						<Select.Trigger id="composer-subcategory" class="w-full">
 							{draft.subcategory || 'Subcategory'}
