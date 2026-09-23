@@ -8,7 +8,7 @@
     CardTitle,
   } from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
+  import { Badge, type BadgeVariant } from "$lib/components/ui/badge";
   import * as Tabs from "$lib/components/ui/tabs";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
@@ -37,7 +37,6 @@
     type MigrationJobStatus,
     type PendingMigrationConfig,
     type MigrationSourceDto,
-    type TestMigrationConnectionResult,
     MigrationJobState,
     MigrationMode,
   } from "$api";
@@ -179,7 +178,10 @@
     }
   }
 
-  function getStateBadge(state: MigrationJobState | undefined) {
+  function getStateBadge(state: MigrationJobState | undefined): {
+    variant: BadgeVariant;
+    label: string;
+  } {
     switch (state) {
       case MigrationJobState.Pending:
         return { variant: "secondary", label: "Pending" };
@@ -412,7 +414,7 @@
                 {...testConnectionForm.enhance(async ({ submit }) => {
                   connectionTestResult = null;
                   await submit();
-                  const result = testConnectionForm.result as TestMigrationConnectionResult | undefined;
+                  const result = testConnectionForm.result;
                   if (result) {
                     connectionTestResult = {
                       success: result.isSuccess || false,
@@ -457,7 +459,7 @@
                 {...startMigrationForm.enhance(async ({ submit }) => {
                   error = null;
                   await submit();
-                  const jobInfo = startMigrationForm.result as MigrationJobInfo | undefined;
+                  const jobInfo = startMigrationForm.result;
                   if (jobInfo?.id) {
                     await pollMigrationStatus(jobInfo.id);
                     activeTab = "progress";
@@ -624,7 +626,7 @@
                       <div>
                         <div class="font-medium flex items-center gap-2">
                           {job.sourceDescription || "Unknown Source"}
-                          <Badge variant={badge.variant as any}>
+                          <Badge variant={badge.variant}>
                             {badge.label}
                           </Badge>
                         </div>

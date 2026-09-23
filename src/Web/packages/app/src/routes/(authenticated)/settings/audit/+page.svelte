@@ -26,7 +26,7 @@
 
   // Permissions
   const effectivePermissions: string[] = $derived(
-    (page.data as any).effectivePermissions ?? [],
+    page.data.effectivePermissions ?? [],
   );
   const canManageAudit = $derived(
     effectivePermissions.includes("audit.manage") ||
@@ -109,8 +109,8 @@
     }),
   );
   const mutationsResult = $derived(mutationsQuery.current);
-  const mutations = $derived((mutationsResult as any)?.data ?? []);
-  const mutationsTotal = $derived((mutationsResult as any)?.pagination?.total ?? 0);
+  const mutations = $derived(mutationsResult?.data ?? []);
+  const mutationsTotal = $derived(mutationsResult?.pagination?.total ?? 0);
 
   // --- Read access log server-side filters ---
   let rFrom = $state(defaultFrom);
@@ -127,8 +127,8 @@
     }),
   );
   const readsResult = $derived(readsQuery.current);
-  const reads = $derived((readsResult as any)?.data ?? []);
-  const readsTotal = $derived((readsResult as any)?.pagination?.total ?? 0);
+  const reads = $derived(readsResult?.data ?? []);
+  const readsTotal = $derived(readsResult?.pagination?.total ?? 0);
 
   // --- Filter state helpers ---
   const mHasDateFilter = $derived(

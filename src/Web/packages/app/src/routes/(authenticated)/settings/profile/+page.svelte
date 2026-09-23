@@ -57,47 +57,47 @@
   // Extract unique profile names from therapy settings (the canonical source)
   function getProfileNames(data: Summary): string[] {
     return distinct(
-      ((data?.therapySettings ?? []) as any[]).map((ts) => String(ts.profileName ?? "Default"))
+      (data?.therapySettings ?? []).map((ts) => String(ts.profileName ?? "Default"))
     );
   }
 
   // Determine the default (active) profile name
   function getDefaultProfileName(data: Summary): string | null {
-    const settings = (data?.therapySettings ?? []) as any[];
-    const defaultSettings = settings.find((ts: any) => ts.isDefault) ?? settings[0] ?? null;
+    const settings = data?.therapySettings ?? [];
+    const defaultSettings = settings.find((ts) => ts.isDefault) ?? settings[0] ?? null;
     return defaultSettings?.profileName ?? null;
   }
 
   // Helper to extract data from the summary for a given profile name
   function getTherapyForProfile(data: Summary, profileName: string) {
-    return ((data?.therapySettings ?? []) as any[]).find((ts: any) => ts.profileName === profileName) ?? null;
+    return (data?.therapySettings ?? []).find((ts) => ts.profileName === profileName) ?? null;
   }
 
   function getBasalForProfile(data: Summary, profileName: string) {
-    return ((data?.basalSchedules ?? []) as any[]).find((b: any) => b.profileName === profileName) ?? null;
+    return (data?.basalSchedules ?? []).find((b) => b.profileName === profileName) ?? null;
   }
 
   function getCarbRatioForProfile(data: Summary, profileName: string) {
-    return ((data?.carbRatioSchedules ?? []) as any[]).find((c: any) => c.profileName === profileName) ?? null;
+    return (data?.carbRatioSchedules ?? []).find((c) => c.profileName === profileName) ?? null;
   }
 
   function getSensitivityForProfile(data: Summary, profileName: string) {
-    return ((data?.sensitivitySchedules ?? []) as any[]).find((s: any) => s.profileName === profileName) ?? null;
+    return (data?.sensitivitySchedules ?? []).find((s) => s.profileName === profileName) ?? null;
   }
 
   // Newest record wins: manual edits create new timestamped records (history-preserving),
   // and reports/alerts also evaluate against the most recent schedule.
   function getTargetRangeForProfile(data: Summary, profileName: string) {
-    const matches = ((data?.targetRangeSchedules ?? []) as any[]).filter(
-      (t: any) => t.profileName === profileName
+    const matches = (data?.targetRangeSchedules ?? []).filter(
+      (t) => t.profileName === profileName
     );
     if (matches.length === 0) return null;
-    return matches.reduce((newest: any, t: any) =>
+    return matches.reduce((newest, t) =>
       new Date(t.timestamp ?? 0) > new Date(newest.timestamp ?? 0) ? t : newest
     );
   }
 
-  function formatRelativeTime(dateString: string | undefined): string {
+  function formatRelativeTime(dateString: Date | string | undefined): string {
     if (!dateString) return "";
     try {
       const date = new Date(dateString);

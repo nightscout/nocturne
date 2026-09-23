@@ -15,7 +15,7 @@
   // All IANA zones for the picker, with the browser's current zone as the default.
   const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const zones: string[] =
-    "supportedValuesOf" in Intl ? (Intl as typeof Intl & { supportedValuesOf(k: string): string[] }).supportedValuesOf("timeZone") : [browserZone];
+    typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [browserZone];
 
   let newZone = $state(browserZone);
   let newDate = $state(""); // datetime-local "YYYY-MM-DDTHH:mm"

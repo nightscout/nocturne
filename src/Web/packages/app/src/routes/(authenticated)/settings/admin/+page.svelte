@@ -79,7 +79,7 @@
     }
   }
 
-  async function saveProvider(providerData: any) {
+  async function saveProvider(providerData: unknown) {
     try {
       if (editingProvider?.id) {
         await oidcRemote.update({ id: editingProvider.id, request: providerData });

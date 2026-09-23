@@ -231,7 +231,7 @@
   }
 
   // Format date
-  function formatDate(dateStr: any): string {
+  function formatDate(dateStr: Date | string | undefined): string {
     if (!dateStr) return "";
     return formatDayTime(dateStr);
   }

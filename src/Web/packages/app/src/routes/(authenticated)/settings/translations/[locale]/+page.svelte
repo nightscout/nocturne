@@ -21,7 +21,6 @@
   import {
     getLanguageLabel,
     isSupportedLocale,
-    type SupportedLocale,
   } from "$lib/stores/appearance-store.svelte";
   import { SvelteMap } from "svelte/reactivity";
 
@@ -31,7 +30,20 @@
   const catalogSourceQuery = translationsApi.getCatalogSource();
 
   const locale = $derived(page.params.locale ?? "");
-  const localeValid = $derived(isSupportedLocale(locale) && locale !== "en");
+  const supportedLocale = $derived(
+    isSupportedLocale(locale) && locale !== "en" ? locale : null
+  );
+  const localeValid = $derived(supportedLocale !== null);
+  const languageLabel = $derived(supportedLocale ? getLanguageLabel(supportedLocale) : "");
+  const nativeLanguageLabel = $derived(
+    supportedLocale ? getLanguageLabel(supportedLocale, supportedLocale) : ""
+  );
+
+  function messageOf(e: unknown): string | undefined {
+    return e && typeof e === "object" && "message" in e && typeof e.message === "string"
+      ? e.message
+      : undefined;
+  }
 
   let messages = $state<TranslationMessage[]>([]);
   let catalogError = $state<string | null>(null);
@@ -279,8 +291,7 @@
       await draftsQuery?.refresh();
     } catch (e) {
       submitError =
-        (e as { message?: string })?.message ??
-        "Failed to submit the contribution.";
+        messageOf(e) ?? "Failed to submit the contribution.";
     } finally {
       submitting = false;
     }
@@ -303,13 +314,13 @@
       clearOpen = false;
     } catch (e) {
       clearError =
-        (e as { message?: string })?.message ?? "Failed to clear drafts.";
+        messageOf(e) ?? "Failed to clear drafts.";
     }
   }
 </script>
 
 <svelte:head>
-  <title>Translate {localeValid ? getLanguageLabel(locale as SupportedLocale) : ""} - Settings</title>
+  <title>Translate {languageLabel} - Settings</title>
 </svelte:head>
 
 {#if !localeValid}
@@ -331,9 +342,9 @@
             Translations
           </a>
           <h1 class="text-2xl font-bold">
-            {getLanguageLabel(locale as SupportedLocale, locale as SupportedLocale)}
+            {nativeLanguageLabel}
             <span class="text-muted-foreground font-normal">
-              · {getLanguageLabel(locale as SupportedLocale)}
+              · {languageLabel}
             </span>
           </h1>
         </div>
@@ -456,7 +467,7 @@
         <AlertDialog.Title>Clear all drafts?</AlertDialog.Title>
         <AlertDialog.Description>
           All {drafts.size} draft{drafts.size === 1 ? "" : "s"} for
-          {getLanguageLabel(locale as SupportedLocale)} will be deleted. This cannot be undone.
+          {languageLabel} will be deleted. This cannot be undone.
         </AlertDialog.Description>
       </AlertDialog.Header>
       {#if clearError}

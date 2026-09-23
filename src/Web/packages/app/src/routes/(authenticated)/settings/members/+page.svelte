@@ -44,7 +44,7 @@
   import { retainQuery } from "$lib/api/retain-query.svelte";
 
   const effectivePermissions: string[] = $derived(
-    (page.data as any).effectivePermissions ?? [],
+    page.data.effectivePermissions ?? [],
   );
   const hasStar = $derived(effectivePermissions.includes("*"));
   const canInvite = $derived(
