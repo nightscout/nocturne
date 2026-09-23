@@ -59,19 +59,24 @@ The simulation's pigment amount is not a KM thickness. A cell's amount is
 deposited plus a fixed share (`wet_pigment_visibility`) of its suspended
 pigment, whatever the film's depth, so paint is visible at nearly full
 strength the moment it lands instead of darkening in as it settles. The
-amount maps to optical thickness through a saturating curve,
+pixel's *total* amount `A` (summed over pigments) maps to optical thickness
+through a saturating curve, and each pigment takes its share of the result:
 
 ```
-g = amount^optical_gamma
-t = optical_max * g / (g + optical_mid)
+g   = A^optical_gamma
+t   = optical_max * g / (g + optical_mid)
+t_k = amount_k * t / A
 ```
 
-The exponent above 1 keeps faint halos faint; the ceiling means a wash
-approaches masstone but never black; and because the simulation caps a dried
-deposit at 1, the curve is where the headroom past the swatch lives: a
-typical dried light wash lands near thickness 1 (the swatch) and a full
-deposit reads well past it. Presence (the luminous alpha field) goes through
-the same curve; the luminous outline mask reads the raw amount.
+The exponent above 1 keeps faint halos faint. The ceiling means a wash only
+approaches masstone, never black: a typical dried light wash lands near
+thickness 1 (the swatch), a full deposit reads past it, and a heavy rim or
+pool several times that approaches the ceiling rather than crushing to
+black. Saturating the total rather than each pigment is what keeps an
+overlap from stacking masstones: two glazes still read darker than one, but
+three approach the mixture's masstone instead of brown-black. Presence (the
+luminous alpha field) goes through the same curve; the luminous outline mask
+reads the raw amount.
 
 ### Surface correction
 
@@ -129,14 +134,32 @@ ones in any compositor, not a claim of physical accuracy.
 A pale glaze over a dark ground cannot glow under Subtractive compositing (a
 thin yellow returns almost no light of its own), so dark hosts use an explicit
 second mode, `CompositeMode::Luminous`, selected by
-`Background::TransparentOnDark`. The colour is the pigment mix's on-white
-colour `W_c = R_c + return_c` at a display alpha:
+`Background::TransparentOnDark`. Over a dark ground the paint is shown as
+coloured light: a glaze whose opacity grows with how much paint is there,
+coloured by the mix's on-white colour `W_c = R_c + return_c` pushed toward
+its hue.
 
 ```
-alpha = smoothstep(LUMINOUS_ALPHA_TOE = 0.03, LUMINOUS_ALPHA_FULL = 0.2, coverage)
-      * smoothstep(LUMINOUS_EDGE_LO = 0.2, LUMINOUS_EDGE_HI = 0.8, mask)
-rgb_c = W_c * alpha
+body  = LUMINOUS_ALPHA_MAX * (1 - 2^(-presence / LUMINOUS_ALPHA_HALF))
+tooth = 1 + (textured / plain - 1) * LUMINOUS_ALPHA_GRAIN
+alpha = clamp(body * tooth, 0, 1) * smoothstep(0, LUMINOUS_ALPHA_TOE, presence)
+      * smoothstep(LUMINOUS_EDGE_LO, LUMINOUS_EDGE_HI, mask)
+G_c   = mean(W) + (W_c - mean(W)) * LUMINOUS_CHROMA_GAIN
+alpha = 1 - (1 - alpha)^(1 + LUMINOUS_PALE_LIFT * Y(G_dry))
+rgb_c = G_c * alpha
 ```
+
+`presence` is the pixel's soft-dilated optical thickness. Alpha is the
+density carrier: a light wash lets the night through, a pool or rim glows
+nearly solid, and `LUMINOUS_ALPHA_MAX` keeps even a heavy body a glaze rather
+than a slab. The on-white colour darkens as paint thickens, so if alpha were
+flat across the body (as it once was) every pool read as a dark cloud; with
+alpha rising, a pool reads deeper and more opaque instead. The chroma gain
+exists because an on-white colour is paper plus pigment, a pale opaque tint
+over a dark ground; pushed toward its hue it reads as light. A pale colour
+at partial alpha over near-black reads as grey or olive, so the pale lift
+raises alpha with the colour's luminance `Y`, read from the dry colour so
+the film never moves alpha.
 
 Five display decisions are folded in:
 
@@ -158,9 +181,11 @@ Five display decisions are folded in:
   a dense body. The thickness term still fades thin glazes and halos. Internal
   rims and overlaps do not touch the mask, so they never open onto the ground.
 
-- **Alpha from the plain mix.** Coverage is computed from the *plain* pigment
-  thickness (before granulation modulation). Keeping fine paper texture out of
-  alpha stops thin spots letting the dark ground through as speckle.
+- **Tooth in alpha, damped.** The paper's tooth reaches alpha through the
+  granulation ratio (`textured / plain`), damped by `LUMINOUS_ALPHA_GRAIN`,
+  so a translucent wash shows the paper's grain as glaze density. The
+  presence itself is the plain, dilated mix, so a thin spot never opens a
+  pit onto the ground.
 - **Presence dilation.** A wash's deposit has genuine pinholes where paper
   tooth left cells almost bare; a per-pixel alpha would open each onto the
   ground as a dark pit. The coverage term uses the deposit's presence
@@ -182,8 +207,8 @@ Five display decisions are folded in:
   copying the largest of them, so the alpha edge follows the deposit's
   sub-cell position rather than the lattice.
 - **Damped grain in colour.** Colour comes from the granulated mix damped
-  toward the plain one by `LUMINOUS_GRAIN_STRENGTH = 0.38`
-  (`plain + (textured - plain) * strength`), so granulation reads as gentle
+  toward the plain one by `LUMINOUS_GRAIN_STRENGTH`
+  (`plain + (textured - plain) * strength`), so granulation reads as
   mottling inside a continuous glow rather than stone. The paper's low-frequency
   pooling octaves sit in the same height field the granulation term reads, so
   they are damped by the same factor; the pooling the simulation deposited
@@ -198,19 +223,19 @@ Five display decisions are folded in:
   darkens toward mud, which over a dark ground stops reading as light.
   Between the two the colour follows the deposited thickness.
 
-`rgb <= alpha` always holds. Over white it composites to
-`1 - alpha (1 - W_c)`: thin glazes agree with the subtractive result (both
-near white), medium ones come out more saturated, dense dark ones washed out.
-Luminous is a display choice, not physics.
+`rgb <= alpha` always holds. Luminous is a display choice, not physics, and
+over white it does not agree with the subtractive result.
 
-**Why the body saturates.** The constants are one value, `LUMINOUS_TUNING`, so
-`render_with_luminous_tuning` can render alternatives. A translucent tuning
-(`alpha_full 0.45`, `grain_strength 0.7`) was re-rendered against the soft
-dilation and rejected again, for a different reason than before. Its edges were
-fine; its bodies were not. A pale glaze at partial alpha over near-black is
-grey, so `header-motif`'s mountains and `moonlit-shoreline`'s sea clouded into
-grey blotches. `alpha_full` stays at 0.2, and a mark that should read as
-translucent on dark (a paint drop) is laid at a lower concentration instead.
+**Why translucency works now.** The constants are one value,
+`LUMINOUS_TUNING`, so `render_with_luminous_tuning` can render alternatives.
+Translucent bodies were once rejected because a pale glaze at partial alpha
+over near-black is grey, and `moonlit-shoreline`'s sea clouded into grey
+blotches. The colour is now evaluated at no less than the presence and the
+colour floor, pushed toward its hue by the chroma gain, and pale colours
+are laid more opaque by the pale lift, so partial alpha reads as a coloured
+glaze. Flat bodies were the worse failure once deposits varied several-fold:
+a saturated alpha left density to the colour alone, which darkens with
+thickness, so pools read as dark clouds.
 
 **Resolution.** A finer grid is not the fix for a blocky outline. The fluid
 moves in cells per tick, so a 512 grid paints a different picture from a 256
@@ -220,10 +245,10 @@ is one painting at every size, and the outline is smoothed in the render by the
 mask above. At 256 over a 900 px hero a cell is 3.5 px; the mask rounds its
 staircase to a gentle wobble.
 
-**Known limitation.** With `alpha_full` at 0.2 a body saturates its alpha long
-before it is dense, so on dark it carries its variation in colour alone, and
-only between the colour floor and ceiling; a triple overlap still reads as a
-dim brown. A preview hook
+**Known limitation.** A thin pale-green or yellow wash (moss) still reads
+somewhat grey-olive on dark at partial alpha, even with the pale lift. Lifted
+areas inside a body (the shoreline foam) show the night ground, so they read
+as dark smudges where on white they read as paper. A preview hook
 (`luminous_variants` in `render_native`) exists but is not shipped.
 
 ### When each mode is chosen

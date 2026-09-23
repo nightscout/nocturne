@@ -78,47 +78,44 @@
 //! The above is [`CompositeMode::Subtractive`]. Under it a pale glaze over a
 //! dark ground cannot glow: a thin yellow returns almost no light of its own,
 //! so a gold crescent on a night ground is a matte olive slab. For dark hosts
-//! [`CompositeMode::Luminous`] is a *display* choice, not physics: it keeps
-//! the same coverage alpha but outputs the colour the layer would show on
-//! white paper,
+//! [`CompositeMode::Luminous`] is a *display* choice, not physics: the paint
+//! is shown as coloured light whose opacity grows with how much paint is
+//! there,
 //!
 //! ```text
-//! coverage  = 1 - lerp(min_c(return_c), mean_c(return_c), ALPHA_SOFTNESS)   of the
-//!             plain mix (pigment thickness before granulation modulation)
-//! alpha     = smoothstep(LUMINOUS_ALPHA_TOE, LUMINOUS_ALPHA_FULL, coverage of the
-//!             plain mix's *presence*: its soft-dilated thickness around each cell)
-//!           * smoothstep(LUMINOUS_EDGE_LO, LUMINOUS_EDGE_HI, mask)
-//! W_c       = on-white colour of the damped granulated mix at thickness
-//!             min(max(t_plain, t_presence, LUMINOUS_COLOUR_FLOOR),
-//!                 LUMINOUS_COLOUR_CEILING), surface corrected
-//! rgb_c     = W_c * alpha                                                  (premultiplied)
+//! alpha = luminous_alpha(presence, textured / plain, mask)
+//!       = clamp(LUMINOUS_ALPHA_MAX * (1 - 2^(-presence / LUMINOUS_ALPHA_HALF))
+//!               * (1 + (textured / plain - 1) * LUMINOUS_ALPHA_GRAIN), 0, 1)
+//!         * smoothstep(0, LUMINOUS_ALPHA_TOE, presence)
+//!         * smoothstep(LUMINOUS_EDGE_LO, LUMINOUS_EDGE_HI, mask)
+//! W_c   = on-white colour of the damped granulated mix at thickness
+//!         min(max(t_plain, presence, LUMINOUS_COLOUR_FLOOR), LUMINOUS_COLOUR_CEILING),
+//!         surface corrected
+//! G_c   = mean(W) + (W_c - mean(W)) * LUMINOUS_CHROMA_GAIN
+//! alpha = 1 - (1 - alpha)^(1 + LUMINOUS_PALE_LIFT * Y(G of the dry mix))
+//! rgb_c = G_c * alpha                                               (premultiplied)
 //! ```
 //!
-//! where `t_plain` is the plain mix's total thickness and the granulated mix
+//! where `presence` is the plain mix's soft-dilated optical thickness
+//! (`Sample::presence`), `t_plain` the plain mix's, and the granulated mix
 //! is first damped toward the plain one,
-//! `plain + (textured - plain) * LUMINOUS_GRAIN_STRENGTH`. Fine-scale texture
-//! therefore lives in colour, not alpha: granulation darkens and saturates
-//! `W` as gentle mottling inside a continuous glow instead of thinning alpha
-//! and letting the ground show through as speckle, while alpha still falls
-//! off with the plain thickness at the boundary and in the halo. The paper's
-//! low-frequency pooling octaves are part of the same height field the
-//! granulation term reads, so they are damped by the same factor in colour;
-//! the pooling the simulation deposited (the plain thickness itself) is not. Over a dark ground the
-//! wash shows its on-white colour softly, like a translucent light wash, and
-//! `rgb <= alpha` always holds. Two display decisions are folded in. The
-//! alpha curve exists because the subtractive coverage is optical density,
-//! which stays small for a pale pigment even at full thickness (moon gold:
-//! 0.45 at thickness 1) and dips wherever the deposit carries paper tooth;
-//! a display alpha has to read pigment presence and be flat across the
-//! body, so coverage is mapped through a smoothstep that reaches 1 at
-//! `LUMINOUS_ALPHA_FULL` (0.2) and is 0 below `LUMINOUS_ALPHA_TOE` (0.03),
-//! with the smoothstep's gentle toe in between so halos and soft edges,
-//! whose coverage falls through that band, still fade. The alpha reads the
-//! plain thickness soft-dilated over simulation cells (`Sample::presence`):
-//! a wash's deposit has genuine pinholes where the paper tooth left cells
-//! almost bare, and per-pixel alpha would open each of them onto the ground
-//! as a dark pit; presence fills a pit to most of its ring while grading a
-//! boundary outward over about a cell.
+//! `plain + (textured - plain) * LUMINOUS_GRAIN_STRENGTH`. Alpha carries
+//! density: a light wash lets the ground through and a pool glows nearly
+//! solid. It has to, because the on-white colour darkens with thickness; with
+//! alpha flat across a body, every pool read as a dark cloud over the night
+//! ground. `LUMINOUS_ALPHA_MAX` keeps a heavy body a glaze rather than a slab.
+//! The paper's tooth reaches alpha damped by `LUMINOUS_ALPHA_GRAIN` and colour
+//! damped by `LUMINOUS_GRAIN_STRENGTH`, so a translucent wash shows its grain;
+//! presence itself is dilated, so a thin spot never opens a pit. The chroma
+//! gain exists because an on-white colour is paper plus pigment, which over a
+//! dark ground reads as a pale opaque tint; pushed toward its hue it reads as
+//! light. A pale colour at partial alpha over near-black reads as grey, so the
+//! pale lift raises alpha with the luminance `Y` of the dry colour (the film
+//! never moves alpha). The alpha reads the plain thickness soft-dilated over
+//! simulation cells: a wash's deposit has genuine pinholes where the paper
+//! tooth left cells almost bare, and per-pixel alpha would open each of them
+//! onto the ground as a dark pit; presence fills a pit to most of its ring
+//! while grading a boundary outward over about a cell.
 //!
 //! The second factor draws the outline. A dried deposit is bare or full cell
 //! by cell, so a body's edge is a staircase, and the thickness term alone put
@@ -143,11 +140,9 @@
 //! only darkens toward mud. In between the colour follows the deposited
 //! thickness, so pooling and the deposit's fine tooth read as gentle
 //! warm/pale mottling in colour, and overlaps darken further.
-//! Over white it composites to `1 - alpha (1 - W_c)`: for a thin glaze
-//! (`alpha` small) both modes are close to white and agree; for a dense
-//! dark glaze on white Luminous is visibly washed out, and for a medium one
-//! it is more saturated than the subtractive result because `W_c` is the
-//! full-strength colour. That mismatch is why it is a per-scene choice
+//! Over white it does not agree with the subtractive result (a thin glaze
+//! comes close; a medium or dense one is more saturated and paler). That
+//! mismatch is why it is a per-scene choice
 //! (`Background::TransparentOnDark`) and not the default. Pair it with the
 //! normal palettes: `Palette::for_dark_surface` thins and pales pigments to
 //! glow under Subtractive, which under Luminous only lowers alpha and drains
@@ -211,11 +206,24 @@ const MAX_BETA: f32 = 40.0;
 /// See the module doc, "Transparent output". Mirrored in `render.wgsl`.
 pub const ALPHA_SOFTNESS: f32 = 0.6;
 
-/// Plain-mix coverage below which the luminous alpha is 0 and at which it
-/// reaches 1; see the module doc, "Composite modes". Mirrored in
+/// Presence (optical thickness) over which the luminous alpha fades in from
+/// 0, so halos and soft edges vanish; see the module doc, "Composite modes".
+/// Mirrored in `render.wgsl`.
+pub const LUMINOUS_ALPHA_TOE: f32 = 0.06;
+
+/// Presence at which the luminous alpha reaches half of
+/// [`LUMINOUS_ALPHA_MAX`]: a light wash lets the ground through, a dense
+/// one glows nearly solid. Mirrored in `render.wgsl`.
+pub const LUMINOUS_ALPHA_HALF: f32 = 0.4;
+
+/// Ceiling of the luminous alpha: even a heavy body stays a glaze over the
+/// night ground rather than a slab. Mirrored in `render.wgsl`.
+pub const LUMINOUS_ALPHA_MAX: f32 = 0.9;
+
+/// How much of the granulation's thickness ratio reaches the luminous
+/// alpha, so a translucent wash shows the paper's tooth. Mirrored in
 /// `render.wgsl`.
-pub const LUMINOUS_ALPHA_TOE: f32 = 0.03;
-pub const LUMINOUS_ALPHA_FULL: f32 = 0.2;
+pub const LUMINOUS_ALPHA_GRAIN: f32 = 0.7;
 
 /// Reconstructed paint mask (`Sample::mask`) at which the luminous outline
 /// starts and is fully in, either side of its 0.5 contour; see the module
@@ -235,36 +243,56 @@ pub fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
 
 /// Smallest plain thickness the luminous colour is evaluated at; see the
 /// module doc, "Composite modes". Mirrored in `render.wgsl`.
-pub const LUMINOUS_COLOUR_FLOOR: f32 = 0.5;
+pub const LUMINOUS_COLOUR_FLOOR: f32 = 0.4;
 
 /// Largest optical thickness the luminous colour is evaluated at: past about
 /// swatch depth an on-white colour only darkens toward mud, which over a
 /// dark ground stops reading as light. Mirrored in `render.wgsl`.
-pub const LUMINOUS_COLOUR_CEILING: f32 = 1.6;
+pub const LUMINOUS_COLOUR_CEILING: f32 = 1.2;
 
 /// How much of the granulation deviation reaches the luminous colour; `1`
 /// is the full textured mix, `0` none. See the module doc, "Composite
 /// modes". Mirrored in `render.wgsl`.
-pub const LUMINOUS_GRAIN_STRENGTH: f32 = 0.38;
+pub const LUMINOUS_GRAIN_STRENGTH: f32 = 0.7;
+
+/// How far the luminous colour is pushed away from its channel mean. An
+/// on-white colour is paper plus pigment, so over a dark ground it reads as
+/// a pale opaque slab; pushing its chroma makes it read as coloured light.
+/// Mirrored in `render.wgsl`.
+pub const LUMINOUS_CHROMA_GAIN: f32 = 1.45;
+
+/// How much a light colour raises the luminous alpha: a pale colour at
+/// partial alpha over a dark ground reads as grey or olive, not as light, so
+/// alpha becomes `1 - (1 - alpha)^(1 + pale_lift * Y)` for the colour's
+/// luminance `Y`. Mirrored in `render.wgsl`.
+pub const LUMINOUS_PALE_LIFT: f32 = 1.5;
 
 /// The Luminous display constants as one value, so probes can render
 /// alternatives side by side. The shader only knows [`LUMINOUS_TUNING`].
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LuminousTuning {
     pub alpha_toe: f32,
-    pub alpha_full: f32,
+    pub alpha_half: f32,
+    pub alpha_max: f32,
+    pub alpha_grain: f32,
     pub colour_floor: f32,
     pub colour_ceiling: f32,
     pub grain_strength: f32,
+    pub chroma_gain: f32,
+    pub pale_lift: f32,
 }
 
 /// The shipped tuning; mirrored constant for constant in `render.wgsl`.
 pub const LUMINOUS_TUNING: LuminousTuning = LuminousTuning {
     alpha_toe: LUMINOUS_ALPHA_TOE,
-    alpha_full: LUMINOUS_ALPHA_FULL,
+    alpha_half: LUMINOUS_ALPHA_HALF,
+    alpha_max: LUMINOUS_ALPHA_MAX,
+    alpha_grain: LUMINOUS_ALPHA_GRAIN,
     colour_floor: LUMINOUS_COLOUR_FLOOR,
     colour_ceiling: LUMINOUS_COLOUR_CEILING,
     grain_strength: LUMINOUS_GRAIN_STRENGTH,
+    chroma_gain: LUMINOUS_CHROMA_GAIN,
+    pale_lift: LUMINOUS_PALE_LIFT,
 };
 
 /// The wet-look factors for one pixel: the film-depth factor and the two
@@ -573,9 +601,8 @@ pub fn to_premultiplied_luminous_tuned(
     wet: WetLook,
     surface: Surface,
 ) -> [f32; 4] {
-    let (r, t) = layer_rgb(presence.kx, presence.sx, 1.0);
-    let body = smoothstep(tuning.alpha_toe, tuning.alpha_full, coverage(r, t));
-    let alpha = body * smoothstep(LUMINOUS_EDGE_LO, LUMINOUS_EDGE_HI, mask);
+    let grain = textured.thickness / plain.thickness.max(1e-6);
+    let alpha = luminous_alpha(presence.thickness, grain, mask, tuning);
     // Brings the layer's thickness up to its presence (so a boundary and a
     // pinhole take their neighbours' colour, as they take their alpha) or the
     // colour floor, and down to the ceiling.
@@ -583,12 +610,51 @@ pub fn to_premultiplied_luminous_tuned(
     let scale = (tuning.colour_floor.max(presence.thickness) / reference)
         .max(1.0)
         .min(tuning.colour_ceiling / reference);
-    let damped = wet.enrich(damp_texture(textured, plain, tuning.grain_strength));
-    let (r_ref, t_ref) = layer_rgb(damped.kx, damped.sx, scale);
-    let w = over_ground(r_ref, t_ref, wet.ground());
-    let q = surface.factor(w, plain.thickness * scale);
+    let damped = damp_texture(textured, plain, tuning.grain_strength);
+    let thickness = plain.thickness * scale;
+    let glow = luminous_colour(wet.enrich(damped), scale, thickness, wet, surface, tuning);
+    // The pale lift reads the dry colour, so the film never moves alpha.
+    let dry = luminous_colour(damped, scale, thickness, WetLook::OFF, surface, tuning);
+    let luminance = 0.2126 * dry.0[0] + 0.7152 * dry.0[1] + 0.0722 * dry.0[2];
+    let alpha = 1.0 - (1.0 - alpha).powf(1.0 + tuning.pale_lift * luminance);
+    [
+        glow.0[0] * alpha,
+        glow.0[1] * alpha,
+        glow.0[2] * alpha,
+        alpha,
+    ]
+}
+
+/// The luminous colour of mix `m` evaluated at `scale` times its thickness
+/// (`thickness` after scaling): its on-white colour over the film-darkened
+/// ground, surface corrected, with the sheen, pushed away from its channel
+/// mean by the chroma gain.
+fn luminous_colour(
+    m: MixTotals,
+    scale: f32,
+    thickness: f32,
+    wet: WetLook,
+    surface: Surface,
+    tuning: &LuminousTuning,
+) -> Rgb {
+    let (r, t) = layer_rgb(m.kx, m.sx, scale);
+    let w = over_ground(r, t, wet.ground());
+    let q = surface.factor(w, thickness);
     let w = w.zip(q, |c, q| (c * q + wet.sheen()).clamp(0.0, 1.0));
-    [w.0[0] * alpha, w.0[1] * alpha, w.0[2] * alpha, alpha]
+    let mean = w.mean();
+    w.map(|c| (mean + (c - mean) * tuning.chroma_gain).clamp(0.0, 1.0))
+}
+
+/// The luminous display alpha for a pixel of `presence` optical thickness,
+/// granulation thickness ratio `grain` (textured over plain) and paint
+/// `mask`; see the module doc, "Composite modes".
+pub fn luminous_alpha(presence: f32, grain: f32, mask: f32, tuning: &LuminousTuning) -> f32 {
+    let presence = presence.max(0.0);
+    let body = tuning.alpha_max * (1.0 - (-presence / tuning.alpha_half).exp2());
+    let tooth = (1.0 + (grain - 1.0) * tuning.alpha_grain).max(0.0);
+    (body * tooth).clamp(0.0, 1.0)
+        * smoothstep(0.0, tuning.alpha_toe, presence)
+        * smoothstep(LUMINOUS_EDGE_LO, LUMINOUS_EDGE_HI, mask)
 }
 
 /// Subtractive premultiplied RGBA whose colour comes from the mix `colour`
@@ -757,10 +823,11 @@ impl Default for RenderParams {
             wet_scatter_loss: 0.5,
             wet_absorb_gain: 0.2,
             // A dried light wash (amount ~0.4) lands near its swatch
-            // (optical ~0.85); a full deposit (amount 1) reads past it at ~1.5.
+            // (optical ~0.85); a full deposit (amount 1) reads past it at
+            // ~1.36, and a heavy rim (amount 2-4) approaches 1.8 at most.
             optical_gamma: 1.35,
-            optical_max: 2.2,
-            optical_mid: 0.47,
+            optical_max: 1.8,
+            optical_mid: 0.32,
             // A gum-arabic film: ~3 % external and ~40 % internal reflection.
             surface_k1: 0.03,
             surface_k2: 0.4,
@@ -828,16 +895,30 @@ pub fn render_with_luminous_tuning(
             let sample = cubic_sample(grid, u, v, params.wet_pigment_visibility);
             let h_out = paper_out.height[(y as usize) * (ow as usize) + x as usize];
             let wet_look = (sample.depth / params.sheen_depth).clamp(0.0, 1.0);
+            // The curve saturates the pixel's total amount, and each pigment
+            // takes its share of the result, so an overlap approaches the
+            // mixture's masstone instead of stacking masstones toward black.
+            let mut amount = 0.0f32;
+            let mut amount_presence = 0.0f32;
             for k in 0..k_count {
-                let base =
-                    sample.deposited[k] + sample.suspended[k] * params.wet_pigment_visibility;
+                amount += (sample.deposited[k]
+                    + sample.suspended[k] * params.wet_pigment_visibility)
+                    .max(0.0);
+                amount_presence += sample.presence[k].max(0.0);
+            }
+            let share = params.optical(amount) / amount.max(1e-6);
+            let share_presence = params.optical(amount_presence) / amount_presence.max(1e-6);
+            for k in 0..k_count {
+                let base = (sample.deposited[k]
+                    + sample.suspended[k] * params.wet_pigment_visibility)
+                    .max(0.0);
                 let grain = 1.0 + gran[k] * params.granulation_gain * (0.5 - h_out) * 2.0;
-                let plain_base = params.optical(base.max(0.0));
+                let plain_base = base * share;
                 let grained = (plain_base * grain.max(0.0)).max(0.0);
                 coverage[k] = grained;
                 plain[k] = plain_base;
                 thickness[k] = grained;
-                presence[k] = params.optical(sample.presence[k].max(0.0));
+                presence[k] = sample.presence[k].max(0.0) * share_presence;
             }
             let px = composite_pixel_tuned(
                 mixed_totals(palette, &thickness),
@@ -1192,30 +1273,43 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn luminous_alpha_is_flat_across_the_body_and_fades_at_the_edge() {
-        let p = builtin::moon_gold();
-        let alpha_at = |thickness: f32| {
-            let m = totals(&p, thickness);
+    fn luminous_alpha_grows_with_presence_and_stays_a_glaze() {
+        let alpha_at = |p: &Pigment, thickness: f32| {
+            let m = totals(p, thickness);
             composite_pixel(m, m, m, CompositeMode::Luminous)[3]
         };
-        // Coverage of moon gold: ~0.03 at thickness 0.05, ~0.1 at 0.16,
-        // ~0.26 at 0.5, ~0.45 at 1.
-        assert!(alpha_at(0.02) < 0.05, "vanishing thickness fades out");
-        let toe = alpha_at(0.16);
-        assert!(toe > 0.05 && toe < 0.8, "halo band is partial: {toe}");
-        assert_eq!(
-            alpha_at(0.5),
-            1.0,
-            "body at half thickness is fully covered"
-        );
-        assert_eq!(alpha_at(1.0), 1.0);
-        assert_eq!(alpha_at(3.0), 1.0);
-        let mut prev = 0.0;
-        for i in 0..=20 {
-            let a = alpha_at(i as f32 * 0.05);
-            assert!(a >= prev - 1e-6, "monotone");
-            prev = a;
+        for p in [
+            builtin::moon_gold(),
+            builtin::indigo(),
+            builtin::quinacridone_rose(),
+        ] {
+            assert!(
+                alpha_at(&p, 0.01) < 0.05,
+                "{}: vanishing thickness fades out",
+                p.name
+            );
+            let wash = alpha_at(&p, 0.3);
+            assert!(
+                wash > 0.3 && wash < 0.85,
+                "{}: a light wash is translucent: {wash}",
+                p.name
+            );
+            assert!(
+                alpha_at(&p, 1.5) > 0.8,
+                "{}: a dense body glows nearly solid",
+                p.name
+            );
+            assert!(alpha_at(&p, 3.0) < 1.0, "{}: never a slab", p.name);
+            let mut prev = 0.0;
+            for i in 0..=40 {
+                let a = alpha_at(&p, i as f32 * 0.05);
+                assert!(a >= prev - 1e-6, "{}: monotone", p.name);
+                prev = a;
+            }
         }
+        // A pale colour at the same presence is laid more opaque, so it reads
+        // as light rather than as grey.
+        assert!(alpha_at(&builtin::moon_gold(), 0.3) > alpha_at(&builtin::indigo(), 0.3));
     }
 
     #[test]
@@ -1245,28 +1339,31 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn luminous_texture_darkens_colour_but_leaves_alpha_alone() {
+    fn luminous_texture_darkens_colour_and_carries_the_tooth_into_alpha() {
         let p = builtin::moon_gold();
         let plain = totals(&p, 0.4);
+        let straight = |px: [f32; 4]| (px[0] + px[1] + px[2]) / px[3];
         let smooth = to_premultiplied_luminous(plain, plain, plain);
         let grainy = to_premultiplied_luminous(totals(&p, 0.4 * 1.5), plain, plain);
         let thin = to_premultiplied_luminous(totals(&p, 0.4 * 0.6), plain, plain);
-        assert_eq!(smooth[3], grainy[3]);
-        assert_eq!(smooth[3], thin[3]);
-        let lum = |px: [f32; 4]| px[0] + px[1] + px[2];
-        assert!(lum(grainy) < lum(smooth), "denser texture darkens");
-        assert!(lum(thin) > lum(smooth), "sparser texture lightens");
+        assert!(
+            straight(grainy) < straight(smooth),
+            "denser texture darkens"
+        );
+        assert!(
+            straight(thin) > straight(smooth),
+            "sparser texture lightens"
+        );
+        assert!(grainy[3] > smooth[3], "a tooth's peak is more opaque");
+        assert!(
+            thin[3] < smooth[3],
+            "a tooth's hollow lets the ground through"
+        );
         // The damping leaves the colour strictly between the smooth and the
-        // fully textured result, in proportion to the strength.
+        // fully textured result.
         let full =
             to_premultiplied_luminous_with_strength(totals(&p, 0.4 * 1.5), plain, plain, 1.0);
-        assert_eq!(full[3], grainy[3]);
-        assert!(lum(full) < lum(grainy) && lum(grainy) < lum(smooth));
-        let ratio = (lum(smooth) - lum(grainy)) / (lum(smooth) - lum(full));
-        assert!(
-            (ratio - LUMINOUS_GRAIN_STRENGTH).abs() < 0.12,
-            "damping ratio {ratio} vs strength {LUMINOUS_GRAIN_STRENGTH}"
-        );
+        assert!(straight(full) < straight(grainy) && straight(grainy) < straight(smooth));
         let sub_smooth = composite_pixel(plain, plain, plain, CompositeMode::Subtractive);
         let sub_grainy = composite_pixel(
             totals(&p, 0.4 * 1.5),
@@ -1334,8 +1431,7 @@ pub(crate) mod tests {
             wet_pigment_visibility: 0.0,
             ..RenderParams::default()
         };
-        // A pale glaze whose alpha never saturates, and a body well past
-        // `LUMINOUS_ALPHA_FULL`. Without the mask the dense body rose from a
+        // A pale glaze and a dense body. Without the mask the dense body rose from a
         // tenth of its alpha to nine tenths in 2 pixels here, a quarter of a
         // cell: a one-pixel edge tracing the staircase.
         for thickness in [0.06f32, 0.6] {
@@ -1679,8 +1775,13 @@ pub(crate) mod tests {
                         WetLook::OFF,
                         surface,
                     );
-                    let over_white = |q: [f32; 4]| [0, 1, 2].map(|c| q[c] + 1.0 - q[3]);
-                    let (a, b) = (over_white(plain), over_white(px));
+                    // Subtractive is judged over white; Luminous by its
+                    // straight colour, since its alpha is a display choice.
+                    let seen = |q: [f32; 4]| match mode {
+                        CompositeMode::Subtractive => [0, 1, 2].map(|c| q[c] + 1.0 - q[3]),
+                        CompositeMode::Luminous => [0, 1, 2].map(|c| q[c] / q[3].max(1e-6)),
+                    };
+                    let (a, b) = (seen(plain), seen(px));
                     for c in 0..3 {
                         assert!(px[c] <= px[3] + 1e-6 && px[c] >= 0.0, "{} {mode:?}", p.name);
                         assert!(

@@ -47,15 +47,17 @@ struct RenderParams {
 @group(0) @binding(4) var<storage, read_write> out: array<vec4<f32>>;
 
 const MAX_BETA: f32 = 40.0;
-// Mirror optics::ALPHA_SOFTNESS, LUMINOUS_ALPHA_TOE and LUMINOUS_ALPHA_FULL.
+// Mirror optics::ALPHA_SOFTNESS and the LUMINOUS_* tuning constants.
 const ALPHA_SOFTNESS: f32 = 0.6;
-const LUMINOUS_ALPHA_TOE: f32 = 0.03;
-const LUMINOUS_ALPHA_FULL: f32 = 0.2;
-// Mirror optics::LUMINOUS_COLOUR_FLOOR and LUMINOUS_COLOUR_CEILING.
-const LUMINOUS_COLOUR_FLOOR: f32 = 0.5;
-const LUMINOUS_COLOUR_CEILING: f32 = 1.6;
-// Mirrors optics::LUMINOUS_GRAIN_STRENGTH.
-const LUMINOUS_GRAIN_STRENGTH: f32 = 0.38;
+const LUMINOUS_ALPHA_TOE: f32 = 0.06;
+const LUMINOUS_ALPHA_HALF: f32 = 0.4;
+const LUMINOUS_ALPHA_MAX: f32 = 0.9;
+const LUMINOUS_ALPHA_GRAIN: f32 = 0.7;
+const LUMINOUS_COLOUR_FLOOR: f32 = 0.4;
+const LUMINOUS_COLOUR_CEILING: f32 = 1.2;
+const LUMINOUS_GRAIN_STRENGTH: f32 = 0.7;
+const LUMINOUS_CHROMA_GAIN: f32 = 1.45;
+const LUMINOUS_PALE_LIFT: f32 = 1.5;
 // Mirror optics::LUMINOUS_EDGE_LO, LUMINOUS_EDGE_HI, LUMINOUS_MASK_THICKNESS,
 // MASK_MAJORITY and MASK_THIN.
 const LUMINOUS_EDGE_LO: f32 = 0.2;
@@ -109,6 +111,19 @@ fn surface_factor(w: vec3<f32>, thickness: f32) -> vec3<f32> {
     let gain = (1.0 - R.surface_k1) * (1.0 - R.surface_k2);
     let q = gain / max(vec3<f32>(1.0) - R.surface_k2 * clamp(w, vec3<f32>(0.0), vec3<f32>(1.0)), vec3<f32>(1e-6));
     return vec3<f32>(1.0) + (q - vec3<f32>(1.0)) * gate;
+}
+
+// optics::luminous_colour.
+fn luminous_colour(kx: vec3<f32>, sx: vec3<f32>, scale: f32, thickness: f32, ground: f32, sheen: f32) -> vec3<f32> {
+    let lr = km_layer(kx.x * scale, sx.x * scale);
+    let lg = km_layer(kx.y * scale, sx.y * scale);
+    let lb = km_layer(kx.z * scale, sx.z * scale);
+    let r = vec3<f32>(lr.x, lg.x, lb.x);
+    let t = vec3<f32>(lr.y, lg.y, lb.y);
+    let over = clamp(r + t * t * ground / max(vec3<f32>(1.0) - r * ground, vec3<f32>(1e-6)), vec3<f32>(0.0), vec3<f32>(1.0));
+    let w = clamp(over * surface_factor(over, thickness) + vec3<f32>(sheen), vec3<f32>(0.0), vec3<f32>(1.0));
+    let mean = (w.x + w.y + w.z) / 3.0;
+    return clamp(vec3<f32>(mean) + (w - vec3<f32>(mean)) * LUMINOUS_CHROMA_GAIN, vec3<f32>(0.0), vec3<f32>(1.0));
 }
 
 // Mirrors optics::PRESENCE_KERNEL: a Gaussian `2^(-d^2)` over the squared cell
@@ -236,22 +251,25 @@ fn render(@builtin(global_invocation_id) gid: vec3<u32>) {
     var kx_plain = vec3<f32>(0.0);
     var sx_plain = vec3<f32>(0.0);
     var plain_thickness = 0.0;
-    var kx_pres = vec3<f32>(0.0);
-    var sx_pres = vec3<f32>(0.0);
-    var pres_thickness = 0.0;
+    // optics::render: the curve saturates the total amount and each pigment
+    // takes its share.
+    var amount = 0.0;
+    var amount_pres = 0.0;
     for (var k = 0u; k < R.pigment_count; k++) {
-        let base = dep[k] + sus[k] * R.wet_pigment_visibility;
+        amount += max(dep[k] + sus[k] * R.wet_pigment_visibility, 0.0);
+        amount_pres += max(pres[k], 0.0);
+    }
+    let share = optical(amount) / max(amount, 1e-6);
+    let pres_thickness = optical(amount_pres);
+    for (var k = 0u; k < R.pigment_count; k++) {
+        let base = max(dep[k] + sus[k] * R.wet_pigment_visibility, 0.0);
         let gran = optics[k * 3u + 2u].x;
         let grain = 1.0 + gran * R.granulation_gain * (0.5 - h_out) * 2.0;
-        let plain = optical(max(base, 0.0));
+        let plain = base * share;
         let t = max(plain * max(grain, 0.0), 0.0);
         plain_thickness += plain;
         kx_plain += optics[k * 3u].xyz * plain;
         sx_plain += optics[k * 3u + 1u].xyz * plain;
-        let presence = optical(max(pres[k], 0.0));
-        pres_thickness += presence;
-        kx_pres += optics[k * 3u].xyz * presence;
-        sx_pres += optics[k * 3u + 1u].xyz * presence;
         thickness += t;
         kx += optics[k * 3u].xyz * t;
         sx += optics[k * 3u + 1u].xyz * t;
@@ -281,34 +299,31 @@ fn render(@builtin(global_invocation_id) gid: vec3<u32>) {
     var rgb = clamp(w_ground - vec3<f32>(passed), vec3<f32>(0.0), vec3<f32>(1.0));
     var out_alpha = 1.0 - passed;
     if state[o_composite_mode()] > 0.5 {
-        // optics::to_premultiplied_luminous_tuned: alpha from the dilated
-        // plain presence's coverage, colour from the damped granulated mix
-        // brought to no less than the colour floor of the plain thickness.
-        let pr = km_layer(kx_pres.x, sx_pres.x);
-        let pg = km_layer(kx_pres.y, sx_pres.y);
-        let pb = km_layer(kx_pres.z, sx_pres.z);
-        let r_plain = vec3<f32>(pr.x, pg.x, pb.x);
-        let t_plain = vec3<f32>(pr.y, pg.y, pb.y);
-        let ret_plain = clamp(t_plain * t_plain / max(vec3<f32>(1.0) - r_plain, vec3<f32>(1e-6)), vec3<f32>(0.0), vec3<f32>(1.0));
-        let min_plain = min(ret_plain.x, min(ret_plain.y, ret_plain.z));
-        let mean_plain = (ret_plain.x + ret_plain.y + ret_plain.z) / 3.0;
-        let coverage = clamp(1.0 - (min_plain + (mean_plain - min_plain) * ALPHA_SOFTNESS), 0.0, 1.0);
-        out_alpha = smoothstep(LUMINOUS_ALPHA_TOE, LUMINOUS_ALPHA_FULL, coverage)
+        // optics::luminous_alpha: presence-driven alpha carrying the tooth.
+        let body = LUMINOUS_ALPHA_MAX * (1.0 - exp2(-pres_thickness / LUMINOUS_ALPHA_HALF));
+        let grain_ratio = thickness / max(plain_thickness, 1e-6);
+        let tooth = max(1.0 + (grain_ratio - 1.0) * LUMINOUS_ALPHA_GRAIN, 0.0);
+        var alpha_l = clamp(body * tooth, 0.0, 1.0)
+            * smoothstep(0.0, LUMINOUS_ALPHA_TOE, pres_thickness)
             * smoothstep(LUMINOUS_EDGE_LO, LUMINOUS_EDGE_HI, mask);
+        // optics::to_premultiplied_luminous_tuned: colour from the damped
+        // granulated mix, its thickness raised to the presence or the floor
+        // and capped at the ceiling.
         let reference = max(plain_thickness, 1e-6);
         let scale = min(max(max(LUMINOUS_COLOUR_FLOOR, pres_thickness) / reference, 1.0), LUMINOUS_COLOUR_CEILING / reference);
-        // optics::damp_texture: grain deviation damped toward the plain mix,
-        // then enriched by the film.
-        let kx_d = (kx_plain + (kx - kx_plain) * LUMINOUS_GRAIN_STRENGTH) * wet_k;
-        let sx_d = (sx_plain + (sx - sx_plain) * LUMINOUS_GRAIN_STRENGTH) * wet_sc;
-        let rr = km_layer(kx_d.x * scale, sx_d.x * scale);
-        let rg = km_layer(kx_d.y * scale, sx_d.y * scale);
-        let rb = km_layer(kx_d.z * scale, sx_d.z * scale);
-        let r_ref = vec3<f32>(rr.x, rg.x, rb.x);
-        let t_ref = vec3<f32>(rr.y, rg.y, rb.y);
-        let over_ground_ref = clamp(r_ref + t_ref * t_ref * ground / max(vec3<f32>(1.0) - r_ref * ground, vec3<f32>(1e-6)), vec3<f32>(0.0), vec3<f32>(1.0));
-        let w_ref = clamp(over_ground_ref * surface_factor(over_ground_ref, plain_thickness * scale) + vec3<f32>(sheen), vec3<f32>(0.0), vec3<f32>(1.0));
-        rgb = w_ref * out_alpha;
+        let kx_d = kx_plain + (kx - kx_plain) * LUMINOUS_GRAIN_STRENGTH;
+        let sx_d = sx_plain + (sx - sx_plain) * LUMINOUS_GRAIN_STRENGTH;
+        let colour_t = plain_thickness * scale;
+        let w_glow = luminous_colour(kx_d * wet_k, sx_d * wet_sc, scale, colour_t, ground, sheen);
+        // The pale lift reads the dry colour, so the film never moves alpha.
+        let w_dry = luminous_colour(kx_d, sx_d, scale, colour_t, 1.0, 0.0);
+        let luminance = 0.2126 * w_dry.x + 0.7152 * w_dry.y + 0.0722 * w_dry.z;
+        let clear = 1.0 - alpha_l;
+        if clear > 0.0 {
+            alpha_l = 1.0 - pow(clear, 1.0 + LUMINOUS_PALE_LIFT * luminance);
+        }
+        out_alpha = alpha_l;
+        rgb = w_glow * alpha_l;
     }
     out[y * R.out_width + x] = vec4<f32>(rgb, out_alpha);
 }

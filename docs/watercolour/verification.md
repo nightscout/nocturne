@@ -224,13 +224,11 @@ spot checks on the machine above, not a benchmark harness.
 - **CPU/GPU not bit-exact**: a few boundary cells dry one tick apart under
   fused-multiply-add rounding. Mean difference stays three orders of magnitude
   inside the 0.01 tolerance; see the measured table.
-- **Luminous bodies are flatter/pastel on dark**: `alpha_full` at 0.2
-  saturates a body, so it carries its variation in colour alone. The
-  translucent tuning (`alpha_full 0.45`, `grain_strength 0.7`) was re-rendered
-  on the soft dilation and rejected: its outlines were fine, but a pale glaze
-  at partial alpha over black is grey, and `header-motif` and
-  `moonlit-shoreline` clouded. Preview hook exists (`luminous_variants` in
-  `render_native`), not shipped.
+- **Luminous pale greens and yellows read slightly grey on dark**: bodies are
+  translucent glazes whose alpha grows with presence, and a pale colour at
+  partial alpha over near-black greys. The pale lift and chroma gain limit
+  it; a thin moss wash still reads a little olive. Preview hook exists
+  (`luminous_variants` in `render_native`), not shipped.
 - **A luminous outline wobbles at the cell scale**: the paint mask rounds a
   binary deposit's staircase but cannot recover a sub-cell edge, and a
   one-cell mark keeps its full weight rather than being rounded. The grid is

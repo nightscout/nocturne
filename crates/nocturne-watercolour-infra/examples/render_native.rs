@@ -186,21 +186,29 @@ fn luminous_variants(out_dir: &Path, dark: Rgb) {
         (
             "middle",
             LuminousTuning {
-                alpha_toe: 0.03,
-                alpha_full: 0.45,
+                alpha_toe: 0.06,
+                alpha_half: 0.5,
+                alpha_max: 0.85,
+                alpha_grain: 0.5,
                 colour_floor: 0.5,
                 colour_ceiling: 1.2,
                 grain_strength: 0.7,
+                chroma_gain: 1.0,
+                pale_lift: 0.0,
             },
         ),
         (
             "deep",
             LuminousTuning {
-                alpha_toe: 0.03,
-                alpha_full: 0.45,
+                alpha_toe: 0.06,
+                alpha_half: 0.5,
+                alpha_max: 0.85,
+                alpha_grain: 0.5,
                 colour_floor: 1.0,
                 colour_ceiling: 1.2,
                 grain_strength: 0.85,
+                chroma_gain: 1.0,
+                pale_lift: 0.0,
             },
         ),
     ];
