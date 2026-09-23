@@ -227,7 +227,7 @@
               <Card.Title class="text-sm font-medium">
                 {insulin.name || "Unknown Insulin"}
               </Card.Title>
-              <Card.Description class="text-xs">
+              <Card.Description size="sm">
                 {insulin.insulinCategory
                   ? (insulinCategoryLabels[insulin.insulinCategory] ?? insulin.insulinCategory)
                   : "Unknown Category"}

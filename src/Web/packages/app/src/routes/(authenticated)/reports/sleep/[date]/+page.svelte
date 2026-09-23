@@ -104,7 +104,7 @@
       {#if report.score != null}
         <Card>
           <CardHeader class="pb-2">
-            <CardTitle class="text-sm font-medium text-muted-foreground">Sleep Score</CardTitle>
+            <CardTitle variant="muted" class="text-sm font-medium">Sleep Score</CardTitle>
           </CardHeader>
           <CardContent>
             <div class="flex items-center gap-2">
@@ -119,7 +119,7 @@
       {#if timeAsleepMinutes != null}
         <Card>
           <CardHeader class="pb-2">
-            <CardTitle class="text-sm font-medium text-muted-foreground">Time Asleep</CardTitle>
+            <CardTitle variant="muted" class="text-sm font-medium">Time Asleep</CardTitle>
           </CardHeader>
           <CardContent>
             <div class="flex items-center gap-2">
@@ -135,7 +135,7 @@
       {#if report.overnightTir}
         <Card>
           <CardHeader class="pb-2">
-            <CardTitle class="text-sm font-medium text-muted-foreground">Overnight TIR</CardTitle>
+            <CardTitle variant="muted" class="text-sm font-medium">Overnight TIR</CardTitle>
           </CardHeader>
           <CardContent>
             <div class="flex items-center gap-2">
@@ -154,7 +154,7 @@
       {#if session.efficiency != null}
         <Card>
           <CardHeader class="pb-2">
-            <CardTitle class="text-sm font-medium text-muted-foreground">Efficiency</CardTitle>
+            <CardTitle variant="muted" class="text-sm font-medium">Efficiency</CardTitle>
           </CardHeader>
           <CardContent>
             <div class="flex items-center gap-2">

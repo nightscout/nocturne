@@ -35,7 +35,7 @@
     <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {#each targetLocales as locale (locale)}
         <a href={resolve("/(authenticated)/settings/translations/[locale]", { locale })} class="group">
-          <Card.Root class="transition-colors group-hover:border-primary/50">
+          <Card.Root interactive>
             <Card.Content class="flex items-center justify-between p-4">
               <div>
                 <p class="font-medium">{getLanguageLabel(locale, locale)}</p>

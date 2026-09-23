@@ -252,7 +252,7 @@
         href={resolve("/alerts/history")}
         class="block rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <Card class="transition-colors hover:bg-muted/40">
+        <Card interactive>
           <CardContent>
             <p class="text-xs uppercase tracking-wider text-muted-foreground">Fired this week</p>
             <p class="mt-1 text-2xl font-bold tabular-nums">
@@ -269,7 +269,7 @@
       <Card variant="destructive">
         <CardHeader>
           <div class="flex flex-col gap-2 @sm:flex-row @sm:items-center @sm:justify-between">
-            <CardTitle class="flex min-w-0 items-center gap-2 text-destructive">
+            <CardTitle variant="destructive" class="flex min-w-0 items-center gap-2">
               <AlertTriangle class="h-5 w-5 shrink-0" />
               <span class="truncate">Active alerts ({activeAlerts.length})</span>
             </CardTitle>

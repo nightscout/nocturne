@@ -228,13 +228,17 @@
         open={showDirectPermissions}
         onOpenChange={(open: boolean) => (showDirectPermissions = open)}
       >
-        <Collapsible.Trigger class="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors w-full">
-          {#if showDirectPermissions}
-            <ChevronUp class="h-4 w-4" />
-          {:else}
-            <ChevronDown class="h-4 w-4" />
-          {/if}
-          Direct permissions (advanced)
+        <Collapsible.Trigger>
+          {#snippet child({ props }: { props: Record<string, unknown> })}
+            <Button {...props} variant="subtle" size="inline" class="w-full justify-start">
+              {#if showDirectPermissions}
+                <ChevronUp class="h-4 w-4" />
+              {:else}
+                <ChevronDown class="h-4 w-4" />
+              {/if}
+              Direct permissions (advanced)
+            </Button>
+          {/snippet}
         </Collapsible.Trigger>
         <Collapsible.Content>
           <div class="mt-3">

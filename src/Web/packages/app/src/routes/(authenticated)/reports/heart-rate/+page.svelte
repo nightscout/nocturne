@@ -84,7 +84,7 @@
   <div class="grid grid-cols-2 @sm:grid-cols-4 gap-4">
     <Card>
       <CardHeader class="pb-2">
-        <CardTitle class="text-sm font-medium text-muted-foreground">
+        <CardTitle variant="muted" class="text-sm font-medium">
           Average
         </CardTitle>
       </CardHeader>
@@ -99,7 +99,7 @@
 
     <Card>
       <CardHeader class="pb-2">
-        <CardTitle class="text-sm font-medium text-muted-foreground">
+        <CardTitle variant="muted" class="text-sm font-medium">
           Resting Estimate
         </CardTitle>
       </CardHeader>
@@ -114,7 +114,7 @@
 
     <Card>
       <CardHeader class="pb-2">
-        <CardTitle class="text-sm font-medium text-muted-foreground">
+        <CardTitle variant="muted" class="text-sm font-medium">
           Min / Max
         </CardTitle>
       </CardHeader>
@@ -131,7 +131,7 @@
 
     <Card>
       <CardHeader class="pb-2">
-        <CardTitle class="text-sm font-medium text-muted-foreground">
+        <CardTitle variant="muted" class="text-sm font-medium">
           Readings
         </CardTitle>
       </CardHeader>

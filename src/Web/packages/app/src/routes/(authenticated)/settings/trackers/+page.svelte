@@ -504,22 +504,22 @@
 
     <Tabs.Root bind:value={activeTab} class="space-y-6">
       <Tabs.List class="grid w-full grid-cols-4">
-        <Tabs.Trigger value="active" class="gap-2">
+        <Tabs.Trigger value="active">
           <Activity class="h-4 w-4" />
           Active
           {#if activeCount > 0}
             <Badge variant="secondary" class="ml-1">{activeCount}</Badge>
           {/if}
         </Tabs.Trigger>
-        <Tabs.Trigger value="history" class="gap-2">
+        <Tabs.Trigger value="history">
           <History class="h-4 w-4" />
           History
         </Tabs.Trigger>
-        <Tabs.Trigger value="definitions" class="gap-2">
+        <Tabs.Trigger value="definitions">
           <Settings2 class="h-4 w-4" />
           Definitions
         </Tabs.Trigger>
-        <Tabs.Trigger value="presets" class="gap-2">
+        <Tabs.Trigger value="presets">
           <Bookmark class="h-4 w-4" />
           Presets
         </Tabs.Trigger>

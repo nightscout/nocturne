@@ -53,7 +53,8 @@
     value={clockName}
     oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
       onNameChange(e.currentTarget.value)}
-    class="max-w-[200px] border-none text-center font-semibold focus-visible:ring-0"
+    variant="title"
+    class="max-w-[200px] text-center"
     placeholder="Clock name"
   />
   <div class="flex gap-2">

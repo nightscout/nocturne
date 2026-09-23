@@ -159,7 +159,7 @@
         </div>
         <div>
           <CardTitle class="text-base">Target Range</CardTitle>
-          <CardDescription class="text-xs">Desired blood glucose range</CardDescription>
+          <CardDescription size="sm">Desired blood glucose range</CardDescription>
         </div>
       </div>
     </CardHeader>

@@ -7,17 +7,19 @@
     ref = $bindable(null),
     class: className,
     variant = "default",
+    interactive = false,
     children,
     ...restProps
   }: WithElementRef<HTMLAttributes<HTMLDivElement>> & {
     variant?: CardVariant;
+    interactive?: boolean;
   } = $props();
 </script>
 
 <div
   bind:this={ref}
   data-slot="card"
-  class={cn(cardVariants({ variant }), className)}
+  class={cn(cardVariants({ variant, interactive }), className)}
   {...restProps}
 >
   {@render children?.()}

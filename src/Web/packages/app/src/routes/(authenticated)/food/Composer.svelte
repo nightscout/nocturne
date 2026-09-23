@@ -208,8 +208,12 @@
 	<div class="mt-3 flex items-center justify-between">
 		<!-- Details toggle -->
 		<Collapsible.Root bind:open={showDetails}>
-			<Collapsible.Trigger data-testid="food-composer-details" class="inline-flex cursor-pointer select-none items-center gap-1.5 text-xs text-muted-foreground">
-				<span class="inline-flex transition-transform" class:rotate-90={showDetails}><ChevronRight class="h-3 w-3" /></span> {showDetails ? 'Hide' : 'Add'} fat, protein, category...
+			<Collapsible.Trigger>
+				{#snippet child({ props }: { props: Record<string, unknown> })}
+					<Button {...props} data-testid="food-composer-details" variant="subtle" size="inline-xs" class="select-none">
+						<span class="inline-flex transition-transform" class:rotate-90={showDetails}><ChevronRight class="h-3 w-3" /></span> {showDetails ? 'Hide' : 'Add'} fat, protein, category...
+					</Button>
+				{/snippet}
 			</Collapsible.Trigger>
 			<Collapsible.Content>
 			<div class="mt-3 grid grid-cols-5 gap-3">

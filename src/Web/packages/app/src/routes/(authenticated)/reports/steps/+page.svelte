@@ -76,7 +76,7 @@
   <div class="grid grid-cols-1 @sm:grid-cols-3 gap-4">
     <Card>
       <CardHeader class="pb-2">
-        <CardTitle class="text-sm font-medium text-muted-foreground">
+        <CardTitle variant="muted" class="text-sm font-medium">
           Total Steps
         </CardTitle>
       </CardHeader>
@@ -92,7 +92,7 @@
 
     <Card>
       <CardHeader class="pb-2">
-        <CardTitle class="text-sm font-medium text-muted-foreground">
+        <CardTitle variant="muted" class="text-sm font-medium">
           Daily Average
         </CardTitle>
       </CardHeader>
@@ -109,7 +109,7 @@
 
     <Card>
       <CardHeader class="pb-2">
-        <CardTitle class="text-sm font-medium text-muted-foreground">
+        <CardTitle variant="muted" class="text-sm font-medium">
           Period
         </CardTitle>
       </CardHeader>

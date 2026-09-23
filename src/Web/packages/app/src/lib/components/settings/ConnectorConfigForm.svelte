@@ -490,13 +490,11 @@
     <Collapsible.Root bind:open={advancedExpanded}>
       <Card>
         <Collapsible.Trigger class="w-full">
-          <CardHeader
-            class="cursor-pointer hover:bg-muted/50 transition-colors"
-          >
+          <CardHeader interactive>
             <div class="flex items-center justify-between">
               <CardTitle class="flex items-center gap-2">
                 {advancedGroup.name}
-                <Badge variant="secondary" class="font-normal">
+                <Badge variant="secondary">
                   {advancedGroup.properties.length} settings
                 </Badge>
               </CardTitle>

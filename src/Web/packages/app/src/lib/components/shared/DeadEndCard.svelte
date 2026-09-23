@@ -19,7 +19,7 @@
       </div>
       <Card.Title>{title}</Card.Title>
     </Card.Header>
-    <Card.Content class="space-y-3 text-center text-sm text-muted-foreground">
+    <Card.Content variant="muted" class="space-y-3 text-center">
       {@render children()}
     </Card.Content>
   </Card.Root>

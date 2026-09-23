@@ -270,7 +270,7 @@
           </Table.Row>
         {:else}
           <Table.Row>
-            <Table.Cell colspan={isRange ? 4 : 3} class="text-center py-4 text-muted-foreground">
+            <Table.Cell variant="muted" colspan={isRange ? 4 : 3} class="text-center py-4">
               No time blocks configured. Click "Add Time Block" to get started.
             </Table.Cell>
           </Table.Row>
@@ -293,7 +293,7 @@
           <div>
             <CardTitle class="text-base">{title}</CardTitle>
             {#if description}
-              <CardDescription class="text-xs">{description}</CardDescription>
+              <CardDescription size="sm">{description}</CardDescription>
             {/if}
           </div>
         </div>
@@ -316,7 +316,7 @@
         <Table.Body>
           {#each entries as entry, i (i)}
             <Table.Row>
-              <Table.Cell class="font-mono text-sm">
+              <Table.Cell class="font-mono">
                 {entry.time ?? "\u2013"}
               </Table.Cell>
               {#if isRange}
@@ -334,7 +334,7 @@
             </Table.Row>
           {:else}
             <Table.Row>
-              <Table.Cell colspan={isRange ? 3 : 2} class="text-center py-4 text-muted-foreground">
+              <Table.Cell variant="muted" colspan={isRange ? 3 : 2} class="text-center py-4">
                 No schedule entries configured.
               </Table.Cell>
             </Table.Row>

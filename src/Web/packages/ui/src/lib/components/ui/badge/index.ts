@@ -29,6 +29,11 @@ export const badgeVariants = tv({
       "severity-info":
         "bg-severity-info text-severity-info-foreground [a&]:hover:bg-severity-info/90 border-transparent",
     },
+    size: {
+      default: "",
+      // A count or tag packed into a dense row, a tab or a table header.
+      sm: "px-1.5 py-0 text-2xs",
+    },
     // Set by Badge from onremove; its remove button's focus ring shows on the badge,
     // since the badge clips overflow.
     removable: {
@@ -38,10 +43,12 @@ export const badgeVariants = tv({
   },
   defaultVariants: {
     variant: "default",
+    size: "default",
     removable: false,
   },
 });
 
 export type BadgeVariant = VariantProps<typeof badgeVariants>["variant"];
+export type BadgeSize = VariantProps<typeof badgeVariants>["size"];
 
 export { default as Badge } from "./badge.svelte";

@@ -264,18 +264,18 @@
 
     <Tabs.Root bind:value={activeTab} class="space-y-6">
       <Tabs.List class="grid w-full grid-cols-3">
-        <Tabs.Trigger value="migrate" class="gap-2">
+        <Tabs.Trigger value="migrate">
           <Play class="h-4 w-4" />
           New Migration
         </Tabs.Trigger>
-        <Tabs.Trigger value="progress" class="gap-2">
+        <Tabs.Trigger value="progress">
           <RefreshCw class="h-4 w-4" />
           Progress
           {#if hasActiveMigration}
             <Badge variant="default" class="ml-1 animate-pulse">Active</Badge>
           {/if}
         </Tabs.Trigger>
-        <Tabs.Trigger value="history" class="gap-2">
+        <Tabs.Trigger value="history">
           <Clock class="h-4 w-4" />
           History
           {#if history.length > 0}

@@ -61,7 +61,7 @@
     >
       <Link class="h-3.5 w-3.5" />
       Linked Records
-      <Badge variant="secondary" class="h-5 px-1.5">
+      <Badge variant="secondary" size="sm" class="h-5">
         {records.length}
       </Badge>
     </h4>

@@ -197,7 +197,7 @@
               <Card.Title class="text-sm font-medium">
                 {[device.manufacturer, device.model].filter(Boolean).join(" ") || "Unknown Device"}
               </Card.Title>
-              <Card.Description class="text-xs">
+              <Card.Description size="sm">
                 {device.deviceCategory
                   ? (deviceCategoryLabels[device.deviceCategory] ?? device.deviceCategory)
                   : "Unknown Category"}

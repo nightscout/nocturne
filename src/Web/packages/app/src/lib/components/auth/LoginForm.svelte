@@ -260,7 +260,7 @@
 {/snippet}
 
 {#snippet lastUsedBadge()}
-  <Badge variant="secondary" class="ml-2 text-2xs uppercase">
+  <Badge variant="secondary" size="sm" class="ml-2 uppercase">
     Last used
   </Badge>
 {/snippet}
@@ -340,8 +340,7 @@
 {#snippet otherMethodLinks()}
   <Button
     variant="link"
-    size="inline"
-    class="text-xs"
+    size="inline-xs"
     onclick={() => switchMode("recovery")}
     disabled={isLoading}
   >
@@ -352,8 +351,7 @@
 {#snippet backToSignIn(label: string)}
   <Button
     variant="link"
-    size="inline"
-    class="text-xs"
+    size="inline-xs"
     onclick={() => switchMode("default")}
     disabled={isLoading}
   >

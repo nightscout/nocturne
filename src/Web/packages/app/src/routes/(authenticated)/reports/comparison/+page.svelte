@@ -452,7 +452,7 @@
                 oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
                   setLabel(cfg.side, e.currentTarget.value)}
                 size="sm"
-                class="border-0 px-1 font-semibold focus-visible:ring-1"
+                variant="title"
               />
               <span class="ml-auto font-mono text-xs text-muted-foreground">
                 {dayCount(p.from, p.to)}d

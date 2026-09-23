@@ -85,10 +85,10 @@
         {rule.name ?? "(unnamed)"}
       </Button>
       {#if !rule.isEnabled}
-        <Badge variant="secondary" class="text-2xs">Disabled</Badge>
+        <Badge variant="secondary" size="sm">Disabled</Badge>
       {/if}
       {#if rule.managedBy}
-        <Badge variant="secondary" class="text-2xs">Managed by tracker</Badge>
+        <Badge variant="secondary" size="sm">Managed by tracker</Badge>
       {/if}
     </div>
     <div class="truncate text-xs text-muted-foreground" title={chip}>
@@ -176,7 +176,7 @@
             {#snippet trigger(props)}
               <DropdownMenu.Item
                 {...props}
-                class="text-destructive"
+                variant="destructive"
                 onSelect={(e: Event) => e.preventDefault()}
               >
                 <Trash2 class="h-4 w-4 mr-2" /> Delete

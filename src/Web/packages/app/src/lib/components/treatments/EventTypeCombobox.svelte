@@ -100,10 +100,10 @@
   <Popover.Trigger>
     {#snippet child({ props }: { props: Record<string, unknown> })}
       <Button
-        variant="outline"
+        variant="combobox"
         role="combobox"
         aria-expanded={popoverOpen}
-        class={cn("w-full justify-between font-normal", className)}
+        class={cn("w-full justify-between", className)}
         {disabled}
         {...props}
       >

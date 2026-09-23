@@ -90,7 +90,7 @@
     </div>
 
     <!-- Date Range Info -->
-    <Card class="bg-muted/30">
+    <Card variant="muted">
       <CardContent
         class="flex flex-wrap items-center justify-between gap-4 py-3"
       >
@@ -155,13 +155,14 @@
   <Card variant="info">
     <CardHeader>
       <CardTitle
-        class="flex items-center gap-2 text-info"
+        variant="info"
+        class="flex items-center gap-2"
       >
         <HelpCircle class="h-5 w-5" />
         Understanding This Report
       </CardTitle>
     </CardHeader>
-    <CardContent class="space-y-4 text-sm text-info">
+    <CardContent size="sm" class="space-y-4">
       <p>
         <strong>What this shows:</strong>
         This report averages your glucose readings across all your site changes to

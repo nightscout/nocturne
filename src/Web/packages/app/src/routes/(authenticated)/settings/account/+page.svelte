@@ -515,9 +515,9 @@
       </Card.Root>
 
       <!-- Section 4: Recovery Mode Info -->
-      <Card.Root class="border-muted">
+      <Card.Root>
         <Card.Header>
-          <Card.Title class="flex items-center gap-2 text-muted-foreground">
+          <Card.Title variant="muted" class="flex items-center gap-2">
             <Server class="h-5 w-5" />
             Server-Side Account Recovery
           </Card.Title>

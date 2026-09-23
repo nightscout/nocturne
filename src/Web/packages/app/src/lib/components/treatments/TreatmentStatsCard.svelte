@@ -56,7 +56,7 @@
       <div class="mt-2 flex flex-wrap gap-1">
         {#each Object.values(ENTRY_CATEGORIES) as cat (cat.id)}
           {#if counts[cat.id] > 0}
-            <Badge variant="secondary" class="text-2xs px-1.5 py-0">
+            <Badge variant="secondary" size="sm">
               {cat.name} <span class="opacity-70">{counts[cat.id]}</span>
             </Badge>
           {/if}

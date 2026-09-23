@@ -46,7 +46,7 @@
       >
         {label}
         {#if selected.length > 0}
-          <Badge variant="secondary" class="ml-1 h-5 px-1">
+          <Badge variant="secondary" size="sm" class="ml-1 h-5">
             {selected.length}
           </Badge>
         {/if}

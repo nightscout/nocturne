@@ -72,14 +72,14 @@
 
 {#if hourlyDeliveryQuery.error || analysisQuery.error}
   <div class="@container container mx-auto max-w-7xl p-3 @md:p-6">
-    <Card variant="destructive" class="border-2">
+    <Card variant="destructive">
       <CardHeader>
-        <CardTitle class="flex items-center gap-2 text-base text-destructive">
+        <CardTitle variant="destructive" class="flex items-center gap-2 text-base">
           <Info class="h-5 w-5" />
           Error Loading Basal Analysis
         </CardTitle>
       </CardHeader>
-      <CardContent class="text-sm text-muted-foreground">
+      <CardContent variant="muted">
         {String(hourlyDeliveryQuery.error ?? analysisQuery.error)}
       </CardContent>
     </Card>
@@ -136,16 +136,14 @@
     </div>
 
     <!-- What is this report - Educational Card -->
-    <Card
-      class="border-2 border-report-treatment/30 bg-report-treatment/5"
-    >
+    <Card variant="info">
       <CardHeader class="pb-3">
         <CardTitle class="flex items-center gap-2 text-base">
-          <HelpCircle class="h-5 w-5 text-report-treatment" />
+          <HelpCircle class="h-5 w-5 text-info" />
           Understanding This Report
         </CardTitle>
       </CardHeader>
-      <CardContent class="space-y-2 text-sm">
+      <CardContent size="sm" class="space-y-2">
         <p>
           This report shows how your <strong>
             basal (background) insulin delivery

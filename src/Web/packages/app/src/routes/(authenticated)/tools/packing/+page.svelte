@@ -117,7 +117,7 @@
   {/each}
 
   <!-- Generate Button -->
-  <Card class="border-primary/20 bg-primary/5">
+  <Card variant="primary">
     <CardContent class="pt-6 flex flex-col items-center gap-3 text-center">
       <p class="text-sm text-muted-foreground">
         {#if totalItems > 0}

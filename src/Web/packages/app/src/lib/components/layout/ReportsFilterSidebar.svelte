@@ -135,7 +135,7 @@
 
 <Sheet.Root bind:open {onOpenChange}>
   <Sheet.Content side="right" class="w-[320px] sm:w-[400px] p-0">
-    <Sheet.Header class="px-6 py-4 border-b border-border">
+    <Sheet.Header class="px-6 py-4 border-b">
       <div class="flex items-center justify-between">
         <Sheet.Title class="flex items-center gap-2">
           <Filter class="h-5 w-5" />

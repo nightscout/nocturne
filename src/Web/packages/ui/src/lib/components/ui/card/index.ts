@@ -16,6 +16,52 @@ export const cardVariants = tv({
       success: "border-success/30 bg-success/5",
       warning: "border-warning/30 bg-warning/5",
       info: "border-info/30 bg-info/5",
+      // A highlighted summary, e.g. a report's headline figures.
+      primary: "border-primary/20 bg-primary/5",
+      // Supporting notes or a filter bar beside the main content.
+      muted: "bg-muted/30",
+      // An empty state standing in for content that has yet to be added.
+      dashed: "border-dashed",
+    },
+    // A card that is itself a link, wrapped in an <a>.
+    interactive: {
+      true: "transition-colors hover:bg-accent/50",
+      false: "",
+    },
+  },
+  defaultVariants: {
+    variant: "default",
+    interactive: false,
+  },
+});
+
+export type CardVariant = VariantProps<typeof cardVariants>["variant"];
+
+export const cardHeaderVariants = tv({
+  base: "@container/card-header has-data-[slot=card-action]:grid-cols-[1fr_auto] [.border-b]:pb-6 grid auto-rows-min grid-rows-[auto_auto] items-start gap-1.5 px-6",
+  variants: {
+    // A header that is the trigger of a collapsible card.
+    interactive: {
+      true: "cursor-pointer transition-colors hover:bg-accent/50",
+      false: "",
+    },
+  },
+  defaultVariants: {
+    interactive: false,
+  },
+});
+
+export const cardTitleVariants = tv({
+  base: "font-semibold leading-none",
+  variants: {
+    variant: {
+      default: "",
+      // The label of a stat tile, above its figure.
+      muted: "text-muted-foreground",
+      destructive: "text-destructive",
+      success: "text-success",
+      warning: "text-warning",
+      info: "text-info",
     },
   },
   defaultVariants: {
@@ -23,7 +69,45 @@ export const cardVariants = tv({
   },
 });
 
-export type CardVariant = VariantProps<typeof cardVariants>["variant"];
+export type CardTitleVariant = VariantProps<typeof cardTitleVariants>["variant"];
+
+export const cardDescriptionVariants = tv({
+  base: "text-muted-foreground text-sm",
+  variants: {
+    size: {
+      default: "",
+      sm: "text-xs",
+    },
+  },
+  defaultVariants: {
+    size: "default",
+  },
+});
+
+export type CardDescriptionSize = VariantProps<typeof cardDescriptionVariants>["size"];
+
+export const cardContentVariants = tv({
+  base: "px-6",
+  variants: {
+    variant: {
+      default: "",
+      // A secondary message, e.g. an empty or error state, in the card's description type.
+      muted: "text-muted-foreground text-sm",
+    },
+    size: {
+      default: "",
+      // Explanatory prose, e.g. a report's "about this report" card.
+      sm: "text-sm",
+    },
+  },
+  defaultVariants: {
+    variant: "default",
+    size: "default",
+  },
+});
+
+export type CardContentVariant = VariantProps<typeof cardContentVariants>["variant"];
+export type CardContentSize = VariantProps<typeof cardContentVariants>["size"];
 
 export {
 	Root,

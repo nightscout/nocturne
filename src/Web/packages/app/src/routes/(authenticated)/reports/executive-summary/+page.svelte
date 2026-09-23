@@ -91,9 +91,7 @@
       {/snippet}
 
       <!-- Headline Metrics -->
-      <Card
-        class="border-2 border-primary/20 bg-linear-to-br from-background to-muted/30"
-      >
+      <Card variant="primary">
         <CardContent class="pt-6">
           <div
             class="flex flex-col @3xl:flex-row items-center justify-between gap-6"
@@ -124,7 +122,7 @@
       <!-- Primary Metrics Grid -->
       <div class="grid grid-cols-1 @2xl:grid-cols-2 @4xl:grid-cols-3 gap-6">
         <!-- Time in Range - Featured -->
-        <Card class="border-2 @2xl:col-span-2 @4xl:col-span-1 @4xl:row-span-2">
+        <Card class="@2xl:col-span-2 @4xl:col-span-1 @4xl:row-span-2">
           <CardHeader>
             <CardTitle class="flex items-center gap-2">
               <Target class="w-5 h-5 text-glucose-in-range" />
@@ -176,7 +174,7 @@
         </Card>
 
         <!-- Estimated A1C -->
-        <Card class="border-2">
+        <Card>
           <CardHeader class="pb-2">
             <CardTitle class="flex items-center gap-2 text-base">
               <Gauge class="w-5 h-5" />
@@ -225,7 +223,7 @@
         </Card>
 
         <!-- Glucose Variability -->
-        <Card class="border-2">
+        <Card>
           <CardHeader class="pb-2">
             <CardTitle class="flex items-center gap-2 text-base">
               <TrendingUp class="w-5 h-5" />
@@ -275,7 +273,7 @@
       <!-- Safety Metrics Row -->
       <div class="grid grid-cols-1 @3xl:grid-cols-2 gap-6">
         <!-- Hypoglycemia -->
-        <Card class="border-2">
+        <Card>
           <CardHeader>
             <CardTitle class="flex items-center gap-2">
               <AlertTriangle class="w-5 h-5 text-glucose-very-low" />
@@ -328,7 +326,7 @@
         </Card>
 
         <!-- Hyperglycemia -->
-        <Card class="border-2">
+        <Card>
           <CardHeader>
             <CardTitle class="flex items-center gap-2">
               <TrendingUp class="w-5 h-5 text-glucose-high" />
@@ -374,7 +372,7 @@
       <!-- Data Quality & Statistics -->
       <div class="grid grid-cols-1 @3xl:grid-cols-2 gap-6">
         <!-- Glucose Statistics -->
-        <Card class="border-2">
+        <Card>
           <CardHeader>
             <CardTitle class="flex items-center gap-2">
               <Activity class="w-5 h-5" />
@@ -443,7 +441,7 @@
         </Card>
 
         <!-- Data Quality -->
-        <Card class="border-2">
+        <Card>
           <CardHeader>
             <CardTitle class="flex items-center gap-2">
               <Shield class="w-5 h-5" />
@@ -490,7 +488,7 @@
       </div>
 
       <!-- Navigation to Other Reports -->
-      <Card class="border-2 bg-muted/30 print:hidden">
+      <Card variant="muted" class="print:hidden">
         <CardHeader>
           <CardTitle class="flex items-center gap-2">
             <Zap class="w-5 h-5" />

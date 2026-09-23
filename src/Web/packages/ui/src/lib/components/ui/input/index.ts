@@ -20,6 +20,8 @@ export const inputVariants = tv({
       default: "",
       // Device and pairing codes the user reads off another screen.
       code: "text-center text-lg uppercase tracking-widest md:text-lg",
+      // A name edited in place, e.g. a clock face's or a comparison period's; its border shows on focus.
+      title: "border-transparent bg-transparent font-semibold shadow-none dark:bg-transparent",
     },
   },
   defaultVariants: {

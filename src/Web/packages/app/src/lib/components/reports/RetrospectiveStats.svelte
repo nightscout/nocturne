@@ -39,7 +39,7 @@
 </script>
 
 {#if !retrospectiveQuery.current && !retrospectiveQuery.error}
-  <Card.Root class="@container border-2 border-primary/20 bg-primary/5">
+  <Card.Root variant="primary" class="@container">
     <Card.Header class="pb-2">
       <Card.Title class="flex items-center gap-2 text-base">
         <Activity class="h-4 w-4" />
@@ -74,9 +74,9 @@
   </Card.Root>
 {:else if retrospectiveQuery.error}
   {@const error = retrospectiveQuery.error}
-  <Card.Root variant="destructive" class="border-2">
+  <Card.Root variant="destructive">
     <Card.Header class="pb-2">
-      <Card.Title class="flex items-center gap-2 text-base text-destructive">
+      <Card.Title variant="destructive" class="flex items-center gap-2 text-base">
         <AlertTriangle class="h-4 w-4" />
         Error Loading Status
       </Card.Title>
@@ -99,7 +99,7 @@
   </Card.Root>
 {:else}
   {@const data = retrospectiveQuery.current}
-  <Card.Root class="@container border-2 border-primary/20 bg-primary/5">
+  <Card.Root variant="primary" class="@container">
     <Card.Header class="pb-2">
       <Card.Title class="flex items-center gap-2 text-base">
         <Activity class="h-4 w-4" />

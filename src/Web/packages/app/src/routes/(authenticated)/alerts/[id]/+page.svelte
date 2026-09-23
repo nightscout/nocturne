@@ -536,7 +536,7 @@
       <Card>
         <CardHeader>
           <CardTitle class="text-base">Test alert</CardTitle>
-          <CardDescription class="text-xs">
+          <CardDescription size="sm">
             Fire a real notification, or replay the rule against historical
             glucose.
           </CardDescription>
@@ -577,7 +577,7 @@
             <CardTitle class="text-base flex items-center gap-2">
               <HistoryIcon class="h-4 w-4" /> Historic firings
             </CardTitle>
-            <CardDescription class="text-xs">
+            <CardDescription size="sm">
               Real fires for this rule. Click any to replay the day in the
               simulator.
             </CardDescription>

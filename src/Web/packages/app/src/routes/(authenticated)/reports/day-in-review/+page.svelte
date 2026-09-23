@@ -529,7 +529,8 @@
                   {/if}
                 </Table.Cell>
                 <Table.Cell
-                  class="text-muted-foreground truncate max-w-[200px]"
+                  variant="muted"
+                  class="truncate max-w-[200px]"
                 >
                   —
                 </Table.Cell>

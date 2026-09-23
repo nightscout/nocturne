@@ -105,18 +105,19 @@
           readonly
           disabled
           value={calculatedRate > 0 ? calculatedRate.toFixed(3) : "-"}
-          class="bg-muted text-muted-foreground"
         />
       </div>
     </div>
   {/if}
 
   <Collapsible.Root bind:open={showAdvanced}>
-    <Collapsible.Trigger
-      class="flex items-center gap-1 px-2 h-7 text-xs text-muted-foreground hover:text-foreground transition-colors"
-    >
-      <ChevronDown class="h-3 w-3 transition-transform {showAdvanced ? 'rotate-180' : ''}" />
-      Advanced
+    <Collapsible.Trigger>
+      {#snippet child({ props }: { props: Record<string, unknown> })}
+        <Button {...props} variant="subtle" size="xs">
+          <ChevronDown class="h-3 w-3 transition-transform {showAdvanced ? 'rotate-180' : ''}" />
+          Advanced
+        </Button>
+      {/snippet}
     </Collapsible.Trigger>
     <Collapsible.Content>
       <div class="grid grid-cols-2 gap-3 pt-2">

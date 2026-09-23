@@ -547,8 +547,9 @@
         {:else}
           <Table.Row>
             <Table.Cell
+              variant="muted"
               colspan={columns.length}
-              class="h-24 text-center text-muted-foreground"
+              class="h-24 text-center"
             >
               No audit records found.
             </Table.Cell>

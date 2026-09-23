@@ -49,13 +49,13 @@
 <Collapsible.Root bind:open={expanded}>
   <Card>
     <Collapsible.Trigger class="w-full">
-      <CardHeader class="cursor-pointer hover:bg-muted/50 transition-colors py-3">
+      <CardHeader interactive class="py-3">
         <div class="flex items-center justify-between">
           <CardTitle class="flex items-center gap-2 text-sm font-semibold">
             <Icon class="h-4 w-4 text-muted-foreground" />
             {config.label}
             {#if categoryTotal > 0}
-              <Badge variant="secondary" class="font-normal tabular-nums">
+              <Badge variant="secondary" class="tabular-nums">
                 {categoryTotal} items
               </Badge>
             {/if}

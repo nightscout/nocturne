@@ -54,12 +54,12 @@
          `for` targets the caller's id. -->
     {#snippet child({ props }: { props: Record<string, unknown> })}
       <Button
-        variant="outline"
+        variant="combobox"
         role="combobox"
         aria-expanded={popoverOpen}
         aria-invalid={ariaInvalid}
         aria-describedby={ariaDescribedby}
-        class={cn("w-full justify-between font-normal", className)}
+        class={cn("w-full justify-between", className)}
         {disabled}
         {...props}
         {...id ? { id } : {}}

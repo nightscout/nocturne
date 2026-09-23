@@ -110,7 +110,7 @@
         >
           <Avatar.Root class="h-16 w-16">
             <Avatar.Image src={localAvatarUrl} alt={user.name} />
-            <Avatar.Fallback class="bg-primary/10 text-primary text-xl">
+            <Avatar.Fallback variant="primary" class="text-xl">
               {getInitials(user.name)}
             </Avatar.Fallback>
           </Avatar.Root>

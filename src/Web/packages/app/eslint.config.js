@@ -104,11 +104,20 @@ export default ts.config(
         allow: ["layout"],
         // A later matching contract replaces an earlier one, so each restates layout.
         contracts: [
+          // A rule between sections is the caller's: CardHeader and CardFooter pad a
+          // border-b or border-t they are given. Tabs and its panels draw nothing.
           {
-            pattern: "^Card(Header|Content|Footer)$|^(Dialog|Sheet|AlertDialog)(Header|Footer)$|^(Popover|Collapsible)Content$",
-            allow: ["layout", "spacing"]
+            pattern: "^Card(Header|Content|Footer)$|^(Dialog|Sheet|AlertDialog)(Header|Footer)$|^(Popover|Collapsible)Content$|^Tabs(Content)?$",
+            allow: ["layout", "spacing", "border-t", "border-b"]
           },
-          { pattern: "^Table(Cell|Head)$", allow: ["layout", "spacing", "tabular-nums", "font-mono"] },
+          {
+            pattern: "^Table(Cell|Head)$",
+            allow: ["layout", "spacing", "tabular-nums", "font-mono", "font-medium"],
+            message: { color: 'Use <{{component}} variant="muted"> for a secondary column or an empty-table message.' }
+          },
+          { pattern: "^CardDescription$", allow: ["layout", "gap"] },
+          // Initials scale with the avatar, whose size the caller sets.
+          { pattern: "^AvatarFallback$", allow: ["layout", "text-xs", "text-sm", "text-base", "text-lg", "text-xl"] },
           { pattern: "^(Card|Dialog|Sheet|AlertDialog)Title$", allow: ["layout", "typography", "gap"] },
           {
             pattern: "^(Input|SelectTrigger)$",
@@ -162,9 +171,9 @@ export default ts.config(
             allow: ["layout"],
             deny: HEIGHT_CLASSES,
             message: {
-              color: "\"{{className}}\" is not allowed on <Button>: pick a variant. For a colour the theme does not own (an OIDC provider's brand), use variant=\"brand\" and pass brand with its background and foreground, the foreground picked for contrast by the API.",
-              layout: "\"{{className}}\" is not allowed on <Button>: its height comes from size. Use xs (h-7), sm (h-8), default (h-9), lg (h-10), xl (h-14, full-screen alarm actions), icon-xs (size-7), icon-sm (size-8), icon (size-9), icon-2xs (size-5, a round remove pip), or inline (h-auto, no padding) for a link in running text. Width stays yours.",
-              typography: "\"{{className}}\" is not allowed on <Button>: it owns its type. size=\"xs\" gives text-xs and size=\"xl\" text-lg; every other size is text-sm font-medium.",
+              color: "\"{{className}}\" is not allowed on <Button>: pick a variant: subtle for muted text with no fill (a disclosure toggle), ghost-muted for a quiet action. For a colour the theme does not own (an OIDC provider's brand), use variant=\"brand\" and pass brand with its background and foreground, the foreground picked for contrast by the API.",
+              layout: "\"{{className}}\" is not allowed on <Button>: its height comes from size. Use xs (h-7), sm (h-8), default (h-9), lg (h-10), xl (h-14, full-screen alarm actions), icon-xs (size-7), icon-sm (size-8), icon (size-9), icon-2xs (size-5, a round remove pip), or inline (h-auto, no padding) for a link in running text, inline-xs beside text-xs copy. Width stays yours.",
+              typography: "\"{{className}}\" is not allowed on <Button>: it owns its type. size=\"xs\" and \"inline-xs\" give text-xs and size=\"xl\" text-lg; every other size is text-sm font-medium. A combobox or date-picker trigger is variant=\"combobox\".",
               effects: "\"{{className}}\" is not allowed on <Button>: it owns its effects. For a remove that shows on hover, set reveal: it stays hidden until its `group` is hovered or holds focus."
             }
           },
@@ -172,6 +181,8 @@ export default ts.config(
             pattern: "^(Badge|Alert|Card)(\\.Root)?$",
             allow: ["layout"]
           },
+          // An identifier or a count keeps its figures aligned.
+          { pattern: "^Badge$", allow: ["layout", "font-mono", "tabular-nums"] },
           {
             pattern: "^(Item|RadioGroup\\.Card|RadioGroupCard)$",
             allow: ["layout"],

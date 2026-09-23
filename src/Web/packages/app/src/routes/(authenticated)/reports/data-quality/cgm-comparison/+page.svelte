@@ -99,7 +99,7 @@
 
     {#if devices.length < 2}
       <Card>
-        <CardContent class="pt-6 text-sm text-muted-foreground">
+        <CardContent variant="muted" class="pt-6">
           Two registered CGMs need readings in this range to compare. This range has {devices.length}.
         </CardContent>
       </Card>
@@ -158,13 +158,13 @@
 
       {#if !comparable}
         <Card>
-          <CardContent class="pt-6 text-sm text-muted-foreground">
+          <CardContent variant="muted" class="pt-6">
             Pick two different devices to compare.
           </CardContent>
         </Card>
       {:else if query?.error}
         <Card>
-          <CardContent class="pt-6 text-sm text-muted-foreground">
+          <CardContent variant="muted" class="pt-6">
             The comparison could not be loaded.
           </CardContent>
         </Card>

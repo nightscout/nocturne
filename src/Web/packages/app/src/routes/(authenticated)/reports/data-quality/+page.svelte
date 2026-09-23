@@ -140,7 +140,7 @@
 
 			<!-- Compression Lows Card -->
 			<a href={resolve("/reports/data-quality/compression-lows")} class="block">
-				<Card class="transition-colors hover:bg-muted/50">
+				<Card interactive>
 					<CardHeader class="pb-3">
 						<div class="flex items-center justify-between">
 							<div class="flex items-center gap-3">
@@ -178,7 +178,7 @@
 
 			<!-- Signal Integrity Card -->
 			<a href={resolve("/reports/data-quality/sensor-integrity")} class="block">
-				<Card class="transition-colors hover:bg-muted/50">
+				<Card interactive>
 					<CardHeader class="pb-3">
 						<div class="flex items-center justify-between">
 							<div class="flex items-center gap-3">
@@ -202,7 +202,7 @@
 
 			<!-- CGM Comparison Card -->
 			<a href={resolve("/reports/data-quality/cgm-comparison")} class="block">
-				<Card class="transition-colors hover:bg-muted/50">
+				<Card interactive>
 					<CardHeader class="pb-3">
 						<div class="flex items-center justify-between">
 							<div class="flex items-center gap-3">

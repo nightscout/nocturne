@@ -317,7 +317,7 @@
 {#snippet chartBody()}
   <CardHeader class={isMobile.current ? "pb-2 px-1" : "pb-2 px-3 @md:px-6"}>
     <div class="flex items-center justify-between flex-wrap gap-2">
-      <CardTitle class="flex items-center gap-2 text-card-foreground">
+      <CardTitle class="flex items-center gap-2">
         Blood Glucose
         {#if displayDemoMode}
           <Badge
@@ -450,7 +450,7 @@
     {@render chartBody()}
   </div>
 {:else}
-  <Card class="@container border-border">
+  <Card class="@container">
     {@render chartBody()}
   </Card>
 {/if}

@@ -281,7 +281,8 @@
                 </Tooltip.Trigger>
                 <Tooltip.Portal>
                   <Tooltip.Content
-                    class="z-50 overflow-hidden bg-popover py-2 text-sm text-popover-foreground shadow-md"
+                    variant="popover"
+                    class="z-50 overflow-hidden"
                   >
                     {#if selectedConnector.totalItemsBreakdown && Object.keys(selectedConnector.totalItemsBreakdown).length > 0}
                       <div class="space-y-1">
@@ -320,7 +321,8 @@
                 </Tooltip.Trigger>
                 <Tooltip.Portal>
                   <Tooltip.Content
-                    class="z-50 overflow-hidden bg-popover py-2 text-sm text-popover-foreground shadow-md"
+                    variant="popover"
+                    class="z-50 overflow-hidden"
                   >
                     {#if selectedConnector.itemsLast24HoursBreakdown && Object.keys(selectedConnector.itemsLast24HoursBreakdown).length > 0}
                       <div class="space-y-1">

@@ -50,10 +50,10 @@
     <Popover.Trigger>
       {#snippet child({ props }: { props: Record<string, unknown> })}
         <Button
-          variant="outline"
+          variant="combobox"
           role="combobox"
           aria-expanded={popoverOpen}
-          class="w-full justify-between font-normal"
+          class="w-full justify-between"
           {...props}
         >
           {#if form.eventType}

@@ -101,7 +101,7 @@
         <div class="flex items-start gap-3">
           <Avatar.Root class="h-10 w-10 shrink-0">
             <Avatar.Image src={request.avatarUrl} alt={request.subjectName} />
-            <Avatar.Fallback class="bg-primary/10 text-primary text-sm">
+            <Avatar.Fallback variant="primary" class="text-sm">
               {getInitials(request.subjectName)}
             </Avatar.Fallback>
           </Avatar.Root>

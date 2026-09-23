@@ -237,13 +237,17 @@
           open={showInvitePermissions}
           onOpenChange={(open: boolean) => (showInvitePermissions = open)}
         >
-          <Collapsible.Trigger class="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors w-full">
-            {#if showInvitePermissions}
-              <ChevronUp class="h-4 w-4" />
-            {:else}
-              <ChevronDown class="h-4 w-4" />
-            {/if}
-            Direct Permissions (optional)
+          <Collapsible.Trigger>
+            {#snippet child({ props }: { props: Record<string, unknown> })}
+              <Button {...props} variant="subtle" size="inline" class="w-full justify-start">
+                {#if showInvitePermissions}
+                  <ChevronUp class="h-4 w-4" />
+                {:else}
+                  <ChevronDown class="h-4 w-4" />
+                {/if}
+                Direct Permissions (optional)
+              </Button>
+            {/snippet}
           </Collapsible.Trigger>
           <Collapsible.Content>
             <div class="mt-3">

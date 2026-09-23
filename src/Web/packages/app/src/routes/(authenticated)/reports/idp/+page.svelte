@@ -111,7 +111,7 @@
   <!-- Top Row: Insulin Summary + Glucose Metrics -->
   <div class="grid grid-cols-1 @3xl:grid-cols-2 gap-6">
     <!-- Insulin Summary Card -->
-    <Card class="border-2">
+    <Card>
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <Syringe class="w-5 h-5 text-insulin" />
@@ -197,7 +197,7 @@
     </Card>
 
     <!-- Glucose Metrics Card -->
-    <Card class="border-2">
+    <Card>
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <Droplets class="w-5 h-5 text-glucose-in-range" />
@@ -259,7 +259,7 @@
   <!-- Middle Row: AID Use (stub) + GRI -->
   <div class="grid grid-cols-1 @3xl:grid-cols-2 gap-6">
     <!-- AID Use Card (stubbed) -->
-    <Card class="border-2">
+    <Card>
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <Activity class="w-5 h-5" />
@@ -300,7 +300,7 @@
     </Card>
 
     <!-- GRI Card -->
-    <Card class="border-2">
+    <Card>
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <Target class="w-5 h-5" />
@@ -323,7 +323,7 @@
   </div>
 
   <!-- Glucose Pattern — unified section matching iCoDE-2 layout -->
-  <Card class="border-2">
+  <Card>
     <CardHeader>
       <CardTitle class="flex items-center gap-2">
         <Activity class="w-5 h-5" />

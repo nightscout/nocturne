@@ -190,8 +190,8 @@
         {/snippet}
       </Tooltip.Trigger>
       <Tooltip.Content
+        variant="popover"
         side="top"
-        class="bg-card text-card-foreground border shadow-lg p-3"
       >
         <div class="space-y-1.5">
           <div class="font-medium text-sm">

@@ -176,16 +176,18 @@
 
   <!-- Collapsible nutritional details -->
   <Collapsible.Root bind:open={nutritionDetailsOpen}>
-    <Collapsible.Trigger
-      class="flex w-full items-center justify-between rounded-lg border px-3 py-2 text-sm font-medium hover:bg-muted/50 transition-colors"
-    >
-      <span>Nutritional Details</span>
-      <ChevronDown
-        class={cn(
-          "h-4 w-4 transition-transform",
-          nutritionDetailsOpen && "rotate-180"
-        )}
-      />
+    <Collapsible.Trigger>
+      {#snippet child({ props }: { props: Record<string, unknown> })}
+        <Button {...props} variant="outline" class="w-full justify-between">
+          <span>Nutritional Details</span>
+          <ChevronDown
+            class={cn(
+              "h-4 w-4 transition-transform",
+              nutritionDetailsOpen && "rotate-180"
+            )}
+          />
+        </Button>
+      {/snippet}
     </Collapsible.Trigger>
     <Collapsible.Content class="pt-3 space-y-4">
       <!-- Portion and unit row -->
@@ -206,7 +208,7 @@
             <Popover.Trigger bind:ref={unitTriggerRef}>
               {#snippet child({ props }: { props: Record<string, unknown> })}
                 <Button
-                  variant="outline"
+                  variant="combobox"
                   class="w-full justify-between"
                   {...props}
                   role="combobox"
@@ -259,7 +261,7 @@
             <Popover.Trigger bind:ref={giTriggerRef}>
               {#snippet child({ props }: { props: Record<string, unknown> })}
                 <Button
-                  variant="outline"
+                  variant="combobox"
                   class="w-full justify-between"
                   {...props}
                   role="combobox"

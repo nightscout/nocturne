@@ -58,7 +58,7 @@
 
 <Card>
   <CardHeader class="pb-2">
-    <CardTitle class="text-sm font-medium text-muted-foreground">{label}</CardTitle>
+    <CardTitle variant="muted" class="text-sm font-medium">{label}</CardTitle>
   </CardHeader>
   <CardContent>
     <div class="flex items-center gap-2">

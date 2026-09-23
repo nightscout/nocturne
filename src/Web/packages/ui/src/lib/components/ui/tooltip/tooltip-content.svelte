@@ -9,9 +9,12 @@
     side = "top",
     children,
     arrowClasses,
+    variant = "default",
     ...restProps
   }: TooltipPrimitive.ContentProps & {
     arrowClasses?: string;
+    /** popover: a multi-line breakdown, on the popover surface. */
+    variant?: "default" | "popover";
   } = $props();
 </script>
 
@@ -23,6 +26,8 @@
     {side}
     class={cn(
       "bg-primary text-primary-foreground animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 origin-(--bits-tooltip-content-transform-origin) z-50 w-fit text-balance rounded-md px-3 py-1.5 text-xs",
+      variant === "popover" &&
+        "bg-popover text-popover-foreground border py-2 text-sm shadow-md",
       className
     )}
     {...restProps}
@@ -33,6 +38,7 @@
         <div
           class={cn(
             "bg-primary z-50 size-2.5 rotate-45 rounded-[2px]",
+            variant === "popover" && "bg-popover",
             side === "top" && "translate-x-1/2 translate-y-[calc(-50%_+_2px)]",
             side === "bottom" &&
               "-translate-x-1/2 -translate-y-[calc(-50%_+_1px)]",

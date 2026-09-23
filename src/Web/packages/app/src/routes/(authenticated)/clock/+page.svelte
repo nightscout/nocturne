@@ -112,7 +112,7 @@
 
       {#if clockFaces.length === 0}
         <!-- Empty State -->
-        <Card.Root class="border-dashed">
+        <Card.Root variant="dashed">
           <Card.Content class="flex flex-col items-center justify-center py-12">
             <div class="mb-4 rounded-full bg-muted p-4">
               <ClockIcon class="size-8 text-muted-foreground" />
@@ -150,7 +150,7 @@
               <div class="flex items-start justify-between">
                 <div>
                   <Card.Title class="font-semibold">{face.name}</Card.Title>
-                  <Card.Description class="text-xs">
+                  <Card.Description size="sm">
                     {#if face.updatedAt}
                       Updated {formatNumericDate(new Date(face.updatedAt))}
                     {:else if face.createdAt}

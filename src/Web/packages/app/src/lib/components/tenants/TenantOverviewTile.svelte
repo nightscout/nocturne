@@ -40,7 +40,7 @@
 </script>
 
 {#snippet tileContent()}
-  <Card.Root class="h-full transition-colors hover:bg-accent/50">
+  <Card.Root interactive class="h-full">
     <Card.Header class="pb-2">
       <div class="flex items-start justify-between gap-2">
         <div class="min-w-0">

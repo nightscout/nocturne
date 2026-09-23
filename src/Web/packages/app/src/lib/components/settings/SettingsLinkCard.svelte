@@ -8,9 +8,7 @@
 
 <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- link.href is a literal in-app path from settings-links.ts or its caller -->
 <a href={link.href} class="group block">
-  <Card.Root
-    class="h-full transition-colors hover:border-primary/40 hover:bg-muted/40"
-  >
+  <Card.Root interactive class="h-full">
     <Card.Content class="flex items-center gap-4 p-4">
       <div
         class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10"

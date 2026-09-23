@@ -181,7 +181,7 @@
 
     {#if profileNames.length === 0}
       <!-- Empty State -->
-      <Card class="border-dashed">
+      <Card variant="dashed">
         <CardContent class="py-12">
           <div class="text-center space-y-4">
             <div
@@ -264,9 +264,8 @@
                         </Badge>
                       {:else}
                         <Button
-                          variant="link"
-                          size="inline"
-                          class="text-xs text-muted-foreground"
+                          variant="subtle"
+                          size="inline-xs"
                           onclick={(e: MouseEvent) => { e.preventDefault(); handleSetActive(profileName); }}
                           disabled={switchingProfile !== null}
                         >
@@ -412,7 +411,7 @@
         </div>
 
         <!-- Additional Therapy Metadata -->
-        <Card class="bg-muted/30">
+        <Card variant="muted">
           <CardHeader class="pb-3">
             <CardTitle class="text-sm font-medium">
               Profile Settings
@@ -441,7 +440,7 @@
         </Card>
       {:else if selectedProfileName}
         <!-- Profile selected but no therapy settings found -->
-        <Card class="border-dashed">
+        <Card variant="dashed">
           <CardContent class="py-8">
             <div class="text-center text-muted-foreground">
               <p>

@@ -101,14 +101,14 @@
   </div>
 
   <!-- What is AGP - Educational Card -->
-  <Card variant="info" class="border-2">
+  <Card variant="info">
     <CardHeader class="pb-3">
       <CardTitle class="flex items-center gap-2 text-base">
         <HelpCircle class="w-5 h-5 text-info" />
         What is an AGP?
       </CardTitle>
     </CardHeader>
-    <CardContent class="text-sm space-y-2">
+    <CardContent size="sm" class="space-y-2">
       <p>
         The <strong>Ambulatory Glucose Profile</strong>
         shows what a "typical" day looks like for your glucose levels. It overlays
@@ -149,9 +149,7 @@
 
     <!-- Quick Stats Grid -->
     <div class="grid grid-cols-2 @lg:grid-cols-4 @3xl:grid-cols-6 gap-4">
-      <Card
-        class="p-4 text-center border-2 border-glucose-in-range/30 bg-glucose-in-range/5"
-      >
+      <Card variant="success" class="p-4 text-center">
         <div class="text-3xl font-bold text-glucose-in-range">
           {tir.target?.toFixed(0) ?? "–"}%
         </div>
@@ -196,7 +194,7 @@
     <ReliabilityBadge reliability={analysis?.reliability} />
 
     <!-- Main AGP Chart -->
-    <Card class="border-2">
+    <Card>
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <BarChart3 class="w-5 h-5" />
@@ -214,7 +212,7 @@
 
     <!-- Time in Range Visual -->
     <div class="grid grid-cols-1 @3xl:grid-cols-2 gap-6">
-      <Card class="border-2">
+      <Card>
         <CardHeader>
           <CardTitle class="flex items-center gap-2">
             <Target class="w-5 h-5 text-glucose-in-range" />
@@ -230,7 +228,7 @@
       </Card>
 
       <!-- Key Patterns / Insights -->
-      <Card class="border-2">
+      <Card>
         <CardHeader>
           <CardTitle class="flex items-center gap-2">
             <TrendingUp class="w-5 h-5" />
@@ -294,7 +292,7 @@
   <Separator />
 
   <!-- Clinical Context Footer -->
-  <Card class="bg-muted/30">
+  <Card variant="muted">
     <CardContent class="pt-6">
       <div class="grid grid-cols-1 @3xl:grid-cols-3 gap-6 text-sm">
         <div>

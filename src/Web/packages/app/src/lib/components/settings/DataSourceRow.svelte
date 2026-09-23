@@ -250,7 +250,8 @@
               </Tooltip.Trigger>
               <Tooltip.Portal>
                 <Tooltip.Content
-                  class="z-50 overflow-hidden bg-popover py-2 text-sm text-popover-foreground shadow-md"
+                  variant="popover"
+                  class="z-50 overflow-hidden"
                 >
                   <div class="space-y-1">
                     <div class="font-medium text-xs text-muted-foreground mb-1">
@@ -285,7 +286,8 @@
                 </Tooltip.Trigger>
                 <Tooltip.Portal>
                   <Tooltip.Content
-                    class="z-50 overflow-hidden bg-popover py-2 text-sm text-popover-foreground shadow-md"
+                    variant="popover"
+                    class="z-50 overflow-hidden"
                   >
                     <div class="space-y-1">
                       <div

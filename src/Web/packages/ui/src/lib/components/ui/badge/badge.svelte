@@ -2,7 +2,7 @@
   import type { HTMLAnchorAttributes } from "svelte/elements";
   import { X } from "@lucide/svelte";
   import { cn, type WithElementRef } from "../../../utils";
-  import { badgeVariants, type BadgeVariant } from "./index.js";
+  import { badgeVariants, type BadgeSize, type BadgeVariant } from "./index.js";
 
   // A removable badge must name what its remove button removes.
   type Removal =
@@ -14,6 +14,7 @@
     href,
     class: className,
     variant = "default",
+    size = "default",
     onremove,
     removeLabel,
     children,
@@ -21,6 +22,7 @@
   }: WithElementRef<HTMLAnchorAttributes> &
     Removal & {
       variant?: BadgeVariant;
+      size?: BadgeSize;
     } = $props();
 </script>
 
@@ -29,7 +31,7 @@
   bind:this={ref}
   data-slot="badge"
   {href}
-  class={cn(badgeVariants({ variant, removable: onremove !== undefined }), className)}
+  class={cn(badgeVariants({ variant, size, removable: onremove !== undefined }), className)}
   {...restProps}
 >
   {@render children?.()}

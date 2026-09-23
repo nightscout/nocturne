@@ -112,7 +112,7 @@
       >
         {#each PROFILE_ICONS as icon (icon.id)}
           {@const IconComponent = iconComponents[icon.id] ?? User}
-          <ToggleGroup.Item value={icon.id} class="size-9" title={icon.name} aria-label={icon.name}>
+          <ToggleGroup.Item value={icon.id} class="w-9" title={icon.name} aria-label={icon.name}>
             <IconComponent class="h-4 w-4" />
           </ToggleGroup.Item>
         {/each}

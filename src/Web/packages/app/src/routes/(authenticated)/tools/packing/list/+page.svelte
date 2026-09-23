@@ -138,7 +138,7 @@
       <Card>
         <CardHeader class="py-3">
           <div class="flex items-center justify-between">
-            <CardTitle class="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+            <CardTitle variant="muted" class="text-sm font-semibold uppercase tracking-wider">
               {category}
             </CardTitle>
             <Button
@@ -234,7 +234,7 @@
     {#if addingToCategory === "Custom"}
       <Card>
         <CardHeader class="py-3">
-          <CardTitle class="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+          <CardTitle variant="muted" class="text-sm font-semibold uppercase tracking-wider">
             Custom
           </CardTitle>
         </CardHeader>

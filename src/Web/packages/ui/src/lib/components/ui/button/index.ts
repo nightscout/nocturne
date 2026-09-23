@@ -24,12 +24,17 @@ export const buttonVariants = tv({
       // A quiet secondary action.
       "ghost-muted":
         "text-muted-foreground hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
+      // Muted text with no fill: a disclosure toggle, or a secondary action in a line of text.
+      subtle: "text-muted-foreground hover:text-foreground",
       // A quiet remove action.
       "ghost-destructive":
         "text-destructive hover:bg-destructive/10 hover:text-destructive dark:hover:bg-destructive/20",
       // A bordered remove action.
       "outline-destructive":
         "bg-background text-destructive shadow-xs hover:bg-destructive/10 dark:bg-input/30 dark:hover:bg-destructive/20 border border-destructive/30",
+      // The trigger of a combobox or date picker, typed like SelectTrigger.
+      combobox:
+        "bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 border font-normal",
       // The add-item placeholder at the end of a list.
       dashed:
         "text-muted-foreground hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50 border border-dashed",
@@ -52,6 +57,8 @@ export const buttonVariants = tv({
       "icon-2xs": "size-5 rounded-full [&_svg:not([class*='size-'])]:size-3",
       // A link-style button that sits in running text or a label row.
       inline: "h-auto gap-1 p-0",
+      // The same, beside a caption or other text-xs copy.
+      "inline-xs": "h-auto gap-1 p-0 text-xs [&_svg:not([class*='size-'])]:size-3",
     },
     // Hidden until the enclosing `group` is hovered or holds focus; keyboard focus always shows it.
     reveal: {

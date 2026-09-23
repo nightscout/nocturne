@@ -299,7 +299,7 @@
             <Button onclick={onConnected}>Continue to Dashboard</Button>
           </div>
         {:else}
-          <Card.Root class="border-muted">
+          <Card.Root>
             <Card.Content class="flex items-center gap-3 pt-6">
               <Clock class="h-5 w-5 text-muted-foreground" />
               <div>
@@ -564,7 +564,7 @@
           <Button onclick={onConnected}>Continue to Dashboard</Button>
         </div>
       {:else}
-        <Card.Root class="border-muted">
+        <Card.Root>
           <Card.Content class="flex items-center gap-3 pt-6">
             <Clock class="h-5 w-5 text-muted-foreground" />
             <div>

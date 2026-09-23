@@ -590,7 +590,7 @@
       <div class="grid grid-cols-1 @lg:grid-cols-2 gap-4">
         <Card.Root>
           <Card.Header class="py-3">
-            <Card.Title class="text-base text-destructive">
+            <Card.Title variant="destructive" class="text-base">
               Nightscout Response
             </Card.Title>
           </Card.Header>
@@ -612,7 +612,7 @@
         </Card.Root>
         <Card.Root>
           <Card.Header class="py-3">
-            <Card.Title class="text-base text-success">
+            <Card.Title variant="success" class="text-base">
               Nocturne Response
             </Card.Title>
           </Card.Header>

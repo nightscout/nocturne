@@ -117,7 +117,7 @@
 
   <Card variant="destructive">
     <CardHeader>
-      <CardTitle class="text-destructive">Danger Zone</CardTitle>
+      <CardTitle variant="destructive">Danger Zone</CardTitle>
       <CardDescription>
         Irreversible actions that affect this connector
       </CardDescription>

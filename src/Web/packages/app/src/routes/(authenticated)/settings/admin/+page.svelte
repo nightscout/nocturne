@@ -203,7 +203,7 @@
     <Tabs.Root bind:value={activeTab} class="space-y-6">
       <Tabs.List class={oidcConfigManaged ? "grid w-full grid-cols-1" : "grid w-full grid-cols-2"}>
         {#if !oidcConfigManaged}
-          <Tabs.Trigger value="identity-providers" class="gap-2">
+          <Tabs.Trigger value="identity-providers">
             <Shield class="h-4 w-4" />
             Identity Providers
             {#if oidcProviders.length > 0}
@@ -211,7 +211,7 @@
             {/if}
           </Tabs.Trigger>
         {/if}
-        <Tabs.Trigger value="integrations" class="gap-2">
+        <Tabs.Trigger value="integrations">
           <Bot class="h-4 w-4" />
           Integrations
         </Tabs.Trigger>

@@ -118,9 +118,9 @@
     </div>
   {:else}
     <div class="container mx-auto max-w-7xl px-4 py-6">
-      <Card variant="destructive" class="border-2">
+      <Card variant="destructive">
         <CardHeader>
-          <CardTitle class="flex items-center gap-2 text-destructive">
+          <CardTitle variant="destructive" class="flex items-center gap-2">
             <AlertTriangle class="h-5 w-5" />
             {errorTitle}
           </CardTitle>

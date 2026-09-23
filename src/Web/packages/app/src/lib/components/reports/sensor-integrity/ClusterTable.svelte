@@ -60,7 +60,7 @@
               {confidenceLabel(cluster.confidence)}
             </span>
           </Table.Cell>
-          <Table.Cell class="text-muted-foreground">{describeCluster(cluster)}</Table.Cell>
+          <Table.Cell variant="muted">{describeCluster(cluster)}</Table.Cell>
         </Table.Row>
       {/each}
     </Table.Body>

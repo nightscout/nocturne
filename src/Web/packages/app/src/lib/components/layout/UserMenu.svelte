@@ -55,7 +55,7 @@
         >
           <Avatar.Root class="h-8 w-8 shrink-0">
             <Avatar.Image src={user.avatarUrl} alt={user.name} />
-            <Avatar.Fallback class="bg-primary/10 text-primary text-xs">
+            <Avatar.Fallback variant="primary" class="text-xs">
               {getInitials(user.name)}
             </Avatar.Fallback>
           </Avatar.Root>
@@ -143,7 +143,7 @@
 
       <!-- display:contents keeps the form out of the menu's layout box -->
       <form method="POST" action="/auth/logout" class="contents">
-        <DropdownMenu.Item class="w-full text-destructive focus:text-destructive">
+        <DropdownMenu.Item variant="destructive" class="w-full">
           {#snippet child({ props }: { props: Record<string, unknown> })}
             <!-- eslint-disable-next-line no-restricted-syntax -- DropdownMenu.Item styles its child as the menu item -->
             <button {...props} type="submit">

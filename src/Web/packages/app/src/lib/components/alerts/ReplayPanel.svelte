@@ -479,9 +479,9 @@
         {#snippet child({ props }: { props: Record<string, unknown> })}
           <Button
             {...props}
-            variant="outline"
+            variant="combobox"
             size="sm"
-            class="justify-start font-normal"
+            class="justify-start"
           >
             <CalendarIcon class="h-3.5 w-3.5 text-muted-foreground" />
             {dateLabel(selectedDate)}

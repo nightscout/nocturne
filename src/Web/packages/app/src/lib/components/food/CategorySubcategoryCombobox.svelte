@@ -148,8 +148,8 @@
     <Popover.Trigger bind:ref={comboboxTriggerRef}>
       {#snippet child({ props }: { props: Record<string, unknown> })}
         <Button
-          variant="outline"
-          class="w-full justify-between font-normal"
+          variant="combobox"
+          class="w-full justify-between"
           {...props}
           role="combobox"
           aria-expanded={comboboxOpen}

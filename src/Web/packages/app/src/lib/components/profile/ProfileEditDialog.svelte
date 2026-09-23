@@ -634,8 +634,9 @@
         {:else}
           <Table.Row>
             <Table.Cell
+              variant="muted"
               colspan={3}
-              class="text-center py-4 text-muted-foreground"
+              class="text-center py-4"
             >
               No time blocks configured. Click "Add Time Block" to get started.
             </Table.Cell>
