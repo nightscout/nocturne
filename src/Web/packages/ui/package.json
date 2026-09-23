@@ -30,7 +30,7 @@
     "mode-watcher": "^1.1.0",
     "paneforge": "^1.0.2",
     "svelte": "^5.50.0",
-    "svelte-check-native": "^0.2.0",
+    "svelte-check": "^4.4.2",
     "svelte-sonner": "^1.1.1",
     "tailwind-merge": "^3.4.0",
     "tailwind-variants": "^3.2.2",
@@ -40,7 +40,7 @@
     "vaul-svelte": "1.0.0-next.7"
   },
   "scripts": {
-    "check": "svelte-check-native --tsconfig ./tsconfig.json --ignore 'src/lib/components/ui/calendar/calendar.svelte'",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
     "lint": "eslint .",
     "lint:ci": "eslint . --max-warnings 24"
   }
