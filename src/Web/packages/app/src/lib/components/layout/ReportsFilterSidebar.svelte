@@ -153,7 +153,7 @@
         <div class="space-y-3">
           <Label>Quick Selection</Label>
           <div class="grid grid-cols-3 gap-2">
-            {#each dayPresets as preset}
+            {#each dayPresets as preset (preset.days)}
               <Button
                 variant={selectedDays === preset.days ? "default" : "outline"}
                 size="xs"

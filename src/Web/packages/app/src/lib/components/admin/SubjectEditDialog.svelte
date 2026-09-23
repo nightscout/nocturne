@@ -104,7 +104,7 @@
             <p class="text-sm text-muted-foreground">No roles available</p>
           {:else}
             <!-- Show predefined roles first -->
-            {#each roles.filter((r: TenantRoleDto) => r.isSystem) as role}
+            {#each roles.filter((r: TenantRoleDto) => r.isSystem) as role (role.id)}
               <label class="flex items-center gap-2 cursor-pointer">
                 <Checkbox
                   checked={selectedRoleIds.includes(role.name ?? "")}
@@ -121,7 +121,7 @@
             {#if roles.filter((r: TenantRoleDto) => !r.isSystem).length > 0}
               <div class="pt-2 border-t">
                 <p class="text-xs text-muted-foreground mb-2">Custom Roles</p>
-                {#each roles.filter((r: TenantRoleDto) => !r.isSystem) as role}
+                {#each roles.filter((r: TenantRoleDto) => !r.isSystem) as role (role.id)}
                   <label class="flex items-center gap-2 cursor-pointer">
                     <Checkbox
                       checked={selectedRoleIds.includes(role.name ?? "")}

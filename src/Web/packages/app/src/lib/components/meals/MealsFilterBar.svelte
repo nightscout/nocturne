@@ -127,7 +127,7 @@
               <Command.List class="max-h-[200px]">
                 <Command.Empty>No foods found.</Command.Empty>
                 <Command.Group>
-                  {#each filteredFoodsForDropdown as food}
+                  {#each filteredFoodsForDropdown as food (food)}
                     <Command.Item
                       value={food}
                       onSelect={() => toggleFoodFilter(food)}
@@ -185,7 +185,7 @@
           <!-- Note: parent should track filteredAndSortedMeals count -->
         </span>
 
-        {#each selectedFoods as food}
+        {#each selectedFoods as food (food)}
           <Badge variant="outline">
             {food}
             <button

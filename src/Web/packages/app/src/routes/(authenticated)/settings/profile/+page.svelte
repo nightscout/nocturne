@@ -221,7 +221,7 @@
           </CardHeader>
           <CardContent>
             <div class="grid gap-2 @xl:grid-cols-2 @4xl:grid-cols-3">
-              {#each profileNames as profileName}
+              {#each profileNames as profileName (profileName)}
                 {@const profileTherapy = getTherapyForProfile(data, profileName)}
                 {@const isSelected = selectedProfileName === profileName}
                 {@const isDefault = profileTherapy?.isDefault === true}

@@ -426,7 +426,7 @@
               {/snippet}
             </DropdownMenu.Trigger>
             <DropdownMenu.Content align="end">
-              {#each Object.entries(ENTRY_CATEGORIES) as [id, cat]}
+              {#each Object.entries(ENTRY_CATEGORIES) as [id, cat] (id)}
                 {@const Icon = addKindIcons[id as EntryCategoryId]}
                 <DropdownMenu.Item
                   onclick={() => handleAddTreatment(id as EntryCategoryId)}
@@ -618,7 +618,7 @@
           <Alert.Title>Selected Records</Alert.Title>
           <Alert.Description>
             <div class="max-h-48 space-y-2 overflow-y-auto text-sm">
-              {#each rowsToDelete.slice(0, 5) as row}
+              {#each rowsToDelete.slice(0, 5) as row (`${row.kind}-${row.data.id}`)}
                 <div
                   class="flex items-center justify-between border-b border-border py-1 last:border-b-0"
                 >

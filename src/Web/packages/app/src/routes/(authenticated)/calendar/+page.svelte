@@ -444,7 +444,7 @@
             {/if}
             <div class="flex-1 overflow-x-auto print:overflow-visible flex flex-col">
               <div class="grid grid-cols-7 gap-1 mb-2 min-w-[28rem] @md:min-w-0">
-                {#each DAY_NAMES as dayName}
+                {#each DAY_NAMES as dayName, i (i)}
                   <div
                     class="text-center text-sm font-medium text-muted-foreground py-2"
                   >
@@ -462,9 +462,9 @@
                     "Tracker events appear on your calendar \u2014 colored by urgency.",
                 })}
               >
-                {#each calendarGrid as week}
+                {#each calendarGrid as week, idx (idx)}
                   <div class="grid grid-cols-7 gap-1">
-                    {#each week as day}
+                    {#each week as day, i (i)}
                       <CalendarDayCell
                       {day}
                       {viewMode}

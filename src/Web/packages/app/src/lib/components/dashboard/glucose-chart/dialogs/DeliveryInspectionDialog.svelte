@@ -283,7 +283,7 @@
           {/if}
 
           {#if activityStates && activityStates.length > 0}
-            {#each activityStates as activity}
+            {#each activityStates as activity, i (i)}
               <div class="flex items-center gap-2">
                 <Activity class="h-3.5 w-3.5 text-muted-foreground" />
                 <span class="font-medium">{activity}</span>

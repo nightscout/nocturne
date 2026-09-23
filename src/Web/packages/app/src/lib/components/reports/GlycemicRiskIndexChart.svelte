@@ -205,7 +205,7 @@
           {#snippet children({ context })}
             <Svg>
               <!-- Zone polygons (rendered back-to-front: E first so A is on top) -->
-              {#each zones as zone}
+              {#each zones as zone (zone.label)}
                 <Polygon
                   points={zone.vertices.map((v) => ({
                     x: context.xScale(v.x),
@@ -221,7 +221,7 @@
 
               {#if isTimeSeries}
                 <!-- Time-series connecting lines (dotted) -->
-                {#each timeSeriesPoints as point, i}
+                {#each timeSeriesPoints as point, i (i)}
                   {#if i > 0}
                     {@const prev = timeSeriesPoints[i - 1]}
                     <line
@@ -237,7 +237,7 @@
                 {/each}
 
                 <!-- Time-series data points -->
-                {#each timeSeriesPoints as point}
+                {#each timeSeriesPoints as point, i (i)}
                   <circle
                     cx={context.xScale(point.hypo)}
                     cy={context.yScale(point.hyper)}

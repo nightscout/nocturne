@@ -8,7 +8,7 @@
   <h1 class="mb-3 text-lg font-semibold">Average glucose — Year Overview</h1>
   <ColorFocusRange glucose units="mmol" stops={GLUCOSE_HEATMAP_LEGEND_STOPS} />
   <div class="mt-5 flex flex-wrap gap-3">
-    {#each [40, 45, 50, 54, 63, 72] as value}
+    {#each [40, 45, 50, 54, 63, 72] as value (value)}
       <div class="text-center text-xs">
         <div
           class="mb-1 size-10 rounded-sm bg-(--sample)"

@@ -383,7 +383,7 @@
     <!-- Import lanes -->
     {#if collections.length > 0}
       <div class="flex flex-col gap-2.5">
-        {#each collections as col}
+        {#each collections as col (col.key)}
           <div
             class="flex flex-col gap-2 p-3.5 px-4 rounded-xl border border-white/6 bg-white/2"
           >

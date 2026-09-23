@@ -264,7 +264,7 @@
                   {/if}
                 </div>
                 <div class="flex flex-wrap gap-1.5">
-                  {#each grant.scopes as scope}
+                  {#each grant.scopes as scope, i (i)}
                     <Badge variant="outline" class="font-mono">
                       {scope}
                     </Badge>

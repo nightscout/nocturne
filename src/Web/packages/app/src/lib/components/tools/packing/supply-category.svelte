@@ -70,7 +70,7 @@
     </Collapsible.Trigger>
     <Collapsible.Content>
       <CardContent class="pt-0 pb-3">
-        {#each config.items as item, i}
+        {#each config.items as item, i (item.id)}
           {#if itemStates[i]}
             <SupplyItem
               config={item}

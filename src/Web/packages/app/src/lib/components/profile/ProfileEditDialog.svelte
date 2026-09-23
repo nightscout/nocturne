@@ -239,7 +239,7 @@
                     {editedProfile.units ?? "mg/dL"}
                   </Select.Trigger>
                   <Select.Content>
-                    {#each BG_UNITS as unit}
+                    {#each BG_UNITS as unit (unit.value)}
                       <Select.Item value={unit.value}>{unit.label}</Select.Item>
                     {/each}
                   </Select.Content>
@@ -258,7 +258,7 @@
                     {storeData.timezone ?? "Select timezone"}
                   </Select.Trigger>
                   <Select.Content>
-                    {#each Intl.DateTimeFormat().resolvedOptions().timeZone as tz}
+                    {#each Intl.DateTimeFormat().resolvedOptions().timeZone as tz, i (i)}
                       <Select.Item value={tz}>{tz}</Select.Item>
                     {/each}
                   </Select.Content>
@@ -375,7 +375,7 @@
                     </Table.Row>
                   </Table.Header>
                   <Table.Body>
-                    {#each storeData.target_low ?? [] as tv, i}
+                    {#each storeData.target_low ?? [] as tv, i (tv)}
                       <Table.Row>
                         <Table.Cell>
                           <Input
@@ -447,7 +447,7 @@
                     </Table.Row>
                   </Table.Header>
                   <Table.Body>
-                    {#each storeData.target_high ?? [] as tv, i}
+                    {#each storeData.target_high ?? [] as tv, i (tv)}
                       <Table.Row>
                         <Table.Cell>
                           <Input
@@ -586,7 +586,7 @@
         </Table.Row>
       </Table.Header>
       <Table.Body>
-        {#each values as tv, i}
+        {#each values as tv, i (tv)}
           <Table.Row>
             <Table.Cell>
               <Input

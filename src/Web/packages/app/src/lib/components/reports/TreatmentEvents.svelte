@@ -17,7 +17,7 @@
   <div class="mt-4">
     <h4 class="text-sm font-semibold text-foreground mb-2">Treatment Events</h4>
     <div class="flex flex-wrap gap-2">
-      {#each treatments as treatment}
+      {#each treatments as treatment, i (i)}
         <div
           class="bg-blue-50 border border-blue-200 rounded px-2 py-1 text-xs"
         >

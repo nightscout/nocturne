@@ -48,7 +48,7 @@
       </p>
     </div>
     <div class="grid gap-3 @xl:grid-cols-2">
-      {#each servicesOverview.availableConnectors as connector}
+      {#each servicesOverview.availableConnectors as connector (connector.id)}
         <button
           class="flex items-center gap-4 p-4 rounded-lg border hover:border-primary/50 hover:bg-accent/50 transition-colors text-left group {connector.isConfigured
             ? 'border-success/30 bg-success/5'

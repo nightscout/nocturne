@@ -79,7 +79,7 @@
         <p class="text-xs text-muted-foreground">{value}</p>
       </div>
       <div class="px-4 py-3 space-y-2 max-h-80 overflow-y-auto">
-        {#each info as item}
+        {#each info as item, i (i)}
           {#if item.label === "------------"}
             <hr class="border-border my-2" />
           {:else}

@@ -276,7 +276,7 @@
       <div
         class="absolute top-full left-0 mt-1 bg-background border border-border rounded shadow-lg z-50 py-1 min-w-[120px]"
       >
-        {#each uniquePumpModes as state}
+        {#each uniquePumpModes as state (state)}
           {@const span = pumpModeSpans.find((s) => s.state === state)}
           {#if span}
             <div
@@ -305,7 +305,7 @@
       )}
       onclick={onToggleAlarms}
     >
-      {#each uniqueEventTypes.slice(0, 1) as eventType}
+      {#each uniqueEventTypes.slice(0, 1) as eventType (eventType)}
         {@const event = systemEvents.find((e) => e.eventType === eventType)}
         {#if event && eventType}
           <SystemEventIcon

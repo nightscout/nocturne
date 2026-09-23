@@ -92,7 +92,7 @@
     <!-- Tracker icons in top-right corner -->
     {#if dayTrackerEvents.length > 0}
       <div class="absolute top-1 right-1 flex gap-0.5 z-10">
-        {#each dayTrackerEvents as event}
+        {#each dayTrackerEvents as event (`${event.instance.id}-${event.eventType}`)}
           {@const def = getDefinition(event.instance, definitions)}
           {@const level = event.eventType === "due" ? getTrackerLevel(event.instance, def) : "none"}
           {@const category = def?.category ?? TrackerCategory.Consumable}
@@ -213,7 +213,7 @@
     <!-- Tracker icons for empty days -->
     {#if dayTrackerEvents.length > 0}
       <div class="absolute top-1 right-1 flex gap-0.5">
-        {#each dayTrackerEvents as event}
+        {#each dayTrackerEvents as event (`${event.instance.id}-${event.eventType}`)}
           {@const def = getDefinition(event.instance, definitions)}
           {@const level = event.eventType === "due" ? getTrackerLevel(event.instance, def) : "none"}
           {@const category = def?.category ?? TrackerCategory.Consumable}
@@ -260,7 +260,7 @@
     <!-- Tracker icons for days with no readings -->
     {#if dayTrackerEvents.length > 0}
       <div class="absolute top-1 right-1 flex gap-0.5">
-        {#each dayTrackerEvents as event}
+        {#each dayTrackerEvents as event (`${event.instance.id}-${event.eventType}`)}
           {@const def = getDefinition(event.instance, definitions)}
           {@const level = event.eventType === "due" ? getTrackerLevel(event.instance, def) : "none"}
           {@const category = def?.category ?? TrackerCategory.Consumable}

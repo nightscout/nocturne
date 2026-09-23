@@ -67,7 +67,7 @@
         {deviceEventTypeLabels[deviceEvent.eventType ?? DeviceEventType.SiteChange]}
       </Select.Trigger>
       <Select.Content>
-        {#each Object.values(DeviceEventType) as det}
+        {#each Object.values(DeviceEventType) as det (det)}
           <Select.Item value={det} label={deviceEventTypeLabels[det]} />
         {/each}
       </Select.Content>

@@ -24,7 +24,7 @@
 
   <!-- Score Cards Skeleton -->
   <div class="grid grid-cols-1 gap-4 @xl:grid-cols-2 @5xl:grid-cols-4">
-    {#each Array(4) as _}
+    {#each Array(4) as _, i (i)}
       <Card>
         <CardHeader class="pb-2">
           <div class="flex items-center gap-2">
@@ -77,7 +77,7 @@
 
   <!-- Stats Grid Skeleton -->
   <div class="grid grid-cols-2 gap-3 @sm:grid-cols-3 @3xl:grid-cols-6">
-    {#each Array(6) as _}
+    {#each Array(6) as _, i (i)}
       <Card class="p-4 text-center">
         <Skeleton class="h-8 w-16 mx-auto mb-2" />
         <Skeleton class="h-3 w-12 mx-auto" />

@@ -316,7 +316,7 @@
 
 {#snippet providerButtons()}
   <div class="space-y-3">
-    {#each orderedProviders as provider}
+    {#each orderedProviders as provider (provider.id)}
       <Button
         variant="outline"
         size="lg"
@@ -577,20 +577,20 @@
                 cells: ComponentProps<typeof InputOTP.Slot>["cell"][];
               })}
                 <InputOTP.Group>
-                  {#each cells.slice(0, 3) as cell}
+                  {#each cells.slice(0, 3) as cell, i (i)}
                     <InputOTP.Slot {cell} />
                   {/each}
                 </InputOTP.Group>
                 <InputOTP.Separator />
                 <InputOTP.Group>
-                  {#each cells.slice(3, 6) as cell}
+                  {#each cells.slice(3, 6) as cell, i (i)}
                     <InputOTP.Slot {cell} />
                   {/each}
                 </InputOTP.Group>
               {/snippet}
             </InputOTP.Root>
           </div>
-          {#each signInWithAuthenticator.fields.code.issues() ?? [] as issue}
+          {#each signInWithAuthenticator.fields.code.issues() ?? [] as issue, i (i)}
             <p role="alert" class="text-center text-sm text-destructive">
               {issue.message}
             </p>

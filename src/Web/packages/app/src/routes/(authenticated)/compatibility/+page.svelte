@@ -355,7 +355,7 @@
           </tr>
         </thead>
         <tbody class="divide-y divide-border">
-          {#each filteredAnalyses as analysis}
+          {#each filteredAnalyses as analysis (analysis.id)}
             {@const matchType = getMatchTypeDisplay(analysis.overallMatch)}
             {@const compatible = isCompatible(analysis.overallMatch)}
             <tr

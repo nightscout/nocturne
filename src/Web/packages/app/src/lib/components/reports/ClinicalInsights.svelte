@@ -174,7 +174,7 @@
         Not enough data yet to generate insights. Keep tracking!
       </p>
     {:else}
-      {#each insights as insight}
+      {#each insights as insight, i (i)}
         {@const styles = insightVariants({ type: insight.type })}
         {@const InsightIcon = typeIcons[insight.type]}
         {@const CategoryIcon = categoryIcons[insight.category]}

@@ -29,7 +29,7 @@
 </script>
 
 <div class="flex gap-2">
-  {#each daysOfWeek as day}
+  {#each daysOfWeek as day (day.value)}
     {@const isActive =
       activeDays?.includes(day.value) ??
       (activeDays === undefined || activeDays.length === 0)}

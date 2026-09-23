@@ -71,7 +71,7 @@
     <div class="space-y-2">
       <Label>Quick Snooze Options</Label>
       <div class="flex flex-wrap gap-2">
-        {#each profile.snooze.options as minutes}
+        {#each profile.snooze.options as minutes, i (i)}
           <span
             class="bg-primary/10 text-primary px-3 py-1 rounded-full text-sm flex items-center gap-2"
           >
@@ -94,7 +94,7 @@
             <span class="text-sm">+ Add</span>
           </SelectTrigger>
           <SelectContent>
-            {#each [1, 2, 5, 10, 15, 20, 30, 45, 60, 90, 120] as min}
+            {#each [1, 2, 5, 10, 15, 20, 30, 45, 60, 90, 120] as min (min)}
               <SelectItem value={min.toString()}>{min} min</SelectItem>
             {/each}
           </SelectContent>

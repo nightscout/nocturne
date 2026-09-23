@@ -37,7 +37,7 @@
         </div>
       {:else}
         <div class="space-y-2">
-          {#each historyInstances as instance}
+          {#each historyInstances as instance (instance.id)}
             <div
               class="flex items-center justify-between p-3 rounded-lg border"
             >

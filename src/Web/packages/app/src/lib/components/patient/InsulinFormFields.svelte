@@ -105,7 +105,7 @@
             : "Select category"}
         </Select.Trigger>
         <Select.Content>
-          {#each insulinCategoryItems as cat}
+          {#each insulinCategoryItems as cat (cat.value)}
             <Select.Item value={cat.value} label={cat.label}>
               <div>
                 <div>{cat.label}</div>
@@ -131,7 +131,7 @@
               : "Select formulation"}
           </Select.Trigger>
           <Select.Content>
-            {#each formulations as f}
+            {#each formulations as f (f.id)}
               <Select.Item value={f.id ?? ""} label={f.name ?? ""}>
                 <div>
                   <div>{f.name}</div>
@@ -179,7 +179,7 @@
           {insulinRoleLabels[role as InsulinRole] ?? role}
         </Select.Trigger>
         <Select.Content>
-          {#each Object.entries(insulinRoleLabels) as [value, label]}
+          {#each Object.entries(insulinRoleLabels) as [value, label] (value)}
             <Select.Item {value} {label}>
               <div>
                 <div>{label}</div>

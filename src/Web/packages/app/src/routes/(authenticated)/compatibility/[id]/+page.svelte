@@ -202,7 +202,7 @@
             Critical ({discrepanciesBySeverity.critical.length})
           </h3>
           <div class="space-y-3">
-            {#each discrepanciesBySeverity.critical as disc}
+            {#each discrepanciesBySeverity.critical as disc (disc.id)}
               <div
                 class="bg-destructive/10 rounded-lg p-4 border border-destructive/30"
               >
@@ -257,7 +257,7 @@
             Major ({discrepanciesBySeverity.major.length})
           </h3>
           <div class="space-y-3">
-            {#each discrepanciesBySeverity.major as disc}
+            {#each discrepanciesBySeverity.major as disc (disc.id)}
               <div
                 class="bg-warning/10 rounded-lg p-4 border border-warning/30"
               >
@@ -312,7 +312,7 @@
             Minor ({discrepanciesBySeverity.minor.length})
           </h3>
           <div class="space-y-3">
-            {#each discrepanciesBySeverity.minor as disc}
+            {#each discrepanciesBySeverity.minor as disc (disc.id)}
               <div
                 class="bg-info/10 rounded-lg p-4 border border-info/30"
               >

@@ -287,7 +287,7 @@
                         >
                           Breakdown by type:
                         </div>
-                        {#each Object.entries(selectedConnector.totalItemsBreakdown) as [type, count]}
+                        {#each Object.entries(selectedConnector.totalItemsBreakdown) as [type, count] (type)}
                           <div class="flex justify-between gap-4 text-xs">
                             <span>{getDataTypeLabel(type)}</span>
                             <span class="font-mono">
@@ -326,7 +326,7 @@
                         >
                           Breakdown by type:
                         </div>
-                        {#each Object.entries(selectedConnector.itemsLast24HoursBreakdown) as [type, count]}
+                        {#each Object.entries(selectedConnector.itemsLast24HoursBreakdown) as [type, count] (type)}
                           <div class="flex justify-between gap-4 text-xs">
                             <span>{getDataTypeLabel(type)}</span>
                             <span class="font-mono">

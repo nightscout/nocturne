@@ -53,7 +53,7 @@
 
   <!-- Step list -->
   <ol class="flex flex-col">
-    {#each steps as step, index}
+    {#each steps as step, index (step.id)}
       {@const isDone = index < currentStep}
       {@const isCurrent = index === currentStep}
       {@const isFuture = index > currentStep}

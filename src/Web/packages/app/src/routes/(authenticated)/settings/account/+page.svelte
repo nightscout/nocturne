@@ -673,7 +673,7 @@
     </Dialog.Header>
     <div class="space-y-4 py-4">
       <div class="grid grid-cols-2 gap-2 rounded-md border bg-muted/30 p-4">
-        {#each newRecoveryCodes as code}
+        {#each newRecoveryCodes as code, i (i)}
           <p class="font-mono text-sm text-center">{code}</p>
         {/each}
       </div>

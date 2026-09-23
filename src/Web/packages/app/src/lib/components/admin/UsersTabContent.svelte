@@ -78,7 +78,7 @@
         </div>
       {:else}
         <div class="space-y-3">
-          {#each subjects as subject}
+          {#each subjects as subject (subject.id)}
             {@const Icon = getSubjectIcon(subject)}
             {@const isPublicSubject =
               isSystemSubjectCheck(subject) && subject.name === "Public"}

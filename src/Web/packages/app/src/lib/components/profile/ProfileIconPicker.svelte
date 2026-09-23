@@ -110,7 +110,7 @@
         value={selectedIcon}
         onValueChange={(v: string) => v && selectIcon(v)}
       >
-        {#each PROFILE_ICONS as icon}
+        {#each PROFILE_ICONS as icon (icon.id)}
           {@const IconComponent = iconComponents[icon.id] ?? User}
           <ToggleGroup.Item value={icon.id} class="size-9" title={icon.name} aria-label={icon.name}>
             <IconComponent class="h-4 w-4" />

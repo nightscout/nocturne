@@ -479,7 +479,7 @@
         description: "It combines your key metrics into a single page \u2014 great for clinic visits or sharing with your endo.",
         completeOn: { event: "click" },
       })}>
-        {#each categories as category, categoryIndex}
+        {#each categories as category, categoryIndex (category.id)}
           {@const CategoryIcon = category.icon}
           {@const styles = categoryVariants({
             category: category.id as CategoryType,
@@ -507,7 +507,7 @@
 
               <!-- Reports List -->
               <div class="space-y-2">
-                {#each category.reports as report}
+                {#each category.reports as report (report.href)}
                   {@const ReportIcon = report.icon}
                   {#if report.status === "available"}
                     <a

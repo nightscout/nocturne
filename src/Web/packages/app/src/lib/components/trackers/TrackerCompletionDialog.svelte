@@ -244,7 +244,7 @@
             {completionReasonLabels[completionReason]}
           </Select.Trigger>
           <Select.Content>
-            {#each availableReasons as reason}
+            {#each availableReasons as reason, i (i)}
               <Select.Item value={reason} label={completionReasonLabels[reason]} />
             {/each}
           </Select.Content>

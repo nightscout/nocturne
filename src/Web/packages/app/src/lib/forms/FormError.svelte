@@ -43,7 +43,7 @@
   >
     <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
     <div class="space-y-1">
-      {#each messages as message}
+      {#each messages as message, i (i)}
         <p class="text-sm text-destructive">{message}</p>
       {/each}
     </div>

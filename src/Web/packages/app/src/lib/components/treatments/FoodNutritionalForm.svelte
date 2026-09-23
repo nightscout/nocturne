@@ -223,7 +223,7 @@
                 <Command.List>
                   <Command.Empty>No unit found.</Command.Empty>
                   <Command.Group>
-                    {#each foodUnits as unit}
+                    {#each foodUnits as unit (unit)}
                       <Command.Item
                         value={unit}
                         onSelect={() => selectUnit(unit)}
@@ -276,7 +276,7 @@
                 <Command.List>
                   <Command.Empty>No GI found.</Command.Empty>
                   <Command.Group>
-                    {#each giOptions as option}
+                    {#each giOptions as option (option.value)}
                       <Command.Item
                         value={option.label}
                         onSelect={() => selectGi(option.value)}

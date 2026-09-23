@@ -190,7 +190,7 @@
           <!-- Categories and their subcategories -->
           {#each allCategories.filter((cat) => !searchValue || cat
                 .toLowerCase()
-                .includes(searchValue.toLowerCase())) as cat}
+                .includes(searchValue.toLowerCase())) as cat (cat)}
             <Command.Group>
               <Command.Item
                 value={cat}
@@ -209,7 +209,7 @@
               {#if categories[cat]}
                 {#each Object.keys(categories[cat]).filter((sub) => !searchValue || sub
                       .toLowerCase()
-                      .includes(searchValue.toLowerCase())) as sub}
+                      .includes(searchValue.toLowerCase())) as sub (sub)}
                   <Command.Item
                     value={`${cat} > ${sub}`}
                     onSelect={() =>
@@ -299,7 +299,7 @@
           </Command.Group>
           <Command.Separator />
           <Command.Group>
-            {#each allCategories as cat}
+            {#each allCategories as cat (cat)}
               <Command.Item
                 value={cat}
                 onSelect={() => handleCategorySelectionForSubcategory(cat)}

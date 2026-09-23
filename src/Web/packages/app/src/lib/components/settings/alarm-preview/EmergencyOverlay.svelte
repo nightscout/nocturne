@@ -38,7 +38,7 @@
     </div>
 
     <div class="grid gap-4 sm:grid-cols-2">
-      {#each enabledContacts as contact}
+      {#each enabledContacts as contact, i (i)}
         <div
           class="bg-muted p-6 rounded-xl flex flex-col gap-4 text-left shadow-lg border-2 border-border/50"
         >

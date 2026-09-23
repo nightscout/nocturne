@@ -74,7 +74,7 @@
           {bolusTypeLabels[bolus.bolusType ?? BolusType.Normal]}
         </Select.Trigger>
         <Select.Content>
-          {#each Object.values(BolusType) as bt}
+          {#each Object.values(BolusType) as bt (bt)}
             <Select.Item value={bt} label={bolusTypeLabels[bt]} />
           {/each}
         </Select.Content>

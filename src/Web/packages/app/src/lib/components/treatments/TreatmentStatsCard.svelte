@@ -72,7 +72,7 @@
         </div>
       </div>
       <div class="mt-2 flex flex-wrap gap-1">
-        {#each Object.entries(ENTRY_CATEGORIES) as [id, cat]}
+        {#each Object.entries(ENTRY_CATEGORIES) as [id, cat] (id)}
           {#if counts[id as EntryCategoryId] > 0}
             <Badge variant="secondary" class="text-[10px] px-1.5 py-0">
               {cat.name} <span class="opacity-70">{counts[id as EntryCategoryId]}</span>

@@ -212,7 +212,7 @@
       <CardDescription>Connect with the Nightscout community</CardDescription>
     </CardHeader>
     <CardContent class="space-y-4">
-      {#each communityLinks as link}
+      {#each communityLinks as link (link.name)}
         <a
           href={link.href}
           target="_blank"
@@ -254,7 +254,7 @@
     </CardHeader>
     <CardContent class="space-y-4">
       <div class="grid gap-4 @xl:grid-cols-2">
-        {#each supportOptions as option}
+        {#each supportOptions as option (option.name)}
           {#if option.template === "account" && supportConfig?.accountBilling?.mode === "redirect"}
             <a
               href={supportConfig.accountBilling.url}

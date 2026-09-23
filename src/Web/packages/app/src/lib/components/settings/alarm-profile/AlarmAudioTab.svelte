@@ -133,14 +133,14 @@
             <SelectContent>
               <SelectGroup>
                 <SelectLabel>Built-in Sounds</SelectLabel>
-                {#each BUILT_IN_SOUNDS as sound}
+                {#each BUILT_IN_SOUNDS as sound (sound.id)}
                   <SelectItem value={sound.id}>{sound.name}</SelectItem>
                 {/each}
               </SelectGroup>
               {#if allSounds.some((s) => s.isCustom)}
                 <SelectGroup>
                   <SelectLabel>Custom Sounds</SelectLabel>
-                  {#each allSounds.filter((s) => s.isCustom) as sound}
+                  {#each allSounds.filter((s) => s.isCustom) as sound (sound.id)}
                     <SelectItem value={sound.id}>
                       <span class="flex items-center gap-2">
                         <Music class="h-3 w-3" />
@@ -301,7 +301,7 @@
             </span>
           </SelectTrigger>
           <SelectContent>
-            {#each vibrationPatterns as pattern}
+            {#each vibrationPatterns as pattern (pattern.value)}
               <SelectItem value={pattern.value}>
                 {pattern.label}
               </SelectItem>

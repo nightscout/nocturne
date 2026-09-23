@@ -216,7 +216,7 @@
 
   {#if insulinList.items.length > 0}
     <div class="space-y-3">
-      {#each insulinList.items as insulin}
+      {#each insulinList.items as insulin (insulin.id)}
         <Card.Root>
           <Card.Header class="flex flex-row items-center gap-3 py-3">
             <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted">
@@ -295,7 +295,7 @@
             <input type="hidden" name="formulationId" value={inlineFormulationId} />
           {/if}
 
-          {#each insulinList.createForm.fields.allIssues() ?? [] as issue}
+          {#each insulinList.createForm.fields.allIssues() ?? [] as issue, i (i)}
             <p class="text-sm text-destructive">{issue.message}</p>
           {/each}
         </Card.Content>
@@ -325,7 +325,7 @@
     </p>
   {:else}
     <div class="space-y-3">
-      {#each insulinList.items as insulin}
+      {#each insulinList.items as insulin (insulin.id)}
         <div
           class="flex items-center justify-between rounded-lg border p-3"
         >
@@ -451,7 +451,7 @@
             <input type="hidden" name="{namePrefix}formulationId" value={insulinFormulationId} />
           {/if}
 
-          {#each activeForm.fields.allIssues() ?? [] as issue}
+          {#each activeForm.fields.allIssues() ?? [] as issue, i (i)}
             <p class="text-sm text-destructive">{issue.message}</p>
           {/each}
         </div>

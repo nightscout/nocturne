@@ -68,7 +68,7 @@
               : "Select type"}
           </Select.Trigger>
           <Select.Content>
-            {#each Object.entries(diabetesTypeLabels) as [value, label]}
+            {#each Object.entries(diabetesTypeLabels) as [value, label] (value)}
               <Select.Item {value} {label} />
             {/each}
           </Select.Content>
@@ -127,7 +127,7 @@
           </Select.Trigger>
           <Select.Content>
             <Select.Item value="" label="Prefer not to say" />
-            {#each Object.entries(biologicalSexLabels) as [value, label]}
+            {#each Object.entries(biologicalSexLabels) as [value, label] (value)}
               <Select.Item {value} {label} />
             {/each}
           </Select.Content>

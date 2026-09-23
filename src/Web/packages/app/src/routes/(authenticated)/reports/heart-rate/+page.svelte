@@ -170,7 +170,7 @@
           <span class="ml-auto font-mono font-medium tabular-nums">{bpm} bpm</span>
         {/snippet}
         {#snippet row(ctx: ActogramRowContext)}
-          {#each ctx.data as { point, hoursFromStart, isExtended }}
+          {#each ctx.data as { point, hoursFromStart, isExtended }, i (i)}
             {@const bpm = (point as { mills: number; bpm: number }).bpm ?? 0}
             {@const yNorm = (bpm - bpmMin) / (bpmMax - bpmMin)}
             {@const y = ctx.height - yNorm * ctx.height}

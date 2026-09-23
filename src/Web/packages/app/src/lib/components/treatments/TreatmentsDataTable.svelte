@@ -561,9 +561,9 @@
   <div class="rounded-md border">
     <Table.Root>
       <Table.Header>
-        {#each table.getHeaderGroups() as headerGroup}
+        {#each table.getHeaderGroups() as headerGroup (headerGroup.id)}
           <Table.Row>
-            {#each headerGroup.headers as header}
+            {#each headerGroup.headers as header (header.id)}
               <Table.Head
                 class="whitespace-nowrap w-(--col-w)"
                 style={header.getSize()
@@ -593,7 +593,7 @@
               onRowClick?.(row.original);
             }}
           >
-            {#each row.getVisibleCells() as cell}
+            {#each row.getVisibleCells() as cell (cell.id)}
               <Table.Cell class="py-2">
                 <FlexRender
                   content={cell.column.columnDef.cell}

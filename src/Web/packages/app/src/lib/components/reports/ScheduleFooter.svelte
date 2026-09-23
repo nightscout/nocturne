@@ -117,7 +117,7 @@
             Correction Range
           </span>
           <div class="flex flex-1 h-8 rounded overflow-hidden border border-border">
-            {#each targetSegments as seg, i}
+            {#each targetSegments as seg, i (i)}
               <div
                 class="flex items-center justify-center {segmentColors[i % segmentColors.length]} border-r border-border last:border-r-0 px-1 overflow-hidden w-(--seg-w)"
                 style:--seg-w="{seg.widthPercent}%"
@@ -142,7 +142,7 @@
             Carb Ratio
           </span>
           <div class="flex flex-1 h-8 rounded overflow-hidden border border-border">
-            {#each carbSegments as seg, i}
+            {#each carbSegments as seg, i (i)}
               <div
                 class="flex items-center justify-center {segmentColors[i % segmentColors.length]} border-r border-border last:border-r-0 px-1 overflow-hidden w-(--seg-w)"
                 style:--seg-w="{seg.widthPercent}%"
@@ -167,7 +167,7 @@
             Correction Factor
           </span>
           <div class="flex flex-1 h-8 rounded overflow-hidden border border-border">
-            {#each sensitivitySegments as seg, i}
+            {#each sensitivitySegments as seg, i (i)}
               <div
                 class="flex items-center justify-center {segmentColors[i % segmentColors.length]} border-r border-border last:border-r-0 px-1 overflow-hidden w-(--seg-w)"
                 style:--seg-w="{seg.widthPercent}%"

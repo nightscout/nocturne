@@ -43,7 +43,7 @@
       </Badge>
     </Tabs.Trigger>
 
-    {#each Object.entries(ENTRY_CATEGORIES) as [id, cat]}
+    {#each Object.entries(ENTRY_CATEGORIES) as [id, cat] (id)}
       {@const Icon = categoryIcons[id as EntryCategoryId]}
       <Tabs.Trigger
         value={id}

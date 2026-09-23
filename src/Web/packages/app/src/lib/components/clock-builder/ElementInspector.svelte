@@ -117,7 +117,7 @@
         >
           <Select.Trigger>{element.hours || 3}h</Select.Trigger>
           <Select.Content>
-            {#each [1, 3, 6, 12, 24] as h}
+            {#each [1, 3, 6, 12, 24] as h (h)}
               <Select.Item value={String(h)}>
                 {h} hour{h > 1 ? "s" : ""}
               </Select.Item>
@@ -160,7 +160,7 @@
         >
           <Select.Trigger>{element.minutesAhead || 30}m</Select.Trigger>
           <Select.Content>
-            {#each [15, 30, 45, 60] as m}
+            {#each [15, 30, 45, 60] as m (m)}
               <Select.Item value={String(m)}>{m} min</Select.Item>
             {/each}
           </Select.Content>
@@ -199,7 +199,7 @@
                 : "Select tracker..."}
             </Select.Trigger>
             <Select.Content>
-              {#each trackerDefinitions as def}
+              {#each trackerDefinitions as def (def.id)}
                 <Select.Item value={def.id ?? ""}>
                   {def.name}
                 </Select.Item>
@@ -223,7 +223,7 @@
               )?.label ?? "Always show"}
             </Select.Trigger>
             <Select.Content>
-              {#each VISIBILITY_OPTIONS as opt}
+              {#each VISIBILITY_OPTIONS as opt (opt.value)}
                 <Select.Item value={opt.value}>{opt.label}</Select.Item>
               {/each}
             </Select.Content>
@@ -232,7 +232,7 @@
         <div class="space-y-2">
           <Label>Show</Label>
           <div class="space-y-1">
-            {#each TRACKER_SHOW_OPTIONS as opt}
+            {#each TRACKER_SHOW_OPTIONS as opt (opt.value)}
               <div class="flex items-center gap-2">
                 <Checkbox
                   checked={isShowOptionChecked(element.show, opt.value)}
@@ -263,7 +263,7 @@
               )?.label ?? "Always show"}
             </Select.Trigger>
             <Select.Content>
-              {#each VISIBILITY_OPTIONS as opt}
+              {#each VISIBILITY_OPTIONS as opt (opt.value)}
                 <Select.Item value={opt.value}>{opt.label}</Select.Item>
               {/each}
             </Select.Content>
@@ -277,7 +277,7 @@
               : "All categories"}
           </p>
           <div class="grid grid-cols-2 gap-1">
-            {#each TRACKER_CATEGORIES as cat}
+            {#each TRACKER_CATEGORIES as cat (cat)}
               <div class="flex items-center gap-1">
                 <Checkbox
                   checked={isCategoryChecked(element.categories, cat)}
@@ -343,7 +343,7 @@
           >
             <Select.Trigger>{element.hours || 3}h</Select.Trigger>
             <Select.Content>
-              {#each [1, 3, 6, 12, 24] as h}
+              {#each [1, 3, 6, 12, 24] as h (h)}
                 <Select.Item value={String(h)}>
                   {h} hour{h > 1 ? "s" : ""}
                 </Select.Item>
@@ -357,7 +357,7 @@
         <div class="space-y-2">
           <Label>Chart Features</Label>
           <div class="space-y-1">
-            {#each CHART_FEATURE_OPTIONS as { key, label, defaultValue }}
+            {#each CHART_FEATURE_OPTIONS as { key, label, defaultValue } (key)}
               <div class="flex items-center gap-2">
                 <Checkbox
                   checked={element.chartConfig?.[

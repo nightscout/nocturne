@@ -40,7 +40,7 @@
         {/if}
       </div>
       <div class="flex flex-wrap gap-1 mt-1">
-        {#each recentMeals.slice(0, 3) as carbIntake}
+        {#each recentMeals.slice(0, 3) as carbIntake (carbIntake.id)}
           <Badge variant="outline">
             {carbIntake.carbs ?? 0}g
           </Badge>

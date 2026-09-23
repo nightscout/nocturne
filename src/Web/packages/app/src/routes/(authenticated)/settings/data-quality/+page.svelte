@@ -143,7 +143,7 @@
 								{formatHour(bedtimeHour)}
 							</SelectTrigger>
 							<SelectContent>
-								{#each bedtimeHours as hour}
+								{#each bedtimeHours as hour (hour.value)}
 									<SelectItem value={String(hour.value)}>{hour.label}</SelectItem>
 								{/each}
 							</SelectContent>
@@ -161,7 +161,7 @@
 								{formatHour(wakeTimeHour)}
 							</SelectTrigger>
 							<SelectContent>
-								{#each wakeTimeHours as hour}
+								{#each wakeTimeHours as hour (hour.value)}
 									<SelectItem value={String(hour.value)}>{hour.label}</SelectItem>
 								{/each}
 							</SelectContent>

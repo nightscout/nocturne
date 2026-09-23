@@ -146,7 +146,7 @@
               "Select units"}
           </Select.Trigger>
           <Select.Content>
-            {#each BG_UNITS as unit}
+            {#each BG_UNITS as unit (unit.value)}
               <Select.Item value={unit.value}>
                 {unit.label}
                 <span class="text-muted-foreground text-xs">
@@ -166,7 +166,7 @@
             {formState.timezone}
           </Select.Trigger>
           <Select.Content>
-            {#each Intl.DateTimeFormat().resolvedOptions().timeZone as tz}
+            {#each Intl.DateTimeFormat().resolvedOptions().timeZone as tz, i (i)}
               <Select.Item value={tz}>{tz}</Select.Item>
             {/each}
           </Select.Content>

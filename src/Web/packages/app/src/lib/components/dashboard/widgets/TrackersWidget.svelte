@@ -83,7 +83,7 @@
 <WidgetCard title="Trackers">
   {#if hasTrackers}
     <div class="space-y-1.5">
-      {#each trackerData as tracker}
+      {#each trackerData as tracker (tracker?.instance.id)}
         {#if tracker}
           <div
             class="flex items-center justify-between px-2 py-1 rounded border {getUrgencyColor(

@@ -83,7 +83,7 @@
   >
     {#if profile.snooze.options.length > 0}
       <div class="grid grid-cols-2 gap-3">
-        {#each profile.snooze.options as minutes}
+        {#each profile.snooze.options as minutes, i (i)}
           <Button
             variant="secondary"
             size="xl"

@@ -168,7 +168,7 @@
         >
           All Devices
         </Button>
-        {#each allDevices as device}
+        {#each allDevices as device (device)}
           <Button
             variant={selectedDevice === device ? "default" : "outline"}
             size="sm"
@@ -182,7 +182,7 @@
 
     <!-- Statistics Cards -->
     <div class="grid grid-cols-1 @xl:grid-cols-2 @4xl:grid-cols-3 gap-4">
-      {#each displayedStats as stat}
+      {#each displayedStats as stat, i (i)}
         {@const StatIcon = getBatteryIconComponent(
           stat?.level,
           stat?.isCharging
@@ -375,7 +375,7 @@
         </CardHeader>
         <CardContent>
           <div class="space-y-3">
-            {#each cycles.slice(0, 10) as cycle}
+            {#each cycles.slice(0, 10) as cycle (cycle.id)}
               <div
                 class="flex flex-col gap-3 p-3 rounded-lg border @md:flex-row @md:items-center @md:justify-between"
               >

@@ -153,7 +153,7 @@
     </span>
 
     <div class="flex flex-col gap-3">
-      {#each nextSteps as step}
+      {#each nextSteps as step (step.title)}
         <button
           class="group grid grid-cols-[34px_1fr_auto] gap-3 items-center p-3 rounded-xl border border-white/6 bg-white/3 transition-[border-color,background-color] duration-150 cursor-pointer hover:border-white/12 hover:bg-white/5"
           type="button"

@@ -232,7 +232,7 @@
       : undefined}
   />
 
-  {#each notificationsToApiFormat(formNotifications) as threshold, i}
+  {#each notificationsToApiFormat(formNotifications) as threshold, i (i)}
     <input
       type="hidden"
       name="{prefix}notificationThresholds[{i}].urgency"

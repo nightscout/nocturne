@@ -41,7 +41,7 @@
     {/if}
   </SelectTrigger>
   <SelectContent>
-    {#each supportedLocales as locale}
+    {#each supportedLocales as locale (locale)}
       <SelectItem value={locale}>
         {getNativeLanguageLabel(locale)}
       </SelectItem>

@@ -64,7 +64,7 @@
           {glucoseTypeLabels[bgCheck.glucoseType ?? GlucoseType.Finger]}
         </Select.Trigger>
         <Select.Content>
-          {#each Object.values(GlucoseType) as gt}
+          {#each Object.values(GlucoseType) as gt (gt)}
             <Select.Item value={gt} label={glucoseTypeLabels[gt]} />
           {/each}
         </Select.Content>
@@ -84,7 +84,7 @@
           {glucoseUnitLabels[bgCheck.units ?? GlucoseUnit.MgDl]}
         </Select.Trigger>
         <Select.Content>
-          {#each Object.values(GlucoseUnit) as gu}
+          {#each Object.values(GlucoseUnit) as gu (gu)}
             <Select.Item value={gu} label={glucoseUnitLabels[gu]} />
           {/each}
         </Select.Content>

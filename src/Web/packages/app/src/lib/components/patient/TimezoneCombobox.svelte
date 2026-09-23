@@ -79,7 +79,7 @@
       <Command.List>
         <Command.Empty>No timezone found.</Command.Empty>
         <Command.Group>
-          {#each filteredTimezones as tz}
+          {#each filteredTimezones as tz (tz)}
             <Command.Item
               value={tz}
               onSelect={() => selectTimezone(tz)}

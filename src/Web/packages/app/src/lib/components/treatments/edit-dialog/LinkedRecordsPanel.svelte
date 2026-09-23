@@ -64,7 +64,7 @@
         {records.length}
       </Badge>
     </h4>
-    {#each records as linked}
+    {#each records as linked (`${linked.kind}-${linked.data.id}`)}
       {@const linkedStyle = getEntryStyle(linked.kind)}
       {@const linkedCategory = ENTRY_CATEGORIES[linked.kind]}
       {@const isActive = linked.data.id === activeRecordId}

@@ -160,7 +160,7 @@
               None (don't create event)
             </Command.Item>
           {/if}
-          {#each filteredEventTypes as type}
+          {#each filteredEventTypes as type (type)}
             {@const typeStyle = getEventTypeStyle(type)}
             <Command.Item
               value={type}

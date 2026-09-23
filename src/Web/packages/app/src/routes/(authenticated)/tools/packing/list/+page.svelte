@@ -133,7 +133,7 @@
     {/if}
 
     <!-- Grouped checklist -->
-    {#each Object.entries(grouped) as [category, categoryItems]}
+    {#each Object.entries(grouped) as [category, categoryItems] (category)}
       <Card>
         <CardHeader class="py-3">
           <div class="flex items-center justify-between">
@@ -151,6 +151,7 @@
           </div>
         </CardHeader>
         <CardContent class="pt-0 pb-2">
+          <!-- eslint-disable-next-line svelte/require-each-key -- rows are positional: items carry no id, and removing one shifts the checked map by index -->
           {#each categoryItems as { item, index }, i}
             {#if i > 0}
               <Separator class="my-0" />

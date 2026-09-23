@@ -206,7 +206,7 @@
                 stroke-width="1"
               />
               <!-- Outliers -->
-              {#each data.outliers as outlier}
+              {#each data.outliers as outlier, i (i)}
                 <circle
                   cx={cx}
                   cy={context.yScale(outlier)}

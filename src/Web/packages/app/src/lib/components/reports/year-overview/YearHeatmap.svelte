@@ -109,7 +109,7 @@
               >
                 {#snippet children({ cells, cellSize })}
                   <!-- Month labels (clickable → calendar) -->
-                  {#each timeMonths(bounds.start, bounds.end) as monthDate}
+                  {#each timeMonths(bounds.start, bounds.end) as monthDate (monthDate.getTime())}
                     {@const monthX =
                       timeWeek.count(
                         bounds.start,
@@ -135,7 +135,7 @@
                        (x multiple stacked years) cost O(N^2) and stalled the page.
                        Cells carry pre-scaled pixel coords and per-cell handlers,
                        so native <rect> keeps behaviour while registering nothing. -->
-                  {#each cells as cell}
+                  {#each cells as cell, i (i)}
                     {@const padding = 1}
                     {@const cellDate = cell.data?.dateString}
                     <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -159,7 +159,7 @@
                   {/each}
                   <!-- Week number labels -->
                   {@const weekCols = getWeekColumns(cells)}
-                  {#each weekCols as wk}
+                  {#each weekCols as wk (wk.x)}
                     <a
                       href="/reports/week-to-week?from={wk.from}&to={wk.to}&isDefault=false"
                     >
@@ -277,7 +277,7 @@
                         >
                           Counts
                         </div>
-                        {#each visibleCounts as [key, count]}
+                        {#each visibleCounts as [key, count] (key)}
                           <div class="flex justify-between gap-4">
                             <span class="text-muted-foreground">
                               {getDataTypeLabel(key)}

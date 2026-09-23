@@ -74,7 +74,7 @@
           ?.label ?? "System"}
       </Select.Trigger>
       <Select.Content>
-        {#each FONT_OPTIONS as opt}
+        {#each FONT_OPTIONS as opt (opt.value)}
           <Select.Item value={opt.value}>{opt.label}</Select.Item>
         {/each}
       </Select.Content>
@@ -94,7 +94,7 @@
         )?.label ?? "Medium"}
       </Select.Trigger>
       <Select.Content>
-        {#each FONT_WEIGHT_OPTIONS as opt}
+        {#each FONT_WEIGHT_OPTIONS as opt (opt.value)}
           <Select.Item value={opt.value}>{opt.label}</Select.Item>
         {/each}
       </Select.Content>
@@ -115,7 +115,7 @@
         {COLOR_OPTIONS.find((o) => o.value === colorOption)?.label ?? "Custom"}
       </Select.Trigger>
       <Select.Content>
-        {#each COLOR_OPTIONS as opt}
+        {#each COLOR_OPTIONS as opt (opt.value)}
           <Select.Item value={opt.value}>{opt.label}</Select.Item>
         {/each}
       </Select.Content>
@@ -169,7 +169,7 @@
     </p>
 
     {#if element.style?.custom}
-      {#each Object.entries(element.style.custom) as [key, value]}
+      {#each Object.entries(element.style.custom) as [key, value] (key)}
         <div class="flex min-w-0 items-center gap-2">
           <Input
             type="text"

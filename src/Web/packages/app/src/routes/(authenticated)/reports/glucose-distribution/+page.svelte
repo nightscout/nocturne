@@ -186,7 +186,7 @@
                   </Table.Row>
                 </Table.Header>
                 <Table.Body>
-                  {#each rangeStats as stat}
+                  {#each rangeStats as stat (stat.key)}
                     <Table.Row>
                       <Table.Cell>
                         <div class="flex items-center gap-2">

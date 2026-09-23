@@ -629,7 +629,7 @@
               class="overflow-x-auto max-h-[600px] overflow-y-auto"
             >
               <pre
-                class="text-xs font-mono leading-tight">{#each sideBySideDiff.left as { line, type }}<span
+                class="text-xs font-mono leading-tight">{#each sideBySideDiff.left as { line, type }, i (i)}<span
                     class="block px-3 min-h-[1.25em] {type === 'removed'
                       ? 'bg-destructive/10 text-destructive'
                       : type === 'empty'
@@ -651,7 +651,7 @@
               class="overflow-x-auto max-h-[600px] overflow-y-auto"
             >
               <pre
-                class="text-xs font-mono leading-tight">{#each sideBySideDiff.right as { line, type }}<span
+                class="text-xs font-mono leading-tight">{#each sideBySideDiff.right as { line, type }, i (i)}<span
                     class="block px-3 min-h-[1.25em] {type === 'added'
                       ? 'bg-success/10 text-success'
                       : type === 'empty'
@@ -673,7 +673,7 @@
         <Card.Content class="p-0">
           <div class="overflow-x-auto max-h-[600px] overflow-y-auto">
             <pre
-              class="text-xs font-mono leading-tight">{#each parsedDiff as { line, type }}<span
+              class="text-xs font-mono leading-tight">{#each parsedDiff as { line, type }, i (i)}<span
                   class="block px-3 {type === 'add'
                     ? 'bg-success/10 text-success'
                     : type === 'remove'

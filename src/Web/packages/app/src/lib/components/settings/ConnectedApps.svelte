@@ -182,7 +182,7 @@
               Permissions
             </p>
             <ul class="space-y-1.5">
-              {#each app.scopes ?? [] as scope}
+              {#each app.scopes ?? [] as scope, i (i)}
                 <li class="flex items-start gap-2 text-sm">
                   <Check class="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
                   <span class="text-muted-foreground">

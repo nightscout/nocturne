@@ -452,7 +452,7 @@
                   />
                 </div>
               {:else}
-                {#each labels as label, index}
+                {#each labels as label, index (index)}
                   <div class="min-w-0">
                     <label for={id + "-bound-" + index} class="mb-0.5 flex items-center gap-1 text-muted-foreground text-[10px] truncate">
                       <span class="inline-block size-2 shrink-0 rounded-full bg-(--dot)" style:--dot={getGlucoseHeatmapFill(values[index], stops)}></span>
@@ -531,7 +531,7 @@
 
         <div class="flex flex-wrap items-center justify-between gap-2 p-2 rounded bg-muted/30 border border-border/40">
           <div class="flex items-center gap-2 flex-wrap" aria-label="Color palette presets">
-            {#each COLOR_PALETTES as pal}
+            {#each COLOR_PALETTES as pal (pal.label)}
               {@const isSelected = (colors?.join(",") ?? "") === (pal.colors?.join(",") ?? "")}
               {@const themeColors = (themeStops ?? stops).map((stop) => stop.color)}
               <!-- eslint-disable-next-line no-restricted-syntax -- palette swatch; its gradient background is the content -->
@@ -642,7 +642,7 @@
 
         <div class="flex flex-wrap items-center justify-between gap-2 p-2 rounded bg-muted/30 border border-border/40">
           <div class="flex items-center gap-2 flex-wrap" aria-label="Color palette presets">
-            {#each COLOR_PALETTES as pal}
+            {#each COLOR_PALETTES as pal (pal.label)}
               {@const isSelected = (colors?.join(",") ?? "") === (pal.colors?.join(",") ?? "")}
               <!-- eslint-disable-next-line no-restricted-syntax -- palette swatch; its gradient background is the content -->
               <button

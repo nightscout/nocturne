@@ -181,7 +181,7 @@
 
   {#if deviceList.items.length > 0}
     <div class="space-y-3">
-      {#each deviceList.items as device}
+      {#each deviceList.items as device (device.id)}
         <Card.Root>
           <Card.Header class="flex flex-row items-center gap-3 py-3">
             <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted">
@@ -243,7 +243,7 @@
                     : "Select category"}
                 </Select.Trigger>
                 <Select.Content>
-                  {#each Object.entries(deviceCategoryLabels) as [value, label]}
+                  {#each Object.entries(deviceCategoryLabels) as [value, label] (value)}
                     <Select.Item {value} {label} />
                   {/each}
                 </Select.Content>
@@ -280,7 +280,7 @@
                       : "Select algorithm"}
                   </Select.Trigger>
                   <Select.Content>
-                    {#each Object.entries(aidAlgorithmLabels) as [value, label]}
+                    {#each Object.entries(aidAlgorithmLabels) as [value, label] (value)}
                       <Select.Item {value} {label} />
                     {/each}
                   </Select.Content>
@@ -289,7 +289,7 @@
             {/if}
           </div>
           <input type="hidden" name="b:isCurrent" value="on" />
-          {#each deviceList.createForm.fields.allIssues() ?? [] as issue}
+          {#each deviceList.createForm.fields.allIssues() ?? [] as issue, i (i)}
             <p class="text-sm text-destructive">{issue.message}</p>
           {/each}
         </Card.Content>
@@ -319,7 +319,7 @@
     </p>
   {:else}
     <div class="space-y-3">
-      {#each deviceList.items as device, i}
+      {#each deviceList.items as device, i (device.id)}
         <div
           class="flex items-center justify-between rounded-lg border p-3"
         >
@@ -418,7 +418,7 @@
         </p>
       </div>
       <div class="space-y-2">
-        {#each deviceList.discoveredSources as source}
+        {#each deviceList.discoveredSources as source (JSON.stringify([source.dataSource, source.device]))}
           <div class="flex items-center justify-between rounded-lg border border-dashed p-3">
             <div class="space-y-1 min-w-0 flex-1">
               <div class="flex items-center gap-2 flex-wrap">
@@ -479,7 +479,7 @@
                 {deviceCategoryLabels[deviceCategory as DeviceCategory] ?? deviceCategory}
               </Select.Trigger>
               <Select.Content>
-                {#each Object.entries(deviceCategoryLabels) as [value, label]}
+                {#each Object.entries(deviceCategoryLabels) as [value, label] (value)}
                   <Select.Item {value} {label} />
                 {/each}
               </Select.Content>
@@ -517,7 +517,7 @@
                     : "Select algorithm"}
                 </Select.Trigger>
                 <Select.Content>
-                  {#each Object.entries(aidAlgorithmLabels) as [value, label]}
+                  {#each Object.entries(aidAlgorithmLabels) as [value, label] (value)}
                     <Select.Item {value} {label} />
                   {/each}
                 </Select.Content>
@@ -576,7 +576,7 @@
             />
           </div>
 
-          {#each activeForm.fields.allIssues() ?? [] as issue}
+          {#each activeForm.fields.allIssues() ?? [] as issue, i (i)}
             <p class="text-sm text-destructive">{issue.message}</p>
           {/each}
         </div>

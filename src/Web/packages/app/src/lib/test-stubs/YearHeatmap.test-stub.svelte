@@ -17,7 +17,7 @@
 </script>
 
 <div bind:this={sentinelElement} data-year={year}>
-  {#each transformYearData(yearData.get(year) ?? []) as day}
+  {#each transformYearData(yearData.get(year) ?? []) as day, i (i)}
     <span data-testid="cell-{day.dateString}">{getCellFill(day)}</span>
   {/each}
 </div>

@@ -104,6 +104,7 @@
     </div>
   {:else}
     <div class="space-y-3">
+      <!-- eslint-disable-next-line svelte/require-each-key -- each notification is replaced on every edit and new ones have no id, so neither the object nor an id identifies a row -->
       {#each notifications as notification, i}
         {@const config = getUrgencyConfig(notification.urgency)}
         <div class="flex gap-2 items-start p-3 border rounded-lg bg-muted/30">
@@ -120,7 +121,7 @@
                 <span class={config.color}>{config.label}</span>
               </Select.Trigger>
               <Select.Content>
-                {#each urgencyOptions as option}
+                {#each urgencyOptions as option (option.value)}
                   <Select.Item value={option.value}>
                     <span class={option.color}>{option.label}</span>
                   </Select.Item>

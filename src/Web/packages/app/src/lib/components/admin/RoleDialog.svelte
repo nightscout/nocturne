@@ -154,11 +154,11 @@
         <Label>Permissions</Label>
 
         <div class="space-y-4">
-          {#each permissionCategories as category}
+          {#each permissionCategories as category (category.name)}
             <div class="border rounded-lg p-3 bg-muted/50">
               <h4 class="text-sm font-medium mb-2">{category.name}</h4>
               <div class="grid grid-cols-2 gap-2">
-                {#each category.permissions as perm}
+                {#each category.permissions as perm (perm)}
                   <label class="flex items-center gap-2 cursor-pointer">
                     <Checkbox
                       checked={roleFormPermissions.includes(perm)}
@@ -201,7 +201,7 @@
                 Selected Permissions ({roleFormPermissions.length})
               </h4>
               <div class="flex flex-wrap gap-1">
-                {#each roleFormPermissions as perm}
+                {#each roleFormPermissions as perm, i (i)}
                   <Badge variant="secondary" class="font-mono">
                     {perm}
                     {#if !editingRole?.isSystem}

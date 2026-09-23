@@ -58,7 +58,7 @@
         </div>
       {:else}
         <div class="space-y-3">
-          {#each definitions as def}
+          {#each definitions as def (def.id)}
             {@const category = def.category ?? TrackerCategory.Consumable}
             <div
               class="flex items-center justify-between p-4 rounded-lg border"

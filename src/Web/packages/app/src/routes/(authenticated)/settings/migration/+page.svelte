@@ -546,7 +546,7 @@
                 {#if activeMigration.collectionProgress && Object.keys(activeMigration.collectionProgress).length > 0}
                   <div class="space-y-3">
                     <Label>Collection Progress</Label>
-                    {#each Object.entries(activeMigration.collectionProgress) as [name, collection]}
+                    {#each Object.entries(activeMigration.collectionProgress) as [name, collection] (name)}
                       <div
                         class="flex justify-between items-center p-3 border rounded-lg"
                       >
@@ -608,7 +608,7 @@
               </div>
             {:else}
               <div class="space-y-3">
-                {#each history as job}
+                {#each history as job (job.id)}
                   {@const badge = getStateBadge(job.state)}
                   <div
                     class="flex items-center justify-between p-4 rounded-lg border"
@@ -668,7 +668,7 @@
             </CardHeader>
             <CardContent>
               <div class="space-y-3">
-                {#each sources as source}
+                {#each sources as source (source.id)}
                   <div
                     class="flex items-center justify-between p-4 rounded-lg border"
                   >

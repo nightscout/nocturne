@@ -290,7 +290,7 @@
             Notification Schedule (Adjusted)
           </Label>
           <div class="space-y-2">
-            {#each startPreview as preview}
+            {#each startPreview as preview, i (i)}
               {@const isPast = preview.isPast}
               {@const urgencyLower = String(preview.urgency).toLowerCase()}
               <div class="flex items-center justify-between text-xs">

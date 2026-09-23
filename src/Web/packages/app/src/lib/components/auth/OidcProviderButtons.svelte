@@ -30,7 +30,7 @@
 </script>
 
 <div class="space-y-3">
-  {#each providers as provider}
+  {#each providers as provider (provider.id)}
     <Button
       variant="outline"
       size="lg"

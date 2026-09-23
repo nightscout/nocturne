@@ -57,7 +57,7 @@
             Start Tracker
           </Select.Trigger>
           <Select.Content>
-            {#each definitions as def}
+            {#each definitions as def (def.id)}
               <Select.Item
                 value={def.id ?? ""}
                 label={def.name ?? ""}
@@ -77,7 +77,7 @@
         </div>
       {:else}
         <div class="space-y-3">
-          {#each activeInstances as instance}
+          {#each activeInstances as instance (instance.id)}
             {@const level = getInstanceLevel(instance)}
             {@const remaining = getTimeRemaining(instance)}
             <div

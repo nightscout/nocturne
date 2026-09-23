@@ -55,7 +55,7 @@
       <Command.List>
         <Command.Empty>No GI level found.</Command.Empty>
         <Command.Group>
-          {#each GI_OPTIONS as option}
+          {#each GI_OPTIONS as option (option.value)}
             <Command.Item
               value={option.label}
               onSelect={() => selectGi(option.value)}

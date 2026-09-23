@@ -146,7 +146,7 @@
           </Table.Row>
         </Table.Header>
         <Table.Body>
-          {#each mealsByDay as day}
+          {#each mealsByDay as day (day.date)}
             {@const isDateCollapsed = collapsedDates.has(day.date)}
             {@const dayTotalCarbs = day.meals.reduce(
               (sum, m) => sum + (m.totalCarbs ?? 0),
@@ -324,7 +324,7 @@
                           <div
                             class="grid gap-2 @xl:grid-cols-2 @4xl:grid-cols-3"
                           >
-                            {#each meal.foods ?? [] as food}
+                            {#each meal.foods ?? [] as food (food.id)}
                               <div class="rounded-lg border bg-card p-3 text-sm transition-colors group relative hover:bg-accent/50">
                                 <!-- eslint-disable-next-line no-restricted-syntax -- table row region -->
                                 <button

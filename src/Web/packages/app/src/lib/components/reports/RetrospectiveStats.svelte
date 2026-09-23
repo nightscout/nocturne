@@ -49,7 +49,7 @@
     <Card.Content>
       <!-- Skeleton loading state - matches the layout below -->
       <div class="grid grid-cols-2 @lg:grid-cols-4 gap-4">
-        {#each [1, 2, 3, 4] as _}
+        {#each [1, 2, 3, 4] as _, i (i)}
           <div
             class="flex flex-col items-center gap-1 p-3 rounded-lg bg-background/50"
           >

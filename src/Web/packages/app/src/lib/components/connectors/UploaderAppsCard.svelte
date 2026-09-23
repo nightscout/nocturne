@@ -52,10 +52,10 @@
         { value: "cgm", apps: cgmApps },
         { value: "aid", apps: aidApps },
         { value: "other", apps: otherApps },
-      ] as tab}
+      ] as tab (tab.value)}
         <Tabs.Content value={tab.value} class="mt-4">
           <div class="grid gap-3 @xl:grid-cols-2">
-            {#each tab.apps as uploader}
+            {#each tab.apps as uploader (uploader.id)}
               {@const active = isUploaderActive(uploader)}
               <button
                 class="flex items-center gap-4 p-4 rounded-lg border hover:border-primary/50 hover:bg-accent/50 transition-colors text-left group {active

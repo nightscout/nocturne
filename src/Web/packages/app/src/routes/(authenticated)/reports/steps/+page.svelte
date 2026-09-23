@@ -154,7 +154,7 @@
           <span class="ml-auto font-mono font-medium tabular-nums">{formatNumber(steps)}</span>
         {/snippet}
         {#snippet row(ctx: ActogramRowContext)}
-          {#each ctx.data as { point, hoursFromStart, isExtended }}
+          {#each ctx.data as { point, hoursFromStart, isExtended }, i (i)}
             {@const steps = (point as { mills: number; steps: number }).steps ?? 0}
             {@const barHeight = (steps / barScale) * ctx.height}
             {@const x = ctx.xScale(new Date(ctx.day.getTime() + hoursFromStart * MS_PER_HOUR))}

@@ -109,7 +109,7 @@
             </span>
           </Select.Trigger>
           <Select.Content>
-            {#each METRIC_OPTIONS as option}
+            {#each METRIC_OPTIONS as option (option.value)}
               <Select.Item value={option.value}>
                 {option.label}
               </Select.Item>

@@ -229,7 +229,7 @@
 
       {#if user.roles.length > 0}
         <div class="flex flex-wrap gap-2">
-          {#each user.roles as role}
+          {#each user.roles as role, i (i)}
             <Badge variant="secondary" class="text-sm">
               {role}
             </Badge>
@@ -253,7 +253,7 @@
 
       {#if user.permissions.length > 0}
         <div class="flex flex-wrap gap-2">
-          {#each user.permissions as permission}
+          {#each user.permissions as permission, i (i)}
             <Badge variant="outline" class="font-mono">
               {permission}
             </Badge>

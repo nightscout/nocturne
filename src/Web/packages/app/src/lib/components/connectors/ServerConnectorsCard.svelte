@@ -149,7 +149,7 @@
   </CardHeader>
   <CardContent>
     <div class="grid gap-3 @xl:grid-cols-2">
-      {#each availableConnectors as connector}
+      {#each availableConnectors as connector (connector.id)}
         {@const connectorStatusInfo = connectorStatuses.find(
           (cs) => cs.id === connector.id
         )}

@@ -179,7 +179,7 @@
               class="rounded-md border border-warning/30 bg-warning/10 p-3"
             >
               <ul class="space-y-2">
-                {#each newScopes as s}
+                {#each newScopes as s, i (i)}
                   <li class="flex items-start gap-3 text-sm">
                     <ShieldAlert
                       class="mt-0.5 h-4 w-4 shrink-0 text-warning"
@@ -203,7 +203,7 @@
                 </p>
               </div>
               <ul class="space-y-2">
-                {#each previouslyApprovedScopes as s}
+                {#each previouslyApprovedScopes as s, i (i)}
                   <li class="flex items-start gap-3 text-sm">
                     <Check
                       class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground"
@@ -223,7 +223,7 @@
               This application is requesting permission to:
             </p>
             <ul class="space-y-2">
-              {#each scopes as s}
+              {#each scopes as s, i (i)}
                 <li class="flex items-start gap-3 text-sm">
                   <Check class="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                   <span class="text-muted-foreground">
@@ -286,7 +286,7 @@
 
         <Separator />
 
-        {#each formIssues as issue}
+        {#each formIssues as issue, i (i)}
           <div
             class="flex items-start gap-3 rounded-md border border-destructive/20 bg-destructive/5 p-3"
           >

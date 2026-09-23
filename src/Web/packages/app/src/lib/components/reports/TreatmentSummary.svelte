@@ -54,7 +54,7 @@
     Overall Treatment Summary
   </h2>
   <div class="grid grid-cols-1 @4xl:grid-cols-3 gap-4">
-    {#each dailyDataPoints as day}
+    {#each dailyDataPoints as day (day.date)}
       {@const totalInsulin = getTotalInsulin(day.treatmentSummary)}
       {@const totalCarbs = getTotalCarbs(day.treatmentSummary)}
       {@const totalProtein = getTotalProtein(day.treatmentSummary)}

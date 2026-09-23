@@ -176,7 +176,7 @@
             This application is requesting permission to:
           </p>
           <ul class="space-y-2">
-            {#each scopes as scope}
+            {#each scopes as scope, i (i)}
               {@const sensitive = isSensitiveDeviceScope(scope)}
               <li class="flex items-start gap-3 text-sm">
                 {#if sensitive}
@@ -218,7 +218,7 @@
 
         <Separator />
 
-        {#each allIssues as issue}
+        {#each allIssues as issue, i (i)}
           <div
             class="flex items-start gap-3 rounded-md border border-destructive/20 bg-destructive/5 p-3"
           >
@@ -284,7 +284,7 @@
       </Card.Header>
 
       <Card.Content class="space-y-4">
-        {#each lookupDeviceForm.fields.allIssues() ?? [] as issue}
+        {#each lookupDeviceForm.fields.allIssues() ?? [] as issue, i (i)}
           <div
             class="flex items-start gap-3 rounded-md border border-destructive/20 bg-destructive/5 p-3"
           >

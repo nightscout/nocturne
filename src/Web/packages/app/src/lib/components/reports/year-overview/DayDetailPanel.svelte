@@ -161,7 +161,7 @@
             By Data Type
           </div>
           <div class="space-y-2">
-            {#each visiblePanelCounts as [key, count]}
+            {#each visiblePanelCounts as [key, count] (key)}
               <div
                 class="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2 text-sm"
               >

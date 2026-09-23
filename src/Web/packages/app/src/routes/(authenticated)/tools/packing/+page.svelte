@@ -104,7 +104,7 @@
   {/if}
 
   <!-- Category Cards -->
-  {#each categories as category, ci}
+  {#each categories as category, ci (category.id)}
     <SupplyCategory
       config={category}
       icon={iconMap[category.icon]}

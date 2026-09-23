@@ -64,7 +64,7 @@
           </span>
         </Select.Trigger>
         <Select.Content>
-          {#each availableDataSources as source}
+          {#each availableDataSources as source (source)}
             <Select.Item value={source}>
               {getDataTypeLabel(source)}
             </Select.Item>
@@ -104,7 +104,7 @@
             {/if}
           </div>
           <div class="space-y-1.5">
-            {#each presentDataTypes as dataType}
+            {#each presentDataTypes as dataType (dataType)}
               <label
                 class="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-muted/50"
               >

@@ -70,7 +70,7 @@
           <Command.Empty>No options found.</Command.Empty>
         {/if}
         <Command.Group>
-          {#each filteredOptions as option}
+          {#each filteredOptions as option (option.value)}
             <Command.Item
               value={option.value}
               onSelect={() => onToggle(option.value)}

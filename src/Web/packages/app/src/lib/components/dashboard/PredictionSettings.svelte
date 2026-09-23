@@ -47,7 +47,7 @@
     <div class="flex items-center gap-2">
       <!-- Skeleton for mode selector -->
       <div class="bg-muted rounded-lg p-0.5 flex gap-0.5">
-        {#each [1, 2, 3, 4, 5] as _}
+        {#each [1, 2, 3, 4, 5] as _, i (i)}
           <Skeleton class="h-6 w-10 rounded-md" />
         {/each}
       </div>

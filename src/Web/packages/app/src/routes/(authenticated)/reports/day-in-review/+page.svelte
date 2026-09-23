@@ -465,7 +465,7 @@
             </Select.Trigger>
             <Select.Content>
               <Select.Item value="">All Types</Select.Item>
-              {#each uniqueEventTypes as eventType}
+              {#each uniqueEventTypes as eventType (eventType)}
                 <Select.Item value={eventType}>{eventType}</Select.Item>
               {/each}
             </Select.Content>
@@ -495,7 +495,7 @@
             </Table.Row>
           </Table.Header>
           <Table.Body>
-            {#each filteredTreatments as row}
+            {#each filteredTreatments as row (`${row.rowType}-${row.id}`)}
               {@const style = getRowTypeStyle(row.rowType)}
               <Table.Row
                 class="cursor-pointer"

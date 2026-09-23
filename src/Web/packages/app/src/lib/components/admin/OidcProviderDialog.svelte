@@ -423,7 +423,7 @@
                   : ""}.
                 {#if testResult.warnings && testResult.warnings.length > 0}
                   <ul class="list-disc list-inside mt-1 text-xs">
-                    {#each testResult.warnings as warn}
+                    {#each testResult.warnings as warn, i (i)}
                       <li>{warn}</li>
                     {/each}
                   </ul>

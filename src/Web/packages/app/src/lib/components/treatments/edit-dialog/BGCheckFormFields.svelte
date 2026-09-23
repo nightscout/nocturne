@@ -46,7 +46,7 @@
         {form.glucoseType || "Select..."}
       </Select.Trigger>
       <Select.Content>
-        {#each glucoseTypeOptions as opt}
+        {#each glucoseTypeOptions as opt (opt)}
           <Select.Item value={opt}>{opt}</Select.Item>
         {/each}
       </Select.Content>

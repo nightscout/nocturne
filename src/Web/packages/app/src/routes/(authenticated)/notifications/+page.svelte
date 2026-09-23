@@ -331,7 +331,7 @@
               </div>
             {:else}
               <div class="space-y-4">
-                {#each Object.entries(groupedHistory) as [date, instances]}
+                {#each Object.entries(groupedHistory) as [date, instances] (date)}
                 <Collapsible.Root
                   open={isExpanded(date)}
                   onOpenChange={() => toggleGroup(date)}
@@ -355,7 +355,7 @@
                     />
                   </Collapsible.Trigger>
                   <Collapsible.Content class="border-t p-3 space-y-2">
-                    {#each instances as instance}
+                    {#each instances as instance (instance.id)}
                       <div
                         class="flex items-center justify-between p-3 rounded-lg bg-muted/30"
                       >

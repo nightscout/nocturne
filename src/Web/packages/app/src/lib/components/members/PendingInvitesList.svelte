@@ -40,7 +40,7 @@
               {invite.label ?? "Invite Link"}
             </p>
             {#if invite.roleIds?.length}
-              {#each invite.roleIds as roleId}
+              {#each invite.roleIds as roleId, i (i)}
                 <Badge variant="secondary">
                   {getRoleName(roleId)}
                 </Badge>
@@ -66,7 +66,7 @@
               >
                 Used by
               </p>
-              {#each invite.usedBy as usage}
+              {#each invite.usedBy as usage, i (i)}
                 <p class="text-xs text-foreground">
                   <Check class="inline h-3 w-3 mr-1 text-primary" />
                   {usage.name ?? "Unknown"}

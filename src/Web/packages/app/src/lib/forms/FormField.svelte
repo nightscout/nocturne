@@ -76,7 +76,7 @@
 
   {#if invalid}
     <div id={messageId} role="alert" class="space-y-1">
-      {#each messages as message}
+      {#each messages as message, i (i)}
         <p class="text-sm text-destructive">{message}</p>
       {/each}
     </div>

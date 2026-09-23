@@ -688,7 +688,7 @@
               "Select a definition"}
           </Select.Trigger>
           <Select.Content>
-            {#each definitions as def}
+            {#each definitions as def (def.id)}
               <Select.Item value={def.id ?? ""} label={def.name ?? ""} />
             {/each}
           </Select.Content>

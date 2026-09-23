@@ -413,7 +413,7 @@
             {/if}
           {/snippet}
           {#snippet row(ctx: ActogramRowContext)}
-            {#each ctx.data as { point, hoursFromStart, isExtended }}
+            {#each ctx.data as { point, hoursFromStart, isExtended }, i (i)}
               {@const span = point as { mills: number; startMills: number; endMills: number; state: string }}
               {@const durationHours = (span.endMills - span.startMills) / MS_PER_HOUR}
               {@const x = ctx.xScale(new Date(ctx.day.getTime() + hoursFromStart * MS_PER_HOUR))}
