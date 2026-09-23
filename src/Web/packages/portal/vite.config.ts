@@ -103,7 +103,10 @@ export default defineConfig({
     sharedFonts(),
     releaseAssets(),
     tailwindcss(),
-    wuchale(),
+    // The shared catalogue records references relative to packages/app, where translations:sync
+    // runs, and wuchale reads references relative to its config's directory. Loaded from here,
+    // no portal reference matched, so every portal string compiled to empty.
+    wuchale({ configPath: '../app/wuchale.config.js' }),
     lingo({
       route: '/_translations',
       localesDir: '../../locales',
