@@ -54,7 +54,7 @@
             {/if}
             {#if totalCarbs > 0}
               <div class="flex items-center gap-2">
-                <Apple class="w-4 h-4 text-carbs" />
+                <Apple class="w-4 h-4 text-entry-carbs" />
                 <span>
                   Carbs: {formatCarbDisplay(totalCarbs)}g
                 </span>

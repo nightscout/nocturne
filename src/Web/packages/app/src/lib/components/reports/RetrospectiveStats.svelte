@@ -176,7 +176,7 @@
           class="flex flex-col items-center gap-1 p-3 rounded-lg bg-background/50"
         >
           <div class="flex items-center gap-1 text-muted-foreground">
-            <Apple class="h-4 w-4 text-carbs-on-board" />
+            <Apple class="h-4 w-4 text-entry-carbs" />
             <span class="text-xs font-medium">COB</span>
           </div>
           {#if data?.cob}
@@ -200,7 +200,7 @@
           class="flex flex-col items-center gap-1 p-3 rounded-lg bg-background/50"
         >
           <div class="flex items-center gap-1 text-muted-foreground">
-            <Activity class="h-4 w-4 text-insulin-scheduled-basal" />
+            <Activity class="h-4 w-4 text-entry-basal" />
             <span class="text-xs font-medium">Basal</span>
           </div>
           {#if data?.basal}

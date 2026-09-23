@@ -25,7 +25,7 @@ function excursion(
 	return {
 		id,
 		ruleName: `Rule ${id}`,
-		startedAt: new Date(),
+		startedAt: new Date().toISOString(),
 		...overrides,
 	};
 }
@@ -51,7 +51,7 @@ describe("FiringToast", () => {
 	// authenticated layout outside its error boundary, so that took down every
 	// page in the app, not just the one being viewed.
 	it("settles when an active alert is already acknowledged", async () => {
-		activeAlerts = [excursion("acked", { acknowledgedAt: new Date() })];
+		activeAlerts = [excursion("acked", { acknowledgedAt: new Date().toISOString() })];
 
 		expect(() => render(FiringToast)).not.toThrow();
 
@@ -65,7 +65,7 @@ describe("FiringToast", () => {
 		render(FiringToast);
 		await expect.element(page.getByText("Rule b").first()).toBeVisible();
 
-		activeAlerts = [excursion("b", { acknowledgedAt: new Date() })];
+		activeAlerts = [excursion("b", { acknowledgedAt: new Date().toISOString() })];
 		flushSync();
 
 		await expect.element(page.getByText("Rule b")).not.toBeInTheDocument();

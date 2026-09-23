@@ -35,7 +35,7 @@
       .toUpperCase();
   }
 
-  function formatRelativeTime(date: Date | undefined): string {
+  function formatRelativeTime(date: string | undefined): string {
     if (!date) return "Unknown";
     const now = Date.now();
     const then = new Date(date).getTime();

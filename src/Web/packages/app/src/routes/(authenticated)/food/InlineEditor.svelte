@@ -98,7 +98,7 @@
 
 		<!-- Carbs -->
 		<div class="flex flex-col gap-1.5">
-			<label for="food-edit-carbs" class="font-semibold text-xs text-carbs">
+			<label for="food-edit-carbs" class="font-semibold text-xs text-entry-carbs">
 				Carbs <span aria-hidden="true">*</span><span class="sr-only">(required)</span>
 			</label>
 			<InputGroup.Root>

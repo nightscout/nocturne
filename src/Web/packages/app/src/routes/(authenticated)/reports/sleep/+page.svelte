@@ -79,8 +79,8 @@
   const trendsResource = contextResource(
     () =>
       getTrends({
-        from: new Date(reportsParams.dateRangeMillis.from),
-        to: new Date(reportsParams.dateRangeMillis.to),
+        from: new Date(reportsParams.dateRangeMillis.from).toISOString(),
+        to: new Date(reportsParams.dateRangeMillis.to).toISOString(),
         source: sourceFilter === "all" ? undefined : sourceFilter,
       }),
     { errorTitle: "Error Loading Sleep Report" }

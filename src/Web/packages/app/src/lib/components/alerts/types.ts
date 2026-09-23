@@ -771,7 +771,7 @@ export function defaultClientConfig(): ClientConfiguration {
 		snooze: {
 			defaultMinutes: 15,
 			options: [5, 15, 30, 60],
-			maxCount: 5,
+			maxCount: 3,
 			smartSnooze: false,
 			smartSnoozeExtendMinutes: 10,
 			conditions: [],
@@ -890,7 +890,7 @@ export function parseRule(r: AlertRuleResponse | null): RuleEditorState {
 				snooze: {
 					defaultMinutes: cc.snooze?.defaultMinutes ?? 15,
 					options: cc.snooze?.options ?? [5, 15, 30, 60],
-					maxCount: cc.snooze?.maxCount ?? 5,
+					maxCount: cc.snooze?.maxCount ?? 3,
 					smartSnooze: cc.snooze?.smartSnooze ?? false,
 					smartSnoozeExtendMinutes: cc.snooze?.smartSnoozeExtendMinutes ?? 10,
 					conditions: parseSnoozeConditions(cc.snooze),

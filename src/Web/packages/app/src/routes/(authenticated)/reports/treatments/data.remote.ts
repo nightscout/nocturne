@@ -66,8 +66,8 @@ export const getTreatmentsData = query(
 			basalInjections,
 			treatmentSummary,
 			dateRange: {
-				from: startDate.toISOString(),
-				to: endDate.toISOString(),
+				from: startDate,
+				to: endDate,
 			},
 		};
 	}

@@ -61,7 +61,7 @@
         series={[
           {
             key: "basal",
-            color: "var(--insulin-scheduled-basal)",
+            color: "var(--basal)",
             label: "Basal (U)",
             props: { class: patternClass("insulin-scheduled-basal") },
           },

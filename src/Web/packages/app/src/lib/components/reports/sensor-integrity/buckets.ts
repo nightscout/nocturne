@@ -9,10 +9,6 @@ import { formatLocale } from "$lib/utils/formatting";
 const DAY_MS = 86_400_000;
 const MIN_MS = 60_000;
 
-// The generated client types DTO date fields as `Date`, but they are ISO strings at
-// runtime (the client deserializes with no reviver). Re-wrap before reading epoch ms.
-const epochMs = (d: Date): number => new Date(d).getTime();
-
 export interface DayPoint {
   /** Minutes from local midnight (0–1440). */
   x: number;
@@ -94,8 +90,8 @@ export function buildDayBuckets(
 
   for (const c of clusters) {
     if (!c.start || !c.end) continue;
-    const startLocal = epochMs(c.start) + offsetMs;
-    const endLocal = epochMs(c.end) + offsetMs;
+    const startLocal = Date.parse(c.start) + offsetMs;
+    const endLocal = Date.parse(c.end) + offsetMs;
     const firstDay = Math.floor(startLocal / DAY_MS);
     const lastDay = Math.floor(endLocal / DAY_MS);
 
@@ -116,7 +112,7 @@ export function buildDayBuckets(
     const t = h.event?.nadirTime;
     const y = h.event?.nadirMgdl;
     if (!t || y == null) continue;
-    const localMs = epochMs(t) + offsetMs;
+    const localMs = Date.parse(t) + offsetMs;
     const dayKey = Math.floor(localMs / DAY_MS);
     ensure(dayKey).hypos.push({
       x: (localMs - dayKey * DAY_MS) / MIN_MS,

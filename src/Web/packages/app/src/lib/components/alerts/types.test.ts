@@ -40,7 +40,8 @@ describe("defaultClientConfig", () => {
 
 		expect(config.snooze.defaultMinutes).toBe(15);
 		expect(config.snooze.options).toEqual([5, 15, 30, 60]);
-		expect(config.snooze.maxCount).toBe(5);
+		// Mirrors SmartSnoozeConfig.DefaultMaxCount / DefaultExtendMinutes on the backend.
+		expect(config.snooze.maxCount).toBe(3);
 		expect(config.snooze.smartSnooze).toBe(false);
 		expect(config.snooze.smartSnoozeExtendMinutes).toBe(10);
 	});
@@ -164,6 +165,19 @@ describe("parseRule", () => {
 		expect(state.condition?.type).toBe("composite");
 		expect(state.condition?.composite?.operator).toBe("or");
 		expect(state.condition?.composite?.conditions).toHaveLength(2);
+	});
+
+	it("fills snooze fields a stored rule omits with the backend's defaults", () => {
+		const state = parseRule({
+			name: "Low Alert",
+			conditionType: "threshold",
+			conditionParams: { direction: "below", value: 70 },
+			clientConfiguration: { snooze: { smartSnooze: true } },
+		} as never);
+
+		expect(state.clientConfig.snooze.smartSnooze).toBe(true);
+		expect(state.clientConfig.snooze.maxCount).toBe(3);
+		expect(state.clientConfig.snooze.smartSnoozeExtendMinutes).toBe(10);
 	});
 
 	it("parses auto-resolve params from a full ConditionNode envelope", () => {

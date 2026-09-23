@@ -1040,7 +1040,7 @@ export class RealtimeStore {
     const { from: backfillFromDate, to: nowDate } = untilNow(backfillFrom);
 
     console.log(
-      `[RealtimeStore] Backfilling data from ${backfillFromDate.toISOString()} ` +
+      `[RealtimeStore] Backfilling data from ${backfillFromDate} ` +
       `(${Math.round(timeSinceLastData / 60000)} minutes ago)`
     );
 

@@ -101,9 +101,9 @@
     })
   );
 
-  function formatCompactDate(date: Date | undefined): string {
+  function formatCompactDate(date: string | undefined): string {
     if (!date) return "\u2014";
-    return compactDateFormatter.format(date instanceof Date ? date : new Date(date));
+    return compactDateFormatter.format(new Date(date));
   }
 
   function truncateId(id: string): string {

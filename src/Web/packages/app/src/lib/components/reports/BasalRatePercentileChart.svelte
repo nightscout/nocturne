@@ -39,8 +39,13 @@
     return `${hour - 12} PM`;
   }
 
-  const outer = { color: "var(--percentile-outer)", props: { class: patternClass("percentile-outer") } };
-  const inner = { color: "var(--percentile-inner)", props: { class: patternClass("percentile-inner") } };
+  // Basal bands are tints of the one basal hue; texture tells them apart in print.
+  const outer = {
+    color: "color-mix(in oklab, var(--basal) 45%, var(--background))",
+    props: { class: patternClass("percentile-outer") },
+  };
+  const inner = { color: "var(--basal)", props: { class: patternClass("percentile-inner") } };
+  const medianColor = "var(--entry-basal)";
 </script>
 
 <div class="w-full">
@@ -84,7 +89,7 @@
               (d: HourlyBasalPercentileData) => d.median,
               (d: HourlyBasalPercentileData) => d.median,
             ],
-            color: "var(--percentile-median)",
+            color: medianColor,
             props: {
               line: { strokeWidth: 2 },
             },
@@ -129,9 +134,9 @@
     <ChartKey
       class="mt-4"
       items={[
-        { texture: "percentile-outer", label: "10th–25th / 75th–90th percentile" },
-        { texture: "percentile-inner", label: "25th–75th percentile" },
-        { texture: "percentile-median", label: "Median basal rate", shape: "line" },
+        { texture: "percentile-outer", label: "10th–25th / 75th–90th percentile", color: outer.color },
+        { texture: "percentile-inner", label: "25th–75th percentile", color: inner.color },
+        { texture: "percentile-median", label: "Median basal rate", shape: "line", color: medianColor },
       ]}
     />
   {:else}

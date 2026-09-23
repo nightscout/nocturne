@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { isoNow } from "$lib/utils/now";
   import { formatClock } from "$lib/utils/formatting";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
@@ -138,7 +139,7 @@
       await acknowledge({}).updates(
         activeAlertsQuery.withOverride((current) =>
           (current ?? []).map((a) =>
-            a.acknowledgedAt ? a : { ...a, acknowledgedAt: new Date() },
+            a.acknowledgedAt ? a : { ...a, acknowledgedAt: isoNow() },
           ),
         ),
       );

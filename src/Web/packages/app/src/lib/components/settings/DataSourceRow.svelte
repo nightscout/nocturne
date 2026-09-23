@@ -35,9 +35,9 @@
     statusMessage?: string;
     totalEntries?: number;
     entriesLast24h?: number;
-    lastSeen?: Date;
-    lastSyncAttempt?: Date;
-    lastSuccessfulSync?: Date;
+    lastSeen?: string;
+    lastSyncAttempt?: string;
+    lastSuccessfulSync?: string;
     totalBreakdown?: Record<string, number>;
     last24hBreakdown?: Record<string, number>;
     syncProgress?: Pick<
@@ -127,7 +127,7 @@
   }
 
 
-  function formatRelativeTime(date: Date | undefined): string {
+  function formatRelativeTime(date: string | undefined): string {
     if (!date) return "Never";
     const d = new Date(date);
     const now = new Date();

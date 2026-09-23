@@ -37,8 +37,6 @@ describe("the body a generated bulk-restore command carries", () => {
   it("hands the ids to the client instead of an empty object", (ctx) => {
     if (!existsSync(WRAPPER)) ctx.skip(ABSENT);
 
-    expect(bulkRestoreSource()).toContain(
-      ".bulkRestore(request as string[])"
-    );
+    expect(bulkRestoreSource()).toContain(".bulkRestore(request);");
   });
 });

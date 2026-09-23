@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { isoNow } from "$lib/utils/now";
   import {
     getActiveAlerts,
     snoozeInstance,
@@ -104,7 +105,7 @@
       }).updates(
         activeAlerts.withOverride((current) =>
           (current ?? []).map((a) =>
-            a.id === id ? { ...a, acknowledgedAt: new Date() } : a
+            a.id === id ? { ...a, acknowledgedAt: isoNow() } : a
           )
         )
       )

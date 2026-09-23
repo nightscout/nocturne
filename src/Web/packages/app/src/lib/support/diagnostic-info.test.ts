@@ -3,7 +3,7 @@ import type { SupportDiagnosticsResponse } from "$api-clients";
 import { buildDiagnosticInfo, type DiagnosticSources } from "./diagnostic-info";
 import { isRecord } from "$lib/utils/type-guards";
 
-const lastSync = new Date("2026-09-10T21:00:00Z");
+const lastSync = "2026-09-10T21:00:00.000Z";
 
 const settings: SupportDiagnosticsResponse = {
   glucoseUnits: "mg/dl",
@@ -60,10 +60,7 @@ describe("buildDiagnosticInfo", () => {
   it("attaches the real settings snapshot, not a placeholder", () => {
     const info = parse(buildDiagnosticInfo(sources, { ...allOff, settings: true }));
 
-    expect(info.settings).toEqual({
-      ...settings,
-      connectors: [{ ...settings.connectors![0], lastSuccessfulSync: lastSync.toISOString() }],
-    });
+    expect(info.settings).toEqual(settings);
   });
 
   it("attaches the real failures, not a placeholder", () => {

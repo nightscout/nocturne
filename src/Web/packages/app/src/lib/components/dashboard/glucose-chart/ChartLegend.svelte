@@ -192,9 +192,11 @@
 {/snippet}
 
 <!-- Icon snippets -->
-{#snippet basalIcon()}<div
-    class="w-3 h-2 bg-insulin-basal border border-insulin"
-  ></div>{/snippet}
+<!-- Scheduled step, then temp step: the pair the basal track draws. -->
+{#snippet basalIcon()}<div class="flex items-end">
+    <div class="w-2 h-1.5 bg-insulin-basal"></div>
+    <div class="w-2 h-2.5 bg-insulin-temp-basal border border-insulin-bolus"></div>
+  </div>{/snippet}
 {#snippet iobIcon()}<div
     class="w-3 h-2 bg-iob-basal border border-insulin"
   ></div>{/snippet}

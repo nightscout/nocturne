@@ -128,7 +128,7 @@
         <div class="space-y-1">
           <div class="flex justify-between text-xs text-muted-foreground">
             <span class="flex items-center gap-1">
-              <TextureSwatch texture="insulin-scheduled-basal" />
+              <TextureSwatch texture="insulin-scheduled-basal" color="var(--basal)" />
               Basal: {avgBasal?.toFixed(1) ?? "--"} U/day ({basalPct.toFixed(0)}%)
             </span>
             <span class="flex items-center gap-1">
@@ -138,7 +138,7 @@
           </div>
           <div class="flex h-4 rounded-full overflow-hidden">
             <div
-              class="w-(--share) bg-insulin-scheduled-basal {bgPatternClass('insulin-scheduled-basal')} transition-all"
+              class="w-(--share) bg-basal {bgPatternClass('insulin-scheduled-basal')} transition-all"
               style:--share="{basalPct}%"
             ></div>
             <div

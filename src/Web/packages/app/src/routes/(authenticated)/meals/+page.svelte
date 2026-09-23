@@ -25,6 +25,7 @@
   import MealBolusDialog from "$lib/components/meals/MealBolusDialog.svelte";
   import { coachmark } from "@nocturne/coach";
   import { localDayStart, localDayEnd } from "$lib/utils/timezone";
+  import { toIsoString } from "$lib/utils/api-date";
   import { Now } from "$lib/hooks/now.svelte";
 
   let dateRange = $state<{ from?: string; to?: string }>({});
@@ -67,8 +68,8 @@
   const addFood = useToastSubmission("Failed to add food");
 
   const queryParams = $derived({
-    from: dateRange.from ? localDayStart(dateRange.from).getTime() : undefined,
-    to: dateRange.to ? localDayEnd(dateRange.to).getTime() : undefined,
+    from: dateRange.from ? (toIsoString(localDayStart(dateRange.from)) ?? undefined) : undefined,
+    to: dateRange.to ? (toIsoString(localDayEnd(dateRange.to)) ?? undefined) : undefined,
     attributed: filterMode === "unattributed" ? false : undefined,
   });
 
@@ -80,8 +81,8 @@
   // uses the viewer's local date rather than UTC.
   const now = new Now();
   const suggestionsQueryParams = $derived({
-    from: dateRange.from ?? now.localDate,
-    to: dateRange.to ?? now.localDate,
+    from: toIsoString(localDayStart(dateRange.from ?? now.localDate)) ?? undefined,
+    to: toIsoString(localDayEnd(dateRange.to ?? now.localDate)) ?? undefined,
   });
   const suggestionsQuery = $derived(
     getMealMatchingSuggestions(suggestionsQueryParams)

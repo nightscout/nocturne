@@ -11,6 +11,9 @@ using OpenApi.Remote.Attributes;
 
 namespace Nocturne.API.Controllers.V4.Platform;
 
+/// <summary>How many screenshots a support submission may carry, and how large.</summary>
+internal sealed record SupportImageLimits(int MaxCount, long MaxBytesEach, long MaxTotalBytes);
+
 [ApiController]
 [Authorize]
 [Route("api/v4/support")]
@@ -23,10 +26,26 @@ public class SupportController(
 {
     private static readonly HashSet<string> ValidTemplates = ["bug", "feature", "data-issue", "account"];
     private static readonly HashSet<string> AllowedImageTypes = ["image/png", "image/jpeg", "image/webp", "image/gif"];
-    private const int MaxImages = 4;
-    private const long MaxImageBytes = 10 * 1024 * 1024; // 10 MB per image
-    private const long MaxTotalBytes = 40 * 1024 * 1024; // 40 MB total
+    private const int MaxTitleLength = 256;
+    private const long MaxTotalBytes = 40 * 1024 * 1024;
 
+    private const long MaxRelayTotalBytes = 10 * 1024 * 1024;
+
+    // Multipart framing and the text fields ride on top of the images.
+    private const long MaxRelayRequestBytes = MaxRelayTotalBytes + 1024 * 1024;
+
+    internal static readonly SupportImageLimits DirectImageLimits = new(4, 10 * 1024 * 1024, MaxTotalBytes);
+
+    // The relay is anonymous and every image it accepts is a commit to the assets branch on the
+    // operator's PAT, so it takes half the bytes per image and a quarter in total. The count
+    // matches the form's, so a reporter on a relaying instance loses only headroom; 5 MB still
+    // admits a full-resolution phone or desktop screenshot.
+    internal static readonly SupportImageLimits RelayImageLimits = new(4, 5 * 1024 * 1024, MaxRelayTotalBytes);
+
+    /// <remarks>
+    /// Validated against <see cref="RelayImageLimits"/> when this instance will relay, so a
+    /// submission the relay would refuse is refused here instead of after the upload.
+    /// </remarks>
     // No [RemoteCommand]: command arguments are devalue-serialised and cannot
     // carry File objects. The frontend submits through the hand-maintained
     // form remote in support.remote.ts, which models the multipart upload.
@@ -49,30 +68,57 @@ public class SupportController(
         [FromForm] List<IFormFile>? images,
         CancellationToken ct)
     {
-        if (!ValidTemplates.Contains(template))
-            return Problem(detail: $"Invalid template: {template}", statusCode: 400, title: "Bad Request");
-
-        if (string.IsNullOrWhiteSpace(title) || title.Length > 256)
-            return Problem(detail: "Title is required and must be under 256 characters", statusCode: 400, title: "Bad Request");
-
-        if (string.IsNullOrWhiteSpace(description))
-            return Problem(detail: "Description is required", statusCode: 400, title: "Bad Request");
-
-        if (string.IsNullOrWhiteSpace(diagnosticInfo))
-            return Problem(detail: "Diagnostic info is required", statusCode: 400, title: "Bad Request");
-
+        var request = new CreateIssueRequest
+        {
+            Template = template,
+            Title = title,
+            Description = description,
+            StepsToReproduce = stepsToReproduce,
+            ExpectedBehavior = expectedBehavior,
+            ActualBehavior = actualBehavior,
+            CgmSource = cgmSource,
+            TimeRange = timeRange,
+            DiagnosticInfo = diagnosticInfo,
+        };
         images ??= [];
 
-        if (images.Count > MaxImages)
-            return Problem(detail: $"Maximum {MaxImages} images allowed", statusCode: 400, title: "Bad Request");
+        var relay = !githubService.HasLocalPat;
+        var validationError = await ValidateAsync(
+            request, images, relay ? RelayImageLimits : DirectImageLimits, ct);
+        if (validationError is not null)
+            return validationError;
 
-        foreach (var image in images)
-        {
-            if (image.Length > MaxImageBytes)
-                return Problem(detail: $"Image {image.FileName} exceeds 10 MB limit", statusCode: 400, title: "Bad Request");
-            if (!AllowedImageTypes.Contains(image.ContentType))
-                return Problem(detail: $"Image {image.FileName} must be PNG, JPEG, WebP, or GIF", statusCode: 400, title: "Bad Request");
-        }
+        return relay
+            ? await SubmitAsync(() => RelayAsync(request, images, ct), "support issue (relayed)")
+            : await SubmitAsync(() => CreateLocallyAsync(request, images, ct), "support issue");
+    }
+
+    /// <summary>
+    /// Anonymous ingress for issues relayed from instances without their own PAT (the
+    /// nocturne.run side of the relay). The relayed payload is re-validated here, against the
+    /// lower <see cref="RelayImageLimits"/>; the rate limit is shared with the authenticated
+    /// endpoint.
+    /// </summary>
+    [HttpPost("relay")]
+    [AllowAnonymous]
+    [EnableRateLimiting("support-issues")]
+    [RequestSizeLimit(MaxRelayRequestBytes)]
+    [ApiExplorerSettings(IgnoreApi = true)]
+    public async Task<ActionResult<CreateIssueResponse>> AcceptRelayedIssue(
+        [FromForm] string template,
+        [FromForm] string title,
+        [FromForm] string description,
+        [FromForm] string? stepsToReproduce,
+        [FromForm] string? expectedBehavior,
+        [FromForm] string? actualBehavior,
+        [FromForm] string? cgmSource,
+        [FromForm] string? timeRange,
+        [FromForm] string diagnosticInfo,
+        [FromForm] List<IFormFile>? images,
+        CancellationToken ct)
+    {
+        if (!githubService.AcceptsRelay)
+            return NotFound();
 
         var request = new CreateIssueRequest
         {
@@ -86,56 +132,136 @@ public class SupportController(
             TimeRange = timeRange,
             DiagnosticInfo = diagnosticInfo,
         };
+        images ??= [];
+
+        var validationError = await ValidateAsync(request, images, RelayImageLimits, ct);
+        if (validationError is not null)
+            return validationError;
+
+        return await SubmitAsync(() => CreateLocallyAsync(request, images, ct), "relayed support issue");
+    }
+
+    /// <summary>
+    /// The one validation both ingresses run, so a relayed submission is held to everything a
+    /// direct one is.
+    /// </summary>
+    internal async Task<ObjectResult?> ValidateAsync(
+        CreateIssueRequest request,
+        IReadOnlyList<IFormFile> images,
+        SupportImageLimits limits,
+        CancellationToken ct)
+    {
+        if (request.Template is null || !ValidTemplates.Contains(request.Template))
+            return Invalid($"Invalid template: {request.Template}");
+
+        if (string.IsNullOrWhiteSpace(request.Title) || request.Title.Length > MaxTitleLength)
+            return Invalid($"Title is required and must be under {MaxTitleLength} characters");
+
+        if (string.IsNullOrWhiteSpace(request.Description))
+            return Invalid("Description is required");
+
+        if (string.IsNullOrWhiteSpace(request.DiagnosticInfo))
+            return Invalid("Diagnostic info is required");
+
+        if (images.Count > limits.MaxCount)
+            return Invalid($"Maximum {limits.MaxCount} images allowed");
+
+        foreach (var image in images)
+        {
+            if (image.Length > limits.MaxBytesEach)
+                return Invalid($"Image {image.FileName} exceeds {limits.MaxBytesEach / (1024 * 1024)} MB limit");
+            if (!AllowedImageTypes.Contains(image.ContentType)
+                || !await HasSignatureOfAsync(image, ct))
+                return Invalid($"Image {image.FileName} must be PNG, JPEG, WebP, or GIF");
+        }
+
+        if (images.Sum(i => i.Length) > limits.MaxTotalBytes)
+            return Invalid($"Images exceed {limits.MaxTotalBytes / (1024 * 1024)} MB in total");
+
+        return null;
+    }
+
+    /// <summary>
+    /// Whether the file's leading bytes are those of its declared image type. The content type is
+    /// the caller's claim, and whatever passes is committed to a public repository and served from
+    /// raw.githubusercontent.com.
+    /// </summary>
+    private static async Task<bool> HasSignatureOfAsync(IFormFile image, CancellationToken ct)
+    {
+        var header = new byte[12];
+        await using var stream = image.OpenReadStream();
+        var read = await stream.ReadAtLeastAsync(header, header.Length, throwOnEndOfStream: false, ct);
+        var bytes = header.AsSpan(0, read);
+
+        return image.ContentType switch
+        {
+            "image/png" => bytes.StartsWith((ReadOnlySpan<byte>)[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]),
+            "image/jpeg" => bytes.StartsWith((ReadOnlySpan<byte>)[0xFF, 0xD8, 0xFF]),
+            "image/gif" => bytes.StartsWith("GIF87a"u8) || bytes.StartsWith("GIF89a"u8),
+            "image/webp" => read == 12 && bytes[..4].SequenceEqual("RIFF"u8) && bytes[8..].SequenceEqual("WEBP"u8),
+            _ => false,
+        };
+    }
+
+    private ObjectResult Invalid(string detail) =>
+        Problem(detail: detail, statusCode: 400, title: "Bad Request");
+
+    private async Task<CreateIssueResponse> CreateLocallyAsync(
+        CreateIssueRequest request, IReadOnlyList<IFormFile> images, CancellationToken ct)
+    {
+        var imageData = images
+            .Select(f => (f.FileName, f.ContentType, (Stream)f.OpenReadStream()))
+            .ToList();
 
         try
         {
-            CreateIssueResponse result;
+            return await githubService.CreateIssueAsync(request, imageData, ct);
+        }
+        finally
+        {
+            foreach (var (_, _, stream) in imageData)
+                await stream.DisposeAsync();
+        }
+    }
 
-            if (githubService.HasLocalPat)
-            {
-                var imageData = images
-                    .Select(f => (f.FileName, f.ContentType, (Stream)f.OpenReadStream()))
-                    .ToList();
+    private async Task<CreateIssueResponse> RelayAsync(
+        CreateIssueRequest request, IReadOnlyList<IFormFile> images, CancellationToken ct)
+    {
+        using var content = new MultipartFormDataContent();
+        content.Add(new StringContent(request.Template), "template");
+        content.Add(new StringContent(request.Title), "title");
+        content.Add(new StringContent(request.Description), "description");
+        if (request.StepsToReproduce != null) content.Add(new StringContent(request.StepsToReproduce), "stepsToReproduce");
+        if (request.ExpectedBehavior != null) content.Add(new StringContent(request.ExpectedBehavior), "expectedBehavior");
+        if (request.ActualBehavior != null) content.Add(new StringContent(request.ActualBehavior), "actualBehavior");
+        if (request.CgmSource != null) content.Add(new StringContent(request.CgmSource), "cgmSource");
+        if (request.TimeRange != null) content.Add(new StringContent(request.TimeRange), "timeRange");
+        content.Add(new StringContent(request.DiagnosticInfo), "diagnosticInfo");
 
-                try
-                {
-                    result = await githubService.CreateIssueAsync(request, imageData, ct);
-                }
-                finally
-                {
-                    foreach (var (_, _, stream) in imageData)
-                        await stream.DisposeAsync();
-                }
-            }
-            else
-            {
-                // Relay to nocturne.run
-                using var content = new MultipartFormDataContent();
-                content.Add(new StringContent(template), "template");
-                content.Add(new StringContent(title), "title");
-                content.Add(new StringContent(description), "description");
-                if (stepsToReproduce != null) content.Add(new StringContent(stepsToReproduce), "stepsToReproduce");
-                if (expectedBehavior != null) content.Add(new StringContent(expectedBehavior), "expectedBehavior");
-                if (actualBehavior != null) content.Add(new StringContent(actualBehavior), "actualBehavior");
-                if (cgmSource != null) content.Add(new StringContent(cgmSource), "cgmSource");
-                if (timeRange != null) content.Add(new StringContent(timeRange), "timeRange");
-                content.Add(new StringContent(diagnosticInfo), "diagnosticInfo");
+        foreach (var image in images)
+        {
+            var streamContent = new StreamContent(image.OpenReadStream());
+            streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(image.ContentType);
+            content.Add(streamContent, "images", image.FileName);
+        }
 
-                foreach (var image in images)
-                {
-                    var streamContent = new StreamContent(image.OpenReadStream());
-                    streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(image.ContentType);
-                    content.Add(streamContent, "images", image.FileName);
-                }
+        return await githubService.RelayAsync(content, ct);
+    }
 
-                result = await githubService.RelayAsync(content, ct);
-            }
-
-            return StatusCode(201, result);
+    /// <summary>
+    /// One error policy for both ingresses. The 502 is what sends the form to its fallback
+    /// (a pre-filled GitHub link), so every upstream failure has to surface as one.
+    /// </summary>
+    private async Task<ActionResult<CreateIssueResponse>> SubmitAsync(
+        Func<Task<CreateIssueResponse>> submit, string logContext)
+    {
+        try
+        {
+            return StatusCode(201, await submit());
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to create GitHub issue");
+            logger.LogError(ex, "Failed to create {LogContext}", logContext);
             return Problem(detail: "Failed to create issue. Try again or report directly on GitHub.",
                 statusCode: 502, title: "Bad Gateway");
         }

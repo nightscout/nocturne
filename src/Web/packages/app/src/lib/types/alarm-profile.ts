@@ -107,20 +107,6 @@ export interface AlarmReraiseSettings {
   escalationVolumeStep: number;
 }
 
-/** Smart snooze settings - auto-extend snooze when trending in right direction */
-export interface SmartSnoozeSettings {
-  /** Whether smart snooze is enabled */
-  enabled: boolean;
-  /** For high alarms: auto-extend snooze if glucose is falling. For low alarms: auto-extend snooze if glucose is rising */
-  extendWhenTrendingCorrect: boolean;
-  /** Minimum delta (mg/dL per 5 min) to consider "trending correct" */
-  minDeltaThreshold: number;
-  /** Extension duration in minutes when trending correct */
-  extensionMinutes: number;
-  /** Maximum total snooze time with extensions */
-  maxTotalMinutes: number;
-}
-
 /** A time range for scheduling */
 export interface TimeRange {
   /** Start time in HH:mm format (24-hour) */
@@ -174,8 +160,6 @@ export interface AlarmProfileConfiguration {
   snooze: AlarmSnoozeSettings;
   /** Re-raise/repeat configuration for unacknowledged alarms */
   reraise: AlarmReraiseSettings;
-  /** Smart snooze - auto-extend snooze if glucose is trending in the right direction */
-  smartSnooze: SmartSnoozeSettings;
   /** Time-of-day schedule - when this alarm is active */
   schedule: AlarmScheduleSettings;
   /** Priority level for this alarm (affects notification behavior) */
@@ -436,13 +420,6 @@ export function createDefaultAlarmProfile(
       intervalMinutes: defaults.reraiseMinutes,
       escalate: type === "UrgentHigh" || type === "UrgentLow",
       escalationVolumeStep: 20,
-    },
-    smartSnooze: {
-      enabled: false,
-      extendWhenTrendingCorrect: true,
-      minDeltaThreshold: 5,
-      extensionMinutes: 15,
-      maxTotalMinutes: 60,
     },
     schedule: {
       enabled: false,

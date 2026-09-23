@@ -74,7 +74,7 @@
       {@const segmentData = [
         { key: "Bolus", value: bolus, color: "var(--iob-bolus)" },
         { key: "Auto", value: auto, color: "var(--iob-temporary)" },
-        { key: "Basal", value: basal, color: "var(--iob-basal)" },
+        { key: "Basal", value: basal, color: "var(--basal)" },
       ].filter(s => s.value > 0)}
 
       <div class="flex items-center justify-center">
@@ -124,7 +124,7 @@
         {/if}
         <span class="flex items-center gap-1.5">
           <span
-            class="w-2 h-2 rounded-full bg-iob-basal"
+            class="w-2 h-2 rounded-full bg-basal"
           ></span>
           Basal {basal.toFixed(1)}U
         </span>

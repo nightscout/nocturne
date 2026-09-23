@@ -370,6 +370,19 @@ contexts; window resolution, reading fetch, and fact-timeline capture stay host-
   snooze *conditions* are evaluated through the normal node dispatch with
   `CurrentPath = "snooze"`, wrapped as `composite{and, [conditions]}`; that evaluation
   goes through the crate
+  - The snooze context's glucose facts (`LatestValue`, `LatestTimestamp`, `TrendRate`) come
+    from the newest canonical reading only when it is at most 11 minutes old; otherwise they
+    are null, so `threshold`, `trend` and `glucose_bucket` leaves read false and the snooze
+    clears.
+  - The trend fallback (smart snooze on, no conditions) applies to `threshold` rules only
+    and compares the newest reading (at most 11 minutes old) with the readings closest to
+    5 and 10 minutes before it (each within ±2.5 minutes; both must exist). Extend when,
+    in mg/dL and strictly greater: `below` — rise over 5 min > 4 or over 10 min > 10;
+    `above` — fall over 5 min > 1 or over 10 min > 2 (xDrip's `trendingToAlertEnd`, on
+    wall-clock spans rather than reading counts). Every other case clears. A second host
+    (Prelude) must implement the same predicate; `SmartSnoozeTrendGate` is the reference.
+  - `client_configuration.snooze.maxCount` (default 3) caps one count shared by manual
+    snoozes and automatic extensions.
 - Rule CRUD, validation, `RuleReferenceResolver.FilterEvaluable`, topo-sort inputs
 
 ## 10. Known anomalies index

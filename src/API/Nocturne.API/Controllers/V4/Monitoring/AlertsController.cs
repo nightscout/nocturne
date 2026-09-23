@@ -1,11 +1,11 @@
 using System.Security.Claims;
-using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
+using Nocturne.API.Services.Alerts;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Alerts;
@@ -313,16 +313,7 @@ public class AlertsController : ControllerBase
 
         var rule = instance.AlertExcursion?.AlertRule;
 
-        using var doc = JsonDocument.Parse(rule?.ClientConfiguration ?? "{}");
-        var snoozeSection = doc.RootElement.TryGetProperty("snooze", out var snooze) ? snooze : default;
-
-        var maxCount = 5;
-        if (snoozeSection.ValueKind != JsonValueKind.Undefined
-            && snoozeSection.TryGetProperty("maxCount", out var maxCountElement)
-            && maxCountElement.ValueKind == JsonValueKind.Number)
-        {
-            maxCount = maxCountElement.GetInt32();
-        }
+        var maxCount = SmartSnoozeConfig.Parse(rule?.ClientConfiguration).MaxCount;
 
         if (instance.SnoozeCount >= maxCount)
             return Problem(detail: "Maximum snooze count reached", statusCode: 409, title: "Conflict");

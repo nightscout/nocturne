@@ -40,6 +40,7 @@
   --insulin-temp-basal: rgba(64, 187, 170, 0.4); /* AAPS accent teal */
   --insulin-manual-temp-basal: rgba(51, 120, 197, 0.9);
   --insulin-scheduled-basal: rgb(81, 145, 210);
+  --basal: rgb(81, 145, 210);
   --insulin-additional-basal: rgb(64, 187, 170); /* AAPS accent teal */
 
   /* Carbohydrates - warm orange */

@@ -23,6 +23,7 @@
   import AuditMutationsTable from "$lib/components/audit/AuditMutationsTable.svelte";
   import AuditReadsTable from "$lib/components/audit/AuditReadsTable.svelte";
   import { localDayStart, localDayEnd } from "$lib/utils/timezone";
+  import { toIsoString } from "$lib/utils/api-date";
 
   // Permissions
   const effectivePermissions: string[] = $derived(
@@ -99,10 +100,12 @@
   let mTo = $state(defaultTo);
   let mGlobalFilter = $state("");
 
+  // A cleared date input names no instant; "" fails the query's validation, as
+  // an Invalid Date did, rather than throwing from toISOString inside the derived.
   const mutationsQuery = $derived(
     getMutationAuditLog({
-      from: localDayStart(mFrom),
-      to: localDayEnd(mTo),
+      from: toIsoString(localDayStart(mFrom)) ?? "",
+      to: toIsoString(localDayEnd(mTo)) ?? "",
       limit: ROW_LIMIT,
       offset: 0,
       sort: "created_at_desc",
@@ -119,8 +122,8 @@
 
   const readsQuery = $derived(
     getReadAccessAuditLog({
-      from: localDayStart(rFrom),
-      to: localDayEnd(rTo),
+      from: toIsoString(localDayStart(rFrom)) ?? "",
+      to: toIsoString(localDayEnd(rTo)) ?? "",
       limit: ROW_LIMIT,
       offset: 0,
       sort: "created_at_desc",

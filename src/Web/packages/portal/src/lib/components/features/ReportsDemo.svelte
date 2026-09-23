@@ -269,7 +269,7 @@
                     <path d="M0,140 L60,140 L60,100 L120,100 L120,140 L180,140 L180,80 L240,80 L240,130 L300,130 L300,110 L360,110 L360,140 L400,140"
                           stroke={INSULIN} stroke-width="2" fill="none"/>
                     <path d="M0,140 L60,140 L60,100 L120,100 L120,140 L180,140 L180,80 L240,80 L240,130 L300,130 L300,110 L360,110 L360,140 L400,140 L400,170 L0,170 Z"
-                          class="fill-insulin-scheduled-basal/18"/>
+                          class="fill-basal/18"/>
                     <path d="M0,150 L60,150 L60,118 L120,118 L120,146 L180,146 L180,96 L240,96 L240,138 L300,138 L300,124 L360,124 L360,150 L400,150"
                           stroke={INK_SOFT} stroke-width="1.5" fill="none" stroke-dasharray="4 3"/>
                     <text x="16" y="24" fill={INK} font-size="13" font-weight="700" font-family={SANS}>Scheduled basal vs what was delivered</text>

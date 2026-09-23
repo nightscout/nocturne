@@ -76,7 +76,7 @@
       basal.push({
         key: "basal",
         value: (d) => d.basal ?? 0,
-        color: "var(--insulin-scheduled-basal)",
+        color: "var(--basal)",
         label: "Basal",
         texture: "insulin-scheduled-basal",
       });
@@ -102,7 +102,7 @@
           {
             key: "basal",
             value: (d: HourlyInsulinDeliveryPoint) => d.basal ?? 0,
-            color: "var(--chart-1)",
+            color: "var(--basal)",
             label: "Basal Insulin",
           },
         ]
