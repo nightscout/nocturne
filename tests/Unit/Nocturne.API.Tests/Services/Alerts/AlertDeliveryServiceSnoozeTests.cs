@@ -29,7 +29,7 @@ namespace Nocturne.API.Tests.Services.Alerts;
 /// provider call.
 /// </summary>
 [Trait("Category", "Unit")]
-public class AlertDeliveryServiceSnoozeTests
+public class AlertDeliveryServiceSnoozeTests : IDisposable
 {
     private static readonly Guid Tenant = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
 
@@ -48,6 +48,12 @@ public class AlertDeliveryServiceSnoozeTests
     private readonly Mock<IInAppNotificationService> _inApp = new();
     private readonly Mock<IHttpClientFactory> _httpClientFactory = new();
     private readonly Mock<IHubContext<HomeAssistantHub>> _haHub = new();
+    private readonly List<ServiceProvider> _providers = [];
+
+    public void Dispose()
+    {
+        foreach (var provider in _providers) provider.Dispose();
+    }
 
     private AlertDeliveryService CreateService()
     {
@@ -58,7 +64,7 @@ public class AlertDeliveryServiceSnoozeTests
         services.AddSingleton(_haHub.Object);
         services.AddSingleton<IConfiguration>(new ConfigurationBuilder().Build());
         services.AddSingleton(Mock.Of<ITenantAccessor>(a => a.TenantId == Tenant));
-        services.AddSingleton<IMemoryCache>(new MemoryCache(new MemoryCacheOptions()));
+        services.AddSingleton<IMemoryCache>(_ => new MemoryCache(new MemoryCacheOptions()));
         services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
         services.AddSingleton<WebPushProvider>();
         services.AddSingleton<InAppProvider>();
@@ -66,11 +72,14 @@ public class AlertDeliveryServiceSnoozeTests
         services.AddSingleton<ChatBotProvider>();
         services.AddSingleton<HomeAssistantProvider>();
 
+        var provider = services.BuildServiceProvider();
+        _providers.Add(provider);
+
         return new AlertDeliveryService(
             _factory,
             Mock.Of<ITenantAccessor>(a => a.TenantId == Tenant),
             _broadcast.Object,
-            services.BuildServiceProvider(),
+            provider,
             NullLogger<AlertDeliveryService>.Instance);
     }
 
