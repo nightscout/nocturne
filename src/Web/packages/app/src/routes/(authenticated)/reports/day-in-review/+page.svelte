@@ -536,7 +536,7 @@
                   —
                 </Table.Cell>
                 <Table.Cell class="print:hidden">
-                  <Button variant="ghost" size="icon" class="h-8 w-8">
+                  <Button variant="ghost" size="icon-sm">
                     <Edit class="h-4 w-4" />
                   </Button>
                 </Table.Cell>

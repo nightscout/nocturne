@@ -160,8 +160,6 @@
             {#if notification.alertRuleId}
               <Button
                 variant="ghost-muted"
-                size="sm"
-                class="h-9"
                 href="/alerts/{notification.alertRuleId}"
                 target="_blank"
                 rel="noopener"

@@ -154,7 +154,8 @@
                     bind:value={editLabel}
                     placeholder="Device name"
                     maxlength={255}
-                    class="h-8 max-w-xs"
+                    size="sm"
+                    class="max-w-xs"
                     disabled={isSaving === device.id}
                     aria-label="Device name"
                   />

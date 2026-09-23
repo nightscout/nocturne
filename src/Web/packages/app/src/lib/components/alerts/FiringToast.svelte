@@ -208,8 +208,7 @@
               <Button
                 type="button"
                 variant="ghost"
-                size="icon"
-                class="h-7 w-7"
+                size="icon-xs"
                 onclick={() => dismiss(a.id ?? "")}
                 aria-label="Close this notification without acknowledging"
               >

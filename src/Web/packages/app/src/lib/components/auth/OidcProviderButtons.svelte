@@ -33,7 +33,8 @@
   {#each providers as provider}
     <Button
       variant="outline"
-      class="w-full h-11 relative"
+      size="lg"
+      class="w-full relative"
       style={getButtonStyle(provider.buttonColor)}
       {disabled}
       onclick={() => provider.id && onLogin(provider.id)}

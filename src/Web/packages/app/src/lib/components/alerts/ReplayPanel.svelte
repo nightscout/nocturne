@@ -516,7 +516,8 @@
           <Button
             {...props}
             variant="outline"
-            class="h-8 justify-start font-normal"
+            size="sm"
+            class="justify-start font-normal"
           >
             <CalendarIcon class="h-3.5 w-3.5 text-muted-foreground" />
             {dateLabel(selectedDate)}
@@ -574,7 +575,8 @@
       <Button
         variant="outline"
         href={dayInReviewHref}
-        class="ml-auto h-8"
+        size="sm"
+        class="ml-auto"
         title="Open Day in Review for this day"
       >
         <CalendarDays class="h-3.5 w-3.5 text-muted-foreground" />

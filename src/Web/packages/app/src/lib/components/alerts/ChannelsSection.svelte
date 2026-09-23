@@ -143,8 +143,7 @@
           <Button
             type="button"
             variant="ghost"
-            size="icon"
-            class="h-7 w-7"
+            size="icon-xs"
             aria-label="Remove channel"
             onclick={() => removeChannel(i)}
           >
@@ -166,7 +165,7 @@
               <Input
                 id="channel-dest-{i}"
                 type="text"
-                class="h-8"
+                size="sm"
                 placeholder={opt.destinationPlaceholder}
                 aria-invalid={error != null}
                 aria-describedby={error != null
@@ -200,7 +199,7 @@
                   id="channel-secret-{i}"
                   type="password"
                   autocomplete="off"
-                  class="h-8"
+                  size="sm"
                   placeholder={ch.hasSecret ? "Saved — type to replace" : "Shared with your receiver"}
                   aria-describedby="channel-secret-helper-{i}"
                   value={ch.secret ?? ""}
@@ -237,7 +236,7 @@
             <Input
               id="channel-label-{i}"
               type="text"
-              class="h-8"
+              size="sm"
               placeholder="Family channel, work phone…"
               value={ch.destinationLabel ?? ""}
               oninput={(e: Event & { currentTarget: HTMLInputElement }) => {

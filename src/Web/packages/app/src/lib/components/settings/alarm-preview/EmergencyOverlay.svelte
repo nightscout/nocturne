@@ -55,8 +55,8 @@
             {#if contact.phone}
               <Button
                 variant="default"
-                size="lg"
-                class="w-full h-14 text-lg justify-start"
+                size="xl"
+                class="w-full justify-start"
                 href="tel:{contact.phone}"
               >
                 <Phone class="h-6 w-6 mr-3" />
@@ -66,8 +66,8 @@
             {#if contact.email}
               <Button
                 variant="secondary"
-                size="lg"
-                class="w-full h-14 text-lg justify-start"
+                size="xl"
+                class="w-full justify-start"
                 href="mailto:{contact.email}"
               >
                 <Mail class="h-6 w-6 mr-3" />

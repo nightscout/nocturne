@@ -132,8 +132,8 @@
         <Button
           {...props}
           variant="ghost"
-          size="icon"
-          class="relative h-8 w-8"
+          size="icon-sm"
+          class="relative"
           aria-label="Notifications"
         >
           <Bell class="h-4 w-4" />
@@ -227,8 +227,8 @@
   {#snippet failed()}
     <Button
       variant="ghost"
-      size="icon"
-      class="relative h-8 w-8"
+      size="icon-sm"
+      class="relative"
       aria-label="Notifications unavailable"
       disabled
     >

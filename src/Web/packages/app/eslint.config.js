@@ -14,6 +14,11 @@ import noImperativeRemoteQuery from "./tools/eslint/no-imperative-remote-query.j
 const BUTTON_VARIANT_HINT =
   "\"{{className}}\" is not allowed on <Button>: it owns its {{category}}. Use a variant: ghost-muted (quiet secondary action), ghost-destructive (quiet remove), outline-destructive (bordered remove), dashed (add-item placeholder), or default, secondary, outline, ghost, link, destructive.";
 
+// Width stays layout the caller owns; height comes only from a control's size.
+const HEIGHT_CLASSES = ["h-*", "size-*", "min-h-*", "max-h-*"];
+const CONTROL_HEIGHT_HINT =
+  "\"{{className}}\" is not allowed on <{{component}}>: its height comes from size. Use size=\"xs\" (h-7), \"sm\" (h-8) or the default (h-9); each matches the same size on Button, Input, SelectTrigger and Toggle.";
+
 export default ts.config(
   js.configs.recommended,
   ...ts.configs.recommended,
@@ -62,7 +67,9 @@ export default ts.config(
           {
             pattern: "^(Input|SelectTrigger)$",
             allow: ["layout", "tabular-nums", "font-mono"],
+            deny: HEIGHT_CLASSES,
             message: {
+              layout: CONTROL_HEIGHT_HINT,
               spacing: 'Use size="xs" or "sm" on <{{component}}>; each matches the same size on Input, SelectTrigger and ToggleGroup.',
               typography: 'Use size="xs" or "sm" on <{{component}}>; Input also has variant="code" for device codes.',
               color: "Mark an invalid field with aria-invalid, which <{{component}}> already styles."
@@ -80,20 +87,29 @@ export default ts.config(
           {
             pattern: "^ToggleGroup(Item)?$",
             allow: ["layout"],
-            message: 'Set it on <ToggleGroup>: size="xs" for a compact row, variant="segmented" for a view switcher, spacing={1} for separate chips.'
+            deny: HEIGHT_CLASSES,
+            message: 'Set it on <ToggleGroup>: size="xs" (h-7) or "sm" (h-8) for a compact row, variant="segmented" for a view switcher, spacing={1} for separate chips.'
+          },
+          {
+            pattern: "^Toggle$",
+            allow: ["layout"],
+            deny: HEIGHT_CLASSES,
+            message: { layout: CONTROL_HEIGHT_HINT }
           },
           // A placeholder takes the radius of the content it stands in for.
           { pattern: "^Skeleton$", allow: ["layout", "rounded"] },
           {
             pattern: "^Button$",
             allow: ["layout"],
+            deny: HEIGHT_CLASSES,
             message: {
+              layout: "\"{{className}}\" is not allowed on <Button>: its height comes from size. Use xs (h-7), sm (h-8), default (h-9), lg (h-10), xl (h-14, full-screen alarm actions), icon-xs (size-7), icon-sm (size-8), icon (size-9), or inline (h-auto, no padding) for a link in running text. Width stays yours.",
               color: BUTTON_VARIANT_HINT,
               shape: BUTTON_VARIANT_HINT,
               effects: BUTTON_VARIANT_HINT,
               motion: BUTTON_VARIANT_HINT,
-              spacing: "\"{{className}}\" is not allowed on <Button>: it owns its padding and gap. Use a size: xs (h-7, text-xs), sm, default, lg, icon-xs (size-7), icon-sm (size-8), icon (size-9), or inline (no padding, a link in running text). For space around it, use margin or gap on the parent.",
-              typography: "\"{{className}}\" is not allowed on <Button>: it owns its type. size=\"xs\" gives text-xs; every other size is text-sm font-medium."
+              spacing: "\"{{className}}\" is not allowed on <Button>: it owns its padding and gap. Use a size: xs (h-7, text-xs), sm, default, lg, xl (full-screen alarm actions), icon-xs (size-7), icon-sm (size-8), icon (size-9), or inline (no padding, a link in running text). For space around it, use margin or gap on the parent.",
+              typography: "\"{{className}}\" is not allowed on <Button>: it owns its type. size=\"xs\" gives text-xs and size=\"xl\" text-lg; every other size is text-sm font-medium."
             }
           },
           {

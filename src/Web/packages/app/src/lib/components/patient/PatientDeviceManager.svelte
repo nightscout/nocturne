@@ -360,8 +360,7 @@
               <div class="flex flex-col">
                 <Button
                   variant="ghost"
-                  size="icon"
-                  class="h-5 w-6"
+                  size="icon-xs"
                   aria-label="Move device up in priority"
                   disabled={i === 0}
                   onclick={() => moveDevice(i, -1)}
@@ -370,8 +369,7 @@
                 </Button>
                 <Button
                   variant="ghost"
-                  size="icon"
-                  class="h-5 w-6"
+                  size="icon-xs"
                   aria-label="Move device down in priority"
                   disabled={i === deviceList.items.length - 1}
                   onclick={() => moveDevice(i, 1)}

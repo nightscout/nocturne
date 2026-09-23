@@ -287,7 +287,7 @@
     <Button
       type="submit"
       data-testid="passkey-sign-in"
-      class="w-full h-12"
+      class="w-full"
       size="lg"
       disabled={isLoading || isRedirecting || !passkeysSupported}
     >
@@ -319,7 +319,8 @@
     {#each orderedProviders as provider}
       <Button
         variant="outline"
-        class="w-full h-11 relative"
+        size="lg"
+        class="w-full relative"
         style={getButtonStyle(provider.buttonColor)}
         disabled={isLoading || isRedirecting || !provider.id}
         onclick={() => provider.id && loginWithProvider(provider.id)}

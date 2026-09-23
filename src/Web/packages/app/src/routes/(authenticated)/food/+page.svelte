@@ -63,7 +63,7 @@
           bind:value={state.query}
         />
         {#if state.query}
-          <Button variant="ghost" size="icon" class="h-7 w-7" aria-label="Clear search" onclick={() => (state.query = '')}><X class="h-3 w-3" /></Button>
+          <Button variant="ghost" size="icon-xs" aria-label="Clear search" onclick={() => (state.query = '')}><X class="h-3 w-3" /></Button>
         {/if}
       </div>
 
@@ -83,7 +83,7 @@
       <Separator orientation="vertical" class="h-5" />
 
       <Select.Root type="single" bind:value={state.sort}>
-        <Select.Trigger data-testid="food-sort" size="xs" class="h-8">
+        <Select.Trigger data-testid="food-sort" size="sm">
           {state.sort === 'name' ? 'Sort: A → Z' : state.sort === 'carbs' ? 'Sort: Carbs (high)' : 'Sort: Recently added'}
         </Select.Trigger>
         <Select.Content>

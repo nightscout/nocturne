@@ -199,16 +199,17 @@
                 bind:value={newQty}
                 min={1}
                 step={1}
-                size="xs"
-                class="w-16 h-8"
+                size="sm"
+                class="w-16"
               />
               <Input
                 bind:value={newLabel}
                 placeholder="Item name..."
-                class="flex-1 h-8"
+                size="sm"
+                class="flex-1"
                 onkeydown={(e: KeyboardEvent) => e.key === "Enter" && addItem()}
               />
-              <Button size="sm" class="h-8" onclick={addItem} disabled={!newLabel.trim()}>
+              <Button size="sm" onclick={addItem} disabled={!newLabel.trim()}>
                 Add
               </Button>
               <Button
@@ -239,16 +240,17 @@
               bind:value={newQty}
               min={1}
               step={1}
-              size="xs"
-              class="w-16 h-8"
+              size="sm"
+              class="w-16"
             />
             <Input
               bind:value={newLabel}
               placeholder="Item name..."
-              class="flex-1 h-8"
+              size="sm"
+              class="flex-1"
               onkeydown={(e: KeyboardEvent) => e.key === "Enter" && addItem()}
             />
-            <Button size="sm" class="h-8" onclick={addItem} disabled={!newLabel.trim()}>
+            <Button size="sm" onclick={addItem} disabled={!newLabel.trim()}>
               Add
             </Button>
             <Button

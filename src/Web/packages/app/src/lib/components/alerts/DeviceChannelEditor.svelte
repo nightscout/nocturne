@@ -85,7 +85,8 @@
     >
       <Select.Trigger
         id="device-kind-{index}"
-        class="h-8 w-48"
+        size="sm"
+        class="w-48"
         data-testid="device-kind-trigger"
       >
         {selectedKind ? deviceKindLabel(selectedKind) : "Select a kind"}

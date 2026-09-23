@@ -231,8 +231,7 @@
   <div class="flex items-center justify-between mb-2">
     <Button
       variant="ghost"
-      size="icon"
-      class="h-7 w-7"
+      size="icon-xs"
       onclick={gotoPrevMonth}
       aria-label="Previous month"
     >
@@ -253,8 +252,7 @@
     </div>
     <Button
       variant="ghost"
-      size="icon"
-      class="h-7 w-7"
+      size="icon-xs"
       onclick={gotoNextMonth}
       disabled={!canGoNext}
       aria-label="Next month"

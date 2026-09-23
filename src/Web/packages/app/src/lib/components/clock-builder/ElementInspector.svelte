@@ -86,7 +86,7 @@
 >
   <div class="flex items-center justify-between">
     <Badge>{info?.name ?? element.type}</Badge>
-    <Button variant="ghost" size="icon" class="size-6" onclick={onClose}>
+    <Button variant="ghost" size="icon-xs" onclick={onClose}>
       <X class="size-4" />
     </Button>
   </div>

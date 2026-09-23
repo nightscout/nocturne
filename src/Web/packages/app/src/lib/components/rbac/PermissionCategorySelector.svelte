@@ -187,7 +187,7 @@
           }}
           disabled={readonly || roleGranted}
         >
-          <Select.Trigger class="w-40 h-8">
+          <Select.Trigger size="sm" class="w-40">
             {getLevelLabel(cat)}
           </Select.Trigger>
           <Select.Content>

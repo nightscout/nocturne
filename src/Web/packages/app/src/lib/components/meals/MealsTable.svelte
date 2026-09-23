@@ -216,8 +216,7 @@
                     {#if hasFoods}
                       <Button
                         variant="ghost"
-                        size="icon"
-                        class="h-6 w-6"
+                        size="icon-xs"
                         onclick={(e: MouseEvent) => {
                           e.stopPropagation();
                           onToggleRow(meal.carbIntakes?.[0]?.id ?? "");

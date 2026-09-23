@@ -63,7 +63,7 @@
       Carb Intake
     </div>
     {#if onRemove}
-      <Button variant="ghost" size="icon" class="h-6 w-6" onclick={onRemove}>
+      <Button variant="ghost" size="icon-xs" onclick={onRemove}>
         <X class="h-3.5 w-3.5" />
       </Button>
     {/if}
@@ -97,8 +97,9 @@
         <Button
           type="button"
           variant="dashed"
+          size="lg"
           onclick={() => (showAddFood = true)}
-          class="h-auto w-full justify-center p-4"
+          class="w-full"
         >
           <Plus class="mr-1.5 h-4 w-4" />
           Add a food to this carb entry
@@ -116,8 +117,7 @@
               <Button
                 type="button"
                 variant="ghost-destructive"
-                size="icon"
-                class="h-7 w-7"
+                size="icon-xs"
                 onclick={() => removePendingFood(index)}
               >
                 <Trash2 class="h-4 w-4" />
@@ -140,8 +140,9 @@
         <Button
           type="button"
           variant="dashed"
+          size="lg"
           onclick={() => (showAddFood = true)}
-          class="h-auto w-full justify-center p-3"
+          class="w-full"
         >
           <Plus class="mr-1.5 h-4 w-4" />
           Add food

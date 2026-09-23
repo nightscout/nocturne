@@ -86,8 +86,8 @@
         {#each profile.snooze.options as minutes}
           <Button
             variant="secondary"
-            size="lg"
-            class="h-16 text-lg font-semibold shadow-lg"
+            size="xl"
+            class="font-semibold shadow-lg"
             onclick={() => onSnooze(minutes)}
           >
             <Clock class="h-5 w-5 mr-2" />
@@ -99,8 +99,8 @@
 
     <Button
       variant="destructive"
-      size="lg"
-      class="h-16 text-xl font-bold border-2 border-white/20 shadow-xl"
+      size="xl"
+      class="text-xl font-bold border-2 border-white/20 shadow-xl"
       onclick={onDismiss}
     >
       Dismiss Alarm

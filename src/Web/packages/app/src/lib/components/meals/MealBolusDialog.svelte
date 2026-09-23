@@ -218,8 +218,7 @@
         <div class="flex items-center gap-2">
           <Button
             variant="ghost"
-            size="icon"
-            class="h-8 w-8"
+            size="icon-sm"
             onclick={returnToList}
           >
             <ArrowLeft class="h-4 w-4" />
@@ -292,16 +291,14 @@
                 <div class="flex gap-1">
                   <Button
                     variant="ghost"
-                    size="icon"
-                    class="h-8 w-8"
+                    size="icon-sm"
                     onclick={() => startEdit(bolus)}
                   >
                     <Pencil class="h-4 w-4" />
                   </Button>
                   <Button
                     variant="ghost"
-                    size="icon"
-                    class="h-8 w-8"
+                    size="icon-sm"
                     onclick={() => (deletingBolusId = bolus.id ?? null)}
                   >
                     <Trash2 class="h-4 w-4" />

@@ -90,7 +90,7 @@
             if (value) addSnoozeOption(parseInt(value));
           }}
         >
-          <SelectTrigger class="w-24 h-8">
+          <SelectTrigger size="sm" class="w-24">
             <span class="text-sm">+ Add</span>
           </SelectTrigger>
           <SelectContent>

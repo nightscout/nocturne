@@ -593,8 +593,8 @@
                   >
                     <Button
                       variant="ghost"
-                      size="sm"
-                      class="flex min-w-0 flex-1 items-center px-2 py-1.5 text-left text-xs h-auto"
+                      size="xs"
+                      class="flex min-w-0 flex-1 items-center text-left"
                       onclick={() => openReplay(h.startedAt)}
                       title="Replay this day in the simulator"
                     >

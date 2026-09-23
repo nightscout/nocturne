@@ -145,8 +145,9 @@
         <Button
           type="button"
           variant="dashed"
+          size="lg"
           onclick={() => (showAddFood = true)}
-          class="h-auto w-full justify-center p-4"
+          class="w-full"
         >
           <Plus class="mr-1.5 h-4 w-4" />
           Add a food to this carb entry
@@ -188,8 +189,9 @@
         <Button
           type="button"
           variant="dashed"
+          size="lg"
           onclick={() => (showAddFood = true)}
-          class="h-auto w-full justify-center p-3"
+          class="w-full"
         >
           <Plus class="mr-1.5 h-4 w-4" />
           Add food

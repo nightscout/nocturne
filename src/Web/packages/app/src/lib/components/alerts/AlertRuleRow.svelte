@@ -138,8 +138,7 @@
             {...props}
             type="button"
             variant="ghost"
-            size="icon"
-            class="h-8 w-8"
+            size="icon-sm"
             aria-label="Row actions"
           >
             <MoreHorizontal class="h-4 w-4" />

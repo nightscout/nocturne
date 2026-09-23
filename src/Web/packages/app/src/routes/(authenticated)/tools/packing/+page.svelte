@@ -86,7 +86,7 @@
         min={1}
         max={365}
         step={1}
-        class="w-20 h-9"
+        class="w-20"
       />
       <span class="text-sm text-muted-foreground">days</span>
     </div>

@@ -348,7 +348,7 @@
   <Button
     variant="ghost"
     size="sm"
-    class="-ml-3 h-8"
+    class="-ml-3"
     onclick={() => column.toggleSorting()}
   >
     {label}

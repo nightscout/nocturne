@@ -518,7 +518,7 @@
                 oninput={changeDim}
                 aria-invalid={invalidDim}
                 size="xs"
-                class="h-6 w-12 tabular-nums"
+                class="w-12 tabular-nums"
               />
               <span class="text-[10px] text-muted-foreground">%</span>
             </div>
@@ -628,7 +628,7 @@
                 oninput={changeDim}
                 aria-invalid={invalidDim}
                 size="xs"
-                class="h-6 w-12 tabular-nums"
+                class="w-12 tabular-nums"
               />
               <span class="text-[10px] text-muted-foreground">%</span>
             </div>

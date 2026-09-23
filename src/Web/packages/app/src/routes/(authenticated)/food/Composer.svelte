@@ -124,7 +124,7 @@
 		<span class="text-muted-foreground" style="font-size: 11px">
 			Tab through fields · Enter to save · ⌘+Enter to save and add another · Esc to close
 		</span>
-		<Button type="button" variant="ghost" size="icon" class="ml-auto h-8 w-8" onclick={onclose}><X class="h-3.5 w-3.5" /></Button>
+		<Button type="button" variant="ghost" size="icon-sm" class="ml-auto" onclick={onclose}><X class="h-3.5 w-3.5" /></Button>
 	</div>
 
 	<!-- Single-row form -->

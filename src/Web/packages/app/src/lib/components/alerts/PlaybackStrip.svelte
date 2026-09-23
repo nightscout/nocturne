@@ -77,8 +77,8 @@
 <div class="flex items-center gap-2">
   <Button
     variant="outline"
-    size="icon"
-    class="h-8 w-8 shrink-0"
+    size="icon-sm"
+    class="shrink-0"
     onclick={onPlayPause}
     aria-label={playing ? "Pause" : "Play"}
   >
@@ -90,8 +90,8 @@
   </Button>
   <Button
     variant="outline"
-    size="icon"
-    class="h-8 w-8 shrink-0"
+    size="icon-sm"
+    class="shrink-0"
     onclick={onReset}
     aria-label="Reset"
   >
@@ -103,7 +103,7 @@
     value={String(speed)}
     onValueChange={handleSpeedChange}
   >
-    <Select.Trigger size="xs" class="h-8 w-20" aria-label="Playback speed">
+    <Select.Trigger size="sm" class="w-20" aria-label="Playback speed">
       {speed}x
     </Select.Trigger>
     <Select.Content>

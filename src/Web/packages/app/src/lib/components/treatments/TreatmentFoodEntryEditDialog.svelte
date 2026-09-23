@@ -253,8 +253,7 @@
             <Button
               type="button"
               variant="ghost"
-              size="icon"
-              class="h-8 w-8"
+              size="icon-sm"
               onclick={openEditFood}
               disabled={isLoadingFood}
               title="Edit food"

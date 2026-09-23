@@ -233,7 +233,7 @@
 		<div class="flex items-center gap-3">
 			<!-- Category -->
 			<Select.Root type="single" name="category" value={draft.category ?? ''} onValueChange={(v) => { draft.category = v; }}>
-				<Select.Trigger aria-label="Category" class="h-9 w-45">
+				<Select.Trigger aria-label="Category" class="w-45">
 					{draft.category || 'No category'}
 				</Select.Trigger>
 				<Select.Content>
@@ -246,7 +246,7 @@
 
 			<!-- Subcategory -->
 			<Select.Root type="single" name="subcategory" value={draft.subcategory ?? ''} onValueChange={(v) => { draft.subcategory = v; }}>
-				<Select.Trigger aria-label="Subcategory" class="h-9 w-45">
+				<Select.Trigger aria-label="Subcategory" class="w-45">
 					{draft.subcategory || 'No subcategory'}
 				</Select.Trigger>
 				<Select.Content>

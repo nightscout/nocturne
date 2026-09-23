@@ -246,8 +246,8 @@
             <Button
               {...props}
               variant="ghost"
-              size="icon"
-              class="h-7 w-7 shrink-0"
+              size="icon-xs"
+              class="shrink-0"
               aria-label="Group actions"
             >
               <MoreHorizontal class="h-4 w-4" />
@@ -331,8 +331,8 @@
       <Button
         type="button"
         variant="ghost-destructive"
-        size="icon"
-        class="h-7 w-7 shrink-0 hidden group-hover/row:inline-flex"
+        size="icon-xs"
+        class="shrink-0 hidden group-hover/row:inline-flex"
         aria-label="Remove condition (shift+click shortcut)"
         onclick={() => removeChild(parent, index)}
       >
@@ -345,8 +345,8 @@
           <Button
             {...props}
             variant="ghost"
-            size="icon"
-            class="h-7 w-7 shrink-0"
+            size="icon-xs"
+            class="shrink-0"
             aria-label="Row actions"
           >
             <MoreHorizontal class="h-4 w-4" />
