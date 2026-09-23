@@ -5,7 +5,7 @@
     labelVariants,
     type LabelSize,
     type LabelVariant,
-  } from "./label-variants";
+  } from "./index.js";
 
   let {
     ref = $bindable(null),

@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { HTMLAttributes } from "svelte/elements";
   import { cn, type WithElementRef } from "../../../utils";
-  import { cardVariants, type CardVariant } from "./card-variants";
+  import { cardVariants, type CardVariant } from "./index.js";
 
   let {
     ref = $bindable(null),

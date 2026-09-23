@@ -9,11 +9,6 @@ import ts from 'typescript-eslint';
 
 import noImperativeRemoteQuery from "./tools/eslint/no-imperative-remote-query.js";
 
-// {{variants}} and {{sizes}} come out empty for Button: the lint does not follow
-// button.svelte to button-variants.ts. Keep these names in step with that file.
-const BUTTON_VARIANT_HINT =
-  "\"{{className}}\" is not allowed on <Button>: it owns its {{category}}. Use a variant: ghost-muted (quiet secondary action), ghost-destructive (quiet remove), outline-destructive (bordered remove), dashed (add-item placeholder), or default, secondary, outline, ghost, link, destructive.";
-
 // Width stays layout the caller owns; height comes only from a control's size.
 const HEIGHT_CLASSES = ["h-*", "size-*", "min-h-*", "max-h-*"];
 const CONTROL_HEIGHT_HINT =
@@ -105,20 +100,12 @@ export default ts.config(
             deny: HEIGHT_CLASSES,
             message: {
               layout: "\"{{className}}\" is not allowed on <Button>: its height comes from size. Use xs (h-7), sm (h-8), default (h-9), lg (h-10), xl (h-14, full-screen alarm actions), icon-xs (size-7), icon-sm (size-8), icon (size-9), or inline (h-auto, no padding) for a link in running text. Width stays yours.",
-              color: BUTTON_VARIANT_HINT,
-              shape: BUTTON_VARIANT_HINT,
-              effects: BUTTON_VARIANT_HINT,
-              motion: BUTTON_VARIANT_HINT,
-              spacing: "\"{{className}}\" is not allowed on <Button>: it owns its padding and gap. Use a size: xs (h-7, text-xs), sm, default, lg, xl (full-screen alarm actions), icon-xs (size-7), icon-sm (size-8), icon (size-9), or inline (no padding, a link in running text). For space around it, use margin or gap on the parent.",
               typography: "\"{{className}}\" is not allowed on <Button>: it owns its type. size=\"xs\" gives text-xs and size=\"xl\" text-lg; every other size is text-sm font-medium."
             }
           },
           {
             pattern: "^(Badge|Alert|Card)(\\.Root)?$",
-            allow: ["layout"],
-            message: {
-              color: "Pick a variant (destructive, success, warning, info) instead of colouring it by hand."
-            }
+            allow: ["layout"]
           }
         ]
       }],

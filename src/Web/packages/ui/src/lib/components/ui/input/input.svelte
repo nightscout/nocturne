@@ -8,7 +8,7 @@
     inputVariants,
     type InputSize,
     type InputVariant,
-  } from "./input-variants";
+  } from "./index.js";
 
   type InputType = Exclude<HTMLInputTypeAttribute, "file">;
 
