@@ -84,6 +84,12 @@ jobs:
           VITE_PLAUSIBLE_DOMAIN: ${{ vars.PLAUSIBLE_PORTAL_DOMAIN }}
         run: pnpm run build
 
+      # A build whose translations compile empty still succeeds and prerenders
+      # blank pages, so this guard fails the deploy before upload.
+      - name: Check built pages have copy
+        working-directory: src/Web/packages/portal
+        run: pnpm run check:build
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:

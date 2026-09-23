@@ -8,6 +8,7 @@
 		"screenshots:sync": "node scripts/sync-screenshots.mjs",
 		"dev": "node scripts/generate-sdk-manifest.mjs && node scripts/sync-screenshots.mjs && vite dev",
 		"build": "node scripts/generate-sdk-manifest.mjs && node scripts/sync-screenshots.mjs && vite build",
+		"check:build": "node scripts/check-build.mjs",
 		"preview": "vite preview",
 		"check": "node scripts/generate-sdk-manifest.mjs && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"test": "svelte-kit sync && vitest run",
