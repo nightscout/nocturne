@@ -11,10 +11,9 @@ export default [
     "shadcn/no-raw-colors": 76,
     "shadcn/no-inline-styles": 67,
     "svelte/no-navigation-without-resolve": 50,
-    "@typescript-eslint/consistent-type-assertions": 14,
+    "@typescript-eslint/consistent-type-assertions": 13,
     "svelte/require-each-key": 10,
     "svelte/prefer-svelte-reactivity": 2,
-    "svelte/no-at-html-tags": 1,
     "security/detect-non-literal-fs-filename": 1,
     "shadcn/no-restyle": 52,
     "no-restricted-syntax": 19

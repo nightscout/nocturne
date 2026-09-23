@@ -1,7 +1,7 @@
 <script lang="ts">
     import { getChangelog, type ChangelogRelease } from "$lib/data/portal";
     import { Button } from "@nocturne/ui/ui/button";
-    import { marked } from "marked";
+    import { renderReleaseMarkdown } from "$lib/utils/release-markdown";
     import {
         Tag,
         ExternalLink,
@@ -49,13 +49,6 @@
             loading = false;
             loadingMore = false;
         }
-    }
-
-    marked.use({ breaks: true });
-
-    function renderMarkdown(body: string | null): string {
-        if (!body) return "";
-        return marked.parse(body, { async: false }) as string;
     }
 
     function formatDate(dateStr: string | null): string {
@@ -196,7 +189,8 @@
 
                         {#if release.body}
                             <div class="prose prose-sm dark:prose-invert max-w-none">
-                                {@html renderMarkdown(release.body)}
+                                <!-- eslint-disable-next-line svelte/no-at-html-tags -- renderReleaseMarkdown escapes raw HTML and unsafe URLs -->
+                                {@html renderReleaseMarkdown(release.body)}
                             </div>
                         {/if}
 
