@@ -2,6 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { error } from "@sveltejs/kit";
+import { page as pageState } from "$app/state";
 import { ApiException, type SyncResult } from "$api-clients";
 import { SyncRequestSchema } from "$lib/api/generated/schemas";
 
@@ -52,6 +53,81 @@ const syncReturning = (result: SyncResult) => syncing(async () => result);
 describe("ConnectorDetailsDialog", () => {
   beforeEach(() => {
     sentRequest = undefined;
+    pageState.data = { effectivePermissions: ["tenant.settings"] };
+  });
+
+  it("hides the manual sync controls from a member without tenant.settings", async () => {
+    pageState.data = { effectivePermissions: ["glucose.read"] };
+
+    render(ConnectorDetailsDialog, {
+      props: {
+        open: true,
+        selectedConnector: {
+          id: "nightscout",
+          name: "Nightscout",
+          status: "Active",
+          state: "Configured",
+          isHealthy: true,
+        },
+        selectedConnectorCapabilities: {
+          supportsManualSync: true,
+          supportsHistoricalSync: true,
+        },
+      },
+    });
+
+    await expect.element(page.getByText("Nightscout")).toBeVisible();
+    expect(
+      page.getByRole("button", { name: "Sync Now" }).elements()
+    ).toHaveLength(0);
+  });
+
+  it("offers the manual sync controls to a member holding tenant.settings", async () => {
+    render(ConnectorDetailsDialog, {
+      props: {
+        open: true,
+        selectedConnector: {
+          id: "nightscout",
+          name: "Nightscout",
+          status: "Active",
+          state: "Configured",
+          isHealthy: true,
+        },
+        selectedConnectorCapabilities: {
+          supportsManualSync: true,
+          supportsHistoricalSync: true,
+        },
+      },
+    });
+
+    await expect
+      .element(page.getByRole("button", { name: "Sync Now" }))
+      .toBeVisible();
+  });
+
+  it("offers the manual sync controls to an owner holding the wildcard scope", async () => {
+    pageState.data = { effectivePermissions: ["*"] };
+
+    render(ConnectorDetailsDialog, {
+      props: {
+        open: true,
+        selectedConnector: {
+          id: "nightscout",
+          name: "Nightscout",
+          status: "Active",
+          state: "Configured",
+          isHealthy: true,
+        },
+        selectedConnectorCapabilities: {
+          supportsManualSync: true,
+          supportsHistoricalSync: true,
+        },
+      },
+    });
+
+    await expect
+      .element(page.getByRole("button", { name: "Sync Now" }))
+      .toBeVisible();
   });
 
   it("reports the count a failed sync still landed", async () => {
@@ -93,7 +169,9 @@ describe("ConnectorDetailsDialog", () => {
   });
 
   it("shows the server's reason when the sync was refused", async () => {
-    await syncing(async () => error(409, "A sync for this connector is already running."));
+    await syncing(async () =>
+      error(409, "A sync for this connector is already running.")
+    );
 
     await expect
       .element(page.getByText("A sync for this connector is already running."))
@@ -111,8 +189,8 @@ describe("ConnectorDetailsDialog", () => {
 
   /**
    * The generated client's own rejection is an `Error`, so rendering a caught
-   * `message` reads as safe and is not: it is boilerplate the client wrote,
-   * and a body it could not parse arrives as a `SyntaxError` quoting the body.
+   * `message` reads as safe and is not: it is boilerplate the client wrote, and
+   * a body it could not parse arrives as a `SyntaxError` quoting the body.
    */
   it("keeps the generated client's own error text out of the panel", async () => {
     await syncing(async () => {
@@ -129,7 +207,9 @@ describe("ConnectorDetailsDialog", () => {
     expect(
       page.getByText("An unexpected server error occurred.").elements()
     ).toHaveLength(0);
-    expect(page.getByText("502 Bad Gateway", { exact: false }).elements()).toHaveLength(0);
+    expect(
+      page.getByText("502 Bad Gateway", { exact: false }).elements()
+    ).toHaveLength(0);
   });
 
   it("keeps an unparsable response body out of the panel", async () => {
@@ -139,7 +219,9 @@ describe("ConnectorDetailsDialog", () => {
     });
 
     await expect.element(page.getByText(FALLBACK)).toBeInTheDocument();
-    expect(page.getByText("502 Bad Gateway", { exact: false }).elements()).toHaveLength(0);
+    expect(
+      page.getByText("502 Bad Gateway", { exact: false }).elements()
+    ).toHaveLength(0);
   });
 
   /**
@@ -190,7 +272,9 @@ describe("ConnectorDetailsDialog", () => {
     await expect.element(page.getByText("(288 items)")).toBeVisible();
     expect(page.getByText(FALLBACK).elements()).toHaveLength(0);
     expect(calls).toBe(1);
-    expect(logged.join(" ")).toContain("Failed to refresh after a connector sync");
+    expect(logged.join(" ")).toContain(
+      "Failed to refresh after a connector sync"
+    );
 
     vi.restoreAllMocks();
   });

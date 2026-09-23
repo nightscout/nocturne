@@ -7,6 +7,8 @@
   import { getDataTypeLabel } from "$lib/utils/data-type-labels";
   import { triggerConnectorSync } from "$api/generated/services.generated.remote";
   import { describeSubmitError } from "$lib/forms/submit-error";
+  import { satisfiesScope } from "$lib/authorization/scopes";
+  import { page } from "$app/state";
   import {
     Cloud,
     Loader2,
@@ -39,6 +41,10 @@
     onSyncComplete?: () => Promise<void>;
   }>();
 
+  const canManage = $derived(
+    satisfiesScope(page.data.effectivePermissions ?? [], "tenant.settings")
+  );
+
   let granularSyncFrom = $state("");
   let granularSyncTo = $state("");
   let isGranularSyncing = $state(false);
@@ -59,8 +65,6 @@
       if (!granularSyncFrom) granularSyncFrom = formatLocal(thirtyDaysAgo);
     }
   });
-
-
 
   const selectedRange = () => ({
     from: new Date(granularSyncFrom).toISOString(),
@@ -169,22 +173,32 @@
         <div class="flex items-center justify-between">
           <span class="text-sm font-medium">Status</span>
           {#if selectedConnector.state === "Syncing"}
-            <Badge class="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100">
+            <Badge
+              class="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100"
+            >
               <Loader2 class="h-3 w-3 mr-1 animate-spin" />
               Syncing...
             </Badge>
           {:else if selectedConnector.state === "BackingOff"}
-            <Badge variant="secondary" class="bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-100">
+            <Badge
+              variant="secondary"
+              class="bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-100"
+            >
               <Clock class="h-3 w-3 mr-1" />
               Backing Off
             </Badge>
           {:else if selectedConnector.isHealthy}
-            <Badge class="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100">
+            <Badge
+              class="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100"
+            >
               <CheckCircle class="h-3 w-3 mr-1" />
               Healthy
             </Badge>
           {:else if selectedConnector.state === "Disabled"}
-            <Badge variant="secondary" class="bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100">
+            <Badge
+              variant="secondary"
+              class="bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100"
+            >
               <WifiOff class="h-3 w-3 mr-1" />
               Disabled
             </Badge>
@@ -196,7 +210,9 @@
           {:else}
             <Badge variant="destructive">
               <AlertCircle class="h-3 w-3 mr-1" />
-              {selectedConnector.stateMessage ?? selectedConnector.state ?? "Error"}
+              {selectedConnector.stateMessage ??
+                selectedConnector.state ??
+                "Error"}
             </Badge>
           {/if}
         </div>
@@ -209,21 +225,27 @@
 
         {#if selectedConnectorCapabilities}
           {#if selectedConnectorCapabilities.supportsHistoricalSync === false}
-            <div class="rounded-lg border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/20 p-3 text-xs text-blue-800 dark:text-blue-200">
+            <div
+              class="rounded-lg border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/20 p-3 text-xs text-blue-800 dark:text-blue-200"
+            >
               Historical sync is not supported for this connector.
               {#if selectedConnectorCapabilities.maxHistoricalDays}
-                Recent data only (last {selectedConnectorCapabilities.maxHistoricalDays} days).
+                Recent data only (last {selectedConnectorCapabilities.maxHistoricalDays}
+                days).
               {/if}
             </div>
           {:else if selectedConnectorCapabilities.maxHistoricalDays}
             <div class="text-xs text-muted-foreground">
-              Historical sync limited to the last {selectedConnectorCapabilities.maxHistoricalDays} days.
+              Historical sync limited to the last {selectedConnectorCapabilities.maxHistoricalDays}
+              days.
             </div>
           {/if}
         {/if}
 
         {#if selectedConnector.state === "Disabled"}
-          <div class="rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950/20 p-4">
+          <div
+            class="rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950/20 p-4"
+          >
             <div class="flex items-center gap-2 text-muted-foreground">
               <WifiOff class="h-5 w-5" />
               <span class="font-medium">Connector Disabled</span>
@@ -235,7 +257,9 @@
             </p>
           </div>
         {:else if selectedConnector.state === "Offline"}
-          <div class="rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950/20 p-4">
+          <div
+            class="rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950/20 p-4"
+          >
             <div class="flex items-center gap-2 text-muted-foreground">
               <WifiOff class="h-5 w-5" />
               <span class="font-medium">Connector Not Running</span>
@@ -255,15 +279,21 @@
               <span class="text-sm text-muted-foreground">Total records</span>
               <Tooltip.Root>
                 <Tooltip.Trigger>
-                  <span class="font-mono font-medium cursor-help underline decoration-dotted decoration-muted-foreground/50">
+                  <span
+                    class="font-mono font-medium cursor-help underline decoration-dotted decoration-muted-foreground/50"
+                  >
                     {formatNumber(selectedConnector.totalEntries)}
                   </span>
                 </Tooltip.Trigger>
                 <Tooltip.Portal>
-                  <Tooltip.Content class="z-50 overflow-hidden rounded-md bg-popover px-3 py-2 text-sm text-popover-foreground shadow-md">
+                  <Tooltip.Content
+                    class="z-50 overflow-hidden rounded-md bg-popover px-3 py-2 text-sm text-popover-foreground shadow-md"
+                  >
                     {#if selectedConnector.totalItemsBreakdown && Object.keys(selectedConnector.totalItemsBreakdown).length > 0}
                       <div class="space-y-1">
-                        <div class="font-medium text-xs text-muted-foreground mb-1">
+                        <div
+                          class="font-medium text-xs text-muted-foreground mb-1"
+                        >
                           Breakdown by type:
                         </div>
                         {#each Object.entries(selectedConnector.totalItemsBreakdown) as [type, count]}
@@ -288,15 +318,21 @@
               </span>
               <Tooltip.Root>
                 <Tooltip.Trigger>
-                  <span class="font-mono font-medium cursor-help underline decoration-dotted decoration-muted-foreground/50">
+                  <span
+                    class="font-mono font-medium cursor-help underline decoration-dotted decoration-muted-foreground/50"
+                  >
                     {formatNumber(selectedConnector.entriesLast24Hours)}
                   </span>
                 </Tooltip.Trigger>
                 <Tooltip.Portal>
-                  <Tooltip.Content class="z-50 overflow-hidden rounded-md bg-popover px-3 py-2 text-sm text-popover-foreground shadow-md">
+                  <Tooltip.Content
+                    class="z-50 overflow-hidden rounded-md bg-popover px-3 py-2 text-sm text-popover-foreground shadow-md"
+                  >
                     {#if selectedConnector.itemsLast24HoursBreakdown && Object.keys(selectedConnector.itemsLast24HoursBreakdown).length > 0}
                       <div class="space-y-1">
-                        <div class="font-medium text-xs text-muted-foreground mb-1">
+                        <div
+                          class="font-medium text-xs text-muted-foreground mb-1"
+                        >
                           Breakdown by type:
                         </div>
                         {#each Object.entries(selectedConnector.itemsLast24HoursBreakdown) as [type, count]}
@@ -347,7 +383,9 @@
             {/if}
           </div>
         {:else if selectedConnector.status === "Unreachable"}
-          <div class="rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950/20 p-4">
+          <div
+            class="rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950/20 p-4"
+          >
             <div class="flex items-center gap-2 text-muted-foreground">
               <WifiOff class="h-5 w-5" />
               <span class="font-medium">Connector Offline</span>
@@ -359,9 +397,7 @@
           </div>
         {/if}
 
-        {#if (selectedConnector.isHealthy || selectedConnector.state === "Configured") &&
-        selectedConnector.state !== "Offline" &&
-        (selectedConnectorCapabilities?.supportsManualSync ?? true)}
+        {#if canManage && (selectedConnector.isHealthy || selectedConnector.state === "Configured") && selectedConnector.state !== "Offline" && (selectedConnectorCapabilities?.supportsManualSync ?? true)}
           <Separator />
 
           <div class="space-y-3">
@@ -404,7 +440,11 @@
             {/if}
 
             {#if granularSyncResult}
-              <div class="text-xs p-2 rounded {granularSyncResult.success ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200' : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200'}">
+              <div
+                class="text-xs p-2 rounded {granularSyncResult.success
+                  ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200'
+                  : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200'}"
+              >
                 {#if granularSyncResult.success}
                   <CheckCircle class="inline h-3 w-3 mr-1" />
                   Sync initiated successfully
@@ -417,7 +457,13 @@
               </div>
             {/if}
 
-            <Button size="sm" variant="outline" class="w-full gap-2" onclick={triggerGranularSync} disabled={isGranularSyncing}>
+            <Button
+              size="sm"
+              variant="outline"
+              class="w-full gap-2"
+              onclick={triggerGranularSync}
+              disabled={isGranularSyncing}
+            >
               {#if isGranularSyncing}
                 <Loader2 class="h-3 w-3 animate-spin" />
                 Syncing...
@@ -443,7 +489,11 @@
               </p>
 
               {#if foodOnlySyncResult}
-                <div class="text-xs p-2 rounded {foodOnlySyncResult.success ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200' : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200'}">
+                <div
+                  class="text-xs p-2 rounded {foodOnlySyncResult.success
+                    ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200'
+                    : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200'}"
+                >
                   {#if foodOnlySyncResult.success}
                     <CheckCircle class="inline h-3 w-3 mr-1" />
                     Food sync completed
@@ -457,7 +507,13 @@
                 </div>
               {/if}
 
-              <Button size="sm" variant="outline" class="w-full gap-2" onclick={triggerFoodOnlySync} disabled={isFoodOnlySyncing}>
+              <Button
+                size="sm"
+                variant="outline"
+                class="w-full gap-2"
+                onclick={triggerFoodOnlySync}
+                disabled={isFoodOnlySyncing}
+              >
                 {#if isFoodOnlySyncing}
                   <Loader2 class="h-3 w-3 animate-spin" />
                   Downloading...
@@ -472,10 +528,12 @@
       </div>
 
       <Dialog.Footer>
-        <Button variant="outline" onclick={() => (open = false)}>
-          Close
-        </Button>
-        <Button variant="outline" class="gap-2" href="/settings/connectors/{selectedConnector.id?.toLowerCase()}">
+        <Button variant="outline" onclick={() => (open = false)}>Close</Button>
+        <Button
+          variant="outline"
+          class="gap-2"
+          href="/settings/connectors/{selectedConnector.id?.toLowerCase()}"
+        >
           <Wrench class="h-4 w-4" />
           Configure
         </Button>

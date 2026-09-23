@@ -34,8 +34,8 @@ describe("DataMaintenanceCard", () => {
     expect(document.body.textContent).not.toContain("Remove Demo Data");
   });
 
-  it("offers both tools to an admin", async () => {
-    page.data = { effectivePermissions: ["admin"], isPlatformAdmin: false };
+  it("offers both tools to an owner holding the wildcard scope", async () => {
+    page.data = { effectivePermissions: ["*"], isPlatformAdmin: false };
     render(DataMaintenanceCard);
 
     await expect
@@ -44,26 +44,35 @@ describe("DataMaintenanceCard", () => {
     expect(document.body.textContent).toContain("Remove Demo Data");
   });
 
-  it("reads a wildcard grant as admin", async () => {
-    page.data = { effectivePermissions: ["*"], isPlatformAdmin: false };
+  it("offers only demo data deletion to a member holding tenant.settings", async () => {
+    // Deduplication is RequireAdmin; deleting demo data is tenant.settings. A tenant
+    // administrator holds the second and not the first.
+    page.data = {
+      effectivePermissions: ["tenant.settings"],
+      isPlatformAdmin: false,
+    };
     render(DataMaintenanceCard);
 
-    await expect
-      .element(browser.getByTestId("deduplicate-records"))
-      .toBeVisible();
+    expect(
+      document.querySelector('[data-testid="deduplicate-records"]')
+    ).toBeNull();
+    expect(document.body.textContent).toContain("Remove Demo Data");
   });
 
   it("keeps connector cursors to platform admins, not tenant admins", async () => {
     // Resetting a cursor re-syncs a connector for the whole instance, so it answers to
-    // isPlatformAdmin rather than to the tenant's own admin permission.
-    page.data = { effectivePermissions: ["admin"], isPlatformAdmin: false };
+    // isPlatformAdmin rather than to any tenant permission.
+    page.data = {
+      effectivePermissions: ["tenant.settings"],
+      isPlatformAdmin: false,
+    };
     render(DataMaintenanceCard);
 
     expect(document.body.textContent).not.toContain("Reset Connector Cursors");
   });
 
   it("offers connector cursors to a platform admin", async () => {
-    page.data = { effectivePermissions: ["admin"], isPlatformAdmin: true };
+    page.data = { effectivePermissions: ["*"], isPlatformAdmin: true };
     render(DataMaintenanceCard);
 
     expect(document.body.textContent).toContain("Reset Connector Cursors");

@@ -1,14 +1,8 @@
 <script lang="ts">
   import { formatNumber } from "$lib/utils/formatting";
-  import type {
-    ConnectorDataSummary,
-  } from "$lib/api/generated/nocturne-api-client";
-  import {
-    deleteConfiguration,
-  } from "$lib/api/generated/configurations.generated.remote";
-  import {
-    deleteConnectorData,
-  } from "$lib/api/generated/services.generated.remote";
+  import type { ConnectorDataSummary } from "$lib/api/generated/nocturne-api-client";
+  import { deleteConfiguration } from "$lib/api/generated/configurations.generated.remote";
+  import { deleteConnectorData } from "$lib/api/generated/services.generated.remote";
   import { describeSubmitError } from "$lib/forms/submit-error";
   import {
     Card,
@@ -20,6 +14,8 @@
   import { Button } from "$lib/components/ui/button";
   import { Separator } from "$lib/components/ui/separator";
   import { DangerZoneDialog } from "$lib/components/ui/danger-zone-dialog";
+  import { satisfiesScope } from "$lib/authorization/scopes";
+  import { page } from "$app/state";
   import { AlertCircle, CheckCircle, Database, Trash2 } from "lucide-svelte";
 
   interface Props {
@@ -41,6 +37,10 @@
     onConfigDeleted,
     onDataDeleted,
   }: Props = $props();
+
+  const canManage = $derived(
+    satisfiesScope(page.data.effectivePermissions ?? [], "tenant.settings")
+  );
 
   const recordCountLabels: Record<string, string> = {
     Glucose: "glucose readings",
@@ -112,7 +112,7 @@
   }
 </script>
 
-{#if hasExistingConfig || hasData}
+{#if canManage && (hasExistingConfig || hasData)}
   <Separator class="my-6" />
 
   <Card class="border-destructive/50">
@@ -124,7 +124,9 @@
     </CardHeader>
     <CardContent class="@container space-y-4">
       {#if hasExistingConfig}
-        <div class="flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between">
+        <div
+          class="flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between"
+        >
           <div>
             <p class="font-medium">Delete Configuration</p>
             <p class="text-sm text-muted-foreground">
@@ -151,7 +153,9 @@
       {/if}
 
       {#if hasData}
-        <div class="flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between">
+        <div
+          class="flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between"
+        >
           <div>
             <p class="font-medium">Delete Synced Data</p>
             <p class="text-sm text-muted-foreground">
@@ -207,7 +211,9 @@
               class="flex items-center gap-2 text-green-800 dark:text-green-200"
             >
               <CheckCircle class="h-5 w-5" />
-              <span class="font-medium">Configuration deleted successfully</span>
+              <span class="font-medium">
+                Configuration deleted successfully
+              </span>
             </div>
             <p class="text-sm text-green-700 dark:text-green-300 mt-1">
               Redirecting...
@@ -277,8 +283,7 @@
             <p
               class="text-sm font-medium text-green-700 dark:text-green-300 mt-2"
             >
-              Total: {formatNumber(deleteDataResult.totalDeleted)} records
-              deleted
+              Total: {formatNumber(deleteDataResult.totalDeleted)} records deleted
             </p>
           </div>
         {:else}
