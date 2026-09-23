@@ -432,6 +432,32 @@ public class GuestLinkServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task HasRedeemableCodeAsync_NonGuestGrant_ReturnsFalse()
+    {
+        _dbContext.OAuthGrants.Add(new OAuthGrantEntity
+        {
+            Id = Guid.CreateVersion7(),
+            SubjectId = _dataOwnerId,
+            GrantType = OAuthGrantTypes.Direct,
+            Scopes = [Scope.HealthRead],
+            ExpiresAt = DateTime.UtcNow.AddHours(1),
+        });
+        await _dbContext.SaveChangesAsync();
+
+        (await _service.HasRedeemableCodeAsync()).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task HasRedeemableCodeAsync_OtherTenantsLink_ReturnsFalse()
+    {
+        await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Tenant A", "https://example.com");
+
+        _dbContext.TenantId = Guid.CreateVersion7();
+
+        (await _service.HasRedeemableCodeAsync()).Should().BeFalse();
+    }
+
+    [Fact]
     public async Task GetGuestLinksAsync_ExcludesDismissedByDefault()
     {
         var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Dismissed Link", "https://example.com");

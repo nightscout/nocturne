@@ -9,6 +9,7 @@
   import LoginForm from "$lib/components/auth/LoginForm.svelte";
   import RequestMembershipDialog from "$lib/components/members/RequestMembershipDialog.svelte";
   import GuestCodeForm from "$lib/components/auth/GuestCodeForm.svelte";
+  import { dismissGuestCode } from "$lib/components/auth/guest-code-dismissal";
 
   let { data } = $props();
 
@@ -73,14 +74,17 @@
 
     {#if showGuestCode}
       <Card.Content data-testid="login-guest-code">
-        <GuestCodeForm />
+        <GuestCodeForm {returnUrl} />
       </Card.Content>
 
       <Card.Footer class="flex flex-col space-y-2">
         <Button
           variant="link"
           data-testid="dismiss-guest-code"
-          onclick={() => (guestCodeDismissed = true)}
+          onclick={() => {
+            dismissGuestCode();
+            guestCodeDismissed = true;
+          }}
         >
           <ArrowLeft class="mr-1 h-4 w-4" />
           Not signing in with a one-time guest code

@@ -262,6 +262,29 @@ public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
     }
 
     [Fact]
+    public async Task CrossTenant_PendingGuestCode_NotReported()
+    {
+        using var clientA = AuthTestHelpers.CreateAuthenticatedTenantClient(Fixture, _slugA, _baseDomain, _accessTokenA);
+        var createResponse = await clientA.PostAsJsonAsync("/api/v4/guest-links", new
+        {
+            label = "Pending Probe",
+            scopes = new[] { "entries.read" }
+        });
+        createResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var anonymousA = AuthTestHelpers.CreateTenantClient(Fixture, _slugA, _baseDomain);
+        using var anonymousB = AuthTestHelpers.CreateTenantClient(Fixture, _slugB, _baseDomain);
+
+        var pendingA = await anonymousA.GetFromJsonAsync<JsonElement>("/api/v4/guest-links/pending");
+        var pendingB = await anonymousB.GetFromJsonAsync<JsonElement>("/api/v4/guest-links/pending");
+
+        pendingA.GetProperty("pending").GetBoolean().Should().BeTrue(
+            "an anonymous visitor to tenant A should learn that A has a code waiting");
+        pendingB.GetProperty("pending").GetBoolean().Should().BeFalse(
+            "a code created in tenant A must not be reported on tenant B");
+    }
+
+    [Fact]
     public async Task CrossTenant_DirectGrant_NotUsable()
     {
         // Arrange - create a direct grant token in tenant A

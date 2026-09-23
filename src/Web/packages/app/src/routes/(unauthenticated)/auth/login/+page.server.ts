@@ -1,6 +1,7 @@
 import { redirect } from "@sveltejs/kit";
 import { env } from "$env/dynamic/private";
 import type { PageServerLoad } from "./$types";
+import { GUEST_CODE_DISMISSED_COOKIE } from "$lib/components/auth/guest-code-dismissal";
 
 // Marker appended to returnUrl so a single auto-login attempt can be detected
 // after it bounces back. It survives the round-trip because the auth guard
@@ -23,9 +24,12 @@ const AUTO_LOGIN_MARKER = "__autologin";
 const DEV_LOGIN_ENDPOINT = "/api/v4/dev-only/auth/login";
 const DEMO_LOGIN_ENDPOINT = "/api/v4/demo/session";
 
-export const load: PageServerLoad = async ({ url, locals, parent }) => {
+export const load: PageServerLoad = async ({ url, locals, cookies, parent }) => {
   const endpoint = await resolveAutoLoginEndpoint(locals);
   if (!endpoint) {
+    if (cookies.get(GUEST_CODE_DISMISSED_COOKIE) === "1") {
+      return { guestCodePending: false };
+    }
     const { tenantless } = await parent();
     return { guestCodePending: await hasPendingGuestCode(locals, tenantless) };
   }

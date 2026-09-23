@@ -6,7 +6,10 @@
   import { FormError, FormField, useSubmission } from "$lib/forms";
   import { activateGuestCode } from "$lib/api/guest.remote";
 
-  let { initialCode = "" }: { initialCode?: string } = $props();
+  let {
+    initialCode = "",
+    returnUrl = "/",
+  }: { initialCode?: string; returnUrl?: string } = $props();
 
   let code = $state(untrack(() => initialCode));
 
@@ -24,6 +27,7 @@
   })}
 >
   <FormError issues={submission.error} focusOnShow />
+  <input type="hidden" name="returnUrl" value={returnUrl} />
 
   <FormField
     label="Guest code"
