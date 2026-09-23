@@ -52,6 +52,7 @@
     "@internationalized/date": "^3.12.1",
     "@lucide/svelte": "^1.14.0",
     "@playwright/test": "^1.60.0",
+    "@shadcn/lint": "^0.2.0",
     "@sveltejs/adapter-auto": "^7.0.1",
     "@sveltejs/adapter-node": "^5.5.4",
     "@sveltejs/kit": "^2.59.1",
@@ -101,6 +102,7 @@
   "dependencies": {
     "@nocturne/bot": "workspace:*",
     "@nocturne/bridge": "workspace:*",
+    "@nocturne/cms": "workspace:*",
     "@nocturne/coach": "workspace:*",
     "@nocturne/ui": "workspace:*",
     "@opentelemetry/api": "^1.9.1",
@@ -127,7 +129,6 @@
     "sveltekit-search-params": "^3.0.0",
     "tailwindcss": "^4.3.0",
     "typescript": "^6.0.3",
-    "zod": "^4.4.3",
-    "@nocturne/cms": "workspace:*"
+    "zod": "^4.4.3"
   }
 }
