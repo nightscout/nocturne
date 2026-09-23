@@ -191,9 +191,6 @@ unbaked icon falls to the plain SVG. Two things for the branch owner to decide:
 
 ## Found along the way
 
-- `src/Web/packages/watercolour-showcase/src/routes/gallery/+page.svelte` is
-  10,674 null bytes in the last commit; the Gallery route has no content and
-  there is no earlier version in git to restore.
 - `tests/reveal_preserves_the_artwork` in the infra crate aborts with a native
   exit code partway through in **debug** builds on this machine and passes in
   release (7/7, 7-14 min). Run the infra suite with `--release`.

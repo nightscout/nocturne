@@ -1,6 +1,7 @@
 <script lang="ts">
   import "../app.css";
   import { ModeWatcher } from "mode-watcher";
+  import { getEngineHost } from "@nocturne/watercolour";
   import NavigationProgress from "$lib/components/ui/NavigationProgress.svelte";
   import { Toaster } from "$lib/components/ui/sonner";
   import * as alarmState from "$lib/stores/alarm-state.svelte";
@@ -37,6 +38,19 @@
     layers: data.displayPreferences ?? [],
     language: data.displayLanguage,
   }));
+
+  /**
+   * The first engine acquire blocks the main thread for a few hundred ms while
+   * the wasm loads and WebGPU hands over a device. Paid on a pointer-enter it
+   * freezes the transition that pointer started, and a paint drop's backend is
+   * settled within 90 ms of the hover or it falls back to a still.
+   *
+   * Resolves false where there is no GPU, which needs no handling: that is the
+   * case the baked and static paths exist for.
+   */
+  $effect(() => {
+    void getEngineHost().warm();
+  });
 </script>
 
 <ModeWatcher />

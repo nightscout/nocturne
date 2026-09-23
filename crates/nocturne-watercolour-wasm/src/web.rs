@@ -130,7 +130,10 @@ impl WatercolourEngine {
     /// (0 = keep the default) is the share of the wall clock the brushwork
     /// gets: the playback's curve becomes `ProgressCurve::reveal_for(scene,
     /// paint_wall_fraction)`, so the tail covers the settling after the pen
-    /// leaves the paper.
+    /// leaves the paper. `checkpoint_budget_bytes` (absent or 0 = the
+    /// engine's [`BROWSER_CHECKPOINT_BUDGET_BYTES`]) is this instance's own
+    /// seek-checkpoint budget; anything below one checkpoint still keeps the
+    /// one at tick 0, so `seek` falls back to replaying from the start.
     #[wasm_bindgen(js_name = createInstance)]
     pub fn create_instance(
         &self,
@@ -138,6 +141,7 @@ impl WatercolourEngine {
         duration_ms: f64,
         settle_fraction: f64,
         paint_wall_fraction: f64,
+        checkpoint_budget_bytes: Option<f64>,
     ) -> Result<SceneInstance, JsError> {
         guard_device(&self.ctx)?;
         if self.shared.live.get() >= self.shared.max_live.get() {
@@ -153,7 +157,11 @@ impl WatercolourEngine {
         if settle_fraction.is_finite() && settle_fraction > 0.0 {
             scene_tools::apply_settle_fraction(&mut scene, settle_fraction as f32);
         }
-        let mut playback = Playback::new(self.template.fork(), scene, duration_ms as f32)
+        let mut engine = self.template.fork();
+        if let Some(bytes) = checkpoint_budget_bytes.filter(|b| b.is_finite() && *b > 0.0) {
+            engine = engine.with_checkpoint_budget(bytes as u64);
+        }
+        let mut playback = Playback::new(engine, scene, duration_ms as f32)
             .map_err(|e| js_err("InvalidScene", e))?;
         if paint_wall_fraction.is_finite() && paint_wall_fraction > 0.0 {
             playback.set_progress_curve(ProgressCurve::reveal_for(

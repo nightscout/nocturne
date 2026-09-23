@@ -23,10 +23,9 @@
     DropGroup,
     DropSurface,
     PALETTE_IDS,
-    detailForEdge,
     getEngineHost,
   } from '$lib/artwork';
-  import type { ArtworkMode, DropFonts, DropReveal, PaletteId } from '$lib/artwork';
+  import type { DropDeposit, DropKind, DropFonts, PaletteId } from '$lib/artwork';
 
   interface Feature {
     icon: Component;
@@ -68,46 +67,34 @@
     detail: { font: `400 12px ${SANS}`, lineHeight: 16 },
   };
 
-  const REVEALS: readonly DropReveal[] = ['fade', 'mask', 'flip'];
-  const REVEAL_LABELS: Record<DropReveal, string> = {
-    none: 'None',
-    fade: 'Fade',
-    mask: 'Mask',
-    flip: 'Mask and travel',
-  };
+  /** The two deposits, in the order they are offered and compared. */
+  const COMPARISON = [
+    { key: 'wet', label: 'Wet into wet' },
+    { key: 'stamp', label: 'Pigment alone' },
+  ] as const;
 
-  const MODES: readonly ArtworkMode[] = ['live', 'baked', 'static'];
-  const MODE_LABELS: Record<string, string> = {
-    live: 'Live',
-    baked: 'Baked strip',
-    static: 'Still',
-  };
-
-  let mode = $state<ArtworkMode>('static');
   let hold = $state(false);
   let measured = $state(true);
-  let reveal = $state<DropReveal>('mask');
-  let themeColour = $state<PaletteId | 'none'>('none');
+  let themeColour = $state<PaletteId>('water');
   let tintSurface = $state(false);
+  let deposit = $state<DropDeposit>('wet');
+  let kind = $state<DropKind | 'auto'>('auto');
+  const KINDS: readonly { key: DropKind | 'auto'; label: string }[] = [
+    { key: 'auto', label: 'Cycle' },
+    { key: 'stroke', label: 'Stroke' },
+    { key: 'drops', label: 'Drops' },
+    { key: 'splotch', label: 'Splotch' },
+    { key: 'border', label: 'Border' },
+  ];
+  let spatter = $state(true);
   let generation = $state(0);
   let resolved = $state(new Map<string, string>());
 
-  /**
-   * The strip that puts the reveals beside each other. The engine's own is the
-   * reference, and it cannot be scrubbed: it plays on its own clock.
-   */
-  const COMPARISON = [
-    { key: 'live', label: 'The engine, live', reveal: 'none' as DropReveal, live: true },
-    ...REVEALS.map((r) => ({ key: r, label: REVEAL_LABELS[r], reveal: r, live: false })),
-  ];
-
-  /** The baked columns: scrubbed by the slider, or played by the button. */
   let scrub = $state(0.42);
   let playing = $state(false);
   let playGeneration = $state(0);
 
-
-  const palette = $derived<PaletteId | undefined>(themeColour === 'none' ? undefined : themeColour);
+  const palette = $derived(themeColour);
   const fonts = $derived(measured ? CARD_FONTS : undefined);
   const rowFonts = $derived(measured ? ROW_FONTS : undefined);
   // Read off the resolved rows: the host has no stats until an engine exists,
@@ -127,11 +114,24 @@
    * The first engine acquire blocks the main thread for a few hundred ms while
    * the wasm module loads and WebGPU hands over a device. Paid on the first
    * pointer-enter, it freezes the transition that pointer just started, so it
-   * is paid here instead. A machine with no GPU reports false and is served by
-   * the baked path, which is what it would have fallen back to anyway.
+   * is paid here instead. A machine with no GPU reports false and shows no
+   * mark, which is what it would have shown anyway.
    */
+  /**
+   * This page holds every surface open at once to compare them, which the
+   * production cap of four would leave mostly blank. The cap is raised here
+   * only and put back when the page goes.
+   */
+  const SHOWCASE_LIVE_INSTANCES = 16;
+
   $effect(() => {
-    void getEngineHost().warm();
+    const host = getEngineHost();
+    const production = host.maxLiveInstances;
+    host.maxLiveInstances = SHOWCASE_LIVE_INSTANCES;
+    void host.warm();
+    return () => {
+      host.maxLiveInstances = production;
+    };
   });
 
   function play() {
@@ -155,9 +155,10 @@
     <Card.Header>
       <Card.Title>Controls</Card.Title>
       <Card.Description>
-        A live mark is simulated in the browser from the same scene the bake runs, and the engine allows
-        {DEFAULT_MAX_LIVE_INSTANCES} at once. A baked mark plays a shipped frame strip. A still is the finished
-        paint alone, which is all the mask reveal needs - and the cheapest of the three by some way.
+        A mark is one gesture fitted to the empty space. A stroke or a border is drawn along its path, then
+        the ink spreads into the paper; drops and splotches land whole. In production the engine allows
+        {DEFAULT_MAX_LIVE_INSTANCES} at once; this page raises that so every surface can be held open. A machine
+        without WebGPU sees the surface without a mark.
       </Card.Description>
     </Card.Header>
     <Card.Content class="grid gap-4">
@@ -178,41 +179,49 @@
           <Switch id="drops-tint" checked={tintSurface} onCheckedChange={(v) => (tintSurface = v)} />
           <Label for="drops-tint">Tint the surface</Label>
         </div>
+        <div class="flex items-center gap-2">
+          <Switch
+            id="drops-spatter"
+            checked={spatter}
+            onCheckedChange={(v) => { spatter = v; repaint(); }}
+          />
+          <Label for="drops-spatter">Spatter</Label>
+        </div>
         <Button variant="outline" size="sm" onclick={repaint}><RotateCcw /> Repaint</Button>
         <p class="font-mono text-xs text-muted-foreground">
-          live instances {leases} / {DEFAULT_MAX_LIVE_INSTANCES}
+          live instances {leases} / {SHOWCASE_LIVE_INSTANCES} (production cap {DEFAULT_MAX_LIVE_INSTANCES})
         </p>
       </div>
       <div class="flex flex-wrap items-end gap-6">
         <div class="grid gap-1">
-          <span class="text-xs font-medium text-muted-foreground">What paints the mark</span>
+          <span class="text-xs font-medium text-muted-foreground">Deposit</span>
           <ToggleGroup.Root
             type="single"
             variant="outline"
             size="sm"
-            value={mode}
-            onValueChange={(v) => { if (v) { mode = v as ArtworkMode; repaint(); } }}
-            aria-label="Backend"
+            value={deposit}
+            onValueChange={(v) => { if (v) { deposit = v as DropDeposit; repaint(); } }}
+            aria-label="Deposit"
             class="justify-start"
           >
-            {#each MODES as m (m)}
-              <ToggleGroup.Item value={m} aria-label={MODE_LABELS[m]}>{MODE_LABELS[m]}</ToggleGroup.Item>
+            {#each COMPARISON as option (option.key)}
+              <ToggleGroup.Item value={option.key} aria-label={option.label}>{option.label}</ToggleGroup.Item>
             {/each}
           </ToggleGroup.Root>
         </div>
         <div class="grid gap-1">
-          <span class="text-xs font-medium text-muted-foreground">How a still arrives</span>
+          <span class="text-xs font-medium text-muted-foreground">Gesture</span>
           <ToggleGroup.Root
             type="single"
             variant="outline"
             size="sm"
-            value={reveal}
-            onValueChange={(v) => { if (v) reveal = v as DropReveal; }}
-            aria-label="Reveal"
+            value={kind}
+            onValueChange={(v) => { if (v) { kind = v as DropKind | 'auto'; repaint(); } }}
+            aria-label="Gesture"
             class="justify-start"
           >
-            {#each REVEALS as r (r)}
-              <ToggleGroup.Item value={r} aria-label={REVEAL_LABELS[r]}>{REVEAL_LABELS[r]}</ToggleGroup.Item>
+            {#each KINDS as option (option.key)}
+              <ToggleGroup.Item value={option.key} aria-label={option.label}>{option.label}</ToggleGroup.Item>
             {/each}
           </ToggleGroup.Root>
         </div>
@@ -221,13 +230,10 @@
           <Select.Root
             type="single"
             value={themeColour}
-            onValueChange={(v) => { themeColour = v as PaletteId | 'none'; repaint(); }}
+            onValueChange={(v) => { themeColour = v as PaletteId; repaint(); }}
           >
-            <Select.Trigger class="w-44" aria-label="Theme colour">
-              {themeColour === 'none' ? 'Each mark as baked' : themeColour}
-            </Select.Trigger>
+            <Select.Trigger class="w-44" aria-label="Theme colour">{themeColour}</Select.Trigger>
             <Select.Content>
-              <Select.Item value="none" label="Each mark as baked">Each mark as baked</Select.Item>
               {#each PALETTE_IDS as p (p)}
                 <Select.Item value={p} label={p}>{p}</Select.Item>
               {/each}
@@ -235,10 +241,6 @@
           </Select.Root>
         </div>
       </div>
-      <p class="text-xs text-muted-foreground">
-        A live mark takes the palette directly, so a theme colour is exact. A baked one ships in one palette only
-        and is steered with a filter, which moves the granulation with the pigment - compare the two.
-      </p>
     </Card.Content>
   </Card.Root>
 
@@ -246,10 +248,8 @@
     <Card.Header>
       <Card.Title>How it arrives</Card.Title>
       <Card.Description>
-        The same mark on the same card. The engine's own reveal is the reference and plays on its own clock; the
-        three baked ones are pinned at one instant, so drag to scrub them together, or play everything. A fade is
-        the generic UI pop. The mask uncovers the paint's own dried edge from where the brush touched down, and
-        gains pigment after it has stopped spreading.
+        The same stroke deposited two ways on the same card, pinned at one instant by the slider and played
+        together from the button.
       </Card.Description>
     </Card.Header>
     <Card.Content class="grid gap-4">
@@ -263,21 +263,20 @@
         </div>
       </div>
       <PreviewSurface>
-        <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div class="grid gap-4 sm:grid-cols-2">
           {#each COMPARISON as column (column.key)}
             <div class="grid gap-2">
               <p class="text-xs font-medium text-muted-foreground">{column.label}</p>
               {#key playGeneration}
                 <DropSurface
+                  deposit={column.key}
                   index={1}
                   name="compare-{column.key}"
-                  mode={column.live ? 'live' : mode === 'live' ? 'static' : mode}
+                  fonts={CARD_FONTS}
+                  progress={playing ? undefined : scrub}
+                  shown={playing ? true : undefined}
                   {palette}
                   {tintSurface}
-                  fonts={CARD_FONTS}
-                  reveal={column.reveal}
-                  progress={playing || column.live ? undefined : scrub}
-                  shown={playing || column.live ? playing : undefined}
                   onresolved={record}
                   class="rounded-xl border bg-card"
                   contentClass="flex items-start gap-3 p-4"
@@ -318,9 +317,10 @@
             {#each FEATURES as feature (feature.title)}
               {@const Icon = feature.icon}
               <DropSurface
-                {mode}
                 {generation}
-                {reveal}
+                {deposit}
+                {kind}
+                {spatter}
                 {palette}
                 {tintSurface}
                 {fonts}
@@ -352,10 +352,8 @@
     <Card.Header>
       <Card.Title>Buttons</Card.Title>
       <Card.Description>
-        A button is nearly all label, so there is no empty space for a mark to find. These are the large buttons,
-        not the icon ones: below a 64 px edge the catalogue drops to <code>{detailForEdge(63)}</code> detail and
-        the engine discards the brushwork. An edge mark on a 40 px control is either a hairline nobody sees or,
-        stretched until they do, a slab. The wash puts one mark over the whole control instead, behind the label.
+        A button is nearly all label, so there is no empty space for a mark to find. A wash fits the stroke with the
+        label ignored, behind it, while the other lets the stroke find the space beside the label or nothing at all.
       </Card.Description>
     </Card.Header>
     <Card.Content class="grid gap-4">
@@ -367,13 +365,13 @@
               <div class="flex flex-wrap gap-3">
                 {#each ACTIONS as action (action)}
                   <DropSurface
-                    {mode}
                     {generation}
-                    {reveal}
+                    {deposit}
+                    kind="glaze"
+                    {spatter}
                     {palette}
                     {tintSurface}
-                    layout="wash"
-                    name="wash {action}"
+                    name="glaze {action}"
                     shown={hold ? true : undefined}
                     onresolved={record}
                     class="rounded-md border bg-background"
@@ -390,12 +388,12 @@
               <div class="flex flex-wrap gap-3">
                 {#each ACTIONS as action (action)}
                   <DropSurface
-                    {mode}
                     {generation}
-                    {reveal}
+                    {deposit}
+                    {kind}
+                    {spatter}
                     {palette}
                     {tintSurface}
-                    count={1}
                     name="edge {action}"
                     shown={hold ? true : undefined}
                     onresolved={record}
@@ -416,9 +414,8 @@
     <Card.Header>
       <Card.Title>List rows</Card.Title>
       <Card.Description>
-        A run of identical rows is where repetition shows worst. A row this tight has space for one mark and one
-        only, so the run varies how it is drawn: consecutive rows mirror each other and take a different angle and
-        size.
+        A run of identical rows is where repetition shows worst. A row this tight has room for one stroke, and
+        consecutive rows differ by their seed.
       </Card.Description>
     </Card.Header>
     <Card.Content>
@@ -427,13 +424,13 @@
           <div class="divide-y rounded-lg border">
             {#each ROWS as row (row.name)}
               <DropSurface
-                {mode}
                 {generation}
-                {reveal}
+                {deposit}
+                {kind}
+                {spatter}
                 {palette}
                 {tintSurface}
                 fonts={rowFonts}
-                count={2}
                 name={row.name}
                 shown={hold ? true : undefined}
                 onresolved={record}
@@ -447,6 +444,99 @@
               </DropSurface>
             {/each}
           </div>
+        </DropGroup>
+      </PreviewSurface>
+    </Card.Content>
+  </Card.Root>
+
+  <Card.Root>
+    <Card.Header>
+      <Card.Title>Surfaces that blobbed</Card.Title>
+      <Card.Description>
+        Three surface shapes on which the previous catalogue marks read as a disc with a boundary rather than
+        paint, kept here so the stroke is judged where it used to fail.
+      </Card.Description>
+    </Card.Header>
+    <Card.Content class="grid gap-6">
+      {#snippet blobbed()}
+        <div class="grid items-start gap-4 sm:grid-cols-3">
+          <DropSurface
+            {deposit}
+            {kind}
+            {spatter}
+            {palette}
+            {tintSurface}
+            {generation}
+            shown={hold ? true : undefined}
+            onresolved={record}
+            fonts={CARD_FONTS}
+            name="tier"
+            class="w-[245px] rounded-xl border bg-card"
+            contentClass="flex min-h-[205px] flex-col gap-3 p-5"
+          >
+            <h3 data-drop-text="title" class="text-sm font-semibold">Supporter</h3>
+            <p data-drop-text="copy" class="text-sm text-muted-foreground">
+              Keep the servers running<br />and the data yours.
+            </p>
+            <Button variant="outline" size="sm" data-drop-obstacle class="mt-auto self-start">Choose</Button>
+          </DropSurface>
+          <DropSurface
+            {deposit}
+            {kind}
+            {spatter}
+            {palette}
+            {tintSurface}
+            {generation}
+            shown={hold ? true : undefined}
+            onresolved={record}
+            fonts={CARD_FONTS}
+            name="fork"
+            class="w-[330px] rounded-xl border bg-card"
+            contentClass="flex min-h-[330px] flex-col gap-4 p-6"
+          >
+            <div
+              data-drop-obstacle
+              class="flex size-12 items-center justify-center rounded-lg bg-primary/10 text-primary"
+            >
+              <Server class="size-6" />
+            </div>
+            <h3 data-drop-text="title" class="text-sm font-semibold">Connect a CGM or pump account</h3>
+            <p data-drop-text="copy" class="text-sm text-muted-foreground">
+              Dexcom, Medtronic, Libre,<br />Omnipod and more,<br />all in one place.
+            </p>
+          </DropSurface>
+          <DropSurface
+            {deposit}
+            {kind}
+            {spatter}
+            {palette}
+            {tintSurface}
+            {generation}
+            shown={hold ? true : undefined}
+            onresolved={record}
+            name="tile"
+            class="w-[403px] rounded-lg border bg-card"
+            contentClass="flex min-h-[142px] flex-col items-center gap-2 p-4 text-center"
+          >
+            <div
+              data-drop-obstacle
+              class="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary"
+            >
+              <Heart class="size-5" />
+            </div>
+            <h3 data-drop-text="title" class="text-sm font-semibold">Sponsor the Foundation</h3>
+            <p data-drop-text="copy" class="text-sm text-muted-foreground">Fund the work that keeps Nocturne free.</p>
+          </DropSurface>
+        </div>
+      {/snippet}
+      <PreviewSurface background="light">
+        <DropGroup name="blobbed light">
+          {@render blobbed()}
+        </DropGroup>
+      </PreviewSurface>
+      <PreviewSurface background="dark">
+        <DropGroup name="blobbed dark">
+          {@render blobbed()}
         </DropGroup>
       </PreviewSurface>
     </Card.Content>

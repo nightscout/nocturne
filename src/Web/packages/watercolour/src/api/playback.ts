@@ -1,12 +1,12 @@
 import type { ArtworkOptions, DetailLevel, Surface } from '../types';
-import { DEFAULT_DURATION_MS, DEFAULT_TAIL, detailForEdge, simResolutionForEdge } from '../types';
+import { DEFAULT_DURATION_MS, DEFAULT_TAIL, detailForEdge } from '../types';
 import { type AssetKey, type AssetOptions, assetAvailable, assetUrl, iconAssetKey, loadManifest } from './assets';
 import { bakedServesEdge, type BakedManifest, type StripBitmap, drawStill, drawStripFrame, loadStrip, parseBakedManifest, sharedStill } from './baked';
 import { type Capabilities, detectCapabilities } from './capabilities';
 import { type EngineHost, type EngineLease, type WasmInstance, getEngineHost } from './engine-host';
 import { WatercolourError, toWatercolourError } from './errors';
 import { type ResolvedMode, fallbackOrder, resolveMode, resolveMotion } from './mode';
-import { type ArtworkRef, type IconRef, type SceneSource, iconSvg, isArtworkRef, isIconRef, parseSceneDocument, resolveSceneJson } from './scenes';
+import { type ArtworkRef, type IconRef, type SceneSource, authoredSceneJson, iconSvg, isArtworkRef, isIconRef, parseSceneDocument, resolveSceneJson } from './scenes';
 import { type Scheduler, type SchedulerHandle, getScheduler } from './scheduler';
 
 export type PlayerEvent = 'ready' | 'finished' | 'fallback' | 'error' | 'statechange';
@@ -59,6 +59,13 @@ export interface PlayerOptions extends ArtworkOptions, AssetOptions {
    * cheap to render but numerous (avatars).
    */
   releaseAfterFinish?: boolean;
+  /**
+   * Live only: GPU memory this instance may spend on seek checkpoints.
+   * Absent keeps the engine's default; 0 leaves it with the single
+   * checkpoint at tick 0, so a backwards seek replays from the start
+   * instead of restoring a nearer state.
+   */
+  checkpointBudgetBytes?: number;
   scheduler?: Scheduler;
   engineHost?: EngineHost;
   capabilities?: () => Promise<Capabilities>;
@@ -200,23 +207,30 @@ class LiveBackend implements Backend {
   ): Promise<LiveBackend> {
     const lease = await host.acquire();
     try {
-      // Live reveals pick the detail tier and the simulation grid from the
-      // canvas's BACKING long edge (the size passed in is DPR-scaled), so the
-      // grid keeps up with the output instead of stretching 256 cells across
-      // a 450+ px store. An explicit `detail`/`simResolution` option wins.
+      // Live reveals pick the detail tier from the canvas's BACKING long edge
+      // (the size passed in is DPR-scaled). The simulation grid is the tier's
+      // own, whatever the canvas: the fluid moves in cells, so a different
+      // grid paints a different picture, and one tier must paint the same one
+      // at every size. An explicit `detail`/`simResolution` option wins.
       const longEdge = Math.max(size.width, size.height);
       const resolvedDetail = options.detail ?? detailForEdge(longEdge);
       const sceneJson = isArtworkRef(source) || isIconRef(source)
         ? resolveSceneJson(lease.module, source, {
             detail: resolvedDetail,
-            simResolution: options.simResolution ?? simResolutionForEdge(longEdge),
+            simResolution: options.simResolution,
           })
-        : source.sceneJson;
+        : authoredSceneJson(source, lease.module);
       parseSceneDocument(sceneJson);
       // Catalogue scenes carry their own tick tail; only the wall-clock split
       // is passed through, so `tail` is the share of the duration the paint
       // phase does NOT get.
-      const instance = lease.engine.createInstance(sceneJson, durationMs, 0, 1 - (options.tail ?? DEFAULT_TAIL));
+      const instance = lease.engine.createInstance(
+        sceneJson,
+        durationMs,
+        0,
+        1 - (options.tail ?? DEFAULT_TAIL),
+        options.checkpointBudgetBytes,
+      );
       if (options.easing) instance.setProgressCurve('linear');
       try {
         const target = acquireWebgpu(canvas);

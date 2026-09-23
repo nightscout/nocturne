@@ -37,53 +37,6 @@ export const PALETTE_PIGMENTS: Readonly<Record<PaletteId, PigmentColours>> = {
   slate: { baseWash: PAYNES_GREY, shadow: LAMP_BLACK, accent: CERULEAN, glow: MOON_GOLD },
 };
 
-/** The pigment a mark reads as: whatever its palette lays down first. */
-export function dominantPigment(palette: PaletteId): string {
-  return PALETTE_PIGMENTS[palette].baseWash;
-}
-
-/**
- * The hue each palette's base wash sits at, in degrees, and how saturated it
- * is. Both come from the same reflectances as {@link PALETTE_PIGMENTS} and are
- * what {@link tintFilter} steers between.
- */
-const BASE_HUE: Readonly<Record<PaletteId, number>> = {
-  moonlight: 228,
-  water: 209,
-  dusk: 340,
-  ember: 23,
-  moss: 92,
-  slate: 222,
-};
-
-const BASE_SATURATION: Readonly<Record<PaletteId, number>> = {
-  moonlight: 0.38,
-  water: 0.52,
-  dusk: 0.6,
-  ember: 0.8,
-  moss: 0.52,
-  slate: 0.19,
-};
-
-/**
- * A filter that steers a baked mark from the palette it was baked in toward
- * another one.
- *
- * Every mark ships baked in exactly one palette. A themed surface can either
- * bake more, which is exact and costs assets, or push the pixels it has.
- *
- * This is the second route, and it approximates. `hue-rotate` is a linear
- * matrix rather than a hue wheel, so it shifts the granulation and the paper
- * stain along with the pigment. Prefer a real bake wherever the colour is load
- * bearing; the live path takes a {@link PaletteId} directly.
- */
-export function tintFilter(from: PaletteId, to: PaletteId): string | undefined {
-  if (from === to) return undefined;
-  const turn = ((BASE_HUE[to] - BASE_HUE[from] + 540) % 360) - 180;
-  const gain = BASE_SATURATION[to] / BASE_SATURATION[from];
-  return `hue-rotate(${turn.toFixed(1)}deg) saturate(${gain.toFixed(2)})`;
-}
-
 /**
  * The background wash a surface takes from the mark that landed on it.
  *
@@ -92,7 +45,7 @@ export function tintFilter(from: PaletteId, to: PaletteId): string | undefined {
  * so the surface and the mark arrive together.
  */
 export function surfaceTint(palette: PaletteId, alpha: number): string {
-  const rgb = dominantPigment(palette);
+  const rgb = PALETTE_PIGMENTS[palette].baseWash;
   return rgb.replace(/^rgb\((.*)\)$/, (_, channels: string) => `rgba(${channels}, ${alpha.toFixed(3)})`);
 }
 

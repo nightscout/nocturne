@@ -67,11 +67,11 @@ defaults it from a `.dark` class on `<html>`, else `prefers-color-scheme`.
 `detail: 'small' | 'medium' | 'large' | 'extraLarge'` simplifies the artwork for
 its rendered size; `detailForEdge(px)` picks it from the canvas's BACKING long
 edge (CSS size times device pixel ratio, capped at 2): below 64 px small, below
-192 px medium, below 320 px large, 320 px and above extraLarge. Live reveals
-additionally set the simulation grid from the same edge via
-`simResolutionForEdge` - the edge rounded up to a multiple of 32, capped at 512 -
-so a large backing store is not stretched across 256 cells. An explicit
-`detail` or `simResolution` (live only) option overrides the derived values.
+192 px medium, below 320 px large, 320 px and above extraLarge. The simulation
+grid is the tier's own (96/160/256/384) whatever the canvas size: the fluid
+moves in cells, so a different grid would paint a different picture, and a tier
+paints the same one at every size. An explicit `detail` or `simResolution`
+(live only) option overrides the derived values.
 
 `easing: (t: number) => number` maps wall-clock progress to the progress shown,
 e.g. `import { cubicOut } from 'svelte/easing'`. When given, the live backend

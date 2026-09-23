@@ -184,6 +184,17 @@ export const DEFAULT_DURATION_MS = 3000;
 export const DEFAULT_TAIL = 0.8;
 
 /**
+ * How long a mark takes to arrive, in ms.
+ *
+ * This is a hover state on a UI element, not a hero: it has to feel like a
+ * response to the pointer. The engine's own 3 s reveal is for a piece of
+ * artwork someone is looking at, and reads as a hang on a card.
+ */
+export const DEFAULT_REVEAL_MS = 420;
+/** The settle runs past the spread, so the mark is still gaining pigment when it stops moving. */
+export const REVEAL_SETTLE_RATIO = 1.45;
+
+/**
  * The natural width/height ratio of each catalogue artwork, from the baked
  * aspect table (icons and `wash` are square, scenes and accents keep the
  * ratio they were authored at). The components use it to size the canvas in
@@ -246,31 +257,6 @@ export function detailForEdge(edgePx: number): DetailLevel {
   if (edgePx < 192) return 'medium';
   if (edgePx < 320) return 'large';
   return 'extraLarge';
-}
-
-/**
- * Largest simulation grid a live reveal will run on, whatever the display.
- *
- * A tick is the expensive thing in a frame and its cost is roughly the cell
- * count: measured on a discrete laptop GPU, a 512 grid costs 0.9-1.9 ms a
- * tick against 0.35-1.06 ms at 256, and an integrated GPU is several times
- * slower again. The render reconstructs the simulation fields at the output
- * resolution with a cubic B-spline, so a larger canvas still gets a sharp
- * frame off a 256 grid — it is the fluid detail that is capped, not the
- * picture. Anything that genuinely wants a 512 grid wants a baked strip.
- */
-export const MAX_LIVE_SIM_RESOLUTION = 256;
-
-/**
- * Simulation grid side for a live reveal at a backing long edge: the edge
- * rounded up to a multiple of 32, floored at `SimResolution.MIN` (64) and
- * capped at {@link MAX_LIVE_SIM_RESOLUTION}. The engine clamps again
- * defensively.
- */
-export function simResolutionForEdge(edgePx: number): number {
-  const edge = Math.max(0, Math.round(edgePx));
-  if (edge >= MAX_LIVE_SIM_RESOLUTION) return MAX_LIVE_SIM_RESOLUTION;
-  return Math.max(64, Math.ceil(edge / 32) * 32);
 }
 
 /** FNV-1a over the name, so the same person always receives the same wash. */

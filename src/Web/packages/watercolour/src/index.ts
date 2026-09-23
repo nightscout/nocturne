@@ -28,7 +28,7 @@ export type {
   IconArtworkSource,
   PigmentRole,
 } from './types';
-export { ARTWORK_IDS, PALETTE_IDS, DEFAULT_INTENSITY, DEFAULT_DURATION_MS, DEFAULT_TAIL, ARTWORK_ASPECT, artworkAspect, seedFromName, detailForEdge } from './types';
+export { ARTWORK_IDS, PALETTE_IDS, DEFAULT_INTENSITY, DEFAULT_DURATION_MS, DEFAULT_TAIL, DEFAULT_REVEAL_MS, REVEAL_SETTLE_RATIO, ARTWORK_ASPECT, artworkAspect, seedFromName, detailForEdge } from './types';
 
 export { createArtworkPlayer } from './api/playback';
 export type { ArtworkPlayer, PlayerOptions, PlayerState, PlayerEvent, FallbackDetail } from './api/playback';
@@ -63,61 +63,23 @@ export {
 export type { BakedManifest, StripPosition, StripBitmap } from './api/baked';
 
 export { parseSceneDocument, resolveSceneJson, paletteKey, isArtworkRef, mergeIconHints, iconSvg, SCENE_DOCUMENT_VERSION } from './api/scenes';
-export type { ArtworkRef, SceneSource, SceneDocumentHeader } from './api/scenes';
+export type { ArtworkRef, SceneSource, AuthoredScene, SceneDocumentHeader } from './api/scenes';
+export { authoredSceneJson } from './api/scenes';
 
 export { ICON_HINTS } from './api/icon-hints';
 
 export { assetUrl, assetAvailable, hasBundledAsset, loadManifest, bundledArtworkIds, defaultPaletteFor, DEFAULT_PALETTE } from './api/assets';
 export type { AssetVariant, AssetOptions, AssetKey } from './api/assets';
 
-export {
-  DROP_MARKS,
-  inkAspect,
-  inkFrame,
-  placeSpots,
-  searchStep,
-  layOutDrops,
-  planDrop,
-  washDrop,
-  signaturesOf,
-} from './api/drops';
-export type {
-  DropAnchor,
-  DropSide,
-  DropMark,
-  DropPlan,
-  DropSignature,
-  PlacedDrop,
-  InkExtent,
-  Box,
-  Spot,
-  LayOutOptions,
-} from './api/drops';
+export { fitMark, fitStroke, fitDrops, fitSplotch, borderMark, washStroke, glazeStroke, mergeReserves, clearanceField, strokeStep, bleedFor, MAX_THICKNESS, MAX_RADIUS, MAX_DROP_RADIUS } from './api/drop-stroke';
+export type { DropMark, DropKind, MarkOptions, DropStroke, StrokeOptions, StrokeSide, ClearanceField, Dab, Pt } from './api/drop-stroke';
+export { dropScene, strokeFrame } from './api/drop-scene';
+export type { DropScene, DropSceneOptions, DropDeposit } from './api/drop-scene';
 
 export { measureObstacles, textBoxes, DROP_TEXT_PAD } from './api/drop-text';
 export type { DropFont, DropFonts } from './api/drop-text';
 
-export {
-  DROP_REVEALS,
-  REVEAL_SPREAD_EASE,
-  REVEAL_SETTLE_EASE,
-  REVEAL_START_RADIUS,
-  REVEAL_START_OPACITY,
-  REVEAL_START_SATURATION,
-  REVEAL_END_SATURATION,
-  REVEAL_START_SCALE,
-  REVEAL_SETTLE_RATIO,
-  DEFAULT_REVEAL_MS,
-  cssEase,
-  cubicBezier,
-  revealArea,
-  revealPacing,
-  coveringRadius,
-  sampleReveal,
-} from './api/drop-reveal';
-export type { DropReveal, Bezier, RevealSample } from './api/drop-reveal';
-
-export { PALETTE_PIGMENTS, dominantPigment, tintFilter, surfaceTint, SURFACE_TINT_ALPHA } from './api/drop-colour';
+export { PALETTE_PIGMENTS, surfaceTint, SURFACE_TINT_ALPHA } from './api/drop-colour';
 export type { PigmentColours } from './api/drop-colour';
 
 export { WatercolourError, toWatercolourError } from './api/errors';

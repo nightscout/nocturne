@@ -101,3 +101,6 @@ Trio/
 
 # Throwaway probes and one-off scripts; never part of a change.
 scratch/
+
+# Session scratch: worker briefs, logs and reports
+scratchpad/

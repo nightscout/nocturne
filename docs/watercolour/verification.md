@@ -222,19 +222,25 @@ spot checks on the machine above, not a benchmark harness.
 - **CPU/GPU not bit-exact**: a few boundary cells dry one tick apart under
   fused-multiply-add rounding. Mean difference stays three orders of magnitude
   inside the 0.01 tolerance; see the measured table.
-- **Luminous bodies are flatter/pastel on dark**; a translucent variant needs a
-  smooth (Gaussian/soft-max) presence kernel. Preview hook exists
-  (`luminous_variants` in `render_native`), not shipped.
-- **Luminous dark-surface bodies read flat or murky** (the vision review's
-  verdict): the shipped tuning is kept because the translucent tunings
-  reintroduce grey dirt; the fix belongs in the alpha and grain curves, not the
-  reconstruction kernel.
+- **Luminous bodies are flatter/pastel on dark**: `alpha_full` at 0.2
+  saturates a body, so it carries its variation in colour alone. The
+  translucent tuning (`alpha_full 0.45`, `grain_strength 0.7`) was re-rendered
+  on the soft dilation and rejected: its outlines were fine, but a pale glaze
+  at partial alpha over black is grey, and `header-motif` and
+  `moonlit-shoreline` clouded. Preview hook exists (`luminous_variants` in
+  `render_native`), not shipped.
+- **A luminous outline wobbles at the cell scale**: the paint mask rounds a
+  binary deposit's staircase but cannot recover a sub-cell edge, and a
+  one-cell mark keeps its full weight rather than being rounded. The grid is
+  fixed per detail tier rather than raised, because the simulation is not
+  scale invariant; see "Resolution" in `pigment-and-compositing.md`.
 - **The 600 ms reveal at a 512 grid can exceed the 16 ms frame budget** on the
   largest heroes: at `extraLarge` complexity (tick scale 1.25) the reveal needs
   ~18 ticks/frame at 60 fps, and at 512 each tick costs ~0.8-1.4 ms on the GPU
   (measured, per-tick numbers in the resolution report), so a large hero is
   ~14-25 ms/frame. The scheduler's catch-up keeps it correct, but not a smooth
-  60 fps at the biggest backing sizes.
+  60 fps at the biggest backing sizes. Only an explicit `simResolution` takes
+  a reveal there; the largest tier's own grid is 384.
 - **Baked assets stay at their baked detail**; the resolution override applies
   to live mode only.
 - **The host app's `svelte-check` has 46 pre-existing errors** unrelated to this

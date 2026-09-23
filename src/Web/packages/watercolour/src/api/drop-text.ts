@@ -1,5 +1,5 @@
 import { layoutWithLines, prepareWithSegments } from '@chenglou/pretext';
-import type { Box } from './drops';
+import type { Box } from './drop-stroke';
 
 /**
  * A font a surface's text is set in, as Pretext needs it.

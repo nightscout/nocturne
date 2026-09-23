@@ -1,4 +1,5 @@
 import {
+  type ArtworkId,
   type ArtworkMode,
   type ArtworkPlayer,
   type ArtworkQuality,
@@ -11,6 +12,7 @@ import {
   type Surface,
   type WatercolourError,
   PALETTE_IDS,
+  artworkAspect,
   catalogueIds,
   createArtworkPlayer,
   detectCapabilities,
@@ -117,6 +119,17 @@ export class PlaygroundState {
   /** 0 = auto; anything else overrides the simulation grid side. */
   simOverride = $state(0);
   outputSize = $state<OutputSize>(512);
+  /**
+   * The canvas in CSS px, at the artwork's own aspect with `outputSize` on the
+   * long edge. A scene is authored at its aspect; simulated on a square it is
+   * stretched.
+   */
+  readonly canvasSize = $derived.by(() => {
+    const aspect = this.artwork.startsWith('lucide:') ? 1 : artworkAspect(this.artwork as ArtworkId);
+    return aspect >= 1
+      ? { width: this.outputSize, height: Math.round(this.outputSize / aspect) }
+      : { width: Math.round(this.outputSize * aspect), height: this.outputSize };
+  });
   easing = $state<EasingName>('engine');
   tail = $state(0.8);
   quality = $state<ArtworkQuality>('auto');
@@ -193,8 +206,8 @@ export class PlaygroundState {
         mode: this.mode,
         motion: 'full',
         autoplay: 'once',
-        width: this.outputSize,
-        height: this.outputSize,
+        width: this.canvasSize.width,
+        height: this.canvasSize.height,
         dpr: this.dpr,
         easing: this.easing === 'engine' ? undefined : EASING_FNS[this.easing],
         tail: this.tail,
@@ -252,7 +265,7 @@ export class PlaygroundState {
     if (!this.player) throw new Error('no player');
     this.exporting = true;
     try {
-      const bytes = await this.player.exportPng(this.outputSize, this.outputSize);
+      const bytes = await this.player.exportPng(this.canvasSize.width, this.canvasSize.height);
       return new Blob([bytes as BlobPart], { type: 'image/png' });
     } finally {
       this.exporting = false;

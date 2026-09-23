@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { type IconHints, type IconNode } from '../types';
 import { WatercolourError, toWatercolourError } from './errors';
 import { ICON_HINTS } from './icon-hints';
-import { type IconRef, iconSvg, isIconRef, mergeIconHints, paletteKey, parseSceneDocument, resolveSceneJson } from './scenes';
+import { type IconRef, authoredSceneJson, iconSvg, isIconRef, mergeIconHints, paletteKey, parseSceneDocument, resolveSceneJson } from './scenes';
 import { type IconArtworkSource, type PigmentRole, type IconNode as IndexIconNode, type IconHints as IndexIconHints, ICON_HINTS as INDEX_ICON_HINTS, mergeIconHints as indexMergeIconHints, iconSvg as indexIconSvg } from '../index';
 
 vi.mock('../components/Artwork.svelte', () => ({ default: {} }));
@@ -233,5 +233,13 @@ describe('index surface', () => {
     expect(node[0]).toBe('circle');
     const role: PigmentRole = 'shadow';
     expect(source.hints?.markRole).not.toBe(role);
+  });
+});
+
+describe('authoredSceneJson', () => {
+  it('returns a finished document as is and authors a lazy one with the module', () => {
+    const module = { catalogueScene: () => '{"donor":true}' } as never;
+    expect(authoredSceneJson({ sceneJson: '{"a":1}' }, module)).toBe('{"a":1}');
+    expect(authoredSceneJson({ scene: (m) => m.catalogueScene('x', 0, 'water', 0.7, 'large', 'light', 0) }, module)).toBe('{"donor":true}');
   });
 });

@@ -51,9 +51,11 @@ export interface WasmEngine {
    * `paintWallFraction` (0 = keep the default) is the share of the wall clock
    * the brushwork gets; the playback runs `ProgressCurve::reveal_for(scene,
    * paintWallFraction)` so the tail covers the settling after the pen leaves
-   * the paper.
+   * the paper. `checkpointBudgetBytes` (absent or 0 = the engine default) is
+   * this instance's own seek-checkpoint budget; below one checkpoint it still
+   * keeps the one at tick 0, so `seekProgress` replays from the start.
    */
-  createInstance(sceneJson: string, durationMs: number, settleFraction?: number, paintWallFraction?: number): WasmInstance;
+  createInstance(sceneJson: string, durationMs: number, settleFraction?: number, paintWallFraction?: number, checkpointBudgetBytes?: number): WasmInstance;
   isLost(): boolean;
   onDeviceLost(callback: (message: string) => void): void;
   adapterName(): string;

@@ -1,6 +1,7 @@
 <script lang="ts">
   import * as Card from '@nocturne/ui/ui/card';
   import * as Select from '@nocturne/ui/ui/select';
+  import * as ToggleGroup from '@nocturne/ui/ui/toggle-group';
   import { Button } from '@nocturne/ui/ui/button';
   import { Input } from '@nocturne/ui/ui/input';
   import { Label } from '@nocturne/ui/ui/label';
@@ -14,6 +15,7 @@
   import Download from '@lucide/svelte/icons/download';
   import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
   import PageHeader from '$lib/components/PageHeader.svelte';
+  import DropPlayground from '$lib/components/DropPlayground.svelte';
   import { LUCIDE_ICONS } from '$lib/lucide-icons';
   import type { ArtworkMode, ArtworkQuality, PaletteId } from '@nocturne/watercolour';
   import {
@@ -33,6 +35,8 @@
   } from '$lib/playground-state.svelte';
 
   const pg = new PlaygroundState();
+  /** A catalogue artwork on the raw player, or a paint drop on its surface. */
+  let subject = $state<'artwork' | 'drop'>('artwork');
   let canvas: HTMLCanvasElement | undefined = $state();
 
   const titleCase = (s: string) => s.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
@@ -83,7 +87,7 @@
   async function exportPng() {
     try {
       download(await pg.exportPng(), `${fileStem()}.png`);
-      toast('Exported PNG', { description: `${pg.outputSize} by ${pg.outputSize}, straight alpha, sRGB.` });
+      toast('Exported PNG', { description: `${pg.canvasSize.width} by ${pg.canvasSize.height}, straight alpha, sRGB.` });
     } catch (error) {
       toast.error('Export failed', { description: error instanceof Error ? error.message : String(error) });
     }
@@ -107,8 +111,25 @@
 
 <PageHeader
   title="Playground"
-  description="The real engine on a square canvas: every artwork, palette, detail tier, sim resolution and easing, with PNG and baked-strip export."
+  description="The real engine: every artwork at its own aspect with every palette, detail tier, sim resolution and easing, or a paint drop on a surface of any size."
 />
+
+<ToggleGroup.Root
+  type="single"
+  variant="outline"
+  size="sm"
+  value={subject}
+  onValueChange={(v) => { if (v) subject = v as 'artwork' | 'drop'; }}
+  aria-label="Subject"
+  class="mb-6 justify-start"
+>
+  <ToggleGroup.Item value="artwork" aria-label="Artwork">Artwork</ToggleGroup.Item>
+  <ToggleGroup.Item value="drop" aria-label="Paint drop">Paint drop</ToggleGroup.Item>
+</ToggleGroup.Root>
+
+{#if subject === 'drop'}
+  <DropPlayground />
+{:else}
 
 {#if pg.webgpuAvailable === false}
   <div role="status" class="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
@@ -350,19 +371,19 @@
           {/if}
         </Card.Description>
       </Card.Header>
-      <Card.Content class="flex justify-center">
+      <Card.Content class="flex flex-col items-center">
         <div
           data-playground-canvas
           data-mode={pg.resolvedMode}
           data-progress={pg.progress}
           data-playing={pg.playing}
-          class="relative aspect-square w-full rounded-lg outline-1 outline-dashed -outline-offset-1 outline-border"
-          style="max-width:{pg.outputSize}px"
+          class="relative w-full rounded-lg outline-1 outline-dashed -outline-offset-1 outline-border"
+          style="max-width:{pg.canvasSize.width}px; aspect-ratio:{pg.canvasSize.width} / {pg.canvasSize.height}"
         >
           <canvas
             bind:this={canvas}
-            width={pg.outputSize * pg.dpr}
-            height={pg.outputSize * pg.dpr}
+            width={pg.canvasSize.width * pg.dpr}
+            height={pg.canvasSize.height * pg.dpr}
             class="block h-full w-full"
             aria-hidden="true"
           ></canvas>
@@ -370,7 +391,7 @@
         <dl class="mt-3 grid w-full grid-cols-2 gap-x-6 gap-y-1 font-mono text-xs sm:grid-cols-4">
           <div>
             <dt class="text-muted-foreground">backing</dt>
-            <dd>{pg.outputSize} x {pg.outputSize} CSS px @ {pg.dpr}x</dd>
+            <dd>{pg.canvasSize.width} x {pg.canvasSize.height} CSS px @ {pg.dpr}x</dd>
           </div>
           <div>
             <dt class="text-muted-foreground">detail</dt>
@@ -408,3 +429,4 @@
     </Card.Root>
   </div>
 </div>
+{/if}

@@ -9,7 +9,6 @@ import Bell from '@lucide/svelte/icons/bell';
 import Settings from '@lucide/svelte/icons/settings';
 import CircleCheck from '@lucide/svelte/icons/circle-check';
 import FlaskConical from '@lucide/svelte/icons/flask-conical';
-import LayoutGrid from '@lucide/svelte/icons/layout-grid';
 import Code from '@lucide/svelte/icons/code';
 import Droplet from '@lucide/svelte/icons/droplet';
 
@@ -32,6 +31,5 @@ export const NAV_PAGES: readonly NavPage[] = [
   { href: '/confirmations', label: 'Confirmations', description: 'Toasts, saved states and empty states', icon: CircleCheck },
   { href: '/playground', label: 'Playground', description: 'Engine controls and canvas', icon: FlaskConical },
   { href: '/drops', label: 'Paint drops', description: 'Marks painted live into the free space on a card', icon: Droplet },
-  { href: '/gallery', label: 'Gallery', description: 'Every artwork at three sizes', icon: LayoutGrid },
   { href: '/integration', label: 'Integration', description: 'Using the components in the app', icon: Code },
 ];

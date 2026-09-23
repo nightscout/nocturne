@@ -47,6 +47,13 @@ const LUMINOUS_ALPHA_FULL: f32 = 0.2;
 const LUMINOUS_COLOUR_FLOOR: f32 = 0.5;
 // Mirrors optics::LUMINOUS_GRAIN_STRENGTH.
 const LUMINOUS_GRAIN_STRENGTH: f32 = 0.38;
+// Mirror optics::LUMINOUS_EDGE_LO, LUMINOUS_EDGE_HI, LUMINOUS_MASK_THICKNESS,
+// MASK_MAJORITY and MASK_THIN.
+const LUMINOUS_EDGE_LO: f32 = 0.2;
+const LUMINOUS_EDGE_HI: f32 = 0.8;
+const LUMINOUS_MASK_THICKNESS: f32 = 0.02;
+const MASK_MAJORITY: u32 = 5u;
+const MASK_THIN: u32 = 2u;
 const MAX_PIGMENTS: u32 = 8u;
 
 fn o_wet() -> u32 { return 0u; }
@@ -74,6 +81,15 @@ fn km_layer(kx_in: f32, sx_in: f32) -> vec2<f32> {
     let r = sx * sinh_over_beta / denom;
     let t = 1.0 / denom;
     return vec2<f32>(clamp(r, 0.0, 1.0), clamp(t, 0.0, 1.0));
+}
+
+// Mirrors optics::PRESENCE_KERNEL: a Gaussian `2^(-d^2)` over the squared cell
+// distance from the tap, normalised to sum to 1. The shift keeps the weights
+// exact in f32, so no `exp` and no divergence from the reference table.
+fn presence_weight(dx: u32, dy: u32) -> f32 {
+    let ox = i32(dx) - 1i;
+    let oy = i32(dy) - 1i;
+    return 0.25 / f32(1u << u32(ox * ox + oy * oy));
 }
 
 // Cubic B-spline weights for a fractional `t` in 0..1; mirrors
@@ -127,20 +143,59 @@ fn render(@builtin(global_invocation_id) gid: vec3<u32>) {
             for (var k = 0u; k < R.pigment_count; k++) {
                 dep[k] += state[o_d(k) + i] * wgt;
                 sus[k] += state[o_g(k) + i] * wgt;
-                // optics::Sample::presence: 3x3 maximum of deposited + visible
-                // suspended pigment around the tap cell (clamped at the edge).
-                var best = 0.0;
-                for (var dy = 0u; dy < 3u; dy++) {
-                    for (var dx = 0u; dx < 3u; dx++) {
-                        let nx = u32(min(max(tap_x + i32(dx) - 1i, 0), i32(w) - 1i));
-                        let ny = u32(min(max(tap_y + i32(dy) - 1i, 0), i32(h) - 1i));
-                        let j = ny * w + nx;
-                        best = max(best, state[o_d(k) + j] + state[o_g(k) + j] * R.wet_pigment_visibility * state[o_wet() + j]);
-                    }
-                }
-                pres[k] += best * wgt;
             }
         }
+    }
+    // optics::cubic_sample's window: the 6x6 cells the taps and their 3x3
+    // neighbourhoods read, clamped at the grid edge, read once per pigment.
+    // From it, per tap, the presence (the tap cell raised toward its 3x3 by a
+    // Gaussian-weighted fourth-power mean) and how far inside the paint the
+    // tap is.
+    var mask = 0.0;
+    var win: array<f32, 36>;
+    for (var k = 0u; k < R.pigment_count; k++) {
+        for (var wy_i = 0u; wy_i < 6u; wy_i++) {
+            let ny = u32(min(max(i32(y0) + i32(wy_i) - 2i, 0), i32(h) - 1i));
+            for (var wx_i = 0u; wx_i < 6u; wx_i++) {
+                let nx = u32(min(max(i32(x0) + i32(wx_i) - 2i, 0), i32(w) - 1i));
+                let j = ny * w + nx;
+                win[wy_i * 6u + wx_i] = max(state[o_d(k) + j] + state[o_g(k) + j] * R.wet_pigment_visibility * state[o_wet() + j], 0.0);
+            }
+        }
+        var mask_k = 0.0;
+        for (var oy = 0u; oy < 4u; oy++) {
+            for (var ox = 0u; ox < 4u; ox++) {
+                let wgt = wx[ox] * wy[oy];
+                var acc = 0.0;
+                var neighbours = 0u;
+                var soft = 0.0;
+                for (var dy = 0u; dy < 3u; dy++) {
+                    for (var dx = 0u; dx < 3u; dx++) {
+                        let q = win[(oy + dy) * 6u + ox + dx];
+                        let q2 = q * q;
+                        acc += presence_weight(dx, dy) * q2 * q2;
+                        if q > LUMINOUS_MASK_THICKNESS {
+                            soft += presence_weight(dx, dy);
+                            if dy != 1u || dx != 1u {
+                                neighbours += 1u;
+                            }
+                        }
+                    }
+                }
+                let own = win[(oy + 1u) * 6u + ox + 1u];
+                pres[k] += max(sqrt(sqrt(acc)), own) * wgt;
+                // optics::cubic_sample: the painted share of the tap's 3x3,
+                // full when a painted majority rings it or when the tap is a
+                // painted thin mark.
+                var inside = soft;
+                let thin = own > LUMINOUS_MASK_THICKNESS && neighbours <= MASK_THIN;
+                if neighbours >= MASK_MAJORITY || thin {
+                    inside = 1.0;
+                }
+                mask_k += inside * wgt;
+            }
+        }
+        mask = max(mask, mask_k);
     }
     let h_out = paper_out[y * R.out_width + x];
     let wet_look = clamp(depth_s / R.sheen_depth, 0.0, 1.0);
@@ -212,7 +267,8 @@ fn render(@builtin(global_invocation_id) gid: vec3<u32>) {
         let min_plain = min(ret_plain.x, min(ret_plain.y, ret_plain.z));
         let mean_plain = (ret_plain.x + ret_plain.y + ret_plain.z) / 3.0;
         let coverage = clamp(1.0 - (min_plain + (mean_plain - min_plain) * ALPHA_SOFTNESS), 0.0, 1.0);
-        out_alpha = smoothstep(LUMINOUS_ALPHA_TOE, LUMINOUS_ALPHA_FULL, coverage);
+        out_alpha = smoothstep(LUMINOUS_ALPHA_TOE, LUMINOUS_ALPHA_FULL, coverage)
+            * smoothstep(LUMINOUS_EDGE_LO, LUMINOUS_EDGE_HI, mask);
         let scale = max(LUMINOUS_COLOUR_FLOOR / max(plain_thickness, 1e-6), 1.0);
         // optics::damp_texture: grain deviation damped toward the plain mix.
         let kx_d = kx_plain + (kx - kx_plain) * LUMINOUS_GRAIN_STRENGTH;

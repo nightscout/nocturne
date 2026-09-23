@@ -13,6 +13,7 @@
   import { Label } from "$lib/components/ui/label";
   import { Textarea } from "$lib/components/ui/textarea";
   import GithubIcon from "$lib/components/icons/GithubIcon.svelte";
+  import { DropGroup, DropSurface } from "@nocturne/watercolour";
   import {
     HeartHandshake,
     MessageCircle,
@@ -253,16 +254,24 @@
       <CardDescription>Need help? Here's how to reach us</CardDescription>
     </CardHeader>
     <CardContent class="space-y-4">
+      <!-- No `fonts`: these sizes are inherited, so there is no class to mirror. -->
+      <DropGroup name="support options">
       <div class="grid gap-4 @xl:grid-cols-2">
         {#each supportOptions as option}
           {#if option.template === "account" && supportConfig?.accountBilling?.mode === "redirect"}
-            <a
+            <DropSurface
+              as="a"
+              name={option.template}
+              palette="water"
+              peak={0.6}
               href={supportConfig.accountBilling.url}
               target="_blank"
               rel="noopener noreferrer"
-              class="flex flex-col items-center text-center p-4 rounded-lg border hover:border-primary/50 hover:bg-accent/50 transition-colors"
+              class="rounded-lg border hover:border-primary/50 hover:bg-accent/50 transition-colors"
+              contentClass="flex flex-col items-center text-center p-4"
             >
               <div
+                data-drop-obstacle
                 class="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 mb-3"
               >
                 <ExternalLink class="h-6 w-6 text-primary" />
@@ -271,18 +280,24 @@
               <p class="text-sm text-muted-foreground mt-1">
                 {option.description}
               </p>
-            </a>
+            </DropSurface>
           {:else}
             <!-- The account tile's routing depends on the operator config; keep it inert until
                  the config resolves so a click during the fetch window can't misroute a
                  redirect/api-mode tenant to the generic community dialog. Other templates route
                  the same regardless of config, so they stay interactive. -->
-            <button
-              class="flex flex-col items-center text-center p-4 rounded-lg border hover:border-primary/50 hover:bg-accent/50 transition-colors disabled:pointer-events-none disabled:opacity-60"
+            <DropSurface
+              as="button"
+              name={option.template}
+              palette="water"
+              peak={0.6}
+              class="rounded-lg border hover:border-primary/50 hover:bg-accent/50 transition-colors disabled:pointer-events-none disabled:opacity-60"
+              contentClass="flex flex-col items-center text-center p-4"
               disabled={option.template === "account" && supportConfig === undefined}
               onclick={() => handleSupportAction(option.template, supportConfig?.accountBilling?.mode)}
             >
               <div
+                data-drop-obstacle
                 class="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 mb-3"
               >
                 <option.icon class="h-6 w-6 text-primary" />
@@ -291,10 +306,11 @@
               <p class="text-sm text-muted-foreground mt-1">
                 {option.description}
               </p>
-            </button>
+            </DropSurface>
           {/if}
         {/each}
       </div>
+      </DropGroup>
 
       <div class="flex justify-center pt-2">
         <a

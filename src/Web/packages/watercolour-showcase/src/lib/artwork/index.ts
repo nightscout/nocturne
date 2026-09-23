@@ -63,9 +63,5 @@ export type {
   FrameStats,
   DropFont,
   DropFonts,
-  DropMark,
-  DropPlan,
-  DropReveal,
-  DropSignature,
-  PlacedDrop,
+  DropDeposit,
 } from '@nocturne/watercolour';

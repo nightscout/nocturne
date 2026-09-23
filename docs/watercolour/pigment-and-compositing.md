@@ -90,10 +90,29 @@ colour `W_c = R_c + return_c` at a display alpha:
 
 ```
 alpha = smoothstep(LUMINOUS_ALPHA_TOE = 0.03, LUMINOUS_ALPHA_FULL = 0.2, coverage)
+      * smoothstep(LUMINOUS_EDGE_LO = 0.2, LUMINOUS_EDGE_HI = 0.8, mask)
 rgb_c = W_c * alpha
 ```
 
-Four display decisions are folded in:
+Five display decisions are folded in:
+
+- **Outline from where the paint is, not how thick it is.** A dried deposit is
+  bare or at full thickness cell by cell (a body reads `0.00 | 1.00 1.00 ...`
+  across its edge), so its outline is a staircase of cells. The coverage term
+  alone put the edge at the far tail of the reconstructed ramp, where a dense
+  body saturates within a quarter of a cell: a one-pixel edge tracing every
+  step, which over black read as blocks. The outline now comes from a separate
+  `mask`. Each tap counts as inside the paint when its cell holds more than
+  `LUMINOUS_MASK_THICKNESS = 0.02`, or when at least `MASK_MAJORITY = 5` of its
+  8 neighbours do (that closes pinholes and fills a staircase's inner corners
+  without growing a straight edge). The flags are blended with the same cubic
+  weights, and the largest over pigments is `mask`. Its 0.5 contour is the
+  smoothest outline the cells allow, and its ramp is set by the cubic, not by
+  the thickness. Measured on a binary slanted band at eight output pixels to
+  the cell, the edge climbs from a tenth to nine tenths of its alpha in about
+  half a cell at any thickness; the coverage term alone did it in 2 pixels on
+  a dense body. The thickness term still fades thin glazes and halos. Internal
+  rims and overlaps do not touch the mask, so they never open onto the ground.
 
 - **Alpha from the plain mix.** Coverage is computed from the *plain* pigment
   thickness (before granulation modulation). Keeping fine paper texture out of
@@ -101,10 +120,23 @@ Four display decisions are folded in:
 - **Presence dilation.** A wash's deposit has genuine pinholes where paper
   tooth left cells almost bare; a per-pixel alpha would open each onto the
   ground as a dark pit. The coverage term uses the deposit's presence
-  (deposited + visible suspended thickness) dilated by a **3x3 maximum**
-  around each of the 16 cubic reconstruction taps and blended with the same
-  weights, which closes anything smaller than a cell and moves a boundary
-  outward by up to two cells.
+  (deposited + visible suspended thickness) **soft-dilated** around each of
+  the 16 cubic reconstruction taps and blended with the same weights. The
+  dilation is the larger of the tap cell's own value and a fourth-power mean
+  of its 3x3 neighbourhood, weighted by a Gaussian on cell distance
+  (`2^(-d^2)`, normalised to sum to 1, so the weights are exact in `f32` and
+  the shader needs no `exp`):
+
+  ```
+  presence(tap) = max(tap, (sum_ij w_ij x_ij^4)^(1/4))
+  ```
+
+  A bare cell ringed by `t` comes back at `0.93 t`, so pits still close; a
+  uniform field comes back unchanged, so a wash's body is untouched; a mark
+  thinner than a cell keeps its own value instead of being averaged away;
+  and a cell beside a boundary grades with its neighbours' values instead of
+  copying the largest of them, so the alpha edge follows the deposit's
+  sub-cell position rather than the lattice.
 - **Damped grain in colour.** Colour comes from the granulated mix damped
   toward the plain one by `LUMINOUS_GRAIN_STRENGTH = 0.38`
   (`plain + (textured - plain) * strength`), so granulation reads as gentle
@@ -123,18 +155,26 @@ Four display decisions are folded in:
 near white), medium ones come out more saturated, dense dark ones washed out.
 Luminous is a display choice, not physics.
 
-**Rejected tunings.** The constants are one value, `LUMINOUS_TUNING`, so
-`render_with_luminous_tuning` can render alternatives. Two were tried and
-rejected (`alpha_full 0.45` with `grain_strength 0.7`, and the same with
-`colour_floor 1.0` and `grain_strength 0.85`): once alpha is no longer
-saturated across the body it follows the presence field, and presence is a
-cubic-weighted blend of 3x3 maxima, i.e. plateaus, which show as hard grey blocks
-over a dark ground; a smoother dilation would be needed for a translucent body.
-The shipped tuning trades some translucency for a continuous body with no pits
-or blocks.
+**Why the body saturates.** The constants are one value, `LUMINOUS_TUNING`, so
+`render_with_luminous_tuning` can render alternatives. A translucent tuning
+(`alpha_full 0.45`, `grain_strength 0.7`) was re-rendered against the soft
+dilation and rejected again, for a different reason than before. Its edges were
+fine; its bodies were not. A pale glaze at partial alpha over near-black is
+grey, so `header-motif`'s mountains and `moonlit-shoreline`'s sea clouded into
+grey blotches. `alpha_full` stays at 0.2, and a mark that should read as
+translucent on dark (a paint drop) is laid at a lower concentration instead.
 
-**Known limitation.** Bodies are flatter and more pastel on dark; a translucent
-variant would need a smooth (Gaussian/soft-max) presence kernel. A preview hook
+**Resolution.** A finer grid is not the fix for a blocky outline. The fluid
+moves in cells per tick, so a 512 grid paints a different picture from a 256
+one (on `header-motif` the moon came out smaller and the ridges reshaped).
+Every reveal runs its detail tier's own grid whatever the canvas size, so a tier
+is one painting at every size, and the outline is smoothed in the render by the
+mask above. At 256 over a 900 px hero a cell is 3.5 px; the mask rounds its
+staircase to a gentle wobble.
+
+**Known limitation.** Bodies are still flatter and more pastel on dark than the
+subtractive mode's: with `alpha_full` at 0.2 a body saturates long before it is
+dense, so it carries its variation in colour alone. A preview hook
 (`luminous_variants` in `render_native`) exists but is not shipped.
 
 ### When each mode is chosen

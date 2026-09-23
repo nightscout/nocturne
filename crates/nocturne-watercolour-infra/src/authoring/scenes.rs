@@ -5,8 +5,7 @@
 
 use nocturne_watercolour_core::application::Reveal;
 use nocturne_watercolour_core::domain::{
-    Background, Palette, Paper, PigmentRole, Point, Scene, SceneId, Seed, SimResolution,
-    SizeHint,
+    Background, Palette, Paper, PigmentRole, Point, Scene, SceneId, Seed, SimResolution, SizeHint,
 };
 
 use super::geometry::{Crescent, Frame, Hills, Notch, WaterBody};

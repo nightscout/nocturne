@@ -116,13 +116,8 @@
         No data source is set up yet. Pick whichever matches how you track your
         glucose.
       </p>
-      <!--
-        Three ways in, each one pointed at on purpose, so each earns a mark.
-        No `fonts` is passed: the sizes here are inherited rather than set on
-        the element, and a font string that does not match the CSS exactly
-        gives line boxes for text that was never drawn. The DOM fallback is
-        always right, and three cards is not a measurement budget worth saving.
-      -->
+      <!-- No `fonts`: these sizes are inherited rather than set on the element,
+           so there is no class to mirror. The DOM fallback measures it. -->
       <DropGroup name="first reading paths">
         <div class="grid gap-3 @md:grid-cols-3">
           <DropSurface

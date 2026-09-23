@@ -1,3 +1,4 @@
+use nocturne_watercolour_core::application::cpu::checkpoint_bytes;
 use nocturne_watercolour_core::application::{
     Advance, AdvanceByElapsed, CheckpointPolicy, CpuEngine, Playback, PlaybackState, ProgressCurve,
     Reveal, Simulator, settle_after_last_stroke,
@@ -223,6 +224,45 @@ fn checkpoint_capacity_is_bounded() {
     assert_eq!(engine.snapshot().unwrap(), None);
     engine.release(ids[0]);
     assert!(engine.snapshot().unwrap().is_some());
+}
+
+/// A surface that is never scrubbed asks for the smallest budget, so it holds
+/// the tick-0 checkpoint and nothing else; seeking then replays from the top
+/// rather than restoring a nearer state, and must land on the same grid.
+#[test]
+fn a_one_byte_budget_keeps_one_checkpoint_and_still_seeks_exactly() {
+    let one_checkpoint = |pb: &mut Playback<CpuEngine>| {
+        checkpoint_bytes(pb.simulator().grid().unwrap()) * pb.checkpoint_ticks().len()
+    };
+
+    let mut default_budget = unbudgeted(scene(), 3000.0);
+    default_budget.advance_ticks(140).unwrap();
+
+    let mut tiny = Playback::new(
+        CpuEngine::default().with_checkpoint_budget(1),
+        scene(),
+        3000.0,
+    )
+    .unwrap()
+    .with_tick_budget(0);
+    tiny.advance_ticks(140).unwrap();
+
+    assert_eq!(tiny.checkpoint_ticks(), vec![0]);
+    assert!(
+        one_checkpoint(&mut tiny) * 4 < one_checkpoint(&mut default_budget),
+        "a one-byte budget held {} bytes against the default's {}",
+        one_checkpoint(&mut tiny),
+        one_checkpoint(&mut default_budget),
+    );
+
+    tiny.seek_tick(100).unwrap();
+    assert_eq!(tiny.current_tick(), 100);
+    let mut straight = unbudgeted(scene(), 3000.0);
+    straight.advance_ticks(100).unwrap();
+    assert_eq!(
+        tiny.simulator().grid().unwrap(),
+        straight.simulator().grid().unwrap()
+    );
 }
 
 #[test]

@@ -16,6 +16,7 @@ pub struct CpuEngine {
     loaded: Option<Loaded>,
     checkpoints: Vec<(CheckpointId, SimulationGrid)>,
     next_id: u64,
+    checkpoint_budget: usize,
 }
 
 struct Loaded {
@@ -41,7 +42,16 @@ impl CpuEngine {
             loaded: None,
             checkpoints: Vec::new(),
             next_id: 1,
+            checkpoint_budget: CHECKPOINT_BUDGET_BYTES,
         }
+    }
+
+    /// Lowers (or raises) the memory this engine may spend on checkpoints;
+    /// takes effect on the next `snapshot`. A budget below one checkpoint
+    /// still keeps one, so a seek restores tick 0 and replays from there.
+    pub fn with_checkpoint_budget(mut self, bytes: usize) -> Self {
+        self.checkpoint_budget = bytes;
+        self
     }
 
     pub fn params(&self) -> &SimParams {
@@ -134,7 +144,7 @@ impl Simulator for CpuEngine {
 
     fn checkpoint_capacity(&self) -> usize {
         match &self.loaded {
-            Some(l) => (CHECKPOINT_BUDGET_BYTES / checkpoint_bytes(&l.grid).max(1)).clamp(1, 64),
+            Some(l) => (self.checkpoint_budget / checkpoint_bytes(&l.grid).max(1)).clamp(1, 64),
             None => 0,
         }
     }

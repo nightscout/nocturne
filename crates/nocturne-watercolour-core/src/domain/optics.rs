@@ -67,7 +67,8 @@
 //! coverage  = 1 - lerp(min_c(return_c), mean_c(return_c), ALPHA_SOFTNESS)   of the
 //!             plain mix (pigment thickness before granulation modulation)
 //! alpha     = smoothstep(LUMINOUS_ALPHA_TOE, LUMINOUS_ALPHA_FULL, coverage of the
-//!             plain mix's *presence*: its 3x3-dilated thickness around each cell)
+//!             plain mix's *presence*: its soft-dilated thickness around each cell)
+//!           * smoothstep(LUMINOUS_EDGE_LO, LUMINOUS_EDGE_HI, mask)
 //! W_c       = on-white colour of the damped granulated mix at thickness
 //!             max(t_plain, LUMINOUS_COLOUR_FLOOR)
 //! rgb_c     = W_c * alpha                                                  (premultiplied)
@@ -93,11 +94,27 @@
 //! `LUMINOUS_ALPHA_FULL` (0.2) and is 0 below `LUMINOUS_ALPHA_TOE` (0.03),
 //! with the smoothstep's gentle toe in between so halos and soft edges,
 //! whose coverage falls through that band, still fade. The alpha reads the
-//! plain thickness dilated by a 3x3 maximum over simulation cells
-//! (`Sample::presence`): a wash's deposit has genuine pinholes where the
-//! paper tooth left cells almost bare, and per-pixel alpha would open each
-//! of them onto the ground as a dark pit; presence closes anything smaller
-//! than a cell while moving a boundary outward by at most one cell. The colour is taken
+//! plain thickness soft-dilated over simulation cells (`Sample::presence`):
+//! a wash's deposit has genuine pinholes where the paper tooth left cells
+//! almost bare, and per-pixel alpha would open each of them onto the ground
+//! as a dark pit; presence fills a pit to most of its ring while grading a
+//! boundary outward over about a cell.
+//!
+//! The second factor draws the outline. A dried deposit is bare or full cell
+//! by cell, so a body's edge is a staircase, and the thickness term alone put
+//! alpha's rise at the far tail of the reconstructed ramp: a dense body went
+//! from nothing to opaque within a quarter of a cell, a one-pixel edge tracing
+//! every step. `mask` (`Sample::mask`) is the cubic blend of how far inside
+//! the paint each tap is. A cell is painted when it holds more than
+//! `LUMINOUS_MASK_THICKNESS`; a tap takes the `PRESENCE_KERNEL`-weighted share
+//! of its 3x3 that is painted, which rounds a staircase's corners toward the
+//! line through them. A tap ringed by `MASK_MAJORITY` painted neighbours is
+//! fully inside, which closes pinholes, and so is a painted tap with at most
+//! `MASK_THIN` painted neighbours, so a dot or a one-cell line is kept whole
+//! and only a body's corners round off. Its
+//! 0.5 contour follows the body's boundary, and its ramp is set by the
+//! geometry, not the thickness. Rims and overlaps inside a body do not move
+//! it. The colour is taken
 //! at no less than `LUMINOUS_COLOUR_FLOOR` thickness because a very thin
 //! glaze's on-white colour is nearly white, and white times a small alpha
 //! over black is grey; above the floor the colour follows the deposited
@@ -134,12 +151,29 @@
 //! grid edge the out-of-bounds taps read the edge cell, which keeps the
 //! weights summing to 1. The cost is four times the cell reads of the
 //! previous bilinear: 16 taps instead of 4, each a separate storage read.
-//! The Luminous presence semantics are unchanged (a 3x3 maximum of
-//! `deposited + suspended * visibility * wet` around each tap, blended with
-//! the same weights), but the maximum is now evaluated on all 16 taps, so
-//! presence dilates by up to two cells instead of one; the pinhole-closing
-//! property is untouched. `render.wgsl` is the lockstep port: both sides
-//! evaluate the same taps in the same order.
+//! The Luminous alpha reads a *dilated* copy of the same field
+//! (`Sample::presence`): at each of the 16 taps, `deposited + suspended *
+//! visibility * wet` is raised toward its 3x3 neighbourhood and the results
+//! are blended with the same cubic weights. The dilation is the larger of
+//! the tap cell's own value and the `PRESENCE_KERNEL`-weighted fourth-power
+//! mean of the 3x3, i.e. a soft maximum:
+//!
+//! ```text
+//! presence(tap) = max(tap, (sum_ij w_ij * x_ij^4)^(1/4)),  sum_ij w_ij = 1
+//! ```
+//!
+//! A plain maximum fills a pit exactly but flattens every 3x3 to one value,
+//! so the field it hands the alpha curve is a mosaic of plateaus whose
+//! edges lie on cell boundaries - over a dark ground that reads as hard
+//! grey blocks the size of a cell. The soft maximum keeps the pit-filling
+//! (a bare cell ringed by `t` comes back at `0.93 t`) and the peaks (the
+//! `max` with the cell's own value, so a stroke thinner than a cell is not
+//! averaged away), but a cell beside a boundary now grades with its
+//! neighbours' values instead of copying the largest, so the alpha edge
+//! follows the deposit's sub-cell position rather than the lattice. Being
+//! homogeneous and summing to 1, the kernel leaves a uniform field exactly
+//! as it found it: the body of a wash is untouched. `render.wgsl` is the
+//! lockstep port: both sides evaluate the same taps in the same order.
 
 use super::grid::SimulationGrid;
 use super::image::Image;
@@ -159,6 +193,16 @@ pub const ALPHA_SOFTNESS: f32 = 0.6;
 /// `render.wgsl`.
 pub const LUMINOUS_ALPHA_TOE: f32 = 0.03;
 pub const LUMINOUS_ALPHA_FULL: f32 = 0.2;
+
+/// Reconstructed paint mask (`Sample::mask`) at which the luminous outline
+/// starts and is fully in, either side of its 0.5 contour; see the module
+/// doc, "Composite modes". Mirrored in `render.wgsl`.
+pub const LUMINOUS_EDGE_LO: f32 = 0.2;
+pub const LUMINOUS_EDGE_HI: f32 = 0.8;
+
+/// Cell thickness above which a cell counts as painted for the luminous
+/// outline. Mirrored in `render.wgsl`.
+pub const LUMINOUS_MASK_THICKNESS: f32 = 0.02;
 
 /// Hermite smoothstep of `x` between `edge0` and `edge1`.
 pub fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
@@ -385,7 +429,14 @@ pub fn to_premultiplied_luminous(
     plain: MixTotals,
     presence: MixTotals,
 ) -> [f32; 4] {
-    to_premultiplied_luminous_tuned(textured, plain, presence, &LUMINOUS_TUNING, WetLook::OFF)
+    to_premultiplied_luminous_tuned(
+        textured,
+        plain,
+        presence,
+        1.0,
+        &LUMINOUS_TUNING,
+        WetLook::OFF,
+    )
 }
 
 /// [`to_premultiplied_luminous`] with an explicit grain strength, for
@@ -400,21 +451,25 @@ pub fn to_premultiplied_luminous_with_strength(
         grain_strength,
         ..LUMINOUS_TUNING
     };
-    to_premultiplied_luminous_tuned(textured, plain, presence, &tuning, WetLook::OFF)
+    to_premultiplied_luminous_tuned(textured, plain, presence, 1.0, &tuning, WetLook::OFF)
 }
 
-/// [`to_premultiplied_luminous`] with an explicit tuning and wet-look
-/// factors. The wet look darkens the ground the on-white colour composites
-/// over and adds a faint sheen, exactly as the subtractive path does.
+/// [`to_premultiplied_luminous`] with an explicit tuning, the reconstructed
+/// paint `mask` and wet-look factors. A `mask` of 1 is a pixel well inside
+/// the paint, where alpha is the thickness term alone. The wet look darkens
+/// the ground the on-white colour composites over and adds a faint sheen,
+/// exactly as the subtractive path does.
 pub fn to_premultiplied_luminous_tuned(
     textured: MixTotals,
     plain: MixTotals,
     presence: MixTotals,
+    mask: f32,
     tuning: &LuminousTuning,
     wet: WetLook,
 ) -> [f32; 4] {
     let (r, t) = layer_rgb(presence.kx, presence.sx, 1.0);
-    let alpha = smoothstep(tuning.alpha_toe, tuning.alpha_full, coverage(r, t));
+    let body = smoothstep(tuning.alpha_toe, tuning.alpha_full, coverage(r, t));
+    let alpha = body * smoothstep(LUMINOUS_EDGE_LO, LUMINOUS_EDGE_HI, mask);
     // Brings a layer thinner than the colour floor up to the floor.
     let scale = (tuning.colour_floor / plain.thickness.max(1e-6)).max(1.0);
     let damped = damp_texture(textured, plain, tuning.grain_strength);
@@ -487,6 +542,7 @@ pub fn composite_pixel_with_strength(
         textured,
         plain,
         presence,
+        1.0,
         mode,
         &tuning,
         WetLook::OFF,
@@ -499,11 +555,13 @@ pub fn composite_pixel_with_strength(
 /// scaling pigment thickness; the wrapper [`composite_pixel`] passes
 /// `textured` for the coverage and a zero wet look, reproducing the dry-frame
 /// behaviour exactly.
+#[allow(clippy::too_many_arguments)]
 pub fn composite_pixel_tuned(
     textured: MixTotals,
     coverage: MixTotals,
     plain: MixTotals,
     presence: MixTotals,
+    mask: f32,
     mode: CompositeMode,
     tuning: &LuminousTuning,
     wet: WetLook,
@@ -515,7 +573,7 @@ pub fn composite_pixel_tuned(
             to_premultiplied_with_coverage(r, t, r_c, t_c, wet)
         }
         CompositeMode::Luminous => {
-            to_premultiplied_luminous_tuned(textured, plain, presence, tuning, wet)
+            to_premultiplied_luminous_tuned(textured, plain, presence, mask, tuning, wet)
         }
     }
 }
@@ -628,6 +686,7 @@ pub fn render_with_luminous_tuning(
                 mixed_totals(palette, &coverage),
                 mixed_totals(palette, &plain),
                 mixed_totals(palette, &presence),
+                sample.mask,
                 grid.composite_mode,
                 tuning,
                 WetLook {
@@ -649,10 +708,38 @@ struct Sample {
     depth: f32,
     deposited: [f32; super::palette::MAX_PIGMENTS],
     suspended: [f32; super::palette::MAX_PIGMENTS],
-    /// Per pigment, the cubic blend of each of the 4x4 taps' 3x3 maximum of
+    /// Per pigment, the cubic blend of each of the 4x4 taps' soft-dilated
     /// `deposited + suspended * visibility * wet`; see the module doc.
     presence: [f32; super::palette::MAX_PIGMENTS],
+    /// The cubic blend of whether each tap is inside the paint, the largest
+    /// over pigments: 1 in a body, 0 outside, its 0.5 contour the outline.
+    /// See the module doc, "Composite modes".
+    mask: f32,
 }
+
+/// Side of the cell window one sample reads: the 4x4 taps plus the ring
+/// their 3x3 neighbourhoods reach.
+const WINDOW: usize = 6;
+
+/// Painted neighbours out of 8 that make a tap count as fully inside the paint.
+const MASK_MAJORITY: u32 = 5;
+
+/// Painted neighbours out of 8 at or below which a painted tap is a thin mark
+/// (a lone dot, a line one cell wide, its end) and counts as fully inside.
+/// Only a body's corners, with more, round off.
+const MASK_THIN: u32 = 2;
+
+/// The 3x3 presence kernel, row-major from the tap's top-left neighbour: a
+/// Gaussian `2^(-d^2)` over squared cell distance, normalised to sum to 1.
+/// Powers of two are exact in `f32`, so the shader port needs no `exp` and
+/// weighs each neighbour identically. Summing to 1 makes the dilation
+/// homogeneous: a uniform field keeps its own thickness, so the body of a
+/// wash is untouched and only its boundary and its pits are filled.
+const PRESENCE_KERNEL: [f32; 9] = [
+    0.0625, 0.125, 0.0625, //
+    0.125, 0.25, 0.125, //
+    0.0625, 0.125, 0.0625,
+];
 
 /// The cubic B-spline weights for a fractional position `t in 0..1` between
 /// sample points, for the four taps at `floor - 1 ..= floor + 2`. See the
@@ -689,11 +776,76 @@ fn cubic_sample(grid: &SimulationGrid, u: f32, v: f32, wet_visibility: f32) -> S
         deposited: [0.0; super::palette::MAX_PIGMENTS],
         suspended: [0.0; super::palette::MAX_PIGMENTS],
         presence: [0.0; super::palette::MAX_PIGMENTS],
+        mask: 0.0,
     };
     let cell_presence = |k: usize, j: usize| {
         grid.pigments_deposited[k * n + j]
             + grid.pigments_in_water[k * n + j] * wet_visibility * grid.wet[j]
     };
+    // The cells the taps and their 3x3 neighbourhoods read, once: the 4x4
+    // taps at `x0 - 1 ..= x0 + 2` widened by one on each side. Coordinates
+    // clamp at the grid edge, as the taps do.
+    let mut window = [[0.0f32; WINDOW]; WINDOW];
+    let mut painted = [[false; WINDOW]; WINDOW];
+    for k in 0..k_count {
+        for (wy_i, row) in window.iter_mut().enumerate() {
+            let ny = (y0 as isize + wy_i as isize - 2).clamp(0, h as isize - 1) as usize;
+            for (wx_i, cell) in row.iter_mut().enumerate() {
+                let nx = (x0 as isize + wx_i as isize - 2).clamp(0, w as isize - 1) as usize;
+                *cell = cell_presence(k, ny * w + nx).max(0.0);
+            }
+        }
+        for (row, flags) in window.iter().zip(painted.iter_mut()) {
+            for (&q, flag) in row.iter().zip(flags.iter_mut()) {
+                *flag = q > LUMINOUS_MASK_THICKNESS;
+            }
+        }
+        let mut mask = 0.0f32;
+        for (oy, &wyi) in wy.iter().enumerate() {
+            for (ox, &wxo) in wx.iter().enumerate() {
+                let wgt = wxo * wyi;
+                // Presence at the tap: its own thickness raised toward its
+                // neighbours by a Gaussian-weighted fourth-power mean. The mean
+                // alone thins isolated cells and thin strokes; a plain maximum
+                // flattens the whole 3x3 to one value, which gave the luminous
+                // alpha cell-shaped plateaus. See the module doc,
+                // "Reconstruction".
+                let mut acc = 0.0f32;
+                let mut neighbours = 0u32;
+                let mut soft = 0.0f32;
+                for dy in 0..3 {
+                    for dx in 0..3 {
+                        let q = window[oy + dy][ox + dx];
+                        let q = q * q;
+                        acc += PRESENCE_KERNEL[dy * 3 + dx] * q * q;
+                        if painted[oy + dy][ox + dx] {
+                            soft += PRESENCE_KERNEL[dy * 3 + dx];
+                            if (dy, dx) != (1, 1) {
+                                neighbours += 1;
+                            }
+                        }
+                    }
+                }
+                let own = window[oy + 1][ox + 1];
+                out.presence[k] += acc.sqrt().sqrt().max(own) * wgt;
+                // How far inside the paint the tap is: the kernel-weighted share
+                // of its 3x3 that is painted, so a staircase's corners round
+                // off toward the line through them. A tap ringed by a painted
+                // majority is fully inside (a bare cell in a body is a
+                // pinhole). So is a painted tap with at most `MASK_THIN`
+                // painted neighbours: a thin mark has no corner to round, and
+                // the share would blur it away.
+                let thin = painted[oy + 1][ox + 1] && neighbours <= MASK_THIN;
+                let inside = if neighbours >= MASK_MAJORITY || thin {
+                    1.0
+                } else {
+                    soft
+                };
+                mask += inside * wgt;
+            }
+        }
+        out.mask = out.mask.max(mask);
+    }
     for (oy, &wyi) in wy.iter().enumerate() {
         let tap_y = y0 as isize + oy as isize - 1;
         let cy = tap_y.clamp(0, h as isize - 1) as usize;
@@ -707,15 +859,6 @@ fn cubic_sample(grid: &SimulationGrid, u: f32, v: f32, wet_visibility: f32) -> S
             for k in 0..k_count {
                 out.deposited[k] += grid.pigments_deposited[k * n + i] * wgt;
                 out.suspended[k] += grid.pigments_in_water[k * n + i] * wgt;
-                let mut best = 0.0f32;
-                for dy in 0..3 {
-                    for dx in 0..3 {
-                        let nx = (tap_x + dx as isize - 1).clamp(0, w as isize - 1) as usize;
-                        let ny = (tap_y + dy as isize - 1).clamp(0, h as isize - 1) as usize;
-                        best = best.max(cell_presence(k, ny * w + nx));
-                    }
-                }
-                out.presence[k] += best * wgt;
             }
         }
     }
@@ -978,6 +1121,131 @@ pub(crate) mod tests {
             sub_smooth[3], sub_grainy[3],
             "subtractive still carries texture in alpha"
         );
+    }
+
+    /// A coarse grid under a much finer output: the band is four cells wide
+    /// and its edges sweep two cells down the grid, so every row meets the
+    /// lattice at a different sub-cell offset. Each cell is either bare or at
+    /// full `thickness`, as a dried simulation deposit is: a body runs at its
+    /// own thickness up to its last cell, so its edge is a staircase.
+    fn slanted_band(cells: u32, out: u32, thickness: f32) -> (SimulationGrid, Palette, PaperField) {
+        let palette = Palette::moonlight();
+        let grid_paper = PaperField::generate(&Paper::hot_press(Seed(5)), cells, cells);
+        let out_paper = PaperField::generate(&Paper::hot_press(Seed(5)), out, out);
+        let mut grid = SimulationGrid::new(&grid_paper, palette.len())
+            .with_composite_mode(CompositeMode::Luminous);
+        for y in 0..cells {
+            let lo = 10.0 + (y as f32 + 0.5) / cells as f32 * 2.0;
+            for x in 0..cells {
+                let covered = ((x + 1) as f32).min(lo + 4.0) - (x as f32).max(lo);
+                if covered >= 0.5 {
+                    grid.pigments_deposited[(y * cells + x) as usize] = thickness;
+                }
+            }
+        }
+        (grid, palette, out_paper)
+    }
+
+    #[test]
+    fn luminous_outline_keeps_a_lone_painted_cell() {
+        let (cells, out) = (32u32, 256u32);
+        let params = RenderParams {
+            granulation_gain: 0.0,
+            wet_pigment_visibility: 0.0,
+            ..RenderParams::default()
+        };
+        let palette = Palette::moonlight();
+        let grid_paper = PaperField::generate(&Paper::hot_press(Seed(5)), cells, cells);
+        let out_paper = PaperField::generate(&Paper::hot_press(Seed(5)), out, out);
+        let mut grid = SimulationGrid::new(&grid_paper, palette.len())
+            .with_composite_mode(CompositeMode::Luminous);
+        grid.pigments_deposited[(16 * cells + 16) as usize] = 0.6;
+        let image = render(&grid, &palette, &out_paper, &params);
+        let centre = 16 * (out / cells) + out / cells / 2;
+        let dot = image.pixel(centre, centre)[3];
+        // Blended as a share of its 3x3, a lone cell read 0 here; as a thin
+        // mark it keeps the 0.35 a plain painted flag gives it.
+        assert!(dot >= 0.3, "a lone painted cell reads at {dot}");
+    }
+
+    #[test]
+    fn luminous_outline_is_antialiased_over_half_a_cell_at_any_thickness() {
+        let (cells, out) = (32u32, 256u32);
+        let cell_px = (out / cells) as f32;
+        let params = RenderParams {
+            granulation_gain: 0.0,
+            wet_pigment_visibility: 0.0,
+            ..RenderParams::default()
+        };
+        // A pale glaze whose alpha never saturates, and a body well past
+        // `LUMINOUS_ALPHA_FULL`. Without the mask the dense body rose from a
+        // tenth of its alpha to nine tenths in 2 pixels here, a quarter of a
+        // cell: a one-pixel edge tracing the staircase.
+        for thickness in [0.06f32, 0.6] {
+            let (grid, palette, out_paper) = slanted_band(cells, out, thickness);
+            let image = render(&grid, &palette, &out_paper, &params);
+            for y in 0..out {
+                let row: Vec<f32> = (0..out).map(|x| image.pixel(x, y)[3]).collect();
+                let peak = row.iter().cloned().fold(0.0f32, f32::max);
+                let crest = row.iter().position(|&a| a >= peak - 1e-6).unwrap();
+                for w in row[..=crest].windows(2) {
+                    assert!(
+                        w[1] >= w[0] - 1e-6,
+                        "alpha falls back inside the ramp at row {y}, thickness {thickness}"
+                    );
+                }
+                let toe = row.iter().position(|&a| a >= 0.1 * peak).unwrap();
+                let shoulder = row.iter().position(|&a| a >= 0.9 * peak).unwrap();
+                let width = (shoulder - toe) as f32;
+                assert!(
+                    width >= 0.45 * cell_px,
+                    "row {y}, thickness {thickness}: edge climbs in {width} px of an {cell_px} px cell"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn luminous_presence_keeps_a_pitted_body_continuous() {
+        let palette = Palette::moonlight();
+        let (cells, out) = (32u32, 256u32);
+        let scale = out / cells;
+        let grid_paper = PaperField::generate(&Paper::hot_press(Seed(3)), cells, cells);
+        let out_paper = PaperField::generate(&Paper::hot_press(Seed(3)), out, out);
+        let mut grid = SimulationGrid::new(&grid_paper, palette.len())
+            .with_composite_mode(CompositeMode::Luminous);
+        for y in 8..24 {
+            for x in 8..24 {
+                grid.pigments_deposited[(y * cells + x) as usize] = 0.06;
+            }
+        }
+        // Single-cell pinholes, the paper tooth's bare cells.
+        let pits = [(12u32, 13u32), (16, 16), (19, 11), (13, 20)];
+        for &(x, y) in &pits {
+            grid.pigments_deposited[(y * cells + x) as usize] = 0.0;
+        }
+        let params = RenderParams {
+            granulation_gain: 0.0,
+            wet_pigment_visibility: 0.0,
+            ..RenderParams::default()
+        };
+        let image = render(&grid, &palette, &out_paper, &params);
+        let alpha_at = |cx: f32, cy: f32| {
+            image.pixel((cx * scale as f32) as u32, (cy * scale as f32) as u32)[3]
+        };
+        for &(x, y) in &pits {
+            let (cx, cy) = (x as f32 + 0.5, y as f32 + 0.5);
+            let ring = [(-2.0, 0.0), (2.0, 0.0), (0.0, -2.0), (0.0, 2.0)]
+                .iter()
+                .map(|(dx, dy)| alpha_at(cx + dx, cy + dy))
+                .sum::<f32>()
+                / 4.0;
+            let pit = alpha_at(cx, cy);
+            assert!(
+                pit >= 0.8 * ring,
+                "pit at ({x},{y}) reads {pit} against {ring} around it"
+            );
+        }
     }
 
     #[test]

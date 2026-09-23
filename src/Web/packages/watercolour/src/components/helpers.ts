@@ -108,7 +108,7 @@ function resolveBox(
   return containBox(containerWidth, containerHeight, aspect, options.fitAnchor ?? 'center');
 }
 
-function applyCanvasFit(canvas: HTMLCanvasElement, box: FitBox, dpr: number): void {
+export function applyCanvasFit(canvas: HTMLCanvasElement, box: FitBox, dpr: number): void {
   canvas.style.position = 'absolute';
   canvas.style.left = `${box.offsetX}px`;
   canvas.style.top = `${box.offsetY}px`;

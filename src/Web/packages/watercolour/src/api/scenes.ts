@@ -29,7 +29,18 @@ export interface IconRef {
 }
 
 /** A ready scene document (JSON string) or a catalogue or icon reference the engine expands. */
-export type SceneSource = ArtworkRef | IconRef | { sceneJson: string };
+/**
+ * A scene authored by the caller. `sceneJson` is a finished document; `scene`
+ * is authored inside the live lease, for a caller that needs the wasm module
+ * (a palette or a paper from the catalogue) before it can write one.
+ */
+export type AuthoredScene = { sceneJson: string } | { scene: (module: WasmModule) => string };
+
+export type SceneSource = ArtworkRef | IconRef | AuthoredScene;
+
+export function authoredSceneJson(source: AuthoredScene, module: WasmModule): string {
+  return 'sceneJson' in source ? source.sceneJson : source.scene(module);
+}
 
 /** Live-mode overrides derived from the canvas's backing store size. */
 export interface SceneResolutionOverride {

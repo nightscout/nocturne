@@ -214,6 +214,10 @@ checkpoint is released, and if none remain no more are taken. Capacity is
   memory per tab): 10 checkpoints at the catalogue's 256^2 x 4 pigments, about
   44 MB per live instance.
 
+The budget is per instance: `createInstance` takes it as a fifth argument, and
+paint drops (`DropSurface`) pass 1 byte unless the showcase scrubber is driving
+them, so an unscrubbed drop holds the single tick-0 checkpoint and nothing else.
+
 `Playback` falls back to reload-and-replay from tick 0 when no checkpoint
 precedes the seek target. Seeking restores the nearest checkpoint at or before
 the target and replays; `seek(t)` + `step` is bit-identical to a straight run
