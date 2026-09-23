@@ -28,7 +28,7 @@ export interface ArrangeContext {
 	 * Calls a tenant-scoped API path as the seeded owner. The API is reached at its own origin, so
 	 * the tenant is carried by a forwarded host rather than the URL.
 	 */
-	fetch: <T>(path: string, request?: ArrangeRequest) => Promise<T>;
+	fetch: (path: string, request?: ArrangeRequest) => Promise<unknown>;
 }
 
 /** A screenshot to capture, declared in the manifest source. */

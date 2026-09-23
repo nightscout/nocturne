@@ -1,7 +1,7 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { docsContentDir, manifestPath, repoRoot } from './paths.js';
-import type { Manifest } from './types.js';
+import { isRecord } from './json.js';
 
 const OPENING_TAG = '<Screenshot';
 const TAG_NAME_CHARACTER = /[A-Za-z0-9_-]/;
@@ -50,7 +50,21 @@ function tagEnd(source: string, from: number): number {
  * worth nothing if the shapes it misses are the ones that break. Code fences and comments are cut
  * first, so a page that documents the component is not held to the manifest.
  */
-function findProblems(page: string, where: string, manifest: Manifest): string[] {
+/** Each screenshot id in manifest.json, with the anchor names it declares. */
+type EmbedTargets = Map<string, string[]>;
+
+function readEmbedTargets(json: string): EmbedTargets {
+	const manifest: unknown = JSON.parse(json);
+	const targets: EmbedTargets = new Map();
+	if (!isRecord(manifest)) return targets;
+	for (const [id, entry] of Object.entries(manifest)) {
+		const anchors = isRecord(entry) ? entry.anchors : undefined;
+		targets.set(id, isRecord(anchors) ? Object.keys(anchors) : []);
+	}
+	return targets;
+}
+
+function findProblems(page: string, where: string, targets: EmbedTargets): string[] {
 	const problems: string[] = [];
 	let source = page;
 	let previous: string;
@@ -83,8 +97,8 @@ function findProblems(page: string, where: string, manifest: Manifest): string[]
 			continue;
 		}
 
-		const entry = manifest[id];
-		if (!entry) {
+		const declaredAnchors = targets.get(id);
+		if (!declaredAnchors) {
 			problems.push(`${where}: <Screenshot id="${id}"> is not in the screenshots manifest`);
 			continue;
 		}
@@ -104,8 +118,8 @@ function findProblems(page: string, where: string, manifest: Manifest): string[]
 			continue;
 		}
 		for (const anchor of anchors) {
-			if (!entry.anchors?.[anchor]) {
-				const declared = Object.keys(entry.anchors ?? {}).join(', ') || 'none';
+			if (!declaredAnchors.includes(anchor)) {
+				const declared = declaredAnchors.join(', ') || 'none';
 				problems.push(
 					`${where}: <Screenshot id="${id}"> points at anchor "${anchor}"; declared anchors: ${declared}`,
 				);
@@ -118,14 +132,14 @@ function findProblems(page: string, where: string, manifest: Manifest): string[]
 
 /** Every docs embed whose id or anchor the manifest cannot satisfy. */
 export async function findBrokenEmbeds(): Promise<string[]> {
-	const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as Manifest;
+	const targets = readEmbedTargets(await readFile(manifestPath, 'utf8'));
 	const problems: string[] = [];
 	let scanned = 0;
 
 	for await (const page of docPages(docsContentDir)) {
 		scanned++;
 		const source = await readFile(page, 'utf8');
-		problems.push(...findProblems(source, relative(repoRoot, page), manifest));
+		problems.push(...findProblems(source, relative(repoRoot, page), targets));
 	}
 
 	// A check that reaches no pages passes for the wrong reason, and would keep passing if the docs
