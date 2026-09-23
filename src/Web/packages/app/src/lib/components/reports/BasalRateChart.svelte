@@ -65,7 +65,7 @@
             x={4}
             y={4}
             dy="-0.355em"
-            class="text-[10px] fill-muted-foreground font-medium"
+            class="text-2xs fill-muted-foreground font-medium"
           >
             BASAL
           </text>

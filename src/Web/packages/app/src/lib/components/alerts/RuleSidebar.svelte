@@ -281,13 +281,13 @@
           <span class="flex-1 min-w-0 truncate">
             {rule.name ?? "(unnamed)"}
             {#if isEditing}
-              <span class="ml-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+              <span class="ml-1 text-2xs uppercase tracking-wide text-muted-foreground">
                 (editing)
               </span>
             {/if}
           </span>
           <span
-            class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide {severitySlot(rule.severity, 'chip')}"
+            class="shrink-0 rounded px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-wide {severitySlot(rule.severity, 'chip')}"
           >
             {disabled ? "Off" : "On"}
           </span>

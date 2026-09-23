@@ -148,7 +148,7 @@
 
   <!-- Right column -->
   <div class="flex flex-col gap-4">
-    <span class="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+    <span class="text-xs uppercase tracking-[0.12em] text-muted-foreground">
       A few next things
     </span>
 

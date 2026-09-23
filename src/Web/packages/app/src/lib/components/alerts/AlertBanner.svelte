@@ -78,7 +78,7 @@
         <div class="flex-1 min-w-0">
           <!-- Named as well as coloured: colour alone is unavailable to a
                screen reader and to anyone who can't distinguish these hues. -->
-          <span class="text-[10px] font-semibold uppercase tracking-wider">
+          <span class="text-2xs font-semibold uppercase tracking-wider">
             {severityLabel(alert.severity)}
           </span>
           <span class="text-sm font-medium">

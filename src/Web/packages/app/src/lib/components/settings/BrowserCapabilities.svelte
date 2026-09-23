@@ -180,7 +180,7 @@
             <span class="font-medium text-sm">Audio Playback</span>
             {#if !capabilities.audio}
               <span
-                class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-muted text-muted-foreground"
+                class="px-1.5 py-0.5 text-2xs font-medium rounded bg-muted text-muted-foreground"
               >
                 Unavailable
               </span>
@@ -229,19 +229,19 @@
             <span class="font-medium text-sm">Notifications</span>
             {#if !capabilities.notifications}
               <span
-                class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-muted text-muted-foreground"
+                class="px-1.5 py-0.5 text-2xs font-medium rounded bg-muted text-muted-foreground"
               >
                 Unavailable
               </span>
             {:else if capabilities.notificationPermission === "denied"}
               <span
-                class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-destructive/10 text-destructive"
+                class="px-1.5 py-0.5 text-2xs font-medium rounded bg-destructive/10 text-destructive"
               >
                 Blocked
               </span>
             {:else if capabilities.notificationPermission === "default"}
               <span
-                class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-warning/10 text-warning"
+                class="px-1.5 py-0.5 text-2xs font-medium rounded bg-warning/10 text-warning"
               >
                 Needs Permission
               </span>
@@ -290,7 +290,7 @@
             <span class="font-medium text-sm">Vibration</span>
             {#if !capabilities.vibration}
               <span
-                class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-muted text-muted-foreground"
+                class="px-1.5 py-0.5 text-2xs font-medium rounded bg-muted text-muted-foreground"
               >
                 Unavailable
               </span>
@@ -333,7 +333,7 @@
             <span class="font-medium text-sm">Screen Wake Lock</span>
             {#if !capabilities.wakeLock}
               <span
-                class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-muted text-muted-foreground"
+                class="px-1.5 py-0.5 text-2xs font-medium rounded bg-muted text-muted-foreground"
               >
                 Unavailable
               </span>

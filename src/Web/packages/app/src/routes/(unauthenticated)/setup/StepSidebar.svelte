@@ -17,7 +17,7 @@
 <nav class="flex flex-col gap-8">
   <!-- Eyebrow -->
   <p
-    class="flex items-center gap-2 font-mono text-[11px] uppercase tracking-widest text-(--onb-accent)"
+    class="flex items-center gap-2 font-mono text-xs uppercase tracking-widest text-(--onb-accent)"
   >
     <span
       class="inline-block h-1.5 w-1.5 rounded-full bg-(--onb-accent) shadow-(--onb-glow-accent)"

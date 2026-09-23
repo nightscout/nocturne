@@ -299,7 +299,7 @@
 		<!-- Action buttons -->
 		<div class="flex items-center gap-2">
 			<Button type="submit" variant="outline" size="sm" disabled={!canSave}>Save</Button>
-			<Button type="button" size="sm" disabled={!canSave} onclick={() => submit(true)}>Save & add another <span class="ml-1 text-[11px] opacity-60">⌘+Enter</span></Button>
+			<Button type="button" size="sm" disabled={!canSave} onclick={() => submit(true)}>Save & add another <span class="ml-1 text-xs opacity-60">⌘+Enter</span></Button>
 		</div>
 	</div>
 </form>

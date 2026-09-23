@@ -144,7 +144,7 @@
                 {a.ruleName ?? "Alert"}
               </span>
               <span
-                class="ml-auto text-[10px] uppercase tracking-wider text-muted-foreground"
+                class="ml-auto text-2xs uppercase tracking-wider text-muted-foreground"
               >
                 {formatTimeSince(a.startedAt, now)}
               </span>

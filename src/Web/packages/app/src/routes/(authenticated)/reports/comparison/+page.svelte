@@ -451,7 +451,7 @@
                 size="sm"
                 class="border-0 px-1 font-semibold focus-visible:ring-1"
               />
-              <span class="ml-auto font-mono text-[11px] text-muted-foreground">
+              <span class="ml-auto font-mono text-xs text-muted-foreground">
                 {dayCount(p.from, p.to)}d
               </span>
             </div>
@@ -506,7 +506,7 @@
           ></span>
           {committed.a.label}
         </span>
-        <span class="font-mono text-[11px] uppercase tracking-[0.15em] text-muted-foreground">
+        <span class="font-mono text-xs uppercase tracking-[0.15em] text-muted-foreground">
           vs
         </span>
         <span class="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium">
@@ -515,7 +515,7 @@
           ></span>
           {committed.b.label}
         </span>
-        <span class="ml-auto font-mono text-[11px] text-muted-foreground">
+        <span class="ml-auto font-mono text-xs text-muted-foreground">
           {rangeDisplay(committed.a.from, committed.a.to)}
           <ArrowRight class="mx-1 inline h-3 w-3" />
           {rangeDisplay(committed.b.from, committed.b.to)}
@@ -554,7 +554,7 @@
         {/each}
       </div>
 
-      <div class="flex justify-between font-mono text-[10px] uppercase tracking-[0.06em] text-muted-foreground">
+      <div class="flex justify-between font-mono text-2xs uppercase tracking-[0.06em] text-muted-foreground">
         <span>← lower in {committed.b.label}</span>
         <span>no change</span>
         <span>higher in {committed.b.label} →</span>
@@ -580,7 +580,7 @@
                 style:--dot={col.accent}
               ></span>
               <span class="text-sm font-semibold">{col.periodLabel}</span>
-              <span class="ml-auto font-mono text-[11px] text-muted-foreground">
+              <span class="ml-auto font-mono text-xs text-muted-foreground">
                 {col.range}
               </span>
             </div>

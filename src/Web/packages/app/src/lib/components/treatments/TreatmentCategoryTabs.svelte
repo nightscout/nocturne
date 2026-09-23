@@ -46,7 +46,7 @@
     >
       <List class="h-5 w-5" />
       <span class="text-xs font-medium">All</span>
-      <Badge variant="secondary" class="text-[10px] px-1.5 py-0">
+      <Badge variant="secondary" class="text-2xs px-1.5 py-0">
         {categoryCounts.all}
       </Badge>
     </Tabs.Trigger>
@@ -59,7 +59,7 @@
       >
         <Icon class="h-5 w-5 {cat.colorClass}" />
         <span class="text-xs font-medium">{cat.name}</span>
-        <Badge variant="secondary" class="text-[10px] px-1.5 py-0">
+        <Badge variant="secondary" class="text-2xs px-1.5 py-0">
           {categoryCounts[cat.id]}
         </Badge>
       </Tabs.Trigger>

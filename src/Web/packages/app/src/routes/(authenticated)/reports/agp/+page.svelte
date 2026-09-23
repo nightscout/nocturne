@@ -156,40 +156,40 @@
           {tir.target?.toFixed(0) ?? "–"}%
         </div>
         <div class="text-xs text-muted-foreground">Time in Range</div>
-        <div class="text-[10px] text-green-600">Target: ≥70%</div>
+        <div class="text-2xs text-green-600">Target: ≥70%</div>
       </Card>
       <Card class="p-4 text-center">
         <div class="text-3xl font-bold">{stats.mean ? bg(stats.mean) : "–"}</div>
         <div class="text-xs text-muted-foreground">Average</div>
-        <div class="text-[10px] text-muted-foreground/70">{bgLabel()}</div>
+        <div class="text-2xs text-muted-foreground/70">{bgLabel()}</div>
       </Card>
       <Card class="p-4 text-center">
         <div class="text-3xl font-bold text-red-600">
           {variability.estimatedA1c?.toFixed(1) ?? "–"}%
         </div>
         <div class="text-xs text-muted-foreground">Est. A1C</div>
-        <div class="text-[10px] text-muted-foreground/70">GMI</div>
+        <div class="text-2xs text-muted-foreground/70">GMI</div>
       </Card>
       <Card class="p-4 text-center">
         <div class="text-3xl font-bold text-purple-600">
           {variability.coefficientOfVariation?.toFixed(0) ?? "–"}%
         </div>
         <div class="text-xs text-muted-foreground">CV</div>
-        <div class="text-[10px] text-purple-600">Target: ≤33%</div>
+        <div class="text-2xs text-purple-600">Target: ≤33%</div>
       </Card>
       <Card class="p-4 text-center">
         <div class="text-3xl font-bold text-red-500">
           {((tir.low ?? 0) + (tir.veryLow ?? 0)).toFixed(1)}%
         </div>
         <div class="text-xs text-muted-foreground">Below Range</div>
-        <div class="text-[10px] text-red-500">Target: &lt;4%</div>
+        <div class="text-2xs text-red-500">Target: &lt;4%</div>
       </Card>
       <Card class="p-4 text-center">
         <div class="text-3xl font-bold text-orange-500">
           {((tir.high ?? 0) + (tir.veryHigh ?? 0)).toFixed(1)}%
         </div>
         <div class="text-xs text-muted-foreground">Above Range</div>
-        <div class="text-[10px] text-orange-500">Target: &lt;25%</div>
+        <div class="text-2xs text-orange-500">Target: &lt;25%</div>
       </Card>
     </div>
 

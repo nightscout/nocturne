@@ -60,7 +60,7 @@
       {/if}
 
       {#if source}
-        <p class="text-[10px] text-muted-foreground/70 italic">
+        <p class="text-2xs text-muted-foreground/70 italic">
           Source: {source}
         </p>
       {/if}

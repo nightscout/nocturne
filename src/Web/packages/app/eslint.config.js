@@ -110,7 +110,7 @@ export default ts.config(
         ]
       }],
       "shadcn/no-raw-colors": "warn",
-      "shadcn/no-arbitrary-values": ["warn", { allow: ["layout"] }],
+      "shadcn/no-arbitrary-values": ["warn", { allow: ["layout"], deny: ["text-[10px]", "text-[11px]"] }],
       "shadcn/no-inline-styles": "warn",
       // `lead` is a hook the typography plugin styles inside `prose`.
       "shadcn/no-unknown-classes": ["warn", { allow: ["lead"] }],

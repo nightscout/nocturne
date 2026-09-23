@@ -235,7 +235,7 @@
         <GripVertical class="h-3.5 w-3.5" />
       </button>
       <span
-        class="w-12 shrink-0 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
+        class="w-12 shrink-0 text-2xs font-semibold uppercase tracking-wider text-muted-foreground"
       >
         {label}
       </span>
@@ -291,7 +291,7 @@
       <GripVertical class="h-3.5 w-3.5" />
     </button>
     <span
-      class="w-12 shrink-0 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
+      class="w-12 shrink-0 text-2xs font-semibold uppercase tracking-wider text-muted-foreground"
     >
       {label}
     </span>
@@ -304,7 +304,7 @@
       </span>
     {/if}
     {#if isNot}
-      <span class="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+      <span class="rounded bg-muted px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
         NOT
       </span>
     {/if}

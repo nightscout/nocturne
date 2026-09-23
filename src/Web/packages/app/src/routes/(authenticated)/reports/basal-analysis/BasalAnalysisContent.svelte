@@ -179,7 +179,7 @@
             {basalStats.avgRate.toFixed(2)}
           </div>
           <div class="text-xs font-medium text-muted-foreground">Avg Rate</div>
-          <div class="text-[10px] text-muted-foreground/60">U/hr</div>
+          <div class="text-2xs text-muted-foreground/60">U/hr</div>
         </CardContent>
       </Card>
       <Card>
@@ -190,7 +190,7 @@
           <div class="text-xs font-medium text-muted-foreground">
             Total Basal
           </div>
-          <div class="text-[10px] text-muted-foreground/60">
+          <div class="text-2xs text-muted-foreground/60">
             units delivered
           </div>
         </CardContent>
@@ -203,7 +203,7 @@
           <div class="text-xs font-medium text-muted-foreground">
             Temp Basals
           </div>
-          <div class="text-[10px] text-muted-foreground/60">per day avg</div>
+          <div class="text-2xs text-muted-foreground/60">per day avg</div>
         </CardContent>
       </Card>
       <Card>
@@ -220,7 +220,7 @@
           <div class="text-xs font-medium text-muted-foreground">
             High / Low
           </div>
-          <div class="text-[10px] text-muted-foreground/60">temp basals</div>
+          <div class="text-2xs text-muted-foreground/60">temp basals</div>
         </CardContent>
       </Card>
     </div>

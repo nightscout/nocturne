@@ -100,7 +100,7 @@
             />
             <span class="text-sm font-medium">{displayDelta}</span>
           </div>
-          <span class="text-[10px] text-muted-foreground leading-tight">
+          <span class="text-2xs text-muted-foreground leading-tight">
             {timeSinceReading}
           </span>
         </div>
@@ -147,7 +147,7 @@
         class="size-3 rotate-(--arrow-angle)"
         style="--arrow-angle: {arrowAngle.current}deg"
       />
-      <span class="text-[10px] font-medium">{displayDelta}</span>
+      <span class="text-2xs font-medium">{displayDelta}</span>
     </div>
   {/if}
 </div>

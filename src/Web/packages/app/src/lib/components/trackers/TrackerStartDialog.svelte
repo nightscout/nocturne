@@ -257,7 +257,7 @@
             id="scheduledAt"
             bind:value={scheduledAtString}
           />
-          <p class="text-[10px] text-muted-foreground">
+          <p class="text-2xs text-muted-foreground">
             When is this event scheduled?
           </p>
         </div>
@@ -269,7 +269,7 @@
             id="startedAt"
             bind:value={startedAtString}
           />
-          <p class="text-[10px] text-muted-foreground">
+          <p class="text-2xs text-muted-foreground">
             Adjust if you started this earlier.
           </p>
         </div>
@@ -319,7 +319,7 @@
                     {isPast ? "Triggered" : "Triggering in"}
                     {preview.relativeTime}
                   </span>
-                  <span class="text-[10px] opacity-70">
+                  <span class="text-2xs opacity-70">
                     {formatClock(preview.triggerTime, { seconds: true })}
                   </span>
                 </div>

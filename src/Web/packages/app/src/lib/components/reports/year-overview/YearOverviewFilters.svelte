@@ -83,7 +83,7 @@
               Types
               {#if hiddenDataTypes.size > 0}
                 <span
-                  class="ml-1 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-medium leading-none text-primary-foreground"
+                  class="ml-1 rounded-full bg-primary px-1.5 py-0.5 text-2xs font-medium leading-none text-primary-foreground"
                 >
                   {presentDataTypes.length -
                     hiddenDataTypes.size}/{presentDataTypes.length}

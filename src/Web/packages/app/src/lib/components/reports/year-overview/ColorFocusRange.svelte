@@ -392,7 +392,7 @@
         </Slider.Root>
       </div>
 
-      <div class="flex justify-between tabular-nums text-[11px]" aria-hidden="true">
+      <div class="flex justify-between tabular-nums text-xs" aria-hidden="true">
         <span>{formatted(minimum)} {unitLabel}</span>
         <span>{formatted(maximum)} {unitLabel}</span>
       </div>
@@ -403,14 +403,14 @@
       <div class="space-y-2 pt-1">
         <div class="grid grid-cols-2 gap-2">
           <div class="p-2 rounded border border-border/60 bg-muted/20 space-y-1.5">
-            <div class="text-[11px] font-medium text-foreground/80 flex items-center gap-1">
+            <div class="text-xs font-medium text-foreground/80 flex items-center gap-1">
               <span class="size-2.5 rounded-full bg-primary/70"></span>
               Color Boundaries
             </div>
             <div class="grid grid-cols-2 gap-1.5">
               {#if usesCustomPalette}
                 <div class="min-w-0">
-                  <label for={id + "-bound-0"} class="mb-0.5 flex items-center gap-1 text-muted-foreground text-[10px] truncate">
+                  <label for={id + "-bound-0"} class="mb-0.5 flex items-center gap-1 text-muted-foreground text-2xs truncate">
                     <span class="inline-block size-2 shrink-0 rounded-full bg-(--dot)" style:--dot={getGlucoseHeatmapFill(values[0], stops)}></span>
                     Low
                   </label>
@@ -431,7 +431,7 @@
                   />
                 </div>
                 <div class="min-w-0">
-                  <label for={id + "-bound-3"} class="mb-0.5 flex items-center gap-1 text-muted-foreground text-[10px] truncate">
+                  <label for={id + "-bound-3"} class="mb-0.5 flex items-center gap-1 text-muted-foreground text-2xs truncate">
                     <span class="inline-block size-2 shrink-0 rounded-full bg-(--dot)" style:--dot={getGlucoseHeatmapFill(values[3], stops)}></span>
                     High
                   </label>
@@ -454,7 +454,7 @@
               {:else}
                 {#each labels as label, index (index)}
                   <div class="min-w-0">
-                    <label for={id + "-bound-" + index} class="mb-0.5 flex items-center gap-1 text-muted-foreground text-[10px] truncate">
+                    <label for={id + "-bound-" + index} class="mb-0.5 flex items-center gap-1 text-muted-foreground text-2xs truncate">
                       <span class="inline-block size-2 shrink-0 rounded-full bg-(--dot)" style:--dot={getGlucoseHeatmapFill(values[index], stops)}></span>
                       {label}
                     </label>
@@ -480,7 +480,7 @@
           </div>
 
           <div class="p-2 rounded border border-border/60 bg-muted/20 space-y-1.5">
-            <div class="text-[11px] font-medium text-foreground/80 flex items-center gap-1">
+            <div class="text-xs font-medium text-foreground/80 flex items-center gap-1">
               <span class="w-1.5 h-3 rounded-sm bg-foreground/70"></span>
               Focus Window
             </div>
@@ -510,10 +510,10 @@
                 size="xs"
                 class="w-16 tabular-nums"
               />
-              <span class="text-muted-foreground text-[11px]">{unitLabel}</span>
+              <span class="text-muted-foreground text-xs">{unitLabel}</span>
             </div>
             <div class="flex items-center gap-1.5 pt-1 mt-1 border-t border-border/30">
-              <span class="text-[10px] text-muted-foreground">Dim:</span>
+              <span class="text-2xs text-muted-foreground">Dim:</span>
               <Input
                 type="number"
                 min={0}
@@ -524,7 +524,7 @@
                 size="xs"
                 class="w-12 tabular-nums"
               />
-              <span class="text-[10px] text-muted-foreground">%</span>
+              <span class="text-2xs text-muted-foreground">%</span>
             </div>
           </div>
         </div>
@@ -564,7 +564,7 @@
       <div class="space-y-2 pt-1">
         <div class="grid grid-cols-2 gap-2">
           <div class="p-2 rounded border border-border/60 bg-muted/20 space-y-1.5">
-            <div class="text-[11px] font-medium text-foreground/80 flex items-center gap-1">
+            <div class="text-xs font-medium text-foreground/80 flex items-center gap-1">
               <span class="size-2.5 rounded-full bg-primary/70"></span>
               Color Range
             </div>
@@ -590,12 +590,12 @@
                 size="xs"
                 class="w-16 tabular-nums"
               />
-              <span class="text-muted-foreground text-[11px]">{unitLabel}</span>
+              <span class="text-muted-foreground text-xs">{unitLabel}</span>
             </div>
           </div>
 
           <div class="p-2 rounded border border-border/60 bg-muted/20 space-y-1.5">
-            <div class="text-[11px] font-medium text-foreground/80 flex items-center gap-1">
+            <div class="text-xs font-medium text-foreground/80 flex items-center gap-1">
               <span class="w-1.5 h-3 rounded-sm bg-foreground/70"></span>
               Focus Window
             </div>
@@ -621,10 +621,10 @@
                 size="xs"
                 class="w-16 tabular-nums"
               />
-              <span class="text-muted-foreground text-[11px]">{unitLabel}</span>
+              <span class="text-muted-foreground text-xs">{unitLabel}</span>
             </div>
             <div class="flex items-center gap-1.5 pt-1 mt-1 border-t border-border/30">
-              <span class="text-[10px] text-muted-foreground">Dim:</span>
+              <span class="text-2xs text-muted-foreground">Dim:</span>
               <Input
                 type="number"
                 min={0}
@@ -635,7 +635,7 @@
                 size="xs"
                 class="w-12 tabular-nums"
               />
-              <span class="text-[10px] text-muted-foreground">%</span>
+              <span class="text-2xs text-muted-foreground">%</span>
             </div>
           </div>
         </div>
@@ -666,7 +666,7 @@
 
     <!-- Validation error alert -->
     {#if invalidBound !== null || invalidFocusBound !== null || invalidDim}
-      <p id={id + "-error"} class="text-destructive text-[11px] pt-1" role="alert">
+      <p id={id + "-error"} class="text-destructive text-xs pt-1" role="alert">
         {#if invalidDim}
           Enter a dim percentage between 0 and 100.
         {:else if glucose}

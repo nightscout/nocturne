@@ -325,7 +325,7 @@
             class="flex items-center gap-2.5 rounded-full border border-white/8 bg-white/3 py-1 pl-1 pr-3"
           >
             <span
-              class="onb-avatar flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold text-(--onb-navy)"
+              class="onb-avatar flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold text-(--onb-navy)"
             >
               {userInitials}
             </span>

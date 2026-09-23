@@ -152,7 +152,7 @@
             x={-LABEL_WIDTH + 8}
             y={yPos + TRACK_HEIGHT / 2 + 4}
             dy="-0.355em"
-            class="text-[10px] fill-muted-foreground font-medium"
+            class="text-2xs fill-muted-foreground font-medium"
           >
             {track.label}
           </text>
@@ -257,7 +257,7 @@
           placement="bottom"
           rule
           tickLabelProps={{
-            class: "text-[10px] fill-muted-foreground",
+            class: "text-2xs fill-muted-foreground",
           }}
         />
         </Svg>

@@ -130,11 +130,11 @@
         <span class="text-sm font-semibold truncate">{h.ruleName ?? "Alert"}</span>
         <!-- Named as well as coloured, so history reads the same to a screen
              reader as it does on screen. -->
-        <Badge variant="outline" class="text-[10px] shrink-0">
+        <Badge variant="outline" class="text-2xs shrink-0">
           {severityLabel(h.severity)}
         </Badge>
         {#if h.acknowledgedAt}
-          <Badge variant="secondary" class="text-[10px]">Acknowledged</Badge>
+          <Badge variant="secondary" class="text-2xs">Acknowledged</Badge>
         {/if}
       </div>
       <div class="text-xs text-muted-foreground">

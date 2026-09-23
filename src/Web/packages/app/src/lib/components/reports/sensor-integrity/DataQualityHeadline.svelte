@@ -25,7 +25,7 @@
         <div class="text-3xl font-bold tabular-nums">{card.value}</div>
         <div class="mt-1 text-xs font-medium text-foreground">{card.label}</div>
         {#if card.hint}
-          <div class="mt-0.5 text-[10px] leading-tight text-muted-foreground">{card.hint}</div>
+          <div class="mt-0.5 text-2xs leading-tight text-muted-foreground">{card.hint}</div>
         {/if}
       </CardContent>
     </Card>

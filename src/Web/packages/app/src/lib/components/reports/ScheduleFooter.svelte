@@ -189,7 +189,7 @@
       <!-- Time axis -->
       <div class="flex items-center gap-2">
         <span class="w-28 shrink-0"></span>
-        <div class="flex flex-1 justify-between text-[10px] text-muted-foreground px-0.5">
+        <div class="flex flex-1 justify-between text-2xs text-muted-foreground px-0.5">
           <span>12AM</span>
           <span>6AM</span>
           <span>12PM</span>

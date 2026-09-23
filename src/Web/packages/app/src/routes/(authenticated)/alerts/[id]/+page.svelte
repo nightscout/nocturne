@@ -614,7 +614,7 @@
                         {formatHistoryRow(h.startedAt)}
                       </span>
                       {#if h.acknowledgedAt}
-                        <span class="text-[10px] text-muted-foreground shrink-0">
+                        <span class="text-2xs text-muted-foreground shrink-0">
                           ack
                         </span>
                       {/if}

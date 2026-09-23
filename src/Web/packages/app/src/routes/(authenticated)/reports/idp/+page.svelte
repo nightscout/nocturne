@@ -218,17 +218,17 @@
             <div>
               <div class="text-2xl font-bold">{stats.mean ? bg(stats.mean) : "--"}</div>
               <div class="text-xs text-muted-foreground">Average</div>
-              <div class="text-[10px] text-muted-foreground/70">{bgLabel()}</div>
+              <div class="text-2xs text-muted-foreground/70">{bgLabel()}</div>
             </div>
             <div>
               <div class="text-2xl font-bold">{variability.estimatedA1c?.toFixed(1) ?? "--"}%</div>
               <div class="text-xs text-muted-foreground">GMI</div>
-              <div class="text-[10px] text-muted-foreground/70">Est. A1C</div>
+              <div class="text-2xs text-muted-foreground/70">Est. A1C</div>
             </div>
             <div>
               <div class="text-2xl font-bold">{variability.coefficientOfVariation?.toFixed(0) ?? "--"}%</div>
               <div class="text-xs text-muted-foreground">CV</div>
-              <div class="text-[10px] {(variability.coefficientOfVariation ?? 50) <= 33 ? 'text-green-600' : 'text-orange-600'}">
+              <div class="text-2xs {(variability.coefficientOfVariation ?? 50) <= 33 ? 'text-green-600' : 'text-orange-600'}">
                 Target: ≤33%
               </div>
             </div>

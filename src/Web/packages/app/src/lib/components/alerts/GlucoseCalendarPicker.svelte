@@ -183,7 +183,7 @@
   <div class="grid grid-cols-7 gap-1 mb-1">
     {#each weekdayLabels as label, i (i)}
       <div
-        class="text-[10px] text-center text-muted-foreground uppercase tracking-wide font-medium"
+        class="text-2xs text-center text-muted-foreground uppercase tracking-wide font-medium"
       >
         {label}
       </div>

@@ -254,7 +254,7 @@
             <text
               x={-LABEL_WIDTH + 8}
               y={y + LANE_HEIGHT / 2 + 4}
-              class="text-[10px] fill-muted-foreground font-medium"
+              class="text-2xs fill-muted-foreground font-medium"
             >
               {HYPNOGRAM_LANE_LABELS[lane]}
             </text>
@@ -332,7 +332,7 @@
             <text
               x={-LABEL_WIDTH + 8}
               y={basalTop + BASAL_LANE_HEIGHT / 2 + 4}
-              class="text-[10px] fill-muted-foreground font-medium"
+              class="text-2xs fill-muted-foreground font-medium"
             >
               Basal
             </text>
@@ -373,7 +373,7 @@
             rule
             ticks={8}
             format={(d: Date) => timeFormatter.format(d)}
-            tickLabelProps={{ class: "text-[10px] fill-muted-foreground" }}
+            tickLabelProps={{ class: "text-2xs fill-muted-foreground" }}
           />
 
           <!-- Interaction overlay for the tooltip (topmost layer) -->

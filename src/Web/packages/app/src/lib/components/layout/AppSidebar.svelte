@@ -217,7 +217,7 @@
         >
       </p>
       {#if grantExpiresInMin !== null && grantExpiresInMin > 0}
-        <p class="mt-0.5 text-[11px] text-muted-foreground">
+        <p class="mt-0.5 text-xs text-muted-foreground">
           Access expires in ~{grantExpiresInMin} min
         </p>
       {/if}

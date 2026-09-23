@@ -14,7 +14,7 @@
 <div class="header-row">
 	<span></span>
 
-	<Button variant="ghost" size="inline" class="text-[11px] font-semibold uppercase tracking-wider hover:bg-transparent {sort === 'name' ? 'text-foreground' : ''}" onclick={() => onsort('name')}>
+	<Button variant="ghost" size="inline" class="text-xs font-semibold uppercase tracking-wider hover:bg-transparent {sort === 'name' ? 'text-foreground' : ''}" onclick={() => onsort('name')}>
 		Name
 		{#if sort === 'name'}
 			<ChevronDown class="h-2.5 w-2.5" />
@@ -24,7 +24,7 @@
 	<Button
 		variant="ghost"
 		size="inline"
-		class="text-[11px] font-semibold uppercase tracking-wider hover:bg-transparent"
+		class="text-xs font-semibold uppercase tracking-wider hover:bg-transparent"
 		onclick={() => onsort('carbs')}
 	>
 		<span class="contents {sort === 'carbs' ? 'text-(--carbs-strong)' : ''}">

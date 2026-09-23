@@ -303,15 +303,15 @@
                   <span class="flex items-center gap-1.5">
                     <span class="text-sm font-medium">{o.label}</span>
                     {#if pending}
-                      <span class="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                      <span class="rounded bg-muted px-1.5 py-0.5 text-2xs uppercase tracking-wide text-muted-foreground">
                         Loading
                       </span>
                     {:else if unavailable}
-                      <span class="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                      <span class="rounded bg-muted px-1.5 py-0.5 text-2xs uppercase tracking-wide text-muted-foreground">
                         Unavailable
                       </span>
                     {:else if !linked}
-                      <span class="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                      <span class="rounded bg-muted px-1.5 py-0.5 text-2xs uppercase tracking-wide text-muted-foreground">
                         Not linked
                       </span>
                     {/if}

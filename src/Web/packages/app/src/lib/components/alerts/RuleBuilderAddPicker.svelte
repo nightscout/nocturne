@@ -89,7 +89,7 @@
       {#each FACT_GROUP_ORDER as group (group)}
         {@const facts = LEAF_FACTS.filter((f) => f.group === group)}
         {#if facts.length > 0}
-          <div class="px-2 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <div class="px-2 pt-2 pb-1 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
             {FACT_GROUP_LABELS[group]}
           </div>
           {#each facts as f (f.kind)}
@@ -122,7 +122,7 @@
       {/each}
 
       <div class="my-1 border-t"></div>
-      <div class="px-2 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+      <div class="px-2 pt-2 pb-1 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
         Group
       </div>
       <Popover.Close>

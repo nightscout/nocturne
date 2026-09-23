@@ -173,7 +173,7 @@
               class="block h-3.5 w-full rounded-sm bg-(image:--heatmap-gradient)"
               style:--heatmap-gradient="linear-gradient(to right in srgb, {HEATMAP_STOPS.map((s) => `${s.color} ${((s.mgdl - GLUCOSE_COLOR_MIN) / (GLUCOSE_COLOR_MAX - GLUCOSE_COLOR_MIN)) * 100}%`).join(', ')})"
             ></span>
-            <div class="flex justify-between text-[11px] tabular-nums">
+            <div class="flex justify-between text-xs tabular-nums">
               <span>{formatGlucoseValue(GLUCOSE_COLOR_MIN, units)} {getUnitLabel(units)}</span>
               <span class="text-muted-foreground">Default scale</span>
               <span>{formatGlucoseValue(GLUCOSE_COLOR_MAX, units)} {getUnitLabel(units)}</span>
@@ -221,7 +221,7 @@
               class="block h-3.5 w-full rounded-sm bg-linear-to-r from-(--metric-color)/15 to-(--metric-color)"
               style:--metric-color="var({cssVar})"
             ></span>
-            <div class="flex justify-between text-[11px] tabular-nums">
+            <div class="flex justify-between text-xs tabular-nums">
               <span>0 {metricUnit}</span>
               <span class="text-muted-foreground">{metricLabel} default scale</span>
               <span>{metricMax} {metricUnit}</span>

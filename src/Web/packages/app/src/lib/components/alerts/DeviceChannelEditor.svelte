@@ -129,7 +129,7 @@
                 </Label>
                 {#if cap.isHardware}
                   <span
-                    class="text-[11px] text-muted-foreground"
+                    class="text-xs text-muted-foreground"
                     data-testid="device-cap-hardware-note"
                   >
                     Device must allow this.

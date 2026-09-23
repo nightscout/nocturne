@@ -217,7 +217,7 @@
                       >
                         {#if d.totalDailyDose != null}
                           <div
-                            class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground"
+                            class="text-2xs font-medium uppercase tracking-wider text-muted-foreground"
                           >
                             Insulin
                           </div>
@@ -275,7 +275,7 @@
                         class="space-y-0.5 border-t border-border/50 pt-1.5"
                       >
                         <div
-                          class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground"
+                          class="text-2xs font-medium uppercase tracking-wider text-muted-foreground"
                         >
                           Counts
                         </div>

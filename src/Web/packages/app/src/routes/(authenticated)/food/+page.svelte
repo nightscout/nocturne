@@ -91,7 +91,7 @@
 
     <!-- Filter chips -->
     <div class="flex flex-wrap items-center gap-1.5 border-b border-border px-4 py-2.5">
-      <span class="mr-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60">Category</span>
+      <span class="mr-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground/60">Category</span>
       <button
         class={['flex h-7 items-center rounded-full border px-2.5 text-xs cursor-pointer transition-all', state.categoryFilter === null ? 'border-foreground/16 bg-foreground/8 text-foreground' : 'border-border text-muted-foreground']}
         onclick={() => (state.categoryFilter = null)}
@@ -105,7 +105,7 @@
 
       <Separator orientation="vertical" class="mx-1 h-4" />
 
-      <span class="mr-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60">GI</span>
+      <span class="mr-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground/60">GI</span>
       {#each giLevels as g (g)}
         <button
           class={['flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs cursor-pointer transition-all', state.giFilter === g ? 'border-foreground/16 bg-foreground/8 text-foreground' : 'border-border text-muted-foreground']}
@@ -143,7 +143,7 @@
           <Button size="sm" onclick={() => (state.composerOpen = true)}><Plus class="h-3.5 w-3.5" /> Add your first food</Button>
           <Button variant="outline" size="sm"><Upload class="h-3.5 w-3.5" /> Import CSV</Button>
         </div>
-        <div class="mt-4 text-[11px] text-muted-foreground/60">
+        <div class="mt-4 text-xs text-muted-foreground/60">
           Or browse the Nocturne food bank →
         </div>
       </div>

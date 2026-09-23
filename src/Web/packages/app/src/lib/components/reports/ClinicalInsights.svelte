@@ -5,7 +5,7 @@
     slots: {
       container: "rounded-lg border p-4 transition-all",
       icon: "h-5 w-5",
-      badge: "text-[10px]",
+      badge: "text-2xs",
     },
     variants: {
       type: {

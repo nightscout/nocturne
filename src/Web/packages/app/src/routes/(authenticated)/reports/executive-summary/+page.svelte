@@ -86,7 +86,7 @@
             <div class="text-sm font-medium text-muted-foreground">No data</div>
           {/if}
           <div class="text-xs text-muted-foreground">{label}</div>
-          <div class="text-[10px] text-muted-foreground/70">Target {target}</div>
+          <div class="text-2xs text-muted-foreground/70">Target {target}</div>
         </div>
       {/snippet}
 

@@ -85,10 +85,10 @@
         {rule.name ?? "(unnamed)"}
       </Button>
       {#if !rule.isEnabled}
-        <Badge variant="secondary" class="text-[10px]">Disabled</Badge>
+        <Badge variant="secondary" class="text-2xs">Disabled</Badge>
       {/if}
       {#if rule.managedBy}
-        <Badge variant="secondary" class="text-[10px]">Managed by tracker</Badge>
+        <Badge variant="secondary" class="text-2xs">Managed by tracker</Badge>
       {/if}
     </div>
     <div class="truncate text-xs text-muted-foreground" title={chip}>

@@ -281,7 +281,7 @@
   </div>
 
   {#if showThresholds || personalRange}
-    <div class={["mt-2 shrink-0 text-center text-muted-foreground", compact ? "text-[10px]" : "text-xs"].join(" ")}>
+    <div class={["mt-2 shrink-0 text-center text-muted-foreground", compact ? "text-2xs" : "text-xs"].join(" ")}>
       {#if showThresholds}
         <p><span class="font-semibold text-foreground">Target Range:</span> {bgRange(thresholds.low, thresholds.high)}</p>
       {/if}

@@ -230,7 +230,7 @@
     <!-- Selection info -->
     {#if hasSelection && selectedXDomain}
       <div
-        class="flex items-center justify-center gap-2 px-3 py-1 text-[10px] text-muted-foreground border-t border-border"
+        class="flex items-center justify-center gap-2 px-3 py-1 text-2xs text-muted-foreground border-t border-border"
       >
         <span>Viewing:</span>
         <span class="font-medium text-foreground">

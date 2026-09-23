@@ -202,7 +202,7 @@
           {(insulinStats.tdd ?? 0).toFixed(1)}
         </div>
         <div class="text-xs font-medium text-muted-foreground">Avg TDD</div>
-        <div class="text-[10px] text-muted-foreground/60">units/day</div>
+        <div class="text-2xs text-muted-foreground/60">units/day</div>
       </CardContent>
     </Card>
     <Card>
@@ -211,7 +211,7 @@
           {(insulinStats.basalPercent ?? 0).toFixed(0)}%
         </div>
         <div class="text-xs font-medium text-muted-foreground">Basal</div>
-        <div class="text-[10px] text-muted-foreground/60">
+        <div class="text-2xs text-muted-foreground/60">
           {(insulinStats.totalBasal ?? 0).toFixed(1)}U total
         </div>
       </CardContent>
@@ -222,7 +222,7 @@
           {(insulinStats.bolusPercent ?? 0).toFixed(0)}%
         </div>
         <div class="text-xs font-medium text-muted-foreground">Bolus</div>
-        <div class="text-[10px] text-muted-foreground/60">
+        <div class="text-2xs text-muted-foreground/60">
           {(insulinStats.totalBolus ?? 0).toFixed(1)}U total
         </div>
       </CardContent>
@@ -233,7 +233,7 @@
           {(insulinStats.bolusesPerDay ?? 0).toFixed(1)}
         </div>
         <div class="text-xs font-medium text-muted-foreground">Boluses/Day</div>
-        <div class="text-[10px] text-muted-foreground/60">
+        <div class="text-2xs text-muted-foreground/60">
           avg {(insulinStats.avgBolus ?? 0).toFixed(1)}U each
         </div>
       </CardContent>
@@ -246,7 +246,7 @@
             : "–"}
         </div>
         <div class="text-xs font-medium text-muted-foreground">Avg I:C</div>
-        <div class="text-[10px] text-muted-foreground/60">
+        <div class="text-2xs text-muted-foreground/60">
           {(insulinStats.totalCarbs ?? 0).toFixed(0)}g carbs
         </div>
       </CardContent>

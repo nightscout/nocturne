@@ -200,7 +200,7 @@
           placement="left"
           ticks={4}
           format={(v) => String(bg(v as number))}
-          tickLabelProps={{ class: "text-[10px] fill-muted-foreground" }}
+          tickLabelProps={{ class: "text-2xs fill-muted-foreground" }}
         />
 
         <!-- Bottom X-axis with time labels -->

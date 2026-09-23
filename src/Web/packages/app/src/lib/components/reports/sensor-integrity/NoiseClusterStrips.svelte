@@ -48,11 +48,11 @@
       <div class="w-16 shrink-0 text-right">
         {#if bucket.clusterCount > 0}
           <span class="text-xs font-medium text-foreground">{bucket.clusterCount}</span>
-          <span class="text-[10px] text-muted-foreground">
+          <span class="text-2xs text-muted-foreground">
             {bucket.clusterCount === 1 ? "window" : "windows"}
           </span>
         {:else}
-          <span class="text-[10px] text-muted-foreground">—</span>
+          <span class="text-2xs text-muted-foreground">—</span>
         {/if}
       </div>
     </button>

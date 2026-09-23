@@ -123,7 +123,7 @@
             Turn off
           </button>
         {:else}
-          <div class="px-2 pt-1 pb-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+          <div class="px-2 pt-1 pb-1 text-2xs uppercase tracking-wider text-muted-foreground">
             Mute alerts for
           </div>
           {#each [30, 60, 120, 240] as mins (mins)}
