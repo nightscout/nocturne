@@ -39,6 +39,11 @@
 //!   (`carry`), less for dense pigment, and lift scales with the wet fraction
 //!   and flow speed (`lift_still`, `lift_flow_gain`): still or thin water
 //!   barely re-suspends a deposit.
+//! - Suspended pigment is also stirred by a drifting curl-noise current
+//!   (`swirl`, [`pass_swirl`]): Curtis's grid resolves no convection inside a
+//!   standing film, so without it a wet-into-wet wash only blurs. The current
+//!   is exactly divergence free where the film is deep and away from its
+//!   edge, and fades out toward both. Water itself is never swirled.
 //! - Stroke water is modulated by paper height at the stamp
 //!   (`paint::STROKE_WATER_PAPER_GAIN`), so a wash starts with pools in the
 //!   paper's low regions rather than as a flat slab.
@@ -47,7 +52,9 @@
 //!
 //! - `DT = 1` per tick. Velocities are clamped to `max_velocity` cells per
 //!   tick (`0.45`), so `|u| + |v| <= 0.9 < 1` and the upwind advection never
-//!   removes more than a cell holds.
+//!   removes more than a cell holds. The swirl is a separate upwind pass
+//!   whose face fluxes are clamped to `SWIRL_FACE_LIMIT`, so its four faces
+//!   together never empty a cell either.
 //! - Viscosity and diffusion coefficients are per-neighbour explicit
 //!   Laplacian weights and must stay below `0.25` total (`viscosity <= 0.25`,
 //!   `pigment_diffusion <= 1.0` since it is divided by four).
@@ -63,6 +70,7 @@ use super::ops::{MAX_SETTLE_SHARE, Mask, Operation};
 use super::paint::{self, StampParams, StampTarget};
 use super::palette::Palette;
 use super::seed::Seed;
+use super::swirl;
 
 pub const DT: f32 = 1.0;
 pub const MAX_WATER_DEPTH: f32 = 8.0;
@@ -148,6 +156,19 @@ pub struct SimParams {
     pub lift_still: f32,
     /// Flow speed (cells/tick) gain at which lift reaches full strength.
     pub lift_flow_gain: f32,
+    /// Peak swirl speed, short-axis cells per tick: slow enough that pigment
+    /// drifts about one feature while a film stands, so tendrils form but a
+    /// silhouette does not smear.
+    pub swirl_speed: f32,
+    /// Swirl noise lattice cells per isotropic unit; sets the tendril size
+    /// relative to the artwork rather than to the grid.
+    pub swirl_frequency: f32,
+    /// Noise drift, lattice cells per tick, so the currents wander instead of
+    /// circling fixed eddies.
+    pub swirl_drift: f32,
+    /// Film depth at which the swirl reaches full strength, fading to nothing
+    /// at `wet_lo`: a thin film has no room to convect.
+    pub swirl_depth: f32,
 }
 
 impl Default for SimParams {
@@ -188,6 +209,10 @@ impl Default for SimParams {
             carry: 2.0,
             lift_still: 0.25,
             lift_flow_gain: 3.0,
+            swirl_speed: 0.16,
+            swirl_frequency: 8.0,
+            swirl_drift: 0.004,
+            swirl_depth: 0.35,
         }
     }
 }
@@ -280,10 +305,15 @@ pub fn step(
     std::mem::swap(&mut grid.pigments_in_water, &mut scratch.g);
     std::mem::swap(&mut grid.pressure, &mut scratch.p);
 
+    pass_swirl(grid, params, &scratch.blurred, &mut scratch.g);
+    std::mem::swap(&mut grid.pigments_in_water, &mut scratch.g);
+
     pass_transfer(grid, pigments, params);
 
     pass_capillary(grid, params, &mut scratch.s);
     std::mem::swap(&mut grid.saturation, &mut scratch.s);
+
+    grid.tick = grid.tick.saturating_add(1);
 }
 
 /// Applies an operation. `seed` drives the stroke's radius jitter and should
@@ -521,9 +551,103 @@ pub fn pass_blur_v(grid: &SimulationGrid, params: &SimParams, src: &[f32], out: 
     }
 }
 
+/// Swirl gate of cell `j`: `0` where dry, rising to `1` as the film deepens
+/// to `swirl_depth` and as the cell's `blur_radius` window becomes wholly
+/// wet. A face into a dry cell carries nothing, so a gate that stepped
+/// straight from `1` to `0` there would leave the edge cell's other faces
+/// unbalanced and drain or flood it in a few ticks; the taper spreads that
+/// imbalance over the window. `blurred_wet` treats the grid border as wet, so
+/// the border's own share is taken from the distance to it.
+#[inline]
+fn swirl_gate(grid: &SimulationGrid, params: &SimParams, blurred_wet: &[f32], j: usize) -> f32 {
+    if grid.wet[j] == 0.0 {
+        return 0.0;
+    }
+    let w = grid.width as usize;
+    let h = grid.height as usize;
+    let (x, y) = (j % w, j / w);
+    let border = x.min(y).min(w - 1 - x).min(h - 1 - y) as f32;
+    let radius = params.blur_radius as f32;
+    let border_wet = ((border + radius + 1.0) / (2.0 * radius + 1.0)).min(1.0);
+    let interior = smoothstep(SWIRL_EDGE_WET, 1.0, blurred_wet[j].min(border_wet));
+    interior * smoothstep(params.wet_lo, params.swirl_depth, grid.pressure[j])
+}
+
+/// Most of a cell the swirl may move through one face, so its four faces
+/// together never move more than the cell holds.
+pub const SWIRL_FACE_LIMIT: f32 = 0.25;
+/// Wet share of the blur window at which the swirl starts: just under the
+/// `~0.55` a cell on a straight wet edge sees, so edge cells stay still.
+pub const SWIRL_EDGE_WET: f32 = 0.5;
+
+/// Swirl flux of cell `i`'s four faces `(left, right, up, down)` from
+/// `swirl::face_fluxes`, each scaled by the shallower side's gate. The gate
+/// is symmetric in the two cells, so a face moves the same pigment out of one
+/// as into the other; a face to a dry cell or the border carries nothing.
+fn swirl_faces(
+    grid: &SimulationGrid,
+    params: &SimParams,
+    blurred_wet: &[f32],
+    i: usize,
+) -> [f32; 4] {
+    let gate_i = swirl_gate(grid, params, blurred_wet, i);
+    if gate_i == 0.0 || params.swirl_speed <= 0.0 {
+        return [0.0; 4];
+    }
+    let w = grid.width;
+    let (x, y) = (i as u32 % w, i as u32 / w);
+    let psi = |cx: u32, cy: u32| {
+        swirl::stream(
+            cx,
+            cy,
+            w,
+            grid.aspect,
+            grid.tick,
+            grid.swirl_seed,
+            params.swirl_speed,
+            params.swirl_frequency,
+            params.swirl_drift,
+        )
+    };
+    let flux = swirl::face_fluxes(psi(x, y), psi(x + 1, y), psi(x, y + 1), psi(x + 1, y + 1));
+    let mut out = [0.0; 4];
+    for (f, j) in neighbours(grid, i).into_iter().enumerate() {
+        if j != i {
+            let gate = gate_i.min(swirl_gate(grid, params, blurred_wet, j));
+            out[f] = (flux[f] * gate).clamp(-SWIRL_FACE_LIMIT, SWIRL_FACE_LIMIT);
+        }
+    }
+    out
+}
+
+/// Stirs suspended pigment through the swirl's face fluxes ([`swirl_faces`])
+/// with the same upwind rule as [`pass_advect`]. A separate pass so the
+/// water's advection and diffusion keep their own stability budget; the face
+/// limit bounds this one.
+pub fn pass_swirl(
+    grid: &SimulationGrid,
+    params: &SimParams,
+    blurred_wet: &[f32],
+    out_g: &mut [f32],
+) {
+    let n = grid.cell_count();
+    for i in 0..n {
+        let [sl, sr, su, sd] = swirl_faces(grid, params, blurred_wet, i);
+        let [l, r, up, dn] = neighbours(grid, i);
+        let keep = 1.0 - (sr.max(0.0) + (-sl).max(0.0) + sd.max(0.0) + (-su).max(0.0)) * DT;
+        let (in_l, in_r) = (sl.max(0.0) * DT, (-sr).max(0.0) * DT);
+        let (in_u, in_d) = (su.max(0.0) * DT, (-sd).max(0.0) * DT);
+        for k in 0..grid.pigment_count {
+            let g = &grid.pigments_in_water[k * n..(k + 1) * n];
+            let ng = g[i] * keep + in_l * g[l] + in_r * g[r] + in_u * g[up] + in_d * g[dn];
+            out_g[k * n + i] = ng.clamp(0.0, MAX_SUSPENDED);
+        }
+    }
+}
+
 /// Moves water and suspended pigment: conservative upwind advection, depth-
-/// weighted diffusion between wet neighbours, and the flow-outward water
-/// removal near the wet boundary (Curtis's edge-darkening rule).
+/// weighted diffusion between wet neighbours, and the flow-outward water removal near
+/// the wet boundary (Curtis's edge-darkening rule).
 pub fn pass_advect(
     grid: &SimulationGrid,
     params: &SimParams,

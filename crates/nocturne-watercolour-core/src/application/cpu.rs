@@ -83,7 +83,8 @@ impl Simulator for CpuEngine {
         let res = scene.sim_resolution.0;
         let field = PaperField::generate_with_aspect(&scene.paper, res, res, scene.aspect());
         let grid = SimulationGrid::new(&field, scene.palette.len())
-            .with_composite_mode(scene.composite_mode());
+            .with_composite_mode(scene.composite_mode())
+            .with_swirl_seed(scene.seed);
         let scratch = Scratch::for_grid(&grid);
         self.checkpoints.clear();
         self.loaded = Some(Loaded {

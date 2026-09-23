@@ -285,7 +285,19 @@ pigments stay smooth apart from the pooling they inherit from the water.
 `scene::isotropic_scale` (shorter side `0..1`, longer `0..max(aspect, 1/aspect)`),
 so grain, pooling octaves, stamps and feathers stay round on non-square scenes.
 The fluid step itself is not aspect-aware (square grid by design): its per-cell
-diffusion, advection and blur distances are still stretched with the grid.
+diffusion, advection and blur distances are still stretched with the grid. The
+standing-water swirl is the exception: its eddies are sized in the isotropic
+metric.
+
+**Standing-water swirl.** Suspended pigment in a standing film is stirred by a
+slow, drifting curl-noise current (`sim::pass_swirl`), which is what marbles a
+wet-into-wet wash instead of only blurring it. The current is the curl of a
+two-octave value-noise stream function sampled at cell corners, so each face's
+flux is the difference of its two corners and every cell's fluxes cancel: it
+moves pigment without piling it up, and never moves water. Its strength fades
+with film depth (`swirl_depth`) and toward the wet boundary over the
+flow-outward blur window, so a thinning film and a silhouette's edge stay
+still.
 
 ## Numerical limits (`domain::sim`)
 
@@ -293,6 +305,7 @@ diffusion, advection and blur distances are still stretched with the grid.
 |---|---|---|
 | `DT` | `1` per tick | fixed timestep; determinism |
 | max velocity | `0.45` cells/tick | keeps `|u| + |v| < 1` so upwind advection never drains a cell |
+| swirl face flux | `<= 0.25` per face (`SWIRL_FACE_LIMIT`) | the swirl is its own upwind pass, so four faces together never drain a cell |
 | viscosity | `0.1` | explicit Laplacian weight; keep `<= 0.25` |
 | pigment diffusion | `0.05` | divided by four per neighbour; keep `<= 1.0` |
 | water diffusion | `0.1` | same |
@@ -308,7 +321,7 @@ The stability sweep test runs 500 ticks at parameter extremes and asserts
 finiteness and bounds. Documented deviations from Curtis (collocated
 velocities, advected water depth, depth-weighted pigment diffusion, no capillary
 destination threshold, depth- and height-scaled edge drain, paper-modulated
-stroke water) are listed in the `domain::sim` module doc.
+stroke water, standing-water swirl) are listed in the `domain::sim` module doc.
 
 Measured behaviour on the reference: a wet-on-dry disc ends with deposited
 pigment heavier in the rim band than at the centre (edge darkening, asserted

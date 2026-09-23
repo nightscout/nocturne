@@ -3,6 +3,7 @@
 
 use super::optics::CompositeMode;
 use super::paper::PaperField;
+use super::seed::{Seed, SubSeed};
 
 /// All per-cell fields are row-major `width * height` vectors; per-pigment
 /// fields are `pigment_count` such vectors back to back, so pigment `k` of
@@ -43,6 +44,11 @@ pub struct SimulationGrid {
     /// in its isotropic metric (`scene::isotropic_scale`). Taken from the
     /// paper field the grid was built from.
     pub aspect: f32,
+    /// Ticks stepped since load. The swirl noise drifts with it, so it is
+    /// state a checkpoint carries rather than a clock.
+    pub tick: u32,
+    /// Swirl noise seed, below `2^24` so it packs exactly into an `f32`.
+    pub swirl_seed: u32,
 }
 
 impl SimulationGrid {
@@ -66,11 +72,19 @@ impl SimulationGrid {
             settle_share: 0.0,
             composite_mode: CompositeMode::Subtractive,
             aspect: paper.aspect,
+            tick: 0,
+            swirl_seed: 0,
         }
     }
 
     pub fn with_aspect(mut self, aspect: f32) -> SimulationGrid {
         self.aspect = aspect;
+        self
+    }
+
+    /// Seeds the swirl noise from the scene seed.
+    pub fn with_swirl_seed(mut self, seed: Seed) -> SimulationGrid {
+        self.swirl_seed = (seed.derive(SubSeed::Swirl).0 & 0x00FF_FFFF) as u32;
         self
     }
 

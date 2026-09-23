@@ -63,10 +63,20 @@ impl StateLayout {
     pub fn settle_share(&self) -> usize {
         self.dry_rate() + 3
     }
-    /// Total f32 count, including a 4-element header tail holding
-    /// `dry_rate`, the composite-mode flag, the aspect and `settle_share`.
-    pub fn state_len(&self) -> usize {
+    /// `SimulationGrid::tick`, read by the swirl and advanced by `clock`.
+    pub fn tick(&self) -> usize {
         self.dry_rate() + 4
+    }
+    /// `SimulationGrid::swirl_seed`, read by the swirl.
+    pub fn swirl_seed(&self) -> usize {
+        self.dry_rate() + 5
+    }
+    /// Total f32 count, including a 6-element header tail holding
+    /// `dry_rate`, the composite-mode flag, the aspect, `settle_share`, the
+    /// tick and the swirl seed. Both integers stay below `2^24`, so `f32`
+    /// holds them exactly.
+    pub fn state_len(&self) -> usize {
+        self.dry_rate() + 6
     }
     pub fn state_bytes(&self) -> u64 {
         (self.state_len() * std::mem::size_of::<f32>()) as u64
@@ -116,6 +126,8 @@ impl StateLayout {
         out[self.settle_share()] = grid.settle_share;
         out[self.composite_mode()] = grid.composite_mode.flag();
         out[self.aspect()] = grid.aspect;
+        out[self.tick()] = grid.tick as f32;
+        out[self.swirl_seed()] = grid.swirl_seed as f32;
         out
     }
 
@@ -141,6 +153,8 @@ impl StateLayout {
             settle_share: data[self.settle_share()],
             composite_mode: CompositeMode::from_flag(data[self.composite_mode()]),
             aspect: data[self.aspect()],
+            tick: data[self.tick()] as u32,
+            swirl_seed: data[self.swirl_seed()] as u32,
         }
     }
 }
@@ -160,6 +174,8 @@ mod tests {
         grid.dry_rate = 2.5;
         grid.composite_mode = CompositeMode::Luminous;
         grid.aspect = 4.0;
+        grid.tick = 1234;
+        grid.swirl_seed = 0x00AB_CDEF;
         let layout = StateLayout::new(8, 6, 3);
         let packed = layout.pack(&grid);
         assert_eq!(packed.len(), layout.state_len());

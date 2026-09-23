@@ -678,3 +678,104 @@ fn the_stain_bite_ignores_density_and_needs_water() {
     assert!(weak < heavy, "a weaker stain bites less: {weak} vs {heavy}");
     assert_eq!(thin, 0.0, "no bite without a film, settled {thin}");
 }
+
+/// A standing film, held wet with `Dry { rate: 0 }`, with pigment `0` loaded
+/// into its left half only, so the interface is the one place stirring shows.
+fn standing_interface(params: &SimParams, ticks: u32) -> SimulationGrid {
+    const S: u32 = 128;
+    let palette = Palette::moonlight();
+    let field = PaperField::generate(&Paper::cold_press(Seed(8)), S, S);
+    let mut grid = SimulationGrid::new(&field, palette.len()).with_swirl_seed(Seed(8));
+    let w = S as usize;
+    let (lo, hi) = (w / 8, w - w / 8);
+    for y in lo..hi {
+        for x in lo..hi {
+            let i = y * w + x;
+            grid.wet[i] = 1.0;
+            grid.pressure[i] = 0.6;
+            grid.saturation[i] = 0.8;
+            if x < w / 2 {
+                grid.pigments_in_water[i] = 0.5;
+            }
+        }
+    }
+    sim::apply(&mut grid, &Operation::Dry { rate: 0.0 }, params, Seed(8));
+    run(
+        &mut grid,
+        &PigmentCoefficients::from_palette(&palette),
+        params,
+        ticks,
+    );
+    grid
+}
+
+/// Pigment `0`, suspended plus deposited, per cell.
+fn pigment_field(grid: &SimulationGrid) -> Vec<f32> {
+    (0..grid.cell_count())
+        .map(|i| grid.in_water(0, i) + grid.deposited(0, i))
+        .collect()
+}
+
+/// Spread (standard deviation, cells) of where each row of the wash's
+/// interior crosses half the loaded strength: `0` for a straight front, and
+/// the reach of the fingers stirring pushes across it.
+fn front_spread(field: &[f32], w: usize) -> f64 {
+    let (lo, hi) = (w / 8 + 8, w - w / 8 - 8);
+    let half = 0.5 * field[(w / 2) * w + w / 4];
+    let fronts: Vec<f64> = (lo..hi)
+        .map(|y| {
+            let row = &field[y * w..(y + 1) * w];
+            let mut x = w / 8;
+            while x < w - w / 8 && row[x] >= half {
+                x += 1;
+            }
+            x as f64
+        })
+        .collect();
+    let mean = fronts.iter().sum::<f64>() / fronts.len() as f64;
+    (fronts.iter().map(|f| (f - mean).powi(2)).sum::<f64>() / fronts.len() as f64).sqrt()
+}
+
+fn field_centroid(field: &[f32], w: usize) -> (f64, f64) {
+    let (mut sx, mut sy, mut m) = (0.0f64, 0.0f64, 0.0f64);
+    for (i, &v) in field.iter().enumerate() {
+        sx += (i % w) as f64 * v as f64;
+        sy += (i / w) as f64 * v as f64;
+        m += v as f64;
+    }
+    (sx / m, sy / m)
+}
+
+#[test]
+fn standing_water_stirs_tendrils_without_moving_or_losing_pigment() {
+    let on = SimParams::default();
+    let off = SimParams {
+        swirl_speed: 0.0,
+        ..on
+    };
+    let w = 128;
+    let start = pigment_field(&standing_interface(&on, 0));
+    let stirred = pigment_field(&standing_interface(&on, 240));
+    let still = pigment_field(&standing_interface(&off, 240));
+
+    let loaded: f64 = start.iter().map(|&v| v as f64).sum();
+    let kept: f64 = stirred.iter().map(|&v| v as f64).sum();
+    let (e_on, e_off) = (front_spread(&stirred, w), front_spread(&still, w));
+    let (c_on, c_off) = (field_centroid(&stirred, w), field_centroid(&still, w));
+    eprintln!(
+        "loaded {loaded} kept {kept}; front spread on {e_on} off {e_off}; centroid on {c_on:?} off {c_off:?}"
+    );
+    assert!(
+        (kept - loaded).abs() < 1e-3 * loaded,
+        "the swirl moves pigment, it does not make or lose it: {loaded} -> {kept}"
+    );
+    assert!(
+        e_on > 2.0 * e_off.max(1.0),
+        "stirring should finger the front: spread on {e_on} off {e_off} cells"
+    );
+    let drift = ((c_on.0 - c_off.0).powi(2) + (c_on.1 - c_off.1).powi(2)).sqrt();
+    assert!(
+        drift < 1.5,
+        "a divergence-free stir should not shift the wash: centroid moved {drift} cells"
+    );
+}

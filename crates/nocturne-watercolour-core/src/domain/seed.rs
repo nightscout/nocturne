@@ -11,6 +11,8 @@ pub struct Seed(pub u64);
 pub enum SubSeed {
     Paper,
     Granulation,
+    /// Standing-water swirl noise (`swirl`).
+    Swirl,
     /// Brush jitter for the timeline event with this index.
     Brush(u32),
 }
@@ -20,6 +22,7 @@ impl SubSeed {
         match self {
             SubSeed::Paper => 0x5041_5045_5200_0000,
             SubSeed::Granulation => 0x4752_414E_0000_0000,
+            SubSeed::Swirl => 0x5357_4952_4C00_0000,
             SubSeed::Brush(i) => 0x4252_5553_4800_0000 ^ u64::from(i),
         }
     }

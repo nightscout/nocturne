@@ -12,6 +12,7 @@ pub mod pigment;
 pub mod scene;
 pub mod seed;
 pub mod sim;
+pub mod swirl;
 pub mod timeline;
 
 pub use grid::SimulationGrid;

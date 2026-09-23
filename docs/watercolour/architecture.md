@@ -132,7 +132,16 @@ isotropic metric (`scene::isotropic_scale`: shorter side `0..1`, longer
 `0..max(aspect, 1/aspect)`) so they stay round after the stretch. `PaperField::
 generate_with_aspect`, `paint::rasterize_path_aspect` / `rasterize_mask_aspect`
 and `SimulationGrid::aspect` (packed in the state header) carry the aspect;
-the fluid step itself is deliberately square-metric.
+the fluid step itself is deliberately square-metric, except for the
+standing-water swirl, whose noise is sampled in the isotropic metric so its
+eddies stay round.
+
+**Swirl determinism.** The swirl's stream function is value noise over an
+integer hash, a pure function of (cell corner, tick, seed). The tick and the
+swirl seed (`SimulationGrid::tick`, `swirl_seed`, derived from the scene seed)
+sit in the state header, so a checkpoint restores the swirl's phase with the
+rest of the state and a seek replays it exactly; the GPU advances its tick
+with a one-thread `clock` dispatch at the end of every step.
 
 **Lucide icons.** A Lucide icon is a 24-grid element list (`[tag, attrs]`
 pairs: `path`, `circle`, `rect`, `line`, `ellipse`, `polyline`, `polygon`).
@@ -159,7 +168,7 @@ returns for the engine to load.
 |---|---|---|---|
 | `velocity.wgsl` | `velocity` | Curtis UpdateVelocities (`sim::pass_velocity`) | none |
 | `pressure.wgsl` | `divergence`, `jacobi_a`, `jacobi_b`, `project` | Curtis RelaxDivergence (`pass_divergence`, `pass_jacobi` x 8 ping-pong, `pass_project`) | none (host copies `q2 -> q` when the iteration count is odd) |
-| `flow.wgsl` | `blur_h`, `blur_v`, `advect` | Curtis FlowOutward + MovePigment (`pass_blur_h/v`, `pass_advect`) | none |
+| `flow.wgsl` | `blur_h`, `blur_v`, `advect`, `swirl`, `clock` | Curtis FlowOutward + MovePigment (`pass_blur_h/v`, `pass_advect`), the standing-water swirl (`pass_swirl`, `domain::swirl`) and the tick counter `step` advances | none |
 | `transfer.wgsl` | `transfer` | Curtis TransferPigment + evaporation, capillary absorption, drying (`pass_transfer`) | none |
 | `capillary.wgsl` | `capillary`, `capillary_wet` | Curtis SimulateCapillaryFlow (`pass_capillary`) | none |
 | `apply.wgsl` | `apply_brush`, `apply_water`, `apply_lift`, `dry_all` | `paint::apply_*`, `sim::dry_all` on an uploaded stamp | none |

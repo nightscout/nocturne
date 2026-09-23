@@ -15,8 +15,8 @@ flow/transfer/capillary passes map 1:1 onto Curtis's UpdateVelocities,
 RelaxDivergence, FlowOutward + MovePigment, TransferPigment + evaporation and
 SimulateCapillaryFlow. Deliberate deviations from the paper (collocated
 velocities, advected water depth, depth-weighted pigment diffusion, a
-depth- and height-scaled edge drain, paper-modulated stroke water) are listed
-in the `domain::sim` module doc.
+depth- and height-scaled edge drain, paper-modulated stroke water, a
+standing-water curl-noise swirl) are listed in the `domain::sim` module doc.
 
 [sudaquarelle.com](https://sudaquarelle.com) was used as a **visual reference
 only** during tuning: it informed judgements about what a wash should look

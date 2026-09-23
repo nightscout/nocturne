@@ -95,6 +95,10 @@ struct ParamsUniform {
     max_deposited: f32,
     carry_min: f32,
     carry_reach: f32,
+    swirl_speed: f32,
+    swirl_frequency: f32,
+    swirl_drift: f32,
+    swirl_depth: f32,
 }
 
 impl ParamsUniform {
@@ -144,6 +148,10 @@ impl ParamsUniform {
             max_deposited: sim::MAX_DEPOSITED,
             carry_min: sim::CARRY_MIN,
             carry_reach: sim::CARRY_REACH,
+            swirl_speed: p.swirl_speed,
+            swirl_frequency: p.swirl_frequency,
+            swirl_drift: p.swirl_drift,
+            swirl_depth: p.swirl_depth,
         }
     }
 }
@@ -213,6 +221,8 @@ struct SimPipelines {
     blur_h: wgpu::ComputePipeline,
     blur_v: wgpu::ComputePipeline,
     advect: wgpu::ComputePipeline,
+    swirl: wgpu::ComputePipeline,
+    clock: wgpu::ComputePipeline,
     transfer: wgpu::ComputePipeline,
     capillary: wgpu::ComputePipeline,
     capillary_wet: wgpu::ComputePipeline,
@@ -431,6 +441,8 @@ impl GpuEngine {
             blur_h: make("blur_h"),
             blur_v: make("blur_v"),
             advect: make("advect"),
+            swirl: make("swirl"),
+            clock: make("clock"),
             transfer: make("transfer"),
             capillary: make("capillary"),
             capillary_wet: make("capillary_wet"),
@@ -707,11 +719,19 @@ impl GpuEngine {
         copy(enc, lay.scratch_g(0), lay.g(0), lay.n * lay.pigment_count);
         copy(enc, lay.scratch_p(), lay.p(), lay.n);
 
+        dispatch(enc, &self.sim.swirl);
+        copy(enc, lay.scratch_g(0), lay.g(0), lay.n * lay.pigment_count);
+
         dispatch(enc, &self.sim.transfer);
 
         dispatch(enc, &self.sim.capillary);
         dispatch(enc, &self.sim.capillary_wet);
         copy(enc, lay.scratch_s(), lay.s(), lay.n);
+
+        let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
+        pass.set_pipeline(&self.sim.clock);
+        pass.set_bind_group(0, &l.bind_group, &[]);
+        pass.dispatch_workgroups(1, 1, 1);
     }
 
     fn write_state_region(&self, offset_elems: usize, data: &[f32]) -> Result<(), EngineError> {
@@ -1188,7 +1208,8 @@ impl Simulator for GpuEngine {
         let pigment_count = scene.palette.len();
         let paper_sim = PaperField::generate_with_aspect(&scene.paper, res, res, scene.aspect());
         let grid = SimulationGrid::new(&paper_sim, pigment_count)
-            .with_composite_mode(scene.composite_mode());
+            .with_composite_mode(scene.composite_mode())
+            .with_swirl_seed(scene.seed);
         let layout = StateLayout::new(res, res, pigment_count);
         let f = std::mem::size_of::<f32>() as u64;
 

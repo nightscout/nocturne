@@ -2,9 +2,9 @@
 //! the CPU reference. The parity test only catches a drifted literal through
 //! its mean error, which a small drift slips under, so each is compared here.
 
-use nocturne_watercolour_core::domain::{optics, paint, palette, sim};
+use nocturne_watercolour_core::domain::{optics, paint, palette, sim, swirl};
 
-const SHADERS: [(&str, &str); 2] = [
+const SHADERS: [(&str, &str); 3] = [
     (
         "render.wgsl",
         include_str!("../src/gpu/shaders/render.wgsl"),
@@ -13,6 +13,7 @@ const SHADERS: [(&str, &str); 2] = [
         "common.wgsl",
         include_str!("../src/gpu/shaders/common.wgsl"),
     ),
+    ("flow.wgsl", include_str!("../src/gpu/shaders/flow.wgsl")),
 ];
 
 /// Declared in `common.wgsl` and owned by the transfer pass, which keeps its
@@ -42,6 +43,10 @@ fn rust_value(name: &str) -> Option<f64> {
         "DRAIN_MIN" => sim::DRAIN_MIN as f64,
         "DRAIN_MAX" => sim::DRAIN_MAX as f64,
         "STROKE_WATER_PAPER_GAIN" => paint::STROKE_WATER_PAPER_GAIN as f64,
+        "SWIRL_OCTAVE_GAIN" => swirl::SWIRL_OCTAVE_GAIN as f64,
+        "SWIRL_OCTAVE_DRIFT" => swirl::SWIRL_OCTAVE_DRIFT as f64,
+        "SWIRL_FACE_LIMIT" => sim::SWIRL_FACE_LIMIT as f64,
+        "SWIRL_EDGE_WET" => sim::SWIRL_EDGE_WET as f64,
         _ => return None,
     };
     Some(v)
