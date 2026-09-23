@@ -122,13 +122,22 @@ export default ts.config(
             allow: ["layout"],
             deny: HEIGHT_CLASSES,
             message: {
-              layout: "\"{{className}}\" is not allowed on <Button>: its height comes from size. Use xs (h-7), sm (h-8), default (h-9), lg (h-10), xl (h-14, full-screen alarm actions), icon-xs (size-7), icon-sm (size-8), icon (size-9), or inline (h-auto, no padding) for a link in running text. Width stays yours.",
-              typography: "\"{{className}}\" is not allowed on <Button>: it owns its type. size=\"xs\" gives text-xs and size=\"xl\" text-lg; every other size is text-sm font-medium."
+              layout: "\"{{className}}\" is not allowed on <Button>: its height comes from size. Use xs (h-7), sm (h-8), default (h-9), lg (h-10), xl (h-14, full-screen alarm actions), icon-xs (size-7), icon-sm (size-8), icon (size-9), icon-2xs (size-5, a round remove pip), or inline (h-auto, no padding) for a link in running text. Width stays yours.",
+              typography: "\"{{className}}\" is not allowed on <Button>: it owns its type. size=\"xs\" gives text-xs and size=\"xl\" text-lg; every other size is text-sm font-medium.",
+              effects: "\"{{className}}\" is not allowed on <Button>: it owns its effects. For a remove that shows on hover, set reveal: it stays hidden until its `group` is hovered or holds focus."
             }
           },
           {
             pattern: "^(Badge|Alert|Card)(\\.Root)?$",
             allow: ["layout"]
+          },
+          {
+            pattern: "^(Item|RadioGroup\\.Card|RadioGroupCard)$",
+            allow: ["layout"],
+            message: {
+              color: 'Use <Item variant="outline">, "success", "muted", "dashed" or "ghost". aria-current="true" marks the current item, aria-busy a running one, and disabled dims it. <RadioGroup.Card> styles its own checked state.',
+              spacing: 'Use <Item size="sm">, the default or size="lg".'
+            }
           }
         ]
       }],
@@ -213,7 +222,7 @@ export default ts.config(
         ...COMPONENT_SCRIPT_SYNTAX,
         {
           selector: 'SvelteElement[kind="html"][name.name="button"]',
-          message: "Use <Button> with a variant and size, or <Toggle> for a pressed state, instead of a raw <button>."
+          message: "Use <Button> with a variant and size instead of a raw <button>. A pressed state is <Toggle>; a clickable card or row is <Item> with onclick or href; a single-select option card is <RadioGroup.Card>; an option in a popover list is <DropdownMenu.Item>; a chip's remove is <Badge onremove>; a remove that shows on hover is <Button reveal>."
         },
         {
           selector: 'SvelteElement[kind="html"][name.name="input"]:not(:has(SvelteAttribute[key.name="type"] > SvelteLiteral[value="hidden"]))',

@@ -6,6 +6,7 @@
   import { toast } from "svelte-sonner";
   import { useToastSubmission } from "$lib/forms";
   import { X, Loader2 } from "lucide-svelte";
+  import { Button } from "$lib/components/ui/button";
   import { StateHistory } from "runed";
   import {
     clockGlucoseSourceOf,
@@ -401,16 +402,18 @@
 {/snippet}
 
 {#snippet removeButton(rowIndex: number, elementId: string)}
-  <button
-    type="button"
-    class="absolute -right-2 -top-2 z-10 flex size-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-md transition-transform hover:scale-110"
+  <Button
+    variant="destructive"
+    size="icon-2xs"
+    class="absolute -right-2 -top-2 z-10"
     onclick={(e) => {
       e.stopPropagation();
       removeElement(rowIndex, elementId);
     }}
+    aria-label="Remove element"
   >
-    <X class="size-3" />
-  </button>
+    <X />
+  </Button>
 {/snippet}
 
 {#snippet draggableElement(

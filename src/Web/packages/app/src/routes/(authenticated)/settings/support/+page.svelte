@@ -8,6 +8,7 @@
   } from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
+  import { Item } from "$lib/components/ui/item";
   import { Separator } from "$lib/components/ui/separator";
   import { Switch } from "$lib/components/ui/switch";
   import { Label } from "$lib/components/ui/label";
@@ -256,42 +257,50 @@
       <div class="grid gap-4 @xl:grid-cols-2">
         {#each supportOptions as option (option.name)}
           {#if option.template === "account" && supportConfig?.accountBilling?.mode === "redirect"}
-            <a
+            <Item
+              variant="outline"
+              size="lg"
+              class="flex-col"
               href={supportConfig.accountBilling.url}
               target="_blank"
               rel="external noopener noreferrer"
-              class="flex flex-col items-center text-center p-4 rounded-lg border hover:border-primary/50 hover:bg-accent/50 transition-colors"
             >
               <div
-                class="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 mb-3"
+                class="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10"
               >
                 <ExternalLink class="h-6 w-6 text-primary" />
               </div>
-              <span class="font-medium">{supportConfig.accountBilling.label ?? option.name}</span>
-              <p class="text-sm text-muted-foreground mt-1">
-                {option.description}
-              </p>
-            </a>
+              <div class="text-center">
+                <span class="font-medium">{supportConfig.accountBilling.label ?? option.name}</span>
+                <p class="text-sm text-muted-foreground mt-1">
+                  {option.description}
+                </p>
+              </div>
+            </Item>
           {:else}
             <!-- The account tile's routing depends on the operator config; keep it inert until
                  the config resolves so a click during the fetch window can't misroute a
                  redirect/api-mode tenant to the generic community dialog. Other templates route
                  the same regardless of config, so they stay interactive. -->
-            <button
-              class="flex flex-col items-center text-center p-4 rounded-lg border hover:border-primary/50 hover:bg-accent/50 transition-colors disabled:pointer-events-none disabled:opacity-60"
+            <Item
+              variant="outline"
+              size="lg"
+              class="flex-col"
               disabled={option.template === "account" && supportConfig === undefined}
               onclick={() => handleSupportAction(option.template, supportConfig?.accountBilling?.mode)}
             >
               <div
-                class="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 mb-3"
+                class="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10"
               >
                 <option.icon class="h-6 w-6 text-primary" />
               </div>
-              <span class="font-medium">{option.name}</span>
-              <p class="text-sm text-muted-foreground mt-1">
-                {option.description}
-              </p>
-            </button>
+              <div class="text-center">
+                <span class="font-medium">{option.name}</span>
+                <p class="text-sm text-muted-foreground mt-1">
+                  {option.description}
+                </p>
+              </div>
+            </Item>
           {/if}
         {/each}
       </div>

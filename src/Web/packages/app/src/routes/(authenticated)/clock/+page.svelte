@@ -159,15 +159,16 @@
                   </Card.Description>
                 </div>
                 <Button
-                  variant="ghost"
+                  variant="ghost-destructive"
                   size="icon"
-                  class="opacity-0 transition-opacity group-hover:opacity-100"
+                  reveal
+                  aria-label="Delete clock face"
                   onclick={(e: MouseEvent) => {
                     e.stopPropagation();
                     openDeleteDialog(face.id ?? "", face.name ?? "Untitled");
                   }}
                 >
-                  <Trash2 class="size-4 text-destructive" />
+                  <Trash2 />
                 </Button>
               </div>
 

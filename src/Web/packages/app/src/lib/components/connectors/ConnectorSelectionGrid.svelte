@@ -6,6 +6,7 @@
   import { Card, CardContent } from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
+  import { Item } from "$lib/components/ui/item";
   import {
     AlertCircle,
     CheckCircle,
@@ -49,10 +50,9 @@
     </div>
     <div class="grid gap-3 @xl:grid-cols-2">
       {#each servicesOverview.availableConnectors as connector (connector.id)}
-        <button
-          class="flex items-center gap-4 p-4 rounded-lg border hover:border-primary/50 hover:bg-accent/50 transition-colors text-left group {connector.isConfigured
-            ? 'border-success/30 bg-success/5'
-            : ''}"
+        <Item
+          variant={connector.isConfigured ? "success" : "outline"}
+          size="lg"
           onclick={() => onSelect(connector)}
         >
           <div
@@ -81,7 +81,7 @@
           <ChevronRight
             class="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors"
           />
-        </button>
+        </Item>
       {/each}
     </div>
   </div>

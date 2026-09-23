@@ -7,6 +7,7 @@
     CardTitle,
   } from "$lib/components/ui/card";
   import { Badge } from "$lib/components/ui/badge";
+  import { Item } from "$lib/components/ui/item";
   import { Button } from "$lib/components/ui/button";
   import { Skeleton } from "$lib/components/ui/skeleton";
   import {
@@ -199,12 +200,9 @@
           <div class="grid grid-cols-1 @sm:grid-cols-2 gap-2">
             {#each availableWidgets as widget (widget.id)}
               {@const Icon = WIDGET_ICONS[widget.id]}
-              <button
-                type="button"
-                class="flex items-center gap-2 p-2 rounded-lg border border-dashed text-left transition-colors
-                {canAddMore
-                  ? 'hover:border-primary hover:bg-accent cursor-pointer'
-                  : 'opacity-50 cursor-not-allowed'}"
+              <Item
+                variant="dashed"
+                size="sm"
                 onclick={() => addWidget(widget.id)}
                 disabled={!canAddMore}
               >
@@ -213,7 +211,7 @@
                 <div class="flex-1 min-w-0">
                   <div class="font-medium text-sm">{widget.name}</div>
                 </div>
-              </button>
+              </Item>
             {/each}
           </div>
         </div>

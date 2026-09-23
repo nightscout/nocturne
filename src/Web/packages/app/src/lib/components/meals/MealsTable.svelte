@@ -340,17 +340,19 @@
                                     class="text-muted-foreground"
                                   />
                                 </button>
-                                <button
-                                  type="button"
+                                <Button
+                                  variant="ghost-destructive"
+                                  size="icon-2xs"
+                                  reveal
+                                  class="absolute top-2 right-2"
                                   onclick={(e) => {
                                     e.stopPropagation();
                                     onUnlinkFood(meal, food);
                                   }}
-                                  class="absolute top-2 right-2 p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive transition-opacity"
                                   title="Unlink food"
                                 >
-                                  <X class="h-3.5 w-3.5" />
-                                </button>
+                                  <X />
+                                </Button>
                               </div>
                             {/each}
                           </div>

@@ -9,6 +9,7 @@
     CardTitle,
   } from "$lib/components/ui/card";
   import { Badge } from "$lib/components/ui/badge";
+  import { Item } from "$lib/components/ui/item";
   import * as Tabs from "$lib/components/ui/tabs";
   import {
     Smartphone,
@@ -57,10 +58,9 @@
           <div class="grid gap-3 @xl:grid-cols-2">
             {#each tab.apps as uploader (uploader.id)}
               {@const active = isUploaderActive(uploader)}
-              <button
-                class="flex items-center gap-4 p-4 rounded-lg border hover:border-primary/50 hover:bg-accent/50 transition-colors text-left group {active
-                  ? 'border-success/30 bg-success/5'
-                  : ''}"
+              <Item
+                variant={active ? "success" : "outline"}
+                size="lg"
                 onclick={() => onSetup(uploader)}
               >
                 <div
@@ -90,7 +90,7 @@
                 <ChevronRight
                   class="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors"
                 />
-              </button>
+              </Item>
             {/each}
           </div>
         </Tabs.Content>

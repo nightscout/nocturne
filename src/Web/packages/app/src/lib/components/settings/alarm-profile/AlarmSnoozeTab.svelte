@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Badge } from "$lib/components/ui/badge";
   import { Input } from "$lib/components/ui/input";
   import { Switch } from "$lib/components/ui/switch";
   import { Label } from "$lib/components/ui/label";
@@ -72,17 +73,13 @@
       <Label>Quick Snooze Options</Label>
       <div class="flex flex-wrap gap-2">
         {#each profile.snooze.options as minutes, i (i)}
-          <span
-            class="bg-primary/10 text-primary px-3 py-1 rounded-full text-sm flex items-center gap-2"
+          <Badge
+            variant="secondary"
+            onremove={() => removeSnoozeOption(minutes)}
+            removeLabel="Remove {minutes} minute snooze"
           >
             {minutes}m
-            <button
-              class="hover:text-destructive"
-              onclick={() => removeSnoozeOption(minutes)}
-            >
-              ×
-            </button>
-          </span>
+          </Badge>
         {/each}
         <Select
           type="single"

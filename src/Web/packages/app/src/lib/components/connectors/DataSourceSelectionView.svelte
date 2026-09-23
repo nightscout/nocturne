@@ -12,6 +12,7 @@
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
+  import { Item } from "$lib/components/ui/item";
   import {
     AlertCircle,
     ChevronRight,
@@ -131,11 +132,9 @@
         <div class="grid gap-3 @xl:grid-cols-2">
           {#each connectors as connector (connector.id)}
             {@const configured = connector.isConfigured ?? false}
-            <button
-              type="button"
-              class="flex items-center gap-4 p-4 rounded-lg border transition-colors text-left group {configured
-                ? 'border-success/30 bg-success/5 hover:bg-success/10'
-                : 'bg-muted/30 hover:border-primary/50 hover:bg-accent/50'}"
+            <Item
+              variant={configured ? "success" : "outline"}
+              size="lg"
               onclick={() => onSelectConnector(connector.id ?? "")}
             >
               <div
@@ -163,7 +162,7 @@
               <ChevronRight
                 class="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors shrink-0"
               />
-            </button>
+            </Item>
           {/each}
         </div>
       </div>
@@ -211,11 +210,9 @@
               <div class="grid gap-3 @xl:grid-cols-2">
                 {#each group.apps as app (app.id)}
                   {@const detected = isDetected(app.id)}
-                  <button
-                    type="button"
-                    class="flex items-center gap-4 p-4 rounded-lg border transition-colors text-left group {detected
-                      ? 'border-success/30 bg-success/5 hover:bg-success/10'
-                      : 'bg-muted/30 hover:border-primary/50 hover:bg-accent/50'}"
+                  <Item
+                    variant={detected ? "success" : "outline"}
+                    size="lg"
                     onclick={() => onSelectUploader(app)}
                   >
                     <div
@@ -246,7 +243,7 @@
                     <ChevronRight
                       class="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors shrink-0"
                     />
-                  </button>
+                  </Item>
                 {/each}
               </div>
             </div>

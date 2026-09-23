@@ -2,7 +2,7 @@
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
-  import * as Popover from "$lib/components/ui/popover";
+  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import { Plus, Bell, X } from "lucide-svelte";
   import { getLinkedPlatforms } from "$api/generated/linkedPlatforms.generated.remote";
   import { getChannelStatuses } from "$api/generated/systems.generated.remote";
@@ -249,8 +249,8 @@
     </div>
   {/each}
 
-  <Popover.Root>
-    <Popover.Trigger>
+  <DropdownMenu.Root>
+    <DropdownMenu.Trigger>
       {#snippet child({ props }: { props: Record<string, unknown> })}
         <Button
           {...props}
@@ -261,68 +261,59 @@
           <Plus class="h-4 w-4 mr-2" /> Add channel
         </Button>
       {/snippet}
-    </Popover.Trigger>
-    <Popover.Content class="w-80 p-1" align="start">
-      <div class="max-h-96 overflow-y-auto">
-        {#each channelOptions as o (o.type)}
-          {@const Glyph = o.icon ?? Bell}
-          {@const linked = isLinked(o)}
-          {@const catalogFailed =
-            o.isDeviceAction === true &&
-            catalog === null &&
-            catalogQuery.error != null}
-          {@const catalogPending =
-            o.isDeviceAction === true && catalog === null && !catalogFailed}
-          {@const pending = statusPending || catalogPending}
-          {@const unavailable = statusFailed || catalogFailed}
-          <Popover.Close>
-            {#snippet child({ props })}
-              <Button
-                {...props}
-                type="button"
-                variant="ghost"
-                class="flex h-auto w-full items-start justify-start rounded px-2 py-1.5 text-left font-normal hover:bg-muted"
-                disabled={pending || unavailable}
-                title={linked
-                  ? undefined
-                  : `${platformLabel(o.platform!)} not linked — connect it in Connectors & Apps to enable delivery.`}
-                onclick={() => addChannel(o)}
-              >
-                <span
-                  class="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded bg-muted text-muted-foreground overflow-hidden {!linked
-                    ? 'opacity-50'
-                    : ''}"
-                >
-                  {#if o.logo}
-                    <img src={o.logo} alt="" class="h-4 w-4 object-contain" />
-                  {:else}
-                    <Glyph class="h-3.5 w-3.5" />
-                  {/if}
+    </DropdownMenu.Trigger>
+    <DropdownMenu.Content class="w-80 max-h-96" align="start">
+      {#each channelOptions as o (o.type)}
+        {@const Glyph = o.icon ?? Bell}
+        {@const linked = isLinked(o)}
+        {@const catalogFailed =
+          o.isDeviceAction === true &&
+          catalog === null &&
+          catalogQuery.error != null}
+        {@const catalogPending =
+          o.isDeviceAction === true && catalog === null && !catalogFailed}
+        {@const pending = statusPending || catalogPending}
+        {@const unavailable = statusFailed || catalogFailed}
+        <DropdownMenu.Item
+          class="items-start"
+          disabled={pending || unavailable}
+          title={linked
+            ? undefined
+            : `${platformLabel(o.platform!)} not linked — connect it in Connectors & Apps to enable delivery.`}
+          onSelect={() => addChannel(o)}
+        >
+          <span
+            class="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded bg-muted text-muted-foreground overflow-hidden {!linked
+              ? 'opacity-50'
+              : ''}"
+          >
+            {#if o.logo}
+              <img src={o.logo} alt="" class="h-4 w-4 object-contain" />
+            {:else}
+              <Glyph class="h-3.5 w-3.5" />
+            {/if}
+          </span>
+          <span class="flex flex-1 flex-col {!linked ? 'opacity-60' : ''}">
+            <span class="flex items-center gap-1.5">
+              <span class="text-sm font-medium">{o.label}</span>
+              {#if pending}
+                <span class="rounded bg-muted px-1.5 py-0.5 text-2xs uppercase tracking-wide text-muted-foreground">
+                  Loading
                 </span>
-                <span class="flex flex-1 flex-col {!linked ? 'opacity-60' : ''}">
-                  <span class="flex items-center gap-1.5">
-                    <span class="text-sm font-medium">{o.label}</span>
-                    {#if pending}
-                      <span class="rounded bg-muted px-1.5 py-0.5 text-2xs uppercase tracking-wide text-muted-foreground">
-                        Loading
-                      </span>
-                    {:else if unavailable}
-                      <span class="rounded bg-muted px-1.5 py-0.5 text-2xs uppercase tracking-wide text-muted-foreground">
-                        Unavailable
-                      </span>
-                    {:else if !linked}
-                      <span class="rounded bg-muted px-1.5 py-0.5 text-2xs uppercase tracking-wide text-muted-foreground">
-                        Not linked
-                      </span>
-                    {/if}
-                  </span>
-                  <span class="text-xs text-muted-foreground leading-tight">{o.description}</span>
+              {:else if unavailable}
+                <span class="rounded bg-muted px-1.5 py-0.5 text-2xs uppercase tracking-wide text-muted-foreground">
+                  Unavailable
                 </span>
-              </Button>
-            {/snippet}
-          </Popover.Close>
-        {/each}
-      </div>
-    </Popover.Content>
-  </Popover.Root>
+              {:else if !linked}
+                <span class="rounded bg-muted px-1.5 py-0.5 text-2xs uppercase tracking-wide text-muted-foreground">
+                  Not linked
+                </span>
+              {/if}
+            </span>
+            <span class="text-xs text-muted-foreground leading-tight">{o.description}</span>
+          </span>
+        </DropdownMenu.Item>
+      {/each}
+    </DropdownMenu.Content>
+  </DropdownMenu.Root>
 </div>

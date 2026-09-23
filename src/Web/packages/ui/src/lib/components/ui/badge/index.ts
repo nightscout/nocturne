@@ -18,9 +18,16 @@ export const badgeVariants = tv({
         "bg-warning/15 text-warning [a&]:hover:bg-warning/25 border-transparent",
       info: "bg-info/15 text-info [a&]:hover:bg-info/25 border-transparent",
     },
+    // Set by Badge from onremove; its remove button's focus ring shows on the badge,
+    // since the badge clips overflow.
+    removable: {
+      true: "has-[[data-slot=badge-remove]:focus-visible]:border-ring has-[[data-slot=badge-remove]:focus-visible]:ring-[3px] has-[[data-slot=badge-remove]:focus-visible]:ring-ring/50",
+      false: "",
+    },
   },
   defaultVariants: {
     variant: "default",
+    removable: false,
   },
 });
 

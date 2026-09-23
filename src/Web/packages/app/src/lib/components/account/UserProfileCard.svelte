@@ -122,14 +122,16 @@
           </div>
         </button>
         {#if localAvatarUrl && !isUploading && !isDeleting}
-          <button
-            type="button"
-            class="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-sm opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          <Button
+            variant="destructive"
+            size="icon-2xs"
+            reveal
+            class="absolute -bottom-1 -right-1"
             onclick={handleDeleteAvatar}
             title="Remove avatar"
           >
-            <Trash2 class="h-3 w-3" />
-          </button>
+            <Trash2 />
+          </Button>
         {/if}
         <form
           class="contents"

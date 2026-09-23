@@ -44,13 +44,21 @@ export const buttonVariants = tv({
       icon: "size-9",
       "icon-xs": "size-7 rounded-md [&_svg:not([class*='size-'])]:size-3",
       "icon-sm": "size-8",
+      // A round remove pip pinned to the corner of a thumbnail or tile, or a remove in a dense row.
+      "icon-2xs": "size-5 rounded-full [&_svg:not([class*='size-'])]:size-3",
       // A link-style button that sits in running text or a label row.
       inline: "h-auto gap-1 p-0",
+    },
+    // Hidden until the enclosing `group` is hovered or holds focus; keyboard focus always shows it.
+    reveal: {
+      true: "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100",
+      false: "",
     },
   },
   defaultVariants: {
     variant: "default",
     size: "default",
+    reveal: false,
   },
 });
 
@@ -61,6 +69,7 @@ export type ButtonProps = WithElementRef<HTMLButtonAttributes> &
   WithElementRef<HTMLAnchorAttributes> & {
     variant?: ButtonVariant;
     size?: ButtonSize;
+    reveal?: boolean;
   };
 
 export {

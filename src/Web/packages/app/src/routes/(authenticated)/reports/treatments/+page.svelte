@@ -464,26 +464,22 @@
           </span>
 
           {#if activeCategory !== "all"}
-            <Badge variant="secondary">
+            <Badge
+              variant="secondary"
+              onremove={() => setCategory("all")}
+              removeLabel="Clear category filter"
+            >
               {ENTRY_CATEGORIES[activeCategory].name}
-              <button
-                onclick={() => setCategory("all")}
-                class="ml-1 hover:text-foreground"
-              >
-                <X class="h-3 w-3" />
-              </button>
             </Badge>
           {/if}
 
           {#if searchQuery.trim()}
-            <Badge variant="outline">
+            <Badge
+              variant="outline"
+              onremove={() => setSearch("")}
+              removeLabel="Clear search"
+            >
               "{searchQuery}"
-              <button
-                onclick={() => setSearch("")}
-                class="ml-1 hover:text-foreground"
-              >
-                <X class="h-3 w-3" />
-              </button>
             </Badge>
           {/if}
         </div>

@@ -1,6 +1,7 @@
 <script lang="ts">
   import * as Dialog from "$lib/components/ui/dialog";
   import { Badge } from "$lib/components/ui/badge";
+  import { Item } from "$lib/components/ui/item";
   import { Syringe } from "lucide-svelte";
   import {
     bg,
@@ -308,13 +309,7 @@
         <div class="space-y-2">
           {#each correlatedRecords as record, i (record.data.id ?? `${record.data.mills}-${i}`)}
             {@const category = ENTRY_CATEGORIES[record.kind]}
-            <button
-              type="button"
-              class="w-full flex items-center gap-3 p-3 rounded-lg bg-muted hover:bg-muted/80 transition-colors text-left"
-              onclick={() => {
-                /* correlated record click — currently informational */
-              }}
-            >
+            <Item variant="muted">
               <div class="flex-1">
                 <div class="font-medium text-sm">
                   {entrySummary(record)}
@@ -328,7 +323,7 @@
               <Badge variant="outline" class="{category.colorClass}">
                 {category.name}
               </Badge>
-            </button>
+            </Item>
           {/each}
         </div>
       </div>

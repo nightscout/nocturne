@@ -186,26 +186,22 @@
         </span>
 
         {#each selectedFoods as food (food)}
-          <Badge variant="outline">
+          <Badge
+            variant="outline"
+            onremove={() => toggleFoodFilter(food)}
+            removeLabel="Remove {food} filter"
+          >
             {food}
-            <button
-              onclick={() => toggleFoodFilter(food)}
-              class="ml-1 hover:text-foreground"
-            >
-              <X class="h-3 w-3" />
-            </button>
           </Badge>
         {/each}
 
         {#if searchQuery.trim()}
-          <Badge variant="outline">
+          <Badge
+            variant="outline"
+            onremove={() => (searchQuery = "")}
+            removeLabel="Clear search"
+          >
             "{searchQuery}"
-            <button
-              onclick={() => (searchQuery = "")}
-              class="ml-1 hover:text-foreground"
-            >
-              <X class="h-3 w-3" />
-            </button>
           </Badge>
         {/if}
       </div>

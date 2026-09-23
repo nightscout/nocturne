@@ -55,6 +55,7 @@
   import { Label } from "$lib/components/ui/label";
   import { Separator } from "$lib/components/ui/separator";
   import { Badge } from "$lib/components/ui/badge";
+  import * as RadioGroup from "$lib/components/ui/radio-group";
   import {
     Select,
     SelectContent,
@@ -226,16 +227,17 @@
         </CardDescription>
       </CardHeader>
       <CardContent class="space-y-4">
-        <div class="grid gap-4 @xl:grid-cols-2 @5xl:grid-cols-4">
+        <RadioGroup.Root
+          class="grid @xl:grid-cols-2 @5xl:grid-cols-4"
+          aria-label="Color theme"
+          value={currentTheme}
+          onValueChange={(theme) => {
+            if (theme === "nocturne" || theme === "trio" || theme === "aaps" || theme === "classic")
+              handleThemeChange(theme);
+          }}
+        >
           <!-- Nocturne Theme -->
-          <button
-            type="button"
-            class="relative flex flex-col items-start gap-2 rounded-lg border-2 p-4 text-left transition-colors hover:bg-accent/50 {currentTheme ===
-            'nocturne'
-              ? 'border-primary bg-accent/30'
-              : 'border-border'}"
-            onclick={() => handleThemeChange("nocturne")}
-          >
+          <RadioGroup.Card value="nocturne">
             {#if currentTheme === "nocturne"}
               <Badge class="absolute right-2 top-2" variant="default">
                 Active
@@ -272,17 +274,10 @@
                 title="Carbs"
               ></div>
             </div>
-          </button>
+          </RadioGroup.Card>
 
           <!-- Trio Theme -->
-          <button
-            type="button"
-            class="relative flex flex-col items-start gap-2 rounded-lg border-2 p-4 text-left transition-colors hover:bg-accent/50 {currentTheme ===
-            'trio'
-              ? 'border-primary bg-accent/30'
-              : 'border-border'}"
-            onclick={() => handleThemeChange("trio")}
-          >
+          <RadioGroup.Card value="trio">
             {#if currentTheme === "trio"}
               <Badge class="absolute right-2 top-2" variant="default">
                 Active
@@ -319,17 +314,10 @@
                 title="Carbs"
               ></div>
             </div>
-          </button>
+          </RadioGroup.Card>
 
           <!-- AAPS Theme -->
-          <button
-            type="button"
-            class="relative flex flex-col items-start gap-2 rounded-lg border-2 p-4 text-left transition-colors hover:bg-accent/50 {currentTheme ===
-            'aaps'
-              ? 'border-primary bg-accent/30'
-              : 'border-border'}"
-            onclick={() => handleThemeChange("aaps")}
-          >
+          <RadioGroup.Card value="aaps">
             {#if currentTheme === "aaps"}
               <Badge class="absolute right-2 top-2" variant="default">
                 Active
@@ -366,17 +354,10 @@
                 title="Accent"
               ></div>
             </div>
-          </button>
+          </RadioGroup.Card>
 
           <!-- Classic Theme -->
-          <button
-            type="button"
-            class="relative flex flex-col items-start gap-2 rounded-lg border-2 p-4 text-left transition-colors hover:bg-accent/50 {currentTheme ===
-            'classic'
-              ? 'border-primary bg-accent/30'
-              : 'border-border'}"
-            onclick={() => handleThemeChange("classic")}
-          >
+          <RadioGroup.Card value="classic">
             {#if currentTheme === "classic"}
               <Badge class="absolute right-2 top-2" variant="default">
                 Active
@@ -413,8 +394,8 @@
                 title="Classic Blue"
               ></div>
             </div>
-          </button>
-        </div>
+          </RadioGroup.Card>
+        </RadioGroup.Root>
 
         <Separator />
 

@@ -204,16 +204,13 @@
               </h4>
               <div class="flex flex-wrap gap-1">
                 {#each roleFormPermissions as perm, i (i)}
-                  <Badge variant="secondary" class="font-mono">
+                  <Badge
+                    variant="secondary"
+                    class="font-mono"
+                    onremove={editingRole?.isSystem ? undefined : () => togglePermission(perm)}
+                    removeLabel="Remove {perm}"
+                  >
                     {perm}
-                    {#if !editingRole?.isSystem}
-                      <button
-                        class="ml-1 hover:text-destructive"
-                        onclick={() => togglePermission(perm)}
-                      >
-                        ×
-                      </button>
-                    {/if}
                   </Badge>
                 {/each}
               </div>

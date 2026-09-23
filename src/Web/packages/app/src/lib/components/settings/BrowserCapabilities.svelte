@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { Item } from "$lib/components/ui/item";
   import {
     getBrowserCapabilities,
     requestNotificationPermission,
@@ -157,14 +158,10 @@
 
     <div class="grid gap-3 @xl:grid-cols-2">
       <!-- Audio -->
-      <button
-        type="button"
-        class="flex items-center gap-3 p-3 rounded-lg border bg-muted/30 transition-colors text-left w-full {capabilities.audio
-          ? 'hover:bg-muted/50 cursor-pointer'
-          : 'opacity-60 cursor-not-allowed'} {testingAudio
-          ? 'ring-2 ring-primary'
-          : ''}"
-        onclick={capabilities.audio ? testAudio : undefined}
+      <Item
+        disabled={!capabilities.audio}
+        aria-busy={testingAudio}
+        onclick={testAudio}
       >
         <div
           class="flex items-center justify-center w-10 h-10 rounded-lg bg-background"
@@ -201,23 +198,16 @@
         {#if capabilities.audio}
           <Play class="h-4 w-4 text-muted-foreground" />
         {/if}
-      </button>
+      </Item>
 
       <!-- Notifications -->
-      <button
-        type="button"
-        class="flex items-center gap-3 p-3 rounded-lg border bg-muted/30 transition-colors text-left w-full {capabilities.notifications &&
-        capabilities.notificationPermission !== 'denied'
-          ? 'hover:bg-muted/50 cursor-pointer'
-          : 'opacity-60 cursor-not-allowed'} {requestingPermission
-          ? 'ring-2 ring-primary animate-pulse'
-          : ''}"
-        onclick={!capabilities.notifications ||
-        capabilities.notificationPermission === "denied"
-          ? undefined
-          : capabilities.notificationPermission === "granted"
-            ? testNotification
-            : handleRequestNotificationPermission}
+      <Item
+        disabled={!capabilities.notifications ||
+          capabilities.notificationPermission === "denied"}
+        aria-busy={requestingPermission}
+        onclick={capabilities.notificationPermission === "granted"
+          ? testNotification
+          : handleRequestNotificationPermission}
       >
         <div
           class="flex items-center justify-center w-10 h-10 rounded-lg bg-background"
@@ -268,17 +258,13 @@
         {#if capabilities.notifications && capabilities.notificationPermission !== "denied"}
           <Play class="h-4 w-4 text-muted-foreground" />
         {/if}
-      </button>
+      </Item>
 
       <!-- Vibration -->
-      <button
-        type="button"
-        class="flex items-center gap-3 p-3 rounded-lg border bg-muted/30 transition-colors text-left w-full {capabilities.vibration
-          ? 'hover:bg-muted/50 cursor-pointer'
-          : 'opacity-60 cursor-not-allowed'} {testingVibration
-          ? 'ring-2 ring-primary animate-pulse'
-          : ''}"
-        onclick={capabilities.vibration ? testVibrate : undefined}
+      <Item
+        disabled={!capabilities.vibration}
+        aria-busy={testingVibration}
+        onclick={testVibrate}
       >
         <div
           class="flex items-center justify-center w-10 h-10 rounded-lg bg-background"
@@ -311,17 +297,13 @@
         {#if capabilities.vibration}
           <Play class="h-4 w-4 text-muted-foreground" />
         {/if}
-      </button>
+      </Item>
 
       <!-- Wake Lock -->
-      <button
-        type="button"
-        class="flex items-center gap-3 p-3 rounded-lg border bg-muted/30 transition-colors text-left w-full {capabilities.wakeLock
-          ? 'hover:bg-muted/50 cursor-pointer'
-          : 'opacity-60 cursor-not-allowed'} {testingWakeLock
-          ? 'ring-2 ring-primary'
-          : ''}"
-        onclick={capabilities.wakeLock ? testWakeLock : undefined}
+      <Item
+        disabled={!capabilities.wakeLock}
+        aria-busy={testingWakeLock}
+        onclick={testWakeLock}
       >
         <div
           class="flex items-center justify-center w-10 h-10 rounded-lg bg-background"
@@ -358,7 +340,7 @@
             <Play class="h-4 w-4 text-muted-foreground" />
           {/if}
         {/if}
-      </button>
+      </Item>
     </div>
 
     <p class="text-xs text-muted-foreground">

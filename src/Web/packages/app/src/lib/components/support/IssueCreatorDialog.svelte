@@ -579,13 +579,16 @@
                         alt="Screenshot {i + 1}"
                         class="h-20 w-20 object-cover rounded-md border"
                       />
-                      <button
-                        type="button"
-                        class="absolute -top-2 -right-2 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      <Button
+                        variant="destructive"
+                        size="icon-2xs"
+                        reveal
+                        class="absolute -top-2 -right-2"
                         onclick={() => removeImage(i)}
+                        aria-label="Remove screenshot {i + 1}"
                       >
-                        <X class="h-3 w-3" />
-                      </button>
+                        <X />
+                      </Button>
                     </div>
                   {/each}
                 </div>

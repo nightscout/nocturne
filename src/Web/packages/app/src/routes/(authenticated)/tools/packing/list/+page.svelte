@@ -183,13 +183,15 @@
                 }}
                 onkeydown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
               />
-              <button
-                type="button"
-                class="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-destructive/10"
+              <Button
+                variant="ghost-destructive"
+                size="icon-2xs"
+                reveal
                 onclick={() => removeItem(index)}
+                aria-label="Remove {item.l}"
               >
-                <X class="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
-              </button>
+                <X />
+              </Button>
             </div>
           {/each}
 

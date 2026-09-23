@@ -265,14 +265,12 @@
           {#if mHasDateFilter}
             <div class="mt-4 flex flex-wrap items-center gap-2 pt-4 border-t text-sm">
               <span class="text-muted-foreground">Date range:</span>
-              <Badge variant="outline">
+              <Badge
+                variant="outline"
+                onremove={resetMutationDateFilter}
+                removeLabel="Clear date range"
+              >
                 {mFrom} to {mTo}
-                <button
-                  onclick={resetMutationDateFilter}
-                  class="ml-1 hover:text-foreground"
-                >
-                  <X class="h-3 w-3" />
-                </button>
               </Badge>
             </div>
           {/if}
@@ -352,14 +350,12 @@
             {#if rHasDateFilter}
               <div class="mt-4 flex flex-wrap items-center gap-2 pt-4 border-t text-sm">
                 <span class="text-muted-foreground">Date range:</span>
-                <Badge variant="outline">
+                <Badge
+                  variant="outline"
+                  onremove={resetReadDateFilter}
+                  removeLabel="Clear date range"
+                >
                   {rFrom} to {rTo}
-                  <button
-                    onclick={resetReadDateFilter}
-                    class="ml-1 hover:text-foreground"
-                  >
-                    <X class="h-3 w-3" />
-                  </button>
                 </Badge>
               </div>
             {/if}
