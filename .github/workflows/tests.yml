@@ -184,11 +184,9 @@ jobs:
   # integration projects stay deferred until their fixtures/references are fixed.
   # Typechecks every Svelte package whose check needs no generated API client, and runs the
   # pure-node vitest suites, so this needs nothing but pnpm.
-  # @nocturne/app and @nocturne/portal are excluded because their checks depend on the
-  # NSwag/Zod codegen and belong with the .NET build: the portal imports the app's
-  # appearance store, which imports the generated client's WidgetId enum.
-  # @nocturne/app's `check` is not gated yet: it still fails on the openapi-remote-codegen
-  # output (27 errors) and on #1429.
+  # @nocturne/app and @nocturne/portal are checked in web-app-typecheck instead, because their
+  # checks depend on the NSwag/Zod codegen that the .NET build runs: the portal imports the
+  # app's appearance store, which imports the generated client's WidgetId enum.
   web-typecheck:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -227,6 +225,42 @@ jobs:
           pnpm --filter @nocturne/screenshots run validate
           pnpm --filter @nocturne/screenshots run check-refs
           pnpm --filter @nocturne/screenshots run check-embeds
+
+  # The API build's post-build targets write the client these checks read (NSwag, then the
+  # Zod schemas and remote functions, both through pnpm), so pnpm is installed first.
+  # The app's check builds @nocturne/bridge and @nocturne/bot itself (tools/ensure-check-deps.mjs).
+  web-app-typecheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: src/Web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "11.5.0"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: src/Web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0"
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
+      - name: Generate API client
+        working-directory: src/API/Nocturne.API
+        run: dotnet build -c Release
+      - name: Typecheck app
+        run: pnpm --filter @nocturne/app run check
+      - name: Typecheck portal
+        run: pnpm --filter @nocturne/portal run check
 
   web-lint:
     runs-on: ubuntu-latest
