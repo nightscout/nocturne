@@ -32,11 +32,12 @@
 
   // View mode: 'tir' for Time in Range bars, 'profile' for glucose line charts
   type ViewMode = "tir" | "profile";
-  let viewMode = $state<ViewMode>(
-    (typeof localStorage !== "undefined" &&
-      (localStorage.getItem("calendar-view-mode") as ViewMode)) ||
-      "tir"
-  );
+  function isViewMode(value: string | null): value is ViewMode {
+    return value === "tir" || value === "profile";
+  }
+  const storedViewMode =
+    typeof localStorage !== "undefined" ? localStorage.getItem("calendar-view-mode") : null;
+  let viewMode = $state<ViewMode>(isViewMode(storedViewMode) ? storedViewMode : "tir");
 
   // Persist view mode preference
   function setViewMode(mode: ViewMode) {

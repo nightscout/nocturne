@@ -71,13 +71,12 @@
   ]);
 
   const scopes = $derived(
-    deviceInfo ? (deviceInfo.scopes as string[]).filter(Boolean) : []
+    deviceInfo ? deviceInfo.scopes.filter(Boolean) : []
   );
   const hasFullAccess = $derived(scopes.includes("*"));
   const appName = $derived(
     deviceInfo
-      ? (deviceInfo.displayName as string | null) ??
-          (deviceInfo.clientId as string)
+      ? deviceInfo.displayName ?? deviceInfo.clientId
       : ""
   );
 </script>

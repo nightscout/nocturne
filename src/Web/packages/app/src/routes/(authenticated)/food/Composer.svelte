@@ -4,7 +4,7 @@
 	import { Plus, X, ChevronRight } from 'lucide-svelte';
 	import GiIcon from './GiIcon.svelte';
 	import { getFoodState } from './food-context.js';
-	import { giFromInt, giToInt } from './types.js';
+	import { giFromInt, giToInt, isGiLevel } from './types.js';
 	import type { GiLevel } from './types.js';
 	import { FOOD_UNITS, DEFAULT_PORTION, DEFAULT_GI } from '$lib/components/food';
 	import * as Select from '$lib/components/ui/select';
@@ -194,7 +194,7 @@
 		<!-- GI -->
 		<div class="flex h-full flex-col gap-1">
 			<span id="composer-gi-label" class="text-muted-foreground font-medium uppercase text-2xs">GI</span>
-			<ToggleGroup.Root aria-labelledby="composer-gi-label" type="single" value={giFromInt(draft.gi)} onValueChange={(v: string) => { if (v) draft = { ...draft, gi: giToInt(v as GiLevel) }; }} variant="outline" size="sm" class="w-full flex-1">
+			<ToggleGroup.Root aria-labelledby="composer-gi-label" type="single" value={giFromInt(draft.gi)} onValueChange={(v: string) => { if (isGiLevel(v)) draft = { ...draft, gi: giToInt(v) }; }} variant="outline" size="sm" class="w-full flex-1">
 				{#each giLevels as g (g)}
 					<ToggleGroup.Item value={g} class="capitalize">
 						<GiIcon level={g} size={7} />{g}

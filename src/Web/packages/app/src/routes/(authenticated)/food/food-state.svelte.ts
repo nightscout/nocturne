@@ -82,7 +82,7 @@ export class FoodState {
       ]);
       this.foods = foods ?? [];
       this.favorites = new SvelteSet(
-        (favs ?? []).map((f: Food) => f._id).filter(Boolean) as string[]
+        (favs ?? []).map((f: Food) => f._id).filter((id): id is string => !!id)
       );
     } catch (err) {
       console.error('Failed to load food data:', err);
@@ -110,7 +110,7 @@ export class FoodState {
       toast.error(describeSubmitError(err, 'Failed to update favorite'));
       const favs = await getFavorites(undefined).run();
       this.favorites = new SvelteSet(
-        (favs ?? []).map((f: Food) => f._id).filter(Boolean) as string[]
+        (favs ?? []).map((f: Food) => f._id).filter((id): id is string => !!id)
       );
     }
   }

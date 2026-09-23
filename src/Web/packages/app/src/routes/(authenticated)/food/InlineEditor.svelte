@@ -4,7 +4,7 @@
 	import { Trash2, Check } from 'lucide-svelte';
 	import GiIcon from './GiIcon.svelte';
 	import { getFoodState } from './food-context.js';
-	import { giFromInt, giToInt } from './types.js';
+	import { giFromInt, giToInt, isGiLevel } from './types.js';
 	import type { GiLevel } from './types.js';
 	import { FOOD_UNITS } from '$lib/components/food';
 	import * as Select from '$lib/components/ui/select';
@@ -156,7 +156,7 @@
 		<!-- GI -->
 		<div class="flex flex-col gap-1.5">
 			<span id="food-edit-gi-label" class="text-muted-foreground font-semibold text-xs">Glycemic Index</span>
-			<ToggleGroup.Root aria-labelledby="food-edit-gi-label" type="single" value={giFromInt(draft.gi)} onValueChange={(v: string) => { if (v) draft.gi = giToInt(v as GiLevel); }} variant="outline" size="sm" class="w-full">
+			<ToggleGroup.Root aria-labelledby="food-edit-gi-label" type="single" value={giFromInt(draft.gi)} onValueChange={(v: string) => { if (isGiLevel(v)) draft.gi = giToInt(v); }} variant="outline" size="sm" class="w-full">
 				{#each giLevels as g (g)}
 					<ToggleGroup.Item value={g} class="capitalize">
 						<GiIcon level={g} size={7} />{g}

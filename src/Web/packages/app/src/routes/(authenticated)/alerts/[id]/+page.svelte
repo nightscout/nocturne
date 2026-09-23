@@ -14,6 +14,7 @@
   } from "$api/generated/alertRules.generated.remote";
   import { describeSubmitError } from "$lib/forms/submit-error";
   import { getAlertHistory } from "$api/generated/alerts.generated.remote";
+  import { z } from "zod";
   import { AlertRuleSeverity, AlertConditionType } from "$api-clients";
   import type { HistoryExcursionResponse } from "$api-clients";
 
@@ -147,14 +148,14 @@
     try {
       const body = buildBody(editor);
       if (isNew) {
-        const created = await createRule(body as never);
+        const created = await createRule(body);
         await goto(
           created?.id
             ? resolve("/(authenticated)/alerts/[id]", { id: created.id })
             : resolve("/alerts")
         );
       } else {
-        await updateRule({ id: ruleId, request: body as never });
+        await updateRule({ id: ruleId, request: body });
         savedBody = buildBody(editor);
       }
     } catch (e) {
@@ -238,6 +239,9 @@
    * Snapshot the editor state into the dry-run rule shape. Re-evaluated each
    * time Run is pressed so unsaved edits between presses are picked up.
    */
+  const conditionTypeSchema = z.enum(AlertConditionType);
+  const severitySchema = z.enum(AlertRuleSeverity);
+
   function buildReplayRule() {
     const flat = flattenSingleChildRoot(editor.condition!);
     const api = nodeToApi(flat);
@@ -248,7 +252,7 @@
     return {
       id: isNew ? undefined : ruleId,
       name: editor.name,
-      conditionType: api?.conditionType as AlertConditionType,
+      conditionType: conditionTypeSchema.safeParse(api?.conditionType).data,
       conditionParams: params == null ? undefined : JSON.stringify(params),
       severity: editor.severity,
       allowThroughDnd: editor.allowThroughDnd,
@@ -396,7 +400,8 @@
                 type="single"
                 value={editor.severity}
                 onValueChange={(v) => {
-                  editor.severity = v as AlertRuleSeverity;
+                  const parsed = severitySchema.safeParse(v);
+                  if (parsed.success) editor.severity = parsed.data;
                 }}
               >
                 <Select.Trigger>{severityLabel(editor.severity)}</Select.Trigger>

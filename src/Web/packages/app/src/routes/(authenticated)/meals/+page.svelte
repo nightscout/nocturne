@@ -191,8 +191,12 @@
   });
 
   // Sorting helper
-  function toggleSort(column: string) {
-    const col = column as SortColumn;
+  function isSortColumn(column: string): column is SortColumn {
+    return column === "time" || column === "meal" || column === "carbs" || column === "insulin";
+  }
+
+  function toggleSort(col: string) {
+    if (!isSortColumn(col)) return;
     if (sortColumn === col) {
       sortDirection = sortDirection === "asc" ? "desc" : "asc";
     } else {

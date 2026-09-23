@@ -70,9 +70,10 @@
     { showDefaults: false, noScroll: true }
   );
 
-  const hidden = $derived(
-    new Set((viewParams.hide ?? "").split(",").filter(Boolean) as CategoryKey[])
-  );
+  const hidden = $derived.by(() => {
+    const hiddenKeys = (viewParams.hide ?? "").split(",");
+    return new Set(CATEGORIES.filter((c) => hiddenKeys.includes(c.key)).map((c) => c.key));
+  });
 
   const isShown = (key: CategoryKey) => !hidden.has(key);
 
