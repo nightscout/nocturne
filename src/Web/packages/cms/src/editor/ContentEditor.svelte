@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Button } from '@nocturne/ui/ui/button';
   import { EdraEditor, EdraToolBar, EdraDragHandleExtended } from '../lib/components/edra/shadcn/index.ts';
   import type { Editor } from '@tiptap/core';
   import type { ContentTypeConfig, EditorCallbacks, ContentItem } from './types.ts';
@@ -127,20 +128,12 @@
       <span class="mr-auto text-xs text-muted-foreground">
         {#if saving}Saving...{:else if selectedId}Editing{:else}No content selected{/if}
       </span>
-      <button
-        class="rounded-md bg-secondary px-3 py-1.5 text-sm font-medium hover:bg-secondary/80 disabled:opacity-50"
-        onclick={handleSave}
-        disabled={!selectedId || saving}
-      >
+      <Button variant="secondary" size="sm" onclick={handleSave} disabled={!selectedId || saving}>
         Save Draft
-      </button>
-      <button
-        class="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-        onclick={handlePublish}
-        disabled={!selectedId}
-      >
+      </Button>
+      <Button size="sm" onclick={handlePublish} disabled={!selectedId}>
         Publish
-      </button>
+      </Button>
     </div>
   </div>
 

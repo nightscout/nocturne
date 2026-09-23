@@ -22,7 +22,7 @@ export default [
   },
   ...debt({
     "shadcn/require-static-classes": 6,
-    "shadcn/no-restyle": 93,
-    "no-restricted-syntax": 20
+    "shadcn/no-restyle": 87,
+    "no-restricted-syntax": 15
   })
 ];

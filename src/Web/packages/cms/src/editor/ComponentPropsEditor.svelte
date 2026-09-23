@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Button } from '@nocturne/ui/ui/button';
   import { Input } from '@nocturne/ui/ui/input';
   import { Label } from '@nocturne/ui/ui/label';
   import { Switch } from '@nocturne/ui/ui/switch';
@@ -74,7 +75,7 @@
     <div class="space-y-2">
       {#each Object.entries(selectedComponent.props) as [key, value] (key)}
         <div class="flex items-center gap-2">
-          <Label class="w-24 shrink-0 text-xs">{key}</Label>
+          <Label size="sm" class="w-24 shrink-0">{key}</Label>
           {#if value === 'true' || value === 'false'}
             <Switch
               checked={value === 'true'}
@@ -82,39 +83,34 @@
             />
           {:else}
             <Input
-              class="h-7 text-xs"
+              size="xs"
               value={value}
               oninput={(e) => updateProp(key, e.currentTarget.value)}
             />
           {/if}
-          <button
-            class="shrink-0 text-muted-foreground hover:text-destructive"
-            onclick={() => removeProp(key)}
-          >
-            <X class="h-3 w-3" />
-          </button>
+          <Button variant="subtle" size="icon-2xs" class="shrink-0" onclick={() => removeProp(key)}>
+            <X />
+          </Button>
         </div>
       {/each}
 
       <!-- Add new prop -->
       <div class="flex items-center gap-2 pt-1 border-t border-border/20">
         <Input
-          class="h-7 text-xs w-24 shrink-0"
+          size="xs"
+          class="w-24 shrink-0"
           placeholder="prop"
           bind:value={newPropKey}
         />
         <Input
-          class="h-7 text-xs"
+          size="xs"
           placeholder="value"
           bind:value={newPropValue}
           onkeydown={(e) => e.key === 'Enter' && addProp()}
         />
-        <button
-          class="shrink-0 text-xs text-primary hover:text-primary/80 font-medium"
-          onclick={addProp}
-        >
+        <Button variant="link" size="inline-xs" class="shrink-0" onclick={addProp}>
           Add
-        </button>
+        </Button>
       </div>
     </div>
   </div>

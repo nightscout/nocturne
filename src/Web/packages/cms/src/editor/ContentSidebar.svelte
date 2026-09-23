@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Button } from '@nocturne/ui/ui/button';
-  import { Input } from '@nocturne/ui/ui/input';
+  import * as InputGroup from '@nocturne/ui/ui/input-group';
   import { Badge } from '@nocturne/ui/ui/badge';
   import { Separator } from '@nocturne/ui/ui/separator';
   import { Plus, Search, FileText } from '@lucide/svelte';
@@ -38,14 +38,12 @@
   </div>
 
   <div class="px-4 pb-2">
-    <div class="relative">
-      <Search class="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-      <Input
-        placeholder="Search..."
-        class="pl-8"
-        bind:value={search}
-      />
-    </div>
+    <InputGroup.Root>
+      <InputGroup.Addon>
+        <Search />
+      </InputGroup.Addon>
+      <InputGroup.Input placeholder="Search..." bind:value={search} />
+    </InputGroup.Root>
   </div>
 
   <Separator />
@@ -61,7 +59,7 @@
         <div class="min-w-0 flex-1">
           <p class="truncate text-sm font-medium">{item.title || 'Untitled'}</p>
           <div class="mt-1 flex items-center gap-2">
-            <Badge variant={item.status === 'published' ? 'default' : 'secondary'} class="text-xs">
+            <Badge variant={item.status === 'published' ? 'default' : 'secondary'}>
               {item.status}
             </Badge>
             <span class="text-xs text-muted-foreground">{item.updatedAt}</span>
