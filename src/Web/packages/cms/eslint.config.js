@@ -17,7 +17,6 @@ export default [
     "svelte/no-at-html-tags": 3,
     "svelte/require-each-key": 3,
     "no-useless-assignment": 3,
-    "security/detect-possible-timing-attacks": 1,
     "shadcn/no-raw-colors": 1,
     "shadcn/require-static-classes": 6,
     "security/detect-unsafe-regex": 2,
