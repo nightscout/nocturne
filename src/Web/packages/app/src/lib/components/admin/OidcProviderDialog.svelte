@@ -55,6 +55,9 @@
     onCancel: () => void;
   }>();
 
+  // `roles` is accepted for callers but read only through the binding.
+  void roles;
+
   // Form field state
   let providerName = $state("");
   let providerType = $state<OidcProviderType>(OidcProviderType.Oidc);

@@ -69,7 +69,7 @@ export const GET: RequestHandler = async (event) => {
   // Bound the probe (5s): the client fetches this inside the Socket.IO `auth`
   // callback, which has no timeout of its own, so a hung API must not wedge the
   // handshake. The request's own abort signal is already bound via the client.
-  let probeStatus: number | null = null;
+  let probeStatus: number;
   try {
     const probe = await httpClient.fetch(
       `${apiBaseUrl}/api/v1/entries?count=1`,

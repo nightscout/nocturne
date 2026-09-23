@@ -31,7 +31,6 @@
   // non-composite node, render an empty stub so the runtime doesn't crash —
   // surfacing the bug to the developer console rather than rendering garbage.
   if (node.type !== "composite" || !node.composite) {
-    // eslint-disable-next-line no-console
     console.error("[RuleBuilder] expected a composite root, got:", node.type);
   }
 

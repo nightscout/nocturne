@@ -20,7 +20,6 @@
   const realtimeStore = tryGetRealtimeStore();
 
   // Engine for the sidebar chart — no predictions, no inspection
-  // svelte-ignore state_referenced_locally
   const sidebarEngine = createChartDataEngine({
     enablePredictions: false,
     focusHours: 3,

@@ -24,6 +24,9 @@
     onenablechange,
   }: Props = $props();
 
+  // `quantity` is written to the parent through the binding, never read here.
+  void quantity;
+
   let interval = $state(config.defaultInterval ?? 0);
   let buffer = $state(config.defaultBuffer);
   let containerSize = $state(config.defaultContainerSize ?? 300);

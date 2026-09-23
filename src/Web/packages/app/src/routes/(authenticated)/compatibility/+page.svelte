@@ -63,7 +63,7 @@
   let polledMetrics = $state<typeof metrics | null>(null);
 
   // Polling interval (5 seconds)
-  let pollInterval: NodeJS.Timeout | null = null;
+  let pollInterval: ReturnType<typeof setInterval> | null = null;
 
   // Filter state - initialized from derived fetchedData
   let filterPath = $state("");

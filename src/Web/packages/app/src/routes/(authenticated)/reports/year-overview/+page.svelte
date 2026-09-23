@@ -37,7 +37,7 @@
   import { onMount, untrack, tick } from "svelte";
   import { fade } from "svelte/transition";
 
-  const reportsParams = getDateParamsContext();
+  getDateParamsContext();
 
   // =========================================================================
   // State

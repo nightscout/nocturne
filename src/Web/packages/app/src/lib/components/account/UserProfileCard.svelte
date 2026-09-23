@@ -45,12 +45,7 @@
   let avatarError = $state<string | null>(null);
 
   /** Reactive avatar URL that updates after upload/delete */
-  let localAvatarUrl = $state<string | undefined>();
-
-  /** Sync localAvatarUrl when user prop changes (e.g. session reload) */
-  $effect(() => {
-    localAvatarUrl = user.avatarUrl;
-  });
+  let localAvatarUrl = $derived(user.avatarUrl);
 
   /** Get initials from user name */
   function getInitials(name: string): string {

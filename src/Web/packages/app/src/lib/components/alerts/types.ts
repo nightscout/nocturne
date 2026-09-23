@@ -489,7 +489,6 @@ function coerceStalenessOperator(node: ConditionNode): void {
 	if (!payload) return;
 	const op = payload.operator as ComparisonOperator;
 	if (op === "<" || op === "<=") {
-		// eslint-disable-next-line no-console
 		console.warn(
 			`[alerts] coercing ${node.type} operator '${op}' → '>' (staleness only supports '>' / '>=')`,
 		);

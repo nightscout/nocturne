@@ -109,7 +109,7 @@ export class FormGuard<T extends Record<string, unknown>> {
 
   debouncedValidate(): void {
     // Access .current to trigger the debounced evaluation
-    this.#debounced.current;
+    void this.#debounced.current;
   }
 
   issuesFor(field: string): ZodIssue[] {

@@ -74,7 +74,8 @@
 
   // Reset pending selection when the confirmed props change from outside.
   $effect(() => {
-    startDate; endDate; // track deps
+    void startDate;
+    void endDate; // track deps
     pendingStart = null;
     hoverDate = null;
   });

@@ -16,6 +16,7 @@ export function safeReturnUrl(value: unknown, fallback = "/"): string {
   if (trimmed.startsWith("//") || trimmed.startsWith("/\\")) return fallback;
   if (trimmed.includes("\\")) return fallback;
   // The URL parser strips tab and newline, so "/\t/evil.test" resolves as "//evil.test".
+  // eslint-disable-next-line no-control-regex -- deliberately rejects control characters
   if (/[\u0000-\u001F\u007F\s]/.test(trimmed)) return fallback;
 
   return trimmed;

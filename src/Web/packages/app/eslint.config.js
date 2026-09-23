@@ -152,6 +152,14 @@ export default ts.config(
         {
           assertionStyle: "never"
         }
+      ],
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_"
+        }
       ]
     }
   },

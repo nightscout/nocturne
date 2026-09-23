@@ -27,6 +27,8 @@
     onClearFilters,
   }: Props = $props();
 
+  // `dateRange` is only written here and read by the parent through the binding.
+  void dateRange;
 
   let foodFilterOpen = $state(false);
   let foodFilterSearch = $state("");

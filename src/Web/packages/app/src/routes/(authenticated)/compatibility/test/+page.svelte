@@ -473,7 +473,7 @@
               id="requestBody"
               bind:value={requestBody}
               class="font-mono h-24"
-              placeholder={"key:value"}
+              placeholder="key:value"
             />
           </div>
         {/if}
@@ -667,9 +667,7 @@
         <Card.Header class="py-3 flex-row justify-between items-center">
           <Card.Title class="text-base">Unified Diff</Card.Title>
           <span class="text-sm text-muted-foreground">
-            <span class="text-destructive">- Nightscout</span>
-            {" / "}
-            <span class="text-success">+ Nocturne</span>
+            <span class="text-destructive">- Nightscout</span> / <span class="text-success">+ Nocturne</span>
           </span>
         </Card.Header>
         <Card.Content class="p-0">

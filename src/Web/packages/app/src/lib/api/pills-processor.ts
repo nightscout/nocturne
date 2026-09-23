@@ -706,7 +706,7 @@ export function processSAGE(
 	}
 
 	// Format display
-	let display = '';
+	let display: string;
 	if (ageHours >= 24) {
 		display = `${ageDays}d${remainingHours}h`;
 	} else {
@@ -819,7 +819,7 @@ export function processBasal(
 
 	let totalBasal = scheduledBasal; // Start with scheduled, override if temp basal active
 	let isTempBasal = false;
-	let isComboActive = false;
+	const isComboActive = false;
 	let tempBasalInfo: BasalPillData['tempBasal'] | undefined;
 
 	// Check for temp basal from various sources
@@ -919,7 +919,7 @@ export function processLoop(
 	const loopData = latestStatus.loop;
 	const openapsData = latestStatus.openaps;
 
-	let result: LoopPillData = {
+	const result: LoopPillData = {
 		status: 'warning',
 		symbol: '⚠',
 		display: '---',

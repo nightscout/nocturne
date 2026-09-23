@@ -39,7 +39,7 @@
       step="1"
       min="0"
       bind:value={form.absorptionTime}
-      placeholder={"\u2014"}
+      placeholder="—"
     />
   </div>
   <div class="space-y-2">
@@ -49,7 +49,7 @@
       type="number"
       step="1"
       bind:value={form.carbTime}
-      placeholder={"\u2014"}
+      placeholder="—"
     />
   </div>
 </div>

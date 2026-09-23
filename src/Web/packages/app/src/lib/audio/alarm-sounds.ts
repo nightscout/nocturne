@@ -675,7 +675,7 @@ export interface CustomAlarmSound {
 }
 
 /** Storage for custom sounds - uses IndexedDB via a simple wrapper */
-let customSoundsCache: Map<string, CustomAlarmSound> = new Map();
+const customSoundsCache: Map<string, CustomAlarmSound> = new Map();
 let customSoundsLoaded = false;
 
 /**
@@ -729,7 +729,7 @@ async function saveCustomSounds(): Promise<void> {
       localStorage.setItem(CUSTOM_SOUNDS_STORAGE_KEY, JSON.stringify(sounds));
     } catch (err) {
       console.error('Failed to save custom sounds:', err);
-      throw new Error('Storage quota exceeded. Try removing some custom sounds.');
+      throw new Error('Storage quota exceeded. Try removing some custom sounds.', { cause: err });
     }
   }
 }

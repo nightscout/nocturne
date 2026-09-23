@@ -17,11 +17,7 @@
 
   let { table, selectedCount, totalCount }: Props = $props();
 
-  let pageSize = $state(50);
-
-  $effect(() => {
-    pageSize = table.getState().pagination.pageSize;
-  });
+  let pageSize = $derived(table.getState().pagination.pageSize);
 </script>
 
 <!-- Pagination -->

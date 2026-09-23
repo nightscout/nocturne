@@ -98,7 +98,7 @@
 
   // When the record prop changes (new dialog open), clear the override
   $effect(() => {
-    record; // track the prop
+    void record; // track the prop
     overrideRecord = null;
   });
 

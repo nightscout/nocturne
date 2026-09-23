@@ -60,7 +60,7 @@
   }: Props = $props();
 
   // Track which secret fields are visible
-  let visibleSecrets = $state(new SvelteSet<string>());
+  const visibleSecrets = new SvelteSet<string>();
 
   // Track initial configuration for unsaved change detection
   let initialConfiguration = $state<Record<string, unknown>>({});
