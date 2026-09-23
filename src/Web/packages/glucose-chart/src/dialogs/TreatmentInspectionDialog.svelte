@@ -15,45 +15,40 @@
       name: "Insulin",
       description: "Bolus insulin deliveries",
       icon: "syringe" as const,
-      colorClass: "text-blue-600 dark:text-blue-400",
-      bgClass: "bg-blue-100 dark:bg-blue-900/30",
-      borderClass: "border-blue-200 dark:border-blue-700",
+      colorClass: "text-entry-bolus",
+      badgeClass: "bg-entry-bolus/10 text-entry-bolus border-entry-bolus/30",
     },
     carbs: {
       id: "carbs" as const,
       name: "Carbs",
       description: "Carbohydrate intake records",
       icon: "utensils" as const,
-      colorClass: "text-green-600 dark:text-green-400",
-      bgClass: "bg-green-100 dark:bg-green-900/30",
-      borderClass: "border-green-200 dark:border-green-700",
+      colorClass: "text-entry-carbs",
+      badgeClass: "bg-entry-carbs/10 text-entry-carbs border-entry-carbs/30",
     },
     bgCheck: {
       id: "bgCheck" as const,
       name: "BG Checks",
       description: "Blood glucose measurements",
       icon: "droplet" as const,
-      colorClass: "text-red-600 dark:text-red-400",
-      bgClass: "bg-red-100 dark:bg-red-900/30",
-      borderClass: "border-red-200 dark:border-red-700",
+      colorClass: "text-entry-bg-check",
+      badgeClass: "bg-entry-bg-check/10 text-entry-bg-check border-entry-bg-check/30",
     },
     note: {
       id: "note" as const,
       name: "Notes",
       description: "User annotations and announcements",
       icon: "file-text" as const,
-      colorClass: "text-gray-600 dark:text-gray-400",
-      bgClass: "bg-gray-100 dark:bg-gray-800/50",
-      borderClass: "border-gray-200 dark:border-gray-600",
+      colorClass: "text-muted-foreground",
+      badgeClass: "bg-muted text-muted-foreground border-border",
     },
     deviceEvent: {
       id: "deviceEvent" as const,
       name: "Device Events",
       description: "Sensor, pump, and site changes",
       icon: "smartphone" as const,
-      colorClass: "text-orange-600 dark:text-orange-400",
-      bgClass: "bg-orange-100 dark:bg-orange-900/30",
-      borderClass: "border-orange-200 dark:border-orange-700",
+      colorClass: "text-entry-device-event",
+      badgeClass: "bg-entry-device-event/10 text-entry-device-event border-entry-device-event/30",
     },
   } as const;
 
@@ -210,11 +205,11 @@
     if (!bolusCalc?.calculationType) return "";
     switch (bolusCalc.calculationType) {
       case CalculationType2.Suggested:
-        return "bg-blue-500/20 text-blue-400 border-blue-500/30";
+        return "bg-status-info/20 text-status-info border-status-info/30";
       case CalculationType2.Manual:
-        return "bg-orange-500/20 text-orange-400 border-orange-500/30";
+        return "bg-status-warning/20 text-status-warning border-status-warning/30";
       case CalculationType2.Automatic:
-        return "bg-green-500/20 text-green-400 border-green-500/30";
+        return "bg-status-normal/20 text-status-normal border-status-normal/30";
       default:
         return "bg-muted text-muted-foreground border-border";
     }
@@ -267,14 +262,14 @@
     <div class="flex flex-col gap-1.5 p-6 pb-0">
       <div class="flex items-center gap-3 flex-wrap">
         {#if bolusInsulin != null}
-          {@render badge({ variant: 'outline', class: `${ENTRY_CATEGORIES.bolus.colorClass} ${ENTRY_CATEGORIES.bolus.bgClass} ${ENTRY_CATEGORIES.bolus.borderClass}`, children: bolusBadgeContent })}
+          {@render badge({ variant: 'outline', class: ENTRY_CATEGORIES.bolus.badgeClass, children: bolusBadgeContent })}
           {#snippet bolusBadgeContent()}
             <Syringe class="mr-1 h-3.5 w-3.5" />
             {bolusInsulin}U{bolusType ? ` ${bolusType}` : ""}
           {/snippet}
         {/if}
         {#if carbGrams != null}
-          {@render badge({ variant: 'outline', class: `${ENTRY_CATEGORIES.carbs.colorClass} ${ENTRY_CATEGORIES.carbs.bgClass} ${ENTRY_CATEGORIES.carbs.borderClass}`, children: carbBadgeContent })}
+          {@render badge({ variant: 'outline', class: ENTRY_CATEGORIES.carbs.badgeClass, children: carbBadgeContent })}
           {#snippet carbBadgeContent()}
             {carbGrams}g{carbLabel ? ` ${carbLabel}` : " carbs"}
           {/snippet}
@@ -422,13 +417,7 @@
         <div class="space-y-2">
           {#each correlatedRecords as record, i (record.data.id ?? `${record.data.mills}-${i}`)}
             {@const category = ENTRY_CATEGORIES[record.kind]}
-            <button
-              type="button"
-              class="w-full flex items-center gap-3 p-3 rounded-lg bg-muted hover:bg-muted/80 transition-colors text-left"
-              onclick={() => {
-                /* correlated record click — currently informational */
-              }}
-            >
+            <div class="w-full flex items-center gap-3 p-3 rounded-lg bg-muted text-left">
               <div class="flex-1">
                 <div class="font-medium text-sm">
                   {formatEntrySummary(record)}
@@ -446,7 +435,7 @@
               {#snippet recordBadgeContent()}
                 {category.name}
               {/snippet}
-            </button>
+            </div>
           {/each}
         </div>
       </div>

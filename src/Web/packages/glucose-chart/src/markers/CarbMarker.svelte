@@ -28,7 +28,7 @@
       y={-18}
       dy="-0.355em"
       text-anchor="middle"
-      class="text-[7px] fill-carbs font-medium opacity-80"
+      class="text-4xs fill-carbs font-medium opacity-80"
     >
       {label}
     </text>
@@ -43,7 +43,7 @@
     y={18}
     dy="-0.355em"
     text-anchor="middle"
-    class="text-[8px] fill-carbs font-medium"
+    class="text-3xs fill-carbs font-medium"
   >
     {carbs}g
   </text>

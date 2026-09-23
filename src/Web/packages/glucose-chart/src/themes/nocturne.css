@@ -15,6 +15,7 @@
   --pred-acob: oklch(0.7 0.18 50);       /* orange, was #FB8C00 */
   --pred-zt: oklch(0.75 0.15 195);       /* teal, was #00d2d2 */
   --pred-uam: oklch(0.75 0.12 85);       /* yellow-green, was #c9bd60 */
+  --pred-main: oklch(0.714 0.203 305.504); /* the single predicted curve in the inspection chart */
 
   /* Insulin Types */
   --insulin: rgb(30, 150, 252);
@@ -78,6 +79,12 @@
   /* Health Overlays */
   --heart-rate: oklch(0.6 0.2 25);
   --steps: oklch(0.6 0.15 300);
+
+  /* Record categories - an entry's label and badge in the inspection dialogs */
+  --entry-bolus: oklch(0.546 0.245 262.881);
+  --entry-carbs: oklch(0.627 0.194 149.214);
+  --entry-bg-check: oklch(0.577 0.245 27.325);
+  --entry-device-event: oklch(0.646 0.222 41.116);
 }
 
 .dark {
@@ -94,6 +101,12 @@
   /* Data Exclusion - Dark Mode - slightly higher opacity for visibility on dark backgrounds */
   --data-exclusion-compression-low: rgba(255, 165, 0, 0.2);
   --data-exclusion-sensor-error: rgba(255, 0, 0, 0.15);
+
+  /* Record categories - Dark Mode - lighter for contrast on dark backgrounds */
+  --entry-bolus: oklch(0.707 0.165 254.624);
+  --entry-carbs: oklch(0.792 0.209 151.711);
+  --entry-bg-check: oklch(0.704 0.191 22.216);
+  --entry-device-event: oklch(0.75 0.183 55.934);
 }
 
 /* Tailwind theme integration */
@@ -112,6 +125,7 @@
   --color-pred-acob: var(--pred-acob);
   --color-pred-zt: var(--pred-zt);
   --color-pred-uam: var(--pred-uam);
+  --color-pred-main: var(--pred-main);
 
   /* Insulin Types */
   --color-insulin: var(--insulin);
@@ -143,4 +157,31 @@
   --color-gri-zone-c: var(--gri-zone-c);
   --color-gri-zone-d: var(--gri-zone-d);
   --color-gri-zone-e: var(--gri-zone-e);
+
+  /* Pump Mode States */
+  --color-pump-mode-automatic: var(--pump-mode-automatic);
+  --color-pump-mode-limited: var(--pump-mode-limited);
+  --color-pump-mode-manual: var(--pump-mode-manual);
+  --color-pump-mode-boost: var(--pump-mode-boost);
+  --color-pump-mode-ease-off: var(--pump-mode-ease-off);
+  --color-pump-mode-sleep: var(--pump-mode-sleep);
+  --color-pump-mode-exercise: var(--pump-mode-exercise);
+  --color-pump-mode-suspended: var(--pump-mode-suspended);
+  --color-pump-mode-off: var(--pump-mode-off);
+  --color-pump-mode-liberty: var(--pump-mode-liberty);
+
+  /* Record categories */
+  --color-entry-bolus: var(--entry-bolus);
+  --color-entry-carbs: var(--entry-carbs);
+  --color-entry-bg-check: var(--entry-bg-check);
+  --color-entry-device-event: var(--entry-device-event);
+
+  /* Chart annotation text that has to fit inside a track or beside a marker glyph,
+     below the 12px floor of Tailwind's scale. Not for text outside a chart. */
+  --text-2xs: 0.625rem;
+  --text-2xs--line-height: 1.5;
+  --text-3xs: 0.5rem;
+  --text-3xs--line-height: 1.25;
+  --text-4xs: 0.4375rem;
+  --text-4xs--line-height: 1.25;
 }

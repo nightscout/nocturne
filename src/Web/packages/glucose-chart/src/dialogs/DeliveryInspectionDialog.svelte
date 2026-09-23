@@ -136,11 +136,11 @@
   const deliveryBadgeClass = $derived.by(() => {
     switch (basalOrigin) {
       case BasalDeliveryOrigin.Algorithm:
-        return "bg-blue-500/20 text-blue-400 border-blue-500/30";
+        return "bg-status-info/20 text-status-info border-status-info/30";
       case BasalDeliveryOrigin.Suspended:
-        return "bg-red-500/20 text-red-400 border-red-500/30";
+        return "bg-status-critical/20 text-status-critical border-status-critical/30";
       case BasalDeliveryOrigin.Manual:
-        return "bg-orange-500/20 text-orange-400 border-orange-500/30";
+        return "bg-status-warning/20 text-status-warning border-status-warning/30";
       default:
         return "bg-muted text-muted-foreground border-border";
     }
@@ -237,12 +237,12 @@
           <span class="text-muted-foreground">Status</span>
           <span>
             {#if snapshot.enacted}
-              {@render badge({ variant: 'outline', class: 'bg-green-500/20 text-green-400 border-green-500/30', children: enactedContent })}
+              {@render badge({ variant: 'outline', class: 'bg-status-normal/20 text-status-normal border-status-normal/30', children: enactedContent })}
               {#snippet enactedContent()}
                 Enacted
               {/snippet}
             {:else}
-              {@render badge({ variant: 'outline', class: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30', children: suggestedContent })}
+              {@render badge({ variant: 'outline', class: 'bg-status-warning/20 text-status-warning border-status-warning/30', children: suggestedContent })}
               {#snippet suggestedContent()}
                 Suggested Only
               {/snippet}
@@ -359,7 +359,7 @@
           {/if}
 
           {#if activityStates && activityStates.length > 0}
-            {#each activityStates as activity}
+            {#each activityStates as activity, i (i)}
               <div class="flex items-center gap-2">
                 <Activity class="h-3.5 w-3.5 text-muted-foreground" />
                 <span class="font-medium">{activity}</span>
@@ -372,7 +372,7 @@
 
     <!-- Pump status: stale data warning -->
     {#if isStaleBasal}
-      <div class="flex items-center gap-2 py-2 px-6 text-yellow-500 text-sm">
+      <div class="flex items-center gap-2 py-2 px-6 text-status-warning text-sm">
         <TriangleAlert class="h-4 w-4" />
         <span>Basal data may be stale. The last update was received some time ago.</span>
       </div>

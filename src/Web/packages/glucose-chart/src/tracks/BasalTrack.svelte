@@ -167,7 +167,7 @@
           x={labelX}
           y={labelY}
           dy="-0.355em"
-          class="text-[7px] fill-insulin-basal font-medium"
+          class="text-4xs fill-insulin-basal font-medium"
         >
           {span.rate.toFixed(2)}U/h
         </text>
@@ -176,7 +176,7 @@
           x={labelX}
           y={labelY}
           dy="-0.355em"
-          class="text-[7px] fill-insulin-basal font-medium"
+          class="text-4xs fill-insulin-basal font-medium"
         >
           {span.percent}%
         </text>
@@ -205,7 +205,7 @@
     </ChartClipPath>
     <AnnotationLine
       x={staleBasalData.start}
-      class="stroke-yellow-500/50 stroke-1"
+      class="stroke-status-warning/50 stroke-1"
       stroke-dasharray="2,2"
     />
     <AnnotationPoint
@@ -213,7 +213,7 @@
       y={basalScale(maxBasalRate)}
       label="Last pump sync"
       labelPlacement="bottom-right"
-      fill="yellow"
+      fill="var(--status-warning)"
       class="hover:bg-background hover:text-foreground"
     />
   {/if}
@@ -236,7 +236,7 @@
     scale={basalAxisScale}
     ticks={2}
     tickLabelProps={{
-      class: "text-[9px] fill-muted-foreground",
+      class: "text-2xs fill-muted-foreground",
     }}
   />
 
@@ -245,7 +245,7 @@
     x={4}
     y={basalTrackTop + 12}
     dy="-0.355em"
-    class="text-[8px] fill-muted-foreground font-medium"
+    class="text-3xs fill-muted-foreground font-medium"
   >
     BASAL
   </text>
@@ -272,8 +272,8 @@
                 width: context.xScale(new Date(nextPoint.timestamp ?? 0)) - left,
                 height: Math.abs(bottom - top),
               }}
-              <rect {...step} fill={fillColor} style="opacity: {opacity}" />
-              <rect {...step} fill={patternFill} style="opacity: {opacity}" />
+              <rect {...step} fill={fillColor} {opacity} />
+              <rect {...step} fill={patternFill} {opacity} />
             {/each}
           {/snippet}
         </Pattern>
@@ -287,8 +287,8 @@
           curve={curveStepAfter}
           fill={fillColor}
           stroke={strokeColor}
+          {opacity}
           class="stroke-1"
-          style="opacity: {opacity}"
         />
       {/if}
     {/each}

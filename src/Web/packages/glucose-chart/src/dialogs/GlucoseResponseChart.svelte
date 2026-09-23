@@ -152,7 +152,7 @@
             y={context.yScale(yDomain[1]) - 4}
             dy="-0.355em"
             text-anchor="middle"
-            class="text-[9px] fill-muted-foreground"
+            class="text-2xs fill-muted-foreground"
           >
             {label}
           </text>
@@ -187,7 +187,7 @@
               x={(d: { time: Date; sgv: number }) => d.time}
               y="sgv"
               curve={curveMonotoneX}
-              class="stroke-purple-400/60 stroke-1 fill-none"
+              class="stroke-pred-main/60 stroke-1 fill-none"
               stroke-dasharray="4,2"
             />
           {/if}
@@ -200,7 +200,7 @@
             y={context.yScale(peakPoint.sgv) - 10}
             dy="-0.355em"
             text-anchor="middle"
-            class="text-[9px] fill-foreground font-medium"
+            class="text-2xs fill-foreground font-medium"
           >
             {bg(peakPoint.sgv)}
           </text>
@@ -213,7 +213,7 @@
             y={context.yScale(nadirPoint.sgv) + 14}
             dy="-0.355em"
             text-anchor="middle"
-            class="text-[9px] fill-foreground font-medium"
+            class="text-2xs fill-foreground font-medium"
           >
             {bg(nadirPoint.sgv)}
           </text>
@@ -223,8 +223,8 @@
         <Axis
           placement="left"
           ticks={4}
-          format={(v) => String(bg(v as number))}
-          tickLabelProps={{ class: "text-[10px] fill-muted-foreground" }}
+          format={(v) => (typeof v === "number" ? bg(v) : String(v))}
+          tickLabelProps={{ class: "text-2xs fill-muted-foreground" }}
         />
 
         <!-- Bottom X-axis with time labels -->
@@ -238,7 +238,7 @@
                   minute: "2-digit",
                 })
               : String(v)}
-          tickLabelProps={{ class: "text-[9px] fill-muted-foreground" }}
+          tickLabelProps={{ class: "text-2xs fill-muted-foreground" }}
         />
       </Svg>
     {/snippet}

@@ -230,7 +230,7 @@
               : "var(--color-insulin-basal)"}
             class={cn(
               staleBasalData && data.time >= staleBasalData.start
-                ? "text-yellow-500 font-bold"
+                ? "text-status-warning font-bold"
                 : ""
             )}
           />
@@ -265,7 +265,7 @@
               : "var(--color-insulin-basal)"}
             class={cn(
               staleBasalData && data.time >= staleBasalData.start
-                ? "text-yellow-500 font-bold"
+                ? "text-status-warning font-bold"
                 : ""
             )}
           />
