@@ -35,7 +35,10 @@ is your stack.
 
 Both containers enable their exporters only when `OTEL_EXPORTER_OTLP_ENDPOINT`
 is set. Setting it on a container turns telemetry on; leaving it unset keeps it
-off. The standard OpenTelemetry SDK environment variables apply:
+off. With the endpoint set, the API sends its logs to the collector only and
+stops writing them to the container log, so `docker compose logs nocturne-api`
+shows little. Read them in your backend instead. The standard OpenTelemetry SDK
+environment variables apply:
 
 | Variable | Description |
 |----------|-------------|

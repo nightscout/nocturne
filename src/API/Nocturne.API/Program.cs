@@ -134,7 +134,13 @@ builder.Services.AddCompatibilityProxyServices(builder.Configuration);
 builder.Services.AddNocturneMemoryCache();
 
 builder.Logging.ClearProviders();
-builder.Logging.AddOpenTelemetry(logging => logging.AddConsoleExporter());
+builder.Logging.AddOpenTelemetry(logging =>
+{
+    if (builder.Environment.IsDevelopment() || !builder.Configuration.IsOtlpConfigured())
+    {
+        logging.AddConsoleExporter();
+    }
+});
 
 var loopApnsKeyId = builder.Configuration["Loop:ApnsKeyId"];
 Console.WriteLine(
