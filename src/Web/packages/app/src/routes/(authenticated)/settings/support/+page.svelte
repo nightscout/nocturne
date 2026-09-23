@@ -107,7 +107,7 @@
       name: "Documentation",
       description: "Guides, tutorials, and API reference",
       icon: BookOpen,
-      href: "https://docs.nightscout.info/",
+      href: "https://getnocturne.dev/docs",
     },
     {
       name: "Nightscout Foundation",
