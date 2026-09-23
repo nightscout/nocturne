@@ -24,6 +24,7 @@ public sealed class AccessRequestControllerTests : IDisposable
     private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _dbContext;
     private readonly Mock<IInAppNotificationService> _notifications = new();
+    private readonly Mock<ITenantService> _tenantService = new();
     private readonly AccessRequestController _controller;
 
     private readonly Guid _tenantId = Guid.CreateVersion7();
@@ -43,7 +44,7 @@ public sealed class AccessRequestControllerTests : IDisposable
         _controller = new AccessRequestController(
             _dbContext,
             Mock.Of<ISubjectService>(),
-            Mock.Of<ITenantService>(),
+            _tenantService.Object,
             roleService.Object,
             MockTenantAccessor.Create(_tenantId).Object,
             _notifications.Object,
@@ -84,6 +85,30 @@ public sealed class AccessRequestControllerTests : IDisposable
         ArchivedFor(owner, NotificationArchiveReason.Completed, Times.Once());
         ArchivedFor(revoked, NotificationArchiveReason.Completed, Times.Never());
         ArchivedFor(deactivated, NotificationArchiveReason.Completed, Times.Never());
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Approve_carriesLimitTo24HoursOntoTheMembership(bool limitTo24Hours)
+    {
+        var requestorId = await SeedPendingRequestAsync();
+
+        var result = await _controller.Approve(
+            requestorId,
+            new ApproveAccessRequestRequest
+            {
+                DirectPermissions = ["api:*:read"],
+                LimitTo24Hours = limitTo24Hours,
+            },
+            CancellationToken.None);
+
+        Assert.IsType<OkResult>(result);
+        _tenantService.Verify(
+            s => s.AddMemberAsync(
+                _tenantId, requestorId, It.IsAny<List<Guid>>(), It.IsAny<List<string>?>(),
+                It.IsAny<string?>(), limitTo24Hours, It.IsAny<CancellationToken>()),
+            Times.Once());
     }
 
     [Fact]
