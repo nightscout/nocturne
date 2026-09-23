@@ -3,9 +3,10 @@
 // only its own index. Deviations from Curtis shared with the CPU reference:
 // deposition follows the settle rule (a thinning film settles hard, while a
 // deep film still settles by density and stains by staining power), flow
-// speed keeps pigment suspended, and lift needs water and grows with flow. Deviation from Curtis: absorption is
-// a transfer that takes the water it adds to the fibres out of the film, so
-// the sheet cannot manufacture water. No deviation from the CPU reference.
+// speed keeps pigment suspended, and lift needs water and grows with flow.
+// Deviation from Curtis: absorption is a transfer that takes the water it
+// adds to the fibres out of the film, so the sheet cannot manufacture water.
+// No deviation from the CPU reference.
 
 @compute @workgroup_size(256)
 fn transfer(@builtin(global_invocation_id) gid: vec3<u32>) {
@@ -28,7 +29,7 @@ fn transfer(@builtin(global_invocation_id) gid: vec3<u32>) {
         let di = o_d(k) + i;
         let g = state[gi];
         let d = state[di];
-        let carry = clamp(1.0 - speed * P.carry * (CARRY_REACH - coef.density), CARRY_MIN, 1.0);
+        let carry = clamp(1.0 - speed * P.carry * (P.carry_reach - coef.density), P.carry_min, 1.0);
         let settle = coef.density * (settle_gate + P.wet_settle * w) + P.stain_bite * coef.staining_power * w;
         var down = g * (1.0 - h * coef.granulation) * settle * carry * P.deposition_rate * P.dt;
         var up = d * (1.0 + (h - 1.0) * coef.granulation) * coef.density / coef.staining_power * P.lift_rate * lift_flow * P.dt;

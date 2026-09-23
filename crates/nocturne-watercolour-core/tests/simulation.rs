@@ -549,3 +549,117 @@ fn injected_flow_stays_inside_the_speed_bound() {
         );
     }
 }
+
+/// Transfer params with evaporation and absorption off, so one
+/// `pass_transfer` tick changes a cell only by deposition and lift.
+fn transfer_only() -> SimParams {
+    SimParams {
+        evaporation: 0.0,
+        capillary_absorb: 0.0,
+        ..Default::default()
+    }
+}
+
+fn coef(density: f32, staining_power: f32) -> PigmentCoefficients {
+    PigmentCoefficients {
+        density,
+        staining_power,
+        granulation: 0.0,
+    }
+}
+
+/// One `pass_transfer` tick on a 4x4 grid whose cell 0 holds a film of depth
+/// `p` moving at `(u, v)`, with suspended `g` and deposited `d`. Returns
+/// `(settled, lifted)`: the deposit's gain when `d = 0` and its loss when
+/// `g = 0`, so the two exchanges are read in isolation.
+fn exchange(params: &SimParams, c: PigmentCoefficients, p: f32, u: f32, v: f32) -> (f32, f32) {
+    let run_cell = |g: f32, d: f32| {
+        let field = PaperField::generate(&Paper::cold_press(Seed(1)), 4, 4);
+        let mut grid = SimulationGrid::new(&field, 1);
+        grid.wet[0] = 1.0;
+        grid.pressure[0] = p;
+        grid.paper_height[0] = 0.5;
+        grid.velocity_u[0] = u;
+        grid.velocity_v[0] = v;
+        grid.pigments_in_water[0] = g;
+        grid.pigments_deposited[0] = d;
+        sim::pass_transfer(&mut grid, &[c], params);
+        grid.pigments_deposited[0]
+    };
+    (run_cell(1.0, 0.0), 0.5 - run_cell(0.0, 0.5))
+}
+
+#[test]
+fn lift_needs_water() {
+    let params = transfer_only();
+    let fast = params.max_velocity;
+    let (_, thin) = exchange(&params, coef(0.6, 0.5), params.wet_lo, fast, fast);
+    assert_eq!(thin, 0.0, "a film at wet_lo lifts nothing, lifted {thin}");
+    let (_, deep) = exchange(&params, coef(0.6, 0.5), 1.0, fast, fast);
+    assert!(deep > 0.0, "a deep moving film lifts, lifted {deep}");
+
+    let field = PaperField::generate(&Paper::cold_press(Seed(1)), 4, 4);
+    let mut grid = SimulationGrid::new(&field, 1);
+    grid.pigments_deposited[0] = 0.5;
+    sim::pass_transfer(&mut grid, &[coef(0.6, 0.5)], &params);
+    assert_eq!(grid.pigments_deposited[0], 0.5, "a dry cell is untouched");
+}
+
+#[test]
+fn still_water_lifts_its_lift_still_share() {
+    let params = transfer_only();
+    let full = 1.0 / params.lift_flow_gain;
+    let (_, still) = exchange(&params, coef(0.6, 0.5), 1.0, 0.0, 0.0);
+    let (_, moving) = exchange(&params, coef(0.6, 0.5), 1.0, full, 0.0);
+    assert!(
+        moving > still,
+        "flow lifts more: still {still} moving {moving}"
+    );
+    assert!(
+        (still - params.lift_still * moving).abs() < 1e-6,
+        "still lift {still} should be lift_still x full-flow lift {moving}"
+    );
+}
+
+#[test]
+fn fast_water_carries_light_pigment_further_than_dense() {
+    let params = transfer_only();
+    let fast = params.max_velocity;
+    let kept = |density| {
+        let (still, _) = exchange(&params, coef(density, 0.5), 1.0, 0.0, 0.0);
+        let (moving, _) = exchange(&params, coef(density, 0.5), 1.0, fast, fast);
+        moving / still
+    };
+    let (light, dense) = (kept(0.3), kept(0.9));
+    for (name, k) in [("light", light), ("dense", dense)] {
+        assert!(
+            (sim::CARRY_MIN - 1e-6..1.0).contains(&k),
+            "{name} pigment at max speed keeps {k} of its still deposition"
+        );
+    }
+    assert!(
+        dense > light,
+        "dense pigment escapes the flow more: dense {dense} light {light}"
+    );
+}
+
+#[test]
+fn the_stain_bite_ignores_density_and_needs_water() {
+    let params = SimParams {
+        settle_base: 0.0,
+        dry_deposition: 0.0,
+        wet_settle: 0.0,
+        ..transfer_only()
+    };
+    let (sparse, _) = exchange(&params, coef(0.2, 0.9), 1.0, 0.0, 0.0);
+    let (heavy, _) = exchange(&params, coef(0.9, 0.9), 1.0, 0.0, 0.0);
+    let (weak, _) = exchange(&params, coef(0.9, 0.3), 1.0, 0.0, 0.0);
+    let (thin, _) = exchange(&params, coef(0.9, 0.9), params.wet_lo, 0.0, 0.0);
+    assert!(sparse > 0.0, "a staining pigment bites a deep film");
+    assert!(
+        (sparse - heavy).abs() < 1e-7,
+        "the bite is density-independent: {sparse} vs {heavy}"
+    );
+    assert!(weak < heavy, "a weaker stain bites less: {weak} vs {heavy}");
+    assert_eq!(thin, 0.0, "no bite without a film, settled {thin}");
+}

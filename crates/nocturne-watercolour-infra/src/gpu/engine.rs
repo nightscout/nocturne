@@ -93,8 +93,8 @@ struct ParamsUniform {
     lift_still: f32,
     lift_flow_gain: f32,
     max_deposited: f32,
-    _pad_deposit0: f32,
-    _pad_deposit1: f32,
+    carry_min: f32,
+    carry_reach: f32,
 }
 
 impl ParamsUniform {
@@ -142,8 +142,8 @@ impl ParamsUniform {
             lift_still: p.lift_still,
             lift_flow_gain: p.lift_flow_gain,
             max_deposited: sim::MAX_DEPOSITED,
-            _pad_deposit0: 0.0,
-            _pad_deposit1: 0.0,
+            carry_min: sim::CARRY_MIN,
+            carry_reach: sim::CARRY_REACH,
         }
     }
 }
