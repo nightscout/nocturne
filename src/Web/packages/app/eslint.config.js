@@ -1,241 +1,118 @@
-import prettier from "eslint-config-prettier";
-import pluginsecurity from "eslint-plugin-security";
-import { plugin as shadcn } from "@shadcn/lint";
-
-import js from '@eslint/js';
-import svelte from 'eslint-plugin-svelte';
-import globals from 'globals';
-import ts from 'typescript-eslint';
+import { svelteConfig, RAW_COLOR_ALLOW } from "@nocturne/eslint-config";
 
 import noImperativeRemoteQuery from "./tools/eslint/no-imperative-remote-query.js";
-
-const TEST_FILES = [
-  "**/*.test.ts",
-  "**/*.test.svelte",
-  "**/*.spec.ts",
-  "**/*.test-harness.svelte",
-  "**/*.test-stub.svelte",
-  "**/*-test-wrapper.svelte",
-  "src/lib/test-stubs/**",
-  "src/lib/test-fixtures/**",
-  "e2e/**",
-  "vitest.browser.setup.ts"
-];
 
 // Width stays layout the caller owns; height comes only from a control's size.
 const HEIGHT_CLASSES = ["h-*", "size-*", "min-h-*", "max-h-*"];
 const CONTROL_HEIGHT_HINT =
   "\"{{className}}\" is not allowed on <{{component}}>: its height comes from size. Use size=\"xs\" (h-7), \"sm\" (h-8) or the default (h-9); each matches the same size on Button, Input, SelectTrigger and Toggle.";
 
-// no-raw-colors reads `none` as an undeclared colour; fill-none and stroke-none paint nothing.
-const RAW_COLOR_ALLOW = ["fill-none", "stroke-none"];
-const RAW_COLOR_HINT =
-  "\"{{className}}\" is a raw colour. Use the token for what it means: glucose-* for a glucose range; insulin, carbs, iob-*, pred-* for a chart series; entry-* for a record kind's label or icon (entry-bolus, entry-carbs...); report-* for a report category's accent; status-* for a clinical state; success, warning, info, destructive for a UI outcome; demo for demo data; favorite for a pinned or favourite star. Otherwise a surface token (card, muted, foreground, border). All are declared in {{file}}.";
-
-// svelte-check types the bindings destructured from $props<T>() as any inside the
-// component. Beside a top-level binding named after a rune, svelte-check reads that
-// rune's other calls as store reads and leaves them untyped.
-const COMPONENT_SCRIPT_SYNTAX = [
-  {
-    selector: 'CallExpression[callee.name="$props"][typeArguments]',
-    message: "Type props with an interface: `let { a, b }: Props = $props()`. With $props<T>() svelte-check types the destructured props as any."
-  },
-  ...["state", "derived", "effect", "props"].flatMap((rune) =>
-    [
-      `VariableDeclaration > VariableDeclarator[id.name="${rune}"]`,
-      `VariableDeclaration > VariableDeclarator > ObjectPattern > Property[value.name="${rune}"]`,
-      `VariableDeclaration > VariableDeclarator > ObjectPattern > Property[value.left.name="${rune}"]`,
-      `FunctionDeclaration[id.name="${rune}"]`,
-      // svelte-check special-cases svelte/store's `derived` beside $derived.
-      `ImportDeclaration:not([source.value="svelte/store"]) > [local.name="${rune}"]`
-    ].map((binding) => ({
-      selector: `SvelteScriptElement:has(Identifier[name="$${rune}"]) > ${binding}`,
-      message: `Rename \`${rune}\`: while a local shares its name, svelte-check reads $${rune} as a store and types it as any.`
-    }))
-  )
-];
-
-export default ts.config(
-  js.configs.recommended,
-  ...ts.configs.recommended,
-  pluginsecurity.configs.recommended,
-  ...svelte.configs["flat/recommended"],
-  prettier,
-  ...svelte.configs['flat/prettier'],
-  {
-    // 374 findings, near all on typed index access; the noise buried every other warning.
-    rules: { "security/detect-object-injection": "off" }
-  },
-  {
-    // Recommended warnings with no findings left; as errors they stay at none.
-    rules: Object.fromEntries(
-      [
-        "security/detect-bidi-characters",
-        "security/detect-buffer-noassert",
-        "security/detect-child-process",
-        "security/detect-disable-mustache-escape",
-        "security/detect-eval-with-expression",
-        "security/detect-new-buffer",
-        "security/detect-no-csrf-before-method-override",
-        "security/detect-non-literal-require",
-        "security/detect-possible-timing-attacks",
-        "security/detect-pseudoRandomBytes",
-        "security/detect-non-literal-fs-filename",
-        "security/detect-non-literal-regexp",
-        "security/detect-unsafe-regex",
-        "svelte/no-at-debug-tags",
-        "svelte/no-inspect"
-      ].map((rule) => [rule, "error"])
-    )
-  },
-  {
-    // Tests read fixtures and sources under the repo and build patterns from their own
-    // identifiers; neither path nor pattern comes from a request, so every finding here
-    // was a false positive.
-    files: TEST_FILES,
-    rules: {
-      "security/detect-non-literal-fs-filename": "off",
-      "security/detect-non-literal-regexp": "off",
-      "security/detect-unsafe-regex": "off"
-    }
-  },
-  {
-    languageOptions: {
-	  globals: {
-	    ...globals.browser,
-	    ...globals.node
-	  }
-	}
-  },
-  {
-    files: ["**/*.svelte", "**/*.svelte.ts"],
-
-    languageOptions: {
-	  parserOptions: {
-	    parser: ts.parser
-	  }
-	},
-    plugins: { shadcn }
-  },
-  {
-    files: ["**/*.ts"],
-    plugins: { shadcn }
-  },
-  {
+export default [
+  ...svelteConfig({
+    componentDirs: ["src/lib/components/ui/**"],
     // Generated by the API build; gitignored, so linting it makes counts depend on whether it was built.
-    ignores: ["build/", ".svelte-kit/", "dist/", "src/lib/api/generated/**", "src/lib/api/api-client.generated.ts"]
-  },
-  {
-    files: ["**/*.svelte", "**/*.ts"],
-    rules: {
-      "shadcn/no-restyle": ["warn", {
-        allow: ["layout"],
-        // A later matching contract replaces an earlier one, so each restates layout.
-        contracts: [
-          // A rule between sections is the caller's: CardHeader and CardFooter pad a
-          // border-b or border-t they are given. Tabs and its panels draw nothing.
-          {
-            pattern: "^Card(Header|Content|Footer)$|^(Dialog|Sheet|AlertDialog)(Header|Footer)$|^(Popover|Collapsible)Content$|^Tabs(Content)?$",
-            allow: ["layout", "spacing", "border-t", "border-b"]
-          },
-          {
-            pattern: "^Table(Cell|Head)$",
-            allow: ["layout", "spacing", "tabular-nums", "font-mono", "font-medium"],
-            message: { color: 'Use <{{component}} variant="muted"> for a secondary column or an empty-table message.' }
-          },
-          { pattern: "^CardDescription$", allow: ["layout", "gap"] },
-          // Initials scale with the avatar, whose size the caller sets.
-          { pattern: "^AvatarFallback$", allow: ["layout", "text-xs", "text-sm", "text-base", "text-lg", "text-xl"] },
-          { pattern: "^(Card|Dialog|Sheet|AlertDialog)Title$", allow: ["layout", "typography", "gap"] },
-          {
-            pattern: "^(Input|SelectTrigger)$",
-            allow: ["layout", "tabular-nums", "font-mono"],
-            deny: HEIGHT_CLASSES,
-            message: {
-              layout: CONTROL_HEIGHT_HINT,
-              spacing: 'Use size="xs" or "sm" on <{{component}}>; each matches the same size on Input, SelectTrigger and ToggleGroup. For an icon or text inside the field, use <InputGroup.Root> with an <InputGroup.Addon> and <InputGroup.Input>.',
-              typography: 'Use size="xs" or "sm" on <{{component}}>; Input also has variant="code" for device codes.',
-              color: "Mark an invalid field with aria-invalid, which <{{component}}> already styles. On <Input>, mark a value the server accepted (e.g. an available username) with valid."
-            }
-          },
-          {
-            pattern: "^InputGroup(\\.Input|Input)$",
-            allow: ["layout", "tabular-nums", "font-mono"],
-            deny: HEIGHT_CLASSES,
-            message: "<InputGroup.Root> owns the field's border, height and padding; put icons and text in <InputGroup.Addon> (align=\"inline-start\" or \"inline-end\")."
-          },
-          {
-            pattern: "^Select(\\.Item|Item)$",
-            allow: ["layout"],
-            message: {
-              typography: 'Set size="xs" on <SelectContent> to match a size="xs" trigger; its items follow.'
-            }
-          },
-          { pattern: "^Textarea$", allow: ["layout", "font-mono"] },
-          {
-            pattern: "^Label$",
-            allow: ["layout"],
-            message: {
-              typography: 'Use <Label size="sm"> or size="lg", or variant="option" for a checkbox, radio or switch choice.',
-              color: 'Use <Label variant="muted"> for a secondary caption.'
-            }
-          },
-          {
-            pattern: "^ToggleGroup(Item)?$",
-            allow: ["layout"],
-            deny: HEIGHT_CLASSES,
-            message: 'Set it on <ToggleGroup>: size="xs" (h-7) or "sm" (h-8) for a compact row, variant="segmented" for a view switcher, spacing={1} for separate chips.'
-          },
-          {
-            pattern: "^Toggle$",
-            allow: ["layout"],
-            deny: HEIGHT_CLASSES,
-            message: { layout: CONTROL_HEIGHT_HINT }
-          },
-          // A placeholder takes the radius of the content it stands in for.
-          { pattern: "^Skeleton$", allow: ["layout", "rounded"] },
-          {
-            pattern: "^Button$",
-            allow: ["layout"],
-            deny: HEIGHT_CLASSES,
-            message: {
-              color: "\"{{className}}\" is not allowed on <Button>: pick a variant: subtle for muted text with no fill (a disclosure toggle), ghost-muted for a quiet action. For a colour the theme does not own (an OIDC provider's brand), use variant=\"brand\" and pass brand with its background and foreground, the foreground picked for contrast by the API.",
-              layout: "\"{{className}}\" is not allowed on <Button>: its height comes from size. Use xs (h-7), sm (h-8), default (h-9), lg (h-10), xl (h-14, full-screen alarm actions), icon-xs (size-7), icon-sm (size-8), icon (size-9), icon-2xs (size-5, a round remove pip), or inline (h-auto, no padding) for a link in running text, inline-xs beside text-xs copy. Width stays yours.",
-              typography: "\"{{className}}\" is not allowed on <Button>: it owns its type. size=\"xs\" and \"inline-xs\" give text-xs and size=\"xl\" text-lg; every other size is text-sm font-medium. A combobox or date-picker trigger is variant=\"combobox\".",
-              effects: "\"{{className}}\" is not allowed on <Button>: it owns its effects. For a remove that shows on hover, set reveal: it stays hidden until its `group` is hovered or holds focus."
-            }
-          },
-          {
-            pattern: "^(Badge|Alert|Card)(\\.Root)?$",
-            allow: ["layout"]
-          },
-          // An identifier or a count keeps its figures aligned.
-          { pattern: "^Badge$", allow: ["layout", "font-mono", "tabular-nums"] },
-          {
-            pattern: "^(Item|RadioGroup\\.Card|RadioGroupCard)$",
-            allow: ["layout"],
-            message: {
-              color: 'Use <Item variant="outline">, "success", "muted", "dashed" or "ghost". aria-current="true" marks the current item, aria-busy a running one, and disabled dims it. <RadioGroup.Card> styles its own checked state.',
-              spacing: 'Use <Item size="sm">, the default or size="lg".'
-            }
-          },
-          {
-            pattern: "^Banner$",
-            allow: ["layout"],
-            message: {
-              color: 'Use <Banner variant="warning"> or variant="info"; the tints are opaque so content scrolled beneath does not show through.'
-            }
+    ignores: ["src/lib/api/generated/**", "src/lib/api/api-client.generated.ts"],
+    noRestyle: {
+      allow: ["layout"],
+      // A later matching contract replaces an earlier one, so each restates layout.
+      contracts: [
+        // A rule between sections is the caller's: CardHeader and CardFooter pad a
+        // border-b or border-t they are given. Tabs and its panels draw nothing.
+        {
+          pattern: "^Card(Header|Content|Footer)$|^(Dialog|Sheet|AlertDialog)(Header|Footer)$|^(Popover|Collapsible)Content$|^Tabs(Content)?$",
+          allow: ["layout", "spacing", "border-t", "border-b"]
+        },
+        {
+          pattern: "^Table(Cell|Head)$",
+          allow: ["layout", "spacing", "tabular-nums", "font-mono", "font-medium"],
+          message: { color: 'Use <{{component}} variant="muted"> for a secondary column or an empty-table message.' }
+        },
+        { pattern: "^CardDescription$", allow: ["layout", "gap"] },
+        // Initials scale with the avatar, whose size the caller sets.
+        { pattern: "^AvatarFallback$", allow: ["layout", "text-xs", "text-sm", "text-base", "text-lg", "text-xl"] },
+        { pattern: "^(Card|Dialog|Sheet|AlertDialog)Title$", allow: ["layout", "typography", "gap"] },
+        {
+          pattern: "^(Input|SelectTrigger)$",
+          allow: ["layout", "tabular-nums", "font-mono"],
+          deny: HEIGHT_CLASSES,
+          message: {
+            layout: CONTROL_HEIGHT_HINT,
+            spacing: 'Use size="xs" or "sm" on <{{component}}>; each matches the same size on Input, SelectTrigger and ToggleGroup. For an icon or text inside the field, use <InputGroup.Root> with an <InputGroup.Addon> and <InputGroup.Input>.',
+            typography: 'Use size="xs" or "sm" on <{{component}}>; Input also has variant="code" for device codes.',
+            color: "Mark an invalid field with aria-invalid, which <{{component}}> already styles. On <Input>, mark a value the server accepted (e.g. an available username) with valid."
           }
-        ]
-      }],
-      "shadcn/no-raw-colors": ["error", { allow: RAW_COLOR_ALLOW, message: RAW_COLOR_HINT }],
-      "shadcn/no-arbitrary-values": ["error", { allow: ["layout"], deny: ["text-[10px]", "text-[11px]"] }],
-      "shadcn/no-inline-styles": "error",
-      // `lead` is a hook the typography plugin styles inside `prose`.
-      "shadcn/no-unknown-classes": ["error", { allow: ["lead"] }],
-      "shadcn/require-static-classes": "error"
+        },
+        {
+          pattern: "^InputGroup(\\.Input|Input)$",
+          allow: ["layout", "tabular-nums", "font-mono"],
+          deny: HEIGHT_CLASSES,
+          message: "<InputGroup.Root> owns the field's border, height and padding; put icons and text in <InputGroup.Addon> (align=\"inline-start\" or \"inline-end\")."
+        },
+        {
+          pattern: "^Select(\\.Item|Item)$",
+          allow: ["layout"],
+          message: {
+            typography: 'Set size="xs" on <SelectContent> to match a size="xs" trigger; its items follow.'
+          }
+        },
+        { pattern: "^Textarea$", allow: ["layout", "font-mono"] },
+        {
+          pattern: "^Label$",
+          allow: ["layout"],
+          message: {
+            typography: 'Use <Label size="sm"> or size="lg", or variant="option" for a checkbox, radio or switch choice.',
+            color: 'Use <Label variant="muted"> for a secondary caption.'
+          }
+        },
+        {
+          pattern: "^ToggleGroup(Item)?$",
+          allow: ["layout"],
+          deny: HEIGHT_CLASSES,
+          message: 'Set it on <ToggleGroup>: size="xs" (h-7) or "sm" (h-8) for a compact row, variant="segmented" for a view switcher, spacing={1} for separate chips.'
+        },
+        {
+          pattern: "^Toggle$",
+          allow: ["layout"],
+          deny: HEIGHT_CLASSES,
+          message: { layout: CONTROL_HEIGHT_HINT }
+        },
+        // A placeholder takes the radius of the content it stands in for.
+        { pattern: "^Skeleton$", allow: ["layout", "rounded"] },
+        {
+          pattern: "^Button$",
+          allow: ["layout"],
+          deny: HEIGHT_CLASSES,
+          message: {
+            color: "\"{{className}}\" is not allowed on <Button>: pick a variant: subtle for muted text with no fill (a disclosure toggle), ghost-muted for a quiet action. For a colour the theme does not own (an OIDC provider's brand), use variant=\"brand\" and pass brand with its background and foreground, the foreground picked for contrast by the API.",
+            layout: "\"{{className}}\" is not allowed on <Button>: its height comes from size. Use xs (h-7), sm (h-8), default (h-9), lg (h-10), xl (h-14, full-screen alarm actions), icon-xs (size-7), icon-sm (size-8), icon (size-9), icon-2xs (size-5, a round remove pip), or inline (h-auto, no padding) for a link in running text, inline-xs beside text-xs copy. Width stays yours.",
+            typography: "\"{{className}}\" is not allowed on <Button>: it owns its type. size=\"xs\" and \"inline-xs\" give text-xs and size=\"xl\" text-lg; every other size is text-sm font-medium. A combobox or date-picker trigger is variant=\"combobox\".",
+            effects: "\"{{className}}\" is not allowed on <Button>: it owns its effects. For a remove that shows on hover, set reveal: it stays hidden until its `group` is hovered or holds focus."
+          }
+        },
+        {
+          pattern: "^(Badge|Alert|Card)(\\.Root)?$",
+          allow: ["layout"]
+        },
+        // An identifier or a count keeps its figures aligned.
+        { pattern: "^Badge$", allow: ["layout", "font-mono", "tabular-nums"] },
+        {
+          pattern: "^(Item|RadioGroup\\.Card|RadioGroupCard)$",
+          allow: ["layout"],
+          message: {
+            color: 'Use <Item variant="outline">, "success", "muted", "dashed" or "ghost". aria-current="true" marks the current item, aria-busy a running one, and disabled dims it. <RadioGroup.Card> styles its own checked state.',
+            spacing: 'Use <Item size="sm">, the default or size="lg".'
+          }
+        },
+        {
+          pattern: "^Banner$",
+          allow: ["layout"],
+          message: {
+            color: 'Use <Banner variant="warning"> or variant="info"; the tints are opaque so content scrolled beneath does not show through.'
+          }
+        }
+      ]
     }
-  },
+  }),
   {
     // Where notification and tracker urgency is drawn, the nearest-token hint would
     // offer an unrelated red or amber; the ramp is its own token family.
@@ -283,42 +160,6 @@ export default ts.config(
     }
   },
   {
-    files: ["src/lib/components/ui/**"],
-    rules: {
-      "shadcn/no-restyle": "off",
-      "shadcn/no-arbitrary-values": "off",
-      "shadcn/require-static-classes": "off"
-    }
-  },
-  {
-    rules: {
-      "@typescript-eslint/consistent-type-assertions": [
-        "error",
-        {
-          assertionStyle: "never"
-        }
-      ],
-      "@typescript-eslint/no-unused-vars": [
-        "error",
-        {
-          argsIgnorePattern: "^_",
-          varsIgnorePattern: "^_",
-          caughtErrorsIgnorePattern: "^_"
-        }
-      ]
-    }
-  },
-  {
-    // Tests build partial mocks of framework and API types, which only an assertion can type.
-    files: TEST_FILES,
-    rules: {
-      "@typescript-eslint/consistent-type-assertions": [
-        "error",
-        { assertionStyle: "as", objectLiteralTypeAssertions: "allow" }
-      ]
-    }
-  },
-  {
     // Guard against the year-overview/alerts-polling regression class: a remote
     // query() awaited or `.then()`-chained imperatively (outside a reactive
     // context) throws "not created in a reactive context ... Use .run()".
@@ -331,49 +172,5 @@ export default ts.config(
     rules: {
       "nocturne/no-imperative-remote-query": "error"
     }
-  },
-  {
-    // @shadcn/lint only sees classes on known components, so a raw control
-    // escapes the design system without a finding. Hidden inputs carry form
-    // state and render nothing.
-    // Flat config replaces no-restricted-syntax's options wholesale, so every
-    // .svelte selector lives in this block or the next, which covers its ignores.
-    files: ["**/*.svelte"],
-    ignores: ["src/lib/components/ui/**", "**/*.test.svelte"],
-    rules: {
-      "no-restricted-syntax": ["warn",
-        ...COMPONENT_SCRIPT_SYNTAX,
-        {
-          selector: 'SvelteElement[kind="html"][name.name="button"]',
-          message: "Use <Button> with a variant and size instead of a raw <button>. A pressed state is <Toggle>; a clickable card or row is <Item> with onclick or href; a single-select option card is <RadioGroup.Card>; an option in a popover list is <DropdownMenu.Item>; a chip's remove is <Badge onremove>; a remove that shows on hover is <Button reveal>."
-        },
-        {
-          selector: 'SvelteElement[kind="html"][name.name="input"]:not(:has(SvelteAttribute[key.name="type"] > SvelteLiteral[value="hidden"]))',
-          message: "Use <Input>, <Checkbox>, <Switch>, <RadioGroup> or <Slider> instead of a raw <input>. type=\"hidden\" is allowed."
-        },
-        {
-          selector: 'SvelteElement[kind="html"][name.name="select"]',
-          message: "Use <Select> instead of a raw <select>."
-        },
-        {
-          selector: 'SvelteElement[kind="html"][name.name="textarea"]',
-          message: "Use <Textarea> instead of a raw <textarea>."
-        },
-        {
-          selector: "Literal[value=/hsl\\(var\\(--/]",
-          message: "Theme variables are oklch; use var(--x) or color-mix(in oklch, var(--x) N%, transparent), not hsl(var(--x))."
-        },
-        {
-          selector: "TemplateElement[value.raw=/hsl\\(var\\(--/]",
-          message: "Theme variables are oklch; use var(--x) or color-mix(in oklch, var(--x) N%, transparent), not hsl(var(--x))."
-        }
-      ]
-    }
-  },
-  {
-    files: ["src/lib/components/ui/**/*.svelte", "**/*.test.svelte"],
-    rules: {
-      "no-restricted-syntax": ["warn", ...COMPONENT_SCRIPT_SYNTAX]
-    }
   }
-);
+];

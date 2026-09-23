@@ -9,7 +9,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "lint": "eslint .",
+    "lint:ci": "eslint . --max-warnings 40"
   },
   "dependencies": {
     "@nocturne/ui": "workspace:*",
@@ -19,6 +21,7 @@
   },
   "devDependencies": {
     "@lucide/svelte": "^1.14.0",
+    "@nocturne/eslint-config": "workspace:*",
     "@sveltejs/adapter-static": "^3.0.10",
     "@sveltejs/kit": "^2.59.1",
     "@sveltejs/vite-plugin-svelte": "^7.1.2",
@@ -27,6 +30,7 @@
     "@tauri-apps/cli": "^2.9.0",
     "bits-ui": "^2.18.1",
     "clsx": "^2.1.1",
+    "eslint": "^10.3.0",
     "svelte": "^5.55.5",
     "svelte-check": "^4.3.4",
     "tailwind-merge": "^3.6.0",

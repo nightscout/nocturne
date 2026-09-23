@@ -91,7 +91,7 @@
         bring-your-own-proxy override to disable the bundled Caddy and expose the
         gateway on plain HTTP port 8080 for your proxy to forward to:
     </p>
-    <CodeBlock code={"docker compose -f docker-compose.yaml -f docker-compose.byo-proxy.yaml up -d"} class="mb-4" />
+    <CodeBlock code="docker compose -f docker-compose.yaml -f docker-compose.byo-proxy.yaml up -d" class="mb-4" />
     <p class="text-muted-foreground mb-8">
         Your proxy must forward the original <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">Host</code>
         along with <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">X-Forwarded-Proto</code> and

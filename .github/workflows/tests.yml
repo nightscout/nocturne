@@ -249,10 +249,13 @@ jobs:
           cache: pnpm
           cache-dependency-path: src/Web/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      # Errors fail the job, and `lint:ci` caps the warnings at today's count. Lower the cap
-      # in app/package.json as warnings are fixed; never raise it.
-      - name: Lint app
-        run: pnpm --filter @nocturne/app run lint:ci
+      # Every package's `lint:ci` fails on any error and caps its warnings at today's count
+      # (`--max-warnings` in its package.json). Caps only go down: lower one as warnings are
+      # fixed, never raise it. A package's unpaid rules are downgraded to warnings by the
+      # `debt({...})` block in its eslint.config.js, which records each rule's count.
+      # --no-bail runs every package and fails the step if any of them failed.
+      - name: Lint packages
+        run: pnpm --recursive --no-bail --workspace-concurrency=1 run lint:ci
 
   integration-db:
     runs-on: ubuntu-latest

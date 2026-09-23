@@ -27,7 +27,6 @@
     glucoseData,
     glucoseScale,
     glucoseAxisScale,
-    glucoseTrackTop,
     highThreshold,
     lowThreshold,
     contextWidth,

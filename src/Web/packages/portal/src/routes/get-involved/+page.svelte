@@ -308,7 +308,7 @@
       </h2>
     </div>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-      {#each LANES as lane}
+      {#each LANES as lane (lane.id)}
         <a
           href={lane.href}
           target={opensNewTab(lane) ? "_blank" : undefined}
@@ -437,7 +437,7 @@
             target="_blank"
             rel="noopener noreferrer"
             onclick={() => track("Outbound Click", { destination: "github" })}
-            class="gi-issue-row flex items-center gap-3.5 px-[18px] py-[13px] border-b border-border transition-[background] duration-150 cursor-pointer no-underline text-inherit hover:bg-[color-mix(in_oklch,var(--card),transparent_20%)] last:border-b-0"
+            class="flex items-center gap-3.5 px-[18px] py-[13px] border-b border-border transition-[background] duration-150 cursor-pointer no-underline text-inherit hover:bg-[color-mix(in_oklch,var(--card),transparent_20%)] last:border-b-0"
           >
             <div class="gi-issue-dot shrink-0 w-3.5 h-3.5 rounded-full relative mt-[3px]" style="border: 2px solid {ACCENT}">
             </div>

@@ -39,7 +39,6 @@
   // Basal: 12%, IOB/COB: 18%, Glucose: 70%
   const BASAL_RATIO = 0.12;
   const IOB_RATIO = 0.18;
-  const GLUCOSE_RATIO = 0.70;
 
   const basalHeight = $derived(Math.round(height * BASAL_RATIO));
   const iobHeight = $derived(Math.round(height * IOB_RATIO));
@@ -75,7 +74,6 @@
 
   const maxBasalRate = $derived(data.maxBasalRate > 0 ? data.maxBasalRate : 2.5);
   const maxIob = $derived(data.maxIob > 0 ? data.maxIob : 3);
-  const maxCob = $derived(data.maxCob > 0 ? data.maxCob : 60);
   const glucoseYMax = $derived(data.thresholds.glucoseYMax > 0 ? data.thresholds.glucoseYMax : 300);
   const highThreshold = $derived(data.thresholds.high);
   const lowThreshold = $derived(data.thresholds.low);
@@ -88,7 +86,6 @@
   );
 
   // Stale basal: none in the package version (no live sync), always null
-  // eslint-disable-next-line prefer-const
   let staleBasalData: { start: Date; end: Date } | null = null;
 
   // ===== LEGEND TOGGLE STATE =====

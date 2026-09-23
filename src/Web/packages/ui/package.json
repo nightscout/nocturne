@@ -20,10 +20,12 @@
   "devDependencies": {
     "@internationalized/date": "^3.12.1",
     "@lucide/svelte": "^0.563.1",
+    "@nocturne/eslint-config": "workspace:*",
     "@sveltejs/vite-plugin-svelte": "^6.2.4",
     "@tailwindcss/typography": "^0.5.19",
     "bits-ui": "^2.18.1",
     "clsx": "^2.1.1",
+    "eslint": "^10.3.0",
     "layerchart": "2.2.0",
     "mode-watcher": "^1.1.0",
     "paneforge": "^1.0.2",
@@ -38,6 +40,8 @@
     "vaul-svelte": "1.0.0-next.7"
   },
   "scripts": {
-    "check": "svelte-check-native --tsconfig ./tsconfig.json --ignore 'src/lib/components/ui/calendar/calendar.svelte'"
+    "check": "svelte-check-native --tsconfig ./tsconfig.json --ignore 'src/lib/components/ui/calendar/calendar.svelte'",
+    "lint": "eslint .",
+    "lint:ci": "eslint . --max-warnings 24"
   }
 }

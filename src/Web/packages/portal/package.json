@@ -10,11 +10,14 @@
 		"build": "node scripts/generate-sdk-manifest.mjs && node scripts/sync-screenshots.mjs && vite build",
 		"preview": "vite preview",
 		"check": "node scripts/generate-sdk-manifest.mjs && svelte-kit sync && svelte-check-native --tsconfig ./tsconfig.json",
-		"test": "svelte-kit sync && vitest run"
+		"test": "svelte-kit sync && vitest run",
+		"lint": "eslint .",
+		"lint:ci": "eslint . --max-warnings 574"
 	},
 	"devDependencies": {
 		"@lucide/svelte": "^0.555.0",
 		"@nocturne/cms": "workspace:*",
+		"@nocturne/eslint-config": "workspace:*",
 		"@nocturne/screenshots": "workspace:*",
 		"@sveltejs/adapter-static": "^3.0.10",
 		"@sveltejs/kit": "^2.49.1",
@@ -24,6 +27,7 @@
 		"@typescript/native-preview": "7.0.0-dev.20260504.1",
 		"bits-ui": "^2.14.4",
 		"clsx": "^2.1.1",
+		"eslint": "^10.3.0",
 		"formsnap": "^2.0.1",
 		"mdsvex": "^0.12.3",
 		"mode-watcher": "^1.1.0",

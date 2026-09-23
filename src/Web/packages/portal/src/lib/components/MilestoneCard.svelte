@@ -55,7 +55,7 @@
             {issue.title}
         </span>
         <div class="flex items-center gap-2 flex-shrink-0">
-            {#each issue.labels.slice(0, 3) as label}
+            {#each issue.labels.slice(0, 3) as label (label.id)}
                 <span
                     class="px-2 py-0.5 text-xs rounded-full"
                     style="background-color: #{label.color}20; color: #{label.color};"
@@ -133,7 +133,7 @@
         <Collapsible.Content>
             {#if milestone.issues.length > 0}
                 <div class="border-t border-border/60 divide-y divide-border/40">
-                    {#each milestone.issues as issue}
+                    {#each milestone.issues as issue (issue.id)}
                         {@render issueRow(issue)}
                     {/each}
                 </div>

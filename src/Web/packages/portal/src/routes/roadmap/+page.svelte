@@ -115,7 +115,7 @@
                     <h2 class="text-[clamp(1.4rem,2.5vw,2rem)] font-bold leading-[1.2] tracking-[-0.02em] text-foreground m-0">Currently <em class="text-glucose-in-range">building.</em></h2>
                 </div>
                 <div class="grid gap-4">
-                    {#each grouped.inProgress as milestone}
+                    {#each grouped.inProgress as milestone (milestone.id)}
                         <MilestoneCard {milestone} status={getMilestoneStatus(milestone)} />
                     {/each}
                 </div>
@@ -130,7 +130,7 @@
                     <h2 class="text-[clamp(1.4rem,2.5vw,2rem)] font-bold leading-[1.2] tracking-[-0.02em] text-foreground m-0">On the <em class="text-glucose-in-range">horizon.</em></h2>
                 </div>
                 <div class="grid gap-4">
-                    {#each grouped.upcoming as milestone}
+                    {#each grouped.upcoming as milestone (milestone.id)}
                         <MilestoneCard {milestone} status={getMilestoneStatus(milestone)} />
                     {/each}
                 </div>
@@ -145,7 +145,7 @@
                     <h2 class="text-[clamp(1.4rem,2.5vw,2rem)] font-bold leading-[1.2] tracking-[-0.02em] text-foreground m-0">Already <em class="text-glucose-in-range">shipped.</em></h2>
                 </div>
                 <div class="grid gap-4">
-                    {#each grouped.completed as milestone}
+                    {#each grouped.completed as milestone (milestone.id)}
                         <MilestoneCard {milestone} status={getMilestoneStatus(milestone)} />
                     {/each}
                 </div>

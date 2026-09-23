@@ -1,4 +1,3 @@
-import { Server as HttpServer } from 'http';
 import { Server as SocketIOServerClass } from 'socket.io';
 
 export interface BridgeConfig {

@@ -1,6 +1,4 @@
 <script lang="ts">
-  import { Button } from '@nocturne/ui/ui/button';
-  import { ArrowRight } from '@lucide/svelte';
   import manifest from 'virtual:blog-manifest';
 </script>
 

@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { Button } from '@nocturne/ui/ui/button';
 	import { cn } from '@nocturne/ui/utils';
 	import { isTextSelection } from '@tiptap/core';
 	import commands from '../../commands/toolbar-commands.ts';

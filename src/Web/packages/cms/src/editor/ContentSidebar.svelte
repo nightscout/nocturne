@@ -51,7 +51,7 @@
   <Separator />
 
   <div class="flex-1 overflow-y-auto">
-    {#each filtered as item}
+    {#each filtered as item (item.id)}
       <button
         class="flex w-full items-start gap-3 p-3 text-left hover:bg-muted/50 transition-colors
           {selectedId === item.id ? 'bg-muted' : ''}"

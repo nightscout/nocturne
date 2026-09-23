@@ -558,7 +558,7 @@
   <!-- Mobile: static chip wrap -->
   <div class="md:hidden absolute top-[72px] left-0 right-0 px-4">
     <div class="flex flex-wrap gap-x-1.5 gap-y-2 justify-center">
-      {#each CHIP_DEFS as def}
+      {#each CHIP_DEFS as def (def.id)}
         <div
           class="flex items-center gap-1.5 bg-[oklch(0.10_0.028_261/85%)] border border-[oklch(1_0_0/20%)] rounded-full py-0.5 pr-2 pl-0.5 backdrop-blur-sm max-w-full"
         >
@@ -582,7 +582,7 @@
         pointer-events-auto + touch-none lets pointer events through despite
         the aria-hidden parent being pointer-events-none in the original.
     -->
-  {#each CHIP_DEFS as def, i}
+  {#each CHIP_DEFS as def, i (def.id)}
     <div
       class="hidden md:flex absolute top-0 left-0 items-center gap-[7px]
                    bg-[oklch(0.10_0.028_261/85%)] border border-[oklch(1_0_0/20%)]

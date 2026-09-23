@@ -34,7 +34,7 @@
 			if (file) {
 				editor.chain().focus().setAudio(file).run();
 			}
-		} catch (e) {
+		} catch {
 			isUploading = true;
 			try {
 				const file = await editor.storage.fileDrop.localFileGetter(FileType.AUDIO);

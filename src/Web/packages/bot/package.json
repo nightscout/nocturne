@@ -11,7 +11,9 @@
     "clean": "rimraf dist",
     "test": "vitest run",
     "test:watch": "vitest",
-    "bot:register-discord-commands": "node dist/scripts/register-discord-commands.js"
+    "bot:register-discord-commands": "node dist/scripts/register-discord-commands.js",
+    "lint": "eslint .",
+    "lint:ci": "eslint . --max-warnings 9"
   },
   "author": "Nocturne Project",
   "license": "AGPL-3.0-only",
@@ -30,9 +32,11 @@
     "winston": "^3.11.0"
   },
   "devDependencies": {
+    "@nocturne/eslint-config": "workspace:*",
     "@types/node": "^20.10.6",
-    "typescript": "^5.3.3",
+    "eslint": "^10.3.0",
     "rimraf": "^5.0.5",
+    "typescript": "^5.3.3",
     "vitest": "^4.1.6"
   },
   "engines": {

@@ -16,10 +16,14 @@
 		"diff-stats": "tsx src/diff-stats.ts",
 		"check-refs": "tsx src/check-refs.ts",
 		"check-embeds": "tsx src/check-embeds.ts",
-		"check": "tsc --noEmit"
+		"check": "tsc --noEmit",
+		"lint": "eslint .",
+		"lint:ci": "eslint . --max-warnings 8"
 	},
 	"devDependencies": {
+		"@nocturne/eslint-config": "workspace:*",
 		"@playwright/test": "^1.60.0",
+		"eslint": "^10.3.0",
 		"sharp": "^0.34.3",
 		"tsx": "^4.20.3",
 		"typescript": "^5.9.2"

@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { Button } from '@nocturne/ui/ui/button';
 	import { cn } from '@nocturne/ui/utils';
 	import { slide } from 'svelte/transition';
 	import commands from '../commands/toolbar-commands.ts';
