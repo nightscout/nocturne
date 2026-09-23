@@ -152,9 +152,9 @@ rgb_c = G_c * alpha
 `presence` is the pixel's soft-dilated optical thickness. Alpha is the
 density carrier: a light wash lets the night through, a pool or rim glows
 nearly solid, and `LUMINOUS_ALPHA_MAX` keeps even a heavy body a glaze rather
-than a slab. The on-white colour darkens as paint thickens, so if alpha were
-flat across the body (as it once was) every pool read as a dark cloud; with
-alpha rising, a pool reads deeper and more opaque instead. The chroma gain
+than a slab. The on-white colour darkens as paint thickens, so an alpha flat
+across the body would show every pool as a dark cloud; with alpha rising, a
+pool reads deeper and more opaque instead. The chroma gain
 exists because an on-white colour is paper plus pigment, a pale opaque tint
 over a dark ground; pushed toward its hue it reads as light. A pale colour
 at partial alpha over near-black reads as grey or olive, so the pale lift
@@ -226,16 +226,15 @@ Five display decisions are folded in:
 `rgb <= alpha` always holds. Luminous is a display choice, not physics, and
 over white it does not agree with the subtractive result.
 
-**Why translucency works now.** The constants are one value,
+**What keeps a translucent body from greying.** The constants are one value,
 `LUMINOUS_TUNING`, so `render_with_luminous_tuning` can render alternatives.
-Translucent bodies were once rejected because a pale glaze at partial alpha
-over near-black is grey, and `moonlit-shoreline`'s sea clouded into grey
-blotches. The colour is now evaluated at no less than the presence and the
-colour floor, pushed toward its hue by the chroma gain, and pale colours
-are laid more opaque by the pale lift, so partial alpha reads as a coloured
-glaze. Flat bodies were the worse failure once deposits varied several-fold:
-a saturated alpha left density to the colour alone, which darkens with
-thickness, so pools read as dark clouds.
+A pale glaze at partial alpha over near-black is grey. Three terms keep a
+translucent body coloured: the colour is evaluated at no less than the
+presence and the colour floor, the chroma gain pushes it toward its hue,
+and the pale lift lays pale colours more opaque. A saturated, flat alpha is
+not the alternative: it leaves density to the colour alone, which darkens
+with thickness, so wherever the deposit varies several-fold the pools read
+as dark clouds.
 
 **Resolution.** A finer grid is not the fix for a blocky outline. The fluid
 moves in cells per tick, so a 512 grid paints a different picture from a 256

@@ -21,9 +21,11 @@
 //! A cell's pigment amount is its deposit plus `wet_pigment_visibility` of its
 //! suspended pigment, independent of the film's depth, so paint reads at
 //! nearly full strength the moment it lands. The amount is not a KM thickness:
-//! [`optical_thickness`] maps it through `max * g / (g + mid)`, `g =
-//! amount^gamma`, which keeps halos faint, never reaches black, and gives the
-//! headroom past the swatch that the simulation's deposit cap of 1 cannot.
+//! the pixel's total amount maps through [`optical_thickness`],
+//! `max * g / (g + mid)` with `g = amount^gamma`, and each pigment takes its
+//! share. A typical dried wash lands near thickness 1 (the swatch), while
+//! rims and pools holding several times that amount approach `max` instead of
+//! black; the exponent keeps halos faint.
 //!
 //! # Surface
 //!
@@ -101,9 +103,9 @@
 //! is first damped toward the plain one,
 //! `plain + (textured - plain) * LUMINOUS_GRAIN_STRENGTH`. Alpha carries
 //! density: a light wash lets the ground through and a pool glows nearly
-//! solid. It has to, because the on-white colour darkens with thickness; with
-//! alpha flat across a body, every pool read as a dark cloud over the night
-//! ground. `LUMINOUS_ALPHA_MAX` keeps a heavy body a glaze rather than a slab.
+//! solid. It has to, because the on-white colour darkens with thickness: an
+//! alpha flat across a body would show every pool as a dark cloud over the
+//! night ground. `LUMINOUS_ALPHA_MAX` keeps a heavy body a glaze rather than a slab.
 //! The paper's tooth reaches alpha damped by `LUMINOUS_ALPHA_GRAIN` and colour
 //! damped by `LUMINOUS_GRAIN_STRENGTH`, so a translucent wash shows its grain;
 //! presence itself is dilated, so a thin spot never opens a pit. The chroma
@@ -201,7 +203,7 @@ use super::pigment::Rgb;
 
 /// Upper bound on `beta`; `cosh` overflows `f32` near 89 and `T` is already
 /// below `1e-17` here.
-const MAX_BETA: f32 = 40.0;
+pub const MAX_BETA: f32 = 40.0;
 
 /// See the module doc, "Transparent output". Mirrored in `render.wgsl`.
 pub const ALPHA_SOFTNESS: f32 = 0.6;
@@ -546,13 +548,9 @@ pub fn damp_texture(textured: MixTotals, plain: MixTotals, strength: f32) -> Mix
 
 /// Luminous premultiplied RGBA; see the module doc, "Composite modes".
 /// `textured` is the mix after granulation modulation (colour), `plain` the
-/// same mix before it (colour reference thickness), `presence` the plain
-/// mix dilated over the cell neighbourhood (alpha).
-pub fn to_premultiplied_luminous(
-    textured: MixTotals,
-    plain: MixTotals,
-    presence: MixTotals,
-) -> [f32; 4] {
+/// same mix before it (colour reference thickness), `presence` the optical
+/// thickness of the plain mix dilated over the cell neighbourhood (alpha).
+pub fn to_premultiplied_luminous(textured: MixTotals, plain: MixTotals, presence: f32) -> [f32; 4] {
     to_premultiplied_luminous_tuned(
         textured,
         plain,
@@ -569,7 +567,7 @@ pub fn to_premultiplied_luminous(
 pub fn to_premultiplied_luminous_with_strength(
     textured: MixTotals,
     plain: MixTotals,
-    presence: MixTotals,
+    presence: f32,
     grain_strength: f32,
 ) -> [f32; 4] {
     let tuning = LuminousTuning {
@@ -595,19 +593,19 @@ pub fn to_premultiplied_luminous_with_strength(
 pub fn to_premultiplied_luminous_tuned(
     textured: MixTotals,
     plain: MixTotals,
-    presence: MixTotals,
+    presence: f32,
     mask: f32,
     tuning: &LuminousTuning,
     wet: WetLook,
     surface: Surface,
 ) -> [f32; 4] {
     let grain = textured.thickness / plain.thickness.max(1e-6);
-    let alpha = luminous_alpha(presence.thickness, grain, mask, tuning);
+    let alpha = luminous_alpha(presence, grain, mask, tuning);
     // Brings the layer's thickness up to its presence (so a boundary and a
     // pinhole take their neighbours' colour, as they take their alpha) or the
     // colour floor, and down to the ceiling.
     let reference = plain.thickness.max(1e-6);
-    let scale = (tuning.colour_floor.max(presence.thickness) / reference)
+    let scale = (tuning.colour_floor.max(presence) / reference)
         .max(1.0)
         .min(tuning.colour_ceiling / reference);
     let damped = damp_texture(textured, plain, tuning.grain_strength);
@@ -695,7 +693,7 @@ fn to_premultiplied_with_coverage(
 pub fn composite_pixel(
     textured: MixTotals,
     plain: MixTotals,
-    presence: MixTotals,
+    presence: f32,
     mode: CompositeMode,
 ) -> [f32; 4] {
     composite_pixel_with_strength(textured, plain, presence, mode, LUMINOUS_GRAIN_STRENGTH)
@@ -706,7 +704,7 @@ pub fn composite_pixel(
 pub fn composite_pixel_with_strength(
     textured: MixTotals,
     plain: MixTotals,
-    presence: MixTotals,
+    presence: f32,
     mode: CompositeMode,
     grain_strength: f32,
 ) -> [f32; 4] {
@@ -738,7 +736,7 @@ pub fn composite_pixel_tuned(
     textured: MixTotals,
     coverage: MixTotals,
     plain: MixTotals,
-    presence: MixTotals,
+    presence: f32,
     mask: f32,
     mode: CompositeMode,
     tuning: &LuminousTuning,
@@ -885,7 +883,6 @@ pub fn render_with_luminous_tuning(
     let k_count = grid.pigment_count.min(palette.len());
     let mut thickness = vec![0.0f32; k_count];
     let mut plain = vec![0.0f32; k_count];
-    let mut presence = vec![0.0f32; k_count];
     let mut coverage = vec![0.0f32; k_count];
     let gran: Vec<f32> = palette.pigments().map(|p| p.granulation).collect();
     for y in 0..oh {
@@ -907,7 +904,6 @@ pub fn render_with_luminous_tuning(
                 amount_presence += sample.presence[k].max(0.0);
             }
             let share = params.optical(amount) / amount.max(1e-6);
-            let share_presence = params.optical(amount_presence) / amount_presence.max(1e-6);
             for k in 0..k_count {
                 let base = (sample.deposited[k]
                     + sample.suspended[k] * params.wet_pigment_visibility)
@@ -918,13 +914,12 @@ pub fn render_with_luminous_tuning(
                 coverage[k] = grained;
                 plain[k] = plain_base;
                 thickness[k] = grained;
-                presence[k] = sample.presence[k].max(0.0) * share_presence;
             }
             let px = composite_pixel_tuned(
                 mixed_totals(palette, &thickness),
                 mixed_totals(palette, &coverage),
                 mixed_totals(palette, &plain),
-                mixed_totals(palette, &presence),
+                params.optical(amount_presence),
                 sample.mask,
                 grid.composite_mode,
                 tuning,
@@ -963,12 +958,12 @@ struct Sample {
 const WINDOW: usize = 6;
 
 /// Painted neighbours out of 8 that make a tap count as fully inside the paint.
-const MASK_MAJORITY: u32 = 5;
+pub const MASK_MAJORITY: u32 = 5;
 
 /// Painted neighbours out of 8 at or below which a painted tap is a thin mark
 /// (a lone dot, a line one cell wide, its end) and counts as fully inside.
 /// Only a body's corners, with more, round off.
-const MASK_THIN: u32 = 2;
+pub const MASK_THIN: u32 = 2;
 
 /// The 3x3 presence kernel, row-major from the tap's top-left neighbour: a
 /// Gaussian `2^(-d^2)` over squared cell distance, normalised to sum to 1.
@@ -1204,11 +1199,7 @@ pub(crate) mod tests {
             rgb.iter().cloned().fold(0.0, f32::max) - rgb.iter().cloned().fold(1.0, f32::min)
         };
         let pixel = |p: &Pigment, thickness: f32| {
-            to_premultiplied_luminous(
-                totals(p, thickness),
-                totals(p, thickness),
-                totals(p, thickness),
-            )
+            to_premultiplied_luminous(totals(p, thickness), totals(p, thickness), thickness)
         };
         let check = |p: &Pigment| {
             let px = pixel(p, 0.5);
@@ -1240,7 +1231,7 @@ pub(crate) mod tests {
                 let textured = totals(&p, thickness * 1.4);
                 let plain = totals(&p, thickness);
                 for mode in [CompositeMode::Subtractive, CompositeMode::Luminous] {
-                    let px = composite_pixel(textured, plain, plain, mode);
+                    let px = composite_pixel(textured, plain, plain.thickness, mode);
                     for c in 0..3 {
                         assert!(
                             px[c] <= px[3] + 1e-6,
@@ -1260,8 +1251,8 @@ pub(crate) mod tests {
     fn luminous_matches_subtractive_over_white_for_thin_pale_layers() {
         let p = builtin::moon_gold();
         let m = totals(&p, 0.05);
-        let sub = composite_pixel(m, m, m, CompositeMode::Subtractive);
-        let lum = composite_pixel(m, m, m, CompositeMode::Luminous);
+        let sub = composite_pixel(m, m, m.thickness, CompositeMode::Subtractive);
+        let lum = composite_pixel(m, m, m.thickness, CompositeMode::Luminous);
         for c in 0..3 {
             let over_white_sub = sub[c] + (1.0 - sub[3]);
             let over_white_lum = lum[c] + (1.0 - lum[3]);
@@ -1276,7 +1267,7 @@ pub(crate) mod tests {
     fn luminous_alpha_grows_with_presence_and_stays_a_glaze() {
         let alpha_at = |p: &Pigment, thickness: f32| {
             let m = totals(p, thickness);
-            composite_pixel(m, m, m, CompositeMode::Luminous)[3]
+            composite_pixel(m, m, m.thickness, CompositeMode::Luminous)[3]
         };
         for p in [
             builtin::moon_gold(),
@@ -1316,11 +1307,8 @@ pub(crate) mod tests {
     fn luminous_colour_is_floored_for_thin_layers_and_darkens_with_thickness() {
         let p = builtin::quinacridone_rose();
         let straight = |thickness: f32| {
-            let px = to_premultiplied_luminous(
-                totals(&p, thickness),
-                totals(&p, thickness),
-                totals(&p, thickness),
-            );
+            let px =
+                to_premultiplied_luminous(totals(&p, thickness), totals(&p, thickness), thickness);
             [px[0] / px[3], px[1] / px[3], px[2] / px[3]]
         };
         let thin = straight(0.1);
@@ -1343,9 +1331,9 @@ pub(crate) mod tests {
         let p = builtin::moon_gold();
         let plain = totals(&p, 0.4);
         let straight = |px: [f32; 4]| (px[0] + px[1] + px[2]) / px[3];
-        let smooth = to_premultiplied_luminous(plain, plain, plain);
-        let grainy = to_premultiplied_luminous(totals(&p, 0.4 * 1.5), plain, plain);
-        let thin = to_premultiplied_luminous(totals(&p, 0.4 * 0.6), plain, plain);
+        let smooth = to_premultiplied_luminous(plain, plain, plain.thickness);
+        let grainy = to_premultiplied_luminous(totals(&p, 0.4 * 1.5), plain, plain.thickness);
+        let thin = to_premultiplied_luminous(totals(&p, 0.4 * 0.6), plain, plain.thickness);
         assert!(
             straight(grainy) < straight(smooth),
             "denser texture darkens"
@@ -1361,14 +1349,50 @@ pub(crate) mod tests {
         );
         // The damping leaves the colour strictly between the smooth and the
         // fully textured result.
-        let full =
-            to_premultiplied_luminous_with_strength(totals(&p, 0.4 * 1.5), plain, plain, 1.0);
+        let full = to_premultiplied_luminous_with_strength(
+            totals(&p, 0.4 * 1.5),
+            plain,
+            plain.thickness,
+            1.0,
+        );
         assert!(straight(full) < straight(grainy) && straight(grainy) < straight(smooth));
-        let sub_smooth = composite_pixel(plain, plain, plain, CompositeMode::Subtractive);
+        // The colour deviation is in proportion to the strength. Measured with
+        // the chroma gain and pale lift off, so only the damping acts on the
+        // colour; the KM response is not linear in thickness, hence the
+        // tolerance.
+        let bare = LuminousTuning {
+            chroma_gain: 1.0,
+            pale_lift: 0.0,
+            ..LUMINOUS_TUNING
+        };
+        let colour = |textured: MixTotals, strength: f32| {
+            let tuning = LuminousTuning {
+                grain_strength: strength,
+                ..bare
+            };
+            straight(to_premultiplied_luminous_tuned(
+                textured,
+                plain,
+                plain.thickness,
+                1.0,
+                &tuning,
+                WetLook::OFF,
+                Surface::OFF,
+            ))
+        };
+        let grainy = totals(&p, 0.4 * 1.5);
+        let ratio = (colour(plain, LUMINOUS_GRAIN_STRENGTH)
+            - colour(grainy, LUMINOUS_GRAIN_STRENGTH))
+            / (colour(plain, 1.0) - colour(grainy, 1.0));
+        assert!(
+            (ratio - LUMINOUS_GRAIN_STRENGTH).abs() < 0.12,
+            "damping ratio {ratio} vs strength {LUMINOUS_GRAIN_STRENGTH}"
+        );
+        let sub_smooth = composite_pixel(plain, plain, plain.thickness, CompositeMode::Subtractive);
         let sub_grainy = composite_pixel(
             totals(&p, 0.4 * 1.5),
             plain,
-            plain,
+            plain.thickness,
             CompositeMode::Subtractive,
         );
         assert_ne!(
@@ -1576,7 +1600,7 @@ pub(crate) mod tests {
             mix,
             mix,
             mix,
-            mix,
+            mix.thickness,
             1.0,
             CompositeMode::Subtractive,
             &LUMINOUS_TUNING,
@@ -1751,7 +1775,7 @@ pub(crate) mod tests {
             bare,
             bare,
             bare,
-            bare,
+            bare.thickness,
             1.0,
             CompositeMode::Subtractive,
             &LUMINOUS_TUNING,
@@ -1763,12 +1787,12 @@ pub(crate) mod tests {
             for thickness in [0.05, 0.3, 1.0, 2.0] {
                 let m = totals(&p, thickness);
                 for mode in [CompositeMode::Subtractive, CompositeMode::Luminous] {
-                    let plain = composite_pixel(m, m, m, mode);
+                    let plain = composite_pixel(m, m, m.thickness, mode);
                     let px = composite_pixel_tuned(
                         m,
                         m,
                         m,
-                        m,
+                        m.thickness,
                         1.0,
                         mode,
                         &LUMINOUS_TUNING,

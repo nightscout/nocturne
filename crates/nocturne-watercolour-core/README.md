@@ -55,8 +55,11 @@ clamped to `0.002 ≤ Rb ≤ Rw − 0.002` and `Rw ≤ 0.98` to avoid the singul
 height modulates deposition).
 
 Every pixel is rendered as one mixed layer: `Kx = Σ t_k K_k`, `Sx = Σ t_k S_k` where
-`t_k` is deposited plus visible suspended pigment, modulated at output resolution by
-paper height for granulating pigments. With `β = √(Kx² + 2 Kx Sx)`:
+`t_k` is the pigment's optical thickness: its share of the pixel's total amount
+(deposited plus a fixed share of suspended pigment) mapped through a saturating curve,
+then modulated at output resolution by paper height for granulating pigments. A
+Saunderson surface correction deepens heavy paint and the water film enriches the
+colour while wet; see `docs/watercolour/pigment-and-compositing.md`. With `β = √(Kx² + 2 Kx Sx)`:
 `R = Sx·sinh(β)/β / (a/b·sinh β + cosh β)`, `T = 1 / (a/b·sinh β + cosh β)`; the
 formulation stays finite as `Sx → 0` and `β` is capped at 40. Layers stack with
 Curtis's two-layer formula (`composite`).
@@ -84,61 +87,20 @@ Output is linear RGB; sRGB encoding is the exporter's job.
 
 **Composite modes.** The conversion above is `CompositeMode::Subtractive`. Under it a
 pale glaze over a dark ground cannot glow (a thin yellow returns almost no light of
-its own), so for dark hosts there is an explicit second mode,
-`CompositeMode::Luminous`: the colour output is the colour the pigment mix shows on
-white paper, `W_c = R_c + return_c`, at a display alpha
-`smoothstep(LUMINOUS_ALPHA_TOE = 0.03, LUMINOUS_ALPHA_FULL = 0.2, coverage)`:
-`rgb_c = W_c · alpha`.
-The coverage term is the subtractive one computed from the *plain* mix (pigment
-thickness before granulation modulation); the colour is computed from the granulated
-mix damped toward the plain one by `LUMINOUS_GRAIN_STRENGTH = 0.38`
-(`plain + (textured − plain) · strength`) and evaluated at no less than
-`LUMINOUS_COLOUR_FLOOR = 0.5` thickness (scaled by `max(1, 0.5/t_plain)`). Four display
-decisions are folded in. Alpha from the plain mix keeps fine paper texture out of alpha,
-where thin spots would let a dark ground through as speckle. The alpha curve is there because optical coverage stays small for a pale pigment even
-at full thickness (moon gold `0.45` at thickness 1) and dips wherever the deposit carries
-paper tooth; the display alpha has to read pigment presence and be flat across the body,
-so coverage is mapped through a smoothstep that is 1 from coverage `0.2` upward and 0
-below `0.03`, its gentle toe in between letting halos and soft edges still fade. That
-coverage is computed from the plain mix's *presence*, the deposited-plus-visible-suspended
-thickness dilated by a 3×3 maximum around each of the 16 cubic reconstruction taps
-and blended with the same weights: a wash's
-deposit has genuine pinholes where paper tooth left cells almost bare, and a per-pixel
-alpha opened each onto the ground as a dark pit; presence closes anything smaller than a
-cell and moves a boundary outward by up to two cells. The constants are one value, `LUMINOUS_TUNING`, so `render_with_luminous_tuning` can
-render alternatives; two were tried and rejected (`alpha_full 0.45` with `grain_strength
-0.7`, and the same with `colour_floor 1.0` and `grain_strength 0.85`): once alpha is no
-longer saturated across the body it follows the presence field, and presence is a
-cubic-weighted blend of 3×3 maxima, i.e. plateaus, which show as hard grey blocks over a dark
-ground; a smoother dilation would be needed for a translucent body. The shipped tuning
-trades some translucency for a continuous body with no pits or blocks. The grain
-damping makes granulation read as gentle mottling inside a continuous glow rather than
-stone; the paper's low-frequency pooling octaves sit in the
-same height field the granulation term reads, so they are damped by the same factor in
-colour, while the pooling the simulation deposited (plain thickness) is untouched. The
-colour floor is there because a very thin glaze's on-white colour is nearly white, and
-white times a small alpha over black is grey; above the floor the colour follows the
-deposited thickness, so pooling and the deposit's tooth read as warm/pale mottling in
-colour and overlaps darken further. Over a dark ground the wash shows its on-white
-colour softly, like a translucent light wash, and `rgb ≤ alpha` always holds. Pair
-Luminous with the normal palettes: `for_dark_surface()` thins and pales pigments to glow
-under Subtractive, which under Luminous only lowers alpha and drains the colour toward
-white. Over white it composites to `1 − alpha (1 − W_c)`: thin glazes agree with the
-subtractive result (both near white), medium ones come out more saturated (full-strength
-colour) and dense dark ones washed out. Luminous is a display choice, not physics. The
+its own), so dark hosts use `CompositeMode::Luminous`, a display choice rather than
+physics: the paint is shown as coloured light, a glaze whose alpha grows with the
+pixel's dilated presence and carries the paper's tooth, coloured by the mix's on-white
+colour pushed toward its hue, with pale colours laid more opaque so partial alpha does
+not read as grey. The outline comes from a separate paint mask, so it is smooth at the
+cell scale, and `rgb ≤ alpha` always holds. Pair it with the normal palettes. The
 mode is carried by `Scene::background` (`Transparent` → Subtractive,
 `TransparentOnDark` → Luminous), read through `Scene::composite_mode()`, stored in
 `SimulationGrid::composite_mode` (so checkpoints and every backend read it from the same
-state) and mirrored in `render.wgsl` through the state header. Tests: luminous over
-black gives chroma `> 0.15` for moon gold, quinacridone rose, phthalo blue and cerulean
-(straight colour at thickness 0.5, composited pixel at 1.0); the premultiplied invariant
-holds in both modes for every built-in at five thicknesses; luminous and subtractive
-agree over white within 0.03 for a thin pale glaze; the luminous alpha is 1 for a body at half thickness or more, partial in the
-halo band and vanishing for a 0.02 glaze, monotone throughout; a one-cell pinhole in a
-luminous body renders opaque while the bare cell stays bare under Subtractive and cells
-two or more outside the body stay transparent; the luminous colour is identical below the floor and darkens
-with thickness above it; texture changes the luminous colour but not its alpha (and
-still changes subtractive alpha), damped by `LUMINOUS_GRAIN_STRENGTH` (ratio tested).
+state) and mirrored in `render.wgsl` through the state header. The model, its
+constants' rationale and its tests are documented in
+`docs/watercolour/pigment-and-compositing.md` and the `optics` module doc; the constants
+are one value, `LUMINOUS_TUNING`, so `render_with_luminous_tuning` can render
+alternatives.
 
 **Dark-surface palettes.** `Pigment::luminous` (and `Palette::for_dark_surface`) makes
 a pigment more transparent (`Rb × 0.3`), paler and more chromatic (`Rw` pushed away
@@ -204,8 +166,8 @@ while the square-metric field's differ by more than 2.5×.
   low spot at the edge drains harder than a thin film on a high spot, which is what
   varies the dried rim's weight along the boundary.
 - Stroke water is `water · coverage · (1 + 0.5 · (0.5 − h) · 2)` (never negative).
-- Deposited pigment is clamped to `1.0` per pigment, suspended pigment to `8.0`, water
-  depth to `8.0`; every field is clamped after each pass.
+- Deposited pigment, suspended pigment and water depth are clamped to their
+  `sim` maxima (`MAX_DEPOSITED`, `MAX_SUSPENDED`, `MAX_WATER_DEPTH`) after each pass.
 - Deviations from Curtis (collocated velocities, advected water depth, depth-weighted
   pigment diffusion, no capillary destination threshold, depth- and height-scaled edge
   drain, paper-modulated stroke water) are listed in the module doc. The stability
