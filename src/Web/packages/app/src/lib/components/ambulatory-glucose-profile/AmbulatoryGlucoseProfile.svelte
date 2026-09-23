@@ -6,7 +6,9 @@
     glucoseUnits,
     timeFormat,
   } from "$lib/stores/appearance-store.svelte";
-  import { convertToDisplayUnits, bgLabel } from "$lib/utils/formatting";
+  import { convertToDisplayUnits, bg, bgLabel, bgRange } from "$lib/utils/formatting";
+  import { CHART_TEXTURES, patternClass } from "$lib/components/charts/print/chart-print-patterns";
+  import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
   import type { AveragedStats } from "$lib/api";
   import {
     formatHour as _formatHour,
@@ -28,6 +30,14 @@
   const isMMOL = $derived(units === "mmol");
 
   const data = $derived(transformStats(rawData, units));
+
+  // Midnight repeated at 24 so the profile spans the whole day instead of stopping at 11pm.
+  const dayData = $derived.by(() => {
+    const midnight = data.find((d) => d.hour === 0);
+    return midnight ? [...data, { ...midnight, hour: 24 }] : data;
+  });
+
+  const HOUR_TICKS = [0, 3, 6, 9, 12, 15, 18, 21, 24];
 
   // Dynamic Y-axis domain based on units
   const yDomain = $derived<[number, number]>(isMMOL ? [0, 22.2] : [0, 400]);
@@ -53,14 +63,18 @@
   const BAND_OUTER = "oklch(from var(--chart-1) l c h / 0.35)";
   const BAND_INNER = "oklch(from var(--chart-1) l c h / 0.6)";
   const MEDIAN_COLOR = "var(--chart-1)";
+
+  // Drawn over the bands, so each label wears a paper-coloured halo to stay legible where a band crosses it.
+  const RULE_LABEL_CLASS = "text-xs fill-foreground stroke-background [stroke-width:3px] [paint-order:stroke]";
 </script>
 
 {#if rawData.length > 0}
+<div class="flex h-full w-full flex-col">
+  <div class="min-h-0 flex-1">
   <AreaChart
-    {data}
+    data={dayData}
     x={(d) => d.hour}
     y={(d) => d.median}
-    legend
     series={[
       {
         key: "p10",
@@ -70,6 +84,7 @@
         ],
         color: BAND_OUTER,
         label: "P10",
+        props: { class: patternClass("percentile-outer") },
       },
       {
         key: "p25",
@@ -79,13 +94,14 @@
         ],
         color: BAND_INNER,
         label: "P25",
+        props: { class: patternClass("percentile-inner") },
       },
       {
         key: "median",
         value: [(d: AgpDataPoint) => d.median, (d: AgpDataPoint) => d.median],
         color: MEDIAN_COLOR,
         props: {
-          line: { strokeWidth: 1.75 },
+          line: { strokeWidth: 2.5 },
         },
         label: "Median",
       },
@@ -97,6 +113,7 @@
         ],
         color: BAND_INNER,
         label: "P75",
+        props: { class: patternClass("percentile-inner") },
       },
       {
         key: "p90",
@@ -106,46 +123,44 @@
         ],
         color: BAND_OUTER,
         label: "P90",
+        props: { class: patternClass("percentile-outer") },
       },
     ]}
-    xDomain={[0, 23]}
+    xDomain={[0, 24]}
     {yDomain}
     seriesLayout="overlap"
     annotations={[
       {
+        type: "range",
+        layer: "below",
+        y: [lowThreshold, highThreshold],
+        fill: CHART_TEXTURES["target-band"].color,
+        class: patternClass("target-band"),
+      },
+      {
         type: "line",
-        x: 0,
+        layer: "above",
         y: lowThreshold,
-        label: "Low",
+        label: `Low ${bg(FALLBACK_GLUCOSE_THRESHOLDS.low)}`,
+        labelPlacement: "bottom-left",
         labelXOffset: 4,
         labelYOffset: 4,
         props: {
-          label: {
-            class: "text-xs text-muted-foreground",
-          },
-          line: {
-            stroke: "var(--glucose-low)",
-            strokeWidth: 1,
-            "stroke-dasharray": "4 2",
-          },
+          label: { class: RULE_LABEL_CLASS },
+          line: { class: "stroke-foreground", strokeWidth: 1, "stroke-dasharray": "5 3" },
         },
       },
       {
         type: "line",
-        x: 0,
+        layer: "above",
         y: highThreshold,
-        label: "High",
+        label: `High ${bg(FALLBACK_GLUCOSE_THRESHOLDS.high)}`,
+        labelPlacement: "top-left",
         labelXOffset: 4,
-        labelYOffset: -12,
+        labelYOffset: 4,
         props: {
-          label: {
-            class: "text-xs text-muted-foreground",
-          },
-          line: {
-            stroke: "var(--glucose-high)",
-            strokeWidth: 1,
-            "stroke-dasharray": "4 2",
-          },
+          label: { class: RULE_LABEL_CLASS },
+          line: { class: "stroke-foreground", strokeWidth: 1, "stroke-dasharray": "5 3" },
         },
       },
     ]}
@@ -153,7 +168,7 @@
       area: { motion: { type: "tween", duration: 200 } },
       xAxis: {
         motion: { type: "tween", duration: 200 },
-        tickMultiline: true,
+        ticks: HOUR_TICKS,
         format: formatHour,
       },
       tooltip: { context: { mode: "bisect-x" } },
@@ -201,6 +216,17 @@
       </Tooltip.Root>
     {/snippet}
   </AreaChart>
+  </div>
+  <ChartKey
+    class="pt-2"
+    items={[
+      { texture: "percentile-outer", label: "10–90%", color: BAND_OUTER },
+      { texture: "percentile-inner", label: "25–75%", color: BAND_INNER },
+      { texture: "percentile-median", label: "Median", color: MEDIAN_COLOR, shape: "line" },
+      { texture: "target-band", label: `Target range ${bgRange(FALLBACK_GLUCOSE_THRESHOLDS.low, FALLBACK_GLUCOSE_THRESHOLDS.high)}` },
+    ]}
+  />
+</div>
 {:else}
   <div
     class="flex h-full w-full items-center justify-center text-muted-foreground"

@@ -38,6 +38,8 @@
   import { fade } from "svelte/transition";
   import { getWeekColumns } from "$lib/components/reports/year-overview/week-columns";
   import { toggled } from "$lib/utils/collections";
+  import { setReportPrintMeta } from "$lib/components/reports/print/report-print.svelte";
+  import type { TextureKey } from "$lib/components/charts/print/chart-print-patterns";
 
   // =========================================================================
   // State
@@ -210,8 +212,10 @@
   // Glucose color scale
   // =========================================================================
 
+  const GLUCOSE_BANDS = [54, 70, 180, 250];
+
   const glucoseColorScale = scaleThreshold<number, string>()
-    .domain([54, 70, 180, 250])
+    .domain(GLUCOSE_BANDS)
     .range([
       "var(--glucose-very-low)",
       "var(--glucose-low)",
@@ -219,6 +223,15 @@
       "var(--glucose-high)",
       "var(--glucose-very-high)",
     ]);
+
+  const glucoseHatchScale = scaleThreshold<number, TextureKey | null>()
+    .domain(GLUCOSE_BANDS)
+    .range(["very-low-hatch", "low-hatch", null, "high-hatch", "very-high-hatch"]);
+
+  function getCellHatch(data: CalendarDatum | undefined): TextureKey | null {
+    if (selectedMetric !== "avgGlucose" || data?.value == null) return null;
+    return glucoseHatchScale(data.value);
+  }
 
   /** CSS variable names for each metric's hue */
   const METRIC_CSS_VARS: Record<
@@ -365,6 +378,14 @@
   const units = $derived(glucoseUnits.current);
   const unitLabel = $derived(getUnitLabel(units));
   const sortedYears = $derived([...availableYears].sort((a, b) => b - a));
+
+  setReportPrintMeta(() => {
+    const title = "Year Overview";
+    if (sortedYears.length === 0) return { title };
+    const first = sortedYears.at(-1);
+    const last = sortedYears[0];
+    return { title, period: { label: first === last ? `${last}` : `${first} – ${last}` } };
+  });
 
   /** Discover data types present in loaded data */
   const presentDataTypes = $derived.by(() => {
@@ -609,7 +630,7 @@
   />
 </svelte:head>
 
-<div class="year-overview @container flex min-h-full">
+<div class="year-overview @container flex min-h-full print:px-3">
   <!-- Main Content -->
   <div
     class="flex-1 transition-all duration-200 print:mr-0 {selectedDay
@@ -653,6 +674,7 @@
       onCustomColorsChange={setCustomColors}
       {invert}
       onInvertChange={setInvert}
+      glucoseBands={GLUCOSE_BANDS}
     />
 
     <!-- Loading state for metadata -->
@@ -707,6 +729,7 @@
             {yearData}
             {transformYearData}
             {getCellFill}
+            {getCellHatch}
             {getWeekColumns}
             {navigateToDayInReview}
             {glucoseColorScale}
@@ -747,3 +770,22 @@
     />
   </div>
 </div>
+
+<style>
+  /* The theme ramp runs black, cyan, green, yellow, red: its lightness rises and
+     falls, so grey days read as either end. On paper it becomes one ramp that
+     darkens with glucose; the band hatching over each cell tells lows apart. */
+  @media print {
+    .year-overview {
+      --glucose-heatmap-1: oklch(0.97 0.02 250);
+      --glucose-heatmap-2: oklch(0.93 0.04 245);
+      --glucose-heatmap-3: oklch(0.87 0.07 225);
+      --glucose-heatmap-4: oklch(0.8 0.1 190);
+      --glucose-heatmap-5: oklch(0.72 0.12 150);
+      --glucose-heatmap-6: oklch(0.63 0.13 95);
+      --glucose-heatmap-7: oklch(0.53 0.15 55);
+      --glucose-heatmap-8: oklch(0.44 0.15 30);
+      --glucose-heatmap-9: oklch(0.32 0.12 20);
+    }
+  }
+</style>

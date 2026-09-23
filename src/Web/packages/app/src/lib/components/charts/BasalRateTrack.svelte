@@ -169,8 +169,7 @@
   </ChartClipPath>
   <AnnotationLine
     x={staleBasalData.start}
-    class="stroke-warning/50 stroke-1"
-    stroke-dasharray="2,2"
+    props={{ line: { class: "stroke-warning/50 stroke-1", dashArray: "2,2" } }}
   />
   <AnnotationPoint
     x={staleBasalData.start.getTime()}

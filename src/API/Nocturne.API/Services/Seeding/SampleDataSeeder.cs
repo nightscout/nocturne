@@ -274,6 +274,8 @@ public class SampleDataSeeder
                     + $"treatments; {requestedTreatments - treatmentCount} were dropped during "
                     + "decomposition (see preceding 'Failed to decompose treatment' errors).");
             }
+
+            await StampTempBasalScheduledRatesAsync(dataSource, config.BasalRate, ct);
         }
         else
         {
@@ -706,6 +708,27 @@ public class SampleDataSeeder
     }
 
     /// <summary>
+    /// A legacy "Temp Basal" treatment carries no scheduled rate, so neither does
+    /// its decomposed TempBasal. Basal analysis then cannot say whether a temp ran
+    /// above or below schedule. The seeder knows the schedule it seeded, so it
+    /// stamps it on its own temps after decomposition.
+    /// </summary>
+    private async Task StampTempBasalScheduledRatesAsync(
+        string dataSource, double baseRate, CancellationToken ct)
+    {
+        var scheduled = Nocturne.Core.Models.V4.TempBasalOrigin.Scheduled.ToString();
+        var temps = await _db.TempBasals
+            .Where(t => t.DataSource == dataSource && t.ScheduledRate == null && t.Origin != scheduled)
+            .ToListAsync(ct);
+        foreach (var temp in temps)
+        {
+            var local = DateTime.SpecifyKind(temp.StartTimestamp, DateTimeKind.Utc).ToLocalTime();
+            temp.ScheduledRate = DemoTherapyProfile.ScheduledRateAt(local, baseRate);
+        }
+        await _db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
     /// State spans for the window: pump mode with manual/exercise windows, the
     /// active profile, workout overrides and temporary targets, illness runs,
     /// and the travel span. Spans carrying our data source are wiped and
@@ -739,23 +762,23 @@ public class SampleDataSeeder
     /// <summary>
     /// The patient record singleton, the device roster (CGM, pod, meter), and
     /// the current insulin — the /settings/patient page and device attribution
-    /// context. Created only when absent.
+    /// context. Only unset fields are filled. A report read during seeding
+    /// creates an empty record through the API's get-or-create, and a re-seed
+    /// must not overwrite the user's own edits.
     /// </summary>
     private async Task SeedPatientProfileAsync(CancellationToken ct)
     {
-        if (!await _db.PatientRecords.AnyAsync(ct))
+        var record = await _db.PatientRecords.FirstOrDefaultAsync(ct);
+        if (record is null)
         {
-            _db.PatientRecords.Add(new PatientRecordEntity
-            {
-                Id = Guid.CreateVersion7(),
-                TenantId = _db.TenantId,
-                PreferredName = "Demo",
-                DiabetesType = "type1",
-                DiagnosisDate = new DateOnly(2014, 3, 12),
-                DateOfBirth = new DateOnly(1992, 4, 17),
-                Timezone = DemoTherapyProfile.LocalIanaTimezone(),
-            });
+            record = new PatientRecordEntity { Id = Guid.CreateVersion7(), TenantId = _db.TenantId };
+            _db.PatientRecords.Add(record);
         }
+        record.PreferredName ??= "Demo";
+        record.DiabetesType ??= "type1";
+        record.DiagnosisDate ??= new DateOnly(2014, 3, 12);
+        record.DateOfBirth ??= new DateOnly(1992, 4, 17);
+        record.Timezone ??= DemoTherapyProfile.LocalIanaTimezone();
 
         var deviceSeeds = new (string Category, string Manufacturer, string Model, string? Aid)[]
         {

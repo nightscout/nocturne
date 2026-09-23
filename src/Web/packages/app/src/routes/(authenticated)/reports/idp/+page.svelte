@@ -6,13 +6,11 @@
     CardHeader,
     CardTitle,
   } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
   import { Separator } from "$lib/components/ui/separator";
   import {
     Syringe,
     Calendar,
     Target,
-    Printer,
     Activity,
     Droplets,
   } from "lucide-svelte";
@@ -23,6 +21,8 @@
   import ScheduledBasalRateChart from "$lib/components/reports/ScheduledBasalRateChart.svelte";
   import HourlyBolusChart from "$lib/components/reports/HourlyBolusChart.svelte";
   import ScheduleFooter from "$lib/components/reports/ScheduleFooter.svelte";
+  import TextureSwatch from "$lib/components/charts/print/TextureSwatch.svelte";
+  import { bgPatternClass } from "$lib/components/charts/print/chart-print-patterns";
   import { getIdpData } from "$api/idp.remote";
   import { bg, bgLabel, formatMediumDateTime, formatNumber, formatNumericDate } from "$lib/utils/formatting";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
@@ -73,43 +73,31 @@
 <div class="@container container mx-auto space-y-8 p-3 @md:p-6 max-w-7xl">
   <!-- Header -->
   <div class="space-y-4">
-    <div class="flex items-center justify-between flex-wrap gap-4">
-      <div>
-        <h1 class="text-2xl @md:text-3xl font-bold flex items-center gap-3">
-          <Syringe class="w-6 h-6 @md:w-8 @md:h-8 text-primary" />
-          Insulin Dosing Profile
-        </h1>
-        <p class="text-muted-foreground mt-1">
-          Comprehensive insulin delivery analysis with glucose context
-        </p>
-      </div>
-      <div class="flex items-center gap-2 print:hidden">
-        <Button
-          variant="outline"
-          size="sm"
-          onclick={() => window.print()}
-        >
-          <Printer class="w-4 h-4" />
-          Print
-        </Button>
-      </div>
+    <div class="print:hidden">
+      <h1 class="text-2xl @md:text-3xl font-bold flex items-center gap-3">
+        <Syringe class="w-6 h-6 @md:w-8 @md:h-8 text-primary" />
+        Insulin Dosing Profile
+      </h1>
+      <p class="text-muted-foreground mt-1">
+        Comprehensive insulin delivery analysis with glucose context
+      </p>
     </div>
 
     <!-- Period info -->
     <div class="flex items-center gap-2 text-sm text-muted-foreground">
-      <Calendar class="w-4 h-4" />
-      <span>
+      <Calendar class="w-4 h-4 print:hidden" />
+      <span class="print:hidden">
         {formatNumericDate(startDate)} – {formatNumericDate(endDate)}
       </span>
-      <span class="text-muted-foreground/50">•</span>
-      <span>{dayCount} days</span>
-      <span class="text-muted-foreground/50">•</span>
+      <span class="text-muted-foreground/50 print:hidden">•</span>
+      <span class="print:hidden">{dayCount} days</span>
+      <span class="text-muted-foreground/50 print:hidden">•</span>
       <span>{formatNumber(entries.length)} readings</span>
     </div>
   </div>
 
   <!-- Top Row: Insulin Summary + Glucose Metrics -->
-  <div class="grid grid-cols-1 @3xl:grid-cols-2 gap-6">
+  <div class="grid grid-cols-1 @3xl:grid-cols-2 print:grid-cols-2 gap-6">
     <!-- Insulin Summary Card -->
     <Card>
       <CardHeader>
@@ -139,16 +127,22 @@
         {@const bolusPct = insulinStats?.bolusPercent ?? 0}
         <div class="space-y-1">
           <div class="flex justify-between text-xs text-muted-foreground">
-            <span>Basal: {avgBasal?.toFixed(1) ?? "--"} U/day ({basalPct.toFixed(0)}%)</span>
-            <span>Bolus: {avgBolus?.toFixed(1) ?? "--"} U/day ({bolusPct.toFixed(0)}%)</span>
+            <span class="flex items-center gap-1">
+              <TextureSwatch texture="insulin-scheduled-basal" />
+              Basal: {avgBasal?.toFixed(1) ?? "--"} U/day ({basalPct.toFixed(0)}%)
+            </span>
+            <span class="flex items-center gap-1">
+              <TextureSwatch texture="insulin-bolus" />
+              Bolus: {avgBolus?.toFixed(1) ?? "--"} U/day ({bolusPct.toFixed(0)}%)
+            </span>
           </div>
           <div class="flex h-4 rounded-full overflow-hidden">
             <div
-              class="w-(--share) bg-insulin-scheduled-basal transition-all"
+              class="w-(--share) bg-insulin-scheduled-basal {bgPatternClass('insulin-scheduled-basal')} transition-all"
               style:--share="{basalPct}%"
             ></div>
             <div
-              class="w-(--share) bg-insulin-bolus transition-all"
+              class="w-(--share) bg-insulin-bolus {bgPatternClass('insulin-bolus')} transition-all"
               style:--share="{bolusPct}%"
             ></div>
           </div>
@@ -212,6 +206,7 @@
           {@const stats = analysis.basicStats ?? {}}
           {@const variability = analysis.glycemicVariability ?? {}}
           {@const tir = analysis.timeInRange?.percentages ?? {}}
+          {@const cvMet = (variability.coefficientOfVariation ?? 50) <= 33}
 
           <!-- Average, GMI, CV -->
           <div class="grid grid-cols-3 gap-2 @sm:gap-4 text-center">
@@ -222,14 +217,15 @@
             </div>
             <div>
               <div class="text-2xl font-bold">{variability.estimatedA1c?.toFixed(1) ?? "--"}%</div>
-              <div class="text-xs text-muted-foreground">GMI</div>
-              <div class="text-2xs text-muted-foreground/70">Est. A1C</div>
+              <div class="text-xs text-muted-foreground">Est. A1C</div>
+              <div class="text-2xs text-muted-foreground/70">From mean glucose</div>
             </div>
             <div>
               <div class="text-2xl font-bold">{variability.coefficientOfVariation?.toFixed(0) ?? "--"}%</div>
               <div class="text-xs text-muted-foreground">CV</div>
-              <div class="text-2xs {(variability.coefficientOfVariation ?? 50) <= 33 ? 'text-status-normal' : 'text-status-warning'}">
+              <div class="text-2xs {cvMet ? 'text-status-normal' : 'text-status-warning'} print:text-muted-foreground">
                 Target: ≤33%
+                <span class="hidden print:inline">({cvMet ? "met" : "not met"})</span>
               </div>
             </div>
           </div>
@@ -239,7 +235,7 @@
           <!-- TIR Horizontal Stacked Bar -->
           <div class="space-y-2">
             <div class="text-sm font-medium">Time in Range</div>
-            <div class="h-32 w-full">
+            <div class="h-32 w-full print:h-auto">
               <TIRStackedChart percentages={tir} orientation="horizontal" />
             </div>
           </div>
@@ -270,7 +266,7 @@
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div class="grid grid-cols-1 @xs:grid-cols-2 gap-4 text-sm">
+        <div class="grid grid-cols-1 @xs:grid-cols-2 print:grid-cols-3 gap-4 text-sm">
           <div>
             <div class="text-muted-foreground">CGM</div>
             <div class="font-semibold text-lg">{aidMetrics?.cgmDeviceNames ?? '--'}</div>
@@ -358,7 +354,7 @@
     </CardContent>
   </Card>
 
-  <div class="text-xs text-muted-foreground text-center">
+  <div class="text-xs text-muted-foreground text-center print:hidden">
     Data from {formatNumericDate(startDate)} – {formatNumericDate(endDate)}.
     {#if lastUpdated}
       Last updated {formatMediumDateTime(new Date(lastUpdated))}.

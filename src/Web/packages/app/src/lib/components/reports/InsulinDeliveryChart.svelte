@@ -2,7 +2,11 @@
   import { AreaChart } from "layerchart";
   import type { HourlyInsulinDeliveryPoint } from "$lib/api";
   import { Syringe } from "lucide-svelte";
-  import { categoryPatternClass } from "$lib/components/charts/print/chart-print-patterns";
+  import {
+    patternClass,
+    type TextureKey,
+  } from "$lib/components/charts/print/chart-print-patterns";
+  import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
 
   interface Props {
     /** Backend-computed hourly delivery averages (24 entries, hour 0-23) */
@@ -41,6 +45,68 @@
     chartData.some((d) => (d.scheduledBasal ?? 0) > 0)
   );
   const hasTempBasalData = $derived(chartData.some((d) => (d.tempBasal ?? 0) > 0));
+
+  type Series = {
+    key: string;
+    value: (d: HourlyInsulinDeliveryPoint) => number;
+    color: string;
+    label: string;
+    texture: TextureKey;
+  };
+
+  const stackedSeries = $derived.by((): Series[] => {
+    const basal: Series[] = [];
+    if (hasScheduledBasalData)
+      basal.push({
+        key: "scheduledBasal",
+        value: (d) => d.scheduledBasal ?? 0,
+        color: "var(--insulin-scheduled-basal)",
+        label: "Scheduled Basal",
+        texture: "insulin-scheduled-basal",
+      });
+    if (hasTempBasalData)
+      basal.push({
+        key: "tempBasal",
+        value: (d) => d.tempBasal ?? 0,
+        color: "var(--insulin-additional-basal)",
+        label: "Temp Basal",
+        texture: "insulin-temp-basal",
+      });
+    if (basal.length === 0)
+      basal.push({
+        key: "basal",
+        value: (d) => d.basal ?? 0,
+        color: "var(--insulin-scheduled-basal)",
+        label: "Basal",
+        texture: "insulin-scheduled-basal",
+      });
+    return [
+      ...basal,
+      {
+        key: "bolus",
+        value: (d) => d.bolus ?? 0,
+        color: "var(--insulin-bolus)",
+        label: "Bolus",
+        texture: "insulin-bolus",
+      },
+    ];
+  });
+
+  const series = $derived(
+    showStacked
+      ? stackedSeries.map(({ texture, ...s }) => ({
+          ...s,
+          props: { class: patternClass(texture) },
+        }))
+      : [
+          {
+            key: "basal",
+            value: (d: HourlyInsulinDeliveryPoint) => d.basal ?? 0,
+            color: "var(--chart-1)",
+            label: "Basal Insulin",
+          },
+        ]
+  );
 </script>
 
 <div class="w-full">
@@ -50,59 +116,7 @@
         data={chartData}
         x={(d) => d.hour}
         y={displayValue}
-        series={showStacked
-          ? [
-              // Show scheduled basal, temp basal adjustments, and bolus as stacked
-              ...(hasScheduledBasalData
-                ? [
-                    {
-                      key: "scheduledBasal",
-                      value: (d: HourlyInsulinDeliveryPoint) => d.scheduledBasal ?? 0,
-                      color: "var(--insulin-scheduled-basal)",
-                      label: "Scheduled Basal",
-                      props: { class: categoryPatternClass(1) },
-                    },
-                  ]
-                : []),
-              ...(hasTempBasalData
-                ? [
-                    {
-                      key: "tempBasal",
-                      value: (d: HourlyInsulinDeliveryPoint) => d.tempBasal ?? 0,
-                      color: "var(--insulin-additional-basal)",
-                      label: "Temp Basal",
-                      props: { class: categoryPatternClass(2) },
-                    },
-                  ]
-                : []),
-              // Fallback if no scheduled/temp distinction - show combined basal
-              ...(!hasScheduledBasalData && !hasTempBasalData
-                ? [
-                    {
-                      key: "basal",
-                      value: (d: HourlyInsulinDeliveryPoint) => d.basal ?? 0,
-                      color: "var(--insulin-scheduled-basal)",
-                      label: "Basal",
-                      props: { class: categoryPatternClass(1) },
-                    },
-                  ]
-                : []),
-              {
-                key: "bolus",
-                value: (d: HourlyInsulinDeliveryPoint) => d.bolus ?? 0,
-                color: "var(--insulin-bolus)",
-                label: "Bolus",
-                props: { class: categoryPatternClass(3) },
-              },
-            ]
-          : [
-              {
-                key: "basal",
-                value: (d: HourlyInsulinDeliveryPoint) => d.basal ?? 0,
-                color: "var(--chart-1)",
-                label: "Basal Insulin",
-              },
-            ]}
+        {series}
         xDomain={[0, 23]}
         yDomain={[0, maxInsulin]}
         seriesLayout={showStacked ? "stack" : "overlap"}
@@ -118,6 +132,12 @@
         padding={{ top: 20, right: 20, bottom: 40, left: 50 }}
       />
     </div>
+    {#if showStacked}
+      <ChartKey
+        class="mt-2"
+        items={stackedSeries.map((s) => ({ texture: s.texture, label: s.label, color: s.color }))}
+      />
+    {/if}
 
     <!-- Time period insights -->
     {#if chartData.length >= 24}

@@ -10,7 +10,9 @@
     laneForStage,
     HYPNOGRAM_LANE_ORDER,
     HYPNOGRAM_LANE_LABELS,
+    laneTexture,
   } from "$lib/utils/sleep-stages";
+  import { patternClass } from "$lib/components/charts/print/chart-print-patterns";
   import { BasalDeliveryOrigin } from "$lib/api";
   import type { SleepStageInterval, SleepDawnPhenomenon } from "$lib/api";
 
@@ -158,7 +160,7 @@
 
   // Glucose overlay spans the stage-lane region.
   const glucoseScale = $derived(scaleLinear([0, glucoseYMax], [stagesHeight, 0]));
-  const glucoseTicks = $derived(hasGlucose ? glucoseScale.ticks(3).filter((v) => v > 0) : []);
+  const glucoseTicks = $derived(hasGlucose ? glucoseScale.ticks(3).filter((v) => v > 0 && v < glucoseYMax) : []);
 
   function buildGlucosePath(xScale: (d: Date) => number): string {
     return glucosePoints
@@ -282,7 +284,7 @@
               height={LANE_HEIGHT - 6}
               data-lane={span.label.toLowerCase()}
               rx={2}
-              class="fill-lane opacity-70"
+              class={["fill-lane opacity-70", patternClass(laneTexture(span.lane))]}
             />
           {/each}
 

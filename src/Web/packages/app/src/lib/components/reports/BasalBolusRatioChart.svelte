@@ -1,7 +1,8 @@
 <script lang="ts">
   import { BarChart } from "layerchart";
   import { PieChart } from "lucide-svelte";
-  import { categoryPatternClass } from "$lib/components/charts/print/chart-print-patterns";
+  import { patternClass } from "$lib/components/charts/print/chart-print-patterns";
+  import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
 
   // Local type definitions matching the backend response structure
   interface DailyBasalBolusData {
@@ -31,6 +32,12 @@
   const chartData = $derived(ratioData?.dailyData ?? []);
   const averageBasalPercent = $derived(ratioData?.averageBasalPercent ?? 0);
   const averageBolusPercent = $derived(ratioData?.averageBolusPercent ?? 0);
+
+  const MAX_X_LABELS = 10;
+  const xTicks = $derived.by(() => {
+    const step = Math.ceil(chartData.length / MAX_X_LABELS);
+    return chartData.filter((_, i) => i % step === 0).map((d) => d.displayDate);
+  });
 </script>
 
 <div class="w-full">
@@ -56,29 +63,35 @@
             key: "basal",
             color: "var(--insulin-scheduled-basal)",
             label: "Basal (U)",
-            props: { class: categoryPatternClass(1) },
+            props: { class: patternClass("insulin-scheduled-basal") },
           },
           {
             key: "bolus",
             color: "var(--insulin-bolus)",
             label: "Bolus (U)",
-            props: { class: categoryPatternClass(3) },
+            props: { class: patternClass("insulin-bolus") },
           },
         ]}
         seriesLayout="stack"
-        legend
         tooltipContext={{ mode: "band" }}
         props={{
           xAxis: {
-            tickMultiline: true,
+            ticks: xTicks,
           },
           yAxis: {
             label: "Insulin (U)",
           },
         }}
-        padding={{ top: 20, right: 20, bottom: 50, left: 50 }}
+        padding={{ top: 20, right: 20, bottom: 30, left: 50 }}
       />
     </div>
+    <ChartKey
+      class="mt-2"
+      items={[
+        { texture: "insulin-scheduled-basal", label: "Basal (U)", color: "var(--insulin-scheduled-basal)" },
+        { texture: "insulin-bolus", label: "Bolus (U)", color: "var(--insulin-bolus)" },
+      ]}
+    />
 
     <!-- Ideal ratio guidance -->
     <div class="mt-4 rounded-lg border border-dashed bg-muted/30 p-3">

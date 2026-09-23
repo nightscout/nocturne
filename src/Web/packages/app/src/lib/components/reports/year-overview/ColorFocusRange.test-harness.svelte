@@ -22,6 +22,7 @@
 
 {#key metricLabel}
 <ColorFocusRange
+  metricKey="tdd"
   {metricLabel}
   {unit}
   {observedMax}

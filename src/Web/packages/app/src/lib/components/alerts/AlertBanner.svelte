@@ -64,7 +64,7 @@
 </script>
 
 {#if visibleAlerts.length > 0}
-  <div class="border-b">
+  <div class="border-b print:hidden">
     {#each visibleAlerts as alert (alert.id)}
       <!-- Coloured by the rule's own severity: styling every banner as
            destructive made an info rule indistinguishable from a critical low. -->

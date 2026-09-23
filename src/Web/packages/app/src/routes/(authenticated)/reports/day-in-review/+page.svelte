@@ -6,6 +6,7 @@
   import { page } from "$app/state";
   import type { Bolus, CarbIntake } from "$lib/api";
   import type { EntryRecord } from "$lib/constants/entry-categories";
+  import { cn } from "$lib/utils";
   import * as Card from "$lib/components/ui/card";
   import * as Table from "$lib/components/ui/table";
   import * as Select from "$lib/components/ui/select";
@@ -42,6 +43,7 @@
   import { contextResource } from "$lib/hooks/resource-context.svelte";
   import { apsSnapshotToPrediction } from "$lib/utils/aps-snapshot-to-prediction";
   import { isDayString, startOfDay, toDayString } from "$lib/utils/date-range";
+  import { setReportPrintMeta } from "$lib/components/reports/print/report-print.svelte";
 
   // Get date from URL search params. The default is the local calendar day —
   // taking it from `toISOString()` names yesterday for anyone east of UTC.
@@ -50,6 +52,8 @@
     const fromUrl = page.url.searchParams.get("date");
     return isDayString(fromUrl) ? fromUrl : today;
   });
+
+  setReportPrintMeta(() => ({ period: { from: dateParam, to: dateParam } }));
 
   // Create resource with automatic layout registration
   const dayDataResource = contextResource(
@@ -244,10 +248,11 @@
 
 {#snippet sortableHeader(column: "time" | "type" | "carbs" | "insulin", label: string, alignRight = false)}
   <Table.Head class={alignRight ? "text-right" : ""}>
+    <span class="hidden print:inline">{label}</span>
     <Button
       variant="ghost"
       size="sm"
-      class={alignRight ? "-mr-3" : "-ml-3"}
+      class={[alignRight ? "-mr-3" : "-ml-3", "print:hidden"]}
       onclick={() => toggleSort(column)}
     >
       {label}
@@ -315,9 +320,9 @@
   </Card.Root>
 
   <!-- Summary Stats -->
-  <div class="grid @4xl:grid-cols-3 gap-6">
+  <div class="grid @4xl:grid-cols-3 print:grid-cols-3 gap-6">
     <!-- Glucose Overview -->
-    <Card.Root class="@4xl:col-span-2">
+    <Card.Root class="@4xl:col-span-2 print:col-span-2">
       <Card.Content class="p-4 space-y-4">
         <TIRStackedChart
           percentages={analysis?.timeInRange?.percentages}
@@ -369,7 +374,7 @@
             </div>
           </div>
         </div>
-        <ReliabilityBadge reliability={analysis?.reliability} />
+        <ReliabilityBadge reliability={analysis?.reliability} class="print:hidden" />
       </Card.Content>
     </Card.Root>
 
@@ -425,17 +430,17 @@
     externalPredictionData={selectedPredictionData}
   />
 
-  <!-- Historical Prediction Scrubber + APS State -->
+  <!-- Historical Prediction Scrubber + APS State: both follow the scrubber, which paper cannot move -->
   {#if hasApsSnapshots}
-    <div class="print:hidden">
+    <div class="space-y-6 print:hidden">
       <RetrospectiveTimeScrubber
         date={currentDate}
         bind:currentTime={scrubberTime}
         onTimeChange={handleScrubberTimeChange}
         stepMinutes={5}
       />
+      <ApsStateCard snapshot={selectedSnapshot} />
     </div>
-    <ApsStateCard snapshot={selectedSnapshot} />
   {/if}
 
   <!-- Treatments Timeline with Filter/Sort -->
@@ -477,6 +482,9 @@
         </div>
       </div>
       <Card.Description class="print:hidden">Click on a treatment to edit it</Card.Description>
+      {#if filterEventType}
+        <p class="hidden text-sm text-muted-foreground print:block">Showing {filterEventType} only</p>
+      {/if}
     </Card.Header>
     <Card.Content>
       {#if filteredTreatments.length > 0}
@@ -509,7 +517,7 @@
                 </Table.Cell>
                 <Table.Cell class="text-right">
                   {#if row.rowType === "carbIntake" && (row.carbs ?? 0) > 0}
-                    <span class={getRowTypeStyle("carbIntake").colorClass}>
+                    <span class={cn(getRowTypeStyle("carbIntake").colorClass, "print:text-foreground")}>
                       {row.carbs}g
                     </span>
                   {:else}
@@ -518,7 +526,7 @@
                 </Table.Cell>
                 <Table.Cell class="text-right">
                   {#if row.rowType === "bolus" && (row.insulin ?? 0) > 0}
-                    <span class={getRowTypeStyle("bolus").colorClass}>
+                    <span class={cn(getRowTypeStyle("bolus").colorClass, "print:text-foreground")}>
                       {(row.insulin ?? 0).toFixed(2)}U
                     </span>
                   {:else}

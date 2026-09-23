@@ -14,7 +14,7 @@
 import { useSearchParams } from "runed/kit";
 import { z } from "zod";
 import { getLocalTimeZone, today } from "@internationalized/date";
-import { getContext, onDestroy, setContext, untrack } from "svelte";
+import { getContext, setContext, untrack } from "svelte";
 import { SvelteSet } from "svelte/reactivity";
 import {
   dayCount as countDays,
@@ -158,6 +158,12 @@ export function useDateParams(defaultDays = 7) {
     const currentDays = params.days;
     const currentFrom = params.from;
     const currentTo = params.to;
+
+    // A URL carrying no range at all is one the seeding write never reached (a
+    // write during hydration, before the router is ready, is dropped). Copying it
+    // through would blank the seeded default. The server would then answer with
+    // its own 7-day fallback under a page labelled with this report's range.
+    if (currentDays == null && !currentFrom && !currentTo) return;
 
     // Read memoizedInput without tracking to avoid read-write cycle
     // that causes effect_update_depth_exceeded
@@ -444,9 +450,13 @@ export function requireDateParamsContext(reportDefaultDays?: number): ReportsPar
   if (reportDefaultDays !== undefined) {
     const use = getContext<SharedRangeUse | undefined>(SHARED_RANGE_USE_KEY);
     if (use) {
-      const token = Symbol("shared-range-consumer");
-      use.add(token);
-      onDestroy(() => use.remove(token));
+      // Registered from an effect: a page initialised inside an async or block
+      // reaction (the actogram reports) may not write state during setup.
+      $effect.pre(() => {
+        const token = Symbol("shared-range-consumer");
+        use.add(token);
+        return () => use.remove(token);
+      });
     }
   }
 

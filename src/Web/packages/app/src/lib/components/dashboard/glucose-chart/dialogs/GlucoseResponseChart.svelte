@@ -104,21 +104,21 @@
         <Rule
           y={highThreshold}
           class="stroke-glucose-high/40"
-          stroke-dasharray="4,4"
+          dashArray="4,4"
         />
 
         <!-- Low threshold line -->
         <Rule
           y={lowThreshold}
           class="stroke-glucose-very-low/40"
-          stroke-dasharray="4,4"
+          dashArray="4,4"
         />
 
         <!-- Center time vertical rule -->
         <Rule
           x={centerTime}
           class="stroke-muted-foreground/60"
-          stroke-dasharray="6,3"
+          dashArray="6,3"
         />
 
         <!-- Center time label -->

@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import { cn } from "$lib/utils";
+  import { bg } from "$lib/utils/formatting";
   import {
     SystemEventIcon,
     PumpModeIcon,
@@ -14,6 +15,8 @@
   import { SystemEventType } from "$lib/api";
   import Clock from "lucide-svelte/icons/clock";
   import ChevronDown from "lucide-svelte/icons/chevron-down";
+  import { bgPatternClass } from "$lib/components/charts/print/chart-print-patterns";
+  import { PrintMode } from "$lib/components/charts/print/print-mode.svelte";
 
   interface DeviceEventMarker {
     eventType?: string;
@@ -83,6 +86,14 @@
     // Pump mode expansion
     expandedPumpModes: boolean;
     onToggleExpandedPumpModes: () => void;
+
+    // Marks keyed only on paper, where there is no tooltip to name them
+    hasBgChecks?: boolean;
+    /** Hatched basal: inferred from the schedule, or past the pump's last sync. */
+    hasUnreportedBasal?: boolean;
+    hasScheduledBasal?: boolean;
+    targetLow?: number | null;
+    targetHigh?: number | null;
   }
 
   let {
@@ -121,7 +132,24 @@
     uniquePumpModes,
     expandedPumpModes,
     onToggleExpandedPumpModes,
+    hasBgChecks = false,
+    hasUnreportedBasal = false,
+    hasScheduledBasal = false,
+    targetLow = null,
+    targetHigh = null,
   }: Props = $props();
+
+  // Event icons in their own colours print grey; on paper their shape carries them.
+  const print = new PrintMode();
+  const ink = (color: string) => (print.active ? "var(--foreground)" : color);
+
+  const targetLabel = $derived(
+    targetLow == null
+      ? null
+      : targetHigh == null || targetHigh === targetLow
+        ? bg(targetLow)
+        : `${bg(targetLow)}–${bg(targetHigh)}`
+  );
 </script>
 
 {#snippet legendToggle(
@@ -135,8 +163,8 @@
   <button
     type="button"
     class={cn(
-      "flex items-center gap-1 cursor-pointer hover:bg-accent/50 px-1.5 py-0.5 rounded transition-colors",
-      !show && "opacity-50"
+      "flex items-center gap-1 cursor-pointer hover:bg-accent/50 px-1.5 py-0.5 rounded transition-colors print:px-0",
+      !show && "opacity-50 print:hidden"
     )}
     onclick={toggle}
   >
@@ -152,10 +180,13 @@
   </div>
 {/snippet}
 
-{#snippet glucoseRangeIndicator(colorClass: string, label: string)}
+<!-- Points are coloured by range, which paper in black and white loses, so the
+     printed key names each range's bounds for reading a point against the rules. -->
+{#snippet glucoseRangeIndicator(colorClass: string, label: string, bounds: string)}
   <div class="flex items-center gap-1">
     <div class="w-2 h-2 rounded-full {colorClass}"></div>
     <span>{label}</span>
+    <span class="hidden print:inline">{bounds}</span>
   </div>
 {/snippet}
 
@@ -167,23 +198,43 @@
     class="w-3 h-2 bg-iob-basal border border-insulin"
   ></div>{/snippet}
 {#snippet cobIcon()}<div
-    class="w-3 h-2 bg-carbs/40 border border-carbs"
+    class="w-3 h-2 bg-carbs/40 border border-carbs {bgPatternClass('carbs')}"
   ></div>{/snippet}
 {#snippet bolusIconSnippet()}<BolusIcon size={16} />{/snippet}
 {#snippet carbsIconSnippet()}<CarbsIcon size={16} />{/snippet}
 {#snippet sensorIcon()}<SensorIcon
     size={16}
-    color="var(--glucose-in-range)"
+    color={ink("var(--glucose-in-range)")}
   />{/snippet}
 {#snippet siteIcon()}<SiteChangeIcon
     size={16}
-    color="var(--insulin-bolus)"
+    color={ink("var(--insulin-bolus)")}
   />{/snippet}
 {#snippet reservoirIcon()}<ReservoirIcon
     size={16}
-    color="var(--insulin-basal)"
+    color={ink("var(--insulin-basal)")}
   />{/snippet}
-{#snippet batteryIcon()}<BatteryIcon size={16} color="var(--carbs)" />{/snippet}
+{#snippet batteryIcon()}<BatteryIcon size={16} color={ink("var(--carbs)")} />{/snippet}
+
+<!-- Paper-only keys, for marks the screen names in a tooltip. -->
+{#snippet printKey(swatch: Snippet, label: string)}
+  <div class="hidden items-center gap-1 print:flex">
+    {@render swatch()}
+    <span>{label}</span>
+  </div>
+{/snippet}
+{#snippet ruleSwatch(dash: string)}<svg class="h-2 w-5" viewBox="0 0 20 8" aria-hidden="true">
+    <line x1="0" y1="4" x2="20" y2="4" stroke="currentColor" stroke-width="1.5" stroke-dasharray={dash} />
+  </svg>{/snippet}
+{#snippet dashedSwatch()}{@render ruleSwatch("4 4")}{/snippet}
+{#snippet dottedSwatch()}{@render ruleSwatch("2 4")}{/snippet}
+{#snippet bgCheckSwatch()}<svg class="h-3 w-3" viewBox="-8 -8 16 16" aria-hidden="true">
+    <polygon points="0,-7 7,0 0,7 -7,0" fill="currentColor" />
+  </svg>{/snippet}
+{#snippet hatchSwatch()}<svg class="h-2 w-4" viewBox="0 0 16 8" aria-hidden="true">
+    <rect x="0.5" y="0.5" width="15" height="7" fill="none" stroke="currentColor" stroke-width="0.5" />
+    <path d="M0 8 L8 0 M4 8 L12 0 M8 8 L16 0 M12 8 L16 4 M0 4 L4 0" stroke="currentColor" stroke-width="0.6" />
+  </svg>{/snippet}
 {#snippet overrideIcon()}<div
     class="w-3 h-2 rounded border border-(--pump-mode-boost) bg-(--pump-mode-boost) opacity-30"
   ></div>{/snippet}
@@ -205,22 +256,35 @@
   class="flex flex-wrap justify-center gap-x-3 gap-y-1 text-xs @md:gap-4 @md:text-sm text-muted-foreground pt-2"
 >
   <!-- Glucose range indicators -->
-  {@render glucoseRangeIndicator("bg-glucose-in-range", "In Range")}
+  {@render glucoseRangeIndicator("bg-glucose-in-range", "In Range", `${bg(lowThreshold)}–${bg(highThreshold)}`)}
   {#if glucoseData.some((d) => d.sgv > veryHighThreshold)}
-    {@render glucoseRangeIndicator("bg-glucose-very-high", "Very High")}
+    {@render glucoseRangeIndicator("bg-glucose-very-high", "Very High", `>${bg(veryHighThreshold)}`)}
   {/if}
   {#if glucoseData.some((d) => d.sgv > highThreshold && d.sgv <= veryHighThreshold)}
-    {@render glucoseRangeIndicator("bg-glucose-high", "High")}
+    {@render glucoseRangeIndicator("bg-glucose-high", "High", `>${bg(highThreshold)}`)}
   {/if}
   {#if glucoseData.some((d) => d.sgv < lowThreshold && d.sgv >= veryLowThreshold)}
-    {@render glucoseRangeIndicator("bg-glucose-low", "Low")}
+    {@render glucoseRangeIndicator("bg-glucose-low", "Low", `<${bg(lowThreshold)}`)}
   {/if}
   {#if glucoseData.some((d) => d.sgv < veryLowThreshold)}
-    {@render glucoseRangeIndicator("bg-glucose-very-low", "Very Low")}
+    {@render glucoseRangeIndicator("bg-glucose-very-low", "Very Low", `<${bg(veryLowThreshold)}`)}
+  {/if}
+  {@render printKey(dashedSwatch, `Range limits ${bg(lowThreshold)} / ${bg(highThreshold)}`)}
+  {#if targetLabel}
+    {@render printKey(dottedSwatch, `Target ${targetLabel}`)}
+  {/if}
+  {#if hasBgChecks}
+    {@render printKey(bgCheckSwatch, "Fingerstick BG")}
   {/if}
 
   <!-- Data toggles -->
   {@render legendToggle(showBasal, onToggleBasal, "Basal", basalIcon)}
+  {#if hasScheduledBasal}
+    {@render printKey(dashedSwatch, "Scheduled basal")}
+  {/if}
+  {#if hasUnreportedBasal}
+    {@render printKey(hatchSwatch, "Not reported by pump")}
+  {/if}
   {@render legendToggle(showIob, onToggleIob, "IOB", iobIcon)}
   {@render legendToggle(showCob, onToggleCob, "COB", cobIcon)}
   {@render legendToggle(showBolus, onToggleBolus, "Bolus", bolusIconSnippet)}
@@ -241,12 +305,12 @@
   {/if}
 
   <!-- Pump mode toggle with expandable dropdown -->
-  <div class="relative flex items-center">
+  <div class={cn("relative flex items-center", !showPumpModes && "print:hidden")}>
     <!-- eslint-disable-next-line no-restricted-syntax -- chart legend series toggle -->
     <button
       type="button"
       class={cn(
-        "flex items-center gap-1 cursor-pointer hover:bg-accent/50 px-1.5 py-0.5 rounded-l transition-colors",
+        "flex items-center gap-1 cursor-pointer hover:bg-accent/50 px-1.5 py-0.5 rounded-l transition-colors print:px-0",
         !showPumpModes && "opacity-50"
       )}
       onclick={onTogglePumpModes}
@@ -264,7 +328,7 @@
       <!-- eslint-disable-next-line no-restricted-syntax -- chart legend series toggle -->
       <button
         type="button"
-        class="flex items-center cursor-pointer hover:bg-accent/50 px-0.5 py-0.5 rounded-r transition-colors"
+        class="flex items-center cursor-pointer hover:bg-accent/50 px-0.5 py-0.5 rounded-r transition-colors print:hidden"
         onclick={onToggleExpandedPumpModes}
       >
         <ChevronDown
@@ -275,7 +339,7 @@
     {/if}
     {#if expandedPumpModes && uniquePumpModes.length > 1}
       <div
-        class="absolute top-full left-0 mt-1 bg-background border border-border rounded shadow-lg z-50 py-1 min-w-[120px]"
+        class="absolute top-full left-0 mt-1 bg-background border border-border rounded shadow-lg z-50 py-1 min-w-[120px] print:hidden"
       >
         {#each uniquePumpModes as state (state)}
           {@const span = pumpModeSpans.find((s) => s.state === state)}
@@ -283,7 +347,7 @@
             <div
               class="flex items-center gap-2 px-2 py-1 text-xs hover:bg-accent/50"
             >
-              <PumpModeIcon state={state ?? ""} size={14} color={span.color ?? ""} />
+              <PumpModeIcon state={state ?? ""} size={14} color={ink(span.color ?? "")} />
               <span>{state}</span>
             </div>
           {/if}
@@ -291,6 +355,18 @@
       </div>
     {/if}
   </div>
+
+  {#if showPumpModes && uniquePumpModes.length > 1}
+    {#each uniquePumpModes.filter((m) => m !== (currentPumpMode ?? "Automatic")) as state (state)}
+      {@const span = pumpModeSpans.find((s) => s.state === state)}
+      {#if span}
+        <div class="hidden items-center gap-1 print:flex">
+          <PumpModeIcon state={state ?? ""} size={14} color={ink(span.color ?? "")} />
+          <span>{state}</span>
+        </div>
+      {/if}
+    {/each}
+  {/if}
 
   <!-- System event legend items -->
   {#if systemEvents.length > 0}
@@ -301,8 +377,8 @@
     <button
       type="button"
       class={cn(
-        "flex items-center gap-1 cursor-pointer hover:bg-accent/50 px-1.5 py-0.5 rounded transition-colors",
-        !showAlarms && "opacity-50"
+        "flex items-center gap-1 cursor-pointer hover:bg-accent/50 px-1.5 py-0.5 rounded transition-colors print:px-0",
+        !showAlarms && "opacity-50 print:hidden"
       )}
       onclick={onToggleAlarms}
     >
@@ -328,8 +404,8 @@
     <button
       type="button"
       class={cn(
-        "flex items-center gap-1 cursor-pointer hover:bg-accent/50 px-1.5 py-0.5 rounded transition-colors",
-        !showScheduledTrackers && "opacity-50"
+        "flex items-center gap-1 cursor-pointer hover:bg-accent/50 px-1.5 py-0.5 rounded transition-colors print:px-0",
+        !showScheduledTrackers && "opacity-50 print:hidden"
       )}
       onclick={onToggleScheduledTrackers}
     >

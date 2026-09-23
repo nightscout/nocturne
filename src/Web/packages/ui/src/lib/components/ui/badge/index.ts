@@ -1,7 +1,11 @@
 import { type VariantProps, tv } from "tailwind-variants";
 
+// On paper a chip reads as a button that cannot be pressed, so every badge
+// prints as plain text in ink; variants that carry meaning do so in words.
+const PRINT_PLAIN = "print:border-transparent print:bg-transparent print:bg-none print:px-0 print:text-foreground";
+
 export const badgeVariants = tv({
-  base: "focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-medium transition-[color,box-shadow] focus-visible:ring-[3px] [&>svg]:pointer-events-none [&>svg]:size-3",
+  base: `${PRINT_PLAIN} focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-medium transition-[color,box-shadow] focus-visible:ring-[3px] [&>svg]:pointer-events-none [&>svg]:size-3`,
   variants: {
     variant: {
       default:
@@ -33,6 +37,10 @@ export const badgeVariants = tv({
       // A record's category (ENTRY_CATEGORIES, TREATMENT_CATEGORIES); notes take secondary.
       "entry-bolus":
         "bg-entry-bolus/10 text-entry-bolus border-entry-bolus/30 [a&]:hover:bg-entry-bolus/20",
+      // Sensor-integrity detection confidence.
+      "cluster-high": "bg-cluster-high/15 text-cluster-high border-transparent",
+      "cluster-medium": "bg-cluster-medium/15 text-cluster-medium border-transparent",
+      "cluster-low": "bg-cluster-low/20 text-cluster-low border-transparent",
       "entry-basal":
         "bg-entry-basal/10 text-entry-basal border-entry-basal/30 [a&]:hover:bg-entry-basal/20",
       "entry-basal-injection":

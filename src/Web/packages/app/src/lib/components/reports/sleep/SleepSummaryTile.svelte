@@ -61,20 +61,23 @@
     <CardTitle variant="muted" class="text-sm font-medium">{label}</CardTitle>
   </CardHeader>
   <CardContent>
-    <div class="flex items-center gap-2">
+    <div class="flex flex-wrap items-center gap-2">
       <Icon class="h-5 w-5 {iconClass}" />
-      <span class="text-2xl font-bold tabular-nums">{value}</span>
+      <span class="text-2xl font-bold whitespace-nowrap tabular-nums">{value}</span>
       {#if unit}
         <span class="text-sm text-muted-foreground">{unit}</span>
       {/if}
       {#if delta}
         <span
-          class="ml-auto flex shrink-0 items-center gap-0.5 text-xs font-semibold tabular-nums text-(--delta-color)"
+          class="ml-auto flex shrink-0 items-center gap-0.5 text-xs font-semibold tabular-nums text-(--delta-color) print:ml-0 print:basis-full print:text-foreground"
           style:--delta-color={deltaColor}
           title={delta.title ?? "vs prior 7 nights"}
         >
           <DeltaIcon class="h-3.5 w-3.5" />
           {delta.text}
+          {#if delta.tone !== "neutral"}
+            <span class="hidden font-normal print:inline">({delta.tone === "good" ? "better" : "worse"})</span>
+          {/if}
         </span>
       {/if}
     </div>

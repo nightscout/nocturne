@@ -75,7 +75,7 @@ describe("glucose-chart mark registration", () => {
 		expect(labels).toContain("Lunch");
 		expect(labels).toContain("30g");
 		expect(labels).toContain("0.75U/h");
-		expect(labels).toContain("BASAL");
+		expect(labels).toContain("Basal");
 	});
 
 	it("keeps marker glyph geometry and classes", async () => {

@@ -51,7 +51,7 @@
             <Rule
               y={defaultRate}
               class="stroke-muted-foreground/50"
-              stroke-dasharray="4,4"
+              dashArray="4,4"
             />
           {/if}
 

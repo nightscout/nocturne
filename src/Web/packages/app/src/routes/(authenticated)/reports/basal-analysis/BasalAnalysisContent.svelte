@@ -16,7 +16,6 @@
     TrendingUp,
     TrendingDown,
     ArrowRight,
-    Printer,
     HelpCircle,
     Clock,
     Gauge,
@@ -90,7 +89,7 @@
   <div class="@container container mx-auto max-w-7xl space-y-8 p-3 @md:p-6">
     <!-- Header -->
     <div class="space-y-4">
-      <div class="flex flex-wrap items-center justify-between gap-4">
+      <div class="flex flex-wrap items-center justify-between gap-4 print:hidden">
         <div>
           <h1 class="flex items-center gap-3 text-2xl font-bold @md:text-3xl">
             <Layers class="h-6 w-6 text-report-treatment @md:h-8 @md:w-8" />
@@ -100,15 +99,7 @@
             Understand your background insulin delivery patterns over time
           </p>
         </div>
-        <div class="flex items-center gap-2 print:hidden">
-          <Button
-            variant="outline"
-            size="sm"
-            onclick={() => window.print()}
-          >
-            <Printer class="h-4 w-4" />
-            Print
-          </Button>
+        <div class="flex items-center gap-2">
           <Button
             href="/reports/insulin-delivery"
             variant="outline"
@@ -122,7 +113,7 @@
 
       <!-- Period info -->
       <div
-        class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"
+        class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground print:hidden"
       >
         <Calendar class="h-4 w-4" />
         <span>
@@ -269,7 +260,7 @@
           </CardTitle>
         </CardHeader>
         <CardContent class="space-y-4">
-          <div class="grid gap-4 @3xl:grid-cols-2">
+          <div class="grid gap-4 @3xl:grid-cols-2 print:grid-cols-2">
             <!-- Rate Range -->
             <div class="rounded-lg border bg-card p-4">
               <div class="flex items-start gap-3">
@@ -279,12 +270,9 @@
                 <div>
                   <h4 class="font-medium">Basal Rate Range</h4>
                   <p class="text-sm text-muted-foreground">
-                    Your basal rates ranged from <strong>
-                      {basalStats.minRate.toFixed(2)} U/hr
-                    </strong>
-                    to
-                    <strong>{basalStats.maxRate.toFixed(2)} U/hr</strong>
-                    .
+                    Your basal rates ranged from
+                    <strong>{basalStats.minRate.toFixed(2)} U/hr</strong>
+                    to <strong>{basalStats.maxRate.toFixed(2)} U/hr</strong>.
                     {#if basalStats.maxRate - basalStats.minRate > 0.5}
                       This indicates significant variation in your basal needs
                       throughout the day.
@@ -384,7 +372,7 @@
 
     <!-- Footer -->
     <div class="space-y-1 text-center text-xs text-muted-foreground">
-      <p>
+      <p class="print:hidden">
         Report generated from {formatNumber(basalStats.count)} basal events between
         {formatNumericDate(dateInfo.from)} and {formatNumericDate(dateInfo.to)}
       </p>

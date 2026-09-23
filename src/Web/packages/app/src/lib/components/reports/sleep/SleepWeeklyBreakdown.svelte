@@ -91,13 +91,15 @@
             <a
               href={resolve("/(authenticated)/reports/sleep/[date]", { date: cell.date })}
               title={cell.title}
-              class="flex size-6 items-center justify-center rounded-md bg-report-lifestyle/15 text-xs font-medium text-foreground transition-colors hover:bg-report-lifestyle/30"
+              class="flex size-6 items-center justify-center rounded-md bg-report-lifestyle/15 text-xs font-medium text-foreground transition-colors hover:bg-report-lifestyle/30 print:bg-transparent print:font-bold"
             >
               {cell.initial}
             </a>
           {:else}
-            <span class="flex size-6 items-center justify-center rounded-md text-xs text-muted-foreground/40">
-              {cell.initial}
+            <!-- On paper a night without data prints as a dash: a paler letter is lost in black and white. -->
+            <span class="flex size-6 items-center justify-center rounded-md text-xs text-muted-foreground/40 print:text-foreground">
+              <span class="print:hidden">{cell.initial}</span>
+              <span class="hidden print:inline" aria-hidden="true">–</span>
             </span>
           {/if}
         {/each}

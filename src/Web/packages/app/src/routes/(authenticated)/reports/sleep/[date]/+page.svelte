@@ -13,6 +13,7 @@
   import BiometricsCard from "$lib/components/reports/sleep/single-night/BiometricsCard.svelte";
   import { formatMinutesDuration } from "$lib/utils/duration";
   import { bg, bgLabel, formatLocale, time, toDate } from "$lib/utils/formatting";
+  import { setReportPrintMeta } from "$lib/components/reports/print/report-print.svelte";
 
   const date = $derived(page.params.date ?? "");
 
@@ -25,15 +26,13 @@
   const startTime = $derived(toDate(session?.startTime));
   const endTime = $derived(toDate(session?.endTime));
 
-  const dateDisplay = $derived(
+  const formatNightDate = (options: Intl.DateTimeFormatOptions) =>
     startTime
-      ? new Intl.DateTimeFormat(formatLocale(), {
-          weekday: "long",
-          month: "long",
-          day: "numeric",
-        }).format(startTime)
-      : ""
-  );
+      ? new Intl.DateTimeFormat(formatLocale(), { weekday: "long", month: "long", day: "numeric", ...options }).format(startTime)
+      : "";
+  const dateDisplay = $derived(formatNightDate({}));
+  // Paper is read away from the app's own date context, so its period names the year.
+  const printedDate = $derived(formatNightDate({ year: "numeric" }));
 
   const durationLabel = $derived(
     startTime && endTime
@@ -46,12 +45,13 @@
     return session.sourceDevice ? `${session.source} · ${session.sourceDevice}` : session.source;
   });
 
-  const subtitle = $derived.by(() => {
-    if (!startTime || !endTime) return "";
-    const parts = [`${time(startTime)} – ${time(endTime)}`, durationLabel];
-    if (sourceLabel) parts.push(sourceLabel);
-    return parts.join(" · ");
-  });
+  const timeSpan = $derived(startTime && endTime ? `${time(startTime)} – ${time(endTime)}` : "");
+  const subtitleDetail = $derived([durationLabel, sourceLabel].filter(Boolean).join(" · "));
+
+  setReportPrintMeta(() => ({
+    title: "Sleep Night Report",
+    period: printedDate && timeSpan ? { label: `${printedDate}, ${timeSpan}` } : undefined,
+  }));
 
   // ---- Tile row -----------------------------------------------------------
 
@@ -88,14 +88,17 @@
     <div>
       <a
         href={resolve("/(authenticated)/reports/sleep")}
-        class="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        class="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground print:hidden"
       >
         <ArrowLeft class="h-4 w-4" />
         Sleep & Overnight
       </a>
-      <h1 class="mt-2 text-2xl font-bold @md:text-3xl">{dateDisplay}</h1>
-      {#if subtitle}
-        <p class="text-muted-foreground tabular-nums">{subtitle}</p>
+      <h1 class="mt-2 text-2xl font-bold @md:text-3xl print:hidden">{dateDisplay}</h1>
+      {#if timeSpan}
+        <!-- The printed header's period already carries the time span. -->
+        <p class="text-muted-foreground tabular-nums">
+          <span class="print:hidden">{timeSpan} · </span>{subtitleDetail}
+        </p>
       {/if}
     </div>
 
@@ -124,7 +127,7 @@
           <CardContent>
             <div class="flex items-center gap-2">
               <Bed class="h-5 w-5 text-muted-foreground" />
-              <span class="text-2xl font-bold tabular-nums">
+              <span class="text-2xl font-bold whitespace-nowrap tabular-nums">
                 {formatMinutesDuration(timeAsleepMinutes)}
               </span>
             </div>

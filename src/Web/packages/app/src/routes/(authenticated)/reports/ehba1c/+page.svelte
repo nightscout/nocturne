@@ -16,6 +16,13 @@
   import type { EHbA1cPoint, LabHbA1cResult } from "$api/generated/nocturne-api-client";
   import { bg, bgLabel, formatLongDate } from "$lib/utils/formatting";
   import { describeSubmitError } from "$lib/forms/submit-error";
+  import { setReportPrintMeta } from "$lib/components/reports/print/report-print.svelte";
+  import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
+  import {
+    CHART_TEXTURES,
+    patternClass,
+    type TextureKey,
+  } from "$lib/components/charts/print/chart-print-patterns";
 
   type ChartPoint = {
     date: Date;
@@ -42,11 +49,11 @@
    * dark-mode-tuned tokens (the swatch colors are too subtle at chart-fill opacity, and
    * --glucose-in-range/--chart-2 turned out to be the same color when tried here).
    */
-  const A1C_ZONES: { key: string; label: string; maxPercent: number; swatch: string; fill: string }[] = [
-    { key: "healthy", label: "Non-diabetic range", maxPercent: 5.7, swatch: "var(--gri-zone-a)", fill: "var(--ehba1c-zone-healthy)" },
-    { key: "target", label: "Type 1 diabetes target", maxPercent: 7.0, swatch: "var(--gri-zone-b)", fill: "var(--ehba1c-zone-target)" },
-    { key: "high", label: "Elevated", maxPercent: 9.0, swatch: "var(--gri-zone-d)", fill: "var(--ehba1c-zone-high)" },
-    { key: "veryHigh", label: "Very high", maxPercent: 14.0, swatch: "var(--gri-zone-e)", fill: "var(--ehba1c-zone-very-high)" },
+  const A1C_ZONES: { key: string; label: string; maxPercent: number; swatch: string; texture: Extract<TextureKey, `ehba1c-zone-${string}`> }[] = [
+    { key: "healthy", label: "Non-diabetic range", maxPercent: 5.7, swatch: "var(--gri-zone-a)", texture: "ehba1c-zone-healthy" },
+    { key: "target", label: "Type 1 diabetes target", maxPercent: 7.0, swatch: "var(--gri-zone-b)", texture: "ehba1c-zone-target" },
+    { key: "high", label: "Elevated", maxPercent: 9.0, swatch: "var(--gri-zone-d)", texture: "ehba1c-zone-high" },
+    { key: "veryHigh", label: "Very high", maxPercent: 14.0, swatch: "var(--gri-zone-e)", texture: "ehba1c-zone-very-high" },
   ];
 
   let loading = $state(true);
@@ -106,6 +113,17 @@
   }
 
   const chartData = $derived(toChartPoints(pointsByYear));
+
+  const timelineBounds = $derived.by(() => {
+    const dates = [...pointsByYear.values()]
+      .flat()
+      .map((p) => p.date)
+      .filter((d): d is string => !!d)
+      .sort();
+    return dates.length > 0 ? { from: dates[0], to: dates[dates.length - 1] } : null;
+  });
+
+  setReportPrintMeta(() => (timelineBounds ? { period: timelineBounds } : {}));
 
   const displayChartData = $derived(
     chartData.map((p) => ({ ...p, displayValue: toDisplayUnit(p.estimatedA1cPercent) }))
@@ -168,7 +186,8 @@
           type: "range" as const,
           layer: "below" as const,
           y,
-          fill: band.fill,
+          fill: CHART_TEXTURES[band.texture].color,
+          class: patternClass(band.texture),
         };
       })
       .filter((band) => band !== null)
@@ -275,7 +294,7 @@
         }}
         variant="segmented"
         size="xs"
-        class="shrink-0"
+        class="shrink-0 print:hidden"
       >
         <ToggleGroup.Item value="percent" aria-label="Show as percent">
           %
@@ -284,6 +303,9 @@
           mmol/mol
         </ToggleGroup.Item>
       </ToggleGroup.Root>
+      <p class="hidden shrink-0 text-sm text-muted-foreground print:block">
+        {a1cUnit === "percent" ? "Shown in % (NGSP)" : "Shown in mmol/mol (IFCC)"}
+      </p>
     </Card.Header>
     <Card.Content>
       {#if loading}
@@ -342,14 +364,15 @@
           />
         </div>
 
-        <div class="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm">
-          {#each zoneBands as band (band.key)}
-            <div class="flex items-center gap-1.5">
-              <span class="h-2.5 w-2.5 rounded-full bg-(--swatch)" style:--swatch={band.swatch}></span>
-              <span>{band.label}</span>
-              <span class="text-muted-foreground">({formatZoneRange(band)})</span>
-            </div>
-          {/each}
+        <div class="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm">
+          <ChartKey
+            class="text-sm text-foreground"
+            items={zoneBands.map((band) => ({
+              texture: band.texture,
+              color: band.swatch,
+              label: `${band.label} (${formatZoneRange(band)})`,
+            }))}
+          />
           {#if labChartPoints.length > 0}
             <div class="flex items-center gap-1.5">
               <span class="inline-block h-0 w-0 border-x-4 border-b-7 border-x-transparent border-b-foreground"
@@ -362,10 +385,14 @@
     </Card.Content>
   </Card.Root>
 
-  <Card.Root>
+  <Card.Root class={labResults.length === 0 ? "print:hidden" : undefined}>
     <Card.Header>
       <Card.Title>Lab results</Card.Title>
-      <Card.Description>
+      <p class="hidden text-sm text-muted-foreground print:block">
+        Lab HbA1c draws, shown as triangles on the chart above. They are not included in the
+        eHbA1c calculation.
+      </p>
+      <Card.Description class="print:hidden">
         Enter a lab HbA1c result here — shown as a triangle marker on the chart above, so you
         can see how closely the eHbA1c estimate tracks an actual lab draw. Lab results are not
         included in the eHbA1c calculation itself. The date below is the date the blood was
@@ -391,6 +418,7 @@
               <Button
                 variant="ghost"
                 size="icon"
+                class="print:hidden"
                 aria-label="Delete lab result"
                 onclick={() => (pendingDeleteLabResult = result)}
               >
@@ -401,7 +429,7 @@
         </ul>
       {/if}
 
-      <div class="grid gap-3 sm:grid-cols-3">
+      <div class="grid gap-3 sm:grid-cols-3 print:hidden">
         <div class="space-y-1.5">
           <Label for="lab-date">Date of blood draw</Label>
           <Input id="lab-date" type="date" bind:value={newLabDate} />
@@ -417,10 +445,14 @@
       </div>
 
       {#if labResultError}
-        <p class="text-destructive text-sm">{labResultError}</p>
+        <p class="text-destructive text-sm print:hidden">{labResultError}</p>
       {/if}
 
-      <Button onclick={addLabResult} disabled={savingLabResult || !newLabDate || !newLabValue}>
+      <Button
+        class="print:hidden"
+        onclick={addLabResult}
+        disabled={savingLabResult || !newLabDate || !newLabValue}
+      >
         {#if savingLabResult}
           <Loader2 class="size-4 animate-spin" />
         {:else}

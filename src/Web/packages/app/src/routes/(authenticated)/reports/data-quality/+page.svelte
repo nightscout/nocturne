@@ -24,6 +24,9 @@
 	import ChevronRight from 'lucide-svelte/icons/chevron-right';
 	import RefreshCw from 'lucide-svelte/icons/refresh-cw';
 	import type { CompressionLowSuggestion } from '$lib/api';
+	import { setReportPrintMeta } from '$lib/components/reports/print/report-print.svelte';
+
+	setReportPrintMeta(() => ({ period: { label: 'All recorded nights' } }));
 
 	// Create resource with automatic layout registration
 	const suggestionsResource = contextResource(
@@ -82,17 +85,18 @@
 	<div class="@container container mx-auto max-w-4xl space-y-6 p-3 @md:p-6">
 		<!-- Header -->
 		<div class="flex items-center gap-3">
-			<div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+			<div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 print:hidden">
 				<ShieldCheck class="h-5 w-5 text-primary" />
 			</div>
 			<div>
-				<h1 class="text-2xl font-bold tracking-tight">Data Quality</h1>
-				<p class="text-muted-foreground">Monitor and manage data exclusions</p>
+				<h1 class="text-2xl font-bold tracking-tight print:hidden">Data Quality</h1>
+				<p class="text-muted-foreground print:hidden">Monitor and manage data exclusions</p>
+				<h2 class="hidden text-lg font-semibold print:block">Compression lows by review status</h2>
 			</div>
 		</div>
 
 		<!-- Summary Stats -->
-		<div class="grid gap-4 @lg:grid-cols-3">
+		<div class="grid gap-4 @lg:grid-cols-3 print:grid-cols-3">
 			<Card>
 				<CardContent class="flex items-center gap-4 pt-6">
 					<div

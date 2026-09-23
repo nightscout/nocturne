@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Area, Axis, ChartClipPath, Highlight, getChartContext } from "layerchart";
+  import { Area, ChartClipPath, Highlight, getChartContext } from "layerchart";
   import { curveMonotoneX } from "d3";
   import BolusMarker from "../markers/BolusMarker.svelte";
   import CarbMarker from "../markers/CarbMarker.svelte";
@@ -8,9 +8,13 @@
   import {
     placeCenteredLabels,
     placeTrailingLabels,
+    PRINT_LABEL_CHAR_WIDTH,
     type LabelCandidate,
   } from "../engine/marker-label-layout";
   import { MARKER_HALF_WIDTH } from "$lib/components/icons/marker-shapes";
+  import { patternClass } from "$lib/components/charts/print/chart-print-patterns";
+  import TrackAxis from "./TrackAxis.svelte";
+  import TrackLabel from "./TrackLabel.svelte";
 
   interface Props {
     carbRatio?: number;
@@ -34,8 +38,6 @@
   const showBolus = $derived(ctx.legend?.bolus ?? true);
   const showCarbs = $derived(ctx.legend?.carbs ?? true);
 
-
-
   const effectiveOnPointClick = $derived(
     onPointClick ?? ((time: Date) => ctx.inspection?.inspectFromTrack(time))
   );
@@ -52,8 +54,10 @@
 
   const onScreen = (x: number) => x >= 0 && x <= chartCtx.width;
 
-  /** The track's own "IOB/COB" name, drawn at x=4 in the label rows. */
+  /** The track's own "IOB/COB" name, drawn at x=4 in the label rows; on paper it is in the gutter. */
   const TRACK_NAME_SPAN = { left: 0, right: 44 };
+  const labelObstacles = $derived(ctx.printing ? [] : [TRACK_NAME_SPAN]);
+  const amountCharWidth = $derived(ctx.printing ? PRINT_LABEL_CHAR_WIDTH : undefined);
   /** Space between a glyph's edge and its meal name (see CarbMarker). */
   const MEAL_LABEL_GAP = 3;
 
@@ -83,12 +87,12 @@
   // contest one another and each row is placed on its own.
   const bolusLabelVisible = $derived(
     showBolus
-      ? placeCenteredLabels(bolusLabelCandidates, [TRACK_NAME_SPAN])
+      ? placeCenteredLabels(bolusLabelCandidates, labelObstacles, amountCharWidth)
       : new Set<BolusMarkerItem>()
   );
   const carbLabelVisible = $derived(
     showCarbs
-      ? placeCenteredLabels(carbLabelCandidates, [TRACK_NAME_SPAN])
+      ? placeCenteredLabels(carbLabelCandidates, labelObstacles, amountCharWidth)
       : new Set<CarbMarkerItem>()
   );
 
@@ -102,7 +106,7 @@
     const named = carbLabelCandidates
       .filter((c) => c.item.label)
       .map((c) => ({ ...c, text: c.item.label ?? "" }));
-    return placeTrailingLabels(named, glyphXs, MARKER_HALF_WIDTH, MEAL_LABEL_GAP);
+    return placeTrailingLabels(named, glyphXs, MARKER_HALF_WIDTH, MEAL_LABEL_GAP, amountCharWidth);
   });
 
   // Bisector for finding nearest data point
@@ -132,30 +136,14 @@
 {#if iobCobLayout}
   {@const iobScale = iobCobLayout.scale}
   {@const iobZero = iobCobLayout.zero}
-  {@const iobTrackTop = iobCobLayout.top}
   {@const iobAxisScale = iobCobLayout.axisScale}
   <!-- Treatment markers share one baseline so a carb entry (rising above it) and
        a bolus (hanging below it) at the same time compose into one diamond.
        Magnitude is conveyed by the marker labels, not height. -->
   {@const markerBaselineY = (iobCobLayout.top + iobCobLayout.bottom) / 2}
 
-  <!-- IOB axis on right -->
-  <Axis
-    placement="right"
-    scale={iobAxisScale}
-    ticks={2}
-    tickLabelProps={{ class: "text-2xs fill-muted-foreground" }}
-  />
-
-  <!-- IOB/COB track label -->
-  <text
-    x={4}
-    y={iobTrackTop + 12}
-    dy="-0.355em"
-    class="text-3xs fill-muted-foreground font-medium"
-  >
-    IOB/COB
-  </text>
+  <TrackAxis scale={iobAxisScale} unit="U" />
+  <TrackLabel label="IOB/COB" top={iobCobLayout.top} bottom={iobCobLayout.bottom} />
 
   <ChartClipPath>
     <!-- COB area (scaled by carb ratio to show on IOB-equivalent scale) -->
@@ -168,7 +156,7 @@
         motion="spring"
         curve={curveMonotoneX}
         fill=""
-        class="fill-carbs/40"
+        class="fill-carbs/40 {patternClass('carbs')}"
       />
     {/if}
 
@@ -202,6 +190,7 @@
           treatmentId={marker.treatmentId ?? ""}
           onMarkerClick={effectiveOnMarkerClick}
           showLabel={bolusLabelVisible.has(marker)}
+          printed={ctx.printing}
         />
       {/each}
     {/if}
@@ -219,6 +208,7 @@
           treatmentId={marker.treatmentId ?? ""}
           onMarkerClick={effectiveOnMarkerClick}
           showLabel={carbLabelVisible.has(marker)}
+          printed={ctx.printing}
         />
       {/each}
     {/if}

@@ -65,7 +65,7 @@
 
 <div class="@container container mx-auto space-y-6 p-3 @md:p-6 max-w-7xl">
   <!-- Header -->
-  <div>
+  <div class="print:hidden">
     <h1 class="text-2xl @md:text-3xl font-bold">Step Count</h1>
     <p class="text-muted-foreground">
       Daily step patterns with glucose overlay
@@ -124,7 +124,7 @@
   </div>
 
   <!-- Actogram -->
-  <Card>
+  <Card class="print:break-inside-auto!">
     <CardHeader>
       <CardTitle class="flex items-center gap-2">
         <Footprints class="h-5 w-5 text-muted-foreground" />
@@ -139,6 +139,8 @@
         thresholds={actogramResource.current?.thresholds}
         rowHeight={64}
         visibleCount={VISIBLE_DAYS}
+        printCount={report.rangeDayCount}
+        legend={[{ texture: "steps", label: "Steps" }]}
       >
         {#snippet rowLabel({ day })}
           <div class="text-right pr-2">

@@ -35,8 +35,30 @@
   /* App chrome that should never appear on a printed report. */
   [data-slot="sidebar"],
   [data-sidebar="trigger"],
-  [data-slot="sidebar-trigger"] {
+  [data-slot="sidebar-trigger"],
+  [data-slot="banner"],
+  [data-sonner-toaster] {
     display: none !important;
+  }
+
+  /* A shadow prints as a grey smudge, and one cut at a page edge as a stray rule. */
+  *,
+  *::before,
+  *::after {
+    box-shadow: none !important;
+  }
+
+  /* Paper cannot be clicked open, so collapsed explanations print expanded and
+     their summary reads as a plain heading. */
+  details::details-content {
+    content-visibility: visible;
+    display: contents;
+  }
+  summary {
+    list-style: none;
+  }
+  summary::-webkit-details-marker {
+    display: none;
   }
 
   /* Let report content flow onto multiple pages instead of being clipped by
@@ -51,57 +73,30 @@
     position: static !important;
   }
 
-  /* Keep cards, charts, and table rows from splitting across page breaks. */
+  /* Keep cards, charts, and table rows from splitting across page breaks. A
+     table may run for pages, so it flows and repeats its header instead; held
+     whole, it would first be pushed onto a page of its own, leaving a blank one. */
   [data-slot="card"],
-  table,
   tr,
   figure,
   svg {
     break-inside: avoid;
   }
-}
-
-/*
- * Monochrome chart textures, defined in <ChartPrintPatterns />. Active while
- * printing and when the "always show patterns" appearance setting is on — both
- * toggle `.chart-patterns-on` on the document root. SVG marks swap fill to the
- * pattern; HTML bars keep their background-color and gain a texture overlay.
- * fill-opacity is forced to 1 so translucent bands keep a legible texture.
- */
-.chart-patterns-on {
-  & [class*="chart-pat-"] { fill-opacity: 1 !important; }
-
-  & .chart-pat-very-low { fill: url(#print-pat-very-low) !important; }
-  & .chart-pat-low { fill: url(#print-pat-low) !important; }
-  & .chart-pat-in-range { fill: url(#print-pat-in-range) !important; }
-  & .chart-pat-tight-range { fill: url(#print-pat-tight-range) !important; }
-  & .chart-pat-high { fill: url(#print-pat-high) !important; }
-  & .chart-pat-very-high { fill: url(#print-pat-very-high) !important; }
-
-  & .chart-pat-cat-1 { fill: url(#print-pat-cat-1) !important; }
-  & .chart-pat-cat-2 { fill: url(#print-pat-cat-2) !important; }
-  & .chart-pat-cat-3 { fill: url(#print-pat-cat-3) !important; }
-  & .chart-pat-cat-4 { fill: url(#print-pat-cat-4) !important; }
-  & .chart-pat-cat-5 { fill: url(#print-pat-cat-5) !important; }
-  & .chart-pat-cat-6 { fill: url(#print-pat-cat-6) !important; }
-
-  & .chart-bgpat-very-low {
-    background-image: repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.55) 0 1px, transparent 1px 5px) !important;
+  [data-slot="card"]:has(table) {
+    break-inside: auto;
   }
-  & .chart-bgpat-low {
-    background-image: repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.55) 0 1px, transparent 1px 9px) !important;
-  }
-  & .chart-bgpat-tight-range {
-    background-image: radial-gradient(rgba(0, 0, 0, 0.55) 0.8px, transparent 1px) !important;
-    background-size: 6px 6px !important;
-  }
-  & .chart-bgpat-high {
-    background-image: repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.55) 0 1px, transparent 1px 9px) !important;
-  }
-  & .chart-bgpat-very-high {
-    background-image: repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.55) 0 1px, transparent 1px 5px) !important;
+  thead {
+    display: table-header-group;
   }
 }
+
+/* Set by printReport() so charts re-measure at paper width before printing. */
+.report-print-layout [data-report-root] {
+  width: var(--report-print-width);
+}
+
+/* Chart texture rules (`.chart-pat-*`, `.chart-bgpat-*`, `.chart-dash-*`) are
+   generated from CHART_TEXTURES by <ChartPrintPatterns />. */
 
 @media print {
   .year-overview {

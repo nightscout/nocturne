@@ -15,7 +15,6 @@
     TrendingUp,
     TrendingDown,
     ArrowLeft,
-    Printer,
     HelpCircle,
     Clock,
     Lightbulb,
@@ -63,7 +62,7 @@
 <div class="@container container mx-auto max-w-7xl space-y-8 p-3 @md:p-6">
   <!-- Header -->
   <div class="space-y-4">
-    <div class="flex flex-wrap items-center justify-between gap-4">
+    <div class="flex flex-wrap items-center justify-between gap-4 print:hidden">
       <div>
         <h1 class="flex items-center gap-3 text-2xl font-bold @md:text-3xl">
           <SiteChangeIcon class="h-6 w-6 text-report-treatment @md:h-8 @md:w-8" />
@@ -73,15 +72,7 @@
           Analyze glucose patterns before and after pump site changes
         </p>
       </div>
-      <div class="flex items-center gap-2 print:hidden">
-        <Button
-          variant="outline"
-          onclick={() => window.print()}
-          class="hidden md:flex"
-        >
-          <Printer class="mr-2 h-4 w-4" />
-          Print
-        </Button>
+      <div class="flex items-center gap-2">
         <Button variant="outline" href="/reports">
           <ArrowLeft class="mr-2 h-4 w-4" />
           Back to Reports
@@ -90,11 +81,11 @@
     </div>
 
     <!-- Date Range Info -->
-    <Card variant="muted">
+    <Card variant="muted" class={analysis?.siteChangeCount ? undefined : "print:hidden"}>
       <CardContent
         class="flex flex-wrap items-center justify-between gap-4 py-3"
       >
-        <div class="flex items-center gap-2 text-sm">
+        <div class="flex items-center gap-2 text-sm print:hidden">
           <Calendar class="h-4 w-4 text-muted-foreground" />
           <span class="font-medium">{formatDate(startDate)}</span>
           <span class="text-muted-foreground">to</span>
@@ -122,7 +113,7 @@
     </Card>
   </div>
 
-  <Separator />
+  <Separator class="print:hidden" />
 
   <!-- Main Chart -->
   <Card>
@@ -170,7 +161,7 @@
         ages.
       </p>
 
-      <div class="grid gap-4 @lg:grid-cols-2">
+      <div class="grid gap-4 @lg:grid-cols-2 print:grid-cols-2">
         <div>
           <p class="font-medium">Before Site Change (Left)</p>
           <p class="text-info/80">

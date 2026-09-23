@@ -91,6 +91,12 @@
     computeSegmentWidths<ScheduleEntry>(sensitivityEntries),
   );
 
+  const anyChanged = $derived(
+    [targetRangeChanged, carbRatioChanged, sensitivityChanged].some(
+      (info) => info?.changedDuringPeriod
+    )
+  );
+
   let hasData = $derived(
     targetSegments.length > 0 ||
       carbSegments.length > 0 ||
@@ -198,5 +204,12 @@
         </div>
         <span class="w-20 shrink-0"></span>
       </div>
+
+      <!-- The icon's meaning is otherwise only in its hover title, which paper cannot show. -->
+      {#if anyChanged}
+        <p class="hidden items-center justify-end gap-1 text-2xs text-muted-foreground print:flex">
+          <History class="w-3 h-3" /> Changed during this period
+        </p>
+      {/if}
   </div>
 {/if}

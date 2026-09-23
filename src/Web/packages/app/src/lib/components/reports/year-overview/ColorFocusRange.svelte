@@ -357,7 +357,6 @@
           aria-label={glucose
             ? "Average glucose color boundaries"
             : `${metricLabel} color focus`}
-          aria-describedby={id + "-description"}
         >
           {#snippet children({ thumbItems })}
             <span
@@ -576,6 +575,8 @@
                 step={inputStep}
                 bind:value={drafts[0]}
                 oninput={(e: Event & { currentTarget: HTMLInputElement }) => changeBound(0, e)}
+                aria-label={accessibleLabel(0)}
+                aria-invalid={invalidBound === 0}
                 size="xs"
                 class="w-16 tabular-nums"
               />
@@ -587,6 +588,8 @@
                 step={inputStep}
                 bind:value={drafts[1]}
                 oninput={(e: Event & { currentTarget: HTMLInputElement }) => changeBound(1, e)}
+                aria-label={accessibleLabel(1)}
+                aria-invalid={invalidBound === 1}
                 size="xs"
                 class="w-16 tabular-nums"
               />
@@ -675,7 +678,7 @@
             : "Enter valid focus line boundaries (min < max)."}
         {:else}
           {invalidBound !== null
-            ? `Enter valid color scale boundaries (min < max).`
+            ? `Enter valid color scale boundaries (min < max${fixedMax !== undefined ? `, up to ${fixedMax} ${unitLabel}` : ""}).`
             : `Enter valid focus line boundaries (min < max).`}
         {/if}
       </p>

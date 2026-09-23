@@ -7,8 +7,22 @@ import { getRequestEvent, query } from "$app/server";
 import { DiabetesPopulation, ClusterConfidence } from "$lib/api";
 import { fetchAllGlucose } from "./glucose-pagination";
 import { DateRangeSchema, resolveReportRange } from "./report-range";
+import { readable } from "$lib/server/patient-timezone";
 
 export type { DateRangeInput } from "./report-range";
+
+/**
+ * Who a printed report is about. Both fields are null when the record leaves
+ * them unset or the viewer (a public share) may not read the patient record.
+ */
+export const getReportSubject = query(async () => {
+  const { apiClient } = getRequestEvent().locals;
+  const record = await readable(() => apiClient.patientRecord.getPatientRecord());
+  return {
+    name: record?.preferredName?.trim() || null,
+    dateOfBirth: record?.dateOfBirth ?? null,
+  };
+});
 
 /** Get sensor glucose readings for a date range */
 export const getEntries = query(DateRangeSchema.optional(), async (input) => {

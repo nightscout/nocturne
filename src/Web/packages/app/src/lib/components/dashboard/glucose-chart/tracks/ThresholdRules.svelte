@@ -8,22 +8,22 @@
 </script>
 
 <!-- Fixed clinical in-range band boundaries. -->
-<ThresholdRule level="high" class="stroke-glucose-high/50" />
-<ThresholdRule level="low" class="stroke-glucose-very-low/50" />
+<ThresholdRule level="high" class="stroke-glucose-high/50 print:stroke-foreground/60" />
+<ThresholdRule level="low" class="stroke-glucose-very-low/50 print:stroke-foreground/60" />
 
 <!-- Personal target (from the active profile), drawn distinctly. A point
      target (low === high) renders as a single line. -->
 {#if targetLow != null}
   <ThresholdRule
     level="targetLow"
-    class="stroke-glucose-in-range/70"
+    class="stroke-glucose-in-range/70 print:stroke-foreground/40"
     strokeDasharray="2,4"
   />
 {/if}
 {#if targetHigh != null && targetHigh !== targetLow}
   <ThresholdRule
     level="targetHigh"
-    class="stroke-glucose-in-range/70"
+    class="stroke-glucose-in-range/70 print:stroke-foreground/40"
     strokeDasharray="2,4"
   />
 {/if}

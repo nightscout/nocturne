@@ -15,7 +15,6 @@
     Info,
     TrendingUp,
     ArrowRight,
-    Printer,
     HelpCircle,
     Syringe,
     Layers,
@@ -117,7 +116,7 @@
 <div class="@container container mx-auto max-w-7xl space-y-8 p-3 @md:p-6">
   <!-- Header -->
   <div class="space-y-4">
-    <div class="flex flex-wrap items-center justify-between gap-4">
+    <div class="flex flex-wrap items-center justify-between gap-4 print:hidden">
       <div>
         <h1 class="flex items-center gap-3 text-2xl font-bold @md:text-3xl">
           <PieChart class="h-7 w-7 text-report-treatment @md:h-8 @md:w-8" />
@@ -127,15 +126,7 @@
           Comprehensive analysis of your basal and bolus insulin patterns
         </p>
       </div>
-      <div class="flex items-center gap-2 print:hidden">
-        <Button
-          variant="outline"
-          size="sm"
-          onclick={() => window.print()}
-        >
-          <Printer class="h-4 w-4" />
-          Print
-        </Button>
+      <div class="flex items-center gap-2">
         <Button
           href="/reports/basal-analysis"
           variant="outline"
@@ -148,7 +139,7 @@
     </div>
 
     <!-- Period info -->
-    <div class="flex items-center gap-2 text-sm text-muted-foreground">
+    <div class="flex items-center gap-2 text-sm text-muted-foreground print:hidden">
       <Calendar class="h-4 w-4" />
       <span>
         {formatNumericDate(startDate)} – {formatNumericDate(endDate)}
@@ -319,7 +310,7 @@
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div class="grid gap-4 @3xl:grid-cols-3">
+        <div class="grid gap-4 @3xl:grid-cols-3 print:grid-cols-3">
           <div class="rounded-lg border bg-card p-4 text-center">
             <div class="text-3xl font-bold">
               {insulinStats.bolusCount ?? 0}
@@ -466,7 +457,7 @@
 
   <!-- Footer -->
   <div class="space-y-1 text-center text-xs text-muted-foreground">
-    <p>
+    <p class="print:hidden">
       Report generated from {formatNumber(insulinStats.bolusCount)} boluses between
       {formatNumericDate(startDate)} and {formatNumericDate(endDate)}
     </p>

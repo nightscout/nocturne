@@ -7,8 +7,9 @@
   import type { GlucoseChartContext, LegendState } from "./chart-context.svelte";
   import { setGlucoseChartContext } from "./chart-context.svelte";
   import { computeTrackLayout } from "./engine/track-layout";
-  import { hourLabel } from "$lib/utils/formatting";
+  import { formatWeekdayDate, hourLabel } from "$lib/utils/formatting";
   import { hourTicks } from "./engine/axis-ticks";
+  import { PrintMode } from "$lib/components/charts/print/print-mode.svelte";
 
   interface Props {
     engine: ChartDataEngine;
@@ -40,6 +41,7 @@
   }: Props = $props();
 
   let chartHeight = $state(0);
+  const print = new PrintMode();
 
   const layout = $derived(
     computeTrackLayout(
@@ -69,10 +71,25 @@
     )
   );
 
+  // Paper carries no forecast, so its axis ends where the period does.
   const chartXDomain = $derived({
     from: brushDomain?.[0] ?? engine.displayDateRange.from,
-    to: brushDomain?.[1] ?? engine.displayDateRangeWithPredictions.to,
+    to:
+      brushDomain?.[1] ??
+      (print.active ? engine.displayDateRange.to : engine.displayDateRangeWithPredictions.to),
   });
+
+  // Past a day and a half the ticks land on midnights, which read as a row of
+  // identical "12 AM"s unless they name the day.
+  const multiDay = $derived(
+    chartXDomain.to.getTime() - chartXDomain.from.getTime() > 36 * 60 * 60 * 1000
+  );
+
+  function tickLabel(v: unknown): string {
+    if (!(v instanceof Date)) return String(v);
+    const midnight = v.getHours() === 0 && v.getMinutes() === 0;
+    return multiDay && midnight ? formatWeekdayDate(v) : hourLabel(v);
+  }
 
   const ctx: GlucoseChartContext = {
     get engine() {
@@ -86,6 +103,9 @@
     },
     get legend() {
       return legend;
+    },
+    get printing() {
+      return print.active;
     },
   };
   setGlucoseChartContext(ctx);
@@ -115,7 +135,7 @@
           <Axis
             placement="bottom"
             ticks={hourTicks}
-            format={(v) => (v instanceof Date ? hourLabel(v) : String(v))}
+            format={tickLabel}
             tickLabelProps={{ class: "text-xs fill-muted-foreground" }}
           />
         {/if}
@@ -136,8 +156,8 @@
             }
           }}
           classes={{
-            range: "bg-warning/30 border border-warning/60 rounded",
-            handle: "bg-warning hover:bg-warning/80 rounded-sm",
+            range: "bg-warning/30 border border-warning/60 rounded print:border-dashed print:border-foreground",
+            handle: "bg-warning hover:bg-warning/80 rounded-sm print:hidden",
           }}
         />
       {/if}

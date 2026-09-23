@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { AreaChart, Rule, Legend } from "layerchart";
-  import { scaleOrdinal } from "d3-scale";
+  import { AreaChart, Rule } from "layerchart";
+  import { patternClass } from "$lib/components/charts/print/chart-print-patterns";
+  import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
   import SiteChangeIcon from "$lib/components/icons/SiteChangeIcon.svelte";
   import { AlertCircle } from "lucide-svelte";
   import { bg, bgValue, bgLabel, bgRange } from "$lib/utils/formatting";
@@ -62,13 +63,18 @@
     return `${hours}h`;
   }
 
-  // Generate explicit hourly tick values from the x-axis domain
+  const MAX_X_TICKS = 13;
+  const TICK_STEPS_HOURS = [1, 2, 3, 4, 6, 12];
+
+  // Hour ticks anchored on the change itself, thinned so labels never touch.
   const hourlyTicks = $derived.by(() => {
     const [minMinutes, maxMinutes] = xDomain;
-    const ticks: number[] = [];
     const startHour = Math.ceil(minMinutes / 60);
     const endHour = Math.floor(maxMinutes / 60);
-    for (let h = startHour; h <= endHour; h++) {
+    const span = endHour - startHour;
+    const step = TICK_STEPS_HOURS.find((s) => span / s < MAX_X_TICKS) ?? 12;
+    const ticks: number[] = [];
+    for (let h = Math.ceil(startHour / step) * step; h <= endHour; h += step) {
       ticks.push(h * 60);
     }
     return ticks;
@@ -132,22 +138,8 @@
     return [-analysis.hoursBeforeChange * 60, analysis.hoursAfterChange * 60];
   });
 
-  // $derived so the unit-dependent "Target range" label tracks unit-preference changes.
-  const legendScale = $derived(
-    scaleOrdinal<string, string>()
-      .domain([
-        "10th-25th / 75th-90th percentile",
-        "25th-75th percentile",
-        "Median glucose",
-        `Target range (${bgRange(70, 180)})`,
-      ])
-      .range([
-        "var(--percentile-outer)",
-        "var(--percentile-inner)",
-        "var(--percentile-median)",
-        "transparent",
-      ])
-  );
+  const outer = { color: "var(--percentile-outer)", props: { class: patternClass("percentile-outer") } };
+  const inner = { color: "var(--percentile-inner)", props: { class: patternClass("percentile-inner") } };
 </script>
 
 <div class="@container w-full">
@@ -166,7 +158,7 @@
               (d: SiteChangeImpactDataPointValid) => d.percentile25,
               (d: SiteChangeImpactDataPointValid) => d.percentile10,
             ],
-            color: "var(--percentile-outer)",
+            ...outer,
             label: "10th-25th",
           },
           {
@@ -175,7 +167,7 @@
               (d: SiteChangeImpactDataPointValid) => d.medianGlucose,
               (d: SiteChangeImpactDataPointValid) => d.percentile25,
             ],
-            color: "var(--percentile-inner)",
+            ...inner,
             label: "25th-Median",
           },
           {
@@ -196,7 +188,7 @@
               (d: SiteChangeImpactDataPointValid) => d.medianGlucose,
               (d: SiteChangeImpactDataPointValid) => d.percentile75,
             ],
-            color: "var(--percentile-inner)",
+            ...inner,
             label: "Median-75th",
           },
           {
@@ -205,7 +197,7 @@
               (d: SiteChangeImpactDataPointValid) => d.percentile75,
               (d: SiteChangeImpactDataPointValid) => d.percentile90,
             ],
-            color: "var(--percentile-outer)",
+            ...outer,
             label: "75th-90th",
           },
         ]}
@@ -228,29 +220,27 @@
         <!-- Target range overlay (70-180 mg/dL, plotted in display units) -->
         {#snippet aboveMarks()}
           <!-- Horizontal reference lines for target range -->
-          <Rule y={bgValue(70)} class="stroke-success/50 stroke-1" stroke-dasharray="4,4" />
-          <Rule y={bgValue(180)} class="stroke-warning/50 stroke-1" stroke-dasharray="4,4" />
+          <Rule y={bgValue(70)} class="stroke-success/50 stroke-1" dashArray="4 4" />
+          <Rule y={bgValue(180)} class="stroke-warning/50 stroke-1" dashArray="4 4" />
           <!-- Vertical line at site change point -->
           <Rule x={0} class="stroke-primary stroke-2" />
         {/snippet}
       </AreaChart>
     </div>
 
-    <!-- Legend -->
-    <div class="mt-4 flex justify-center">
-      <Legend
-        scale={legendScale}
-        variant="swatches"
-        classes={{
-          label: "text-xs text-muted-foreground",
-          swatch: "rounded-sm",
-        }}
-      />
-    </div>
+    <ChartKey
+      class="mt-4"
+      items={[
+        { texture: "percentile-outer", label: "10th–25th / 75th–90th percentile" },
+        { texture: "percentile-inner", label: "25th–75th percentile" },
+        { texture: "percentile-median", label: "Median glucose", shape: "line" },
+        { texture: "target-range-limit", label: `Target range (${bgRange(70, 180)})`, shape: "line" },
+      ]}
+    />
 
     <!-- Summary Statistics -->
     {#if analysis.summary}
-      <div class="mt-6 grid grid-cols-2 gap-4 @lg:grid-cols-4">
+      <div class="mt-6 grid grid-cols-2 gap-4 @lg:grid-cols-4 print:grid-cols-4">
         <div class="rounded-lg bg-muted/50 p-3 text-center">
           <div class="text-sm text-muted-foreground">Avg Before</div>
           <div class="text-xl font-semibold">
@@ -284,14 +274,14 @@
       </div>
 
       {#if analysis.summary?.percentImprovement !== undefined && analysis.summary?.percentImprovement > 0}
-        <div class="mt-4 rounded-lg bg-success/10 p-3 text-center text-success">
+        <div class="mt-4 rounded-lg bg-success/10 p-3 text-center text-success print:text-foreground">
           <span class="font-medium">
             ↓ {analysis.summary?.percentImprovement.toFixed(1)}% improvement
           </span>
           <span class="text-sm opacity-80">after site change</span>
         </div>
       {:else if analysis.summary?.percentImprovement !== undefined && analysis.summary?.percentImprovement < 0}
-        <div class="mt-4 rounded-lg bg-warning/10 p-3 text-center text-warning">
+        <div class="mt-4 rounded-lg bg-warning/10 p-3 text-center text-warning print:text-foreground">
           <span class="font-medium">
             ↑ {Math.abs(analysis.summary?.percentImprovement).toFixed(1)}%
             higher

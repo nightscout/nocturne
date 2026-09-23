@@ -36,7 +36,7 @@
 </script>
 
 <div class="@container">
-<div class="grid grid-cols-1 @4xl:grid-cols-3 gap-4">
+<div class="grid grid-cols-1 @4xl:grid-cols-3 print:grid-cols-3 gap-4">
   <!-- Total Records -->
   <Card.Root>
     <Card.Content class="p-4">
@@ -48,12 +48,12 @@
           <p class="text-2xl font-bold tabular-nums">{counts.all}</p>
         </div>
         <div
-          class="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center"
+          class="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center print:hidden"
         >
           <Activity class="h-5 w-5 text-primary" />
         </div>
       </div>
-      <div class="mt-2 flex flex-wrap gap-1">
+      <div class="mt-2 flex flex-wrap gap-1 print:gap-x-3">
         {#each Object.values(ENTRY_CATEGORIES) as cat (cat.id)}
           {#if counts[cat.id] > 0}
             <Badge variant="secondary" size="sm">
@@ -72,13 +72,13 @@
         <div>
           <p class="text-sm font-medium text-muted-foreground">Insulin</p>
           <p
-            class="text-2xl font-bold tabular-nums text-insulin-bolus"
+            class="text-2xl font-bold tabular-nums text-insulin-bolus print:text-foreground"
           >
             {totalInsulin.toFixed(1)}U
           </p>
         </div>
         <div
-          class="h-10 w-10 rounded-lg bg-insulin-bolus/10 flex items-center justify-center"
+          class="h-10 w-10 rounded-lg bg-insulin-bolus/10 flex items-center justify-center print:hidden"
         >
           <BolusIcon size={20} />
         </div>
@@ -101,12 +101,12 @@
       <div class="flex items-center justify-between">
         <div>
           <p class="text-sm font-medium text-muted-foreground">Carbs</p>
-          <p class="text-2xl font-bold tabular-nums text-carbs">
+          <p class="text-2xl font-bold tabular-nums text-carbs print:text-foreground">
             {totalCarbs.toFixed(0)}g
           </p>
         </div>
         <div
-          class="h-10 w-10 rounded-lg bg-carbs/10 flex items-center justify-center"
+          class="h-10 w-10 rounded-lg bg-carbs/10 flex items-center justify-center print:hidden"
         >
           <CarbsIcon size={20} />
         </div>

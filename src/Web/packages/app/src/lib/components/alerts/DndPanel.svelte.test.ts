@@ -62,7 +62,7 @@ describe("DndPanel", () => {
     render(DndPanel, {});
 
     await dndToggle().click();
-    await page.getByRole("button", { name: "30 minutes" }).click();
+    await page.getByRole("menuitem", { name: "30 minutes" }).click();
 
     await expect
       .element(page.getByText("A scheduled quiet period is running."))

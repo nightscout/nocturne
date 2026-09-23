@@ -15,8 +15,10 @@
   } from "$lib/components/actogram";
   import { MS_PER_HOUR } from "$lib/components/actogram/actogram";
   import { useActogramReport } from "$lib/hooks/actogram-report.svelte";
+  import { PrintMode } from "$lib/components/charts/print/print-mode.svelte";
 
   const VISIBLE_DAYS = 14;
+  const print = new PrintMode();
 
   const report = useActogramReport("Error Loading Heart Rate Report");
   const { params: reportsParams, resource: actogramResource } = report;
@@ -73,7 +75,7 @@
 
 <div class="@container container mx-auto space-y-6 p-3 @md:p-6 max-w-7xl">
   <!-- Header -->
-  <div>
+  <div class="print:hidden">
     <h1 class="text-2xl @md:text-3xl font-bold">Heart Rate</h1>
     <p class="text-muted-foreground">
       Daily heart rate patterns with glucose overlay
@@ -147,7 +149,7 @@
   </div>
 
   <!-- Actogram -->
-  <Card>
+  <Card class="print:break-inside-auto!">
     <CardHeader>
       <CardTitle class="flex items-center gap-2">
         <HeartPulse class="h-5 w-5 text-heart-rate" />
@@ -162,7 +164,17 @@
         thresholds={actogramResource.current?.thresholds}
         rowHeight={48}
         visibleCount={VISIBLE_DAYS}
+        printCount={report.rangeDayCount}
         initialOffset={0}
+        legend={[
+          {
+            texture: "heart-rate",
+            label: "Heart rate",
+            shape: "dot",
+            // The dots print in ink.
+            color: print.active ? "var(--foreground)" : undefined,
+          },
+        ]}
       >
         {#snippet tooltipValue({ point })}
           {@const bpm = typeof point.bpm === "number" ? point.bpm : 0}
@@ -181,6 +193,7 @@
               r={1.5}
               fill="var(--chart-1)"
               opacity={isExtended ? 0.3 : 0.7}
+              class={isExtended ? "print:[r:2]" : "print:fill-foreground print:opacity-80 print:[r:1.75]"}
             />
           {/each}
         {/snippet}

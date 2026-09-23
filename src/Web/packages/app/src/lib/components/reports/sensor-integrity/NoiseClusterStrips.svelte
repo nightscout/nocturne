@@ -31,18 +31,28 @@
 </script>
 
 <div class="space-y-1">
+  <!-- Printed rows cannot be expanded to the detailed chart, so the page carries the hour axis. -->
+  <div class="hidden items-center gap-3 px-2 text-2xs text-muted-foreground print:flex" aria-hidden="true">
+    <div class="w-20 shrink-0"></div>
+    <div class="flex min-w-0 flex-1 justify-between">
+      {#each ["00:00", "06:00", "12:00", "18:00", "24:00"] as tick (tick)}
+        <span>{tick}</span>
+      {/each}
+    </div>
+    <div class="w-16 shrink-0"></div>
+  </div>
   {#each buckets as bucket (bucket.dateMs)}
     <!-- eslint-disable-next-line no-restricted-syntax -- the chart row is the click target -->
     <button
       type="button"
       onclick={() => onSelectDay?.(bucket)}
-      class="flex w-full items-center gap-3 rounded-md px-2 py-1 text-left transition-colors hover:bg-muted/50 {selectedDateMs ===
+      class="flex w-full items-center gap-3 rounded-md px-2 py-1 text-left transition-colors hover:bg-muted/50 print:break-inside-avoid print:bg-transparent print:ring-0 {selectedDateMs ===
       bucket.dateMs
         ? 'bg-muted ring-1 ring-border'
         : ''}"
     >
       <div class="w-20 shrink-0 text-xs text-muted-foreground">{bucket.label}</div>
-      <div class="h-12 flex-1">
+      <div class="h-12 min-w-0 flex-1 overflow-hidden">
         <NoiseDayChart {bucket} {thresholds} {yMax} />
       </div>
       <div class="w-16 shrink-0 text-right">

@@ -57,7 +57,7 @@ describe("OidcProviderDialog", () => {
 		await expect
 			.element(
 				page.getByText(
-					"Configure an OpenID Connect provider for single sign-on.",
+					"Configure an external identity provider (OpenID Connect or OAuth 2.0) for single sign-on.",
 				),
 			)
 			.toBeVisible();

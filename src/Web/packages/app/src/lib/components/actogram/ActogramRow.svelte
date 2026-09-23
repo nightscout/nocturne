@@ -5,6 +5,7 @@
   import { timeScale } from '$lib/components/charts/scale-guards';
   import { curveMonotoneX } from 'd3';
   import { bg, bgLabel, time } from '$lib/utils/formatting';
+  import { dashClass } from '$lib/components/charts/print/chart-print-patterns';
   import {
     MS_PER_HOUR,
     HOURS_PER_DAY,
@@ -71,15 +72,30 @@
 
       <!-- BG overlay line (middle layer) -->
       {#if bgChartData.length > 1 && thresholds}
+        <!-- The dots' range colour is lost in black and white; these limits carry it instead. -->
+        {#each [thresholds.low, thresholds.high] as limit (limit)}
+          <line
+            x1={0}
+            x2={context.width}
+            y1={context.yScale(limit)}
+            y2={context.yScale(limit)}
+            stroke="var(--muted-foreground)"
+            stroke-width={0.5}
+            stroke-opacity={0.7}
+            class="hidden [.chart-patterns-on_&]:inline {dashClass('target-range-limit')}"
+          />
+        {/each}
         <Spline
           data={bgChartData}
           x={(d) => d.time}
           y={(d) => d.sgv}
           curve={curveMonotoneX}
-          class="stroke-muted-foreground/50 fill-none"
+          class="stroke-muted-foreground/50 fill-none print:stroke-muted-foreground"
           strokeWidth={1.5}
         />
-        <!-- One data-mode Circle for the whole row, not a Circle per reading:
+        <!-- Paper drops the dots: their range colour prints as grey, and grey
+             dots read as the row's own marks. The target limits carry range.
+             One data-mode Circle for the whole row, not a Circle per reading:
              each layerchart mark registers with the chart and every
              registration re-runs the chart's mark deriveds, so N points cost
              O(N^2). Data mode renders all points from a single mark. -->
@@ -90,7 +106,7 @@
           cy={(d) => d.sgv}
           r={2}
           fill={(d) => d.color}
-          class="opacity-80"
+          class="opacity-80 print:hidden"
         />
       {/if}
 

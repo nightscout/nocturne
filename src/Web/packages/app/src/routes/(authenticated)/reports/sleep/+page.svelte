@@ -37,6 +37,8 @@
   import SleepCompositionChart from "$lib/components/reports/sleep/SleepCompositionChart.svelte";
   import SleepWeeklyBreakdown from "$lib/components/reports/sleep/SleepWeeklyBreakdown.svelte";
   import { SleepSource } from "$api";
+  import { laneForStage, laneTexture } from "$lib/utils/sleep-stages";
+  import { patternClass } from "$lib/components/charts/print/chart-print-patterns";
   import { useSearchParams } from "runed/kit";
   import { z } from "zod";
 
@@ -109,6 +111,19 @@
       state: typeof state === "string" ? state : "",
     };
   }
+
+  const actogramLegend = $derived.by(() => {
+    const lanes = new Set(sleepPoints.map((p) => laneForStage(String(p.state ?? ""))));
+    return [
+      { lane: "deep", label: "Deep" },
+      { lane: "rem", label: "REM" },
+      { lane: "light", label: "Light" },
+      { lane: "awake", label: "Awake" },
+      { lane: "unspecified", label: "Asleep (unstaged)" },
+    ]
+      .filter((s) => lanes.has(s.lane))
+      .map((s) => ({ texture: laneTexture(s.lane), label: s.label }));
+  });
 
   // BG data as GlucosePoints
   const bgPoints = $derived(
@@ -226,7 +241,7 @@
 
 <div class="@container container mx-auto space-y-6 p-3 @md:p-6 max-w-7xl">
   <!-- Header -->
-  <div>
+  <div class="print:hidden">
     <h1 class="text-2xl @md:text-3xl font-bold">Sleep & Overnight</h1>
     <p class="text-muted-foreground">
       Sleep patterns with overnight glucose overlay
@@ -331,7 +346,7 @@
             <CalendarRange class="h-5 w-5 text-report-lifestyle" />
             Weekly Breakdown
           </CardTitle>
-          <CardDescription>Each tracked night links to its full report.</CardDescription>
+          <CardDescription class="print:hidden">Each tracked night links to its full report.</CardDescription>
         </CardHeader>
         <CardContent>
           <SleepWeeklyBreakdown weeks={sleepWeeks} nights={sleepNights} />
@@ -351,8 +366,10 @@
             <CardDescription>
               Showing all {sourceLabel} sessions — nights aren't deduplicated across devices.
             </CardDescription>
+          {:else}
+            <CardDescription class="hidden print:block">Source: {sourceLabel}</CardDescription>
           {/if}
-          <CardAction>
+          <CardAction class="print:hidden">
             <Select.Root
               type="single"
               value={sourceFilter}
@@ -384,7 +401,7 @@
     {/if}
 
     <!-- Actogram -->
-    <Card>
+    <Card class="print:break-inside-auto!">
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <Moon class="h-5 w-5 text-report-lifestyle" />
@@ -399,7 +416,9 @@
           thresholds={actogramResource.current?.thresholds}
           rowHeight={48}
           visibleCount={VISIBLE_DAYS}
+          printCount={report.rangeDayCount}
           initialOffset={0}
+          legend={actogramLegend}
         >
           {#snippet tooltipValue({ point })}
             {@const span = sleepSpanOf(point)}
@@ -437,7 +456,7 @@
                 width={rectWidth}
                 height={ctx.height - 8}
                 data-lane={span.state.toLowerCase()}
-                class="fill-lane"
+                class={["fill-lane", patternClass(laneTexture(laneForStage(span.state))), !isExtended && "print:opacity-90"]}
                 opacity={isExtended ? 0.25 : 0.5}
               />
             {/each}

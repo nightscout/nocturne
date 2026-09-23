@@ -18,7 +18,7 @@
   bind:this={ref}
   data-slot="table-cell"
   class={cn(
-    "whitespace-nowrap p-2 align-middle [&:has([role=checkbox])]:pr-0",
+    "whitespace-nowrap p-2 align-middle [&:has([role=checkbox])]:pr-0 print:py-0.5 print:text-xs print:whitespace-normal",
     variant === "muted" && "text-muted-foreground",
     className
   )}

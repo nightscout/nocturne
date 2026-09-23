@@ -32,6 +32,13 @@
 
   const chartCtx = getChartContext();
 
+  // Set from `onerror` rather than computed in the `failed` snippet: layerchart's
+  // <Chart> remounts its children once mounted, and Svelte still renders the
+  // destroyed boundary's `failed` snippet a microtask later. A call expression
+  // there becomes a derived owned by that dead effect, which reads back as an
+  // uninitialized symbol and throws from set_text. A plain state read does not.
+  let failureMessage = $state(PREDICTIONS_UNAVAILABLE);
+
   const predictionEndTime = $derived(chartXDomain.to.getTime());
 
   const predictionCurveData = $derived(
@@ -108,7 +115,9 @@
   });
 </script>
 
-<svelte:boundary>
+<svelte:boundary
+  onerror={(error) => (failureMessage = remoteErrorMessage(error, PREDICTIONS_UNAVAILABLE))}
+>
   {#snippet pending()}
     <Spline
       data={[
@@ -137,14 +146,14 @@
     </text>
   {/snippet}
 
-  {#snippet failed(error)}
+  {#snippet failed()}
     <text
       x={50}
       y={glucoseTrackTop + 20}
       dy="-0.355em"
       class="text-xs fill-destructive"
     >
-      {remoteErrorMessage(error, PREDICTIONS_UNAVAILABLE)}
+      {failureMessage}
     </text>
   {/snippet}
 

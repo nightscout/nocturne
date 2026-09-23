@@ -11,6 +11,8 @@ export default defineConfig({
       "e2e/**",
       ".svelte-kit/**",
       "src/**/*.svelte.test.ts",
+      // SSR render tests need SvelteKit's virtual modules; they run under vitest.render.config.ts.
+      "src/**/*.render.test.ts",
     ],
     environment: "node",
     alias: {

@@ -23,6 +23,7 @@
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import ClinicalInsights from "$lib/components/reports/ClinicalInsights.svelte";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
+  import TextureSwatch from "$lib/components/charts/print/TextureSwatch.svelte";
   import { getReportsData } from "$api/reports.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
@@ -143,7 +144,7 @@
               <h4 class="font-medium text-sm">Time Breakdown (per day avg)</h4>
               <div class="grid grid-cols-3 gap-2">
                 <div class="flex flex-col">
-                  <span class="text-glucose-in-range font-medium">In Range</span>
+                  <span class="text-glucose-in-range font-medium print:text-foreground">In Range</span>
                   <span>
                     {formatMinutesDuration(
                       (durations?.target ?? 0) / dayCount
@@ -151,7 +152,7 @@
                   </span>
                 </div>
                 <div class="flex flex-col">
-                  <span class="text-glucose-very-low font-medium">Low</span>
+                  <span class="text-glucose-very-low font-medium print:text-foreground">Low</span>
                   <span>
                     {formatMinutesDuration(
                       ((durations?.low ?? 0) + (durations?.veryLow ?? 0)) /
@@ -160,7 +161,7 @@
                   </span>
                 </div>
                 <div class="flex flex-col">
-                  <span class="text-glucose-high font-medium">High</span>
+                  <span class="text-glucose-high font-medium print:text-foreground">High</span>
                   <span>
                     {formatMinutesDuration(
                       ((durations?.high ?? 0) + (durations?.veryHigh ?? 0)) /
@@ -212,8 +213,8 @@
                   Clinical details
                 </summary>
                 <p class="mt-2 text-muted-foreground">
-                  Calculated using the Nathan formula: eA1C = (GMI + 2.59) /
-                  1.59. Based on mean glucose of {bgOr(stats?.mean)} {bgLabel()} over
+                  Calculated using the ADAG formula: eA1C = (mean glucose in
+                  mmol/L + 2.59) / 1.59. Based on mean glucose of {bgOr(stats?.mean)} {bgLabel()} over
                   {dayCount}
                   days.
                 </p>
@@ -271,7 +272,7 @@
       </div>
 
       <!-- Safety Metrics Row -->
-      <div class="grid grid-cols-1 @3xl:grid-cols-2 gap-6">
+      <div class="grid grid-cols-1 @3xl:grid-cols-2 print:grid-cols-2 gap-6">
         <!-- Hypoglycemia -->
         <Card>
           <CardHeader>
@@ -295,11 +296,11 @@
               </div>
               <div class="text-right text-sm">
                 <div class="flex items-center gap-2">
-                  <div class="w-3 h-3 rounded-full bg-glucose-very-low"></div>
+                  <TextureSwatch texture="very-low" />
                   <span>&lt;{bg(54)}: {tir?.veryLow?.toFixed(1) ?? 0}%</span>
                 </div>
                 <div class="flex items-center gap-2">
-                  <div class="w-3 h-3 rounded-full bg-glucose-low"></div>
+                  <TextureSwatch texture="low" />
                   <span>{bg(54)}-{bg(70)}: {tir?.low?.toFixed(1) ?? 0}%</span>
                 </div>
               </div>
@@ -348,11 +349,11 @@
               </div>
               <div class="text-right text-sm">
                 <div class="flex items-center gap-2">
-                  <div class="w-3 h-3 rounded-full bg-glucose-high"></div>
+                  <TextureSwatch texture="high" />
                   <span>{bg(180)}-{bg(250)}: {tir?.high?.toFixed(1) ?? 0}%</span>
                 </div>
                 <div class="flex items-center gap-2">
-                  <div class="w-3 h-3 rounded-full bg-glucose-very-high"></div>
+                  <TextureSwatch texture="very-high" />
                   <span>&gt;{bg(250)}: {tir?.veryHigh?.toFixed(1) ?? 0}%</span>
                 </div>
               </div>
@@ -370,7 +371,7 @@
       <ClinicalInsights {analysis} showClinicalNotes={true} maxInsights={3} />
 
       <!-- Data Quality & Statistics -->
-      <div class="grid grid-cols-1 @3xl:grid-cols-2 gap-6">
+      <div class="grid grid-cols-1 @3xl:grid-cols-2 print:grid-cols-2 gap-6">
         <!-- Glucose Statistics -->
         <Card>
           <CardHeader>
@@ -537,7 +538,7 @@
     <!-- Footer -->
     <div class="text-xs text-muted-foreground text-center space-y-1 print:mt-8">
       {#if lastUpdated}
-        <p>Report generated: {formatMediumDateTime(new Date(lastUpdated))}</p>
+        <p class="print:hidden">Report generated: {formatMediumDateTime(new Date(lastUpdated))}</p>
       {/if}
       <p class="text-muted-foreground/60">
         This report is for informational purposes. Always consult your
@@ -551,13 +552,6 @@
   @media print {
     :global(body) {
       font-size: 12px;
-    }
-    /* Collapsed <details> can't be expanded on paper; reveal content, drop the toggle. */
-    details > :not(summary) {
-      display: block;
-    }
-    summary {
-      display: none;
     }
   }
 </style>

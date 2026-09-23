@@ -2,7 +2,7 @@
   import { resolve } from "$app/paths";
   import { Chart, Calendar, Layer, Tooltip } from "layerchart";
   import { scaleThreshold } from "d3-scale";
-  import { timeWeek, timeMonths } from "d3-time";
+  import { timeMonth, timeWeek, timeMonths } from "d3-time";
   import { Loader2 } from "lucide-svelte";
   import { fly } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
@@ -10,6 +10,8 @@
   import type { GlucoseUnits } from "$lib/utils/formatting";
   import { getDataTypeLabel } from "$lib/utils/data-type-labels";
   import { yearCalendarBounds } from "./year-bounds";
+  import { PrintMode } from "$lib/components/charts/print/print-mode.svelte";
+  import { patternClass, type TextureKey } from "$lib/components/charts/print/chart-print-patterns";
   import type {
     DailySummaryDay,
     YearCalendarDatum,
@@ -24,6 +26,7 @@
     yearData,
     transformYearData,
     getCellFill,
+    getCellHatch,
     getWeekColumns,
     navigateToDayInReview,
     glucoseColorScale,
@@ -39,6 +42,8 @@
     yearData: Map<number, DailySummaryDay[]>;
     transformYearData: (days: DailySummaryDay[]) => YearCalendarDatum[];
     getCellFill: (data: YearCalendarDatum | undefined) => string;
+    /** Texture laid over a cell's fill to mark its band in black and white. */
+    getCellHatch?: (data: YearCalendarDatum | undefined) => TextureKey | null;
     getWeekColumns: (
       cells: Array<{ x: number; data?: { date?: Date } }>
     ) => YearWeekColumn[];
@@ -51,10 +56,34 @@
     sentinelElement?: HTMLDivElement;
   } = $props();
 
-  const bounds = $derived(yearCalendarBounds(year));
   const days = $derived(yearData.get(year));
   const chartData = $derived(days ? transformYearData(days) : []);
   const isYearLoading = $derived(loadingYears.has(year) && !days);
+
+  const print = new PrintMode();
+  let chartWidth = $state(0);
+
+  /**
+   * Screen scrolls a full year of fixed-size cells. Paper cannot scroll, so a
+   * print keeps only the months that hold data and sizes cells to fit the width.
+   */
+  const bounds = $derived.by(() => {
+    const full = yearCalendarBounds(year);
+    if (!print.active) return full;
+    const dated = chartData.filter((d) => d.totalCount > 0).map((d) => d.date.getTime());
+    if (dated.length === 0) return full;
+    return {
+      start: timeMonth.floor(new Date(Math.min(...dated))),
+      end: timeMonth.offset(timeMonth.floor(new Date(Math.max(...dated))), 1),
+    };
+  });
+  const SCREEN_CELL = 24;
+  const PRINT_CELL_MAX = 32;
+  const cellSize = $derived(
+    print.active && chartWidth > 0
+      ? Math.min(PRINT_CELL_MAX, chartWidth / (timeWeek.count(bounds.start, bounds.end) + 1))
+      : SCREEN_CELL
+  );
 </script>
 
 <div
@@ -91,7 +120,11 @@
     <div
       class="w-full overflow-x-auto overflow-y-visible rounded-lg border border-border bg-card p-4 print:overflow-visible"
     >
-      <div class="min-w-[900px] h-60">
+      <div
+        class="h-60 min-w-[900px] print:h-(--print-h) print:min-w-0"
+        style:--print-h="{cellSize * 7 + 20}px"
+        bind:clientWidth={chartWidth}
+      >
         <Chart
           data={chartData}
           x="date"
@@ -112,7 +145,7 @@
               <Calendar
                 start={bounds.start}
                 end={bounds.end}
-                cellSize={24}
+                {cellSize}
                 monthPath
                 monthLabel={false}
               >
@@ -148,6 +181,7 @@
                   {#each cells as cell, i (i)}
                     {@const padding = 1}
                     {@const cellDate = cell.data?.dateString}
+                    {@const hatch = getCellHatch?.(cell.data)}
                     <!-- svelte-ignore a11y_click_events_have_key_events -->
                     <!-- svelte-ignore a11y_no_static_element_interactions -->
                     <rect
@@ -166,6 +200,18 @@
                         }
                       }}
                     />
+                    {#if hatch}
+                      <rect
+                        x={cell.x + padding}
+                        y={cell.y + padding}
+                        width={cellSize[0] - padding * 2}
+                        height={cellSize[1] - padding * 2}
+                        rx={4}
+                        fill="none"
+                        pointer-events="none"
+                        class={patternClass(hatch)}
+                      />
+                    {/if}
                   {/each}
                   <!-- Week number labels -->
                   {@const weekCols = getWeekColumns(cells)}

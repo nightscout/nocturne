@@ -189,7 +189,7 @@
                 <h4 class="text-sm font-semibold text-foreground">
                   {insight.title}
                 </h4>
-                <Badge variant={badgeVariants[insight.type]}>
+                <Badge variant={badgeVariants[insight.type]} class="print:hidden">
                   <CategoryIcon class="mr-1 h-3 w-3" />
                   {insight.category}
                 </Badge>

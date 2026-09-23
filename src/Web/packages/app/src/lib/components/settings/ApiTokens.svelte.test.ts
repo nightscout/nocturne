@@ -190,7 +190,9 @@ describe("ApiTokens load failure", () => {
 
     render(ApiTokens);
 
-    await expect.element(page.getByText(LOAD_FAILURE)).toBeVisible();
+    // A reading surface shows a server-written 5xx reason in place of its
+    // fallback; see READ_SURFACE in $lib/forms/submit-error.
+    await expect.element(page.getByText("boom", { exact: true })).toBeVisible();
     await expect
       .element(page.getByText("No API tokens.", { exact: false }))
       .not.toBeInTheDocument();

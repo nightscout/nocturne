@@ -8,6 +8,8 @@
  * @nocturne/ui theme.css) — no colour mapping lives here.
  */
 
+import type { TextureKey } from "$lib/components/charts/print/chart-print-patterns";
+
 /** Classic hypnogram order, top to bottom. Unspecified is appended only when present. */
 export const HYPNOGRAM_LANE_ORDER = ["awake", "rem", "light", "deep"];
 
@@ -43,3 +45,15 @@ export const SLEEP_COMPOSITION_SEGMENTS = [
   { key: "lightMinutes", label: "Light", lane: "light" },
   { key: "unspecifiedMinutes", label: "Unspecified", lane: "unspecified" },
 ] as const;
+
+const LANE_TEXTURES: Record<string, TextureKey> = {
+  awake: "sleep-awake",
+  rem: "sleep-rem",
+  light: "sleep-light",
+  deep: "sleep-deep",
+};
+
+/** The print texture of a display lane from {@link laneForStage}. */
+export function laneTexture(lane: string): TextureKey {
+  return LANE_TEXTURES[lane] ?? "sleep-unspecified";
+}

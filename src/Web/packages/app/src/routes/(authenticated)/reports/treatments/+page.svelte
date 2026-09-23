@@ -372,7 +372,7 @@
 {#if reportsResource.current}
 <div class="@container container mx-auto space-y-6 p-3 @md:p-6">
   <!-- Header -->
-  <div class="space-y-2">
+  <div class="space-y-2 print:hidden">
     <div
       class="flex items-center justify-center gap-2 text-sm text-muted-foreground"
     >
@@ -386,10 +386,16 @@
     <h1 class="text-center text-3xl font-bold">Treatment Log</h1>
     <p class="mx-auto max-w-2xl text-center text-muted-foreground">
       Review and manage your insulin doses, carb entries, BG checks, notes, and
-      device events.<span class="print:hidden"> Use filters to find specific
-        records.</span>
+      device events. Use filters to find specific records.
     </p>
   </div>
+  {#if hasActiveFilters}
+    <p class="hidden text-sm print:block">
+      Showing {formatNumber(filteredRows.length)} of {formatNumber(allRows.length)} records
+      {#if activeCategory !== "all"}· {ENTRY_CATEGORIES[activeCategory].name}{/if}
+      {#if searchQuery.trim()}· matching "{searchQuery.trim()}"{/if}
+    </p>
+  {/if}
 
   <!-- Summary Stats -->
   <TreatmentStatsCard {treatmentSummary} counts={filteredCounts} dayCount={dateInfo.dayCount} />
@@ -502,7 +508,7 @@
   </Card.Root>
 
   <!-- Footer -->
-  <div class="text-center text-xs text-muted-foreground">
+  <div class="text-center text-xs text-muted-foreground print:hidden">
     <p>
       Report generated from {formatNumber(allRows.length)} records between
       {formatNumericDate(dateInfo.from)} and {formatNumericDate(dateInfo.to)}

@@ -27,6 +27,8 @@
 </script>
 
 <script lang="ts">
+  import { PrintMode } from "$lib/components/charts/print/print-mode.svelte";
+  import { cn } from "$lib/utils";
   import { distinct } from "$lib/utils/collections";
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
@@ -43,6 +45,7 @@
   import DataTableToolbar from "./DataTableToolbar.svelte";
   import DataTablePagination from "./DataTablePagination.svelte";
   import ColumnFilterPopover from "./ColumnFilterPopover.svelte";
+  import { getDeviceEventTypeLabel } from "$lib/constants/device-event-types";
 
   interface Props {
     rows: EntryRecord[];
@@ -60,6 +63,12 @@
   let rowSelection = $state<Record<string, boolean>>({});
   let pagination = $state<PaginationState>({ pageIndex: 0, pageSize: 50 });
   let globalFilter = $state("");
+
+  /** Columns that only carry controls, dropped from the printout. */
+  const CONTROL_COLUMNS = new Set(["select", "actions"]);
+
+  // Paper cannot page, so a printout carries every row the filters let through.
+  const print = new PrintMode();
 
   interface FilterOption {
     value: string;
@@ -132,7 +141,7 @@
             : record.data.text
           : "\u2014";
       case "deviceEvent":
-        return record.data.eventType ?? "\u2014";
+        return record.data.eventType ? getDeviceEventTypeLabel(record.data.eventType) : "\u2014";
       case "basalInjection":
         return formatNumber(record.data.units, "U");
     }
@@ -154,7 +163,7 @@
       case "note": {
         const parts: string[] = [];
         if (record.data.eventType) parts.push(record.data.eventType);
-        if (record.data.isAnnouncement) parts.push("Announcement");
+        if (record.data.isAnnouncement && !parts.includes("Announcement")) parts.push("Announcement");
         return parts.length > 0 ? parts.join(" \u00B7 ") : "\u2014";
       }
       case "deviceEvent":
@@ -395,6 +404,10 @@
     return table.getSelectedRowModel().rows.map((row) => row.original);
   });
 
+  const visibleRows = $derived(
+    print.active ? table.getPrePaginationRowModel().rows : table.getRowModel().rows
+  );
+
   function handleBulkDelete() {
     if (onBulkDelete && selectedRows.length > 0) {
       onBulkDelete(selectedRows);
@@ -452,6 +465,14 @@
     }
   }
 
+  const printFilters = $derived([
+    ...(globalFilter.trim() ? [`search "${globalFilter.trim()}"`] : []),
+    ...(selectedTypes.length > 0
+      ? [`type: ${selectedTypes.map((t) => (typeFilterOptions.find((o) => o.value === t)?.label ?? t)).join(", ")}`]
+      : []),
+    ...(selectedSources.length > 0 ? [`source: ${selectedSources.join(", ")}`] : []),
+  ]);
+
   const typeFilterOptions: FilterOption[] = Object.entries(ENTRY_CATEGORIES).map(([id, cat]) => ({
     value: id,
     label: cat.name,
@@ -491,10 +512,11 @@
   column: Column<EntryRecord, unknown>;
   label: string;
 })}
+  <span class="hidden print:inline">{label}</span>
   <Button
     variant="ghost"
     size="sm"
-    class="-ml-3"
+    class="-ml-3 print:hidden"
     onclick={() => column.toggleSorting()}
   >
     {label}
@@ -515,9 +537,10 @@
   label: string;
   styles: ReturnType<typeof getEntryStyle>;
 })}
-  <Badge variant={styles.badge}>
+  <Badge variant={styles.badge} class="print:hidden">
     {label}
   </Badge>
+  <span class="hidden print:inline">{label}</span>
 {/snippet}
 
 {#snippet typeFilterHeaderSnippet({ typeFilterOptions, selectedTypes, toggleTypeFilter, clearTypeFilter }: TypeFilterHeaderProps)}
@@ -562,14 +585,20 @@
 
 <!-- Table UI -->
 <div class="space-y-4">
-  <!-- Toolbar -->
-  <DataTableToolbar
-    bind:globalFilter
-    {table}
-    selectedCount={selectedRows.length}
-    onClearSelection={clearSelection}
-    onBulkDelete={handleBulkDelete}
-  />
+  <div class="print:hidden">
+    <DataTableToolbar
+      bind:globalFilter
+      {table}
+      selectedCount={selectedRows.length}
+      onClearSelection={clearSelection}
+      onBulkDelete={handleBulkDelete}
+    />
+  </div>
+  {#if printFilters.length > 0}
+    <p class="hidden text-xs text-muted-foreground print:block">
+      Filtered by {printFilters.join("; ")}
+    </p>
+  {/if}
 
   <!-- Table -->
   <div class="rounded-md border">
@@ -579,7 +608,10 @@
           <Table.Row>
             {#each headerGroup.headers as header (header.id)}
               <Table.Head
-                class="whitespace-nowrap w-(--col-w)"
+                class={cn(
+                  "whitespace-nowrap w-(--col-w)",
+                  CONTROL_COLUMNS.has(header.column.id) && "print:hidden"
+                )}
                 style={header.getSize()
                   ? `--col-w: ${header.getSize()}px`
                   : undefined}
@@ -596,7 +628,7 @@
         {/each}
       </Table.Header>
       <Table.Body>
-        {#each table.getRowModel().rows as row (row.id)}
+        {#each visibleRows as row (row.id)}
           <Table.Row
             data-testid="treatment-row"
             data-state={row.getIsSelected() ? "selected" : undefined}
@@ -608,7 +640,12 @@
             }}
           >
             {#each row.getVisibleCells() as cell (cell.id)}
-              <Table.Cell class="py-2">
+              <Table.Cell
+                class={cn(
+                  "py-2",
+                  CONTROL_COLUMNS.has(cell.column.id) && "print:hidden"
+                )}
+              >
                 <FlexRender
                   content={cell.column.columnDef.cell}
                   context={cell.getContext()}
@@ -631,10 +668,11 @@
     </Table.Root>
   </div>
 
-  <!-- Pagination -->
-  <DataTablePagination
-    {table}
-    selectedCount={table.getFilteredSelectedRowModel().rows.length}
-    totalCount={table.getFilteredRowModel().rows.length}
-  />
+  <div class="print:hidden">
+    <DataTablePagination
+      {table}
+      selectedCount={table.getFilteredSelectedRowModel().rows.length}
+      totalCount={table.getFilteredRowModel().rows.length}
+    />
+  </div>
 </div>

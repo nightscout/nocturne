@@ -50,7 +50,8 @@
   }
 </script>
 
-<div class="h-80 w-full">
+<!-- Print fixes the box so the plot area (box less padding) is square and the identity line runs at 45°. -->
+<div class="h-80 w-full print:mx-auto print:h-[380px] print:w-[400px]">
   <Chart
     data={points}
     x="x"

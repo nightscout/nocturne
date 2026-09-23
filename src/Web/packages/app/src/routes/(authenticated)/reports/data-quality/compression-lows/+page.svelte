@@ -8,6 +8,9 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
 	import { Badge } from '$lib/components/ui/badge';
+	import * as Table from '$lib/components/ui/table';
+	import { setReportPrintMeta } from '$lib/components/reports/print/report-print.svelte';
+	import { toDayString } from '$lib/utils/date-range';
 	import {
 		Select,
 		SelectContent,
@@ -63,6 +66,20 @@
 	);
 
 	const suggestions = $derived(suggestionsResource.current ?? []);
+
+	const nightSpan = $derived.by(() => {
+		const nights = suggestions.flatMap((s) => (s.nightOf ? [new Date(s.nightOf).getTime()] : []));
+		if (nights.length === 0) return null;
+		return {
+			from: toDayString(Math.min(...nights)),
+			to: toDayString(timeDay.offset(new Date(Math.max(...nights)), 1))
+		};
+	});
+
+	setReportPrintMeta(() => ({
+		title: 'Compression Lows',
+		period: nightSpan ?? { label: 'All recorded nights' }
+	}));
 
 	let statusFilter = $state<string>('all');
 	let selectedSuggestions = $state<Set<string>>(new Set());
@@ -255,6 +272,34 @@
 		}
 	}
 
+	function getStatusLabel(status: string | undefined): string {
+		switch (status?.toLowerCase()) {
+			case 'accepted':
+				return 'Accepted';
+			case 'dismissed':
+				return 'Dismissed';
+			default:
+				return 'Pending review';
+		}
+	}
+
+	function getStatusFilterLabel(filter: string): string {
+		switch (filter) {
+			case 'pending':
+				return 'Pending';
+			case 'accepted':
+				return 'Accepted';
+			case 'dismissed':
+				return 'Dismissed';
+			default:
+				return 'All';
+		}
+	}
+
+	function timeOrDash(mills: number | undefined): string {
+		return mills == null ? '—' : time(mills);
+	}
+
 	function getConfidenceLabel(confidence: number): string {
 		if (confidence >= 0.75) return 'High';
 		if (confidence >= 0.6) return 'Medium';
@@ -306,14 +351,19 @@
 					<ArrowLeft class="h-4 w-4" />
 				</Button>
 				<div>
-					<h1 class="text-2xl font-bold">Compression Lows</h1>
+					<h1 class="text-2xl font-bold print:hidden">Compression Lows</h1>
 					<p class="text-muted-foreground">
 						{#if pendingCount > 0}
 							{pendingCount} pending review
 						{:else}
-							Review history and manage exclusions
+							<span class="print:hidden">Review history and manage exclusions</span>
 						{/if}
 					</p>
+					{#if statusFilter !== 'all'}
+						<p class="hidden text-sm text-muted-foreground print:block">
+							Status: {getStatusFilterLabel(statusFilter)}
+						</p>
+					{/if}
 				</div>
 			</div>
 			<div class="flex shrink-0 items-center gap-2 print:hidden">
@@ -404,11 +454,49 @@
 				</CardContent>
 			</Card>
 		{:else}
+			<!-- The row list is a selection control; print lists every night as a table instead. -->
+			<div class="hidden print:block">
+				<Table.Root>
+					<Table.Header>
+						<Table.Row>
+							<Table.Head>Night</Table.Head>
+							<Table.Head>Time</Table.Head>
+							<Table.Head class="text-right">Lowest ({bgLabel()})</Table.Head>
+							<Table.Head class="text-right">Drop rate ({bgLabel()}/min)</Table.Head>
+							<Table.Head class="text-right">Recovery (minutes)</Table.Head>
+							<Table.Head>Confidence</Table.Head>
+							<Table.Head>Status</Table.Head>
+						</Table.Row>
+					</Table.Header>
+					<Table.Body>
+						{#each filteredSuggestions as suggestion (suggestion.id)}
+							<Table.Row>
+								<Table.Cell class="font-medium">
+									{suggestion.nightOf ? formatNightOf(suggestion.nightOf) : 'Unknown date'}
+								</Table.Cell>
+								<Table.Cell class="tabular-nums">
+									{timeOrDash(suggestion.startMills)} - {timeOrDash(suggestion.endMills)}
+								</Table.Cell>
+								<Table.Cell class="text-right tabular-nums">
+									{suggestion.lowestGlucose != null ? bg(suggestion.lowestGlucose) : '-'}
+								</Table.Cell>
+								<Table.Cell class="text-right tabular-nums">
+									{suggestion.dropRate != null ? bg(suggestion.dropRate) : '-'}
+								</Table.Cell>
+								<Table.Cell class="text-right tabular-nums">
+									{suggestion.recoveryMinutes ?? '-'}
+								</Table.Cell>
+								<Table.Cell>{getConfidenceLabel(suggestion.confidence ?? 0)}</Table.Cell>
+								<Table.Cell>{getStatusLabel(suggestion.status)}</Table.Cell>
+							</Table.Row>
+						{/each}
+					</Table.Body>
+				</Table.Root>
+			</div>
+
 			<div class="grid gap-6 @3xl:grid-cols-3">
 				<!-- Suggestion List -->
-				<div
-					class="max-h-[600px] space-y-2 overflow-y-auto pr-2 print:max-h-none print:overflow-visible"
-				>
+				<div class="max-h-[600px] space-y-2 overflow-y-auto pr-2 print:hidden">
 					{#each filteredSuggestions as suggestion, index (suggestion.id)}
 						{@const StatusIcon = getStatusIcon(suggestion.status)}
 						{@const isSelected = suggestion.id ? selectedSuggestions.has(suggestion.id) : false}
@@ -438,9 +526,7 @@
 											{suggestion.nightOf ? formatNightOf(suggestion.nightOf) : 'Unknown date'}
 										</p>
 										<p class="text-sm text-muted-foreground">
-											{time(suggestion.startMills ?? 0)} - {time(
-												suggestion.endMills ?? 0
-											)}
+											{timeOrDash(suggestion.startMills)} - {timeOrDash(suggestion.endMills)}
 										</p>
 									</div>
 								</div>
@@ -464,10 +550,13 @@
 											: 'Unknown'}
 									</CardTitle>
 									<div
-										class="review-status flex h-8 w-8 items-center justify-center rounded-full"
+										class="review-status flex h-8 min-w-8 items-center justify-center gap-1.5 rounded-full print:px-2.5"
 										data-status={suggestionDetail.suggestion?.status?.toLowerCase() ?? ''}
 									>
 										<DetailStatusIcon class="h-4 w-4" />
+										<span class="hidden text-sm font-medium print:inline">
+											{getStatusLabel(suggestionDetail.suggestion?.status)}
+										</span>
 									</div>
 								</div>
 							</CardHeader>
@@ -654,5 +743,14 @@
 	.review-status[data-status='dismissed'] {
 		background: var(--muted);
 		color: var(--muted-foreground);
+	}
+	/* A tint prints near-white, so print carries the status as a word in ink. */
+	@media print {
+		.review-status,
+		.review-status[data-status] {
+			background: transparent;
+			color: var(--foreground);
+			box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--foreground) 40%, transparent);
+		}
 	}
 </style>

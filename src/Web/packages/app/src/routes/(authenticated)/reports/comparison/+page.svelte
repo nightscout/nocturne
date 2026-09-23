@@ -7,6 +7,7 @@
   import * as Select from "$lib/components/ui/select";
   import GlucoseRangeCalendarPicker from "$lib/components/alerts/GlucoseRangeCalendarPicker.svelte";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
+  import { setReportPrintMeta } from "$lib/components/reports/print/report-print.svelte";
   import { getReportsAnalysis, type DateRangeInput } from "$api/reports.remote";
   import { bg, bgDelta, bgLabel, formatShortDate } from "$lib/utils/formatting";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
@@ -137,6 +138,12 @@
   }
 
   const committed = $derived.by(readCommitted);
+
+  setReportPrintMeta(() => ({
+    period: {
+      label: `${committed.a.label} (${rangeDisplay(committed.a.from, committed.a.to)}) vs ${committed.b.label} (${rangeDisplay(committed.b.from, committed.b.to)})`,
+    },
+  }));
 
   let openPopover = $state<Side | null>(null);
   let preset = $state<Preset>(untrack(() => urlParams.preset ?? DEFAULT_PRESET));
@@ -501,8 +508,8 @@
 
   <!-- Diff-first strip -->
   <Card.Root>
-    <Card.Content class="space-y-4 p-6">
-      <div class="flex flex-wrap items-center gap-3 border-b border-border pb-3">
+    <Card.Content class="space-y-4 p-6 print:space-y-2 print:p-4">
+      <div class="flex flex-wrap items-center gap-3 border-b border-border pb-3 print:hidden">
         <span class="inline-flex items-center gap-2 rounded-full bg-muted px-3 py-1.5 text-xs font-medium">
           <span
             class="inline-block h-2 w-2 rounded-full bg-muted-foreground"
@@ -526,9 +533,18 @@
       </div>
 
       <div class="space-y-1">
+        <div
+          class="hidden gap-4 px-3 text-xs font-medium text-muted-foreground print:grid print:[grid-template-columns:minmax(140px,1fr)_90px_90px_minmax(120px,2fr)_100px]"
+        >
+          <div>Metric</div>
+          <div class="text-right">{committed.a.label}</div>
+          <div class="text-right">{committed.b.label}</div>
+          <div></div>
+          <div class="text-right">Change</div>
+        </div>
         {#each diffRows as row (row.key)}
           <div
-            class="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded border border-border bg-card px-3 py-2.5 @2xl:grid @2xl:flex-nowrap @2xl:gap-4 @2xl:[grid-template-columns:minmax(140px,1fr)_90px_90px_minmax(120px,2fr)_100px]"
+            class="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded border border-border bg-card px-3 py-2.5 print:py-1.5 @2xl:grid @2xl:flex-nowrap @2xl:gap-4 @2xl:[grid-template-columns:minmax(140px,1fr)_90px_90px_minmax(120px,2fr)_100px]"
           >
             <div class="w-full text-sm font-medium @2xl:w-auto">{row.label}</div>
             <div class="font-mono text-sm tabular-nums text-muted-foreground @2xl:text-right">
@@ -579,7 +595,7 @@
           <div class="flex flex-col">
             <div class="mb-3 flex items-center gap-2">
               <span
-                class="inline-block h-2 w-2 rounded-full bg-(--dot)"
+                class="inline-block h-2 w-2 rounded-full bg-(--dot) print:hidden"
                 style:--dot={col.accent}
               ></span>
               <span class="text-sm font-semibold">{col.periodLabel}</span>
@@ -587,7 +603,7 @@
                 {col.range}
               </span>
             </div>
-            <div class="h-80 w-full">
+            <div class="h-80 w-full print:h-56">
               {#if col.tir}
                 <TIRStackedChart percentages={col.tir} />
               {:else}

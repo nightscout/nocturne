@@ -114,7 +114,7 @@
 {#if batteryResource.current}
 <div class="@container container mx-auto space-y-6 p-3 @md:p-6">
   <!-- Header -->
-  <div class="flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between">
+  <div class="flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between print:hidden">
     <div>
       <h1 class="text-3xl font-bold">Battery Report</h1>
       <p class="text-muted-foreground">
@@ -125,7 +125,7 @@
       variant="outline"
       size="sm"
       onclick={fetchData}
-      class="shrink-0 print:hidden"
+      class="shrink-0"
     >
       <RefreshCw class="h-4 w-4 mr-2" />
       Refresh
@@ -133,7 +133,7 @@
   </div>
 
   <!-- Date Range Info -->
-  <div class="flex items-center gap-2 text-sm text-muted-foreground">
+  <div class="flex items-center gap-2 text-sm text-muted-foreground print:hidden">
     <Calendar class="h-4 w-4" />
     <span>
       {formatNumericDate(new Date(dateRange.from))} – {formatNumericDate(new Date(
@@ -181,7 +181,7 @@
     {/if}
 
     <!-- Statistics Cards -->
-    <div class="grid grid-cols-1 @xl:grid-cols-2 @4xl:grid-cols-3 gap-4">
+    <div class="grid grid-cols-1 @xl:grid-cols-2 @4xl:grid-cols-3 print:grid-cols-2 gap-4">
       {#each displayedStats as stat, i (i)}
         {@const StatIcon = getBatteryIconComponent(
           stat?.level,
@@ -272,7 +272,7 @@
                 {#if stat.longestDischargeDurationMinutes}
                   <div>
                     <span class="text-muted-foreground">Longest:</span>
-                    <span class="font-medium ml-1 text-success">
+                    <span class="font-medium ml-1 text-success print:text-foreground">
                       {formatDuration(stat.longestDischargeDurationMinutes)}
                     </span>
                   </div>
@@ -280,7 +280,7 @@
                 {#if stat.shortestDischargeDurationMinutes}
                   <div>
                     <span class="text-muted-foreground">Shortest:</span>
-                    <span class="font-medium ml-1 text-warning">
+                    <span class="font-medium ml-1 text-warning print:text-foreground">
                       {formatDuration(stat.shortestDischargeDurationMinutes)}
                     </span>
                   </div>
@@ -300,7 +300,7 @@
                 <div class="space-y-1">
                   <div class="flex justify-between text-sm">
                     <span>Above 80%</span>
-                    <span class="font-medium text-success">
+                    <span class="font-medium text-success print:text-foreground">
                       {(stat?.timeAbove80Percent ?? 0).toFixed(1)}%
                     </span>
                   </div>
@@ -324,7 +324,7 @@
                   </div>
                   <div class="flex justify-between text-sm">
                     <span>Below 30%</span>
-                    <span class="font-medium text-warning">
+                    <span class="font-medium text-warning print:text-foreground">
                       {(stat?.timeBelow30Percent ?? 0).toFixed(1)}%
                     </span>
                   </div>
@@ -343,13 +343,16 @@
               <Separator />
               <div class="flex gap-4 text-sm">
                 {#if (stat?.warningEventCount ?? 0) > 0}
-                  <div class="flex items-center gap-1 text-warning">
+                  <div class="flex items-center gap-1 text-warning print:text-foreground">
                     <AlertTriangle class="h-4 w-4" />
-                    <span>{stat?.warningEventCount ?? 0} warnings</span>
+                    <span>
+                      {stat?.warningEventCount ?? 0}
+                      {stat?.warningEventCount === 1 ? "warning" : "warnings"}
+                    </span>
                   </div>
                 {/if}
                 {#if (stat?.urgentEventCount ?? 0) > 0}
-                  <div class="flex items-center gap-1 text-destructive">
+                  <div class="flex items-center gap-1 text-destructive print:text-foreground">
                     <AlertTriangle class="h-4 w-4" />
                     <span>{stat?.urgentEventCount ?? 0} critical</span>
                   </div>

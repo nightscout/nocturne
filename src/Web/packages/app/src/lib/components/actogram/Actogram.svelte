@@ -15,6 +15,9 @@
   import { cubicOut } from 'svelte/easing';
   import { ChevronUp, ChevronDown } from 'lucide-svelte';
   import { Button } from '$lib/components/ui/button';
+  import { bgRange } from '$lib/utils/formatting';
+  import { PrintMode } from '$lib/components/charts/print/print-mode.svelte';
+  import ChartKey, { type ChartKeyItem } from '$lib/components/charts/print/ChartKey.svelte';
 
   interface Props {
     data: T[];
@@ -23,11 +26,15 @@
     thresholds?: GlucoseThresholds;
     rowHeight?: number;
     visibleCount?: number;
+    /** Leading rows a print carries: the report's range, without scroll-back padding. */
+    printCount?: number;
     initialOffset?: number;
     onVisibleRangeChange?: (from: Date, to: Date) => void;
     row: Snippet<[ActogramRowContext<T>]>;
     tooltipValue?: Snippet<[{ point: T; day: Date }]>;
     rowLabel?: Snippet<[{ day: Date }]>;
+    /** Key for the marks the `row` snippet draws; glucose overlay entries are added. */
+    legend?: ChartKeyItem[];
   }
 
   let {
@@ -37,12 +44,16 @@
     thresholds,
     rowHeight = 48,
     visibleCount,
+    printCount,
     initialOffset,
     onVisibleRangeChange,
     row,
     tooltipValue,
     rowLabel,
+    legend = [],
   }: Props = $props();
+
+  const print = new PrintMode();
 
   const dataRows = $derived(sliceIntoRows(data, days));
   const bgRows = $derived(bgData ? sliceBgIntoRows(bgData, days) : []);
@@ -53,8 +64,14 @@
   const effectiveVisibleCount = $derived(visibleCount ?? days.length);
   const maxOffset = $derived(Math.max(0, dataRows.length - effectiveVisibleCount));
 
-  const visibleDataRows = $derived(dataRows.slice(offset, offset + effectiveVisibleCount));
-  const visibleBgRows = $derived(bgRows.slice(offset, offset + effectiveVisibleCount));
+  // Paper cannot page through rows, so a print carries the whole range.
+  const shownRange = $derived<[number, number]>(
+    print.active
+      ? [0, printCount ?? dataRows.length]
+      : [offset, offset + effectiveVisibleCount]
+  );
+  const visibleDataRows = $derived(dataRows.slice(...shownRange));
+  const visibleBgRows = $derived(bgRows.slice(...shownRange));
 
   // X-axis hour labels at 6-hour intervals across 48h double-plot.
   // Labels show hours mod 24, so both 0h and 24h display as "0h" (midnight).
@@ -134,7 +151,7 @@
   <!-- Rows -->
   {#each visibleDataRows as dataRow, i (`${dataRow.day.getTime()}-${i}`)}
     <div
-      class="flex h-(--row-h) items-center"
+      class="flex h-(--row-h) items-center break-inside-avoid"
       style:--row-h="{rowHeight}px"
       animate:flip={{ duration: 300, easing: cubicOut }}
       in:fly={{ y: direction === 'down' ? rowHeight : -rowHeight, duration: 300, easing: cubicOut }}
@@ -164,6 +181,20 @@
       </div>
     </div>
   {/each}
+
+  {#if legend.length > 0}
+    <ChartKey items={legend} class="mt-3 justify-start pl-20" />
+  {/if}
+  {#if bgData?.length && thresholds}
+    <!-- On screen the glucose dots carry their range in colour and a tooltip names them. -->
+    <ChartKey
+      items={[
+        { texture: 'glucose-trace', label: 'Glucose', shape: 'line' },
+        { texture: 'target-range-limit', label: `Glucose target range ${bgRange(thresholds.low, thresholds.high)}`, color: 'var(--muted-foreground)', shape: 'line' },
+      ]}
+      class="mt-1 hidden justify-start pl-20 [.chart-patterns-on_&]:flex"
+    />
+  {/if}
 
   {#if visibleCount !== undefined}
     <div class="flex print:hidden">

@@ -35,6 +35,8 @@
   });
 </script>
 
+<span class="hidden print:inline">{label}</span>
+<span class="print:hidden">
 <Popover.Root bind:open>
   <Popover.Trigger>
     {#snippet child({ props }: { props: Record<string, unknown> })}
@@ -112,3 +114,4 @@
     </Command.Root>
   </Popover.Content>
 </Popover.Root>
+</span>

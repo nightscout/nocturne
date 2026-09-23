@@ -19,5 +19,6 @@
 </script>
 
 {#if y != null}
-  <Rule {y} class={className} stroke-dasharray={strokeDasharray} />
+  <!-- layerchart's Line writes its own stroke-dasharray from `dashArray`, overriding a passed attribute. -->
+  <Rule {y} class={className} dashArray={strokeDasharray} />
 {/if}

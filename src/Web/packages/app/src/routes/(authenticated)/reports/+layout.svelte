@@ -1,10 +1,17 @@
 <script lang="ts">
-  import { formatMediumDateTime } from "$lib/utils/formatting";
     import {page} from "$app/state";
+    import {formatMediumDateRange} from "$lib/utils/formatting";
     import { Button } from "$lib/components/ui/button";
     import {ReportsFilterSidebar} from "$lib/components/layout";
     import ResourceGuard from "$lib/components/reports/ResourceGuard.svelte";
-    import {Filter, Calendar, ChevronDown} from "lucide-svelte";
+    import ReportPrintHeader from "$lib/components/reports/print/ReportPrintHeader.svelte";
+    import {
+        createReportPrintContext,
+        installPrintFitFallback,
+        printReport,
+    } from "$lib/components/reports/print/report-print.svelte";
+    import {reportCategories} from "$lib/navigation/report-navigation";
+    import {Filter, Calendar, ChevronDown, Printer} from "lucide-svelte";
     import {useDateParams, setDateParamsContext, createSharedRangeUse} from "$lib/hooks/date-params.svelte";
     import {createResourceContext} from "$lib/hooks/resource-context.svelte";
 
@@ -35,8 +42,20 @@
     // Whether to use the ResourceGuard (skip for main reports page which has custom design)
     const useResourceGuard = $derived(page.url.pathname !== "/reports");
 
+    const printCtx = createReportPrintContext();
+
+    let reportRoot = $state<HTMLElement | null>(null);
+    $effect(() => installPrintFitFallback(() => reportRoot));
+
+    const registryTitles = new Map(
+        reportCategories.flatMap((c) => c.reports).map((r) => [r.href, r.title])
+    );
+
     // Extract report name from the URL
     const reportName = $derived.by(() => {
+        const declared = printCtx.meta.title ?? registryTitles.get(page.url.pathname);
+        if (declared) return declared;
+
         const pathSegments = page.url.pathname.split("/");
         const reportSegment = pathSegments[pathSegments.length - 1];
 
@@ -58,16 +77,18 @@
         page.url.pathname !== "/reports" && sharedRangeUse.consumed
     );
 
+    const printPeriod = $derived(
+        printCtx.meta.period ??
+            (sharedRangeUse.consumed ? {from: params.fromDay, to: params.toDay} : undefined)
+    );
+
     // Format date range for display
+    // Read from the resolved range, not the URL: a default range seeded during
+    // hydration never reaches the URL, which would otherwise read as no range.
     const dateRangeDisplay = $derived.by(() => {
-        if (params.days) {
-            if (params.days === 1) return "Today";
-            return `Last ${params.days} days`;
-        }
-        if (params.from && params.to) {
-            return `${params.from} to ${params.to}`;
-        }
-        return "Last 7 days";
+        const {days} = params.dateRangeInput;
+        if (days) return days === 1 ? "Today" : `Last ${days} days`;
+        return formatMediumDateRange(params.startDate, params.endDate);
     });
 </script>
 
@@ -80,16 +101,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 </svelte:head>
 
-<div class="relative min-h-full bg-background">
+<div class="relative min-h-full bg-background" bind:this={reportRoot} data-report-root>
     {#if page.url.pathname !== "/reports"}
-        <!-- Print-only report header: gives the printed page the context the
-             interactive sticky header (hidden below) carries on screen. -->
-        <div class="hidden print:block border-b border-border pb-3 mb-4 px-3">
-            <h1 class="text-xl font-bold text-foreground">{reportName}</h1>
-            <p class="text-sm text-muted-foreground">
-                {#if showFilters}{dateRangeDisplay} · {/if}Generated {formatMediumDateTime(new Date())}
-            </p>
-        </div>
+        <ReportPrintHeader title={reportName} period={printPeriod} />
 
         <!-- Report Header - unified sticky header with sidebar trigger -->
         <!-- On mobile (md:hidden), position below the MobileHeader with top-14 -->
@@ -118,16 +132,22 @@
                     </div>
                 </div>
 
-                {#if showFilters}
-                    <Button
-                            variant="outline"
-                            size="sm"
-                            onclick={() => (filterSidebarOpen = true)}
-                    >
-                        <Filter class="w-4 h-4"/>
-                        <span class="hidden sm:inline">Filters</span>
+                <div class="flex items-center gap-2">
+                    <Button variant="outline" size="sm" onclick={printReport}>
+                        <Printer class="w-4 h-4"/>
+                        <span class="hidden sm:inline">Print</span>
                     </Button>
-                {/if}
+                    {#if showFilters}
+                        <Button
+                                variant="outline"
+                                size="sm"
+                                onclick={() => (filterSidebarOpen = true)}
+                        >
+                            <Filter class="w-4 h-4"/>
+                            <span class="hidden sm:inline">Filters</span>
+                        </Button>
+                    {/if}
+                </div>
             </div>
         </div>
     {/if}

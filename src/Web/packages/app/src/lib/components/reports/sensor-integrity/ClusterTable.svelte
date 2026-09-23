@@ -3,7 +3,8 @@
   import * as Table from "$lib/components/ui/table";
   import type { GlucoseCluster } from "$lib/api";
   import { bgRange, formatDateTimeCompact } from "$lib/utils/formatting";
-  import { confidenceLabel, confidenceChipClass, describeCluster } from "./format";
+  import { describeCluster } from "./format";
+  import ConfidenceBadge from "./ConfidenceBadge.svelte";
   import { formatMinutesDuration } from "$lib/utils/duration";
 
   interface Props {
@@ -52,13 +53,7 @@
               : "—"}
           </Table.Cell>
           <Table.Cell>
-            <span
-              class="rounded-full px-2 py-0.5 text-xs font-medium {confidenceChipClass(
-                cluster.confidence
-              )}"
-            >
-              {confidenceLabel(cluster.confidence)}
-            </span>
+            <ConfidenceBadge confidence={cluster.confidence} />
           </Table.Cell>
           <Table.Cell variant="muted">{describeCluster(cluster)}</Table.Cell>
         </Table.Row>

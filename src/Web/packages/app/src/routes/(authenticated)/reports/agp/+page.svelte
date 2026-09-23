@@ -14,7 +14,6 @@
     Target,
     TrendingUp,
     ArrowRight,
-    Printer,
     HelpCircle,
   } from "lucide-svelte";
   import { AmbulatoryGlucoseProfile } from "$lib/components/ambulatory-glucose-profile";
@@ -58,7 +57,7 @@
   <!-- Header with AGP Explanation -->
   <div class="space-y-4">
     <div class="flex items-center justify-between flex-wrap gap-4">
-      <div>
+      <div class="print:hidden">
         <h1 class="text-3xl font-bold flex items-center gap-3">
           <BarChart3 class="w-8 h-8 text-primary" />
           Ambulatory Glucose Profile
@@ -68,14 +67,6 @@
         </p>
       </div>
       <div class="flex items-center gap-2 print:hidden">
-        <Button
-          variant="outline"
-          size="sm"
-          onclick={() => window.print()}
-        >
-          <Printer class="w-4 h-4" />
-          Print
-        </Button>
         <Button
           href="/reports/executive-summary"
           variant="outline"
@@ -89,13 +80,13 @@
 
     <!-- Period info -->
     <div class="flex items-center gap-2 text-sm text-muted-foreground">
-      <Calendar class="w-4 h-4" />
-      <span>
+      <Calendar class="w-4 h-4 print:hidden" />
+      <span class="print:hidden">
         {formatNumericDate(startDate)} – {formatNumericDate(endDate)}
       </span>
-      <span class="text-muted-foreground/50">•</span>
-      <span>{dayCount} days</span>
-      <span class="text-muted-foreground/50">•</span>
+      <span class="text-muted-foreground/50 print:hidden">•</span>
+      <span class="print:hidden">{dayCount} days</span>
+      <span class="text-muted-foreground/50 print:hidden">•</span>
       <span>{formatNumber(entries.length)} readings</span>
     </div>
   </div>
@@ -132,7 +123,7 @@
             (10th-90th percentile) shows where you are 80% of the time.
           </p>
           <p>
-            <strong>Green zone</strong>
+            <strong>The shaded band</strong>
             ({bgRange(70, 180)}) is the consensus target range. The consensus target
             is at least 70% of time in this zone.
           </p>
@@ -148,13 +139,13 @@
     {@const variability = analysis.glycemicVariability ?? {}}
 
     <!-- Quick Stats Grid -->
-    <div class="grid grid-cols-2 @lg:grid-cols-4 @3xl:grid-cols-6 gap-4">
+    <div class="grid grid-cols-2 @lg:grid-cols-4 @3xl:grid-cols-6 print:grid-cols-6 gap-4 print:gap-2">
       <Card variant="success" size="sm" class="text-center">
-        <div class="text-3xl font-bold text-glucose-in-range">
+        <div class="text-3xl font-bold text-glucose-in-range print:text-foreground">
           {tir.target?.toFixed(0) ?? "–"}%
         </div>
         <div class="text-xs text-muted-foreground">Time in Range</div>
-        <div class="text-2xs text-glucose-in-range">Target: ≥70%</div>
+        <div class="text-2xs text-glucose-in-range print:text-muted-foreground">Target: ≥70%</div>
       </Card>
       <Card size="sm" class="text-center">
         <div class="text-3xl font-bold">{stats.mean ? bg(stats.mean) : "–"}</div>
@@ -166,7 +157,7 @@
           {variability.estimatedA1c?.toFixed(1) ?? "–"}%
         </div>
         <div class="text-xs text-muted-foreground">Est. A1C</div>
-        <div class="text-2xs text-muted-foreground/70">GMI</div>
+        <div class="text-2xs text-muted-foreground/70">From mean glucose</div>
       </Card>
       <Card size="sm" class="text-center">
         <div class="text-3xl font-bold">
@@ -176,18 +167,18 @@
         <div class="text-2xs text-muted-foreground/70">Target: ≤33%</div>
       </Card>
       <Card size="sm" class="text-center">
-        <div class="text-3xl font-bold text-glucose-very-low">
+        <div class="text-3xl font-bold text-glucose-very-low print:text-foreground">
           {((tir.low ?? 0) + (tir.veryLow ?? 0)).toFixed(1)}%
         </div>
         <div class="text-xs text-muted-foreground">Below Range</div>
-        <div class="text-2xs text-glucose-very-low">Target: &lt;4%</div>
+        <div class="text-2xs text-glucose-very-low print:text-muted-foreground">Target: &lt;4%</div>
       </Card>
       <Card size="sm" class="text-center">
-        <div class="text-3xl font-bold text-glucose-high">
+        <div class="text-3xl font-bold text-glucose-high print:text-foreground">
           {((tir.high ?? 0) + (tir.veryHigh ?? 0)).toFixed(1)}%
         </div>
         <div class="text-xs text-muted-foreground">Above Range</div>
-        <div class="text-2xs text-glucose-high">Target: &lt;25%</div>
+        <div class="text-2xs text-glucose-high print:text-muted-foreground">Target: &lt;25%</div>
       </Card>
     </div>
 
@@ -211,7 +202,7 @@
     </Card>
 
     <!-- Time in Range Visual -->
-    <div class="grid grid-cols-1 @3xl:grid-cols-2 gap-6">
+    <div class="grid grid-cols-1 @3xl:grid-cols-2 print:grid-cols-2 gap-6 print:gap-4">
       <Card>
         <CardHeader>
           <CardTitle class="flex items-center gap-2">
@@ -289,12 +280,12 @@
     </div>
   {/if}
 
-  <Separator />
+  <Separator class="print:hidden" />
 
   <!-- Clinical Context Footer -->
   <Card variant="muted">
     <CardContent class="pt-6">
-      <div class="grid grid-cols-1 @3xl:grid-cols-3 gap-6 text-sm">
+      <div class="grid grid-cols-1 @3xl:grid-cols-3 print:grid-cols-3 gap-6 text-sm">
         <div>
           <h4 class="font-semibold mb-2">About This Report</h4>
           <p class="text-muted-foreground">
@@ -322,7 +313,7 @@
     </CardContent>
   </Card>
 
-  <div class="text-xs text-muted-foreground text-center">
+  <div class="text-xs text-muted-foreground text-center print:hidden">
     Data from {formatNumericDate(startDate)} – {formatNumericDate(endDate)}.
     {#if lastUpdated}
       Last updated {formatMediumDateTime(new Date(lastUpdated))}.
@@ -330,15 +321,3 @@
   </div>
 </div>
 {/if}
-
-<style>
-  /* Expand collapsible clinical detail when printing. */
-  @media print {
-    details > :not(summary) {
-      display: block;
-    }
-    summary {
-      display: none;
-    }
-  }
-</style>

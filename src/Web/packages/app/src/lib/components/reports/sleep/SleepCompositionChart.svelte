@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/consistent-type-assertions */
 <script lang="ts">
   /**
    * Stacked sleep-stage composition chart for the trends page: one bar per
@@ -11,7 +10,9 @@
   import { bandScale } from "$lib/components/charts/scale-guards";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
-  import { SLEEP_COMPOSITION_SEGMENTS } from "$lib/utils/sleep-stages";
+  import { SLEEP_COMPOSITION_SEGMENTS, laneTexture } from "$lib/utils/sleep-stages";
+  import { patternClass } from "$lib/components/charts/print/chart-print-patterns";
+  import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
   import { dayKeyFor, buildNightsByDayKey } from "$lib/utils/sleep-night-mapping";
   import { formatMinutesDuration } from "$lib/utils/duration";
   import type { SleepNightSummary, SleepStageReferenceRangeSet } from "$lib/api";
@@ -180,7 +181,7 @@
                       width={bandwidth}
                       height={Math.max(context.yScale(segment.y0) - context.yScale(segment.y1), 0)}
                       data-lane={segment.lane}
-                      class="fill-lane"
+                      class={["fill-lane", patternClass(laneTexture(segment.lane))]}
                       rx={2}
                     />
                   {/if}
@@ -259,15 +260,10 @@
       {/if}
     </div>
 
-    <!-- Legend -->
-    <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
-      {#each visibleSegments as seg (seg.key)}
-        <span class="flex items-center gap-1.5">
-          <span class="size-2 rounded-full bg-lane" data-lane={seg.lane}></span>
-          {seg.label}
-        </span>
-      {/each}
-    </div>
+    <ChartKey
+      class="mt-3 justify-start"
+      items={visibleSegments.map((seg) => ({ texture: laneTexture(seg.lane), label: seg.label }))}
+    />
   </div>
 
   <!-- Stage composition reference panel -->

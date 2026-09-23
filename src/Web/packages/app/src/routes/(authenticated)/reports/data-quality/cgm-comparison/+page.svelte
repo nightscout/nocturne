@@ -15,6 +15,9 @@
   import { contextResource } from "$lib/hooks/resource-context.svelte";
   import PairedGlucoseScatter from "$lib/components/reports/cgm-comparison/PairedGlucoseScatter.svelte";
   import { bg, bgDelta, bgLabel } from "$lib/utils/formatting";
+  import { setReportPrintMeta } from "$lib/components/reports/print/report-print.svelte";
+
+  setReportPrintMeta(() => ({ title: "CGM Comparison" }));
 
   const params = requireDateParamsContext(14);
 
@@ -85,11 +88,11 @@
         Data Quality
       </a>
       <div class="flex items-center gap-3">
-        <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+        <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 print:hidden">
           <GitCompareArrows class="h-5 w-5 text-primary" />
         </div>
         <div>
-          <h1 class="text-2xl font-bold tracking-tight">CGM Comparison</h1>
+          <h1 class="text-2xl font-bold tracking-tight print:hidden">CGM Comparison</h1>
           <p class="text-muted-foreground">
             Readings from two sensors matched to the same moment
           </p>
@@ -173,7 +176,7 @@
           <CardHeader class="pb-3">
             <CardTitle class="text-base">Agreement</CardTitle>
             <CardDescription>
-              {comparison.deviceAName} against {comparison.deviceBName}, readings matched within
+              {comparison.deviceAName} against the reference {comparison.deviceBName}, readings matched within
               {comparison.toleranceMinutes} minutes.
             </CardDescription>
           </CardHeader>

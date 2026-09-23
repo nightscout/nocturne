@@ -23,7 +23,7 @@
     chartAreaOpacity,
   } from "$lib/stores/appearance-store.svelte";
   import type { PredictionDisplayMode } from "$lib/stores/appearance-store.svelte";
-  import type { SystemEventType } from "$lib/api";
+  import { BasalDeliveryOrigin, type SystemEventType } from "$lib/api";
   import PredictionSettings from "../PredictionSettings.svelte";
   import MiniOverviewChart from "../MiniOverviewChart.svelte";
   import GlucoseChartShell from "./GlucoseChartShell.svelte";
@@ -36,6 +36,7 @@
   import type { TransformedChartData } from "$lib/utils/chart-data-transform";
   import type { PredictionData } from "$api/predictions.remote";
   import { EntryEditDialog } from "$lib/components/entries";
+  import { PrintMode } from "$lib/components/charts/print/print-mode.svelte";
 
   // Tracks
   import BasalTrack from "./tracks/BasalTrack.svelte";
@@ -86,16 +87,20 @@
 
   // On mobile, drop the card chrome so the chart can use the full width.
   const isMobile = new IsMobile();
+  const print = new PrintMode();
 
   // Axis gutters. The desktop 48px each side is a quarter of a phone's width,
   // so a phone gets only what the tick labels need. Left: a three-digit or
   // one-decimal glucose value at 12px. Right: a one- or two-character
   // basal/IOB tick at 9px plus its 4px tick mark. The overview strip shares
-  // the horizontal values so its brush lines up with the main plot.
+  // the horizontal values so its brush lines up with the main plot. Paper
+  // widens the left gutter, where the track names print.
   const chartPadding = $derived(
-    isMobile.current
-      ? { left: 36, right: 22, top: 8, bottom: 28 }
-      : { left: 48, right: 48, top: 8, bottom: 30 }
+    print.active
+      ? { left: 56, right: 48, top: 8, bottom: 30 }
+      : isMobile.current
+        ? { left: 36, right: 22, top: 8, bottom: 28 }
+        : { left: 48, right: 48, top: 8, bottom: 30 }
   );
 
   // ===== ENGINE =====
@@ -197,8 +202,10 @@
   }
 
   // ===== PREDICTIONS =====
+  // A printed report is a record of what happened; a forecast made at print
+  // time is not part of it.
   const effectiveShowPredictions = $derived(
-    showPredictions && engine.effectiveShowPredictions,
+    showPredictions && engine.effectiveShowPredictions && !print.active,
   );
 
   let predictionModeValue = $state(predictionDisplayMode.current);
@@ -437,6 +444,13 @@
       currentPumpMode={engine.currentPumpMode}
       uniquePumpModes={engine.uniquePumpModes}
       {expandedPumpModes}
+      hasBgChecks={engine.bgCheckMarkers.length > 0}
+      hasUnreportedBasal={showBasal &&
+        (engine.staleBasalData != null ||
+          engine.basalData.some((p) => p.origin === BasalDeliveryOrigin.Inferred))}
+      hasScheduledBasal={showBasal && engine.scheduledBasalData.length > 0}
+      targetLow={engine.thresholds.targetLow}
+      targetHigh={engine.thresholds.targetHigh}
       onToggleExpandedPumpModes={() => (expandedPumpModes = !expandedPumpModes)}
     />
   </CardContent>

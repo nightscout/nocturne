@@ -8,8 +8,10 @@
   import { scaleLinear } from "d3-scale";
   import { curveMonotoneX } from "d3-shape";
   import { ClusterConfidence } from "$lib/api";
-  import { categoryPatternClass } from "$lib/components/charts/print/chart-print-patterns";
+  import { patternClass } from "$lib/components/charts/print/chart-print-patterns";
   import type { DayBucket } from "./buckets";
+  import { confidenceTexture } from "./format";
+  import HypoMarker from "./HypoMarker.svelte";
 
   interface Props {
     bucket: DayBucket;
@@ -33,15 +35,8 @@
   // Hour ticks for the detailed axis: 00, 06, 12, 18, 24.
   const hourTicks = [0, 360, 720, 1080, 1440];
 
-  // Confidence bands differ only by colour; in monochrome print they collapse to
-  // near-identical greys, so each confidence gets a stable categorical texture.
-  const bandStyle = (c: ClusterConfidence | undefined) => {
-    if (c === ClusterConfidence.High)
-      return { fill: "var(--cluster-high)", opacity: 0.26, patternSlot: 1 };
-    if (c === ClusterConfidence.Medium)
-      return { fill: "var(--cluster-medium)", opacity: 0.2, patternSlot: 2 };
-    return { fill: "var(--cluster-low)", opacity: 0.16, patternSlot: 3 };
-  };
+  const bandOpacity = (c: ClusterConfidence | undefined) =>
+    c === ClusterConfidence.High ? 0.26 : c === ClusterConfidence.Medium ? 0.2 : 0.16;
 </script>
 
 <Chart
@@ -58,16 +53,17 @@
     <Svg>
       <!-- Noise clusters as confidence-coloured bands (behind the trace) -->
       {#each bucket.bands as band, i (i)}
-        {@const style = bandStyle(band.cluster.confidence)}
+        {@const texture = confidenceTexture(band.cluster.confidence)}
         {@const xPx = context.xScale(band.xStart)}
+        <!-- Printed textures go opaque; the print opacity keeps the trace legible over a high band. -->
         <rect
           x={xPx}
           y={0}
           width={Math.max(1, context.xScale(band.xEnd) - xPx)}
           height={context.height}
-          fill={style.fill}
-          fill-opacity={style.opacity}
-          class={categoryPatternClass(style.patternSlot)}
+          fill="var(--{texture})"
+          fill-opacity={bandOpacity(band.cluster.confidence)}
+          class="{patternClass(texture)} print:opacity-60"
         />
       {/each}
 
@@ -106,12 +102,7 @@
 
       <!-- Hypo nadirs: marker above the lowest post-cluster reading -->
       {#each bucket.hypos as h, i (i)}
-        {@const cx = context.xScale(h.x)}
-        {@const cy = context.yScale(h.y)}
-        <path
-          d={`M ${cx - 3.5} ${cy - 8} L ${cx + 3.5} ${cy - 8} L ${cx} ${cy - 2} Z`}
-          class={h.nocturnal ? "fill-cluster-high" : "fill-glucose-very-low"}
-        />
+        <HypoMarker x={context.xScale(h.x)} y={context.yScale(h.y) - 2} nocturnal={h.nocturnal} />
       {/each}
     </Svg>
   {/snippet}
