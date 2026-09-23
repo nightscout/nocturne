@@ -13,13 +13,15 @@ public interface IClientDeviceService
     /// <summary>
     /// Idempotently register or refresh a device for the given subject, keyed on the request's
     /// install id. Advertised capabilities are filtered to those known, allowed for the kind, and
-    /// covered by <paramref name="grantedScopes"/>.
+    /// covered by <paramref name="grantedScopes"/>. <paramref name="grantId"/> records the OAuth
+    /// grant the device is paired under, so revoking that grant removes the device.
     /// </summary>
     /// <exception cref="ArgumentException">The kind is unknown or the install id is missing.</exception>
     Task<ClientDeviceDto> RegisterAsync(
         Guid subjectId,
         RegisterDeviceRequest request,
         IReadOnlySet<string> grantedScopes,
+        Guid? grantId,
         CancellationToken cancellationToken = default);
 
     /// <summary>Lists the devices registered by the given subject, most-recently-seen first.</summary>

@@ -11,6 +11,7 @@ using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.ClientDevices;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
@@ -366,6 +367,61 @@ public class DirectGrantControllerTests : IDisposable
         var result = await _controller.Revoke(grantId);
 
         Assert.IsType<NoContentResult>(result);
+    }
+
+    [Fact]
+    public async Task Revoke_RemovesTheGrantsDevicesAndSparesAnotherGrants()
+    {
+        var revokedGrantId = Guid.CreateVersion7();
+        var survivingGrantId = Guid.CreateVersion7();
+        _dbContext.OAuthGrants.Add(new OAuthGrantEntity
+        {
+            Id = revokedGrantId,
+            SubjectId = _subjectId,
+            GrantType = OAuthGrantTypes.Direct,
+            Scopes = ["glucose.read"],
+            Label = "WithDevice",
+            TokenHash = "hashwithdevice",
+            CreatedAt = DateTime.UtcNow,
+        });
+        _dbContext.OAuthGrants.Add(new OAuthGrantEntity
+        {
+            Id = survivingGrantId,
+            SubjectId = _subjectId,
+            GrantType = OAuthGrantTypes.Direct,
+            Scopes = ["glucose.read"],
+            Label = "OtherDevice",
+            TokenHash = "hashotherdevice",
+            CreatedAt = DateTime.UtcNow,
+        });
+
+        var revokedDeviceId = Guid.CreateVersion7();
+        var survivingDeviceId = Guid.CreateVersion7();
+        _dbContext.ClientDevices.Add(new ClientDeviceEntity
+        {
+            Id = revokedDeviceId,
+            TenantId = _testTenantId,
+            SubjectId = _subjectId,
+            GrantId = revokedGrantId,
+            InstallId = "install-revoked",
+            Kind = DeviceKinds.Prelude,
+        });
+        _dbContext.ClientDevices.Add(new ClientDeviceEntity
+        {
+            Id = survivingDeviceId,
+            TenantId = _testTenantId,
+            SubjectId = _subjectId,
+            GrantId = survivingGrantId,
+            InstallId = "install-surviving",
+            Kind = DeviceKinds.Companion,
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _controller.Revoke(revokedGrantId);
+
+        Assert.IsType<NoContentResult>(result);
+        Assert.False(await _dbContext.ClientDevices.AnyAsync(d => d.Id == revokedDeviceId));
+        Assert.True(await _dbContext.ClientDevices.AnyAsync(d => d.Id == survivingDeviceId));
     }
 
     /// <summary>

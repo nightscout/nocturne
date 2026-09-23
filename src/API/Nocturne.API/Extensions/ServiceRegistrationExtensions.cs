@@ -18,6 +18,7 @@ using Nocturne.API.Services.Analytics;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Services.CoachMarks;
+using Nocturne.Core.Contracts.Content;
 using Nocturne.Core.Contracts.Translations;
 using Nocturne.API.Services.Timezones;
 using Nocturne.API.Services.ChartData;
@@ -165,8 +166,9 @@ public static class ServiceRegistrationExtensions
         ("support-issues", 5, TimeSpan.FromHours(1)),
         // Each contribution opens an upstream PR, directly or through the relay, so the ceiling
         // bounds how much of that a caller can spend. The page is server-rendered, so the address
-        // only distinguishes contributors when it comes off the signed header.
-        ("translation-contributions", 10, TimeSpan.FromHours(1)),
+        // only distinguishes contributors when it comes off the signed header. One bucket for
+        // every contribution flow: what is bounded is pull requests upstream, not endpoints.
+        (ContributionsRateLimitPolicy, 10, TimeSpan.FromHours(1)),
         // Connector credential verification drives a live sign-in against the external provider
         // from this deployment's address, so the ceiling bounds both provider-side lockouts and
         // use of the API as a credential-testing proxy.
@@ -203,6 +205,14 @@ public static class ServiceRegistrationExtensions
     /// Rate-limiting policy for the per-session translation draft store.
     /// </summary>
     public const string TranslationDraftsRateLimitPolicy = "translation-drafts";
+
+    /// <summary>
+    /// Rate-limiting policy shared by every contribution flow that opens an
+    /// upstream pull request (translations, CMS content). One bucket on
+    /// purpose: the cost being bounded is PRs on the upstream repository, not
+    /// requests to any one endpoint.
+    /// </summary>
+    public const string ContributionsRateLimitPolicy = "contributions";
 
     /// <summary>Shared bucket for draft requests that present no credential.</summary>
     internal const string AnonymousDraftPartition = "anonymous";
@@ -334,9 +344,10 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<GitHubIssueService>();
         services.AddScoped<ISupportDiagnosticsService, SupportDiagnosticsService>();
 
-        // GitHub translation contribution PRs + per-user draft storage
-        services.Configure<GitHubTranslationOptions>(configuration.GetSection("GitHub"));
+        services.Configure<GitHubContributionOptions>(configuration.GetSection("GitHub"));
+        services.AddSingleton<GitHubPrClient>();
         services.AddSingleton<ITranslationContributionService, GitHubTranslationService>();
+        services.AddSingleton<IContentContributionService, GitHubContentService>();
         services.AddScoped<ITranslationDraftService, TranslationDraftService>();
 
         return services;

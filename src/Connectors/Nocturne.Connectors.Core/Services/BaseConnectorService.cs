@@ -1418,8 +1418,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
     #region Failure Tracking
 
-    private int _failedRequestCount;
-
     private string? _authenticationFailureReason;
 
     /// <summary>
@@ -1439,28 +1437,20 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
     protected void TrackFailedRequest(string? reason = null)
     {
-        var newCount = Interlocked.Increment(ref _failedRequestCount);
         _logger.LogWarning(
-            "[{ConnectorSource}] Request failed (consecutive: {FailedCount}){Reason}",
+            "[{ConnectorSource}] Request failed{Reason}",
             ConnectorSource,
-            newCount,
             reason != null ? $": {reason}" : ""
         );
     }
 
+    /// <summary>
+    ///     Clears a stale <see cref="TrackFailedAuthentication"/> reason so a later refusal in the
+    ///     same run does not report a failure the source has since accepted.
+    /// </summary>
     protected void TrackSuccessfulRequest()
     {
-        var previousCount = Volatile.Read(ref _failedRequestCount);
-        if (previousCount > 0)
-        {
-            _logger.LogInformation(
-                "[{ConnectorSource}] Request succeeded, resetting failed count from {PreviousCount}",
-                ConnectorSource,
-                previousCount
-            );
-            Interlocked.Exchange(ref _failedRequestCount, 0);
-            _authenticationFailureReason = null;
-        }
+        _authenticationFailureReason = null;
     }
 
     #endregion

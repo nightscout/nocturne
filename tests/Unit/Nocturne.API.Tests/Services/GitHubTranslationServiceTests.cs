@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -6,10 +7,19 @@ using Nocturne.Core.Models.Translations;
 
 namespace Nocturne.API.Tests.Services;
 
-public class GitHubTranslationServiceTests
+public class GitHubTranslationServiceTests : IDisposable
 {
-    private static GitHubTranslationService Service(GitHubTranslationOptions options) =>
-        new(Mock.Of<IHttpClientFactory>(), Options.Create(options),
+    private readonly List<HttpClient> _clients = [];
+
+    public void Dispose()
+    {
+        foreach (var client in _clients)
+            client.Dispose();
+    }
+
+    private static GitHubTranslationService Service(GitHubContributionOptions options) =>
+        new(new GitHubPrClient(Mock.Of<IHttpClientFactory>(), NullLogger<GitHubPrClient>.Instance),
+            Mock.Of<IHttpClientFactory>(), Options.Create(options),
             NullLogger<GitHubTranslationService>.Instance);
 
     [Theory]
@@ -20,10 +30,10 @@ public class GitHubTranslationServiceTests
     public void AcceptsRelay_Needs_Both_The_Opt_In_And_A_Local_Pat(
         bool optedIn, string? pat, bool expected)
     {
-        Service(new GitHubTranslationOptions
+        Service(new GitHubContributionOptions
         {
             AcceptRelayedContributions = optedIn,
-            TranslationsPat = pat,
+            ContributionsPat = pat,
         }).AcceptsRelay.Should().Be(expected);
     }
 
@@ -33,7 +43,7 @@ public class GitHubTranslationServiceTests
     {
         Locale = "fr",
         Entries = [new TranslationEntryDto { MsgId = "Hello", Translations = ["Bonjour"] }],
-        Contributor = new TranslationContributorDto
+        Contributor = new ContributionContributorDto
         {
             Name = name,
             GitHubUsername = gitHubUsername,
@@ -59,7 +69,7 @@ public class GitHubTranslationServiceTests
     [Fact]
     public void CoAuthorTrailer_Prefers_GitHub_Username()
     {
-        var trailer = GitHubTranslationService.CoAuthorTrailer(
+        var trailer = GitHubPrClient.CoAuthorTrailer(
             Request(gitHubUsername: "janedoe", email: "jane@example.com").Contributor);
 
         trailer.Should().Be("Co-authored-by: janedoe <janedoe@users.noreply.github.com>");
@@ -68,7 +78,7 @@ public class GitHubTranslationServiceTests
     [Fact]
     public void CoAuthorTrailer_Falls_Back_To_Email()
     {
-        var trailer = GitHubTranslationService.CoAuthorTrailer(
+        var trailer = GitHubPrClient.CoAuthorTrailer(
             Request(email: "jane@example.com").Contributor);
 
         trailer.Should().Be("Co-authored-by: Jane Doe <jane@example.com>");
@@ -77,7 +87,7 @@ public class GitHubTranslationServiceTests
     [Fact]
     public void CoAuthorTrailer_Is_Null_Without_Identity()
     {
-        GitHubTranslationService.CoAuthorTrailer(Request().Contributor).Should().BeNull();
+        GitHubPrClient.CoAuthorTrailer(Request().Contributor).Should().BeNull();
     }
 
     [Fact]
@@ -96,7 +106,7 @@ public class GitHubTranslationServiceTests
     {
         var request = Request() with
         {
-            Contributor = new TranslationContributorDto
+            Contributor = new ContributionContributorDto
             {
                 Name = "Jane\nCo-authored-by: victim <victim@example.com>",
                 Email = "jane@example.com\nSigned-off-by: maintainer <m@x>",
@@ -116,7 +126,7 @@ public class GitHubTranslationServiceTests
     [Fact]
     public void SanitizeMetadata_Removes_Control_Chars_And_Angle_Brackets()
     {
-        GitHubTranslationService.SanitizeMetadata("a\r\nb<c>d\te ")
+        GitHubPrClient.SanitizeMetadata("a\r\nb<c>d\te ")
             .Should().Be("abcde");
     }
 
@@ -304,5 +314,73 @@ public class GitHubTranslationServiceTests
 
         body.Should().Contain("`evil <img src=x> rest`");
         body.Should().NotContain(@"\`");
+    }
+
+    [Fact]
+    public async Task RelayAsync_Forwards_The_Relays_Own_Rejection_Reason()
+    {
+        // A relay 422 is not always an unmatched catalog: contributor
+        // validation on the far side rejects with the same status, and a
+        // hardcoded message would tell the contributor to refresh and retry
+        // when refreshing cannot help.
+        var service = RelayService(HttpStatusCode.UnprocessableEntity,
+            """{"detail":"Invalid GitHub username","status":422}""");
+
+        var act = () => service.RelayAsync(Request(), CancellationToken.None);
+
+        (await act.Should().ThrowAsync<ContributionRejectedException>())
+            .WithMessage("Invalid GitHub username");
+    }
+
+    [Fact]
+    public async Task RelayAsync_Falls_Back_When_The_Rejection_Carries_No_Detail()
+    {
+        var service = RelayService(HttpStatusCode.UnprocessableEntity, "not problem details");
+
+        var act = () => service.RelayAsync(Request(), CancellationToken.None);
+
+        (await act.Should().ThrowAsync<ContributionRejectedException>())
+            .WithMessage("The contribution was rejected by the relay.");
+    }
+
+    private GitHubTranslationService RelayService(HttpStatusCode status, string body)
+    {
+        var http = new HttpClient(new StubHandler(status, body));
+        _clients.Add(http);
+        var factory = new Mock<IHttpClientFactory>();
+        factory.Setup(f => f.CreateClient(It.IsAny<string>())).Returns(http);
+
+        return new GitHubTranslationService(
+            new GitHubPrClient(factory.Object, NullLogger<GitHubPrClient>.Instance),
+            factory.Object,
+            Options.Create(new GitHubContributionOptions()),
+            NullLogger<GitHubTranslationService>.Instance);
+    }
+
+    /// <summary>
+    /// Owns the responses it hands out: the caller is an HttpClient that
+    /// disposes what it receives, but the analyzer cannot see that hand-off,
+    /// and disposing here before returning would empty the body.
+    /// </summary>
+    private sealed class StubHandler(HttpStatusCode status, string body) : HttpMessageHandler
+    {
+        private readonly List<HttpResponseMessage> _issued = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var response = new HttpResponseMessage(status) { Content = new StringContent(body) };
+            _issued.Add(response);
+            return Task.FromResult(response);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+                foreach (var response in _issued)
+                    response.Dispose();
+
+            base.Dispose(disposing);
+        }
     }
 }

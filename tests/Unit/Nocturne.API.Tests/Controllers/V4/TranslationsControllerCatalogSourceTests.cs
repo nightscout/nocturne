@@ -11,13 +11,13 @@ namespace Nocturne.API.Tests.Controllers.V4;
 
 /// <summary>
 /// The editor drafts against whatever this endpoint points it at, while the
-/// contribution is written through <see cref="GitHubTranslationOptions"/>. If
+/// contribution is written through <see cref="GitHubContributionOptions"/>. If
 /// the two can disagree, a fork or test-branch instance silently discards
 /// every contributed entry as unmatched.
 /// </summary>
 public class TranslationsControllerCatalogSourceTests
 {
-    private static string CatalogBaseUrl(GitHubTranslationOptions options)
+    private static string CatalogBaseUrl(GitHubContributionOptions options)
     {
         var controller = new TranslationsController(
             Mock.Of<ITranslationContributionService>(),
@@ -35,14 +35,14 @@ public class TranslationsControllerCatalogSourceTests
     [Fact]
     public void Defaults_Point_At_The_Upstream_Repository()
     {
-        CatalogBaseUrl(new GitHubTranslationOptions())
+        CatalogBaseUrl(new GitHubContributionOptions())
             .Should().Be("https://raw.githubusercontent.com/nightscout/nocturne/main/src/Web/locales");
     }
 
     [Fact]
     public void Every_Configured_Coordinate_Moves_The_Catalog_Source()
     {
-        CatalogBaseUrl(new GitHubTranslationOptions
+        CatalogBaseUrl(new GitHubContributionOptions
         {
             Owner = "acme",
             Repo = "nocturne-fork",
@@ -58,7 +58,7 @@ public class TranslationsControllerCatalogSourceTests
     public void Separators_Survive_And_Stray_Slashes_Do_Not(
         string baseBranch, string catalogDir, string expected)
     {
-        CatalogBaseUrl(new GitHubTranslationOptions
+        CatalogBaseUrl(new GitHubContributionOptions
         {
             BaseBranch = baseBranch,
             CatalogDir = catalogDir,
@@ -68,7 +68,7 @@ public class TranslationsControllerCatalogSourceTests
     [Fact]
     public void Configured_Values_Are_Url_Escaped()
     {
-        CatalogBaseUrl(new GitHubTranslationOptions
+        CatalogBaseUrl(new GitHubContributionOptions
         {
             Owner = "a c",
             Repo = "r?p",

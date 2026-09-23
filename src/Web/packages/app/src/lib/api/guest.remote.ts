@@ -2,10 +2,11 @@ import { form, getRequestEvent } from "$app/server";
 import { invalid, redirect } from "@sveltejs/kit";
 import { z } from "zod";
 import { RATE_LIMITED_ERROR } from "$lib/forms/submit-error";
+import { safeReturnUrl } from "$lib/server/return-url";
 import {
   classifyActivationError,
   type ActivationFailure,
-} from "./activation-error";
+} from "./guest-activation-error";
 
 const FAILURE_MESSAGES: Record<ActivationFailure, string> = {
   rejected:
@@ -24,6 +25,7 @@ const FAILURE_MESSAGES: Record<ActivationFailure, string> = {
 export const activateGuestCode = form(
   z.object({
     code: z.string().trim().min(1, "Enter the code you were given"),
+    returnUrl: z.string().optional(),
   }),
   async (data, issue) => {
     const { apiClient } = getRequestEvent().locals;
@@ -42,6 +44,6 @@ export const activateGuestCode = form(
 
     if (failure) invalid(issue.code(FAILURE_MESSAGES[failure]));
 
-    redirect(303, "/");
+    redirect(303, safeReturnUrl(data.returnUrl));
   }
 );

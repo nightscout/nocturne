@@ -553,6 +553,7 @@ msgstr ""
 msgid "Verification code"
 msgstr ""
 
+#: ../portal/src/routes/studio/+page.svelte
 #: src/lib/components/account/TotpSetupDialog.svelte
 #: src/lib/components/admin/OidcProviderDialog.svelte
 #: src/lib/components/admin/RoleDialog.svelte
@@ -848,6 +849,7 @@ msgstr ""
 msgid "Update role details and permissions."
 msgstr ""
 
+#: ../portal/src/routes/studio/+page.svelte
 #: src/lib/components/admin/OidcProviderDialog.svelte
 #: src/lib/components/admin/RoleDialog.svelte
 #: src/lib/components/admin/SubjectEditDialog.svelte
@@ -1696,9 +1698,9 @@ msgstr ""
 msgid "Recovery code"
 msgstr ""
 
+#: src/lib/components/auth/GuestCodeForm.svelte
 #: src/lib/components/auth/LoginForm.svelte
 #: src/lib/components/auth/LoginForm.svelte
-#: src/routes/(unauthenticated)/guest/[[code]]/+page.svelte
 msgid "<0/> Verifying..."
 msgstr ""
 
@@ -1728,6 +1730,7 @@ msgstr ""
 msgid "Display name"
 msgstr ""
 
+#: ../portal/src/routes/studio/+page.svelte
 #: src/lib/components/auth/PasskeyRegistrationForm.svelte
 #: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
 #: src/routes/(unauthenticated)/auth/recovery/+page.svelte
@@ -3534,6 +3537,7 @@ msgstr ""
 msgid "Sharing & Privacy"
 msgstr ""
 
+#: ../portal/src/routes/studio/+page.svelte
 #: src/lib/components/layout/BackupSignInPrompt.svelte
 #: src/lib/components/layout/SessionExpiryWarning.svelte
 #: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
@@ -14579,7 +14583,7 @@ msgstr ""
 msgid "Enter guest code"
 msgstr ""
 
-#: src/routes/(unauthenticated)/guest/[[code]]/+page.svelte
+#: src/lib/components/auth/GuestCodeForm.svelte
 msgid "<0/> Access Data"
 msgstr ""
 
@@ -16747,9 +16751,8 @@ msgstr ""
 msgid "Studio - Nocturne"
 msgstr ""
 
-#: ../portal/src/routes/studio/+page.svelte
-msgid "Failed to publish"
-msgstr ""
+#~ msgid "Failed to publish"
+#~ msgstr ""
 
 #: ../portal/src/routes/studio/+page.svelte
 msgid "LanguageSelector"
@@ -22749,11 +22752,11 @@ msgstr ""
 msgid "Signing you in"
 msgstr ""
 
-#: src/routes/(unauthenticated)/guest/[[code]]/+page.svelte
+#: src/lib/components/auth/GuestCodeForm.svelte
 msgid "We couldn't check that code just now. Please try again."
 msgstr ""
 
-#: src/routes/(unauthenticated)/guest/[[code]]/+page.svelte
+#: src/lib/components/auth/GuestCodeForm.svelte
 msgid "Guest code"
 msgstr ""
 
@@ -24179,10 +24182,12 @@ msgstr ""
 msgid "Used for commit co-author credit."
 msgstr ""
 
+#: ../portal/src/routes/studio/+page.svelte
 #: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
 msgid "Email (optional)"
 msgstr ""
 
+#: ../portal/src/routes/studio/+page.svelte
 #: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
 msgid "Note to reviewers (optional)"
 msgstr ""
@@ -24210,3 +24215,48 @@ msgstr ""
 
 #~ msgid "{0}=set; path=/; max-age=1"
 #~ msgstr ""
+
+#: src/routes/(unauthenticated)/auth/login/+page.svelte
+msgid "Enter your guest code"
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/login/+page.svelte
+msgid "Enter the code you were given to view health data. The code works once — this device stays signed in for 48 hours."
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/login/+page.svelte
+msgid "<0/> Not signing in with a one-time guest code"
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/login/+page.svelte
+msgid "<0/> Have a one-time guest code?"
+msgstr ""
+
+#: ../portal/src/routes/studio/+page.svelte
+msgid "Failed to propose the change"
+msgstr ""
+
+#: ../portal/src/routes/studio/+page.svelte
+msgid "Proposed as pull request <0/> — the post updates once the pull request merges."
+msgstr ""
+
+#: ../portal/src/routes/studio/+page.svelte
+msgid "Propose as pull request"
+msgstr ""
+
+#. 0: proposal.title
+#: ../portal/src/routes/studio/+page.svelte
+msgid "\"{0}\" is proposed to the Nocturne project as a pull request. Your name appears in the commit credit."
+msgstr ""
+
+#: ../portal/src/routes/studio/+page.svelte
+msgid "GitHub username (optional, used for commit co-author credit)"
+msgstr ""
+
+#: ../portal/src/routes/studio/+page.svelte
+msgid "Proposing…"
+msgstr ""
+
+#: ../portal/src/routes/studio/+page.svelte
+msgid "Propose"
+msgstr ""

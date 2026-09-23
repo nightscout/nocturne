@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Services.ClientDevices;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -197,6 +198,8 @@ public class OAuthGrantService : IOAuthGrantService
             token.RevokedAt = now;
         }
 
+        var deviceCount = await _dbContext.RemoveGrantDevicesAsync(grantId, ct);
+
         await _dbContext.SaveChangesAsync(ct);
 
         // Guest sessions are cached for 30 seconds, so revoking the grant is not enough on its
@@ -207,8 +210,8 @@ public class OAuthGrantService : IOAuthGrantService
         _guestSessionCache.Evict(grant.TenantId, grant.Id);
 
         _logger.LogInformation(
-            "OAuthAudit: {Event} grant_id={GrantId} subject_id={SubjectId} revoked_tokens={TokenCount}",
-            "grant_revoked", grantId, grant.SubjectId, refreshTokens.Count);
+            "OAuthAudit: {Event} grant_id={GrantId} subject_id={SubjectId} revoked_tokens={TokenCount} revoked_devices={DeviceCount}",
+            "grant_revoked", grantId, grant.SubjectId, refreshTokens.Count, deviceCount);
     }
 
     /// <inheritdoc />

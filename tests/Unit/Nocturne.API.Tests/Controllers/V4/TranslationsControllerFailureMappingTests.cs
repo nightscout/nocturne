@@ -34,8 +34,9 @@ public class TranslationsControllerFailureMappingTests
         // No PAT, so the contribution takes the relay path and the handler stands in
         // for nocturne.run.
         var service = new GitHubTranslationService(
+            new GitHubPrClient(factory.Object, NullLogger<GitHubPrClient>.Instance),
             factory.Object,
-            Options.Create(new GitHubTranslationOptions()),
+            Options.Create(new GitHubContributionOptions()),
             NullLogger<GitHubTranslationService>.Instance);
 
         return new TranslationsController(
@@ -52,7 +53,7 @@ public class TranslationsControllerFailureMappingTests
     {
         Locale = "fr",
         Entries = [new TranslationEntryDto { MsgId = "Hello", Translations = ["Bonjour"] }],
-        Contributor = new TranslationContributorDto { Name = "Jane Doe" },
+        Contributor = new ContributionContributorDto { Name = "Jane Doe" },
     };
 
     [Fact]

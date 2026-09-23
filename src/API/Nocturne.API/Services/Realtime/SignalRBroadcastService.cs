@@ -237,14 +237,13 @@ public class SignalRBroadcastService : ISignalRBroadcastService
                 .Clients.Group(group)
                 .SendCoreAsync("dataUpdate", new[] { data });
             _logger.LogInformation("Data update broadcast completed successfully");
-
-            // Relay to Home Assistant subscribers
-            await BroadcastHomeAssistantGlucoseAsync(data);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error broadcasting data update");
         }
+
+        await BroadcastHomeAssistantGlucoseAsync(data);
 
         // Tenant-tagged ping to cross-tenant overview subscribers. Same "{tenantId}:" group
         // scheme but on OverviewHub, so no collision with DataHub groups. Minimal payload:

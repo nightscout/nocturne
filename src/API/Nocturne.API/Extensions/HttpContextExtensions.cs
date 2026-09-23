@@ -105,7 +105,30 @@ public static class HttpContextExtensions
     }
 
     /// <summary>
-    /// Check if the current request holds the superuser permission (<c>*</c>)
+    /// The <c>oauth_grants</c> id the request's credential authenticates under, or null when the
+    /// credential has no grant. <see cref="AuthContext.TokenId"/> means "the token row this
+    /// credential came from", which is a grant id only for the grant-backed credential types; a
+    /// platform-access or session cookie carries a JWT id instead, and a credential that carries
+    /// no token id carries none.
+    /// </summary>
+    public static Guid? GetGrantId(this HttpContext context)
+    {
+        var authContext = context.GetAuthContext();
+        if (authContext is null)
+        {
+            return null;
+        }
+
+        return authContext.AuthType is AuthType.OAuthAccessToken
+            or AuthType.ApiKey
+            or AuthType.DirectGrant
+            or AuthType.Guest
+            ? authContext.TokenId
+            : null;
+    }
+
+    /// <summary>
+    /// Check if the current request has admin permissions
     /// </summary>
     /// <param name="context">HTTP context</param>
     /// <returns>True if the request holds superuser permissions</returns>

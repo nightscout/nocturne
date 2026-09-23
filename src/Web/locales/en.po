@@ -553,6 +553,7 @@ msgstr "Label (optional)"
 msgid "Verification code"
 msgstr "Verification code"
 
+#: ../portal/src/routes/studio/+page.svelte
 #: src/lib/components/account/TotpSetupDialog.svelte
 #: src/lib/components/admin/OidcProviderDialog.svelte
 #: src/lib/components/admin/RoleDialog.svelte
@@ -848,6 +849,7 @@ msgstr "Create a new role with specific permissions."
 msgid "Update role details and permissions."
 msgstr "Update role details and permissions."
 
+#: ../portal/src/routes/studio/+page.svelte
 #: src/lib/components/admin/OidcProviderDialog.svelte
 #: src/lib/components/admin/RoleDialog.svelte
 #: src/lib/components/admin/SubjectEditDialog.svelte
@@ -1696,9 +1698,9 @@ msgstr "Back"
 msgid "Recovery code"
 msgstr "Recovery code"
 
+#: src/lib/components/auth/GuestCodeForm.svelte
 #: src/lib/components/auth/LoginForm.svelte
 #: src/lib/components/auth/LoginForm.svelte
-#: src/routes/(unauthenticated)/guest/[[code]]/+page.svelte
 msgid "<0/> Verifying..."
 msgstr "<0/> Verifying..."
 
@@ -1728,6 +1730,7 @@ msgstr "<0/> Verify"
 msgid "Display name"
 msgstr "Display name"
 
+#: ../portal/src/routes/studio/+page.svelte
 #: src/lib/components/auth/PasskeyRegistrationForm.svelte
 #: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
 #: src/routes/(unauthenticated)/auth/recovery/+page.svelte
@@ -3534,6 +3537,7 @@ msgstr "Alerts"
 msgid "Sharing & Privacy"
 msgstr "Sharing & Privacy"
 
+#: ../portal/src/routes/studio/+page.svelte
 #: src/lib/components/layout/BackupSignInPrompt.svelte
 #: src/lib/components/layout/SessionExpiryWarning.svelte
 #: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
@@ -14579,7 +14583,7 @@ msgstr "Guest Access - Nocturne"
 msgid "Enter guest code"
 msgstr "Enter guest code"
 
-#: src/routes/(unauthenticated)/guest/[[code]]/+page.svelte
+#: src/lib/components/auth/GuestCodeForm.svelte
 msgid "<0/> Access Data"
 msgstr "<0/> Access Data"
 
@@ -16747,9 +16751,8 @@ msgstr "Blog Posts"
 msgid "Studio - Nocturne"
 msgstr "Studio - Nocturne"
 
-#: ../portal/src/routes/studio/+page.svelte
-msgid "Failed to publish"
-msgstr "Failed to publish"
+#~ msgid "Failed to publish"
+#~ msgstr "Failed to publish"
 
 #: ../portal/src/routes/studio/+page.svelte
 msgid "LanguageSelector"
@@ -22749,11 +22752,11 @@ msgstr "Sign in normally"
 msgid "Signing you in"
 msgstr "Signing you in"
 
-#: src/routes/(unauthenticated)/guest/[[code]]/+page.svelte
+#: src/lib/components/auth/GuestCodeForm.svelte
 msgid "We couldn't check that code just now. Please try again."
 msgstr "We couldn't check that code just now. Please try again."
 
-#: src/routes/(unauthenticated)/guest/[[code]]/+page.svelte
+#: src/lib/components/auth/GuestCodeForm.svelte
 msgid "Guest code"
 msgstr "Guest code"
 
@@ -24179,10 +24182,12 @@ msgstr "GitHub username (optional)"
 msgid "Used for commit co-author credit."
 msgstr "Used for commit co-author credit."
 
+#: ../portal/src/routes/studio/+page.svelte
 #: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
 msgid "Email (optional)"
 msgstr "Email (optional)"
 
+#: ../portal/src/routes/studio/+page.svelte
 #: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
 msgid "Note to reviewers (optional)"
 msgstr "Note to reviewers (optional)"
@@ -24210,3 +24215,48 @@ msgstr "Failed to load the translation catalog source."
 
 #~ msgid "{0}=set; path=/; max-age=1"
 #~ msgstr "{0}=set; path=/; max-age=1"
+
+#: src/routes/(unauthenticated)/auth/login/+page.svelte
+msgid "Enter your guest code"
+msgstr "Enter your guest code"
+
+#: src/routes/(unauthenticated)/auth/login/+page.svelte
+msgid "Enter the code you were given to view health data. The code works once — this device stays signed in for 48 hours."
+msgstr "Enter the code you were given to view health data. The code works once — this device stays signed in for 48 hours."
+
+#: src/routes/(unauthenticated)/auth/login/+page.svelte
+msgid "<0/> Not signing in with a one-time guest code"
+msgstr "<0/> Not signing in with a one-time guest code"
+
+#: src/routes/(unauthenticated)/auth/login/+page.svelte
+msgid "<0/> Have a one-time guest code?"
+msgstr "<0/> Have a one-time guest code?"
+
+#: ../portal/src/routes/studio/+page.svelte
+msgid "Failed to propose the change"
+msgstr "Failed to propose the change"
+
+#: ../portal/src/routes/studio/+page.svelte
+msgid "Proposed as pull request <0/> — the post updates once the pull request merges."
+msgstr "Proposed as pull request <0/> — the post updates once the pull request merges."
+
+#: ../portal/src/routes/studio/+page.svelte
+msgid "Propose as pull request"
+msgstr "Propose as pull request"
+
+#. 0: proposal.title
+#: ../portal/src/routes/studio/+page.svelte
+msgid "\"{0}\" is proposed to the Nocturne project as a pull request. Your name appears in the commit credit."
+msgstr "\"{0}\" is proposed to the Nocturne project as a pull request. Your name appears in the commit credit."
+
+#: ../portal/src/routes/studio/+page.svelte
+msgid "GitHub username (optional, used for commit co-author credit)"
+msgstr "GitHub username (optional, used for commit co-author credit)"
+
+#: ../portal/src/routes/studio/+page.svelte
+msgid "Proposing…"
+msgstr "Proposing…"
+
+#: ../portal/src/routes/studio/+page.svelte
+msgid "Propose"
+msgstr "Propose"

@@ -58,6 +58,7 @@ public class ClientDevicesController : ControllerBase
                 subjectId.Value,
                 request,
                 HttpContext.GetGrantedScopes(),
+                HttpContext.GetGrantId(),
                 cancellationToken);
 
             _logger.LogDebug(

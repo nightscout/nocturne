@@ -181,6 +181,18 @@ public class GuestLinkController : ControllerBase
         return Ok(new ActivateGuestLinkResponse(result.Session.ExpiresAt));
     }
 
+    /// <summary>
+    /// Whether this tenant has a guest code waiting to be redeemed, so the sign-in page can open
+    /// on code entry. Answers only yes or no: nothing about the code, its label or its owner.
+    /// </summary>
+    [HttpGet("pending")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(GuestCodePendingResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetGuestCodePending(CancellationToken ct)
+    {
+        var pending = await _guestLinkService.HasRedeemableCodeAsync(ct);
+        return Ok(new GuestCodePendingResponse(pending));
+    }
 }
 
 /// <summary>
@@ -199,3 +211,8 @@ public record ActivateGuestLinkRequest(string Code);
 /// sniffing this shape for an error field.
 /// </summary>
 public record ActivateGuestLinkResponse(DateTime? ExpiresAt);
+
+/// <summary>
+/// Whether the tenant has an unredeemed guest code.
+/// </summary>
+public record GuestCodePendingResponse(bool Pending);

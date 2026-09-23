@@ -45,7 +45,7 @@ public class TranslationDraftServiceTests
         Translations = translation is null ? [] : [translation],
     };
 
-    private static TranslationContributorDto Contributor() => new() { Name = "Jane Doe" };
+    private static ContributionContributorDto Contributor() => new() { Name = "Jane Doe" };
 
     [Fact]
     public async Task UpsertDraftsAsync_Creates_And_Updates_By_Key()
@@ -113,7 +113,7 @@ public class TranslationDraftServiceTests
     {
         var act = () => _service.SubmitDraftsAsync("fr", Contributor(), null);
 
-        await act.Should().ThrowAsync<TranslationContributionRejectedException>();
+        await act.Should().ThrowAsync<ContributionRejectedException>();
     }
 
     [Fact]

@@ -8,7 +8,7 @@ public record TranslationEntryDto
     public required List<string> Translations { get; init; }
 }
 
-public record TranslationContributorDto
+public record ContributionContributorDto
 {
     public required string Name { get; init; }
     public string? GitHubUsername { get; init; }
@@ -19,7 +19,7 @@ public record TranslationContributionRequest
 {
     public required string Locale { get; init; }
     public required List<TranslationEntryDto> Entries { get; init; }
-    public required TranslationContributorDto Contributor { get; init; }
+    public required ContributionContributorDto Contributor { get; init; }
     public string? Note { get; init; }
 }
 
