@@ -1,62 +1,6 @@
 import logger from './logger.js';
 import SocketIOServer from './socketio-server.js';
-
-interface DataPoint {
-  _id?: string;
-  id?: string;
-  sgv?: number;
-  value?: number;
-  date?: number;
-  timestamp?: number;
-  dateString?: string;
-  trend?: number;
-  direction?: string;
-  filtered?: number;
-  unfiltered?: number;
-  rssi?: number;
-  noise?: number;
-  type?: string;
-  [key: string]: any;
-}
-
-interface AnnouncementMessage {
-  message?: string;
-  text?: string;
-  title?: string;
-  level?: string;
-  timestamp?: string;
-  [key: string]: any;
-}
-
-interface AlarmData {
-  level?: string;
-  title?: string;
-  message?: string;
-  plugin?: string;
-  source?: string;
-  timestamp?: string;
-  key?: string;
-  id?: string;
-  [key: string]: any;
-}
-
-interface NotificationData {
-  title?: string;
-  message?: string;
-  level?: string;
-  plugin?: string;
-  source?: string;
-  timestamp?: string;
-  [key: string]: any;
-}
-
-interface StatusData {
-  status?: string;
-  state?: string;
-  message?: string;
-  timestamp?: string;
-  [key: string]: any;
-}
+import { fieldsOf, type Payload } from './payload.js';
 
 class MessageTranslator {
   private socketIOServer: SocketIOServer;
@@ -67,7 +11,7 @@ class MessageTranslator {
     this.tenantSlug = tenantSlug;
   }
 
-  handleDataUpdate(data: any): void {
+  handleDataUpdate(data: unknown): void {
     try {
       const translatedData = this.translateDataUpdate(data);
       this.socketIOServer.broadcastDataUpdate(translatedData, this.tenantSlug);
@@ -76,7 +20,7 @@ class MessageTranslator {
     }
   }
 
-  handleAnnouncement(message: AnnouncementMessage): void {
+  handleAnnouncement(message: unknown): void {
     try {
       const translatedMessage = this.translateAnnouncement(message);
       this.socketIOServer.broadcastAnnouncement(translatedMessage, this.tenantSlug);
@@ -85,10 +29,10 @@ class MessageTranslator {
     }
   }
 
-  handleAlarm(alarm: AlarmData): void {
+  handleAlarm(alarm: unknown): void {
     try {
       const translatedAlarm = this.translateAlarm(alarm);
-      this.socketIOServer.broadcastAlarm(translatedAlarm as any, this.tenantSlug);
+      this.socketIOServer.broadcastAlarm(translatedAlarm, this.tenantSlug);
     } catch (error) {
       logger.error('Error translating alarm:', error);
     }
@@ -102,7 +46,7 @@ class MessageTranslator {
     }
   }
 
-  handleNotification(notification: NotificationData): void {
+  handleNotification(notification: unknown): void {
     try {
       const translatedNotification = this.translateNotification(notification);
       this.socketIOServer.broadcastNotification(translatedNotification, this.tenantSlug);
@@ -111,7 +55,7 @@ class MessageTranslator {
     }
   }
 
-  handleStatusUpdate(status: StatusData): void {
+  handleStatusUpdate(status: unknown): void {
     try {
       const translatedStatus = this.translateStatusUpdate(status);
       this.socketIOServer.broadcastStatusUpdate(translatedStatus, this.tenantSlug);
@@ -120,7 +64,7 @@ class MessageTranslator {
     }
   }
 
-  handleStorageCreate(data: any): void {
+  handleStorageCreate(data: unknown): void {
     try {
       const translatedData = this.translateStorageEvent(data);
       this.socketIOServer.broadcastStorageEvent('create', translatedData, this.tenantSlug);
@@ -129,7 +73,7 @@ class MessageTranslator {
     }
   }
 
-  handleStorageUpdate(data: any): void {
+  handleStorageUpdate(data: unknown): void {
     try {
       const translatedData = this.translateStorageEvent(data);
       this.socketIOServer.broadcastStorageEvent('update', translatedData, this.tenantSlug);
@@ -138,7 +82,7 @@ class MessageTranslator {
     }
   }
 
-  handleStorageDelete(data: any): void {
+  handleStorageDelete(data: unknown): void {
     try {
       const translatedData = this.translateStorageEvent(data);
       this.socketIOServer.broadcastStorageEvent('delete', translatedData, this.tenantSlug);
@@ -147,7 +91,7 @@ class MessageTranslator {
     }
   }
 
-  handleNotificationCreated(data: any): void {
+  handleNotificationCreated(data: unknown): void {
     try {
       this.socketIOServer.broadcastInAppNotification('notificationCreated', data, this.tenantSlug);
     } catch (error) {
@@ -155,7 +99,7 @@ class MessageTranslator {
     }
   }
 
-  handleNotificationArchived(data: any): void {
+  handleNotificationArchived(data: unknown): void {
     try {
       this.socketIOServer.broadcastInAppNotification('notificationArchived', data, this.tenantSlug);
     } catch (error) {
@@ -163,7 +107,7 @@ class MessageTranslator {
     }
   }
 
-  handleNotificationUpdated(data: any): void {
+  handleNotificationUpdated(data: unknown): void {
     try {
       this.socketIOServer.broadcastInAppNotification('notificationUpdated', data, this.tenantSlug);
     } catch (error) {
@@ -171,7 +115,7 @@ class MessageTranslator {
     }
   }
 
-  handleSyncProgress(data: any): void {
+  handleSyncProgress(data: unknown): void {
     try {
       this.socketIOServer.broadcastSyncProgress(data, this.tenantSlug);
     } catch (error) {
@@ -179,7 +123,7 @@ class MessageTranslator {
     }
   }
 
-  handleConfigChanged(data: any): void {
+  handleConfigChanged(data: unknown): void {
     try {
       this.socketIOServer.broadcastConfigChanged(data, this.tenantSlug);
     } catch (error) {
@@ -189,7 +133,7 @@ class MessageTranslator {
 
   // Translation methods - these ensure compatibility with legacy Nightscout client expectations
 
-  private translateDataUpdate(data: DataPoint[]): any {
+  private translateDataUpdate(data: unknown): unknown {
     // Ensure the data structure matches what legacy clients expect
     if (Array.isArray(data)) {
       return data.map(item => this.translateSingleDataPoint(item));
@@ -199,13 +143,14 @@ class MessageTranslator {
     return data;
   }
 
-  private translateSingleDataPoint(item: DataPoint): DataPoint {
+  private translateSingleDataPoint(data: unknown): Payload {
+    const item = fieldsOf(data);
     // Ensure required fields are present for legacy compatibility
     return {
       _id: item._id || item.id,
       sgv: item.sgv || item.value,
       date: item.date || item.timestamp,
-      dateString: item.dateString || new Date(item.date || item.timestamp || Date.now()).toISOString(),
+      dateString: item.dateString || new Date(dateInput(item.date || item.timestamp || Date.now())).toISOString(),
       trend: item.trend,
       direction: item.direction,
       filtered: item.filtered,
@@ -217,10 +162,11 @@ class MessageTranslator {
     };
   }
 
-  private translateAnnouncement(message: AnnouncementMessage): AnnouncementMessage {
+  private translateAnnouncement(data: unknown): Payload {
+    const message = fieldsOf(data);
     // Ensure announcement format matches legacy expectations
     return {
-      message: message.message || message.text || String(message),
+      message: message.message || message.text || String(data),
       title: message.title || 'Announcement',
       level: message.level || 'info',
       timestamp: message.timestamp || new Date().toISOString(),
@@ -228,7 +174,8 @@ class MessageTranslator {
     };
   }
 
-  private translateAlarm(alarm: AlarmData): AlarmData {
+  private translateAlarm(data: unknown): Payload {
+    const alarm = fieldsOf(data);
     // Ensure alarm format matches legacy expectations
     return {
       level: alarm.level || 'warn', // 'urgent', 'warn', 'info'
@@ -241,7 +188,8 @@ class MessageTranslator {
     };
   }
 
-  private translateNotification(notification: NotificationData): NotificationData {
+  private translateNotification(data: unknown): Payload {
+    const notification = fieldsOf(data);
     // Ensure notification format matches legacy expectations
     return {
       title: notification.title,
@@ -253,7 +201,8 @@ class MessageTranslator {
     };
   }
 
-  private translateStatusUpdate(status: StatusData): StatusData {
+  private translateStatusUpdate(data: unknown): Payload {
+    const status = fieldsOf(data);
     // Ensure status format matches legacy expectations
     return {
       status: status.status || status.state,
@@ -263,16 +212,26 @@ class MessageTranslator {
     };
   }
 
-  private translateStorageEvent(data: any): any {
+  private translateStorageEvent(payload: unknown): Payload {
+    const data = fieldsOf(payload);
     // Ensure storage event format matches legacy expectations
     // Legacy Nightscout expects { colName: 'entries', doc: {...} } format
     return {
       colName: data.colName || data.collection,
-      doc: data.doc || data.document || data,
+      doc: data.doc || data.document || payload,
       ...data
     };
   }
 
+}
+
+/**
+ * The API sends a timestamp as mills or an ISO string. Anything else is read as a number,
+ * which is how the Date constructor reads a non-string primitive.
+ */
+function dateInput(value: unknown): number | string | Date {
+  if (typeof value === 'number' || typeof value === 'string' || value instanceof Date) return value;
+  return Number(value);
 }
 
 export default MessageTranslator;

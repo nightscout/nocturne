@@ -1,8 +1,21 @@
-import { Server as SocketIOServerClass, Socket, Namespace } from 'socket.io';
+import { Server as SocketIOServerClass, Socket, Namespace, type DefaultEventsMap } from 'socket.io';
 import { Server as HttpServer } from 'http';
 import logger from './logger.js';
 import type { ClientInfo, AlarmData, ServerStats } from '../types.js';
 import { verifyHandshakeTicket, normalizeHandshakeHost } from './handshake-ticket.js';
+import { isRecord, stringField, type Payload } from './payload.js';
+
+/** What a socket carries from its handshake to its handlers. */
+interface BridgeSocketData {
+  /** The tenant whose rooms the socket is authorized for. */
+  tenantSlug?: string;
+  /** The tenant the socket's host resolved to, before it has authorized. */
+  pendingTenantSlug?: string;
+}
+
+type BridgeServer = SocketIOServerClass<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, BridgeSocketData>;
+type BridgeNamespace = Namespace<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, BridgeSocketData>;
+type BridgeSocket = Socket<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, BridgeSocketData>;
 
 /**
  * The six collection names the Nightscout v3 `/storage` namespace lets a client
@@ -18,6 +31,11 @@ const KNOWN_STORAGE_COLLECTIONS = [
   'foods',
   'settings',
 ] as const;
+
+type StorageCollection = (typeof KNOWN_STORAGE_COLLECTIONS)[number];
+
+const isStorageCollection = (name: string): name is StorageCollection =>
+  KNOWN_STORAGE_COLLECTIONS.some((known) => known === name);
 
 /**
  * The API broadcasts storage events under its own collection names, which don't
@@ -132,7 +150,7 @@ export function resolveTenantSlug(
 }
 
 class SocketIOServer {
-  private io: SocketIOServerClass | null = null;
+  private io: BridgeServer | null = null;
   private httpServer: HttpServer;
   private clients: Map<string, ClientInfo> = new Map();
   private config: SocketIOConfig;
@@ -142,8 +160,8 @@ class SocketIOServer {
   private apiBaseUrl: string;
   /** Nightscout v3 namespaces for uploaders (AAPS, xDrip+, ...). null until
    *  start() attaches them to the same httpServer as the default namespace. */
-  private storageNsp: Namespace | null = null;
-  private alarmNsp: Namespace | null = null;
+  private storageNsp: BridgeNamespace | null = null;
+  private alarmNsp: BridgeNamespace | null = null;
 
   constructor(
     httpServer: HttpServer,
@@ -170,9 +188,9 @@ class SocketIOServer {
     return new Promise((resolve, reject) => {
       try {
         // Create Socket.IO server attached to existing HTTP server
-        this.io = new SocketIOServerClass(this.httpServer, {
+        this.io = new SocketIOServerClass<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, BridgeSocketData>(this.httpServer, {
           cors: this.config.cors,
-          transports: this.config.transports as any,
+          transports: this.config.transports,
           pingTimeout: this.config.pingTimeout,
           pingInterval: this.config.pingInterval,
           // Legacy Nightscout clients (LoopFollow's socket.io-client-swift) speak
@@ -212,7 +230,7 @@ class SocketIOServer {
   /** Resolve the tenant for a handshake and authorize it from its ticket. Sets
    *  `socket.data.tenantSlug` for room assignment on success; calls `next` with
    *  an error to reject. Exposed for unit testing. */
-  async authorizeHandshake(socket: Socket, next: (err?: Error) => void): Promise<void> {
+  async authorizeHandshake(socket: BridgeSocket, next: (err?: Error) => void): Promise<void> {
     try {
       const host = pickHandshakeHost(socket.handshake.headers);
       const tenantSlug = resolveTenantSlug(host, this.baseDomain, this.tenantSlugs);
@@ -224,7 +242,7 @@ class SocketIOServer {
       // Engine.IO v3 clients have no `auth` payload — that arrived with the v4
       // protocol — so also accept the ticket from the handshake query.
       const token =
-        (socket.handshake.auth as { token?: string } | undefined)?.token
+        stringField(socket.handshake.auth, 'token')
         ?? queryValue(socket.handshake.query?.token);
       if (token) {
         // A ticket was offered, so this is the browser path: reject it outright if
@@ -265,7 +283,7 @@ class SocketIOServer {
   private setupEventHandlers(): void {
     if (!this.io) return;
 
-    this.io.on('connection', (socket: Socket) => {
+    this.io.on('connection', (socket: BridgeSocket) => {
       const clientId = socket.id;
       const clientInfo: ClientInfo = {
         id: clientId,
@@ -280,7 +298,7 @@ class SocketIOServer {
 
       // Join the client to the tenant room resolved and authorized during the
       // handshake (see setupHandshakeAuth).
-      const tenantSlug = socket.data.tenantSlug as string | undefined;
+      const tenantSlug = socket.data.tenantSlug;
       if (tenantSlug) {
         socket.join(`tenant:${tenantSlug}`);
         logger.info(`Client ${clientId} joined tenant room: ${tenantSlug}`);
@@ -325,7 +343,7 @@ class SocketIOServer {
    *  bridge's instance key, which would authenticate any anonymous caller as a
    *  service and hand them another tenant's data. */
   async handleAuthorize(
-    socket: Socket,
+    socket: BridgeSocket,
     payload: unknown,
     callback?: (result: unknown) => void,
   ): Promise<void> {
@@ -341,14 +359,13 @@ class SocketIOServer {
       return;
     }
 
-    const tenantSlug = socket.data.pendingTenantSlug as string | undefined;
+    const tenantSlug = socket.data.pendingTenantSlug;
     if (!tenantSlug) return deny('no resolvable tenant');
 
     if (!this.apiBaseUrl) return deny('bridge has no API base URL configured');
 
-    const message = (payload ?? {}) as { secret?: unknown; token?: unknown };
-    const secret = typeof message.secret === 'string' ? message.secret : undefined;
-    const token = typeof message.token === 'string' ? message.token : undefined;
+    const secret = stringField(payload, 'secret');
+    const token = stringField(payload, 'token');
     if (!secret && !token) return deny('no credentials supplied');
 
     try {
@@ -399,7 +416,7 @@ class SocketIOServer {
   }
 
   // Methods to broadcast messages to clients
-  broadcastDataUpdate(data: any, tenantSlug?: string): void {
+  broadcastDataUpdate(data: unknown, tenantSlug?: string): void {
     const target = this.emitTarget(tenantSlug);
     if (!target) return;
 
@@ -407,7 +424,7 @@ class SocketIOServer {
     target.emit('dataUpdate', data);
   }
 
-  broadcastAnnouncement(message: any, tenantSlug?: string): void {
+  broadcastAnnouncement(message: unknown, tenantSlug?: string): void {
     const target = this.emitTarget(tenantSlug);
     if (!target) return;
 
@@ -444,7 +461,7 @@ class SocketIOServer {
     }
   }
 
-  broadcastNotification(notification: any, tenantSlug?: string): void {
+  broadcastNotification(notification: unknown, tenantSlug?: string): void {
     const target = this.emitTarget(tenantSlug);
     if (!target) return;
 
@@ -452,7 +469,7 @@ class SocketIOServer {
     target.emit('notification', notification);
   }
 
-  broadcastStatusUpdate(status: any, tenantSlug?: string): void {
+  broadcastStatusUpdate(status: unknown, tenantSlug?: string): void {
     const target = this.emitTarget(tenantSlug);
     if (!target) return;
 
@@ -460,7 +477,7 @@ class SocketIOServer {
     target.emit('status', status);
   }
 
-  broadcastStorageEvent(eventType: 'create' | 'update' | 'delete', data: any, tenantSlug?: string): void {
+  broadcastStorageEvent(eventType: 'create' | 'update' | 'delete', data: Payload, tenantSlug?: string): void {
     const target = this.emitTarget(tenantSlug);
     if (!target) return;
 
@@ -484,10 +501,7 @@ class SocketIOServer {
     // `colName` is amended to the client spelling too, since AAPS routes the
     // event by reading `colName` from the payload.
     if (this.storageNsp && tenantSlug) {
-      const broadcastCollection =
-        typeof data?.colName === 'string' ? data.colName
-        : typeof data?.collection === 'string' ? data.collection
-        : null;
+      const broadcastCollection = stringField(data, 'colName') ?? stringField(data, 'collection') ?? null;
       if (broadcastCollection) {
         const clientCollection = clientCollectionName(broadcastCollection);
         this.storageNsp
@@ -497,7 +511,7 @@ class SocketIOServer {
     }
   }
 
-  broadcastInAppNotification(eventType: 'notificationCreated' | 'notificationArchived' | 'notificationUpdated', data: any, tenantSlug?: string): void {
+  broadcastInAppNotification(eventType: 'notificationCreated' | 'notificationArchived' | 'notificationUpdated', data: unknown, tenantSlug?: string): void {
     const target = this.emitTarget(tenantSlug);
     if (!target) return;
 
@@ -505,14 +519,14 @@ class SocketIOServer {
     target.emit(eventType, data);
   }
 
-  broadcastSyncProgress(data: any, tenantSlug?: string): void {
+  broadcastSyncProgress(data: unknown, tenantSlug?: string): void {
     const target = this.emitTarget(tenantSlug);
     if (!target) return;
     logger.debug(`Broadcasting syncProgress${tenantSlug ? ` to tenant ${tenantSlug}` : ''}`);
     target.emit('syncProgress', data);
   }
 
-  broadcastConfigChanged(data: any, tenantSlug?: string): void {
+  broadcastConfigChanged(data: unknown, tenantSlug?: string): void {
     const target = this.emitTarget(tenantSlug);
     if (!target) return;
     logger.debug(`Broadcasting configChanged${tenantSlug ? ` to tenant ${tenantSlug}` : ''}`);
@@ -520,7 +534,7 @@ class SocketIOServer {
   }
 
   // Send message to specific room
-  sendToRoom(room: string, event: string, data: any): void {
+  sendToRoom(room: string, event: string, data: unknown): void {
     if (!this.io) return;
 
     logger.debug(`Sending ${event} to room: ${room}`);
@@ -540,7 +554,7 @@ class SocketIOServer {
     this.tenantSlugs = slugs;
   }
 
-  getIO(): SocketIOServerClass | null {
+  getIO(): BridgeServer | null {
     return this.io;
   }
 
@@ -553,7 +567,7 @@ class SocketIOServer {
    * Returns the slug, or null when the host resolves to no tenant. Exposed for
    * unit testing.
    */
-  resolveNamespaceTenant(socket: Socket): string | null {
+  resolveNamespaceTenant(socket: BridgeSocket): string | null {
     const host = pickHandshakeHost(socket.handshake.headers);
     return resolveTenantSlug(host, this.baseDomain, this.tenantSlugs);
   }
@@ -628,7 +642,7 @@ class SocketIOServer {
       next();
     });
 
-    this.storageNsp.on('connection', (socket: Socket) => {
+    this.storageNsp.on('connection', (socket: BridgeSocket) => {
       logger.info(`v3 /storage client connected: ${socket.id}`);
 
       socket.on('subscribe', async (payload: unknown, ack?: (result: unknown) => void) => {
@@ -652,19 +666,18 @@ class SocketIOServer {
    * immediately retrying `subscribe` as a credential-guessing oracle.
    */
   async handleStorageSubscribe(
-    socket: Socket,
+    socket: BridgeSocket,
     payload: unknown,
     ack?: (result: unknown) => void,
   ): Promise<void> {
-    const tenantSlug = socket.data.pendingTenantSlug as string | undefined;
+    const tenantSlug = socket.data.pendingTenantSlug;
     if (!tenantSlug) {
       ack?.({ success: false, message: 'no resolvable tenant' });
       socket.disconnect(true);
       return;
     }
 
-    const message = (payload ?? {}) as { accessToken?: unknown; collections?: unknown };
-    const accessToken = typeof message.accessToken === 'string' ? message.accessToken : undefined;
+    const accessToken = stringField(payload, 'accessToken');
     if (!accessToken) {
       ack?.({ success: false, message: 'Missing or bad accessToken' });
       socket.disconnect(true);
@@ -673,11 +686,12 @@ class SocketIOServer {
 
     // Normalize the requested collections to the known v3 set, preserving order
     // and dropping anything unrecognized.
-    const requested = Array.isArray(message.collections)
-      ? message.collections.filter((c): c is string => typeof c === 'string')
+    const collections = isRecord(payload) ? payload.collections : undefined;
+    const requested = Array.isArray(collections)
+      ? collections.filter((c): c is string => typeof c === 'string')
       : [];
-    const candidateCollections = requested.length > 0
-      ? requested.filter((c) => (KNOWN_STORAGE_COLLECTIONS as readonly string[]).includes(c))
+    const candidateCollections: StorageCollection[] = requested.length > 0
+      ? requested.filter(isStorageCollection)
       : [...KNOWN_STORAGE_COLLECTIONS];
 
     // Probe each collection's read endpoint independently so authorization is
@@ -741,7 +755,7 @@ class SocketIOServer {
       next();
     });
 
-    this.alarmNsp.on('connection', (socket: Socket) => {
+    this.alarmNsp.on('connection', (socket: BridgeSocket) => {
       logger.info(`v3 /alarm client connected: ${socket.id}`);
 
       socket.on('subscribe', async (payload: unknown, ack?: (result: unknown) => void) => {
@@ -751,7 +765,7 @@ class SocketIOServer {
       // Positional ack: AAPS emits ("ack", level, group, silenceTime) — three
       // separate arguments, not a JSON object (matches cgm-remote-monitor).
       socket.on('ack', (level: unknown, group: unknown, silenceTime: unknown) => {
-        const tenantSlug = socket.data.tenantSlug as string | undefined;
+        const tenantSlug = socket.data.tenantSlug;
         if (!tenantSlug) return;
         this.onAlarmAck(
           tenantSlug,
@@ -775,19 +789,18 @@ class SocketIOServer {
    * credential-guessing oracle.
    */
   async handleAlarmSubscribe(
-    socket: Socket,
+    socket: BridgeSocket,
     payload: unknown,
     ack?: (result: unknown) => void,
   ): Promise<void> {
-    const tenantSlug = socket.data.pendingTenantSlug as string | undefined;
+    const tenantSlug = socket.data.pendingTenantSlug;
     if (!tenantSlug) {
       ack?.({ success: false, message: 'no resolvable tenant' });
       socket.disconnect(true);
       return;
     }
 
-    const message = (payload ?? {}) as { accessToken?: unknown };
-    const accessToken = typeof message.accessToken === 'string' ? message.accessToken : undefined;
+    const accessToken = stringField(payload, 'accessToken');
     if (!accessToken) {
       ack?.({ success: false, message: 'Missing or bad accessToken' });
       socket.disconnect(true);

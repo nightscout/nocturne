@@ -22,7 +22,7 @@
     "test": "vitest run",
     "prepublishOnly": "pnpm run build",
     "lint": "eslint .",
-    "lint:ci": "eslint . --max-warnings 57 --report-unused-disable-directives-severity error"
+    "lint:ci": "eslint . --max-warnings 0 --report-unused-disable-directives-severity error"
   },
   "keywords": [
     "nightscout",

@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { isRecord } from './payload.js';
 
 /**
  * HMAC-signed handshake ticket for the Socket.IO realtime bridge.
@@ -90,15 +91,17 @@ export function verifyHandshakeTicket(
     return null;
   }
 
-  let payload: HandshakeTicketPayload;
+  let parsed: unknown;
   try {
-    payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf-8')) as HandshakeTicketPayload;
+    parsed = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf-8'));
   } catch {
     return null;
   }
 
-  if (typeof payload.h !== 'string' || typeof payload.exp !== 'number') return null;
-  if (payload.exp < now) return null;
+  if (!isRecord(parsed)) return null;
+  const { h, exp } = parsed;
+  if (typeof h !== 'string' || typeof exp !== 'number') return null;
+  if (exp < now) return null;
 
-  return payload;
+  return { h, exp };
 }
