@@ -6,9 +6,9 @@ import { SystemEventType } from "$lib/api";
 
 function createDefaultProps(
 	overrides: Partial<Parameters<typeof ChartLegend>[1]> = {},
-) {
+): Parameters<typeof ChartLegend>[1] {
 	return {
-		glucoseData: [] as { sgv: number }[],
+		glucoseData: [],
 		highThreshold: 180,
 		lowThreshold: 70,
 		veryHighThreshold: 250,
@@ -35,12 +35,12 @@ function createDefaultProps(
 		onToggleOverrideSpans: vi.fn(),
 		onToggleProfileSpans: vi.fn(),
 		onToggleActivitySpans: vi.fn(),
-		deviceEventMarkers: [] as { eventType?: string }[],
-		systemEvents: [] as { id?: string; eventType?: SystemEventType; color?: string }[],
-		pumpModeSpans: [] as { state?: string; color?: string }[],
-		scheduledTrackerMarkers: [] as { id?: string }[],
-		currentPumpMode: undefined as string | undefined,
-		uniquePumpModes: [] as (string | undefined)[],
+		deviceEventMarkers: [],
+		systemEvents: [],
+		pumpModeSpans: [],
+		scheduledTrackerMarkers: [],
+		currentPumpMode: undefined,
+		uniquePumpModes: [],
 		expandedPumpModes: false,
 		onToggleExpandedPumpModes: vi.fn(),
 		...overrides,

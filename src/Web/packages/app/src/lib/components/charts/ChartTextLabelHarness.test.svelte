@@ -4,10 +4,9 @@
   import BasalRateTrack from "./BasalRateTrack.svelte";
   import IobCobTrack from "$lib/components/dashboard/glucose-chart/tracks/IobCobTrack.svelte";
   import PredictionVisualizations from "$lib/components/dashboard/PredictionVisualizations.svelte";
-  import { setGlucoseChartContext } from "$lib/components/dashboard/glucose-chart/chart-context.svelte";
+  import { partialEngine, setGlucoseChartContext } from "$lib/components/dashboard/glucose-chart/chart-context.svelte";
   import { computeTrackLayout } from "$lib/components/dashboard/glucose-chart/engine/track-layout";
   import type { GlucoseChartContext } from "$lib/components/dashboard/glucose-chart/chart-context.svelte";
-  import type { ChartDataEngine } from "$lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte";
   import type { PredictionData } from "$api/predictions.remote";
 
   interface Props {
@@ -41,7 +40,7 @@
     value: 1 + (i % 3) * 0.5,
   }));
 
-  const engineStub = {
+  const engineStub = partialEngine({
     get iobData() {
       return series;
     },
@@ -54,7 +53,7 @@
     get carbMarkers() {
       return [];
     },
-  } as Partial<ChartDataEngine> as ChartDataEngine;
+  });
 
   const layout = $derived(
     computeTrackLayout(

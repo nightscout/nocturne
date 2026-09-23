@@ -100,7 +100,8 @@
           type="single"
           value={selectedMetric}
           onValueChange={(v) => {
-            if (v) selectedMetric = v as HeatmapMetric;
+            const option = METRIC_OPTIONS.find((o) => o.value === v);
+            if (option) selectedMetric = option.value;
           }}
         >
           <Select.Trigger size="sm" class="w-[145px] print:hidden">
@@ -188,7 +189,7 @@
       {@const metricMax =
         selectedMetric === "tir" ? 100 : getMetricMax(selectedMetric)}
       {@const cssVar =
-        METRIC_CSS_VARS[selectedMetric as Exclude<HeatmapMetric, "avgGlucose">]}
+        Object.entries(METRIC_CSS_VARS).find(([metric]) => metric === selectedMetric)?.[1]}
       <div class="w-full">
         {#if advancedMode}
           {#key `${selectedMetric}-${lowColor}-${highColor}-${invert}`}

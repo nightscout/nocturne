@@ -7,7 +7,8 @@
    */
   import { formatShortDate, formatWeekdayLabel } from "$lib/utils/formatting";
   import { Chart, Svg, Axis, Tooltip } from "layerchart";
-  import { scaleBand, scaleLinear, type ScaleBand } from "d3-scale";
+  import { scaleBand, scaleLinear } from "d3-scale";
+  import { bandScale } from "$lib/components/charts/scale-guards";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { SLEEP_COMPOSITION_SEGMENTS } from "$lib/utils/sleep-stages";
@@ -56,7 +57,7 @@
       const night = nightsByDayKey.get(dayKeyFor(date));
       let cumulative = 0;
       const segments: DaySegment[] = SLEEP_COMPOSITION_SEGMENTS.map((seg) => {
-        const minutes = (night?.[seg.key] as number | undefined) ?? 0;
+        const minutes = night?.[seg.key] ?? 0;
         const y0 = cumulative;
         cumulative += minutes;
         return { key: seg.key, label: seg.label, lane: seg.lane, minutes, y0, y1: cumulative };
@@ -153,7 +154,7 @@
           tooltipContext={{ mode: "manual" }}
         >
           {#snippet children({ context })}
-            {@const xBandScale = context.xScale as unknown as ScaleBand<string>}
+            {@const xBandScale = bandScale(context.xScale)}
             <Svg>
               <Axis
                 placement="left"
@@ -216,7 +217,7 @@
 
             <Tooltip.Root>
               {#snippet children({ data })}
-                {@const row = data as DayRow}
+                {@const row: DayRow = data}
                 <Tooltip.Header
                   value={`${formatWeekdayLabel(row.date)}, ${formatShortDate(row.date)}`}
                 />

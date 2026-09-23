@@ -2,7 +2,7 @@
   import type { Snippet } from 'svelte';
   import { Chart, Svg, Spline, Circle, Tooltip } from 'layerchart';
   import { scaleTime } from 'd3-scale';
-  import type { ScaleTime } from 'd3-scale';
+  import { timeScale } from '$lib/components/charts/scale-guards';
   import { curveMonotoneX } from 'd3';
   import { bg, bgLabel, time } from '$lib/utils/formatting';
   import {
@@ -59,8 +59,7 @@
 >
   {#snippet children({ context })}
     {@const rowContext: ActogramRowContext = {
-      // LayerChart types xScale as AnyScale; we know it's ScaleTime because we pass scaleTime() above
-      xScale: context.xScale as unknown as ScaleTime<number, number>,
+      xScale: timeScale(context.xScale),
       width: context.width,
       height: context.height,
       data,
@@ -131,7 +130,7 @@
       class="print:hidden bg-popover/95 text-popover-foreground rounded-lg border border-border px-2.5 py-1.5 shadow-xl"
     >
       {#snippet children({ data: tooltipData })}
-        {@const d = tooltipData as ActogramTooltipData}
+        {@const d: ActogramTooltipData | undefined = tooltipData}
         {#if d}
           <div class="space-y-1 text-xs">
             <div class="font-medium tabular-nums">

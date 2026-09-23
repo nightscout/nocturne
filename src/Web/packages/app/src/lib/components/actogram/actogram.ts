@@ -111,9 +111,9 @@ export function extentOf<T>(
 }
 
 function slicePoints<T extends ActogramPoint>(data: T[], days: Date[]): { day: Date; data: RowDataPoint<T>[] }[] {
-	const rows = days.map((day) => ({
+	const rows = days.map((day): { day: Date; data: RowDataPoint<T>[] } => ({
 		day,
-		data: [] as RowDataPoint<T>[],
+		data: [],
 	}));
 
 	for (const point of data) {

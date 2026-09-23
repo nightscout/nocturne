@@ -68,7 +68,7 @@
         type="single"
         value={viewMode}
         onValueChange={(value: string) =>
-          value && setViewMode(value as ViewMode)}
+          (value === "tir" || value === "profile") && setViewMode(value)}
         variant="segmented"
         size="xs"
       >

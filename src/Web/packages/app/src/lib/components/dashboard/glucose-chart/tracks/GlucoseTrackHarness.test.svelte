@@ -2,11 +2,10 @@
   import { Chart, Svg } from "layerchart";
   import { scaleTime } from "d3-scale";
   import GlucoseTrack from "./GlucoseTrack.svelte";
-  import { setGlucoseChartContext } from "../chart-context.svelte";
+  import { partialEngine, setGlucoseChartContext } from "../chart-context.svelte";
   import { computeTrackLayout } from "../engine/track-layout";
   import type { GlucoseChartContext } from "../chart-context.svelte";
   import type {
-    ChartDataEngine,
     GlucosePoint,
   } from "../engine/chart-data-engine.svelte";
 
@@ -68,15 +67,13 @@
 
   // Minimal stub of ChartDataEngine — GlucoseTrack only reads `glucoseData`
   // and `thresholds` from the engine (other fields like `width`/`height` come
-  // from layerchart's own context, not the engine). The `Partial<...> as ...`
-  // cast is intentional: if GlucoseTrack starts touching a new engine field,
-  // it should light up as a type error here rather than as runtime undefined.
-  const engineStub = {
+  // from layerchart's own context, not the engine).
+  const engineStub = partialEngine({
     get glucoseData() {
       return glucoseData;
     },
     thresholds,
-  } as Partial<ChartDataEngine> as ChartDataEngine;
+  });
 
   const layout = $derived(
     computeTrackLayout(

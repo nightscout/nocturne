@@ -4,8 +4,8 @@ vi.mock("$app/environment", () => ({ browser: false }));
 vi.mock("mode-watcher", () => ({}));
 vi.mock("runed", () => ({
 	PersistedState: class {
-		current: any;
-		constructor(v: any) {
+		current: unknown;
+		constructor(v: unknown) {
 			this.current = v;
 		}
 	},

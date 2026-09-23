@@ -31,10 +31,14 @@
     onPredictionModeChange,
   }: Props = $props();
 
+  /** The modes the toggle group below offers. */
+  const TOGGLE_MODES = ["cone", "lines", "iob", "zt", "uam"] as const satisfies readonly PredictionDisplayMode[];
+
   // Handle mode changes via callback
   function handleModeChange(value: string | undefined) {
-    if (value && onPredictionModeChange) {
-      onPredictionModeChange(value as PredictionDisplayMode);
+    const mode = TOGGLE_MODES.find((m) => m === value);
+    if (mode && onPredictionModeChange) {
+      onPredictionModeChange(mode);
     }
   }
 

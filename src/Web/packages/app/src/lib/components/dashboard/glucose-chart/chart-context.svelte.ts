@@ -37,3 +37,17 @@ export function setGlucoseChartContext(value: GlucoseChartContext) {
 export function getGlucoseChartContext(): GlucoseChartContext {
 	return ctx.get();
 }
+
+/**
+ * Stands a partial engine in for the full one, for a host that renders only
+ * tracks reading the fields it supplies (the calendar sparkline, test
+ * harnesses). The context is typed for the whole chart, so this is asserted:
+ * a track that starts reading a field the host omits sees `undefined` at
+ * runtime, not a type error — keep the host's field list in step with its tracks.
+ */
+export function partialEngine<K extends keyof ChartDataEngine>(
+	fields: Pick<ChartDataEngine, K>
+): ChartDataEngine {
+	// eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- see the doc comment: a track-only host has no full engine to give
+	return fields as ChartDataEngine;
+}

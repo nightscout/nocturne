@@ -287,7 +287,7 @@
                 class="bg-popover text-popover-foreground rounded-md border p-3 shadow-lg"
               >
                 {#snippet children({ data })}
-                  {@const d = data as typeof timeSeriesPoints[0]}
+                  {@const d: (typeof timeSeriesPoints)[number] = data}
                   <div class="min-w-44 space-y-1.5 text-xs">
                     <div class="font-semibold">
                       {formatPeriodLabel(d.periodStart)}

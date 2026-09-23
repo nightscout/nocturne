@@ -2,28 +2,7 @@
   import { Syringe, Apple, Utensils } from "lucide-svelte";
   import { formatCarbDisplay, formatInsulinDisplay, formatShortDate } from "$lib/utils/formatting";
   import type { DayToDayDailyData } from "./types";
-
-  // Local type definition for treatment summary
-  interface TreatmentSummaryType {
-    id?: string;
-    mills?: number;
-    eventType?: string;
-    insulin?: number;
-    carbs?: number;
-    totals?: {
-      insulin?: {
-        bolus?: number;
-        basal?: number;
-      };
-      food?: {
-        carbs?: number;
-        protein?: number;
-        fat?: number;
-      };
-    };
-    treatmentCount?: number;
-    [key: string]: any;
-  }
+  import type { TreatmentSummary } from "$lib/api";
 
   interface Props {
     dailyDataPoints: DayToDayDailyData[];
@@ -32,19 +11,19 @@
   let { dailyDataPoints }: Props = $props();
 
   // Helper functions to access nested TreatmentSummary properties
-  function getTotalInsulin(summary: TreatmentSummaryType | undefined): number {
+  function getTotalInsulin(summary: TreatmentSummary | undefined): number {
     return (summary?.totals?.insulin?.bolus ?? 0) + (summary?.totals?.insulin?.basal ?? 0);
   }
 
-  function getTotalCarbs(summary: TreatmentSummaryType | undefined): number {
+  function getTotalCarbs(summary: TreatmentSummary | undefined): number {
     return summary?.totals?.food?.carbs ?? 0;
   }
 
-  function getTotalProtein(summary: TreatmentSummaryType | undefined): number {
+  function getTotalProtein(summary: TreatmentSummary | undefined): number {
     return summary?.totals?.food?.protein ?? 0;
   }
 
-  function getTotalFat(summary: TreatmentSummaryType | undefined): number {
+  function getTotalFat(summary: TreatmentSummary | undefined): number {
     return summary?.totals?.food?.fat ?? 0;
   }
 </script>

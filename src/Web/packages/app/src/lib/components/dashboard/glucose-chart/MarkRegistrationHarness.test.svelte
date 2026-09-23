@@ -7,7 +7,6 @@
     DeviceEventType,
     SystemEventType,
   } from "$lib/api";
-  import type { BasalPoint } from "$lib/api";
   import MarkCounter from "./MarkCounter.test.svelte";
   import BolusMarker from "./markers/BolusMarker.svelte";
   import CarbMarker from "./markers/CarbMarker.svelte";
@@ -16,11 +15,11 @@
   import TrackerExpirationMarker from "./markers/TrackerExpirationMarker.svelte";
   import BasalInjectionMarker from "./markers/BasalInjectionMarker.svelte";
   import BasalTrack from "./tracks/BasalTrack.svelte";
-  import { setGlucoseChartContext } from "./chart-context.svelte";
+  import { partialEngine, setGlucoseChartContext } from "./chart-context.svelte";
   import { computeTrackLayout } from "./engine/track-layout";
   import type { GlucoseChartContext } from "./chart-context.svelte";
   import type {
-    ChartDataEngine,
+    ChartBasalPoint,
     DisplayTempBasalSpan,
   } from "./engine/chart-data-engine.svelte";
 
@@ -54,9 +53,10 @@
   // hatched branch — the densest per-datum path in BasalTrack.
   const basalData = $derived(
     indices.map(
-      (i): BasalPoint => ({
+      (i): ChartBasalPoint => ({
         timestamp: at(i).getTime(),
         rate: 0.5 + (i % 4) * 0.25,
+        scheduledRate: undefined,
         origin: BasalDeliveryOrigin.Inferred,
         fillColor: ChartColor.InsulinTempBasal,
         strokeColor: ChartColor.InsulinTempBasal,
@@ -81,10 +81,8 @@
 
   const staleBasalData = $derived({ start: at(0), end: at(n) });
 
-  // Minimal ChartDataEngine stub — BasalTrack reads only these fields. The
-  // `Partial<...> as ...` cast is deliberate: a newly-read engine field should
-  // surface as a type error here rather than as runtime undefined.
-  const engineStub = {
+  // Minimal ChartDataEngine stub — BasalTrack reads only these fields.
+  const engineStub = partialEngine({
     get basalData() {
       return basalData;
     },
@@ -98,7 +96,7 @@
       return staleBasalData;
     },
     maxBasalRate,
-  } as Partial<ChartDataEngine> as ChartDataEngine;
+  });
 
   const layout = $derived(
     computeTrackLayout(
@@ -127,8 +125,8 @@
 <div class="h-(--harness-h) w-(--harness-w)" style:--harness-w="{width}px" style:--harness-h="{height}px" data-testid="harness-root">
   <Chart
     data={basalData}
-    x={(d: BasalPoint) => new Date(d.timestamp ?? 0)}
-    y={(d: BasalPoint) => d.rate ?? 0}
+    x={(d: ChartBasalPoint) => new Date(d.timestamp ?? 0)}
+    y={(d: ChartBasalPoint) => d.rate ?? 0}
     xScale={scaleTime()}
     {xDomain}
     yDomain={[0, glucoseYMax]}

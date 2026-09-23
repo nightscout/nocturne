@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Chart, Svg, Axis, Tooltip } from "layerchart";
   import { scaleTime, scaleLinear } from "d3-scale";
-  import type { ScaleTime } from "d3-scale";
+  import { timeScale } from "$lib/components/charts/scale-guards";
   import { getActogramData } from "$api/actogram.remote";
   import { getBasalSeries } from "$api/generated/chartDatas.generated.remote";
   import { bg, bgLabel, formatLocale, toDate } from "$lib/utils/formatting";
@@ -388,7 +388,7 @@
               const svgRect = e.currentTarget.closest("svg")?.getBoundingClientRect();
               if (!svgRect) return;
               const localX = e.clientX - svgRect.left - LABEL_WIDTH;
-              const time = (context.xScale as unknown as ScaleTime<number, number>).invert(localX);
+              const time = timeScale(context.xScale).invert(localX);
               context.tooltip?.show(e, tooltipDataAt(time) satisfies TooltipData);
             }}
             onpointerleave={() => context.tooltip?.hide()}
@@ -399,7 +399,7 @@
           class="print:hidden bg-popover/95 text-popover-foreground rounded-lg border border-border px-2.5 py-1.5 shadow-xl"
         >
           {#snippet children({ data: tooltipData })}
-            {@const d = tooltipData as TooltipData}
+            {@const d: TooltipData | undefined = tooltipData}
             {#if d}
               <div class="space-y-1 text-xs">
                 <div class="font-medium tabular-nums">{timeFormatter.format(d.time)}</div>

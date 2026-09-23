@@ -1,6 +1,5 @@
 import { untrack } from "svelte";
 import {
-  type BasalPoint,
   BasalDeliveryOrigin,
   type DeviceEventType,
   type SystemEventType,
@@ -166,6 +165,15 @@ export interface StaleBasalRange {
   end: Date;
 }
 
+const metadataString = (value: unknown): string | undefined =>
+  typeof value === "string" ? value : undefined;
+
+const metadataNumber = (value: unknown): number | undefined =>
+  typeof value === "number" ? value : undefined;
+
+/** A basal series point with its colours resolved to CSS values */
+export type ChartBasalPoint = TransformedChartData["basalSeries"][number];
+
 /** Scheduled basal point for the dotted overlay */
 export interface ScheduledBasalPoint {
   timestamp?: number;
@@ -259,7 +267,7 @@ export interface ChartDataEngine {
   readonly bgCheckMarkers: BgCheckMarkerData[];
   readonly iobData: SeriesPoint[];
   readonly cobData: SeriesPoint[];
-  readonly basalData: BasalPoint[];
+  readonly basalData: ChartBasalPoint[];
   readonly scheduledBasalData: ScheduledBasalPoint[];
   readonly maxIOB: number;
   readonly maxBasalRate: number;
@@ -612,27 +620,27 @@ export function createChartDataEngine(
 
   // ---- Series derivations ----
   const bolusMarkers = $derived(
-    (serverChartData?.bolusMarkers ?? []) as BolusMarkerData[]
+    serverChartData?.bolusMarkers ?? []
   );
   const carbMarkers = $derived(
-    (serverChartData?.carbMarkers ?? []) as CarbMarkerData[]
+    serverChartData?.carbMarkers ?? []
   );
   const deviceEventMarkers = $derived(
-    (serverChartData?.deviceEventMarkers ?? []) as DeviceEventMarkerData[]
+    serverChartData?.deviceEventMarkers ?? []
   );
   const basalInjectionMarkers = $derived(
-    (serverChartData?.basalInjectionMarkers ?? []) as BasalInjectionMarkerData[]
+    serverChartData?.basalInjectionMarkers ?? []
   );
   const bgCheckMarkers = $derived(
-    (serverChartData?.bgCheckMarkers ?? []) as BgCheckMarkerData[]
+    serverChartData?.bgCheckMarkers ?? []
   );
   const iobData = $derived(
-    (serverChartData?.iobSeries ?? []) as SeriesPoint[]
+    serverChartData?.iobSeries ?? []
   );
   const cobData = $derived(
-    (serverChartData?.cobSeries ?? []) as SeriesPoint[]
+    serverChartData?.cobSeries ?? []
   );
-  const basalData = $derived((serverChartData?.basalSeries ?? []) as BasalPoint[]);
+  const basalData = $derived(serverChartData?.basalSeries ?? []);
   const maxIOB = $derived(serverChartData?.maxIob ?? 3);
   const maxBasalRate = $derived(serverChartData?.maxBasalRate ?? 3.0);
 
@@ -693,8 +701,7 @@ export function createChartDataEngine(
     const profile = processSpans(profileSpans, rangeStart, rangeEnd).map(
       (span) => ({
         ...span,
-        profileName:
-          (span.metadata?.profileName as string) ?? span.state ?? "",
+        profileName: metadataString(span.metadata?.profileName) ?? span.state ?? "",
       })
     );
 
@@ -704,10 +711,10 @@ export function createChartDataEngine(
       (span) => ({
         ...span,
         rate:
-          (span.metadata?.rate as number) ??
-          (span.metadata?.absolute as number) ??
+          metadataNumber(span.metadata?.rate) ??
+          metadataNumber(span.metadata?.absolute) ??
           null,
-        percent: (span.metadata?.percent as number) ?? null,
+        percent: metadataNumber(span.metadata?.percent) ?? null,
       })
     );
 

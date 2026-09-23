@@ -7,18 +7,8 @@
   import { formatGlucoseValue } from "$lib/utils/formatting";
   import type { GlucoseUnits } from "$lib/utils/formatting";
   import { getDataTypeLabel } from "$lib/utils/data-type-labels";
+  import type { YearCalendarDatum } from "./calendar-datum";
 
-  interface Props {
-    selectedDay: any; // Using any for brevity in this refactor, but it's CalendarDatum
-    units: GlucoseUnits;
-    unitLabel: string;
-    formatSelectedDate: (dateStr: string) => string;
-    formatUnits: (value: number | null) => string;
-    glucoseColorScale: any;
-    getVisibleCounts: (counts: Record<string, number>) => [string, number][];
-    closeDetailPanel: () => void;
-    navigateToDayInReview: (dateStr: string) => void;
-  }
 
   let {
     selectedDay,
@@ -30,7 +20,17 @@
     getVisibleCounts,
     closeDetailPanel,
     navigateToDayInReview,
-  }: Props = $props();
+  }: {
+    selectedDay: YearCalendarDatum | null;
+    units: GlucoseUnits;
+    unitLabel: string;
+    formatSelectedDate: (dateStr: string) => string;
+    formatUnits: (value: number | null) => string;
+    glucoseColorScale: (mgdl: number) => string;
+    getVisibleCounts: (counts: Record<string, number>) => [string, number][];
+    closeDetailPanel: () => void;
+    navigateToDayInReview: (dateStr: string) => void;
+  } = $props();
 </script>
 
 {#if selectedDay}

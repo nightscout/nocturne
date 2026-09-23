@@ -199,7 +199,7 @@
         <Axis
           placement="left"
           ticks={4}
-          format={(v) => String(bg(v as number))}
+          format={(v) => String(bg(Number(v)))}
           tickLabelProps={{ class: "text-2xs fill-muted-foreground" }}
         />
 

@@ -163,7 +163,7 @@
     {#snippet tooltip({ context })}
       <Tooltip.Root {context}>
         {#snippet children({ data })}
-          {@const d = data as AgpDataPoint & { hour: number }}
+          {@const d: AgpDataPoint & { hour: number } = data}
           <Tooltip.Header value={`${formatHour(d.hour)} · ${bgLabel()}`} />
           <Tooltip.List>
             <Tooltip.Item

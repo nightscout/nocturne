@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Snippet } from "svelte";
   import { cn } from "$lib/utils";
   import {
     SystemEventIcon,
@@ -144,7 +145,7 @@
   </button>
 {/snippet}
 
-{#snippet legendIndicator(children: any, label: string)}
+{#snippet legendIndicator(children: Snippet, label: string)}
   <div class="flex items-center gap-1">
     {@render children()}
     <span>{label}</span>

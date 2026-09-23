@@ -24,7 +24,8 @@
 
 <script lang="ts">
   import { Chart, Svg, Bars, Bar, Text, Tooltip } from "layerchart";
-  import { scaleBand, scaleLinear, type ScaleBand } from "d3-scale";
+  import { scaleBand, scaleLinear } from "d3-scale";
+  import { bandScale as toBandScale, numericScale } from "$lib/components/charts/scale-guards";
   import { bgRange } from "$lib/utils/formatting";
   import { glucosePatternClass } from "$lib/components/charts/print/chart-print-patterns";
   import type { TimeInRangePercentages } from "$api-clients";
@@ -121,10 +122,10 @@
 </script>
 
 {#snippet marks(context: { xScale: unknown; yScale: unknown; width: number; height: number })}
-  {@const bandScale = (vertical ? context.xScale : context.yScale) as ScaleBand<string>}
+  {@const bandScale = toBandScale(vertical ? context.xScale : context.yScale)}
   {@const bandPos = bandScale("TIR") ?? 0}
   {@const bandSize = bandScale.bandwidth()}
-  {@const valueScale = (vertical ? context.yScale : context.xScale) as (v: number) => number}
+  {@const valueScale = numericScale(vertical ? context.yScale : context.xScale)}
   <Svg>
           <Bars>
             <!-- Round only the outer ends of the stack: the first segment's outer edge and

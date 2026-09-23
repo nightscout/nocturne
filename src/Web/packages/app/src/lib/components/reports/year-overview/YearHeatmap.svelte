@@ -10,23 +10,12 @@
   import type { GlucoseUnits } from "$lib/utils/formatting";
   import { getDataTypeLabel } from "$lib/utils/data-type-labels";
   import { yearCalendarBounds } from "./year-bounds";
+  import type {
+    DailySummaryDay,
+    YearCalendarDatum,
+    YearWeekColumn,
+  } from "./calendar-datum";
 
-  interface Props {
-    year: number;
-    yearIndex: number;
-    loadingYears: Set<number>;
-    yearData: Map<number, any[]>;
-    transformYearData: (days: any[]) => any[];
-    getCellFill: (data: any) => string;
-    getWeekColumns: (cells: any[]) => any[];
-    navigateToDayInReview: (dateStr: string) => void;
-    glucoseColorScale: any;
-    units: GlucoseUnits;
-    unitLabel: string;
-    formatUnits: (value: number | null) => string;
-    getVisibleCounts: (counts: Record<string, number>) => [string, number][];
-    sentinelElement?: HTMLDivElement;
-  }
 
   let {
     year,
@@ -43,7 +32,24 @@
     formatUnits,
     getVisibleCounts,
     sentinelElement = $bindable(),
-  }: Props = $props();
+  }: {
+    year: number;
+    yearIndex: number;
+    loadingYears: Set<number>;
+    yearData: Map<number, DailySummaryDay[]>;
+    transformYearData: (days: DailySummaryDay[]) => YearCalendarDatum[];
+    getCellFill: (data: YearCalendarDatum | undefined) => string;
+    getWeekColumns: (
+      cells: Array<{ x: number; data?: { date?: Date } }>
+    ) => YearWeekColumn[];
+    navigateToDayInReview: (dateStr: string) => void;
+    glucoseColorScale: (mgdl: number) => string;
+    units: GlucoseUnits;
+    unitLabel: string;
+    formatUnits: (value: number | null) => string;
+    getVisibleCounts: (counts: Record<string, number>) => [string, number][];
+    sentinelElement?: HTMLDivElement;
+  } = $props();
 
   const bounds = $derived(yearCalendarBounds(year));
   const days = $derived(yearData.get(year));
@@ -75,7 +81,7 @@
     {/if}
     {#if days}
       <span class="text-sm text-muted-foreground">
-        {days.filter((d: any) => (d.totalCount ?? 0) > 0).length} days with data
+        {days.filter((d) => (d.totalCount ?? 0) > 0).length} days with data
       </span>
     {/if}
   </div>
@@ -186,7 +192,7 @@
               class="rounded-md border bg-popover p-2.5 text-popover-foreground shadow-md"
             >
               {#snippet children({ data })}
-                {@const d = data as any}
+                {@const d: YearCalendarDatum | undefined = data}
                 {#if d?.dateString}
                   <div class="text-xs min-w-40">
                     <!-- Date header -->

@@ -27,7 +27,7 @@
   let { data = null, loading = false }: Props = $props();
 
   // Extract data from prop
-  const ratioData = $derived(data as DailyBasalBolusRatioResponse | null);
+  const ratioData = $derived(data);
   const chartData = $derived(ratioData?.dailyData ?? []);
   const averageBasalPercent = $derived(ratioData?.averageBasalPercent ?? 0);
   const averageBolusPercent = $derived(ratioData?.averageBolusPercent ?? 0);

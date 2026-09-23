@@ -116,7 +116,7 @@ export function computeTrackLayout(
       .range([
         pixelToGlucoseDomain(glucoseTrackBottom),
         pixelToGlucoseDomain(glucoseTrackTop),
-      ]) as unknown as (value: number) => number,
+      ]),
     axisScale: scaleLinear()
       .domain([0, glucoseYMax])
       .range([glucoseTrackBottom, glucoseTrackTop]),

@@ -1,9 +1,10 @@
 import type {
+  ChartBasalPoint,
   SeriesFinders,
   GlucosePoint,
   SeriesPoint,
 } from "./chart-data-engine.svelte";
-import { type BasalPoint, BasalDeliveryOrigin } from "$lib/api";
+import { BasalDeliveryOrigin } from "$lib/api";
 import {
   bg,
   bgLabel,
@@ -74,7 +75,7 @@ export interface PointInspection {
 export interface InspectionSeriesData {
   iobData: () => SeriesPoint[];
   cobData: () => SeriesPoint[];
-  basalData: () => BasalPoint[];
+  basalData: () => ChartBasalPoint[];
 }
 
 // ===== Factory =====
@@ -136,10 +137,7 @@ export function createPointInspection(
     timestamp = time;
     glucosePoint = point;
 
-    const basal = finders.findBasalValue(
-      seriesData.basalData(),
-      time,
-    ) as BasalPoint | undefined;
+    const basal = finders.findBasalValue(seriesData.basalData(), time);
     const iobVal = finders.findSeriesValue(seriesData.iobData(), time);
     const cobVal = finders.findSeriesValue(seriesData.cobData(), time);
     const pumpMode = finders.findActivePumpMode(time);

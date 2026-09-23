@@ -159,7 +159,7 @@
         {#snippet tooltip(snippetProps)}
           <Tooltip.Root context={snippetProps.context}>
             {#snippet children({ data })}
-              {@const d = data as SegmentData}
+              {@const d: SegmentData = data}
               <div class="space-y-1 text-sm">
                 <div class="font-semibold">{d.label}</div>
                 <div class="tabular-nums">{d.value.toFixed(2)}U</div>
