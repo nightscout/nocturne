@@ -64,22 +64,11 @@ const OPAQUE_JSON_TYPES = new Set(["JsonDocument", "JsonElement"]);
 /**
  * Helpers emitted at the top of the output.
  *
- * A `date-time` field is typed `Date` on the NSwag interfaces, so the schema
- * yields a real `Date`. It accepts one as well as the ISO string a form or a
- * JSON round trip produces, and `JSON.stringify` sends it back as that string.
- * A `date` (DateOnly) field stays a string: a serialised `Date` carries a time
- * component the server's DateOnly converter rejects.
- *
  * A nullable field accepts `null` and yields `undefined`, which is how the NSwag
  * interfaces (`nullValue: Undefined`) type it. The field is then left out of the
  * request body, which the server binds as null.
  */
-const HEADER = `const dateTime = z.union([
-  z.date(),
-  z.iso.datetime().transform((value) => new Date(value)),
-]);
-
-const nullish = <T extends z.ZodType>(schema: T) =>
+const HEADER = `const nullish = <T extends z.ZodType>(schema: T) =>
   schema.nullish().transform((value) => value ?? undefined);
 `;
 
@@ -121,8 +110,6 @@ function assertHandled(schema: Schema, where: string): void {
 class Generator {
   private readonly schemas: Record<string, Schema>;
   private readonly clientEnums: Set<string>;
-  /** Schemas whose wire shape differs from their NSwag interface: they hold a DateOnly field. */
-  private readonly divergent = new Set<string>();
   /** Members of reference cycles, declared through `z.lazy`. */
   private readonly lazy = new Set<string>();
 
@@ -135,11 +122,6 @@ class Generator {
     if (schema.$ref) out.add(refName(schema.$ref));
     for (const child of children(schema)) this.dependencies(child, out);
     return out;
-  }
-
-  private hasDateOnly(schema: Schema): boolean {
-    if (schema.type === "string" && schema.format === "date") return true;
-    return children(schema).some((child) => this.hasDateOnly(child));
   }
 
   /**
@@ -189,26 +171,18 @@ class Generator {
       }
     };
     for (const name of names) if (!index.has(name)) visit(name);
-
-    for (const name of ordered) {
-      if (
-        this.hasDateOnly(this.schemas[name]) ||
-        (deps.get(name) ?? []).some((d) => this.divergent.has(d))
-      ) {
-        this.divergent.add(name);
-      }
-    }
-    for (const name of this.lazy) {
-      if (this.divergent.has(name)) {
-        throw new Error(`${name}: a cyclic schema with a DateOnly field has no type to be declared with`);
-      }
-    }
     return ordered;
   }
 
+  /**
+   * NSwag's `dateTimeType: String` types `date-time` and `date` as `string`, and
+   * with no reviver in the client that is what they are at runtime, so both stay
+   * ISO text here. `offset: true` admits the `+hh:mm` a `DateTimeOffset` carries
+   * as well as the `Z` of a UTC `DateTime` and of `Date#toISOString()`.
+   */
   private stringExpr(schema: Schema): string {
-    if (schema.format === "date-time") return "dateTime";
     const formats: Record<string, string> = {
+      "date-time": "z.iso.datetime({ offset: true })",
       date: "z.iso.date()",
       time: "z.iso.time()",
       duration: "z.iso.duration()",
@@ -335,14 +309,6 @@ class Generator {
       return [
         `export const ${name}Schema: z.ZodType<Api.${name}> = z.lazy(() => ${expr});`,
         `export type ${name} = Api.${name};`,
-      ].join("\n");
-    }
-    if (this.divergent.has(name)) {
-      return [
-        `// A DateOnly field is a string on the wire but \`Date\` on the NSwag interface.`,
-        `export const ${name}Schema = ${expr};`,
-        `export type ${name} = z.output<typeof ${name}Schema>;`,
-        `export type ${name}Input = z.input<typeof ${name}Schema>;`,
       ].join("\n");
     }
     return [
