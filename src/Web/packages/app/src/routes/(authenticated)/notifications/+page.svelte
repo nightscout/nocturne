@@ -82,7 +82,7 @@
   }
 
   // Format date
-  function formatDate(dateStr: Date | undefined): string {
+  function formatDate(dateStr: string | undefined): string {
     if (!dateStr) return "";
     return formatDayTime(dateStr);
   }

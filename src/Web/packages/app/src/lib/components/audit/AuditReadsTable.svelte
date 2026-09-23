@@ -100,9 +100,9 @@
     })
   );
 
-  function formatCompactDateTime(date: Date | undefined): string {
+  function formatCompactDateTime(date: string | undefined): string {
     if (!date) return "\u2014";
-    return dtf.format(date instanceof Date ? date : new Date(date));
+    return dtf.format(new Date(date));
   }
 
   function getStatusBadgeVariant(

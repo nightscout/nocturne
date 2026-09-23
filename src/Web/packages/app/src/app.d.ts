@@ -23,7 +23,7 @@ export interface AuthUser {
 	email?: string;
 	roles: string[];
 	permissions: string[];
-	expiresAt?: Date;
+	expiresAt?: string;
 	/** User's preferred language code (e.g., "en", "fr", "de") */
 	preferredLanguage?: string;
 	/** Per-user display preferences (units, time format, theme, chart style, etc.) */

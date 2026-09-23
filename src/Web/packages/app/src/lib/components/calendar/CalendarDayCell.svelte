@@ -53,7 +53,7 @@
     getDefinition: (instance: TrackerInstanceDto, defs: TrackerDefinitionDto[]) => TrackerDefinitionDto | undefined;
     getTrackerLevel: (instance: TrackerInstanceDto, def: TrackerDefinitionDto | undefined) => string;
     getTrackerTone: (eventType: string, level: string) => string;
-    formatTrackerStartTime: (startedAt: Date | undefined) => string | null;
+    formatTrackerStartTime: (startedAt: string | undefined) => string | null;
     formatTrackerAge: (hours: number | undefined) => string;
     openCompletionDialog: (instance: TrackerInstanceDto, def: TrackerDefinitionDto | undefined, date: string) => void;
   } = $props();

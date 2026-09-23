@@ -38,10 +38,10 @@
     <input type="hidden" name="avatarUrl" value={clinical.record.avatarUrl} />
   {/if}
   {#if clinical.record?.createdAt}
-    <input type="hidden" name="createdAt" value={clinical.record.createdAt instanceof Date ? clinical.record.createdAt.toISOString() : clinical.record.createdAt} />
+    <input type="hidden" name="createdAt" value={clinical.record.createdAt} />
   {/if}
   {#if clinical.record?.modifiedAt}
-    <input type="hidden" name="modifiedAt" value={clinical.record.modifiedAt instanceof Date ? clinical.record.modifiedAt.toISOString() : clinical.record.modifiedAt} />
+    <input type="hidden" name="modifiedAt" value={clinical.record.modifiedAt} />
   {/if}
 
   <div class="grid gap-4 @sm:grid-cols-2">

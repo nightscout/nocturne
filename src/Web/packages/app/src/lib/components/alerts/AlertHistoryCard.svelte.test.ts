@@ -13,8 +13,8 @@ function excursion(over: Partial<HistoryExcursionResponse> = {}): HistoryExcursi
 		id: "1",
 		ruleName: "Test",
 		conditionType: AlertConditionType.Threshold,
-		startedAt: new Date("2025-01-01T10:00:00Z"),
-		endedAt: new Date("2025-01-01T10:30:00Z"),
+		startedAt: "2025-01-01T10:00:00Z",
+		endedAt: "2025-01-01T10:30:00Z",
 		...over,
 	};
 }
@@ -75,7 +75,7 @@ describe("AlertHistoryCard", () => {
 				items: [
 					excursion({
 						ruleName: "Low Alert",
-						acknowledgedAt: new Date("2025-01-01T10:05:00Z"),
+						acknowledgedAt: "2025-01-01T10:05:00Z",
 						acknowledgedBy: "admin",
 					}),
 				],

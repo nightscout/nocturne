@@ -30,7 +30,7 @@
   }
 
   // Format relative time
-  function formatRelativeTime(date: Date | undefined): string {
+  function formatRelativeTime(date: string | undefined): string {
     if (!date) return "";
     const now = Date.now();
     const timestamp = new Date(date).getTime();

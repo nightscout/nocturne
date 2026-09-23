@@ -16,13 +16,13 @@ function makeTenant(
     tenantId: "00000000-0000-0000-0000-000000000001",
     slug: "alice",
     displayName: "Alice",
-    lastReadingAt: new Date(Date.now() - 5 * 60_000),
+    lastReadingAt: new Date(Date.now() - 5 * 60_000).toISOString(),
     latest: {
       mgdl: 120,
       delta: 4,
       direction: GlucoseDirection.Flat,
       trendRate: 0.5,
-      timestamp: new Date(Date.now() - 5 * 60_000),
+      timestamp: new Date(Date.now() - 5 * 60_000).toISOString(),
     },
     status: GlucoseStatus.InRange,
     thresholds: { urgentLow: 54, low: 70, high: 180, urgentHigh: 250 },
@@ -77,7 +77,7 @@ describe("TenantOverviewTile", () => {
       props: {
         tenant: makeTenant({
           status: GlucoseStatus.Stale,
-          lastReadingAt: new Date(Date.now() - 32 * 60_000),
+          lastReadingAt: new Date(Date.now() - 32 * 60_000).toISOString(),
         }),
         baseDomain: "example.com",
       },
@@ -153,7 +153,7 @@ describe("TenantOverviewTile", () => {
     render(TenantOverviewTile, {
       props: {
         tenant: makeTenant({
-          lastReadingAt: "not-a-timestamp" as unknown as Date,
+          lastReadingAt: "not-a-timestamp",
         }),
         baseDomain: "example.com",
       },
@@ -194,7 +194,7 @@ describe("TenantOverviewTile", () => {
             mgdl: 120,
             delta: 4,
             direction: GlucoseDirection.None,
-            timestamp: new Date(),
+            timestamp: new Date().toISOString(),
           },
         }),
         baseDomain: "example.com",
@@ -209,7 +209,7 @@ describe("TenantOverviewTile", () => {
     render(TenantOverviewTile, {
       props: {
         tenant: makeTenant({
-          latest: { mgdl: undefined, timestamp: new Date() },
+          latest: { mgdl: undefined, timestamp: new Date().toISOString() },
         }),
         baseDomain: "example.com",
       },

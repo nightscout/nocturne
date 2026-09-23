@@ -14,6 +14,7 @@ import { browser } from "$app/environment";
 import { goto } from "$app/navigation";
 import { resolve } from "$app/paths";
 import { toDate } from "$lib/utils/formatting";
+import { toIsoString } from "$lib/utils/api-date";
 import {
   getSessionInfo,
   refreshSession as refreshSessionRemote,
@@ -32,7 +33,8 @@ export interface AuthUser {
   email?: string;
   roles: string[];
   permissions: string[];
-  expiresAt?: Date;
+  /** ISO 8601. */
+  expiresAt?: string;
   avatarUrl?: string;
 }
 
@@ -178,7 +180,7 @@ export class AuthStore {
           email: session.email,
           roles: session.roles ?? [],
           permissions: session.permissions ?? [],
-          expiresAt: toDate(session.expiresAt) ?? undefined,
+          expiresAt: toIsoString(session.expiresAt) ?? undefined,
           avatarUrl: session.avatarUrl,
         };
         this._expiresAt = toDate(session.expiresAt);

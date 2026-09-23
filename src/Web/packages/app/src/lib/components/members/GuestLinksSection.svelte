@@ -105,15 +105,14 @@
     return ip.slice(0, half) + "...";
   }
 
-  function formatDate(date: Date | undefined | null): string {
+  function formatDate(date: string | undefined | null): string {
     if (!date) return "";
-    const d = date instanceof Date ? date : new Date(date);
-    return formatDayTime(d);
+    return formatDayTime(date);
   }
 
-  function formatRelativeExpiry(date: Date | undefined | null): string {
+  function formatRelativeExpiry(date: string | undefined | null): string {
     if (!date) return "";
-    const d = date instanceof Date ? date : new Date(date);
+    const d = new Date(date);
     const now = Date.now();
     const diffMs = d.getTime() - now;
     const absDiffMs = Math.abs(diffMs);
