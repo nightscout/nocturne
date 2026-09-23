@@ -31,9 +31,10 @@
   --destructive-foreground: oklch(0.985 0.002 247.839);
   /* UI outcome colours (saved, failed, stale, syncing). Clinical states use the
      --status-* and --glucose-* tokens in nocturne-theme.css instead. */
-  --success: oklch(0.627 0.194 149.214);
+  /* Success and warning are read mostly as text on their own /5 to /20 tints, so light
+     holds them at 4.5:1 there; their solid uses are dots and bars. */
+  --success: oklch(0.47 0.13 149.214);
   --success-foreground: oklch(0.985 0.002 247.839);
-  /* Read mostly as text on its own /5 to /20 tints, so light holds it at 4.5:1 there. */
   --warning: oklch(0.49 0.117 58.318);
   --warning-foreground: oklch(0.985 0.002 247.839);
   --info: oklch(0.546 0.245 262.881);
