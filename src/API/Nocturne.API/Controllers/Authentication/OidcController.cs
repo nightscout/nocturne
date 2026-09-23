@@ -6,6 +6,7 @@ using OpenApi.Remote.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.API.Multitenancy;
+using Nocturne.API.Services.Auth;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -91,6 +92,7 @@ public class OidcController : ControllerBase
                 Name = p.Name,
                 Icon = p.Icon,
                 ButtonColor = p.ButtonColor,
+                ButtonForegroundColor = ButtonColorContrast.ForegroundFor(p.ButtonColor),
             })
             .ToList();
 
@@ -754,6 +756,12 @@ public class OidcProviderInfo
     /// Button color for UI
     /// </summary>
     public string? ButtonColor { get; set; }
+
+    /// <summary>
+    /// Text colour legible on <see cref="ButtonColor"/>; null when that is not a hex colour,
+    /// in which case the button keeps its themed style.
+    /// </summary>
+    public string? ButtonForegroundColor { get; set; }
 }
 
 /// <summary>

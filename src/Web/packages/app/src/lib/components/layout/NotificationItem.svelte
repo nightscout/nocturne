@@ -19,11 +19,11 @@
   function getUrgencyClasses(urgency: NotificationUrgency | undefined): string {
     switch (urgency) {
       case NotificationUrgency.Urgent:
-        return "text-red-500 bg-red-500/10 border-red-500/20";
+        return "text-severity-urgent bg-severity-urgent/10 border-severity-urgent/20";
       case NotificationUrgency.Hazard:
-        return "text-orange-500 bg-orange-500/10 border-orange-500/20";
+        return "text-severity-hazard bg-severity-hazard/10 border-severity-hazard/20";
       case NotificationUrgency.Warn:
-        return "text-yellow-500 bg-yellow-500/10 border-yellow-500/20";
+        return "text-severity-warn bg-severity-warn/10 border-severity-warn/20";
       default:
         return "text-muted-foreground bg-muted/50 border-border";
     }

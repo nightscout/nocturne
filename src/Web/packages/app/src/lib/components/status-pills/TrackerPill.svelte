@@ -104,12 +104,12 @@
 
     const levelClasses: Record<AlertLevel, string> = {
       none: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-      info: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/50",
-      warn: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300 hover:bg-yellow-200 dark:hover:bg-yellow-900/50",
+      info: "bg-severity-info/15 text-severity-info hover:bg-severity-info/25",
+      warn: "bg-severity-warn/15 text-severity-warn hover:bg-severity-warn/25",
       hazard:
-        "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-900/50",
+        "bg-severity-hazard/15 text-severity-hazard hover:bg-severity-hazard/25",
       urgent:
-        "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/50",
+        "bg-severity-urgent/15 text-severity-urgent hover:bg-severity-urgent/25",
     };
 
     return cn(baseClasses, levelClasses[level], className);
@@ -119,10 +119,10 @@
   const progressFillClasses = $derived.by((): string => {
     const fillClasses: Record<AlertLevel, string> = {
       none: "bg-secondary-foreground/10 dark:bg-secondary-foreground/15",
-      info: "bg-blue-200/60 dark:bg-blue-700/40",
-      warn: "bg-yellow-200/60 dark:bg-yellow-700/40",
-      hazard: "bg-orange-200/60 dark:bg-orange-700/40",
-      urgent: "bg-red-200/60 dark:bg-red-700/40",
+      info: "bg-severity-info/20",
+      warn: "bg-severity-warn/20",
+      hazard: "bg-severity-hazard/20",
+      urgent: "bg-severity-urgent/20",
     };
     return fillClasses[level];
   });
@@ -194,7 +194,7 @@
               timeRemaining !== undefined && timeRemaining <= 0
                 ? "text-destructive"
                 : timeRemaining !== undefined && timeRemaining < 6
-                  ? "text-yellow-600 dark:text-yellow-400"
+                  ? "text-severity-warn"
                   : ""
             )}
           >

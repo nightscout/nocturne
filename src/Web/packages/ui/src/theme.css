@@ -131,6 +131,12 @@
   --color-warning-foreground: var(--warning-foreground);
   --color-info: var(--info);
   --color-info-foreground: var(--info-foreground);
+  /* Opaque tints for surfaces that content scrolls beneath, where bg-warning/10 would
+     show it through. Mixed per element, so they follow a .dark set below the root. */
+  --color-warning-subtle: color-mix(in oklch, var(--warning) 12%, var(--background));
+  --color-warning-subtle-foreground: color-mix(in oklch, var(--warning) 45%, var(--foreground));
+  --color-info-subtle: color-mix(in oklch, var(--info) 12%, var(--background));
+  --color-info-subtle-foreground: color-mix(in oklch, var(--info) 45%, var(--foreground));
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);

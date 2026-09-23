@@ -1,5 +1,6 @@
 <script lang="ts">
   import { KeyRound, X } from "lucide-svelte";
+  import { Banner } from "$lib/components/ui/banner";
   import { Button } from "$lib/components/ui/button";
   import { listCredentials } from "$lib/api/generated/passkeys.generated.remote";
   import {
@@ -33,9 +34,7 @@
 </script>
 
 {#if hasSingleSignInMethod && !dismissed}
-  <div
-    class="sticky top-0 z-50 flex items-start justify-between gap-4 border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200"
-  >
+  <Banner variant="warning" class="items-start">
     <div class="flex items-start gap-2">
       <KeyRound class="mt-0.5 h-4 w-4 shrink-0" />
       <div class="space-y-0.5">
@@ -55,5 +54,5 @@
         <X class="h-3 w-3" />
       </Button>
     </div>
-  </div>
+  </Banner>
 {/if}

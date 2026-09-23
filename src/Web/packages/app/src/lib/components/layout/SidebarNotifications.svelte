@@ -142,9 +142,9 @@
             <span
               class={cn(
                 "absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-2xs font-medium",
-                badgeVariant === "destructive" && "bg-red-500 text-white",
-                badgeVariant === "warning" && "bg-orange-500 text-white",
-                badgeVariant === "secondary" && "bg-yellow-500 text-black"
+                badgeVariant === "destructive" && "bg-severity-urgent text-severity-urgent-foreground",
+                badgeVariant === "warning" && "bg-severity-hazard text-severity-hazard-foreground",
+                badgeVariant === "secondary" && "bg-severity-warn text-severity-warn-foreground"
               )}
             >
               {unreadCount}

@@ -100,6 +100,18 @@
   --system-event-warning: oklch(0.769 0.188 70.08); /* Yellow - warning */
   --system-event-info: oklch(0.6 0.118 184.704); /* Green - informational */
 
+  /* Notification and tracker urgency (NotificationUrgency: Urgent > Hazard > Warn > Info).
+     Unlike --system-event-*, these are read as text and tints, so each scheme has its
+     own lightness, and info is blue: a green step would read as "all clear". */
+  --severity-urgent: oklch(0.577 0.245 27.325);
+  --severity-urgent-foreground: oklch(0.985 0.002 247.839);
+  --severity-hazard: oklch(0.646 0.222 41.116);
+  --severity-hazard-foreground: oklch(0.985 0.002 247.839);
+  --severity-warn: oklch(0.681 0.162 75.834);
+  --severity-warn-foreground: oklch(0.21 0.034 264.665);
+  --severity-info: oklch(0.546 0.245 262.881);
+  --severity-info-foreground: oklch(0.985 0.002 247.839);
+
   /* Glycemia Risk Index (GRI) Zones */
   --gri-zone-a: oklch(0.72 0.17 145);   /* Green - best glycemia */
   --gri-zone-b: oklch(0.78 0.15 120);   /* Yellow-green */
@@ -132,6 +144,14 @@
 
 .dark {
   --glucose-heatmap-1: #ffffff;
+  --severity-urgent: oklch(0.704 0.191 22.216);
+  --severity-urgent-foreground: oklch(0.21 0.034 264.665);
+  --severity-hazard: oklch(0.75 0.183 55.934);
+  --severity-hazard-foreground: oklch(0.21 0.034 264.665);
+  --severity-warn: oklch(0.852 0.199 91.936);
+  --severity-warn-foreground: oklch(0.21 0.034 264.665);
+  --severity-info: oklch(0.707 0.165 254.624);
+  --severity-info-foreground: oklch(0.21 0.034 264.665);
   --glucose-heatmap-outside: oklch(0.53 0.06 300);
   /* Insulin Types - Dark Mode - need higher opacity for visibility */
   --insulin-basal: rgba(100, 180, 255, 0.35);
@@ -198,6 +218,16 @@
   --color-status-critical: var(--status-critical);
   --color-status-normal: var(--status-normal);
   --color-status-info: var(--status-info);
+
+  /* Notification urgency */
+  --color-severity-urgent: var(--severity-urgent);
+  --color-severity-urgent-foreground: var(--severity-urgent-foreground);
+  --color-severity-hazard: var(--severity-hazard);
+  --color-severity-hazard-foreground: var(--severity-hazard-foreground);
+  --color-severity-warn: var(--severity-warn);
+  --color-severity-warn-foreground: var(--severity-warn-foreground);
+  --color-severity-info: var(--severity-info);
+  --color-severity-info-foreground: var(--severity-info-foreground);
 
   /* IOB */
   --color-iob-basal: var(--iob-basal);

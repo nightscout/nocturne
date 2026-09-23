@@ -164,6 +164,7 @@ export const getProvidersInfo = query(async () => {
         name: p.name,
         icon: p.icon,
         buttonColor: p.buttonColor,
+        buttonForegroundColor: p.buttonForegroundColor,
       })) ?? [],
     };
   } catch (error) {

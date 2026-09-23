@@ -47,7 +47,7 @@
   <div class="text-xs space-y-1">
     {#if event.eventType === "start"}
       <div
-        class="flex items-center gap-1 text-green-600 dark:text-green-400"
+        class="flex items-center gap-1 text-success"
       >
         <Play class="h-3 w-3" />
         <span>
@@ -78,12 +78,12 @@
         class={cn(
           "flex items-center gap-1",
           level === "urgent"
-            ? "text-red-600 dark:text-red-400"
+            ? "text-severity-urgent"
             : level === "hazard"
-              ? "text-orange-600 dark:text-orange-400"
+              ? "text-severity-hazard"
               : level === "warn"
-                ? "text-yellow-600 dark:text-yellow-400"
-                : "text-blue-600 dark:text-blue-400"
+                ? "text-severity-warn"
+                : "text-severity-info"
         )}
       >
         <CalendarClock class="h-3 w-3" />

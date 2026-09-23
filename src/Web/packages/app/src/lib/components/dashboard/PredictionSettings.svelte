@@ -161,16 +161,16 @@
               {/if}
             </div>
           </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="disabled" class="text-xs text-muted-foreground">
+          <SelectContent size="xs">
+            <SelectItem value="disabled" class="text-muted-foreground">
               Disable
             </SelectItem>
-            <SelectItem value="15" class="text-xs">15 min</SelectItem>
-            <SelectItem value="30" class="text-xs">30 min</SelectItem>
-            <SelectItem value="60" class="text-xs">1 hour</SelectItem>
-            <SelectItem value="120" class="text-xs">2 hours</SelectItem>
-            <SelectItem value="180" class="text-xs">3 hours</SelectItem>
-            <SelectItem value="240" class="text-xs">4 hours</SelectItem>
+            <SelectItem value="15">15 min</SelectItem>
+            <SelectItem value="30">30 min</SelectItem>
+            <SelectItem value="60">1 hour</SelectItem>
+            <SelectItem value="120">2 hours</SelectItem>
+            <SelectItem value="180">3 hours</SelectItem>
+            <SelectItem value="240">4 hours</SelectItem>
           </SelectContent>
         </Select>
       </div>

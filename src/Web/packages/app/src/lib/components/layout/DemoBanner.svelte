@@ -1,5 +1,6 @@
 <script lang="ts">
   import { FlaskConical } from "lucide-svelte";
+  import { Banner } from "$lib/components/ui/banner";
 
   interface Props {
     nextResetAt: string | null;
@@ -28,9 +29,7 @@
   });
 </script>
 
-<div
-  class="sticky top-0 z-50 flex items-center justify-between gap-4 border-b border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-900 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-200"
->
+<Banner variant="info">
   <div class="flex items-center gap-2">
     <FlaskConical class="h-4 w-4 shrink-0" />
     <span>Demo instance with synthetic data</span>
@@ -38,4 +37,4 @@
   {#if remaining}
     <span class="shrink-0 font-medium">{remaining}</span>
   {/if}
-</div>
+</Banner>

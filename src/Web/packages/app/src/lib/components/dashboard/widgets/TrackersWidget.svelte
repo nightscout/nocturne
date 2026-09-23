@@ -11,14 +11,14 @@
   function getUrgencyColor(urgency: NotificationUrgency | undefined): string {
     switch (urgency) {
       case NotificationUrgency.Urgent:
-        return "bg-red-500/20 text-red-400 border-red-500/30";
+        return "bg-severity-urgent/20 text-severity-urgent border-severity-urgent/30";
       case NotificationUrgency.Hazard:
-        return "bg-orange-500/20 text-orange-400 border-orange-500/30";
+        return "bg-severity-hazard/20 text-severity-hazard border-severity-hazard/30";
       case NotificationUrgency.Warn:
-        return "bg-yellow-500/20 text-yellow-400 border-yellow-500/30";
+        return "bg-severity-warn/20 text-severity-warn border-severity-warn/30";
       case NotificationUrgency.Info:
       default:
-        return "bg-blue-500/20 text-blue-400 border-blue-500/30";
+        return "bg-severity-info/20 text-severity-info border-severity-info/30";
     }
   }
 

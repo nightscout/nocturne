@@ -104,7 +104,8 @@
           spellcheck={false}
           autofocus
           minlength={3}
-          class="font-mono {availability.valid && !availability.error ? 'border-green-500/50' : ''}"
+          valid={availability.valid && !availability.error}
+          class="font-mono"
         />
       {/snippet}
       {#snippet hint()}

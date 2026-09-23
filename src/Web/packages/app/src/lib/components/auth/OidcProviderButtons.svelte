@@ -2,6 +2,7 @@
   import { Button } from "$lib/components/ui/button";
   import { ExternalLink, Loader2 } from "lucide-svelte";
   import type { OidcProviderInfo } from "$lib/api/generated/nocturne-api-client";
+  import { brandColors } from "./brand-colors";
 
   interface Props {
     providers: OidcProviderInfo[];
@@ -22,20 +23,16 @@
     dividerText = "Or create an account with a passkey",
     showDivider = true,
   }: Props = $props();
-
-  function getButtonStyle(buttonColor?: string): string {
-    if (!buttonColor) return "";
-    return `background-color: ${buttonColor}; border-color: ${buttonColor};`;
-  }
 </script>
 
 <div class="space-y-3">
   {#each providers as provider (provider.id)}
+    {@const brand = brandColors(provider)}
     <Button
-      variant="outline"
+      variant={brand ? "brand" : "outline"}
+      {brand}
       size="lg"
       class="w-full relative"
-      style={getButtonStyle(provider.buttonColor)}
       {disabled}
       onclick={() => provider.id && onLogin(provider.id)}
     >

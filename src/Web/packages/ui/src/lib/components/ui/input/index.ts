@@ -7,6 +7,8 @@ export const inputVariants = tv({
     "border-input selection:bg-primary dark:bg-input/30 selection:text-primary-foreground ring-offset-background placeholder:text-muted-foreground shadow-xs flex w-full min-w-0 rounded-md border outline-none transition-[color,box-shadow] disabled:cursor-not-allowed disabled:opacity-50",
     "focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
     "aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
+    // A value the server has accepted, e.g. an available username.
+    "data-valid:not-aria-invalid:border-success/60",
   ],
   variants: {
     size: {

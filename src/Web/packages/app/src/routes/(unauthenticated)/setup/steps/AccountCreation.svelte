@@ -244,7 +244,7 @@
               minlength={3}
               bind:value={username}
               disabled={isRedirecting || isRegistering}
-              class={availability.valid && !availability.error ? 'border-green-500/50' : ''}
+              valid={availability.valid && !availability.error}
             />
           {/snippet}
           {#snippet hint()}

@@ -33,6 +33,10 @@ export const buttonVariants = tv({
       // The add-item placeholder at the end of a list.
       dashed:
         "text-muted-foreground hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50 border border-dashed",
+      // A colour the theme does not own, e.g. an admin-configured sign-in provider. Pass
+      // it as `brand`; the foreground has to be chosen for contrast by whoever owns the colour.
+      brand:
+        "bg-(--button-bg) text-(--button-fg) border border-(--button-bg) shadow-xs hover:opacity-90",
     },
     size: {
       default: "h-9 px-4 py-2 has-[>svg]:px-3",
@@ -70,6 +74,8 @@ export type ButtonProps = WithElementRef<HTMLButtonAttributes> &
     variant?: ButtonVariant;
     size?: ButtonSize;
     reveal?: boolean;
+    /** Fills variant="brand" (as --button-bg and --button-fg). */
+    brand?: { background: string; foreground: string };
   };
 
 export {

@@ -464,7 +464,8 @@
           bind:value={slug}
           placeholder="my-instance"
           aria-invalid={!!slugError}
-          class="font-mono {slugValid && !slugError ? 'border-green-500' : ''}"
+          valid={slugValid && !slugError}
+          class="font-mono"
         />
         {#if validating}
           <p class="text-xs text-muted-foreground">Checking availability...</p>

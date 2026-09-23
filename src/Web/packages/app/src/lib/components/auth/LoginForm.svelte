@@ -2,7 +2,7 @@
   import type { ComponentProps } from "svelte";
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
+  import * as InputGroup from "$lib/components/ui/input-group";
   import { Label } from "$lib/components/ui/label";
   import {
     Loader2,
@@ -35,6 +35,7 @@
     runPasskeyAssertion,
     type CeremonyOptionsResponse,
   } from "./passkey-login";
+  import { brandColors } from "./brand-colors";
   import { isLastUsed, withLastUsedFirst } from "./last-sign-in";
   import { signInMethodLabels } from "./labels";
 
@@ -233,11 +234,6 @@
     window.location.href = `/api/auth/oidc/login?${params.toString()}`;
   }
 
-  function getButtonStyle(buttonColor?: string): string {
-    if (!buttonColor) return "";
-    return `background-color: ${buttonColor}; border-color: ${buttonColor};`;
-  }
-
   function switchMode(newMode: LoginMode) {
     mode = newMode;
     passkeyError = null;
@@ -317,11 +313,12 @@
 {#snippet providerButtons()}
   <div class="space-y-3">
     {#each orderedProviders as provider (provider.id)}
+      {@const brand = brandColors(provider)}
       <Button
-        variant="outline"
+        variant={brand ? "brand" : "outline"}
+        {brand}
         size="lg"
         class="w-full relative"
-        style={getButtonStyle(provider.buttonColor)}
         disabled={isLoading || isRedirecting || !provider.id}
         onclick={() => provider.id && loginWithProvider(provider.id)}
       >
@@ -422,14 +419,15 @@
       <form onsubmit={handleUsernameLogin} class="space-y-3">
         <FormField label="Username" id="username" required>
           {#snippet control(field)}
-            <div class="relative">
-              <User class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
+            <InputGroup.Root>
+              <InputGroup.Addon>
+                <User />
+              </InputGroup.Addon>
+              <InputGroup.Input
                 {...field}
                 name="username"
                 type="text"
                 placeholder="your-username"
-                class="pl-10"
                 autocomplete="username webauthn"
                 autocapitalize="none"
                 spellcheck={false}
@@ -437,7 +435,7 @@
                 bind:value={username}
                 disabled={isLoading}
               />
-            </div>
+            </InputGroup.Root>
           {/snippet}
         </FormField>
 
@@ -483,21 +481,22 @@
           issues={signInWithRecoveryCode.fields.username.issues()}
         >
           {#snippet control(field)}
-            <div class="relative">
-              <User class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
+            <InputGroup.Root>
+              <InputGroup.Addon>
+                <User />
+              </InputGroup.Addon>
+              <InputGroup.Input
                 {...field}
                 name="username"
                 type="text"
                 placeholder="your-username"
-                class="pl-10"
                 autocomplete="username"
                 autocapitalize="none"
                 spellcheck={false}
                 autofocus
                 bind:value={username}
               />
-            </div>
+            </InputGroup.Root>
           {/snippet}
         </FormField>
 
@@ -508,19 +507,21 @@
           issues={signInWithRecoveryCode.fields.code.issues()}
         >
           {#snippet control(field)}
-            <div class="relative">
-              <KeyRound class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
+            <InputGroup.Root>
+              <InputGroup.Addon>
+                <KeyRound />
+              </InputGroup.Addon>
+              <InputGroup.Input
                 {...field}
                 name="code"
                 type="text"
                 placeholder="XXXX-XXXX"
-                class="pl-10 font-mono"
+                class="font-mono"
                 autocomplete="one-time-code"
                 autocapitalize="characters"
                 spellcheck={false}
               />
-            </div>
+            </InputGroup.Root>
           {/snippet}
         </FormField>
 

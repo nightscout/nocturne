@@ -33,21 +33,21 @@
     label: string;
     color: string;
   }[] = [
-    { value: NotificationUrgency.Info, label: "Info", color: "text-blue-500" },
+    { value: NotificationUrgency.Info, label: "Info", color: "text-severity-info" },
     {
       value: NotificationUrgency.Warn,
       label: "Warning",
-      color: "text-yellow-500",
+      color: "text-severity-warn",
     },
     {
       value: NotificationUrgency.Hazard,
       label: "Hazard",
-      color: "text-orange-500",
+      color: "text-severity-hazard",
     },
     {
       value: NotificationUrgency.Urgent,
       label: "Urgent",
-      color: "text-red-500",
+      color: "text-severity-urgent",
     },
   ];
 

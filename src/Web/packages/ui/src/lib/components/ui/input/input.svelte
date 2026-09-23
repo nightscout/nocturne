@@ -21,6 +21,8 @@
       ) & {
         size?: InputSize;
         variant?: InputVariant;
+        /** Marks a value confirmed as acceptable; aria-invalid still wins. */
+        valid?: boolean;
       }
   >;
 
@@ -31,6 +33,7 @@
     files = $bindable(),
     size = "default",
     variant = "default",
+    valid = false,
     class: className,
     ...restProps
   }: Props = $props();
@@ -41,6 +44,7 @@
     bind:this={ref}
     data-slot="input"
     data-size={size}
+    data-valid={valid || undefined}
     class={cn(
       inputVariants({ size, variant }),
       "bg-transparent py-2 font-medium",
@@ -57,6 +61,7 @@
     bind:this={ref}
     data-slot="input"
     data-size={size}
+    data-valid={valid || undefined}
     class={cn(inputVariants({ size, variant }), "bg-background py-1", className)}
     {type}
     bind:value

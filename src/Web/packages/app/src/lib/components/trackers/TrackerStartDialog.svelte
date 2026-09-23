@@ -298,13 +298,13 @@
                     class={cn(
                       "w-2 h-2 rounded-full",
                       (urgencyLower === "info" || urgencyLower === "0") &&
-                        "bg-blue-500",
+                        "bg-severity-info",
                       (urgencyLower === "warn" || urgencyLower === "1") &&
-                        "bg-yellow-500",
+                        "bg-severity-warn",
                       (urgencyLower === "hazard" || urgencyLower === "2") &&
-                        "bg-orange-500",
+                        "bg-severity-hazard",
                       (urgencyLower === "urgent" || urgencyLower === "3") &&
-                        "bg-red-500"
+                        "bg-severity-urgent"
                     )}
                   ></div>
                   <span>{preview.hours}h</span>
