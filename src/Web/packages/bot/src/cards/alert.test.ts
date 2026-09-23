@@ -79,7 +79,7 @@ describe("ActiveAlertsCard", () => {
   ): ActiveExcursion => ({
     id,
     ruleName,
-    startedAt: new Date(Date.now() - 12 * 60_000),
+    startedAt: new Date(Date.now() - 12 * 60_000).toISOString(),
     ...over,
   });
 
@@ -87,7 +87,7 @@ describe("ActiveAlertsCard", () => {
     const card = ActiveAlertsCard({
       excursions: [
         excursion("e1", "Urgent low"),
-        excursion("e2", "High", { acknowledgedAt: new Date() }),
+        excursion("e2", "High", { acknowledgedAt: new Date().toISOString() }),
       ],
     });
 

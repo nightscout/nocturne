@@ -1,13 +1,14 @@
 /**
- * Minimal interface matching the NSwag-generated ApiClient shape.
+ * Minimal interface matching the NSwag-generated ApiClient shape, whose date-times
+ * are ISO 8601 strings.
  * Only includes the methods the bot actually uses.
  * The SvelteKit app passes `locals.apiClient` which satisfies this interface.
  */
 export interface BotApiClient {
   sensorGlucose: {
     getAll(
-      from?: Date | null,
-      to?: Date | null,
+      from?: string | null,
+      to?: string | null,
       limit?: number,
       offset?: number,
       sort?: string,
@@ -73,7 +74,7 @@ export interface SensorGlucoseReading {
   trend?: string;
   trendRate?: number;
   mills?: number;
-  timestamp?: Date;
+  timestamp?: string;
 }
 
 export interface AcknowledgeRequest {
@@ -83,8 +84,8 @@ export interface AcknowledgeRequest {
 export interface ActiveExcursion {
   id?: string;
   ruleName?: string;
-  startedAt?: Date;
-  acknowledgedAt?: Date | null;
+  startedAt?: string;
+  acknowledgedAt?: string | null;
 }
 
 export interface MarkDeliveredRequest {
@@ -102,7 +103,7 @@ export interface PendingDeliveryResponse {
   channelType?: string;
   destination?: string;
   payload?: string;
-  createdAt?: Date;
+  createdAt?: string;
   retryCount?: number;
 }
 
