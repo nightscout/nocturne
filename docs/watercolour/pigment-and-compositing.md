@@ -15,8 +15,8 @@ scattering `S`, plus three Curtis behaviour coefficients:
 |---|---|
 | `k` (`K` per RGB channel) | Absorption coefficient |
 | `s` (`S` per RGB channel) | Scattering coefficient |
-| `density` (`rho`) | Settling: how strongly the pigment deposits |
-| `staining_power` (`omega`) | Resistance to lifting |
+| `density` (`rho`) | Settling: how strongly the pigment deposits, including out of standing water, and how far moving water can keep it suspended |
+| `staining_power` (`omega`) | Resistance to lifting, and how hard the pigment bites into the fibres while the film is still wet |
 | `granulation` (`gamma`) | How strongly paper height modulates deposition |
 
 `Pigment::from_reflectance(Rw, Rb)` derives `K`/`S` from a designed reflectance
@@ -278,7 +278,7 @@ diffusion, advection and blur distances are still stretched with the grid.
 | divergence relaxation | fixed **8** Jacobi iterations | not a tolerance, so CPU and GPU do identical work |
 | edge drain | `eta * (1 - M_blurred) * clamp(p / DRAIN_DEPTH, DRAIN_MIN, DRAIN_MAX) * (1.5 - h)` with `eta = 0.06`, `DRAIN_DEPTH = 0.5`, clamp `[0.15, 2.0]` | pooled water at the boundary drains harder than a thin film on a high spot, varying the dried rim's weight |
 | stroke water | `water * coverage * (1 + 0.5 * (0.5 - h) * 2)` | never negative |
-| clamps | deposited pigment `<= 1.0`, suspended `<= 8.0`, water depth `<= 8.0` | every field clamped after each pass |
+| clamps | deposited pigment `<= 8.0` (`MAX_DEPOSITED`), suspended `<= 8.0`, water depth `<= 8.0` | every field clamped after each pass; deposited headroom above `1.0` so a drying rim keeps the pigment it concentrates |
 
 The stability sweep test runs 500 ticks at parameter extremes and asserts
 finiteness and bounds. Documented deviations from Curtis (collocated
@@ -290,3 +290,17 @@ Measured behaviour on the reference: a wet-on-dry disc ends with deposited
 pigment heavier in the rim band than at the centre (edge darkening, asserted
 `> 1.15x`); the same brush into a pre-wetted area spreads its 90 % pigment
 radius `> 1.3x` further.
+
+## Deposition and lift (`sim::pass_transfer`)
+
+A deep film is not inert. Besides the settle rule, which makes a thinning film
+deposit hard, each pigment keeps leaving the water while the cell is wet: by
+`density` (heavy pigment drops out of standing water, `wet_settle`) and by
+`staining_power` independent of density (a dye-like pigment adsorbs onto the
+fibres, `stain_bite`). So the outward flow to a drying rim carries only what
+has not already settled, and a staining wash keeps colour in its centre while a
+sedimentary one gives more of it to the rim. Flow speed reduces deposition
+(`carry`, weaker for denser pigment), so moving water keeps pigment in
+suspension and strands it where the water slows. Lift needs water: it scales
+with the wet fraction and grows with flow speed from a still-water share
+(`lift_still`), still divided by `staining_power` as in Curtis.

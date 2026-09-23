@@ -84,7 +84,7 @@ fn dry_all(@builtin(global_invocation_id) gid: vec3<u32>) {
     if i >= P.n { return; }
     for (var k = 0u; k < P.pigment_count; k++) {
         let d = state[o_d(k) + i] + state[o_g(k) + i];
-        state[o_d(k) + i] = min(d, 1.0);
+        state[o_d(k) + i] = min(d, P.max_deposited);
         state[o_g(k) + i] = 0.0;
     }
     state[o_p() + i] = 0.0;

@@ -43,6 +43,14 @@ struct Params {
     max_suspended: f32,
     wet_threshold: f32,
     _pad: f32,
+    wet_settle: f32,
+    stain_bite: f32,
+    carry: f32,
+    lift_still: f32,
+    lift_flow_gain: f32,
+    max_deposited: f32,
+    _pad_deposit0: f32,
+    _pad_deposit1: f32,
 };
 
 struct Stroke {
@@ -68,6 +76,9 @@ const DRAIN_DEPTH: f32 = 0.5;
 const DRAIN_MIN: f32 = 0.15;
 const DRAIN_MAX: f32 = 2.0;
 const STROKE_WATER_PAPER_GAIN: f32 = 0.5;
+// Mirrors sim::CARRY_MIN and sim::CARRY_REACH.
+const CARRY_MIN: f32 = 0.1;
+const CARRY_REACH: f32 = 1.2;
 
 fn stroke_water_factor(h: f32) -> f32 {
     return max(1.0 + STROKE_WATER_PAPER_GAIN * (0.5 - h) * 2.0, 0.0);

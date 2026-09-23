@@ -264,7 +264,7 @@ fn stability_sweep_stays_finite_and_bounded() {
             assert!((0.0..=sim::MAX_SUSPENDED).contains(&g));
         }
         for &d in &grid.pigments_deposited {
-            assert!((0.0..=1.0).contains(&d));
+            assert!((0.0..=sim::MAX_DEPOSITED).contains(&d));
         }
         for (&u, &v) in grid.velocity_u.iter().zip(&grid.velocity_v) {
             assert!(u.abs() <= params.max_velocity && v.abs() <= params.max_velocity);
@@ -308,6 +308,66 @@ fn wet_on_dry_darkens_the_edge() {
     assert!(
         edge > centre * 1.15,
         "edge {edge} should exceed centre {centre} by 15%"
+    );
+}
+
+/// Dries a wet-on-dry disc of one pigment and returns the grid with the
+/// pigment total it was loaded with.
+fn dried_disc(coef: PigmentCoefficients, concentration: f32) -> (SimulationGrid, f32) {
+    let params = SimParams::default();
+    let field = PaperField::generate(&Paper::cold_press(Seed(21)), N, N);
+    let mut grid = SimulationGrid::new(&field, 1);
+    sim::apply(
+        &mut grid,
+        &disc(0.25, concentration, 1.0),
+        &params,
+        Seed(21),
+    );
+    let loaded = grid.total_pigment();
+    run(&mut grid, &[coef], &params, 600);
+    sim::dry_all(&mut grid);
+    (grid, loaded)
+}
+
+fn centre_to_rim(grid: &SimulationGrid) -> f32 {
+    let profile = radial_profile(grid, 0);
+    mean_in(&profile, 0.0, 0.1) / mean_in(&profile, 0.16, 0.24)
+}
+
+#[test]
+fn a_staining_pigment_keeps_its_wash_centre() {
+    let with = |staining_power| PigmentCoefficients {
+        density: 0.6,
+        staining_power,
+        granulation: 0.3,
+    };
+    let staining = centre_to_rim(&dried_disc(with(0.9), 0.48).0);
+    let sedimentary = centre_to_rim(&dried_disc(with(0.3), 0.48).0);
+    eprintln!("centre/rim staining {staining} sedimentary {sedimentary}");
+    assert!(
+        staining >= 0.6,
+        "a staining wash centre should keep 60% of its rim density, kept {staining}"
+    );
+    assert!(
+        staining > sedimentary + 0.1,
+        "staining {staining} should hold its centre better than sedimentary {sedimentary}"
+    );
+}
+
+#[test]
+fn a_full_load_dries_without_losing_pigment_at_the_rim() {
+    let (grid, loaded) = dried_disc(
+        PigmentCoefficients {
+            density: 0.6,
+            staining_power: 0.6,
+            granulation: 0.3,
+        },
+        1.0,
+    );
+    let kept = grid.total_pigment() / loaded;
+    assert!(
+        kept > 0.995,
+        "the dried rim should hold the pigment it concentrates, kept {kept}"
     );
 }
 

@@ -87,6 +87,14 @@ struct ParamsUniform {
     max_suspended: f32,
     wet_threshold: f32,
     _pad: f32,
+    wet_settle: f32,
+    stain_bite: f32,
+    carry: f32,
+    lift_still: f32,
+    lift_flow_gain: f32,
+    max_deposited: f32,
+    _pad_deposit0: f32,
+    _pad_deposit1: f32,
 }
 
 impl ParamsUniform {
@@ -128,6 +136,14 @@ impl ParamsUniform {
             max_suspended: sim::MAX_SUSPENDED,
             wet_threshold: WET_THRESHOLD,
             _pad: 0.0,
+            wet_settle: p.wet_settle,
+            stain_bite: p.stain_bite,
+            carry: p.carry,
+            lift_still: p.lift_still,
+            lift_flow_gain: p.lift_flow_gain,
+            max_deposited: sim::MAX_DEPOSITED,
+            _pad_deposit0: 0.0,
+            _pad_deposit1: 0.0,
         }
     }
 }
