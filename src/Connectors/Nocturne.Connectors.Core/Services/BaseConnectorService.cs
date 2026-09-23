@@ -169,10 +169,14 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             await ReportSyncOutcomeAsync(result.Success, FailureMessage(result), cancellationToken);
             return result;
         }
-        // A cancelled run has no outcome to report — the caller withdrew it. The background
-        // entry point's own catch-all converts its timeout into a failed result first, so that
-        // path still reports a terminal message through the success path above.
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        // A run the caller withdrew still resolves the tenant's in-progress indicator: report one
+        // reasonless terminal failure under CancellationToken.None, then let the cancellation travel.
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            await ReportSyncOutcomeAsync(false, null, CancellationToken.None);
+            throw;
+        }
+        catch (Exception ex)
         {
             await ReportSyncOutcomeAsync(false, ex.Message, cancellationToken);
             throw;
@@ -1394,7 +1398,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
             return result;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             _logger.LogError(
                 ex,

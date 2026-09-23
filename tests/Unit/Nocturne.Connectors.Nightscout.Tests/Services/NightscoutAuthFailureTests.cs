@@ -86,8 +86,8 @@ public class NightscoutAuthFailureTests
     }
 
     /// <summary>
-    ///     A run the caller withdrew has no outcome to report. The cancellation travels rather than
-    ///     arriving as a failed credential the tenant would go looking for.
+    ///     A run the caller withdrew propagates the cancellation rather than arriving as a failed
+    ///     credential the tenant would go looking for.
     /// </summary>
     [Fact]
     public async Task RequestedSync_WhenTheCallerCancels_PropagatesTheCancellation()

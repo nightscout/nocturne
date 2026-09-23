@@ -1067,6 +1067,30 @@ public class ConnectorBackgroundServiceTests
         await run;
     }
 
+    [Fact]
+    public async Task SyncForTenant_WhenASyncThrowsACancellationNobodyAskedFor_LogsItAsAnErrorNotATimeout()
+    {
+        // A cancellation of neither the poller's token nor the timeout's is not the per-tenant
+        // timeout, so it must fall through to the generic handler rather than be reported as one.
+        var (cleanup, connStr, _) = CreateSqliteDbWithTenantId();
+        using var _c = cleanup;
+
+        var serviceProvider = BuildServiceProvider(
+            connStr, BuildEnabledConfigMock(), new TestConnectorConfig { Enabled = true, SyncIntervalMinutes = 5 });
+
+        var logger = new MessageRecordingLogger();
+        var sut = new TestConnectorBackgroundService(
+            serviceProvider,
+            new SyncResult { Success = true },
+            logger,
+            onSync: () => throw new OperationCanceledException());
+
+        await sut.ExecuteOnceAsync(CancellationToken.None);
+
+        logger.Messages.Should().NotContain(m => m.Contains("exceeded"));
+        logger.Messages.Should().Contain(m => m.Contains("Error syncing"));
+    }
+
     /// <summary>Config-service mock that reports the test connector as configured and enabled.</summary>
     private static Mock<IConnectorConfigurationService> BuildEnabledConfigMock()
     {

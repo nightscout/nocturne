@@ -100,8 +100,8 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
             // A status the retry loop re-threw; `answered` holds it.
         }
         // The retry loop re-throws every cancellation, and a client timeout reaches it as one. Only
-        // the caller's own token means the run was withdrawn, and a withdrawn run has no outcome to
-        // report; the rest is the remote falling silent.
+        // the caller's own token means the run was withdrawn and must travel; the rest is the remote
+        // falling silent.
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             return UnansweredResult();

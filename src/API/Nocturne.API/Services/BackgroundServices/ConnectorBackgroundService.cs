@@ -402,7 +402,7 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
                 {
                     throw; // The service itself is shutting down — propagate to stop the loop.
                 }
-                catch (OperationCanceledException)
+                catch (OperationCanceledException) when (tenantCts.IsCancellationRequested)
                 {
                     // Per-tenant timeout fired. Abandon this tenant so it frees its slot for others.
                     Logger.LogWarning(

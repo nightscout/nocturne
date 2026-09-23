@@ -116,6 +116,50 @@ public class ConnectorSyncServiceTests
     }
 
     [Fact]
+    public async Task TriggerSyncAsync_WhenTheExecutorIsCancelled_PropagatesTheCancellation()
+    {
+        // A cancelled manual sync is the caller withdrawing it, not a failure of the connector, so
+        // it must travel through rather than being reported as "Sync failed: A task was canceled."
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        var executor = new Mock<IConnectorSyncExecutor>();
+        executor.Setup(x => x.ConnectorId).Returns("test");
+        executor.Setup(x => x.ExecuteSyncAsync(
+                It.IsAny<IServiceProvider>(),
+                It.IsAny<SyncRequest>(),
+                It.IsAny<CancellationToken>(),
+                It.IsAny<ISyncProgressReporter?>()))
+            .ThrowsAsync(new OperationCanceledException());
+        var sut = CreateService(BuildProvider(executor.Object));
+
+        var act = async () =>
+            await sut.TriggerSyncAsync("test", new SyncRequest(), cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
+    public async Task TriggerSyncAsync_WhenTheExecutorTimesOut_ReturnsAFailedResultCarryingTheText()
+    {
+        // A source timeout arrives as a TaskCanceledException while the caller's token is still
+        // live, so it is a failure of the connector with a reason, not a withdrawn run.
+        var executor = new Mock<IConnectorSyncExecutor>();
+        executor.Setup(x => x.ConnectorId).Returns("test");
+        executor.Setup(x => x.ExecuteSyncAsync(
+                It.IsAny<IServiceProvider>(),
+                It.IsAny<SyncRequest>(),
+                It.IsAny<CancellationToken>(),
+                It.IsAny<ISyncProgressReporter?>()))
+            .ThrowsAsync(new TaskCanceledException("HttpClient.Timeout"));
+        var sut = CreateService(BuildProvider(executor.Object));
+
+        var result = await sut.TriggerSyncAsync("test", new SyncRequest(), CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Message.Should().Contain("HttpClient.Timeout");
+    }
+
+    [Fact]
     public async Task TriggerSyncAsync_WithUnknownConnector_ReturnsFailure()
     {
         // Arrange - no executors registered

@@ -91,12 +91,13 @@ public class SyncTerminalPhaseTests
     private static Task<SyncResult> RunAsync(
         Func<SyncResult, Task> body,
         ISyncProgressReporter reporter,
+        CancellationToken cancellationToken = default,
         bool authenticationSucceeds = true)
         => new TestConnectorService(body) { AuthenticationSucceeds = authenticationSucceeds }
             .SyncDataAsync(
                 new SyncRequest { DataTypes = [SyncDataType.Glucose] },
                 new TestConfig(),
-                CancellationToken.None,
+                cancellationToken,
                 reporter);
 
     [Fact]
@@ -191,17 +192,60 @@ public class SyncTerminalPhaseTests
     }
 
     [Fact]
-    public async Task CancelledSync_ReportsNothing()
+    public async Task CancelledSync_ReportsOneTerminalFailureWithoutExceptionText()
     {
-        // Arrange: a run the caller withdrew has no outcome to report.
+        // Arrange: a withdrawn run still has to release the tenant's in-progress indicator, so it
+        // reports the same terminal failure as any other ending rather than falling silent.
         var (reporter, reported) = BuildReporter();
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
 
         // Act
-        var act = () => RunAsync(_ => throw new OperationCanceledException(), reporter.Object);
+        var act = () => RunAsync(
+            _ => throw new OperationCanceledException(), reporter.Object, cts.Token);
 
         // Assert
         await act.Should().ThrowAsync<OperationCanceledException>();
-        reported.Should().BeEmpty();
+        reported.Should().ContainSingle().Which.Phase.Should().Be(SyncPhase.Failed);
+        reported[0].ErrorMessage.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task CancelledBackgroundSync_PropagatesAndReportsOneTerminalFailureWithoutExceptionText()
+    {
+        // Arrange: the background entry point's own catch-all must let a cancellation of the caller's
+        // token through to the poller's timeout handler instead of turning it into a failed result.
+        var (reporter, reported) = BuildReporter();
+        var service = new TestConnectorService(_ => throw new TaskCanceledException("HttpClient.Timeout"));
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        // Act
+        var act = async () =>
+            await service.SyncDataAsync(new TestConfig(), cts.Token, null, reporter.Object);
+
+        // Assert
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        reported.Should().ContainSingle().Which.Phase.Should().Be(SyncPhase.Failed);
+        reported[0].ErrorMessage.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task SourceTimeout_IsAFailedResultCarryingTheExceptionText()
+    {
+        // Arrange: an HttpClient timeout arrives as a TaskCanceledException while the caller's token
+        // is still live, so it is the source falling silent, not a withdrawn run.
+        var (reporter, reported) = BuildReporter();
+        var service = new TestConnectorService(_ => throw new TaskCanceledException("HttpClient.Timeout"));
+
+        // Act
+        var result = await service.SyncDataAsync(new TestConfig(), CancellationToken.None, null, reporter.Object);
+
+        // Assert
+        result.Success.Should().BeFalse();
+        result.Errors.Should().ContainSingle().Which.Should().Be("HttpClient.Timeout");
+        reported.Should().ContainSingle().Which.Phase.Should().Be(SyncPhase.Failed);
+        reported[0].ErrorMessage.Should().Be("HttpClient.Timeout");
     }
 
     [Fact]

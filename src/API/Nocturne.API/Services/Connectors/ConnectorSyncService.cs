@@ -124,7 +124,7 @@ public class ConnectorSyncService : IConnectorSyncService
                 Message = $"Connector '{connectorId}' is not configured or is disabled",
             };
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             _logger.LogError(
                 ex,
