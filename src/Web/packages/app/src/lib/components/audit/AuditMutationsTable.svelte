@@ -514,7 +514,7 @@
           </Table.Row>
           <!-- Expanded detail row -->
           {#if expandedId === row.original.id}
-            <Table.Row class="bg-muted/50">
+            <Table.Row variant="detail">
               <Table.Cell colspan={columns.length + 1} class="p-4">
                 <div class="space-y-3 text-sm">
                   {#if row.original.reason}

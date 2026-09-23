@@ -31,8 +31,7 @@
 			pressed={favorite}
 			onPressedChange={() => onfavorite()}
 			variant="default"
-			size="xs"
-			class="p-0"
+			size="icon-xs"
 			aria-label={favorite ? 'Remove from favorites' : 'Add to favorites'}
 			onclick={(e: MouseEvent) => e.stopPropagation()}
 		>

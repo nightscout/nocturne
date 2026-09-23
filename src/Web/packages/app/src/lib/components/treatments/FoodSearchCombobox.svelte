@@ -170,7 +170,7 @@
               <Command.Item
                 value="__create_new__"
                 onSelect={onCreateNew}
-                class="cursor-pointer text-primary"
+                variant="create" class="cursor-pointer"
               >
                 <Plus class="mr-2 h-4 w-4" />
                 Create "{searchQuery.trim()}"
@@ -179,7 +179,7 @@
             <Command.Item
               value="__log_without_saving__"
               onSelect={onLogWithoutSaving}
-              class="cursor-pointer text-muted-foreground"
+              variant="muted" class="cursor-pointer"
             >
               <FileText class="mr-2 h-4 w-4" />
               Log without saving food

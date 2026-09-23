@@ -37,6 +37,7 @@
     if (category) onChange(category);
   }}
 >
+  <!-- eslint-disable shadcn/no-restyle -- the treatment filter is the only tab list drawn as a wrapping grid of tiles, each an icon over its label and count -->
   <Tabs.List
     class="grid h-auto w-full grid-cols-[repeat(auto-fit,minmax(4.5rem,1fr))] gap-2 bg-transparent p-0"
   >
@@ -65,4 +66,5 @@
       </Tabs.Trigger>
     {/each}
   </Tabs.List>
+  <!-- eslint-enable shadcn/no-restyle -->
 </Tabs.Root>

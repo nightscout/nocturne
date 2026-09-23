@@ -320,10 +320,7 @@
       <CardTitle class="flex items-center gap-2">
         Blood Glucose
         {#if displayDemoMode}
-          <Badge
-            variant="outline"
-            class="border-border text-muted-foreground"
-          >
+          <Badge variant="demo">
             Demo
           </Badge>
         {/if}

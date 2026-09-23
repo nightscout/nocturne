@@ -288,7 +288,6 @@
             <Button
               variant={previewingId === sound.id ? "default" : "ghost"}
               size="icon"
-              class={previewingId === sound.id ? "animate-pulse" : ""}
               onclick={() => handlePreview(sound)}
               title={previewingId === sound.id ? "Stop" : "Preview"}
             >

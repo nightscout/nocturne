@@ -300,7 +300,7 @@
       <!-- Selected Profile Details -->
       {#if selectedProfileName && therapy}
         {#if therapy.isExternallyManaged}
-          <Alert.Root class="border-muted-foreground/25 bg-muted/50">
+          <Alert.Root>
             <Lock class="h-4 w-4" />
             <Alert.Title>Managed by {therapy.enteredBy ?? "an external source"}</Alert.Title>
             <Alert.Description>

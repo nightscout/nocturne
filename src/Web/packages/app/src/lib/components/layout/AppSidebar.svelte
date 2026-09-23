@@ -329,7 +329,7 @@
     </Sidebar.Group>
   </Sidebar.Content>
 
-  <Sidebar.Footer class="p-2">
+  <Sidebar.Footer>
     <Sidebar.Menu>
       {#if !langPrefKnown}
         <Sidebar.MenuItem class="group-data-[collapsible=icon]:hidden">

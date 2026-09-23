@@ -1,7 +1,7 @@
 <script lang="ts">
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import * as Avatar from "$lib/components/ui/avatar";
-  import { Button } from "$lib/components/ui/button";
+  import * as Sidebar from "$lib/components/ui/sidebar";
   import { User, LogOut, Settings, Shield, ChevronDown, UserPlus } from "lucide-svelte";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
@@ -46,13 +46,7 @@
   <DropdownMenu.Root bind:open={isOpen}>
     <DropdownMenu.Trigger>
       {#snippet child({ props }: { props: Record<string, unknown> })}
-        <Button
-          variant="ghost"
-          class="w-full justify-start px-2 {collapsed
-            ? 'justify-center'
-            : ''} {className}"
-          {...props}
-        >
+        <Sidebar.MenuButton size="lg" class={className} {...props}>
           <Avatar.Root class="h-8 w-8 shrink-0">
             <Avatar.Image src={user.avatarUrl} alt={user.name} />
             <Avatar.Fallback variant="primary" class="text-xs">
@@ -72,7 +66,7 @@
             </div>
             <ChevronDown class="h-4 w-4 text-muted-foreground shrink-0" />
           {/if}
-        </Button>
+        </Sidebar.MenuButton>
       {/snippet}
     </DropdownMenu.Trigger>
 
@@ -81,11 +75,11 @@
       align={collapsed ? "center" : "end"}
       side="top"
     >
-      <DropdownMenu.Label class="font-normal">
+      <DropdownMenu.Label>
         <div class="flex flex-col space-y-1">
           <p class="text-sm font-medium leading-none">{user.name}</p>
           {#if user.email}
-            <p class="text-xs leading-none text-muted-foreground">
+            <p class="text-xs font-normal leading-none text-muted-foreground">
               {user.email}
             </p>
           {/if}
@@ -96,7 +90,7 @@
       {#if !isGuestSession}
         {#if user.roles.length > 0}
           <DropdownMenu.Group>
-            <DropdownMenu.Label class="text-xs text-muted-foreground">
+            <DropdownMenu.Label>
               Roles
             </DropdownMenu.Label>
             <div class="px-2 py-1 flex flex-wrap gap-1">
@@ -160,21 +154,18 @@
   {/if}
 {:else}
   <!-- Not logged in - show login button -->
-  <Button
-    variant="ghost"
-    data-testid="sign-in-link"
-    href="/auth/login"
-    class="w-full justify-start px-2 {collapsed
-      ? 'justify-center'
-      : ''} {className}"
-  >
-    <div
-      class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted"
-    >
-      <User class="h-4 w-4 text-muted-foreground" />
-    </div>
-    {#if !collapsed}
-      <span class="text-sm">Sign in</span>
-    {/if}
-  </Button>
+  <Sidebar.MenuButton size="lg" class={className}>
+    {#snippet child({ props }: { props: Record<string, unknown> })}
+      <a {...props} data-testid="sign-in-link" href={resolve("/auth/login")}>
+        <div
+          class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted"
+        >
+          <User class="h-4 w-4 text-muted-foreground" />
+        </div>
+        {#if !collapsed}
+          <span>Sign in</span>
+        {/if}
+      </a>
+    {/snippet}
+  </Sidebar.MenuButton>
 {/if}

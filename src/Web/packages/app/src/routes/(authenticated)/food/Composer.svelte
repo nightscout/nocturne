@@ -3,6 +3,7 @@
 	import type { Food } from '$api';
 	import { Plus, X, ChevronRight } from 'lucide-svelte';
 	import GiIcon from './GiIcon.svelte';
+	import GiLabel from './GiLabel.svelte';
 	import { getFoodState } from './food-context.js';
 	import { giFromInt, giToInt, isGiLevel } from './types.js';
 	import type { GiLevel } from './types.js';
@@ -190,8 +191,8 @@
 			<span id="composer-gi-label" class="text-muted-foreground font-medium uppercase text-2xs">GI</span>
 			<ToggleGroup.Root aria-labelledby="composer-gi-label" type="single" value={giFromInt(draft.gi)} onValueChange={(v: string) => { if (isGiLevel(v)) draft = { ...draft, gi: giToInt(v) }; }} variant="outline" class="w-full">
 				{#each giLevels as g (g)}
-					<ToggleGroup.Item value={g} class="capitalize">
-						<GiIcon level={g} size={7} />{g}
+					<ToggleGroup.Item value={g}>
+						<GiIcon level={g} size={7} /><GiLabel level={g} />
 					</ToggleGroup.Item>
 				{/each}
 			</ToggleGroup.Root>

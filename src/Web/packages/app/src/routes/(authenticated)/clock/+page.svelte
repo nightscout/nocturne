@@ -136,9 +136,7 @@
         <!-- Clock Face Grid -->
         <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {#each clockFaces as face (face.id)}
-            <Card.Root
-              class="group cursor-pointer transition-all hover:-translate-y-1 hover:shadow-lg"
-            >
+            <Card.Root interactive class="group cursor-pointer">
               <!-- Each preview reads its own query's state rather than awaiting it: an await here
                    is work the enclosing boundary has to finish before it can show the list at all,
                    and one preview that never resolves holds the whole page on its placeholder. -->

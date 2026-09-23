@@ -15,6 +15,7 @@
     class: className,
     variant = "default",
     size = "default",
+    live = false,
     onremove,
     removeLabel,
     children,
@@ -23,6 +24,7 @@
     Removal & {
       variant?: BadgeVariant;
       size?: BadgeSize;
+      live?: boolean;
     } = $props();
 </script>
 
@@ -31,7 +33,7 @@
   bind:this={ref}
   data-slot="badge"
   {href}
-  class={cn(badgeVariants({ variant, size, removable: onremove !== undefined }), className)}
+  class={cn(badgeVariants({ variant, size, live, removable: onremove !== undefined }), className)}
   {...restProps}
 >
   {@render children?.()}

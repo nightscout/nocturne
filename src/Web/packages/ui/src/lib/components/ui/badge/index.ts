@@ -19,6 +19,8 @@ export const badgeVariants = tv({
       info: "bg-info/15 text-info [a&]:hover:bg-info/25 border-transparent",
       // Marks synthetic demo data wherever it appears beside real data.
       demo: "bg-demo/15 text-demo [a&]:hover:bg-demo/25 border-transparent",
+      // Over a full-screen display whose background the theme does not own, e.g. a clock face.
+      overlay: "border-white/30 text-white/80",
       // Notification and tracker urgency, as a solid count or level chip.
       "severity-urgent":
         "bg-severity-urgent text-severity-urgent-foreground [a&]:hover:bg-severity-urgent/90 border-transparent",
@@ -46,6 +48,13 @@ export const badgeVariants = tv({
       default: "",
       // A count or tag packed into a dense row, a tab or a table header.
       sm: "px-1.5 py-0 text-2xs",
+      // A status that is the subject of its section, or read from across a room.
+      lg: "px-3 py-1 text-sm [&>svg]:size-4",
+    },
+    // Something running now, e.g. an active migration.
+    live: {
+      true: "animate-pulse",
+      false: "",
     },
     // Set by Badge from onremove; its remove button's focus ring shows on the badge,
     // since the badge clips overflow.
@@ -58,6 +67,7 @@ export const badgeVariants = tv({
     variant: "default",
     size: "default",
     removable: false,
+    live: false,
   },
 });
 

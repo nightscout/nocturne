@@ -134,7 +134,7 @@
 </script>
 
 <Sheet.Root bind:open {onOpenChange}>
-  <Sheet.Content side="right" class="w-[320px] sm:w-[400px] p-0">
+  <Sheet.Content side="right" class="w-[320px] sm:w-[400px]">
     <Sheet.Header class="px-6 py-4 border-b">
       <div class="flex items-center justify-between">
         <Sheet.Title class="flex items-center gap-2">
@@ -182,7 +182,6 @@
               captionLayout="dropdown"
               locale={formatLocale()}
               onValueChange={handleCalendarChange}
-              class="p-0"
             />
           </div>
         </div>

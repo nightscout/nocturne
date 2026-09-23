@@ -285,7 +285,7 @@
 			</CardHeader>
 			<CardContent class="space-y-4">
 				<div class="flex items-center gap-3">
-					<Badge variant={recommendationColor} class="text-sm px-3 py-1">
+					<Badge variant={recommendationColor} size="lg">
 						{#if status.recommendation?.status === 'safe'}
 							<CheckCircle2 class="h-4 w-4" />
 						{:else if status.recommendation?.status === 'almost-ready'}

@@ -8,6 +8,7 @@
   import FoodList from './FoodList.svelte';
   import Composer from './Composer.svelte';
   import GiIcon from './GiIcon.svelte';
+  import GiLabel from './GiLabel.svelte';
 
   import { Plus, Download, Upload, Search, Star, X, Apple } from 'lucide-svelte';
   import * as Select from '$lib/components/ui/select';
@@ -130,7 +131,7 @@
         {#each giLevels as g (g)}
           <ToggleGroup.Item value={g}>
             <GiIcon level={g} size={7} />
-            <span class="capitalize">{g}</span>
+            <GiLabel level={g} />
           </ToggleGroup.Item>
         {/each}
       </ToggleGroup.Root>

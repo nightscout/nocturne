@@ -286,7 +286,7 @@
           />
         </Card.Content>
         {#if mutationsTotal > mutations.length}
-          <Card.Footer class="border-t pt-4 text-sm text-muted-foreground">
+          <Card.Footer variant="muted" class="border-t pt-4">
             Showing the {mutations.length} most recent of {mutationsTotal} entries in
             this range. Narrow the dates to see the rest.
           </Card.Footer>
@@ -371,7 +371,7 @@
             />
           </Card.Content>
           {#if readsTotal > reads.length}
-            <Card.Footer class="border-t pt-4 text-sm text-muted-foreground">
+            <Card.Footer variant="muted" class="border-t pt-4">
               Showing the {reads.length} most recent of {readsTotal} entries in this
               range. Narrow the dates to see the rest.
             </Card.Footer>

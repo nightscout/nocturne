@@ -262,7 +262,7 @@
           id="carelink-code"
           bind:value={codeInput}
           rows={3}
-          class="font-mono text-xs break-all"
+          class="font-mono break-all"
           placeholder="{REDIRECT_PREFIX}?code=…&state=…"
           disabled={busy}
         />

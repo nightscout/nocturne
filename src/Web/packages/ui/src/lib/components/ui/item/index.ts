@@ -17,6 +17,10 @@ export const itemVariants = tv({
       ghost: "",
       // A connected or configured source.
       success: "border border-success/30 bg-success/5",
+      // A source or result that failed.
+      destructive: "border border-destructive/30 bg-destructive/5",
+      // A source of synthetic demo data.
+      demo: "border border-demo/30 bg-demo/5",
       // An option that adds something, like the add-item placeholder at the end of a list.
       dashed: "border border-dashed",
     },
@@ -36,6 +40,8 @@ export const itemVariants = tv({
     { interactive: true, variant: "outline", class: "hover:not-disabled:border-primary/50" },
     { interactive: true, variant: "muted", class: "hover:not-disabled:bg-muted/80" },
     { interactive: true, variant: "success", class: "hover:not-disabled:bg-success/10" },
+    { interactive: true, variant: "destructive", class: "hover:not-disabled:bg-destructive/10" },
+    { interactive: true, variant: "demo", class: "hover:not-disabled:bg-demo/10" },
     { interactive: true, variant: "dashed", class: "hover:not-disabled:border-primary hover:not-disabled:bg-accent" },
   ],
   defaultVariants: {

@@ -17,6 +17,7 @@ export default [
   ...debt({
     "svelte/prefer-svelte-reactivity": 11,
     "svelte/no-unused-svelte-ignore": 8,
-    "shadcn/no-inline-styles": 1
+    "shadcn/no-inline-styles": 1,
+    "no-restricted-syntax": 4
   })
 ];

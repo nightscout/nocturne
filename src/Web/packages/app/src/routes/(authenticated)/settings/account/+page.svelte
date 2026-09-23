@@ -553,7 +553,7 @@
     <div
       class="min-h-[70vh] flex flex-col items-center justify-center p-4 animate-in fade-in slide-in-from-bottom-4 duration-500"
     >
-      <Card.Root class="w-full max-w-md text-center shadow-lg">
+      <Card.Root class="w-full max-w-md text-center">
         <Card.Header class="pb-4 pt-8">
           <div
             class="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-6"
@@ -561,7 +561,7 @@
             <User class="h-8 w-8 text-primary" />
           </div>
           <Card.Title class="text-2xl font-bold">Not Signed In</Card.Title>
-          <Card.Description class="text-base mt-2">
+          <Card.Description class="mt-2">
             Sign in to access your account dashboard and manage your settings.
           </Card.Description>
         </Card.Header>

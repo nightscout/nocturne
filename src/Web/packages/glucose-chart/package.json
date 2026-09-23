@@ -19,7 +19,7 @@
   "scripts": {
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "lint": "eslint .",
-    "lint:ci": "eslint . --max-warnings 59"
+    "lint:ci": "eslint . --max-warnings 59 --report-unused-disable-directives-severity error"
   },
   "peerDependencies": {
     "@lucide/svelte": ">=0.400.0",

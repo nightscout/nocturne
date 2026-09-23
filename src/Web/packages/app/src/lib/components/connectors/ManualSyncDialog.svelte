@@ -2,6 +2,7 @@
   import { formatLocale } from "$lib/utils/formatting";
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
+  import { Item } from "$lib/components/ui/item";
   import { Loader2, Download, CheckCircle, AlertCircle } from "lucide-svelte";
   import type { SyncProgressEvent } from "$lib/websocket/types";
   import { formatSyncMessage } from "$lib/utils/sync-messages";
@@ -174,7 +175,7 @@
             <h4 class="font-medium text-sm">Connector Results</h4>
             <div class="space-y-2">
               {#each manualSyncResult.connectorResults as result (result.connectorName)}
-                <div class="flex items-center justify-between p-3 rounded-lg border {result.success ? 'border-success/30 bg-success/5' : 'border-destructive/30 bg-destructive/5'}">
+                <Item variant={result.success ? "success" : "destructive"} class="justify-between">
                   <div class="flex items-center gap-3">
                     {#if result.success}
                       <CheckCircle class="h-4 w-4 text-success" />
@@ -195,7 +196,7 @@
                       {result.duration}
                     {/if}
                   </div>
-                </div>
+                </Item>
               {/each}
             </div>
           </div>

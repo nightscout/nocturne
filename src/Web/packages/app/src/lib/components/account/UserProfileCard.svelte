@@ -231,7 +231,7 @@
       {#if user.roles.length > 0}
         <div class="flex flex-wrap gap-2">
           {#each user.roles as role, i (i)}
-            <Badge variant="secondary" class="text-sm">
+            <Badge variant="secondary" size="lg">
               {role}
             </Badge>
           {/each}

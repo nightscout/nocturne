@@ -79,10 +79,11 @@
     <div class="flex items-center gap-2">
       <Button
         variant="link"
-        size="inline" class="font-semibold truncate"
+        size="inline"
+        class="min-w-0"
         onclick={onEdit}
       >
-        {rule.name ?? "(unnamed)"}
+        <span class="truncate">{rule.name ?? "(unnamed)"}</span>
       </Button>
       {#if !rule.isEnabled}
         <Badge variant="secondary" size="sm">Disabled</Badge>

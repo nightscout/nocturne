@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { UploaderApp } from "$lib/api/generated/nocturne-api-client";
+  import { UploaderPlatform, type UploaderApp } from "$lib/api/generated/nocturne-api-client";
   import { getUploaderName, getUploaderDescription } from "$lib/utils/uploader-labels";
   import {
     Card,
@@ -25,6 +25,13 @@
   }
 
   let { uploaderApps, isUploaderActive, onSetup }: Props = $props();
+
+  const platformLabels: Record<UploaderPlatform, string> = {
+    [UploaderPlatform.Android]: "Android",
+    [UploaderPlatform.IOS]: "iOS",
+    [UploaderPlatform.Desktop]: "Desktop",
+    [UploaderPlatform.Web]: "Web",
+  };
 
   const cgmApps = $derived(uploaderApps.filter((u) => u.category === "cgm"));
   const aidApps = $derived(uploaderApps.filter((u) => u.category === "aid-system"));
@@ -73,9 +80,11 @@
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2 flex-wrap">
                     <span class="font-medium">{getUploaderName(uploader)}</span>
-                    <Badge variant="outline" class="capitalize">
-                      {uploader.platform}
-                    </Badge>
+                    {#if uploader.platform}
+                      <Badge variant="outline">
+                        {platformLabels[uploader.platform]}
+                      </Badge>
+                    {/if}
                     {#if active}
                       <Badge variant="success">
                         <CheckCircle class="h-3 w-3 mr-1" />

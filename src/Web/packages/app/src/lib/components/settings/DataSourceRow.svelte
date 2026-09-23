@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import { Badge } from "$lib/components/ui/badge";
+  import { Item, type ItemVariant } from "$lib/components/ui/item";
   import * as Tooltip from "$lib/components/ui/tooltip";
   import {
     CheckCircle,
@@ -111,17 +112,17 @@
     }
   }
 
-  function getBorderClass(s: DataSourceStatus): string {
+  function getItemVariant(s: DataSourceStatus): ItemVariant {
     switch (s) {
       case "active":
       case "syncing":
-        return "border-success/30 bg-success/5";
+        return "success";
       case "demo":
-        return "border-demo/30 bg-demo/5";
+        return "demo";
       case "error":
-        return "border-destructive/30 bg-destructive/5";
+        return "destructive";
       default:
-        return "";
+        return "outline";
     }
   }
 
@@ -147,14 +148,11 @@
   }
 
   const iconColors = $derived(getIconColors(status));
-  const borderClass = $derived(getBorderClass(status));
+  const itemVariant = $derived(getItemVariant(status));
 </script>
 
 <div class="relative">
-  <button
-    class="w-full flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors text-left {borderClass}"
-    {onclick}
-  >
+  <Item variant={itemVariant} size="lg" class="justify-between" {onclick}>
     <div class="flex items-center gap-4 min-w-0 flex-1">
       <div
         class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg {iconColors.bg}"
@@ -241,12 +239,8 @@
         <p class="text-sm text-muted-foreground">
           {#if totalBreakdown && Object.keys(totalBreakdown).length > 0}
             <Tooltip.Root>
-              <Tooltip.Trigger>
-                <span
-                  class="cursor-help underline decoration-dotted decoration-muted-foreground/50"
-                >
-                  {formatNumber(totalEntries)} records
-                </span>
+              <Tooltip.Trigger variant="term">
+                {formatNumber(totalEntries)} records
               </Tooltip.Trigger>
               <Tooltip.Content
                 variant="popover"
@@ -275,12 +269,8 @@
             <span class="mx-1">&middot;</span>
             {#if last24hBreakdown && Object.keys(last24hBreakdown).length > 0}
               <Tooltip.Root>
-                <Tooltip.Trigger>
-                  <span
-                    class="cursor-help underline decoration-dotted decoration-muted-foreground/50"
-                  >
-                    {formatNumber(entriesLast24h)} in 24h
-                  </span>
+                <Tooltip.Trigger variant="term">
+                  {formatNumber(entriesLast24h)} in 24h
                 </Tooltip.Trigger>
                 <Tooltip.Content
                   variant="popover"
@@ -354,7 +344,7 @@
         <!-- Default: no trailing content -->
       </div>
     {/if}
-  </button>
+  </Item>
 
   <!-- Actions rendered outside the button for proper event handling -->
   {#if actions}

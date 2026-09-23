@@ -431,7 +431,7 @@
   <Sheet.Root bind:open onOpenChange={(o) => !o && onClose()}>
     <Sheet.Content
       side="bottom"
-      class="max-h-[90vh] overflow-y-auto rounded-t-xl p-6"
+      class="max-h-[90vh] overflow-y-auto p-6"
     >
       {@render dialogBody()}
     </Sheet.Content>

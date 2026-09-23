@@ -248,7 +248,9 @@ jobs:
       # Every package's `lint:ci` fails on any error and caps its warnings at today's count
       # (`--max-warnings` in its package.json). Caps only go down: lower one as warnings are
       # fixed, never raise it. A package's unpaid rules are downgraded to warnings by the
-      # `debt({...})` block in its eslint.config.js, which records each rule's count.
+      # `debt({...})` block in its eslint.config.js, which records each rule's count; a package
+      # with no debt block (app) allows no warnings. An eslint-disable that no longer
+      # suppresses anything is an error everywhere.
       # --no-bail runs every package and fails the step if any of them failed.
       - name: Lint packages
         run: pnpm --recursive --no-bail --workspace-concurrency=1 run lint:ci

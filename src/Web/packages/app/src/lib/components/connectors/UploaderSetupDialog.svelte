@@ -146,7 +146,6 @@
 
         {#if selectedUploader.url}
           <div class="pt-4">
-            <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external uploader website URL from the API, not an internal app route -->
             <Button
               variant="outline"
               class="w-full"

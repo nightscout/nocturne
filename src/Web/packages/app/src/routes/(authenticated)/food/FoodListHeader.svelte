@@ -14,19 +14,16 @@
 <div class="header-row">
 	<span></span>
 
-	<Button variant="ghost" size="inline" class="text-xs font-semibold uppercase tracking-wider hover:bg-transparent {sort === 'name' ? 'text-foreground' : ''}" onclick={() => onsort('name')}>
-		Name
-		{#if sort === 'name'}
-			<ChevronDown class="h-2.5 w-2.5" />
-		{/if}
+	<Button variant="subtle" size="inline-xs" onclick={() => onsort('name')}>
+		<span class="contents {sort === 'name' ? 'text-foreground' : ''}">
+			Name
+			{#if sort === 'name'}
+				<ChevronDown class="h-2.5 w-2.5" />
+			{/if}
+		</span>
 	</Button>
 
-	<Button
-		variant="ghost"
-		size="inline"
-		class="text-xs font-semibold uppercase tracking-wider hover:bg-transparent"
-		onclick={() => onsort('carbs')}
-	>
+	<Button variant="subtle" size="inline-xs" onclick={() => onsort('carbs')}>
 		<span class="contents {sort === 'carbs' ? 'text-(--carbs-strong)' : ''}">
 			Carbs
 			{#if sort === 'carbs'}
@@ -46,6 +43,8 @@
 
 <style>
 	.header-row {
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
 		display: grid;
 		grid-template-columns: 24px 1fr 110px 130px 90px 70px 24px;
 		gap: 12px;
@@ -60,8 +59,6 @@
 
 	.col-label {
 		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
 		color: oklch(from var(--muted-foreground) l c h / 0.7);
 	}
 </style>

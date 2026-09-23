@@ -21,6 +21,8 @@ export default [
     "shadcn/no-raw-colors": 1,
     "shadcn/require-static-classes": 6,
     "security/detect-unsafe-regex": 2,
-    "shadcn/no-arbitrary-values": 1
+    "shadcn/no-arbitrary-values": 1,
+    "shadcn/no-restyle": 93,
+    "no-restricted-syntax": 20
   })
 ];

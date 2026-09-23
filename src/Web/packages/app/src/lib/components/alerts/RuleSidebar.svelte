@@ -262,10 +262,10 @@
     {@const leaves = tree ? collectLeaves(rule, tree) : []}
     {@const isEditing = editingRuleId === id}
 
-    <Collapsible.Root open={isEditing} class="rounded-md border bg-background">
-      <div class="flex items-center gap-2 px-2 py-1.5">
+    <Collapsible.Root open={isEditing} variant="outline">
+      <div class="flex items-center gap-2 px-2 py-1.5 text-sm">
         <Collapsible.Trigger
-          class="group flex flex-1 min-w-0 items-center gap-2 text-left text-sm"
+          class="group flex flex-1 min-w-0 items-center gap-2 text-left"
         >
           <ChevronRight
             class="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-90"

@@ -13,7 +13,6 @@
     X,
   } from "lucide-svelte";
   import type { MealEvent, TreatmentFood, SuggestedMealMatch } from "$lib/api";
-  import { cn } from "$lib/utils";
   import SortableColumnHeader from "./SortableColumnHeader.svelte";
   import MealSuggestionRow from "./MealSuggestionRow.svelte";
   import CarbBreakdownBar from "$lib/components/treatments/CarbBreakdownBar.svelte";
@@ -159,7 +158,8 @@
             )}
             <!-- Day separator row -->
             <Table.Row
-              class="bg-muted/50 hover:bg-muted/60 cursor-pointer"
+              variant="group"
+              class="cursor-pointer"
               onclick={() => onToggleDate(day.date)}
             >
               <Table.Cell class="py-2">
@@ -207,10 +207,8 @@
 
                 <!-- Main meal row -->
                 <Table.Row
-                  class={cn(
-                    "cursor-pointer",
-                    isExpanded && "bg-accent/30"
-                  )}
+                  class="cursor-pointer"
+                  data-state={isExpanded ? "open" : "closed"}
                   onclick={() => onAddFood(meal)}
                 >
                   <Table.Cell class="py-3">
@@ -296,6 +294,7 @@
 
                 <!-- Suggested matches row (only for unattributed meals with suggestions) -->
                 {#if !meal.isAttributed && mealSuggestions.length > 0}
+                  <!-- eslint-disable-next-line shadcn/no-restyle -- the only row that asks for a decision; the primary rule sets the suggestion apart from the meal it would attribute -->
                   <Table.Row class="bg-primary/5 hover:bg-primary/10 border-l-2 border-l-primary">
                     <Table.Cell colspan={7} class="py-2 px-4">
                       <div class="space-y-2">
@@ -314,7 +313,7 @@
 
                 <!-- Expanded details row (only shown when there are foods) -->
                 {#if isExpanded && hasFoods}
-                  <Table.Row class="bg-accent/20 hover:bg-accent/20">
+                  <Table.Row variant="detail">
                     <Table.Cell colspan={7} class="py-4">
                       <div class="space-y-4 px-4">
                         <!-- Food details -->

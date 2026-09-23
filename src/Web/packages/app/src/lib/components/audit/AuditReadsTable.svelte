@@ -526,8 +526,8 @@
             {/each}
           </Table.Row>
           {#if expandedId === row.id}
-            <Table.Row>
-              <Table.Cell colspan={columns.length} class="bg-muted/30 p-0">
+            <Table.Row variant="detail">
+              <Table.Cell colspan={columns.length} class="p-0">
                 <div class="flex items-center justify-between border-b px-4 py-1">
                   <span class="text-xs font-medium text-muted-foreground"
                     >Details</span

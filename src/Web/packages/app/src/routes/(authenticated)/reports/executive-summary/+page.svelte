@@ -6,7 +6,7 @@
     CardHeader,
     CardTitle,
   } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
+  import { Item } from "$lib/components/ui/item";
   import { Progress } from "$lib/components/ui/progress";
   import {
     Gauge,
@@ -497,38 +497,38 @@
         </CardHeader>
         <CardContent>
           <div class="grid grid-cols-2 @3xl:grid-cols-4 gap-3">
-            <Button
+            <Item
               href="/reports/agp"
               variant="outline"
-              class="h-auto py-4 flex-col"
+              class="flex-col justify-center"
             >
               <BarChart3 class="w-5 h-5" />
               <span class="text-xs">AGP Report</span>
-            </Button>
-            <Button
+            </Item>
+            <Item
               href="/reports/readings"
               variant="outline"
-              class="h-auto py-4 flex-col"
+              class="flex-col justify-center"
             >
               <Calendar class="w-5 h-5" />
               <span class="text-xs">Day-by-Day</span>
-            </Button>
-            <Button
+            </Item>
+            <Item
               href="/reports/treatments"
               variant="outline"
-              class="h-auto py-4 flex-col"
+              class="flex-col justify-center"
             >
               <Activity class="w-5 h-5" />
               <span class="text-xs">Treatments</span>
-            </Button>
-            <Button
+            </Item>
+            <Item
               href="/reports"
               variant="outline"
-              class="h-auto py-4 flex-col"
+              class="flex-col justify-center"
             >
               <BookOpen class="w-5 h-5" />
               <span class="text-xs">All Reports</span>
-            </Button>
+            </Item>
           </div>
         </CardContent>
       </Card>

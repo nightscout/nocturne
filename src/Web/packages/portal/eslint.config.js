@@ -15,7 +15,9 @@ export default [
     "svelte/require-each-key": 10,
     "svelte/prefer-svelte-reactivity": 2,
     "svelte/no-at-html-tags": 1,
-    "security/detect-non-literal-fs-filename": 1
+    "security/detect-non-literal-fs-filename": 1,
+    "shadcn/no-restyle": 52,
+    "no-restricted-syntax": 19
   }),
   {
     // Build-time tooling over the repo's own files: every path is built from the package

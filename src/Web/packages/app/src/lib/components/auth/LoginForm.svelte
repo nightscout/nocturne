@@ -260,7 +260,7 @@
 {/snippet}
 
 {#snippet lastUsedBadge()}
-  <Badge variant="secondary" size="sm" class="ml-2 uppercase">
+  <Badge variant="secondary" size="sm" class="ml-2">
     Last used
   </Badge>
 {/snippet}

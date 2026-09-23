@@ -113,6 +113,22 @@ export const cardContentVariants = tv({
   },
 });
 
+export const cardFooterVariants = tv({
+  base: "[.border-t]:pt-6 flex items-center px-6",
+  variants: {
+    variant: {
+      default: "",
+      // A footnote on the card's content, e.g. that a list is truncated.
+      muted: "text-muted-foreground text-sm",
+    },
+  },
+  defaultVariants: {
+    variant: "default",
+  },
+});
+
+export type CardFooterVariant = VariantProps<typeof cardFooterVariants>["variant"];
+
 export type CardContentVariant = VariantProps<typeof cardContentVariants>["variant"];
 export type CardContentSize = VariantProps<typeof cardContentVariants>["size"];
 

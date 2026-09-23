@@ -61,18 +61,16 @@
       </div>
 
       {#if showEmergencyButton}
-        <Button
-          variant="destructive"
-          class="p-8 border mt-4 animate-in zoom-in duration-300 cursor-pointer"
-          onclick={onEmergencyClick}
-        >
-          <div class="flex items-center justify-center gap-2 mb-2">
-            <AlertCircle class="h-5 w-5" />
-            <h3 class="font-bold text-lg uppercase tracking-wider">
-              Emergency Contacts
-            </h3>
-          </div>
-        </Button>
+        <div class="mt-4 animate-in zoom-in duration-300">
+          <Button
+            variant="outline-destructive"
+            size="xl"
+            onclick={onEmergencyClick}
+          >
+            <AlertCircle />
+            Emergency Contacts
+          </Button>
+        </div>
       {/if}
     </div>
   </div>
@@ -87,7 +85,6 @@
           <Button
             variant="secondary"
             size="xl"
-            class="font-semibold shadow-lg"
             onclick={() => onSnooze(minutes)}
           >
             <Clock class="h-5 w-5 mr-2" />
@@ -100,7 +97,6 @@
     <Button
       variant="destructive"
       size="xl"
-      class="text-xl font-bold border-2 border-white/20 shadow-xl"
       onclick={onDismiss}
     >
       Dismiss Alarm

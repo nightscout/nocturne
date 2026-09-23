@@ -18,7 +18,7 @@
 		"check-embeds": "tsx src/check-embeds.ts",
 		"check": "tsc --noEmit",
 		"lint": "eslint .",
-		"lint:ci": "eslint . --max-warnings 8"
+		"lint:ci": "eslint . --max-warnings 8 --report-unused-disable-directives-severity error"
 	},
 	"devDependencies": {
 		"@nocturne/eslint-config": "workspace:*",

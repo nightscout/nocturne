@@ -208,11 +208,11 @@
   <AlertDialog.Root bind:open={showDeleteConfirmDialog}>
     <AlertDialog.Content>
       <AlertDialog.Header>
-        <AlertDialog.Title class="flex items-center gap-2 text-destructive">
+        <AlertDialog.Title variant="destructive" class="flex items-center gap-2">
           <AlertTriangle class="h-5 w-5" />
           Permanently Delete Data
         </AlertDialog.Title>
-        <AlertDialog.Description class="space-y-4">
+        <AlertDialog.Description class="grid gap-4">
           {#if selectedDataSource}
             <div
               class="rounded-lg border border-destructive/30 bg-destructive/10 p-4 mt-4"

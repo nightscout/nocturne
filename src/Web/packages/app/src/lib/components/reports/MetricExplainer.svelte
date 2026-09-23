@@ -22,9 +22,7 @@
 </script>
 
 <Popover.Root>
-  <Popover.Trigger
-    class="inline-flex items-center gap-1 cursor-help underline decoration-dotted decoration-muted-foreground/50 underline-offset-2"
-  >
+  <Popover.Trigger variant="term">
     <span>{term}</span>
     <HelpCircle class="w-3.5 h-3.5 text-muted-foreground" />
   </Popover.Trigger>

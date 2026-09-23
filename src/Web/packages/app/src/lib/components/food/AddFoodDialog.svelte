@@ -189,7 +189,6 @@
                 name="n:carbs"
                 type="number"
                 bind:value={foodCarbs}
-                class="text-lg"
               />
             </div>
             <div class="space-y-2">
@@ -286,7 +285,6 @@
                 name="n:carbs"
                 type="number"
                 bind:value={foodCarbs}
-                class="text-lg"
               />
             </div>
             <div class="space-y-2">

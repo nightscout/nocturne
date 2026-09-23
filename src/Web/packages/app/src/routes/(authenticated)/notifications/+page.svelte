@@ -11,6 +11,7 @@
   } from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
+  import { Item } from "$lib/components/ui/item";
   import {
     Bell,
     History,
@@ -334,24 +335,26 @@
                 <Collapsible.Root
                   open={isExpanded(date)}
                   onOpenChange={() => toggleGroup(date)}
-                  class="border rounded-lg"
+                  variant="outline"
                 >
-                  <Collapsible.Trigger
-                    class="flex items-center justify-between w-full p-3 hover:bg-muted/50 rounded-t-lg"
-                  >
-                    <div class="flex items-center gap-2">
-                      <Clock class="h-4 w-4 text-muted-foreground" />
-                      <span class="font-medium">{formatLongDate(startOfDay(date))}</span>
-                      <Badge variant="secondary" class="ml-2">
-                        {instances.length}
-                      </Badge>
-                    </div>
-                    <ChevronDown
-                      class={cn(
-                        "h-4 w-4 transition-transform",
-                        isExpanded(date) && "rotate-180"
-                      )}
-                    />
+                  <Collapsible.Trigger>
+                    {#snippet child({ props }: { props: Record<string, unknown> })}
+                      <Item variant="ghost" class="justify-between" {...props}>
+                        <div class="flex items-center gap-2">
+                          <Clock class="h-4 w-4 text-muted-foreground" />
+                          <span class="font-medium">{formatLongDate(startOfDay(date))}</span>
+                          <Badge variant="secondary" class="ml-2">
+                            {instances.length}
+                          </Badge>
+                        </div>
+                        <ChevronDown
+                          class={cn(
+                            "h-4 w-4 transition-transform",
+                            isExpanded(date) && "rotate-180"
+                          )}
+                        />
+                      </Item>
+                    {/snippet}
                   </Collapsible.Trigger>
                   <Collapsible.Content class="border-t p-3 space-y-2">
                     {#each instances as instance (instance.id)}

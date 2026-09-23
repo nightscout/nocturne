@@ -272,10 +272,8 @@
             <div class="flex items-center justify-between">
               <span class="text-sm text-muted-foreground">Total records</span>
               <Tooltip.Root>
-                <Tooltip.Trigger>
-                  <span
-                    class="font-mono font-medium cursor-help underline decoration-dotted decoration-muted-foreground/50"
-                  >
+                <Tooltip.Trigger variant="term">
+                  <span class="font-mono font-medium">
                     {formatNumber(selectedConnector.totalEntries)}
                   </span>
                 </Tooltip.Trigger>
@@ -310,10 +308,8 @@
                 Records in last 24 hours
               </span>
               <Tooltip.Root>
-                <Tooltip.Trigger>
-                  <span
-                    class="font-mono font-medium cursor-help underline decoration-dotted decoration-muted-foreground/50"
-                  >
+                <Tooltip.Trigger variant="term">
+                  <span class="font-mono font-medium">
                     {formatNumber(selectedConnector.entriesLast24Hours)}
                   </span>
                 </Tooltip.Trigger>

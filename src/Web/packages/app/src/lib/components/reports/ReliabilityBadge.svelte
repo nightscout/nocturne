@@ -16,7 +16,7 @@
   <Badge
     variant="warning"
     class={cn(
-      "h-auto max-w-full items-start gap-1.5 whitespace-normal break-words py-1 text-left text-xs leading-snug",
+      "h-auto max-w-full items-start whitespace-normal break-words text-left",
       className
     )}
   >

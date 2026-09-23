@@ -15,6 +15,8 @@ export const toggleVariants = tv({
       // Matches the xs Input and SelectTrigger.
       xs: "h-7 min-w-7 px-2 text-xs",
       lg: "h-10 min-w-10 px-2.5",
+      // Matches Button's icon-xs.
+      "icon-xs": "size-7 [&_svg:not([class*='size-'])]:size-3",
     },
   },
   defaultVariants: {

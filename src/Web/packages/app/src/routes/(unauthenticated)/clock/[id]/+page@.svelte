@@ -132,9 +132,8 @@
            opacity-0 transition-opacity duration-300 hover:opacity-100"
   >
     <Button
-      variant="ghost"
+      variant="overlay"
       size="sm"
-      class="text-white/80 hover:text-white"
       onclick={() => goto(resolve("/clock"))}
     >
       <ArrowLeft class="size-4" />
@@ -142,14 +141,13 @@
     </Button>
     <div class="flex items-center gap-2">
       {#if demoMode}
-        <Badge variant="outline" class="border-white/30 text-white/80">
+        <Badge variant="overlay">
           Demo Mode
         </Badge>
       {/if}
       <Button
-        variant="ghost"
+        variant="overlay"
         size="sm"
-        class="text-white/80 hover:text-white"
         onclick={() => goto(resolve("/(authenticated)/clock/config/[id]", { id }))}
       >
         <Settings class="size-4" />
@@ -182,7 +180,7 @@
     <!-- Stale indicator -->
     {#if isStale}
       <div class="fixed bottom-8 left-1/2 z-20 -translate-x-1/2">
-        <Badge variant="outline" class="border-white/50 px-4 py-2 text-white">
+        <Badge variant="overlay" size="lg">
           Data is {timeSince} old
         </Badge>
       </div>

@@ -72,12 +72,17 @@ const COMPONENT_SCRIPT_SYNTAX = [
 ];
 
 // @shadcn/lint only sees classes on known components, so a raw control escapes the
-// design system without a finding. Hidden inputs carry form state and render nothing.
-const RAW_CONTROL_SYNTAX = [
+// design system without a finding. Buttons are split out so a path can be let off
+// raw buttons alone (see `rawButtonFiles`).
+export const RAW_BUTTON_SYNTAX = [
   {
     selector: 'SvelteElement[kind="html"][name.name="button"]',
     message: "Use <Button> with a variant and size instead of a raw <button>. A pressed state is <Toggle>; a clickable card or row is <Item> with onclick or href; a single-select option card is <RadioGroup.Card>; an option in a popover list is <DropdownMenu.Item>; a chip's remove is <Badge onremove>; a remove that shows on hover is <Button reveal>."
-  },
+  }
+];
+
+// Hidden inputs carry form state and render nothing.
+export const RAW_MARKUP_SYNTAX = [
   {
     selector: 'SvelteElement[kind="html"][name.name="input"]:not(:has(SvelteAttribute[key.name="type"] > SvelteLiteral[value="hidden"]))',
     message: "Use <Input>, <Checkbox>, <Switch>, <RadioGroup> or <Slider> instead of a raw <input>. type=\"hidden\" is allowed."
@@ -189,12 +194,15 @@ export function nodeConfig({ ignores = [] } = {}) {
  * styling, so no-restyle, no-arbitrary-values and require-static-classes are off there,
  * and they may render raw controls. `noRestyle` holds shadcn/no-restyle's options, such
  * as a package's contracts. `shadcnSettings` is `settings.shadcn`, for a package whose
- * components.json does not name the component directory.
+ * components.json does not name the component directory. `rawButtonFiles` are globs
+ * where a raw <button> is allowed, for a surface drawn in a palette no Button variant
+ * carries; raw inputs, selects and textareas stay errors there.
  *
  * @param {{
  *   componentDirs?: string[],
  *   noRestyle?: Record<string, unknown>,
  *   shadcnSettings?: Record<string, unknown>,
+ *   rawButtonFiles?: string[],
  *   ignores?: string[]
  * }} [options]
  */
@@ -202,6 +210,7 @@ export function svelteConfig({
   componentDirs = [],
   noRestyle = { allow: ["layout"] },
   shadcnSettings,
+  rawButtonFiles = [],
   ignores = []
 } = {}) {
   return ts.config(
@@ -217,6 +226,12 @@ export function svelteConfig({
       )
     },
     testFileSecurity,
+    {
+      // ESLint's --report-unused-disable-directives never sees an HTML-comment directive
+      // in Svelte markup; this rule owns those.
+      files: ["**/*.svelte"],
+      rules: { "svelte/comment-directive": ["error", { reportUnusedDisableDirectives: true }] }
+    },
     {
       languageOptions: {
         globals: {
@@ -243,7 +258,7 @@ export function svelteConfig({
       files: SHADCN_FILES,
       ...(shadcnSettings ? { settings: { shadcn: shadcnSettings } } : {}),
       rules: {
-        "shadcn/no-restyle": ["warn", noRestyle],
+        "shadcn/no-restyle": ["error", noRestyle],
         "shadcn/no-raw-colors": ["error", { allow: RAW_COLOR_ALLOW, message: RAW_COLOR_HINT }],
         "shadcn/no-arbitrary-values": ["error", { allow: ["layout"], deny: ["text-[10px]", "text-[11px]"] }],
         "shadcn/no-inline-styles": "error",
@@ -269,17 +284,28 @@ export function svelteConfig({
     testFilePolicy,
     {
       // Flat config replaces no-restricted-syntax's options wholesale, so every .svelte
-      // selector lives in this block or the next, which covers its ignores.
+      // selector lives in this block or the two after it, which cover its ignores.
       files: ["**/*.svelte"],
       ignores: [...componentDirs, "**/*.test.svelte"],
       rules: {
-        "no-restricted-syntax": ["warn", ...COMPONENT_SCRIPT_SYNTAX, ...RAW_CONTROL_SYNTAX]
+        "no-restricted-syntax": ["error", ...COMPONENT_SCRIPT_SYNTAX, ...RAW_BUTTON_SYNTAX, ...RAW_MARKUP_SYNTAX]
       }
     },
+    ...(rawButtonFiles.length
+      ? [
+          {
+            files: rawButtonFiles,
+            ignores: [...componentDirs, "**/*.test.svelte"],
+            rules: {
+              "no-restricted-syntax": ["error", ...COMPONENT_SCRIPT_SYNTAX, ...RAW_MARKUP_SYNTAX]
+            }
+          }
+        ]
+      : []),
     {
       files: [...componentDirs.map((dir) => `${dir.replace(/\/\*\*$/, "")}/**/*.svelte`), "**/*.test.svelte"],
       rules: {
-        "no-restricted-syntax": ["warn", ...COMPONENT_SCRIPT_SYNTAX]
+        "no-restricted-syntax": ["error", ...COMPONENT_SCRIPT_SYNTAX]
       }
     }
   );

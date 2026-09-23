@@ -142,7 +142,7 @@
             <Command.Item
               value="__create_new__"
               onSelect={handleCreateNew}
-              class="cursor-pointer text-primary"
+              variant="create" class="cursor-pointer"
             >
               <Plus class="mr-2 h-4 w-4" />
               Create new event type...
@@ -152,7 +152,7 @@
             <Command.Item
               value="__none__"
               onSelect={clearSelection}
-              class="cursor-pointer text-muted-foreground"
+              variant="muted" class="cursor-pointer"
             >
               <Check
                 class={cn("mr-2 h-4 w-4", !value ? "opacity-100" : "opacity-0")}

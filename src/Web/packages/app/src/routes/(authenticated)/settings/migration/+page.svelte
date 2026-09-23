@@ -272,7 +272,7 @@
           <RefreshCw class="h-4 w-4" />
           Progress
           {#if hasActiveMigration}
-            <Badge variant="default" class="ml-1 animate-pulse">Active</Badge>
+            <Badge variant="default" live class="ml-1">Active</Badge>
           {/if}
         </Tabs.Trigger>
         <Tabs.Trigger value="history">
@@ -511,7 +511,7 @@
             <CardTitle class="flex items-center gap-2">
               Active Migration
               {#if hasActiveMigration}
-                <Badge variant="default" class="animate-pulse">Running</Badge>
+                <Badge variant="default" live>Running</Badge>
               {/if}
             </CardTitle>
             <CardDescription>

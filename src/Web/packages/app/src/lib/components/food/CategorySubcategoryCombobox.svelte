@@ -214,7 +214,7 @@
                     value={`${cat} > ${sub}`}
                     onSelect={() =>
                       selectCategorySubcategory(`${cat} > ${sub}`)}
-                    class="pl-6"
+                    inset
                   >
                     <Check
                       class={cn(
@@ -254,6 +254,7 @@
                 <Command.Item
                   value={`create-category-${searchTerm}`}
                   onSelect={handleCreateNewCategory}
+                  variant="create"
                 >
                   <Plus class="mr-2 size-4" />
                   Create category "{searchTerm}"
@@ -262,7 +263,7 @@
                 <Command.Item
                   value={`create-subcategory-${searchTerm}`}
                   onSelect={handleCreateNewSubcategory}
-                  class="pl-0"
+                  variant="create"
                 >
                   <SquarePlus class="mr-2 size-4" />
                   Create subcategory "{searchTerm}"

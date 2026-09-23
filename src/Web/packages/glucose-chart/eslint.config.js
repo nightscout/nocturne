@@ -11,6 +11,7 @@ export default [
     "shadcn/no-raw-colors": 5,
     "@typescript-eslint/no-explicit-any": 1,
     "svelte/prefer-svelte-reactivity": 1,
-    "shadcn/no-arbitrary-values": 10
+    "shadcn/no-arbitrary-values": 10,
+    "no-restricted-syntax": 6
   })
 ];

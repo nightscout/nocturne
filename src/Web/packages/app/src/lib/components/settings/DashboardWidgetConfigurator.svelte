@@ -161,7 +161,7 @@
               role="listitem"
             >
               <GripVertical class="h-4 w-4 text-muted-foreground cursor-grab" />
-              <Badge variant="outline" class="w-6 h-6 p-0 justify-center">
+              <Badge variant="outline" class="min-w-6 h-6 tabular-nums">
                 {index + 1}
               </Badge>
               <Icon class="h-4 w-4 text-muted-foreground" />

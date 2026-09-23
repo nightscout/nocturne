@@ -648,9 +648,8 @@
 </div>
 
 <Dialog.Root bind:open={replayOpen}>
-  <Dialog.Content
-    class="flex h-[90vh] max-h-[90vh] w-[calc(100vw-1rem)] max-w-6xl flex-col gap-0 overflow-hidden p-0 sm:w-[95vw] sm:max-w-7xl"
-  >
+  <!-- eslint-disable-next-line shadcn/no-restyle -- the replay workbench fills the viewport; its bordered header and scrolling body pad themselves, so the dialog cannot -->
+  <Dialog.Content class="flex h-[90vh] max-h-[90vh] w-[calc(100vw-1rem)] max-w-6xl flex-col gap-0 overflow-hidden p-0 sm:w-[95vw] sm:max-w-7xl">
     <Dialog.Header class="border-b px-4 py-3">
       <Dialog.Title class="flex items-center gap-2">
         <PlayCircle class="h-4 w-4" /> Replay
