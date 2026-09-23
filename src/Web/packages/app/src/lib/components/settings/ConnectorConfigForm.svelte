@@ -316,8 +316,7 @@
               <Badge variant="secondary">Modified</Badge>
               <Button
                 variant="ghost"
-                size="sm"
-                class="h-5 px-1"
+                size="icon-xs"
                 title="Reset to environment variable value"
                 onclick={() => resetToEnvVar(propName)}
               >
@@ -351,8 +350,7 @@
           <Badge variant="secondary">Modified</Badge>
           <Button
             variant="ghost"
-            size="sm"
-            class="h-5 px-1"
+            size="icon-xs"
             title="Reset to environment variable value"
             onclick={() => resetToEnvVar(propName)}
           >
@@ -390,8 +388,7 @@
           <Badge variant="secondary">Modified</Badge>
           <Button
             variant="ghost"
-            size="sm"
-            class="h-5 px-1"
+            size="icon-xs"
             title="Reset to environment variable value"
             onclick={() => resetToEnvVar(propName)}
           >
@@ -442,8 +439,7 @@
           <Badge variant="secondary">Modified</Badge>
           <Button
             variant="ghost"
-            size="sm"
-            class="h-5 px-1"
+            size="icon-xs"
             title="Reset to environment variable value"
             onclick={() => resetToEnvVar(propName)}
           >

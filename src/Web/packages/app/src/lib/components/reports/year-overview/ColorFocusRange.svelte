@@ -538,14 +538,13 @@
           <div class="flex items-center gap-1.5">
             <Button
               variant="outline"
-              size="sm"
-              class="h-6 px-2 text-[11px]"
+              size="xs"
               aria-pressed={invert}
               disabled={!usesCustomPalette}
               title={usesCustomPalette ? undefined : "Theme colors are fixed; pick a palette to invert"}
               onclick={() => onInvertChange?.(!invert)}
             >Invert</Button>
-            <Button variant="outline" size="sm" class="h-6 px-2 text-[11px]" aria-label={resetLabel} onclick={reset}>Reset</Button>
+            <Button variant="outline" size="xs" aria-label={resetLabel} onclick={reset}>Reset</Button>
           </div>
         </div>
       </div>
@@ -641,8 +640,8 @@
             {/each}
           </div>
           <div class="flex items-center gap-1.5">
-            <Button variant="outline" size="sm" class="h-6 px-2 text-[11px]" aria-pressed={invert} onclick={() => onInvertChange?.(!invert)}>Invert</Button>
-            <Button variant="outline" size="sm" class="h-6 px-2 text-[11px]" aria-label={resetLabel} onclick={reset}>Reset</Button>
+            <Button variant="outline" size="xs" aria-pressed={invert} onclick={() => onInvertChange?.(!invert)}>Invert</Button>
+            <Button variant="outline" size="xs" aria-label={resetLabel} onclick={reset}>Reset</Button>
           </div>
         </div>
       </div>

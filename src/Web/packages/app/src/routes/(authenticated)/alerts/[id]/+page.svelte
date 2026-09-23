@@ -616,9 +616,9 @@
                     </Button>
                     {#if dayInReviewHref(h.startedAt)}
                       <Button
-                        variant="ghost"
-                        size="icon"
-                        class="h-6 w-6 shrink-0 text-muted-foreground"
+                        variant="ghost-muted"
+                        size="icon-xs"
+                        class="shrink-0"
                         href={dayInReviewHref(h.startedAt)}
                         title="Open day in review"
                         aria-label="Open day in review"

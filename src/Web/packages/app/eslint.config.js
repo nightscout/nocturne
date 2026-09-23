@@ -9,6 +9,11 @@ import ts from 'typescript-eslint';
 
 import noImperativeRemoteQuery from "./tools/eslint/no-imperative-remote-query.js";
 
+// {{variants}} and {{sizes}} come out empty for Button: the lint does not follow
+// button.svelte to button-variants.ts. Keep these names in step with that file.
+const BUTTON_VARIANT_HINT =
+  "\"{{className}}\" is not allowed on <Button>: it owns its {{category}}. Use a variant: ghost-muted (quiet secondary action), ghost-destructive (quiet remove), outline-destructive (bordered remove), dashed (add-item placeholder), or default, secondary, outline, ghost, link, destructive.";
+
 export default ts.config(
   js.configs.recommended,
   ...ts.configs.recommended,
@@ -56,7 +61,19 @@ export default ts.config(
           { pattern: "^(Card|Dialog|Sheet|AlertDialog)Title$", allow: ["layout", "typography", "gap"] },
           { pattern: "^(Input|SelectTrigger)$", allow: ["layout", "tabular-nums", "font-mono"] },
           // A placeholder takes the radius of the content it stands in for.
-          { pattern: "^Skeleton$", allow: ["layout", "rounded"] }
+          { pattern: "^Skeleton$", allow: ["layout", "rounded"] },
+          {
+            pattern: "^Button$",
+            allow: ["layout"],
+            message: {
+              color: BUTTON_VARIANT_HINT,
+              shape: BUTTON_VARIANT_HINT,
+              effects: BUTTON_VARIANT_HINT,
+              motion: BUTTON_VARIANT_HINT,
+              spacing: "\"{{className}}\" is not allowed on <Button>: it owns its padding and gap. Use a size: xs (h-6, text-xs), sm, default, lg, icon-xs (size-6), icon-sm (size-8), icon (size-9), or inline (no padding, a link in running text). For space around it, use margin or gap on the parent.",
+              typography: "\"{{className}}\" is not allowed on <Button>: it owns its type. size=\"xs\" gives text-xs; every other size is text-sm font-medium."
+            }
+          }
         ]
       }],
       "shadcn/no-raw-colors": "warn",

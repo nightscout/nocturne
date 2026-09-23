@@ -105,10 +105,9 @@
           <Label>Alarm Sound</Label>
           <Button
             variant="ghost"
-            size="sm"
+            size="xs"
             onclick={() =>
               (showCustomSoundUpload = !showCustomSoundUpload)}
-            class="h-7 text-xs"
           >
             <Upload class="h-3 w-3 mr-1" />
             {showCustomSoundUpload ? "Hide" : "Manage"} Custom Sounds

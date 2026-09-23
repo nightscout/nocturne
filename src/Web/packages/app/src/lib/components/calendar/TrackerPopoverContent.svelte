@@ -91,9 +91,9 @@
         Age: {formatTrackerAge(event.instance.ageHours)}
       </div>
       <Button
-        size="sm"
+        size="xs"
         variant="outline"
-        class="mt-2 w-full h-7 text-xs"
+        class="mt-2 w-full"
         onclick={() =>
           openCompletionDialog(
             event.instance,

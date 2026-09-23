@@ -188,7 +188,6 @@
             <Button
               variant={platformFilter === UploaderPlatform.IOS ? "default" : "outline"}
               size="sm"
-              class="gap-1.5"
               onclick={() => (platformFilter = UploaderPlatform.IOS)}
             >
               <Apple class="h-3.5 w-3.5" />
@@ -197,7 +196,6 @@
             <Button
               variant={platformFilter === UploaderPlatform.Android ? "default" : "outline"}
               size="sm"
-              class="gap-1.5"
               onclick={() => (platformFilter = UploaderPlatform.Android)}
             >
               <Smartphone class="h-3.5 w-3.5" />

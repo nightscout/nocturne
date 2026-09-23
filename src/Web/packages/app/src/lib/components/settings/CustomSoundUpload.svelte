@@ -297,9 +297,8 @@
               {/if}
             </Button>
             <Button
-              variant="ghost"
+              variant="ghost-destructive"
               size="icon"
-              class="text-destructive hover:text-destructive"
               onclick={() => handleDelete(sound)}
               title="Delete"
             >

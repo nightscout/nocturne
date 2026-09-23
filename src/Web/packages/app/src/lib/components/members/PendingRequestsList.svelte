@@ -153,8 +153,8 @@
         <!-- Actions -->
         <div class="flex gap-3">
           <Button
-            variant="outline"
-            class="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10"
+            variant="outline-destructive"
+            class="flex-1"
             disabled={isBusy}
             onclick={() => handleDeny(request.id ?? "")}
           >

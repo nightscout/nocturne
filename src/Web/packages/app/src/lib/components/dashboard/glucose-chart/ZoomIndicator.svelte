@@ -24,7 +24,7 @@
         </span>
       {/if}
     </div>
-    <Button variant="ghost" size="sm" class="flex items-center gap-1 text-xs text-primary" onclick={onResetZoom}>
+    <Button variant="link" size="xs" onclick={onResetZoom}>
       <RotateCcw size={12} />
       Reset zoom
     </Button>

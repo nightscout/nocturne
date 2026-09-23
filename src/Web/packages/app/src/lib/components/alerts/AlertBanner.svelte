@@ -95,8 +95,7 @@
           {#if !alert.acknowledgedAt}
             <Button
               variant="outline"
-              size="sm"
-              class="h-7 text-xs"
+              size="xs"
               onclick={() => handleAcknowledge(alert.id ?? "")}
               disabled={acknowledgingId === alert.id}
             >

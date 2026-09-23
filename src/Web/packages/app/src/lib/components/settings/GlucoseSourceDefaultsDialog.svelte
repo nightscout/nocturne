@@ -145,9 +145,9 @@
             </div>
 
             <Button
-              variant="ghost"
-              size="sm"
-              class="h-8 w-8 shrink-0 p-0 text-muted-foreground hover:text-destructive"
+              variant="ghost-destructive"
+              size="icon-sm"
+              class="shrink-0"
               onclick={() => removeRule(index)}
             >
               <Trash2 class="h-4 w-4" />

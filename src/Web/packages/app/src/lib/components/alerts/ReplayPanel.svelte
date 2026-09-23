@@ -527,8 +527,8 @@
         <div class="border-b p-2">
           <Button
             variant="ghost"
-            size="sm"
-            class="w-full justify-start text-xs"
+            size="xs"
+            class="w-full justify-start"
             onclick={clearDate}
           >
             Last 24 hours
@@ -574,7 +574,7 @@
       <Button
         variant="outline"
         href={dayInReviewHref}
-        class="ml-auto h-8 font-normal"
+        class="ml-auto h-8"
         title="Open Day in Review for this day"
       >
         <CalendarDays class="h-3.5 w-3.5 text-muted-foreground" />

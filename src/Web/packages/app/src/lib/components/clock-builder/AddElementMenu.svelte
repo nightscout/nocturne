@@ -42,8 +42,7 @@
             {#each group.types as type}
               <Button
                 variant="outline"
-                size="sm"
-                class="h-7 text-xs"
+                size="xs"
                 onclick={() => onAddElement(type, position)}
               >
                 {ELEMENT_INFO[type].name}

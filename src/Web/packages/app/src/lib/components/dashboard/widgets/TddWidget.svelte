@@ -27,9 +27,9 @@
 <WidgetCard title="Total Daily Dose">
   {#snippet subtitleSnippet()}
     <Button
-      variant="ghost"
-      size="sm"
-      class="h-5 px-1.5 text-xs text-muted-foreground hover:text-foreground -ml-1.5"
+      variant="ghost-muted"
+      size="xs"
+      class="-ml-2"
       onclick={toggleView}
     >
       {showAverage ? "90-Day Avg" : "Today"}

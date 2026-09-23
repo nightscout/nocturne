@@ -329,9 +329,9 @@
     {#if shiftHeld}
       <Button
         type="button"
-        variant="ghost"
+        variant="ghost-destructive"
         size="icon"
-        class="h-7 w-7 shrink-0 text-destructive hidden group-hover/row:inline-flex"
+        class="h-7 w-7 shrink-0 hidden group-hover/row:inline-flex"
         aria-label="Remove condition (shift+click shortcut)"
         onclick={() => removeChild(parent, index)}
       >

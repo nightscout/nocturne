@@ -243,9 +243,9 @@
             </div>
             {#if insulin.id}
               <Button
-                variant="ghost"
+                variant="ghost-destructive"
                 size="icon"
-                class="shrink-0 text-muted-foreground hover:text-destructive"
+                class="shrink-0"
                 onclick={() => insulinList.remove(insulin.id!)}
               >
                 <Trash2 class="h-4 w-4" />

@@ -65,8 +65,7 @@
       <span class="text-destructive">Predictions unavailable</span>
       <Button
         variant="ghost"
-        size="sm"
-        class="h-6 px-2 text-xs"
+        size="xs"
         onclick={reset}
       >
         <RefreshCw class="h-3 w-3 mr-1" />

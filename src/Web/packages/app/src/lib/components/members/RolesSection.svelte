@@ -231,9 +231,8 @@
             </Button>
             {#if !role.isSystem}
               <Button
-                variant="outline"
+                variant="outline-destructive"
                 size="sm"
-                class="border-destructive/30 text-destructive hover:bg-destructive/10"
                 onclick={() => openDeleteDialog(role)}
               >
                 <Trash2 class="h-3.5 w-3.5" />

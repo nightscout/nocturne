@@ -28,7 +28,7 @@
       variant="ghost"
       size="sm"
       href="/settings/connectors"
-      class="gap-1 -ml-2 mb-4"
+      class="-ml-2 mb-4"
     >
       <ChevronLeft class="h-4 w-4" />
       Back to connectors

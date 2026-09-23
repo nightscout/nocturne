@@ -158,10 +158,9 @@
         <div class="flex items-center gap-3">
           {#if unreadCount > 0}
             <Button
-              variant="ghost"
-              size="sm"
+              variant="ghost-muted"
+              size="xs"
               onclick={handleMarkAllRead}
-              class="h-auto gap-1 px-2 py-1 text-xs text-muted-foreground"
             >
               <CheckCheck class="h-3.5 w-3.5" />
               Mark all read

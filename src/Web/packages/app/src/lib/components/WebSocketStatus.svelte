@@ -102,9 +102,8 @@
       {#if !isConnected}
         <Button
           variant="outline"
-          size="sm"
+          size="xs"
           onclick={handleReconnect}
-          class="h-6 px-2 text-xs"
         >
           Retry
         </Button>

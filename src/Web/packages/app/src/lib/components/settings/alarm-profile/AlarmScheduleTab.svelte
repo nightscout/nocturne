@@ -78,9 +78,8 @@
               />
               {#if profile.schedule.activeRanges.length > 1}
                 <Button
-                  variant="ghost"
+                  variant="ghost-destructive"
                   size="icon"
-                  class="text-destructive"
                   onclick={() => removeTimeRange(index)}
                 >
                   ×

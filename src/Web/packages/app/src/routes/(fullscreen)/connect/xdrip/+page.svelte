@@ -99,7 +99,7 @@
             href="https://github.com/NightscoutFoundation/xDrip/releases"
             target="_blank"
             variant="link"
-            class="px-0"
+            size="inline"
           >
             <ExternalLink class="mr-1 h-3 w-3" />
             Download xDrip+

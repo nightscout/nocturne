@@ -181,9 +181,8 @@
                 </Button>
                 <Button
                   type="button"
-                  variant="ghost"
+                  variant="ghost-destructive"
                   size="icon"
-                  class="text-destructive"
                   onclick={() => handleDelete(entry)}
                 >
                   <Trash2 class="h-4 w-4" />

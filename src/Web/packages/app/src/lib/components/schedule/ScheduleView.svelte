@@ -259,9 +259,8 @@
             {/if}
             <Table.Cell>
               <Button
-                variant="ghost"
-                size="icon"
-                class="h-8 w-8 text-destructive hover:text-destructive"
+                variant="ghost-destructive"
+                size="icon-sm"
                 disabled={entries.length <= 1}
                 onclick={() => removeEntry(i)}
               >

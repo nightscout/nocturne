@@ -342,8 +342,8 @@
 {#snippet otherMethodLinks()}
   <Button
     variant="link"
-    size="sm"
-    class="h-auto p-0 text-xs"
+    size="inline"
+    class="text-xs"
     onclick={() => switchMode("recovery")}
     disabled={isLoading}
   >
@@ -354,8 +354,8 @@
 {#snippet backToSignIn(label: string)}
   <Button
     variant="link"
-    size="sm"
-    class="h-auto p-0 text-xs"
+    size="inline"
+    class="text-xs"
     onclick={() => switchMode("default")}
     disabled={isLoading}
   >

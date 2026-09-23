@@ -477,7 +477,7 @@
   <Button
     variant="ghost"
     size="sm"
-    class="-ml-3 h-8 data-[state=open]:bg-accent"
+    class="-ml-3 h-8"
     onclick={() => column.toggleSorting()}
   >
     {label}
@@ -535,9 +535,8 @@
   <div class="flex items-center gap-1">
     {#if onDelete}
       <Button
-        variant="ghost"
-        size="sm"
-        class="h-8 w-8 p-0 text-destructive hover:text-destructive"
+        variant="ghost-destructive"
+        size="icon-sm"
         onclick={() => onDelete(entry)}
         title="Delete"
       >

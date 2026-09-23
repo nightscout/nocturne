@@ -77,9 +77,8 @@
     {#snippet child({ props }: { props: Record<string, unknown> })}
       <Button
         {...props}
-        variant="outline"
+        variant="dashed"
         size="sm"
-        class="border-dashed text-muted-foreground"
       >
         <Plus class="h-4 w-4 mr-2" /> Add condition
       </Button>

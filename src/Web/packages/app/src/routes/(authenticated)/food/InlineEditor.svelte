@@ -259,7 +259,7 @@
 		</div>
 
 		<div class="flex items-center gap-2">
-			<Button variant="ghost" size="sm" class="text-destructive hover:text-destructive" onclick={handleDeleteClick}><Trash2 class="h-3.5 w-3.5" /> Delete</Button>
+			<Button variant="ghost-destructive" size="sm" onclick={handleDeleteClick}><Trash2 class="h-3.5 w-3.5" /> Delete</Button>
 			<Button variant="outline" size="sm" onclick={oncancel}>Cancel</Button>
 			<Button type="submit" size="sm"><Check class="h-3.5 w-3.5" /> Save changes</Button>
 		</div>

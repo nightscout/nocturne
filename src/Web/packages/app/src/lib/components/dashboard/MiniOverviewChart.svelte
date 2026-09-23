@@ -127,7 +127,7 @@
   >
     <span class="font-medium">Full Range Overview</span>
     {#if showReset}
-      <Button variant="ghost" size="sm" class="flex items-center gap-1 text-[10px] text-primary" onclick={resetSelection}>
+      <Button variant="link" size="xs" onclick={resetSelection}>
         <RotateCcw size={10} />
         Reset zoom
       </Button>

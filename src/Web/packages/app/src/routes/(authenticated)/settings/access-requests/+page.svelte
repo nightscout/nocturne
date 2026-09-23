@@ -304,9 +304,8 @@
                 {#snippet trigger(props)}
                   <Button
                     {...props}
-                    variant="outline"
+                    variant="outline-destructive"
                     size="sm"
-                    class="text-destructive border-destructive/30 hover:bg-destructive/10"
                     disabled={denyingId === subjectId}
                   >
                     {#if denyingId === subjectId}

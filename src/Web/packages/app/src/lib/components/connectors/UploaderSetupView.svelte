@@ -242,7 +242,7 @@
   <Button
     variant="ghost"
     size="sm"
-    class="gap-1 -ml-2"
+    class="-ml-2"
     onclick={onBack}
   >
     <ChevronLeft class="h-4 w-4" />

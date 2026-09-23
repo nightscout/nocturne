@@ -95,7 +95,7 @@
 <div class="container mx-auto p-6 max-w-2xl space-y-5">
   <!-- Header -->
   <div class="flex flex-col gap-3">
-    <Button variant="ghost" size="sm" href="/tools/packing" class="gap-1 -ml-2 w-fit">
+    <Button variant="ghost" size="sm" href="/tools/packing" class="-ml-2 w-fit">
       <ArrowLeft class="h-4 w-4" />
       Back to calculator
     </Button>
@@ -142,8 +142,7 @@
             </CardTitle>
             <Button
               variant="ghost"
-              size="sm"
-              class="h-7 px-2 text-xs"
+              size="xs"
               onclick={() => startAdding(category)}
             >
               <Plus class="h-3 w-3 mr-1" />
@@ -213,8 +212,7 @@
               </Button>
               <Button
                 variant="ghost"
-                size="sm"
-                class="h-8 px-2"
+                size="icon-sm"
                 onclick={() => (addingToCategory = null)}
               >
                 <X class="h-4 w-4" />
@@ -253,8 +251,7 @@
             </Button>
             <Button
               variant="ghost"
-              size="sm"
-              class="h-8 px-2"
+              size="icon-sm"
               onclick={() => (addingToCategory = null)}
             >
               <X class="h-4 w-4" />

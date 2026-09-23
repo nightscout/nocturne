@@ -206,9 +206,9 @@
             </div>
             {#if device.id}
               <Button
-                variant="ghost"
+                variant="ghost-destructive"
                 size="icon"
-                class="shrink-0 text-muted-foreground hover:text-destructive"
+                class="shrink-0"
                 onclick={() => deviceList.remove(device.id!)}
               >
                 <Trash2 class="h-4 w-4" />

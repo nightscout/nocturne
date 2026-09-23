@@ -12,7 +12,7 @@
   <!-- Breadcrumb navigation for subpages on mobile -->
   {#if isSubpage}
     <div class="md:hidden border-b border-border px-4 py-2">
-      <Button variant="ghost" size="sm" href="/settings" class="gap-1 -ml-2">
+      <Button variant="ghost" size="sm" href="/settings" class="-ml-2">
         <ChevronLeft class="h-4 w-4" />
         Settings
       </Button>

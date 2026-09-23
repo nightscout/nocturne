@@ -159,9 +159,9 @@
                  would discard the tracker edits made so far. -->
             {#if notification.alertRuleId}
               <Button
-                variant="ghost"
+                variant="ghost-muted"
                 size="sm"
-                class="h-9 text-muted-foreground"
+                class="h-9"
                 href="/alerts/{notification.alertRuleId}"
                 target="_blank"
                 rel="noopener"
@@ -172,10 +172,9 @@
               </Button>
             {/if}
             <Button
-              variant="ghost"
+              variant="ghost-destructive"
               size="icon"
               type="button"
-              class="h-9 w-9 text-muted-foreground hover:text-destructive"
               onclick={() => removeNotification(i)}
             >
               <Trash2 class="h-4 w-4" />

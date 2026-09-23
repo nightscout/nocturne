@@ -268,8 +268,8 @@
                       {:else}
                         <Button
                           variant="link"
-                          size="sm"
-                          class="h-auto p-0 text-xs text-muted-foreground"
+                          size="inline"
+                          class="text-xs text-muted-foreground"
                           onclick={(e: MouseEvent) => { e.preventDefault(); handleSetActive(profileName); }}
                           disabled={switchingProfile !== null}
                         >

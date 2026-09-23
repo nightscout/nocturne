@@ -144,9 +144,9 @@
       {#if !breakdown.foods || breakdown.foods.length === 0}
         <Button
           type="button"
-          variant="ghost"
+          variant="dashed"
           onclick={() => (showAddFood = true)}
-          class="h-auto w-full justify-center border border-dashed p-4 font-normal text-muted-foreground"
+          class="h-auto w-full justify-center p-4"
         >
           <Plus class="mr-1.5 h-4 w-4" />
           Add a food to this carb entry
@@ -175,9 +175,8 @@
                 </Button>
                 <Button
                   type="button"
-                  variant="ghost"
+                  variant="ghost-destructive"
                   size="icon"
-                  class="text-destructive"
                   onclick={() => handleDelete(entry)}
                 >
                   <Trash2 class="h-4 w-4" />
@@ -188,9 +187,9 @@
         </div>
         <Button
           type="button"
-          variant="ghost"
+          variant="dashed"
           onclick={() => (showAddFood = true)}
-          class="h-auto w-full justify-center border border-dashed p-3 font-normal text-muted-foreground"
+          class="h-auto w-full justify-center p-3"
         >
           <Plus class="mr-1.5 h-4 w-4" />
           Add food

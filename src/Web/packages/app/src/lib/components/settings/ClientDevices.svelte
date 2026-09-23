@@ -214,9 +214,8 @@
                     <Button
                       {...props}
                       type="button"
-                      variant="outline"
+                      variant="outline-destructive"
                       size="sm"
-                      class="text-destructive border-destructive/30 hover:bg-destructive/10"
                       disabled={isRevoking === device.id}
                     >
                       {#if isRevoking === device.id}

@@ -152,8 +152,7 @@
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
-                class="h-7 px-2 text-xs"
+                size="xs"
                 onclick={() => snooze(a.id ?? "", 5)}
               >
                 5m
@@ -161,8 +160,7 @@
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
-                class="h-7 px-2 text-xs"
+                size="xs"
                 onclick={() => snooze(a.id ?? "", 15)}
               >
                 15m
@@ -170,8 +168,7 @@
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
-                class="h-7 px-2 text-xs"
+                size="xs"
                 onclick={() => snooze(a.id ?? "", 30)}
               >
                 30m
@@ -179,8 +176,7 @@
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
-                class="h-7 px-2 text-xs"
+                size="xs"
                 onclick={() => snooze(a.id ?? "", 60)}
               >
                 1h
@@ -191,8 +187,8 @@
               <Button
                 type="button"
                 variant="ghost"
-                size="sm"
-                class="h-7 px-2 text-xs ml-auto"
+                size="xs"
+                class="ml-auto"
                 onclick={() => ack(a.id ?? "")}
               >
                 Acknowledge
@@ -201,8 +197,7 @@
                 <Button
                   type="button"
                   variant="ghost"
-                  size="sm"
-                  class="h-7 px-2 text-xs"
+                  size="xs"
                   href="/alerts/{a.alertRuleId}"
                   title="Open this rule's settings"
                   aria-label="Open settings for {a.ruleName ?? 'this rule'}"

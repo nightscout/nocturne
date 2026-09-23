@@ -170,9 +170,8 @@
                 </div>
               </div>
               <Button
-                variant="ghost"
-                size="sm"
-                class="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                variant="ghost-muted"
+                size="icon-sm"
                 onclick={() => removeWidget(index)}
               >
                 <X class="h-4 w-4" />

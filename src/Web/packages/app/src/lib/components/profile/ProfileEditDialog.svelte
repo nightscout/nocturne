@@ -412,9 +412,8 @@
                         </Table.Cell>
                         <Table.Cell>
                           <Button
-                            variant="ghost"
-                            size="icon"
-                            class="h-8 w-8 text-destructive"
+                            variant="ghost-destructive"
+                            size="icon-sm"
                             onclick={() => removeTimeValue("target_low", i)}
                           >
                             <Trash2 class="h-4 w-4" />
@@ -485,9 +484,8 @@
                         </Table.Cell>
                         <Table.Cell>
                           <Button
-                            variant="ghost"
-                            size="icon"
-                            class="h-8 w-8 text-destructive"
+                            variant="ghost-destructive"
+                            size="icon-sm"
                             onclick={() => removeTimeValue("target_high", i)}
                           >
                             <Trash2 class="h-4 w-4" />
@@ -616,9 +614,8 @@
             </Table.Cell>
             <Table.Cell>
               <Button
-                variant="ghost"
-                size="icon"
-                class="h-8 w-8 text-destructive hover:text-destructive"
+                variant="ghost-destructive"
+                size="icon-sm"
                 onclick={() => removeTimeValue(field, i)}
               >
                 <Trash2 class="h-4 w-4" />

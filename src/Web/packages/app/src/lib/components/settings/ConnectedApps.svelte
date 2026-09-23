@@ -154,9 +154,9 @@
                 <Button
                   {...props}
                   type="button"
-                  variant="outline"
+                  variant="outline-destructive"
                   size="sm"
-                  class="text-destructive border-destructive/30 hover:bg-destructive/10 shrink-0"
+                  class="shrink-0"
                   disabled={isRevoking === app.grantId}
                 >
                   {#if isRevoking === app.grantId}

@@ -472,9 +472,9 @@
                 </div>
                 {#if link.status === GuestLinkStatus.Active || (isTerminal(link) && !link.dismissedAt)}
                   <Button
-                    variant="ghost"
+                    variant="ghost-muted"
                     size="sm"
-                    class="text-muted-foreground hover:text-foreground shrink-0"
+                    class="shrink-0"
                     disabled={reissuingId === link.id}
                     onclick={() => handleReissue(link)}
                   >
@@ -488,9 +488,9 @@
                 {/if}
                 {#if canRevoke(link)}
                   <Button
-                    variant="ghost"
+                    variant="ghost-destructive"
                     size="sm"
-                    class="text-destructive hover:text-destructive shrink-0"
+                    class="shrink-0"
                     disabled={pendingIds.has(link.id!)}
                     onclick={() => handleRevoke(link.id!)}
                   >
@@ -499,9 +499,9 @@
                   </Button>
                 {:else if isTerminal(link) && !link.dismissedAt}
                   <Button
-                    variant="ghost"
+                    variant="ghost-muted"
                     size="sm"
-                    class="text-muted-foreground hover:text-foreground shrink-0"
+                    class="shrink-0"
                     disabled={pendingIds.has(link.id!)}
                     onclick={() => handleDismiss(link.id!)}
                   >

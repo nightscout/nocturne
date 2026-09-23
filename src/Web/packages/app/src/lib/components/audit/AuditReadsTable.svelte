@@ -348,7 +348,7 @@
   <Button
     variant="ghost"
     size="sm"
-    class="-ml-3 h-8 data-[state=open]:bg-accent"
+    class="-ml-3 h-8"
     onclick={() => column.toggleSorting()}
   >
     {label}
@@ -518,8 +518,7 @@
                   >
                   <Button
                     variant="ghost"
-                    size="sm"
-                    class="h-6 w-6 p-0"
+                    size="icon-xs"
                     onclick={() => (expandedId = null)}
                   >
                     <ChevronUp class="h-3 w-3" />

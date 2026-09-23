@@ -10,7 +10,7 @@
 <div class="flex flex-col min-h-full">
   {#if isSubpage}
     <div class="md:hidden border-b border-border px-4 py-2">
-      <Button variant="ghost" size="sm" href="/tools" class="gap-1 -ml-2">
+      <Button variant="ghost" size="sm" href="/tools" class="-ml-2">
         <ChevronLeft class="h-4 w-4" />
         Tools
       </Button>

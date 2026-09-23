@@ -391,7 +391,7 @@
                 href="/reports/agp"
                 variant="ghost"
                 size="sm"
-                class="shrink-0 gap-1.5 self-start @sm:self-auto"
+                class="shrink-0 self-start @sm:self-auto"
               >
                 Full Report
                 <ArrowRight class="h-4 w-4" />

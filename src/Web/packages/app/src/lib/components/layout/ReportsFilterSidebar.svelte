@@ -156,9 +156,8 @@
             {#each dayPresets as preset}
               <Button
                 variant={selectedDays === preset.days ? "default" : "outline"}
-                size="sm"
+                size="xs"
                 onclick={() => selectPreset(preset.days)}
-                class="text-xs"
               >
                 {preset.label}
               </Button>

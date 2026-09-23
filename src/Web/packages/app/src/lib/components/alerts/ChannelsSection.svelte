@@ -212,8 +212,8 @@
                   <Button
                     type="button"
                     variant="ghost"
-                    size="sm"
-                    class="h-8 shrink-0 text-xs"
+                    size="xs"
+                    class="shrink-0"
                     onclick={() => {
                       channels[i].hasSecret = false;
                       channels[i].secret = "";
@@ -256,9 +256,8 @@
         <Button
           {...props}
           type="button"
-          variant="outline"
+          variant="dashed"
           size="sm"
-          class="border-dashed text-muted-foreground"
         >
           <Plus class="h-4 w-4 mr-2" /> Add channel
         </Button>

@@ -100,7 +100,7 @@
             href="https://github.com/nightscout/prelude/releases"
             target="_blank"
             variant="link"
-            class="px-0"
+            size="inline"
           >
             <ExternalLink class="mr-1 h-3 w-3" />
             Download Prelude
