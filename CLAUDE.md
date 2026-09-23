@@ -30,8 +30,8 @@ dotnet test tests/E2E/Nocturne.E2E.Tests -p:RunE2E=true
 # Frontend type checking
 cd src/Web/packages/app && pnpm run check
 
-# Lint the frontend before pushing (CI gate: no errors, warnings capped in app/package.json)
-cd src/Web && pnpm --filter @nocturne/app lint:ci
+# Lint the frontend before pushing (CI gate: no errors, warnings capped in each package's lint:ci)
+cd src/Web && pnpm --recursive --no-bail run lint:ci
 
 # Seed a loginable tenant with sample data (stack must be running; see README
 # "Multitenancy and Passkeys"). Response has url + loginLink (browser session).
