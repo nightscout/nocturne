@@ -36,7 +36,7 @@
     joined &&
       "rounded-none first:rounded-l-md last:rounded-r-md data-[variant=outline]:border-l-0 data-[variant=outline]:first:border-l",
     segmented &&
-      "text-muted-foreground hover:text-foreground hover:bg-transparent data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-xs",
+      "min-w-fit text-muted-foreground hover:text-foreground hover:bg-transparent data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-xs",
     className
   )}
   {value}
