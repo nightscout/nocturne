@@ -115,7 +115,7 @@
               y={context.yScale(bgValue(180))}
               width={context.width}
               height={context.yScale(bgValue(70)) - context.yScale(bgValue(180))}
-              fill="hsl(var(--success))"
+              fill="var(--success)"
               fill-opacity="0.1"
             />
             <line
@@ -123,7 +123,7 @@
               x2={context.width}
               y1={context.yScale(bgValue(180))}
               y2={context.yScale(bgValue(180))}
-              stroke="hsl(var(--destructive))"
+              stroke="var(--destructive)"
               stroke-width="1"
               stroke-dasharray="5,5"
               opacity="0.7"
@@ -133,7 +133,7 @@
               x2={context.width}
               y1={context.yScale(bgValue(70))}
               y2={context.yScale(bgValue(70))}
-              stroke="hsl(var(--destructive))"
+              stroke="var(--destructive)"
               stroke-width="1"
               stroke-dasharray="5,5"
               opacity="0.7"
@@ -156,9 +156,9 @@
                 y={yQ3}
                 width={boxHalfWidth * 2}
                 height={yQ1 - yQ3}
-                fill="hsl(var(--primary))"
+                fill="var(--primary)"
                 fill-opacity="0.3"
-                stroke="hsl(var(--primary))"
+                stroke="var(--primary)"
                 stroke-width="2"
               />
               <!-- Median line -->
@@ -167,7 +167,7 @@
                 x2={cx + boxHalfWidth}
                 y1={yMedian}
                 y2={yMedian}
-                stroke="hsl(var(--primary))"
+                stroke="var(--primary)"
                 stroke-width="3"
               />
               <!-- Upper whisker -->
@@ -176,7 +176,7 @@
                 x2={cx}
                 y1={yQ3}
                 y2={yMax}
-                stroke="hsl(var(--primary))"
+                stroke="var(--primary)"
                 stroke-width="1"
               />
               <!-- Lower whisker -->
@@ -185,7 +185,7 @@
                 x2={cx}
                 y1={yQ1}
                 y2={yMin}
-                stroke="hsl(var(--primary))"
+                stroke="var(--primary)"
                 stroke-width="1"
               />
               <!-- Whisker caps -->
@@ -194,7 +194,7 @@
                 x2={cx + capHalfWidth}
                 y1={yMax}
                 y2={yMax}
-                stroke="hsl(var(--primary))"
+                stroke="var(--primary)"
                 stroke-width="1"
               />
               <line
@@ -202,7 +202,7 @@
                 x2={cx + capHalfWidth}
                 y1={yMin}
                 y2={yMin}
-                stroke="hsl(var(--primary))"
+                stroke="var(--primary)"
                 stroke-width="1"
               />
               <!-- Outliers -->
@@ -211,8 +211,8 @@
                   cx={cx}
                   cy={context.yScale(outlier)}
                   r="2"
-                  fill="hsl(var(--destructive))"
-                  stroke="hsl(var(--destructive))"
+                  fill="var(--destructive)"
+                  stroke="var(--destructive)"
                   stroke-width="1"
                 />
               {/each}

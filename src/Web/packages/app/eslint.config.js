@@ -200,6 +200,14 @@ export default ts.config(
         {
           selector: 'SvelteElement[kind="html"][name.name="textarea"]',
           message: "Use <Textarea> instead of a raw <textarea>."
+        },
+        {
+          selector: "Literal[value=/hsl\\(var\\(--/]",
+          message: "Theme variables are oklch; use var(--x) or color-mix(in oklch, var(--x) N%, transparent), not hsl(var(--x))."
+        },
+        {
+          selector: "TemplateElement[value.raw=/hsl\\(var\\(--/]",
+          message: "Theme variables are oklch; use var(--x) or color-mix(in oklch, var(--x) N%, transparent), not hsl(var(--x))."
         }
       ]
     }

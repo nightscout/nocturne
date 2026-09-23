@@ -251,8 +251,8 @@
 
 <style>
   .mini-overview-chart {
-    border-top: 1px solid hsl(var(--border));
-    background: hsl(var(--muted) / 0.3);
+    border-top: 1px solid var(--border);
+    background: color-mix(in oklch, var(--muted) 30%, transparent);
     border-radius: 0 0 var(--radius) var(--radius);
   }
 </style>

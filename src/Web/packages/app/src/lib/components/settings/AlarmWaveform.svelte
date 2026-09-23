@@ -33,8 +33,8 @@
     isPlaying = false,
     width = 200,
     height = 60,
-    color = "hsl(var(--muted-foreground) / 0.4)",
-    progressColor = "hsl(var(--primary))",
+    color = "color-mix(in oklch, var(--muted-foreground) 40%, transparent)",
+    progressColor = "var(--primary)",
     barWidth = 3,
   }: Props = $props();
 

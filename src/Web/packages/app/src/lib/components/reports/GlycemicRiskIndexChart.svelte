@@ -41,7 +41,7 @@
       const t = i / (n - 1);
       const gray = Math.round(t * 255);
       const fill = `rgb(${gray}, ${gray}, ${gray})`;
-      const stroke = gray > 200 ? "hsl(var(--border))" : fill;
+      const stroke = gray > 200 ? "var(--border)" : fill;
 
       return {
         ...period,
@@ -229,7 +229,7 @@
                       y1={context.yScale(prev.hyper)}
                       x2={context.xScale(point.hypo)}
                       y2={context.yScale(point.hyper)}
-                      stroke="hsl(var(--muted-foreground))"
+                      stroke="var(--muted-foreground)"
                       stroke-width="1"
                       stroke-dasharray="2,2"
                     />
