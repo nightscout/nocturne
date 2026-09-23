@@ -67,7 +67,6 @@ const MASK_MAJORITY: u32 = 5u;
 const MASK_THIN: u32 = 2u;
 const MAX_PIGMENTS: u32 = 8u;
 
-fn o_wet() -> u32 { return 0u; }
 fn o_p() -> u32 { return 3u * R.n; }
 fn o_g(k: u32) -> u32 { return (8u + k) * R.n; }
 fn o_d(k: u32) -> u32 { return (8u + R.pigment_count + k) * R.n; }

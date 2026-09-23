@@ -3,10 +3,14 @@ import type { PaletteId } from '../types';
 /**
  * A palette's four pigments as the engine draws them.
  *
- * These are the `r_white` reflectances of `builtin::*` in
- * `crates/nocturne-watercolour-core/src/domain/pigment.rs`, which the render
- * path writes out untransformed. Keeping them here means a surface can take
- * its colour from the paint without reading a single pixel back.
+ * These are the design `r_white` reflectances of `builtin::*` in
+ * `crates/nocturne-watercolour-core/src/domain/pigment.rs`, each linear
+ * channel written directly as an sRGB byte. They name the pigment's hue, not
+ * the painted pixel: the render maps pigment amount through a saturating
+ * optical curve, a surface correction and (on dark grounds) a chroma gain,
+ * and these values are darker than any dried wash. They serve only as a faint
+ * tint, so a surface can take a colour from its paint without reading a
+ * pixel back.
  */
 export interface PigmentColours {
   baseWash: string;

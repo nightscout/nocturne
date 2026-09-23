@@ -153,16 +153,20 @@ export function brushworkMs(mark: DropMark): number {
   return mark.strokes.reduce((sum, st) => sum + pathLength(st.path), 0) / PEN_SPEED;
 }
 
-/** Concentration and water for the surface, mirroring the authoring `Style` factors. */
-function medium(surface: Surface, intensity: number) {
+/**
+ * Concentration and water for the drop, scaled by intensity with the authoring
+ * `Style::conc`/`Style::water` factors.
+ *
+ * One load serves both surfaces. It dries to about the swatch's depth on a
+ * light ground; on a dark one the luminous alpha follows the same deposit, so
+ * it reads there as a translucent glaze at roughly three quarters alpha. A
+ * drop is a wash, not a glow shape, so `Style::glow`'s heavier dark-ground
+ * load does not apply.
+ */
+function medium(intensity: number) {
   const conc = (base: number) => Math.min(1, base * (0.4 + intensity * 0.857));
   const water = (base: number) => Math.min(1.5, base * (0.8 + intensity * 0.3));
-  // A luminous wash on a dark ground saturates its alpha early, so it is laid
-  // lighter; heavy enough that it dries past the luminous colour floor and
-  // shows its own depth rather than the floor's pale tint.
-  return surface === 'dark'
-    ? { conc: conc(0.34), water: water(0.55), spatterConc: conc(0.6) }
-    : { conc: conc(0.48), water: water(0.5), spatterConc: conc(0.8) };
+  return { conc: conc(0.48), water: water(0.5), spatterConc: conc(0.8) };
 }
 
 function roleIndex(doc: SceneDocument, role: string): number {
@@ -252,7 +256,7 @@ export function dropScene(
   // events' indices both read from this list, which keeps the two in step.
   const used = [...new Set(wet ? [base, shadow] : [base])].sort((a, b) => a - b);
   const pigmentIndex = (donorAt: number) => used.indexOf(donorAt);
-  const m = medium(surface, intensity);
+  const m = medium(intensity);
   // A wash sits behind a label, so it is laid lighter than a mark beside one.
   const share: Partial<Record<DropMark['kind'], number>> = {
     wash: WASH_CONCENTRATION,
