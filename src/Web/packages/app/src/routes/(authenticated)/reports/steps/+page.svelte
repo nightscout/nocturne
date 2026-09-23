@@ -149,13 +149,13 @@
           </div>
         {/snippet}
         {#snippet tooltipValue({ point })}
-          {@const steps = (point as { mills: number; steps: number }).steps ?? 0}
+          {@const steps = typeof point.steps === "number" ? point.steps : 0}
           <span class="text-muted-foreground">Steps</span>
           <span class="ml-auto font-mono font-medium tabular-nums">{formatNumber(steps)}</span>
         {/snippet}
         {#snippet row(ctx: ActogramRowContext)}
           {#each ctx.data as { point, hoursFromStart, isExtended }, i (i)}
-            {@const steps = (point as { mills: number; steps: number }).steps ?? 0}
+            {@const steps = typeof point.steps === "number" ? point.steps : 0}
             {@const barHeight = (steps / barScale) * ctx.height}
             {@const x = ctx.xScale(new Date(ctx.day.getTime() + hoursFromStart * MS_PER_HOUR))}
             <rect

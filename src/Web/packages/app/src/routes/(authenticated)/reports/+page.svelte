@@ -86,7 +86,7 @@
   const reportsParams = requireDateParamsContext(14);
 
   const grantedScopes: string[] = $derived(
-    (page.data as { effectivePermissions?: string[] }).effectivePermissions ?? []
+    page.data.effectivePermissions ?? []
   );
   const viewer = $derived({
     grantedScopes,
@@ -482,7 +482,7 @@
         {#each categories as category, categoryIndex (category.id)}
           {@const CategoryIcon = category.icon}
           {@const styles = categoryVariants({
-            category: category.id as CategoryType,
+            category: category.id,
           })}
           <div
             class={styles.card()}

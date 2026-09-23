@@ -323,7 +323,7 @@
     }
 
     const cssVar =
-      METRIC_CSS_VARS[selectedMetric as Exclude<HeatmapMetric, "avgGlucose">];
+      METRIC_CSS_VARS[selectedMetric];
     const baseColor = getFocusedIntensityFill(
       metricValue,
       focusRange ?? [0, metricMaxCached],
@@ -446,7 +446,7 @@
       const [y, m, d] = dateStr.split("-").map(Number);
       const date = new Date(y, m - 1, d);
       const avg = day.averageGlucoseMgdl ?? null;
-      const counts = (day.counts as Record<string, number>) ?? {};
+      const counts = day.counts ?? {};
 
       // Calculate filtered count excluding hidden types
       const filteredCount = Object.entries(counts)
@@ -496,7 +496,8 @@
       (entries) => {
         for (const entry of entries) {
           if (entry.isIntersecting) {
-            const year = Number((entry.target as HTMLElement).dataset.year);
+            if (!(entry.target instanceof HTMLElement)) continue;
+            const year = Number(entry.target.dataset.year);
             if (!isNaN(year)) {
               loadYearData(year);
             }

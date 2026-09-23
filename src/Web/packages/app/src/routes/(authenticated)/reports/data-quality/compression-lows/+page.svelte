@@ -42,7 +42,7 @@
 	import type { CompressionLowSuggestion } from '$lib/api';
 
 	const effectivePermissions: string[] = $derived(
-		(page.data as any).effectivePermissions ?? []
+		page.data.effectivePermissions ?? []
 	);
 	// Accepting, dismissing, deleting and re-running detection all write state
 	// spans and suggestion rows, so the server gates them on glucose.readwrite.

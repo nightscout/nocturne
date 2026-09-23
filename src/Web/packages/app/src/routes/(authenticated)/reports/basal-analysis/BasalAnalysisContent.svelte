@@ -30,7 +30,7 @@
   } from "$api/generated/statistics.generated.remote";
 
   interface Props {
-    analysisDates: { startDate: Date; endDate: Date };
+    analysisDates: { startDate: string; endDate: string };
     dateInfo: { from: Date; to: Date; dayCount: number };
   }
   let { analysisDates, dateInfo }: Props = $props();

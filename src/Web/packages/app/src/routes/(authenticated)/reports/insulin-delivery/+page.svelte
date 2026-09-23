@@ -42,11 +42,11 @@
   // remote-query argument ("Unknown date type"), so passing Dates left these
   // queries erroring — empty on first load, hard error when the filter dates
   // change. The server schema is z.coerce.date(), which parses the ISO strings
-  // back to dates; the cast satisfies the generated Date arg type.
+  // back to dates.
   // Same pattern as ReplayPanel's replay() call.
   const statisticsDates = $derived({
-    startDate: reportsParams.startDate.toISOString() as unknown as Date,
-    endDate: reportsParams.endDate.toISOString() as unknown as Date,
+    startDate: reportsParams.startDate.toISOString(),
+    endDate: reportsParams.endDate.toISOString(),
   });
 
   // Routed through contextResource (not a bare $derived query) so a resolved

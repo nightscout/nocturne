@@ -409,7 +409,10 @@
           <Select.Root
             type="single"
             value={preset}
-            onValueChange={(v) => applyPreset(v as Preset)}
+            onValueChange={(v) => {
+              const next = PRESETS.find((p) => p === v);
+              if (next) applyPreset(next);
+            }}
           >
             <Select.Trigger id="cmp-preset" class="w-full">
               {presetLabel}

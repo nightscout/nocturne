@@ -18,8 +18,8 @@
   const analysisDates = $derived.by(() => {
     const range = reportsParams.getDateRange();
     return {
-      startDate: range.start.toISOString() as unknown as Date,
-      endDate: range.end.toISOString() as unknown as Date,
+      startDate: range.start.toISOString(),
+      endDate: range.end.toISOString(),
     };
   });
 

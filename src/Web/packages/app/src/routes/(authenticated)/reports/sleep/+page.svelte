@@ -24,7 +24,7 @@
     buildDayRange,
     type ActogramRowContext,
   } from "$lib/components/actogram";
-  import { MS_PER_HOUR, HOURS_PER_ROW } from "$lib/components/actogram/actogram";
+  import { MS_PER_HOUR, HOURS_PER_ROW, type ActogramPoint } from "$lib/components/actogram/actogram";
   import { getTrends } from "$api/generated/sleepReports.generated.remote";
   import { useActogramReport } from "$lib/hooks/actogram-report.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
@@ -100,6 +100,15 @@
       state: s.state,
     }))
   );
+
+  function sleepSpanOf(point: ActogramPoint) {
+    const { startMills, endMills, state } = point;
+    return {
+      startMills: typeof startMills === "number" ? startMills : point.mills,
+      endMills: typeof endMills === "number" ? endMills : point.mills,
+      state: typeof state === "string" ? state : "",
+    };
+  }
 
   // BG data as GlucosePoints
   const bgPoints = $derived(
@@ -348,7 +357,7 @@
               type="single"
               value={sourceFilter}
               onValueChange={(v) =>
-                (viewParams.source = v && v !== "all" ? (v as SleepSource) : null)}
+                (viewParams.source = Object.values(SleepSource).find((s) => s === v) ?? null)}
             >
               <Select.Trigger class="w-44">
                 {sourceLabel}
@@ -393,7 +402,7 @@
           initialOffset={0}
         >
           {#snippet tooltipValue({ point })}
-            {@const span = point as { mills: number; state: string }}
+            {@const span = sleepSpanOf(point)}
             <div class="size-2 rounded-full bg-[var(--lane-color)]" data-lane={span.state.toLowerCase()}></div>
             <span class="text-muted-foreground">Sleep</span>
             <span class="ml-auto font-mono font-medium tabular-nums capitalize">{span.state.toLowerCase()}</span>
@@ -415,7 +424,7 @@
           {/snippet}
           {#snippet row(ctx: ActogramRowContext)}
             {#each ctx.data as { point, hoursFromStart, isExtended }, i (i)}
-              {@const span = point as { mills: number; startMills: number; endMills: number; state: string }}
+              {@const span = sleepSpanOf(point)}
               {@const durationHours = (span.endMills - span.startMills) / MS_PER_HOUR}
               {@const x = ctx.xScale(new Date(ctx.day.getTime() + hoursFromStart * MS_PER_HOUR))}
               {@const endHours = hoursFromStart + durationHours}

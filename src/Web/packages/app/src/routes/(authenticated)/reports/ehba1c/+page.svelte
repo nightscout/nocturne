@@ -163,10 +163,11 @@
         const yMin = Math.max(band.yMin, yDomain[0]);
         const yMax = Math.min(band.yMax, yDomain[1]);
         if (yMax <= yMin) return null;
+        const y: [number, number] = [yMin, yMax];
         return {
           type: "range" as const,
           layer: "below" as const,
-          y: [yMin, yMax] as [number, number],
+          y,
           fill: band.fill,
         };
       })
@@ -216,7 +217,7 @@
     labResultError = null;
     try {
       await labResultsApi.create({
-        measuredAt: new Date(`${newLabDate}T00:00:00.000Z`).toISOString() as unknown as Date,
+        measuredAt: new Date(`${newLabDate}T00:00:00.000Z`).toISOString(),
         valuePercent: toPercentFromDisplayUnit(value),
         note: newLabNote || undefined,
       });

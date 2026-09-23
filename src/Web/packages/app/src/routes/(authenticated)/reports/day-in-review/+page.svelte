@@ -62,10 +62,10 @@
   // Short aliases for deeply-nested backend data
   // Note: analysis, insulinDelivery, and treatmentSummary are currently null
   // until the statistics client is migrated to use summary/retrospective clients
-  const analysis = $derived(dayData?.analysis as any);
+  const analysis = $derived(dayData?.analysis);
   const basicStats = $derived(analysis?.basicStats);
-  const delivery = $derived(dayData?.insulinDelivery as any);
-  const summary = $derived(dayData?.treatmentSummary as any);
+  const delivery = $derived(dayData?.insulinDelivery);
+  const summary = $derived(dayData?.treatmentSummary);
 
   // Parse current date from URL. Read as a local day, not as UTC midnight, which
   // renders as the previous day for anyone west of UTC.
@@ -167,7 +167,7 @@
     const record: EntryRecord = { kind: "bolus", data: bolus };
     const correlated: EntryRecord[] = [];
     if (bolus.correlationId) {
-      const linkedCarb = (dayData?.carbIntakes ?? [] as CarbIntake[]).find(
+      const linkedCarb = (dayData?.carbIntakes ?? []).find(
         (c: CarbIntake) => c.correlationId === bolus.correlationId
       );
       if (linkedCarb) correlated.push({ kind: "carbs", data: linkedCarb });
@@ -184,7 +184,7 @@
       editDialogRecord = { kind: "carbs", data: row };
       const correlated: EntryRecord[] = [];
       if (row.correlationId) {
-        const linkedBolus = (dayData?.boluses ?? [] as Bolus[]).find(
+        const linkedBolus = (dayData?.boluses ?? []).find(
           (b: Bolus) => b.correlationId === row.correlationId
         );
         if (linkedBolus) correlated.push({ kind: "bolus", data: linkedBolus });

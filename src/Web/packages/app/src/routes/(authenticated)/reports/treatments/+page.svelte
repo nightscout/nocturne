@@ -2,13 +2,7 @@
   import { page } from "$app/state";
   import { replaceState } from "$app/navigation";
 
-  interface TreatmentSummary {
-    totals?: {
-      insulin?: { bolus?: number; basal?: number; scheduledBasal?: number; additionalBasal?: number };
-      food?: { carbs?: number };
-    };
-    treatmentCount?: number;
-  }
+  import type { TreatmentSummary } from "$lib/api";
   import {
     TreatmentsDataTable,
     TreatmentEditDialog,
@@ -75,12 +69,13 @@
   );
   const dateInfo = $derived(reportsResource.date);
 
+  const emptyTreatmentSummary: TreatmentSummary = {
+    totals: { food: { carbs: 0 }, insulin: { bolus: 0, basal: 0 } },
+    treatmentCount: 0,
+  };
+
   const treatmentSummary = $derived(
-    reportsResource.current?.treatmentSummary ??
-      ({
-        totals: { food: { carbs: 0 }, insulin: { bolus: 0, basal: 0 } },
-        treatmentCount: 0,
-      } as TreatmentSummary)
+    reportsResource.current?.treatmentSummary ?? emptyTreatmentSummary
   );
 
   const counts = $derived(countEntryRecords(allRows));
@@ -89,8 +84,12 @@
   const initialCategory = page.url.searchParams.get("category");
   const initialSearch = page.url.searchParams.get("search");
 
+  function isCategoryFilter(value: string | null): value is EntryCategoryId | "all" {
+    return value === "all" || (value !== null && Object.hasOwn(ENTRY_CATEGORIES, value));
+  }
+
   let activeCategory = $state<EntryCategoryId | "all">(
-    (initialCategory as EntryCategoryId | "all") || "all"
+    isCategoryFilter(initialCategory) ? initialCategory : "all"
   );
   let searchQuery = $state(initialSearch || "");
 
@@ -254,8 +253,21 @@
     const data = {
       mills: Date.now(),
       utcOffset: -new Date().getTimezoneOffset(),
-    } as EntryRecord["data"];
-    return { kind, data } as EntryRecord;
+    };
+    switch (kind) {
+      case "bolus":
+        return { kind, data };
+      case "carbs":
+        return { kind, data };
+      case "bgCheck":
+        return { kind, data };
+      case "note":
+        return { kind, data };
+      case "deviceEvent":
+        return { kind, data };
+      case "basalInjection":
+        return { kind, data };
+    }
   }
 
   function handleAddTreatment(kind: EntryCategoryId) {
@@ -428,10 +440,10 @@
               {/snippet}
             </DropdownMenu.Trigger>
             <DropdownMenu.Content align="end">
-              {#each Object.entries(ENTRY_CATEGORIES) as [id, cat] (id)}
-                {@const Icon = addKindIcons[id as EntryCategoryId]}
+              {#each Object.values(ENTRY_CATEGORIES) as cat (cat.id)}
+                {@const Icon = addKindIcons[cat.id]}
                 <DropdownMenu.Item
-                  onclick={() => handleAddTreatment(id as EntryCategoryId)}
+                  onclick={() => handleAddTreatment(cat.id)}
                 >
                   <Icon class="mr-2 h-4 w-4 {cat.colorClass}" />
                   {cat.name}
