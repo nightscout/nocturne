@@ -51,6 +51,10 @@ struct Params {
     max_deposited: f32,
     _pad_deposit0: f32,
     _pad_deposit1: f32,
+    pool_rate: f32,
+    pool_relief: f32,
+    edge_flow: f32,
+    _pad_water: f32,
 };
 
 struct Stroke {

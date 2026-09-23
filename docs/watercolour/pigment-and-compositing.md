@@ -276,6 +276,7 @@ diffusion, advection and blur distances are still stretched with the grid.
 | `pressure_gain` | `0.9` (depth) | same |
 | `drag` | `0.02` | |
 | divergence relaxation | fixed **8** Jacobi iterations | not a tolerance, so CPU and GPU do identical work |
+| free-surface flux | per neighbour `pool_rate / 4 * min(p_avg / diffusion_depth, 1) * (eta_i - eta_j)`, `eta = p + pool_relief * h - edge_flow * drive * (1 - M_blurred)`, bounded by a quarter of the donor's film; `drive` is the sheet's evaporation rate at `DRAIN_DEPTH` | a separate pass after advection: the projected velocity is divergence-free, so this is what lets water converge into the tooth's valleys and, while the sheet dries, run to the rim as a replacement current. It carries suspended pigment at the donor's concentration and is antisymmetric per pair, so it conserves water. `pool_rate` is capped by the explicit-diffusion bound (`<= 1`) |
 | edge drain | `eta * (1 - M_blurred) * clamp(p / DRAIN_DEPTH, DRAIN_MIN, DRAIN_MAX) * (1.5 - h)` with `eta = 0.06`, `DRAIN_DEPTH = 0.5`, clamp `[0.15, 2.0]` | pooled water at the boundary drains harder than a thin film on a high spot, varying the dried rim's weight |
 | stroke water | `water * coverage * (1 + 0.5 * (0.5 - h) * 2)` | never negative |
 | clamps | deposited pigment `<= 8.0` (`MAX_DEPOSITED`), suspended `<= 8.0`, water depth `<= 8.0` | every field clamped after each pass; deposited headroom above `1.0` so a drying rim keeps the pigment it concentrates |
@@ -283,13 +284,15 @@ diffusion, advection and blur distances are still stretched with the grid.
 The stability sweep test runs 500 ticks at parameter extremes and asserts
 finiteness and bounds. Documented deviations from Curtis (collocated
 velocities, advected water depth, depth-weighted pigment diffusion, no capillary
-destination threshold, depth- and height-scaled edge drain, paper-modulated
-stroke water) are listed in the `domain::sim` module doc.
+destination threshold, depth- and height-scaled edge drain, the free-surface
+flux, paper-modulated stroke water) are listed in the `domain::sim` module doc.
 
 Measured behaviour on the reference: a wet-on-dry disc ends with deposited
 pigment heavier in the rim band than at the centre (edge darkening, asserted
 `> 1.15x`); the same brush into a pre-wetted area spreads its 90 % pigment
-radius `> 1.3x` further.
+radius `> 1.3x` further; the free-surface flux moves a dried disc's interior
+deposit towards the paper's valleys (its correlation with `1 - h` rises by more
+than `0.05` over the same run without the flux).
 
 ## Deposition and lift (`sim::pass_transfer`)
 

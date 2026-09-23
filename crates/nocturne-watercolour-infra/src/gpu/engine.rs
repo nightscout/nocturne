@@ -95,6 +95,10 @@ struct ParamsUniform {
     max_deposited: f32,
     _pad_deposit0: f32,
     _pad_deposit1: f32,
+    pool_rate: f32,
+    pool_relief: f32,
+    edge_flow: f32,
+    _pad_water: f32,
 }
 
 impl ParamsUniform {
@@ -144,6 +148,10 @@ impl ParamsUniform {
             max_deposited: sim::MAX_DEPOSITED,
             _pad_deposit0: 0.0,
             _pad_deposit1: 0.0,
+            pool_rate: p.pool_rate,
+            pool_relief: p.pool_relief,
+            edge_flow: p.edge_flow,
+            _pad_water: 0.0,
         }
     }
 }
@@ -213,6 +221,7 @@ struct SimPipelines {
     blur_h: wgpu::ComputePipeline,
     blur_v: wgpu::ComputePipeline,
     advect: wgpu::ComputePipeline,
+    pool: wgpu::ComputePipeline,
     transfer: wgpu::ComputePipeline,
     capillary: wgpu::ComputePipeline,
     capillary_wet: wgpu::ComputePipeline,
@@ -431,6 +440,7 @@ impl GpuEngine {
             blur_h: make("blur_h"),
             blur_v: make("blur_v"),
             advect: make("advect"),
+            pool: make("pool"),
             transfer: make("transfer"),
             capillary: make("capillary"),
             capillary_wet: make("capillary_wet"),
@@ -704,6 +714,10 @@ impl GpuEngine {
         dispatch(enc, &self.sim.blur_h);
         dispatch(enc, &self.sim.blur_v);
         dispatch(enc, &self.sim.advect);
+        copy(enc, lay.scratch_g(0), lay.g(0), lay.n * lay.pigment_count);
+        copy(enc, lay.scratch_p(), lay.p(), lay.n);
+
+        dispatch(enc, &self.sim.pool);
         copy(enc, lay.scratch_g(0), lay.g(0), lay.n * lay.pigment_count);
         copy(enc, lay.scratch_p(), lay.p(), lay.n);
 
