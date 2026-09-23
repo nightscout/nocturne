@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { timeDay } from "d3-time";
+	import { withAll } from "$lib/utils/collections";
 	import { page } from '$app/state';
 	import { toast } from 'svelte-sonner';
 	import { permissionGatedMutationError } from '$lib/forms';
@@ -111,12 +113,10 @@
 		if (event.shiftKey && lastClickedIndex >= 0) {
 			const start = Math.min(lastClickedIndex, index);
 			const end = Math.max(lastClickedIndex, index);
-			const newSelection = new Set(selectedSuggestions);
-			for (let i = start; i <= end; i++) {
-				const id = filteredSuggestions[i]?.id;
-				if (id) newSelection.add(id);
-			}
-			selectedSuggestions = newSelection;
+			selectedSuggestions = withAll(
+				selectedSuggestions,
+				filteredSuggestions.slice(start, end + 1).flatMap((s) => (s.id ? [s.id] : []))
+			);
 		} else {
 			selectedSuggestions = new Set([suggestion.id]);
 		}
@@ -270,8 +270,7 @@
 
 	function formatNightOf(nightOf: string | Date): string {
 		const date = nightOf instanceof Date ? nightOf : new Date(nightOf);
-		const nextDay = new Date(date);
-		nextDay.setDate(nextDay.getDate() + 1);
+		const nextDay = timeDay.offset(date, 1);
 		// `{ day, year }` has no CLDR pattern; ICU renders it as "2026 (day: 30)".
 		return `Night of ${formatShortDate(date)} \u2013 ${formatShortDate(nextDay, true)}`;
 	}

@@ -97,9 +97,10 @@
   function loginWithProvider(providerId: string) {
     isRedirecting = true;
     selectedProvider = providerId;
-    const params = new URLSearchParams();
-    params.set("provider", providerId);
-    params.set("returnUrl", `/join?token=${encodeURIComponent(token)}`);
+    const params = new URLSearchParams({
+      provider: providerId,
+      returnUrl: `/join?token=${encodeURIComponent(token)}`,
+    });
     window.location.href = `/api/auth/oidc/login?${params.toString()}`;
   }
 

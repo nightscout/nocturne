@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { indexBy } from "$lib/utils/collections";
   import {
     Card,
     CardAction,
@@ -110,13 +111,13 @@
   const sleepWeeks = $derived(trendsResource.current?.weeks ?? []);
 
   // Maps each display day to the night's authoritative display date, for actogram row links.
-  const nightDateByDayKey = $derived.by(() => {
-    const map = new Map<number, string>();
-    for (const [key, night] of buildNightsByDayKey(sleepNights)) {
-      if (night.displayDate) map.set(key, night.displayDate);
-    }
-    return map;
-  });
+  const nightDateByDayKey = $derived(
+    indexBy(
+      buildNightsByDayKey(sleepNights),
+      ([key, night]) => (night.displayDate ? key : null),
+      ([, night]) => night.displayDate ?? ""
+    )
+  );
 
   function formatHoursMinutes(hours: number): string {
     const totalMinutes = Math.round(hours * 60);

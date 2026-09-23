@@ -37,6 +37,8 @@
   import { getDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { onMount, untrack, tick } from "svelte";
   import { fade } from "svelte/transition";
+  import { getWeekColumns } from "$lib/components/reports/year-overview/week-columns";
+  import { toggled } from "$lib/utils/collections";
 
   getDateParamsContext();
 
@@ -368,17 +370,8 @@
 
   /** Discover data types present in loaded data */
   const presentDataTypes = $derived.by(() => {
-    const types = new Set<string>();
-    for (const days of yearData.values()) {
-      for (const day of days) {
-        if (day.counts) {
-          for (const key of Object.keys(day.counts) as string[]) {
-            types.add(key);
-          }
-        }
-      }
-    }
-    return ALL_DATA_TYPES.filter((t) => types.has(t));
+    const days = [...yearData.values()].flat();
+    return ALL_DATA_TYPES.filter((t) => days.some((day) => day.counts && Object.hasOwn(day.counts, t)));
   });
 
   // =========================================================================
@@ -416,9 +409,7 @@
     } catch (err) {
       console.error(`Failed to load data for year ${year}:`, err);
     } finally {
-      const next = new Set(loadingYears);
-      next.delete(year);
-      loadingYears = next;
+      loadingYears = toggled(loadingYears, year, false);
     }
   }
 
@@ -500,13 +491,7 @@
   // =========================================================================
 
   function toggleDataType(dataType: string) {
-    const next = new Set(hiddenDataTypes);
-    if (next.has(dataType)) {
-      next.delete(dataType);
-    } else {
-      next.add(dataType);
-    }
-    hiddenDataTypes = next;
+    hiddenDataTypes = toggled(hiddenDataTypes, dataType);
   }
 
   function showAllDataTypes() {
@@ -614,57 +599,6 @@
     return Object.entries(counts)
       .filter(([key, count]) => count > 0 && !hiddenDataTypes.has(key))
       .sort(([, a], [, b]) => b - a);
-  }
-
-  /** Get ISO week number for a date */
-  function getISOWeekNumber(date: Date): number {
-    const d = new Date(
-      Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())
-    );
-    d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
-    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-    return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
-  }
-
-  /** Get the Monday and Sunday of the ISO week containing the given date */
-  function getWeekBounds(date: Date): { from: string; to: string } {
-    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    const day = d.getDay();
-    const diffToMonday = day === 0 ? -6 : 1 - day;
-    const monday = new Date(d);
-    monday.setDate(d.getDate() + diffToMonday);
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-    const fmt = (dt: Date) =>
-      `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
-    return { from: fmt(monday), to: fmt(sunday) };
-  }
-
-  type WeekColumn = {
-    x: number;
-    weekNumber: number;
-    from: string;
-    to: string;
-  };
-
-  /** Extract unique week columns from calendar cells */
-  function getWeekColumns(
-    cells: Array<{ x: number; data?: { date?: Date } }>
-  ): WeekColumn[] {
-    const seen = new Map<number, { date: Date }>();
-    for (const cell of cells) {
-      const date = cell.data?.date;
-      if (date && !seen.has(cell.x)) {
-        seen.set(cell.x, { date });
-      }
-    }
-    return [...seen.entries()]
-      .map(([x, { date }]) => ({
-        x,
-        weekNumber: getISOWeekNumber(date),
-        ...getWeekBounds(date),
-      }))
-      .sort((a, b) => a.x - b.x);
   }
 </script>
 

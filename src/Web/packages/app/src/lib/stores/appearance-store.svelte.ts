@@ -79,6 +79,7 @@ export const PREFS_COOKIE_NAME = "nocturne-prefs";
 const PREFS_COOKIE_MAX_AGE = 31536000; // 1 year
 
 /** Registry of synced prefs by their localStorage key — powers cross-tab sync. */
+// eslint-disable-next-line svelte/prefer-svelte-reactivity -- module-level registry; nothing renders from it
 const syncedRegistry = new Map<string, SyncedPref<unknown>>();
 
 const PREFERENCES_CONTEXT_KEY = Symbol("nocturne-display-preferences");

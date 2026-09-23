@@ -4,6 +4,7 @@
     duration: number;
   }
   /** Module-level cache for computed peaks (persists across component remounts) */
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- module-level cache; nothing renders from it
   const peaksCache = new Map<string, CachedSoundData>();
 </script>
 

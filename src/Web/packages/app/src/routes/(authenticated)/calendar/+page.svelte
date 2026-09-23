@@ -21,6 +21,8 @@
   import CalendarMonthSummary from "$lib/components/calendar/CalendarMonthSummary.svelte";
   import CalendarDayCell from "$lib/components/calendar/CalendarDayCell.svelte";
   import { coachmark } from "@nocturne/coach";
+  import { groupBy, indexBy } from "$lib/utils/collections";
+  import { toDayString } from "$lib/utils/date-range";
 
   // Infer DayStats type from the query result
   type PunchCardMonth = NonNullable<
@@ -157,15 +159,8 @@
     const monthData = currentData?.months?.find(
       (m) => m.year === currentYear && m.month === currentMonth
     );
-    const daysMap = new Map<string, DayStats>();
-    if (monthData) {
-      for (const day of monthData?.days || []) {
-        if (!day.date) continue;
-        daysMap.set(day.date, day);
-      }
-    }
     return {
-      days: daysMap,
+      days: indexBy(monthData?.days ?? [], (day) => day.date, (day) => day),
       maxCarbs: monthData?.maxCarbs ?? 0,
       maxInsulin: monthData?.maxInsulin ?? 0,
       maxDiff: monthData?.maxCarbInsulinDiff ?? 0,
@@ -286,34 +281,22 @@
     active: TrackerInstanceDto[],
     history: TrackerInstanceDto[]
   ): Map<string, TrackerEvent[]> {
-    const events = new Map<string, TrackerEvent[]>();
-    function addEvent(dateStr: string, event: TrackerEvent) {
-      if (!events.has(dateStr)) events.set(dateStr, []);
-      events.get(dateStr)!.push(event);
-    }
-    function toDateStr(date: Date | undefined): string | null {
-      if (!date) return null;
-      const d = new Date(date);
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    }
-    for (const instance of active) {
-      const startDate = toDateStr(instance.startedAt);
-      if (startDate)
-        addEvent(startDate, { instance, eventType: "start", date: startDate });
-      const dueDate = toDateStr(instance.expectedEndAt);
-      if (dueDate)
-        addEvent(dueDate, { instance, eventType: "due", date: dueDate });
-    }
-    for (const instance of history) {
-      const completedDate = toDateStr(instance.completedAt);
-      if (completedDate)
-        addEvent(completedDate, {
-          instance,
-          eventType: "completed",
-          date: completedDate,
-        });
-    }
-    return events;
+    const event = (
+      instance: TrackerInstanceDto,
+      eventType: TrackerEventType,
+      at: Date | undefined
+    ): TrackerEvent[] =>
+      at ? [{ instance, eventType, date: toDayString(new Date(at)) }] : [];
+    return groupBy(
+      [
+        ...active.flatMap((i) => [
+          ...event(i, "start", i.startedAt),
+          ...event(i, "due", i.expectedEndAt),
+        ]),
+        ...history.flatMap((i) => event(i, "completed", i.completedAt)),
+      ],
+      (e) => e.date
+    );
   }
 
   /**

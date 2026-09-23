@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { findNearbyEntries } from "./engine/nearby-entries";
   import type { Snippet } from "svelte";
   import type { TransformedChartData } from "$lib/utils/chart-data-transform";
   import type { PredictionData } from "$api/predictions.remote";
@@ -6,7 +7,6 @@
   import type { EntryRecord } from "$lib/constants/entry-categories";
   import {
     createChartDataEngine,
-    TREATMENT_PROXIMITY_MS,
   } from "./engine/chart-data-engine.svelte";
   import { createPointInspection } from "./engine/point-inspection.svelte";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
@@ -132,32 +132,11 @@
 
   // ---- Entry lookup helpers ----
   function findAllNearbyEntries(time: Date): EntryRecord[] {
-    const nearby: EntryRecord[] = [];
-    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local, non-reactive
-    const seen = new Set<string>();
-
-    const allMarkers = [
-      ...engine.bolusMarkers,
-      ...engine.carbMarkers,
-      ...engine.deviceEventMarkers,
-    ];
-
-    for (const marker of allMarkers) {
-      if (
-        Math.abs(marker.time.getTime() - time.getTime()) <
-        TREATMENT_PROXIMITY_MS
-      ) {
-        const entry = realtimeStore.findEntryByTreatmentId(
-          marker.treatmentId ?? "",
-        );
-        if (entry && entry.data.id && !seen.has(entry.data.id)) {
-          seen.add(entry.data.id);
-          nearby.push(entry);
-        }
-      }
-    }
-
-    return nearby;
+    return findNearbyEntries(
+      [...engine.bolusMarkers, ...engine.carbMarkers, ...engine.deviceEventMarkers],
+      time,
+      (id) => realtimeStore.findEntryByTreatmentId(id)
+    );
   }
 
   async function handleMarkerClick(treatmentId: string) {

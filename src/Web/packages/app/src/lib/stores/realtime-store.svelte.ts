@@ -1,5 +1,9 @@
 // Real-time data store using Svelte 5 Runes and WebSocket integration
 import { WebSocketClient } from "$lib/websocket/websocket-client.svelte";
+import { entryIdentity, unseenEntries } from "./entry-identity";
+import { markedRead } from "./notification-read";
+import { untilNow } from "$lib/utils/now";
+import { toDate } from "$lib/utils/formatting";
 import type {
   Entry,
   WebSocketConfig,
@@ -80,6 +84,7 @@ export class RealtimeStore {
    * sorts the full entries array, which also recomputes every chart derived
    * from it. Buffer a short burst and commit it as one reactive update.
    */
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- batch buffer; the flush commits it to $state as one update
   private pendingEntryCreates = new Map<string, Entry>();
   private entryCreateFlushTimeout: ReturnType<typeof setTimeout> | null = null;
   private static readonly ENTRY_CREATE_BATCH_MS = 100;
@@ -255,7 +260,7 @@ export class RealtimeStore {
         // Compute age dynamically from startedAt and current time
         // This ensures notifications update in real-time as time passes
         const age = instance.startedAt
-          ? (this.now - new Date(instance.startedAt).getTime()) / (1000 * 60 * 60)
+          ? (this.now - (toDate(instance.startedAt)?.getTime() ?? this.now)) / (1000 * 60 * 60)
           : instance.ageHours ?? 0;
 
         if (!age || age <= 0) return null;
@@ -346,8 +351,7 @@ export class RealtimeStore {
     try {
       // Fetch historical data using the properly configured API client
       const apiClient = getApiClient();
-      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-      const now = new Date();
+      const { from: oneDayAgo, to: now } = untilNow(Date.now() - 24 * 60 * 60 * 1000);
       const [
         historicalEntries,
         deviceStatusData,
@@ -595,20 +599,10 @@ export class RealtimeStore {
     }
   }
 
-  private entryIdentity(entry: Entry): string {
-    return entry._id
-      ? `id:${entry._id}`
-      : this.entryReadingIdentity(entry);
-  }
-
-  private entryReadingIdentity(entry: Entry): string {
-    return `reading:${entry.mills ?? ""}:${entry.sgv ?? ""}`;
-  }
-
   private queueEntryCreate(entry: Entry): void {
     // A later event with the same identity wins. This also makes an update that
     // arrives before the batch flush replace the pending create cleanly.
-    this.pendingEntryCreates.set(this.entryIdentity(entry), entry);
+    this.pendingEntryCreates.set(entryIdentity(entry), entry);
     if (this.entryCreateFlushTimeout !== null) {
       clearTimeout(this.entryCreateFlushTimeout);
     }
@@ -626,27 +620,7 @@ export class RealtimeStore {
     const pending = [...this.pendingEntryCreates.values()];
     this.pendingEntryCreates.clear();
 
-    const knownIds = new Set(
-      this.entries
-        .map((entry) => entry._id)
-        .filter((id): id is string => typeof id === "string"),
-    );
-    const knownReadings = new Set(
-      this.entries.map((entry) => this.entryReadingIdentity(entry)),
-    );
-    const additions = pending.filter((entry) => {
-      const readingIdentity = this.entryReadingIdentity(entry);
-      if (
-        (typeof entry._id === "string" && knownIds.has(entry._id)) ||
-        knownReadings.has(readingIdentity)
-      ) {
-        return false;
-      }
-
-      if (typeof entry._id === "string") knownIds.add(entry._id);
-      knownReadings.add(readingIdentity);
-      return true;
-    });
+    const additions = unseenEntries(this.entries, pending);
 
     if (additions.length > 0) {
       this.entries = [...additions.reverse(), ...this.entries]
@@ -679,7 +653,7 @@ export class RealtimeStore {
     const { colName, doc } = event;
 
     if (colName === "entries") {
-      this.pendingEntryCreates.delete(this.entryIdentity(doc));
+      this.pendingEntryCreates.delete(entryIdentity(doc));
       this.entries = this.entries.filter((entry) => entry._id !== doc._id);
     }
   }
@@ -766,18 +740,12 @@ export class RealtimeStore {
    *  update instantly; the server's notificationUpdated broadcast reconciles other
    *  clients (and this one). */
   markAllNotificationsRead(): void {
-    const readAt = new Date();
-    this.inAppNotifications = this.inAppNotifications.map((n) =>
-      n.readAt ? n : { ...n, readAt }
-    );
+    this.inAppNotifications = markedRead(this.inAppNotifications);
   }
 
   /** Optimistically mark a single notification read by id. */
   markNotificationRead(id: string): void {
-    const readAt = new Date();
-    this.inAppNotifications = this.inAppNotifications.map((n) =>
-      n.id === id && !n.readAt ? { ...n, readAt } : n
-    );
+    this.inAppNotifications = markedRead(this.inAppNotifications, (n) => n.id === id);
   }
 
   /** Handle new in-app notification from SignalR */
@@ -1025,8 +993,8 @@ export class RealtimeStore {
   private async refreshLatestApsSnapshot(): Promise<void> {
     try {
       const apiClient = getApiClient();
-      const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
-      const result = await apiClient.apsSnapshot.getAll(fiveMinAgo, new Date(), 5);
+      const { from, to } = untilNow(Date.now() - 5 * 60 * 1000);
+      const result = await apiClient.apsSnapshot.getAll(from, to, 5);
       const snapshots = result.data ?? [];
       if (snapshots.length === 0) return;
       const added = snapshots.filter(
@@ -1064,9 +1032,10 @@ export class RealtimeStore {
 
     this.isSyncing = true;
     const backfillFrom = this.lastDataReceived;
+    const { from: backfillFromDate, to: nowDate } = untilNow(backfillFrom);
 
     console.log(
-      `[RealtimeStore] Backfilling data from ${new Date(backfillFrom).toISOString()} ` +
+      `[RealtimeStore] Backfilling data from ${backfillFromDate.toISOString()} ` +
       `(${Math.round(timeSinceLastData / 60000)} minutes ago)`
     );
 
@@ -1074,8 +1043,6 @@ export class RealtimeStore {
       const apiClient = getApiClient();
 
       // Fetch all data types since last received using existing API methods
-      const backfillFromDate = new Date(backfillFrom);
-      const nowDate = new Date();
       const reservoirRefresh = this.refreshCurrentReservoir();
       const [entries, deviceStatuses, boluses, carbIntakes, bgChecks, notes, devEvents, newApsSnapshots] = await Promise.all([
         apiClient.sensorGlucose.getAll(backfillFromDate, nowDate, 1000).then((r) => (r.data ?? []).map(sensorGlucoseToEntry)).catch(() => [] as Entry[]),

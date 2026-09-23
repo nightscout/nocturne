@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { toggled } from "$lib/utils/collections";
   import { parseDate } from "@internationalized/date";
   import { formatLongDate, formatShortDate } from "$lib/utils/formatting";
   import { goto } from "$app/navigation";
@@ -76,9 +77,7 @@
   const isShown = (key: CategoryKey) => !hidden.has(key);
 
   function setShown(key: CategoryKey, shown: boolean) {
-    const next = new Set(hidden);
-    if (shown) next.delete(key);
-    else next.add(key);
+    const next = toggled(hidden, key, !shown);
     viewParams.hide =
       next.size > 0
         ? CATEGORIES.filter((c) => next.has(c.key))

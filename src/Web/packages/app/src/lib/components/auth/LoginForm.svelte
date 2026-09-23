@@ -225,11 +225,10 @@
     isRedirecting = true;
     selectedProvider = providerId;
 
-    const params = new URLSearchParams();
-    params.set("provider", providerId);
-    if (returnUrl && returnUrl !== "/") {
-      params.set("returnUrl", returnUrl);
-    }
+    const params = new URLSearchParams({
+      provider: providerId,
+      ...(returnUrl && returnUrl !== "/" ? { returnUrl } : {}),
+    });
 
     window.location.href = `/api/auth/oidc/login?${params.toString()}`;
   }

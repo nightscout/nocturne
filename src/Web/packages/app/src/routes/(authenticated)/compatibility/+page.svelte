@@ -147,10 +147,13 @@
 
   // Apply filters
   function applyFilters() {
-    const params = new URLSearchParams();
-    if (filterPath) params.set("requestPath", filterPath);
-    if (filterMethod) params.set("requestMethod", filterMethod);
-    if (filterMatch) params.set("overallMatch", filterMatch);
+    const params = new URLSearchParams(
+      Object.entries({
+        requestPath: filterPath,
+        requestMethod: filterMethod,
+        overallMatch: filterMatch,
+      }).filter(([, value]) => value)
+    );
     goto(resolve(`/compatibility?${params.toString()}`));
   }
 

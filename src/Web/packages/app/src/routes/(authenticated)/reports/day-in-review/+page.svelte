@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { timeDay } from "d3-time";
+  import { distinct } from "$lib/utils/collections";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
@@ -76,8 +78,7 @@
 
   // Date navigation
   function goToDayOffset(days: number) {
-    const target = new Date(currentDate);
-    target.setDate(target.getDate() + days);
+    const target = timeDay.offset(currentDate, days);
     goto(resolve(`/reports/day-in-review?date=${toDayString(target)}`), {
       invalidateAll: true,
       replaceState: true,
@@ -110,11 +111,7 @@
 
   // Get unique event types for filter dropdown
   const uniqueEventTypes = $derived.by(() => {
-    const types = new Set<string>();
-    for (const row of treatmentRows) {
-      types.add(getRowLabel(row));
-    }
-    return Array.from(types).sort();
+    return distinct(treatmentRows.map(getRowLabel)).sort();
   });
 
   // Filtered and sorted treatments

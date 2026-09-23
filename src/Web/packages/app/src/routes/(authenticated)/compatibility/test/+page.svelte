@@ -13,6 +13,7 @@
   import { Checkbox } from "$lib/components/ui/checkbox";
   import * as Select from "$lib/components/ui/select";
   import { ArrowLeft, Play, Loader2 } from "lucide-svelte";
+  import { indexBy } from "$lib/utils/collections";
 
   // Form state - default URL matches CompatibilityProxy format
   let nightscoutUrl = $state("https://your-nightscout.herokuapp.com");
@@ -169,45 +170,23 @@
     return nocturneObj;
   }
 
-  // Match and reorder Nocturne array entries to align with Nightscout's _id order
+  function idOf(item: { _id?: string } | null | undefined): string | undefined {
+    return item && typeof item === "object" && item._id ? item._id : undefined;
+  }
+
+  // Match and reorder Nocturne array entries to align with Nightscout's _id order;
+  // unmatched Nocturne entries follow, then those without an _id.
   function matchEntriesById(nocturneArr: any[], nightscoutArr: any[]): any[] {
-    // Build a map of Nocturne entries by _id
-    const ncById = new Map<string, any>();
-    const ncWithoutId: any[] = [];
-
-    for (const item of nocturneArr) {
-      if (item && typeof item === "object" && item._id) {
-        ncById.set(item._id, item);
-      } else {
-        ncWithoutId.push(item);
-      }
-    }
-
-    // Reorder Nocturne entries to match Nightscout's _id order
-    const matched: any[] = [];
-    const usedIds = new Set<string>();
-
-    for (const nsItem of nightscoutArr) {
-      if (nsItem && typeof nsItem === "object" && nsItem._id) {
-        const ncItem = ncById.get(nsItem._id);
-        if (ncItem) {
-          matched.push(ncItem);
-          usedIds.add(nsItem._id);
-        }
-      }
-    }
-
-    // Add any unmatched Nocturne entries at the end
-    for (const [id, item] of ncById) {
-      if (!usedIds.has(id)) {
-        matched.push(item);
-      }
-    }
-
-    // Add entries without _id at the end
-    matched.push(...ncWithoutId);
-
-    return matched;
+    const ncById = indexBy(nocturneArr, idOf, (item) => item);
+    const matchedIds = nightscoutArr
+      .map(idOf)
+      .filter((id): id is string => id !== undefined && ncById.has(id));
+    const used = new Set(matchedIds);
+    return [
+      ...matchedIds.map((id) => ncById.get(id)),
+      ...[...ncById].filter(([id]) => !used.has(id)).map(([, item]) => item),
+      ...nocturneArr.filter((item) => idOf(item) === undefined),
+    ];
   }
 
   // Remove Nocturne-specific fields recursively
@@ -231,13 +210,7 @@
   function reorderToMatch(nocturneObj: any, nightscoutObj: any): any {
     if (Array.isArray(nocturneObj)) {
       if (Array.isArray(nightscoutObj)) {
-        // Build a map of Nightscout entries by _id for matching
-        const nsById = new Map<string, any>();
-        for (const item of nightscoutObj) {
-          if (item && typeof item === "object" && item._id) {
-            nsById.set(item._id, item);
-          }
-        }
+        const nsById = indexBy(nightscoutObj, idOf, (item) => item);
 
         // Match each Nocturne entry with its corresponding Nightscout entry by _id
         return nocturneObj.map((ncItem, index) => {

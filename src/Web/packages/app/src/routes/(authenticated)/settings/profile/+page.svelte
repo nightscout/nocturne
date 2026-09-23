@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { distinct } from "$lib/utils/collections";
   import { page } from "$app/state";
   import { resolve } from "$app/paths";
   import {
@@ -55,11 +56,9 @@
 
   // Extract unique profile names from therapy settings (the canonical source)
   function getProfileNames(data: Summary): string[] {
-    const names = new Set<string>();
-    for (const ts of (data?.therapySettings ?? []) as any[]) {
-      names.add(String(ts.profileName ?? "Default"));
-    }
-    return [...names];
+    return distinct(
+      ((data?.therapySettings ?? []) as any[]).map((ts) => String(ts.profileName ?? "Default"))
+    );
   }
 
   // Determine the default (active) profile name

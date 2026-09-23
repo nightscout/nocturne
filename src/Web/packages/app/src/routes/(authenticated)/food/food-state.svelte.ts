@@ -1,4 +1,6 @@
 import { toast } from 'svelte-sonner';
+import { SvelteSet } from 'svelte/reactivity';
+import { distinct } from '$lib/utils/collections';
 import type { Food } from '$api';
 import type { GiLevel, SortMode } from './types.js';
 import { giFromInt } from './types.js';
@@ -16,7 +18,7 @@ import { describeSubmitError } from '$lib/forms/submit-error';
 
 export class FoodState {
   foods = $state<Food[]>([]);
-  favorites = $state<Set<string>>(new Set());
+  favorites = $state(new SvelteSet<string>());
   query = $state('');
   categoryFilter = $state<string | null>(null);
   giFilter = $state<GiLevel | null>(null);
@@ -27,13 +29,7 @@ export class FoodState {
   loading = $state(false);
 
   /** Unique category names derived from the food list */
-  categories = $derived.by(() => {
-    const cats = new Set<string>();
-    for (const f of this.foods) {
-      if (f.category) cats.add(f.category);
-    }
-    return [...cats].sort();
-  });
+  categories = $derived(distinct(this.foods.map((f) => f.category || null)).sort());
 
   /** Filtered + sorted food list */
   filteredFoods = $derived.by(() => {
@@ -68,8 +64,8 @@ export class FoodState {
       list.sort((a, b) => (b.carbs ?? 0) - (a.carbs ?? 0));
     } else if (this.sort === 'recent') {
       list.sort((a, b) => {
-        const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
-        const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
+        const ta = a.created_at ? Date.parse(a.created_at) : 0;
+        const tb = b.created_at ? Date.parse(b.created_at) : 0;
         return tb - ta;
       });
     }
@@ -85,7 +81,7 @@ export class FoodState {
         getFavorites(undefined).run(),
       ]);
       this.foods = foods ?? [];
-      this.favorites = new Set(
+      this.favorites = new SvelteSet(
         (favs ?? []).map((f: Food) => f._id).filter(Boolean) as string[]
       );
     } catch (err) {
@@ -105,17 +101,15 @@ export class FoodState {
     try {
       if (this.favorites.has(foodId)) {
         this.favorites.delete(foodId);
-        this.favorites = new Set(this.favorites);
         await removeFavoriteRemote(foodId);
       } else {
         this.favorites.add(foodId);
-        this.favorites = new Set(this.favorites);
         await addFavoriteRemote(foodId);
       }
     } catch (err) {
       toast.error(describeSubmitError(err, 'Failed to update favorite'));
       const favs = await getFavorites(undefined).run();
-      this.favorites = new Set(
+      this.favorites = new SvelteSet(
         (favs ?? []).map((f: Food) => f._id).filter(Boolean) as string[]
       );
     }
@@ -164,7 +158,6 @@ export class FoodState {
       await deleteFoodRemote({ foodId, attributionMode });
       this.foods = this.foods.filter((f) => f._id !== foodId);
       this.favorites.delete(foodId);
-      this.favorites = new Set(this.favorites);
       this.expandedId = null;
       toast.success('Food deleted');
     } catch (err) {

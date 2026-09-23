@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { timeDay } from "d3-time";
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
   import { Label } from "$lib/components/ui/label";
@@ -76,8 +77,7 @@
         .toISOString()
         .slice(0, 16);
       // Default scheduled time to tomorrow at 9am for event mode
-      const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-      tomorrow.setHours(9, 0, 0, 0);
+      const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 9);
       scheduledAtString = new Date(tomorrow.getTime() - offset)
         .toISOString()
         .slice(0, 16);
@@ -106,8 +106,7 @@
       a.getMonth() === b.getMonth() &&
       a.getDate() === b.getDate();
 
-    const yesterday = new Date(now);
-    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterday = timeDay.offset(now, -1);
 
     const timeStr = time(d);
 

@@ -25,8 +25,9 @@ import {
 } from "$lib/stores/appearance-store.svelte";
 import { mergeChartData } from "$lib/utils/chart-data-merge";
 import type { TransformedChartData } from "$lib/utils/chart-data-transform";
-import { getGlucoseColor } from "$lib/utils/chart-colors";
 import { stableBy } from "$lib/utils/stable-by";
+import { distinct } from "$lib/utils/collections";
+import { mergeRealtimeGlucose } from "./merge-glucose";
 import { resolveGlucoseThresholds } from "$lib/constants/glucose-thresholds";
 import { bisector } from "d3";
 
@@ -302,6 +303,48 @@ export interface ChartDataEngine {
   readonly finders: SeriesFinders;
 }
 
+// ===== Date helpers =====
+// Outside the factory: svelte/prefer-svelte-reactivity reports every Date built
+// inside an exported function, and none of these is ever mutated.
+
+function toDate(date: Date | string | undefined): Date {
+  if (!date) return new Date();
+  return date instanceof Date ? date : new Date(date);
+}
+
+function hoursEndingAt(endMs: number, hours: number): { from: Date; to: Date } {
+  return { from: new Date(endMs - hours * 60 * 60 * 1000), to: new Date(endMs) };
+}
+
+function dateSpan(startMs: number, endMs: number): { start: Date; end: Date } {
+  return { start: new Date(startMs), end: new Date(endMs) };
+}
+
+function shiftDate(date: Date, ms: number): Date {
+  return new Date(date.getTime() + ms);
+}
+
+function processSpans<T extends { startTime: Date; endTime?: Date | null }>(
+  spans: T[],
+  rangeStart: number,
+  rangeEnd: number
+) {
+  if (!spans) return [];
+  return spans
+    .filter((span) => {
+      const spanStart = span.startTime.getTime();
+      const spanEnd = span.endTime?.getTime() ?? rangeEnd;
+      return spanEnd > rangeStart && spanStart < rangeEnd;
+    })
+    .map((span) => ({
+      ...span,
+      displayStart: new Date(Math.max(span.startTime.getTime(), rangeStart)),
+      displayEnd: new Date(
+        Math.min(span.endTime?.getTime() ?? rangeEnd, rangeEnd)
+      ),
+    }));
+}
+
 // ===== Factory =====
 
 export function createChartDataEngine(
@@ -328,15 +371,6 @@ export function createChartDataEngine(
   let processedHistoricalPromise =
     $state<Promise<TransformedChartData | null> | null>(null);
 
-  // ---- Helpers ----
-  function normalizeDate(
-    date: Date | string | undefined,
-    fallback: Date
-  ): Date {
-    if (!date) return fallback;
-    return date instanceof Date ? date : new Date(date);
-  }
-
   // ---- Time ranges ----
   const nowMinute = $derived(Math.floor(realtimeStore.now / 60000) * 60000);
 
@@ -353,31 +387,22 @@ export function createChartDataEngine(
     (predictionServiceAvailable || hasExternalPredictions)
   );
 
-  const fullDataRange = $derived({
-    from: options.dateRange
-      ? normalizeDate(options.dateRange.from, new Date())
-      : new Date(nowMinute - GLUCOSE_CHART_FETCH_HOURS * 60 * 60 * 1000),
-    to: options.dateRange
-      ? normalizeDate(options.dateRange.to, new Date())
-      : new Date(nowMinute),
-  });
+  const fullDataRange = $derived(
+    options.dateRange
+      ? { from: toDate(options.dateRange.from), to: toDate(options.dateRange.to) }
+      : hoursEndingAt(nowMinute, GLUCOSE_CHART_FETCH_HOURS)
+  );
 
-  const displayDateRange = $derived({
-    from: options.dateRange
-      ? normalizeDate(options.dateRange.from, new Date())
-      : new Date(nowMinute - lookbackHours * 60 * 60 * 1000),
-    to: options.dateRange
-      ? normalizeDate(options.dateRange.to, new Date())
-      : new Date(nowMinute),
-  });
+  const displayDateRange = $derived(
+    options.dateRange
+      ? { from: toDate(options.dateRange.from), to: toDate(options.dateRange.to) }
+      : hoursEndingAt(nowMinute, lookbackHours)
+  );
 
   const displayDateRangeWithPredictions = $derived({
     from: displayDateRange.from,
     to: effectiveShowPredictions
-      ? new Date(
-        displayDateRange.to.getTime() +
-        predictionMinutes.current * 60 * 1000
-      )
+      ? shiftDate(displayDateRange.to, predictionMinutes.current * 60 * 1000)
       : displayDateRange.to,
   });
 
@@ -387,9 +412,7 @@ export function createChartDataEngine(
     from: fullDataRange.from,
     to:
       effectiveShowPredictions && predictionData
-        ? new Date(
-          fullDataRange.to.getTime() + predictionHours * 60 * 60 * 1000
-        )
+        ? shiftDate(fullDataRange.to, predictionHours * 60 * 60 * 1000)
         : fullDataRange.to,
   });
 
@@ -575,46 +598,7 @@ export function createChartDataEngine(
   // is re-executed on every read, not once per change. This is the most-read
   // series in the app, and a fresh array from it re-dirties the chart's entire
   // extent and scale chain, which reads it again. See the note on `stableBy`.
-  const mergeGlucose = stableBy(
-    (
-      chartData: TransformedChartData | null,
-      entries: typeof realtimeStore.entries,
-      fromMs: number,
-      toMs: number
-    ): GlucosePoint[] => {
-      const base = chartData?.glucoseData ?? [];
-      if (!chartData) return base as GlucosePoint[];
-
-      const thresholds = resolveGlucoseThresholds(chartData.thresholds);
-
-      const byMills = new Map<number, GlucosePoint>();
-      for (const p of base) byMills.set(p.time.getTime(), p);
-
-      for (const e of entries) {
-        if (
-          e.type !== "sgv" ||
-          e.mills == null ||
-          e.sgv == null ||
-          e.mills < fromMs ||
-          e.mills > toMs ||
-          byMills.has(e.mills)
-        ) {
-          continue;
-        }
-        byMills.set(e.mills, {
-          time: new Date(e.mills),
-          sgv: e.sgv,
-          direction: e.direction,
-          dataSource: e.data_source,
-          color: getGlucoseColor(e.sgv, thresholds),
-        });
-      }
-
-      return [...byMills.values()].sort(
-        (a, b) => a.time.getTime() - b.time.getTime()
-      ) as GlucosePoint[];
-    }
-  );
+  const mergeGlucose = stableBy(mergeRealtimeGlucose);
 
   const glucoseData = $derived(
     mergeGlucose(
@@ -697,27 +681,6 @@ export function createChartDataEngine(
   const systemEvents = $derived(serverChartData?.systemEventMarkers ?? []);
   const trackerMarkers = $derived(serverChartData?.trackerMarkers ?? []);
 
-  function processSpans<T extends { startTime: Date; endTime?: Date | null }>(
-    spans: T[],
-    rangeStart: number,
-    rangeEnd: number
-  ) {
-    if (!spans) return [];
-    return spans
-      .filter((span) => {
-        const spanStart = span.startTime.getTime();
-        const spanEnd = span.endTime?.getTime() ?? rangeEnd;
-        return spanEnd > rangeStart && spanStart < rangeEnd;
-      })
-      .map((span) => ({
-        ...span,
-        displayStart: new Date(Math.max(span.startTime.getTime(), rangeStart)),
-        displayEnd: new Date(
-          Math.min(span.endTime?.getTime() ?? rangeEnd, rangeEnd)
-        ),
-      }));
-  }
-
   const processedStateSpans = $derived.by(() => {
     const rangeStart = fullDataRange.from.getTime();
     const rangeEnd = fullDataRange.to.getTime();
@@ -783,9 +746,7 @@ export function createChartDataEngine(
   const displayTrackerMarkers = $derived.by(() => {
     const rangeStart = displayDateRange.from.getTime();
     const predEnd = effectiveShowPredictions && predictionData
-      ? new Date(
-        displayDateRange.to.getTime() + predictionHours * 60 * 60 * 1000
-      ).getTime()
+      ? displayDateRange.to.getTime() + predictionHours * 60 * 60 * 1000
       : displayDateRange.to.getTime();
     return trackerMarkers
       .filter((m) => {
@@ -817,10 +778,7 @@ export function createChartDataEngine(
       timeSinceLastUpdate > STALE_THRESHOLD_MS &&
       lastBasalSourceTime >= rangeStartTime
     ) {
-      return {
-        start: new Date(lastBasalSourceTime),
-        end: new Date(rangeEndTime),
-      };
+      return dateSpan(lastBasalSourceTime, rangeEndTime);
     }
     return null;
   });
@@ -841,9 +799,9 @@ export function createChartDataEngine(
     return sorted[0]?.state ?? "Automatic";
   });
 
-  const uniquePumpModes = $derived([
-    ...new Set(displayPumpModeSpans.map((s) => s.state ?? "")),
-  ]);
+  const uniquePumpModes = $derived(
+    distinct(displayPumpModeSpans.map((s) => s.state ?? ""))
+  );
 
   // ---- Series finders ----
   const bisectDate = bisector((d: { time: Date }) => d.time).left;

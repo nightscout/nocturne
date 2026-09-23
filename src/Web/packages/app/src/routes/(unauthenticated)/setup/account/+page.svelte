@@ -51,9 +51,7 @@
   function loginWithProvider(providerId: string) {
     isRedirecting = true;
     selectedProvider = providerId;
-    const params = new URLSearchParams();
-    params.set("provider", providerId);
-    params.set("returnUrl", "/setup/account");
+    const params = new URLSearchParams({ provider: providerId, returnUrl: "/setup/account" });
     window.location.href = `/api/auth/oidc/login?${params.toString()}`;
   }
 

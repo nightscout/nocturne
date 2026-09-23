@@ -1,4 +1,5 @@
 import { pushState, replaceState } from "$app/navigation";
+import { withSearchParam } from "$lib/utils/url";
 import { page } from "$app/state";
 
 /**
@@ -89,10 +90,8 @@ export function useDialogHistory(
         adopted = true;
       } else if (param) {
         pushed = true;
-        const url = new URL(page.url);
-        url.searchParams.set(param.name, param.value());
         // eslint-disable-next-line svelte/no-navigation-without-resolve -- the current page's URL plus one param, already resolved
-        pushState(url, { ...page.state });
+        pushState(withSearchParam(page.url, param.name, param.value()), { ...page.state });
       } else {
         pushed = true;
         pushState("", { ...page.state, [key]: true });
@@ -103,10 +102,8 @@ export function useDialogHistory(
         history.back();
       } else {
         adopted = false;
-        const url = new URL(page.url);
-        url.searchParams.delete(param!.name);
         // eslint-disable-next-line svelte/no-navigation-without-resolve -- the current page's URL minus one param, already resolved
-        replaceState(url, { ...page.state });
+        replaceState(withSearchParam(page.url, param!.name, null), { ...page.state });
       }
     }
   });

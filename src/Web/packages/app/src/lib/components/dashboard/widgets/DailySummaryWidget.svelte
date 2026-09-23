@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { timeDay } from "d3-time";
   import WidgetCard from "./WidgetCard.svelte";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
@@ -18,9 +19,7 @@
   // Calculate daily stats from today's entries
   const dailyStats = $derived.by(() => {
     const now = realtimeStore.now;
-    const startOfDay = new Date(now);
-    startOfDay.setHours(0, 0, 0, 0);
-    const startOfDayMs = startOfDay.getTime();
+    const startOfDayMs = timeDay.floor(new Date(now)).getTime();
 
     const todayEntries = realtimeStore.entries.filter(
       (e) => (e.mills || 0) >= startOfDayMs

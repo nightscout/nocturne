@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { toggled } from "$lib/utils/collections";
   import { onMount, untrack } from "svelte";
   import * as Collapsible from "$lib/components/ui/collapsible";
   import { Switch } from "$lib/components/ui/switch";
@@ -228,10 +229,7 @@
   }
 
   function toggleDisabled(id: string, enabled: boolean): void {
-    const next = new Set(disabledRuleIds);
-    if (enabled) next.delete(id);
-    else next.add(id);
-    disabledRuleIds = next;
+    disabledRuleIds = toggled(disabledRuleIds, id, !enabled);
   }
 </script>
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { toggled } from "$lib/utils/collections";
   import { formatDayTime } from "$lib/utils/formatting";
   import { page } from "$app/state";
   import { Button } from "$lib/components/ui/button";
@@ -160,10 +161,7 @@
   }
 
   async function toggleScope(scope: string) {
-    const next = new Set(scopes);
-    if (next.has(scope)) next.delete(scope);
-    else next.add(scope);
-    const list = [...next];
+    const list = [...toggled(new Set(scopes), scope)];
     pendingScopes = list;
     errorMessage = null;
     scopeWritesInFlight++;

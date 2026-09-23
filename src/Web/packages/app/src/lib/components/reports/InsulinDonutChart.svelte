@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { indexBy } from "$lib/utils/collections";
   import { formatClock } from "$lib/utils/formatting";
   import { PieChart, Text, Tooltip } from "layerchart";
   import type { Bolus, CarbIntake } from "$lib/api";
@@ -34,13 +35,9 @@
   );
 
   // Build correlation map for tooltip (bolus correlationId -> carb intake)
-  const carbByCorrelation = $derived.by(() => {
-    const map = new Map<string, CarbIntake>();
-    for (const c of carbIntakes) {
-      if (c.correlationId) map.set(c.correlationId, c);
-    }
-    return map;
-  });
+  const carbByCorrelation = $derived(
+    indexBy(carbIntakes, (c) => c.correlationId || null, (c) => c)
+  );
 
   // Segment data for the pie chart
   interface SegmentData {

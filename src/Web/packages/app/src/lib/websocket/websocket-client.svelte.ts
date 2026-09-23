@@ -14,6 +14,7 @@ import type {
   StatusEvent,
 } from "./types";
 import { realtimeSocketOptions } from "./socket-options";
+import { isoNow } from "$lib/utils/now";
 
 /** Per-socket record of whether its handshake carried a ticket. The bridge
  *  admits a ticket-less handshake so legacy Nightscout clients can run the
@@ -262,7 +263,7 @@ export class WebSocketClient {
       this.clearAuthRetry();
       this.eventHandlers.connect?.({
         clientId: this.socket?.id || "",
-        serverTime: new Date().toISOString(),
+        serverTime: isoNow(),
         version: "1.0.0",
       });
     });
@@ -357,7 +358,7 @@ export class WebSocketClient {
         message: data.message || data.text || String(data),
         title: data.title || "Announcement",
         level: data.level || "info",
-        timestamp: data.timestamp || new Date().toISOString(),
+        timestamp: data.timestamp || isoNow(),
       };
       this.eventHandlers.announcement?.(event);
     });
@@ -369,7 +370,7 @@ export class WebSocketClient {
         title: data.title || "Alarm",
         message: data.message,
         plugin: data.plugin || data.source,
-        timestamp: data.timestamp || new Date().toISOString(),
+        timestamp: data.timestamp || isoNow(),
         key: data.key || data.id,
       };
       this.eventHandlers.alarm?.(event);
@@ -394,7 +395,7 @@ export class WebSocketClient {
       const event: StatusEvent = {
         status: data.status || data.state,
         message: data.message,
-        timestamp: data.timestamp || new Date().toISOString(),
+        timestamp: data.timestamp || isoNow(),
       };
       this.eventHandlers.status?.(event);
     });
@@ -476,7 +477,7 @@ export class WebSocketClient {
 
     return {
       clientId: this.socket.id || "",
-      serverTime: new Date().toISOString(),
+      serverTime: isoNow(),
       version: "1.0.0",
     };
   }

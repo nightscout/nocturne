@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { toggled } from "$lib/utils/collections";
   import * as Select from "$lib/components/ui/select";
   import { Checkbox } from "$lib/components/ui/checkbox";
   import { Label } from "$lib/components/ui/label";
@@ -68,10 +69,9 @@
   }
 
   function toggleCapability(key: string, checked: boolean): void {
-    const current = new Set(selectedCapabilities);
-    if (checked) current.add(key);
-    else current.delete(key);
-    channel.metadata = { capabilities: [...current] };
+    channel.metadata = {
+      capabilities: [...toggled(new Set(selectedCapabilities), key, checked)],
+    };
   }
 </script>
 

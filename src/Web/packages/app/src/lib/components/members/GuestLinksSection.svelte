@@ -149,11 +149,8 @@
   /** The backend may report http behind a reverse proxy; use the browser's origin */
   function normalizeCreatedUrl(url: string): string {
     try {
-      const backendUrl = new URL(url);
-      const originUrl = new URL(window.location.origin);
-      backendUrl.protocol = originUrl.protocol;
-      backendUrl.host = originUrl.host;
-      return backendUrl.toString();
+      const { pathname, search, hash } = new URL(url);
+      return new URL(pathname + search + hash, window.location.origin).toString();
     } catch {
       // Fallback: treat as relative path
       return url.startsWith("http") ? url : `${window.location.origin}${url}`;

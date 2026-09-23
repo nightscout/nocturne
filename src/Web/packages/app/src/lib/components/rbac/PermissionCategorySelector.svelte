@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { distinct } from "$lib/utils/collections";
   import * as Select from "$lib/components/ui/select";
 
   interface AccessLevel {
@@ -113,13 +114,7 @@
 
   /** All unique atoms across every level of a category. */
   function allAtoms(cat: PermissionCategory): string[] {
-    const set = new Set<string>();
-    for (const level of cat.levels) {
-      for (const atom of level.atoms) {
-        set.add(atom);
-      }
-    }
-    return [...set];
+    return distinct(cat.levels.flatMap((level) => level.atoms));
   }
 
   /** Determine the current access level for a category (most permissive first). */

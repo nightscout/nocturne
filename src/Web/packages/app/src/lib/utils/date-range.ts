@@ -27,7 +27,8 @@ export type DayRangeInput = {
  * groups by whatever shape the region format produces, so changing the format
  * mid-session re-buckets every group, and two days that format alike merge.
  */
-export function toDayString(date: Date = new Date()): string {
+export function toDayString(at: Date | number = new Date()): string {
+  const date = typeof at === "number" ? new Date(at) : at;
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { distinct, groupBy, toggled } from "$lib/utils/collections";
   import { startOfDay, toDayString } from "$lib/utils/date-range";
   import { formatLongDate } from "$lib/utils/formatting";
   import { Calendar } from "lucide-svelte";
@@ -94,27 +95,15 @@
 
   // Create a map of carbIntakeId -> suggestions for easy lookup
   const suggestionsByCarbIntake = $derived.by(() => {
-    const map = new Map<string, SuggestedMealMatch[]>();
-    for (const match of suggestedMatches) {
-      const carbIntakeId = match.carbIntakeId;
-      if (!carbIntakeId) continue;
-      if (!map.has(carbIntakeId)) {
-        map.set(carbIntakeId, []);
-      }
-      map.get(carbIntakeId)!.push(match);
-    }
+    const map = groupBy(suggestedMatches, (match) => match.carbIntakeId || null);
     return map;
   });
 
   // Get unique food names for filter dropdown
   const uniqueFoods = $derived.by(() => {
-    const foods = new Set<string>();
-    for (const meal of meals) {
-      for (const food of meal.foods ?? []) {
-        if (food.foodName) foods.add(food.foodName);
-      }
-    }
-    return Array.from(foods).sort();
+    return distinct(
+      meals.flatMap((meal) => (meal.foods ?? []).map((food) => food.foodName || null))
+    ).sort();
   });
 
 
@@ -189,31 +178,16 @@
     meals: MealEvent[];
   }
 
-  const mealsByDay = $derived.by(() => {
-    const grouped = new Map<string, MealEvent[]>();
-
-    for (const meal of filteredAndSortedMeals) {
+  const mealsByDay = $derived.by((): MealsByDay[] => {
+    const grouped = groupBy(filteredAndSortedMeals, (meal) => {
       const mills = meal.carbIntakes?.[0]?.mills;
-      if (!mills) continue;
-
-      const dateKey = toDayString(new Date(mills));
-
-      if (!grouped.has(dateKey)) {
-        grouped.set(dateKey, []);
-      }
-      grouped.get(dateKey)!.push(meal);
-    }
-
-    const result: MealsByDay[] = [];
-    for (const [date, dayMeals] of grouped) {
-      result.push({
-        date,
-        displayDate: formatLongDate(startOfDay(date)),
-        meals: dayMeals,
-      });
-    }
-
-    return result;
+      return mills ? toDayString(mills) : null;
+    });
+    return [...grouped].map(([date, meals]) => ({
+      date,
+      displayDate: formatLongDate(startOfDay(date)),
+      meals,
+    }));
   });
 
   // Sorting helper
@@ -233,23 +207,11 @@
   }
 
   function toggleRow(id: string) {
-    const newSet = new Set(expandedRows);
-    if (newSet.has(id)) {
-      newSet.delete(id);
-    } else {
-      newSet.add(id);
-    }
-    expandedRows = newSet;
+    expandedRows = toggled(expandedRows, id);
   }
 
   function toggleDate(date: string) {
-    const newSet = new Set(collapsedDates);
-    if (newSet.has(date)) {
-      newSet.delete(date);
-    } else {
-      newSet.add(date);
-    }
-    collapsedDates = newSet;
+    collapsedDates = toggled(collapsedDates, date);
   }
 
   function openAddFood(meal: MealEvent) {

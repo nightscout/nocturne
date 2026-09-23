@@ -25,6 +25,7 @@
 </script>
 
 <script lang="ts">
+  import { distinct } from "$lib/utils/collections";
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
   import { Checkbox } from "$lib/components/ui/checkbox";
@@ -73,14 +74,9 @@
   };
 
   // Compute unique sources from data
-  let uniqueSources = $derived.by(() => {
-    const sources = new Set<string>();
-    for (const r of rows) {
-      const source = r.data.dataSource || r.data.app;
-      if (source) sources.add(source);
-    }
-    return Array.from(sources).sort();
-  });
+  let uniqueSources = $derived(
+    distinct(rows.map((r) => r.data.dataSource || r.data.app || null)).sort()
+  );
 
   // Format functions
   function formatNumber(

@@ -32,6 +32,7 @@
   // Which ids we've already shown, so a refresh doesn't spawn duplicates. Kept
   // off $state: the effect below both reads and writes it, and nothing renders
   // from it.
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- kept off $state, see above
   const seen = new Set<string>();
   // Reactive clock so each card's relative time ages while it sits on screen.
   // Toasts never auto-dismiss and existing queue items aren't replaced on

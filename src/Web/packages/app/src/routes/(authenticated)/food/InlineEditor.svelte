@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { distinct } from "$lib/utils/collections";
 	import type { Food } from '$api';
 	import { Trash2, Check } from 'lucide-svelte';
 	import GiIcon from './GiIcon.svelte';
@@ -31,13 +32,11 @@
 
 	const subcategories = $derived.by(() => {
 		if (!draft.category) return [];
-		const subs = new Set<string>();
-		for (const f of foodState.foods) {
-			if (f.category === draft.category && f.subcategory) {
-				subs.add(f.subcategory);
-			}
-		}
-		return [...subs].sort();
+		return distinct(
+			foodState.foods
+				.filter((f) => f.category === draft.category)
+				.map((f) => f.subcategory || null)
+		).sort();
 	});
 
 	async function handleDeleteClick() {

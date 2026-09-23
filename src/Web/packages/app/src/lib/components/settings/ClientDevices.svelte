@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { indexBy } from "$lib/utils/collections";
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
   import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
@@ -33,13 +34,13 @@
   const devices = $derived(devicesQuery.current ?? []);
 
   // Map capability key -> human label from the catalog.
-  const capabilityLabels = $derived.by(() => {
-    const map = new Map<string, string>();
-    for (const cap of catalogQuery.current?.capabilities ?? []) {
-      if (cap.key) map.set(cap.key, cap.label ?? cap.key);
-    }
-    return map;
-  });
+  const capabilityLabels = $derived(
+    indexBy(
+      catalogQuery.current?.capabilities ?? [],
+      (cap) => cap.key || null,
+      (cap) => cap.label ?? cap.key ?? ""
+    )
+  );
 
   // Inline rename state.
   let editingId = $state<string | null>(null);

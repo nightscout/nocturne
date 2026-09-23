@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { timeDay } from "d3-time";
+  import { indexBy } from "$lib/utils/collections";
   import { onDestroy, untrack } from "svelte";
   import {
     type DateValue,
@@ -158,25 +160,13 @@
     const toHm = parseHHmm(toTime);
     if (!fromHm || !toHm) return null;
 
-    const baseLocal = selectedDate
-      ? selectedDate.toDate(getLocalTimeZone())
-      : (() => {
-          // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local, non-reactive
-          const t = new Date();
-          t.setHours(0, 0, 0, 0);
-          return t;
-        })();
+    const day = selectedDate ? selectedDate.toDate(getLocalTimeZone()) : new Date();
+    const at = ([hours, minutes]: [number, number]) =>
+      new Date(day.getFullYear(), day.getMonth(), day.getDate(), hours, minutes);
 
-    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local, non-reactive
-    const from = new Date(baseLocal.getTime());
-    from.setHours(fromHm[0], fromHm[1], 0, 0);
-    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local, non-reactive
-    const to = new Date(baseLocal.getTime());
-    to.setHours(toHm[0], toHm[1], 0, 0);
-    if (to.getTime() <= from.getTime()) {
-      to.setDate(to.getDate() + 1);
-    }
-    return { from, to };
+    const from = at(fromHm);
+    const to = at(toHm);
+    return { from, to: to.getTime() <= from.getTime() ? timeDay.offset(to, 1) : to };
   }
 
   // Per-run derived state populated by handleRun. Kept as plain $state (not
@@ -302,25 +292,15 @@
       // Build per-rule tree + leaf-id maps. The rule under edit substitutes
       // its in-memory tree so the sidebar reflects the editor's current
       // typing rather than the saved version.
-      // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local, non-reactive
-      const trees = new Map<string, ConditionNode>();
-      // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local, non-reactive
-      const ids = new Map<string, Map<string, number>>();
-      for (const r of rulesList) {
-        if (!r.id) continue;
-        let parsed: ConditionNode | null;
-        if (editingRuleId && r.id === editingRuleId && editingTree) {
-          parsed = editingTree;
-        } else {
-          parsed = nodeFromApi(r.conditionType, r.conditionParams);
-        }
-        if (!parsed) continue;
-        const tree = ensureCompositeRoot(parsed);
-        trees.set(r.id, tree);
-        ids.set(r.id, assignLeafIds(tree));
-      }
-      treeByRule = trees;
-      leafIdsByRule = ids;
+      const parsedTrees = rulesList.flatMap((r) => {
+        const parsed =
+          editingRuleId && r.id === editingRuleId && editingTree
+            ? editingTree
+            : nodeFromApi(r.conditionType, r.conditionParams);
+        return r.id && parsed ? [{ id: r.id, tree: ensureCompositeRoot(parsed) }] : [];
+      });
+      treeByRule = indexBy(parsedTrees, (t) => t.id, (t) => t.tree);
+      leafIdsByRule = indexBy(parsedTrees, (t) => t.id, (t) => assignLeafIds(t.tree));
       leafLog = new LeafTransitionLog(result?.leafTransitionsByRule ?? {});
       factLog = new FactSnapshotLog(result?.factTimelines ?? {});
     } catch (err) {

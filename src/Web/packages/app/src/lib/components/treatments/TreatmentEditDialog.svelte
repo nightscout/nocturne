@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { uniqueBy } from "$lib/utils/collections";
   import type {
     Bolus,
     CarbIntake,
@@ -294,15 +295,7 @@
   // Correlation group: all records sharing the same correlationId
   let correlationGroup = $derived.by(() => {
     if (!record) return [];
-    const all = [record, ...correlatedRecords];
-    // Deduplicate by id
-    const seen = new Set<string>();
-    return all.filter((r) => {
-      const id = r.data.id;
-      if (!id || seen.has(id)) return false;
-      seen.add(id);
-      return true;
-    });
+    return uniqueBy([record, ...correlatedRecords], (r) => r.data.id || null);
   });
 
   // Icon per kind
