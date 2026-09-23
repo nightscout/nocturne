@@ -10,7 +10,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Table from '$lib/components/ui/table';
 	import { setReportPrintMeta } from '$lib/components/reports/print/report-print.svelte';
-	import { toDayString } from '$lib/utils/date-range';
+	import { startOfDay, toDayString } from '$lib/utils/date-range';
 	import {
 		Select,
 		SelectContent,
@@ -67,8 +67,18 @@
 
 	const suggestions = $derived(suggestionsResource.current ?? []);
 
+	/**
+	 * Local midnight of a night's calendar date. `nightOf` is a date sent as UTC
+	 * midnight, which local getters would read as the previous day west of UTC.
+	 */
+	function nightDate(nightOf: string | Date): Date {
+		const utc = nightOf instanceof Date ? nightOf : new Date(nightOf);
+		return startOfDay(utc.toISOString().slice(0, 10));
+	}
+
+	// Spans the nights the printed table lists, so the header matches the rows.
 	const nightSpan = $derived.by(() => {
-		const nights = suggestions.flatMap((s) => (s.nightOf ? [new Date(s.nightOf).getTime()] : []));
+		const nights = filteredSuggestions.flatMap((s) => (s.nightOf ? [nightDate(s.nightOf).getTime()] : []));
 		if (nights.length === 0) return null;
 		return {
 			from: toDayString(Math.min(...nights)),
@@ -314,7 +324,7 @@
 
 
 	function formatNightOf(nightOf: string | Date): string {
-		const date = nightOf instanceof Date ? nightOf : new Date(nightOf);
+		const date = nightDate(nightOf);
 		const nextDay = timeDay.offset(date, 1);
 		// `{ day, year }` has no CLDR pattern; ICU renders it as "2026 (day: 30)".
 		return `Night of ${formatShortDate(date)} \u2013 ${formatShortDate(nextDay, true)}`;

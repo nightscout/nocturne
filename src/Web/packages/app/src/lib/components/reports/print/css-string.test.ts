@@ -13,6 +13,11 @@ describe("cssString", () => {
 		expect(out).toContain(String.raw`\3c `);
 	});
 
+	it("escapes a form feed, which CSS reads as a line break", () => {
+		const out = cssString("x\f} body{display:none}");
+		expect(out).toBe(String.raw`"x\c } body{display:none}"`);
+	});
+
 	it("escapes backslashes and newlines", () => {
 		expect(cssString("a\\b\nc")).toBe(String.raw`"a\5c b\a c"`);
 	});

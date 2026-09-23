@@ -49,7 +49,8 @@ public interface IDemoDataGenerator
     /// agrees. Each call runs a fresh simulation — consumers must enumerate
     /// once and project what they need.
     /// </summary>
-    IEnumerable<DemoTimeStep> GenerateHistoricalTimeline();
+    /// <param name="endDate">Local end of the timeline; now when omitted.</param>
+    IEnumerable<DemoTimeStep> GenerateHistoricalTimeline(DateTime? endDate = null);
 }
 
 /// <summary>
@@ -61,7 +62,7 @@ public class DemoDataGenerator : IDemoDataGenerator
     private readonly ILogger<DemoDataGenerator> _logger;
     private readonly ILoggerFactory _loggerFactory;
     private readonly DemoModeConfiguration _config;
-    private readonly Random _random = new();
+    private readonly Random _random;
     private double _currentGlucose;
     private readonly object _lock = new();
     private const double PumpBolusIncrementUnits = 0.1;
@@ -87,6 +88,7 @@ public class DemoDataGenerator : IDemoDataGenerator
         _logger = logger;
         _loggerFactory = loggerFactory;
         _config = config.Value;
+        _random = _config.RandomSeed is { } seed ? new Random(seed) : new Random();
         _currentGlucose = _config.InitialGlucose;
     }
 
@@ -206,19 +208,19 @@ public class DemoDataGenerator : IDemoDataGenerator
     /// simulator's IOB/COB — so the chart, the treatment history, the device
     /// status stream, and the alarm episodes all derive from the same run.
     /// </summary>
-    public IEnumerable<DemoTimeStep> GenerateHistoricalTimeline()
+    public IEnumerable<DemoTimeStep> GenerateHistoricalTimeline(DateTime? endDate = null)
     {
         // Local-time day iteration: meals land at local wall-clock mealtimes,
         // and the per-date DayScenario key matches the sleep/activity/device
         // generators, which anchor on local dates. Timestamps convert to UTC
         // at the point of storage (DateTimeOffset respects Kind).
-        var endDate = DateTime.Now;
-        var startDate = endDate.AddDays(-_config.BackfillDays);
+        var end = endDate ?? DateTime.Now;
+        var startDate = end.AddDays(-_config.BackfillDays);
 
         _logger.LogInformation(
             "Streaming historical timeline from {StartDate} to {EndDate}",
             startDate,
-            endDate
+            end
         );
 
         var currentDay = startDate.Date;
@@ -229,7 +231,7 @@ public class DemoDataGenerator : IDemoDataGenerator
         // midnight) carry into the next day's step buckets.
         var carriedOver = new List<(DateTime Time, Treatment Treatment)>();
 
-        while (currentDay <= endDate.Date)
+        while (currentDay <= end.Date)
         {
             var dayScenario = SelectDayScenario(currentDay);
             var scenarioParams = GetScenarioParameters(dayScenario);
@@ -282,8 +284,8 @@ public class DemoDataGenerator : IDemoDataGenerator
             var targetGlucose = _config.TargetGlucose;
             var currentTime = currentDay;
             // Cap endTime to now to prevent generating future data
-            var endTime = currentDay.Date == endDate.Date
-                ? endDate
+            var endTime = currentDay.Date == end.Date
+                ? end
                 : currentDay.AddDays(1);
 
             while (currentTime < endTime)
@@ -481,7 +483,7 @@ public class DemoDataGenerator : IDemoDataGenerator
 
             // Unconsumed items (late boluses past midnight) carry into the next
             // day. On the final day they would be future-dated — drop them.
-            if (currentDay != endDate.Date)
+            if (currentDay != end.Date)
                 carriedOver = pending;
 
             previousDayEndingGlucose = glucose;

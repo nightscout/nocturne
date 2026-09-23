@@ -32,11 +32,11 @@
 
   const chartCtx = getChartContext();
 
-  // Set from `onerror` rather than computed in the `failed` snippet: layerchart's
-  // <Chart> remounts its children once mounted, and Svelte still renders the
+  // Set from `onerror` rather than computed in the `failed` snippet. Layerchart's
+  // <Chart> remounts its children once mounted, yet Svelte still renders the
   // destroyed boundary's `failed` snippet a microtask later. A call expression
-  // there becomes a derived owned by that dead effect, which reads back as an
-  // uninitialized symbol and throws from set_text. A plain state read does not.
+  // there becomes a derived owned by that dead effect. It reads back as an
+  // uninitialized symbol and throws from set_text; a plain state read does not.
   let failureMessage = $state(PREDICTIONS_UNAVAILABLE);
 
   const predictionEndTime = $derived(chartXDomain.to.getTime());

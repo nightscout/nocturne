@@ -193,7 +193,7 @@
               r={1.5}
               fill="var(--chart-1)"
               opacity={isExtended ? 0.3 : 0.7}
-              class={isExtended ? "print:[r:2]" : "print:fill-foreground print:opacity-80 print:[r:1.75]"}
+              class={isExtended ? "print:[r:2px]" : "print:fill-foreground print:opacity-80 print:[r:1.75px]"}
             />
           {/each}
         {/snippet}

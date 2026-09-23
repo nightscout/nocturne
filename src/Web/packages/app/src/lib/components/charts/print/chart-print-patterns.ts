@@ -71,6 +71,10 @@ export const CHART_TEXTURES = {
 	"very-high-hatch": { texture: VERY_HIGH },
 	/** A target-range boundary drawn as a reference line over a glucose chart. */
 	"target-range-limit": { color: "var(--glucose-in-range)", texture: solid, dash: "4 4" },
+	/** The patient's personal target, drawn finer than the clinical limits it sits inside. */
+	"glucose-target": { color: "var(--glucose-in-range)", texture: solid, dash: "2 4" },
+	/** Basal the pump never reported, hatched rather than drawn as a rate. */
+	"basal-unreported": { texture: lines(45, 4) },
 
 	/** A glucose trace drawn as a plain line under another series (the actograms). */
 	"glucose-trace": { color: "var(--muted-foreground)", texture: solid },
@@ -155,6 +159,15 @@ export function bgPatternClass(key: TextureKey): string {
 	return `chart-bgpat-${key}`;
 }
 
+/**
+ * A key's `stroke-dasharray`, for marks that are dashed on screen as well as on
+ * paper. Unlike {@link dashClass} it applies whether or not patterns are on.
+ */
+export function dashOf(key: TextureKey): string | undefined {
+	const spec: TextureSpec = CHART_TEXTURES[key];
+	return spec.dash;
+}
+
 /** Dash pattern for an SVG stroke. Keys without a `dash` stay solid. */
 export function dashClass(key: TextureKey): string {
 	return `chart-dash-${key}`;
@@ -189,6 +202,8 @@ function entries(): (readonly [TextureKey, TextureSpec])[] {
 		isTextureKey(key) ? [[key, spec] as const] : []
 	);
 }
+
+export const TEXTURE_KEYS: readonly TextureKey[] = entries().map(([key]) => key);
 
 /**
  * CSS declarations laying a texture over an element's own background colour,

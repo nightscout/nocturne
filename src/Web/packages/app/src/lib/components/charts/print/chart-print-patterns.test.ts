@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	CHART_TEXTURES,
+	TEXTURE_KEYS,
 	bgPatternClass,
 	categoryKey,
 	dashClass,
@@ -8,10 +9,9 @@ import {
 	patternId,
 	patternTiles,
 	textureStylesheet,
-	type TextureKey,
 } from "./chart-print-patterns";
 
-const keys = Object.keys(CHART_TEXTURES) as TextureKey[];
+const keys = TEXTURE_KEYS;
 
 describe("textureStylesheet", () => {
 	const css = textureStylesheet();

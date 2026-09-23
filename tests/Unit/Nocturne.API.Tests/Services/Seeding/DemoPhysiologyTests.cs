@@ -48,18 +48,18 @@ public class DemoPhysiologyTests
 
     /// <summary>
     /// Every report is judged against this stream. It has to look like a real
-    /// T1D on AID: mostly in range, with real highs and some lows. Bounds are
-    /// loose because the generator is unseeded.
+    /// T1D on AID: mostly in range, with real highs and some lows. The seed and
+    /// end date pin one timeline, so the bounds hold on every run.
     /// </summary>
     [Fact]
     public void Timeline_GlucoseMixLooksLikeRealType1()
     {
         var generator = new DemoDataGenerator(
-            Options.Create(new DemoModeConfiguration { BackfillDays = 28 }),
+            Options.Create(new DemoModeConfiguration { BackfillDays = 28, RandomSeed = 1234 }),
             NullLogger<DemoDataGenerator>.Instance,
             NullLoggerFactory.Instance);
 
-        var glucose = generator.GenerateHistoricalTimeline().Select(s => s.Entry.Sgv ?? 0).ToList();
+        var glucose = generator.GenerateHistoricalTimeline(new DateTime(2026, 9, 24, 12, 0, 0, DateTimeKind.Local)).Select(s => s.Entry.Sgv ?? 0).ToList();
         double Percent(Func<double, bool> f) => 100.0 * glucose.Count(f) / glucose.Count;
 
         Percent(g => g >= 70 && g <= 180).Should().BeInRange(55, 88);

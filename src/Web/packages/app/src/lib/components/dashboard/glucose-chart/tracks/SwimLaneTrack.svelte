@@ -21,7 +21,6 @@
 <!-- Pump Mode Swim Lane -->
 {#if swimLanePositions.pumpMode.visible}
   {@const lane = swimLanePositions.pumpMode}
-  <TrackLabel label="Mode" top={lane.top} bottom={lane.bottom} lane />
   <ChartClipPath>
     <!-- Lane background -->
     <rect
@@ -54,12 +53,12 @@
       </g>
     {/each}
   </ChartClipPath>
+  <TrackLabel label="Mode" top={lane.top} bottom={lane.bottom} lane />
 {/if}
 
 <!-- Override Swim Lane -->
 {#if swimLanePositions.override.visible}
   {@const lane = swimLanePositions.override}
-  <TrackLabel label="Override" top={lane.top} bottom={lane.bottom} lane />
   <ChartClipPath>
     <!-- Lane background -->
     <rect
@@ -93,12 +92,12 @@
       </text>
     {/each}
   </ChartClipPath>
+  <TrackLabel label="Override" top={lane.top} bottom={lane.bottom} lane />
 {/if}
 
 <!-- Profile Swim Lane -->
 {#if swimLanePositions.profile.visible}
   {@const lane = swimLanePositions.profile}
-  <TrackLabel label="Profile" top={lane.top} bottom={lane.bottom} lane />
   <ChartClipPath>
     <!-- Lane background -->
     <rect
@@ -132,12 +131,12 @@
       </text>
     {/each}
   </ChartClipPath>
+  <TrackLabel label="Profile" top={lane.top} bottom={lane.bottom} lane />
 {/if}
 
 <!-- Activity Swim Lane (Sleep, Exercise, Illness, Travel - all in one lane) -->
 {#if swimLanePositions.activity?.visible}
   {@const lane = swimLanePositions.activity}
-  <TrackLabel label="Activity" top={lane.top} bottom={lane.bottom} lane />
   <ChartClipPath>
     <!-- Lane background -->
     <rect
@@ -170,4 +169,5 @@
       </g>
     {/each}
   </ChartClipPath>
+  <TrackLabel label="Activity" top={lane.top} bottom={lane.bottom} lane />
 {/if}

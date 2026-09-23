@@ -53,6 +53,12 @@ public class DemoModeConfiguration
     public int BackfillDays { get; set; } = 90;
 
     /// <summary>
+    /// Seeds the generator's randomness so a timeline is reproducible. Unset in
+    /// the running demo, where each start should differ.
+    /// </summary>
+    public int? RandomSeed { get; set; }
+
+    /// <summary>
     /// Base basal rate for insulin calculations (U/hr).
     /// </summary>
     public double BasalRate { get; set; } = 1.0;

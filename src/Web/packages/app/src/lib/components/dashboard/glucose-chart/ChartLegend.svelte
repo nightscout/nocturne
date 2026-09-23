@@ -1,4 +1,5 @@
 <script lang="ts">
+  import TextureSwatch from "$lib/components/charts/print/TextureSwatch.svelte";
   import type { Snippet } from "svelte";
   import { cn } from "$lib/utils";
   import { bg } from "$lib/utils/formatting";
@@ -223,18 +224,13 @@
     <span>{label}</span>
   </div>
 {/snippet}
-{#snippet ruleSwatch(dash: string)}<svg class="h-2 w-5" viewBox="0 0 20 8" aria-hidden="true">
-    <line x1="0" y1="4" x2="20" y2="4" stroke="currentColor" stroke-width="1.5" stroke-dasharray={dash} />
-  </svg>{/snippet}
-{#snippet dashedSwatch()}{@render ruleSwatch("4 4")}{/snippet}
-{#snippet dottedSwatch()}{@render ruleSwatch("2 4")}{/snippet}
+{#snippet rangeLimitSwatch()}<TextureSwatch texture="target-range-limit" color="currentColor" shape="line" />{/snippet}
+{#snippet targetSwatch()}<TextureSwatch texture="glucose-target" color="currentColor" shape="line" />{/snippet}
+{#snippet scheduledBasalSwatch()}<TextureSwatch texture="insulin-scheduled-basal" color="currentColor" shape="line" />{/snippet}
 {#snippet bgCheckSwatch()}<svg class="h-3 w-3" viewBox="-8 -8 16 16" aria-hidden="true">
     <polygon points="0,-7 7,0 0,7 -7,0" fill="currentColor" />
   </svg>{/snippet}
-{#snippet hatchSwatch()}<svg class="h-2 w-4" viewBox="0 0 16 8" aria-hidden="true">
-    <rect x="0.5" y="0.5" width="15" height="7" fill="none" stroke="currentColor" stroke-width="0.5" />
-    <path d="M0 8 L8 0 M4 8 L12 0 M8 8 L16 0 M12 8 L16 4 M0 4 L4 0" stroke="currentColor" stroke-width="0.6" />
-  </svg>{/snippet}
+{#snippet hatchSwatch()}<TextureSwatch texture="basal-unreported" color="transparent" />{/snippet}
 {#snippet overrideIcon()}<div
     class="w-3 h-2 rounded border border-(--pump-mode-boost) bg-(--pump-mode-boost) opacity-30"
   ></div>{/snippet}
@@ -269,9 +265,9 @@
   {#if glucoseData.some((d) => d.sgv < veryLowThreshold)}
     {@render glucoseRangeIndicator("bg-glucose-very-low", "Very Low", `<${bg(veryLowThreshold)}`)}
   {/if}
-  {@render printKey(dashedSwatch, `Range limits ${bg(lowThreshold)} / ${bg(highThreshold)}`)}
+  {@render printKey(rangeLimitSwatch, `Range limits ${bg(lowThreshold)} / ${bg(highThreshold)}`)}
   {#if targetLabel}
-    {@render printKey(dottedSwatch, `Target ${targetLabel}`)}
+    {@render printKey(targetSwatch, `Target ${targetLabel}`)}
   {/if}
   {#if hasBgChecks}
     {@render printKey(bgCheckSwatch, "Fingerstick BG")}
@@ -280,7 +276,7 @@
   <!-- Data toggles -->
   {@render legendToggle(showBasal, onToggleBasal, "Basal", basalIcon)}
   {#if hasScheduledBasal}
-    {@render printKey(dashedSwatch, "Scheduled basal")}
+    {@render printKey(scheduledBasalSwatch, "Scheduled basal")}
   {/if}
   {#if hasUnreportedBasal}
     {@render printKey(hatchSwatch, "Not reported by pump")}

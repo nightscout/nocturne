@@ -55,17 +55,23 @@ function settle(): Promise<void> {
 
 /**
  * Print the report laid out at paper width. Charts size themselves from a
- * ResizeObserver, which never runs for the print layout itself. Printing
- * straight from a wide screen would clip every chart at its screen width, so
- * the page narrows first and waits for the charts to re-measure.
+ * ResizeObserver, which never runs for the print layout itself. Printed
+ * straight from a wide screen, every chart would clip at its screen width.
+ * So the page narrows first and waits for the charts to re-measure.
  */
 export async function printReport(): Promise<void> {
   const root = document.documentElement;
   root.style.setProperty("--report-print-width", `${PAPER_CONTENT_MM}mm`);
   root.classList.add(PRINT_LAYOUT_CLASS);
-  window.addEventListener("afterprint", () => root.classList.remove(PRINT_LAYOUT_CLASS), { once: true });
-  await settle();
-  window.print();
+  try {
+    await settle();
+    window.print();
+  } finally {
+    // print() blocks until the dialog closes, and afterprint never fires where
+    // the dialog is suppressed, so the paper layout is undone here instead.
+    root.classList.remove(PRINT_LAYOUT_CLASS);
+    root.style.removeProperty("--report-print-width");
+  }
 }
 
 /**

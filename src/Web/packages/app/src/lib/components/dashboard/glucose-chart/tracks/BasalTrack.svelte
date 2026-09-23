@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { dashOf } from "$lib/components/charts/print/chart-print-patterns";
   import {
     Area,
     Spline,
@@ -201,7 +202,7 @@
         y={(d) => basalScale(d.rate ?? 0)}
         curve={curveStepAfter}
         class="stroke-muted-foreground/50 stroke-1 fill-none print:stroke-foreground/70"
-        stroke-dasharray="4,4"
+        stroke-dasharray={dashOf("insulin-scheduled-basal")}
       />
     </ChartClipPath>
   {/if}

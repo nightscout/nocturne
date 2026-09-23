@@ -1,6 +1,7 @@
 <script lang="ts">
   import ThresholdRule from "./ThresholdRule.svelte";
   import { getGlucoseChartContext } from "../chart-context.svelte";
+  import { dashOf } from "$lib/components/charts/print/chart-print-patterns";
 
   const ctx = getGlucoseChartContext();
   const targetLow = $derived(ctx.engine.thresholds.targetLow);
@@ -17,13 +18,13 @@
   <ThresholdRule
     level="targetLow"
     class="stroke-glucose-in-range/70 print:stroke-foreground/40"
-    strokeDasharray="2,4"
+    strokeDasharray={dashOf("glucose-target")}
   />
 {/if}
 {#if targetHigh != null && targetHigh !== targetLow}
   <ThresholdRule
     level="targetHigh"
     class="stroke-glucose-in-range/70 print:stroke-foreground/40"
-    strokeDasharray="2,4"
+    strokeDasharray={dashOf("glucose-target")}
   />
 {/if}

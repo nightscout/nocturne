@@ -4,7 +4,6 @@
  */
 import { ClusterConfidence, type GlucoseCluster } from "$lib/api";
 import { bg, bgLabel } from "$lib/utils/formatting";
-import type { TextureKey } from "$lib/components/charts/print/chart-print-patterns";
 
 export function confidenceLabel(c: ClusterConfidence | undefined): string {
   switch (c) {
@@ -17,20 +16,11 @@ export function confidenceLabel(c: ClusterConfidence | undefined): string {
   }
 }
 
-/** Chart texture, and colour, of a confidence level. */
-export function confidenceTexture(c: ClusterConfidence | undefined): TextureKey {
-  switch (c) {
-    case ClusterConfidence.High:
-      return "cluster-high";
-    case ClusterConfidence.Medium:
-      return "cluster-medium";
-    default:
-      return "cluster-low";
-  }
-}
-
-/** Tailwind text + background classes for a confidence chip. A tint prints near-white, so print is ink on an outline. */
-export function confidenceBadgeVariant(
+/**
+ * A confidence level's key, which names both its chart texture and its badge
+ * variant, so a chart band and its chip always match.
+ */
+export function confidenceKey(
   c: ClusterConfidence | undefined
 ): "cluster-high" | "cluster-medium" | "cluster-low" {
   switch (c) {
@@ -42,6 +32,7 @@ export function confidenceBadgeVariant(
       return "cluster-low";
   }
 }
+
 
 /** Plain-English description of why a window was flagged, built from the detector diagnostics. */
 export function describeCluster(cluster: GlucoseCluster): string {

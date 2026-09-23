@@ -10,7 +10,7 @@
   import { ClusterConfidence } from "$lib/api";
   import { patternClass } from "$lib/components/charts/print/chart-print-patterns";
   import type { DayBucket } from "./buckets";
-  import { confidenceTexture } from "./format";
+  import { confidenceKey } from "./format";
   import HypoMarker from "./HypoMarker.svelte";
 
   interface Props {
@@ -53,7 +53,7 @@
     <Svg>
       <!-- Noise clusters as confidence-coloured bands (behind the trace) -->
       {#each bucket.bands as band, i (i)}
-        {@const texture = confidenceTexture(band.cluster.confidence)}
+        {@const texture = confidenceKey(band.cluster.confidence)}
         {@const xPx = context.xScale(band.xStart)}
         <!-- Printed textures go opaque; the print opacity keeps the trace legible over a high band. -->
         <rect
