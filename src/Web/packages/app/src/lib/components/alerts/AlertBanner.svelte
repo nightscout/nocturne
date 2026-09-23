@@ -5,7 +5,8 @@
     acknowledgeExcursion,
   } from "$api/generated/alerts.generated.remote";
   import { Button } from "$lib/components/ui/button";
-  import { AlertTriangle, Check } from "lucide-svelte";
+  import { AlertTriangle, BellOff, Check } from "lucide-svelte";
+  import { time } from "$lib/utils/formatting";
   import { formatTimeSince } from "./alertTime";
   import { severity, severityLabel } from "./severity";
 
@@ -91,6 +92,16 @@
           <span class="text-xs text-muted-foreground">
             {formatTimeSince(alert.startedAt)}
           </span>
+          {#if alert.snoozedUntil}
+            <!-- Still listed: a snooze pauses notifications, it does not
+                 acknowledge the alert. -->
+            <span
+              class="ml-2 inline-flex items-center gap-1 text-xs text-muted-foreground"
+            >
+              <BellOff class="h-3 w-3" />
+              Snoozed until {time(alert.snoozedUntil)}
+            </span>
+          {/if}
         </div>
         <div class="flex items-center gap-2 shrink-0">
           {#if !alert.acknowledgedAt}

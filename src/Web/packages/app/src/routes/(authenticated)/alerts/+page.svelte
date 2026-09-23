@@ -309,6 +309,10 @@
               </div>
               {#if a.acknowledgedAt}
                 <Badge variant="secondary" class="shrink-0">Acknowledged</Badge>
+              {:else if a.snoozedUntil}
+                <Badge variant="outline" class="shrink-0">
+                  Snoozed until {formatClock(a.snoozedUntil)}
+                </Badge>
               {/if}
             </div>
           {/each}

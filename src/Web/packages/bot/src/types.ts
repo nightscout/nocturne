@@ -86,6 +86,8 @@ export interface ActiveExcursion {
   ruleName?: string;
   startedAt?: string;
   acknowledgedAt?: string | null;
+  /** Set while the server holds the alert's notifications back; null once it lapses. */
+  snoozedUntil?: string | null;
 }
 
 export interface MarkDeliveredRequest {

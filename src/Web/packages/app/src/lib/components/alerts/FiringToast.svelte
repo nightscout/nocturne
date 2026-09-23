@@ -25,6 +25,10 @@
    * restored only if the command fails. Acknowledge additionally pushes a
    * single-flight override into the shared getActiveAlerts query so the banner
    * reflects it in the same round-trip.
+   *
+   * Snooze state is the server's `snoozedUntil`, not ours: a snoozed alert has
+   * no card, and it earns a fresh one once the server stops reporting the
+   * snooze, which is also when its notifications resume.
    */
 
   // Toasts are appended whenever a new alert id appears; users dismiss them
@@ -50,20 +54,26 @@
     const fresh: ActiveExcursionResponse[] = [];
     for (const a of list) {
       const id = a.id ?? "";
-      if (!id || seen.has(id) || a.acknowledgedAt) continue;
+      if (!id) continue;
+      if (a.snoozedUntil) {
+        seen.delete(id);
+        continue;
+      }
+      if (seen.has(id) || a.acknowledgedAt) continue;
       seen.add(id);
       fresh.push(a);
     }
     if (fresh.length > 0) queue = [...fresh, ...queue];
-    // Remove toasts that were acknowledged elsewhere (other tab, banner, etc.).
-    // Assign only when a card actually drops: this effect reads `queue`, and
-    // `filter` returns a new array even when nothing matched, so an
-    // unconditional write re-dirties the effect's own dependency and loops.
-    const ackedIds = new Set(
-      list.filter((a) => a.acknowledgedAt).map((a) => a.id)
+    // Remove toasts that were acknowledged or snoozed elsewhere (other tab,
+    // banner, chat bot, etc.). Assign only when a card actually drops: this
+    // effect reads `queue`, and `filter` returns a new array even when nothing
+    // matched, so an unconditional write re-dirties the effect's own dependency
+    // and loops.
+    const quietIds = new Set(
+      list.filter((a) => a.acknowledgedAt || a.snoozedUntil).map((a) => a.id)
     );
-    if (ackedIds.size > 0) {
-      const remaining = queue.filter((a) => !ackedIds.has(a.id));
+    if (quietIds.size > 0) {
+      const remaining = queue.filter((a) => !quietIds.has(a.id));
       if (remaining.length !== queue.length) queue = remaining;
     }
   });
@@ -91,9 +101,11 @@
     }
   }
 
-  function snooze(id: string, minutes: number): Promise<void> {
-    return optimistic(id, () =>
-      snoozeInstance({ instanceId: id, request: { minutes } })
+  // Snooze targets the excursion's instance; the card is keyed by excursion.
+  function snooze(a: ActiveExcursionResponse, minutes: number): Promise<void> {
+    const instanceId = a.activeInstances?.[0]?.id ?? "";
+    return optimistic(a.id ?? "", () =>
+      snoozeInstance({ instanceId, request: { minutes } })
     );
   }
 
@@ -151,38 +163,40 @@
               </span>
             </div>
             <div class="mt-2 flex flex-wrap items-center gap-1">
-              <Button
-                type="button"
-                variant="outline"
-                size="xs"
-                onclick={() => snooze(a.id ?? "", 5)}
-              >
-                5m
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="xs"
-                onclick={() => snooze(a.id ?? "", 15)}
-              >
-                15m
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="xs"
-                onclick={() => snooze(a.id ?? "", 30)}
-              >
-                30m
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="xs"
-                onclick={() => snooze(a.id ?? "", 60)}
-              >
-                1h
-              </Button>
+              {#if a.activeInstances?.[0]?.id}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="xs"
+                  onclick={() => snooze(a, 5)}
+                >
+                  5m
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="xs"
+                  onclick={() => snooze(a, 15)}
+                >
+                  15m
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="xs"
+                  onclick={() => snooze(a, 30)}
+                >
+                  30m
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="xs"
+                  onclick={() => snooze(a, 60)}
+                >
+                  1h
+                </Button>
+              {/if}
               <!-- This one records the acknowledgement; the X beside it only
                    closes the card. They used to read "Dismiss" and an unlabelled
                    cross, which is the wrong pair of words for that difference. -->

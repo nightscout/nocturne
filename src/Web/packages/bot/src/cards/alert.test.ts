@@ -98,6 +98,30 @@ describe("ActiveAlertsCard", () => {
     ]);
   });
 
+  it("marks a snoozed excursion with the time the server resumes it", () => {
+    const until = new Date(Date.now() + 20 * 60_000);
+    const card = ActiveAlertsCard({
+      excursions: [excursion("e1", "Low", { snoozedUntil: until.toISOString() })],
+    });
+
+    expect(cardFields(card)).toEqual([
+      `Low: Snoozed until ${until.toLocaleTimeString()}, started 12 min ago`,
+    ]);
+  });
+
+  it("reads an acknowledged excursion as acknowledged even while snoozed", () => {
+    const card = ActiveAlertsCard({
+      excursions: [
+        excursion("e1", "Low", {
+          acknowledgedAt: new Date().toISOString(),
+          snoozedUntil: new Date(Date.now() + 60_000).toISOString(),
+        }),
+      ],
+    });
+
+    expect(cardFields(card)).toEqual(["Low: Acknowledged, started 12 min ago"]);
+  });
+
   it("says so rather than printing a bogus age when the start time is missing", () => {
     const card = ActiveAlertsCard({
       excursions: [excursion("e1", "Urgent low", { startedAt: undefined })],
