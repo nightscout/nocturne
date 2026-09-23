@@ -88,13 +88,15 @@ public class V4WriteScopeGatingTests
         public const string ConnectorFoodImport = "connector food-entry import; governing write scope undecided";
 
         /// <summary>
-        /// Connector configuration, gated on <see cref="Scope.TenantSettings"/> — an
-        /// administration atom, absent from <see cref="Scope.AllScopes"/>, so no data-category
-        /// scope names it. Asserted per controller by
+        /// Tenant administration (connector configuration and the connector data-deletion and
+        /// sync-trigger actions), gated on <see cref="Scope.TenantSettings"/>. An administration
+        /// atom, absent from <see cref="Scope.AllScopes"/>, so no data-category scope names it.
+        /// Asserted per controller by
         /// <see cref="EveryExemptionClaimingAnAttribute_ActuallyCarriesIt"/>, and behaviourally by
-        /// <see cref="ConnectorConfigurationScopeTests"/>.
+        /// <see cref="ConnectorConfigurationScopeTests"/> and
+        /// <see cref="ServicesControllerScopeTests"/>.
         /// </summary>
-        public const string TenantSettingsScope = "connector configuration, gated on tenant.settings";
+        public const string TenantSettingsScope = "tenant administration, gated on tenant.settings";
 
         /// <summary>
         /// The same tenant-administration gate as <see cref="TenantSettingsScope"/>, enforced in the
@@ -182,11 +184,10 @@ public class V4WriteScopeGatingTests
             ["DeduplicationController"] = NotDataCategory.TenantAdminAttribute,
             ["MigrationController"] = NotDataCategory.TenantAdminAttribute,
 
-            // Both repeat [RequireAdmin] per action rather than carrying it on the class.
-            // ServicesController's data deletions and sync triggers are behind it, so they are not
-            // reachable by a read-only session despite having no scope gate.
+            // CompatibilityController repeats [RequireAdmin] per action rather than carrying it on
+            // the class.
             ["CompatibilityController"] = NotDataCategory.TenantAdminAttribute,
-            ["ServicesController"] = NotDataCategory.TenantAdminAttribute,
+            ["ServicesController"] = NotDataCategory.TenantSettingsScope,
 
             ["ChatIdentityDirectoryController"] = NotDataCategory.InstanceKey,
 
