@@ -33,7 +33,6 @@ export function confidenceKey(
   }
 }
 
-
 /** Plain-English description of why a window was flagged, built from the detector diagnostics. */
 export function describeCluster(cluster: GlucoseCluster): string {
   const d = cluster.diagnostics;
