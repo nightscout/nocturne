@@ -28,7 +28,7 @@
     </ul>
 
     <div class="flex gap-4 not-prose">
-        <Button href={resolve("/docs/configuration")} variant="outline" class="gap-2">
+        <Button href={resolve("/docs/configuration")} variant="outline">
             Configuration Guide
             <ArrowRight class="w-4 h-4" />
         </Button>

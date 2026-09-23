@@ -14,10 +14,10 @@
     <div class="flex gap-8">
         <!-- Mobile sidebar toggle -->
         <div class="lg:hidden fixed bottom-4 right-4 z-50">
-            <Button
+            <!-- eslint-disable-next-line shadcn/no-restyle -- the site's only floating action button, pinned over the page on narrow screens -->
+            <Button class="rounded-full shadow-lg"
                 variant="default"
                 size="icon"
-                class="rounded-full shadow-lg"
                 onclick={() => (sidebarOpen = !sidebarOpen)}
             >
                 {#if sidebarOpen}

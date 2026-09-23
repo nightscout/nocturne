@@ -79,10 +79,10 @@
                 the way you want; and tells you the moment something needs attention.
             </p>
             <div class="flex flex-wrap gap-3 mt-2">
-                <Button href="/docs/installation" size="lg" class="gap-2 text-base">
+                <Button href="/docs/installation" size="cta">
                     Get started <ArrowRight class="size-4" />
                 </Button>
-                <Button href="/demo" variant="outline" size="lg" class="gap-2 text-base">
+                <Button href="/demo" variant="outline" size="cta">
                     <Play class="size-4" /> See a real day
                 </Button>
             </div>
@@ -248,13 +248,13 @@
                 No account, no credit card, no waitlist.
             </p>
             <div class="flex flex-wrap gap-3">
-                <Button href="/docs/installation" size="lg" class="gap-2 text-base">
+                <Button href="/docs/installation" size="cta">
                     Installation guide <ArrowRight class="size-4" />
                 </Button>
-                <Button href="/demo" variant="outline" size="lg" class="gap-2 text-base">
+                <Button href="/demo" variant="outline" size="cta">
                     <Play class="size-4" /> See the demo
                 </Button>
-                <Button href="/docs" variant="ghost" size="lg" class="text-base">
+                <Button href="/docs" variant="ghost" size="cta">
                     Read the docs
                 </Button>
             </div>

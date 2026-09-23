@@ -4,27 +4,22 @@ import { adapter as js } from 'wuchale/adapter-vanilla'
 import { defineConfig, gemini, pofile } from "wuchale"
 import supportedLocales from "./supportedLocales.json" with { type: 'json' };
 
-// Every package's files are listed in every package's config so a single
-// extraction run (from any of them) produces the complete shared catalog. An
-// extraction that sees only one package obsoletes the other's messages, which
-// compiles to an empty string in a production build. Derived from one list
-// here so a new package or glob cannot be added to one config and forgotten
-// in the other; the order is package-independent so extraction from any of
-// them writes the same catalog. Run it through `pnpm run translations:sync`.
+// The monorepo's one wuchale config. It is loaded only as packages/app/wuchale.config.js:
+// `pnpm run translations:sync` runs there, and the portal's vite plugin loads that file by
+// path. Its globs and the catalogue's references are relative to packages/app. wuchale
+// resolves references against the directory of the loading config, so loaded from another
+// package, that package's strings match no reference and compile to empty.
+//
+// Both packages' files are listed so one extraction writes the complete shared catalogue.
+// An extraction that saw only one package would obsolete the other's messages.
 const PACKAGES = ['app', 'portal']
 
-/** Resolves a per-package source glob from the config owner's directory. */
-const globs = (owner, patterns) =>
+const globs = (patterns) =>
     PACKAGES.flatMap(pkg =>
-        patterns.map(p => (pkg === owner ? `src/${p}` : `../${pkg}/src/${p}`)))
+        patterns.map(p => (pkg === 'app' ? `src/${p}` : `../${pkg}/src/${p}`)))
 
-/**
- * The wuchale config for one package of the monorepo. Both adapters share one
- * catalog set (same storage key -> shared .po files).
- *
- * @param {'app' | 'portal'} owner
- */
-export function wuchaleConfig(owner) {
+/** Both adapters share one catalogue set (same storage key -> shared .po files). */
+export function wuchaleConfig() {
     const storage = pofile({ location: '../../locales/{locale}.po' })
 
     return defineConfig({
@@ -35,13 +30,13 @@ export function wuchaleConfig(owner) {
                 loader: 'sveltekit',
                 sourceLocale: 'en',
                 storage,
-                files: globs(owner, ['**/*.svelte', '**/*.svelte.{js,ts}']),
+                files: globs(['**/*.svelte', '**/*.svelte.{js,ts}']),
             }),
             js: js({
                 loader: 'vite',
                 sourceLocale: 'en',
                 storage,
-                files: globs(owner, [
+                files: globs([
                     '**/+{page,layout}.{js,ts}',
                     '**/+{page,layout}.server.{js,ts}',
                 ]),

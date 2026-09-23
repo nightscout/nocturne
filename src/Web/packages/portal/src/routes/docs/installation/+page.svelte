@@ -1,5 +1,6 @@
 <script lang="ts">
   import { resolve } from "$app/paths";
+  import { Button } from "@nocturne/ui/ui/button";
   import {
     ArrowRight,
     Cloud,
@@ -255,9 +256,10 @@
         <PikaPodsVoteCard />
   </div>
 
-  <button
+  <Button
+    variant="subtle"
+    size="inline"
     onclick={() => (showListingRequirements = !showListingRequirements)}
-    class="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
   >
     <ChevronDown
       class="w-4 h-4 transition-transform {showListingRequirements
@@ -265,7 +267,7 @@
         : ''}"
     />
     Want to list your service here?
-  </button>
+  </Button>
   {#if showListingRequirements}
     <div
       class="mt-3 p-4 rounded-lg border border-border/60 bg-card/30 text-sm text-muted-foreground"

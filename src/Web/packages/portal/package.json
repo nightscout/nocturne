@@ -13,7 +13,7 @@
 		"check": "node scripts/generate-sdk-manifest.mjs && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"test": "svelte-kit sync && vitest run",
 		"lint": "eslint .",
-		"lint:ci": "eslint . --max-warnings 69 --report-unused-disable-directives-severity error"
+		"lint:ci": "eslint . --max-warnings 0 --report-unused-disable-directives-severity error"
 	},
 	"devDependencies": {
 		"@lucide/svelte": "^0.555.0",

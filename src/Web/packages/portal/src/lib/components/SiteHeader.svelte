@@ -66,18 +66,19 @@
             </div>
 
             <!-- Mobile Menu Button -->
-            <button
-                type="button"
-                class="md:hidden p-2 rounded-md hover:bg-muted transition-colors"
+            <Button
+                variant="ghost"
+                size="icon"
+                class="md:hidden"
                 onclick={() => (mobileMenuOpen = !mobileMenuOpen)}
                 aria-label="Toggle menu"
             >
                 {#if mobileMenuOpen}
-                    <X class="w-5 h-5" />
+                    <X class="size-5" />
                 {:else}
-                    <Menu class="w-5 h-5" />
+                    <Menu class="size-5" />
                 {/if}
-            </button>
+            </Button>
         </div>
 
         <!-- Mobile Navigation -->

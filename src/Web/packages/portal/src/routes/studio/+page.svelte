@@ -5,6 +5,9 @@
   import type { ContentTypeConfig, EditorCallbacks, ContentItem, ContentData } from '@nocturne/cms/editor/types';
   import type { ComponentDefinition } from '@nocturne/cms/editor/extensions/svelte-component';
   import LanguageSelector from '$lib/components/LanguageSelector.svelte';
+  import { Button } from '@nocturne/ui/ui/button';
+  import { Input } from '@nocturne/ui/ui/input';
+  import { Textarea } from '@nocturne/ui/ui/textarea';
 
   const portalComponents: ComponentDefinition[] = [
     {
@@ -241,13 +244,9 @@
       {/if}
       — the post updates once the pull request merges.
     </span>
-    <button
-      type="button"
-      class="text-muted-foreground hover:text-foreground"
-      onclick={() => (proposedPr = null)}
-    >
+    <Button variant="subtle" size="inline" onclick={() => (proposedPr = null)}>
       Dismiss
-    </button>
+    </Button>
   </div>
 {/if}
 
@@ -266,57 +265,34 @@
       <div class="space-y-3">
         <label class="block space-y-1 text-sm">
           <span>Name</span>
-          <input
-            class="w-full rounded-md border border-input bg-background px-3 py-2"
-            bind:value={contributorName}
-            placeholder="Your name"
-          />
+          <Input bind:value={contributorName} placeholder="Your name" />
         </label>
         <label class="block space-y-1 text-sm">
           <span>GitHub username (optional, used for commit co-author credit)</span>
-          <input
-            class="w-full rounded-md border border-input bg-background px-3 py-2"
-            bind:value={contributorGitHub}
-            placeholder="octocat"
-          />
+          <Input bind:value={contributorGitHub} placeholder="octocat" />
         </label>
         <label class="block space-y-1 text-sm">
           <span>Email (optional)</span>
-          <input
-            type="email"
-            class="w-full rounded-md border border-input bg-background px-3 py-2"
-            bind:value={contributorEmail}
-          />
+          <Input type="email" bind:value={contributorEmail} />
         </label>
         <label class="block space-y-1 text-sm">
           <span>Note to reviewers (optional)</span>
-          <textarea
-            class="w-full rounded-md border border-input bg-background px-3 py-2"
-            rows="3"
-            bind:value={proposalNote}
-          ></textarea>
+          <Textarea rows={3} bind:value={proposalNote} />
         </label>
         {#if proposeError}
           <p class="text-sm text-destructive">{proposeError}</p>
         {/if}
       </div>
       <div class="flex justify-end gap-2">
-        <button
-          type="button"
-          class="rounded-md border border-input px-4 py-2 text-sm"
-          onclick={cancelProposal}
-          disabled={proposing}
-        >
+        <Button variant="outline" onclick={cancelProposal} disabled={proposing}>
           Cancel
-        </button>
-        <button
-          type="button"
-          class="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-50"
+        </Button>
+        <Button
           onclick={submitProposal}
           disabled={proposing || contributorName.trim().length === 0}
         >
           {proposing ? 'Proposing…' : 'Propose'}
-        </button>
+        </Button>
       </div>
     </div>
   </div>

@@ -15,10 +15,13 @@
     HeartHandshake,
   } from "@lucide/svelte";
   import { onMount } from "svelte";
+  import { Button } from "@nocturne/ui/ui/button";
   import { resolve } from "$app/paths";
   import { LINKS } from "$lib/data/links";
   import { track } from "$lib/analytics";
   import SupportNocturne from "$lib/components/docs/SupportNocturne.svelte";
+
+  const BRAND = { background: "var(--brand)", foreground: "white" };
 
   const STATS = [
     { value: "100%", label: "Built by volunteers" },
@@ -239,21 +242,19 @@
         start.
       </p>
       <div class="flex gap-2.5 flex-wrap">
-        <a
-          href="#tasks"
-          class="inline-flex items-center justify-center gap-2 rounded-lg font-medium text-sm h-[46px] px-6 whitespace-nowrap no-underline cursor-pointer transition-all duration-150 bg-brand text-white hover:brightness-108"
-        >
-          Find a task <ArrowRight class="w-4 h-4" strokeWidth={2.5} />
-        </a>
-        <a
+        <Button href="#tasks" variant="brand" size="cta" brand={BRAND}>
+          Find a task <ArrowRight strokeWidth={2.5} />
+        </Button>
+        <Button
           href={LINKS.discord}
           target="_blank"
           rel="external noopener noreferrer"
           onclick={() => track("Outbound Click", { destination: "discord" })}
-          class="inline-flex items-center justify-center gap-2 rounded-lg font-medium text-sm h-[46px] px-6 whitespace-nowrap no-underline cursor-pointer transition-all duration-150 bg-transparent border border-border text-foreground hover:bg-accent"
+          variant="outline"
+          size="cta"
         >
-          <MessageCircle class="w-4 h-4" /> Join the Discord
-        </a>
+          <MessageCircle /> Join the Discord
+        </Button>
       </div>
     </div>
 
@@ -457,15 +458,17 @@
         </p>
       </div>
       <div class="flex flex-col gap-2.5">
-        <a
+        <Button
           href={LINKS.donate}
           target="_blank"
           rel="external noopener noreferrer"
           onclick={() => track("Donate Click", { destination: "foundation" })}
-          class="inline-flex items-center justify-center gap-2 rounded-lg font-medium text-sm h-[46px] px-6 whitespace-nowrap no-underline cursor-pointer transition-all duration-150 bg-brand text-white hover:brightness-108"
+          variant="brand"
+          size="cta"
+          brand={BRAND}
         >
-          <HeartHandshake class="w-[17px] h-[17px]" /> Donate to the Foundation
-        </a>
+          <HeartHandshake /> Donate to the Foundation
+        </Button>
         <span class="text-xs text-muted-foreground text-center"
           >Tax-deductible in the US &middot; Supports the whole community</span
         >

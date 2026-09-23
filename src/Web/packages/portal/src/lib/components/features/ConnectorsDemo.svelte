@@ -80,6 +80,7 @@
     class="px-4.5 py-3.5 border-b border-white/8 flex items-center gap-3 bg-card/20 shrink-0"
   >
     <Search class="size-5 text-muted-foreground shrink-0" />
+    <!-- eslint-disable-next-line no-restricted-syntax -- the demo's search bar is a borderless headline-size field in its own header row, which no Input size or variant draws -->
     <input
       class="flex-1 bg-transparent border-none outline-none text-lg text-foreground font-medium placeholder:text-muted-foreground/60 min-h-7 w-0"
       placeholder="Find your device or app"

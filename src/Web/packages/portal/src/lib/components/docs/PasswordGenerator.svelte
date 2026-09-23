@@ -1,6 +1,7 @@
 <script lang="ts">
     import CopyButton from "./CopyButton.svelte";
     import { RefreshCw } from "@lucide/svelte";
+    import { Button } from "@nocturne/ui/ui/button";
 
     interface Props {
         label?: string;
@@ -65,14 +66,14 @@
         </code>
 
         <div class="flex items-center gap-1 shrink-0">
-            <button
-                type="button"
+            <Button
+                variant="ghost-muted"
+                size="icon-xs"
                 onclick={refresh}
-                class="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
                 aria-label="Generate new {label}"
             >
-                <RefreshCw class="h-4 w-4" />
-            </button>
+                <RefreshCw class="size-4" />
+            </Button>
 
             <CopyButton text={password} kind="password" label="Copy {label} to clipboard" />
         </div>

@@ -67,15 +67,15 @@
                 built by the diabetes community.
             </p>
             <div class="flex flex-wrap gap-3 justify-center pointer-events-auto">
-                <Button href="/docs/installation" size="lg" class="gap-2 text-base hero-btn-primary">
+                <Button href="/docs/installation" size="cta">
                     Get started <ArrowRight class="w-4 h-4" />
                 </Button>
                 {#if DEMO_ENABLED}
-                    <Button href="/demo" variant="ghost" size="lg" class="gap-2 text-base hero-btn-ghost">
+                    <Button href="/demo" variant="outline" size="cta">
                         <Play class="w-4 h-4" /> See a real day
                     </Button>
                 {:else}
-                    <Button href="/features" variant="ghost" size="lg" class="text-base hero-btn-ghost">
+                    <Button href="/features" variant="outline" size="cta">
                         Explore features
                     </Button>
                 {/if}
@@ -187,7 +187,7 @@ $ docker compose up -d
     </div>
 
     <div class="flex flex-wrap gap-3">
-        <Button href="/docs/installation" size="lg" class="gap-2">
+        <Button href="/docs/installation" size="lg">
             Installation guide <ArrowRight class="w-4 h-4" />
         </Button>
         <Button href="/docs" variant="outline" size="lg">
@@ -272,18 +272,5 @@ $ docker compose up -d
     .marquee-mask {
         mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
         -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
-    }
-
-    /* Hero CTAs: :global needed to pierce the Button component */
-    :global(.hero-btn-primary) {
-        background: oklch(0.96 0.005 261) !important;
-        color: oklch(0.13 0.028 261) !important;
-        box-shadow: 0 0 0 1px oklch(1 0 0 / 20%) !important;
-    }
-    :global(.hero-btn-ghost) {
-        background: oklch(1 0 0 / 8%) !important;
-        color: oklch(0.92 0.01 261) !important;
-        border: 1px solid oklch(1 0 0 / 20%) !important;
-        backdrop-filter: blur(8px);
     }
 </style>

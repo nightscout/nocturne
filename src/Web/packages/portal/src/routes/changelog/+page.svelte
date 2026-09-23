@@ -92,7 +92,6 @@
                 target="_blank"
                 variant="outline"
                 size="sm"
-                class="gap-2"
             >
                 <Github class="w-4 h-4" />
                 View on GitHub
@@ -102,7 +101,6 @@
                 onclick={() => loadChangelog()}
                 variant="ghost"
                 size="sm"
-                class="gap-2"
                 disabled={loading}
             >
                 <RefreshCw class="w-4 h-4 {loading ? 'animate-spin' : ''}" />
@@ -198,9 +196,8 @@
                             <Button
                                 href={release.html_url}
                                 target="_blank"
-                                variant="ghost"
+                                variant="ghost-muted"
                                 size="sm"
-                                class="gap-1.5 text-muted-foreground"
                             >
                                 View on GitHub
                                 <ExternalLink class="w-3 h-3" />
@@ -218,7 +215,6 @@
                     onclick={() => loadChangelog(true)}
                     variant="outline"
                     disabled={loadingMore}
-                    class="gap-2"
                 >
                     {#if loadingMore}
                         <Loader2 class="w-4 h-4 animate-spin" />

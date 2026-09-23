@@ -125,18 +125,16 @@
                     <div class="font-brand text-xs font-bold tracking-eyebrow uppercase text-muted-foreground">0{ci + 1} &middot; {category.title}</div>
                 </div>
 
-                <Accordion.Root type="multiple" class="space-y-3">
+                <Accordion.Root type="multiple">
                     {#each category.questions as faq, index (index)}
-                        <Accordion.Item
+                        <!-- eslint-disable-next-line shadcn/no-restyle -- the only accordion drawn as separate cards; an AccordionItem variant would serve this one call site -->
+                        <Accordion.Item class="mb-3 rounded-lg border border-border/60 bg-card/50 px-6 overflow-hidden"
                             value="{category.title}-{index}"
-                            class="rounded-lg border border-border/60 bg-card/50 px-6 overflow-hidden"
                         >
-                            <Accordion.Trigger
-                                class="py-4 text-left font-medium hover:no-underline w-full"
-                            >
+                            <Accordion.Trigger class="w-full">
                                 {faq.question}
                             </Accordion.Trigger>
-                            <Accordion.Content class="pb-4">
+                            <Accordion.Content>
                                 <p class="text-muted-foreground">{faq.answer}</p>
                             </Accordion.Content>
                         </Accordion.Item>
@@ -151,7 +149,7 @@
         <div class="font-mono text-xs tracking-eyebrow uppercase text-muted-foreground">Still have questions?</div>
         <h2 class="text-subsection font-bold text-foreground mt-3">Check the docs or ask the community.</h2>
         <div class="flex flex-col sm:flex-row gap-4 mt-6">
-            <Button href="/docs" size="lg" class="gap-2">
+            <Button href="/docs" size="lg">
                 Browse documentation
                 <ArrowRight class="w-4 h-4" />
             </Button>

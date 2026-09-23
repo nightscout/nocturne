@@ -1,5 +1,6 @@
 <script lang="ts">
     import { Copy, Check, X } from "@lucide/svelte";
+    import { Button } from "@nocturne/ui/ui/button";
     import { copyToClipboard } from "@nocturne/ui/utils";
     import { track } from "$lib/analytics";
 
@@ -32,17 +33,17 @@
     }
 </script>
 
-<button
-    type="button"
+<Button
+    variant="ghost-muted"
+    size="icon-xs"
     onclick={copy}
-    class="shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
     aria-label={copied ? "Copied" : failed ? "Copy failed. Select the text and copy it manually" : label}
 >
     {#if copied}
-        <Check class="h-4 w-4 text-success" />
+        <Check class="size-4 text-success" />
     {:else if failed}
-        <X class="h-4 w-4 text-destructive" />
+        <X class="size-4 text-destructive" />
     {:else}
-        <Copy class="h-4 w-4" />
+        <Copy class="size-4" />
     {/if}
-</button>
+</Button>

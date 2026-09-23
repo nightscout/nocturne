@@ -1,6 +1,7 @@
 <script lang="ts">
     import { resolve } from "$app/paths";
     import { ArrowRight, Check } from "@lucide/svelte";
+    import { Button } from "@nocturne/ui/ui/button";
     import ReportsDemo from "./ReportsDemo.svelte";
     import ConnectorsDemo from "./ConnectorsDemo.svelte";
     import AlarmsDemo from "./AlarmsDemo.svelte";
@@ -92,19 +93,12 @@
             <div class="text-sm text-muted-foreground mt-1">Open the demo, or run your own copy in a few minutes.</div>
         </div>
         <div class="flex flex-wrap gap-3 shrink-0">
-            <a
-                href={resolve("/docs/installation")}
-                class="inline-flex items-center gap-2 px-5 py-3 rounded-lg text-sm font-semibold transition-colors
-                       bg-foreground text-background hover:opacity-90"
-            >
+            <Button href={resolve("/docs/installation")} size="cta">
                 Get started <ArrowRight class="size-4" />
-            </a>
-            <a
-                href={resolve("/features")}
-                class="inline-flex items-center gap-2 px-5 py-3 rounded-lg text-sm font-medium border border-border text-foreground hover:bg-muted/50 transition-colors"
-            >
+            </Button>
+            <Button href={resolve("/features")} variant="outline" size="cta">
                 All features
-            </a>
+            </Button>
         </div>
     </div>
 </section>

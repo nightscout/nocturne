@@ -38,10 +38,10 @@ export const buttonVariants = tv({
       // The add-item placeholder at the end of a list.
       dashed:
         "text-muted-foreground hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50 border border-dashed",
-      // A colour the theme does not own, e.g. an admin-configured sign-in provider. Pass
-      // it as `brand`; the foreground has to be chosen for contrast by whoever owns the colour.
       // Over a full-screen display whose background the theme does not own, e.g. a clock face.
       overlay: "text-white/80 hover:bg-white/10 hover:text-white",
+      // A colour the theme does not own, e.g. an admin-configured sign-in provider. Pass
+      // it as `brand`; the foreground has to be chosen for contrast by whoever owns the colour.
       brand:
         "bg-(--button-bg) text-(--button-fg) border border-(--button-bg) shadow-xs hover:opacity-90",
     },
@@ -50,6 +50,8 @@ export const buttonVariants = tv({
       xs: "h-7 gap-1 rounded-md px-2 text-xs has-[>svg]:px-1.5 [&_svg:not([class*='size-'])]:size-3",
       sm: "h-8 gap-1.5 rounded-md px-3 has-[>svg]:px-2.5",
       lg: "h-10 rounded-md px-6 has-[>svg]:px-4",
+      // A marketing call to action: lg, set in body-size type.
+      cta: "h-10 rounded-md px-6 text-base has-[>svg]:px-4",
       // Full-screen alarm and emergency actions: a touch target read at a glance.
       xl: "h-14 rounded-md px-8 text-lg font-semibold shadow-lg has-[>svg]:px-6 [&_svg:not([class*='size-'])]:size-5",
       icon: "size-9",

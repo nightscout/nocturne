@@ -7,6 +7,8 @@
     import { Play, Pause, RotateCcw, ChevronRight, Droplet, Timer } from "@lucide/svelte";
     import * as Collapsible from "@nocturne/ui/ui/collapsible";
     import { Switch } from "@nocturne/ui/ui/switch";
+    import { Button } from "@nocturne/ui/ui/button";
+    import * as Select from "@nocturne/ui/ui/select";
 
     // ── Inlined helpers (from app/alerts/severity.ts + alertTime.ts) ──────────
     function severityVar(s: string | undefined): string {
@@ -218,9 +220,8 @@
         const r = e.currentTarget.getBoundingClientRect();
         seek(Math.max(0, Math.min(100, ((e.clientX - r.left) / r.width) * 100)));
     }
-    function handleSpeedChange(e: Event): void {
-        if (!(e.currentTarget instanceof HTMLSelectElement)) return;
-        const v = Number(e.currentTarget.value);
+    function handleSpeedChange(value: string): void {
+        const v = Number(value);
         if (Number.isFinite(v)) speed = v;
     }
 </script>
@@ -237,9 +238,9 @@
         <div class="shrink-0 overflow-y-auto border-b border-white/8 p-2" data-testid="rule-sidebar">
             <div class="font-mono text-2xs tracking-widest uppercase text-muted-foreground/60 px-1 pb-1.5">Rules</div>
             {#each ruleStates as r (r.id)}
-                <Collapsible.Root open class="rounded-md border bg-background mb-1.5">
-                    <div class="flex items-center gap-2 px-2 py-1.5">
-                        <Collapsible.Trigger class="group flex flex-1 min-w-0 items-center gap-2 text-left text-sm">
+                <Collapsible.Root open variant="outline" class="mb-1.5">
+                    <div class="flex items-center gap-2 px-2 py-1.5 text-sm">
+                        <Collapsible.Trigger class="group flex flex-1 min-w-0 items-center gap-2 text-left">
                             <ChevronRight class="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
                             <span
                                 data-testid="rule-status-pip"
@@ -333,23 +334,24 @@
             <!-- Playback strip -->
             <div class="px-3 pt-2 shrink-0">
                 <div class="flex items-center gap-2">
-                    <button type="button" onclick={toggle}
-                        class="size-7 rounded-md border border-white/15 bg-white/5 hover:bg-white/10 flex items-center justify-center shrink-0 transition-colors"
+                    <Button variant="outline" size="icon-xs" class="shrink-0" onclick={toggle}
                         aria-label={playing ? "Pause" : "Play"}>
-                        {#if playing}<Pause class="size-3.5 text-foreground/80" />{:else}<Play class="size-3.5 text-foreground/80" />{/if}
-                    </button>
-                    <button type="button" onclick={reset}
-                        class="size-7 rounded-md border border-white/15 bg-white/5 hover:bg-white/10 flex items-center justify-center shrink-0 transition-colors"
+                        {#if playing}<Pause class="size-3.5" />{:else}<Play class="size-3.5" />{/if}
+                    </Button>
+                    <Button variant="outline" size="icon-xs" class="shrink-0" onclick={reset}
                         aria-label="Reset">
-                        <RotateCcw class="size-3.5 text-foreground/80" />
-                    </button>
-                    <select value={String(speed)} onchange={handleSpeedChange}
-                        class="h-7 rounded-md border border-white/15 bg-white/5 px-2 text-xs text-foreground/80 shrink-0 w-16"
-                        aria-label="Playback speed">
-                        {#each [0.25, 0.5, 1, 2] as opt (opt)}
-                            <option value={String(opt)} selected={speed === opt}>{opt}x</option>
-                        {/each}
-                    </select>
+                        <RotateCcw class="size-3.5" />
+                    </Button>
+                    <Select.Root type="single" value={String(speed)} onValueChange={handleSpeedChange}>
+                        <Select.Trigger size="xs" class="w-16 shrink-0" aria-label="Playback speed">
+                            {speed}x
+                        </Select.Trigger>
+                        <Select.Content size="xs">
+                            {#each [0.25, 0.5, 1, 2] as opt (opt)}
+                                <Select.Item value={String(opt)} label={`${opt}x`} />
+                            {/each}
+                        </Select.Content>
+                    </Select.Root>
                     <svg role="presentation"
                         class="h-7 flex-1 cursor-pointer rounded border border-white/10 bg-white/4"
                         viewBox="0 0 100 28" preserveAspectRatio="none"

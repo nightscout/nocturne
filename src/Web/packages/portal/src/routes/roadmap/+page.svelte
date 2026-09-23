@@ -63,7 +63,6 @@
                 target="_blank"
                 variant="outline"
                 size="sm"
-                class="gap-2"
             >
                 <GitPullRequest class="w-4 h-4" />
                 View on GitHub
@@ -73,7 +72,6 @@
                 onclick={loadRoadmap}
                 variant="ghost"
                 size="sm"
-                class="gap-2"
                 disabled={loading}
             >
                 <RefreshCw class="w-4 h-4 {loading ? 'animate-spin' : ''}" />
