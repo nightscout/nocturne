@@ -39,11 +39,11 @@ export default defineConfig(({ mode }) => {
     assetsInclude: ["**/*.jpg", "**/*.png", "**/*.gif"],
     resolve: {
       alias: reactAliases,
-      // Force a single copy of @internationalized/date (and bits-ui) into the
-      // bundle. Multiple versions are installed (3.11.0 + 3.12.1 via different
-      // bits-ui versions); without dedupe a date created by the app fails
-      // bits-ui's `instanceof CalendarDate` check and the RangeCalendar throws
-      // "Unknown date type" once it has a value (reports filter, date pickers).
+      // Force a single copy of @internationalized/date and bits-ui into the
+      // bundle. The app and @nocturne/ui resolve bits-ui 2.18.1 against
+      // different peers (vite, typescript), so pnpm installs it twice. A date
+      // that fails bits-ui's `instanceof CalendarDate` check makes the
+      // RangeCalendar throw "Unknown date type" (reports filter, date pickers).
       dedupe: ["@internationalized/date", "bits-ui"],
     },
     ssr: {

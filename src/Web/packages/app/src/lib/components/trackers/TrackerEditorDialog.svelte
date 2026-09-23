@@ -21,6 +21,28 @@
   const createRemote = trackersRemote.createDefinition;
   const updateRemote = trackersRemote.updateDefinition;
 
+  interface Props {
+    open?: boolean;
+    isNewDefinition: boolean;
+    editingDefinition: TrackerDefinitionDto | null;
+    formName?: string;
+    formDescription?: string;
+    formCategory?: TrackerCategory;
+    formIcon?: string;
+    formLifespanHours?: number | undefined;
+    formLowReservoirUnits?: number | undefined;
+    formLowReservoirUrgency?: NotificationUrgency;
+    formNotifications?: TrackerNotification[];
+    formIsFavorite?: boolean;
+    formDashboardVisibility?: DashboardVisibility;
+    formVisibility?: TrackerVisibility;
+    formMode?: TrackerMode;
+    formStartEventType?: string | undefined;
+    formCompletionEventType?: string | undefined;
+    categoryLabels: Record<TrackerCategory, string>;
+    loadData: () => Promise<void>;
+  }
+
   let {
     open = $bindable(false),
     isNewDefinition,
@@ -41,27 +63,7 @@
     formCompletionEventType = $bindable(undefined),
     categoryLabels,
     loadData,
-  } = $props<{
-    open?: boolean;
-    isNewDefinition: boolean;
-    editingDefinition: TrackerDefinitionDto | null;
-    formName?: string;
-    formDescription?: string;
-    formCategory?: TrackerCategory;
-    formIcon?: string;
-    formLifespanHours?: number | undefined;
-    formLowReservoirUnits?: number | undefined;
-    formLowReservoirUrgency?: NotificationUrgency;
-    formNotifications?: TrackerNotification[];
-    formIsFavorite?: boolean;
-    formDashboardVisibility?: DashboardVisibility;
-    formVisibility?: TrackerVisibility;
-    formMode?: TrackerMode;
-    formStartEventType?: string | undefined;
-    formCompletionEventType?: string | undefined;
-    categoryLabels: Record<TrackerCategory, string>;
-    loadData: () => Promise<void>;
-  }>();
+  }: Props = $props();
 
   const createForm = $derived(createRemote.for("create"));
   const updateForm = $derived(updateRemote.for(editingDefinition?.id ?? ""));

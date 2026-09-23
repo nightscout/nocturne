@@ -13,15 +13,17 @@
   import { Smartphone, Monitor, Trash2 } from "lucide-svelte";
   import type { OAuthGrantDto } from "$api";
 
+  interface Props {
+    grants: OAuthGrantDto[];
+    formatDate: (date: any) => string;
+    revokeGrant: (id: string) => void;
+  }
+
   let {
     grants,
     formatDate,
     revokeGrant,
-  } = $props<{
-    grants: OAuthGrantDto[];
-    formatDate: (date: any) => string;
-    revokeGrant: (id: string) => void;
-  }>();
+  }: Props = $props();
 </script>
 
 <Tabs.Content value="devices">

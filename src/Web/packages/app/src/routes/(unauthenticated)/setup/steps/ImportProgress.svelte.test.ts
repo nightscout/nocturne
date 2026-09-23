@@ -23,7 +23,7 @@ describe("ImportProgress", () => {
       errorMessage:
         "1 of 7 collections imported, 1 failed, 5 not attempted. treatments: Could not reach your Nightscout server.",
       collectionProgress: {},
-    } as MigrationJobStatus;
+    };
 
     render(ImportProgress, { jobId: "job-1", onComplete: () => {} });
 
@@ -47,7 +47,7 @@ describe("ImportProgress", () => {
           skippedReason: "Skipped: listing the people and devices that can sign in needs an admin API secret.",
         },
       },
-    } as unknown as MigrationJobStatus;
+    };
 
     render(ImportProgress, { jobId: "job-3", onComplete: () => {} });
 
@@ -68,7 +68,7 @@ describe("ImportProgress", () => {
           failureReason: "Nightscout answered with a server error (500). It may be down or restarting; try again shortly.",
         },
       },
-    } as unknown as MigrationJobStatus;
+    };
 
     render(ImportProgress, { jobId: "job-4", onComplete: () => {} });
 
@@ -81,9 +81,9 @@ describe("ImportProgress", () => {
     status = {
       state: MigrationJobState.Completed,
       progressPercentage: 100,
-      errorMessage: null,
+      errorMessage: undefined,
       collectionProgress: {},
-    } as MigrationJobStatus;
+    };
 
     render(ImportProgress, { jobId: "job-2", onComplete: () => {} });
 

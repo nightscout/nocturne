@@ -9,15 +9,7 @@
     TrackerCategory,
   } from "$api";
 
-  let {
-    event,
-    category,
-    startTime,
-    level,
-    formatTrackerAge,
-    openCompletionDialog,
-    def,
-  } = $props<{
+  interface Props {
     event: {
       instance: TrackerInstanceDto;
       eventType: "start" | "due" | "completed";
@@ -29,7 +21,17 @@
     formatTrackerAge: (hours: number | undefined) => string;
     openCompletionDialog: (instance: TrackerInstanceDto, def: TrackerDefinitionDto | undefined, date: string) => void;
     def: TrackerDefinitionDto | undefined;
-  }>();
+  }
+
+  let {
+    event,
+    category,
+    startTime,
+    level,
+    formatTrackerAge,
+    openCompletionDialog,
+    def,
+  }: Props = $props();
 </script>
 
 <div class="space-y-2">

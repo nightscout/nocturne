@@ -21,15 +21,17 @@
   import { getCategoryIcon } from "$lib/utils/connector-display";
   import { formatNumber, lastSeen } from "$lib/utils/formatting";
 
+  interface Props {
+    open: boolean;
+    selectedDataSource: DataSourceInfo | null;
+    onDeleteComplete?: () => Promise<void>;
+  }
+
   let {
     open = $bindable(false),
     selectedDataSource,
     onDeleteComplete,
-  } = $props<{
-    open: boolean;
-    selectedDataSource: DataSourceInfo | null;
-    onDeleteComplete?: () => Promise<void>;
-  }>();
+  }: Props = $props();
 
   const canManage = $derived(
     satisfiesScope(page.data.effectivePermissions ?? [], "tenant.settings")

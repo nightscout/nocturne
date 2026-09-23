@@ -14,6 +14,29 @@ const HEIGHT_CLASSES = ["h-*", "size-*", "min-h-*", "max-h-*"];
 const CONTROL_HEIGHT_HINT =
   "\"{{className}}\" is not allowed on <{{component}}>: its height comes from size. Use size=\"xs\" (h-7), \"sm\" (h-8) or the default (h-9); each matches the same size on Button, Input, SelectTrigger and Toggle.";
 
+// svelte-check types the bindings destructured from $props<T>() as any inside the
+// component. Beside a top-level binding named after a rune, svelte-check reads that
+// rune's other calls as store reads and leaves them untyped.
+const COMPONENT_SCRIPT_SYNTAX = [
+  {
+    selector: 'CallExpression[callee.name="$props"][typeArguments]',
+    message: "Type props with an interface: `let { a, b }: Props = $props()`. With $props<T>() svelte-check types the destructured props as any."
+  },
+  ...["state", "derived", "effect", "props"].flatMap((rune) =>
+    [
+      `VariableDeclaration > VariableDeclarator[id.name="${rune}"]`,
+      `VariableDeclaration > VariableDeclarator > ObjectPattern > Property[value.name="${rune}"]`,
+      `VariableDeclaration > VariableDeclarator > ObjectPattern > Property[value.left.name="${rune}"]`,
+      `FunctionDeclaration[id.name="${rune}"]`,
+      // svelte-check special-cases svelte/store's `derived` beside $derived.
+      `ImportDeclaration:not([source.value="svelte/store"]) > [local.name="${rune}"]`
+    ].map((binding) => ({
+      selector: `SvelteScriptElement:has(Identifier[name="$${rune}"]) > ${binding}`,
+      message: `Rename \`${rune}\`: while a local shares its name, svelte-check reads $${rune} as a store and types it as any.`
+    }))
+  )
+];
+
 export default ts.config(
   js.configs.recommended,
   ...ts.configs.recommended,
@@ -181,10 +204,13 @@ export default ts.config(
     // @shadcn/lint only sees classes on known components, so a raw control
     // escapes the design system without a finding. Hidden inputs carry form
     // state and render nothing.
+    // Flat config replaces no-restricted-syntax's options wholesale, so every
+    // .svelte selector lives in this block or the next, which covers its ignores.
     files: ["**/*.svelte"],
     ignores: ["src/lib/components/ui/**", "**/*.test.svelte"],
     rules: {
       "no-restricted-syntax": ["warn",
+        ...COMPONENT_SCRIPT_SYNTAX,
         {
           selector: 'SvelteElement[kind="html"][name.name="button"]',
           message: "Use <Button> with a variant and size, or <Toggle> for a pressed state, instead of a raw <button>."
@@ -210,6 +236,12 @@ export default ts.config(
           message: "Theme variables are oklch; use var(--x) or color-mix(in oklch, var(--x) N%, transparent), not hsl(var(--x))."
         }
       ]
+    }
+  },
+  {
+    files: ["src/lib/components/ui/**/*.svelte", "**/*.test.svelte"],
+    rules: {
+      "no-restricted-syntax": ["warn", ...COMPONENT_SCRIPT_SYNTAX]
     }
   }
 );

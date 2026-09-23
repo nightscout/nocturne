@@ -41,19 +41,21 @@
     },
   };
 
+  interface Props {
+    open: boolean;
+    editingProvider: OidcProviderResponse | null;
+    roles: TenantRoleDto[];
+    onSave: (providerData: any) => Promise<void>;
+    onCancel: () => void;
+  }
+
   let {
     open = $bindable(false),
     editingProvider = $bindable<OidcProviderResponse | null>(null),
     roles = $bindable<TenantRoleDto[]>([]),
     onSave,
     onCancel,
-  } = $props<{
-    open: boolean;
-    editingProvider: OidcProviderResponse | null;
-    roles: TenantRoleDto[];
-    onSave: (providerData: any) => Promise<void>;
-    onCancel: () => void;
-  }>();
+  }: Props = $props();
 
   // `roles` is accepted for callers but read only through the binding.
   void roles;

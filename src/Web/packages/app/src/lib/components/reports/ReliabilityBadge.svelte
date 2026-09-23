@@ -4,10 +4,12 @@
   import { cn } from "$lib/utils";
   import type { StatisticReliability } from "$lib/api";
 
-  let { reliability, class: className } = $props<{
+  interface Props {
     reliability?: StatisticReliability | null;
     class?: string;
-  }>();
+  }
+
+  let { reliability, class: className }: Props = $props();
 </script>
 
 {#if reliability && reliability.meetsReliabilityCriteria === false}

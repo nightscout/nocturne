@@ -11,6 +11,23 @@
   import { getDataTypeLabel } from "$lib/utils/data-type-labels";
   import { yearCalendarBounds } from "./year-bounds";
 
+  interface Props {
+    year: number;
+    yearIndex: number;
+    loadingYears: Set<number>;
+    yearData: Map<number, any[]>;
+    transformYearData: (days: any[]) => any[];
+    getCellFill: (data: any) => string;
+    getWeekColumns: (cells: any[]) => any[];
+    navigateToDayInReview: (dateStr: string) => void;
+    glucoseColorScale: any;
+    units: GlucoseUnits;
+    unitLabel: string;
+    formatUnits: (value: number | null) => string;
+    getVisibleCounts: (counts: Record<string, number>) => [string, number][];
+    sentinelElement?: HTMLDivElement;
+  }
+
   let {
     year,
     yearIndex,
@@ -26,22 +43,7 @@
     formatUnits,
     getVisibleCounts,
     sentinelElement = $bindable(),
-  } = $props<{
-    year: number;
-    yearIndex: number;
-    loadingYears: Set<number>;
-    yearData: Map<number, any[]>;
-    transformYearData: (days: any[]) => any[];
-    getCellFill: (data: any) => string;
-    getWeekColumns: (cells: any[]) => any[];
-    navigateToDayInReview: (dateStr: string) => void;
-    glucoseColorScale: any;
-    units: GlucoseUnits;
-    unitLabel: string;
-    formatUnits: (value: number | null) => string;
-    getVisibleCounts: (counts: Record<string, number>) => [string, number][];
-    sentinelElement?: HTMLDivElement;
-  }>();
+  }: Props = $props();
 
   const bounds = $derived(yearCalendarBounds(year));
   const days = $derived(yearData.get(year));

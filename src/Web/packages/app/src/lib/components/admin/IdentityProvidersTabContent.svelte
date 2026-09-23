@@ -23,6 +23,16 @@
   import ProviderIcon from "$lib/components/auth/ProviderIcon.svelte";
   import type { OidcProviderResponse } from "$api";
 
+  interface Props {
+    oidcLoading: boolean;
+    oidcError: string | null;
+    oidcProviders: OidcProviderResponse[];
+    openCreateProviderDialog: () => void;
+    openEditProviderDialog: (provider: OidcProviderResponse) => void;
+    toggleProvider: (provider: OidcProviderResponse) => void;
+    deleteProvider: (provider: OidcProviderResponse) => void;
+  }
+
   let {
     oidcLoading,
     oidcError,
@@ -31,15 +41,7 @@
     openEditProviderDialog,
     toggleProvider,
     deleteProvider,
-  } = $props<{
-    oidcLoading: boolean;
-    oidcError: string | null;
-    oidcProviders: OidcProviderResponse[];
-    openCreateProviderDialog: () => void;
-    openEditProviderDialog: (provider: OidcProviderResponse) => void;
-    toggleProvider: (provider: OidcProviderResponse) => void;
-    deleteProvider: (provider: OidcProviderResponse) => void;
-  }>();
+  }: Props = $props();
 </script>
 
 <Tabs.Content value="identity-providers">

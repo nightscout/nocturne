@@ -10,6 +10,18 @@
   import { Loader2, TriangleAlert } from "lucide-svelte";
   import type { TenantRoleDto } from "$api";
 
+  interface Props {
+    open: boolean;
+    isNew: boolean;
+    subjectName: string;
+    subjectNotes: string;
+    selectedRoleIds: string[];
+    roles: TenantRoleDto[];
+    isSaving: boolean;
+    onSave: () => void;
+    onCancel: () => void;
+  }
+
   let {
     open = $bindable(false),
     isNew = $bindable(false),
@@ -20,17 +32,7 @@
     isSaving = $bindable(false),
     onSave,
     onCancel,
-  } = $props<{
-    open: boolean;
-    isNew: boolean;
-    subjectName: string;
-    subjectNotes: string;
-    selectedRoleIds: string[];
-    roles: TenantRoleDto[];
-    isSaving: boolean;
-    onSave: () => void;
-    onCancel: () => void;
-  }>();
+  }: Props = $props();
 
   // Derived: check if admin role is selected (shows warning)
   const hasAdminRoleSelected = $derived(

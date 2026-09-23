@@ -12,6 +12,25 @@
   import type { GlucoseUnits } from "$lib/utils/formatting";
   import { formatCalendarDate, getCalendarDayNumber } from "$lib/components/calendar/calendar-date";
 
+  interface Props {
+    day: any; // Using any for brevity in this complex propset, but it maps to calendar logic
+    viewMode: "tir" | "profile";
+    currentYear: number;
+    currentMonth: number;
+    trackerEvents: Map<string, any[]>;
+    definitions: TrackerDefinitionDto[];
+    openPopoverId: string | null;
+    units: GlucoseUnits;
+    unitLabel: string;
+    handleDayClick: (day: any) => void;
+    getDefinition: (instance: TrackerInstanceDto, defs: TrackerDefinitionDto[]) => TrackerDefinitionDto | undefined;
+    getTrackerLevel: (instance: TrackerInstanceDto, def: TrackerDefinitionDto | undefined) => string;
+    getTrackerTone: (eventType: string, level: string) => string;
+    formatTrackerStartTime: (startedAt: Date | undefined) => string | null;
+    formatTrackerAge: (hours: number | undefined) => string;
+    openCompletionDialog: (instance: TrackerInstanceDto, def: TrackerDefinitionDto | undefined, date: string) => void;
+  }
+
   let {
     day,
     viewMode,
@@ -29,24 +48,7 @@
     formatTrackerStartTime,
     formatTrackerAge,
     openCompletionDialog,
-  } = $props<{
-    day: any; // Using any for brevity in this complex propset, but it maps to calendar logic
-    viewMode: "tir" | "profile";
-    currentYear: number;
-    currentMonth: number;
-    trackerEvents: Map<string, any[]>;
-    definitions: TrackerDefinitionDto[];
-    openPopoverId: string | null;
-    units: GlucoseUnits;
-    unitLabel: string;
-    handleDayClick: (day: any) => void;
-    getDefinition: (instance: TrackerInstanceDto, defs: TrackerDefinitionDto[]) => TrackerDefinitionDto | undefined;
-    getTrackerLevel: (instance: TrackerInstanceDto, def: TrackerDefinitionDto | undefined) => string;
-    getTrackerTone: (eventType: string, level: string) => string;
-    formatTrackerStartTime: (startedAt: Date | undefined) => string | null;
-    formatTrackerAge: (hours: number | undefined) => string;
-    openCompletionDialog: (instance: TrackerInstanceDto, def: TrackerDefinitionDto | undefined, date: string) => void;
-  }>();
+  }: Props = $props();
 
   // Helper for today check (can be simplified if passed as prop)
   function isToday(date: string): boolean {

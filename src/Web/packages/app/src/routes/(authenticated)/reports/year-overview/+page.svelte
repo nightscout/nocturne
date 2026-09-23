@@ -34,13 +34,10 @@
     type ColorFocusRange,
     type GlucoseColorThresholds,
   } from "$lib/utils/metric-color-focus";
-  import { getDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { onMount, untrack, tick } from "svelte";
   import { fade } from "svelte/transition";
   import { getWeekColumns } from "$lib/components/reports/year-overview/week-columns";
   import { toggled } from "$lib/utils/collections";
-
-  getDateParamsContext();
 
   // =========================================================================
   // State
@@ -76,6 +73,9 @@
   ];
 
   let selectedMetric = $state<HeatmapMetric>("avgGlucose");
+  const colorsKey = $derived<`${HeatmapMetric}Colors`>(`${selectedMetric}Colors`);
+  const invertKey = $derived<`${HeatmapMetric}Invert`>(`${selectedMetric}Invert`);
+  const bandKey = $derived<`${HeatmapMetric}Band`>(`${selectedMetric}Band`);
   const colorFocusPreferences = $derived(yearOverviewColors.current);
   const advancedMode = $derived(colorFocusPreferences.advancedMode ?? false);
   const transparencyPercent = $derived(
@@ -83,16 +83,13 @@
   );
 
   const currentMetricColors = $derived.by(() => {
-    const key = `${selectedMetric}Colors` as keyof typeof colorFocusPreferences;
-    const colors = colorFocusPreferences[key] as string[] | undefined;
+    const colors = colorFocusPreferences[colorsKey];
     return colors && colors.length >= 2 ? colors : undefined;
   });
 
   const lowColor = $derived(currentMetricColors?.[0]);
   const highColor = $derived(currentMetricColors?.at(-1));
-  const invert = $derived(
-    !!colorFocusPreferences[`${selectedMetric}Invert` as keyof typeof colorFocusPreferences]
-  );
+  const invert = $derived(!!colorFocusPreferences[invertKey]);
 
   const focusRange = $derived.by(() => {
     if (!advancedMode || selectedMetric === "avgGlucose") return null;
@@ -100,10 +97,6 @@
   });
   const focusBand = $derived.by(() => {
     if (!advancedMode) return null;
-    if (selectedMetric === "avgGlucose") {
-      return resolveColorFocusRange(colorFocusPreferences.avgGlucoseBand);
-    }
-    const bandKey = `${selectedMetric}Band` as keyof typeof colorFocusPreferences;
     return resolveColorFocusRange(colorFocusPreferences[bandKey]);
   });
   const glucoseThresholds = $derived(
@@ -143,25 +136,19 @@
   }
 
   function setCustomColors(colors: string[] | undefined) {
-    const key = `${selectedMetric}Colors` as keyof typeof colorFocusPreferences;
     const next = { ...colorFocusPreferences };
     if (colors && colors.length >= 2) {
-      next[key] = [...colors];
+      next[colorsKey] = [...colors];
     } else {
-      delete next[key];
+      delete next[colorsKey];
     }
     yearOverviewColors.current = next;
   }
 
   function setInvert(value: boolean) {
-    const key = `${selectedMetric}Invert` as keyof typeof colorFocusPreferences;
     const next = { ...colorFocusPreferences };
-    if (value) {
-      (next as Record<string, boolean>)[key] = true;
-    } else {
-      delete next[key];
-    }
-    yearOverviewColors.current = next;
+    delete next[invertKey];
+    yearOverviewColors.current = value ? { ...next, [invertKey]: true } : next;
   }
 
   function setFocusRange(candidate: ColorFocusRange | null) {
@@ -194,9 +181,6 @@
       (!range || (selectedMetric === "tir" && range[1] > 100))
     )
       return;
-    const bandKey = (selectedMetric === "avgGlucose"
-      ? "avgGlucoseBand"
-      : `${selectedMetric}Band`) as keyof typeof colorFocusPreferences;
     const next = { ...colorFocusPreferences };
     if (range) next[bandKey] = [...range];
     else delete next[bandKey];

@@ -5,6 +5,7 @@ import {
   type DeviceEventType,
   type SystemEventType,
   type StateSpanCategory,
+  type ChartSpanKind,
   type TrackerCategory,
 } from "$lib/api";
 import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
@@ -115,7 +116,7 @@ export interface TrackerMarkerData {
 /** A state span (pump mode, override, profile, activity, temp basal, basal delivery) */
 export interface StateSpan {
   id?: string;
-  kind?: string;
+  kind?: ChartSpanKind;
   category?: StateSpanCategory;
   state?: string;
   startTime: Date;

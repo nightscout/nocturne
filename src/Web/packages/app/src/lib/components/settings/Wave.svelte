@@ -1,13 +1,21 @@
 <script lang="ts">
-  let { canvasWidth, canvasHeight, color, gradientColors, barWidth, peaks } =
-    $props<{
-      canvasWidth: number;
-      canvasHeight: number;
-      color: string;
-      gradientColors: string[];
-      barWidth: number;
-      peaks: number[];
-    }>();
+  interface Props {
+    canvasWidth: number;
+    canvasHeight: number;
+    color: string;
+    gradientColors: string[];
+    barWidth: number;
+    peaks: number[];
+  }
+
+  let {
+    canvasWidth,
+    canvasHeight,
+    color,
+    gradientColors,
+    barWidth,
+    peaks,
+  }: Props = $props();
 
   let canvasEl: HTMLCanvasElement;
   let pixelRatio = $state(1);

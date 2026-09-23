@@ -14,10 +14,12 @@
   import { satisfiesScope } from "$lib/authorization/scopes";
   import { page } from "$app/state";
 
-  let { open = $bindable(false), onDeleteComplete } = $props<{
+  interface Props {
     open: boolean;
     onDeleteComplete?: () => Promise<void>;
-  }>();
+  }
+
+  let { open = $bindable(false), onDeleteComplete }: Props = $props();
 
   const canManage = $derived(
     satisfiesScope(page.data.effectivePermissions ?? [], "tenant.settings")

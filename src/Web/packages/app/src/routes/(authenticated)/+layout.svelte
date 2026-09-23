@@ -4,7 +4,7 @@
   import { createAuthStore } from "$lib/stores/auth-store.svelte";
   import { authInterceptorState } from "$lib/api/auth-interceptor";
   import { remoteErrorMessage } from "$lib/api/remote-error";
-  import { onMount, onDestroy } from "svelte";
+  import { onMount, onDestroy, type Snippet } from "svelte";
   import * as Sidebar from "$lib/components/ui/sidebar";
   import { AppSidebar, MobileHeader } from "$lib/components/layout";
   import type { LayoutData } from "./$types";
@@ -46,7 +46,12 @@
     pingInterval: 25000,
   };
 
-  const { data, children } = $props<{ data: LayoutData; children: any }>();
+  interface Props {
+    data: LayoutData;
+    children: Snippet;
+  }
+
+  const { data, children }: Props = $props();
 
   // A tenantless host leaves the tenant-scoped surfaces below unmounted; see
   // tenantless-navigation. Read once: the host cannot change without a fresh load.

@@ -69,6 +69,18 @@
     },
   ];
 
+  interface Props {
+    open: boolean;
+    roleFormName: string;
+    roleFormNotes: string;
+    roleFormPermissions: string[];
+    isNewRole: boolean;
+    roleCreatedFromSubjectDialog: boolean;
+    editingRole: TenantRoleDto | null;
+    roleSaving: boolean;
+    saveRole: () => void;
+  }
+
   let {
     open = $bindable(false),
     roleFormName = $bindable(""),
@@ -79,17 +91,7 @@
     editingRole,
     roleSaving,
     saveRole,
-  } = $props<{
-    open: boolean;
-    roleFormName: string;
-    roleFormNotes: string;
-    roleFormPermissions: string[];
-    isNewRole: boolean;
-    roleCreatedFromSubjectDialog: boolean;
-    editingRole: TenantRoleDto | null;
-    roleSaving: boolean;
-    saveRole: () => void;
-  }>();
+  }: Props = $props();
 
   let customPermission = $state("");
 

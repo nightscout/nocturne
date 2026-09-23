@@ -19,7 +19,12 @@
   import { describeSubmitError } from "$lib/forms/submit-error";
   import type { DeduplicationJobStatus } from "$lib/api/generated/nocturne-api-client";
 
-  let { open = $bindable(false), isDeduplicating = $bindable(false) } = $props<{ open: boolean, isDeduplicating?: boolean }>();
+  interface Props {
+    open: boolean;
+    isDeduplicating?: boolean;
+  }
+
+  let { open = $bindable(false), isDeduplicating = $bindable(false) }: Props = $props();
 
   let deduplicationJobId = $state<string | null>(null);
   let deduplicationStatus = $state<DeduplicationJobStatus | null>(null);

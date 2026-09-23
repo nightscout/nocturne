@@ -8,6 +8,18 @@
   import type { GlucoseUnits } from "$lib/utils/formatting";
   import { getDataTypeLabel } from "$lib/utils/data-type-labels";
 
+  interface Props {
+    selectedDay: any; // Using any for brevity in this refactor, but it's CalendarDatum
+    units: GlucoseUnits;
+    unitLabel: string;
+    formatSelectedDate: (dateStr: string) => string;
+    formatUnits: (value: number | null) => string;
+    glucoseColorScale: any;
+    getVisibleCounts: (counts: Record<string, number>) => [string, number][];
+    closeDetailPanel: () => void;
+    navigateToDayInReview: (dateStr: string) => void;
+  }
+
   let {
     selectedDay,
     units,
@@ -18,17 +30,7 @@
     getVisibleCounts,
     closeDetailPanel,
     navigateToDayInReview,
-  } = $props<{
-    selectedDay: any; // Using any for brevity in this refactor, but it's CalendarDatum
-    units: GlucoseUnits;
-    unitLabel: string;
-    formatSelectedDate: (dateStr: string) => string;
-    formatUnits: (value: number | null) => string;
-    glucoseColorScale: any;
-    getVisibleCounts: (counts: Record<string, number>) => [string, number][];
-    closeDetailPanel: () => void;
-    navigateToDayInReview: (dateStr: string) => void;
-  }>();
+  }: Props = $props();
 </script>
 
 {#if selectedDay}

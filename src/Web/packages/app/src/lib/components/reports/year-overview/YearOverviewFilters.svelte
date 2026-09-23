@@ -6,6 +6,15 @@
   import { Checkbox } from "$lib/components/ui/checkbox";
   import { getDataTypeLabel } from "$lib/utils/data-type-labels";
 
+  interface Props {
+    availableDataSources: string[];
+    selectedDataSources: string[];
+    presentDataTypes: string[];
+    hiddenDataTypes: Set<string>;
+    toggleDataType: (type: string) => void;
+    showAllDataTypes: () => void;
+  }
+
   let {
     availableDataSources,
     selectedDataSources = $bindable([]),
@@ -13,14 +22,7 @@
     hiddenDataTypes,
     toggleDataType,
     showAllDataTypes,
-  } = $props<{
-    availableDataSources: string[];
-    selectedDataSources: string[];
-    presentDataTypes: string[];
-    hiddenDataTypes: Set<string>;
-    toggleDataType: (type: string) => void;
-    showAllDataTypes: () => void;
-  }>();
+  }: Props = $props();
 </script>
 
 <div class="@container">

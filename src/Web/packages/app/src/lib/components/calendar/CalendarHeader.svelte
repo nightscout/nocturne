@@ -5,6 +5,17 @@
 
   type ViewMode = "tir" | "profile";
 
+  interface Props {
+    viewDate: Date;
+    viewMode: ViewMode;
+    isCurrentMonth: boolean;
+    MONTH_NAMES: string[];
+    previousMonth: () => void;
+    nextMonth: () => void;
+    goToToday: () => void;
+    setViewMode: (mode: ViewMode) => void;
+  }
+
   let {
     viewDate,
     viewMode = $bindable(),
@@ -14,16 +25,7 @@
     nextMonth,
     goToToday,
     setViewMode,
-  } = $props<{
-    viewDate: Date;
-    viewMode: ViewMode;
-    isCurrentMonth: boolean;
-    MONTH_NAMES: string[];
-    previousMonth: () => void;
-    nextMonth: () => void;
-    goToToday: () => void;
-    setViewMode: (mode: ViewMode) => void;
-  }>();
+  }: Props = $props();
 
   const currentMonth = $derived(viewDate.getMonth());
   const currentYear = $derived(viewDate.getFullYear());

@@ -28,17 +28,19 @@
     message: string;
   }
 
+  interface Props {
+    open: boolean;
+    isManualSyncing: boolean;
+    manualSyncResult: BatchSyncResult | null;
+    syncProgress: SyncProgressEvent | null;
+  }
+
   let {
     open = $bindable(false),
     isManualSyncing = false,
     manualSyncResult = null,
     syncProgress = null,
-  } = $props<{
-    open: boolean;
-    isManualSyncing: boolean;
-    manualSyncResult: BatchSyncResult | null;
-    syncProgress: SyncProgressEvent | null;
-  }>();
+  }: Props = $props();
 
   let logEntries = $state<LogEntry[]>([]);
   let logContainer: HTMLDivElement | undefined = $state();

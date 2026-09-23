@@ -30,17 +30,19 @@
   import type { ConnectorStatusWithDescription } from "./ServerConnectorsCard.svelte";
   import { formatNumber, lastSeen } from "$lib/utils/formatting";
 
+  interface Props {
+    open: boolean;
+    selectedConnector: ConnectorStatusWithDescription | null;
+    selectedConnectorCapabilities: ConnectorCapabilities | null;
+    onSyncComplete?: () => Promise<void>;
+  }
+
   let {
     open = $bindable(false),
     selectedConnector = null,
     selectedConnectorCapabilities = null,
     onSyncComplete,
-  } = $props<{
-    open: boolean;
-    selectedConnector: ConnectorStatusWithDescription | null;
-    selectedConnectorCapabilities: ConnectorCapabilities | null;
-    onSyncComplete?: () => Promise<void>;
-  }>();
+  }: Props = $props();
 
   const canManage = $derived(
     satisfiesScope(page.data.effectivePermissions ?? [], "tenant.settings")

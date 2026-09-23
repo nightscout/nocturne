@@ -14,6 +14,16 @@
   import { cn } from "$lib/utils";
   import { TrackerCategory, type TrackerDefinitionDto } from "$api";
 
+  interface Props {
+    definitions: TrackerDefinitionDto[];
+    categoryLabels: Record<TrackerCategory, string>;
+    categoryColors: Record<TrackerCategory, string>;
+    openNewDefinition: () => void;
+    openStartDialog: (def: TrackerDefinitionDto) => void;
+    openEditDefinition: (def: TrackerDefinitionDto) => void;
+    openDeleteDefinitionDialog: (id: string) => void;
+  }
+
   let {
     definitions,
     categoryLabels,
@@ -22,15 +32,7 @@
     openStartDialog,
     openEditDefinition,
     openDeleteDefinitionDialog,
-  } = $props<{
-    definitions: TrackerDefinitionDto[];
-    categoryLabels: Record<TrackerCategory, string>;
-    categoryColors: Record<TrackerCategory, string>;
-    openNewDefinition: () => void;
-    openStartDialog: (def: TrackerDefinitionDto) => void;
-    openEditDefinition: (def: TrackerDefinitionDto) => void;
-    openDeleteDefinitionDialog: (id: string) => void;
-  }>();
+  }: Props = $props();
 </script>
 
 <Tabs.Content value="definitions">

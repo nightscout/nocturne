@@ -22,6 +22,20 @@
   } from "lucide-svelte";
   import type { TenantMemberDto, TenantMemberRoleDto } from "$api";
 
+  interface Props {
+    subjects: TenantMemberDto[];
+    currentUserSubjectId: string | undefined;
+    platformAdminError?: string | null;
+    platformAdminSavingId?: string | null;
+    openNewSubject: () => void;
+    openEditSubject: (subject: TenantMemberDto) => void;
+    togglePlatformAdmin: (subject: TenantMemberDto) => void;
+    deleteSubjectHandler: (id: string) => void;
+    getSubjectIcon: (subject: TenantMemberDto) => any;
+    isSystemSubjectCheck: (subject: TenantMemberDto) => boolean;
+    formatDate: (date: any) => string;
+  }
+
   let {
     subjects,
     currentUserSubjectId,
@@ -34,19 +48,7 @@
     getSubjectIcon,
     isSystemSubjectCheck,
     formatDate,
-  } = $props<{
-    subjects: TenantMemberDto[];
-    currentUserSubjectId: string | undefined;
-    platformAdminError?: string | null;
-    platformAdminSavingId?: string | null;
-    openNewSubject: () => void;
-    openEditSubject: (subject: TenantMemberDto) => void;
-    togglePlatformAdmin: (subject: TenantMemberDto) => void;
-    deleteSubjectHandler: (id: string) => void;
-    getSubjectIcon: (subject: TenantMemberDto) => any;
-    isSystemSubjectCheck: (subject: TenantMemberDto) => boolean;
-    formatDate: (date: any) => string;
-  }>();
+  }: Props = $props();
 </script>
 
 <Tabs.Content value="users">

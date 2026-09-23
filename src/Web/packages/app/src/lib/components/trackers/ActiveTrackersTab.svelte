@@ -14,6 +14,20 @@
   import { TrackerCategory } from "$api";
   import type { NotificationUrgency, TrackerDefinitionDto, TrackerInstanceDto } from "$api";
 
+  interface Props {
+    definitions: TrackerDefinitionDto[];
+    activeInstances: TrackerInstanceDto[];
+    openStartDialog: (def: TrackerDefinitionDto) => void;
+    openCompleteDialog: (id: string) => void;
+    openReservoirReportDialog: () => void;
+    openDeleteInstanceDialog: (id: string) => void;
+    getInstanceLevel: (instance: TrackerInstanceDto) => NotificationUrgency | null;
+    getTimeRemaining: (instance: TrackerInstanceDto) => number | undefined;
+    getLevelStyle: (level: NotificationUrgency | null) => string;
+    formatAge: (hours: number) => string;
+    formatDate: (dateStr: Date | undefined | string) => string;
+  }
+
   let {
     definitions,
     activeInstances,
@@ -26,19 +40,7 @@
     getLevelStyle,
     formatAge,
     formatDate,
-  } = $props<{
-    definitions: TrackerDefinitionDto[];
-    activeInstances: TrackerInstanceDto[];
-    openStartDialog: (def: TrackerDefinitionDto) => void;
-    openCompleteDialog: (id: string) => void;
-    openReservoirReportDialog: () => void;
-    openDeleteInstanceDialog: (id: string) => void;
-    getInstanceLevel: (instance: TrackerInstanceDto) => NotificationUrgency | null;
-    getTimeRemaining: (instance: TrackerInstanceDto) => number | undefined;
-    getLevelStyle: (level: NotificationUrgency | null) => string;
-    formatAge: (hours: number) => string;
-    formatDate: (dateStr: Date | undefined | string) => string;
-  }>();
+  }: Props = $props();
 </script>
 
 <Tabs.Content value="active">
