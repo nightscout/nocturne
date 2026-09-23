@@ -287,7 +287,7 @@ export default ts.config(
       }
     },
     rules: {
-      "nocturne/no-imperative-remote-query": "warn"
+      "nocturne/no-imperative-remote-query": "error"
     }
   },
   {
