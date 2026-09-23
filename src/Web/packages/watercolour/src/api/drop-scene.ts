@@ -157,9 +157,11 @@ export function brushworkMs(mark: DropMark): number {
 function medium(surface: Surface, intensity: number) {
   const conc = (base: number) => Math.min(1, base * (0.4 + intensity * 0.857));
   const water = (base: number) => Math.min(1.5, base * (0.8 + intensity * 0.3));
-  // A luminous wash on a dark ground saturates, so it is laid lighter.
+  // A luminous wash on a dark ground saturates its alpha early, so it is laid
+  // lighter; heavy enough that it dries past the luminous colour floor and
+  // shows its own depth rather than the floor's pale tint.
   return surface === 'dark'
-    ? { conc: conc(0.2), water: water(0.55), spatterConc: conc(0.4) }
+    ? { conc: conc(0.34), water: water(0.55), spatterConc: conc(0.6) }
     : { conc: conc(0.48), water: water(0.5), spatterConc: conc(0.8) };
 }
 

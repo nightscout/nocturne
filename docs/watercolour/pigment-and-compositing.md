@@ -39,7 +39,7 @@ Every pixel is rendered as **one mixed layer**:
 Kx = sum(t_k * K_k),  Sx = sum(t_k * S_k)
 ```
 
-where `t_k` is deposited plus visible suspended pigment, modulated at output
+where `t_k` is the pigment's *optical* thickness (below), modulated at output
 resolution by paper height for granulating pigments. With
 `beta = sqrt(Kx^2 + 2 Kx Sx)`:
 
@@ -52,6 +52,50 @@ The formulation stays finite as `Sx -> 0` (the `sinh(beta)/beta` and `a/b`
 special cases) and `beta` is capped at 40. Layers stack with Curtis's
 two-layer formula (`composite`). Output is linear RGB; sRGB encoding is the
 exporter's job.
+
+### Optical thickness
+
+The simulation's pigment amount is not a KM thickness. A cell's amount is
+deposited plus a fixed share (`wet_pigment_visibility`) of its suspended
+pigment, whatever the film's depth, so paint is visible at nearly full
+strength the moment it lands instead of darkening in as it settles. The
+amount maps to optical thickness through a saturating curve,
+
+```
+g = amount^optical_gamma
+t = optical_max * g / (g + optical_mid)
+```
+
+The exponent above 1 keeps faint halos faint; the ceiling means a wash
+approaches masstone but never black; and because the simulation caps a dried
+deposit at 1, the curve is where the headroom past the swatch lives: a
+typical dried light wash lands near thickness 1 (the swatch) and a full
+deposit reads well past it. Presence (the luminous alpha field) goes through
+the same curve; the luminous outline mask reads the raw amount.
+
+### Surface correction
+
+A gum-arabic film reflects part of the light at its surface and reflects
+light trying to leave it back inside, which deepens heavy paint. The
+reflectance of the layer over its ground is corrected with Saunderson's form
+as Sudo Aquarelle uses it, `R' = (1 - k1)(1 - k2) R / (1 - k2 R)`, blended in
+by `clamp(t * surface_coverage_gain, 0, 1)` so bare paper and faint halos are
+untouched. For the transparent export the correction is applied as a
+per-channel factor `q = R' / R` to *both* the on-white colour and the light
+the coverage layer returns, so alpha rises by the light the film withholds,
+the pixel still composites to the corrected colour over white, and
+`rgb <= alpha` holds. In Luminous mode it scales the on-white colour.
+
+### The wet look
+
+While a film is present (`wet_look = clamp(depth / sheen_depth, 0, 1)`) the
+colour mix reads richer, as water index-matches the particles: its
+scattering falls by `wet_scatter_loss` and its absorption rises by
+`wet_absorb_gain`. The ground under it darkens by `wet_darken` and a faint
+sheen is added. None of this touches the coverage mix, so alpha and the
+artwork's edge do not move as it dries, and a dry frame is bit-identical to
+one rendered with the wet look off. The paper's capillary saturation is not
+used for a lingering damp look because it does not fall as the sheet dries.
 
 ## The subtractive to-RGBA approximation
 
@@ -144,11 +188,15 @@ Five display decisions are folded in:
   pooling octaves sit in the same height field the granulation term reads, so
   they are damped by the same factor; the pooling the simulation deposited
   (plain thickness) is untouched.
-- **Colour floor.** Colour is evaluated at no less than
-  `LUMINOUS_COLOUR_FLOOR = 0.5` thickness (scaled by
-  `max(1, 0.5 / t_plain)`), because a very thin glaze's on-white colour is
-  nearly white, and white times a small alpha over black is grey. Above the
-  floor the colour follows the deposited thickness.
+- **Colour floor and ceiling.** Colour is evaluated at no less than the
+  larger of `LUMINOUS_COLOUR_FLOOR` and the pixel's presence, and at no more
+  than `LUMINOUS_COLOUR_CEILING` optical thickness. A very thin glaze's
+  on-white colour is nearly white, and white times a small alpha over black
+  is grey; raising a boundary or pinhole to its presence gives it its
+  neighbours' colour, as it already has their alpha, so the body does not
+  wear a pale rim. Past the ceiling an overlap's on-white colour only
+  darkens toward mud, which over a dark ground stops reading as light.
+  Between the two the colour follows the deposited thickness.
 
 `rgb <= alpha` always holds. Over white it composites to
 `1 - alpha (1 - W_c)`: thin glazes agree with the subtractive result (both
@@ -172,9 +220,10 @@ is one painting at every size, and the outline is smoothed in the render by the
 mask above. At 256 over a 900 px hero a cell is 3.5 px; the mask rounds its
 staircase to a gentle wobble.
 
-**Known limitation.** Bodies are still flatter and more pastel on dark than the
-subtractive mode's: with `alpha_full` at 0.2 a body saturates long before it is
-dense, so it carries its variation in colour alone. A preview hook
+**Known limitation.** With `alpha_full` at 0.2 a body saturates its alpha long
+before it is dense, so on dark it carries its variation in colour alone, and
+only between the colour floor and ceiling; a triple overlap still reads as a
+dim brown. A preview hook
 (`luminous_variants` in `render_native`) exists but is not shipped.
 
 ### When each mode is chosen

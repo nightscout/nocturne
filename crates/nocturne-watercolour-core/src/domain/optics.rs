@@ -4,7 +4,7 @@
 //!
 //! Every cell is one mixed layer: the pigments present contribute
 //! `Kx = sum_k t_k K_k` and `Sx = sum_k t_k S_k` per channel, where `t_k` is
-//! the pigment's thickness (deposited plus visible suspended pigment). With
+//! the pigment's optical thickness (below). With
 //! `a = (Kx + Sx) / Sx`, `b = sqrt(a^2 - 1)` and `beta = b Sx`,
 //!
 //! ```text
@@ -16,13 +16,32 @@
 //! Layers stack with Curtis's two-layer formula, top layer 1 over layer 2:
 //! `R = R1 + T1^2 R2 / (1 - R1 R2)`, `T = T1 T2 / (1 - R1 R2)`.
 //!
-//! The water film darkens the ground under it and adds a faint sheen to the
-//! result: at reconstructed depth `d` the composite ground is scaled by
-//! `1 - wet_darken * clamp(d / sheen_depth, 0, 1)` and the final reflectance
-//! gains `wet_sheen_add * clamp(d / sheen_depth, 0, 1)`, so a wet wash reads
-//! darker and lifts to its dry value as the film goes. Neither term touches
-//! pigment thickness, so coverage/alpha comes from the same thickness the
-//! colour does and the artwork's edge does not move as it dries; see
+//! # Optical thickness
+//!
+//! A cell's pigment amount is its deposit plus `wet_pigment_visibility` of its
+//! suspended pigment, independent of the film's depth, so paint reads at
+//! nearly full strength the moment it lands. The amount is not a KM thickness:
+//! [`optical_thickness`] maps it through `max * g / (g + mid)`, `g =
+//! amount^gamma`, which keeps halos faint, never reaches black, and gives the
+//! headroom past the swatch that the simulation's deposit cap of 1 cannot.
+//!
+//! # Surface
+//!
+//! The gum film's surface reflections deepen heavy paint: the layer's
+//! reflectance over its ground becomes Saunderson's
+//! `R' = (1 - k1)(1 - k2) R / (1 - k2 R)`, blended in by coverage
+//! ([`Surface`]). The transparent export applies it as the factor `R' / R` to
+//! both the colour and the light the coverage layer returns, so the pixel
+//! still composites to `R'` over white and `rgb <= alpha` holds.
+//!
+//! # Wet look
+//!
+//! At reconstructed depth `d`, `wet_look = clamp(d / sheen_depth, 0, 1)`. The
+//! colour mix loses `wet_scatter_loss * wet_look` of its scattering and gains
+//! `wet_absorb_gain * wet_look` absorption (water index-matches the
+//! particles), the ground under it is scaled by `1 - wet_darken * wet_look`,
+//! and the result gains `wet_sheen_add * wet_look`. The coverage mix is never
+//! enriched, so alpha and the artwork's edge do not move as it dries; see
 //! [`RenderParams`].
 //!
 //! # Transparent output
@@ -70,7 +89,8 @@
 //!             plain mix's *presence*: its soft-dilated thickness around each cell)
 //!           * smoothstep(LUMINOUS_EDGE_LO, LUMINOUS_EDGE_HI, mask)
 //! W_c       = on-white colour of the damped granulated mix at thickness
-//!             max(t_plain, LUMINOUS_COLOUR_FLOOR)
+//!             min(max(t_plain, t_presence, LUMINOUS_COLOUR_FLOOR),
+//!                 LUMINOUS_COLOUR_CEILING), surface corrected
 //! rgb_c     = W_c * alpha                                                  (premultiplied)
 //! ```
 //!
@@ -117,7 +137,10 @@
 //! it. The colour is taken
 //! at no less than `LUMINOUS_COLOUR_FLOOR` thickness because a very thin
 //! glaze's on-white colour is nearly white, and white times a small alpha
-//! over black is grey; above the floor the colour follows the deposited
+//! over black is grey. It is also raised to the pixel's presence, so a
+//! boundary or a pinhole takes its neighbours' colour as it takes their
+//! alpha, and capped at `LUMINOUS_COLOUR_CEILING`, past which an overlap
+//! only darkens toward mud. In between the colour follows the deposited
 //! thickness, so pooling and the deposit's fine tooth read as gentle
 //! warm/pale mottling in colour, and overlaps darken further.
 //! Over white it composites to `1 - alpha (1 - W_c)`: for a thin glaze
@@ -153,7 +176,7 @@
 //! previous bilinear: 16 taps instead of 4, each a separate storage read.
 //! The Luminous alpha reads a *dilated* copy of the same field
 //! (`Sample::presence`): at each of the 16 taps, `deposited + suspended *
-//! visibility * wet` is raised toward its 3x3 neighbourhood and the results
+//! visibility` is raised toward its 3x3 neighbourhood and the results
 //! are blended with the same cubic weights. The dilation is the larger of
 //! the tap cell's own value and the `PRESENCE_KERNEL`-weighted fourth-power
 //! mean of the 3x3, i.e. a soft maximum:
@@ -214,6 +237,11 @@ pub fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
 /// module doc, "Composite modes". Mirrored in `render.wgsl`.
 pub const LUMINOUS_COLOUR_FLOOR: f32 = 0.5;
 
+/// Largest optical thickness the luminous colour is evaluated at: past about
+/// swatch depth an on-white colour only darkens toward mud, which over a
+/// dark ground stops reading as light. Mirrored in `render.wgsl`.
+pub const LUMINOUS_COLOUR_CEILING: f32 = 1.6;
+
 /// How much of the granulation deviation reaches the luminous colour; `1`
 /// is the full textured mix, `0` none. See the module doc, "Composite
 /// modes". Mirrored in `render.wgsl`.
@@ -226,6 +254,7 @@ pub struct LuminousTuning {
     pub alpha_toe: f32,
     pub alpha_full: f32,
     pub colour_floor: f32,
+    pub colour_ceiling: f32,
     pub grain_strength: f32,
 }
 
@@ -234,6 +263,7 @@ pub const LUMINOUS_TUNING: LuminousTuning = LuminousTuning {
     alpha_toe: LUMINOUS_ALPHA_TOE,
     alpha_full: LUMINOUS_ALPHA_FULL,
     colour_floor: LUMINOUS_COLOUR_FLOOR,
+    colour_ceiling: LUMINOUS_COLOUR_CEILING,
     grain_strength: LUMINOUS_GRAIN_STRENGTH,
 };
 
@@ -245,6 +275,8 @@ pub struct WetLook {
     pub wet_look: f32,
     pub wet_darken: f32,
     pub wet_sheen_add: f32,
+    pub wet_scatter_loss: f32,
+    pub wet_absorb_gain: f32,
 }
 
 impl WetLook {
@@ -252,7 +284,71 @@ impl WetLook {
         wet_look: 0.0,
         wet_darken: 0.0,
         wet_sheen_add: 0.0,
+        wet_scatter_loss: 0.0,
+        wet_absorb_gain: 0.0,
     };
+
+    /// The colour mix as it reads under the film: water index-matches the
+    /// particles, so less light scatters back and more is absorbed.
+    fn enrich(&self, m: MixTotals) -> MixTotals {
+        let f = self.wet_look;
+        MixTotals {
+            kx: m.kx.map(|k| k * (1.0 + self.wet_absorb_gain * f)),
+            sx: m.sx.map(|s| s * (1.0 - self.wet_scatter_loss * f)),
+            thickness: m.thickness,
+        }
+    }
+
+    fn sheen(&self) -> f32 {
+        self.wet_sheen_add * self.wet_look
+    }
+
+    fn ground(&self) -> f32 {
+        1.0 - self.wet_darken * self.wet_look
+    }
+}
+
+/// The Saunderson surface correction of the gum film; see the module doc,
+/// "Surface". [`Surface::OFF`] leaves reflectance untouched.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Surface {
+    /// External reflection at the air-film interface.
+    pub k1: f32,
+    /// Internal reflection at the film-air interface, seen from inside.
+    pub k2: f32,
+    /// Optical thickness times this is how much of the correction applies,
+    /// capped at 1, so bare paper and faint halos keep their plain colour.
+    pub coverage_gain: f32,
+}
+
+impl Surface {
+    pub const OFF: Surface = Surface {
+        k1: 0.0,
+        k2: 0.0,
+        coverage_gain: 0.0,
+    };
+
+    /// Per-channel factor `R' / R` for a film of optical thickness
+    /// `thickness` whose uncorrected reflectance is `w`:
+    /// `R' = (1 - k1)(1 - k2) R / (1 - k2 R)`, gated by coverage.
+    pub fn factor(&self, w: Rgb, thickness: f32) -> Rgb {
+        let gate = (thickness * self.coverage_gain).clamp(0.0, 1.0);
+        let gain = (1.0 - self.k1) * (1.0 - self.k2);
+        w.map(|w| {
+            let q = gain / (1.0 - self.k2 * w.clamp(0.0, 1.0)).max(1e-6);
+            1.0 + (q - 1.0) * gate
+        })
+    }
+}
+
+/// Deposited pigment amount to KM optical thickness: `max * g / (g + mid)`
+/// with `g = x^gamma`. See the module doc, "Optical thickness".
+pub fn optical_thickness(x: f32, gamma: f32, max: f32, mid: f32) -> f32 {
+    if x <= 0.0 {
+        return 0.0;
+    }
+    let g = x.powf(gamma);
+    max * g / (g + mid)
 }
 
 /// How a layer's KM reflectance/transmittance becomes one premultiplied
@@ -436,6 +532,7 @@ pub fn to_premultiplied_luminous(
         1.0,
         &LUMINOUS_TUNING,
         WetLook::OFF,
+        Surface::OFF,
     )
 }
 
@@ -451,14 +548,22 @@ pub fn to_premultiplied_luminous_with_strength(
         grain_strength,
         ..LUMINOUS_TUNING
     };
-    to_premultiplied_luminous_tuned(textured, plain, presence, 1.0, &tuning, WetLook::OFF)
+    to_premultiplied_luminous_tuned(
+        textured,
+        plain,
+        presence,
+        1.0,
+        &tuning,
+        WetLook::OFF,
+        Surface::OFF,
+    )
 }
 
 /// [`to_premultiplied_luminous`] with an explicit tuning, the reconstructed
-/// paint `mask` and wet-look factors. A `mask` of 1 is a pixel well inside
-/// the paint, where alpha is the thickness term alone. The wet look darkens
-/// the ground the on-white colour composites over and adds a faint sheen,
-/// exactly as the subtractive path does.
+/// paint `mask`, wet-look factors and surface correction. A `mask` of 1 is a
+/// pixel well inside the paint, where alpha is the thickness term alone. The
+/// wet look and the surface act on the on-white colour exactly as the
+/// subtractive path's do; alpha is untouched by both.
 pub fn to_premultiplied_luminous_tuned(
     textured: MixTotals,
     plain: MixTotals,
@@ -466,53 +571,59 @@ pub fn to_premultiplied_luminous_tuned(
     mask: f32,
     tuning: &LuminousTuning,
     wet: WetLook,
+    surface: Surface,
 ) -> [f32; 4] {
     let (r, t) = layer_rgb(presence.kx, presence.sx, 1.0);
     let body = smoothstep(tuning.alpha_toe, tuning.alpha_full, coverage(r, t));
     let alpha = body * smoothstep(LUMINOUS_EDGE_LO, LUMINOUS_EDGE_HI, mask);
-    // Brings a layer thinner than the colour floor up to the floor.
-    let scale = (tuning.colour_floor / plain.thickness.max(1e-6)).max(1.0);
-    let damped = damp_texture(textured, plain, tuning.grain_strength);
+    // Brings the layer's thickness up to its presence (so a boundary and a
+    // pinhole take their neighbours' colour, as they take their alpha) or the
+    // colour floor, and down to the ceiling.
+    let reference = plain.thickness.max(1e-6);
+    let scale = (tuning.colour_floor.max(presence.thickness) / reference)
+        .max(1.0)
+        .min(tuning.colour_ceiling / reference);
+    let damped = wet.enrich(damp_texture(textured, plain, tuning.grain_strength));
     let (r_ref, t_ref) = layer_rgb(damped.kx, damped.sx, scale);
-    let w = over_ground(r_ref, t_ref, 1.0 - wet.wet_darken * wet.wet_look);
-    let w = w.zip(
-        Rgb::new(
-            wet.wet_sheen_add * wet.wet_look,
-            wet.wet_sheen_add * wet.wet_look,
-            wet.wet_sheen_add * wet.wet_look,
-        ),
-        |c, sheen| (c + sheen).clamp(0.0, 1.0),
-    );
+    let w = over_ground(r_ref, t_ref, wet.ground());
+    let q = surface.factor(w, plain.thickness * scale);
+    let w = w.zip(q, |c, q| (c * q + wet.sheen()).clamp(0.0, 1.0));
     [w.0[0] * alpha, w.0[1] * alpha, w.0[2] * alpha, alpha]
 }
 
-/// Subtractive premultiplied RGBA whose colour comes from layer `(r, t)` and
-/// whose coverage alpha comes from `(r_c, t_c)`; with equal layers this is
-/// [`to_premultiplied`]. The wet look darkens the ground the layer composites
-/// over (`wet_darken * wet_look`) and adds `wet_sheen_add * wet_look` to the
-/// result, so a wet cell reads deeper without reading wider.
-fn to_premultiplied_with_coverage(r: Rgb, t: Rgb, r_c: Rgb, t_c: Rgb, wet: WetLook) -> [f32; 4] {
-    let alpha = coverage(r_c, t_c);
-    let passed = 1.0 - alpha;
-    let w = over_ground(r, t, 1.0 - wet.wet_darken * wet.wet_look);
-    let w = w.zip(
-        Rgb::new(
-            wet.wet_sheen_add * wet.wet_look,
-            wet.wet_sheen_add * wet.wet_look,
-            wet.wet_sheen_add * wet.wet_look,
-        ),
-        |c, sheen| (c + sheen).clamp(0.0, 1.0),
-    );
+/// Subtractive premultiplied RGBA whose colour comes from the mix `colour`
+/// and whose coverage alpha comes from the mix `cover`; with equal mixes and
+/// no wet look or surface this is [`to_premultiplied`]. The wet look enriches
+/// the colour mix, darkens the ground it composites over and adds a sheen;
+/// the surface correction scales both the colour and the light the coverage
+/// mix returns, so over white the pixel still composites to the corrected
+/// colour and `rgb <= alpha` holds.
+fn to_premultiplied_with_coverage(
+    colour: MixTotals,
+    cover: MixTotals,
+    wet: WetLook,
+    surface: Surface,
+) -> [f32; 4] {
+    let (r_c, t_c) = layer_rgb(cover.kx, cover.sx, 1.0);
+    let q_c = surface.factor(over_white(r_c, t_c), cover.thickness);
+    let ret = returned(r_c, t_c).zip(q_c, |ret, q| ret * q);
+    let min_return = ret.0[0].min(ret.0[1]).min(ret.0[2]);
+    let passed = (min_return + (ret.mean() - min_return) * ALPHA_SOFTNESS).clamp(0.0, 1.0);
+    let enriched = wet.enrich(colour);
+    let (r, t) = layer_rgb(enriched.kx, enriched.sx, 1.0);
+    let w = over_ground(r, t, wet.ground());
+    let q = surface.factor(w, colour.thickness);
+    let w = w.zip(q, |c, q| (c * q + wet.sheen()).clamp(0.0, 1.0));
     [
         (w.0[0] - passed).clamp(0.0, 1.0),
         (w.0[1] - passed).clamp(0.0, 1.0),
         (w.0[2] - passed).clamp(0.0, 1.0),
-        alpha,
+        1.0 - passed,
     ]
 }
 
-/// Dispatches on the mode. Subtractive renders the sheen-scaled colour mix as
-/// is; the alpha/coverage comes from `coverage` (identical to `textured` when
+/// Dispatches on the mode with no wet look and no surface correction: the
+/// bare KM conversion. Subtractive renders the colour mix as is; the alpha/coverage comes from `coverage` (identical to `textured` when
 /// dry), so the film deepens colour without widening the wash. Luminous
 /// splits texture into colour and dilated plain presence into alpha.
 pub fn composite_pixel(
@@ -546,15 +657,16 @@ pub fn composite_pixel_with_strength(
         mode,
         &tuning,
         WetLook::OFF,
+        Surface::OFF,
     )
 }
 
-/// [`composite_pixel`] with an explicit coverage mix and wet-look factors.
-/// Subtractive derives its alpha from `coverage` instead of `textured`, and
-/// the wet look (darkened ground plus a sheen) applies to both modes without
-/// scaling pigment thickness; the wrapper [`composite_pixel`] passes
-/// `textured` for the coverage and a zero wet look, reproducing the dry-frame
-/// behaviour exactly.
+/// [`composite_pixel`] with an explicit coverage mix, wet-look factors and
+/// surface correction. Subtractive derives its alpha from `coverage` instead
+/// of `textured`; the wet look (enriched colour mix, darkened ground, sheen)
+/// applies to both modes without touching alpha; the wrapper
+/// [`composite_pixel`] passes `textured` for the coverage, a zero wet look
+/// and [`Surface::OFF`], the bare KM conversion.
 #[allow(clippy::too_many_arguments)]
 pub fn composite_pixel_tuned(
     textured: MixTotals,
@@ -565,15 +677,14 @@ pub fn composite_pixel_tuned(
     mode: CompositeMode,
     tuning: &LuminousTuning,
     wet: WetLook,
+    surface: Surface,
 ) -> [f32; 4] {
     match mode {
         CompositeMode::Subtractive => {
-            let (r, t) = layer_rgb(textured.kx, textured.sx, 1.0);
-            let (r_c, t_c) = layer_rgb(coverage.kx, coverage.sx, 1.0);
-            to_premultiplied_with_coverage(r, t, r_c, t_c, wet)
+            to_premultiplied_with_coverage(textured, coverage, wet, surface)
         }
         CompositeMode::Luminous => {
-            to_premultiplied_luminous_tuned(textured, plain, presence, mask, tuning, wet)
+            to_premultiplied_luminous_tuned(textured, plain, presence, mask, tuning, wet, surface)
         }
     }
 }
@@ -583,30 +694,78 @@ pub struct RenderParams {
     /// How strongly paper height at output resolution modulates thickness of
     /// granulating pigments.
     pub granulation_gain: f32,
-    /// Fraction of suspended pigment that reads through the water film.
+    /// Fraction of suspended pigment that reads through the water film,
+    /// whatever the film's depth: paint in water is visible the moment it
+    /// lands, a little lighter than the same paint settled.
     pub wet_pigment_visibility: f32,
-    /// KM thickness per unit of deposited pigment.
+    /// Scales pigment amount before [`optical_thickness`].
     pub thickness_scale: f32,
     /// Fraction of the ground's reflectance the wet-look factor removes: a
-    /// film darkens the paper under it, which reads as deeper paint without
-    /// faking more pigment. Mirrored in `render.wgsl`.
+    /// film darkens the paper under it. Mirrored in `render.wgsl`.
     pub wet_darken: f32,
     /// Reflectance added to the result while a film is present; the faint
     /// wet sheen. Mirrored in `render.wgsl`.
     pub wet_sheen_add: f32,
     /// Water depth at which the wet-look factor reaches 1.
     pub sheen_depth: f32,
+    /// Fraction of the colour mix's scattering the film removes at full wet
+    /// look: water index-matches the particles, so wet paint reads richer.
+    pub wet_scatter_loss: f32,
+    /// Fraction of absorption the film adds at full wet look.
+    pub wet_absorb_gain: f32,
+    /// [`optical_thickness`]'s exponent: above 1 opens up the pale range.
+    pub optical_gamma: f32,
+    /// [`optical_thickness`]'s ceiling: a wash approaches masstone, never black.
+    pub optical_max: f32,
+    /// [`optical_thickness`]'s half-saturation point in `x^gamma`.
+    pub optical_mid: f32,
+    /// See [`Surface`].
+    pub surface_k1: f32,
+    pub surface_k2: f32,
+    pub surface_coverage_gain: f32,
+}
+
+impl RenderParams {
+    /// The KM thickness a pigment amount `x` renders at.
+    pub fn optical(&self, x: f32) -> f32 {
+        optical_thickness(
+            x * self.thickness_scale,
+            self.optical_gamma,
+            self.optical_max,
+            self.optical_mid,
+        )
+    }
+
+    pub fn surface(&self) -> Surface {
+        Surface {
+            k1: self.surface_k1,
+            k2: self.surface_k2,
+            coverage_gain: self.surface_coverage_gain,
+        }
+    }
 }
 
 impl Default for RenderParams {
     fn default() -> Self {
         RenderParams {
             granulation_gain: 0.8,
-            wet_pigment_visibility: 0.5,
+            wet_pigment_visibility: 0.85,
             thickness_scale: 1.0,
             wet_darken: 0.12,
             wet_sheen_add: 0.018,
             sheen_depth: 0.35,
+            wet_scatter_loss: 0.5,
+            wet_absorb_gain: 0.2,
+            // A dried light wash (amount ~0.4) lands near its swatch
+            // (optical ~0.85); a full deposit (amount 1) reads past it at ~1.5.
+            optical_gamma: 1.35,
+            optical_max: 2.2,
+            optical_mid: 0.47,
+            // A gum-arabic film: ~3 % external and ~40 % internal reflection.
+            surface_k1: 0.03,
+            surface_k2: 0.4,
+            // Full correction from optical thickness 2/3 up.
+            surface_coverage_gain: 1.5,
         }
     }
 }
@@ -668,18 +827,17 @@ pub fn render_with_luminous_tuning(
             let v = (y as f32 + 0.5) / oh as f32;
             let sample = cubic_sample(grid, u, v, params.wet_pigment_visibility);
             let h_out = paper_out.height[(y as usize) * (ow as usize) + x as usize];
-            let wet = sample.wet;
             let wet_look = (sample.depth / params.sheen_depth).clamp(0.0, 1.0);
             for k in 0..k_count {
-                let base = sample.deposited[k]
-                    + sample.suspended[k] * params.wet_pigment_visibility * wet.max(0.0);
+                let base =
+                    sample.deposited[k] + sample.suspended[k] * params.wet_pigment_visibility;
                 let grain = 1.0 + gran[k] * params.granulation_gain * (0.5 - h_out) * 2.0;
-                let plain_base = (base * params.thickness_scale).max(0.0);
+                let plain_base = params.optical(base.max(0.0));
                 let grained = (plain_base * grain.max(0.0)).max(0.0);
                 coverage[k] = grained;
                 plain[k] = plain_base;
                 thickness[k] = grained;
-                presence[k] = (sample.presence[k] * params.thickness_scale).max(0.0);
+                presence[k] = params.optical(sample.presence[k].max(0.0));
             }
             let px = composite_pixel_tuned(
                 mixed_totals(palette, &thickness),
@@ -693,7 +851,10 @@ pub fn render_with_luminous_tuning(
                     wet_look,
                     wet_darken: params.wet_darken,
                     wet_sheen_add: params.wet_sheen_add,
+                    wet_scatter_loss: params.wet_scatter_loss,
+                    wet_absorb_gain: params.wet_absorb_gain,
                 },
+                params.surface(),
             );
             let o = ((y as usize) * (ow as usize) + x as usize) * 4;
             image.rgba[o..o + 4].copy_from_slice(&px);
@@ -703,13 +864,12 @@ pub fn render_with_luminous_tuning(
 }
 
 struct Sample {
-    wet: f32,
     /// Reconstructed water depth (`pressure`), the field the wet sheen reads.
     depth: f32,
     deposited: [f32; super::palette::MAX_PIGMENTS],
     suspended: [f32; super::palette::MAX_PIGMENTS],
     /// Per pigment, the cubic blend of each of the 4x4 taps' soft-dilated
-    /// `deposited + suspended * visibility * wet`; see the module doc.
+    /// `deposited + suspended * visibility`; see the module doc.
     presence: [f32; super::palette::MAX_PIGMENTS],
     /// The cubic blend of whether each tap is inside the paint, the largest
     /// over pigments: 1 in a body, 0 outside, its 0.5 contour the outline.
@@ -771,7 +931,6 @@ fn cubic_sample(grid: &SimulationGrid, u: f32, v: f32, wet_visibility: f32) -> S
     let n = grid.cell_count();
     let k_count = grid.pigment_count.min(super::palette::MAX_PIGMENTS);
     let mut out = Sample {
-        wet: 0.0,
         depth: 0.0,
         deposited: [0.0; super::palette::MAX_PIGMENTS],
         suspended: [0.0; super::palette::MAX_PIGMENTS],
@@ -779,8 +938,7 @@ fn cubic_sample(grid: &SimulationGrid, u: f32, v: f32, wet_visibility: f32) -> S
         mask: 0.0,
     };
     let cell_presence = |k: usize, j: usize| {
-        grid.pigments_deposited[k * n + j]
-            + grid.pigments_in_water[k * n + j] * wet_visibility * grid.wet[j]
+        grid.pigments_deposited[k * n + j] + grid.pigments_in_water[k * n + j] * wet_visibility
     };
     // The cells the taps and their 3x3 neighbourhoods read, once: the 4x4
     // taps at `x0 - 1 ..= x0 + 2` widened by one on each side. Coordinates
@@ -854,7 +1012,6 @@ fn cubic_sample(grid: &SimulationGrid, u: f32, v: f32, wet_visibility: f32) -> S
             let cx = tap_x.clamp(0, w as isize - 1) as usize;
             let wgt = wxo * wyi;
             let i = cy * w + cx;
-            out.wet += grid.wet[i] * wgt;
             out.depth += grid.pressure[i] * wgt;
             for k in 0..k_count {
                 out.deposited[k] += grid.pigments_deposited[k * n + i] * wgt;
@@ -1315,11 +1472,21 @@ pub(crate) mod tests {
             ..RenderParams::default()
         };
         let image = render(&grid, &palette, &field, &params);
-        let mix = mixed_totals(&palette, &[0.5, 0.0, 0.0, 0.0]);
+        let mix = mixed_totals(&palette, &[params.optical(0.5), 0.0, 0.0, 0.0]);
         // Every output pixel reads the same uniform cell values, so the
         // reconstruction (a convex combination) reproduces the single-pixel
         // result of the uniform mix to f32 precision.
-        let expect = composite_pixel(mix, mix, mix, CompositeMode::Subtractive);
+        let expect = composite_pixel_tuned(
+            mix,
+            mix,
+            mix,
+            mix,
+            1.0,
+            CompositeMode::Subtractive,
+            &LUMINOUS_TUNING,
+            WetLook::OFF,
+            params.surface(),
+        );
         for y in 0..16 {
             for x in 0..16 {
                 let px = image.pixel(x, y);
@@ -1459,5 +1626,100 @@ pub(crate) mod tests {
             }
             prev = at;
         }
+    }
+
+    #[test]
+    fn optical_thickness_saturates_with_headroom_past_the_swatch() {
+        let p = RenderParams::default();
+        assert_eq!(p.optical(0.0), 0.0);
+        let mut prev = 0.0;
+        for i in 1..=40 {
+            let t = p.optical(i as f32 * 0.05);
+            assert!(t > prev, "monotone at {}", i as f32 * 0.05);
+            assert!(t < p.optical_max);
+            prev = t;
+        }
+        // A dried light wash sits near its swatch (thickness 1), a full
+        // deposit reads well past it, a faint halo stays faint.
+        let light = p.optical(0.4);
+        assert!((0.75..1.1).contains(&light), "light wash at {light}");
+        assert!(p.optical(1.0) > 1.3, "full deposit at {}", p.optical(1.0));
+        assert!(p.optical(0.02) < 0.03, "halo at {}", p.optical(0.02));
+    }
+
+    #[test]
+    fn the_surface_correction_deepens_paint_and_keeps_the_pixel_well_formed() {
+        let surface = RenderParams::default().surface();
+        let bare = totals(&builtin::indigo(), 0.0);
+        let px = composite_pixel_tuned(
+            bare,
+            bare,
+            bare,
+            bare,
+            1.0,
+            CompositeMode::Subtractive,
+            &LUMINOUS_TUNING,
+            WetLook::OFF,
+            surface,
+        );
+        assert_eq!(px, [0.0, 0.0, 0.0, 0.0], "bare paper is untouched");
+        for p in builtin::all() {
+            for thickness in [0.05, 0.3, 1.0, 2.0] {
+                let m = totals(&p, thickness);
+                for mode in [CompositeMode::Subtractive, CompositeMode::Luminous] {
+                    let plain = composite_pixel(m, m, m, mode);
+                    let px = composite_pixel_tuned(
+                        m,
+                        m,
+                        m,
+                        m,
+                        1.0,
+                        mode,
+                        &LUMINOUS_TUNING,
+                        WetLook::OFF,
+                        surface,
+                    );
+                    let over_white = |q: [f32; 4]| [0, 1, 2].map(|c| q[c] + 1.0 - q[3]);
+                    let (a, b) = (over_white(plain), over_white(px));
+                    for c in 0..3 {
+                        assert!(px[c] <= px[3] + 1e-6 && px[c] >= 0.0, "{} {mode:?}", p.name);
+                        assert!(
+                            b[c] <= a[c] + 1e-5,
+                            "{} {mode:?} @ {thickness}: lighter",
+                            p.name
+                        );
+                    }
+                    if thickness >= 1.0 {
+                        assert!(
+                            b.iter().sum::<f32>() < a.iter().sum::<f32>() - 0.02,
+                            "{} {mode:?} @ {thickness}: not deepened",
+                            p.name
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn paint_reads_at_nearly_its_dried_depth_the_moment_it_lands() {
+        let (grid, palette, field) = sheen_grid(14);
+        let params = RenderParams {
+            granulation_gain: 0.0,
+            ..RenderParams::default()
+        };
+        let n = grid.cell_count();
+        let mut wet = grid.clone();
+        for i in 0..n {
+            wet.pigments_in_water[n + i] = wet.pigments_deposited[n + i];
+            wet.pigments_deposited[n + i] = 0.0;
+        }
+        wet.pressure.fill(params.sheen_depth);
+        wet.wet.fill(1.0);
+        let dry_img = render(&grid, &palette, &field, &params);
+        let wet_img = render(&wet, &palette, &field, &params);
+        let depth = |p: [f32; 4]| 3.0 - (p[0] + p[1] + p[2] + 3.0 * (1.0 - p[3]));
+        let (d, w) = (depth(dry_img.pixel(16, 16)), depth(wet_img.pixel(16, 16)));
+        assert!(w >= 0.9 * d, "fresh paint depth {w} against dried {d}");
     }
 }

@@ -27,6 +27,14 @@ struct RenderParams {
     wet_darken: f32,
     wet_sheen_add: f32,
     sheen_depth: f32,
+    wet_scatter_loss: f32,
+    wet_absorb_gain: f32,
+    optical_gamma: f32,
+    optical_max: f32,
+    optical_mid: f32,
+    surface_k1: f32,
+    surface_k2: f32,
+    surface_coverage_gain: f32,
     _p2: f32,
     _p3: f32,
 };
@@ -43,8 +51,9 @@ const MAX_BETA: f32 = 40.0;
 const ALPHA_SOFTNESS: f32 = 0.6;
 const LUMINOUS_ALPHA_TOE: f32 = 0.03;
 const LUMINOUS_ALPHA_FULL: f32 = 0.2;
-// Mirrors optics::LUMINOUS_COLOUR_FLOOR.
+// Mirror optics::LUMINOUS_COLOUR_FLOOR and LUMINOUS_COLOUR_CEILING.
 const LUMINOUS_COLOUR_FLOOR: f32 = 0.5;
+const LUMINOUS_COLOUR_CEILING: f32 = 1.6;
 // Mirrors optics::LUMINOUS_GRAIN_STRENGTH.
 const LUMINOUS_GRAIN_STRENGTH: f32 = 0.38;
 // Mirror optics::LUMINOUS_EDGE_LO, LUMINOUS_EDGE_HI, LUMINOUS_MASK_THICKNESS,
@@ -81,6 +90,25 @@ fn km_layer(kx_in: f32, sx_in: f32) -> vec2<f32> {
     let r = sx * sinh_over_beta / denom;
     let t = 1.0 / denom;
     return vec2<f32>(clamp(r, 0.0, 1.0), clamp(t, 0.0, 1.0));
+}
+
+// optics::RenderParams::optical: optics::optical_thickness of
+// `x * thickness_scale`.
+fn optical(x_in: f32) -> f32 {
+    let x = x_in * R.thickness_scale;
+    if x <= 0.0 {
+        return 0.0;
+    }
+    let g = pow(x, R.optical_gamma);
+    return R.optical_max * g / (g + R.optical_mid);
+}
+
+// optics::Surface::factor: the gated Saunderson ratio R' / R per channel.
+fn surface_factor(w: vec3<f32>, thickness: f32) -> vec3<f32> {
+    let gate = clamp(thickness * R.surface_coverage_gain, 0.0, 1.0);
+    let gain = (1.0 - R.surface_k1) * (1.0 - R.surface_k2);
+    let q = gain / max(vec3<f32>(1.0) - R.surface_k2 * clamp(w, vec3<f32>(0.0), vec3<f32>(1.0)), vec3<f32>(1e-6));
+    return vec3<f32>(1.0) + (q - vec3<f32>(1.0)) * gate;
 }
 
 // Mirrors optics::PRESENCE_KERNEL: a Gaussian `2^(-d^2)` over the squared cell
@@ -123,7 +151,6 @@ fn render(@builtin(global_invocation_id) gid: vec3<u32>) {
     let wx = cubic_weights(tx);
     let wy = cubic_weights(ty);
 
-    var wet_s = 0.0;
     var depth_s = 0.0;
     var dep: array<f32, MAX_PIGMENTS>;
     var sus: array<f32, MAX_PIGMENTS>;
@@ -138,7 +165,6 @@ fn render(@builtin(global_invocation_id) gid: vec3<u32>) {
             let cx = min(max(tap_x, 0), i32(w) - 1i);
             let wgt = wx[ox] * wyi;
             let i = u32(cy) * w + u32(cx);
-            wet_s += state[o_wet() + i] * wgt;
             depth_s += state[o_p() + i] * wgt;
             for (var k = 0u; k < R.pigment_count; k++) {
                 dep[k] += state[o_d(k) + i] * wgt;
@@ -159,7 +185,7 @@ fn render(@builtin(global_invocation_id) gid: vec3<u32>) {
             for (var wx_i = 0u; wx_i < 6u; wx_i++) {
                 let nx = u32(min(max(i32(x0) + i32(wx_i) - 2i, 0), i32(w) - 1i));
                 let j = ny * w + nx;
-                win[wy_i * 6u + wx_i] = max(state[o_d(k) + j] + state[o_g(k) + j] * R.wet_pigment_visibility * state[o_wet() + j], 0.0);
+                win[wy_i * 6u + wx_i] = max(state[o_d(k) + j] + state[o_g(k) + j] * R.wet_pigment_visibility, 0.0);
             }
         }
         var mask_k = 0.0;
@@ -200,64 +226,64 @@ fn render(@builtin(global_invocation_id) gid: vec3<u32>) {
     let h_out = paper_out[y * R.out_width + x];
     let wet_look = clamp(depth_s / R.sheen_depth, 0.0, 1.0);
     let ground = 1.0 - R.wet_darken * wet_look;
+    let sheen = R.wet_sheen_add * wet_look;
+    // optics::WetLook::enrich, applied to the colour mix only.
+    let wet_k = 1.0 + R.wet_absorb_gain * wet_look;
+    let wet_sc = 1.0 - R.wet_scatter_loss * wet_look;
     var kx = vec3<f32>(0.0);
     var sx = vec3<f32>(0.0);
+    var thickness = 0.0;
     var kx_plain = vec3<f32>(0.0);
     var sx_plain = vec3<f32>(0.0);
     var plain_thickness = 0.0;
     var kx_pres = vec3<f32>(0.0);
     var sx_pres = vec3<f32>(0.0);
-    var kx_cov = vec3<f32>(0.0);
-    var sx_cov = vec3<f32>(0.0);
+    var pres_thickness = 0.0;
     for (var k = 0u; k < R.pigment_count; k++) {
-        let base = dep[k] + sus[k] * R.wet_pigment_visibility * max(wet_s, 0.0);
+        let base = dep[k] + sus[k] * R.wet_pigment_visibility;
         let gran = optics[k * 3u + 2u].x;
         let grain = 1.0 + gran * R.granulation_gain * (0.5 - h_out) * 2.0;
-        let plain_base = max(base * R.thickness_scale, 0.0);
-        let t = max(plain_base * max(grain, 0.0), 0.0);
-        // optics::render: thickness is never scaled by the wet look; the
-        // colour and coverage paths read the same `t`, and the wet terms act
-        // on the ground and the final reflectance.
-        let plain = plain_base;
-        let scaled_t = t;
+        let plain = optical(max(base, 0.0));
+        let t = max(plain * max(grain, 0.0), 0.0);
         plain_thickness += plain;
         kx_plain += optics[k * 3u].xyz * plain;
         sx_plain += optics[k * 3u + 1u].xyz * plain;
-        let presence = max(pres[k] * R.thickness_scale, 0.0);
+        let presence = optical(max(pres[k], 0.0));
+        pres_thickness += presence;
         kx_pres += optics[k * 3u].xyz * presence;
         sx_pres += optics[k * 3u + 1u].xyz * presence;
-        kx_cov += optics[k * 3u].xyz * t;
-        sx_cov += optics[k * 3u + 1u].xyz * t;
-        kx += optics[k * 3u].xyz * scaled_t;
-        sx += optics[k * 3u + 1u].xyz * scaled_t;
+        thickness += t;
+        kx += optics[k * 3u].xyz * t;
+        sx += optics[k * 3u + 1u].xyz * t;
     }
-    let lr = km_layer(kx.x, sx.x);
-    let lg = km_layer(kx.y, sx.y);
-    let lb = km_layer(kx.z, sx.z);
-    let r = vec3<f32>(lr.x, lg.x, lb.x);
-    let t = vec3<f32>(lr.y, lg.y, lb.y);
-    // optics::over_ground: colour over the film-darkened ground, then the
-    // wet sheen added to the result.
-    let over_ground = clamp(r + t * t * ground / max(vec3<f32>(1.0) - r * ground, vec3<f32>(1e-6)), vec3<f32>(0.0), vec3<f32>(1.0));
-    let w_ground = clamp(over_ground + R.wet_sheen_add * wet_look, vec3<f32>(0.0), vec3<f32>(1.0));
-    // Coverage/alpha from the un-scaled grained mix (optics::
-    // to_premultiplied_with_coverage).
-    let cr = km_layer(kx_cov.x, sx_cov.x);
-    let cg = km_layer(kx_cov.y, sx_cov.y);
-    let cb = km_layer(kx_cov.z, sx_cov.z);
+    // optics::to_premultiplied_with_coverage: coverage from the dry grained
+    // mix, its returned light scaled by the surface factor.
+    let cr = km_layer(kx.x, sx.x);
+    let cg = km_layer(kx.y, sx.y);
+    let cb = km_layer(kx.z, sx.z);
     let r_cov = vec3<f32>(cr.x, cg.x, cb.x);
     let t_cov = vec3<f32>(cr.y, cg.y, cb.y);
-    let ret_cov = clamp(t_cov * t_cov / max(vec3<f32>(1.0) - r_cov, vec3<f32>(1e-6)), vec3<f32>(0.0), vec3<f32>(1.0));
+    let ret_raw = clamp(t_cov * t_cov / max(vec3<f32>(1.0) - r_cov, vec3<f32>(1e-6)), vec3<f32>(0.0), vec3<f32>(1.0));
+    let white_cov = clamp(r_cov + ret_raw, vec3<f32>(0.0), vec3<f32>(1.0));
+    let ret_cov = ret_raw * surface_factor(white_cov, thickness);
     let min_cov = min(ret_cov.x, min(ret_cov.y, ret_cov.z));
     let mean_cov = (ret_cov.x + ret_cov.y + ret_cov.z) / 3.0;
-    let passed = min_cov + (mean_cov - min_cov) * ALPHA_SOFTNESS;
-    let alpha = clamp(1.0 - passed, 0.0, 1.0);
+    let passed = clamp(min_cov + (mean_cov - min_cov) * ALPHA_SOFTNESS, 0.0, 1.0);
+    // Colour from the enriched mix over the film-darkened ground, surface
+    // corrected, plus the sheen.
+    let lr = km_layer(kx.x * wet_k, sx.x * wet_sc);
+    let lg = km_layer(kx.y * wet_k, sx.y * wet_sc);
+    let lb = km_layer(kx.z * wet_k, sx.z * wet_sc);
+    let r = vec3<f32>(lr.x, lg.x, lb.x);
+    let t = vec3<f32>(lr.y, lg.y, lb.y);
+    let over_ground = clamp(r + t * t * ground / max(vec3<f32>(1.0) - r * ground, vec3<f32>(1e-6)), vec3<f32>(0.0), vec3<f32>(1.0));
+    let w_ground = clamp(over_ground * surface_factor(over_ground, thickness) + vec3<f32>(sheen), vec3<f32>(0.0), vec3<f32>(1.0));
     var rgb = clamp(w_ground - vec3<f32>(passed), vec3<f32>(0.0), vec3<f32>(1.0));
-    var out_alpha = alpha;
+    var out_alpha = 1.0 - passed;
     if state[o_composite_mode()] > 0.5 {
-        // optics::to_premultiplied_luminous: alpha from the dilated plain
-        // presence's coverage, colour from the damped granulated mix brought
-        // to no less than the colour floor of the plain thickness.
+        // optics::to_premultiplied_luminous_tuned: alpha from the dilated
+        // plain presence's coverage, colour from the damped granulated mix
+        // brought to no less than the colour floor of the plain thickness.
         let pr = km_layer(kx_pres.x, sx_pres.x);
         let pg = km_layer(kx_pres.y, sx_pres.y);
         let pb = km_layer(kx_pres.z, sx_pres.z);
@@ -269,19 +295,19 @@ fn render(@builtin(global_invocation_id) gid: vec3<u32>) {
         let coverage = clamp(1.0 - (min_plain + (mean_plain - min_plain) * ALPHA_SOFTNESS), 0.0, 1.0);
         out_alpha = smoothstep(LUMINOUS_ALPHA_TOE, LUMINOUS_ALPHA_FULL, coverage)
             * smoothstep(LUMINOUS_EDGE_LO, LUMINOUS_EDGE_HI, mask);
-        let scale = max(LUMINOUS_COLOUR_FLOOR / max(plain_thickness, 1e-6), 1.0);
-        // optics::damp_texture: grain deviation damped toward the plain mix.
-        let kx_d = kx_plain + (kx - kx_plain) * LUMINOUS_GRAIN_STRENGTH;
-        let sx_d = sx_plain + (sx - sx_plain) * LUMINOUS_GRAIN_STRENGTH;
+        let reference = max(plain_thickness, 1e-6);
+        let scale = min(max(max(LUMINOUS_COLOUR_FLOOR, pres_thickness) / reference, 1.0), LUMINOUS_COLOUR_CEILING / reference);
+        // optics::damp_texture: grain deviation damped toward the plain mix,
+        // then enriched by the film.
+        let kx_d = (kx_plain + (kx - kx_plain) * LUMINOUS_GRAIN_STRENGTH) * wet_k;
+        let sx_d = (sx_plain + (sx - sx_plain) * LUMINOUS_GRAIN_STRENGTH) * wet_sc;
         let rr = km_layer(kx_d.x * scale, sx_d.x * scale);
         let rg = km_layer(kx_d.y * scale, sx_d.y * scale);
         let rb = km_layer(kx_d.z * scale, sx_d.z * scale);
         let r_ref = vec3<f32>(rr.x, rg.x, rb.x);
         let t_ref = vec3<f32>(rr.y, rg.y, rb.y);
-        // optics::to_premultiplied_luminous_tuned: on-white colour over the
-        // same film-darkened ground, plus the wet sheen.
         let over_ground_ref = clamp(r_ref + t_ref * t_ref * ground / max(vec3<f32>(1.0) - r_ref * ground, vec3<f32>(1e-6)), vec3<f32>(0.0), vec3<f32>(1.0));
-        let w_ref = clamp(over_ground_ref + R.wet_sheen_add * wet_look, vec3<f32>(0.0), vec3<f32>(1.0));
+        let w_ref = clamp(over_ground_ref * surface_factor(over_ground_ref, plain_thickness * scale) + vec3<f32>(sheen), vec3<f32>(0.0), vec3<f32>(1.0));
         rgb = w_ref * out_alpha;
     }
     out[y * R.out_width + x] = vec4<f32>(rgb, out_alpha);
