@@ -279,32 +279,30 @@
                     {formatNumber(selectedConnector.totalEntries)}
                   </span>
                 </Tooltip.Trigger>
-                <Tooltip.Portal>
-                  <Tooltip.Content
-                    variant="popover"
-                    class="z-50 overflow-hidden"
-                  >
-                    {#if selectedConnector.totalItemsBreakdown && Object.keys(selectedConnector.totalItemsBreakdown).length > 0}
-                      <div class="space-y-1">
-                        <div
-                          class="font-medium text-xs text-muted-foreground mb-1"
-                        >
-                          Breakdown by type:
-                        </div>
-                        {#each Object.entries(selectedConnector.totalItemsBreakdown) as [type, count] (type)}
-                          <div class="flex justify-between gap-4 text-xs">
-                            <span>{getDataTypeLabel(type)}</span>
-                            <span class="font-mono">
-                              {formatNumber(count)}
-                            </span>
-                          </div>
-                        {/each}
+                <Tooltip.Content
+                  variant="popover"
+                  class="z-50 overflow-hidden"
+                >
+                  {#if selectedConnector.totalItemsBreakdown && Object.keys(selectedConnector.totalItemsBreakdown).length > 0}
+                    <div class="space-y-1">
+                      <div
+                        class="font-medium text-xs text-muted-foreground mb-1"
+                      >
+                        Breakdown by type:
                       </div>
-                    {:else}
-                      <span class="text-xs">No breakdown available</span>
-                    {/if}
-                  </Tooltip.Content>
-                </Tooltip.Portal>
+                      {#each Object.entries(selectedConnector.totalItemsBreakdown) as [type, count] (type)}
+                        <div class="flex justify-between gap-4 text-xs">
+                          <span>{getDataTypeLabel(type)}</span>
+                          <span class="font-mono">
+                            {formatNumber(count)}
+                          </span>
+                        </div>
+                      {/each}
+                    </div>
+                  {:else}
+                    <span class="text-xs">No breakdown available</span>
+                  {/if}
+                </Tooltip.Content>
               </Tooltip.Root>
             </div>
             <div class="flex items-center justify-between">
@@ -319,32 +317,30 @@
                     {formatNumber(selectedConnector.entriesLast24Hours)}
                   </span>
                 </Tooltip.Trigger>
-                <Tooltip.Portal>
-                  <Tooltip.Content
-                    variant="popover"
-                    class="z-50 overflow-hidden"
-                  >
-                    {#if selectedConnector.itemsLast24HoursBreakdown && Object.keys(selectedConnector.itemsLast24HoursBreakdown).length > 0}
-                      <div class="space-y-1">
-                        <div
-                          class="font-medium text-xs text-muted-foreground mb-1"
-                        >
-                          Breakdown by type:
-                        </div>
-                        {#each Object.entries(selectedConnector.itemsLast24HoursBreakdown) as [type, count] (type)}
-                          <div class="flex justify-between gap-4 text-xs">
-                            <span>{getDataTypeLabel(type)}</span>
-                            <span class="font-mono">
-                              {formatNumber(count)}
-                            </span>
-                          </div>
-                        {/each}
+                <Tooltip.Content
+                  variant="popover"
+                  class="z-50 overflow-hidden"
+                >
+                  {#if selectedConnector.itemsLast24HoursBreakdown && Object.keys(selectedConnector.itemsLast24HoursBreakdown).length > 0}
+                    <div class="space-y-1">
+                      <div
+                        class="font-medium text-xs text-muted-foreground mb-1"
+                      >
+                        Breakdown by type:
                       </div>
-                    {:else}
-                      <span class="text-xs">No breakdown available</span>
-                    {/if}
-                  </Tooltip.Content>
-                </Tooltip.Portal>
+                      {#each Object.entries(selectedConnector.itemsLast24HoursBreakdown) as [type, count] (type)}
+                        <div class="flex justify-between gap-4 text-xs">
+                          <span>{getDataTypeLabel(type)}</span>
+                          <span class="font-mono">
+                            {formatNumber(count)}
+                          </span>
+                        </div>
+                      {/each}
+                    </div>
+                  {:else}
+                    <span class="text-xs">No breakdown available</span>
+                  {/if}
+                </Tooltip.Content>
               </Tooltip.Root>
             </div>
             {#if selectedConnector.lastEntryTime}

@@ -23,6 +23,11 @@ export const cardVariants = tv({
       // An empty state standing in for content that has yet to be added.
       dashed: "border-dashed",
     },
+    size: {
+      default: "",
+      // A stat tile whose figure and label sit directly in the card, without Card.Content.
+      sm: "p-4",
+    },
     // A card that is itself a link, wrapped in an <a>.
     interactive: {
       true: "transition-colors hover:bg-accent/50",
@@ -31,11 +36,13 @@ export const cardVariants = tv({
   },
   defaultVariants: {
     variant: "default",
+    size: "default",
     interactive: false,
   },
 });
 
 export type CardVariant = VariantProps<typeof cardVariants>["variant"];
+export type CardSize = VariantProps<typeof cardVariants>["size"];
 
 export const cardHeaderVariants = tv({
   base: "@container/card-header has-data-[slot=card-action]:grid-cols-[1fr_auto] [.border-b]:pb-6 grid auto-rows-min grid-rows-[auto_auto] items-start gap-1.5 px-6",

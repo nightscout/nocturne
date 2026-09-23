@@ -248,26 +248,24 @@
                   {formatNumber(totalEntries)} records
                 </span>
               </Tooltip.Trigger>
-              <Tooltip.Portal>
-                <Tooltip.Content
-                  variant="popover"
-                  class="z-50 overflow-hidden"
-                >
-                  <div class="space-y-1">
-                    <div class="font-medium text-xs text-muted-foreground mb-1">
-                      Breakdown by type:
-                    </div>
-                    {#each Object.entries(totalBreakdown) as [type, count] (type)}
-                      <div class="flex justify-between gap-4 text-xs">
-                        <span>{getDataTypeLabel(type)}</span>
-                        <span class="font-mono">
-                          {formatNumber(count)}
-                        </span>
-                      </div>
-                    {/each}
+              <Tooltip.Content
+                variant="popover"
+                class="z-50 overflow-hidden"
+              >
+                <div class="space-y-1">
+                  <div class="font-medium text-xs text-muted-foreground mb-1">
+                    Breakdown by type:
                   </div>
-                </Tooltip.Content>
-              </Tooltip.Portal>
+                  {#each Object.entries(totalBreakdown) as [type, count] (type)}
+                    <div class="flex justify-between gap-4 text-xs">
+                      <span>{getDataTypeLabel(type)}</span>
+                      <span class="font-mono">
+                        {formatNumber(count)}
+                      </span>
+                    </div>
+                  {/each}
+                </div>
+              </Tooltip.Content>
             </Tooltip.Root>
           {:else}
             {formatNumber(totalEntries)} records
@@ -284,28 +282,26 @@
                     {formatNumber(entriesLast24h)} in 24h
                   </span>
                 </Tooltip.Trigger>
-                <Tooltip.Portal>
-                  <Tooltip.Content
-                    variant="popover"
-                    class="z-50 overflow-hidden"
-                  >
-                    <div class="space-y-1">
-                      <div
-                        class="font-medium text-xs text-muted-foreground mb-1"
-                      >
-                        Last 24h by type:
-                      </div>
-                      {#each Object.entries(last24hBreakdown) as [type, count] (type)}
-                        <div class="flex justify-between gap-4 text-xs">
-                          <span>{getDataTypeLabel(type)}</span>
-                          <span class="font-mono">
-                            {formatNumber(count)}
-                          </span>
-                        </div>
-                      {/each}
+                <Tooltip.Content
+                  variant="popover"
+                  class="z-50 overflow-hidden"
+                >
+                  <div class="space-y-1">
+                    <div
+                      class="font-medium text-xs text-muted-foreground mb-1"
+                    >
+                      Last 24h by type:
                     </div>
-                  </Tooltip.Content>
-                </Tooltip.Portal>
+                    {#each Object.entries(last24hBreakdown) as [type, count] (type)}
+                      <div class="flex justify-between gap-4 text-xs">
+                        <span>{getDataTypeLabel(type)}</span>
+                        <span class="font-mono">
+                          {formatNumber(count)}
+                        </span>
+                      </div>
+                    {/each}
+                  </div>
+                </Tooltip.Content>
               </Tooltip.Root>
             {:else}
               {formatNumber(entriesLast24h)} in 24h

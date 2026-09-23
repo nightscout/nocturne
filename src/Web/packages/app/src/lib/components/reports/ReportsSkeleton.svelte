@@ -78,7 +78,7 @@
   <!-- Stats Grid Skeleton -->
   <div class="grid grid-cols-2 gap-3 @sm:grid-cols-3 @3xl:grid-cols-6">
     {#each Array(6) as _, i (i)}
-      <Card class="p-4 text-center">
+      <Card size="sm" class="text-center">
         <Skeleton class="h-8 w-16 mx-auto mb-2" />
         <Skeleton class="h-3 w-12 mx-auto" />
       </Card>

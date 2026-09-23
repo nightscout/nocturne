@@ -149,40 +149,40 @@
 
     <!-- Quick Stats Grid -->
     <div class="grid grid-cols-2 @lg:grid-cols-4 @3xl:grid-cols-6 gap-4">
-      <Card variant="success" class="p-4 text-center">
+      <Card variant="success" size="sm" class="text-center">
         <div class="text-3xl font-bold text-glucose-in-range">
           {tir.target?.toFixed(0) ?? "–"}%
         </div>
         <div class="text-xs text-muted-foreground">Time in Range</div>
         <div class="text-2xs text-glucose-in-range">Target: ≥70%</div>
       </Card>
-      <Card class="p-4 text-center">
+      <Card size="sm" class="text-center">
         <div class="text-3xl font-bold">{stats.mean ? bg(stats.mean) : "–"}</div>
         <div class="text-xs text-muted-foreground">Average</div>
         <div class="text-2xs text-muted-foreground/70">{bgLabel()}</div>
       </Card>
-      <Card class="p-4 text-center">
+      <Card size="sm" class="text-center">
         <div class="text-3xl font-bold">
           {variability.estimatedA1c?.toFixed(1) ?? "–"}%
         </div>
         <div class="text-xs text-muted-foreground">Est. A1C</div>
         <div class="text-2xs text-muted-foreground/70">GMI</div>
       </Card>
-      <Card class="p-4 text-center">
+      <Card size="sm" class="text-center">
         <div class="text-3xl font-bold">
           {variability.coefficientOfVariation?.toFixed(0) ?? "–"}%
         </div>
         <div class="text-xs text-muted-foreground">CV</div>
         <div class="text-2xs text-muted-foreground/70">Target: ≤33%</div>
       </Card>
-      <Card class="p-4 text-center">
+      <Card size="sm" class="text-center">
         <div class="text-3xl font-bold text-glucose-very-low">
           {((tir.low ?? 0) + (tir.veryLow ?? 0)).toFixed(1)}%
         </div>
         <div class="text-xs text-muted-foreground">Below Range</div>
         <div class="text-2xs text-glucose-very-low">Target: &lt;4%</div>
       </Card>
-      <Card class="p-4 text-center">
+      <Card size="sm" class="text-center">
         <div class="text-3xl font-bold text-glucose-high">
           {((tir.high ?? 0) + (tir.veryHigh ?? 0)).toFixed(1)}%
         </div>
