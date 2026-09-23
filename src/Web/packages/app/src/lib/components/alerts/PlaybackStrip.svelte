@@ -58,8 +58,8 @@
       })),
   );
 
-  function handleStripPointerDown(e: PointerEvent): void {
-    const target = e.currentTarget as SVGSVGElement;
+  function handleStripPointerDown(e: PointerEvent & { currentTarget: SVGSVGElement }): void {
+    const target = e.currentTarget;
     const rect = target.getBoundingClientRect();
     const pct = Math.max(
       0,

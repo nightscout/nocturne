@@ -1,4 +1,4 @@
-import type { ConditionNode, ComparisonOperator, TrendBucket } from "./types";
+import type { ConditionNode } from "./types";
 import { bg, bgLabel } from "$lib/utils/formatting";
 
 /**
@@ -55,17 +55,17 @@ export function summarizeCondition(
 		case "staleness": {
 			const p = node.staleness;
 			if (!p) return "";
-			return `Sensor stale ${opSymbol(p.operator as ComparisonOperator)} ${formatMinutes(p.value ?? 0)}`;
+			return `Sensor stale ${opSymbol(p.operator)} ${formatMinutes(p.value ?? 0)}`;
 		}
 		case "predicted": {
 			const p = node.predicted;
 			if (!p) return "";
-			return `Predicted BG ${opSymbol(p.operator as ComparisonOperator)} ${bg(p.value ?? 0)} ${bgLabel()} in ${formatMinutes(p.within_minutes ?? 0)}`;
+			return `Predicted BG ${opSymbol(p.operator)} ${bg(p.value ?? 0)} ${bgLabel()} in ${formatMinutes(p.within_minutes ?? 0)}`;
 		}
 		case "trend": {
 			const p = node.trend;
 			if (!p) return "";
-			return `Trend: ${trendLabel(p.bucket as TrendBucket)}`;
+			return `Trend: ${trendLabel(p.bucket)}`;
 		}
 		case "time_of_day": {
 			const p = node.time_of_day;
@@ -75,27 +75,27 @@ export function summarizeCondition(
 		case "iob": {
 			const p = node.iob;
 			if (!p) return "";
-			return `IOB ${opSymbol(p.operator as ComparisonOperator)} ${p.value} U`;
+			return `IOB ${opSymbol(p.operator)} ${p.value} U`;
 		}
 		case "cob": {
 			const p = node.cob;
 			if (!p) return "";
-			return `COB ${opSymbol(p.operator as ComparisonOperator)} ${p.value} g`;
+			return `COB ${opSymbol(p.operator)} ${p.value} g`;
 		}
 		case "reservoir": {
 			const p = node.reservoir;
 			if (!p) return "";
-			return `Reservoir ${opSymbol(p.operator as ComparisonOperator)} ${p.value} U`;
+			return `Reservoir ${opSymbol(p.operator)} ${p.value} U`;
 		}
 		case "site_age": {
 			const p = node.site_age;
 			if (!p) return "";
-			return `Site age ${opSymbol(p.operator as ComparisonOperator)} ${formatHours(p.value ?? 0)}`;
+			return `Site age ${opSymbol(p.operator)} ${formatHours(p.value ?? 0)}`;
 		}
 		case "sensor_age": {
 			const p = node.sensor_age;
 			if (!p) return "";
-			return `Sensor age ${opSymbol(p.operator as ComparisonOperator)} ${formatDays(p.value ?? 0)}`;
+			return `Sensor age ${opSymbol(p.operator)} ${formatDays(p.value ?? 0)}`;
 		}
 		case "alert_state": {
 			const p = node.alert_state;
@@ -124,19 +124,19 @@ export function summarizeCondition(
 		case "pump_battery": {
 			const p = node.pump_battery;
 			if (!p) return "";
-			return `Pump battery ${opSymbol(p.operator as ComparisonOperator)} ${p.value}%`;
+			return `Pump battery ${opSymbol(p.operator)} ${p.value}%`;
 		}
 		case "temp_basal": {
 			const p = node.temp_basal;
 			if (!p) return "";
 			const unit = p.metric === "rate" ? "U/h" : "% of scheduled";
 			const label = p.metric === "rate" ? "Temp basal rate" : "Temp basal";
-			return `${label} ${opSymbol(p.operator as ComparisonOperator)} ${p.value} ${unit}`;
+			return `${label} ${opSymbol(p.operator)} ${p.value} ${unit}`;
 		}
 		case "uploader_battery": {
 			const p = node.uploader_battery;
 			if (!p) return "";
-			return `Uploader battery ${opSymbol(p.operator as ComparisonOperator)} ${p.value}%`;
+			return `Uploader battery ${opSymbol(p.operator)} ${p.value}%`;
 		}
 		case "override_active": {
 			const p = node.override_active;
@@ -147,7 +147,7 @@ export function summarizeCondition(
 		case "sensitivity_ratio": {
 			const p = node.sensitivity_ratio;
 			if (!p) return "";
-			return `Sensitivity ${opSymbol(p.operator as ComparisonOperator)} ${p.value}`;
+			return `Sensitivity ${opSymbol(p.operator)} ${p.value}`;
 		}
 		case "do_not_disturb": {
 			const p = node.do_not_disturb;
@@ -168,12 +168,12 @@ export function summarizeCondition(
 		case "time_since_last_carb": {
 			const p = node.time_since_last_carb;
 			if (!p) return "";
-			return `Time since last carb ${opSymbol(p.operator as unknown as ComparisonOperator)} ${formatMinutes(p.minutes ?? 0)}`;
+			return `Time since last carb ${opSymbol(p.operator)} ${formatMinutes(p.minutes ?? 0)}`;
 		}
 		case "time_since_last_bolus": {
 			const p = node.time_since_last_bolus;
 			if (!p) return "";
-			return `Time since last bolus ${opSymbol(p.operator as unknown as ComparisonOperator)} ${formatMinutes(p.minutes ?? 0)}`;
+			return `Time since last bolus ${opSymbol(p.operator)} ${formatMinutes(p.minutes ?? 0)}`;
 		}
 		case "day_of_week": {
 			const p = node.day_of_week;
@@ -201,7 +201,7 @@ export function summarizeCondition(
 		case "tracker_age": {
 			const p = node.tracker_age;
 			if (!p) return "";
-			return `Tracker age ${opSymbol(p.operator as ComparisonOperator)} ${formatSignedMinutes(p.minutes ?? 0)}`;
+			return `Tracker age ${opSymbol(p.operator)} ${formatSignedMinutes(p.minutes ?? 0)}`;
 		}
 	}
 }
@@ -268,7 +268,7 @@ function wrapForJoin(
 	return summary;
 }
 
-function opSymbol(op: ComparisonOperator | ">" | ">="): string {
+function opSymbol(op: string | undefined): string {
 	switch (op) {
 		case "<":
 			return "<";
@@ -278,10 +278,12 @@ function opSymbol(op: ComparisonOperator | ">" | ">="): string {
 			return ">";
 		case ">=":
 			return "≥";
+		default:
+			return op ?? "";
 	}
 }
 
-function trendLabel(bucket: TrendBucket): string {
+function trendLabel(bucket: string | undefined): string {
 	switch (bucket) {
 		case "falling_fast":
 			return "falling fast";
@@ -293,6 +295,8 @@ function trendLabel(bucket: TrendBucket): string {
 			return "rising";
 		case "rising_fast":
 			return "rising fast";
+		default:
+			return bucket ?? "";
 	}
 }
 

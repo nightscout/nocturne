@@ -16,7 +16,7 @@
   let { firedMarkers, currentDate }: Props = $props();
 
   const chartCtx = getChartContext();
-  const xScale = $derived(chartCtx.xScale as unknown as (d: Date) => number);
+  const xScale = $derived(chartCtx.xScale);
   const height = $derived(chartCtx.height);
 </script>
 

@@ -1,7 +1,33 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect } from "vitest";
+import {
+	AlertConditionType,
+	type AlertHistoryResponse,
+	type HistoryExcursionResponse,
+} from "$api-clients";
 import AlertHistoryCard from "./AlertHistoryCard.svelte";
+
+function excursion(over: Partial<HistoryExcursionResponse> = {}): HistoryExcursionResponse {
+	return {
+		id: "1",
+		ruleName: "Test",
+		conditionType: AlertConditionType.Threshold,
+		startedAt: new Date("2025-01-01T10:00:00Z"),
+		endedAt: new Date("2025-01-01T10:30:00Z"),
+		...over,
+	};
+}
+
+function history(over: Partial<AlertHistoryResponse> = {}): AlertHistoryResponse {
+	return {
+		items: [excursion()],
+		totalCount: 1,
+		totalPages: 1,
+		page: 1,
+		...over,
+	};
+}
 
 describe("AlertHistoryCard", () => {
 	it("renders the card title and description", async () => {
@@ -34,7 +60,7 @@ describe("AlertHistoryCard", () => {
 
 	it("shows empty state with empty items array", async () => {
 		render(AlertHistoryCard, {
-			history: { items: [], totalCount: 0, totalPages: 0, page: 1 } as any,
+			history: history({ items: [], totalCount: 0, totalPages: 0 }),
 			page: 1,
 			loading: false,
 			onLoadPage: () => {},
@@ -45,22 +71,15 @@ describe("AlertHistoryCard", () => {
 
 	it("renders history items in a table", async () => {
 		render(AlertHistoryCard, {
-			history: {
+			history: history({
 				items: [
-					{
-						id: "1",
+					excursion({
 						ruleName: "Low Alert",
-						conditionType: "Threshold",
-						startedAt: "2025-01-01T10:00:00Z",
-						endedAt: "2025-01-01T10:30:00Z",
-						acknowledgedAt: "2025-01-01T10:05:00Z",
+						acknowledgedAt: new Date("2025-01-01T10:05:00Z"),
 						acknowledgedBy: "admin",
-					},
+					}),
 				],
-				totalCount: 1,
-				totalPages: 1,
-				page: 1,
-			} as any,
+			}),
 			page: 1,
 			loading: false,
 			onLoadPage: () => {},
@@ -73,20 +92,7 @@ describe("AlertHistoryCard", () => {
 
 	it("renders table headers", async () => {
 		render(AlertHistoryCard, {
-			history: {
-				items: [
-					{
-						id: "1",
-						ruleName: "Test",
-						conditionType: "Threshold",
-						startedAt: "2025-01-01T10:00:00Z",
-						endedAt: "2025-01-01T10:30:00Z",
-					},
-				],
-				totalCount: 1,
-				totalPages: 1,
-				page: 1,
-			} as any,
+			history: history(),
 			page: 1,
 			loading: false,
 			onLoadPage: () => {},
@@ -101,20 +107,7 @@ describe("AlertHistoryCard", () => {
 
 	it("does not show pagination for single page", async () => {
 		render(AlertHistoryCard, {
-			history: {
-				items: [
-					{
-						id: "1",
-						ruleName: "Test",
-						conditionType: "Threshold",
-						startedAt: "2025-01-01T10:00:00Z",
-						endedAt: "2025-01-01T10:30:00Z",
-					},
-				],
-				totalCount: 1,
-				totalPages: 1,
-				page: 1,
-			} as any,
+			history: history(),
 			page: 1,
 			loading: false,
 			onLoadPage: () => {},
@@ -130,20 +123,7 @@ describe("AlertHistoryCard", () => {
 
 	it("shows pagination when multiple pages exist", async () => {
 		render(AlertHistoryCard, {
-			history: {
-				items: [
-					{
-						id: "1",
-						ruleName: "Test",
-						conditionType: "Threshold",
-						startedAt: "2025-01-01T10:00:00Z",
-						endedAt: "2025-01-01T10:30:00Z",
-					},
-				],
-				totalCount: 25,
-				totalPages: 3,
-				page: 2,
-			} as any,
+			history: history({ totalCount: 25, totalPages: 3, page: 2 }),
 			page: 2,
 			loading: false,
 			onLoadPage: () => {},
@@ -162,12 +142,7 @@ describe("AlertHistoryCard", () => {
 
 	it("disables Previous button on first page", async () => {
 		render(AlertHistoryCard, {
-			history: {
-				items: [{ id: "1", ruleName: "Test", conditionType: "Threshold", startedAt: "2025-01-01T10:00:00Z", endedAt: "2025-01-01T10:30:00Z" }],
-				totalCount: 20,
-				totalPages: 2,
-				page: 1,
-			} as any,
+			history: history({ totalCount: 20, totalPages: 2, page: 1 }),
 			page: 1,
 			loading: false,
 			onLoadPage: () => {},
@@ -180,12 +155,7 @@ describe("AlertHistoryCard", () => {
 
 	it("disables Next button on last page", async () => {
 		render(AlertHistoryCard, {
-			history: {
-				items: [{ id: "1", ruleName: "Test", conditionType: "Threshold", startedAt: "2025-01-01T10:00:00Z", endedAt: "2025-01-01T10:30:00Z" }],
-				totalCount: 20,
-				totalPages: 2,
-				page: 2,
-			} as any,
+			history: history({ totalCount: 20, totalPages: 2, page: 2 }),
 			page: 2,
 			loading: false,
 			onLoadPage: () => {},

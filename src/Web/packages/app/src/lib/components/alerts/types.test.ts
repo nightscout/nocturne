@@ -11,7 +11,7 @@ import {
 	validateChannels,
 	type ChannelDef,
 } from "./types";
-import { ChannelType } from "$api-clients";
+import { AlertConditionType, AlertRuleSeverity, ChannelType } from "$api-clients";
 
 describe("defaultClientConfig", () => {
 	it("returns valid audio defaults", () => {
@@ -130,15 +130,15 @@ describe("parseRule", () => {
 		const state = parseRule({
 			name: "Low Alert",
 			description: "Alert when glucose is low",
-			severity: "warning",
-			conditionType: "threshold",
+			severity: AlertRuleSeverity.Warning,
+			conditionType: AlertConditionType.Threshold,
 			conditionParams: {
 				direction: "below",
 				value: 70,
 			},
 			isEnabled: true,
 			sortOrder: 1,
-		} as never);
+		});
 
 		expect(state.name).toBe("Low Alert");
 		expect(state.condition?.type).toBe("composite");
@@ -151,7 +151,7 @@ describe("parseRule", () => {
 	it("leaves a composite-rooted rule untouched", () => {
 		const state = parseRule({
 			name: "Combo",
-			conditionType: "composite",
+			conditionType: AlertConditionType.Composite,
 			conditionParams: {
 				operator: "or",
 				conditions: [
@@ -159,7 +159,7 @@ describe("parseRule", () => {
 					{ type: "trend", trend: { bucket: "falling_fast" } },
 				],
 			},
-		} as never);
+		});
 
 		expect(state.condition?.type).toBe("composite");
 		expect(state.condition?.composite?.operator).toBe("or");
@@ -172,7 +172,7 @@ describe("parseRule", () => {
 		// kind's payload field).
 		const state = parseRule({
 			name: "Test",
-			conditionType: "threshold",
+			conditionType: AlertConditionType.Threshold,
 			conditionParams: { direction: "below", value: 70 },
 			autoResolveEnabled: true,
 			autoResolveParams: {
@@ -184,7 +184,7 @@ describe("parseRule", () => {
 					],
 				},
 			},
-		} as never);
+		});
 
 		expect(state.autoResolveEnabled).toBe(true);
 		expect(state.autoResolveCondition?.type).toBe("composite");
@@ -193,14 +193,14 @@ describe("parseRule", () => {
 	it("wraps a leaf-rooted auto-resolve envelope in a single-child AND group", () => {
 		const state = parseRule({
 			name: "Test",
-			conditionType: "threshold",
+			conditionType: AlertConditionType.Threshold,
 			conditionParams: { direction: "below", value: 70 },
 			autoResolveEnabled: true,
 			autoResolveParams: {
 				type: "threshold",
 				threshold: { direction: "above", value: 80 },
 			},
-		} as never);
+		});
 
 		expect(state.autoResolveCondition?.type).toBe("composite");
 		expect(state.autoResolveCondition?.composite?.conditions[0].type).toBe(
@@ -211,26 +211,26 @@ describe("parseRule", () => {
 	it("parses the flat channel list and the allow-through-DND flag", () => {
 		const state = parseRule({
 			name: "Low Alert",
-			conditionType: "threshold",
+			conditionType: AlertConditionType.Threshold,
 			conditionParams: { direction: "below", value: 70 },
 			allowThroughDnd: true,
 			channels: [
 				{
 					id: "11111111-1111-1111-1111-111111111111",
-					channelType: "discord_dm",
+					channelType: ChannelType.DiscordDm,
 					destination: "https://discord/webhook/x",
 					destinationLabel: "Family channel",
 					sortOrder: 1,
 				},
 				{
 					id: "22222222-2222-2222-2222-222222222222",
-					channelType: "web_push",
+					channelType: ChannelType.WebPush,
 					destination: "",
-					destinationLabel: null,
+					destinationLabel: undefined,
 					sortOrder: 0,
 				},
 			],
-		} as never);
+		});
 
 		expect(state.allowThroughDnd).toBe(true);
 		expect(state.channels).toHaveLength(2);
@@ -243,9 +243,9 @@ describe("parseRule", () => {
 	it("falls back to a default channel list when the API returns none", () => {
 		const state = parseRule({
 			name: "Test",
-			conditionType: "threshold",
+			conditionType: AlertConditionType.Threshold,
 			conditionParams: { direction: "below", value: 70 },
-		} as never);
+		});
 
 		expect(state.channels).toHaveLength(1);
 		expect(state.channels[0].channelType).toBe("web_push");
@@ -255,10 +255,10 @@ describe("parseRule", () => {
 	it("uses defaults for missing client configuration", () => {
 		const state = parseRule({
 			name: "Test",
-			conditionType: "threshold",
+			conditionType: AlertConditionType.Threshold,
 			conditionParams: { direction: "below", value: 70 },
 			clientConfiguration: undefined,
-		} as never);
+		});
 
 		expect(state.clientConfig.audio.enabled).toBe(true);
 		expect(state.clientConfig.audio.sound).toBe("alarm-default");
@@ -302,7 +302,7 @@ describe("applyChannelDestination", () => {
 		state.channels = [webhookChannel({ hasSecret: true })];
 		applyChannelDestination(state.channels[0], "https://elsewhere.example.com/hook");
 		expect(
-			(buildBody(state).channels[0] as { secret?: string }).secret
+			buildBody(state).channels[0].secret
 		).toBe("");
 	});
 });
@@ -322,7 +322,7 @@ describe("buildBody webhook secret", () => {
 	}
 
 	function sentSecret(over: Partial<ChannelDef>) {
-		return (buildBody(webhookState(over)).channels[0] as { secret?: string }).secret;
+		return buildBody(webhookState(over)).channels[0].secret;
 	}
 
 	it("omits the secret when the channel already has one, so the save keeps it", () => {
@@ -351,14 +351,14 @@ describe("buildBody", () => {
 		// same input will have different internal identities.
 		const state1 = parseRule({
 			name: "Low Alert",
-			conditionType: "threshold",
+			conditionType: AlertConditionType.Threshold,
 			conditionParams: { direction: "below", value: 70 },
-		} as never);
+		});
 		const state2 = parseRule({
 			name: "Low Alert",
-			conditionType: "threshold",
+			conditionType: AlertConditionType.Threshold,
 			conditionParams: { direction: "below", value: 70 },
-		} as never);
+		});
 		expect(JSON.stringify(buildBody(state1))).toBe(JSON.stringify(buildBody(state2)));
 	});
 
@@ -367,9 +367,9 @@ describe("buildBody", () => {
 		// buildBody must flatten it back before sending.
 		const state = parseRule({
 			name: "Test",
-			conditionType: "threshold",
+			conditionType: AlertConditionType.Threshold,
 			conditionParams: { direction: "above", value: 180 },
-		} as never);
+		});
 		const body = buildBody(state);
 		expect(body.conditionType).toBe("threshold");
 		expect(body.conditionParams).toEqual({ direction: "above", value: 180 });
@@ -391,12 +391,12 @@ describe("buildBody", () => {
 	it("strips _uid from channels", () => {
 		const state = parseRule({
 			name: "Test",
-			conditionType: "threshold",
+			conditionType: AlertConditionType.Threshold,
 			conditionParams: { direction: "below", value: 70 },
 			channels: [
-				{ channelType: "web_push", destination: "", sortOrder: 0 },
+				{ channelType: ChannelType.WebPush, destination: "", sortOrder: 0 },
 			],
-		} as never);
+		});
 		const body = buildBody(state);
 		const json = JSON.stringify(body.channels);
 		expect(json).not.toContain("_uid");
@@ -405,17 +405,17 @@ describe("buildBody", () => {
 	it("serialises a device_action channel as {channelType, destination, metadata}", () => {
 		const state = parseRule({
 			name: "Test",
-			conditionType: "threshold",
+			conditionType: AlertConditionType.Threshold,
 			conditionParams: { direction: "below", value: 70 },
 			channels: [
 				{
-					channelType: "device_action",
+					channelType: ChannelType.DeviceAction,
 					destination: "companion",
 					metadata: { capabilities: ["notify", "tray_flash"] },
 					sortOrder: 0,
 				},
 			],
-		} as never);
+		});
 		const body = buildBody(state);
 		const ch = body.channels[0];
 		expect(ch.channelType).toBe("device_action");
@@ -428,10 +428,10 @@ describe("buildBody", () => {
 	it("omits metadata for channels without it", () => {
 		const state = parseRule({
 			name: "Test",
-			conditionType: "threshold",
+			conditionType: AlertConditionType.Threshold,
 			conditionParams: { direction: "below", value: 70 },
-			channels: [{ channelType: "web_push", destination: "", sortOrder: 0 }],
-		} as never);
+			channels: [{ channelType: ChannelType.WebPush, destination: "", sortOrder: 0 }],
+		});
 		const body = buildBody(state);
 		expect(body.channels[0].metadata).toBeUndefined();
 	});
@@ -469,17 +469,17 @@ describe("parseChannelMetadata", () => {
 	it("round-trips a device_action channel through parseRule", () => {
 		const state = parseRule({
 			name: "Test",
-			conditionType: "threshold",
+			conditionType: AlertConditionType.Threshold,
 			conditionParams: { direction: "below", value: 70 },
 			channels: [
 				{
-					channelType: "device_action",
+					channelType: ChannelType.DeviceAction,
 					destination: "companion",
 					metadata: { capabilities: ["notify"] },
 					sortOrder: 0,
 				},
 			],
-		} as never);
+		});
 		const device = state.channels.find(
 			(c) => c.channelType === "device_action",
 		);

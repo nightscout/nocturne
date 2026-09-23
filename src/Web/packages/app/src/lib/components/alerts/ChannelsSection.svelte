@@ -39,7 +39,7 @@
   const statusQuery = getChannelStatuses();
   const statuses = $derived<Map<string, ChannelStatusEntry>>(
     new Map(
-      (statusQuery.current?.channels ?? []).map((c) => [c.channelType as string, c]),
+      (statusQuery.current?.channels ?? []).flatMap((c): [string, ChannelStatusEntry][] => (c.channelType ? [[c.channelType, c]] : [])),
     ),
   );
   const statusPending = $derived(
@@ -59,11 +59,11 @@
   }
 
   function isOffered(opt: ChannelMetaEntry): boolean {
-    return statuses.get(opt.type as string)?.offered === true;
+    return statuses.get(opt.type)?.offered === true;
   }
 
   function needsDestination(channelType: ChannelType | undefined): boolean {
-    return statuses.get(channelType as string)?.requiresDestination === true;
+    return channelType !== undefined && statuses.get(channelType)?.requiresDestination === true;
   }
 
   // Every entry is listed but disabled until the API has answered, so the menu never

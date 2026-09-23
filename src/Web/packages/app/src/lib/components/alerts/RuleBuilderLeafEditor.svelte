@@ -13,14 +13,14 @@
     type ComparisonOperator,
     type StalenessOperator,
     type TrendBucket,
-    type TimeSinceLastCarbCondition,
-    type TimeSinceLastBolusCondition,
+    isStringEnumMember,
     TempBasalMetric,
     GlucoseBucket,
     PumpModeState,
     StateSpanCategory,
     DayOfWeek,
   } from "./types";
+  import { AlertComparisonOperator } from "$api-clients";
 
   interface AvailableRule {
     id: string;
@@ -128,6 +128,15 @@
     [DayOfWeek.Saturday]: "Sat",
   };
 
+  /** Label for a stored key, or undefined when the key is not one the editor offers. */
+  function labelFor(labels: Partial<Record<string, string>>, key: string): string | undefined {
+    return Object.entries(labels).find(([k]) => k === key)?.[1];
+  }
+
+  function isDayOfWeek(value: number): value is DayOfWeek {
+    return Object.values(DayOfWeek).some((day) => day === value);
+  }
+
   function parseNumber(value: string, fallback: number): number {
     const n = Number(value);
     return Number.isFinite(n) ? n : fallback;
@@ -165,7 +174,7 @@
       type="single"
       value={node.threshold.direction ?? "below"}
       onValueChange={(v) => {
-        if (node.threshold) node.threshold.direction = v as "above" | "below";
+        if (node.threshold) node.threshold.direction = v;
       }}
     >
       <Select.Trigger size="xs" class="w-[5rem]">
@@ -185,7 +194,7 @@
       oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
         if (node.threshold)
           node.threshold.value = convertFromDisplayUnits(
-            parseNumber(e.currentTarget.value, bg(node.threshold.value ?? 0) as number),
+            parseNumber(e.currentTarget.value, bg(node.threshold.value ?? 0)),
             glucoseUnits.current,
           );
       }}
@@ -196,11 +205,11 @@
       type="single"
       value={node.predicted.operator ?? "<="}
       onValueChange={(v) => {
-        if (node.predicted) node.predicted.operator = v as ComparisonOperator;
+        if (node.predicted) node.predicted.operator = v;
       }}
     >
       <Select.Trigger size="xs" class="w-14">
-        {opLabels[(node.predicted.operator as ComparisonOperator) ?? "<="]}
+        {labelFor(opLabels, node.predicted.operator ?? "<=")}
       </Select.Trigger>
       <Select.Content>
         {#each Object.entries(opLabels) as [op, label] (op)}
@@ -217,7 +226,7 @@
       oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
         if (node.predicted)
           node.predicted.value = convertFromDisplayUnits(
-            parseNumber(e.currentTarget.value, bg(node.predicted.value ?? 0) as number),
+            parseNumber(e.currentTarget.value, bg(node.predicted.value ?? 0)),
             glucoseUnits.current,
           );
       }}
@@ -244,7 +253,7 @@
       value={node.rate_of_change.direction ?? "falling"}
       onValueChange={(v) => {
         if (node.rate_of_change)
-          node.rate_of_change.direction = v as "rising" | "falling";
+          node.rate_of_change.direction = v;
       }}
     >
       <Select.Trigger size="xs" class="w-24">
@@ -265,7 +274,7 @@
       oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
         if (node.rate_of_change)
           node.rate_of_change.rate = convertFromDisplayUnits(
-            parseNumber(e.currentTarget.value, bg(node.rate_of_change.rate ?? 0) as number),
+            parseNumber(e.currentTarget.value, bg(node.rate_of_change.rate ?? 0)),
             glucoseUnits.current,
           );
       }}
@@ -276,11 +285,11 @@
       type="single"
       value={node.trend.bucket ?? "falling"}
       onValueChange={(v) => {
-        if (node.trend) node.trend.bucket = v as TrendBucket;
+        if (node.trend) node.trend.bucket = v;
       }}
     >
       <Select.Trigger size="xs" class="w-32">
-        {trendLabels[(node.trend.bucket as TrendBucket) ?? "falling"]}
+        {labelFor(trendLabels, node.trend.bucket ?? "falling")}
       </Select.Trigger>
       <Select.Content>
         {#each Object.entries(trendLabels) as [bucket, label] (bucket)}
@@ -297,7 +306,7 @@
       }}
     >
       <Select.Trigger size="xs" class="w-14">
-        {opLabels[(node.staleness.operator as ComparisonOperator) ?? ">="]}
+        {labelFor(opLabels, node.staleness.operator ?? ">=")}
       </Select.Trigger>
       <Select.Content>
         {#each Object.entries(opLabels) as [op, label] (op)}
@@ -345,13 +354,13 @@
     {@const suffix = leafSuffix(node.type)}
     <Select.Root
       type="single"
-      value={(payload.operator as ComparisonOperator) ?? ">="}
+      value={payload.operator ?? ">="}
       onValueChange={(v) => {
-        payload.operator = v as ComparisonOperator;
+        payload.operator = v;
       }}
     >
       <Select.Trigger size="xs" class="w-14">
-        {opLabels[(payload.operator as ComparisonOperator) ?? ">="]}
+        {labelFor(opLabels, payload.operator ?? ">=")}
       </Select.Trigger>
       <Select.Content>
         {#each Object.entries(opLabels) as [op, label] (op)}
@@ -374,13 +383,13 @@
     {@const payload = node[node.type]!}
     <Select.Root
       type="single"
-      value={(payload.operator as StalenessOperator) ?? ">"}
+      value={payload.operator ?? ">"}
       onValueChange={(v) => {
-        payload.operator = v as StalenessOperator;
+        payload.operator = v;
       }}
     >
       <Select.Trigger size="xs" class="w-14">
-        {stalenessOpLabels[(payload.operator as StalenessOperator) ?? ">"]}
+        {labelFor(stalenessOpLabels, payload.operator ?? ">")}
       </Select.Trigger>
       <Select.Content>
         {#each Object.entries(stalenessOpLabels) as [op, label] (op)}
@@ -419,15 +428,13 @@
   {:else if node.type === "temp_basal" && node.temp_basal}
     <Select.Root
       type="single"
-      value={(node.temp_basal.metric ?? TempBasalMetric.Rate) as string}
+      value={node.temp_basal.metric ?? TempBasalMetric.Rate}
       onValueChange={(v) => {
-        if (node.temp_basal) node.temp_basal.metric = v as TempBasalMetric;
+        if (node.temp_basal && isStringEnumMember(TempBasalMetric, v)) node.temp_basal.metric = v;
       }}
     >
       <Select.Trigger size="xs" class="w-32">
-        {tempBasalMetricLabels[
-          (node.temp_basal.metric as TempBasalMetric) ?? TempBasalMetric.Rate
-        ]}
+        {tempBasalMetricLabels[node.temp_basal.metric ?? TempBasalMetric.Rate]}
       </Select.Trigger>
       <Select.Content>
         {#each Object.entries(tempBasalMetricLabels) as [m, label] (m)}
@@ -437,13 +444,13 @@
     </Select.Root>
     <Select.Root
       type="single"
-      value={(node.temp_basal.operator as ComparisonOperator) ?? ">="}
+      value={node.temp_basal.operator ?? ">="}
       onValueChange={(v) => {
-        if (node.temp_basal) node.temp_basal.operator = v as ComparisonOperator;
+        if (node.temp_basal) node.temp_basal.operator = v;
       }}
     >
       <Select.Trigger size="xs" class="w-14">
-        {opLabels[(node.temp_basal.operator as ComparisonOperator) ?? ">="]}
+        {labelFor(opLabels, node.temp_basal.operator ?? ">=")}
       </Select.Trigger>
       <Select.Content>
         {#each Object.entries(opLabels) as [op, label] (op)}
@@ -548,10 +555,10 @@
       type="multiple"
       size="xs"
       spacing={1}
-      value={[...selected] as string[]}
+      value={[...selected]}
       onValueChange={(v: string[]) => {
         if (node.glucose_bucket)
-          node.glucose_bucket.buckets = v as GlucoseBucket[];
+          node.glucose_bucket.buckets = v.filter((b) => isStringEnumMember(GlucoseBucket, b));
       }}
       class="flex-wrap"
     >
@@ -562,18 +569,16 @@
       {/each}
     </ToggleGroup.Root>
   {:else if (node.type === "time_since_last_carb" || node.type === "time_since_last_bolus") && node[node.type]}
-    {@const payload = node[node.type]! as TimeSinceLastCarbCondition | TimeSinceLastBolusCondition}
+    {@const payload = node[node.type]!}
     <Select.Root
       type="single"
-      value={(payload.operator as unknown as ComparisonOperator) ?? ">="}
+      value={payload.operator ?? ">="}
       onValueChange={(v) => {
-        // AlertComparisonOperator is generated as a numeric enum but the wire
-        // shape carries the symbol literal — cast at the boundary.
-        payload.operator = v as unknown as typeof payload.operator;
+        if (isStringEnumMember(AlertComparisonOperator, v)) payload.operator = v;
       }}
     >
       <Select.Trigger size="xs" class="w-14">
-        {opLabels[(payload.operator as unknown as ComparisonOperator) ?? ">="]}
+        {labelFor(opLabels, payload.operator ?? ">=")}
       </Select.Trigger>
       <Select.Content>
         {#each Object.entries(opLabels) as [op, label] (op)}
@@ -601,7 +606,7 @@
       value={[...selectedDays].map(String)}
       onValueChange={(v: string[]) => {
         if (node.day_of_week)
-          node.day_of_week.days = v.map((s: string) => Number(s) as DayOfWeek);
+          node.day_of_week.days = v.map(Number).filter(isDayOfWeek);
       }}
       class="flex-wrap"
     >
@@ -614,13 +619,13 @@
   {:else if node.type === "pump_state" && node.pump_state}
     <Select.Root
       type="single"
-      value={(node.pump_state.mode ?? PumpModeState.Suspended) as string}
+      value={node.pump_state.mode ?? PumpModeState.Suspended}
       onValueChange={(v) => {
-        if (node.pump_state) node.pump_state.mode = v as PumpModeState;
+        if (node.pump_state && isStringEnumMember(PumpModeState, v)) node.pump_state.mode = v;
       }}
     >
       <Select.Trigger size="xs" class="w-32">
-        {pumpModeLabels[(node.pump_state.mode as PumpModeState) ?? PumpModeState.Suspended]}
+        {pumpModeLabels[node.pump_state.mode ?? PumpModeState.Suspended]}
       </Select.Trigger>
       <Select.Content>
         {#each Object.entries(pumpModeLabels) as [mode, label] (mode)}
@@ -658,16 +663,15 @@
   {:else if node.type === "state_span_active" && node.state_span_active}
     <Select.Root
       type="single"
-      value={(node.state_span_active.category ?? StateSpanCategory.Override) as string}
+      value={node.state_span_active.category ?? StateSpanCategory.Override}
       onValueChange={(v) => {
-        if (node.state_span_active)
-          node.state_span_active.category = v as StateSpanCategory;
+        if (node.state_span_active && isStringEnumMember(StateSpanCategory, v))
+          node.state_span_active.category = v;
       }}
     >
       <Select.Trigger size="xs" class="w-40">
-        {stateCategoryLabels[
-          (node.state_span_active.category as StateSpanCategory) ?? StateSpanCategory.Override
-        ] ?? "category"}
+        {stateCategoryLabels[node.state_span_active.category ?? StateSpanCategory.Override] ??
+          "category"}
       </Select.Trigger>
       <Select.Content>
         {#each Object.entries(stateCategoryLabels) as [cat, label] (cat)}
@@ -746,13 +750,13 @@
     </Select.Root>
     <Select.Root
       type="single"
-      value={(node.tracker_age.operator as ComparisonOperator) ?? ">="}
+      value={node.tracker_age.operator ?? ">="}
       onValueChange={(v) => {
-        if (node.tracker_age) node.tracker_age.operator = v as ComparisonOperator;
+        if (node.tracker_age) node.tracker_age.operator = v;
       }}
     >
       <Select.Trigger size="xs" class="w-14">
-        {opLabels[(node.tracker_age.operator as ComparisonOperator) ?? ">="]}
+        {labelFor(opLabels, node.tracker_age.operator ?? ">=")}
       </Select.Trigger>
       <Select.Content>
         {#each Object.entries(opLabels) as [op, label] (op)}

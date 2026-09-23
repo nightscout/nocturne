@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import { LEAF_FACTS, FACT_GROUP_ORDER, getFact, isLeafKind } from "./factCatalog";
-import type { LeafKind } from "./factCatalog";
 import { AlertConditionType } from "$api-clients";
 
 describe("factCatalog", () => {
@@ -9,8 +8,8 @@ describe("factCatalog", () => {
 		const expectedLeaves = Object.values(AlertConditionType).filter(
 			(k) => !structuralKinds.has(k),
 		);
-		const cataloguedKinds = new Set(LEAF_FACTS.map((f) => f.kind));
-		const missing = expectedLeaves.filter((k) => !cataloguedKinds.has(k as LeafKind));
+		const cataloguedKinds = new Set<string>(LEAF_FACTS.map((f) => f.kind));
+		const missing = expectedLeaves.filter((k) => !cataloguedKinds.has(k));
 		expect(missing).toEqual([]);
 	});
 

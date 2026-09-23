@@ -84,8 +84,9 @@ export function unwrapChild(parent: ConditionNode, index: number): void {
  */
 export function rowLeafKind(c: ConditionNode): LeafKind | null {
 	const inner = rowLeafNode(c);
-	if (inner.type === "composite") return null;
-	return inner.type as LeafKind;
+	const kind = inner.type;
+	if (kind === "composite" || kind === "not" || kind === "sustained") return null;
+	return kind;
 }
 
 /** Walk past NOT and sustained wrappers to reach the underlying leaf node. */

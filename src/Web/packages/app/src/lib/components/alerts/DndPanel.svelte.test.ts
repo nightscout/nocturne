@@ -10,7 +10,7 @@ import type { TenantAlertSettingsResponse } from "$api-clients";
 const settings: TenantAlertSettingsResponse = {
   dndManualActive: false,
   dndScheduleEnabled: false,
-} as TenantAlertSettingsResponse;
+};
 
 let updateImpl: () => Promise<TenantAlertSettingsResponse>;
 

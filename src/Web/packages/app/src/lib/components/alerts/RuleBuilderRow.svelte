@@ -32,7 +32,7 @@
     Moon,
   } from "lucide-svelte";
   import type { ConditionNode } from "./types";
-  import type { TrendBucket } from "./types";
+  import { isTrendBucket, type TrendBucket } from "./types";
   import { Direction } from "$lib/api";
   import { getDirectionInfo } from "$lib/utils";
   import RuleBuilder from "./RuleBuilder.svelte";
@@ -65,7 +65,7 @@
   let { parent, index, availableRules = [], shiftHeld }: Props = $props();
 
   let child = $derived(parent.composite!.conditions[index]);
-  let operator = $derived(parent.composite!.operator as "and" | "or");
+  let operator = $derived(parent.composite!.operator);
 
   const ICONS: Record<LucideIconName, typeof Droplet> = {
     droplet: Droplet,
@@ -107,7 +107,8 @@
   function trendIconFor(c: ConditionNode): typeof TrendingUp | null {
     const leaf = rowLeafNode(c);
     if (leaf.type !== "trend" || !leaf.trend) return null;
-    const bucket = (leaf.trend.bucket as TrendBucket) ?? "falling";
+    const bucket = leaf.trend.bucket ?? "falling";
+    if (!isTrendBucket(bucket)) return TrendingUp;
     return getDirectionInfo(TREND_DIRECTIONS[bucket]).icon ?? TrendingUp;
   }
 
@@ -216,8 +217,8 @@
       // Only clear when leaving the element itself, not when crossing into a
       // descendant — relatedTarget being null or outside this element marks
       // the real exit.
-      const next = e.relatedTarget as Node | null;
-      if (!next || !(e.currentTarget as HTMLElement).contains(next)) {
+      const next = e.relatedTarget;
+      if (!(next instanceof Node) || !e.currentTarget.contains(next)) {
         if (drag.overKey === `into:${child._uid ?? ""}`) drag.overKey = null;
       }
     }}

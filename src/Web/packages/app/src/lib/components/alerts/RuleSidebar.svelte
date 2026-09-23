@@ -147,7 +147,7 @@
   });
 
   const ruleById = $derived(
-    new Map(rules.filter((r) => r.id).map((r) => [r.id as string, r])),
+    new Map(rules.flatMap((r): [string, AlertRuleResponse][] => (r.id ? [[r.id, r]] : []))),
   );
 
   function nameLookup(id: string): string | undefined {
