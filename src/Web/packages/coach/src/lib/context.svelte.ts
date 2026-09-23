@@ -31,14 +31,38 @@ function writeDisabledFlag(value: boolean): void {
   }
 }
 
+/**
+ * Mark states keyed by mark key. `$state` does not proxy a Map, so the context replaces
+ * the map whole on every change rather than mutating it; these helpers build each one.
+ */
+type MarkStates = ReadonlyMap<string, MarkState>;
+
+const noMarkStates = (): MarkStates => new Map();
+
+const indexMarkStates = (states: MarkState[]): MarkStates =>
+  new Map(states.map((state) => [state.markKey, state]));
+
+const withMarkState = (states: MarkStates, state: MarkState): MarkStates =>
+  new Map([...states, [state.markKey, state]]);
+
+/** Mark key to the sequence it is a step of. */
+const indexSequences = (sequences: SequenceConfig): ReadonlyMap<string, string> =>
+  new Map(
+    Object.entries(sequences).flatMap(([name, seq]) =>
+      seq.steps.map((step): [string, string] => [step, name]),
+    ),
+  );
+
+const nowIso = () => new Date().toISOString();
+
 export class CoachMarkContext {
   private adapter: CoachMarkAdapter;
   private sequences: SequenceConfig;
   private settleDelay: number;
   private seenDwellMs: number;
-  private _keyToSequence: Map<string, string>;
+  private _keyToSequence: ReadonlyMap<string, string>;
 
-  private _states = $state<Map<string, MarkState>>(new Map());
+  private _states = $state<MarkStates>(noMarkStates());
   private _registrations = $state<MarkRegistration[]>([]);
   private _activeSelection = $state<SelectionResult | null>(null);
   private _settleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -62,23 +86,13 @@ export class CoachMarkContext {
     this.settleDelay = settleDelay;
     this.seenDwellMs = seenDwellMs;
 
-    // Build O(1) lookup from mark key to sequence name
-    this._keyToSequence = new Map();
-    for (const [name, seq] of Object.entries(sequences)) {
-      for (const step of seq.steps) {
-        this._keyToSequence.set(step, name);
-      }
-    }
+    this._keyToSequence = indexSequences(sequences);
   }
 
   async initialize(): Promise<void> {
     this._disabled = readDisabledFlag();
     const states = await this.adapter.fetchAll();
-    const map = new Map<string, MarkState>();
-    for (const s of states) {
-      map.set(s.markKey, s);
-    }
-    this._states = map;
+    this._states = indexMarkStates(states);
     this._initialized = true;
     this.scheduleSelection();
   }
@@ -282,7 +296,7 @@ export class CoachMarkContext {
     if (this.adapter.deleteAll) {
       await this.adapter.deleteAll();
     }
-    this._states = new Map();
+    this._states = noMarkStates();
     this._activeSelection = null;
     this._forcedSequence = null;
     this._quietUntilNavigation = false;
@@ -295,14 +309,13 @@ export class CoachMarkContext {
     const seq = this.sequences[this._forcedSequence];
     if (!seq) return;
 
-    const mountedKeys = new Set(this._registrations.map((r) => r.key));
 
     for (const stepKey of seq.steps) {
       const status = this.getStatus(stepKey);
       if (status === "completed" || status === "dismissed") continue;
 
       // Found the first unseen/seen step
-      if (!mountedKeys.has(stepKey)) {
+      if (!this._registrations.some((r) => r.key === stepKey)) {
         // Not mounted yet — wait for lazy registration to trigger
         return;
       }
@@ -344,7 +357,7 @@ export class CoachMarkContext {
 
   private updateStatus(key: string, status: MarkStatus): void {
     const existing = this._states.get(key);
-    const now = new Date().toISOString();
+    const now = nowIso();
 
     const updated: MarkState = {
       id: existing?.id ?? "",
@@ -358,9 +371,7 @@ export class CoachMarkContext {
           : (existing?.completedAt ?? null),
     };
 
-    const newMap = new Map(this._states);
-    newMap.set(key, updated);
-    this._states = newMap;
+    this._states = withMarkState(this._states, updated);
 
     // Fire and forget — optimistic
     this.adapter.update(key, status).catch((err) => {

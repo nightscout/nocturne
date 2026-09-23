@@ -1,7 +1,11 @@
-import { SHADCN_FILES, debt, svelteConfig } from "@nocturne/eslint-config";
+import { SHADCN_FILES, svelteConfig } from "@nocturne/eslint-config";
 
 export default [
-  ...svelteConfig(),
+  ...svelteConfig({
+    // Coach renders outside the design system and depends on no component library, so
+    // its popover draws its own buttons from theme.css (coach-btn, coach-popover__close).
+    rawButtonFiles: ["src/lib/popover/**"]
+  }),
   {
     // Coach styles itself with its own plain CSS (theme.css, BEM classes and --coach-*
     // properties) and does not use Tailwind, so the Tailwind class rules have nothing to check.
@@ -13,11 +17,5 @@ export default [
       "shadcn/no-unknown-classes": "off",
       "shadcn/require-static-classes": "off"
     }
-  },
-  ...debt({
-    "svelte/prefer-svelte-reactivity": 11,
-    "svelte/no-unused-svelte-ignore": 8,
-    "shadcn/no-inline-styles": 1,
-    "no-restricted-syntax": 4
-  })
+  }
 ];

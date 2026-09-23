@@ -253,7 +253,7 @@
   <div
     class="coach-backdrop"
     data-testid="coach-backdrop"
-    style:clip-path={spotlightClipPath}
+    style:--coach-spotlight={spotlightClipPath || null}
     onkeydown={handleKeydown}
     onclick={handleDismiss}
   ></div>
