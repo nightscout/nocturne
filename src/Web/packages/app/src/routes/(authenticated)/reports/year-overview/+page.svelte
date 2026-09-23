@@ -232,6 +232,21 @@
     carbs: "--chart-5",
   };
 
+  function metricCssVar(metric: Exclude<HeatmapMetric, "avgGlucose">): string {
+    switch (metric) {
+      case "tir":
+        return METRIC_CSS_VARS.tir;
+      case "bolus":
+        return METRIC_CSS_VARS.bolus;
+      case "basal":
+        return METRIC_CSS_VARS.basal;
+      case "tdd":
+        return METRIC_CSS_VARS.tdd;
+      case "carbs":
+        return METRIC_CSS_VARS.carbs;
+    }
+  }
+
   /** Compute max value for a metric across all loaded year data */
   function getMetricMax(metric: HeatmapMetric): number {
     let max = 0;
@@ -322,8 +337,7 @@
       return "rgb(0 0 0 / 5%)";
     }
 
-    const cssVar =
-      METRIC_CSS_VARS[selectedMetric];
+    const cssVar = metricCssVar(selectedMetric);
     const baseColor = getFocusedIntensityFill(
       metricValue,
       focusRange ?? [0, metricMaxCached],
