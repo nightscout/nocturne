@@ -1,4 +1,4 @@
-<script lang="ts">
+<script lang="ts" generics="T extends ActogramPoint">
   import { formatShortDate } from "$lib/utils/formatting";
   import type { Snippet } from 'svelte';
   import type {
@@ -16,7 +16,7 @@
   import { ChevronUp, ChevronDown } from 'lucide-svelte';
 
   interface Props {
-    data: ActogramPoint[];
+    data: T[];
     bgData?: GlucosePoint[];
     days: Date[];
     thresholds?: GlucoseThresholds;
@@ -24,8 +24,8 @@
     visibleCount?: number;
     initialOffset?: number;
     onVisibleRangeChange?: (from: Date, to: Date) => void;
-    row: Snippet<[ActogramRowContext]>;
-    tooltipValue?: Snippet<[{ point: ActogramPoint; day: Date }]>;
+    row: Snippet<[ActogramRowContext<T>]>;
+    tooltipValue?: Snippet<[{ point: T; day: Date }]>;
     rowLabel?: Snippet<[{ day: Date }]>;
   }
 

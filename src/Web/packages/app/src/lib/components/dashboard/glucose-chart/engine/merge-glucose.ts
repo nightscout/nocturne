@@ -12,7 +12,7 @@ export function mergeRealtimeGlucose(
   toMs: number
 ): GlucosePoint[] {
   const base = chartData?.glucoseData ?? [];
-  if (!chartData) return base as GlucosePoint[];
+  if (!chartData) return base;
 
   const thresholds = resolveGlucoseThresholds(chartData.thresholds);
 
@@ -41,5 +41,5 @@ export function mergeRealtimeGlucose(
 
   return [...byMills.values()].sort(
     (a, b) => a.time.getTime() - b.time.getTime()
-  ) as GlucosePoint[];
+  );
 }

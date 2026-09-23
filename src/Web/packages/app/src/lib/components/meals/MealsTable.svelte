@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { MealSortColumn } from "./meal-sort";
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
@@ -28,7 +29,7 @@
 
   interface Props {
     mealsByDay: MealsByDay[];
-    sortColumn: string;
+    sortColumn: MealSortColumn;
     sortDirection: "asc" | "desc";
     expandedRows: Set<string>;
     collapsedDates: Set<string>;
@@ -36,7 +37,7 @@
     filteredAndSortedMealsCount: number;
     mealsCount: number;
     suggestionsByCarbIntake: Map<string, SuggestedMealMatch[]>;
-    onSort: (column: string) => void;
+    onSort: (column: MealSortColumn) => void;
     onToggleRow: (id: string) => void;
     onToggleDate: (date: string) => void;
     onAddFood: (meal: MealEvent) => void;

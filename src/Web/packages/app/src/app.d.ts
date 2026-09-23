@@ -92,29 +92,24 @@ declare global {
 			guestExpiresAt?: string;
 		}
 
-		// Base page data interface for the main app
-		interface BasePageData {
-			loading: boolean;
+		// Fields any page's data may carry, all optional; each route's own load types the rest.
+		interface PageData {
+			loading?: boolean;
 			loadingMessage?: string;
 			error?: string;
-			serverSettings: ServerSettings | null;
-			entries: Entry[];
-			treatments: Treatment[];
-			deviceStatus: DeviceStatus[];
+			serverSettings?: ServerSettings | null;
+			entries?: Entry[];
+			treatments?: Treatment[];
+			deviceStatus?: DeviceStatus[];
 			initialData?: {
 				now: number;
 				history: number;
 				focusHours: number;
 			};
 			/** Resolved by the root layout from the hint cookie the API writes. */
-			lastSignIn: LastSignIn | null;
+			lastSignIn?: LastSignIn | null;
 			/** The viewer's granted scopes, resolved by the root layout. */
-			effectivePermissions: string[];
-		}
-
-		// Main PageData interface that allows additional properties for reports
-		interface PageData extends Partial<BasePageData> {
-			[key: string]: unknown;
+			effectivePermissions?: string[];
 		}
 		// Shallow-routing state. Dialogs key their browser-history entries here
 		// (see useDialogHistory) so the back button can dismiss them.

@@ -43,10 +43,10 @@ export interface ActogramRowContext<T extends ActogramPoint = ActogramPoint> {
 	day: Date;
 }
 
-export interface ActogramTooltipData {
+export interface ActogramTooltipData<T extends ActogramPoint = ActogramPoint> {
 	time: Date;
 	bgPoint?: RowDataPoint<GlucosePoint>;
-	dataPoint?: RowDataPoint<ActogramPoint>;
+	dataPoint?: RowDataPoint<T>;
 }
 
 export function findNearestPoint<T extends ActogramPoint>(
