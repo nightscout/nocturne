@@ -75,7 +75,7 @@
             <Button
               variant="outline"
               size="sm"
-              class="mt-3 gap-2"
+              class="mt-3"
               onclick={() => (showDeduplicationDialog = true)}
             >
               {#if isDeduplicating}
@@ -106,7 +106,7 @@
             <Button
               variant="outline"
               size="sm"
-              class="mt-3 gap-2"
+              class="mt-3"
               onclick={() => (showDemoDataDialog = true)}
             >
               <Sparkles class="h-4 w-4" />

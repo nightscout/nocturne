@@ -121,7 +121,6 @@
             size="sm"
             onclick={onRefreshStatuses}
             disabled={isLoadingConnectorStatuses}
-            class="gap-2"
           >
             <RefreshCw
               class="h-4 w-4 {isLoadingConnectorStatuses ? 'animate-spin' : ''}"
@@ -135,7 +134,6 @@
             size="sm"
             onclick={onManualSync}
             disabled={isManualSyncing}
-            class="gap-2"
           >
             {#if isManualSyncing}
               <Loader2 class="h-4 w-4 animate-spin" />
@@ -261,7 +259,7 @@
               {#if hasData}
                 <Badge
                   variant="secondary"
-                  class="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100 text-xs"
+                  class="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100"
                 >
                   <Database class="h-3 w-3 mr-1" />
                   Has Data
@@ -290,7 +288,7 @@
                 >
                   {connector.name}
                 </a>
-                <Badge variant="outline" class="text-xs">Not Configured</Badge>
+                <Badge variant="outline">Not Configured</Badge>
               </div>
               <p class="text-sm text-muted-foreground">
                 {connector.description}

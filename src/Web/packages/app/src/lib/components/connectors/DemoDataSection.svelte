@@ -135,7 +135,6 @@
           variant="destructive"
           onclick={deleteDemoData}
           disabled={isDeletingDemo}
-          class="gap-2"
         >
           {#if isDeletingDemo}
             <Loader2 class="h-4 w-4 animate-spin" />

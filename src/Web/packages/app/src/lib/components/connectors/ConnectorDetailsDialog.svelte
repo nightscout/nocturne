@@ -287,7 +287,7 @@
                 </Tooltip.Trigger>
                 <Tooltip.Portal>
                   <Tooltip.Content
-                    class="z-50 overflow-hidden rounded-md bg-popover px-3 py-2 text-sm text-popover-foreground shadow-md"
+                    class="z-50 overflow-hidden bg-popover py-2 text-sm text-popover-foreground shadow-md"
                   >
                     {#if selectedConnector.totalItemsBreakdown && Object.keys(selectedConnector.totalItemsBreakdown).length > 0}
                       <div class="space-y-1">
@@ -326,7 +326,7 @@
                 </Tooltip.Trigger>
                 <Tooltip.Portal>
                   <Tooltip.Content
-                    class="z-50 overflow-hidden rounded-md bg-popover px-3 py-2 text-sm text-popover-foreground shadow-md"
+                    class="z-50 overflow-hidden bg-popover py-2 text-sm text-popover-foreground shadow-md"
                   >
                     {#if selectedConnector.itemsLast24HoursBreakdown && Object.keys(selectedConnector.itemsLast24HoursBreakdown).length > 0}
                       <div class="space-y-1">
@@ -460,7 +460,7 @@
             <Button
               size="sm"
               variant="outline"
-              class="w-full gap-2"
+              class="w-full"
               onclick={triggerGranularSync}
               disabled={isGranularSyncing}
             >
@@ -510,7 +510,7 @@
               <Button
                 size="sm"
                 variant="outline"
-                class="w-full gap-2"
+                class="w-full"
                 onclick={triggerFoodOnlySync}
                 disabled={isFoodOnlySyncing}
               >
@@ -531,7 +531,6 @@
         <Button variant="outline" onclick={() => (open = false)}>Close</Button>
         <Button
           variant="outline"
-          class="gap-2"
           href="/settings/connectors/{selectedConnector.id?.toLowerCase()}"
         >
           <Wrench class="h-4 w-4" />

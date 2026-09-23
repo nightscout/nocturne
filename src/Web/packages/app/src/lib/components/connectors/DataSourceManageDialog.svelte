@@ -205,7 +205,6 @@
         {#if canManage}
           <Button
             variant="outline"
-            class="gap-2"
             onclick={() => {
               showDeleteConfirmDialog = true;
               deleteConfirmText = "";
@@ -317,7 +316,6 @@
             variant="destructive"
             onclick={deleteDataSource}
             disabled={isDeletingDataSource || deleteConfirmText !== "DELETE"}
-            class="gap-2"
           >
             {#if isDeletingDataSource}
               <Loader2 class="h-4 w-4 animate-spin" />
