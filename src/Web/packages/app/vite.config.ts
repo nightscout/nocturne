@@ -19,7 +19,12 @@ import { dirname } from "node:path";
 // matches at path boundaries, so `react-dom` -> <dir> also rewrites subpaths like
 // `react-dom/server` -> <dir>/server (react-email needs that). Aliasing to a file
 // would turn `react-dom/server` into `<dir>/index.js/server` (ENOTDIR).
-const require = createRequire(import.meta.url);
+//
+// Resolve from @nocturne/bot, which declares react/react-dom: pnpm's global
+// virtual store does not hoist them to where the app can see them.
+const require = createRequire(
+  createRequire(import.meta.url).resolve("@nocturne/bot/package.json"),
+);
 const reactAliases = {
   react: dirname(require.resolve("react/package.json")),
   "react-dom": dirname(require.resolve("react-dom/package.json")),

@@ -88,7 +88,7 @@
       </div>
 
       {#if isMainSectionEnabled(widgets, WidgetId.GlucoseChart)}
-        {#snippet glucoseChart(chartVisible)}
+        {#snippet glucoseChart(chartVisible: boolean)}
           <div
             {@attach chartVisible
               ? coachmark({

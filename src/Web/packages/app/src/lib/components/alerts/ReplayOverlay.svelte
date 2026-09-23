@@ -1,14 +1,10 @@
 <script lang="ts">
   import { getChartContext } from "layerchart";
-  import { AlertReplayEventKind } from "$api-clients";
+  import { AlertReplayEventKind, type AlertReplayEvent } from "$api-clients";
   import { severityVar } from "./severity";
 
   interface Marker {
-    ev: {
-      ruleId?: string | null;
-      severity?: number | null;
-      kind?: string | null;
-    };
+    ev: AlertReplayEvent;
     tMs: number;
   }
 

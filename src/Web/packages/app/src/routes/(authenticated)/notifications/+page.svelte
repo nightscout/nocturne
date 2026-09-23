@@ -158,7 +158,10 @@
   // Collapsible state for history groups
   let expandedGroups = $state<Record<string, boolean>>({});
 
-  function ensureGroupsInitialized(keys: string[]) {
+  function ensureGroupsInitialized(
+    groups: Record<string, TrackerInstanceDto[]>
+  ): Record<string, TrackerInstanceDto[]> {
+    const keys = Object.keys(groups);
     untrack(() => {
       const alreadyInitialized = keys.some(
         (k) => expandedGroups[k] !== undefined
@@ -168,6 +171,7 @@
         expandedGroups[keys[i]] = i === 0;
       }
     });
+    return groups;
   }
 
   // Helper to toggle group
@@ -317,8 +321,7 @@
             {/snippet}
 
             {@const historyInstances = (await historyQuery) ?? []}
-            {@const groupedHistory = groupHistoryByDate(historyInstances)}
-            {@const _ = ensureGroupsInitialized(Object.keys(groupedHistory))}
+            {@const groupedHistory = ensureGroupsInitialized(groupHistoryByDate(historyInstances))}
 
             {#if historyInstances.length === 0}
               <div class="text-center py-8 text-muted-foreground">

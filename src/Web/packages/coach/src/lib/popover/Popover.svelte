@@ -282,7 +282,6 @@
       onback={handleBack}
       onnext={handleNext}
       oncomplete={handleComplete}
-      ondismiss={handleDismiss}
     />
   </div>
 {/if}

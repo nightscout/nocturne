@@ -17,6 +17,7 @@
   const resolvedVariant = $derived(ctx.variant || variant);
   const resolvedSize = $derived(ctx.size || size);
   const segmented = $derived(resolvedVariant === "segmented");
+  const toggleVariant = $derived(resolvedVariant === "segmented" ? "default" : resolvedVariant);
   const joined = $derived(!segmented && !ctx.spacing);
 </script>
 
@@ -28,7 +29,7 @@
   data-spacing={ctx.spacing ?? 0}
   class={cn(
     toggleVariants({
-      variant: segmented ? "default" : resolvedVariant,
+      variant: toggleVariant,
       size: resolvedSize,
     }),
     "min-w-0 flex-1 shrink-0 shadow-none focus:z-10 focus-visible:z-10",

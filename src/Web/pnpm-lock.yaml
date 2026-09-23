@@ -251,9 +251,9 @@ importers:
       svelte:
         specifier: 5.55.5
         version: 5.55.5(@typescript-eslint/types@8.59.3)
-      svelte-check-native:
-        specifier: ^0.8.5
-        version: 0.8.5(@typescript/native-preview@7.0.0-dev.20260513.1)
+      svelte-check:
+        specifier: ^4.6.0
+        version: 4.6.0(picomatch@4.0.7)(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@6.0.3)
       svelte-sonner:
         specifier: ^1.1.1
         version: 1.1.1(svelte@5.55.5(@typescript-eslint/types@8.59.3))
@@ -723,8 +723,8 @@ importers:
   packages/ui:
     devDependencies:
       '@internationalized/date':
-        specifier: ^3.11.0
-        version: 3.11.0
+        specifier: ^3.12.1
+        version: 3.12.1
       '@lucide/svelte':
         specifier: ^0.563.1
         version: 0.563.1(svelte@5.55.5(@typescript-eslint/types@8.59.3))
@@ -735,8 +735,8 @@ importers:
         specifier: ^0.5.19
         version: 0.5.19(tailwindcss@4.1.18)
       bits-ui:
-        specifier: ^2.15.5
-        version: 2.15.5(@internationalized/date@3.11.0)(@sveltejs/kit@2.59.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.55.5(@typescript-eslint/types@8.59.3))(vite@8.0.12(@types/node@25.7.0)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@5.9.3)(vite@8.0.12(@types/node@25.7.0)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))
+        specifier: ^2.18.1
+        version: 2.18.1(@internationalized/date@3.12.1)(@sveltejs/kit@2.59.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.55.5(@typescript-eslint/types@8.59.3))(vite@8.0.12(@types/node@25.7.0)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@5.9.3)(vite@8.0.12(@types/node@25.7.0)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
@@ -1490,9 +1490,6 @@ packages:
     engines: {node: ^18.17.0 || ^20.3.0 || >=21.0.0}
     cpu: [x64]
     os: [win32]
-
-  '@internationalized/date@3.11.0':
-    resolution: {integrity: sha512-BOx5huLAWhicM9/ZFs84CzP+V3gBW6vlpM02yzsdYC7TGlZJX1OJiEEHcSayF00Z+3jLlm4w79amvSt6RqKN3Q==}
 
   '@internationalized/date@3.12.1':
     resolution: {integrity: sha512-6IedsVWXyq4P9Tj+TxuU8WGWM70hYLl12nbYU8jkikVpa6WXapFazPUcHUMDMoWftIDE2ILDkFFte6W2nFCkRQ==}
@@ -2788,9 +2785,6 @@ packages:
       svelte: 5.55.5
       vite: ^6.3.5
 
-  '@swc/helpers@0.5.18':
-    resolution: {integrity: sha512-TXTnIcNJQEKwThMMqBXsZ4VGAza6bvN4pa41Rkqoio6QBKMvo+5lexeTMScGCIxtzgQJzElcvIltani+adC5PQ==}
-
   '@swc/helpers@0.5.21':
     resolution: {integrity: sha512-jI/VAmtdjB/RnI8GTnokyX7Ug8c+g+ffD6QRLa6XQewtnGyukKkKSk3wLTM3b5cjt1jNh9x0jfVlagdN2gDKQg==}
 
@@ -3937,13 +3931,6 @@ packages:
 
   bits-ui@2.14.4:
     resolution: {integrity: sha512-W6kenhnbd/YVvur+DKkaVJ6GldE53eLewur5AhUCqslYQ0vjZr8eWlOfwZnMiPB+PF5HMVqf61vXBvmyrAmPWg==}
-    engines: {node: '>=20'}
-    peerDependencies:
-      '@internationalized/date': ^3.8.1
-      svelte: 5.55.5
-
-  bits-ui@2.15.5:
-    resolution: {integrity: sha512-WhS+P+E//ClLfKU6KqjKC17nGDRLnz+vkwoP6ClFUPd5m1fFVDxTElPX8QVsduLj5V1KFDxlnv6sW2G5Lqk+vw==}
     engines: {node: '>=20'}
     peerDependencies:
       '@internationalized/date': ^3.8.1
@@ -6301,20 +6288,8 @@ packages:
     cpu: [arm64]
     os: [darwin]
 
-  svelte-check-native-darwin-arm64@0.8.5:
-    resolution: {integrity: sha512-QUtNAlN9y5ezDdlGTHsRRnN+ru1xhPTb8P8pQtRuoUUcbnSvgapPTY7Cpe3iDTnd6vbqrXko0OC46L8pPcbCEg==}
-    engines: {node: '>=18'}
-    cpu: [arm64]
-    os: [darwin]
-
   svelte-check-native-darwin-x64@0.2.0:
     resolution: {integrity: sha512-UhB/eCtIUNcfiBKtdOnasNnD215GxrwwmiokF194P8pnPRoP3qIVgUq9Svr4VNKde6riG+7qcjbMqlQqbIx6dg==}
-    engines: {node: '>=18'}
-    cpu: [x64]
-    os: [darwin]
-
-  svelte-check-native-darwin-x64@0.8.5:
-    resolution: {integrity: sha512-h4NNlsofnUGZCSQMpHm3gtvKuXPunPP07T04bpSC1kMnRjSxVgpJyevAFFMJ2C6ATrCUVVs+tkme+NWKzSBzNA==}
     engines: {node: '>=18'}
     cpu: [x64]
     os: [darwin]
@@ -6325,20 +6300,8 @@ packages:
     cpu: [arm64]
     os: [linux]
 
-  svelte-check-native-linux-arm64@0.8.5:
-    resolution: {integrity: sha512-/M2l1+lnZ11UHbN4NoeOt26/OWo6CFvKnm7Ck2ledqRAX6xwkGtCQFJ/ByliXZBWgapSTFDD21CB+cmxOH4THw==}
-    engines: {node: '>=18'}
-    cpu: [arm64]
-    os: [linux]
-
   svelte-check-native-linux-x64@0.2.0:
     resolution: {integrity: sha512-C//C9KGda11QcXYel1mnh+F0RmUCYf6vBt/qXCU17Mog8C7XpYBd5y8d6OF9CYdC77MzyjJU2Y2/dQoNE1UyNw==}
-    engines: {node: '>=18'}
-    cpu: [x64]
-    os: [linux]
-
-  svelte-check-native-linux-x64@0.8.5:
-    resolution: {integrity: sha512-sxyBdtFPNwxCJCWB+j2U+U+wA7Ytzvuf7+0D9bPCgsyPjyqJ3UvHHbpCiV4Poo/O7DgZrf9seAoT0zyhADEwwA==}
     engines: {node: '>=18'}
     cpu: [x64]
     os: [linux]
@@ -6349,21 +6312,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  svelte-check-native-win32-x64@0.8.5:
-    resolution: {integrity: sha512-Z55Af6RCMNzRkNlWIvzQ0juy9v4GFtQfhJsiW8yPFmfi31yarsEPZp1FN0Vj06gzWjOv4o3iqOkOxd4D63prtQ==}
-    engines: {node: '>=18'}
-    cpu: [x64]
-    os: [win32]
-
   svelte-check-native@0.2.0:
     resolution: {integrity: sha512-DMCS3wHFjNdFP8UGvTmsncLDaWt6ApJIIlUNjON29EiV7+MqOuEl6qO+Gg9ZWPesCQZ2vgXKzpoV/2rjrppLCg==}
-    engines: {node: '>=18'}
-    hasBin: true
-    peerDependencies:
-      '@typescript/native-preview': '>=7.0.0-dev.0'
-
-  svelte-check-native@0.8.5:
-    resolution: {integrity: sha512-ePZZxNfikydsgcr91bXIvCpUi6Mkz9uIteJ0qLSCPjtZNx02zSPDVznwE1iaRchRZDhcYqgPMl7Inw1Yd31DSw==}
     engines: {node: '>=18'}
     hasBin: true
     peerDependencies:
@@ -7763,10 +7713,6 @@ snapshots:
 
   '@img/sharp-win32-x64@0.34.5':
     optional: true
-
-  '@internationalized/date@3.11.0':
-    dependencies:
-      '@swc/helpers': 0.5.18
 
   '@internationalized/date@3.12.1':
     dependencies:
@@ -9188,10 +9134,6 @@ snapshots:
       vitefu: 1.1.3(vite@8.0.12(@types/node@24.10.1)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0))
     optional: true
 
-  '@swc/helpers@0.5.18':
-    dependencies:
-      tslib: 2.8.1
-
   '@swc/helpers@0.5.21':
     dependencies:
       tslib: 2.8.1
@@ -10394,19 +10336,6 @@ snapshots:
     transitivePeerDependencies:
       - '@sveltejs/kit'
 
-  bits-ui@2.15.5(@internationalized/date@3.11.0)(@sveltejs/kit@2.59.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.55.5(@typescript-eslint/types@8.59.3))(vite@8.0.12(@types/node@25.7.0)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@5.9.3)(vite@8.0.12(@types/node@25.7.0)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3)):
-    dependencies:
-      '@floating-ui/core': 1.7.4
-      '@floating-ui/dom': 1.7.5
-      '@internationalized/date': 3.11.0
-      esm-env: 1.2.2
-      runed: 0.35.1(@sveltejs/kit@2.59.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.55.5(@typescript-eslint/types@8.59.3))(vite@8.0.12(@types/node@25.7.0)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@5.9.3)(vite@8.0.12(@types/node@25.7.0)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))
-      svelte: 5.55.5(@typescript-eslint/types@8.59.3)
-      svelte-toolbelt: 0.10.6(@sveltejs/kit@2.59.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.55.5(@typescript-eslint/types@8.59.3))(vite@8.0.12(@types/node@25.7.0)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@5.9.3)(vite@8.0.12(@types/node@25.7.0)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))
-      tabbable: 6.4.0
-    transitivePeerDependencies:
-      - '@sveltejs/kit'
-
   bits-ui@2.18.1(@internationalized/date@3.12.1)(@sveltejs/kit@2.59.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.55.5(@typescript-eslint/types@8.59.3))(vite@6.4.1(@types/node@25.7.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@6.0.3)(vite@6.4.1(@types/node@25.7.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3)):
     dependencies:
       '@floating-ui/core': 1.7.5
@@ -10416,6 +10345,19 @@ snapshots:
       runed: 0.35.1(@sveltejs/kit@2.59.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.55.5(@typescript-eslint/types@8.59.3))(vite@6.4.1(@types/node@25.7.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@6.0.3)(vite@6.4.1(@types/node@25.7.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))
       svelte: 5.55.5(@typescript-eslint/types@8.59.3)
       svelte-toolbelt: 0.10.6(@sveltejs/kit@2.59.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.55.5(@typescript-eslint/types@8.59.3))(vite@6.4.1(@types/node@25.7.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@6.0.3)(vite@6.4.1(@types/node@25.7.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))
+      tabbable: 6.4.0
+    transitivePeerDependencies:
+      - '@sveltejs/kit'
+
+  bits-ui@2.18.1(@internationalized/date@3.12.1)(@sveltejs/kit@2.59.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.55.5(@typescript-eslint/types@8.59.3))(vite@8.0.12(@types/node@25.7.0)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@5.9.3)(vite@8.0.12(@types/node@25.7.0)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3)):
+    dependencies:
+      '@floating-ui/core': 1.7.5
+      '@floating-ui/dom': 1.7.6
+      '@internationalized/date': 3.12.1
+      esm-env: 1.2.2
+      runed: 0.35.1(@sveltejs/kit@2.59.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.55.5(@typescript-eslint/types@8.59.3))(vite@8.0.12(@types/node@25.7.0)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@5.9.3)(vite@8.0.12(@types/node@25.7.0)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))
+      svelte: 5.55.5(@typescript-eslint/types@8.59.3)
+      svelte-toolbelt: 0.10.6(@sveltejs/kit@2.59.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.55.5(@typescript-eslint/types@8.59.3))(vite@8.0.12(@types/node@25.7.0)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@5.9.3)(vite@8.0.12(@types/node@25.7.0)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))
       tabbable: 6.4.0
     transitivePeerDependencies:
       - '@sveltejs/kit'
@@ -13217,31 +13159,16 @@ snapshots:
   svelte-check-native-darwin-arm64@0.2.0:
     optional: true
 
-  svelte-check-native-darwin-arm64@0.8.5:
-    optional: true
-
   svelte-check-native-darwin-x64@0.2.0:
-    optional: true
-
-  svelte-check-native-darwin-x64@0.8.5:
     optional: true
 
   svelte-check-native-linux-arm64@0.2.0:
     optional: true
 
-  svelte-check-native-linux-arm64@0.8.5:
-    optional: true
-
   svelte-check-native-linux-x64@0.2.0:
     optional: true
 
-  svelte-check-native-linux-x64@0.8.5:
-    optional: true
-
   svelte-check-native-win32-x64@0.2.0:
-    optional: true
-
-  svelte-check-native-win32-x64@0.8.5:
     optional: true
 
   svelte-check-native@0.2.0(@typescript/native-preview@7.0.0-dev.20260504.1):
@@ -13263,16 +13190,6 @@ snapshots:
       svelte-check-native-linux-arm64: 0.2.0
       svelte-check-native-linux-x64: 0.2.0
       svelte-check-native-win32-x64: 0.2.0
-
-  svelte-check-native@0.8.5(@typescript/native-preview@7.0.0-dev.20260513.1):
-    dependencies:
-      '@typescript/native-preview': 7.0.0-dev.20260513.1
-    optionalDependencies:
-      svelte-check-native-darwin-arm64: 0.8.5
-      svelte-check-native-darwin-x64: 0.8.5
-      svelte-check-native-linux-arm64: 0.8.5
-      svelte-check-native-linux-x64: 0.8.5
-      svelte-check-native-win32-x64: 0.8.5
 
   svelte-check@4.6.0(picomatch@4.0.7)(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@5.9.3):
     dependencies:

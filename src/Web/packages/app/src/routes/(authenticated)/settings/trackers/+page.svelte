@@ -493,12 +493,12 @@
       </Card>
     {/snippet}
 
-    {@const _await = await Promise.all([
+    {void (await Promise.all([
       definitionsQuery,
       activeInstancesQuery,
       historyInstancesQuery,
       presetsQuery,
-    ])}
+    ]))}
 
     <Tabs.Root bind:value={activeTab} class="space-y-6">
       <Tabs.List class="grid w-full grid-cols-4">

@@ -57,7 +57,7 @@
     invert = false,
     onInvertChange = () => {},
     themeStops = undefined,
-  } = $props<{
+  }: {
     selectedMetric: HeatmapMetric;
     units: GlucoseUnits;
     METRIC_OPTIONS: { value: HeatmapMetric; label: string }[];
@@ -81,7 +81,7 @@
     invert?: boolean;
     onInvertChange?: (value: boolean) => void;
     themeStops?: ReadonlyArray<{ mgdl: number; color: string }>;
-  }>();
+  } = $props();
 
   let isPoppedOut = $state(false);
 

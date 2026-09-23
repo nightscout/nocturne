@@ -18,13 +18,13 @@
     "tailwindcss": ">=4.0.0"
   },
   "devDependencies": {
-    "@internationalized/date": "^3.11.0",
+    "@internationalized/date": "^3.12.1",
     "@lucide/svelte": "^0.563.1",
     "@sveltejs/vite-plugin-svelte": "^6.2.4",
     "@tailwindcss/typography": "^0.5.19",
-    "bits-ui": "^2.15.5",
-    "layerchart": "2.2.0",
+    "bits-ui": "^2.18.1",
     "clsx": "^2.1.1",
+    "layerchart": "2.2.0",
     "mode-watcher": "^1.1.0",
     "paneforge": "^1.0.2",
     "svelte": "^5.50.0",

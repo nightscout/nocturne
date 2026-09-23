@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, untrack, type ComponentProps } from "svelte";
+  import { onDestroy, untrack } from "svelte";
   import {
     type DateValue,
     getLocalTimeZone,
@@ -458,10 +458,6 @@
   let firedMarkers = $derived(
     currentTimeMs != null ? markers.filter((m) => m.tMs <= currentTimeMs) : []
   );
-  const overlayMarkers = $derived(
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- bridge to ReplayOverlay's structural Marker prop type
-    firedMarkers as unknown as ComponentProps<typeof ReplayOverlay>["firedMarkers"]
-  );
 
   // Auto-run on mount and on every window-selection change. We track the
   // serialised window inputs so a re-pick of the same value doesn't re-fire,
@@ -628,7 +624,7 @@
                   <ThresholdRules />
                   <GlucoseTrack />
                   <IobCobTrack />
-                  <ReplayOverlay firedMarkers={overlayMarkers} {currentDate} />
+                  <ReplayOverlay {firedMarkers} {currentDate} />
                 {/snippet}
                 {#snippet overlays()}
                   <ChartTooltip tooltipExtras={replayTooltipExtras} />

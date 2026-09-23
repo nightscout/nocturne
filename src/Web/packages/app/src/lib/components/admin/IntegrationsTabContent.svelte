@@ -24,7 +24,11 @@
     resend: "Resend (Email)",
   };
 
-  let { platforms, onSave, onDelete } = $props<{
+  let {
+    platforms,
+    onSave,
+    onDelete,
+  }: {
     platforms: PlatformSettingsSummary[];
     onSave: (
       category: string,
@@ -32,7 +36,7 @@
       fields: Record<string, string>
     ) => Promise<void>;
     onDelete: (category: string) => Promise<void>;
-  }>();
+  } = $props();
 
   type PlatformState = {
     enabled: boolean;

@@ -40,7 +40,6 @@
   }: Props = $props();
 
   let chartHeight = $state(0);
-  let chartWidth = $state(0);
 
   const layout = $derived(
     computeTrackLayout(
@@ -105,7 +104,7 @@
     tooltipContext={{ mode: "quadtree-x" }}
   >
     {#snippet children({ context })}
-      {(chartHeight = context.height, chartWidth = context.width, "")}
+      {(chartHeight = context.height, "")}
 
       <Svg>
         {#if chartHeight > 0}

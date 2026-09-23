@@ -71,11 +71,11 @@
   let testingSaved = $state(false);
   let error = $state<string | null>(null);
 
-  let state = $state<RuleEditorState>(parseRule(null));
+  let editor = $state<RuleEditorState>(parseRule(null));
   let seededId = $state<string | null>(null);
   let savedBody = $state<ReturnType<typeof buildBody> | null>(null);
   const isDirty = $derived(
-    isNew || savedBody === null || JSON.stringify(buildBody(state)) !== JSON.stringify(savedBody)
+    isNew || savedBody === null || JSON.stringify(buildBody(editor)) !== JSON.stringify(savedBody)
   );
 
   // Queries — fire on the server during SSR, results land in cache for hydration.
@@ -107,9 +107,9 @@
   let replayInitialDate = $state<string | undefined>(undefined);
 
   // Smart-snooze controls — driven by the snooze sub-tree on clientConfig.
-  let smartSnoozeOn = $derived(state.clientConfig.snooze.smartSnooze);
+  let smartSnoozeOn = $derived(editor.clientConfig.snooze.smartSnooze);
   let smartSnoozeMinutes = $derived(
-    state.clientConfig.snooze.smartSnoozeExtendMinutes
+    editor.clientConfig.snooze.smartSnoozeExtendMinutes
   );
 
   // Seed the editor state from the loaded rule once per ruleId. Rebuilds when
@@ -118,7 +118,7 @@
     if (seededId === ruleId) return;
     if (isNew) {
       untrack(() => {
-        state = parseRule(null);
+        editor = parseRule(null);
         savedBody = null;
         seededId = ruleId;
       });
@@ -127,8 +127,8 @@
     const rule = ruleQuery?.current;
     if (rule === undefined) return;
     untrack(() => {
-      state = parseRule(rule ?? null);
-      savedBody = buildBody(state);
+      editor = parseRule(rule ?? null);
+      savedBody = buildBody(editor);
       seededId = ruleId;
     });
   });
@@ -136,7 +136,7 @@
   // ---- Save ------------------------------------------------------------
 
   async function save(): Promise<void> {
-    const channelError = validateChannels(state.channels);
+    const channelError = validateChannels(editor.channels);
     if (channelError) {
       error = channelError;
       return;
@@ -144,13 +144,13 @@
     saving = true;
     error = null;
     try {
-      const body = buildBody(state);
+      const body = buildBody(editor);
       if (isNew) {
         const created = await createRule(body as never);
         await goto(`/alerts/${created?.id ?? ""}`);
       } else {
         await updateRule({ id: ruleId, request: body as never });
-        savedBody = buildBody(state);
+        savedBody = buildBody(editor);
       }
     } catch (e) {
       error = describeSubmitError(e, "Failed to save the alert rule. Please try again.");
@@ -161,7 +161,7 @@
 
   async function destroy(): Promise<void> {
     if (isNew) return;
-    if (!confirm(`Delete "${state.name}"? This cannot be undone.`)) return;
+    if (!confirm(`Delete "${editor.name}"? This cannot be undone.`)) return;
     deleting = true;
     error = null;
     try {
@@ -234,28 +234,28 @@
    * time Run is pressed so unsaved edits between presses are picked up.
    */
   function buildReplayRule() {
-    const flat = flattenSingleChildRoot(state.condition!);
+    const flat = flattenSingleChildRoot(editor.condition!);
     const api = nodeToApi(flat);
     const params = api?.conditionParams;
-    const autoResolve = state.autoResolveCondition
-      ? stripEditorFields(flattenSingleChildRoot(state.autoResolveCondition))
+    const autoResolve = editor.autoResolveCondition
+      ? stripEditorFields(flattenSingleChildRoot(editor.autoResolveCondition))
       : undefined;
     return {
       id: isNew ? undefined : ruleId,
-      name: state.name,
+      name: editor.name,
       conditionType: api?.conditionType as AlertConditionType,
       conditionParams: params == null ? undefined : JSON.stringify(params),
-      severity: state.severity,
-      allowThroughDnd: state.allowThroughDnd,
-      autoResolveEnabled: state.autoResolveEnabled,
+      severity: editor.severity,
+      allowThroughDnd: editor.allowThroughDnd,
+      autoResolveEnabled: editor.autoResolveEnabled,
       autoResolveParams: autoResolve ? JSON.stringify(autoResolve) : undefined,
     };
   }
 
   function toggleSmartSnooze(checked: boolean): void {
-    state.clientConfig.snooze.smartSnooze = checked;
-    if (checked && state.clientConfig.snooze.conditions.length === 0) {
-      state.clientConfig.snooze.conditions = [
+    editor.clientConfig.snooze.smartSnooze = checked;
+    if (checked && editor.clientConfig.snooze.conditions.length === 0) {
+      editor.clientConfig.snooze.conditions = [
         ensureCompositeRoot(defaultPayload("trend")),
       ];
     }
@@ -263,7 +263,7 @@
 </script>
 
 <svelte:head>
-  <title>{isNew ? "New alert" : state.name || "Alert"} · Nocturne</title>
+  <title>{isNew ? "New alert" : editor.name || "Alert"} · Nocturne</title>
 </svelte:head>
 
 <div class="@container container mx-auto p-3 @md:p-6 max-w-7xl max-md:pb-24">
@@ -281,7 +281,7 @@
       </Button>
       <div class="min-w-0">
         <h1 class="text-2xl font-bold truncate">
-          {isNew ? "New alert" : state.name || "Alert"}
+          {isNew ? "New alert" : editor.name || "Alert"}
         </h1>
         <p class="text-sm text-muted-foreground">
           {isNew ? "Define a new alert rule" : "Edit alert rule"}
@@ -353,9 +353,9 @@
               </Label>
               <Switch
                 id="rule-enabled"
-                checked={state.isEnabled}
+                checked={editor.isEnabled}
                 onCheckedChange={(c: boolean) => {
-                  state.isEnabled = c;
+                  editor.isEnabled = c;
                 }}
               />
             </div>
@@ -367,9 +367,9 @@
                 id="rule-name"
                 type="text"
                 placeholder="Approaching low"
-                value={state.name}
+                value={editor.name}
                 oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
-                  state.name = e.currentTarget.value;
+                  editor.name = e.currentTarget.value;
                 }}
               />
             </div>
@@ -379,9 +379,9 @@
                 id="rule-desc"
                 rows={2}
                 placeholder="Why this alert exists, what it should trigger"
-                value={state.description}
+                value={editor.description}
                 oninput={(e: Event & { currentTarget: HTMLTextAreaElement }) => {
-                  state.description = e.currentTarget.value;
+                  editor.description = e.currentTarget.value;
                 }}
               />
             </div>
@@ -389,12 +389,12 @@
               <Label>Severity</Label>
               <Select.Root
                 type="single"
-                value={state.severity}
+                value={editor.severity}
                 onValueChange={(v) => {
-                  state.severity = v as AlertRuleSeverity;
+                  editor.severity = v as AlertRuleSeverity;
                 }}
               >
-                <Select.Trigger>{severityLabel(state.severity)}</Select.Trigger>
+                <Select.Trigger>{severityLabel(editor.severity)}</Select.Trigger>
                 <Select.Content>
                   {#each severityOptions as o (o.value)}
                     <Select.Item value={o.value} label={o.label} />
@@ -405,9 +405,9 @@
             <div class="flex items-start gap-2 rounded border bg-muted/30 p-3">
               <Checkbox
                 id="rule-allow-dnd"
-                checked={state.allowThroughDnd}
+                checked={editor.allowThroughDnd}
                 onCheckedChange={(c: boolean) => {
-                  state.allowThroughDnd = c === true;
+                  editor.allowThroughDnd = c === true;
                 }}
               />
               <div class="space-y-0.5">
@@ -433,8 +433,8 @@
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {#if state.condition}
-              <RuleBuilder bind:node={state.condition} {availableRules} />
+            {#if editor.condition}
+              <RuleBuilder bind:node={editor.condition} {availableRules} />
             {/if}
           </CardContent>
         </Card>
@@ -449,8 +449,8 @@
           </CardHeader>
           <CardContent>
             <ChannelsSection
-              bind:channels={state.channels}
-              severity={state.severity}
+              bind:channels={editor.channels}
+              severity={editor.severity}
             />
           </CardContent>
         </Card>
@@ -462,9 +462,9 @@
           </CardHeader>
           <CardContent>
             <AutoResolveSection
-              bind:enabled={state.autoResolveEnabled}
-              bind:condition={state.autoResolveCondition}
-              firingCondition={state.condition}
+              bind:enabled={editor.autoResolveEnabled}
+              bind:condition={editor.autoResolveCondition}
+              firingCondition={editor.condition}
               {availableRules}
             />
           </CardContent>
@@ -502,15 +502,15 @@
                   oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
                     const n = Number(e.currentTarget.value);
                     if (Number.isFinite(n))
-                      state.clientConfig.snooze.smartSnoozeExtendMinutes = n;
+                      editor.clientConfig.snooze.smartSnoozeExtendMinutes = n;
                   }}
                 />
               </div>
               <div class="space-y-2">
                 <Label>Extend while</Label>
-                {#each state.clientConfig.snooze.conditions as _c, i (i)}
+                {#each editor.clientConfig.snooze.conditions as _c, i (i)}
                   <RuleBuilder
-                    bind:node={state.clientConfig.snooze.conditions[i]}
+                    bind:node={editor.clientConfig.snooze.conditions[i]}
                     {availableRules}
                   />
                 {/each}
@@ -656,7 +656,7 @@
         initialCustomDate={replayInitialDate}
         rule={buildReplayRule}
         editingRuleId={isNew ? undefined : ruleId}
-        editingTree={state.condition ?? undefined}
+        editingTree={editor.condition ?? undefined}
         availableRules={rulesQuery.current ?? []}
       />
     </div>
