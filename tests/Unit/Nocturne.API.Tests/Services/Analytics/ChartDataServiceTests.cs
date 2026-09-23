@@ -1384,7 +1384,8 @@ public class ChartDataServiceTests
         #region FillFromBasalOrigin
 
         [Theory]
-        [InlineData(BasalDeliveryOrigin.Algorithm, ChartColor.InsulinBasal)]
+        [InlineData(BasalDeliveryOrigin.Scheduled, ChartColor.InsulinBasal)]
+        [InlineData(BasalDeliveryOrigin.Algorithm, ChartColor.InsulinTempBasal)]
         [InlineData(BasalDeliveryOrigin.Manual, ChartColor.InsulinTempBasal)]
         [InlineData(BasalDeliveryOrigin.Suspended, ChartColor.PumpModeSuspended)]
         [InlineData(BasalDeliveryOrigin.Inferred, ChartColor.InsulinBasal)]

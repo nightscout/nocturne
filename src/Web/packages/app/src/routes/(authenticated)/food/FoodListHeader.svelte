@@ -24,7 +24,7 @@
 	</Button>
 
 	<Button variant="subtle" size="inline-xs" onclick={() => onsort('carbs')}>
-		<span class="contents {sort === 'carbs' ? 'text-(--carbs-strong)' : ''}">
+		<span class="contents {sort === 'carbs' ? 'text-entry-carbs' : ''}">
 			Carbs
 			{#if sort === 'carbs'}
 				<ChevronDown class="h-2.5 w-2.5" />

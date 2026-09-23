@@ -81,7 +81,7 @@
                     {
                       key: "basal",
                       value: (d: HourlyInsulinDeliveryPoint) => d.basal ?? 0,
-                      color: "var(--insulin-scheduled-basal)",
+                      color: "var(--basal)",
                       label: "Basal",
                       props: { class: categoryPatternClass(1) },
                     },
@@ -99,7 +99,7 @@
               {
                 key: "basal",
                 value: (d: HourlyInsulinDeliveryPoint) => d.basal ?? 0,
-                color: "var(--chart-1)",
+                color: "var(--basal)",
                 label: "Basal Insulin",
               },
             ]}

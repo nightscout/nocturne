@@ -37,7 +37,7 @@
   <title>Food Editor - Nocturne</title>
 </svelte:head>
 
-<div class="food-editor @container flex-1 overflow-auto p-5">
+<div class="@container flex-1 overflow-auto p-5">
   <!-- Header -->
   <div class="mb-5 flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between">
     <div>
@@ -151,7 +151,7 @@
       <div class="py-16 text-center text-muted-foreground">Loading food database...</div>
     {:else if state.foods.length === 0}
       <div class="flex flex-col items-center justify-center gap-3 px-6 py-16 text-center text-muted-foreground">
-        <div class="grid h-14 w-14 place-items-center rounded-2xl bg-carbs/12 text-(--carbs-strong)">
+        <div class="grid h-14 w-14 place-items-center rounded-2xl bg-carbs/12 text-entry-carbs">
           <Apple class="h-7 w-7" />
         </div>
         <div class="text-lg font-semibold text-foreground">Build your food database</div>
@@ -180,9 +180,3 @@
     {/if}
   </div>
 </div>
-
-<style>
-  .food-editor {
-    --carbs-strong: color-mix(in oklch, var(--carbs), white 15%);
-  }
-</style>

@@ -10,7 +10,7 @@ import ts from "typescript-eslint";
 // no-raw-colors reads `none` as an undeclared colour; fill-none and stroke-none paint nothing.
 export const RAW_COLOR_ALLOW = ["fill-none", "stroke-none"];
 const RAW_COLOR_HINT =
-  "\"{{className}}\" is a raw colour. Use the token for what it means: glucose-* for a glucose range; insulin, carbs, iob-*, pred-* for a chart series; entry-* for a record kind's label or icon (entry-bolus, entry-carbs...); report-* for a report category's accent; status-* for a clinical state; success, warning, info, destructive for a UI outcome; demo for demo data; favorite for a pinned or favourite star. Otherwise a surface token (card, muted, foreground, border). All are declared in {{file}}.";
+  "\"{{className}}\" is a raw colour. Use the token for what it means: glucose-* for a glucose range; insulin, basal, carbs, iob-*, pred-* for a chart fill; entry-* for text or an icon in a record kind's colour; report-* for a report category's accent; status-* for a clinical state; success, warning, info, destructive for a UI outcome; demo for demo data; favorite for a pinned or favourite star. Otherwise a surface token (card, muted, foreground, border). All are declared in {{file}}.";
 
 // Recommended warnings @nocturne/app has cleared; as errors they stay at none.
 const SECURITY_ERRORS = [

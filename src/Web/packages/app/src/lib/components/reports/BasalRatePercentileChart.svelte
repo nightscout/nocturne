@@ -45,9 +45,9 @@
       "Median basal rate",
     ])
     .range([
-      "var(--chart-1)",
-      "var(--chart-2)",
-      "var(--primary)",
+      "color-mix(in oklab, var(--basal) 45%, var(--background))",
+      "var(--basal)",
+      "var(--entry-basal)",
     ]);
 </script>
 
@@ -74,7 +74,7 @@
               (d: HourlyBasalPercentileData) => d.p25,
               (d: HourlyBasalPercentileData) => d.p10,
             ],
-            color: "var(--chart-1)",
+            color: "color-mix(in oklab, var(--basal) 45%, var(--background))",
             label: "P10-P25",
           },
           {
@@ -83,7 +83,7 @@
               (d: HourlyBasalPercentileData) => d.median,
               (d: HourlyBasalPercentileData) => d.p25,
             ],
-            color: "var(--chart-2)",
+            color: "var(--basal)",
             label: "P25-Median",
           },
           {
@@ -92,7 +92,7 @@
               (d: HourlyBasalPercentileData) => d.median,
               (d: HourlyBasalPercentileData) => d.median,
             ],
-            color: "var(--primary)",
+            color: "var(--entry-basal)",
             props: {
               line: { strokeWidth: 2 },
             },
@@ -104,7 +104,7 @@
               (d: HourlyBasalPercentileData) => d.median,
               (d: HourlyBasalPercentileData) => d.p75,
             ],
-            color: "var(--chart-3)",
+            color: "var(--basal)",
             label: "Median-P75",
           },
           {
@@ -113,7 +113,7 @@
               (d: HourlyBasalPercentileData) => d.p75,
               (d: HourlyBasalPercentileData) => d.p90,
             ],
-            color: "var(--chart-1)",
+            color: "color-mix(in oklab, var(--basal) 45%, var(--background))",
             label: "P75-P90",
           },
         ]}

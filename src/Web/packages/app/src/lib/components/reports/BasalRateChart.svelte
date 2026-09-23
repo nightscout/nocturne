@@ -58,7 +58,7 @@
           <Area
             y0={0}
             curve={curveStepAfter}
-            class="fill-insulin-scheduled-basal/30 stroke-insulin-scheduled-basal stroke-1"
+            class="fill-basal/30 stroke-basal stroke-1"
           />
 
           <text

@@ -135,7 +135,7 @@
           x={labelX}
           y={labelY}
           dy="-0.355em"
-          class="text-4xs fill-insulin-basal font-medium"
+          class="text-4xs fill-entry-basal font-medium"
         >
           {span.rate.toFixed(2)}U/h
         </text>
@@ -144,7 +144,7 @@
           x={labelX}
           y={labelY}
           dy="-0.355em"
-          class="text-4xs fill-insulin-basal font-medium"
+          class="text-4xs fill-entry-basal font-medium"
         >
           {span.percent}%
         </text>

@@ -144,7 +144,7 @@
           </div>
           <div class="flex h-4 rounded-full overflow-hidden">
             <div
-              class="w-(--share) bg-insulin-scheduled-basal transition-all"
+              class="w-(--share) bg-basal transition-all"
               style:--share="{basalPct}%"
             ></div>
             <div

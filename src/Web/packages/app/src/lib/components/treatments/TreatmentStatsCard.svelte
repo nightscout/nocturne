@@ -72,7 +72,7 @@
         <div>
           <p class="text-sm font-medium text-muted-foreground">Insulin</p>
           <p
-            class="text-2xl font-bold tabular-nums text-insulin-bolus"
+            class="text-2xl font-bold tabular-nums text-entry-bolus"
           >
             {totalInsulin.toFixed(1)}U
           </p>
@@ -101,7 +101,7 @@
       <div class="flex items-center justify-between">
         <div>
           <p class="text-sm font-medium text-muted-foreground">Carbs</p>
-          <p class="text-2xl font-bold tabular-nums text-carbs">
+          <p class="text-2xl font-bold tabular-nums text-entry-carbs">
             {totalCarbs.toFixed(0)}g
           </p>
         </div>

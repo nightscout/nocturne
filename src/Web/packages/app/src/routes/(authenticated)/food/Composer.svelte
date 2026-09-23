@@ -120,7 +120,7 @@
 	<!-- Header -->
 	<div class="mb-3 flex items-center gap-3">
 		<div class="flex items-center justify-center rounded-md size-6.5 bg-carbs/12">
-			<Plus size={14} class="text-carbs" />
+			<Plus size={14} class="text-entry-carbs" />
 		</div>
 		<span class="font-semibold text-sm">Add food</span>
 		<span class="text-muted-foreground text-xs">
@@ -147,7 +147,7 @@
 
 		<!-- Carbs -->
 		<div class="flex flex-col gap-1">
-			<label for="composer-carbs" class="font-medium uppercase text-2xs text-carbs">Carbs</label>
+			<label for="composer-carbs" class="font-medium uppercase text-2xs text-entry-carbs">Carbs</label>
 			<InputGroup.Root>
 				<InputGroup.Input
 					id="composer-carbs"

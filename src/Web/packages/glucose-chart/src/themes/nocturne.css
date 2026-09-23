@@ -20,13 +20,17 @@
   /* Insulin Types */
   --insulin: rgb(30, 150, 252);
   --insulin-bolus: rgba(30, 150, 252, 1);
-  --insulin-basal: rgba(100, 180, 255, 0.3);
-  --insulin-temp-basal: rgba(140, 200, 255, 0.4);
   --insulin-manual-temp-basal: rgba(30, 150, 252, 0.8);
-  --insulin-scheduled-basal: rgb(100, 180, 255); /* Opaque --insulin-basal for chart fills */
-  --insulin-additional-basal: rgb(140, 200, 255); /* Opaque --insulin-temp-basal for chart fills */
 
-  /* Carbohydrates */
+  /* Basal, mirroring @nocturne/ui's nocturne-theme.css: one hue, scheduled the pale
+     step and temp the full colour (outlined in --insulin-bolus by the chart). */
+  --basal: oklch(0.75 0.134 248.6);
+  --insulin-basal: oklch(0.75 0.134 248.6 / 0.3);
+  --insulin-temp-basal: oklch(0.75 0.134 248.6 / 0.85);
+  --insulin-scheduled-basal: oklch(0.87 0.055 248.6);
+  --insulin-additional-basal: var(--basal);
+
+  /* Carbohydrates. Fills; --entry-carbs is the text grade. */
   --carbs: oklch(0.769 0.188 70.08);
   --carbs-on-board: oklch(62.447% 0.13042 69.605);
 
@@ -80,18 +84,21 @@
   --heart-rate: oklch(0.6 0.2 25);
   --steps: oklch(0.6 0.15 300);
 
-  /* Record categories - an entry's label and badge in the inspection dialogs */
+  /* Record categories - an entry's label and badge in the inspection dialogs, and any
+     chart label in a series' colour: the text grade of --insulin, --basal and --carbs. */
   --entry-bolus: oklch(0.546 0.245 262.881);
-  --entry-carbs: oklch(0.627 0.194 149.214);
+  --entry-basal: oklch(0.48 0.13 248.6);
+  --entry-carbs: oklch(0.49 0.105 70.08);
   --entry-bg-check: oklch(0.577 0.245 27.325);
   --entry-device-event: oklch(0.646 0.222 41.116);
 }
 
 .dark {
   /* Insulin Types - Dark Mode - need higher opacity for visibility */
-  --insulin-basal: rgba(100, 180, 255, 0.35);
-  --insulin-temp-basal: rgba(140, 200, 255, 0.5);
+  --insulin-basal: oklch(0.75 0.134 248.6 / 0.35);
+  --insulin-temp-basal: oklch(0.75 0.134 248.6 / 0.9);
   --insulin-manual-temp-basal: rgba(30, 150, 252, 0.9);
+  --insulin-scheduled-basal: oklch(0.52 0.07 248.6);
 
   /* IOB - Dark Mode - more saturated for contrast */
   --iob-basal: rgba(60, 160, 255, 0.8);
@@ -104,7 +111,8 @@
 
   /* Record categories - Dark Mode - lighter for contrast on dark backgrounds */
   --entry-bolus: oklch(0.707 0.165 254.624);
-  --entry-carbs: oklch(0.792 0.209 151.711);
+  --entry-basal: oklch(0.8 0.1 248.6);
+  --entry-carbs: oklch(0.769 0.188 70.08);
   --entry-bg-check: oklch(0.704 0.191 22.216);
   --entry-device-event: oklch(0.75 0.183 55.934);
 }
@@ -128,6 +136,7 @@
   --color-pred-main: var(--pred-main);
 
   /* Insulin Types */
+  --color-basal: var(--basal);
   --color-insulin: var(--insulin);
   --color-insulin-bolus: var(--insulin-bolus);
   --color-insulin-basal: var(--insulin-basal);
@@ -172,6 +181,7 @@
 
   /* Record categories */
   --color-entry-bolus: var(--entry-bolus);
+  --color-entry-basal: var(--entry-basal);
   --color-entry-carbs: var(--entry-carbs);
   --color-entry-bg-check: var(--entry-bg-check);
   --color-entry-device-event: var(--entry-device-event);
