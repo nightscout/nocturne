@@ -37,6 +37,9 @@
   --warning-foreground: oklch(0.21 0.034 264.665);
   --info: oklch(0.546 0.245 262.881);
   --info-foreground: oklch(0.985 0.002 247.839);
+  /* Share of the tone in the *-subtle tints. Dark needs more: the tinted background
+     cancels a warm tone's chroma. */
+  --subtle-tint: 12%;
   --border: oklch(0.928 0.006 264.531);
   --input: oklch(0.928 0.006 264.531);
   --ring: oklch(0.707 0.022 261.325);
@@ -81,6 +84,7 @@
   --warning-foreground: oklch(0.21 0.034 264.665);
   --info: oklch(0.707 0.165 254.624);
   --info-foreground: oklch(0.21 0.034 264.665);
+  --subtle-tint: 20%;
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.551 0.027 264.364);
@@ -132,11 +136,12 @@
   --color-info: var(--info);
   --color-info-foreground: var(--info-foreground);
   /* Opaque tints for surfaces that content scrolls beneath, where bg-warning/10 would
-     show it through. Mixed per element, so they follow a .dark set below the root. */
-  --color-warning-subtle: color-mix(in oklch, var(--warning) 12%, var(--background));
-  --color-warning-subtle-foreground: color-mix(in oklch, var(--warning) 45%, var(--foreground));
-  --color-info-subtle: color-mix(in oklch, var(--info) 12%, var(--background));
-  --color-info-subtle-foreground: color-mix(in oklch, var(--info) 45%, var(--foreground));
+     show it through. Mixed per element, so they follow a .dark set below the root. In
+     oklab: oklch would interpolate hue towards the neutral's nominal hue and turn pink. */
+  --color-warning-subtle: color-mix(in oklab, var(--warning) var(--subtle-tint), var(--background));
+  --color-warning-subtle-foreground: color-mix(in oklab, var(--warning) 45%, var(--foreground));
+  --color-info-subtle: color-mix(in oklab, var(--info) var(--subtle-tint), var(--background));
+  --color-info-subtle-foreground: color-mix(in oklab, var(--info) 45%, var(--foreground));
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
