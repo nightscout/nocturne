@@ -54,7 +54,7 @@ public class ClientDeviceServiceTests
                 DeviceCapabilities.Torch, // Prelude-only -> dropped
                 "bogus",                  // unknown -> dropped
             ],
-        }, FullDeviceScopes);
+        }, FullDeviceScopes, null);
 
         dto.Kind.Should().Be(DeviceKinds.Companion);
         dto.Label.Should().Be("Desk PC");
@@ -69,12 +69,42 @@ public class ClientDeviceServiceTests
         var subject = Guid.NewGuid();
         var svc = CreateService(ctx);
 
-        var first = await svc.RegisterAsync(subject, Req("install-x", DeviceKinds.Prelude, "Old"), FullDeviceScopes);
-        var second = await svc.RegisterAsync(subject, Req("install-x", DeviceKinds.Prelude, "New label"), FullDeviceScopes);
+        var first = await svc.RegisterAsync(subject, Req("install-x", DeviceKinds.Prelude, "Old"), FullDeviceScopes, null);
+        var second = await svc.RegisterAsync(subject, Req("install-x", DeviceKinds.Prelude, "New label"), FullDeviceScopes, null);
 
         ctx.ClientDevices.Should().HaveCount(1);
         second.Id.Should().Be(first.Id);
         second.Label.Should().Be("New label");
+    }
+
+    [Fact]
+    public async Task RegisterAsync_stores_the_grant_it_registered_under()
+    {
+        using var ctx = CreateContext();
+        var subject = Guid.NewGuid();
+        var grantId = Guid.NewGuid();
+        var svc = CreateService(ctx);
+
+        await svc.RegisterAsync(subject, Req("c1", DeviceKinds.Companion), FullDeviceScopes, grantId);
+
+        ctx.ClientDevices.Should().ContainSingle().Which.GrantId.Should().Be(grantId);
+    }
+
+    [Fact]
+    public async Task RegisterAsync_moves_the_device_to_the_grant_it_is_re_paired_under()
+    {
+        using var ctx = CreateContext();
+        var subject = Guid.NewGuid();
+        var firstGrant = Guid.NewGuid();
+        var secondGrant = Guid.NewGuid();
+        var svc = CreateService(ctx);
+
+        var first = await svc.RegisterAsync(subject, Req("c1", DeviceKinds.Companion), FullDeviceScopes, firstGrant);
+        await svc.RegisterAsync(subject, Req("c1", DeviceKinds.Companion), FullDeviceScopes, secondGrant);
+
+        var device = ctx.ClientDevices.Should().ContainSingle().Subject;
+        device.GrantId.Should().Be(secondGrant);
+        device.Id.Should().Be(first.Id);
     }
 
     [Fact]
@@ -89,7 +119,7 @@ public class ClientDeviceServiceTests
             InstallId = "p1",
             Kind = DeviceKinds.Prelude,
             Capabilities = [DeviceCapabilities.Notify, DeviceCapabilities.Torch, DeviceCapabilities.Vibrate],
-        }, notifyOnly);
+        }, notifyOnly, null);
 
         dto.Capabilities.Should().Equal(DeviceCapabilities.Notify);
     }
@@ -100,7 +130,7 @@ public class ClientDeviceServiceTests
         using var ctx = CreateContext();
         var svc = CreateService(ctx);
 
-        var act = () => svc.RegisterAsync(Guid.NewGuid(), Req("i", "smartfridge"), FullDeviceScopes);
+        var act = () => svc.RegisterAsync(Guid.NewGuid(), Req("i", "smartfridge"), FullDeviceScopes, null);
 
         await act.Should().ThrowAsync<ArgumentException>();
     }
@@ -111,7 +141,7 @@ public class ClientDeviceServiceTests
         using var ctx = CreateContext();
         var svc = CreateService(ctx);
 
-        var act = () => svc.RegisterAsync(Guid.NewGuid(), Req("   ", DeviceKinds.Prelude), FullDeviceScopes);
+        var act = () => svc.RegisterAsync(Guid.NewGuid(), Req("   ", DeviceKinds.Prelude), FullDeviceScopes, null);
 
         await act.Should().ThrowAsync<ArgumentException>();
     }
@@ -124,8 +154,8 @@ public class ClientDeviceServiceTests
         var other = Guid.NewGuid();
         var svc = CreateService(ctx);
 
-        await svc.RegisterAsync(me, Req("a", DeviceKinds.Prelude), FullDeviceScopes);
-        await svc.RegisterAsync(other, Req("b", DeviceKinds.Companion), FullDeviceScopes);
+        await svc.RegisterAsync(me, Req("a", DeviceKinds.Prelude), FullDeviceScopes, null);
+        await svc.RegisterAsync(other, Req("b", DeviceKinds.Companion), FullDeviceScopes, null);
 
         var mine = await svc.GetForSubjectAsync(me);
 
@@ -140,9 +170,9 @@ public class ClientDeviceServiceTests
         var attacker = Guid.NewGuid();
         var svc = CreateService(ctx);
 
-        await svc.RegisterAsync(owner, Req("shared-install", DeviceKinds.Prelude, "Owner"), FullDeviceScopes);
+        await svc.RegisterAsync(owner, Req("shared-install", DeviceKinds.Prelude, "Owner"), FullDeviceScopes, null);
 
-        var act = () => svc.RegisterAsync(attacker, Req("shared-install", DeviceKinds.Prelude, "Hijack"), FullDeviceScopes);
+        var act = () => svc.RegisterAsync(attacker, Req("shared-install", DeviceKinds.Prelude, "Hijack"), FullDeviceScopes, null);
 
         await act.Should().ThrowAsync<InvalidOperationException>();
         ctx.ClientDevices.Should().ContainSingle().Which.SubjectId.Should().Be(owner);
@@ -157,10 +187,10 @@ public class ClientDeviceServiceTests
         var svc = CreateService(ctx);
 
         ctx.TenantId = tenantA;
-        await svc.RegisterAsync(Guid.NewGuid(), Req("shared", DeviceKinds.Prelude), FullDeviceScopes);
+        await svc.RegisterAsync(Guid.NewGuid(), Req("shared", DeviceKinds.Prelude), FullDeviceScopes, null);
 
         ctx.TenantId = tenantB;
-        await svc.RegisterAsync(Guid.NewGuid(), Req("shared", DeviceKinds.Prelude), FullDeviceScopes);
+        await svc.RegisterAsync(Guid.NewGuid(), Req("shared", DeviceKinds.Prelude), FullDeviceScopes, null);
 
         var all = ctx.ClientDevices.IgnoreQueryFilters().ToList();
         all.Should().HaveCount(2);
@@ -211,7 +241,7 @@ public class ClientDeviceServiceTests
             InstallId = "c1",
             Kind = DeviceKinds.Companion,
             Capabilities = [DeviceCapabilities.Notify, DeviceCapabilities.TrayFlash],
-        }, FullDeviceScopes);
+        }, FullDeviceScopes, null);
         SeedDeviceActionExcursion(ctx, DeviceKinds.Companion, "{\"capabilities\":[\"notify\",\"tray_flash\",\"torch\"]}");
         await ctx.SaveChangesAsync();
 
@@ -235,7 +265,7 @@ public class ClientDeviceServiceTests
             InstallId = "p1",
             Kind = DeviceKinds.Prelude,
             Capabilities = [DeviceCapabilities.Notify],
-        }, FullDeviceScopes);
+        }, FullDeviceScopes, null);
         SeedDeviceActionExcursion(ctx, DeviceKinds.Prelude, "{\"capabilities\":[\"notify\"]}");
         await ctx.SaveChangesAsync();
 
@@ -254,7 +284,7 @@ public class ClientDeviceServiceTests
             InstallId = "c1",
             Kind = DeviceKinds.Companion,
             Capabilities = [DeviceCapabilities.Notify],
-        }, FullDeviceScopes);
+        }, FullDeviceScopes, null);
         SeedDeviceActionExcursion(ctx, DeviceKinds.Companion, "{\"capabilities\":[\"notify\"]}");
         await ctx.SaveChangesAsync();
 
@@ -274,7 +304,7 @@ public class ClientDeviceServiceTests
             InstallId = "c1",
             Kind = DeviceKinds.Companion,
             Capabilities = [DeviceCapabilities.Notify],
-        }, FullDeviceScopes);
+        }, FullDeviceScopes, null);
         SeedDeviceActionExcursion(ctx, DeviceKinds.Companion, "{\"capabilities\":[\"notify\"]}", open: false);
         await ctx.SaveChangesAsync();
 
@@ -297,7 +327,7 @@ public class ClientDeviceServiceTests
             InstallId = "c1",
             Kind = DeviceKinds.Companion,
             Capabilities = [DeviceCapabilities.Notify],
-        }, FullDeviceScopes);
+        }, FullDeviceScopes, null);
         SeedDeviceActionExcursion(ctx, DeviceKinds.Companion, "{\"capabilities\":[\"notify\"]}",
             endedAt: DateTime.UtcNow.AddSeconds(90));
         await ctx.SaveChangesAsync();
@@ -319,7 +349,7 @@ public class ClientDeviceServiceTests
             InstallId = "c1",
             Kind = DeviceKinds.Companion,
             Capabilities = [DeviceCapabilities.Notify],
-        }, FullDeviceScopes);
+        }, FullDeviceScopes, null);
         SeedDeviceActionExcursion(ctx, DeviceKinds.Companion, "{\"capabilities\":[\"notify\"]}",
             endedAt: DateTime.UtcNow.AddSeconds(-1));
         await ctx.SaveChangesAsync();
@@ -340,7 +370,7 @@ public class ClientDeviceServiceTests
             InstallId = "c1",
             Kind = DeviceKinds.Companion,
             Capabilities = [DeviceCapabilities.Notify],
-        }, FullDeviceScopes);
+        }, FullDeviceScopes, null);
         SeedDeviceActionExcursion(ctx, DeviceKinds.Companion, "{\"capabilities\":[\"notify\"]}", acknowledged: true);
         await ctx.SaveChangesAsync();
 
@@ -362,7 +392,7 @@ public class ClientDeviceServiceTests
             InstallId = "c1",
             Kind = DeviceKinds.Companion,
             Capabilities = [DeviceCapabilities.Notify],
-        }, FullDeviceScopes);
+        }, FullDeviceScopes, null);
         SeedDeviceActionExcursion(ctx, DeviceKinds.Companion, "not valid json");
         await ctx.SaveChangesAsync();
 
@@ -387,7 +417,7 @@ public class ClientDeviceServiceTests
             InstallId = "c1",
             Kind = DeviceKinds.Companion,
             Capabilities = [DeviceCapabilities.Notify],
-        }, FullDeviceScopes);
+        }, FullDeviceScopes, null);
 
         // Seed an open excursion under a DIFFERENT tenant.
         ctx.TenantId = tenantB;
@@ -407,7 +437,7 @@ public class ClientDeviceServiceTests
         using var ctx = CreateContext();
         var subject = Guid.NewGuid();
         var svc = CreateService(ctx);
-        var device = await svc.RegisterAsync(subject, Req("c1", DeviceKinds.Companion, "Old"), FullDeviceScopes);
+        var device = await svc.RegisterAsync(subject, Req("c1", DeviceKinds.Companion, "Old"), FullDeviceScopes, null);
 
         var updated = await svc.RenameAsync(device.Id, subject, "New");
 
@@ -420,7 +450,7 @@ public class ClientDeviceServiceTests
     {
         using var ctx = CreateContext();
         var svc = CreateService(ctx);
-        var device = await svc.RegisterAsync(Guid.NewGuid(), Req("c1", DeviceKinds.Companion), FullDeviceScopes);
+        var device = await svc.RegisterAsync(Guid.NewGuid(), Req("c1", DeviceKinds.Companion), FullDeviceScopes, null);
 
         var updated = await svc.RenameAsync(device.Id, Guid.NewGuid(), "Hijack");
 
@@ -433,7 +463,7 @@ public class ClientDeviceServiceTests
         using var ctx = CreateContext();
         var subject = Guid.NewGuid();
         var svc = CreateService(ctx);
-        var device = await svc.RegisterAsync(subject, Req("c1", DeviceKinds.Companion), FullDeviceScopes);
+        var device = await svc.RegisterAsync(subject, Req("c1", DeviceKinds.Companion), FullDeviceScopes, null);
 
         var removed = await svc.DeleteAsync(device.Id, subject);
 
@@ -446,7 +476,7 @@ public class ClientDeviceServiceTests
     {
         using var ctx = CreateContext();
         var svc = CreateService(ctx);
-        var device = await svc.RegisterAsync(Guid.NewGuid(), Req("c1", DeviceKinds.Companion), FullDeviceScopes);
+        var device = await svc.RegisterAsync(Guid.NewGuid(), Req("c1", DeviceKinds.Companion), FullDeviceScopes, null);
 
         var removed = await svc.DeleteAsync(device.Id, Guid.NewGuid());
 

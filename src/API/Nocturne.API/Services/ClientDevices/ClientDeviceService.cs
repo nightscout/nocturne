@@ -29,6 +29,7 @@ public class ClientDeviceService : IClientDeviceService
         Guid subjectId,
         RegisterDeviceRequest request,
         IReadOnlySet<string> grantedScopes,
+        Guid? grantId,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(request.InstallId))
@@ -60,11 +61,11 @@ public class ClientDeviceService : IClientDeviceService
 
         if (existing is not null)
         {
-            return await UpdateExistingAsync(existing, subjectId, request, accepted, cancellationToken);
+            return await UpdateExistingAsync(existing, subjectId, request, accepted, grantId, cancellationToken);
         }
 
         var entity = new ClientDeviceEntity { InstallId = request.InstallId };
-        Apply(entity, subjectId, request, accepted);
+        Apply(entity, subjectId, request, accepted, grantId);
         _dbContext.ClientDevices.Add(entity);
 
         try
@@ -90,7 +91,7 @@ public class ClientDeviceService : IClientDeviceService
             _logger.LogWarning(
                 "Concurrent registration for install {InstallId}; folding into an update.",
                 request.InstallId);
-            return await UpdateExistingAsync(raced, subjectId, request, accepted, cancellationToken);
+            return await UpdateExistingAsync(raced, subjectId, request, accepted, grantId, cancellationToken);
         }
     }
 
@@ -105,6 +106,7 @@ public class ClientDeviceService : IClientDeviceService
         Guid subjectId,
         RegisterDeviceRequest request,
         string[] capabilities,
+        Guid? grantId,
         CancellationToken cancellationToken)
     {
         if (existing.SubjectId != subjectId)
@@ -113,7 +115,7 @@ public class ClientDeviceService : IClientDeviceService
                 $"Install id '{request.InstallId}' is already registered to another user.");
         }
 
-        Apply(existing, subjectId, request, capabilities);
+        Apply(existing, subjectId, request, capabilities, grantId);
         await _dbContext.SaveChangesAsync(cancellationToken);
         return ToDto(existing);
     }
@@ -236,13 +238,15 @@ public class ClientDeviceService : IClientDeviceService
         ClientDeviceEntity entity,
         Guid subjectId,
         RegisterDeviceRequest request,
-        string[] capabilities)
+        string[] capabilities,
+        Guid? grantId)
     {
         var now = DateTime.UtcNow;
         entity.SubjectId = subjectId;
         entity.Kind = request.Kind;
         entity.Label = request.Label;
         entity.Capabilities = capabilities;
+        entity.GrantId = grantId;
         entity.LastSeenAt = now;
         entity.UpdatedAt = now;
     }

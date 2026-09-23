@@ -6,6 +6,7 @@ using Moq;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.ClientDevices;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -126,6 +127,22 @@ public class OAuthGrantServiceTests : IDisposable
             Label = label,
             RevokedAt = revokedAt,
             CreatedAt = DateTime.UtcNow,
+        });
+        await db.SaveChangesAsync();
+        return id;
+    }
+
+    private async Task<Guid> SeedDeviceAsync(NocturneDbContext db, Guid? grantId)
+    {
+        var id = Guid.CreateVersion7();
+        db.ClientDevices.Add(new ClientDeviceEntity
+        {
+            Id = id,
+            SubjectId = _ownerSubjectId,
+            GrantId = grantId,
+            InstallId = Guid.NewGuid().ToString("N"),
+            Kind = DeviceKinds.Prelude,
+            Capabilities = [],
         });
         await db.SaveChangesAsync();
         return id;
@@ -284,6 +301,26 @@ public class OAuthGrantServiceTests : IDisposable
 
         var tokens = await db.OAuthRefreshTokens.Where(t => t.GrantId == grantId).ToListAsync();
         Assert.All(tokens, t => Assert.NotNull(t.RevokedAt));
+    }
+
+    [Fact]
+    public async Task RevokeGrantAsync_RemovesTheGrantsDevicesAndSparesOthers()
+    {
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
+        var revokedGrant = await SeedGrantAsync(db);
+        var otherGrant = await SeedGrantAsync(db);
+
+        await SeedDeviceAsync(db, revokedGrant);
+        var otherGrantDevice = await SeedDeviceAsync(db, otherGrant);
+        var ungrantedDevice = await SeedDeviceAsync(db, null);
+
+        var service = CreateService(db);
+        await service.RevokeGrantAsync(revokedGrant);
+
+        var remaining = await db.ClientDevices.AsNoTracking().Select(d => d.Id).ToListAsync();
+        remaining.Should().BeEquivalentTo([otherGrantDevice, ungrantedDevice]);
     }
 
     // ---------------------------------------------------------------

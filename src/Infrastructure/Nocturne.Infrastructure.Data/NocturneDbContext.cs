@@ -2344,9 +2344,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             entity.ToTable("client_devices");
             entity.Property(e => e.Capabilities).HasColumnType("text[]");
 
-            // Revoke-cascade: removing the OAuth grant removes the device. The FK is nullable and
-            // unpopulated until the device-management flow resolves the grant, so existing rows are
-            // unaffected.
+            // Fires only on a hard grant delete; a revoke stages removal via ClientDeviceGrantCascade.
             entity.HasOne<OAuthGrantEntity>()
                 .WithMany()
                 .HasForeignKey(e => e.GrantId)

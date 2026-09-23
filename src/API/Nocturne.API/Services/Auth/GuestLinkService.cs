@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Services.ClientDevices;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
@@ -194,11 +195,14 @@ public class GuestLinkService : IGuestLinkService
         }
 
         grant.RevokedAt = DateTime.UtcNow;
+        var deviceCount = await _dbContext.RemoveGrantDevicesAsync(grantId, ct);
         await _dbContext.SaveChangesAsync(ct);
 
         _sessionCache.Evict(grant.TenantId, grant.Id);
 
-        _logger.LogInformation("Guest link {GrantId} revoked by {RequestingSubjectId}", grantId, requestingSubjectId);
+        _logger.LogInformation(
+            "Guest link {GrantId} revoked by {RequestingSubjectId}; removed {DeviceCount} devices",
+            grantId, requestingSubjectId, deviceCount);
         return true;
     }
 
