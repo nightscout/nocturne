@@ -100,16 +100,20 @@ struct ParamsUniform {
     swirl_frequency: f32,
     swirl_drift: f32,
     swirl_depth: f32,
-    /// `swirl::taper_radii` for the loaded scene's size and aspect.
+    /// `swirl::Geometry` for the loaded scene's size and aspect.
     swirl_radius_x: u32,
     swirl_radius_y: u32,
-    _pad2: u32,
-    _pad3: u32,
+    swirl_inv_x: f32,
+    swirl_inv_y: f32,
+    swirl_step_x: f32,
+    swirl_step_y: f32,
+    swirl_scale: f32,
+    _pad2: f32,
 }
 
 impl ParamsUniform {
     fn new(width: u32, height: u32, pigment_count: u32, aspect: f32, p: &SimParams) -> Self {
-        let (swirl_radius_x, swirl_radius_y) = swirl::taper_radii(width, aspect, p.swirl_frequency);
+        let geo = swirl::Geometry::new(width, aspect, p.swirl_speed, p.swirl_frequency);
         ParamsUniform {
             width,
             height,
@@ -159,10 +163,14 @@ impl ParamsUniform {
             swirl_frequency: p.swirl_frequency,
             swirl_drift: p.swirl_drift,
             swirl_depth: p.swirl_depth,
-            swirl_radius_x,
-            swirl_radius_y,
-            _pad2: 0,
-            _pad3: 0,
+            swirl_radius_x: geo.radius_x,
+            swirl_radius_y: geo.radius_y,
+            swirl_inv_x: geo.inv_x,
+            swirl_inv_y: geo.inv_y,
+            swirl_step_x: geo.step_x,
+            swirl_step_y: geo.step_y,
+            swirl_scale: geo.scale,
+            _pad2: 0.0,
         }
     }
 }
@@ -232,8 +240,9 @@ struct SimPipelines {
     blur_h: wgpu::ComputePipeline,
     blur_v: wgpu::ComputePipeline,
     advect: wgpu::ComputePipeline,
-    swirl_gate_h: wgpu::ComputePipeline,
-    swirl_gate_v: wgpu::ComputePipeline,
+    swirl_distance_h: wgpu::ComputePipeline,
+    swirl_distance_v: wgpu::ComputePipeline,
+    swirl_stream: wgpu::ComputePipeline,
     swirl: wgpu::ComputePipeline,
     clock: wgpu::ComputePipeline,
     transfer: wgpu::ComputePipeline,
@@ -284,6 +293,11 @@ struct Loaded {
     bind_group: wgpu::BindGroup,
     checkpoints: HashMap<CheckpointId, wgpu::Buffer>,
     render_cache: Option<RenderTarget>,
+    /// `swirl::Geometry::substeps` for this scene.
+    swirl_substeps: u32,
+    /// `false` only while the host knows no cell is wet (after load, after
+    /// `DryAll`), so the swirl passes can be skipped without a readback.
+    maybe_wet: bool,
 }
 
 struct RenderTarget {
@@ -454,8 +468,9 @@ impl GpuEngine {
             blur_h: make("blur_h"),
             blur_v: make("blur_v"),
             advect: make("advect"),
-            swirl_gate_h: make("swirl_gate_h"),
-            swirl_gate_v: make("swirl_gate_v"),
+            swirl_distance_h: make("swirl_distance_h"),
+            swirl_distance_v: make("swirl_distance_v"),
+            swirl_stream: make("swirl_stream"),
             swirl: make("swirl"),
             clock: make("clock"),
             transfer: make("transfer"),
@@ -734,11 +749,18 @@ impl GpuEngine {
         copy(enc, lay.scratch_g(0), lay.g(0), lay.n * lay.pigment_count);
         copy(enc, lay.scratch_p(), lay.p(), lay.n);
 
-        dispatch(enc, &self.sim.swirl_gate_h);
-        dispatch(enc, &self.sim.swirl_gate_v);
-        for _ in 0..sim::SWIRL_SUBSTEPS {
-            dispatch(enc, &self.sim.swirl);
-            copy(enc, lay.scratch_g(0), lay.g(0), lay.n * lay.pigment_count);
+        if self.params.swirl_speed > 0.0 && l.maybe_wet {
+            dispatch(enc, &self.sim.swirl_distance_h);
+            dispatch(enc, &self.sim.swirl_distance_v);
+            let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
+            pass.set_pipeline(&self.sim.swirl_stream);
+            pass.set_bind_group(0, &l.bind_group, &[]);
+            pass.dispatch_workgroups(groups(lay.corner_count() as u32), 1, 1);
+            drop(pass);
+            for _ in 0..l.swirl_substeps {
+                dispatch(enc, &self.sim.swirl);
+                copy(enc, lay.scratch_g(0), lay.g(0), lay.n * lay.pigment_count);
+            }
         }
 
         dispatch(enc, &self.sim.transfer);
@@ -1352,6 +1374,14 @@ impl Simulator for GpuEngine {
             bind_group,
             checkpoints: HashMap::new(),
             render_cache: None,
+            swirl_substeps: swirl::Geometry::new(
+                res,
+                grid.aspect,
+                self.params.swirl_speed,
+                self.params.swirl_frequency,
+            )
+            .substeps,
+            maybe_wet: false,
         });
         Ok(())
     }
@@ -1367,6 +1397,13 @@ impl Simulator for GpuEngine {
                 l.paper_sim.height.clone(),
             )
         };
+        match op {
+            Operation::Brush(_) | Operation::Water(_) | Operation::Lift(_) => {
+                self.loaded_mut()?.maybe_wet = true;
+            }
+            Operation::DryAll => self.loaded_mut()?.maybe_wet = false,
+            _ => {}
+        }
         let rasterize = |path: &[_], radius, softness, span: StrokeSpan| {
             paint::rasterize_path_span(
                 path,
@@ -1527,7 +1564,9 @@ impl Simulator for GpuEngine {
                 label: Some("restore"),
             });
         enc.copy_buffer_to_buffer(src, 0, &l.state, 0, l.layout.state_bytes());
-        self.submit(enc.finish())
+        self.submit(enc.finish())?;
+        self.loaded_mut()?.maybe_wet = true;
+        Ok(())
     }
 
     fn release(&mut self, id: CheckpointId) {

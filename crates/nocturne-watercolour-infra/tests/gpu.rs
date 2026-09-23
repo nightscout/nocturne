@@ -220,6 +220,24 @@ fn checkpoint_seek_equals_straight_replay() {
     assert_eq!(got, expected);
 }
 
+/// The swirl's phase lives in the tick the GPU counts in its state header:
+/// it must match the steps taken, and a restore must put it back.
+#[test]
+fn the_gpu_tick_counts_steps_and_restores_with_a_checkpoint() {
+    let Some(mut gpu) = gpu() else { return };
+    gpu.load(&small_scene("wash")).unwrap();
+    assert_eq!(gpu.read_grid().unwrap().tick, 0);
+    gpu.step(37).unwrap();
+    assert_eq!(gpu.read_grid().unwrap().tick, 37);
+    let id = gpu.snapshot().unwrap().expect("a checkpoint fits");
+    gpu.step(20).unwrap();
+    assert_eq!(gpu.read_grid().unwrap().tick, 57);
+    gpu.restore(id).unwrap();
+    assert_eq!(gpu.read_grid().unwrap().tick, 37);
+    gpu.step(1).unwrap();
+    assert_eq!(gpu.read_grid().unwrap().tick, 38);
+}
+
 #[test]
 fn checkpoint_capacity_is_bounded_and_releasable() {
     let Some(mut gpu) = gpu() else { return };

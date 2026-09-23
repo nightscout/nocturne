@@ -5,6 +5,11 @@ use super::optics::CompositeMode;
 use super::paper::PaperField;
 use super::seed::{Seed, SubSeed};
 
+/// Largest tick the grid counts to: the GPU keeps the tick in an `f32`
+/// state slot, which holds integers exactly only up to `2^24`, so both
+/// backends stop there and the swirl freezes its phase.
+pub const MAX_TICK: u32 = 1 << 24;
+
 /// All per-cell fields are row-major `width * height` vectors; per-pigment
 /// fields are `pigment_count` such vectors back to back, so pigment `k` of
 /// cell `i` sits at `k * cell_count + i`.
@@ -44,8 +49,9 @@ pub struct SimulationGrid {
     /// in its isotropic metric (`scene::isotropic_scale`). Taken from the
     /// paper field the grid was built from.
     pub aspect: f32,
-    /// Ticks stepped since load. The swirl noise drifts with it, so it is
-    /// state a checkpoint carries rather than a clock.
+    /// Ticks stepped since load, saturating at [`MAX_TICK`]. The swirl noise
+    /// drifts with it, so it is state a checkpoint carries rather than a
+    /// clock.
     pub tick: u32,
     /// Swirl noise seed, below `2^24` so it packs exactly into an `f32`.
     pub swirl_seed: u32,

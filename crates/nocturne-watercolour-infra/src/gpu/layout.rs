@@ -7,6 +7,8 @@ use nocturne_watercolour_core::domain::{CompositeMode, SimulationGrid};
 pub struct StateLayout {
     pub n: usize,
     pub pigment_count: usize,
+    pub width: usize,
+    pub height: usize,
 }
 
 impl StateLayout {
@@ -14,6 +16,8 @@ impl StateLayout {
         StateLayout {
             n: (width as usize) * (height as usize),
             pigment_count,
+            width: width as usize,
+            height: height as usize,
         }
     }
 
@@ -103,8 +107,15 @@ impl StateLayout {
     pub fn scratch_g(&self, k: usize) -> usize {
         (9 + k) * self.n
     }
-    pub fn scratch_len(&self) -> usize {
+    /// Cell corners, the size of the swirl's stream-function region.
+    pub fn corner_count(&self) -> usize {
+        (self.width + 1) * (self.height + 1)
+    }
+    pub fn scratch_psi(&self) -> usize {
         (9 + self.pigment_count) * self.n
+    }
+    pub fn scratch_len(&self) -> usize {
+        self.scratch_psi() + self.corner_count()
     }
 
     /// Serialises a grid into the packed state layout.

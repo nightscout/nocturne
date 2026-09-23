@@ -57,8 +57,12 @@ struct Params {
     swirl_depth: f32,
     swirl_radius_x: u32,
     swirl_radius_y: u32,
-    _pad2: u32,
-    _pad3: u32,
+    swirl_inv_x: f32,
+    swirl_inv_y: f32,
+    swirl_step_x: f32,
+    swirl_step_y: f32,
+    swirl_scale: f32,
+    _pad2: f32,
 };
 
 struct Stroke {
@@ -124,6 +128,8 @@ fn so_blurred() -> u32 { return 6u * P.n; }
 fn so_p() -> u32 { return 7u * P.n; }
 fn so_s() -> u32 { return 8u * P.n; }
 fn so_g(k: u32) -> u32 { return (9u + k) * P.n; }
+// Corner stream function, (width + 1) * (height + 1) row-major.
+fn so_psi() -> u32 { return (9u + P.pigment_count) * P.n; }
 
 // Neighbour indices (left, right, up, down), clamped at the border to the
 // cell itself, exactly as the CPU `neighbours` helper does.

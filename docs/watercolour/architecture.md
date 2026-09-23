@@ -141,7 +141,13 @@ integer hash, a pure function of (cell corner, tick, seed). The tick and the
 swirl seed (`SimulationGrid::tick`, `swirl_seed`, derived from the scene seed)
 sit in the state header, so a checkpoint restores the swirl's phase with the
 rest of the state and a seek replays it exactly; the GPU advances its tick
-with a one-thread `clock` dispatch at the end of every step.
+with a one-thread `clock` dispatch at the end of every step. Both backends
+stop counting at `grid::MAX_TICK` (`2^24`, the largest integer the `f32`
+header slot holds exactly), where the swirl's phase freezes. Every division
+the swirl needs is done once on the host (`swirl::Geometry`) and passed in the
+uniform, so the shader's stream function uses only hashing, `floor`,
+addition and multiplication; the host skips the swirl passes when
+`swirl_speed` is `0` or it knows the sheet is dry (after load or `DryAll`).
 
 **Lucide icons.** A Lucide icon is a 24-grid element list (`[tag, attrs]`
 pairs: `path`, `circle`, `rect`, `line`, `ellipse`, `polyline`, `polygon`).
@@ -168,7 +174,7 @@ returns for the engine to load.
 |---|---|---|---|
 | `velocity.wgsl` | `velocity` | Curtis UpdateVelocities (`sim::pass_velocity`) | none |
 | `pressure.wgsl` | `divergence`, `jacobi_a`, `jacobi_b`, `project` | Curtis RelaxDivergence (`pass_divergence`, `pass_jacobi` x 8 ping-pong, `pass_project`) | none (host copies `q2 -> q` when the iteration count is odd) |
-| `flow.wgsl` | `blur_h`, `blur_v`, `advect`, `swirl_gate_h`, `swirl_gate_v`, `swirl`, `clock` | Curtis FlowOutward + MovePigment (`pass_blur_h/v`, `pass_advect`), the standing-water swirl (`pass_swirl_gate_h/v`, `pass_swirl` x `SWIRL_SUBSTEPS`, `domain::swirl`) and the tick counter `step` advances | none (the taper's blur radii come from `swirl::taper_radii` through the uniform) |
+| `flow.wgsl` | `blur_h`, `blur_v`, `advect`, `swirl_distance_h`, `swirl_distance_v`, `swirl_stream`, `swirl`, `clock` | Curtis FlowOutward + MovePigment (`pass_blur_h/v`, `pass_advect`), the standing-water swirl (`sim::swirl_tick`: `pass_swirl_distance_h/v`, `pass_swirl_stream`, `pass_swirl` x `swirl::Geometry::substeps`) and the tick counter `step` advances | none (`swirl::Geometry` reaches the shader through the uniform) |
 | `transfer.wgsl` | `transfer` | Curtis TransferPigment + evaporation, capillary absorption, drying (`pass_transfer`) | none |
 | `capillary.wgsl` | `capillary`, `capillary_wet` | Curtis SimulateCapillaryFlow (`pass_capillary`) | none |
 | `apply.wgsl` | `apply_brush`, `apply_water`, `apply_lift`, `dry_all` | `paint::apply_*`, `sim::dry_all` on an uploaded stamp | none |

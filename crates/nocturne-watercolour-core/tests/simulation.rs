@@ -762,57 +762,73 @@ fn standing_water_stirs_tendrils_without_moving_or_losing_pigment() {
     );
 }
 
-/// A uniformly loaded standing film against the grid's left border and a
-/// wet edge on its other three sides, with the water held still, no drain, no
-/// blooms and no exchange with the paper, so the swirl is the only thing that
-/// could make the suspended field uneven or move pigment across the edge.
-#[test]
-fn the_swirl_leaves_a_uniform_wash_uniform_up_to_its_edges() {
-    const S: u32 = 128;
-    let params = SimParams {
-        slope_gain: 0.0,
-        pressure_gain: 0.0,
-        deposition_rate: 0.0,
-        lift_rate: 0.0,
-        flow_outward_eta: 0.0,
-        ..SimParams::default()
-    };
-    let palette = Palette::moonlight();
-    let field = PaperField::generate(&Paper::cold_press(Seed(8)), S, S);
-    let mut grid = SimulationGrid::new(&field, palette.len()).with_swirl_seed(Seed(8));
+/// A ragged standing film: random depths (some too thin to swirl), dry
+/// holes and dry margins, wet cells on every grid border, and a random
+/// suspended load, with pigment `k` only in the wet cells.
+fn ragged_film(seed: u64) -> SimulationGrid {
+    const S: u32 = 96;
+    let field = PaperField::generate(&Paper::cold_press(Seed(seed)), S, S);
+    let mut grid = SimulationGrid::new(&field, 2).with_swirl_seed(Seed(seed));
+    let mut rng = Seed(seed).stream();
     let w = S as usize;
-    for y in w / 8..w - w / 8 {
-        for x in 0..w - w / 8 {
-            let i = y * w + x;
-            grid.wet[i] = 1.0;
-            grid.pressure[i] = 0.6;
-            grid.pigments_in_water[i] = 0.5;
+    for i in 0..grid.cell_count() {
+        let (x, y) = (i % w, i / w);
+        let margin = (x > 60 && y > 60) || (x < 20 && y > 70);
+        if margin || rng.next_f32() < 0.03 {
+            continue;
+        }
+        grid.wet[i] = 1.0;
+        grid.pressure[i] = 0.05 + 0.95 * rng.next_f32();
+        for k in 0..2 {
+            grid.pigments_in_water[k * w * w + i] = rng.next_f32();
         }
     }
-    sim::apply(&mut grid, &Operation::Dry { rate: 0.0 }, &params, Seed(8));
-    run(
-        &mut grid,
-        &PigmentCoefficients::from_palette(&palette),
-        &params,
-        240,
-    );
-    let inside = |i: usize| (w / 8..w - w / 8).contains(&(i / w)) && i % w < w - w / 8;
-    let total = |i: usize| grid.in_water(0, i);
-    let worst = (0..grid.cell_count())
-        .filter(|&i| inside(i))
-        .map(|i| (total(i) - 0.5).abs())
-        .fold(0.0f32, f32::max);
-    let escaped: f32 = (0..grid.cell_count())
-        .filter(|&i| !inside(i))
-        .map(total)
-        .sum();
-    eprintln!("worst cell off by {worst}, escaped {escaped}");
-    assert_eq!(
-        escaped, 0.0,
-        "the swirl carried pigment across the wet edge"
-    );
-    assert!(
-        worst < 1e-4,
-        "a divergence-free stir that carries nothing across the edge keeps a uniform wash uniform, worst cell off by {worst}"
-    );
+    grid
+}
+
+/// Runs only the swirl, several ticks, so nothing else can move pigment.
+fn swirl_only(grid: &mut SimulationGrid, params: &SimParams, ticks: u32) {
+    let mut scratch = Scratch::for_grid(grid);
+    for _ in 0..ticks {
+        sim::swirl_tick(grid, params, &mut scratch);
+        grid.tick += 17;
+    }
+}
+
+#[test]
+fn the_swirl_conserves_a_ragged_field_and_never_carries_pigment_into_a_blocked_cell() {
+    let params = SimParams::default();
+    for seed in [3, 11, 29] {
+        let mut grid = ragged_film(seed);
+        let before = grid.clone();
+        swirl_only(&mut grid, &params, 40);
+        let loaded: f64 = before.pigments_in_water.iter().map(|&v| v as f64).sum();
+        let kept: f64 = grid.pigments_in_water.iter().map(|&v| v as f64).sum();
+        assert!(
+            ((kept - loaded) / loaded).abs() < 1e-6,
+            "seed {seed}: the swirl made or lost pigment, {loaded} -> {kept}"
+        );
+        let moved: f64 = grid
+            .pigments_in_water
+            .iter()
+            .zip(&before.pigments_in_water)
+            .map(|(a, b)| (a - b).abs() as f64)
+            .sum();
+        assert!(
+            moved > 1e-2 * loaded,
+            "seed {seed}: the swirl moved nothing ({moved})"
+        );
+        let n = grid.cell_count();
+        for i in 0..n {
+            if grid.wet[i] == 0.0 || grid.pressure[i] < params.swirl_depth {
+                for k in 0..2 {
+                    assert_eq!(
+                        grid.pigments_in_water[k * n + i],
+                        before.pigments_in_water[k * n + i],
+                        "seed {seed}: blocked cell {i} gained or lost pigment"
+                    );
+                }
+            }
+        }
+    }
 }

@@ -2,7 +2,7 @@
 //! the CPU reference. The parity test only catches a drifted literal through
 //! its mean error, which a small drift slips under, so each is compared here.
 
-use nocturne_watercolour_core::domain::{optics, paint, palette, sim, swirl};
+use nocturne_watercolour_core::domain::{grid, optics, paint, palette, sim, swirl};
 
 const SHADERS: [(&str, &str); 3] = [
     (
@@ -44,8 +44,8 @@ fn rust_value(name: &str) -> Option<f64> {
         "DRAIN_MAX" => sim::DRAIN_MAX as f64,
         "STROKE_WATER_PAPER_GAIN" => paint::STROKE_WATER_PAPER_GAIN as f64,
         "SWIRL_DRIFT_SKEW" => swirl::SWIRL_DRIFT_SKEW as f64,
-        "SWIRL_FACE_LIMIT" => sim::SWIRL_FACE_LIMIT as f64,
-        "SWIRL_SUBSTEPS" => sim::SWIRL_SUBSTEPS as f64,
+        "SWIRL_FACE_LIMIT" => swirl::SWIRL_FACE_LIMIT as f64,
+        "MAX_TICK" => grid::MAX_TICK as f64,
         _ => return None,
     };
     Some(v)

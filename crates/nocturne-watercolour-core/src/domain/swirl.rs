@@ -2,30 +2,92 @@
 //! stream function. The curl of any scalar field is divergence free, so it
 //! stirs suspended pigment into tendrils without piling it up.
 //!
-//! Everything here is integer hashing and polynomial arithmetic in `f32`, a
-//! pure function of (cell, tick, seed), so the WGSL mirror in `flow.wgsl`
-//! computes the same field and a checkpoint replay reproduces it exactly.
+//! Everything per corner is integer hashing, `floor` and correctly rounded
+//! `f32` addition and multiplication; every division is done once on the host
+//! in [`Geometry`] and handed to the shader through the uniform. The WGSL
+//! mirror in `flow.wgsl` therefore computes the same stream function up to
+//! whatever multiply-add contraction the GPU driver applies. On either
+//! backend it is a pure function of (corner, tick, seed), so a checkpoint
+//! replay reproduces it exactly.
 
 use super::scene::isotropic_scale;
 
-/// Width of the taper that brings the stream function to zero at the wet
-/// edge, as a share of one noise lattice cell. The edge current along the
-/// taper scales with the stream function's drop across it, so a taper much
-/// narrower than an eddy would run the edge several times faster than the
-/// interior; at half a lattice cell the two are comparable.
+/// Width of the taper that brings the stream function to zero at the edge
+/// of the swirling region, as a share of one noise lattice cell. The edge
+/// current along the taper scales with the stream function's drop across
+/// it, so a taper much narrower than an eddy would run the edge several
+/// times faster than the interior; at half a lattice cell the two are
+/// comparable.
 pub const SWIRL_TAPER: f32 = 0.5;
 
 /// Drift along `y` per unit along `x`: an off-lattice direction, so the
 /// field never repeats with the lattice period as it slides.
 pub const SWIRL_DRIFT_SKEW: f32 = 0.618;
 
-/// Box-blur radii `(x, y)`, in cells, of the gate field the taper reads: one
-/// [`SWIRL_TAPER`] width in the isotropic metric on each axis, at least one
-/// cell. Computed once on the host so both backends use the same integers.
-pub fn taper_radii(size: u32, aspect: f32, frequency: f32) -> (u32, u32) {
-    let (ax, ay) = isotropic_scale(aspect);
-    let cells = |a: f32| ((size as f32 / a * SWIRL_TAPER / frequency.max(1e-3)) as u32).max(1);
-    (cells(ax), cells(ay))
+/// Most a face may carry per substep. Every cell's four fluxes cancel, so its
+/// outflow is half their absolute sum, at most twice the largest face; at
+/// `0.5` a substep can never move more than a cell holds.
+pub const SWIRL_FACE_LIMIT: f32 = 0.5;
+
+/// Largest face flux per unit of per-substep speed (`speed / substeps`). A
+/// face flux is `T_a S_a - T_b S_b = T_a (S_a - S_b) + S_b (T_a - T_b)` over
+/// its two corners, with taper `T <= 1` and centred noise `S`:
+///
+/// - `|S_a - S_b|` is at most the noise's steepest slope (`1.5` per lattice
+///   cell) times one cell's lattice step, which works out to the speed over
+///   the axis's isotropic factor (`>= 1`): at most `1.5`.
+/// - `|S| <= 0.5 * scale`, and `T` is a smoothstep (slope `<= 1.5`) of a
+///   distance that changes by at most `1 / (radius + 1)` per cell, where
+///   `radius + 1` exceeds one taper width in cells: at most
+///   `0.75 / SWIRL_TAPER`.
+pub const SWIRL_FLUX_PER_SPEED: f32 = 1.5 + 0.75 / SWIRL_TAPER;
+
+/// Cap on substeps per tick. Only a `swirl_speed` beyond
+/// `SWIRL_MAX_SUBSTEPS * SWIRL_FACE_LIMIT / SWIRL_FLUX_PER_SPEED` reaches it,
+/// and past that the face clamp can engage.
+pub const SWIRL_MAX_SUBSTEPS: u32 = 64;
+
+/// Per-scene swirl constants, computed once on the host from the grid size,
+/// aspect and parameters and shared by both backends.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Geometry {
+    /// Taper radii in cells along `x` and `y`: one [`SWIRL_TAPER`] width in
+    /// the isotropic metric, at least one cell.
+    pub radius_x: u32,
+    pub radius_y: u32,
+    /// `1 / (radius + 1)`: the normalised distance one cell step is worth.
+    pub inv_x: f32,
+    pub inv_y: f32,
+    /// Noise lattice cells per grid cell along `x` and `y`.
+    pub step_x: f32,
+    pub step_y: f32,
+    /// Stream-function scale per substep, in cells per tick per unit noise.
+    pub scale: f32,
+    /// Swirl passes per tick: enough that [`SWIRL_FLUX_PER_SPEED`] times the
+    /// per-substep speed stays within [`SWIRL_FACE_LIMIT`].
+    pub substeps: u32,
+}
+
+impl Geometry {
+    pub fn new(size: u32, aspect: f32, speed: f32, frequency: f32) -> Geometry {
+        let (ax, ay) = isotropic_scale(aspect);
+        let f = frequency.max(1e-3);
+        let size_f = size as f32;
+        let radius = |a: f32| ((size_f / a * SWIRL_TAPER / f) as u32).max(1);
+        let (radius_x, radius_y) = (radius(ax), radius(ay));
+        let substeps = ((speed.max(0.0) * SWIRL_FLUX_PER_SPEED / SWIRL_FACE_LIMIT).ceil() as u32)
+            .clamp(1, SWIRL_MAX_SUBSTEPS);
+        Geometry {
+            radius_x,
+            radius_y,
+            inv_x: 1.0 / (radius_x + 1) as f32,
+            inv_y: 1.0 / (radius_y + 1) as f32,
+            step_x: ax * f / size_f,
+            step_y: ay * f / size_f,
+            scale: speed / substeps as f32 * size_f / (f * ax * ay),
+            substeps,
+        }
+    }
 }
 
 /// Lattice value in `[0, 1)` for integer point `(x, y)`; a lowbias32-style
@@ -61,39 +123,23 @@ pub fn value_noise(qx: f32, qy: f32, seed: u32) -> f32 {
     a + (b - a) * sx + (c - a) * sy + (a - b - c + d) * sx * sy
 }
 
-/// Centred stream function at cell corner `(cx, cy)` (corner `(x, y)` is the top-left
-/// of cell `(x, y)`), scaled so a face's flux is the difference of its two
-/// corners. `speed` is the flux, in short-axis cells per tick, for a unit
-/// noise gradient; `frequency` is lattice cells per isotropic unit, so eddies
-/// stay round after the square grid is stretched to `aspect`.
-#[allow(clippy::too_many_arguments)]
+/// Untapered, centred stream function at cell corner `(cx, cy)` (corner
+/// `(x, y)` is the top-left of cell `(x, y)`). A face's flux is the
+/// difference of its two corners.
 #[inline]
-pub fn stream(
-    cx: u32,
-    cy: u32,
-    size: u32,
-    aspect: f32,
-    tick: u32,
-    seed: u32,
-    speed: f32,
-    frequency: f32,
-    drift: f32,
-) -> f32 {
-    let (ax, ay) = isotropic_scale(aspect);
-    let px = cx as f32 / size as f32 * ax * frequency;
-    let py = cy as f32 / size as f32 * ay * frequency;
+pub fn stream(cx: u32, cy: u32, geo: &Geometry, tick: u32, seed: u32, drift: f32) -> f32 {
     let t = tick as f32 * drift;
-    let n = value_noise(px + t, py + t * SWIRL_DRIFT_SKEW, seed);
-    let scale = speed * size as f32 / (frequency * ax * ay);
-    scale * (n - 0.5)
+    let n = value_noise(
+        cx as f32 * geo.step_x + t,
+        cy as f32 * geo.step_y + t * SWIRL_DRIFT_SKEW,
+        seed,
+    );
+    geo.scale * (n - 0.5)
 }
 
 /// Face fluxes of one cell from its four corner stream values, top-left,
 /// top-right, bottom-left, bottom-right: `(left, right, up, down)`, positive
-/// along `+x` for the vertical faces and `+y` for the horizontal ones. A face
-/// shared by two cells reads the same two corners from both, and the four
-/// fluxes of any cell sum to zero, so the field is exactly divergence free on
-/// the grid, not only in the limit.
+/// along `+x` for the vertical faces and `+y` for the horizontal ones.
 #[inline]
 pub fn face_fluxes(tl: f32, tr: f32, bl: f32, br: f32) -> [f32; 4] {
     [bl - tl, br - tr, -(tr - tl), -(br - bl)]
@@ -104,35 +150,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn every_cell_is_exactly_balanced_and_faces_agree_between_neighbours() {
-        let psi = |x, y| stream(x, y, 64, 2.0, 91, 5, 0.2, 6.0, 0.004);
-        for y in 0..63 {
-            for x in 0..63 {
-                let [l, r, u, d] =
-                    face_fluxes(psi(x, y), psi(x + 1, y), psi(x, y + 1), psi(x + 1, y + 1));
-                assert!((r - l + d - u).abs() < 1e-6, "cell ({x},{y}) is a source");
-                let [l_right, ..] = face_fluxes(
-                    psi(x + 1, y),
-                    psi(x + 2, y),
-                    psi(x + 1, y + 1),
-                    psi(x + 2, y + 1),
-                );
-                assert_eq!(
-                    r, l_right,
-                    "the shared face reads the same flux from both sides"
-                );
-            }
-        }
-    }
-
-    #[test]
     fn eddies_are_round_after_the_stretch() {
         // On a 4:1 grid an x cell spans four times the isotropic distance a
         // y cell does. Isotropic speed along x is the vertical-face flux (a
         // corner difference along y) times that span; along y, the
         // horizontal-face flux (a difference along x) times one.
-        let (size, aspect) = (400, 4.0);
-        let psi = |x, y| stream(x, y, size, aspect, 0, 3, 1.0, 6.0, 0.0);
+        let geo = Geometry::new(400, 4.0, 1.0, 6.0);
+        let psi = |x, y| stream(x, y, &geo, 0, 3, 0.0);
         let (mut along_x, mut along_y) = (0.0, 0.0);
         for y in 0..200 {
             for x in 0..200 {
@@ -145,5 +169,23 @@ mod tests {
             (ratio - 1.0).abs() < 0.25,
             "isotropic x/y speed ratio {ratio}"
         );
+    }
+
+    #[test]
+    fn a_zero_frequency_stays_finite() {
+        let geo = Geometry::new(128, 1.0, 0.8, 0.0);
+        assert!(stream(5, 9, &geo, 3, 1, 0.004).is_finite());
+    }
+
+    #[test]
+    fn substeps_keep_the_flux_bound_within_the_face_limit() {
+        for speed in [0.05, 0.8, 3.0, 10.0] {
+            let geo = Geometry::new(256, 1.0, speed, 8.0);
+            assert!(
+                speed / geo.substeps as f32 * SWIRL_FLUX_PER_SPEED <= SWIRL_FACE_LIMIT,
+                "speed {speed} in {} substeps",
+                geo.substeps
+            );
+        }
     }
 }

@@ -290,16 +290,19 @@ standing-water swirl is the exception: its eddies are sized in the isotropic
 metric.
 
 **Standing-water swirl.** Suspended pigment in a standing film is stirred by a
-slow, drifting curl-noise current (`sim::pass_swirl`), which is what marbles
+slow, drifting curl-noise current (`sim::swirl_tick`), which is what marbles
 pigment laid wet into wet instead of only blurring it. The current is the curl
-of a value-noise stream function sampled at cell corners: each face's flux is
-the difference of its two corners, so every cell's fluxes cancel and a uniform
-wash stays uniform. Before it is differenced the stream function is tapered to
-zero toward thin film (`swirl_depth`), the wet edge and the grid border, using
-a box blur of the depth gate about half an eddy wide; every corner of a dry
-cell is zero, so no face carries pigment across the edge and edge cells are
-never drained. Water itself is never moved. The swirl runs in several
-substeps per tick so its speed fits the upwind limit.
+of a value-noise stream function sampled once per tick at cell corners: each
+face's flux is the difference of its two corners, so every cell's fluxes
+cancel. Before it is differenced the stream function is tapered to zero over
+about half an eddy from every blocking cell (dry, film thinner than
+`swirl_depth`, or off the grid), using a Chebyshev distance to the nearest
+one; every corner of a blocking cell is zero, so no face carries pigment into
+it and the edge is never drained. Water itself is never moved. Because the
+taper is a smoothstep of a distance, its slope per cell is bounded, which
+bounds every face flux (`swirl::SWIRL_FLUX_PER_SPEED`); the swirl runs in as
+many substeps per tick as keep that bound within `SWIRL_FACE_LIMIT`, so its
+safety clamp does not engage below the substep cap.
 
 ## Numerical limits (`domain::sim`)
 
@@ -307,7 +310,7 @@ substeps per tick so its speed fits the upwind limit.
 |---|---|---|
 | `DT` | `1` per tick | fixed timestep; determinism |
 | max velocity | `0.45` cells/tick | keeps `|u| + |v| < 1` so upwind advection never drains a cell |
-| swirl face flux | `<= 0.25` per face per substep (`SWIRL_FACE_LIMIT`), `SWIRL_SUBSTEPS` substeps | a safety bound the default strength stays under; four faces together never drain a cell |
+| swirl face flux | `<= 0.5` per face per substep (`swirl::SWIRL_FACE_LIMIT`); substeps `ceil(swirl_speed * SWIRL_FLUX_PER_SPEED / SWIRL_FACE_LIMIT)`, capped at `SWIRL_MAX_SUBSTEPS` | balanced fluxes move at most twice the largest face out of a cell; the analytic bound guarantees the limit up to the cap |
 | viscosity | `0.1` | explicit Laplacian weight; keep `<= 0.25` |
 | pigment diffusion | `0.05` | divided by four per neighbour; keep `<= 1.0` |
 | water diffusion | `0.1` | same |
