@@ -1,5 +1,6 @@
 import type { RequestHandler } from "./$types";
 import { error, redirect } from "@sveltejs/kit";
+import { z } from "zod";
 import {
 	createServerApiClient,
 	getApiBaseUrl,
@@ -7,6 +8,9 @@ import {
 import { getHashedInstanceKey } from "$lib/server/instance-key";
 import { verifyOAuthLinkState } from "$lib/server/bot/oauth-state";
 import { getDiscordOAuthConfig } from "$lib/server/bot/platform-credentials";
+
+const DiscordTokenSchema = z.object({ access_token: z.string().optional() });
+const DiscordUserSchema = z.object({ id: z.string().optional() });
 
 /**
  * Apex-hosted Discord OAuth2 callback.
@@ -69,8 +73,7 @@ export const GET: RequestHandler = async ({ url, fetch }) => {
 		);
 		throw error(502, "Discord token exchange failed.");
 	}
-	const tokenJson = (await tokenResponse.json()) as { access_token?: string };
-	const accessToken = tokenJson.access_token;
+	const accessToken = DiscordTokenSchema.safeParse(await tokenResponse.json()).data?.access_token;
 	if (!accessToken) {
 		throw error(502, "Discord did not return an access token.");
 	}
@@ -82,8 +85,8 @@ export const GET: RequestHandler = async ({ url, fetch }) => {
 	if (!userResponse.ok) {
 		throw error(502, "Failed to fetch Discord user profile.");
 	}
-	const discordUser = (await userResponse.json()) as { id?: string };
-	if (!discordUser.id) {
+	const discordUser = DiscordUserSchema.safeParse(await userResponse.json()).data;
+	if (!discordUser?.id) {
 		throw error(502, "Discord user profile missing id.");
 	}
 

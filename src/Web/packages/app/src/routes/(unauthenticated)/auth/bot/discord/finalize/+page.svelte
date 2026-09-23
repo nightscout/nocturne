@@ -33,8 +33,8 @@
 			const link = await claimLink({ token });
 			result = {
 				success: true,
-				label: (link as any).label ?? "",
-				displayName: (link as any).displayName ?? "",
+				label: link.label ?? "",
+				displayName: link.displayName ?? "",
 			};
 		} catch (err: unknown) {
 			console.error("Failed to claim OAuth2 link:", err);

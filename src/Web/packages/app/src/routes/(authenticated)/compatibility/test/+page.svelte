@@ -90,8 +90,8 @@
 
     // Apply filters to both responses
     try {
-      let nsJson = JSON.parse(nsResponse);
-      let ncJson = JSON.parse(ncResponse);
+      const nsJson: unknown = JSON.parse(nsResponse);
+      let ncJson: unknown = JSON.parse(ncResponse);
 
       // Match Nocturne entries to Nightscout's _id order (for arrays)
       if (Array.isArray(nsJson) && Array.isArray(ncJson)) {
@@ -135,8 +135,17 @@
     );
   });
 
+  function isRecord(value: unknown): value is Record<string, unknown> {
+    return !!value && typeof value === "object" && !Array.isArray(value);
+  }
+
+  function idOf(value: unknown): string | number | undefined {
+    const id = isRecord(value) ? value._id : undefined;
+    return (typeof id === "string" || typeof id === "number") && id ? id : undefined;
+  }
+
   // Strip null values from Nocturne response only if the field doesn't have null in Nightscout
-  function stripExtraNulls(nocturneObj: any, nightscoutObj: any): any {
+  function stripExtraNulls(nocturneObj: unknown, nightscoutObj: unknown): unknown {
     if (Array.isArray(nocturneObj)) {
       // If both are arrays, process element by element
       if (Array.isArray(nightscoutObj)) {
@@ -147,10 +156,10 @@
       return nocturneObj.map((item) => stripExtraNulls(item, undefined));
     }
 
-    if (nocturneObj && typeof nocturneObj === "object") {
-      const cleaned: Record<string, any> = {};
+    if (isRecord(nocturneObj)) {
+      const cleaned: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(nocturneObj)) {
-        const nsValue = nightscoutObj?.[key];
+        const nsValue = isRecord(nightscoutObj) ? nightscoutObj[key] : undefined;
 
         // If the value is null/undefined, only keep it if Nightscout also has null
         if (value === null || value === undefined) {
@@ -170,17 +179,13 @@
     return nocturneObj;
   }
 
-  function idOf(item: { _id?: string } | null | undefined): string | undefined {
-    return item && typeof item === "object" && item._id ? item._id : undefined;
-  }
-
   // Match and reorder Nocturne array entries to align with Nightscout's _id order;
   // unmatched Nocturne entries follow, then those without an _id.
-  function matchEntriesById(nocturneArr: any[], nightscoutArr: any[]): any[] {
+  function matchEntriesById(nocturneArr: unknown[], nightscoutArr: unknown[]): unknown[] {
     const ncById = indexBy(nocturneArr, idOf, (item) => item);
     const matchedIds = nightscoutArr
       .map(idOf)
-      .filter((id): id is string => id !== undefined && ncById.has(id));
+      .filter((id): id is string | number => id !== undefined && ncById.has(id));
     const used = new Set(matchedIds);
     return [
       ...matchedIds.map((id) => ncById.get(id)),
@@ -190,12 +195,12 @@
   }
 
   // Remove Nocturne-specific fields recursively
-  function removeNocturneFields(obj: any): any {
+  function removeNocturneFields(obj: unknown): unknown {
     if (Array.isArray(obj)) {
       return obj.map(removeNocturneFields);
     }
-    if (obj && typeof obj === "object") {
-      const cleaned: Record<string, any> = {};
+    if (isRecord(obj)) {
+      const cleaned: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(obj)) {
         if (!nocturneOnlyFields.includes(key)) {
           cleaned[key] = removeNocturneFields(value);
@@ -207,15 +212,16 @@
   }
 
   // Reorder Nocturne object keys to match Nightscout's key order
-  function reorderToMatch(nocturneObj: any, nightscoutObj: any): any {
+  function reorderToMatch(nocturneObj: unknown, nightscoutObj: unknown): unknown {
     if (Array.isArray(nocturneObj)) {
       if (Array.isArray(nightscoutObj)) {
         const nsById = indexBy(nightscoutObj, idOf, (item) => item);
 
         // Match each Nocturne entry with its corresponding Nightscout entry by _id
         return nocturneObj.map((ncItem, index) => {
-          if (ncItem && typeof ncItem === "object" && ncItem._id) {
-            const nsItem = nsById.get(ncItem._id);
+          const id = idOf(ncItem);
+          if (id) {
+            const nsItem = nsById.get(id);
             if (nsItem) {
               return reorderToMatch(ncItem, nsItem);
             }
@@ -227,23 +233,16 @@
       return nocturneObj.map((item) => reorderToMatch(item, undefined));
     }
 
-    if (
-      nocturneObj &&
-      typeof nocturneObj === "object" &&
-      nightscoutObj &&
-      typeof nightscoutObj === "object"
-    ) {
+    if (isRecord(nocturneObj) && isRecord(nightscoutObj)) {
       const reordered: Record<string, unknown> = {};
-      const nocturneRecord = nocturneObj as Record<string, unknown>;
-      const nightscoutRecord = nightscoutObj as Record<string, unknown>;
-      const nsKeys = Object.keys(nightscoutRecord);
-      const ncKeys = Object.keys(nocturneRecord);
+      const nsKeys = Object.keys(nightscoutObj);
+      const ncKeys = Object.keys(nocturneObj);
 
       // First, add keys in Nightscout's order
       for (let i = 0; i < nsKeys.length; i++) {
         const key = nsKeys[i];
-        if (key in nocturneRecord) {
-          reordered[key] = reorderToMatch(nocturneRecord[key], nightscoutRecord[key]);
+        if (key in nocturneObj) {
+          reordered[key] = reorderToMatch(nocturneObj[key], nightscoutObj[key]);
         }
       }
 
@@ -251,7 +250,7 @@
       for (let i = 0; i < ncKeys.length; i++) {
         const key = ncKeys[i];
         if (!(key in reordered)) {
-          reordered[key] = nocturneRecord[key];
+          reordered[key] = nocturneObj[key];
         }
       }
 

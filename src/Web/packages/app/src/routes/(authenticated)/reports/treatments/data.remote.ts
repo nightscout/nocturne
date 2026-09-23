@@ -28,6 +28,7 @@ import {
 	UpdateBasalInjectionRequestSchema,
 } from '$lib/api/generated/schemas';
 import { DateRangeSchema, resolveReportRange } from '$api/report-range';
+import { dtoSchema } from '$lib/api/dto-schema';
 
 /**
  * Get all v4 entry types for the treatments page.
@@ -203,28 +204,28 @@ export const bulkDeleteEntries = command(
  */
 export const updateEntry = command(
 	z.discriminatedUnion('kind', [
-		z.object({ kind: z.literal('bolus'), id: z.string().min(1), data: UpdateBolusRequestSchema }),
-		z.object({ kind: z.literal('carbs'), id: z.string().min(1), data: UpdateCarbIntakeRequestSchema }),
-		z.object({ kind: z.literal('bgCheck'), id: z.string().min(1), data: UpsertBGCheckRequestSchema }),
-		z.object({ kind: z.literal('note'), id: z.string().min(1), data: UpsertNoteRequestSchema }),
-		z.object({ kind: z.literal('deviceEvent'), id: z.string().min(1), data: UpsertDeviceEventRequestSchema }),
-		z.object({ kind: z.literal('basalInjection'), id: z.string().min(1), data: UpdateBasalInjectionRequestSchema }),
+		z.object({ kind: z.literal('bolus'), id: z.string().min(1), data: dtoSchema<UpdateBolusRequest>(UpdateBolusRequestSchema) }),
+		z.object({ kind: z.literal('carbs'), id: z.string().min(1), data: dtoSchema<UpdateCarbIntakeRequest>(UpdateCarbIntakeRequestSchema) }),
+		z.object({ kind: z.literal('bgCheck'), id: z.string().min(1), data: dtoSchema<UpsertBGCheckRequest>(UpsertBGCheckRequestSchema) }),
+		z.object({ kind: z.literal('note'), id: z.string().min(1), data: dtoSchema<UpsertNoteRequest>(UpsertNoteRequestSchema) }),
+		z.object({ kind: z.literal('deviceEvent'), id: z.string().min(1), data: dtoSchema<UpsertDeviceEventRequest>(UpsertDeviceEventRequestSchema) }),
+		z.object({ kind: z.literal('basalInjection'), id: z.string().min(1), data: dtoSchema<UpdateBasalInjectionRequest>(UpdateBasalInjectionRequestSchema) }),
 	]),
 	async (input) => {
 		const { apiClient } = getRequestEvent().locals;
 		switch (input.kind) {
 			case 'bolus':
-				return await apiClient.bolus.update(input.id, input.data as UpdateBolusRequest);
+				return await apiClient.bolus.update(input.id, input.data);
 			case 'carbs':
-				return await apiClient.nutrition.updateCarbIntake(input.id, input.data as UpdateCarbIntakeRequest);
+				return await apiClient.nutrition.updateCarbIntake(input.id, input.data);
 			case 'bgCheck':
-				return await apiClient.bGCheck.update(input.id, input.data as UpsertBGCheckRequest);
+				return await apiClient.bGCheck.update(input.id, input.data);
 			case 'note':
-				return await apiClient.note.update(input.id, input.data as UpsertNoteRequest);
+				return await apiClient.note.update(input.id, input.data);
 			case 'deviceEvent':
-				return await apiClient.deviceEvent.update(input.id, input.data as UpsertDeviceEventRequest);
+				return await apiClient.deviceEvent.update(input.id, input.data);
 			case 'basalInjection':
-				return await apiClient.basalInjection.update(input.id, input.data as UpdateBasalInjectionRequest);
+				return await apiClient.basalInjection.update(input.id, input.data);
 		}
 	}
 );
@@ -243,28 +244,28 @@ export const updateEntry = command(
  */
 export const createEntry = command(
 	z.discriminatedUnion('kind', [
-		z.object({ kind: z.literal('bolus'), data: CreateBolusRequestSchema }),
-		z.object({ kind: z.literal('carbs'), data: CreateCarbIntakeRequestSchema }),
-		z.object({ kind: z.literal('bgCheck'), data: UpsertBGCheckRequestSchema }),
-		z.object({ kind: z.literal('note'), data: UpsertNoteRequestSchema }),
-		z.object({ kind: z.literal('deviceEvent'), data: UpsertDeviceEventRequestSchema }),
-		z.object({ kind: z.literal('basalInjection'), data: CreateBasalInjectionRequestSchema }),
+		z.object({ kind: z.literal('bolus'), data: dtoSchema<CreateBolusRequest>(CreateBolusRequestSchema) }),
+		z.object({ kind: z.literal('carbs'), data: dtoSchema<CreateCarbIntakeRequest>(CreateCarbIntakeRequestSchema) }),
+		z.object({ kind: z.literal('bgCheck'), data: dtoSchema<UpsertBGCheckRequest>(UpsertBGCheckRequestSchema) }),
+		z.object({ kind: z.literal('note'), data: dtoSchema<UpsertNoteRequest>(UpsertNoteRequestSchema) }),
+		z.object({ kind: z.literal('deviceEvent'), data: dtoSchema<UpsertDeviceEventRequest>(UpsertDeviceEventRequestSchema) }),
+		z.object({ kind: z.literal('basalInjection'), data: dtoSchema<CreateBasalInjectionRequest>(CreateBasalInjectionRequestSchema) }),
 	]),
 	async (input) => {
 		const { apiClient } = getRequestEvent().locals;
 		switch (input.kind) {
 			case 'bolus':
-				return await apiClient.bolus.create(input.data as CreateBolusRequest);
+				return await apiClient.bolus.create(input.data);
 			case 'carbs':
-				return await apiClient.nutrition.createCarbIntake(input.data as CreateCarbIntakeRequest);
+				return await apiClient.nutrition.createCarbIntake(input.data);
 			case 'bgCheck':
-				return await apiClient.bGCheck.create(input.data as UpsertBGCheckRequest);
+				return await apiClient.bGCheck.create(input.data);
 			case 'note':
-				return await apiClient.note.create(input.data as UpsertNoteRequest);
+				return await apiClient.note.create(input.data);
 			case 'deviceEvent':
-				return await apiClient.deviceEvent.create(input.data as UpsertDeviceEventRequest);
+				return await apiClient.deviceEvent.create(input.data);
 			case 'basalInjection':
-				return await apiClient.basalInjection.create(input.data as CreateBasalInjectionRequest);
+				return await apiClient.basalInjection.create(input.data);
 		}
 	}
 );

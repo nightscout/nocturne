@@ -38,9 +38,9 @@
   // Group discrepancies by severity
   const discrepanciesBySeverity = $derived({
     critical:
-      analysis.discrepancies?.filter((d: any) => d.severity === 2) || [],
-    major: analysis.discrepancies?.filter((d: any) => d.severity === 1) || [],
-    minor: analysis.discrepancies?.filter((d: any) => d.severity === 0) || [],
+      analysis.discrepancies?.filter((d) => d.severity === 2) || [],
+    major: analysis.discrepancies?.filter((d) => d.severity === 1) || [],
+    minor: analysis.discrepancies?.filter((d) => d.severity === 0) || [],
   });
 
   const matchType = $derived(getMatchTypeDisplay(analysis.overallMatch));

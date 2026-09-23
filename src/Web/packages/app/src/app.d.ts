@@ -108,6 +108,8 @@ declare global {
 			};
 			/** Resolved by the root layout from the hint cookie the API writes. */
 			lastSignIn: LastSignIn | null;
+			/** The viewer's granted scopes, resolved by the root layout. */
+			effectivePermissions: string[];
 		}
 
 		// Main PageData interface that allows additional properties for reports
