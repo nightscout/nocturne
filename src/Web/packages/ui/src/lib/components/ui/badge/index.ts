@@ -17,6 +17,15 @@ export const badgeVariants = tv({
       warning:
         "bg-warning/15 text-warning [a&]:hover:bg-warning/25 border-transparent",
       info: "bg-info/15 text-info [a&]:hover:bg-info/25 border-transparent",
+      // Notification and tracker urgency, as a solid count or level chip.
+      "severity-urgent":
+        "bg-severity-urgent text-severity-urgent-foreground [a&]:hover:bg-severity-urgent/90 border-transparent",
+      "severity-hazard":
+        "bg-severity-hazard text-severity-hazard-foreground [a&]:hover:bg-severity-hazard/90 border-transparent",
+      "severity-warn":
+        "bg-severity-warn text-severity-warn-foreground [a&]:hover:bg-severity-warn/90 border-transparent",
+      "severity-info":
+        "bg-severity-info text-severity-info-foreground [a&]:hover:bg-severity-info/90 border-transparent",
     },
     // Set by Badge from onremove; its remove button's focus ring shows on the badge,
     // since the badge clips overflow.

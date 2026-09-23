@@ -231,15 +231,13 @@
           </div>
           <div class="flex items-center gap-2">
             {#if urgentCount > 0}
-              <Badge variant="destructive">{urgentCount} urgent</Badge>
+              <Badge variant="severity-urgent">{urgentCount} urgent</Badge>
             {/if}
             {#if hazardCount > 0}
-              <Badge class="bg-severity-hazard text-severity-hazard-foreground">
-                {hazardCount} hazard
-              </Badge>
+              <Badge variant="severity-hazard">{hazardCount} hazard</Badge>
             {/if}
             {#if warnCount > 0}
-              <Badge variant="secondary">{warnCount} warning</Badge>
+              <Badge variant="severity-warn">{warnCount} warning</Badge>
             {/if}
             <a href={resolve("/settings/trackers")}>
               <Button variant="outline" size="sm">

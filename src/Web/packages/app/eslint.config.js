@@ -171,6 +171,23 @@ export default ts.config(
     }
   },
   {
+    // Where notification and tracker urgency is drawn, the nearest-token hint would
+    // offer an unrelated red or amber; the ramp is its own token family.
+    files: [
+      "src/lib/components/trackers/**",
+      "src/lib/components/layout/{NotificationItem,SidebarNotifications}.svelte",
+      "src/lib/components/status-pills/TrackerPill.svelte",
+      "src/lib/components/calendar/{CalendarDayCell,TrackerPopoverContent}.svelte",
+      "src/lib/components/dashboard/widgets/TrackersWidget.svelte",
+      "src/routes/(authenticated)/notifications/**"
+    ],
+    rules: {
+      "shadcn/no-raw-colors": ["warn", {
+        message: "\"{{className}}\" is a raw colour. For urgency use the severity tokens, which order urgent > hazard > warn > info (text-severity-hazard, bg-severity-warn/10, border-severity-info/20), or <Badge variant=\"severity-hazard\"> for a solid chip; anything else takes a theme token from {{file}}."
+      }]
+    }
+  },
+  {
     // Clock faces render styles their owner authored in the clock builder: colours,
     // sizes, positions and free-form custom CSS.
     files: [

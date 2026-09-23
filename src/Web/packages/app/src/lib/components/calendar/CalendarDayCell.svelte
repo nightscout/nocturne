@@ -345,15 +345,15 @@
     color: var(--status-normal);
   }
   .tracker-icon[data-tone="info"] {
-    color: var(--system-event-info);
+    color: var(--severity-info);
   }
   .tracker-icon[data-tone="warn"] {
-    color: var(--system-event-warning);
+    color: var(--severity-warn);
   }
   .tracker-icon[data-tone="hazard"] {
-    color: var(--system-event-hazard);
+    color: var(--severity-hazard);
   }
   .tracker-icon[data-tone="urgent"] {
-    color: var(--system-event-alarm);
+    color: var(--severity-urgent);
   }
 </style>
