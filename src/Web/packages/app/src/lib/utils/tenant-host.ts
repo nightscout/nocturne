@@ -40,6 +40,7 @@ export function resolveCookieDomain(baseDomain: string | null | undefined): stri
   if (!host) return null;
   // Any all-numeric dotted form, not just four octets: the API uses IPAddress.TryParse, which
   // also accepts shorthand such as "10.0.1".
+  // eslint-disable-next-line security/detect-unsafe-regex -- linear: each repetition opens with a literal ".".
   if (/^\d+(\.\d+)*$/.test(host)) return null;
   if (!host.includes(".")) return null;
   if (host.toLowerCase().endsWith(".localhost")) return null;

@@ -51,7 +51,7 @@
     x={2}
     y={0}
     text-anchor="start"
-    class="text-[8px] font-medium"
+    class="text-3xs font-medium"
     fill="var(--entry-basal-injection)"
     dy="0.35em"
   >

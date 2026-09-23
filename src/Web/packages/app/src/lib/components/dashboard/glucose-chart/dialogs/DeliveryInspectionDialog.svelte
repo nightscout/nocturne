@@ -85,16 +85,16 @@
     }
   });
 
-  const deliveryBadgeClass = $derived.by(() => {
+  const deliveryBadgeVariant = $derived.by(() => {
     switch (basalOrigin) {
       case BasalDeliveryOrigin.Algorithm:
-        return "bg-blue-500/20 text-blue-400 border-blue-500/30";
+        return "info" as const;
       case BasalDeliveryOrigin.Suspended:
-        return "bg-destructive/20 text-destructive border-destructive/30";
+        return "destructive" as const;
       case BasalDeliveryOrigin.Manual:
-        return "bg-orange-500/20 text-orange-400 border-orange-500/30";
+        return "warning" as const;
       default:
-        return "bg-muted text-muted-foreground border-border";
+        return "secondary" as const;
     }
   });
 
@@ -129,7 +129,7 @@
         {:else}
           <span class="text-3xl font-bold text-muted-foreground">--</span>
         {/if}
-        <Badge variant="outline" class={deliveryBadgeClass}>
+        <Badge variant={deliveryBadgeVariant}>
           {deliveryMode}
         </Badge>
       </Dialog.Title>

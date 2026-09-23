@@ -125,8 +125,6 @@
   });
 
   const hasVisiblePills = $derived(visibleInstances.length > 0);
-
-  $inspect(instances, definitions, visibleInstances).with(console.trace);
 </script>
 
 {#if hasVisiblePills}

@@ -206,7 +206,7 @@
                 y={yPos + TRACK_HEIGHT / 2 + 4}
                 dx={6}
                 dy="-0.355em"
-                class="text-[9px] fill-foreground font-medium pointer-events-none"
+                class="text-2xs fill-foreground font-medium pointer-events-none"
               >
                 {span.profileName}
               </text>
@@ -216,7 +216,7 @@
                 y={yPos + TRACK_HEIGHT / 2 + 4}
                 dx={6}
                 dy="-0.355em"
-                class="text-[9px] fill-foreground font-medium pointer-events-none"
+                class="text-2xs fill-foreground font-medium pointer-events-none"
               >
                 {span.state}
               </text>

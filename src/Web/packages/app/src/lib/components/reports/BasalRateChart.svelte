@@ -76,7 +76,7 @@
               y={context.yScale(defaultRate) - 2}
               dy="-0.355em"
               text-anchor="end"
-              class="text-[8px] fill-muted-foreground"
+              class="text-3xs fill-muted-foreground"
             >
               {defaultRate.toFixed(2)} U/hr
             </text>

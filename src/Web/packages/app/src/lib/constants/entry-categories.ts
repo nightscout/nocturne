@@ -14,8 +14,7 @@ export const ENTRY_CATEGORIES = {
     description: "Bolus insulin deliveries",
     icon: "syringe" as const,
     colorClass: "text-entry-bolus",
-    bgClass: "bg-entry-bolus/10",
-    borderClass: "border-entry-bolus/30",
+    badge: "entry-bolus" as const,
   },
   carbs: {
     id: "carbs" as const,
@@ -23,8 +22,7 @@ export const ENTRY_CATEGORIES = {
     description: "Carbohydrate intake records",
     icon: "utensils" as const,
     colorClass: "text-entry-carbs",
-    bgClass: "bg-entry-carbs/10",
-    borderClass: "border-entry-carbs/30",
+    badge: "entry-carbs" as const,
   },
   bgCheck: {
     id: "bgCheck" as const,
@@ -32,8 +30,7 @@ export const ENTRY_CATEGORIES = {
     description: "Blood glucose measurements",
     icon: "droplet" as const,
     colorClass: "text-entry-bg-check",
-    bgClass: "bg-entry-bg-check/10",
-    borderClass: "border-entry-bg-check/30",
+    badge: "entry-bg-check" as const,
   },
   note: {
     id: "note" as const,
@@ -41,8 +38,7 @@ export const ENTRY_CATEGORIES = {
     description: "User annotations and announcements",
     icon: "file-text" as const,
     colorClass: "text-muted-foreground",
-    bgClass: "bg-muted",
-    borderClass: "border-border",
+    badge: "secondary" as const,
   },
   deviceEvent: {
     id: "deviceEvent" as const,
@@ -50,8 +46,7 @@ export const ENTRY_CATEGORIES = {
     description: "Sensor, pump, and site changes",
     icon: "smartphone" as const,
     colorClass: "text-entry-device-event",
-    bgClass: "bg-entry-device-event/10",
-    borderClass: "border-entry-device-event/30",
+    badge: "entry-device-event" as const,
   },
   basalInjection: {
     id: "basalInjection" as const,
@@ -59,8 +54,7 @@ export const ENTRY_CATEGORIES = {
     description: "Basal insulin injections (pen / syringe)",
     icon: "syringe" as const,
     colorClass: "text-entry-basal-injection",
-    bgClass: "bg-entry-basal-injection/10",
-    borderClass: "border-entry-basal-injection/30",
+    badge: "entry-basal-injection" as const,
   },
 } as const;
 

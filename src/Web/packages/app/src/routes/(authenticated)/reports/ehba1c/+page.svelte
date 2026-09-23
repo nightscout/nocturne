@@ -352,7 +352,7 @@
           {/each}
           {#if labChartPoints.length > 0}
             <div class="flex items-center gap-1.5">
-              <span class="inline-block h-0 w-0 border-x-4 border-b-[7px] border-x-transparent border-b-foreground"
+              <span class="inline-block h-0 w-0 border-x-4 border-b-7 border-x-transparent border-b-foreground"
               ></span>
               <span>Lab result (not included in the calculation)</span>
             </div>

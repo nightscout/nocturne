@@ -144,7 +144,7 @@
     placement="right"
     scale={iobAxisScale}
     ticks={2}
-    tickLabelProps={{ class: "text-[9px] fill-muted-foreground" }}
+    tickLabelProps={{ class: "text-2xs fill-muted-foreground" }}
   />
 
   <!-- IOB/COB track label -->
@@ -152,7 +152,7 @@
     x={4}
     y={iobTrackTop + 12}
     dy="-0.355em"
-    class="text-[8px] fill-muted-foreground font-medium"
+    class="text-3xs fill-muted-foreground font-medium"
   >
     IOB/COB
   </text>

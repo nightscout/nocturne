@@ -128,7 +128,7 @@
             y={context.yScale(yDomain[1]) - 4}
             dy="-0.355em"
             text-anchor="middle"
-            class="text-[9px] fill-muted-foreground"
+            class="text-2xs fill-muted-foreground"
           >
             {label}
           </text>
@@ -176,7 +176,7 @@
             y={context.yScale(peakPoint.sgv) - 10}
             dy="-0.355em"
             text-anchor="middle"
-            class="text-[9px] fill-foreground font-medium"
+            class="text-2xs fill-foreground font-medium"
           >
             {bg(peakPoint.sgv)}
           </text>
@@ -189,7 +189,7 @@
             y={context.yScale(nadirPoint.sgv) + 14}
             dy="-0.355em"
             text-anchor="middle"
-            class="text-[9px] fill-foreground font-medium"
+            class="text-2xs fill-foreground font-medium"
           >
             {bg(nadirPoint.sgv)}
           </text>
@@ -211,7 +211,7 @@
             v instanceof Date
               ? time(v)
               : String(v)}
-          tickLabelProps={{ class: "text-[9px] fill-muted-foreground" }}
+          tickLabelProps={{ class: "text-2xs fill-muted-foreground" }}
         />
       </Svg>
     {/snippet}

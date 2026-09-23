@@ -515,10 +515,7 @@
   label: string;
   styles: ReturnType<typeof getEntryStyle>;
 })}
-  <Badge
-    variant="outline"
-    class="whitespace-nowrap {styles.colorClass} {styles.bgClass} {styles.borderClass}"
-  >
+  <Badge variant={styles.badge}>
     {label}
   </Badge>
 {/snippet}

@@ -28,6 +28,19 @@ export const badgeVariants = tv({
         "bg-severity-warn text-severity-warn-foreground [a&]:hover:bg-severity-warn/90 border-transparent",
       "severity-info":
         "bg-severity-info text-severity-info-foreground [a&]:hover:bg-severity-info/90 border-transparent",
+      // A record's category (ENTRY_CATEGORIES, TREATMENT_CATEGORIES); notes take secondary.
+      "entry-bolus":
+        "bg-entry-bolus/10 text-entry-bolus border-entry-bolus/30 [a&]:hover:bg-entry-bolus/20",
+      "entry-basal":
+        "bg-entry-basal/10 text-entry-basal border-entry-basal/30 [a&]:hover:bg-entry-basal/20",
+      "entry-basal-injection":
+        "bg-entry-basal-injection/10 text-entry-basal-injection border-entry-basal-injection/30 [a&]:hover:bg-entry-basal-injection/20",
+      "entry-carbs":
+        "bg-entry-carbs/10 text-entry-carbs border-entry-carbs/30 [a&]:hover:bg-entry-carbs/20",
+      "entry-bg-check":
+        "bg-entry-bg-check/10 text-entry-bg-check border-entry-bg-check/30 [a&]:hover:bg-entry-bg-check/20",
+      "entry-device-event":
+        "bg-entry-device-event/10 text-entry-device-event border-entry-device-event/30 [a&]:hover:bg-entry-device-event/20",
     },
     size: {
       default: "",

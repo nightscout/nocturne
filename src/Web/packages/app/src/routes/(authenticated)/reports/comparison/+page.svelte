@@ -509,7 +509,7 @@
           ></span>
           {committed.a.label}
         </span>
-        <span class="font-mono text-xs uppercase tracking-[0.15em] text-muted-foreground">
+        <span class="font-mono text-xs uppercase tracking-widest text-muted-foreground">
           vs
         </span>
         <span class="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium">
@@ -557,7 +557,7 @@
         {/each}
       </div>
 
-      <div class="flex justify-between font-mono text-2xs uppercase tracking-[0.06em] text-muted-foreground">
+      <div class="flex justify-between font-mono text-2xs uppercase tracking-wider text-muted-foreground">
         <span>← lower in {committed.b.label}</span>
         <span>no change</span>
         <span>higher in {committed.b.label} →</span>

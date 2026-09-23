@@ -55,6 +55,8 @@
    * - Weeks: 1w, 1 week, 1 weeks → 168, -1w → -168
    * - Hours explicit: 168h, 168 hours, -24h → -24
    */
+  /* eslint-disable security/detect-unsafe-regex -- each pattern is anchored and its repeated
+     group opens with a literal ".", so a match has one parse and cannot backtrack. */
   function parseExpression(expr: string): number | null {
     if (!expr || expr.trim() === "") return null;
 
@@ -107,6 +109,7 @@
     if (result === null) return null;
     return isNegative ? -result : result;
   }
+  /* eslint-enable security/detect-unsafe-regex */
 
   function handleInput() {
     const parsed = parseExpression(inputValue);

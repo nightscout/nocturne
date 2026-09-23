@@ -403,7 +403,7 @@
         >
           {#snippet tooltipValue({ point })}
             {@const span = sleepSpanOf(point)}
-            <div class="size-2 rounded-full bg-[var(--lane-color)]" data-lane={span.state.toLowerCase()}></div>
+            <div class="size-2 rounded-full bg-lane" data-lane={span.state.toLowerCase()}></div>
             <span class="text-muted-foreground">Sleep</span>
             <span class="ml-auto font-mono font-medium tabular-nums capitalize">{span.state.toLowerCase()}</span>
           {/snippet}
@@ -437,7 +437,7 @@
                 width={rectWidth}
                 height={ctx.height - 8}
                 data-lane={span.state.toLowerCase()}
-                class="fill-[var(--lane-color)]"
+                class="fill-lane"
                 opacity={isExtended ? 0.25 : 0.5}
               />
             {/each}

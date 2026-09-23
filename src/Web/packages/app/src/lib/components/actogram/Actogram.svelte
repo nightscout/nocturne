@@ -14,6 +14,7 @@
   import { flip } from 'svelte/animate';
   import { cubicOut } from 'svelte/easing';
   import { ChevronUp, ChevronDown } from 'lucide-svelte';
+  import { Button } from '$lib/components/ui/button';
 
   interface Props {
     data: T[];
@@ -105,14 +106,16 @@
   <div class="flex">
     <div class="w-20 shrink-0 flex items-center justify-center">
       {#if visibleCount !== undefined}
-        <button
-          class="print:hidden text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors p-0.5"
+        <Button
+          variant="ghost-muted"
+          size="icon-2xs"
+          class="print:hidden"
           disabled={offset === 0}
           onclick={() => navigate(-7)}
           aria-label="Previous week"
         >
           <ChevronUp class="size-4" />
-        </button>
+        </Button>
       {/if}
     </div>
     <div class="flex-1 relative h-6">
@@ -165,14 +168,15 @@
   {#if visibleCount !== undefined}
     <div class="flex print:hidden">
       <div class="w-20 shrink-0 flex items-center justify-center">
-        <button
-          class="text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors p-0.5"
+        <Button
+          variant="ghost-muted"
+          size="icon-2xs"
           disabled={offset >= maxOffset}
           onclick={() => navigate(7)}
           aria-label="Next week"
         >
           <ChevronDown class="size-4" />
-        </button>
+        </Button>
       </div>
       <div class="flex-1"></div>
     </div>

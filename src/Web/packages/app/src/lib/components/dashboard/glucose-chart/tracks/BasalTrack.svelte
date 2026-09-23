@@ -135,7 +135,7 @@
           x={labelX}
           y={labelY}
           dy="-0.355em"
-          class="text-[7px] fill-insulin-basal font-medium"
+          class="text-4xs fill-insulin-basal font-medium"
         >
           {span.rate.toFixed(2)}U/h
         </text>
@@ -144,7 +144,7 @@
           x={labelX}
           y={labelY}
           dy="-0.355em"
-          class="text-[7px] fill-insulin-basal font-medium"
+          class="text-4xs fill-insulin-basal font-medium"
         >
           {span.percent}%
         </text>
@@ -206,7 +206,7 @@
     scale={basalAxisScale}
     ticks={2}
     tickLabelProps={{
-      class: "text-[9px] fill-muted-foreground",
+      class: "text-2xs fill-muted-foreground",
     }}
   />
 
@@ -215,7 +215,7 @@
     x={4}
     y={basalTrackTop + 12}
     dy="-0.355em"
-    class="text-[8px] fill-muted-foreground font-medium"
+    class="text-3xs fill-muted-foreground font-medium"
   >
     BASAL
   </text>

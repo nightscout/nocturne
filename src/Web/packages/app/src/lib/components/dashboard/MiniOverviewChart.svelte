@@ -187,7 +187,7 @@
             placement="bottom"
             ticks={4}
             format={(v) => (v instanceof Date ? time(v) : String(v))}
-            tickLabelProps={{ class: "text-[9px] fill-muted-foreground" }}
+            tickLabelProps={{ class: "text-2xs fill-muted-foreground" }}
           />
         </Svg>
 
@@ -211,7 +211,7 @@
                    when the brush hugs an edge, as it does at "now". -->
             {#if bc.active && bc.x?.[0] != null && bc.x?.[1] != null}
               <div
-                class="absolute text-[9px] font-medium text-primary bg-background/90 px-1 py-0.5 rounded shadow-sm border border-border whitespace-nowrap pointer-events-none z-20 left-(--label-left) top-(--label-top) -translate-x-1/2"
+                class="absolute text-2xs font-medium text-primary bg-background/90 px-1 py-0.5 rounded shadow-sm border border-border whitespace-nowrap pointer-events-none z-20 left-(--label-left) top-(--label-top) -translate-x-1/2"
                 style:--label-left="clamp({RANGE_LABEL_HALF_WIDTH}px, {padding.left +
                   bc.range.x +
                   bc.range.width / 2}px, calc(100% - {RANGE_LABEL_HALF_WIDTH}px))"

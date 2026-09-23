@@ -76,6 +76,7 @@
     return "In Range";
   });
 
+  // eslint-disable-next-line shadcn/require-static-classes -- the only badge tinted by glucose range; a Badge variant per range would serve this one call site.
   const rangeBadgeClass = $derived.by(() => {
     if (glucoseValue > highThreshold) return "bg-glucose-high/20 text-glucose-high border-glucose-high/30";
     if (glucoseValue < lowThreshold) return "bg-glucose-very-low/20 text-glucose-very-low border-glucose-very-low/30";

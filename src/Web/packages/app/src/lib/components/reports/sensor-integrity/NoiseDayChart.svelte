@@ -97,7 +97,7 @@
             x={context.xScale(tick)}
             y={context.height + 12}
             text-anchor={tick === 0 ? "start" : tick === 1440 ? "end" : "middle"}
-            class="fill-muted-foreground text-[9px]"
+            class="fill-muted-foreground text-2xs"
           >
             {String(tick / 60).padStart(2, "0")}:00
           </text>

@@ -435,15 +435,12 @@
       <div class="space-y-2">
         {#each guestLinks as link (link.id)}
           <div
+            class={link.dismissedAt ? "opacity-50" : undefined}
             transition:slide={{ duration: 300 }}
             animate:flip={{ duration: 300 }}
           >
             <Card.Root>
-              <Card.Content
-                class="flex items-center gap-4 py-3{link.dismissedAt
-                  ? ' opacity-50'
-                  : ''}"
-              >
+              <Card.Content class="flex items-center gap-4 py-3">
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2">
                     <span class="font-medium text-sm truncate">

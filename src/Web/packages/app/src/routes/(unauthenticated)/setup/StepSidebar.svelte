@@ -31,7 +31,7 @@
 
   <!-- Display heading -->
   <h2
-    class="font-[Montserrat] text-4xl font-[250] leading-tight -tracking-[0.02em] text-white"
+    class="font-brand text-4xl font-hairline leading-tight tracking-tight text-white"
   >
     {#if path === "fresh"}
       Let's get your data <em class="not-italic text-(--onb-accent)">flowing.</em>
@@ -41,7 +41,7 @@
   </h2>
 
   <!-- Supporting paragraph -->
-  <p class="text-[14.5px] leading-relaxed text-muted-foreground">
+  <p class="text-sm leading-relaxed text-muted-foreground">
     {#if path === "fresh"}
       Four short steps. Nothing to uninstall later, nothing sent off-server.
       You can change every choice in Settings afterwards.

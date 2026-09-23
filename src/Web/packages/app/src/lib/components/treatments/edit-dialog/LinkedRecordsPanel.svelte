@@ -75,10 +75,7 @@
         onclick={isActive ? undefined : () => onSwitch(linked)}
       >
         <div class="flex flex-1 items-center gap-2">
-          <Badge
-            variant="outline"
-            class="{linkedStyle.colorClass} {linkedStyle.bgClass} {linkedStyle.borderClass}"
-          >
+          <Badge variant={linkedStyle.badge}>
             {linkedCategory.name}
           </Badge>
           <span class="text-sm">{getPrimaryValue(linked)}</span>

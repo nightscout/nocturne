@@ -180,7 +180,7 @@
                       width={bandwidth}
                       height={Math.max(context.yScale(segment.y0) - context.yScale(segment.y1), 0)}
                       data-lane={segment.lane}
-                      class="fill-[var(--lane-color)]"
+                      class="fill-lane"
                       rx={2}
                     />
                   {/if}
@@ -263,7 +263,7 @@
     <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
       {#each visibleSegments as seg (seg.key)}
         <span class="flex items-center gap-1.5">
-          <span class="size-2 rounded-full bg-[var(--lane-color)]" data-lane={seg.lane}></span>
+          <span class="size-2 rounded-full bg-lane" data-lane={seg.lane}></span>
           {seg.label}
         </span>
       {/each}
@@ -275,7 +275,7 @@
     {#each referenceRows as row (row.label)}
       <div class="space-y-1.5">
         <div class="flex items-center gap-2 text-sm">
-          <span class="size-2.5 shrink-0 rounded-full bg-[var(--lane-color)]" data-lane={row.lane}></span>
+          <span class="size-2.5 shrink-0 rounded-full bg-lane" data-lane={row.lane}></span>
           <span class="font-medium">{row.label}</span>
           <span class="ml-auto tabular-nums font-medium">
             {row.meanPct != null ? `${Math.round(row.meanPct)}%` : "—"}
@@ -290,7 +290,7 @@
             ></div>
             {#if row.meanPct != null}
               <div
-                class="absolute top-1/2 left-(--mean-left) h-2.5 w-0.5 -translate-y-1/2 rounded-full bg-[var(--lane-color)]"
+                class="absolute top-1/2 left-(--mean-left) h-2.5 w-0.5 -translate-y-1/2 rounded-full bg-lane"
                 data-lane={row.lane}
                 style:--mean-left="{Math.min(Math.max(row.meanPct, 0), 100)}%"
               ></div>

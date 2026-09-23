@@ -10,6 +10,7 @@
 	import * as Select from '$lib/components/ui/select';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
+	import * as InputGroup from '$lib/components/ui/input-group';
 	import { Label } from '$lib/components/ui/label';
 	import * as ToggleGroup from '$lib/components/ui/toggle-group';
 	import * as Collapsible from '$lib/components/ui/collapsible';
@@ -42,7 +43,7 @@
 
 	let draft = $state<Food>(emptyDraft());
 	let showDetails = $state(false);
-	let nameInput: HTMLInputElement | undefined = $state();
+	let nameInput: HTMLInputElement | null = $state(null);
 
 	let saving = $state(false);
 	const canSave = $derived(
@@ -117,7 +118,7 @@
 >
 	<!-- Header -->
 	<div class="mb-3 flex items-center gap-3">
-		<div class="flex items-center justify-center rounded-[7px] size-6.5 bg-carbs/12">
+		<div class="flex items-center justify-center rounded-md size-6.5 bg-carbs/12">
 			<Plus size={14} class="text-carbs" />
 		</div>
 		<span class="font-semibold text-sm">Add food</span>
@@ -128,63 +129,56 @@
 	</div>
 
 	<!-- Single-row form -->
-	<div class="grid h-[42px] grid-cols-[1.6fr_110px_90px_1fr_1.4fr] items-end gap-3">
+	<div class="grid grid-cols-[1.6fr_110px_90px_1fr_1.4fr] items-end gap-3">
 		<!-- Name -->
-		<div class="flex h-full flex-col gap-1">
+		<div class="flex flex-col gap-1">
 			<label for="composer-name" class="text-muted-foreground font-medium uppercase text-2xs">Name</label>
-			<div class="flex flex-1 items-center rounded-md px-3 border border-input dark:bg-input/30">
-				<input
-					id="composer-name"
-					name="name"
-					type="text"
-					required
-					class="w-full bg-transparent text-sm outline-none"
-					placeholder="e.g. Greek yogurt, plain"
-					bind:this={nameInput}
-					bind:value={draft.name}
-				/>
-			</div>
+			<Input
+				id="composer-name"
+				name="name"
+				type="text"
+				required
+				placeholder="e.g. Greek yogurt, plain"
+				bind:ref={nameInput}
+				bind:value={draft.name}
+			/>
 		</div>
 
 		<!-- Carbs -->
-		<div class="flex h-full flex-col gap-1">
+		<div class="flex flex-col gap-1">
 			<label for="composer-carbs" class="font-medium uppercase text-2xs text-carbs">Carbs</label>
-			<div class="flex flex-1 items-center rounded-md px-3 border border-carbs/45 bg-carbs/6">
-				<input
+			<InputGroup.Root>
+				<InputGroup.Input
 					id="composer-carbs"
 					name="carbs"
 					type="number"
 					required
-					class="w-full bg-transparent text-sm outline-none"
 					bind:value={draft.carbs}
 					min="0"
 					step="0.1"
 				/>
-				<span class="ml-1 shrink-0 text-xs text-carbs">g</span>
-			</div>
+				<InputGroup.Addon align="inline-end">g</InputGroup.Addon>
+			</InputGroup.Root>
 		</div>
 
 		<!-- Per (portion) -->
-		<div class="flex h-full flex-col gap-1">
+		<div class="flex flex-col gap-1">
 			<label for="composer-portion" class="text-muted-foreground font-medium uppercase text-2xs">Per</label>
-			<div class="flex flex-1 items-center rounded-md px-3 border border-input dark:bg-input/30">
-				<input
-					id="composer-portion"
-					name="portion"
-					type="number"
-					required
-					class="w-full bg-transparent text-sm outline-none"
-					bind:value={draft.portion}
-					min="0"
-					step="1"
-				/>
-			</div>
+			<Input
+				id="composer-portion"
+				name="portion"
+				type="number"
+				required
+				bind:value={draft.portion}
+				min="0"
+				step="1"
+			/>
 		</div>
 
 		<!-- Unit -->
-		<div class="flex h-full flex-col gap-1">
+		<div class="flex flex-col gap-1">
 			<span id="composer-unit-label" class="text-muted-foreground font-medium uppercase text-2xs">Unit</span>
-			<ToggleGroup.Root aria-labelledby="composer-unit-label" type="single" value={draft.unit ?? 'g'} onValueChange={(v: string) => { if (v) draft = { ...draft, unit: v }; }} variant="outline" size="sm" class="w-full flex-1">
+			<ToggleGroup.Root aria-labelledby="composer-unit-label" type="single" value={draft.unit ?? 'g'} onValueChange={(v: string) => { if (v) draft = { ...draft, unit: v }; }} variant="outline" class="w-full">
 				{#each FOOD_UNITS as u (u)}
 					<ToggleGroup.Item value={u} class="flex-1">{u}</ToggleGroup.Item>
 				{/each}
@@ -192,9 +186,9 @@
 		</div>
 
 		<!-- GI -->
-		<div class="flex h-full flex-col gap-1">
+		<div class="flex flex-col gap-1">
 			<span id="composer-gi-label" class="text-muted-foreground font-medium uppercase text-2xs">GI</span>
-			<ToggleGroup.Root aria-labelledby="composer-gi-label" type="single" value={giFromInt(draft.gi)} onValueChange={(v: string) => { if (isGiLevel(v)) draft = { ...draft, gi: giToInt(v) }; }} variant="outline" size="sm" class="w-full flex-1">
+			<ToggleGroup.Root aria-labelledby="composer-gi-label" type="single" value={giFromInt(draft.gi)} onValueChange={(v: string) => { if (isGiLevel(v)) draft = { ...draft, gi: giToInt(v) }; }} variant="outline" class="w-full">
 				{#each giLevels as g (g)}
 					<ToggleGroup.Item value={g} class="capitalize">
 						<GiIcon level={g} size={7} />{g}

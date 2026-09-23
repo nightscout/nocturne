@@ -55,39 +55,21 @@
   });
 
   function getStatusBadge(status: string | undefined): {
-    variant: "default" | "secondary" | "destructive" | "outline";
+    variant: "success" | "warning" | "secondary" | "outline";
     text: string;
-    class: string;
   } {
     switch (status) {
       case "active":
-        return {
-          variant: "default" as const,
-          text: "Active",
-          class:
-            "bg-success/10 text-success",
-        };
+        return { variant: "success", text: "Active" };
       case "stale":
-        return {
-          variant: "secondary" as const,
-          text: "Stale",
-          class:
-            "bg-warning/10 text-warning",
-        };
+        return { variant: "warning", text: "Stale" };
       case "inactive":
-        return {
-          variant: "outline" as const,
-          text: "Inactive",
-          class: "",
-        };
+        return { variant: "outline", text: "Inactive" };
       default:
-        return {
-          variant: "secondary" as const,
-          text: "Unknown",
-          class: "",
-        };
+        return { variant: "secondary", text: "Unknown" };
     }
   }
+
 
   async function deleteDataSource() {
     if (!selectedDataSource) return;
@@ -151,7 +133,6 @@
             <div class="mt-1">
               <Badge
                 variant={getStatusBadge(selectedDataSource.status).variant}
-                class={getStatusBadge(selectedDataSource.status).class}
               >
                 {getStatusBadge(selectedDataSource.status).text}
               </Badge>

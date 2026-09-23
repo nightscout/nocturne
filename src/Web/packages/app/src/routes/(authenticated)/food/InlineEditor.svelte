@@ -10,6 +10,7 @@
 	import * as Select from '$lib/components/ui/select';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
+	import * as InputGroup from '$lib/components/ui/input-group';
 	import { Label } from '$lib/components/ui/label';
 	import * as ToggleGroup from '$lib/components/ui/toggle-group';
 	import { Separator } from '$lib/components/ui/separator';
@@ -85,16 +86,13 @@
 			<label for="food-edit-name" class="text-muted-foreground font-semibold text-xs">
 				Name <span aria-hidden="true">*</span><span class="sr-only">(required)</span>
 			</label>
-			<div class="flex items-center rounded-md px-3 py-2 border border-input dark:bg-input/30">
-				<input
-					id="food-edit-name"
-					name="name"
-					type="text"
-					required
-					class="w-full bg-transparent text-sm outline-none"
-					bind:value={draft.name}
-				/>
-			</div>
+			<Input
+				id="food-edit-name"
+				name="name"
+				type="text"
+				required
+				bind:value={draft.name}
+			/>
 		</div>
 
 		<!-- Carbs -->
@@ -102,19 +100,18 @@
 			<label for="food-edit-carbs" class="font-semibold text-xs text-carbs">
 				Carbs <span aria-hidden="true">*</span><span class="sr-only">(required)</span>
 			</label>
-			<div class="flex items-center rounded-md px-3 py-2 border border-carbs/45 bg-carbs/6">
-				<input
+			<InputGroup.Root>
+				<InputGroup.Input
 					id="food-edit-carbs"
 					name="carbs"
 					type="number"
 					required
-					class="w-full bg-transparent text-sm outline-none"
 					bind:value={draft.carbs}
 					min="0"
 					step="0.1"
 				/>
-				<span class="ml-2 shrink-0 text-xs text-carbs">g</span>
-			</div>
+				<InputGroup.Addon align="inline-end">g</InputGroup.Addon>
+			</InputGroup.Root>
 			<span class="text-muted-foreground text-2xs">per {draft.portion ?? 100} {draft.unit ?? 'g'}</span>
 		</div>
 
@@ -123,19 +120,18 @@
 			<label for="food-edit-portion" class="text-muted-foreground font-semibold text-xs">
 				Portion <span aria-hidden="true">*</span><span class="sr-only">(required)</span>
 			</label>
-			<div class="flex items-center rounded-md px-3 py-2 border border-input dark:bg-input/30">
-				<input
+			<InputGroup.Root>
+				<InputGroup.Input
 					id="food-edit-portion"
 					name="portion"
 					type="number"
 					required
-					class="w-full bg-transparent text-sm outline-none"
 					bind:value={draft.portion}
 					min="0"
 					step="1"
 				/>
-				<span class="ml-2 shrink-0 text-xs text-muted-foreground">{draft.unit ?? 'g'}</span>
-			</div>
+				<InputGroup.Addon align="inline-end">{draft.unit ?? 'g'}</InputGroup.Addon>
+			</InputGroup.Root>
 		</div>
 
 		<!-- Unit -->

@@ -612,7 +612,7 @@
 <div class="year-overview @container flex min-h-full">
   <!-- Main Content -->
   <div
-    class="flex-1 transition-[margin] duration-200 print:mr-0 {selectedDay
+    class="flex-1 transition-all duration-200 print:mr-0 {selectedDay
       ? 'mr-80 @5xl:mr-96'
       : ''}"
   >

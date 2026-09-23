@@ -17,7 +17,7 @@
   <!-- Heading -->
   <div class="flex flex-col items-center gap-4 text-center">
     <h1
-      class="font-[Montserrat] font-[250] leading-tight tracking-tight text-white text-3xl md:text-4xl xl:text-5xl"
+      class="font-brand font-hairline leading-tight tracking-tight text-white text-3xl md:text-4xl xl:text-5xl"
     >
       How are you <em class="not-italic font-light text-(--onb-green)">arriving</em>?
     </h1>
@@ -41,13 +41,13 @@
       <!-- Radio dot -->
       <span
         class="absolute right-4 top-4 block h-5.5 w-5.5 rounded-full border-2 transition-all duration-200 {freshSelected
-          ? 'border-(--card-accent) bg-(--card-accent) shadow-[inset_0_0_0_4px_rgb(10_10_14)]'
+          ? 'border-(--card-accent) bg-(--card-accent) inset-ring-4 inset-ring-(--onb-navy)'
           : 'border-white/20'}"
       ></span>
 
       <!-- Tag pill -->
       <span
-        class="inline-flex self-start rounded-full px-2.5 py-0.75 font-mono text-[10.5px] uppercase tracking-[0.06em] bg-(--card-glow) text-(--card-accent)"
+        class="inline-flex self-start rounded-full px-2.5 py-0.75 font-mono text-2xs uppercase tracking-wider bg-(--card-glow) text-(--card-accent)"
       >
         Fresh start
       </span>
@@ -60,7 +60,7 @@
       </div>
 
       <!-- Title -->
-      <h2 class="font-[Montserrat] text-[22px] font-normal leading-snug text-white">
+      <h2 class="font-brand text-xl font-normal leading-snug text-white">
         Start with a blank slate
       </h2>
 
@@ -105,13 +105,13 @@
       <!-- Radio dot -->
       <span
         class="absolute right-4 top-4 block h-5.5 w-5.5 rounded-full border-2 transition-all duration-200 {migrationSelected
-          ? 'border-(--card-accent) bg-(--card-accent) shadow-[inset_0_0_0_4px_rgb(10_10_14)]'
+          ? 'border-(--card-accent) bg-(--card-accent) inset-ring-4 inset-ring-(--onb-navy)'
           : 'border-white/20'}"
       ></span>
 
       <!-- Tag pill -->
       <span
-        class="inline-flex self-start rounded-full px-2.5 py-0.75 font-mono text-[10.5px] uppercase tracking-[0.06em] bg-(--card-glow) text-(--card-accent)"
+        class="inline-flex self-start rounded-full px-2.5 py-0.75 font-mono text-2xs uppercase tracking-wider bg-(--card-glow) text-(--card-accent)"
       >
         Coming from Nightscout
       </span>
@@ -124,7 +124,7 @@
       </div>
 
       <!-- Title -->
-      <h2 class="font-[Montserrat] text-[22px] font-normal leading-snug text-white">
+      <h2 class="font-brand text-xl font-normal leading-snug text-white">
         Migrate my Nightscout data
       </h2>
 

@@ -265,7 +265,7 @@
             {@const dx = context.xScale(dawnWindow.start)}
             {@const dw = Math.max(context.xScale(dawnWindow.end) - dx, 0)}
             <rect x={dx} y={0} width={dw} height={stagesHeight} fill="var(--chart-4)" class="opacity-10 pointer-events-none" />
-            <text x={dx + 4} y={10} class="text-[9px] fill-muted-foreground pointer-events-none">
+            <text x={dx + 4} y={10} class="text-2xs fill-muted-foreground pointer-events-none">
               pre-wake window
             </text>
           {/if}
@@ -282,7 +282,7 @@
               height={LANE_HEIGHT - 6}
               data-lane={span.label.toLowerCase()}
               rx={2}
-              class="fill-[var(--lane-color)] opacity-70"
+              class="fill-lane opacity-70"
             />
           {/each}
 
@@ -309,12 +309,12 @@
               <text
                 x={context.width + 6}
                 y={glucoseScale(tick) + 3}
-                class="text-[9px] fill-muted-foreground tabular-nums"
+                class="text-2xs fill-muted-foreground tabular-nums"
               >
                 {bg(tick)}
               </text>
             {/each}
-            <text x={context.width + 6} y={-2} class="text-[9px] fill-muted-foreground">
+            <text x={context.width + 6} y={-2} class="text-2xs fill-muted-foreground">
               {bgLabel()}
             </text>
           {/if}
@@ -414,7 +414,7 @@
                 {/if}
                 {#if d.stageLane}
                   <div class="flex items-center gap-1.5">
-                    <div class="size-2 rounded-full bg-[var(--lane-color)]" data-lane={d.stageLane}></div>
+                    <div class="size-2 rounded-full bg-lane" data-lane={d.stageLane}></div>
                     <span class="text-muted-foreground">Stage</span>
                     <span class="ml-auto pl-3 font-medium">{HYPNOGRAM_LANE_LABELS[d.stageLane]}</span>
                   </div>

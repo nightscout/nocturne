@@ -35,7 +35,7 @@
       x={4}
       y={lane.top + (lane.bottom - lane.top) / 2 + 3}
       dy="-0.355em"
-      class="text-[7px] fill-muted-foreground font-medium"
+      class="text-4xs fill-muted-foreground font-medium"
     >
       MODE
     </text>
@@ -81,7 +81,7 @@
       x={4}
       y={lane.top + (lane.bottom - lane.top) / 2 + 3}
       dy="-0.355em"
-      class="text-[7px] fill-muted-foreground font-medium"
+      class="text-4xs fill-muted-foreground font-medium"
     >
       OVERRIDE
     </text>
@@ -102,7 +102,7 @@
         x={spanXPos + 4}
         y={lane.top + (lane.bottom - lane.top) / 2 + 3}
         dy="-0.355em"
-        class="text-[6px] fill-foreground font-medium"
+        class="text-4xs fill-foreground font-medium"
       >
         {span.state}
       </text>
@@ -128,7 +128,7 @@
       x={4}
       y={lane.top + (lane.bottom - lane.top) / 2 + 3}
       dy="-0.355em"
-      class="text-[7px] fill-muted-foreground font-medium"
+      class="text-4xs fill-muted-foreground font-medium"
     >
       PROFILE
     </text>
@@ -149,7 +149,7 @@
         x={spanXPos + 4}
         y={lane.top + (lane.bottom - lane.top) / 2 + 3}
         dy="-0.355em"
-        class="text-[6px] fill-foreground font-medium"
+        class="text-4xs fill-foreground font-medium"
       >
         {span.profileName}
       </text>
@@ -175,7 +175,7 @@
       x={4}
       y={lane.top + (lane.bottom - lane.top) / 2 + 3}
       dy="-0.355em"
-      class="text-[7px] fill-muted-foreground font-medium"
+      class="text-4xs fill-muted-foreground font-medium"
     >
       ACTIVITY
     </text>

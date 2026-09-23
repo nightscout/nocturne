@@ -27,6 +27,7 @@
   } from "./command-palette-store.svelte";
   import CommandPaletteVitals from "./CommandPaletteVitals.svelte";
   import { Star } from "lucide-svelte";
+  import { Button } from "$lib/components/ui/button";
 
   interface Props {
     open: boolean;
@@ -200,7 +201,7 @@
   {@const pinned = isPinned(item.id)}
   {#if item.href}
     <Command.LinkItem
-      class="group/item"
+      class="group"
       href={item.href}
       value={item.label}
       keywords={item.keywords}
@@ -218,19 +219,22 @@
           >
         {/if}
       </div>
-      <button
-        class="ml-auto shrink-0 p-1 {pinAlwaysVisible || pinned ? 'opacity-100' : 'opacity-0 group-hover/item:opacity-100'} transition-opacity"
+      <Button
+        variant="ghost-muted"
+        size="icon-2xs"
+        reveal={!(pinAlwaysVisible || pinned)}
+        class="ml-auto"
         aria-label={pinned ? `Unpin ${item.label}` : `Pin ${item.label}`}
-        onclick={(e) => handlePinClick(e, item.id)}
+        onclick={(e: MouseEvent) => handlePinClick(e, item.id)}
       >
         <Star
-          class="h-3.5 w-3.5 {pinned ? 'fill-current text-favorite' : 'text-muted-foreground'}"
+          class="size-3.5 {pinned ? 'fill-current text-favorite' : 'text-muted-foreground'}"
         />
-      </button>
+      </Button>
     </Command.LinkItem>
   {:else}
     <Command.Item
-      class="group/item"
+      class="group"
       value={item.label}
       keywords={item.keywords}
       onSelect={() => handleSelect(item)}
@@ -247,15 +251,18 @@
           >
         {/if}
       </div>
-      <button
-        class="ml-auto shrink-0 p-1 {pinAlwaysVisible || pinned ? 'opacity-100' : 'opacity-0 group-hover/item:opacity-100'} transition-opacity"
+      <Button
+        variant="ghost-muted"
+        size="icon-2xs"
+        reveal={!(pinAlwaysVisible || pinned)}
+        class="ml-auto"
         aria-label={pinned ? `Unpin ${item.label}` : `Pin ${item.label}`}
-        onclick={(e) => handlePinClick(e, item.id)}
+        onclick={(e: MouseEvent) => handlePinClick(e, item.id)}
       >
         <Star
-          class="h-3.5 w-3.5 {pinned ? 'fill-current text-favorite' : 'text-muted-foreground'}"
+          class="size-3.5 {pinned ? 'fill-current text-favorite' : 'text-muted-foreground'}"
         />
-      </button>
+      </Button>
     </Command.Item>
   {/if}
 {/snippet}

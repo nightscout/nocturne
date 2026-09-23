@@ -503,10 +503,7 @@
                   {row.mills ? time(row.mills) : "—"}
                 </Table.Cell>
                 <Table.Cell>
-                  <Badge
-                    variant="outline"
-                    class="{style.colorClass} {style.bgClass} {style.borderClass}"
-                  >
+                  <Badge variant={style.badge}>
                     {getRowLabel(row)}
                   </Badge>
                 </Table.Cell>

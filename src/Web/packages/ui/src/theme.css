@@ -113,6 +113,15 @@
   --radius-xl: calc(var(--radius) + 4px);
   --text-2xs: 0.625rem;
   --text-2xs--line-height: 1.5;
+  /* Chart annotation text that has to fit inside a swim lane or beside a marker glyph,
+     below the 10px floor of the UI scale. Not for text outside a chart. */
+  --text-3xs: 0.5rem;
+  --text-3xs--line-height: 1.25;
+  --text-4xs: 0.4375rem;
+  --text-4xs--line-height: 1.25;
+  --font-brand: "Montserrat", sans-serif;
+  /* The onboarding's display headings, set in the variable Montserrat. */
+  --font-weight-hairline: 250;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -158,6 +167,8 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  /* A sleep stage's colour, set per element from its data-lane (see [data-lane] below). */
+  --color-lane: var(--lane-color);
 }
 
 @layer components {
@@ -218,6 +229,3 @@ body {
   font-family: "Cabin", sans-serif;
 }
 
-.font-brand {
-  font-family: "Montserrat", sans-serif;
-}

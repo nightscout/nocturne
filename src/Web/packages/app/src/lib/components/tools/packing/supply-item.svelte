@@ -70,21 +70,19 @@
 
 <div class="group rounded-lg transition-colors {enabled ? '' : 'opacity-40'}">
   <!-- Row 1: Checkbox + label + quantity -->
-  <button
-    type="button"
-    class="flex w-full items-center gap-3 py-2.5 text-left"
-    onclick={() => toggleEnabled(!enabled)}
-  >
-    <Checkbox checked={enabled} />
-    <span class="flex-1 text-sm font-medium">{config.label}</span>
-    {#if enabled && autoQuantity > 0}
-      <span
-        class="inline-flex items-center rounded-md bg-primary/10 px-2 py-0.5 text-sm font-semibold tabular-nums text-primary"
-      >
-        &times;{autoQuantity}
-      </span>
-    {/if}
-  </button>
+  <div class="py-2.5">
+    <Label class="w-full">
+      <Checkbox checked={enabled} onCheckedChange={toggleEnabled} />
+      <span class="flex-1">{config.label}</span>
+      {#if enabled && autoQuantity > 0}
+        <span
+          class="inline-flex items-center rounded-md bg-primary/10 px-2 py-0.5 text-sm font-semibold tabular-nums text-primary"
+        >
+          &times;{autoQuantity}
+        </span>
+      {/if}
+    </Label>
+  </div>
 
   <!-- Row 2: Config fields -->
   {#if enabled}

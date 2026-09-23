@@ -9,6 +9,19 @@ import ts from 'typescript-eslint';
 
 import noImperativeRemoteQuery from "./tools/eslint/no-imperative-remote-query.js";
 
+const TEST_FILES = [
+  "**/*.test.ts",
+  "**/*.test.svelte",
+  "**/*.spec.ts",
+  "**/*.test-harness.svelte",
+  "**/*.test-stub.svelte",
+  "**/*-test-wrapper.svelte",
+  "src/lib/test-stubs/**",
+  "src/lib/test-fixtures/**",
+  "e2e/**",
+  "vitest.browser.setup.ts"
+];
+
 // Width stays layout the caller owns; height comes only from a control's size.
 const HEIGHT_CLASSES = ["h-*", "size-*", "min-h-*", "max-h-*"];
 const CONTROL_HEIGHT_HINT =
@@ -67,9 +80,24 @@ export default ts.config(
         "security/detect-non-literal-require",
         "security/detect-possible-timing-attacks",
         "security/detect-pseudoRandomBytes",
-        "svelte/no-at-debug-tags"
+        "security/detect-non-literal-fs-filename",
+        "security/detect-non-literal-regexp",
+        "security/detect-unsafe-regex",
+        "svelte/no-at-debug-tags",
+        "svelte/no-inspect"
       ].map((rule) => [rule, "error"])
     )
+  },
+  {
+    // Tests read fixtures and sources under the repo and build patterns from their own
+    // identifiers; neither path nor pattern comes from a request, so every finding here
+    // was a false positive.
+    files: TEST_FILES,
+    rules: {
+      "security/detect-non-literal-fs-filename": "off",
+      "security/detect-non-literal-regexp": "off",
+      "security/detect-unsafe-regex": "off"
+    }
   },
   {
     languageOptions: {
@@ -201,11 +229,11 @@ export default ts.config(
         ]
       }],
       "shadcn/no-raw-colors": ["error", { allow: RAW_COLOR_ALLOW, message: RAW_COLOR_HINT }],
-      "shadcn/no-arbitrary-values": ["warn", { allow: ["layout"], deny: ["text-[10px]", "text-[11px]"] }],
+      "shadcn/no-arbitrary-values": ["error", { allow: ["layout"], deny: ["text-[10px]", "text-[11px]"] }],
       "shadcn/no-inline-styles": "error",
       // `lead` is a hook the typography plugin styles inside `prose`.
       "shadcn/no-unknown-classes": ["error", { allow: ["lead"] }],
-      "shadcn/require-static-classes": "warn"
+      "shadcn/require-static-classes": "error"
     }
   },
   {
@@ -282,18 +310,7 @@ export default ts.config(
   },
   {
     // Tests build partial mocks of framework and API types, which only an assertion can type.
-    files: [
-      "**/*.test.ts",
-      "**/*.test.svelte",
-      "**/*.spec.ts",
-      "**/*.test-harness.svelte",
-      "**/*.test-stub.svelte",
-      "**/*-test-wrapper.svelte",
-      "src/lib/test-stubs/**",
-      "src/lib/test-fixtures/**",
-      "e2e/**",
-      "vitest.browser.setup.ts"
-    ],
+    files: TEST_FILES,
     rules: {
       "@typescript-eslint/consistent-type-assertions": [
         "error",

@@ -12,8 +12,7 @@ export const TREATMENT_CATEGORIES = {
     eventTypes: ["Snack Bolus", "Meal Bolus", "Correction Bolus", "Combo Bolus"],
     icon: "syringe" as const,
     colorClass: "text-entry-bolus",
-    bgClass: "bg-entry-bolus/10",
-    borderClass: "border-entry-bolus/30",
+    badge: "entry-bolus" as const,
   },
   basal: {
     id: "basal",
@@ -22,8 +21,7 @@ export const TREATMENT_CATEGORIES = {
     eventTypes: ["Temp Basal Start", "Temp Basal End", "Temp Basal", "Profile Switch"],
     icon: "activity" as const,
     colorClass: "text-entry-basal",
-    bgClass: "bg-entry-basal/10",
-    borderClass: "border-entry-basal/30",
+    badge: "entry-basal" as const,
   },
   carbs: {
     id: "carbs",
@@ -32,8 +30,7 @@ export const TREATMENT_CATEGORIES = {
     eventTypes: ["Carb Correction"],
     icon: "utensils" as const,
     colorClass: "text-entry-carbs",
-    bgClass: "bg-entry-carbs/10",
-    borderClass: "border-entry-carbs/30",
+    badge: "entry-carbs" as const,
   },
   device: {
     id: "device",
@@ -49,8 +46,7 @@ export const TREATMENT_CATEGORIES = {
     ],
     icon: "smartphone" as const,
     colorClass: "text-entry-device-event",
-    bgClass: "bg-entry-device-event/10",
-    borderClass: "border-entry-device-event/30",
+    badge: "entry-device-event" as const,
   },
   notes: {
     id: "notes",
@@ -59,8 +55,7 @@ export const TREATMENT_CATEGORIES = {
     eventTypes: ["BG Check", "Note", "Announcement", "Question", "D.A.D. Alert"],
     icon: "file-text" as const,
     colorClass: "text-muted-foreground",
-    bgClass: "bg-muted",
-    borderClass: "border-border",
+    badge: "secondary" as const,
   },
 } as const;
 
@@ -80,25 +75,12 @@ export function getCategoryForEventType(eventType: string): TreatmentCategoryId 
 /**
  * Get style classes for an event type
  */
-export function getEventTypeStyle(eventType: string): {
-  colorClass: string;
-  bgClass: string;
-  borderClass: string;
-} {
+export function getEventTypeStyle(eventType: string): { colorClass: string } {
   const categoryId = getCategoryForEventType(eventType);
   if (categoryId) {
-    const category = TREATMENT_CATEGORIES[categoryId];
-    return {
-      colorClass: category.colorClass,
-      bgClass: category.bgClass,
-      borderClass: category.borderClass,
-    };
+    return { colorClass: TREATMENT_CATEGORIES[categoryId].colorClass };
   }
-  return {
-    colorClass: "text-muted-foreground",
-    bgClass: "bg-muted/20",
-    borderClass: "border-muted/30",
-  };
+  return { colorClass: "text-muted-foreground" };
 }
 
 /**
@@ -249,15 +231,13 @@ export const V4_CATEGORIES = {
     id: "bolus" as const,
     name: "Bolus",
     colorClass: "text-entry-bolus",
-    bgClass: "bg-entry-bolus/10",
-    borderClass: "border-entry-bolus/30",
+    badge: "entry-bolus" as const,
   },
   carbs: {
     id: "carbs" as const,
     name: "Carbs",
     colorClass: "text-entry-carbs",
-    bgClass: "bg-entry-carbs/10",
-    borderClass: "border-entry-carbs/30",
+    badge: "entry-carbs" as const,
   },
 } as const;
 
@@ -285,11 +265,7 @@ export function countV4Rows(rows: TreatmentRow[]): V4TreatmentCounts {
   return { total: rows.length, bolus, carbs };
 }
 
-export function getRowTypeStyle(rowType: "bolus" | "carbIntake"): {
-  colorClass: string;
-  bgClass: string;
-  borderClass: string;
-} {
+export function getRowTypeStyle(rowType: "bolus" | "carbIntake") {
   if (rowType === "bolus") return V4_CATEGORIES.bolus;
   return V4_CATEGORIES.carbs;
 }

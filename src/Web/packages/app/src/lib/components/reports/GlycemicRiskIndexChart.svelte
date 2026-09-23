@@ -272,13 +272,13 @@
                 placement="bottom"
                 ticks={5}
                 label="Hypoglycemia Component (%)"
-                tickLabelProps={{ class: "text-[9px] fill-muted-foreground" }}
+                tickLabelProps={{ class: "text-2xs fill-muted-foreground" }}
               />
               <Axis
                 placement="left"
                 ticks={5}
                 label="Hyperglycemia Component (%)"
-                tickLabelProps={{ class: "text-[9px] fill-muted-foreground" }}
+                tickLabelProps={{ class: "text-2xs fill-muted-foreground" }}
               />
             </Svg>
 

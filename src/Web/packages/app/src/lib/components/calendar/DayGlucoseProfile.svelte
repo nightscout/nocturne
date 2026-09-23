@@ -33,7 +33,7 @@
         y="50%"
         text-anchor="middle"
         dominant-baseline="middle"
-        class="fill-muted-foreground text-[8px]"
+        class="fill-muted-foreground text-3xs"
       >
         No data
       </text>

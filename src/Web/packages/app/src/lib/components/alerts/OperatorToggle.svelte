@@ -29,7 +29,6 @@
 
   let allText = $derived(allLabel ?? (size === "compact" ? "all" : "all of"));
   let anyText = $derived(anyLabel ?? (size === "compact" ? "any" : "any of"));
-  let itemClass = $derived(size === "compact" ? "h-6" : undefined);
 </script>
 
 <ToggleGroup.Root
@@ -43,14 +42,12 @@
 >
   <ToggleGroup.Item
     value="and"
-    class={itemClass}
     aria-label="All conditions must hold"
   >
     {allText}
   </ToggleGroup.Item>
   <ToggleGroup.Item
     value="or"
-    class={itemClass}
     aria-label="Any condition is enough"
   >
     {anyText}

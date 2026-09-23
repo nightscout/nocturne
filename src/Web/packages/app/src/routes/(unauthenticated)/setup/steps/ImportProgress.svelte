@@ -269,7 +269,7 @@
   <!-- Heading -->
   <div class="flex flex-col items-center gap-4 text-center">
     <h1
-      class="font-[Montserrat] font-[250] leading-tight tracking-tight text-white text-3xl md:text-4xl xl:text-5xl"
+      class="font-brand font-hairline leading-tight tracking-tight text-white text-3xl md:text-4xl xl:text-5xl"
     >
       Bringing your <em
         class="not-italic font-light text-(--onb-accent)"
@@ -305,18 +305,18 @@
       <!-- Left side -->
       <div class="flex flex-col gap-3">
         <span
-          class="font-mono text-[13px] uppercase tracking-widest text-white/40"
+          class="font-mono text-xs uppercase tracking-widest text-white/40"
         >
           Overall progress
         </span>
         <div class="flex items-baseline gap-1">
           <span
-            class="font-[Montserrat] font-[250] tabular-nums text-5xl md:text-6xl xl:text-7xl text-(--onb-accent)"
+            class="font-brand font-hairline tabular-nums text-5xl md:text-6xl xl:text-7xl text-(--onb-accent)"
           >
             {Math.round(progress)}
           </span>
           <span
-            class="text-[28px] font-[Montserrat] font-[250] tabular-nums text-white/40"
+            class="text-3xl font-brand font-hairline tabular-nums text-white/40"
           >
             %
           </span>
@@ -373,7 +373,7 @@
         </svg>
         <!-- Center overlay -->
         <span
-          class="absolute font-[Montserrat] text-[38px] font-light tabular-nums text-white"
+          class="absolute font-brand text-4xl font-light tabular-nums text-white"
         >
           {Math.round(progress)}%
         </span>

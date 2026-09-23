@@ -67,7 +67,7 @@
   <!-- Heading -->
   <div class="flex flex-col items-center gap-4 text-center">
     <h1
-      class="font-[Montserrat] font-[250] leading-tight tracking-tight text-white text-3xl md:text-4xl xl:text-5xl"
+      class="font-brand font-hairline leading-tight tracking-tight text-white text-3xl md:text-4xl xl:text-5xl"
     >
       Name your <em
         class="not-italic font-light text-(--onb-teal)"
@@ -90,7 +90,7 @@
       label="Slug"
       id="setup-slug"
       required
-      labelClass="text-white/70"
+      labelVariant="muted"
       issues={availability.error}
     >
       {#snippet control(field)}
@@ -128,7 +128,7 @@
       label="Instance name"
       id="setup-display-name"
       required
-      labelClass="text-white/70"
+      labelVariant="muted"
       description="A friendly name shown in the UI. You can change this anytime."
     >
       {#snippet control(field)}

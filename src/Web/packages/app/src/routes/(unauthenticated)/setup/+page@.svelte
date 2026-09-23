@@ -301,7 +301,7 @@
         </g>
       </svg>
       <span
-        class="font-[Montserrat] text-xl font-light tracking-wide text-white"
+        class="font-brand text-xl font-light tracking-wide text-white"
       >
         nocturne
       </span>
@@ -310,12 +310,12 @@
     <div class="flex items-center gap-5">
       {#if setupRequired}
         <!-- Step counter for setup phase -->
-        <span class="hidden font-mono text-[13px] text-white/40 sm:inline">
+        <span class="hidden font-mono text-xs text-white/40 sm:inline">
           Step {setupStepIndex + 1} of {SETUP_STEPS.length}
         </span>
       {:else}
         <!-- Step counter -->
-        <span class="hidden font-mono text-[13px] text-white/40 sm:inline">
+        <span class="hidden font-mono text-xs text-white/40 sm:inline">
           Step {stepIndex + 1} of {steps.length}
         </span>
 
@@ -329,19 +329,16 @@
             >
               {userInitials}
             </span>
-            <span class="hidden text-[13px] text-white/40 sm:inline">
+            <span class="hidden text-xs text-white/40 sm:inline">
               {userEmail}
             </span>
           </div>
         {/if}
 
         <!-- Save & exit -->
-        <button
-          class="text-[13px] text-white/40 transition-colors hover:text-white"
-          onclick={handleEnterDashboard}
-        >
+        <Button variant="ghost-muted" size="xs" onclick={handleEnterDashboard}>
           Save & exit
-        </button>
+        </Button>
       {/if}
     </div>
   </header>
@@ -387,7 +384,7 @@
 
         <!-- Step card -->
         <section
-          class="step-card relative rounded-[22px] border border-white/8 backdrop-blur-[18px] overflow-hidden min-h-135 flex flex-col"
+          class="step-card relative rounded-3xl border border-white/8 backdrop-blur-lg overflow-hidden min-h-135 flex flex-col"
         >
           <!-- Strip -->
           <div
@@ -442,7 +439,7 @@
 
         <!-- Step card -->
         <section
-          class="step-card relative rounded-[22px] border border-white/8 backdrop-blur-[18px] overflow-hidden min-h-135 flex flex-col"
+          class="step-card relative rounded-3xl border border-white/8 backdrop-blur-lg overflow-hidden min-h-135 flex flex-col"
         >
           <!-- Strip -->
           <div
@@ -462,7 +459,7 @@
             <div class="flex items-center gap-3">
               <!-- Path badge -->
               <span
-                class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10.5px] font-semibold tracking-[0.06em] uppercase border border-(--onb-accent-dim) bg-(--onb-accent-dim) text-(--onb-accent)"
+                class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-2xs font-semibold tracking-wider uppercase border border-(--onb-accent-dim) bg-(--onb-accent-dim) text-(--onb-accent)"
               >
                 {#if path === "migration"}
                   <Cable class="h-2.5 w-2.5" />
@@ -492,7 +489,7 @@
               <div class="flex flex-col gap-8 px-4 py-8">
                 <div class="flex flex-col items-center gap-4 text-center">
                   <h1
-                    class="font-[Montserrat] font-[250] leading-tight tracking-tight text-white text-3xl md:text-4xl xl:text-5xl"
+                    class="font-brand font-hairline leading-tight tracking-tight text-white text-3xl md:text-4xl xl:text-5xl"
                   >
                     Connect a <em
                       class="not-italic font-light text-(--onb-accent)"
@@ -522,7 +519,7 @@
                 {#if selectedConnectorId}
                   <div class="flex flex-col items-center gap-4 text-center">
                     <h1
-                      class="font-[Montserrat] font-[250] leading-tight tracking-tight text-white text-3xl md:text-4xl xl:text-5xl"
+                      class="font-brand font-hairline leading-tight tracking-tight text-white text-3xl md:text-4xl xl:text-5xl"
                     >
                       Configure your <em
                         class="not-italic font-light text-(--onb-accent)"
@@ -549,7 +546,7 @@
                 {:else if selectedUploader}
                   <div class="flex flex-col items-center gap-4 text-center">
                     <h1
-                      class="font-[Montserrat] font-[250] leading-tight tracking-tight text-white text-3xl md:text-4xl xl:text-5xl"
+                      class="font-brand font-hairline leading-tight tracking-tight text-white text-3xl md:text-4xl xl:text-5xl"
                     >
                       Set up your <em
                         class="not-italic font-light text-(--onb-accent)"

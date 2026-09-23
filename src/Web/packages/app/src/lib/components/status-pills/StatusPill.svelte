@@ -39,6 +39,7 @@
   }: StatusPillProps = $props();
 
   /** Get pill styling based on alert level */
+  // eslint-disable-next-line shadcn/require-static-classes -- this is the pill component: levelClasses is its variant table, and PopoverTrigger renders unstyled.
   const pillClasses = $derived.by(() => {
     const baseClasses =
       "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-sm font-medium transition-colors cursor-pointer select-none";

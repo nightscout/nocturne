@@ -27,14 +27,14 @@
     tenant.slug && baseDomain ? tenantUrl(tenant.slug, baseDomain) : null
   );
 
-  const alertBadgeClass = $derived.by(() => {
+  const alertBadgeVariant = $derived.by(() => {
     switch (tenant.highestActiveSeverity) {
       case AlertRuleSeverity.Critical:
-        return "bg-destructive text-destructive-foreground";
+        return "destructive" as const;
       case AlertRuleSeverity.Warning:
-        return "bg-warning/15 text-warning";
+        return "warning" as const;
       default:
-        return "bg-muted text-muted-foreground";
+        return "secondary" as const;
     }
   });
 </script>
@@ -51,7 +51,8 @@
         </div>
         {#if tenant.activeAlertCount != null && tenant.activeAlertCount > 0}
           <Badge
-            class="shrink-0 {alertBadgeClass}"
+            variant={alertBadgeVariant}
+            class="shrink-0"
             data-testid="alert-badge"
           >
             <Bell class="h-3 w-3" aria-hidden="true" />

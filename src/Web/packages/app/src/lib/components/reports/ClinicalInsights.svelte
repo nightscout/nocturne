@@ -5,29 +5,24 @@
     slots: {
       container: "rounded-lg border p-4 transition-all",
       icon: "h-5 w-5",
-      badge: "text-2xs",
     },
     variants: {
       type: {
         success: {
           container: "border-success/30 bg-success/5",
           icon: "text-success",
-          badge: "bg-success/10 text-success",
         },
         warning: {
           container: "border-warning/30 bg-warning/5",
           icon: "text-warning",
-          badge: "bg-warning/10 text-warning",
         },
         info: {
           container: "border-info/30 bg-info/5",
           icon: "text-info",
-          badge: "bg-info/10 text-info",
         },
         action: {
           container: "border-primary/30 bg-primary/5",
           icon: "text-primary",
-          badge: "bg-primary/10 text-primary",
         },
       },
     },
@@ -46,7 +41,7 @@
     CardHeader,
     CardTitle,
   } from "$lib/components/ui/card";
-  import { Badge } from "$lib/components/ui/badge";
+  import { Badge, type BadgeVariant } from "$lib/components/ui/badge";
   import {
     Lightbulb,
     TrendingUp,
@@ -102,6 +97,13 @@
   }
 
   let { analysis, showClinicalNotes = true, maxInsights = 5 }: Props = $props();
+
+  const badgeVariants = {
+    success: "success",
+    warning: "warning",
+    info: "info",
+    action: "secondary",
+  } as const satisfies Record<NonNullable<InsightType>, BadgeVariant>;
 
   const typeIcons: Record<NonNullable<InsightType>, typeof CheckCircle2> = {
     success: CheckCircle2,
@@ -187,7 +189,7 @@
                 <h4 class="text-sm font-semibold text-foreground">
                   {insight.title}
                 </h4>
-                <Badge variant="outline" class={styles.badge()}>
+                <Badge variant={badgeVariants[insight.type]}>
                   <CategoryIcon class="mr-1 h-3 w-3" />
                   {insight.category}
                 </Badge>

@@ -201,7 +201,7 @@
     scale={basalAxisScale}
     ticks={2}
     tickLabelProps={{
-      class: "text-[9px] fill-muted-foreground",
+      class: "text-2xs fill-muted-foreground",
     }}
   />
 {/if}
@@ -212,7 +212,7 @@
     x={4}
     y={trackTop + 12}
     dy="-0.355em"
-    class="text-[8px] fill-muted-foreground font-medium"
+    class="text-3xs fill-muted-foreground font-medium"
   >
     BASAL
   </text>

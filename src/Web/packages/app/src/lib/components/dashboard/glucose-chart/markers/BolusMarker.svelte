@@ -74,7 +74,7 @@
       dy="-0.355em"
       text-anchor="middle"
       pointer-events="none"
-      class="text-[8px] fill-insulin-bolus font-medium"
+      class="text-3xs fill-insulin-bolus font-medium"
     >
       {insulin.toFixed(1)}U
     </text>

@@ -72,13 +72,13 @@
         <div>
           <p class="text-sm font-medium text-muted-foreground">Insulin</p>
           <p
-            class="text-2xl font-bold tabular-nums text-[color:var(--insulin-bolus)]"
+            class="text-2xl font-bold tabular-nums text-insulin-bolus"
           >
             {totalInsulin.toFixed(1)}U
           </p>
         </div>
         <div
-          class="h-10 w-10 rounded-lg bg-[color:var(--insulin-bolus)]/10 flex items-center justify-center"
+          class="h-10 w-10 rounded-lg bg-insulin-bolus/10 flex items-center justify-center"
         >
           <BolusIcon size={20} />
         </div>
@@ -101,12 +101,12 @@
       <div class="flex items-center justify-between">
         <div>
           <p class="text-sm font-medium text-muted-foreground">Carbs</p>
-          <p class="text-2xl font-bold tabular-nums text-[color:var(--carbs)]">
+          <p class="text-2xl font-bold tabular-nums text-carbs">
             {totalCarbs.toFixed(0)}g
           </p>
         </div>
         <div
-          class="h-10 w-10 rounded-lg bg-[color:var(--carbs)]/10 flex items-center justify-center"
+          class="h-10 w-10 rounded-lg bg-carbs/10 flex items-center justify-center"
         >
           <CarbsIcon size={20} />
         </div>

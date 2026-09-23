@@ -448,10 +448,7 @@
     {#if activeRecord && activeCategory && activeStyle && ActiveKindIcon}
       <Dialog.Header>
         <Dialog.Title class="flex items-center gap-2">
-          <Badge
-            variant="outline"
-            class="{activeStyle.colorClass} {activeStyle.bgClass} {activeStyle.borderClass}"
-          >
+          <Badge variant={activeStyle.badge}>
             <ActiveKindIcon class="mr-1 h-3.5 w-3.5" />
             {activeCategory.name}
           </Badge>

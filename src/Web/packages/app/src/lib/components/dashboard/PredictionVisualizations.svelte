@@ -131,7 +131,7 @@
       x={chartCtx.xScale(new Date(chartXDomain.to.getTime() + 5 * 60 * 1000))}
       y={chartCtx.yScale(glucoseScale(glucoseData.at(-1)?.sgv ?? 100))}
       dy="-0.355em"
-      class="text-[9px] fill-muted-foreground animate-pulse"
+      class="text-2xs fill-muted-foreground animate-pulse"
     >
       Loading predictions...
     </text>
