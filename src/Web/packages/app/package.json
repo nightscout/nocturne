@@ -12,7 +12,7 @@
     "./stores/*": "./src/lib/stores/*",
     "./components/*.svelte": "./src/lib/components/*.svelte",
     "./components/*": "./src/lib/components/*",
-    "./constants/*": "./src/lib/constants/*",
+    "./constants/*": "./src/lib/constants/*.ts",
     "./api/*": "./src/lib/api/generated/*"
   },
   "directories": {

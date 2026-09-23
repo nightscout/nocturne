@@ -5,7 +5,7 @@
     type: 'html' | 'component';
     content: string;
     componentName?: string;
-    props?: Record<string, string>;
+    props?: Record<string, unknown>;
   }
 
   let {

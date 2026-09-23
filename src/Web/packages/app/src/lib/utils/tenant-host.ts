@@ -6,7 +6,7 @@
  * (BASE_DOMAIN, via the root layout) and already carries any non-default port,
  * so it must never be re-derived or re-decorated on the client.
  */
-import type { TenantDto } from "$lib/api/generated/nocturne-api-client";
+import type { TenantDto } from "../api/generated/nocturne-api-client";
 
 export function tenantUrl(
   slug: string,

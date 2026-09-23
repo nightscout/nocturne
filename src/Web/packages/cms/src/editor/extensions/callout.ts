@@ -2,6 +2,15 @@ import { Node, mergeAttributes } from '@tiptap/core';
 
 export type CalloutType = 'info' | 'warning' | 'danger' | 'tip';
 
+declare module '@tiptap/core' {
+	interface Commands<ReturnType> {
+		callout: {
+			setCallout: (attrs?: { type?: CalloutType }) => ReturnType;
+			toggleCallout: (attrs?: { type?: CalloutType }) => ReturnType;
+		};
+	}
+}
+
 export const CalloutExtension = Node.create({
 	name: 'callout',
 	group: 'block',

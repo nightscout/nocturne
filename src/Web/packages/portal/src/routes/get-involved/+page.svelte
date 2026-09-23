@@ -383,7 +383,7 @@
           src="/logos/github.png"
           alt="GitHub"
           class="w-[22px] h-[22px] rounded-[5px] object-contain"
-          onerror={(e) => { e.currentTarget.style.display = 'none'; }}
+          onerror={(e) => { if (e.currentTarget instanceof HTMLElement) e.currentTarget.style.display = 'none'; }}
         />
         <span class="font-mono text-[13px] text-muted-foreground">nightscout/nocturne</span>
         <span

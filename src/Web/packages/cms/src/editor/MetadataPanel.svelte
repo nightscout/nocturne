@@ -62,9 +62,10 @@
               onCheckedChange={(checked) => (metadata[field.key] = checked)}
             />
           {:else if field.type === 'tags'}
+            {@const tags = metadata[field.key]}
             <Input
               id={field.key}
-              value={Array.isArray(metadata[field.key]) ? metadata[field.key].join(', ') : ''}
+              value={Array.isArray(tags) ? tags.join(', ') : ''}
               placeholder="tag1, tag2, tag3"
               oninput={(e) => (metadata[field.key] = e.currentTarget.value.split(',').map((s) => s.trim()).filter(Boolean))}
             />
