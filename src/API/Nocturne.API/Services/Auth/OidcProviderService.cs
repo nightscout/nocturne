@@ -71,6 +71,8 @@ public class OidcProviderService : IOidcProviderService
         await using var db = await factory.CreateDbContextAsync();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<OidcProviderService>>();
 
+        var configuredIds = options.Providers.Select(p => CreateDeterministicGuid(p.IssuerUrl)).ToArray();
+
         foreach (var config in options.Providers)
         {
             var id = CreateDeterministicGuid(config.IssuerUrl);
@@ -108,6 +110,15 @@ public class OidcProviderService : IOidcProviderService
                     ButtonColor = config.ButtonColor,
                 });
             }
+        }
+
+        var stale = await db.OidcProviders
+            .Where(p => !configuredIds.Contains(p.Id) && p.IsEnabled)
+            .ToListAsync();
+        foreach (var provider in stale)
+        {
+            provider.IsEnabled = false;
+            provider.UpdatedAt = DateTime.UtcNow;
         }
 
         await db.SaveChangesAsync();
