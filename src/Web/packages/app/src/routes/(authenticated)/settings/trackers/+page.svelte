@@ -46,6 +46,7 @@
     DashboardVisibility,
     TrackerVisibility,
     TrackerMode,
+    ReservoirReportKind,
     type TrackerDefinitionDto,
     type TrackerInstanceDto,
     type TrackerPresetDto,
@@ -628,7 +629,7 @@
 />
 
 <!-- Reservoir Report Dialog -->
-<ReservoirReportDialog bind:open={isReservoirReportDialogOpen} defaultKind="Fill" />
+<ReservoirReportDialog bind:open={isReservoirReportDialogOpen} defaultKind={ReservoirReportKind.Fill} />
 
 <!-- Delete Definition Confirmation Dialog -->
 <ConfirmDialog

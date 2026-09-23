@@ -9,23 +9,18 @@
     SelectTrigger,
   } from "$lib/components/ui/select";
   import { GripVertical, Plus, Trash2 } from "lucide-svelte";
-
-  interface Rule {
-    match: string;
-    field: string;
-    processing: string;
-  }
+  import { GlucoseProcessing, type GlucoseProcessingSourceDefault } from "$api";
 
   interface Props {
     open: boolean;
-    rules: Rule[];
-    onSave: (rules: Rule[]) => void;
+    rules: GlucoseProcessingSourceDefault[];
+    onSave: (rules: GlucoseProcessingSourceDefault[]) => void;
     onCancel: () => void;
   }
 
   let { open = $bindable(), rules, onSave, onCancel }: Props = $props();
 
-  let localRules = $state<Rule[]>([]);
+  let localRules = $state<GlucoseProcessingSourceDefault[]>([]);
   let dragIndex = $state<number | null>(null);
   let dropIndex = $state<number | null>(null);
 
@@ -37,7 +32,7 @@
   });
 
   function addRule() {
-    localRules = [...localRules, { match: "", field: "device", processing: "Smoothed" }];
+    localRules = [...localRules, { match: "", field: "device", processing: GlucoseProcessing.Smoothed }];
   }
 
   function removeRule(index: number) {
@@ -131,15 +126,15 @@
                 type="single"
                 value={rule.processing}
                 onValueChange={(value) => {
-                  localRules[index].processing = value;
+                  localRules[index].processing = Object.values(GlucoseProcessing).find((p) => p === value);
                 }}
               >
                 <SelectTrigger>
                   <span>{rule.processing}</span>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Smoothed">Smoothed</SelectItem>
-                  <SelectItem value="Unsmoothed">Unsmoothed</SelectItem>
+                  <SelectItem value={GlucoseProcessing.Smoothed}>Smoothed</SelectItem>
+                  <SelectItem value={GlucoseProcessing.Unsmoothed}>Unsmoothed</SelectItem>
                 </SelectContent>
               </Select>
             </div>

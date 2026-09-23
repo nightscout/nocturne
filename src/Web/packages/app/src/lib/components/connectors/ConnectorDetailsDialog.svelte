@@ -22,11 +22,12 @@
     Database,
     Wrench,
   } from "lucide-svelte";
-  import type {
-    ConnectorCapabilities,
-    SyncResult,
+  import {
+    SyncDataType,
+    type ConnectorCapabilities,
+    type SyncResult,
   } from "$lib/api/generated/nocturne-api-client";
-  import type { SyncRequest } from "$lib/api/generated/schemas";
+  import type { SyncRequestInput } from "$lib/api/generated/schemas";
   import type { ConnectorStatusWithDescription } from "./ServerConnectorsCard.svelte";
   import { formatNumber, lastSeen } from "$lib/utils/formatting";
 
@@ -93,7 +94,7 @@
    */
   async function requestSync(
     connectorId: string,
-    request: SyncRequest,
+    request: SyncRequestInput,
     fallback: string
   ): Promise<SyncResult> {
     try {
@@ -139,7 +140,7 @@
     try {
       foodOnlySyncResult = await requestSync(
         connectorId,
-        { ...selectedRange(), dataTypes: ["Food"] },
+        { ...selectedRange(), dataTypes: [SyncDataType.Food] },
         "We couldn't download the food data. Please try again."
       );
       if (foodOnlySyncResult.success) await notifyComplete();

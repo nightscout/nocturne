@@ -1,6 +1,9 @@
+/** `any` and `unknown` carry no keys to report, so they keep the runtime's `string[]`. */
+type KeysOf<T> = 0 extends 1 & T ? string : unknown extends T ? string : keyof T;
+
 declare global {
   interface ObjectConstructor {
-    keys<T>(obj: T): (keyof T)[];
+    keys<T>(obj: T): KeysOf<T>[];
     values<T>(obj: T): T[keyof T][];
     entries<T>(obj: T): {
       [K in keyof T]-?: [

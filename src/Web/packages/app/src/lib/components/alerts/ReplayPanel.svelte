@@ -248,33 +248,20 @@
     maxPct = 0;
     try {
       const range = computeRange();
-      const date = !range && selectedDate ? selectedDate.toString() : null;
-      // Zod schema for from/to is `string (date-time)`. The generated client
-      // types claim Date, but the request travels as JSON, so we send ISO
-      // strings and cast for the type checker.
-      const fromIso = range
-        ? // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- wire-format ISO string typed as Date by the generated client
-          (range.from.toISOString() as unknown as Date)
-        : undefined;
-      const toIso = range
-        ? // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- wire-format ISO string typed as Date by the generated client
-          (range.to.toISOString() as unknown as Date)
-        : undefined;
+      const date = !range && selectedDate ? selectedDate.toString() : undefined;
       const replayResult = rule
         ? await replayDryRun({
-            // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- wire-format date string typed as Date by the generated client
-            date: date as unknown as Date | undefined,
+            date,
             timezone: browserTimezone,
-            from: fromIso,
-            to: toIso,
+            from: range?.from,
+            to: range?.to,
             rule: typeof rule === "function" ? rule() : rule,
           })
         : await replay({
-            // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- wire-format date string typed as Date by the generated client
-            date: date as unknown as Date | undefined,
+            date,
             timezone: browserTimezone,
-            from: fromIso,
-            to: toIso,
+            from: range?.from,
+            to: range?.to,
           });
       result = replayResult ?? null;
 

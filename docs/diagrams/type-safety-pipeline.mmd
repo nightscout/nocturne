@@ -19,7 +19,7 @@ flowchart TD
         subgraph gendir ["<code>lib/api/generated/</code>"]
             OAS["<b>openapi.json</b><br/>OpenAPI 3.0 spec<br/>(schemas + operations)"]
             CLIENT["<b>nocturne-api-client.ts</b><br/>Typed TS classes per controller<br/>(NSwag)"]
-            ZOD["<b>schemas.ts</b><br/>Zod validators per DTO<br/><code>z.fromJSONSchema()</code>"]
+            ZOD["<b>schemas.ts</b><br/>Zod validators per DTO<br/><code>satisfies z.ZodType&lt;Dto&gt;</code>"]
             REMOTE["<b>*.generated.remote.ts</b><br/>query() / command() wrappers<br/>per [Remote*] endpoint"]
         end
         APICLIENT["<b>api-client.generated.ts</b><br/><code>lib/api/</code><br/>Barrel re-export importing from<br/><code>./generated/nocturne-api-client</code>"]

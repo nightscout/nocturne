@@ -8,11 +8,7 @@
  */
 import { getRequestEvent, query, command } from "$app/server";
 import { error, redirect } from "@sveltejs/kit";
-import type {
-  DataQualitySettings,
-  FeatureSettings,
-  UISettingsConfiguration,
-} from "$lib/api/generated/nocturne-api-client";
+import type { UISettingsConfiguration } from "$lib/api/generated/nocturne-api-client";
 import {
   DataQualitySettingsSchema,
   FeatureSettingsSchema,
@@ -70,8 +66,7 @@ export const saveDataQualitySettings = command(
   DataQualitySettingsSchema,
   async (dataQuality) =>
     saveUiSettingsSection({
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- z.fromJSONSchema infers unknown; DataQualitySettingsSchema validates the shape at runtime
-      dataQuality: dataQuality as DataQualitySettings,
+      dataQuality,
     })
 );
 
@@ -80,7 +75,6 @@ export const saveFeatureSettings = command(
   FeatureSettingsSchema,
   async (features) =>
     saveUiSettingsSection({
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- z.fromJSONSchema infers unknown; FeatureSettingsSchema validates the shape at runtime
-      features: features as FeatureSettings,
+      features,
     })
 );

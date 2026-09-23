@@ -224,11 +224,7 @@ describe("ConnectorDetailsDialog", () => {
     ).toHaveLength(0);
   });
 
-  /**
-   * The command validates its payload against this schema, which takes a
-   * date-time as an ISO string and rejects a `Date`, so a range built the
-   * obvious way would fail every sync at that boundary.
-   */
+  /** The command validates its payload against this schema before it syncs. */
   it("sends a range the command's schema accepts", async () => {
     await syncReturning({
       success: true,

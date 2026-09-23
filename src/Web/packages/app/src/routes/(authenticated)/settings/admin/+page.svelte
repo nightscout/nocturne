@@ -25,6 +25,7 @@
     TenantRoleDto,
     OidcProviderResponse,
     PlatformSettingsSummary,
+    CreateOidcProviderRequest,
   } from "$api";
 
   // State
@@ -79,7 +80,7 @@
     }
   }
 
-  async function saveProvider(providerData: unknown) {
+  async function saveProvider(providerData: CreateOidcProviderRequest) {
     try {
       if (editingProvider?.id) {
         await oidcRemote.update({ id: editingProvider.id, request: providerData });

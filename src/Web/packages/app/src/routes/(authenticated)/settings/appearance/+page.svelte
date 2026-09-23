@@ -149,15 +149,7 @@
   let glucoseProcessingPreference: string | null = $derived(
     preferenceQuery?.current?.preferredGlucoseProcessing ?? null,
   );
-  let sourceDefaults: Array<{ match: string; field: string; processing: string }> =
-    $derived(
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- zod types the rule fields as optional, but the API always returns them populated
-      (sourceDefaultsQuery?.current?.rules ?? []) as Array<{
-        match: string;
-        field: string;
-        processing: string;
-      }>,
-    );
+  let sourceDefaults = $derived(sourceDefaultsQuery?.current?.rules ?? []);
   let sourceDefaultsDialogOpen = $state(false);
 
   // Chart range and tracker pills persist server-side. They used to only mutate

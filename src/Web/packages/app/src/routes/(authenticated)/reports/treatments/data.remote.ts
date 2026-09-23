@@ -5,17 +5,6 @@
 import { z } from 'zod';
 import { getRequestEvent, form, command, query } from '$app/server';
 import { invalid } from '@sveltejs/kit';
-import type {
-	CreateBolusRequest,
-	UpdateBolusRequest,
-	CreateCarbIntakeRequest,
-	UpdateCarbIntakeRequest,
-	UpsertBGCheckRequest,
-	UpsertNoteRequest,
-	UpsertDeviceEventRequest,
-	CreateBasalInjectionRequest,
-	UpdateBasalInjectionRequest,
-} from '$lib/api';
 import {
 	CreateBolusRequestSchema,
 	UpdateBolusRequestSchema,
@@ -28,7 +17,6 @@ import {
 	UpdateBasalInjectionRequestSchema,
 } from '$lib/api/generated/schemas';
 import { DateRangeSchema, resolveReportRange } from '$api/report-range';
-import { dtoSchema } from '$lib/api/dto-schema';
 
 /**
  * Get all v4 entry types for the treatments page.
@@ -204,12 +192,12 @@ export const bulkDeleteEntries = command(
  */
 export const updateEntry = command(
 	z.discriminatedUnion('kind', [
-		z.object({ kind: z.literal('bolus'), id: z.string().min(1), data: dtoSchema<UpdateBolusRequest>(UpdateBolusRequestSchema) }),
-		z.object({ kind: z.literal('carbs'), id: z.string().min(1), data: dtoSchema<UpdateCarbIntakeRequest>(UpdateCarbIntakeRequestSchema) }),
-		z.object({ kind: z.literal('bgCheck'), id: z.string().min(1), data: dtoSchema<UpsertBGCheckRequest>(UpsertBGCheckRequestSchema) }),
-		z.object({ kind: z.literal('note'), id: z.string().min(1), data: dtoSchema<UpsertNoteRequest>(UpsertNoteRequestSchema) }),
-		z.object({ kind: z.literal('deviceEvent'), id: z.string().min(1), data: dtoSchema<UpsertDeviceEventRequest>(UpsertDeviceEventRequestSchema) }),
-		z.object({ kind: z.literal('basalInjection'), id: z.string().min(1), data: dtoSchema<UpdateBasalInjectionRequest>(UpdateBasalInjectionRequestSchema) }),
+		z.object({ kind: z.literal('bolus'), id: z.string().min(1), data: UpdateBolusRequestSchema }),
+		z.object({ kind: z.literal('carbs'), id: z.string().min(1), data: UpdateCarbIntakeRequestSchema }),
+		z.object({ kind: z.literal('bgCheck'), id: z.string().min(1), data: UpsertBGCheckRequestSchema }),
+		z.object({ kind: z.literal('note'), id: z.string().min(1), data: UpsertNoteRequestSchema }),
+		z.object({ kind: z.literal('deviceEvent'), id: z.string().min(1), data: UpsertDeviceEventRequestSchema }),
+		z.object({ kind: z.literal('basalInjection'), id: z.string().min(1), data: UpdateBasalInjectionRequestSchema }),
 	]),
 	async (input) => {
 		const { apiClient } = getRequestEvent().locals;
@@ -244,12 +232,12 @@ export const updateEntry = command(
  */
 export const createEntry = command(
 	z.discriminatedUnion('kind', [
-		z.object({ kind: z.literal('bolus'), data: dtoSchema<CreateBolusRequest>(CreateBolusRequestSchema) }),
-		z.object({ kind: z.literal('carbs'), data: dtoSchema<CreateCarbIntakeRequest>(CreateCarbIntakeRequestSchema) }),
-		z.object({ kind: z.literal('bgCheck'), data: dtoSchema<UpsertBGCheckRequest>(UpsertBGCheckRequestSchema) }),
-		z.object({ kind: z.literal('note'), data: dtoSchema<UpsertNoteRequest>(UpsertNoteRequestSchema) }),
-		z.object({ kind: z.literal('deviceEvent'), data: dtoSchema<UpsertDeviceEventRequest>(UpsertDeviceEventRequestSchema) }),
-		z.object({ kind: z.literal('basalInjection'), data: dtoSchema<CreateBasalInjectionRequest>(CreateBasalInjectionRequestSchema) }),
+		z.object({ kind: z.literal('bolus'), data: CreateBolusRequestSchema }),
+		z.object({ kind: z.literal('carbs'), data: CreateCarbIntakeRequestSchema }),
+		z.object({ kind: z.literal('bgCheck'), data: UpsertBGCheckRequestSchema }),
+		z.object({ kind: z.literal('note'), data: UpsertNoteRequestSchema }),
+		z.object({ kind: z.literal('deviceEvent'), data: UpsertDeviceEventRequestSchema }),
+		z.object({ kind: z.literal('basalInjection'), data: CreateBasalInjectionRequestSchema }),
 	]),
 	async (input) => {
 		const { apiClient } = getRequestEvent().locals;
