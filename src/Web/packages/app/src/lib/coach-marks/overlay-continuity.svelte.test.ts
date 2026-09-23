@@ -31,7 +31,7 @@ function watchBackdrop(): BackdropWatch {
   return watch;
 }
 
-function expectUninterrupted(watch: BackdropWatch, backdrop: HTMLElement): void {
+function expectUninterrupted(watch: BackdropWatch, backdrop: Element): void {
   watch.stop();
   expect({
     removals: watch.removals,
@@ -59,7 +59,7 @@ describe("coach mark overlay continuity", () => {
     render(Harness);
 
     await expect.element(page.getByText("First stop.")).toBeVisible();
-    const backdrop = page.getByTestId("coach-backdrop").element() as HTMLElement;
+    const backdrop = page.getByTestId("coach-backdrop").element();
     const watch = watchBackdrop();
 
     await page.getByRole("button", { name: "Got it" }).click();
@@ -75,7 +75,7 @@ describe("coach mark overlay continuity", () => {
 
     await page.getByRole("button", { name: "Start tour" }).click();
     await expect.element(page.getByText("First stop.")).toBeVisible();
-    const backdrop = page.getByTestId("coach-backdrop").element() as HTMLElement;
+    const backdrop = page.getByTestId("coach-backdrop").element();
     const watch = watchBackdrop();
 
     await page.getByRole("button", { name: "Got it" }).click();
@@ -90,7 +90,7 @@ describe("coach mark overlay continuity", () => {
     render(Harness, { props: { multiStep: true } });
 
     await expect.element(page.getByText("First stop.")).toBeVisible();
-    const backdrop = page.getByTestId("coach-backdrop").element() as HTMLElement;
+    const backdrop = page.getByTestId("coach-backdrop").element();
 
     await page.getByRole("button", { name: "Next" }).click();
     await expect.element(page.getByText("First stop, part two.")).toBeVisible();

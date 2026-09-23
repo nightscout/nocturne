@@ -640,7 +640,7 @@ export interface BrowserAlarmCapabilities {
  */
 export function getBrowserCapabilities(): BrowserAlarmCapabilities {
   return {
-    audio: typeof AudioContext !== 'undefined' || typeof (window as unknown as { webkitAudioContext: unknown }).webkitAudioContext !== 'undefined',
+    audio: typeof AudioContext !== 'undefined' || 'webkitAudioContext' in window,
     notifications: 'Notification' in window,
     notificationPermission: getNotificationPermission(),
     vibration: canVibrate(),
@@ -746,8 +746,8 @@ function openDatabase(): Promise<IDBDatabase> {
     request.onerror = () => reject(request.error);
     request.onsuccess = () => resolve(request.result);
 
-    request.onupgradeneeded = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result;
+    request.onupgradeneeded = () => {
+      const db = request.result;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, { keyPath: 'id' });
       }
@@ -869,7 +869,10 @@ export async function getCustomSounds(): Promise<CustomAlarmSound[]> {
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
+    reader.onload = () =>
+      typeof reader.result === 'string'
+        ? resolve(reader.result)
+        : reject(new Error('FileReader did not produce a data URL'));
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(file);
   });

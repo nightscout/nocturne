@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { SupportDiagnosticsResponse } from "$api-clients";
 import { buildDiagnosticInfo, type DiagnosticSources } from "./diagnostic-info";
+import { isRecord } from "$lib/utils/type-guards";
 
 const lastSync = new Date("2026-09-10T21:00:00Z");
 
@@ -40,8 +41,10 @@ const allOff = {
   settings: false,
 };
 
-function parse(json: string) {
-  return JSON.parse(json) as Record<string, unknown>;
+function parse(json: string): Record<string, unknown> {
+  const parsed: unknown = JSON.parse(json);
+  if (!isRecord(parsed)) throw new Error("diagnostic info is not an object");
+  return parsed;
 }
 
 describe("buildDiagnosticInfo", () => {
