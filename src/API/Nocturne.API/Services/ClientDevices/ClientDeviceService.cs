@@ -222,6 +222,7 @@ public class ClientDeviceService : IClientDeviceService
             .AsNoTracking()
             .Include(e => e.AlertRule)
                 .ThenInclude(r => r!.Channels)
+            .Include(e => e.Instances)
             .Where(e => (e.EndedAt == null || e.EndedAt > now)
                 && e.AlertRule!.IsEnabled
                 && e.AlertRule.Channels.Any(c =>
@@ -243,9 +244,11 @@ public class ClientDeviceService : IClientDeviceService
                 .Where(deviceCaps.Contains)
                 .ToList();
 
+            var snoozed = e.Instances.Any(i => i.ResolvedAt == null && AlertSnooze.IsSnoozed(i.SnoozedUntil, now));
+
             intents.Add(new DeviceActionIntent
             {
-                Intent = e.AcknowledgedAt is not null ? "acknowledged" : "opened",
+                Intent = e.AcknowledgedAt is not null ? "acknowledged" : snoozed ? "snoozed" : "opened",
                 ExcursionId = e.Id,
                 RuleName = e.AlertRule.Name,
                 Severity = e.AlertRule.Severity,

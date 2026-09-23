@@ -169,8 +169,10 @@ public class HomeAssistantHub : TenantAwareHub
 
         await using var db = await contextFactory.CreateDbContextAsync(ct);
         db.TenantId = tenantId;
+        var now = DateTime.UtcNow;
 
-        // Find failed HA deliveries for this instance that belong to open excursions
+        // Find failed HA deliveries for this instance that belong to open excursions and are
+        // not under an AlertSnooze (the resume dispatch re-sends those once it lapses)
         var failedDeliveries = await db.AlertDeliveries
             .Include(d => d.AlertInstance)
                 .ThenInclude(i => i!.AlertExcursion)
@@ -181,7 +183,8 @@ public class HomeAssistantHub : TenantAwareHub
                         && d.Status == "failed"
                         && d.AlertInstance != null
                         && d.AlertInstance.AlertExcursion != null
-                        && d.AlertInstance.AlertExcursion.EndedAt == null)
+                        && d.AlertInstance.AlertExcursion.EndedAt == null
+                        && (d.AlertInstance.SnoozedUntil == null || d.AlertInstance.SnoozedUntil <= now))
             .ToListAsync(ct);
 
         foreach (var delivery in failedDeliveries)

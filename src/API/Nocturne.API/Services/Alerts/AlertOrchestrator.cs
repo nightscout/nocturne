@@ -116,7 +116,8 @@ internal sealed class AlertOrchestrator(
 
             case ExcursionTransitionType.ExcursionContinues:
                 // Nothing to do per-reading. The dispatch happened at open; subsequent
-                // notifications-while-firing are a separate-rule concern (alert_state).
+                // notifications-while-firing are a separate-rule concern (alert_state), and
+                // re-notifying after a snooze is AlertSnoozeService.ResumeAsync's.
                 break;
         }
 
@@ -157,21 +158,8 @@ internal sealed class AlertOrchestrator(
         var activeExcursionCount = await repository.CountActiveExcursionsAsync(tenantId, ct);
         var tenant = await repository.GetTenantAlertContextAsync(tenantId, ct);
 
-        var payload = new AlertPayload
-        {
-            AlertType = rule.ConditionType,
-            RuleName = rule.Name,
-            GlucoseValue = context.LatestValue,
-            Trend = null,
-            TrendRate = context.TrendRate,
-            ReadingTimestamp = context.LatestTimestamp ?? now,
-            ExcursionId = excursionId,
-            InstanceId = instance.Id,
-            TenantId = tenantId,
-            SubjectName = tenant?.SubjectName ?? tenant?.DisplayName ?? "Unknown",
-            ActiveExcursionCount = activeExcursionCount,
-            Severity = rule.Severity,
-        };
+        var payload = AlertPayloads.Build(
+            rule, context, tenantId, excursionId, instance.Id, tenant, activeExcursionCount, now);
 
         // Scoped DND suppression (ADR 0004): when an active DND scope covers this rule's class,
         // a non-Critical rule without an explicit "allow through DND" opt-in still gets a history

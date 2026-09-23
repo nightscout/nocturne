@@ -284,7 +284,8 @@ public class ClientDeviceServiceTests
         string metadataJson,
         bool open = true,
         bool acknowledged = false,
-        DateTime? endedAt = null)
+        DateTime? endedAt = null,
+        DateTime? snoozedUntil = null)
     {
         var rule = new AlertRuleEntity
         {
@@ -301,14 +302,79 @@ public class ClientDeviceServiceTests
             Metadata = metadataJson,
         });
         ctx.AlertRules.Add(rule);
-        ctx.AlertExcursions.Add(new AlertExcursionEntity
+        var excursion = new AlertExcursionEntity
         {
             Id = Guid.NewGuid(),
             AlertRuleId = rule.Id,
             StartedAt = DateTime.UtcNow,
             EndedAt = endedAt ?? (open ? null : DateTime.UtcNow),
             AcknowledgedAt = acknowledged ? DateTime.UtcNow : null,
+        };
+        ctx.AlertExcursions.Add(excursion);
+        ctx.AlertInstances.Add(new AlertInstanceEntity
+        {
+            Id = Guid.NewGuid(),
+            AlertExcursionId = excursion.Id,
+            TriggeredAt = DateTime.UtcNow,
+            SnoozedUntil = snoozedUntil,
+            SnoozeCount = snoozedUntil is null ? 0 : 1,
         });
+    }
+
+    private async Task<(ClientDeviceService svc, Guid deviceId, Guid subject)> CompanionWithExcursionAsync(
+        NocturneDbContext ctx, bool acknowledged = false, DateTime? snoozedUntil = null)
+    {
+        var subject = Guid.NewGuid();
+        var svc = CreateService(ctx);
+        var device = await svc.RegisterAsync(subject, new RegisterDeviceRequest
+        {
+            InstallId = "c1",
+            Kind = DeviceKinds.Companion,
+            Capabilities = [DeviceCapabilities.Notify],
+        }, FullDeviceScopes, null);
+        SeedDeviceActionExcursion(ctx, DeviceKinds.Companion, "{\"capabilities\":[\"notify\"]}",
+            acknowledged: acknowledged, snoozedUntil: snoozedUntil);
+        await ctx.SaveChangesAsync();
+        return (svc, device.Id, subject);
+    }
+
+    [Fact]
+    public async Task GetActiveIntentsAsync_reports_a_snoozed_excursion_as_snoozed_so_devices_withdraw()
+    {
+        using var ctx = CreateContext();
+        var (svc, deviceId, subject) = await CompanionWithExcursionAsync(ctx, snoozedUntil: DateTime.UtcNow.AddMinutes(15));
+
+        var intents = await svc.GetActiveIntentsAsync(deviceId, subject);
+
+        intents.Should().ContainSingle();
+        intents[0].Intent.Should().Be("snoozed");
+        intents[0].Acknowledged.Should().BeFalse("a snooze is not an acknowledgement");
+    }
+
+    [Fact]
+    public async Task GetActiveIntentsAsync_reopens_the_intent_once_the_snooze_lapses()
+    {
+        using var ctx = CreateContext();
+        var (svc, deviceId, subject) = await CompanionWithExcursionAsync(ctx, snoozedUntil: DateTime.UtcNow.AddSeconds(-1));
+
+        var intents = await svc.GetActiveIntentsAsync(deviceId, subject);
+
+        intents.Should().ContainSingle();
+        intents[0].Intent.Should().Be("opened");
+    }
+
+    [Fact]
+    public async Task GetActiveIntentsAsync_acknowledgement_wins_over_snooze()
+    {
+        using var ctx = CreateContext();
+        var (svc, deviceId, subject) = await CompanionWithExcursionAsync(
+            ctx, acknowledged: true, snoozedUntil: DateTime.UtcNow.AddMinutes(15));
+
+        var intents = await svc.GetActiveIntentsAsync(deviceId, subject);
+
+        intents.Should().ContainSingle();
+        intents[0].Intent.Should().Be("acknowledged");
+        intents[0].Acknowledged.Should().BeTrue();
     }
 
     [Fact]

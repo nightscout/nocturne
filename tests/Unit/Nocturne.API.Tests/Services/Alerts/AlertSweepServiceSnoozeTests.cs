@@ -25,7 +25,9 @@ namespace Nocturne.API.Tests.Services.Alerts;
 /// <summary>
 /// Drives <see cref="AlertSweepService.CheckSnoozedInstancesAsync"/> end to end over mocked
 /// persistence and glucose, with the real managed engine and evaluators evaluating snooze
-/// conditions.
+/// conditions. Every clear must hand the instance to <see cref="IAlertSnoozeService.ResumeAsync"/>
+/// and no extension may, so <see cref="ShouldBeCleared"/> and <see cref="ShouldBeExtended"/> check
+/// that too.
 /// </summary>
 [Trait("Category", "Unit")]
 public class AlertSweepServiceSnoozeTests
@@ -40,6 +42,8 @@ public class AlertSweepServiceSnoozeTests
     private readonly Mock<ICanonicalGlucoseService> _canonical = new();
     private readonly List<UpdateAlertInstanceRequest> _updates = [];
     private readonly List<SensorContext> _enricherInputs = [];
+    private readonly List<(Guid InstanceId, Guid TenantId, string? AuditEndpoint)> _resumed = [];
+    private Func<Guid, bool> _resumeThrowsFor = _ => false;
     private List<SensorGlucose> _readings = [];
 
     public AlertSweepServiceSnoozeTests()
@@ -109,7 +113,22 @@ public class AlertSweepServiceSnoozeTests
         services.AddSingleton(Mock.Of<Nocturne.Core.Contracts.Repositories.IAlertTrackerRepository>());
         services.AddSingleton<AlertRuleEvaluationGate>();
         services.AddScoped<ExcursionTracker>();
-        services.AddScoped<ITenantAccessor>(_ => Mock.Of<ITenantAccessor>());
+        services.AddScoped<ITenantAccessor, TenantAccessorStub>();
+        services.AddScoped<IAlertSnoozeService>(sp =>
+        {
+            var snooze = new Mock<IAlertSnoozeService>();
+            snooze
+                .Setup(s => s.ResumeAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((Guid id, CancellationToken _) =>
+                {
+                    if (_resumeThrowsFor(id)) throw new InvalidOperationException("resume failed");
+                    _resumed.Add((id,
+                        sp.GetRequiredService<ITenantAccessor>().TenantId,
+                        sp.GetRequiredService<NocturneDbContext>().AuditContext?.Endpoint));
+                    return true;
+                });
+            return snooze.Object;
+        });
         services.AddScoped<IAuditContext, AuditContext>();
         services.AddScoped(_ => new NocturneDbContext(
             new DbContextOptionsBuilder<NocturneDbContext>()
@@ -135,6 +154,7 @@ public class AlertSweepServiceSnoozeTests
         var update = UpdateFor(instance);
         update.SnoozedUntil.Should().Be(Now.AddMinutes(minutes));
         update.SnoozeCount.Should().Be(instance.SnoozeCount + 1);
+        _resumed.Should().NotContain(r => r.InstanceId == instance.InstanceId, "an extension keeps the alert silent");
     }
 
     private void ShouldBeCleared(SnoozedInstanceSnapshot instance)
@@ -142,6 +162,8 @@ public class AlertSweepServiceSnoozeTests
         var update = UpdateFor(instance);
         update.SnoozedUntil.Should().Be(DateTime.MinValue);
         update.SnoozeCount.Should().BeNull();
+        _resumed.Should().ContainSingle(r => r.InstanceId == instance.InstanceId, "a cleared snooze re-notifies")
+            .Which.TenantId.Should().Be(instance.TenantId);
     }
 
     private const string SmartOn = """{"snooze":{"smartSnooze":true}}""";
@@ -425,5 +447,37 @@ public class AlertSweepServiceSnoozeTests
 
         _updates.Should().NotContain(u => u.Id == broken.InstanceId);
         ShouldBeExtended(healthy);
+    }
+
+    [Fact]
+    public async Task Resume_runs_in_the_tenants_system_attributed_scope()
+    {
+        var instance = Instance("""{"snooze":{"smartSnooze":false}}""");
+
+        await SweepAsync(instance);
+
+        _resumed.Should().ContainSingle().Which.Should().Be(
+            (instance.InstanceId, Tenant, "service:alert-sweep"));
+    }
+
+    [Fact]
+    public async Task FailingResume_DoesNotStopTheRestOfTheTenant()
+    {
+        var failing = Instance("""{"snooze":{"smartSnooze":false}}""");
+        var next = Instance("""{"snooze":{"smartSnooze":false}}""");
+        _resumeThrowsFor = id => id == failing.InstanceId;
+
+        await SweepAsync(failing, next);
+
+        UpdateFor(failing).SnoozedUntil.Should().Be(DateTime.MinValue);
+        ShouldBeCleared(next);
+    }
+
+    private sealed class TenantAccessorStub : ITenantAccessor
+    {
+        public TenantContext? Context { get; private set; }
+        public Guid TenantId => Context?.TenantId ?? Guid.Empty;
+        public bool IsResolved => Context is not null;
+        public void SetTenant(TenantContext context) => Context = context;
     }
 }

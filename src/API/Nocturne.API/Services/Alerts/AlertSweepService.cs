@@ -185,7 +185,8 @@ public class AlertSweepService : BackgroundService
     /// <see cref="SmartSnoozeConfig"/> to enable it with count to spare, and then either its
     /// <see cref="SmartSnoozeConfig.Conditions"/> to hold against a context built from the tenant's
     /// fresh canonical reading, or, when it configures none, <see cref="SmartSnoozeTrendGate"/> to
-    /// pass. Anything else clears the snooze so the alert re-fires.
+    /// pass. Anything else clears the snooze and hands the instance to
+    /// <see cref="IAlertSnoozeService.ResumeAsync"/>, which re-notifies if the alert still stands.
     /// </summary>
     internal async Task CheckSnoozedInstancesAsync(CancellationToken ct)
     {
@@ -308,6 +309,9 @@ public class AlertSweepService : BackgroundService
                 _logger.LogInformation(
                     "Snooze cleared for instance {InstanceId} (count: {Count}/{Max}, reason: {Reason})",
                     instance.InstanceId, instance.SnoozeCount, cfg.MaxCount, reason);
+
+                if (tenantContext is not null)
+                    await ResumeAsync(tenantScope.Services, instance.InstanceId, ct);
             }
 
             modifiedCount++;
@@ -351,6 +355,22 @@ public class AlertSweepService : BackgroundService
         {
             audit.Dispose();
             scope.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Re-notifies a cleared snooze through <see cref="IAlertSnoozeService.ResumeAsync"/>. One
+    /// instance's failure is logged, not rethrown, so the rest of the tenant's pass still runs.
+    /// </summary>
+    private async Task ResumeAsync(IServiceProvider tenantServices, Guid instanceId, CancellationToken ct)
+    {
+        try
+        {
+            await tenantServices.GetRequiredService<IAlertSnoozeService>().ResumeAsync(instanceId, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "Failed to resume alert instance {InstanceId} after its snooze lapsed", instanceId);
         }
     }
 

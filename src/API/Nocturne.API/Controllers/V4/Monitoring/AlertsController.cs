@@ -5,7 +5,6 @@ using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
-using Nocturne.API.Services.Alerts;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Alerts;
@@ -36,6 +35,7 @@ public class AlertsController : ControllerBase
     private readonly ITenantDbContextFactory _contextFactory;
     private readonly IAlertAcknowledgementService _acknowledgementService;
     private readonly IAlertDeliveryService _deliveryService;
+    private readonly IAlertSnoozeService _snoozeService;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly ILogger<AlertsController> _logger;
 
@@ -45,18 +45,21 @@ public class AlertsController : ControllerBase
     /// <param name="contextFactory">Tenant-scoped factory for creating <see cref="NocturneDbContext"/> instances.</param>
     /// <param name="acknowledgementService">Service for acknowledging alert excursions.</param>
     /// <param name="deliveryService">Service for marking alert delivery outcomes.</param>
+    /// <param name="snoozeService">Service for snoozing alert instances.</param>
     /// <param name="tenantAccessor">Accessor for the current request tenant context.</param>
     /// <param name="logger">Logger instance.</param>
     public AlertsController(
         ITenantDbContextFactory contextFactory,
         IAlertAcknowledgementService acknowledgementService,
         IAlertDeliveryService deliveryService,
+        IAlertSnoozeService snoozeService,
         ITenantAccessor tenantAccessor,
         ILogger<AlertsController> logger)
     {
         _contextFactory = contextFactory;
         _acknowledgementService = acknowledgementService;
         _deliveryService = deliveryService;
+        _snoozeService = snoozeService;
         _tenantAccessor = tenantAccessor;
         _logger = logger;
     }
@@ -79,6 +82,7 @@ public class AlertsController : ControllerBase
             .OrderByDescending(e => e.StartedAt)
             .ToListAsync(ct);
 
+        var now = DateTime.UtcNow;
         var result = excursions.Select(e => new ActiveExcursionResponse
         {
             Id = e.Id,
@@ -90,6 +94,10 @@ public class AlertsController : ControllerBase
             AcknowledgedAt = e.AcknowledgedAt,
             AcknowledgedBy = e.AcknowledgedBy,
             HysteresisStartedAt = e.HysteresisStartedAt,
+            SnoozedUntil = e.Instances
+                .Where(i => i.ResolvedAt == null)
+                .Select(i => AlertSnooze.ActiveUntil(i.SnoozedUntil, now))
+                .Max(),
             ActiveInstances = e.Instances
                 .Where(i => i.ResolvedAt == null)
                 .Select(i => new ActiveInstanceResponse
@@ -98,6 +106,8 @@ public class AlertsController : ControllerBase
                     Status = i.Status,
                     TriggeredAt = i.TriggeredAt,
                     SuppressionReason = i.SuppressionReason,
+                    SnoozedUntil = AlertSnooze.ActiveUntil(i.SnoozedUntil, now),
+                    SnoozeCount = i.SnoozeCount,
                 })
                 .ToList(),
         }).ToList();
@@ -289,8 +299,14 @@ public class AlertsController : ControllerBase
     }
 
     /// <summary>
-    /// Snooze an alert instance for the specified duration.
+    /// Snooze an alert instance: no notification is sent for it, on any channel, until
+    /// <see cref="SnoozeRequest.Minutes"/> from now. The alert stays active and unacknowledged,
+    /// and re-notifies when the snooze lapses if it is still firing. Snoozing again replaces the
+    /// window. Returns 409 when the instance is already resolved or has used the rule's
+    /// <c>snooze.maxCount</c> (<see cref="Nocturne.API.Services.Alerts.SmartSnoozeConfig"/>), a count
+    /// shared with the sweep's smart-snooze extensions.
     /// </summary>
+    /// <seealso cref="AlertSnooze"/>
     [HttpPost("instances/{instanceId:guid}/snooze")]
     [RequireScope(Scope.AlertsReadWrite)]
     [RemoteCommand(Invalidates = ["GetActiveAlerts"])]
@@ -301,28 +317,15 @@ public class AlertsController : ControllerBase
     public async Task<ActionResult> SnoozeInstance(
         Guid instanceId, [FromBody] SnoozeRequest request, CancellationToken ct)
     {
-        await using var db = await _contextFactory.CreateAsync(ct);
+        var outcome = await _snoozeService.SnoozeAsync(instanceId, request.Minutes, ct);
 
-        var instance = await db.AlertInstances
-            .Include(i => i.AlertExcursion)
-                .ThenInclude(e => e!.AlertRule)
-            .FirstOrDefaultAsync(i => i.Id == instanceId, ct);
-
-        if (instance is null)
-            return NotFound();
-
-        var rule = instance.AlertExcursion?.AlertRule;
-
-        var maxCount = SmartSnoozeConfig.Parse(rule?.ClientConfiguration).MaxCount;
-
-        if (instance.SnoozeCount >= maxCount)
-            return Problem(detail: "Maximum snooze count reached", statusCode: 409, title: "Conflict");
-
-        instance.SnoozedUntil = DateTime.UtcNow.AddMinutes(request.Minutes);
-        instance.SnoozeCount++;
-        await db.SaveChangesAsync(ct);
-
-        return NoContent();
+        return outcome.Result switch
+        {
+            SnoozeResult.Snoozed => NoContent(),
+            SnoozeResult.NotFound => NotFound(),
+            SnoozeResult.NotActive => Problem(detail: "Alert is no longer active", statusCode: 409, title: "Conflict"),
+            _ => Problem(detail: "Maximum snooze count reached", statusCode: 409, title: "Conflict"),
+        };
     }
 
     /// <inheritdoc cref="IAlertDeliveryService.MarkDeliveredAsync"/>
@@ -398,6 +401,13 @@ public class ActiveExcursionResponse
     public DateTime? AcknowledgedAt { get; set; }
     public string? AcknowledgedBy { get; set; }
     public DateTime? HysteresisStartedAt { get; set; }
+
+    /// <summary>
+    /// Latest <see cref="ActiveInstanceResponse.SnoozedUntil"/> among the active instances; null
+    /// when none is snoozed.
+    /// </summary>
+    public DateTime? SnoozedUntil { get; set; }
+
     public List<ActiveInstanceResponse> ActiveInstances { get; set; } = [];
 }
 
@@ -408,6 +418,14 @@ public class ActiveInstanceResponse
     public DateTime TriggeredAt { get; set; }
     /// <summary>One of <c>"dnd"</c> when delivery was suppressed at fire time, otherwise null.</summary>
     public string? SuppressionReason { get; set; }
+
+    /// <summary>
+    /// End of the snooze in force, or null when the instance is not snoozed — including a snooze
+    /// that has lapsed and not yet been swept (<see cref="AlertSnooze.ActiveUntil"/>).
+    /// </summary>
+    public DateTime? SnoozedUntil { get; set; }
+
+    public int SnoozeCount { get; set; }
 }
 
 public class AlertHistoryResponse

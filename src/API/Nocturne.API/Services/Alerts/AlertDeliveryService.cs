@@ -17,9 +17,11 @@ namespace Nocturne.API.Services.Alerts;
 /// trail is complete on provider failure.
 /// </summary>
 /// <remarks>
-/// DND suppression is the orchestrator's responsibility — by the time DispatchAsync is called
-/// we already know the alert should reach the user. Real-time <see cref="ISignalRBroadcastService"/>
-/// notifications are sent alongside channel deliveries.
+/// DND suppression is the caller's responsibility — by the time DispatchAsync is called we
+/// already know the rule should reach the user. Snooze is enforced here instead, because it
+/// belongs to the instance rather than the rule: <see cref="DispatchAsync"/> sends nothing, on
+/// any channel, for an instance under <see cref="AlertSnooze"/>. Real-time
+/// <see cref="ISignalRBroadcastService"/> notifications are sent alongside channel deliveries.
 /// </remarks>
 internal sealed class AlertDeliveryService(
     IDbContextFactory<NocturneDbContext> contextFactory,
@@ -43,6 +45,22 @@ internal sealed class AlertDeliveryService(
     {
         var tenantId = tenantAccessor.TenantId;
 
+        await using var db = await contextFactory.CreateDbContextAsync(ct);
+        db.TenantId = tenantId;
+
+        var snoozedUntil = await db.AlertInstances
+            .AsNoTracking()
+            .Where(i => i.Id == alertInstanceId)
+            .Select(i => i.SnoozedUntil)
+            .FirstOrDefaultAsync(ct);
+        if (AlertSnooze.IsSnoozed(snoozedUntil, DateTime.UtcNow))
+        {
+            logger.LogInformation(
+                "Alert instance {InstanceId} is snoozed until {SnoozedUntil}; dispatch skipped",
+                alertInstanceId, snoozedUntil);
+            return;
+        }
+
         // Always emit the alert_dispatch broadcast so SignalR-connected web clients render
         // the toast even when there are zero configured channels (the user explicitly opted
         // out of every push/sound/in-app delivery surface).
@@ -56,9 +74,6 @@ internal sealed class AlertDeliveryService(
         }
 
         var payloadJson = JsonSerializer.Serialize(payload);
-
-        await using var db = await contextFactory.CreateDbContextAsync(ct);
-        db.TenantId = tenantId;
 
         // Zero-channel rules still leave an audit anchor: an InApp delivery row marked
         // delivered immediately. Without this row the History/Replay page cannot tell the
