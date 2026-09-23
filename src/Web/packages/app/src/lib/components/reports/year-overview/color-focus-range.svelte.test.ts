@@ -58,7 +58,7 @@ describe("year overview color focus", () => {
       .toHaveAttribute("aria-valuemax", "500");
     const background = (
       page.getByTestId("color-focus-track").element() as HTMLElement
-    ).style.background;
+    ).style.getPropertyValue("--scale-gradient");
     expect(background).toContain("2%");
     expect(background).toMatch(/14(?:\.0+2)?%/);
   });
@@ -90,7 +90,7 @@ describe("year overview color focus", () => {
       if (observedMax === 0.5) {
         expect(
           (page.getByTestId("color-focus-track").element() as HTMLElement)
-            .style.background
+            .style.getPropertyValue("--scale-gradient")
         ).toContain("50%");
       }
       await screen.rerender({ observedMax: observedMax + 1 });

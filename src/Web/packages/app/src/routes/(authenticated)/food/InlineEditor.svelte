@@ -57,13 +57,12 @@
 </script>
 
 <form
-	class="border-y border-border px-4 py-4"
-	style="background: oklch(0.17 0.03 263)"
+	class="border-y border-border bg-background/60 px-4 py-4"
 	onsubmit={handleSubmit}
 >
 	<!-- Delete confirmation bar -->
 	{#if confirming}
-		<div class="mb-4 flex items-center gap-3 rounded-lg px-4 py-3" style="background: oklch(0.25 0.06 25 / 0.5); border: 1px solid oklch(0.6 0.2 25 / 0.3)">
+		<div class="mb-4 flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/15 px-4 py-3">
 			<Trash2 size={16} class="shrink-0 text-destructive" />
 			<span class="text-sm">
 				Delete <strong>{food.name}</strong>?
@@ -79,13 +78,13 @@
 	{/if}
 
 	<!-- Section 1: Name, Carbs, Portion, Unit -->
-	<div class="grid gap-4" style="grid-template-columns: 1.6fr 1fr 1fr 1fr">
+	<div class="grid grid-cols-[1.6fr_1fr_1fr_1fr] gap-4">
 		<!-- Name -->
 		<div class="flex flex-col gap-1.5">
-			<label for="food-edit-name" class="text-muted-foreground font-semibold" style="font-size: 11px">
+			<label for="food-edit-name" class="text-muted-foreground font-semibold text-xs">
 				Name <span aria-hidden="true">*</span><span class="sr-only">(required)</span>
 			</label>
-			<div class="flex items-center rounded-md px-3 py-2" style="border: 1px solid oklch(1 0 0 / 0.18); background: oklch(1 0 0 / 0.04)">
+			<div class="flex items-center rounded-md px-3 py-2 border border-input dark:bg-input/30">
 				<input
 					id="food-edit-name"
 					name="name"
@@ -99,10 +98,10 @@
 
 		<!-- Carbs -->
 		<div class="flex flex-col gap-1.5">
-			<label for="food-edit-carbs" class="font-semibold" style="font-size: 11px; color: var(--carbs)">
+			<label for="food-edit-carbs" class="font-semibold text-xs text-carbs">
 				Carbs <span aria-hidden="true">*</span><span class="sr-only">(required)</span>
 			</label>
-			<div class="flex items-center rounded-md px-3 py-2" style="border: 1px solid var(--carbs-border-strong); background: var(--carbs-bg)">
+			<div class="flex items-center rounded-md px-3 py-2 border border-carbs/45 bg-carbs/6">
 				<input
 					id="food-edit-carbs"
 					name="carbs"
@@ -113,17 +112,17 @@
 					min="0"
 					step="0.1"
 				/>
-				<span class="ml-2 shrink-0 text-xs" style="color: var(--carbs)">g</span>
+				<span class="ml-2 shrink-0 text-xs text-carbs">g</span>
 			</div>
-			<span class="text-muted-foreground" style="font-size: 10px">per {draft.portion ?? 100} {draft.unit ?? 'g'}</span>
+			<span class="text-muted-foreground text-2xs">per {draft.portion ?? 100} {draft.unit ?? 'g'}</span>
 		</div>
 
 		<!-- Portion -->
 		<div class="flex flex-col gap-1.5">
-			<label for="food-edit-portion" class="text-muted-foreground font-semibold" style="font-size: 11px">
+			<label for="food-edit-portion" class="text-muted-foreground font-semibold text-xs">
 				Portion <span aria-hidden="true">*</span><span class="sr-only">(required)</span>
 			</label>
-			<div class="flex items-center rounded-md px-3 py-2" style="border: 1px solid oklch(1 0 0 / 0.18); background: oklch(1 0 0 / 0.04)">
+			<div class="flex items-center rounded-md px-3 py-2 border border-input dark:bg-input/30">
 				<input
 					id="food-edit-portion"
 					name="portion"
@@ -140,7 +139,7 @@
 
 		<!-- Unit -->
 		<div class="flex flex-col gap-1.5">
-			<span id="food-edit-unit-label" class="text-muted-foreground font-semibold" style="font-size: 11px">Unit</span>
+			<span id="food-edit-unit-label" class="text-muted-foreground font-semibold text-xs">Unit</span>
 			<ToggleGroup.Root aria-labelledby="food-edit-unit-label" type="single" value={draft.unit ?? 'g'} onValueChange={(v: string) => { if (v) draft.unit = v; }} variant="outline" size="sm" class="w-full">
 				{#each FOOD_UNITS as u (u)}
 					<ToggleGroup.Item value={u} class="flex-1">{u}</ToggleGroup.Item>
@@ -152,10 +151,10 @@
 	<Separator class="my-4" />
 
 	<!-- Section 2: GI, Fat, Protein, Energy -->
-	<div class="grid gap-4" style="grid-template-columns: 1.4fr 1fr 1fr 1fr">
+	<div class="grid grid-cols-[1.4fr_1fr_1fr_1fr] gap-4">
 		<!-- GI -->
 		<div class="flex flex-col gap-1.5">
-			<span id="food-edit-gi-label" class="text-muted-foreground font-semibold" style="font-size: 11px">Glycemic Index</span>
+			<span id="food-edit-gi-label" class="text-muted-foreground font-semibold text-xs">Glycemic Index</span>
 			<ToggleGroup.Root aria-labelledby="food-edit-gi-label" type="single" value={giFromInt(draft.gi)} onValueChange={(v: string) => { if (v) draft.gi = giToInt(v as GiLevel); }} variant="outline" size="sm" class="w-full">
 				{#each giLevels as g (g)}
 					<ToggleGroup.Item value={g} class="capitalize">
@@ -167,11 +166,11 @@
 
 		<!-- Fat -->
 		<div class="flex flex-col gap-1.5">
-			<label for="food-edit-fat" class="font-semibold" style="font-size: 11px">
+			<label for="food-edit-fat" class="font-semibold text-xs">
 				<span class="text-muted-foreground">Fat</span>
-				<span class="ml-1" style="font-size: 10px; color: oklch(1 0 0 / 0.3)">optional</span>
+				<span class="ml-1 text-2xs text-foreground/30">optional</span>
 			</label>
-			<div class="flex items-center rounded-md px-3 py-2" style="border: 1px solid oklch(1 0 0 / 0.18); background: oklch(1 0 0 / 0.04)">
+			<div class="flex items-center rounded-md px-3 py-2 border border-input dark:bg-input/30">
 				<input
 					type="number"
 					id="food-edit-fat"
@@ -187,11 +186,11 @@
 
 		<!-- Protein -->
 		<div class="flex flex-col gap-1.5">
-			<label for="food-edit-protein" class="font-semibold" style="font-size: 11px">
+			<label for="food-edit-protein" class="font-semibold text-xs">
 				<span class="text-muted-foreground">Protein</span>
-				<span class="ml-1" style="font-size: 10px; color: oklch(1 0 0 / 0.3)">optional</span>
+				<span class="ml-1 text-2xs text-foreground/30">optional</span>
 			</label>
-			<div class="flex items-center rounded-md px-3 py-2" style="border: 1px solid oklch(1 0 0 / 0.18); background: oklch(1 0 0 / 0.04)">
+			<div class="flex items-center rounded-md px-3 py-2 border border-input dark:bg-input/30">
 				<input
 					type="number"
 					id="food-edit-protein"
@@ -207,11 +206,11 @@
 
 		<!-- Energy -->
 		<div class="flex flex-col gap-1.5">
-			<label for="food-edit-energy" class="font-semibold" style="font-size: 11px">
+			<label for="food-edit-energy" class="font-semibold text-xs">
 				<span class="text-muted-foreground">Energy</span>
-				<span class="ml-1" style="font-size: 10px; color: oklch(1 0 0 / 0.3)">auto</span>
+				<span class="ml-1 text-2xs text-foreground/30">auto</span>
 			</label>
-			<div class="flex items-center rounded-md px-3 py-2" style="border: 1px solid oklch(1 0 0 / 0.18); background: oklch(1 0 0 / 0.04)">
+			<div class="flex items-center rounded-md px-3 py-2 border border-input dark:bg-input/30">
 				<input
 					type="number"
 					id="food-edit-energy"

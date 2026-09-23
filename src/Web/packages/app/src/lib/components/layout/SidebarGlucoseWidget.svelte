@@ -95,8 +95,8 @@
         <div class="flex flex-col items-center gap-0.5">
           <div class="flex items-center gap-0.5 {deltaColorClass(direction)}">
             <ArrowRight
-              class="size-4"
-              style="transform: rotate({arrowAngle.current}deg)"
+              class="size-4 rotate-(--arrow-angle)"
+              style="--arrow-angle: {arrowAngle.current}deg"
             />
             <span class="text-sm font-medium">{displayDelta}</span>
           </div>
@@ -144,8 +144,8 @@
   {#if hasData && !isStale}
     <div class="flex items-center gap-0.5 {deltaColorClass(direction)}">
       <ArrowRight
-        class="size-3"
-        style="transform: rotate({arrowAngle.current}deg)"
+        class="size-3 rotate-(--arrow-angle)"
+        style="--arrow-angle: {arrowAngle.current}deg"
       />
       <span class="text-[10px] font-medium">{displayDelta}</span>
     </div>

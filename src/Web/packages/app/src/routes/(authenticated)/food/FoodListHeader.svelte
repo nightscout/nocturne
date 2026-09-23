@@ -25,20 +25,21 @@
 		variant="ghost"
 		size="inline"
 		class="text-[11px] font-semibold uppercase tracking-wider hover:bg-transparent"
-		style={sort === 'carbs' ? 'color: var(--carbs-strong)' : undefined}
 		onclick={() => onsort('carbs')}
 	>
-		Carbs
-		{#if sort === 'carbs'}
-			<ChevronDown class="h-2.5 w-2.5" />
-		{/if}
+		<span class="contents {sort === 'carbs' ? 'text-(--carbs-strong)' : ''}">
+			Carbs
+			{#if sort === 'carbs'}
+				<ChevronDown class="h-2.5 w-2.5" />
+			{/if}
+		</span>
 	</Button>
 
 	<span class="col-label">Portion</span>
 
 	<span class="col-label">GI</span>
 
-	<span class="col-label" style="text-align: right;">Energy</span>
+	<span class="col-label text-right">Energy</span>
 
 	<span></span>
 </div>

@@ -69,12 +69,7 @@
 
       <button
         data-testid="food-favorites-filter"
-        class="flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 text-xs cursor-pointer transition-all"
-        style:background={state.favoritesOnly ? 'oklch(1 0 0 / 0.08)' : 'transparent'}
-        style:border-color={state.favoritesOnly ? 'oklch(1 0 0 / 0.16)' : undefined}
-        class:text-foreground={state.favoritesOnly}
-        class:text-muted-foreground={!state.favoritesOnly}
-        class:border-border={!state.favoritesOnly}
+        class={['flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 text-xs cursor-pointer transition-all', state.favoritesOnly ? 'border-foreground/16 bg-foreground/8 text-foreground' : 'border-border text-muted-foreground']}
         onclick={() => (state.favoritesOnly = !state.favoritesOnly)}
       >
         <Star class="h-3 w-3" /> Favorites
@@ -98,22 +93,12 @@
     <div class="flex flex-wrap items-center gap-1.5 border-b border-border px-4 py-2.5">
       <span class="mr-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60">Category</span>
       <button
-        class="flex h-7 items-center rounded-full border px-2.5 text-xs cursor-pointer transition-all"
-        style:background={state.categoryFilter === null ? 'oklch(1 0 0 / 0.08)' : 'transparent'}
-        style:border-color={state.categoryFilter === null ? 'oklch(1 0 0 / 0.16)' : undefined}
-        class:text-foreground={state.categoryFilter === null}
-        class:text-muted-foreground={state.categoryFilter !== null}
-        class:border-border={state.categoryFilter !== null}
+        class={['flex h-7 items-center rounded-full border px-2.5 text-xs cursor-pointer transition-all', state.categoryFilter === null ? 'border-foreground/16 bg-foreground/8 text-foreground' : 'border-border text-muted-foreground']}
         onclick={() => (state.categoryFilter = null)}
       >All</button>
       {#each state.categories as cat (cat)}
         <button
-          class="flex h-7 items-center rounded-full border px-2.5 text-xs cursor-pointer transition-all"
-          style:background={state.categoryFilter === cat ? 'oklch(1 0 0 / 0.08)' : 'transparent'}
-          style:border-color={state.categoryFilter === cat ? 'oklch(1 0 0 / 0.16)' : undefined}
-          class:text-foreground={state.categoryFilter === cat}
-          class:text-muted-foreground={state.categoryFilter !== cat}
-          class:border-border={state.categoryFilter !== cat}
+          class={['flex h-7 items-center rounded-full border px-2.5 text-xs cursor-pointer transition-all', state.categoryFilter === cat ? 'border-foreground/16 bg-foreground/8 text-foreground' : 'border-border text-muted-foreground']}
           onclick={() => (state.categoryFilter = state.categoryFilter === cat ? null : cat)}
         >{cat}</button>
       {/each}
@@ -123,12 +108,7 @@
       <span class="mr-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60">GI</span>
       {#each giLevels as g (g)}
         <button
-          class="flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs cursor-pointer transition-all"
-          style:background={state.giFilter === g ? 'oklch(1 0 0 / 0.08)' : 'transparent'}
-          style:border-color={state.giFilter === g ? 'oklch(1 0 0 / 0.16)' : undefined}
-          class:text-foreground={state.giFilter === g}
-          class:text-muted-foreground={state.giFilter !== g}
-          class:border-border={state.giFilter !== g}
+          class={['flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs cursor-pointer transition-all', state.giFilter === g ? 'border-foreground/16 bg-foreground/8 text-foreground' : 'border-border text-muted-foreground']}
           onclick={() => (state.giFilter = state.giFilter === g ? null : g)}
         >
           <GiIcon level={g} size={7} />
@@ -151,7 +131,7 @@
       <div class="py-16 text-center text-muted-foreground">Loading food database...</div>
     {:else if state.foods.length === 0}
       <div class="flex flex-col items-center justify-center gap-3 px-6 py-16 text-center text-muted-foreground">
-        <div class="grid h-14 w-14 place-items-center rounded-2xl" style="background: var(--carbs-soft); color: var(--carbs-strong);">
+        <div class="grid h-14 w-14 place-items-center rounded-2xl bg-carbs/12 text-(--carbs-strong)">
           <Apple class="h-7 w-7" />
         </div>
         <div class="text-lg font-semibold text-foreground">Build your food database</div>
@@ -183,11 +163,6 @@
 
 <style>
   .food-editor {
-    --carbs-soft: color-mix(in oklch, var(--carbs) 12%, transparent);
     --carbs-strong: color-mix(in oklch, var(--carbs), white 15%);
-    --carbs-border: color-mix(in oklch, var(--carbs) 22%, transparent);
-    --carbs-border-strong: color-mix(in oklch, var(--carbs) 45%, transparent);
-    --carbs-bg: color-mix(in oklch, var(--carbs) 6%, transparent);
-    --carbs-bg-subtle: color-mix(in oklch, var(--carbs) 4%, transparent);
   }
 </style>

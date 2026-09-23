@@ -220,8 +220,8 @@
               </div>
               <div class="w-full h-2 bg-muted rounded-full overflow-hidden">
                 <div
-                  class="h-full bg-primary transition-all duration-300"
-                  style="width: {deduplicationStatus.progress.percentComplete ?? 0}%"
+                  class="h-full w-(--progress) bg-primary transition-all duration-300"
+                  style:--progress="{deduplicationStatus.progress.percentComplete ?? 0}%"
                 ></div>
               </div>
               <div class="grid grid-cols-2 gap-2 text-xs text-muted-foreground">

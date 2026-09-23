@@ -162,8 +162,8 @@
             aria-label="Toggle {category.label.toLowerCase()}"
           >
             <span
-              class="w-2 h-2 rounded-full mr-2"
-              style="background-color: {category.color};"
+              class="w-2 h-2 rounded-full mr-2 bg-(--swatch)"
+              style:--swatch={category.color}
             ></span>
             {category.label}
           </Toggle>

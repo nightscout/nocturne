@@ -244,8 +244,8 @@
                     chartCtx.xScale(new Date(nextPoint.timestamp ?? 0)) - left,
                   height: Math.abs(bottom - top),
                 }}
-                <rect {...step} fill={fillColor} style="opacity: {opacity}" />
-                <rect {...step} fill={patternFill} style="opacity: {opacity}" />
+                <rect {...step} fill={fillColor} {opacity} />
+                <rect {...step} fill={patternFill} {opacity} />
               {/each}
             {/snippet}
           </Pattern>
@@ -259,8 +259,8 @@
             curve={curveStepAfter}
             fill={fillColor}
             stroke={strokeColor}
-            class="stroke-1"
-            style="opacity: {opacity}"
+            class="stroke-1 opacity-(--segment-opacity)"
+            style="--segment-opacity: {opacity}"
           />
         {/if}
       {/each}

@@ -275,10 +275,9 @@
           <span
             data-testid="rule-status-pip"
             data-truth={truth ? "true" : "false"}
-            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full border-2 border-(--severity) {truth ? 'bg-(--severity)' : ''}"
             class:opacity-50={disabled}
-            style:background-color={truth ? severityVar(rule.severity) : "transparent"}
-            style:border={`1.5px solid ${severityVar(rule.severity)}`}
+            style:--severity={severityVar(rule.severity)}
             aria-hidden="true"
           ></span>
           <span class="flex-1 min-w-0 truncate">

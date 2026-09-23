@@ -110,24 +110,21 @@
       <div class="flex justify-between text-xs mt-2">
         <span class="flex items-center gap-1.5">
           <span
-            class="w-2 h-2 rounded-full"
-            style="background-color: var(--iob-bolus);"
+            class="w-2 h-2 rounded-full bg-iob-bolus"
           ></span>
           Bolus {bolus.toFixed(1)}U
         </span>
         {#if auto > 0}
           <span class="flex items-center gap-1.5">
             <span
-              class="w-2 h-2 rounded-full"
-              style="background-color: var(--iob-temporary);"
+              class="w-2 h-2 rounded-full bg-iob-temporary"
             ></span>
             Auto {auto.toFixed(1)}U
           </span>
         {/if}
         <span class="flex items-center gap-1.5">
           <span
-            class="w-2 h-2 rounded-full"
-            style="background-color: var(--iob-basal);"
+            class="w-2 h-2 rounded-full bg-iob-basal"
           ></span>
           Basal {basal.toFixed(1)}U
         </span>
@@ -137,8 +134,7 @@
       <div class="flex justify-center text-xs mt-2 pt-2 border-t border-border">
         <span class="flex items-center gap-1.5 text-muted-foreground">
           <span
-            class="w-2 h-2 rounded-full"
-            style="background-color: var(--cob-carbs, hsl(var(--chart-3)));"
+            class="w-2 h-2 rounded-full bg-carbs"
           ></span>
           Carbs {carbs.toFixed(0)}g
         </span>

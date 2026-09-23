@@ -456,9 +456,9 @@
           <Table.Row>
             {#each headerGroup.headers as header (header.id)}
               <Table.Head
-                class="whitespace-nowrap"
+                class="whitespace-nowrap w-(--col-w)"
                 style={header.getSize()
-                  ? `width: ${header.getSize()}px`
+                  ? `--col-w: ${header.getSize()}px`
                   : undefined}
               >
                 {#if !header.isPlaceholder}

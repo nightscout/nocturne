@@ -119,8 +119,8 @@
       {#each hourLabels as hour (hour)}
         {@const pct = (hour / HOURS_PER_ROW) * 100}
         <span
-          class="absolute text-xs text-muted-foreground -translate-x-1/2"
-          style:left="{pct}%"
+          class="absolute left-(--hour-left) text-xs text-muted-foreground -translate-x-1/2"
+          style:--hour-left="{pct}%"
         >
           {hour % 24 === 0 && hour < 48 ? '0' : hour % 24}h
         </span>
@@ -131,8 +131,8 @@
   <!-- Rows -->
   {#each visibleDataRows as dataRow, i (`${dataRow.day.getTime()}-${i}`)}
     <div
-      class="flex items-center"
-      style:height="{rowHeight}px"
+      class="flex h-(--row-h) items-center"
+      style:--row-h="{rowHeight}px"
       animate:flip={{ duration: 300, easing: cubicOut }}
       in:fly={{ y: direction === 'down' ? rowHeight : -rowHeight, duration: 300, easing: cubicOut }}
       out:fly={{ y: direction === 'down' ? -rowHeight : rowHeight, duration: 300, easing: cubicOut }}

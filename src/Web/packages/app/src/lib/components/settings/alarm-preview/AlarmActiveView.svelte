@@ -26,8 +26,8 @@
 <!-- Screen flash overlay -->
 {#if isFlashing && profile.visual.screenFlash}
   <div
-    class="fixed inset-0 z-100 pointer-events-none transition-opacity duration-100"
-    style="background-color: {profile.visual.flashColor}; opacity: 0.3;"
+    class="fixed inset-0 z-100 pointer-events-none bg-(--flash-color) opacity-30 transition-opacity duration-100"
+    style:--flash-color={profile.visual.flashColor}
   ></div>
 {/if}
 

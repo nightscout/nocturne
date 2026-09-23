@@ -298,7 +298,6 @@
 
   // Cap percent change at ±60 % so outliers don't blow out the bar.
   const BAR_CAP_PCT = 60;
-  const BAR_COLOR = "var(--foreground)";
 
   // Signed percent change from the first period to the second. A zero baseline admits no
   // proportional change, so any move off it saturates the bar in the move's direction
@@ -314,7 +313,8 @@
     label: string;
     av: number | null;
     bv: number | null;
-    fillStyle: string;
+    bar: "flat" | "up" | "down";
+    barWidth: number;
     deltaText: string;
   };
 
@@ -333,7 +333,8 @@
           label: def.label,
           av,
           bv,
-          fillStyle: `left: calc(50% - 1px); width: 2px; background: ${BAR_COLOR};`,
+          bar: "flat",
+          barWidth: 0,
           deltaText: "—",
         };
       }
@@ -347,18 +348,15 @@
 
       // The bar carries the sign of the change: it grows right when the second
       // period is higher and left when it is lower.
-      const fillStyle = flat
-        ? `left: calc(50% - 1px); width: 2px; background: ${BAR_COLOR};`
-        : delta > 0
-          ? `left: 50%; width: ${halfWidth}%; background: ${BAR_COLOR};`
-          : `right: 50%; width: ${halfWidth}%; background: ${BAR_COLOR};`;
+      const bar = flat ? "flat" : delta > 0 ? "up" : "down";
 
       return {
         key,
         label: def.label,
         av,
         bv,
-        fillStyle,
+        bar,
+        barWidth: halfWidth,
         deltaText: def.formatDelta(delta),
       };
     });
@@ -443,8 +441,8 @@
           <div class="rounded-md border border-border bg-card p-3">
             <div class="mb-2 flex items-center gap-2">
               <span
-                class="inline-block h-2 w-2 rounded-full"
-                style="background: {cfg.color};"
+                class="inline-block h-2 w-2 rounded-full bg-(--dot)"
+                style:--dot={cfg.color}
               ></span>
               <Input
                 value={p.label}
@@ -502,8 +500,7 @@
       <div class="flex flex-wrap items-center gap-3 border-b border-border pb-3">
         <span class="inline-flex items-center gap-2 rounded-full bg-muted px-3 py-1.5 text-xs font-medium">
           <span
-            class="inline-block h-2 w-2 rounded-full"
-            style="background: var(--muted-foreground);"
+            class="inline-block h-2 w-2 rounded-full bg-muted-foreground"
           ></span>
           {committed.a.label}
         </span>
@@ -512,8 +509,7 @@
         </span>
         <span class="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium">
           <span
-            class="inline-block h-2 w-2 rounded-full"
-            style="background: var(--glucose-in-range);"
+            class="inline-block h-2 w-2 rounded-full bg-glucose-in-range"
           ></span>
           {committed.b.label}
         </span>
@@ -539,8 +535,12 @@
             <div class="relative order-last h-2 w-full overflow-hidden rounded-full bg-muted @2xl:order-none @2xl:w-auto">
               <div class="absolute top-0 bottom-0 left-1/2 w-px bg-border"></div>
               <div
-                class="absolute top-0 bottom-0 rounded-full transition-all duration-200"
-                style={row.fillStyle}
+                class="absolute top-0 bottom-0 rounded-full bg-foreground transition-all duration-200 {row.bar === 'flat'
+                  ? 'left-[calc(50%-1px)] w-0.5'
+                  : row.bar === 'up'
+                    ? 'left-1/2 w-(--bar-w)'
+                    : 'right-1/2 w-(--bar-w)'}"
+                style:--bar-w="{row.barWidth}%"
               ></div>
             </div>
             <div
@@ -574,8 +574,8 @@
           <div class="flex flex-col">
             <div class="mb-3 flex items-center gap-2">
               <span
-                class="inline-block h-2 w-2 rounded-full"
-                style="background: {col.accent};"
+                class="inline-block h-2 w-2 rounded-full bg-(--dot)"
+                style:--dot={col.accent}
               ></span>
               <span class="text-sm font-semibold">{col.periodLabel}</span>
               <span class="ml-auto font-mono text-[11px] text-muted-foreground">

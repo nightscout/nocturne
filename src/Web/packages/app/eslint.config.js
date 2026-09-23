@@ -124,8 +124,29 @@ export default ts.config(
       "shadcn/no-raw-colors": "warn",
       "shadcn/no-arbitrary-values": ["warn", { allow: ["layout"] }],
       "shadcn/no-inline-styles": "warn",
-      "shadcn/no-unknown-classes": "warn",
+      // `lead` is a hook the typography plugin styles inside `prose`.
+      "shadcn/no-unknown-classes": ["warn", { allow: ["lead"] }],
       "shadcn/require-static-classes": "warn"
+    }
+  },
+  {
+    // Clock faces render styles their owner authored in the clock builder: colours,
+    // sizes, positions and free-form custom CSS.
+    files: [
+      "src/lib/components/clock/**",
+      "src/lib/components/clock-builder/**",
+      "src/routes/(authenticated)/clock/**"
+    ],
+    rules: {
+      "shadcn/no-inline-styles": "off"
+    }
+  },
+  {
+    // Theme cards preview the palettes of themes that are not active, which the
+    // active theme's tokens cannot express.
+    files: ["src/routes/(authenticated)/settings/appearance/+page.svelte"],
+    rules: {
+      "shadcn/no-inline-styles": ["warn", { allow: ["background"] }]
     }
   },
   {

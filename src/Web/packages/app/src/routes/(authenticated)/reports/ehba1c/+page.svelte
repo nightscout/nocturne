@@ -344,7 +344,7 @@
         <div class="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm">
           {#each zoneBands as band (band.key)}
             <div class="flex items-center gap-1.5">
-              <span class="h-2.5 w-2.5 rounded-full" style="background-color: {band.swatch}"></span>
+              <span class="h-2.5 w-2.5 rounded-full bg-(--swatch)" style:--swatch={band.swatch}></span>
               <span>{band.label}</span>
               <span class="text-muted-foreground">({formatZoneRange(band)})</span>
             </div>

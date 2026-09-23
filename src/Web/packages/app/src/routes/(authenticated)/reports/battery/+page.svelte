@@ -306,8 +306,8 @@
                   </div>
                   <div class="h-2 bg-muted rounded-full overflow-hidden">
                     <div
-                      class="h-full bg-success"
-                      style="width: {stat?.timeAbove80Percent ?? 0}%"
+                      class="h-full bg-success w-(--share)"
+                      style:--share="{stat?.timeAbove80Percent ?? 0}%"
                     ></div>
                   </div>
                   <div class="flex justify-between text-sm">
@@ -318,8 +318,8 @@
                   </div>
                   <div class="h-2 bg-muted rounded-full overflow-hidden">
                     <div
-                      class="h-full bg-blue-500"
-                      style="width: {stat?.timeBetween30And80Percent ?? 0}%"
+                      class="h-full bg-blue-500 w-(--share)"
+                      style:--share="{stat?.timeBetween30And80Percent ?? 0}%"
                     ></div>
                   </div>
                   <div class="flex justify-between text-sm">
@@ -330,8 +330,8 @@
                   </div>
                   <div class="h-2 bg-muted rounded-full overflow-hidden">
                     <div
-                      class="h-full bg-warning"
-                      style="width: {stat?.timeBelow30Percent ?? 0}%"
+                      class="h-full bg-warning w-(--share)"
+                      style:--share="{stat?.timeBelow30Percent ?? 0}%"
                     ></div>
                   </div>
                 </div>

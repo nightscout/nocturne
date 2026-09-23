@@ -85,7 +85,7 @@
   };
 </script>
 
-<div style="width: {width}px; height: {height}px;" data-testid="harness-root">
+<div class="h-(--harness-h) w-(--harness-w)" style:--harness-w="{width}px" style:--harness-h="{height}px" data-testid="harness-root">
   <Chart
     data={series}
     x={(d: (typeof series)[number]) => d.time}

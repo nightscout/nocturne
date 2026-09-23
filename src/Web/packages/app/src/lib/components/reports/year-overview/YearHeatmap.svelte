@@ -194,10 +194,8 @@
                     {#if d.averageGlucoseMgdl != null}
                       <div class="mb-2 flex items-baseline gap-1.5">
                         <span
-                          class="text-sm font-bold tabular-nums"
-                          style="color: {glucoseColorScale(
-                            d.averageGlucoseMgdl
-                          )}"
+                          class="text-sm font-bold tabular-nums text-(--avg-color)"
+                          style:--avg-color={glucoseColorScale(d.averageGlucoseMgdl)}
                         >
                           {formatGlucoseValue(
                             d.averageGlucoseMgdl,

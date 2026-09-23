@@ -148,8 +148,8 @@
   <Popover.Trigger class={pillClasses}>
     {#if showProgress}
       <span
-        class="absolute inset-y-0 left-0 {progressFillClasses} transition-all duration-500 ease-out"
-        style="width: {progressPercent}%"
+        class="absolute inset-y-0 left-0 {progressFillClasses} w-(--progress) transition-all duration-500 ease-out"
+        style:--progress="{progressPercent}%"
         aria-hidden="true"
       ></span>
     {/if}

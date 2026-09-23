@@ -682,8 +682,8 @@
                 >
                   {#if isResolved}
                     <CheckCircle2
-                      class="h-3.5 w-3.5 shrink-0"
-                      style="color: {severityVar(m.ev.severity)}"
+                      class="h-3.5 w-3.5 shrink-0 text-(--severity)"
+                      style="--severity: {severityVar(m.ev.severity)}"
                       aria-hidden="true"
                     />
                   {:else if isSuppressed}
@@ -693,8 +693,8 @@
                     />
                   {:else}
                     <Bell
-                      class="h-3.5 w-3.5 shrink-0"
-                      style="color: {severityVar(m.ev.severity)}"
+                      class="h-3.5 w-3.5 shrink-0 text-(--severity)"
+                      style="--severity: {severityVar(m.ev.severity)}"
                       aria-hidden="true"
                     />
                   {/if}

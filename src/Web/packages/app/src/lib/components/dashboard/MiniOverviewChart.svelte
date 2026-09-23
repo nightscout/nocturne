@@ -212,12 +212,11 @@
                    when the brush hugs an edge, as it does at "now". -->
               {#if bc.active && bc.x?.[0] != null && bc.x?.[1] != null}
                 <div
-                  class="absolute text-[9px] font-medium text-primary bg-background/90 px-1 py-0.5 rounded shadow-sm border border-border whitespace-nowrap pointer-events-none z-20"
-                  style="left: clamp({RANGE_LABEL_HALF_WIDTH}px, {padding.left +
+                  class="absolute text-[9px] font-medium text-primary bg-background/90 px-1 py-0.5 rounded shadow-sm border border-border whitespace-nowrap pointer-events-none z-20 left-(--label-left) top-(--label-top) -translate-x-1/2"
+                  style:--label-left="clamp({RANGE_LABEL_HALF_WIDTH}px, {padding.left +
                     bc.range.x +
-                    bc.range.width / 2}px, calc(100% - {RANGE_LABEL_HALF_WIDTH}px)); top: {padding.top +
-                    bc.range.y -
-                    18}px; transform: translateX(-50%)"
+                    bc.range.width / 2}px, calc(100% - {RANGE_LABEL_HALF_WIDTH}px))"
+                  style:--label-top="{padding.top + bc.range.y - 18}px"
                 >
                   {formatDateTime(new Date(bc.x[0]))} - {formatDateTime(
                     new Date(bc.x[1])

@@ -46,7 +46,7 @@
   );
 </script>
 
-<div style:height="{height}px">
+<div class="h-(--row-h)" style:--row-h="{height}px">
 <Chart
   data={bgChartData}
   x="time"
@@ -139,7 +139,7 @@
             </div>
             {#if d.bgPoint}
               <div class="flex items-center gap-1.5">
-                <div class="size-2 rounded-full" style:background={d.bgPoint.point.color}></div>
+                <div class="size-2 rounded-full bg-(--dot)" style:--dot={d.bgPoint.point.color}></div>
                 <span class="text-muted-foreground">Glucose</span>
                 <span class="ml-auto font-mono font-medium tabular-nums">{bg(d.bgPoint.point.sgv)} {bgLabel()}</span>
               </div>

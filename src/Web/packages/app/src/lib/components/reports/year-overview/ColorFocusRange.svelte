@@ -111,6 +111,10 @@
       : colorFocusGradient(resolveColorFocusRange(values)!, maximum, cssVar, lowColor, highColor, invert, colors)
   );
 
+  const themeSwatchGradient = $derived(
+    `linear-gradient(135deg, color-mix(in srgb, var(${cssVar}) 18%, transparent), var(${cssVar}))`
+  );
+
   const activeBandLeftPercent = $derived.by(() => {
     return Math.max(0, Math.min(100, ((focusBandValues[0] - minimum) / (maximum - minimum)) * 100));
   });
@@ -357,22 +361,22 @@
         >
           {#snippet children({ thumbItems })}
             <span
-              class="relative h-3.5 w-full rounded-sm overflow-hidden"
-              style:background={gradient}
+              class="relative h-3.5 w-full rounded-sm overflow-hidden bg-(image:--scale-gradient)"
+              style:--scale-gradient={gradient}
               role="img"
               aria-label={`${metricLabel} color scale from ${formatted(minimum)} to ${formatted(maximum)} ${unitLabel}`}
               data-testid={glucose ? "glucose-color-track" : "color-focus-track"}
             >
               {#if activeBandLeftPercent > 0}
                 <span
-                  class="absolute left-0 top-0 bottom-0 bg-background/85 pointer-events-none"
-                  style:width="{activeBandLeftPercent}%"
+                  class="absolute left-0 top-0 bottom-0 w-(--band-left) bg-background/85 pointer-events-none"
+                  style:--band-left="{activeBandLeftPercent}%"
                 ></span>
               {/if}
               {#if activeBandRightPercent < 100}
                 <span
-                  class="absolute right-0 top-0 bottom-0 bg-background/85 pointer-events-none"
-                  style:left="{activeBandRightPercent}%"
+                  class="absolute right-0 top-0 bottom-0 left-(--band-right) bg-background/85 pointer-events-none"
+                  style:--band-right="{activeBandRightPercent}%"
                 ></span>
               {/if}
             </span>
@@ -407,7 +411,7 @@
               {#if usesCustomPalette}
                 <div class="min-w-0">
                   <label for={id + "-bound-0"} class="mb-0.5 flex items-center gap-1 text-muted-foreground text-[10px] truncate">
-                    <span class="inline-block size-2 shrink-0 rounded-full" style:background={getGlucoseHeatmapFill(values[0], stops)}></span>
+                    <span class="inline-block size-2 shrink-0 rounded-full bg-(--dot)" style:--dot={getGlucoseHeatmapFill(values[0], stops)}></span>
                     Low
                   </label>
                   <Input
@@ -428,7 +432,7 @@
                 </div>
                 <div class="min-w-0">
                   <label for={id + "-bound-3"} class="mb-0.5 flex items-center gap-1 text-muted-foreground text-[10px] truncate">
-                    <span class="inline-block size-2 shrink-0 rounded-full" style:background={getGlucoseHeatmapFill(values[3], stops)}></span>
+                    <span class="inline-block size-2 shrink-0 rounded-full bg-(--dot)" style:--dot={getGlucoseHeatmapFill(values[3], stops)}></span>
                     High
                   </label>
                   <Input
@@ -451,7 +455,7 @@
                 {#each labels as label, index}
                   <div class="min-w-0">
                     <label for={id + "-bound-" + index} class="mb-0.5 flex items-center gap-1 text-muted-foreground text-[10px] truncate">
-                      <span class="inline-block size-2 shrink-0 rounded-full" style:background={getGlucoseHeatmapFill(values[index], stops)}></span>
+                      <span class="inline-block size-2 shrink-0 rounded-full bg-(--dot)" style:--dot={getGlucoseHeatmapFill(values[index], stops)}></span>
                       {label}
                     </label>
                     <Input
@@ -535,8 +539,8 @@
                 title={pal.label}
                 aria-label={pal.label + " palette"}
                 aria-pressed={isSelected}
-                class="size-6 rounded-full border border-border shadow-sm transition-transform {isSelected ? 'scale-110 ring-2 ring-primary ring-offset-1 ring-offset-background' : 'hover:scale-105'}"
-                style:background={paletteSwatchGradient(pal.colors ?? themeColors)}
+                class="size-6 rounded-full border border-border shadow-sm transition-transform {isSelected ? 'scale-110 ring-2 ring-primary ring-offset-1 ring-offset-background' : 'hover:scale-105'} bg-(image:--swatch)"
+                style:--swatch={paletteSwatchGradient(pal.colors ?? themeColors)}
                 onclick={() => onCustomColorsChange?.(pal.colors ? [...pal.colors] : undefined)}
               ></button>
             {/each}
@@ -644,8 +648,8 @@
                 title={pal.label}
                 aria-label={pal.label + " palette"}
                 aria-pressed={isSelected}
-                class="size-6 rounded-full border border-border shadow-sm transition-transform {isSelected ? 'scale-110 ring-2 ring-primary ring-offset-1 ring-offset-background' : 'hover:scale-105'}"
-                style:background={pal.colors ? paletteSwatchGradient(pal.colors) : `linear-gradient(135deg, color-mix(in srgb, var(${cssVar}) 18%, transparent), var(${cssVar}))`}
+                class="size-6 rounded-full border border-border shadow-sm transition-transform {isSelected ? 'scale-110 ring-2 ring-primary ring-offset-1 ring-offset-background' : 'hover:scale-105'} bg-(image:--swatch)"
+                style:--swatch={pal.colors ? paletteSwatchGradient(pal.colors) : themeSwatchGradient}
                 onclick={() => onCustomColorsChange?.(pal.colors ? [...pal.colors] : undefined)}
               ></button>
             {/each}
@@ -678,8 +682,8 @@
 
   <div class="hidden print:block">
     <div
-      class="h-3.5 w-full rounded-sm"
-      style:background={gradient}
+      class="h-3.5 w-full rounded-sm bg-(image:--scale-gradient)"
+      style:--scale-gradient={gradient}
       role="img"
       aria-label={metricLabel + " color scale"}
     ></div>

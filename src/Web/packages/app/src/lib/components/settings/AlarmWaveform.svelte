@@ -545,18 +545,17 @@
 <svelte:window onresize={handleResize} />
 
 <div
-  class="waveform-container rounded-md overflow-hidden border bg-muted"
-  style="position: relative; width: {width}px; height: {height}px;"
+  class="waveform-container relative h-(--wave-h) w-(--wave-w) rounded-md overflow-hidden border bg-muted"
+  style:--wave-w="{width}px"
+  style:--wave-h="{height}px"
 >
   <canvas
     bind:this={canvasEl}
-    class="waveform-canvas"
-    style="position: absolute; top: 0; left: 0;"
+    class="waveform-canvas absolute top-0 left-0"
   ></canvas>
   <canvas
     bind:this={progressCanvasEl}
-    class="progress-canvas"
-    style="position: absolute; top: 0; left: 0; z-index: 1;"
+    class="progress-canvas absolute top-0 left-0 z-1"
   ></canvas>
 </div>
 

@@ -191,8 +191,8 @@
                       <Table.Cell>
                         <div class="flex items-center gap-2">
                           <div
-                            class="h-3 w-3 rounded-full"
-                            style="background-color: {stat.color}"
+                            class="h-3 w-3 rounded-full bg-(--swatch)"
+                            style:--swatch={stat.color}
                           ></div>
                           {stat.key}
                         </div>

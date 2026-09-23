@@ -171,8 +171,8 @@
           <!-- Default simple scale preview -->
           <div class="w-full text-xs text-muted-foreground space-y-1.5">
             <span
-              class="block h-3.5 w-full rounded-sm"
-              style:background="linear-gradient(to right in srgb, {HEATMAP_STOPS.map((s) => `${s.color} ${((s.mgdl - GLUCOSE_COLOR_MIN) / (GLUCOSE_COLOR_MAX - GLUCOSE_COLOR_MIN)) * 100}%`).join(', ')})"
+              class="block h-3.5 w-full rounded-sm bg-(image:--heatmap-gradient)"
+              style:--heatmap-gradient="linear-gradient(to right in srgb, {HEATMAP_STOPS.map((s) => `${s.color} ${((s.mgdl - GLUCOSE_COLOR_MIN) / (GLUCOSE_COLOR_MAX - GLUCOSE_COLOR_MIN)) * 100}%`).join(', ')})"
             ></span>
             <div class="flex justify-between text-[11px] tabular-nums">
               <span>{formatGlucoseValue(GLUCOSE_COLOR_MIN, units)} {getUnitLabel(units)}</span>
@@ -219,8 +219,8 @@
           <!-- Default simple scale preview -->
           <div class="w-full text-xs text-muted-foreground space-y-1.5">
             <span
-              class="block h-3.5 w-full rounded-sm"
-              style:background="linear-gradient(to right, color-mix(in srgb, var({cssVar}) 15%, transparent) 0%, var({cssVar}) 100%)"
+              class="block h-3.5 w-full rounded-sm bg-linear-to-r from-(--metric-color)/15 to-(--metric-color)"
+              style:--metric-color="var({cssVar})"
             ></span>
             <div class="flex justify-between text-[11px] tabular-nums">
               <span>0 {metricUnit}</span>

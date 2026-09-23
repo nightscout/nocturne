@@ -91,7 +91,7 @@
           <span class="text-xs text-muted-foreground ml-1">{unitLabel} avg</span>
         </div>
         <div class="text-right">
-          <span class="text-lg font-semibold" style="color: var(--glucose-in-range);">
+          <span class="text-lg font-semibold text-glucose-in-range">
             {dailyStats.tir.toFixed(0)}%
           </span>
           <span class="text-xs text-muted-foreground ml-1">TIR</span>

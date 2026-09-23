@@ -229,7 +229,7 @@
 </script>
 
 <div class="w-full overflow-x-auto print:overflow-visible">
-  <div style="min-width: 480px; height: {chartHeight + 28}px;">
+  <div class="h-(--chart-h) min-w-[480px]" style:--chart-h="{chartHeight + 28}px">
     <Chart
       data={[]}
       xScale={scaleTime()}
@@ -350,7 +350,7 @@
                   width={Math.max(x2 - x1, 1)}
                   height={h}
                   fill={resolveChartColor(point.fillColor ?? "insulin-basal")}
-                  style="opacity: {basalOpacity(point.origin)}"
+                  opacity={basalOpacity(point.origin)}
                 />
               {/if}
             {/each}
@@ -405,7 +405,7 @@
                 <div class="font-medium tabular-nums">{timeFormatter.format(d.time)}</div>
                 {#if d.glucose}
                   <div class="flex items-center gap-1.5">
-                    <div class="size-2 rounded-full" style:background={d.glucose.color}></div>
+                    <div class="size-2 rounded-full bg-(--dot)" style:--dot={d.glucose.color}></div>
                     <span class="text-muted-foreground">Glucose</span>
                     <span class="ml-auto pl-3 font-mono font-medium tabular-nums">
                       {bg(d.glucose.sgv)} {bgLabel()}
@@ -421,7 +421,7 @@
                 {/if}
                 {#if d.basalRate != null}
                   <div class="flex items-center gap-1.5">
-                    <div class="size-2 rounded-full" style:background="var(--insulin-basal)"></div>
+                    <div class="size-2 rounded-full bg-insulin-basal"></div>
                     <span class="text-muted-foreground">Basal</span>
                     <span class="ml-auto pl-3 font-mono font-medium tabular-nums">
                       {d.basalRate.toFixed(2)} U/h

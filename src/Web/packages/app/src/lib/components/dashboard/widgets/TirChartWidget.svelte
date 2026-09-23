@@ -89,7 +89,7 @@
       <!-- TIR percentage with improvement indicator -->
       <div class="flex items-center justify-between">
         <div class="flex items-baseline gap-2">
-          <span class="text-2xl font-bold" style="color: var(--glucose-in-range);">
+          <span class="text-2xl font-bold text-glucose-in-range">
             {inRange.toFixed(0)}%
           </span>
           {#if improvement !== null}
@@ -123,10 +123,10 @@
 
       <!-- Low/High summary -->
       <div class="flex justify-between text-xs text-muted-foreground mt-1">
-        <span style="color: var(--glucose-low);">
+        <span class="text-glucose-low">
           ↓ {(veryLow + low).toFixed(0)}%
         </span>
-        <span style="color: var(--glucose-high);">
+        <span class="text-glucose-high">
           ↑ {(high + veryHigh).toFixed(0)}%
         </span>
       </div>

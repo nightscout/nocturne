@@ -69,8 +69,8 @@
       {/if}
       {#if delta}
         <span
-          class="ml-auto flex shrink-0 items-center gap-0.5 text-xs font-semibold tabular-nums"
-          style="color: {deltaColor};"
+          class="ml-auto flex shrink-0 items-center gap-0.5 text-xs font-semibold tabular-nums text-(--delta-color)"
+          style:--delta-color={deltaColor}
           title={delta.title ?? "vs prior 7 nights"}
         >
           <DeltaIcon class="h-3.5 w-3.5" />

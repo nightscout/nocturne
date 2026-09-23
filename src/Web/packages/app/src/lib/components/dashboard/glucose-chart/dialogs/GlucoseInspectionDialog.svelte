@@ -102,7 +102,7 @@
   <Dialog.Content class="max-w-lg max-h-[85vh] overflow-y-auto print:hidden">
     <Dialog.Header>
       <Dialog.Title class="flex items-center gap-3">
-        <span class="text-3xl font-bold" style="color: {glucoseColor}">
+        <span class="text-3xl font-bold text-(--glucose-color)" style:--glucose-color={glucoseColor}>
           {bg(glucoseValue)}
         </span>
         <span class="text-sm text-muted-foreground">{bgLabel()}</span>

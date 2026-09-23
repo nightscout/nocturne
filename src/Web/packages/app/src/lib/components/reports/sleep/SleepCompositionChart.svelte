@@ -140,7 +140,7 @@
 
 <div class="@container grid gap-6 @2xl:grid-cols-[2fr_1fr]">
   <div>
-    <div class="sleep-composition-chart h-72 w-full">
+    <div class="h-72 w-full">
       {#if dayRows.length > 0}
         <Chart
           data={dayRows}
@@ -283,15 +283,15 @@
         {#if row.band}
           <div class="relative h-1.5 w-full rounded-full bg-muted">
             <div
-              class="absolute h-full rounded-full bg-muted-foreground/25"
-              style:left="{Math.min(row.band.min, 100)}%"
-              style:width="{Math.max(Math.min(row.band.max, 100) - Math.min(row.band.min, 100), 0)}%"
+              class="absolute left-(--band-left) h-full w-(--band-w) rounded-full bg-muted-foreground/25"
+              style:--band-left="{Math.min(row.band.min, 100)}%"
+              style:--band-w="{Math.max(Math.min(row.band.max, 100) - Math.min(row.band.min, 100), 0)}%"
             ></div>
             {#if row.meanPct != null}
               <div
-                class="absolute top-1/2 h-2.5 w-0.5 -translate-y-1/2 rounded-full bg-[var(--lane-color)]"
+                class="absolute top-1/2 left-(--mean-left) h-2.5 w-0.5 -translate-y-1/2 rounded-full bg-[var(--lane-color)]"
                 data-lane={row.lane}
-                style:left="{Math.min(Math.max(row.meanPct, 0), 100)}%"
+                style:--mean-left="{Math.min(Math.max(row.meanPct, 0), 100)}%"
               ></div>
             {/if}
           </div>

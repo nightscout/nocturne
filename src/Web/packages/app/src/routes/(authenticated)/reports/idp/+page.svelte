@@ -144,12 +144,12 @@
           </div>
           <div class="flex h-4 rounded-full overflow-hidden">
             <div
-              class="transition-all"
-              style="width: {basalPct}%; background-color: var(--insulin-scheduled-basal)"
+              class="w-(--share) bg-insulin-scheduled-basal transition-all"
+              style:--share="{basalPct}%"
             ></div>
             <div
-              class="transition-all"
-              style="width: {bolusPct}%; background-color: var(--insulin-bolus)"
+              class="w-(--share) bg-insulin-bolus transition-all"
+              style:--share="{bolusPct}%"
             ></div>
           </div>
         </div>

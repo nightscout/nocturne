@@ -163,10 +163,9 @@
   <!-- Heading -->
   <div class="flex flex-col items-center gap-4 text-center">
     <h1
-      class="font-[Montserrat] font-[250] leading-tight tracking-tight text-white"
-      style="font-size: clamp(32px, 4vw, 48px);"
+      class="font-[Montserrat] font-[250] leading-tight tracking-tight text-white text-3xl md:text-4xl xl:text-5xl"
     >
-      Create your <em class="not-italic font-light" style="color: var(--onb-teal);">account</em>.
+      Create your <em class="not-italic font-light text-(--onb-teal)">account</em>.
     </h1>
     <p class="max-w-140 text-base leading-relaxed text-white/50">
       Set up the owner account for your Nocturne instance. You will be the
@@ -180,8 +179,7 @@
       <div class="space-y-4">
         <div class="flex flex-col items-center gap-2 text-center">
           <div
-            class="flex h-12 w-12 items-center justify-center rounded-full"
-            style="background: var(--onb-ok); color: var(--onb-navy);"
+            class="flex h-12 w-12 items-center justify-center rounded-full bg-(--onb-ok) text-(--onb-navy)"
           >
             <UserPlus class="h-6 w-6" />
           </div>

@@ -354,7 +354,7 @@ describe("year overview page color focus integration", () => {
       const bounds = (track.element() as HTMLElement).getBoundingClientRect();
       expect(bounds.width).toBeGreaterThan(300);
       const originalGradient = (track.element() as HTMLElement).style
-        .background;
+        .getPropertyValue("--scale-gradient");
       await userEvent.dragAndDrop(bgSlider("High"), track, {
         targetPosition: { x: bounds.width * 0.6, y: bounds.height / 2 },
       });
@@ -362,7 +362,7 @@ describe("year overview page color focus integration", () => {
       expect(value).toBeGreaterThan(224);
       expect(value).toBeLessThan(228);
       await expect.element(bgInput("Very high")).toHaveValue(250);
-      expect((track.element() as HTMLElement).style.background).not.toBe(
+      expect((track.element() as HTMLElement).style.getPropertyValue("--scale-gradient")).not.toBe(
         originalGradient
       );
       expect(

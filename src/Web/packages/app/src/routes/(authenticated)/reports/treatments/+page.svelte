@@ -569,7 +569,7 @@
                 isLoading = false;
               }
             })}
-          style="flex: 1;"
+          class="flex-1"
         >
           <input
             type="hidden"

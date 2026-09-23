@@ -67,12 +67,10 @@
   <!-- Heading -->
   <div class="flex flex-col items-center gap-4 text-center">
     <h1
-      class="font-[Montserrat] font-[250] leading-tight tracking-tight text-white"
-      style="font-size: clamp(32px, 4vw, 48px);"
+      class="font-[Montserrat] font-[250] leading-tight tracking-tight text-white text-3xl md:text-4xl xl:text-5xl"
     >
       Name your <em
-        class="not-italic font-light"
-        style="color: var(--onb-teal);"
+        class="not-italic font-light text-(--onb-teal)"
       >
         instance
       </em>

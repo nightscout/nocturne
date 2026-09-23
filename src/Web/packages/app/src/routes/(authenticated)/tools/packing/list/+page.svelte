@@ -126,8 +126,8 @@
     {#if totalCount > 0}
       <div class="h-2 rounded-full bg-muted overflow-hidden">
         <div
-          class="h-full rounded-full bg-primary transition-all duration-300"
-          style="width: {(totalChecked / totalCount) * 100}%"
+          class="h-full w-(--progress) rounded-full bg-primary transition-all duration-300"
+          style:--progress="{(totalChecked / totalCount) * 100}%"
         ></div>
       </div>
     {/if}

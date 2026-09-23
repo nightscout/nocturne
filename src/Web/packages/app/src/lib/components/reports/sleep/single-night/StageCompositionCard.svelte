@@ -99,14 +99,14 @@
         {#if row.band}
           <div class="relative h-1.5 w-full rounded-full bg-muted">
             <div
-              class="absolute h-full rounded-full bg-muted-foreground/25"
-              style:left="{Math.min(row.band.min, 100)}%"
-              style:width="{Math.max(Math.min(row.band.max, 100) - Math.min(row.band.min, 100), 0)}%"
+              class="absolute left-(--band-left) h-full w-(--band-w) rounded-full bg-muted-foreground/25"
+              style:--band-left="{Math.min(row.band.min, 100)}%"
+              style:--band-w="{Math.max(Math.min(row.band.max, 100) - Math.min(row.band.min, 100), 0)}%"
             ></div>
             <div
-              class="absolute top-1/2 h-2.5 w-0.5 -translate-y-1/2 rounded-full bg-[var(--lane-color)]"
+              class="absolute top-1/2 left-(--pct-left) h-2.5 w-0.5 -translate-y-1/2 rounded-full bg-[var(--lane-color)]"
               data-lane={row.lane}
-              style:left="{Math.min(Math.max(row.pct, 0), 100)}%"
+              style:--pct-left="{Math.min(Math.max(row.pct, 0), 100)}%"
             ></div>
           </div>
           <p class="text-xs text-muted-foreground">

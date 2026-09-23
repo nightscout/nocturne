@@ -486,7 +486,6 @@
           })}
           <div
             class={styles.card()}
-            style="animation-delay: {staggerDelay(categoryIndex)}ms"
             in:fly={{
               y: 40,
               duration: 600,

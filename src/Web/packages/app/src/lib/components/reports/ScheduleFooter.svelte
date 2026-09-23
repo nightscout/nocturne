@@ -119,8 +119,8 @@
           <div class="flex flex-1 h-8 rounded overflow-hidden border border-border">
             {#each targetSegments as seg, i}
               <div
-                class="flex items-center justify-center {segmentColors[i % segmentColors.length]} border-r border-border last:border-r-0 px-1 overflow-hidden"
-                style="width: {seg.widthPercent}%"
+                class="flex items-center justify-center {segmentColors[i % segmentColors.length]} border-r border-border last:border-r-0 px-1 overflow-hidden w-(--seg-w)"
+                style:--seg-w="{seg.widthPercent}%"
                 title="{formatTime(seg.startSeconds)}: {bgOr(seg.entry.low)}-{bgOr(seg.entry.high)}"
               >
                 <span class="truncate text-foreground">
@@ -144,8 +144,8 @@
           <div class="flex flex-1 h-8 rounded overflow-hidden border border-border">
             {#each carbSegments as seg, i}
               <div
-                class="flex items-center justify-center {segmentColors[i % segmentColors.length]} border-r border-border last:border-r-0 px-1 overflow-hidden"
-                style="width: {seg.widthPercent}%"
+                class="flex items-center justify-center {segmentColors[i % segmentColors.length]} border-r border-border last:border-r-0 px-1 overflow-hidden w-(--seg-w)"
+                style:--seg-w="{seg.widthPercent}%"
                 title="{formatTime(seg.startSeconds)}: {seg.entry.value ?? '?'} g/U"
               >
                 <span class="truncate text-foreground">
@@ -169,8 +169,8 @@
           <div class="flex flex-1 h-8 rounded overflow-hidden border border-border">
             {#each sensitivitySegments as seg, i}
               <div
-                class="flex items-center justify-center {segmentColors[i % segmentColors.length]} border-r border-border last:border-r-0 px-1 overflow-hidden"
-                style="width: {seg.widthPercent}%"
+                class="flex items-center justify-center {segmentColors[i % segmentColors.length]} border-r border-border last:border-r-0 px-1 overflow-hidden w-(--seg-w)"
+                style:--seg-w="{seg.widthPercent}%"
                 title="{formatTime(seg.startSeconds)}: {bgOr(seg.entry.value)} {bgLabel()}/U"
               >
                 <span class="truncate text-foreground">

@@ -17,12 +17,10 @@
 <nav class="flex flex-col gap-8">
   <!-- Eyebrow -->
   <p
-    class="flex items-center gap-2 font-mono text-[11px] uppercase tracking-widest"
-    style="color: var(--onb-accent);"
+    class="flex items-center gap-2 font-mono text-[11px] uppercase tracking-widest text-(--onb-accent)"
   >
     <span
-      class="inline-block h-1.5 w-1.5 rounded-full"
-      style="background: var(--onb-accent); box-shadow: 0 0 10px var(--onb-accent);"
+      class="inline-block h-1.5 w-1.5 rounded-full bg-(--onb-accent) shadow-(--onb-glow-accent)"
     ></span>
     {#if path === "fresh"}
       Welcome to Nocturne
@@ -36,9 +34,9 @@
     class="font-[Montserrat] text-4xl font-[250] leading-tight -tracking-[0.02em] text-white"
   >
     {#if path === "fresh"}
-      Let's get your data <em class="not-italic" style="color: var(--onb-accent);">flowing.</em>
+      Let's get your data <em class="not-italic text-(--onb-accent)">flowing.</em>
     {:else}
-      Bring your <em class="not-italic" style="color: var(--onb-accent);">decade</em> of data with you.
+      Bring your <em class="not-italic text-(--onb-accent)">decade</em> of data with you.
     {/if}
   </h2>
 
@@ -69,14 +67,9 @@
             type="button"
             onclick={() => onJumpToStep(index)}
             class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm transition-all
-              {isDone ? 'text-white' : ''}
-              {isCurrent ? 'border-2 text-white' : ''}
-              {isFuture ? 'border text-muted-foreground' : ''}"
-            style={isDone
-              ? `background: var(--onb-accent);`
-              : isCurrent
-                ? `border-color: var(--onb-accent); box-shadow: 0 0 12px var(--onb-accent-dim);`
-                : `border-color: var(--onb-accent-dim);`}
+              {isDone ? 'bg-(--onb-accent) text-white' : ''}
+              {isCurrent ? 'border-2 border-(--onb-accent) text-white shadow-(--onb-step-glow)' : ''}
+              {isFuture ? 'border border-(--onb-accent-dim) text-muted-foreground' : ''}"
           >
             {#if isDone}
               <Check class="h-4 w-4" />
@@ -88,8 +81,7 @@
           <!-- Connector line -->
           {#if !isLast}
             <div
-              class="w-px grow my-1 min-h-4"
-              style="background: var(--onb-accent-dim);"
+              class="w-px grow my-1 min-h-4 bg-(--onb-accent-dim)"
             ></div>
           {/if}
         </div>

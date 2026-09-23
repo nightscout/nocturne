@@ -33,7 +33,7 @@
   );
 </script>
 
-<div class="basal-chart h-[60px] w-full">
+<div class="h-[60px] w-full">
   {#if data.length > 0}
     <Chart
       {data}

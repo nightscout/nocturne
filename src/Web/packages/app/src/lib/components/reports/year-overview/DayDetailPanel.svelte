@@ -67,9 +67,8 @@
           </div>
           <div class="mt-1 text-2xl font-bold tabular-nums">
             <span
-              style="color: {glucoseColorScale(
-                selectedDay.averageGlucoseMgdl
-              )}"
+              class="text-(--avg-color)"
+              style:--avg-color={glucoseColorScale(selectedDay.averageGlucoseMgdl)}
             >
               {formatGlucoseValue(selectedDay.averageGlucoseMgdl, units)}
             </span>

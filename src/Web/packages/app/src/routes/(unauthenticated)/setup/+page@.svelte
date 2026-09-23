@@ -152,35 +152,6 @@
   const connectors = $derived(servicesData?.availableConnectors ?? []);
   const uploaderApps = $derived(servicesData?.uploaderApps ?? []);
 
-  // ── Onboarding CSS variables ──────────────────────────────────────────
-  // Path-independent surface/utility tokens
-  const BASE_VARS = [
-    "--onb-navy: oklch(0.08 0.025 261.692)",
-    "--onb-navy-60: oklch(0.08 0.025 261.692 / 0.6)",
-    "--onb-navy-50: oklch(0.08 0.025 261.692 / 0.5)",
-    "--onb-panel: oklch(0.09 0.022 261.692)",
-    "--onb-surface: oklch(0.1 0.025 261.692)",
-    "--onb-surface-60: oklch(0.1 0.025 261.692 / 0.6)",
-    "--onb-teal: oklch(0.72 0.14 184)",
-    "--onb-ok: oklch(0.72 0.17 150)",
-    "--onb-green: oklch(0.78 0.21 145)",
-    "--onb-green-soft: oklch(0.85 0.21 145)",
-    "--onb-green-dim: oklch(0.78 0.21 145 / 0.12)",
-    "--onb-lavender: oklch(0.78 0.09 265)",
-    "--onb-lavender-soft: oklch(0.86 0.08 265)",
-    "--onb-lavender-dim: oklch(0.78 0.09 265 / 0.14)",
-    "--onb-border: rgb(255 255 255 / 0.08)",
-  ].join("; ");
-
-  // Path-dependent accent tokens
-  const accentVars = $derived(
-    path === "migration"
-      ? "--onb-accent: var(--onb-lavender); --onb-accent-soft: var(--onb-lavender-soft); --onb-accent-dim: var(--onb-lavender-dim)"
-      : "--onb-accent: var(--onb-green); --onb-accent-soft: var(--onb-green-soft); --onb-accent-dim: var(--onb-green-dim)"
-  );
-
-  const styleVars = $derived(`${BASE_VARS}; ${accentVars}`);
-
   // ── Navigation ──────────────────────────────────────────────────────
   function handlePathSelect(selected: "fresh" | "migration") {
     path = selected;
@@ -286,13 +257,12 @@
      shadcn children (inputs, recovery-code chips, buttons) render with dark tokens even
      when the user's system theme — applied by ModeWatcher on <html> — is light. -->
 <div
-  class="dark relative min-h-screen grid grid-rows-[auto_1fr_auto] text-white"
-  style="{styleVars}; background: var(--onb-navy);"
+  class="onb dark relative min-h-screen grid grid-rows-[auto_1fr_auto] bg-(--onb-navy) text-white"
+  class:onb-migration={path === "migration"}
 >
   <!-- Background gradient -->
   <div
-    class="fixed inset-0 z-0 pointer-events-none"
-    style="background: radial-gradient(ellipse 50% 35% at 50% 0%, oklch(0.16 0.05 265 / 0.6), transparent 70%), linear-gradient(180deg, var(--onb-navy), oklch(0.07 0.03 261.692));"
+    class="onb-backdrop fixed inset-0 z-0 pointer-events-none"
   ></div>
 
   <!-- Constellation background (above gradient so stars are visible) -->
@@ -302,8 +272,7 @@
 
   <!-- Header -->
   <header
-    class="relative z-50 flex items-center justify-between px-8 py-5.5 border-b border-white/8 backdrop-blur-sm max-[900px]:px-5 max-[900px]:py-3.5"
-    style="background: var(--onb-navy-60); backdrop-filter: blur(14px) saturate(1.3);"
+    class="relative z-50 flex items-center justify-between px-8 py-5.5 border-b border-white/8 bg-(--onb-navy-60) backdrop-blur-md backdrop-saturate-130 max-[900px]:px-5 max-[900px]:py-3.5"
   >
     <div class="flex items-center gap-3">
       <!-- Logo mark -->
@@ -354,8 +323,7 @@
             class="flex items-center gap-2.5 rounded-full border border-white/8 bg-white/3 py-1 pl-1 pr-3"
           >
             <span
-              class="flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold"
-              style="background: linear-gradient(135deg, var(--onb-teal), var(--onb-accent)); color: var(--onb-navy);"
+              class="onb-avatar flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold text-(--onb-navy)"
             >
               {userInitials}
             </span>
@@ -418,7 +386,6 @@
         <!-- Step card -->
         <section
           class="step-card relative rounded-[22px] border border-white/8 backdrop-blur-[18px] overflow-hidden min-h-135 flex flex-col"
-          style="background: linear-gradient(180deg, oklch(0.14 0.03 261.692 / 0.85), oklch(0.12 0.025 261.692 / 0.75)); box-shadow: 0 1px 0 rgb(255 255 255 / 0.05) inset, 0 30px 80px -30px rgb(0 0 0 / 0.6);"
         >
           <!-- Strip -->
           <div
@@ -439,8 +406,8 @@
               <!-- Progress bar -->
               <div class="h-0.75 w-30 overflow-hidden rounded-full bg-white/8">
                 <div
-                  class="h-full rounded-full transition-all duration-500"
-                  style="width: {setupProgressPct}%; background: var(--onb-teal); box-shadow: 0 0 10px var(--onb-teal);"
+                  class="h-full w-(--progress) rounded-full bg-(--onb-teal) shadow-(--onb-glow-teal) transition-all duration-500"
+                  style:--progress="{setupProgressPct}%"
                 ></div>
               </div>
             </div>
@@ -474,7 +441,6 @@
         <!-- Step card -->
         <section
           class="step-card relative rounded-[22px] border border-white/8 backdrop-blur-[18px] overflow-hidden min-h-135 flex flex-col"
-          style="background: linear-gradient(180deg, oklch(0.14 0.03 261.692 / 0.85), oklch(0.12 0.025 261.692 / 0.75)); box-shadow: 0 1px 0 rgb(255 255 255 / 0.05) inset, 0 30px 80px -30px rgb(0 0 0 / 0.6);"
         >
           <!-- Strip -->
           <div
@@ -494,8 +460,7 @@
             <div class="flex items-center gap-3">
               <!-- Path badge -->
               <span
-                class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10.5px] font-semibold tracking-[0.06em] uppercase"
-                style="background: var(--onb-accent-dim); color: var(--onb-accent); border: 1px solid var(--onb-accent-dim);"
+                class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10.5px] font-semibold tracking-[0.06em] uppercase border border-(--onb-accent-dim) bg-(--onb-accent-dim) text-(--onb-accent)"
               >
                 {#if path === "migration"}
                   <Cable class="h-2.5 w-2.5" />
@@ -508,8 +473,8 @@
               <!-- Progress bar -->
               <div class="h-0.75 w-30 overflow-hidden rounded-full bg-white/8">
                 <div
-                  class="h-full rounded-full transition-all duration-500"
-                  style="width: {progressPct}%; background: var(--onb-accent); box-shadow: 0 0 10px var(--onb-accent);"
+                  class="h-full w-(--progress) rounded-full bg-(--onb-accent) shadow-(--onb-glow-accent) transition-all duration-500"
+                  style:--progress="{progressPct}%"
                 ></div>
               </div>
             </div>
@@ -525,12 +490,10 @@
               <div class="flex flex-col gap-8 px-4 py-8">
                 <div class="flex flex-col items-center gap-4 text-center">
                   <h1
-                    class="font-[Montserrat] font-[250] leading-tight tracking-tight text-white"
-                    style="font-size: clamp(32px, 4vw, 48px);"
+                    class="font-[Montserrat] font-[250] leading-tight tracking-tight text-white text-3xl md:text-4xl xl:text-5xl"
                   >
                     Connect a <em
-                      class="not-italic font-light"
-                      style="color: var(--onb-accent);"
+                      class="not-italic font-light text-(--onb-accent)"
                     >
                       data source
                     </em>
@@ -557,12 +520,10 @@
                 {#if selectedConnectorId}
                   <div class="flex flex-col items-center gap-4 text-center">
                     <h1
-                      class="font-[Montserrat] font-[250] leading-tight tracking-tight text-white"
-                      style="font-size: clamp(32px, 4vw, 48px);"
+                      class="font-[Montserrat] font-[250] leading-tight tracking-tight text-white text-3xl md:text-4xl xl:text-5xl"
                     >
                       Configure your <em
-                        class="not-italic font-light"
-                        style="color: var(--onb-accent);"
+                        class="not-italic font-light text-(--onb-accent)"
                       >
                         connection
                       </em>
@@ -586,12 +547,10 @@
                 {:else if selectedUploader}
                   <div class="flex flex-col items-center gap-4 text-center">
                     <h1
-                      class="font-[Montserrat] font-[250] leading-tight tracking-tight text-white"
-                      style="font-size: clamp(32px, 4vw, 48px);"
+                      class="font-[Montserrat] font-[250] leading-tight tracking-tight text-white text-3xl md:text-4xl xl:text-5xl"
                     >
                       Set up your <em
-                        class="not-italic font-light"
-                        style="color: var(--onb-accent);"
+                        class="not-italic font-light text-(--onb-accent)"
                       >
                         app
                       </em>
@@ -637,8 +596,7 @@
 
           <!-- Actions bar -->
           <div
-            class="relative z-2 flex justify-between items-center px-7 py-4.5 border-t border-white/8 max-[900px]:px-5.5 max-[900px]:py-3.5 max-[900px]:flex-wrap max-[900px]:gap-2.5"
-            style="background: var(--onb-surface-60);"
+            class="relative z-2 flex justify-between items-center px-7 py-4.5 border-t border-white/8 max-[900px]:px-5.5 max-[900px]:py-3.5 max-[900px]:flex-wrap max-[900px]:gap-2.5 bg-(--onb-surface-60)"
           >
             <div>
               {#if stepIndex > 0 && currentStep?.id !== "finish"}
@@ -683,8 +641,7 @@
 
   <!-- Footer -->
   <footer
-    class="relative z-50 px-8 py-5 border-t border-white/8 flex justify-between items-center text-xs text-white/30 max-[900px]:flex-wrap max-[900px]:gap-2.5"
-    style="background: var(--onb-navy-50); backdrop-filter: blur(8px);"
+    class="relative z-50 px-8 py-5 border-t border-white/8 flex justify-between items-center text-xs text-white/30 max-[900px]:flex-wrap max-[900px]:gap-2.5 bg-(--onb-navy-50) backdrop-blur-sm"
   >
     <div class="flex flex-wrap items-center gap-5">
       <span>&copy; 2026 Nocturne</span>
@@ -707,6 +664,48 @@
 </div>
 
 <style>
+  .onb {
+    --onb-navy: oklch(0.08 0.025 261.692);
+    --onb-navy-60: oklch(0.08 0.025 261.692 / 0.6);
+    --onb-navy-50: oklch(0.08 0.025 261.692 / 0.5);
+    --onb-surface-60: oklch(0.1 0.025 261.692 / 0.6);
+    --onb-teal: oklch(0.72 0.14 184);
+    --onb-ok: oklch(0.72 0.17 150);
+    --onb-warn: oklch(0.769 0.188 70.08);
+    --onb-green: oklch(0.78 0.21 145);
+    --onb-green-dim: oklch(0.78 0.21 145 / 0.12);
+    --onb-lavender: oklch(0.78 0.09 265);
+    --onb-lavender-dim: oklch(0.78 0.09 265 / 0.14);
+    --onb-border: rgb(255 255 255 / 0.08);
+    --onb-accent: var(--onb-green);
+    --onb-accent-dim: var(--onb-green-dim);
+    --onb-glow-teal: 0 0 10px var(--onb-teal);
+    --onb-glow-accent: 0 0 10px var(--onb-accent);
+    --onb-step-glow: 0 0 12px var(--onb-accent-dim);
+  }
+
+  .onb.onb-migration {
+    --onb-accent: var(--onb-lavender);
+    --onb-accent-dim: var(--onb-lavender-dim);
+  }
+
+  .onb-backdrop {
+    background:
+      radial-gradient(ellipse 50% 35% at 50% 0%, oklch(0.16 0.05 265 / 0.6), transparent 70%),
+      linear-gradient(180deg, var(--onb-navy), oklch(0.07 0.03 261.692));
+  }
+
+  .onb-avatar {
+    background: linear-gradient(135deg, var(--onb-teal), var(--onb-accent));
+  }
+
+  .step-card {
+    background: linear-gradient(180deg, oklch(0.14 0.03 261.692 / 0.85), oklch(0.12 0.025 261.692 / 0.75));
+    box-shadow:
+      0 1px 0 rgb(255 255 255 / 0.05) inset,
+      0 30px 80px -30px rgb(0 0 0 / 0.6);
+  }
+
   /* Pseudo-element for step-card accent glow — cannot be expressed with Tailwind's before: variant
      because it uses a CSS custom property in the radial-gradient. */
   .step-card::before {

@@ -81,10 +81,9 @@
     <!-- Celebration checkmark -->
     <div class="pulse-wrapper relative size-24">
       <div
-        class="size-24 rounded-full border-2 flex items-center justify-center relative"
-        style="border-color: var(--onb-accent); background: var(--onb-accent-dim);"
+        class="size-24 rounded-full border-2 flex items-center justify-center relative border-(--onb-accent) bg-(--onb-accent-dim)"
       >
-        <Check style="width: 40px; height: 40px; color: var(--onb-accent);" />
+        <Check class="size-10 text-(--onb-accent)" />
       </div>
     </div>
 
@@ -94,15 +93,13 @@
     >
       {#if path === "migration"}
         Your data is <em
-          class="not-italic font-light"
-          style="color: var(--onb-accent);"
+          class="not-italic font-light text-(--onb-accent)"
         >
           home.
         </em>
       {:else}
         You're <em
-          class="not-italic font-light"
-          style="color: var(--onb-accent);"
+          class="not-italic font-light text-(--onb-accent)"
         >
           in.
         </em>
