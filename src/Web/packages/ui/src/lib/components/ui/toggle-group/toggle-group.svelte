@@ -48,12 +48,8 @@
   });
 </script>
 
-<!--
-Discriminated Unions + Destructing (required for bindable) do not
-get along, so we shut typescript up by casting `value` to `never`.
--->
-<ToggleGroupPrimitive.Root
-  bind:value={value as never}
+<!-- eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- bits-ui types value as a union keyed by `type`, which destructuring for $bindable splits apart -->
+<ToggleGroupPrimitive.Root bind:value={value as never}
   bind:ref
   data-slot="toggle-group"
   data-variant={variant}

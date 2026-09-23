@@ -42,6 +42,6 @@
   "scripts": {
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "lint": "eslint .",
-    "lint:ci": "eslint . --max-warnings 24 --report-unused-disable-directives-severity error"
+    "lint:ci": "eslint . --max-warnings 0 --report-unused-disable-directives-severity error"
   }
 }

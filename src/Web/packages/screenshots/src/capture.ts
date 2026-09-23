@@ -269,7 +269,7 @@ function unsettled(dark: boolean): string[] {
 	if (document.fonts.status !== 'loaded') reasons.push('fonts still loading');
 	// A site that has never received a reading holds the glucose indicators' placeholder for good,
 	// so inside one it is a steady state rather than a load in progress.
-	const skeletons = document.querySelectorAll('.animate-pulse:not(.glucose-value-indicator *)').length;
+	const skeletons = document.querySelectorAll('.animate-pulse:not([data-slot=glucose-value-indicator] *)').length;
 	if (skeletons > 0) reasons.push(`${skeletons} skeleton placeholders`);
 	const spinners = document.querySelectorAll('.animate-spin').length;
 	if (spinners > 0) reasons.push(`${spinners} spinners`);

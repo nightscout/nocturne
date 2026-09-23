@@ -11,13 +11,9 @@
   }: WithoutChildrenOrChild<SliderPrimitive.RootProps> = $props();
 </script>
 
-<!--
-Discriminated Unions + Destructing (required for bindable) do not
-get along, so we shut typescript up by casting `value` to `never`.
--->
-<SliderPrimitive.Root
+<!-- eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- bits-ui types value as a union keyed by `type`, which destructuring for $bindable splits apart -->
+<SliderPrimitive.Root bind:value={value as never}
   bind:ref
-  bind:value={value as never}
   data-slot="slider"
   {orientation}
   class={cn(
