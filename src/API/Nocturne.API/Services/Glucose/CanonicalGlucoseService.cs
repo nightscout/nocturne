@@ -18,6 +18,12 @@ internal sealed class CanonicalGlucoseService : ICanonicalGlucoseService
     /// </summary>
     private const int LatestFetchLimit = 60;
 
+    /// <summary>
+    /// Row cap for <see cref="GetRecentAsync"/>: callers ask for windows of minutes, so this only
+    /// bounds a pathological burst of streams, never a normal window.
+    /// </summary>
+    private const int RecentFetchLimit = 500;
+
     private readonly ISensorGlucoseRepository _sensorGlucoseRepository;
     private readonly IPatientDeviceRepository _patientDeviceRepository;
     private readonly IDemoModeService _demoMode;
@@ -52,16 +58,26 @@ internal sealed class CanonicalGlucoseService : ICanonicalGlucoseService
         // No time window: delayed-sync sources (hours-late connector chunks) must still surface
         // a latest value, matching the pre-canonical behaviour of using a write batch's newest
         // reading however old it was.
+        var canonical = await FetchCanonicalAsync(from: null, LatestFetchLimit, ct);
+        return canonical.Count > 0 ? canonical[0] : null;
+    }
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<SensorGlucose>> GetRecentAsync(DateTime since, CancellationToken ct = default)
+        => FetchCanonicalAsync(since, RecentFetchLimit, ct);
+
+    private async Task<IReadOnlyList<SensorGlucose>> FetchCanonicalAsync(
+        DateTime? from, int limit, CancellationToken ct)
+    {
         var source = _demoMode.IsEnabled ? DataSources.DemoService : null;
         var recent = (await _sensorGlucoseRepository.GetAsync(
-            from: null, to: null, device: null, source: source,
-            limit: LatestFetchLimit, offset: 0, descending: true, nativeOnly: false, ct: ct)).ToList();
+            from: from, to: null, device: null, source: source,
+            limit: limit, offset: 0, descending: true, nativeOnly: false, ct: ct)).ToList();
 
         if (!_demoMode.IsEnabled)
             recent = recent.Where(r => !DataSources.IsEphemeral(r.DataSource)).ToList();
 
-        var canonical = await SelectAsync(recent, ct);
-        return canonical.Count > 0 ? canonical[0] : null;
+        return await SelectAsync(recent, ct);
     }
 
     private static bool IsMultiStream(IReadOnlyList<SensorGlucose> readings)

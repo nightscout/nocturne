@@ -185,15 +185,6 @@ public interface IAlertRepository
         Nocturne.Core.Models.Alerts.AlertConditionType conditionType, CancellationToken ct);
 
     /// <summary>
-    /// Returns the latest glucose trend rate (mg/dL per minute) for the tenant,
-    /// used by rate-of-change alert conditions.
-    /// </summary>
-    /// <param name="tenantId">The tenant identifier.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>The latest trend rate, or <c>null</c> if no trend data is available.</returns>
-    Task<double?> GetLatestTrendRateAsync(Guid tenantId, CancellationToken ct);
-
-    /// <summary>
     /// Returns snoozed alert instances whose snooze period has expired as of
     /// <paramref name="asOf"/>, so they can resume escalation.
     /// </summary>

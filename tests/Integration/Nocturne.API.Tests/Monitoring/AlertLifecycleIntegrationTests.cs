@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
+using Nocturne.API.Services.Alerts;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Npgsql;
 using Xunit;
@@ -164,8 +165,7 @@ public class AlertLifecycleIntegrationTests : AspireIntegrationTestBase
 
         using var client = AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, _accessToken);
 
-        // Snooze 5 times (the default max)
-        for (var i = 0; i < 5; i++)
+        for (var i = 0; i < SmartSnoozeConfig.DefaultMaxCount; i++)
         {
             var snoozeResponse = await client.PostAsJsonAsync(
                 $"/api/v4/alerts/instances/{instanceId}/snooze",
@@ -174,7 +174,7 @@ public class AlertLifecycleIntegrationTests : AspireIntegrationTestBase
                 $"snooze attempt {i + 1} should succeed");
         }
 
-        // Act - 6th attempt should be rejected
+        // Act
         var response = await client.PostAsJsonAsync(
             $"/api/v4/alerts/instances/{instanceId}/snooze",
             new { minutes = 30 });

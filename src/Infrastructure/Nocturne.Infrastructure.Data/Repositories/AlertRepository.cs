@@ -467,26 +467,6 @@ public class AlertRepository : IAlertRepository
     }
 
     /// <summary>
-    /// Gets the most recent glucose trend rate for a specific tenant.
-    /// </summary>
-    /// <param name="tenantId">The unique identifier of the tenant.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The trend rate, or null if no readings exist.</returns>
-    public virtual async Task<double?> GetLatestTrendRateAsync(
-        Guid tenantId, CancellationToken ct)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
-        context.TenantId = tenantId;
-
-        return await context.SensorGlucose
-            .AsNoTracking()
-            .Where(sg => sg.TenantId == tenantId)
-            .OrderByDescending(sg => sg.Timestamp)
-            .Select(sg => sg.TrendRate)
-            .FirstOrDefaultAsync(ct);
-    }
-
-    /// <summary>
     /// Gets alert instances whose snooze period has expired.
     /// </summary>
     /// <param name="asOf">The reference timestamp for determining if a snooze has expired.</param>
