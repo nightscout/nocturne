@@ -43,7 +43,7 @@
 
       {#if targetRange}
         <div
-          class="bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300 text-xs p-2 rounded"
+          class="bg-success/10 text-success text-xs p-2 rounded"
         >
           <span class="font-medium">Target:</span>
           {targetRange}
@@ -52,7 +52,7 @@
 
       {#if clinicalContext}
         <div
-          class="bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 text-xs p-2 rounded"
+          class="bg-info/10 text-info text-xs p-2 rounded"
         >
           <span class="font-medium">Clinical Note:</span>
           {clinicalContext}

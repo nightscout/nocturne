@@ -53,7 +53,7 @@ describe("ImportProgress", () => {
 
     const summary = page.getByText(/6 of 7 collections imported/);
     await expect.element(summary).toBeVisible();
-    await expect.element(summary).not.toHaveClass("text-amber-400");
+    await expect.element(summary).not.toHaveClass("text-warning");
   });
 
   it("colours the summary as a warning when a collection actually failed", async () => {
@@ -74,7 +74,7 @@ describe("ImportProgress", () => {
 
     await expect
       .element(page.getByText(/1 of 2 collections imported/))
-      .toHaveClass("text-amber-400");
+      .toHaveClass("text-warning");
   });
 
   it("says nothing extra when every collection imported", async () => {

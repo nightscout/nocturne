@@ -50,7 +50,7 @@
 </script>
 
 <div class="@container bg-white shadow-lg rounded-lg p-4 @lg:p-6 mb-6">
-  <h2 class="text-xl font-semibold text-gray-700 mb-4">
+  <h2 class="text-xl font-semibold text-foreground mb-4">
     Overall Treatment Summary
   </h2>
   <div class="grid grid-cols-1 @4xl:grid-cols-3 gap-4">
@@ -60,8 +60,8 @@
       {@const totalProtein = getTotalProtein(day.treatmentSummary)}
       {@const totalFat = getTotalFat(day.treatmentSummary)}
       {#if day.treatmentSummary && (totalInsulin > 0 || totalCarbs > 0)}
-        <div class="bg-gray-50 rounded-lg p-4">
-          <h3 class="text-lg font-semibold text-gray-700 mb-3">
+        <div class="bg-muted/50 rounded-lg p-4">
+          <h3 class="text-lg font-semibold text-foreground mb-3">
             {formatShortDate(day.date)}
           </h3>
           <div class="space-y-2 text-sm">
@@ -97,7 +97,7 @@
                 </span>
               </div>
             {/if}
-            <div class="text-xs text-gray-500 mt-2">
+            <div class="text-xs text-muted-foreground mt-2">
               {day.treatmentSummary.treatmentCount ?? 0} treatment events
             </div>
           </div>

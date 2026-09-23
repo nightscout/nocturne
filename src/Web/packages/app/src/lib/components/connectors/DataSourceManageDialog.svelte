@@ -62,14 +62,14 @@
           variant: "default" as const,
           text: "Active",
           class:
-            "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100",
+            "bg-success/10 text-success",
         };
       case "stale":
         return {
           variant: "secondary" as const,
           text: "Stale",
           class:
-            "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-100",
+            "bg-warning/10 text-warning",
         };
       case "inactive":
         return {
@@ -178,19 +178,19 @@
 
         {#if canManage}
           <div
-            class="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 p-4"
+            class="rounded-lg border border-warning/30 bg-warning/10 p-4"
           >
             <div class="flex items-start gap-3">
               <AlertTriangle
-                class="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5"
+                class="h-5 w-5 text-warning shrink-0 mt-0.5"
               />
               <div>
                 <p
-                  class="text-sm font-medium text-amber-800 dark:text-amber-200"
+                  class="text-sm font-medium text-warning"
                 >
                   Delete All Data from This Source
                 </p>
-                <p class="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                <p class="text-sm text-warning mt-1">
                   This will permanently delete all entries, treatments, and
                   device status records from this data source.
                 </p>
@@ -231,19 +231,19 @@
         <AlertDialog.Description class="space-y-4">
           {#if selectedDataSource}
             <div
-              class="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20 p-4 mt-4"
+              class="rounded-lg border border-destructive/30 bg-destructive/10 p-4 mt-4"
             >
-              <p class="text-sm font-semibold text-red-800 dark:text-red-200">
+              <p class="text-sm font-semibold text-destructive">
                 THIS ACTION CANNOT BE UNDONE
               </p>
-              <p class="text-sm text-red-700 dark:text-red-300 mt-2">
+              <p class="text-sm text-destructive mt-2">
                 You are about to permanently delete <strong>all data</strong>
                 from
                 <strong>{selectedDataSource.name}</strong>
                 . This includes:
               </p>
               <ul
-                class="text-sm text-red-700 dark:text-red-300 list-disc list-inside mt-2 space-y-1"
+                class="text-sm text-destructive list-disc list-inside mt-2 space-y-1"
               >
                 <li>
                   All glucose records ({formatNumber(
@@ -258,24 +258,24 @@
             {#if deleteResult}
               {#if deleteResult.success}
                 <div
-                  class="rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/20 p-4"
+                  class="rounded-lg border border-success/30 bg-success/10 p-4"
                 >
                   <div
-                    class="flex items-center gap-2 text-green-800 dark:text-green-200"
+                    class="flex items-center gap-2 text-success"
                   >
                     <CheckCircle class="h-5 w-5" />
                     <span class="font-medium">Data deleted successfully</span>
                   </div>
-                  <p class="text-sm text-green-700 dark:text-green-300 mt-1">
+                  <p class="text-sm text-success mt-1">
                     Deleted {formatNumber(deleteResult.totalDeleted)} records
                   </p>
                 </div>
               {:else}
                 <div
-                  class="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20 p-4"
+                  class="rounded-lg border border-destructive/30 bg-destructive/10 p-4"
                 >
                   <div
-                    class="flex items-center gap-2 text-red-800 dark:text-red-200"
+                    class="flex items-center gap-2 text-destructive"
                   >
                     <AlertCircle class="h-5 w-5" />
                     <span class="font-medium">
@@ -284,7 +284,7 @@
                         : "Failed to delete data"}
                     </span>
                   </div>
-                  <p class="text-sm text-red-700 dark:text-red-300 mt-1">
+                  <p class="text-sm text-destructive mt-1">
                     {deleteResult.error}
                   </p>
                 </div>

@@ -375,7 +375,7 @@
 
     {#if formState === "success"}
       <div class="flex flex-col items-center gap-4 py-8">
-        <CheckCircle class="h-12 w-12 text-green-500" />
+        <CheckCircle class="h-12 w-12 text-success" />
         <h3 class="text-lg font-semibold">Issue Submitted!</h3>
         {#if useOperatorSupport}
           <p class="text-sm text-muted-foreground text-center">
@@ -397,7 +397,7 @@
       </div>
     {:else if formState === "error"}
       <div class="flex flex-col items-center gap-4 py-8">
-        <AlertTriangle class="h-12 w-12 text-yellow-500" />
+        <AlertTriangle class="h-12 w-12 text-warning" />
         <h3 class="text-lg font-semibold">Couldn't Create Issue</h3>
         <p class="text-sm text-muted-foreground text-center">
           We've opened a pre-filled GitHub issue form in a new tab as a

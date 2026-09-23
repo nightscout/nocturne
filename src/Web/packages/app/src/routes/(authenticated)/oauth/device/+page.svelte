@@ -91,9 +91,9 @@
       <!-- State 3: Success -->
       <Card.Header class="space-y-1 text-center">
         <div
-          class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30"
+          class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-success/10"
         >
-          <Check class="h-6 w-6 text-green-600 dark:text-green-400" />
+          <Check class="h-6 w-6 text-success" />
         </div>
         <Card.Title class="text-2xl font-bold">
           Device Authorized
@@ -157,12 +157,12 @@
       <Card.Content class="space-y-4">
         {#if !deviceInfo.isKnown}
           <div
-            class="flex items-start gap-3 rounded-md border border-yellow-200 bg-yellow-50 p-3 dark:border-yellow-900/50 dark:bg-yellow-900/20"
+            class="flex items-start gap-3 rounded-md border border-warning/30 bg-warning/10 p-3"
           >
             <AlertTriangle
-              class="mt-0.5 h-4 w-4 shrink-0 text-yellow-600 dark:text-yellow-400"
+              class="mt-0.5 h-4 w-4 shrink-0 text-warning"
             />
-            <p class="text-sm text-yellow-800 dark:text-yellow-200">
+            <p class="text-sm text-warning">
               This application is not in the Nocturne known app directory. Only
               approve if you trust this application.
             </p>

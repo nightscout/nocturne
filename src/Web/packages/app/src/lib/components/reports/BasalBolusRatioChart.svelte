@@ -87,7 +87,7 @@
         Most people with Type 1 diabetes have around 50% basal and 50% bolus. Ratios
         can vary based on diet, activity level, and individual needs.
         {#if averageBasalPercent > 60}
-          <span class="text-amber-600 dark:text-amber-400">
+          <span class="text-warning">
             Your basal percentage is higher than typical — consider discussing
             with your healthcare provider.
           </span>

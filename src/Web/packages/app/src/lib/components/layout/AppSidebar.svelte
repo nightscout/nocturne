@@ -201,10 +201,10 @@
        via a short-lived platform-access grant (distinct from the member switcher). -->
   {#if isPlatformAccessView}
     <div
-      class="border-b border-amber-500/40 bg-amber-500/10 px-3 py-2 group-data-[collapsible=icon]:hidden"
+      class="border-b border-warning/40 bg-warning/10 px-3 py-2 group-data-[collapsible=icon]:hidden"
     >
       <p
-        class="mb-1 flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400"
+        class="mb-1 flex items-center gap-1.5 text-xs font-semibold text-warning"
       >
         <Shield class="h-3 w-3 shrink-0" />
         Platform admin access

@@ -109,7 +109,7 @@
 	{#if settingsQuery.loading}
 		<SettingsPageSkeleton cardCount={2} />
 	{:else if settingsQuery.error}
-		<Card class="border-destructive">
+		<Card variant="destructive">
 			<CardContent class="flex items-center gap-3 py-6">
 				<AlertCircle class="h-5 w-5 text-destructive" />
 				<p class="font-medium">

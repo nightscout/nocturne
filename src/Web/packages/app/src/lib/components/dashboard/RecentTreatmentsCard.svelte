@@ -50,12 +50,12 @@
     {#snippet pending()}
       <div class="flex items-center justify-center h-full">
         <div
-          class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"
+          class="animate-spin rounded-full h-8 w-8 border-b-2 border-foreground"
         ></div>
       </div>
     {/snippet}
     {#snippet failed(_error)}
-      <p class="text-red-500 text-center">Error loading recent entries.</p>
+      <p class="text-destructive text-center">Error loading recent entries.</p>
     {/snippet}
     <CardHeader class="px-3 @md:px-6">
       <CardTitle>{title}</CardTitle>

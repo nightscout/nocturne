@@ -469,7 +469,7 @@
         {:else if slugError}
           <p class="text-xs text-destructive">{slugError}</p>
         {:else if slugValid}
-          <p class="text-xs text-green-600">Available</p>
+          <p class="text-xs text-success">Available</p>
         {/if}
       </div>
 

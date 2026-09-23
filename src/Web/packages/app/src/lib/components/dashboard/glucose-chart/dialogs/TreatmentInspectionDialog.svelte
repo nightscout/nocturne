@@ -125,7 +125,7 @@
       case CalculationType.Manual:
         return "bg-orange-500/20 text-orange-400 border-orange-500/30";
       case CalculationType.Automatic:
-        return "bg-green-500/20 text-green-400 border-green-500/30";
+        return "bg-success/20 text-success border-success/30";
       default:
         return "bg-muted text-muted-foreground border-border";
     }

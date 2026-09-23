@@ -1,22 +1,23 @@
 <script lang="ts">
   import type { HTMLAttributes } from "svelte/elements";
   import { cn, type WithElementRef } from "../../../utils";
+  import { cardVariants, type CardVariant } from "./card-variants";
 
   let {
     ref = $bindable(null),
     class: className,
+    variant = "default",
     children,
     ...restProps
-  }: WithElementRef<HTMLAttributes<HTMLDivElement>> = $props();
+  }: WithElementRef<HTMLAttributes<HTMLDivElement>> & {
+    variant?: CardVariant;
+  } = $props();
 </script>
 
 <div
   bind:this={ref}
   data-slot="card"
-  class={cn(
-    "bg-card text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm",
-    className
-  )}
+  class={cn(cardVariants({ variant }), className)}
   {...restProps}
 >
   {@render children?.()}

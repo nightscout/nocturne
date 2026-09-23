@@ -44,10 +44,8 @@
           APS Decision at {snapshotTime}
         </Card.Title>
         <Badge
-          variant={isEnacted ? "default" : "outline"}
-          class={isEnacted
-            ? "shrink-0 bg-green-600/20 text-green-400 border-green-600/40"
-            : "shrink-0"}
+          variant={isEnacted ? "success" : "outline"}
+          class="shrink-0"
         >
           {#if isEnacted}
             <Check class="h-3 w-3 mr-1" />

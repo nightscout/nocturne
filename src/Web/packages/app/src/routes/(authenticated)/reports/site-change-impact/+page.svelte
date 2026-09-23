@@ -152,18 +152,16 @@
   </Card>
 
   <!-- Educational Card -->
-  <Card
-    class="border-blue-200 bg-blue-50/50 dark:border-blue-900 dark:bg-blue-950/20"
-  >
+  <Card variant="info">
     <CardHeader>
       <CardTitle
-        class="flex items-center gap-2 text-blue-700 dark:text-blue-400"
+        class="flex items-center gap-2 text-info"
       >
         <HelpCircle class="h-5 w-5" />
         Understanding This Report
       </CardTitle>
     </CardHeader>
-    <CardContent class="space-y-4 text-sm text-blue-900 dark:text-blue-200">
+    <CardContent class="space-y-4 text-sm text-info">
       <p>
         <strong>What this shows:</strong>
         This report averages your glucose readings across all your site changes to
@@ -174,7 +172,7 @@
       <div class="grid gap-4 @lg:grid-cols-2">
         <div>
           <p class="font-medium">Before Site Change (Left)</p>
-          <p class="text-blue-700/80 dark:text-blue-300/80">
+          <p class="text-info/80">
             Shows glucose patterns in the hours before you changed your site.
             Higher glucose here may indicate absorption issues with an aging
             site.
@@ -182,19 +180,19 @@
         </div>
         <div>
           <p class="font-medium">After Site Change (Right)</p>
-          <p class="text-blue-700/80 dark:text-blue-300/80">
+          <p class="text-info/80">
             Shows glucose patterns after the fresh site is inserted. Watch for
             improvements in control indicating better insulin absorption.
           </p>
         </div>
       </div>
 
-      <div class="rounded-md bg-blue-100/50 p-3 dark:bg-blue-900/30">
+      <div class="rounded-md bg-info/5 p-3">
         <p class="flex items-center gap-2 font-medium">
           <Lightbulb class="h-4 w-4" />
           What to look for
         </p>
-        <p class="text-blue-700/80 dark:text-blue-300/80">
+        <p class="text-info/80">
           A consistent rise in the hours before site changes is a pattern worth
           discussing with your care team.
         </p>

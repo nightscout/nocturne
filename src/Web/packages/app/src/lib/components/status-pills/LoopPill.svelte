@@ -78,7 +78,7 @@
     if (data.status === "error" && data.failureReason) {
       items.push({
         label: "Error",
-        value: `<span class="text-red-600">${data.failureReason}</span>`,
+        value: `<span class="text-destructive">${data.failureReason}</span>`,
       });
     }
 

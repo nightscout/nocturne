@@ -59,13 +59,13 @@
               {@const active = isUploaderActive(uploader)}
               <button
                 class="flex items-center gap-4 p-4 rounded-lg border hover:border-primary/50 hover:bg-accent/50 transition-colors text-left group {active
-                  ? 'border-green-300 dark:border-green-700 bg-green-50/50 dark:bg-green-950/20'
+                  ? 'border-success/30 bg-success/5'
                   : ''}"
                 onclick={() => onSetup(uploader)}
               >
                 <div
                   class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg {active
-                    ? 'bg-green-100 dark:bg-green-900/30'
+                    ? 'bg-success/10'
                     : 'bg-primary/10'}"
                 >
                   <AppLogo icon={uploader.icon} invertMode />
@@ -77,9 +77,7 @@
                       {uploader.platform}
                     </Badge>
                     {#if active}
-                      <Badge
-                        class="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100"
-                      >
+                      <Badge variant="success">
                         <CheckCircle class="h-3 w-3 mr-1" />
                         Active
                       </Badge>

@@ -115,7 +115,7 @@
 {#if canManage && (hasExistingConfig || hasData)}
   <Separator class="my-6" />
 
-  <Card class="border-destructive/50">
+  <Card variant="destructive">
     <CardHeader>
       <CardTitle class="text-destructive">Danger Zone</CardTitle>
       <CardDescription>
@@ -205,29 +205,29 @@
       {#if deleteConfigResult}
         {#if deleteConfigResult.success}
           <div
-            class="rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/20 p-4 mt-4"
+            class="rounded-lg border border-success/30 bg-success/10 p-4 mt-4"
           >
             <div
-              class="flex items-center gap-2 text-green-800 dark:text-green-200"
+              class="flex items-center gap-2 text-success"
             >
               <CheckCircle class="h-5 w-5" />
               <span class="font-medium">
                 Configuration deleted successfully
               </span>
             </div>
-            <p class="text-sm text-green-700 dark:text-green-300 mt-1">
+            <p class="text-sm text-success mt-1">
               Redirecting...
             </p>
           </div>
         {:else}
           <div
-            class="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20 p-4 mt-4"
+            class="rounded-lg border border-destructive/30 bg-destructive/10 p-4 mt-4"
           >
-            <div class="flex items-center gap-2 text-red-800 dark:text-red-200">
+            <div class="flex items-center gap-2 text-destructive">
               <AlertCircle class="h-5 w-5" />
               <span class="font-medium">Failed to delete configuration</span>
             </div>
-            <p class="text-sm text-red-700 dark:text-red-300 mt-1">
+            <p class="text-sm text-destructive mt-1">
               {deleteConfigResult.error}
             </p>
           </div>
@@ -265,36 +265,36 @@
       {#if deleteDataResult}
         {#if deleteDataResult.success}
           <div
-            class="rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/20 p-4 mt-4"
+            class="rounded-lg border border-success/30 bg-success/10 p-4 mt-4"
           >
             <div
-              class="flex items-center gap-2 text-green-800 dark:text-green-200"
+              class="flex items-center gap-2 text-success"
             >
               <CheckCircle class="h-5 w-5" />
               <span class="font-medium">Data deleted successfully</span>
             </div>
             <ul
-              class="text-sm text-green-700 dark:text-green-300 mt-2 space-y-1"
+              class="text-sm text-success mt-2 space-y-1"
             >
               {#each Object.entries(deleteDataResult.deletedCounts ?? {}) as [key, count] (key)}
                 <li>{formatNumber(count)} {formatCountLabel(key)}</li>
               {/each}
             </ul>
             <p
-              class="text-sm font-medium text-green-700 dark:text-green-300 mt-2"
+              class="text-sm font-medium text-success mt-2"
             >
               Total: {formatNumber(deleteDataResult.totalDeleted)} records deleted
             </p>
           </div>
         {:else}
           <div
-            class="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20 p-4 mt-4"
+            class="rounded-lg border border-destructive/30 bg-destructive/10 p-4 mt-4"
           >
-            <div class="flex items-center gap-2 text-red-800 dark:text-red-200">
+            <div class="flex items-center gap-2 text-destructive">
               <AlertCircle class="h-5 w-5" />
               <span class="font-medium">Failed to delete data</span>
             </div>
-            <p class="text-sm text-red-700 dark:text-red-300 mt-1">
+            <p class="text-sm text-destructive mt-1">
               {deleteDataResult.error}
             </p>
           </div>

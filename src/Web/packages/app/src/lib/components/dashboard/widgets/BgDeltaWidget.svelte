@@ -59,14 +59,14 @@
   const connectionColor = $derived.by(() => {
     switch (connectionStatus) {
       case "connected":
-        return "bg-green-500";
+        return "bg-success";
       case "connecting":
       case "reconnecting":
-        return "bg-yellow-500";
+        return "bg-warning";
       case "disconnected":
         return "bg-gray-500";
       case "error":
-        return "bg-red-500";
+        return "bg-destructive";
       default:
         return "bg-gray-500";
     }
@@ -130,10 +130,10 @@
           <span
             class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium {currentStatus.status ===
             'urgent'
-              ? 'bg-red-500/20 text-red-400'
+              ? 'bg-destructive/20 text-destructive'
               : currentStatus.status === 'warn'
-                ? 'bg-yellow-500/20 text-yellow-400'
-                : 'bg-green-500/20 text-green-400'}"
+                ? 'bg-warning/20 text-warning'
+                : 'bg-success/20 text-success'}"
           >
             {#if currentStatus.min.isCharging}
               <BatteryCharging class="h-3 w-3" />

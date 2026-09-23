@@ -101,12 +101,10 @@
   </div>
 
   <!-- What is AGP - Educational Card -->
-  <Card
-    class="border-2 border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/30"
-  >
+  <Card variant="info" class="border-2">
     <CardHeader class="pb-3">
       <CardTitle class="flex items-center gap-2 text-base">
-        <HelpCircle class="w-5 h-5 text-blue-600" />
+        <HelpCircle class="w-5 h-5 text-info" />
         What is an AGP?
       </CardTitle>
     </CardHeader>
@@ -117,10 +115,10 @@
         all your daily readings to reveal consistent patterns.
       </p>
       <details class="text-muted-foreground">
-        <summary class="cursor-pointer text-blue-600 hover:underline">
+        <summary class="cursor-pointer text-info hover:underline">
           How to read this chart
         </summary>
-        <div class="mt-2 space-y-2 pl-4 border-l-2 border-blue-200">
+        <div class="mt-2 space-y-2 pl-4 border-l-2 border-info/30">
           <p>
             <strong>The dark line</strong>
             is your median (middle) glucose at each hour — what happens most often.

@@ -393,7 +393,7 @@
       <div class="flex flex-wrap gap-2">
         <Button variant="outline" onclick={copyLogs}>
           {#if logsCopied}
-            <CheckCircle class="h-4 w-4 text-green-500" />
+            <CheckCircle class="h-4 w-4 text-success" />
             Copied!
           {:else}
             <Copy class="h-4 w-4" />
@@ -406,18 +406,16 @@
         </Button>
       </div>
 
-      <Card
-        class="border-blue-200 bg-blue-50/50 dark:border-blue-900 dark:bg-blue-950/20"
-      >
+      <Card variant="info">
         <CardContent class="flex items-start gap-3 pt-6">
           <Shield
-            class="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5"
+            class="h-5 w-5 text-info shrink-0 mt-0.5"
           />
           <div>
-            <p class="font-medium text-blue-900 dark:text-blue-100">
+            <p class="font-medium text-info">
               Privacy Note
             </p>
-            <p class="text-sm text-blue-800 dark:text-blue-200">
+            <p class="text-sm text-info">
               Logs never include your glucose data, API tokens, or passwords.
               Only diagnostic information is shared.
             </p>
@@ -472,7 +470,7 @@
 
       <div class="text-center text-sm text-muted-foreground">
         <p>
-          Made with <Heart class="h-4 w-4 inline text-red-500" /> by the Nightscout
+          Made with <Heart class="h-4 w-4 inline text-destructive" /> by the Nightscout
           community
         </p>
         <p class="mt-2">

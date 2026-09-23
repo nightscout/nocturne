@@ -405,7 +405,7 @@
   {#if isLoading && !servicesOverview}
     <SettingsPageSkeleton cardCount={3} />
   {:else if error}
-    <Card class="border-destructive">
+    <Card variant="destructive">
       <CardContent class="py-8">
         <div class="text-center">
           <AlertCircle class="h-12 w-12 mx-auto mb-4 text-destructive" />
@@ -538,7 +538,7 @@
                 onclick={() => copyField(window.location.origin, "baseUrl")}
               >
                 {#if copiedField === "baseUrl"}
-                  <Check class="h-4 w-4 text-green-500" />
+                  <Check class="h-4 w-4 text-success" />
                 {:else}
                   <Copy class="h-4 w-4" />
                 {/if}

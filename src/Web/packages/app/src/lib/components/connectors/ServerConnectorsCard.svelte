@@ -257,10 +257,7 @@
           >
             {#snippet badges()}
               {#if hasData}
-                <Badge
-                  variant="secondary"
-                  class="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100"
-                >
+                <Badge variant="info">
                   <Database class="h-3 w-3 mr-1" />
                   Has Data
                 </Badge>

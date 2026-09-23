@@ -44,10 +44,10 @@
 
     const levelClasses: Record<AlertLevel, string> = {
       none: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-      info: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/50",
-      warn: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300 hover:bg-yellow-200 dark:hover:bg-yellow-900/50",
+      info: "bg-info/10 text-info hover:bg-info/20",
+      warn: "bg-warning/10 text-warning hover:bg-warning/20",
       urgent:
-        "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/50",
+        "bg-destructive/10 text-destructive hover:bg-destructive/20",
     };
 
     const staleClasses = isStale ? "opacity-60" : "";

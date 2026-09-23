@@ -97,10 +97,10 @@
     <Card.Content class="space-y-4">
       {#if registered}
         <div
-          class="flex items-start gap-3 rounded-md border border-green-500/20 bg-green-500/5 p-3"
+          class="flex items-start gap-3 rounded-md border border-success/20 bg-success/5 p-3"
         >
-          <Check class="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
-          <p class="text-sm text-green-700 dark:text-green-400">
+          <Check class="mt-0.5 h-4 w-4 shrink-0 text-success" />
+          <p class="text-sm text-success">
             Passkey registered. Your recovery code is now used up.
           </p>
         </div>

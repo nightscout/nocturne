@@ -97,8 +97,8 @@
             {#if absImprovement >= 0.5}
               <span
                 class="inline-flex items-center gap-0.5 text-xs font-medium {improvement > 0
-                  ? 'text-green-500'
-                  : 'text-red-500'}"
+                  ? 'text-success'
+                  : 'text-destructive'}"
               >
                 {#if improvement > 0}
                   <TrendingUp class="h-3 w-3" />

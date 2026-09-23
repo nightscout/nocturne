@@ -546,7 +546,7 @@
                                 <span class="text-destructive line-through">{diff.oldValue}</span>
                                 <span class="text-muted-foreground">&rarr;</span>
                               {/if}
-                              <span class="text-green-600 dark:text-green-400">{diff.newValue}</span>
+                              <span class="text-success">{diff.newValue}</span>
                             </div>
                           {/each}
                         </div>

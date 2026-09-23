@@ -12,9 +12,9 @@
 
 {#if reliability && reliability.meetsReliabilityCriteria === false}
   <Badge
-    variant="outline"
+    variant="warning"
     class={cn(
-      "h-auto max-w-full items-start gap-1.5 whitespace-normal break-words border-amber-200 bg-amber-50 py-1 text-left text-[11px] leading-snug text-amber-600 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400",
+      "h-auto max-w-full items-start gap-1.5 whitespace-normal break-words py-1 text-left text-[11px] leading-snug",
       className
     )}
   >

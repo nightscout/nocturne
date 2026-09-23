@@ -344,10 +344,7 @@
                 </Badge>
               {/if}
               {#if insulin.isCurrent}
-                <Badge
-                  variant="default"
-                  class="bg-green-600 hover:bg-green-700"
-                >
+                <Badge variant="success">
                   Current
                 </Badge>
               {/if}

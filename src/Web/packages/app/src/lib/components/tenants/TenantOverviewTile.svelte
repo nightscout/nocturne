@@ -32,7 +32,7 @@
       case AlertRuleSeverity.Critical:
         return "bg-destructive text-destructive-foreground";
       case AlertRuleSeverity.Warning:
-        return "bg-amber-500/15 text-amber-700 dark:text-amber-400";
+        return "bg-warning/15 text-warning";
       default:
         return "bg-muted text-muted-foreground";
     }

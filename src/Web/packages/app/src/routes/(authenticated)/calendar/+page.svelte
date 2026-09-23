@@ -373,7 +373,7 @@
   <CalendarSkeleton />
 {:else if punchCardError}
   <div class="flex items-center justify-center h-full p-6">
-    <Card.Root class="max-w-md border-destructive">
+    <Card.Root variant="destructive" class="max-w-md">
       <Card.Content class="py-8">
         <div class="text-center">
           <p class="font-medium text-destructive">

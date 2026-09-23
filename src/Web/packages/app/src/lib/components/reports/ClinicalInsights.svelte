@@ -10,24 +10,19 @@
     variants: {
       type: {
         success: {
-          container:
-            "border-emerald-200 bg-emerald-50/50 dark:border-emerald-800/50 dark:bg-emerald-950/20",
-          icon: "text-emerald-600 dark:text-emerald-400",
-          badge:
-            "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300",
+          container: "border-success/30 bg-success/5",
+          icon: "text-success",
+          badge: "bg-success/10 text-success",
         },
         warning: {
-          container:
-            "border-amber-200 bg-amber-50/50 dark:border-amber-800/50 dark:bg-amber-950/20",
-          icon: "text-amber-600 dark:text-amber-400",
-          badge:
-            "bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300",
+          container: "border-warning/30 bg-warning/5",
+          icon: "text-warning",
+          badge: "bg-warning/10 text-warning",
         },
         info: {
-          container:
-            "border-sky-200 bg-sky-50/50 dark:border-sky-800/50 dark:bg-sky-950/20",
-          icon: "text-sky-600 dark:text-sky-400",
-          badge: "bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-300",
+          container: "border-info/30 bg-info/5",
+          icon: "text-info",
+          badge: "bg-info/10 text-info",
         },
         action: {
           container:

@@ -149,7 +149,7 @@
         <div class="text-sm">
           <span class="font-medium">{foodPortion}{foodUnit}</span>
           <span class="text-muted-foreground">=</span>
-          <span class="font-semibold text-green-600 dark:text-green-400">
+          <span class="font-semibold text-success">
             {foodCarbs}g carbs
           </span>
         </div>

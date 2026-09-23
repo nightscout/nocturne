@@ -164,12 +164,10 @@
   </div>
 
   <!-- What is this report - Educational Card -->
-  <Card
-    class="border-2 border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/30"
-  >
+  <Card variant="info" class="border-2">
     <CardHeader class="pb-3">
       <CardTitle class="flex items-center gap-2 text-base">
-        <HelpCircle class="h-5 w-5 text-blue-600" />
+        <HelpCircle class="h-5 w-5 text-info" />
         Understanding Basal/Bolus Balance
       </CardTitle>
     </CardHeader>
@@ -375,7 +373,7 @@
           <ul class="mt-2 space-y-1 text-sm text-muted-foreground">
             {#if (insulinStats.correctionBoluses ?? 0) > (insulinStats.mealBoluses ?? 0)}
               <li class="flex items-start gap-2">
-                <Info class="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
+                <Info class="mt-0.5 h-4 w-4 shrink-0 text-info" />
                 <span>
                   Correction boluses ({insulinStats.correctionBoluses ?? 0})
                   outnumber meal boluses ({insulinStats.mealBoluses ?? 0}) in this
@@ -385,7 +383,7 @@
             {/if}
             {#if (insulinStats.bolusesPerDay ?? 0) < 3}
               <li class="flex items-start gap-2">
-                <Info class="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
+                <Info class="mt-0.5 h-4 w-4 shrink-0 text-info" />
                 <span>
                   Low bolus frequency — typical for low-carb diets or those with
                   significant basal coverage.
@@ -393,7 +391,7 @@
               </li>
             {:else if (insulinStats.bolusesPerDay ?? 0) > 8}
               <li class="flex items-start gap-2">
-                <Info class="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
+                <Info class="mt-0.5 h-4 w-4 shrink-0 text-info" />
                 <span>
                   High bolus frequency — {(insulinStats.bolusesPerDay ?? 0).toFixed(
                     1

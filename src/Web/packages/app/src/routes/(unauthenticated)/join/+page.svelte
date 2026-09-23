@@ -190,9 +190,9 @@
       <!-- Passkey registration complete — show recovery codes -->
       <Card.Header class="space-y-1 text-center">
         <div
-          class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-green-500/10"
+          class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-success/10"
         >
-          <Check class="h-6 w-6 text-green-600" />
+          <Check class="h-6 w-6 text-success" />
         </div>
         <Card.Title class="text-2xl font-bold">You're In</Card.Title>
         <Card.Description>

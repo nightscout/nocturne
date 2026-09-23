@@ -136,12 +136,12 @@
       <Card.Content class="space-y-4">
         {#if !clientInfo.isKnown}
           <div
-            class="flex items-start gap-3 rounded-md border border-yellow-200 bg-yellow-50 p-3 dark:border-yellow-900/50 dark:bg-yellow-900/20"
+            class="flex items-start gap-3 rounded-md border border-warning/30 bg-warning/10 p-3"
           >
             <AlertTriangle
-              class="mt-0.5 h-4 w-4 shrink-0 text-yellow-600 dark:text-yellow-400"
+              class="mt-0.5 h-4 w-4 shrink-0 text-warning"
             />
-            <p class="text-sm text-yellow-800 dark:text-yellow-200">
+            <p class="text-sm text-warning">
               This application is not in the Nocturne known app directory. Only
               approve if you trust this application.
             </p>
@@ -170,21 +170,21 @@
           <!-- New permissions section -->
           <div>
             <div class="mb-3 flex items-center gap-2">
-              <ShieldPlus class="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              <ShieldPlus class="h-4 w-4 text-warning" />
               <p class="text-sm font-medium text-foreground">
                 New permissions requested
               </p>
             </div>
             <div
-              class="rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/50 dark:bg-amber-900/20"
+              class="rounded-md border border-warning/30 bg-warning/10 p-3"
             >
               <ul class="space-y-2">
                 {#each newScopes as s}
                   <li class="flex items-start gap-3 text-sm">
                     <ShieldAlert
-                      class="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400"
+                      class="mt-0.5 h-4 w-4 shrink-0 text-warning"
                     />
-                    <span class="text-amber-900 dark:text-amber-100">
+                    <span class="text-warning">
                       {getOAuthScopeDescription(s)}
                     </span>
                   </li>

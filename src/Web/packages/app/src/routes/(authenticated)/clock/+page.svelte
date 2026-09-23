@@ -97,7 +97,7 @@
         </div>
       {/snippet}
       {#snippet failed(error, reset)}
-        <Card.Root class="border-destructive">
+        <Card.Root variant="destructive">
           <Card.Content class="py-8 text-center space-y-3">
             <p class="text-destructive">
               {remoteErrorMessage(error, "Failed to load clock faces")}

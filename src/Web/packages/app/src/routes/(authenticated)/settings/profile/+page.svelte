@@ -127,7 +127,7 @@
 
 {#if loadError}
   <div class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6">
-    <Card class="border-destructive">
+    <Card variant="destructive">
       <CardContent class="py-8">
         <div class="text-center space-y-2">
           <p class="text-destructive font-medium">Failed to load profiles</p>
@@ -259,10 +259,7 @@
                         {profileName}
                       </span>
                       {#if isDefault}
-                        <Badge
-                          variant="default"
-                          class="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100"
-                        >
+                        <Badge variant="success">
                           Active
                         </Badge>
                       {:else}
@@ -321,10 +318,7 @@
                 <CardTitle class="flex items-center gap-2">
                   {selectedProfileName}
                   {#if therapy.isDefault}
-                    <Badge
-                      variant="default"
-                      class="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100"
-                    >
+                    <Badge variant="success">
                       Active
                     </Badge>
                   {/if}
@@ -395,7 +389,7 @@
               description="Grams of carbs per unit of insulin"
               unit="g/U"
               icon={Droplet}
-              iconClass="text-green-600"
+              iconClass="text-success"
               entries={carbRatio.entries}
             />
           {/if}

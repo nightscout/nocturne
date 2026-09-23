@@ -15,14 +15,14 @@
 
 {#if treatments.length > 0}
   <div class="mt-4">
-    <h4 class="text-sm font-semibold text-gray-700 mb-2">Treatment Events</h4>
+    <h4 class="text-sm font-semibold text-foreground mb-2">Treatment Events</h4>
     <div class="flex flex-wrap gap-2">
       {#each treatments as treatment}
         <div
           class="bg-blue-50 border border-blue-200 rounded px-2 py-1 text-xs"
         >
           <div class="font-medium">{treatment.eventType}</div>
-          <div class="text-gray-600">
+          <div class="text-muted-foreground">
             {new Date(treatment.timestamp).toLocaleTimeString(formatLocale(), {
               hour: "2-digit",
               minute: "2-digit",

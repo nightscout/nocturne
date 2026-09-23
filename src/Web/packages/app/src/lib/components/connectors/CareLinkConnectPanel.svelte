@@ -267,7 +267,7 @@
           disabled={busy}
         />
         {#if codeInput.trim() && detectedCode}
-          <p class="flex items-center gap-1 text-xs text-green-600">
+          <p class="flex items-center gap-1 text-xs text-success">
             <CheckCircle2 class="h-3.5 w-3.5" /> Authorization code detected.
           </p>
         {:else if codeInput.trim()}
@@ -288,7 +288,7 @@
 
     {#if phase === "done"}
       <div class="flex items-start gap-2 text-sm">
-        <CheckCircle2 class="h-5 w-5 text-green-600 shrink-0" />
+        <CheckCircle2 class="h-5 w-5 text-success shrink-0" />
         <div>
           <p class="font-medium">CareLink connected.</p>
           <p class="text-muted-foreground">

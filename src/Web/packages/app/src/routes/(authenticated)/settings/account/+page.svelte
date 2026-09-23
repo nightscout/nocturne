@@ -388,12 +388,12 @@
 
     {#if successMessage}
       <div
-        class="flex items-start gap-3 rounded-md border border-green-200 bg-green-50 p-3 dark:border-green-900/50 dark:bg-green-900/20"
+        class="flex items-start gap-3 rounded-md border border-success/30 bg-success/10 p-3"
       >
         <Check
-          class="mt-0.5 h-4 w-4 shrink-0 text-green-600 dark:text-green-400"
+          class="mt-0.5 h-4 w-4 shrink-0 text-success"
         />
-        <p class="text-sm text-green-800 dark:text-green-200">
+        <p class="text-sm text-success">
           {successMessage}
         </p>
       </div>
@@ -679,7 +679,7 @@
       </div>
       <Button variant="outline" class="w-full" onclick={copyRecoveryCodes}>
         {#if copiedCodes}
-          <Check class="mr-1.5 h-4 w-4 text-green-600" />
+          <Check class="mr-1.5 h-4 w-4 text-success" />
           Copied
         {:else}
           <Copy class="mr-1.5 h-4 w-4" />

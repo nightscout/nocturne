@@ -93,7 +93,7 @@
                     remaining !== undefined && remaining <= 0
                       ? "text-destructive"
                       : remaining !== undefined && remaining < 6
-                        ? "text-yellow-600 dark:text-yellow-400"
+                        ? "text-warning"
                         : ""
                   )}
                 >

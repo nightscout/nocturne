@@ -247,7 +247,7 @@
         <CardContent>
           {#if trackerNotifications.length === 0}
             <div class="text-center py-8 text-muted-foreground">
-              <Check class="h-12 w-12 mx-auto mb-3 text-green-500 opacity-50" />
+              <Check class="h-12 w-12 mx-auto mb-3 text-success opacity-50" />
               <p>All caught up! No active tracker alerts.</p>
             </div>
           {:else}
@@ -357,7 +357,7 @@
                         class="flex items-center justify-between p-3 rounded-lg bg-muted/30"
                       >
                         <div class="flex items-center gap-3">
-                          <Check class="h-4 w-4 text-green-500" />
+                          <Check class="h-4 w-4 text-success" />
                           <div>
                             <div class="font-medium">
                               {instance.definitionName}

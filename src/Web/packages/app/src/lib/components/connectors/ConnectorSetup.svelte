@@ -334,7 +334,7 @@
   {#if isLoading}
     <SettingsPageSkeleton cardCount={2} />
   {:else if error}
-    <Card class="border-destructive">
+    <Card variant="destructive">
       <CardContent class="flex items-center gap-3 pt-6">
         <AlertCircle class="h-5 w-5 text-destructive" />
         <div>
@@ -360,20 +360,16 @@
 
       <!-- Save Message -->
       {#if saveMessage}
-        <Card
-          class={saveMessage.type === "error"
-            ? "border-destructive"
-            : "border-green-500"}
-        >
+        <Card variant={saveMessage.type === "error" ? "destructive" : "success"}>
           <CardContent class="flex items-center gap-3 py-3">
             {#if saveMessage.type === "error"}
               <AlertCircle class="h-5 w-5 text-destructive" />
             {:else}
               <div
-                class="h-5 w-5 rounded-full bg-green-500 flex items-center justify-center"
+                class="h-5 w-5 rounded-full bg-success flex items-center justify-center"
               >
                 <svg
-                  class="h-3 w-3 text-white"
+                  class="h-3 w-3 text-success-foreground"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"

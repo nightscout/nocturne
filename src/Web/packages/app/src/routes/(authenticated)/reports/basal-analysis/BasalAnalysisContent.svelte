@@ -72,13 +72,9 @@
 
 {#if hourlyDeliveryQuery.error || analysisQuery.error}
   <div class="@container container mx-auto max-w-7xl p-3 @md:p-6">
-    <Card
-      class="border-2 border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/30"
-    >
+    <Card variant="destructive" class="border-2">
       <CardHeader>
-        <CardTitle
-          class="flex items-center gap-2 text-base text-red-700 dark:text-red-400"
-        >
+        <CardTitle class="flex items-center gap-2 text-base text-destructive">
           <Info class="h-5 w-5" />
           Error Loading Basal Analysis
         </CardTitle>

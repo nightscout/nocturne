@@ -297,7 +297,7 @@
     </div>
   {:else if error && !collections.length}
     <div class="flex flex-col items-center justify-center py-16 gap-4">
-      <AlertTriangle class="h-12 w-12 text-amber-400" />
+      <AlertTriangle class="h-12 w-12 text-warning" />
       <p class="text-sm text-white/60">{error}</p>
     </div>
   {:else}
@@ -328,9 +328,9 @@
         </div>
         <p class="text-sm text-white/40">
           {#if failed}
-            <span class="text-amber-400">{error}</span>
+            <span class="text-warning">{error}</span>
           {:else if caveat}
-            <span class={caveatIsFault ? "text-amber-400" : ""}>{caveat}</span>
+            <span class={caveatIsFault ? "text-warning" : ""}>{caveat}</span>
           {:else if etaText}
             About <span class="font-semibold text-white/60">{etaText}</span>
             remaining &middot; {formatCount(totalMigrated)} records

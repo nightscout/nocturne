@@ -74,7 +74,7 @@
   </Card.Root>
 {:else if retrospectiveQuery.error}
   {@const error = retrospectiveQuery.error}
-  <Card.Root class="border-2 border-destructive/20 bg-destructive/5">
+  <Card.Root variant="destructive" class="border-2">
     <Card.Header class="pb-2">
       <Card.Title class="flex items-center gap-2 text-base text-destructive">
         <AlertTriangle class="h-4 w-4" />

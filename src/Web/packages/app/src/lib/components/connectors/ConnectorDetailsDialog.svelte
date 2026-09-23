@@ -173,32 +173,22 @@
         <div class="flex items-center justify-between">
           <span class="text-sm font-medium">Status</span>
           {#if selectedConnector.state === "Syncing"}
-            <Badge
-              class="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100"
-            >
+            <Badge variant="info">
               <Loader2 class="h-3 w-3 mr-1 animate-spin" />
               Syncing...
             </Badge>
           {:else if selectedConnector.state === "BackingOff"}
-            <Badge
-              variant="secondary"
-              class="bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-100"
-            >
+            <Badge variant="warning">
               <Clock class="h-3 w-3 mr-1" />
               Backing Off
             </Badge>
           {:else if selectedConnector.isHealthy}
-            <Badge
-              class="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100"
-            >
+            <Badge variant="success">
               <CheckCircle class="h-3 w-3 mr-1" />
               Healthy
             </Badge>
           {:else if selectedConnector.state === "Disabled"}
-            <Badge
-              variant="secondary"
-              class="bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100"
-            >
+            <Badge variant="secondary">
               <WifiOff class="h-3 w-3 mr-1" />
               Disabled
             </Badge>
@@ -226,7 +216,7 @@
         {#if selectedConnectorCapabilities}
           {#if selectedConnectorCapabilities.supportsHistoricalSync === false}
             <div
-              class="rounded-lg border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/20 p-3 text-xs text-blue-800 dark:text-blue-200"
+              class="rounded-lg border border-info/30 bg-info/10 p-3 text-xs text-info"
             >
               Historical sync is not supported for this connector.
               {#if selectedConnectorCapabilities.maxHistoricalDays}
@@ -244,7 +234,7 @@
 
         {#if selectedConnector.state === "Disabled"}
           <div
-            class="rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950/20 p-4"
+            class="rounded-lg border border-border bg-muted/50 p-4"
           >
             <div class="flex items-center gap-2 text-muted-foreground">
               <WifiOff class="h-5 w-5" />
@@ -258,7 +248,7 @@
           </div>
         {:else if selectedConnector.state === "Offline"}
           <div
-            class="rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950/20 p-4"
+            class="rounded-lg border border-border bg-muted/50 p-4"
           >
             <div class="flex items-center gap-2 text-muted-foreground">
               <WifiOff class="h-5 w-5" />
@@ -384,7 +374,7 @@
           </div>
         {:else if selectedConnector.status === "Unreachable"}
           <div
-            class="rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950/20 p-4"
+            class="rounded-lg border border-border bg-muted/50 p-4"
           >
             <div class="flex items-center gap-2 text-muted-foreground">
               <WifiOff class="h-5 w-5" />
@@ -442,8 +432,8 @@
             {#if granularSyncResult}
               <div
                 class="text-xs p-2 rounded {granularSyncResult.success
-                  ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200'
-                  : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200'}"
+                  ? 'bg-success/10 text-success'
+                  : 'bg-destructive/10 text-destructive'}"
               >
                 {#if granularSyncResult.success}
                   <CheckCircle class="inline h-3 w-3 mr-1" />
@@ -491,8 +481,8 @@
               {#if foodOnlySyncResult}
                 <div
                   class="text-xs p-2 rounded {foodOnlySyncResult.success
-                    ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200'
-                    : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200'}"
+                    ? 'bg-success/10 text-success'
+                    : 'bg-destructive/10 text-destructive'}"
                 >
                   {#if foodOnlySyncResult.success}
                     <CheckCircle class="inline h-3 w-3 mr-1" />

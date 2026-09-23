@@ -113,7 +113,7 @@
         {#if availability.validating}
           <p class="text-xs text-white/40">Checking availability...</p>
         {:else if availability.valid}
-          <p class="flex items-center gap-1.5 text-xs text-green-400">
+          <p class="flex items-center gap-1.5 text-xs text-success">
             <Check class="h-3 w-3" />
             Available
           </p>

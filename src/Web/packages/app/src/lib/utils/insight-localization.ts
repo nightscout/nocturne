@@ -158,11 +158,11 @@ export function formatInsight(
 export function getInsightColor(type: "success" | "warning" | "info" | "action"): string {
   switch (type) {
     case "success":
-      return "text-green-600";
+      return "text-success";
     case "warning":
-      return "text-orange-600";
+      return "text-warning";
     case "info":
-      return "text-blue-600";
+      return "text-info";
     case "action":
       return "text-violet-600";
   }

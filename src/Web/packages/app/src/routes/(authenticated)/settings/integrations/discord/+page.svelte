@@ -131,7 +131,7 @@
 	</div>
 
 	{#if actionError}
-		<Card.Root class="border-destructive">
+		<Card.Root variant="destructive">
 			<Card.Content class="pt-6">
 				<p class="text-sm text-destructive">{actionError}</p>
 			</Card.Content>

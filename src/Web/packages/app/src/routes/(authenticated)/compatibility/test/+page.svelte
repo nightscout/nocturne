@@ -533,7 +533,7 @@
   </Card.Root>
 
   {#if error}
-    <Card.Root class="border-destructive">
+    <Card.Root variant="destructive">
       <Card.Content class="py-4">
         <p class="text-destructive">{error}</p>
       </Card.Content>
@@ -549,7 +549,7 @@
           <p class="text-sm text-muted-foreground mb-1">Nightscout Status</p>
           <p
             class="text-2xl font-bold {result.nightscoutStatusCode === 200
-              ? 'text-green-600'
+              ? 'text-success'
               : 'text-destructive'}"
           >
             {result.nightscoutStatusCode ?? "Error"}
@@ -567,7 +567,7 @@
           <p class="text-sm text-muted-foreground mb-1">Nocturne Status</p>
           <p
             class="text-2xl font-bold {result.nocturneStatusCode === 200
-              ? 'text-green-600'
+              ? 'text-success'
               : 'text-destructive'}"
           >
             {result.nocturneStatusCode ?? "Error"}
@@ -598,16 +598,12 @@
     </div>
 
     <!-- Match Status -->
-    <Card.Root
-      class={isIdentical
-        ? "border-green-500 bg-green-50 dark:bg-green-900/20"
-        : "border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20"}
-    >
+    <Card.Root variant={isIdentical ? "success" : "warning"}>
       <Card.Content class="py-4">
         <p
           class="font-semibold {isIdentical
-            ? 'text-green-700 dark:text-green-300'
-            : 'text-yellow-700 dark:text-yellow-300'}"
+            ? 'text-success'
+            : 'text-warning'}"
         >
           {isIdentical
             ? "✓ Responses are identical"
@@ -622,7 +618,7 @@
       <div class="grid grid-cols-1 @lg:grid-cols-2 gap-4">
         <Card.Root>
           <Card.Header class="py-3">
-            <Card.Title class="text-base text-red-600">
+            <Card.Title class="text-base text-destructive">
               Nightscout Response
             </Card.Title>
           </Card.Header>
@@ -635,7 +631,7 @@
               <pre
                 class="text-xs font-mono leading-tight">{#each sideBySideDiff.left as { line, type }}<span
                     class="block px-3 min-h-[1.25em] {type === 'removed'
-                      ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200'
+                      ? 'bg-destructive/10 text-destructive'
                       : type === 'empty'
                         ? 'bg-muted/30'
                         : ''}">{line}</span>{/each}</pre>
@@ -644,7 +640,7 @@
         </Card.Root>
         <Card.Root>
           <Card.Header class="py-3">
-            <Card.Title class="text-base text-green-600">
+            <Card.Title class="text-base text-success">
               Nocturne Response
             </Card.Title>
           </Card.Header>
@@ -657,7 +653,7 @@
               <pre
                 class="text-xs font-mono leading-tight">{#each sideBySideDiff.right as { line, type }}<span
                     class="block px-3 min-h-[1.25em] {type === 'added'
-                      ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200'
+                      ? 'bg-success/10 text-success'
                       : type === 'empty'
                         ? 'bg-muted/30'
                         : ''}">{line}</span>{/each}</pre>
@@ -671,9 +667,9 @@
         <Card.Header class="py-3 flex-row justify-between items-center">
           <Card.Title class="text-base">Unified Diff</Card.Title>
           <span class="text-sm text-muted-foreground">
-            <span class="text-red-600">- Nightscout</span>
+            <span class="text-destructive">- Nightscout</span>
             {" / "}
-            <span class="text-green-600">+ Nocturne</span>
+            <span class="text-success">+ Nocturne</span>
           </span>
         </Card.Header>
         <Card.Content class="p-0">
@@ -681,11 +677,11 @@
             <pre
               class="text-xs font-mono leading-tight">{#each parsedDiff as { line, type }}<span
                   class="block px-3 {type === 'add'
-                    ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200'
+                    ? 'bg-success/10 text-success'
                     : type === 'remove'
-                      ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200'
+                      ? 'bg-destructive/10 text-destructive'
                       : type === 'header'
-                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200'
+                        ? 'bg-info/10 text-info'
                         : type === 'meta'
                           ? 'text-muted-foreground'
                           : ''}">{line}</span>{/each}</pre>

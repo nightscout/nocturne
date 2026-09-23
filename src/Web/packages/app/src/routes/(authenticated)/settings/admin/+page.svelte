@@ -191,7 +191,7 @@
       <Loader2 class="h-8 w-8 animate-spin text-muted-foreground" />
     </div>
   {:else if error}
-    <Card class="border-destructive">
+    <Card variant="destructive">
       <CardContent class="py-6 text-center">
         <AlertTriangle class="h-8 w-8 text-destructive mx-auto mb-2" />
         <p class="text-destructive">{error}</p>

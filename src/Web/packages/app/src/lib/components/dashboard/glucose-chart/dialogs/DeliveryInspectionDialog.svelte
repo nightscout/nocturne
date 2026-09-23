@@ -90,7 +90,7 @@
       case BasalDeliveryOrigin.Algorithm:
         return "bg-blue-500/20 text-blue-400 border-blue-500/30";
       case BasalDeliveryOrigin.Suspended:
-        return "bg-red-500/20 text-red-400 border-red-500/30";
+        return "bg-destructive/20 text-destructive border-destructive/30";
       case BasalDeliveryOrigin.Manual:
         return "bg-orange-500/20 text-orange-400 border-orange-500/30";
       default:
@@ -167,11 +167,11 @@
           <span class="text-muted-foreground">Status</span>
           <span>
             {#if snapshot.enacted}
-              <Badge variant="outline" class="bg-green-500/20 text-green-400 border-green-500/30">
+              <Badge variant="success">
                 Enacted
               </Badge>
             {:else}
-              <Badge variant="outline" class="bg-yellow-500/20 text-yellow-400 border-yellow-500/30">
+              <Badge variant="warning">
                 Suggested Only
               </Badge>
             {/if}
@@ -296,7 +296,7 @@
 
     <!-- Pump status: stale data warning -->
     {#if isStaleBasal}
-      <div class="flex items-center gap-2 py-2 text-yellow-500 text-sm">
+      <div class="flex items-center gap-2 py-2 text-warning text-sm">
         <AlertTriangle class="h-4 w-4" />
         <span>Basal data may be stale. The last update was received some time ago.</span>
       </div>

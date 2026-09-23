@@ -161,10 +161,10 @@
 
   {#if successMessage}
     <div
-      class="flex items-start gap-3 rounded-md border border-green-200 bg-green-50 p-3 dark:border-green-900/50 dark:bg-green-900/20"
+      class="flex items-start gap-3 rounded-md border border-success/30 bg-success/10 p-3"
     >
-      <Check class="mt-0.5 h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />
-      <p class="text-sm text-green-800 dark:text-green-200">
+      <Check class="mt-0.5 h-4 w-4 shrink-0 text-success" />
+      <p class="text-sm text-success">
         {successMessage}
       </p>
     </div>

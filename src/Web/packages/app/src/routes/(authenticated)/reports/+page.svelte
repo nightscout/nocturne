@@ -173,9 +173,9 @@
   <div class="flex min-h-[60vh] items-center justify-center px-4">
     <div class="max-w-md space-y-4 text-center" in:fade={{ duration: 300 }}>
       <div
-        class="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30"
+        class="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10"
       >
-        <AlertTriangle class="h-8 w-8 text-red-500" />
+        <AlertTriangle class="h-8 w-8 text-destructive" />
       </div>
       <h2 class="text-xl font-semibold">Unable to load reports</h2>
       <p class="text-muted-foreground">
@@ -290,7 +290,7 @@
                 <div class="space-y-4">
                   <div class="grid grid-cols-2 gap-3 @sm:gap-4 @3xl:gap-6">
                     <div
-                      class="min-w-0 rounded-2xl bg-slate-50 p-4 text-center dark:bg-slate-800/50"
+                      class="min-w-0 rounded-2xl bg-muted/50 p-4 text-center"
                     >
                       <div
                         class="text-xs font-medium uppercase tracking-wide text-muted-foreground"
@@ -298,7 +298,7 @@
                         Est. A1C
                       </div>
                       <div
-                        class="mt-1 text-3xl font-bold tabular-nums text-slate-900 dark:text-slate-100"
+                        class="mt-1 text-3xl font-bold tabular-nums text-foreground"
                       >
                         {variability?.estimatedA1c?.toFixed(1) ?? "–"}
                         <span class="text-lg font-normal text-muted-foreground">
@@ -307,7 +307,7 @@
                       </div>
                     </div>
                     <div
-                      class="min-w-0 rounded-2xl bg-slate-50 p-4 text-center dark:bg-slate-800/50"
+                      class="min-w-0 rounded-2xl bg-muted/50 p-4 text-center"
                     >
                       <div
                         class="text-xs font-medium uppercase tracking-wide text-muted-foreground"
@@ -315,7 +315,7 @@
                         Variability
                       </div>
                       <div
-                        class="mt-1 text-3xl font-bold tabular-nums text-slate-900 dark:text-slate-100"
+                        class="mt-1 text-3xl font-bold tabular-nums text-foreground"
                       >
                         {variability?.coefficientOfVariation?.toFixed(0) ?? "–"}
                         <span class="text-lg font-normal text-muted-foreground">
@@ -324,7 +324,7 @@
                       </div>
                     </div>
                     <div
-                      class="min-w-0 rounded-2xl bg-slate-50 p-4 text-center dark:bg-slate-800/50"
+                      class="min-w-0 rounded-2xl bg-muted/50 p-4 text-center"
                     >
                       <div
                         class="text-xs font-medium uppercase tracking-wide text-muted-foreground"
@@ -332,7 +332,7 @@
                         Average
                       </div>
                       <div
-                        class="mt-1 text-3xl font-bold tabular-nums text-slate-900 dark:text-slate-100"
+                        class="mt-1 text-3xl font-bold tabular-nums text-foreground"
                       >
                         {stats?.mean
                           ? formatGlucoseValue(stats.mean, units)
@@ -343,7 +343,7 @@
                       </div>
                     </div>
                     <div
-                      class="min-w-0 rounded-2xl bg-slate-50 p-4 text-center dark:bg-slate-800/50"
+                      class="min-w-0 rounded-2xl bg-muted/50 p-4 text-center"
                     >
                       <div
                         class="text-xs font-medium uppercase tracking-wide text-muted-foreground"
@@ -351,7 +351,7 @@
                         Time Low
                       </div>
                       <div
-                        class="mt-1 text-3xl font-bold tabular-nums text-slate-900 dark:text-slate-100"
+                        class="mt-1 text-3xl font-bold tabular-nums text-foreground"
                       >
                         {((tir?.low ?? 0) + (tir?.veryLow ?? 0)).toFixed(1)}
                         <span class="text-lg font-normal text-muted-foreground">
@@ -408,9 +408,9 @@
             in:fade={{ duration: 400 }}
           >
             <div
-              class="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30"
+              class="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-warning/10"
             >
-              <AlertTriangle class="h-10 w-10 text-amber-500" />
+              <AlertTriangle class="h-10 w-10 text-warning" />
             </div>
             <h2 class="mb-2 text-xl font-semibold">No Data Available</h2>
             <p class="mx-auto max-w-md text-muted-foreground">
@@ -519,23 +519,23 @@
                         class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white shadow-sm dark:bg-slate-800"
                       >
                         <ReportIcon
-                          class="h-5 w-5 text-slate-600 dark:text-slate-300"
+                          class="h-5 w-5 text-muted-foreground"
                         />
                       </div>
                       <div class="min-w-0 flex-1">
                         <div
-                          class="font-medium text-slate-900 dark:text-slate-100"
+                          class="font-medium text-foreground"
                         >
                           {report.title}
                         </div>
                         <div
-                          class="truncate text-sm text-slate-500 dark:text-slate-400"
+                          class="truncate text-sm text-muted-foreground"
                         >
                           {report.description}
                         </div>
                       </div>
                       <ChevronRight
-                        class="h-5 w-5 text-slate-400 transition-transform group-hover/report:translate-x-0.5"
+                        class="h-5 w-5 text-muted-foreground transition-transform group-hover/report:translate-x-0.5"
                       />
                     </a>
                   {:else}
@@ -546,16 +546,16 @@
                         class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/50 dark:bg-slate-800/50"
                       >
                         <ReportIcon
-                          class="h-5 w-5 text-slate-400 dark:text-slate-500"
+                          class="h-5 w-5 text-muted-foreground"
                         />
                       </div>
                       <div class="min-w-0 flex-1">
                         <div
-                          class="font-medium text-slate-500 dark:text-slate-400"
+                          class="font-medium text-muted-foreground"
                         >
                           {report.title}
                         </div>
-                        <div class="text-sm text-slate-400 dark:text-slate-500">
+                        <div class="text-sm text-muted-foreground">
                           Coming soon
                         </div>
                       </div>
@@ -572,7 +572,7 @@
     <!-- Footer Note -->
     <section class="container mx-auto max-w-6xl px-3 pb-12">
       <div
-        class="rounded-2xl bg-slate-50 p-6 text-center dark:bg-slate-900/50"
+        class="rounded-2xl bg-muted/50 p-6 text-center"
         in:fade={{ duration: 400, delay: 800 }}
       >
         <p class="text-sm text-muted-foreground">

@@ -382,8 +382,8 @@
   >
     {#if httpsRequired}
       <div class="w-full max-w-lg mx-auto text-center py-20">
-        <div class="rounded-2xl border border-red-500/20 bg-red-500/5 p-8">
-          <ShieldAlert class="mx-auto mb-4 h-12 w-12 text-red-400" />
+        <div class="rounded-2xl border border-destructive/20 bg-destructive/5 p-8">
+          <ShieldAlert class="mx-auto mb-4 h-12 w-12 text-destructive" />
           <h2 class="text-xl font-semibold text-white mb-3">HTTPS Required</h2>
           <p class="text-white/60 text-sm leading-relaxed">
             Nocturne requires a secure connection. Please access this site using <strong

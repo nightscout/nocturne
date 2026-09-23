@@ -110,7 +110,7 @@
     <Loader2 class="h-6 w-6 animate-spin text-muted-foreground" />
   </div>
 {:else if loadError}
-  <Card.Root class="border-destructive">
+  <Card.Root variant="destructive">
     <Card.Content class="flex items-center gap-3 pt-6">
       <AlertCircle class="h-5 w-5 text-destructive" />
       <div>
@@ -134,13 +134,13 @@
             <button
               type="button"
               class="flex items-center gap-4 p-4 rounded-lg border transition-colors text-left group {configured
-                ? 'border-green-500/30 bg-green-500/5 hover:bg-green-500/10'
+                ? 'border-success/30 bg-success/5 hover:bg-success/10'
                 : 'bg-muted/30 hover:border-primary/50 hover:bg-accent/50'}"
               onclick={() => onSelectConnector(connector.id ?? "")}
             >
               <div
                 class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg {configured
-                  ? 'bg-green-500/10 text-green-600'
+                  ? 'bg-success/10 text-success'
                   : 'bg-primary/10 text-primary'}"
               >
                 <AppLogo icon={connector.icon} invertMode />
@@ -149,7 +149,7 @@
                 <div class="flex items-center gap-2 flex-wrap">
                   <span class="font-medium">{connector.name}</span>
                   {#if configured}
-                    <Badge variant="secondary" class="text-green-600">
+                    <Badge variant="success">
                       Connected
                     </Badge>
                   {/if}
@@ -214,13 +214,13 @@
                   <button
                     type="button"
                     class="flex items-center gap-4 p-4 rounded-lg border transition-colors text-left group {detected
-                      ? 'border-green-500/30 bg-green-500/5 hover:bg-green-500/10'
+                      ? 'border-success/30 bg-success/5 hover:bg-success/10'
                       : 'bg-muted/30 hover:border-primary/50 hover:bg-accent/50'}"
                     onclick={() => onSelectUploader(app)}
                   >
                     <div
                       class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg {detected
-                        ? 'bg-green-500/10 text-green-600'
+                        ? 'bg-success/10 text-success'
                         : 'bg-primary/10 text-primary'}"
                     >
                       <AppLogo icon={app.icon} invertMode />
@@ -232,7 +232,7 @@
                           {getPlatformLabel(app.platform)}
                         </Badge>
                         {#if detected}
-                          <Badge variant="secondary" class="text-green-600">
+                          <Badge variant="success">
                             Connected
                           </Badge>
                         {/if}

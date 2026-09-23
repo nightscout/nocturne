@@ -297,7 +297,7 @@
       >
         {#if member.limitTo24Hours}
           <span
-            class="flex items-center gap-1.5 text-amber-600 dark:text-amber-400"
+            class="flex items-center gap-1.5 text-warning"
           >
             <Clock class="h-3 w-3" />
             24-hour limit

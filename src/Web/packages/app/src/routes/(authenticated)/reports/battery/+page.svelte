@@ -272,7 +272,7 @@
                 {#if stat.longestDischargeDurationMinutes}
                   <div>
                     <span class="text-muted-foreground">Longest:</span>
-                    <span class="font-medium ml-1 text-green-600">
+                    <span class="font-medium ml-1 text-success">
                       {formatDuration(stat.longestDischargeDurationMinutes)}
                     </span>
                   </div>
@@ -280,7 +280,7 @@
                 {#if stat.shortestDischargeDurationMinutes}
                   <div>
                     <span class="text-muted-foreground">Shortest:</span>
-                    <span class="font-medium ml-1 text-yellow-600">
+                    <span class="font-medium ml-1 text-warning">
                       {formatDuration(stat.shortestDischargeDurationMinutes)}
                     </span>
                   </div>
@@ -300,13 +300,13 @@
                 <div class="space-y-1">
                   <div class="flex justify-between text-sm">
                     <span>Above 80%</span>
-                    <span class="font-medium text-green-600">
+                    <span class="font-medium text-success">
                       {(stat?.timeAbove80Percent ?? 0).toFixed(1)}%
                     </span>
                   </div>
                   <div class="h-2 bg-muted rounded-full overflow-hidden">
                     <div
-                      class="h-full bg-green-500"
+                      class="h-full bg-success"
                       style="width: {stat?.timeAbove80Percent ?? 0}%"
                     ></div>
                   </div>
@@ -324,13 +324,13 @@
                   </div>
                   <div class="flex justify-between text-sm">
                     <span>Below 30%</span>
-                    <span class="font-medium text-yellow-600">
+                    <span class="font-medium text-warning">
                       {(stat?.timeBelow30Percent ?? 0).toFixed(1)}%
                     </span>
                   </div>
                   <div class="h-2 bg-muted rounded-full overflow-hidden">
                     <div
-                      class="h-full bg-yellow-500"
+                      class="h-full bg-warning"
                       style="width: {stat?.timeBelow30Percent ?? 0}%"
                     ></div>
                   </div>
@@ -343,13 +343,13 @@
               <Separator />
               <div class="flex gap-4 text-sm">
                 {#if (stat?.warningEventCount ?? 0) > 0}
-                  <div class="flex items-center gap-1 text-yellow-600">
+                  <div class="flex items-center gap-1 text-warning">
                     <AlertTriangle class="h-4 w-4" />
                     <span>{stat?.warningEventCount ?? 0} warnings</span>
                   </div>
                 {/if}
                 {#if (stat?.urgentEventCount ?? 0) > 0}
-                  <div class="flex items-center gap-1 text-red-600">
+                  <div class="flex items-center gap-1 text-destructive">
                     <AlertTriangle class="h-4 w-4" />
                     <span>{stat?.urgentEventCount ?? 0} critical</span>
                   </div>
@@ -381,7 +381,7 @@
               >
                 <div class="flex items-center gap-3">
                   <div class="flex flex-col items-center">
-                    <BatteryCharging class="h-4 w-4 text-green-500" />
+                    <BatteryCharging class="h-4 w-4 text-success" />
                     <div class="h-6 border-l border-dashed"></div>
                     <Battery class="h-4 w-4 text-muted-foreground" />
                   </div>
@@ -414,7 +414,7 @@
                       battery life
                     </div>
                   {:else if cycle.chargeDurationMinutes}
-                    <div class="text-lg font-bold text-green-600">
+                    <div class="text-lg font-bold text-success">
                       {formatDuration(cycle.chargeDurationMinutes)}
                     </div>
                     <div class="text-xs text-muted-foreground">charge time</div>

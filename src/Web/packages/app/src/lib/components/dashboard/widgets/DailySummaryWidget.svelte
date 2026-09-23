@@ -73,8 +73,8 @@
 
   const cvStatus = $derived.by(() => {
     if (!dailyStats) return { text: "—", color: "text-muted-foreground" };
-    if (dailyStats.cv < 33) return { text: "Stable", color: "text-green-400" };
-    if (dailyStats.cv > 50) return { text: "Variable", color: "text-yellow-400" };
+    if (dailyStats.cv < 33) return { text: "Stable", color: "text-success" };
+    if (dailyStats.cv > 50) return { text: "Variable", color: "text-warning" };
     return { text: "Moderate", color: "text-muted-foreground" };
   });
 </script>

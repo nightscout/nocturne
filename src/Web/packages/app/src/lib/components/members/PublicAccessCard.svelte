@@ -214,7 +214,7 @@
     <div class="flex items-start gap-4 p-5 @md:p-6">
       <div
         class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl {enabled
-          ? 'bg-green-500/15 text-green-600 dark:text-green-400'
+          ? 'bg-success/15 text-success'
           : 'bg-muted text-muted-foreground'}"
       >
         {#if enabled}
@@ -294,7 +294,7 @@
                   onclick={copyLink}
                 >
                   {#if copied}
-                    <Check class="mr-1.5 h-4 w-4 text-green-600" />
+                    <Check class="mr-1.5 h-4 w-4 text-success" />
                   {:else}
                     <Copy class="mr-1.5 h-4 w-4" />
                   {/if}
@@ -315,9 +315,9 @@
 
           {#if confirmingRotate}
             <div
-              class="flex items-center justify-between gap-2 rounded-md border border-amber-200 bg-amber-50 p-2 dark:border-amber-900/50 dark:bg-amber-900/20"
+              class="flex items-center justify-between gap-2 rounded-md border border-warning/30 bg-warning/10 p-2"
             >
-              <span class="text-xs text-amber-800 dark:text-amber-200">
+              <span class="text-xs text-warning">
                 Regenerating invalidates the current link immediately.
               </span>
               <div class="flex shrink-0 gap-2">
@@ -362,12 +362,12 @@
               {@const ScopeIcon = cat.icon}
               <label
                 class="flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition-colors {on
-                  ? 'border-green-500/40 bg-green-500/5'
+                  ? 'border-success/40 bg-success/5'
                   : 'border-border bg-background hover:border-muted-foreground/40'}"
               >
                 <div
                   class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg {on
-                    ? 'bg-green-500/15 text-green-600 dark:text-green-400'
+                    ? 'bg-success/15 text-success'
                     : 'bg-muted text-muted-foreground'}"
                 >
                   <ScopeIcon class="h-4 w-4" />
@@ -414,8 +414,8 @@
         </div>
 
         <!-- Plain-language summary -->
-        <div class="flex gap-3 rounded-lg border border-green-500/30 bg-green-500/5 p-4">
-          <Eye class="mt-0.5 h-5 w-5 shrink-0 text-green-600 dark:text-green-400" />
+        <div class="flex gap-3 rounded-lg border border-success/30 bg-success/5 p-4">
+          <Eye class="mt-0.5 h-5 w-5 shrink-0 text-success" />
           <p class="text-sm leading-relaxed">
             {#if scopes.length === 0}
               <strong class="font-semibold">Your link is live, but nothing is shared yet.</strong>

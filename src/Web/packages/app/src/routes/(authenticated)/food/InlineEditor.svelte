@@ -64,7 +64,7 @@
 	<!-- Delete confirmation bar -->
 	{#if confirming}
 		<div class="mb-4 flex items-center gap-3 rounded-lg px-4 py-3" style="background: oklch(0.25 0.06 25 / 0.5); border: 1px solid oklch(0.6 0.2 25 / 0.3)">
-			<Trash2 size={16} class="shrink-0 text-red-400" />
+			<Trash2 size={16} class="shrink-0 text-destructive" />
 			<span class="text-sm">
 				Delete <strong>{food.name}</strong>?
 				{#if attributionCount > 0}

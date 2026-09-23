@@ -76,8 +76,8 @@
       case "active":
       case "syncing":
         return {
-          bg: "bg-green-100 dark:bg-green-900/30",
-          text: "text-green-600 dark:text-green-400",
+          bg: "bg-success/10",
+          text: "text-success",
         };
       case "demo":
         return {
@@ -86,19 +86,19 @@
         };
       case "configured":
         return {
-          bg: "bg-blue-100 dark:bg-blue-900/30",
-          text: "text-blue-600 dark:text-blue-400",
+          bg: "bg-info/10",
+          text: "text-info",
         };
       case "stale":
       case "backing-off":
         return {
-          bg: "bg-yellow-100 dark:bg-yellow-900/30",
-          text: "text-yellow-600 dark:text-yellow-400",
+          bg: "bg-warning/10",
+          text: "text-warning",
         };
       case "error":
         return {
-          bg: "bg-red-100 dark:bg-red-900/30",
-          text: "text-red-600 dark:text-red-400",
+          bg: "bg-destructive/10",
+          text: "text-destructive",
         };
       case "disabled":
       case "offline":
@@ -115,11 +115,11 @@
     switch (s) {
       case "active":
       case "syncing":
-        return "border-green-300 dark:border-green-700 bg-green-50/50 dark:bg-green-950/20";
+        return "border-success/30 bg-success/5";
       case "demo":
         return "border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-950/20";
       case "error":
-        return "border-red-300 dark:border-red-700 bg-red-50/50 dark:bg-red-950/20";
+        return "border-destructive/30 bg-destructive/5";
       default:
         return "";
     }
@@ -170,16 +170,12 @@
 
           <!-- Status badge -->
           {#if syncProgress?.phase === "Syncing" || status === "syncing"}
-            <Badge
-              class="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100"
-            >
+            <Badge variant="info">
               <Loader2 class="h-3 w-3 mr-1 animate-spin" />
               Syncing
             </Badge>
           {:else if syncProgress?.phase === "Completed"}
-            <Badge
-              class="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100"
-            >
+            <Badge variant="success">
               <CheckCircle class="h-3 w-3 mr-1" />
               Sync Complete
             </Badge>
@@ -189,10 +185,7 @@
               Sync Failed
             </Badge>
           {:else if status === "backing-off"}
-            <Badge
-              variant="secondary"
-              class="bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-100"
-            >
+            <Badge variant="warning">
               <Clock class="h-3 w-3 mr-1" />
               Backing Off
             </Badge>
@@ -202,33 +195,22 @@
               Error
             </Badge>
           {:else if status === "configured"}
-            <Badge
-              variant="secondary"
-              class="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100"
-            >
+            <Badge variant="info">
               <Clock class="h-3 w-3 mr-1" />
               Configured
             </Badge>
           {:else if status === "active"}
-            <Badge
-              class="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100"
-            >
+            <Badge variant="success">
               <CheckCircle class="h-3 w-3 mr-1" />
               Active
             </Badge>
           {:else if status === "stale"}
-            <Badge
-              variant="secondary"
-              class="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-100"
-            >
+            <Badge variant="warning">
               <Clock class="h-3 w-3 mr-1" />
               Stale
             </Badge>
           {:else if status === "disabled"}
-            <Badge
-              variant="secondary"
-              class="bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100"
-            >
+            <Badge variant="secondary">
               <WifiOff class="h-3 w-3 mr-1" />
               Disabled
             </Badge>
@@ -252,7 +234,7 @@
 
         <!-- Metrics line -->
         {#if (syncProgress?.phase === "Syncing") && syncProgress.messageType}
-        <p class="text-sm text-blue-600 dark:text-blue-400">
+        <p class="text-sm text-info">
           {formatSyncMessage(syncProgress.messageType, syncProgress.messageParams)}
         </p>
         {:else}
@@ -337,21 +319,21 @@
         <!-- Error detail -->
         {#if status === "error" && statusMessage}
           <div
-            class="mt-2 rounded-md bg-red-50 dark:bg-red-950/30 p-2 border border-red-200 dark:border-red-800"
+            class="mt-2 rounded-md bg-destructive/10 p-2 border border-destructive/30"
           >
             <div class="flex items-start gap-2">
               <AlertCircle
-                class="h-4 w-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5"
+                class="h-4 w-4 text-destructive shrink-0 mt-0.5"
               />
               <div class="flex-1 min-w-0">
-                <p class="text-sm font-medium text-red-800 dark:text-red-200">
+                <p class="text-sm font-medium text-destructive">
                   Error
                 </p>
-                <p class="text-xs text-red-700 dark:text-red-300 mt-1">
+                <p class="text-xs text-destructive mt-1">
                   {statusMessage}
                 </p>
                 <p
-                  class="text-xs text-red-600/80 dark:text-red-400/80 mt-1"
+                  class="text-xs text-destructive/80 mt-1"
                 >
                   {#if lastSyncAttempt}
                     Last attempted: {formatRelativeTime(lastSyncAttempt)}

@@ -20,7 +20,7 @@
       case 'connected':
         return {
           variant: 'default' as const,
-          color: 'bg-green-500',
+          color: 'bg-success',
           text: 'Connected',
           description: 'Real-time data active'
         };
@@ -34,7 +34,7 @@
       case 'connecting':
         return {
           variant: 'secondary' as const,
-          color: 'bg-yellow-500',
+          color: 'bg-warning',
           text: 'Connecting...',
           description: 'Establishing connection'
         };
@@ -62,7 +62,7 @@
       case 'error':
         return {
           variant: 'destructive' as const,
-          color: 'bg-red-500',
+          color: 'bg-destructive',
           text: 'Error',
           description: connectionError?.message || 'Connection failed'
         };

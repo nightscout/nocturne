@@ -129,10 +129,10 @@
 
   function getStatusIcon(supported: boolean, permission?: string) {
     if (!supported) return { icon: X, class: "text-muted-foreground" };
-    if (permission === "denied") return { icon: X, class: "text-red-500" };
+    if (permission === "denied") return { icon: X, class: "text-destructive" };
     if (permission === "default")
-      return { icon: AlertTriangle, class: "text-yellow-500" };
-    return { icon: Check, class: "text-green-500" };
+      return { icon: AlertTriangle, class: "text-warning" };
+    return { icon: Check, class: "text-success" };
   }
 </script>
 
@@ -235,13 +235,13 @@
               </span>
             {:else if capabilities.notificationPermission === "denied"}
               <span
-                class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-red-500/10 text-red-500"
+                class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-destructive/10 text-destructive"
               >
                 Blocked
               </span>
             {:else if capabilities.notificationPermission === "default"}
               <span
-                class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-yellow-500/10 text-yellow-600 dark:text-yellow-400"
+                class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-warning/10 text-warning"
               >
                 Needs Permission
               </span>

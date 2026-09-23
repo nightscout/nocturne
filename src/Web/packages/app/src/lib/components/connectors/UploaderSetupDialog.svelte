@@ -119,7 +119,7 @@
                   copyField(window.location.origin, "dialogUrl")}
               >
                 {#if copiedField === "dialogUrl"}
-                  <Check class="h-4 w-4 text-green-500" />
+                  <Check class="h-4 w-4 text-success" />
                 {:else}
                   <Copy class="h-4 w-4" />
                 {/if}

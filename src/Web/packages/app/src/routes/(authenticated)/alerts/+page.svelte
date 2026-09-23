@@ -189,7 +189,7 @@
     {/snippet}
 
     {#snippet failed(error)}
-      <Card class="border-destructive">
+      <Card variant="destructive">
         <CardContent class="flex items-center gap-3">
           <AlertTriangle class="h-5 w-5 text-destructive" />
           <div>
@@ -266,7 +266,7 @@
     <!-- Active alerts banner (kept as a persistent surface separate from the
          FiringToast which handles fresh-fire moments). -->
     {#if activeAlerts.length > 0}
-      <Card class="border-destructive/40 bg-destructive/5">
+      <Card variant="destructive">
         <CardHeader>
           <div class="flex flex-col gap-2 @sm:flex-row @sm:items-center @sm:justify-between">
             <CardTitle class="flex min-w-0 items-center gap-2 text-destructive">

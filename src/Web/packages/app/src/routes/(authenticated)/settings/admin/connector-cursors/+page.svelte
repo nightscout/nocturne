@@ -346,7 +346,7 @@
               {#if !jobDone}
                 <Loader2 class="h-4 w-4 animate-spin text-primary" />
               {:else if jobStatus.state === ConnectorResetJobState.Completed}
-                <CheckCircle2 class="h-4 w-4 text-green-600" />
+                <CheckCircle2 class="h-4 w-4 text-success" />
               {:else}
                 <AlertTriangle class="h-4 w-4 text-destructive" />
               {/if}
@@ -376,7 +376,7 @@
                 </div>
                 {#if progress}
                   {#if progress.state === ConnectorResetConnectorState.Succeeded}
-                    <span class="flex items-center gap-1 text-sm text-green-600">
+                    <span class="flex items-center gap-1 text-sm text-success">
                       <CheckCircle2 class="h-4 w-4" /> Reset
                     </span>
                   {:else if progress.state === ConnectorResetConnectorState.Failed}

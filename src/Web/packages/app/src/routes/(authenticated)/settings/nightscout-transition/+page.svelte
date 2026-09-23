@@ -111,7 +111,7 @@
 			<Loader2 class="h-8 w-8 animate-spin text-muted-foreground" />
 		</div>
 	{:else if error}
-		<Card class="border-destructive">
+		<Card variant="destructive">
 			<CardContent class="flex items-center gap-3 py-6">
 				<AlertCircle class="h-5 w-5 text-destructive" />
 				<div>
@@ -198,13 +198,13 @@
 					</div>
 					<div class="rounded-lg border p-3">
 						<p class="text-sm text-muted-foreground">Succeeded</p>
-						<p class="text-xl font-semibold tabular-nums text-green-600 dark:text-green-400">
+						<p class="text-xl font-semibold tabular-nums text-success">
 							{formatNumber(status.writeBack?.successesLast24h)}
 						</p>
 					</div>
 					<div class="rounded-lg border p-3">
 						<p class="text-sm text-muted-foreground">Failed</p>
-						<p class="text-xl font-semibold tabular-nums text-red-600 dark:text-red-400">
+						<p class="text-xl font-semibold tabular-nums text-destructive">
 							{formatNumber(status.writeBack?.failuresLast24h)}
 						</p>
 					</div>
@@ -263,7 +263,7 @@
 						</div>
 						<div class="rounded-lg border p-3">
 							<p class="text-sm text-muted-foreground">Discrepancies</p>
-							<p class="text-xl font-semibold tabular-nums text-red-600 dark:text-red-400">
+							<p class="text-xl font-semibold tabular-nums text-destructive">
 								{formatNumber(status.compatibility.discrepancies)}
 							</p>
 						</div>

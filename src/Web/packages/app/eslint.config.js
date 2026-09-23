@@ -95,6 +95,13 @@ export default ts.config(
               spacing: "\"{{className}}\" is not allowed on <Button>: it owns its padding and gap. Use a size: xs (h-7, text-xs), sm, default, lg, icon-xs (size-7), icon-sm (size-8), icon (size-9), or inline (no padding, a link in running text). For space around it, use margin or gap on the parent.",
               typography: "\"{{className}}\" is not allowed on <Button>: it owns its type. size=\"xs\" gives text-xs; every other size is text-sm font-medium."
             }
+          },
+          {
+            pattern: "^(Badge|Alert|Card)(\.Root)?$",
+            allow: ["layout"],
+            message: {
+              color: "Pick a variant (destructive, success, warning, info) instead of colouring it by hand."
+            }
           }
         ]
       }],

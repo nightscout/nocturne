@@ -78,27 +78,27 @@
       {#if demoDeleteResult}
         {#if demoDeleteResult.success}
           <div
-            class="rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/20 p-4"
+            class="rounded-lg border border-success/30 bg-success/10 p-4"
           >
             <div
-              class="flex items-center gap-2 text-green-800 dark:text-green-200"
+              class="flex items-center gap-2 text-success"
             >
               <CheckCircle class="h-5 w-5" />
               <span class="font-medium">Demo data cleared successfully</span>
             </div>
-            <p class="text-sm text-green-700 dark:text-green-300 mt-1">
+            <p class="text-sm text-success mt-1">
               Deleted {formatNumber(demoDeleteResult.totalDeleted)} records
             </p>
           </div>
         {:else}
           <div
-            class="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20 p-4"
+            class="rounded-lg border border-destructive/30 bg-destructive/10 p-4"
           >
-            <div class="flex items-center gap-2 text-red-800 dark:text-red-200">
+            <div class="flex items-center gap-2 text-destructive">
               <AlertCircle class="h-5 w-5" />
               <span class="font-medium">Failed to delete demo data</span>
             </div>
-            <p class="text-sm text-red-700 dark:text-red-300 mt-1">
+            <p class="text-sm text-destructive mt-1">
               {demoDeleteResult.error}
             </p>
           </div>

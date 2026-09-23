@@ -94,9 +94,9 @@
 			<Card>
 				<CardContent class="flex items-center gap-4 pt-6">
 					<div
-						class="flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30"
+						class="flex h-12 w-12 items-center justify-center rounded-full bg-warning/10"
 					>
-						<Clock class="h-6 w-6 text-amber-600 dark:text-amber-400" />
+						<Clock class="h-6 w-6 text-warning" />
 					</div>
 					<div>
 						<p class="text-2xl font-bold">{pendingCount}</p>
@@ -107,9 +107,9 @@
 			<Card>
 				<CardContent class="flex items-center gap-4 pt-6">
 					<div
-						class="flex h-12 w-12 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30"
+						class="flex h-12 w-12 items-center justify-center rounded-full bg-success/10"
 					>
-						<Check class="h-6 w-6 text-green-600 dark:text-green-400" />
+						<Check class="h-6 w-6 text-success" />
 					</div>
 					<div>
 						<p class="text-2xl font-bold">{acceptedCount}</p>
@@ -120,9 +120,9 @@
 			<Card>
 				<CardContent class="flex items-center gap-4 pt-6">
 					<div
-						class="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800"
+						class="flex h-12 w-12 items-center justify-center rounded-full bg-muted"
 					>
-						<X class="h-6 w-6 text-slate-600 dark:text-slate-400" />
+						<X class="h-6 w-6 text-muted-foreground" />
 					</div>
 					<div>
 						<p class="text-2xl font-bold">{dismissedCount}</p>
@@ -157,7 +157,7 @@
 							<div class="flex items-center gap-3">
 								{#if pendingCount > 0}
 									<span
-										class="rounded-full bg-amber-100 px-3 py-1 text-sm font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+										class="rounded-full bg-warning/10 px-3 py-1 text-sm font-medium text-warning"
 									>
 										{pendingCount} pending
 									</span>
@@ -225,12 +225,10 @@
 
 		<!-- Quick Actions: review CTA -->
 		{#if pendingCount > 0}
-			<Card
-				class="border-amber-200 bg-amber-50/50 print:hidden dark:border-amber-900/50 dark:bg-amber-900/10"
-			>
+			<Card variant="warning" class="print:hidden">
 				<CardContent class="flex flex-col gap-3 pt-6 @lg:flex-row @lg:items-center @lg:justify-between">
 					<div class="flex items-center gap-3">
-						<Clock class="h-5 w-5 text-amber-600 dark:text-amber-400" />
+						<Clock class="h-5 w-5 text-warning" />
 						<div>
 							<p class="font-medium">
 								You have {pendingCount} item{pendingCount !== 1 ? 's' : ''} waiting for review

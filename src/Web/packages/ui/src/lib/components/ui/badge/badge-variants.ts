@@ -12,6 +12,11 @@ export const badgeVariants = tv({
         "bg-destructive [a&]:hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/70 border-transparent text-white",
       outline:
         "text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
+      success:
+        "bg-success/15 text-success [a&]:hover:bg-success/25 border-transparent",
+      warning:
+        "bg-warning/15 text-warning [a&]:hover:bg-warning/25 border-transparent",
+      info: "bg-info/15 text-info [a&]:hover:bg-info/25 border-transparent",
     },
   },
   defaultVariants: {
