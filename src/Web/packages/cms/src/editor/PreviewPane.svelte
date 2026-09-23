@@ -76,7 +76,7 @@
   <div class="flex-1 overflow-y-auto p-6">
     {#if mode === 'markdown'}
       <article class="prose prose-neutral dark:prose-invert max-w-none">
-        {#each segments as segment}
+        {#each segments as segment, i (i)}
           {#if segment.type === 'html'}
             <!-- eslint-disable-next-line svelte/no-at-html-tags -- editor.getHTML() output: schema-serialised with text escaped; the one scriptable attribute, iframe src, is filtered by safeFrameSrc -->
             {@html segment.content}

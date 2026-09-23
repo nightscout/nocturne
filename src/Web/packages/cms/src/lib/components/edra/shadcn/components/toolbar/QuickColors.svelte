@@ -25,9 +25,15 @@
 				class={buttonVariants({
 					variant: 'ghost',
 					size: 'icon',
-					class: cn('gap-0.5', className)
+					class: cn(
+						'gap-0.5',
+						currentColor && 'text-(--text-colour)!',
+						currentHighlight && 'bg-(--highlight-tint)!',
+						className
+					)
 				})}
-				style={`color: ${currentColor}; background-color: ${currentHighlight}75;`}
+				style:--text-colour={currentColor}
+				style:--highlight-tint={currentHighlight && `${currentHighlight}75`}
 			>
 				<span>{strings.toolbar.color.templateCharacter}</span>
 				<ChevronDown class="text-muted-foreground size-2!" />
@@ -36,6 +42,8 @@
 	</Popover.Trigger>
 	<Popover.Content class="size-fit shadow-lg" portalProps={{ disabled: true, to: undefined }}>
 		<div class="text-muted-foreground my-2 text-xs">{strings.toolbar.color.textColors}</div>
+		<!-- Each swatch is painted in the author's content colour, which the theme does not own. -->
+		<!-- eslint-disable shadcn/no-inline-styles -->
 		<div class="grid grid-cols-5 gap-2">
 			{#each quickcolors as color (color)}
 				<Button
@@ -83,5 +91,6 @@
 				</Button>
 			{/each}
 		</div>
+		<!-- eslint-enable shadcn/no-inline-styles -->
 	</Popover.Content>
 </Popover.Root>

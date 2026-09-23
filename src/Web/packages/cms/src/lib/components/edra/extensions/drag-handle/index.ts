@@ -1,6 +1,6 @@
 import { Extension } from '@tiptap/core';
 import { Fragment, type Node, Slice } from '@tiptap/pm/model';
-import { NodeSelection, Plugin, PluginKey, TextSelection } from '@tiptap/pm/state';
+import { NodeSelection, Plugin, PluginKey, type Selection, TextSelection } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
 import { serializeForClipboard } from './ClipboardSerializer.ts';
 
@@ -118,7 +118,7 @@ export function DragHandlePlugin(options: GlobalDragHandleOptions & { pluginKey:
 		const diff = from - to;
 
 		const fromSelectionPos = calcNodePos(from, view);
-		let differentNodeSelected = false;
+		let differentNodeSelected: boolean;
 
 		const nodePos = view.state.doc.resolve(fromSelectionPos);
 
@@ -132,7 +132,7 @@ export function DragHandlePlugin(options: GlobalDragHandleOptions & { pluginKey:
 				draggedNodePos + 1 >= nodeSelection.$from.pos && draggedNodePos <= nodeSelection.$to.pos
 			);
 		}
-		let selection = view.state.selection;
+		let selection: Selection;
 		if (!differentNodeSelected && diff !== 0 && !(view.state.selection instanceof NodeSelection)) {
 			const endSelection = NodeSelection.create(view.state.doc, to - 1);
 			selection = TextSelection.create(view.state.doc, draggedNodePos, endSelection.$to.pos);

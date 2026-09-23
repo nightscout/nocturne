@@ -72,7 +72,7 @@
     </div>
 
     <div class="space-y-2">
-      {#each Object.entries(selectedComponent.props) as [key, value]}
+      {#each Object.entries(selectedComponent.props) as [key, value] (key)}
         <div class="flex items-center gap-2">
           <Label class="w-24 shrink-0 text-xs">{key}</Label>
           {#if value === 'true' || value === 'false'}

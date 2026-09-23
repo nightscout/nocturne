@@ -78,7 +78,7 @@
 			onclick={copyCode}
 		>
 			{#if isCopying}
-				<Check class="size-4 text-green-500" />
+				<Check class="size-4 text-success" />
 			{:else}
 				<Copy class="size-4" />
 			{/if}

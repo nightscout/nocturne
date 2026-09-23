@@ -45,9 +45,8 @@
 	contenteditable="false"
 	class={buttonVariants({
 		variant: 'secondary',
-		class: 'media-placeholder relative my-4! flex w-full items-center justify-start gap-4 p-6'
+		class: 'relative my-4! select-none flex w-full items-center justify-start gap-4 p-6'
 	})}
-	style="user-select: none;"
 	draggable={true}
 	onclick={() => (open = true)}
 >

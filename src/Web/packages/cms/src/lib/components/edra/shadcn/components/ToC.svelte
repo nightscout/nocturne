@@ -65,10 +65,10 @@
 						href={`#${item.id}`}
 						onclick={(e) => onItemClick(e, item.id)}
 						class={cn(
-							'text-foreground text-sm text-wrap transition-all duration-500',
+							'text-foreground pl-(--toc-indent) text-sm text-wrap transition-all duration-500',
 							item.isScrolledOver && 'text-muted-foreground italic'
 						)}
-						style={`padding-left: calc(1rem * ${item.level - 1});`}
+						style:--toc-indent={`${item.level - 1}rem`}
 					>
 						{item.textContent}
 					</a>

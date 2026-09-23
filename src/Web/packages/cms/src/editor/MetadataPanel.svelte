@@ -32,7 +32,7 @@
 
   {#if !collapsed}
     <div class="space-y-3 px-4 pb-4">
-      {#each fields as field}
+      {#each fields as field (field.key)}
         <div class="space-y-1">
           <Label for={field.key}>{field.label}{field.required ? ' *' : ''}</Label>
           {#if field.type === 'text'}
