@@ -22,8 +22,10 @@ function pagePath(page) {
   return null;
 }
 
+/** Quoted attribute values may contain `>` (e.g. `has-[>svg]:px-3`), so a tag ends at the first unquoted `>`. */
 function stripTags(html) {
-  return html.replace(/<[^>]*>/g, "");
+  // eslint-disable-next-line security/detect-unsafe-regex -- linear: the alternatives start with disjoint characters (non-quote, ", ')
+  return html.replace(/<(?:[^>"']|"[^"]*"|'[^']*')*>/g, "");
 }
 
 function visibleText(html) {
