@@ -45,6 +45,7 @@
     "test:render": "svelte-kit sync && vitest --config vitest.render.config.ts --run",
     "test:browser": "vitest --config vitest.browser.config.ts",
     "lint": "eslint . && prettier --check .",
+    "lint:ci": "eslint . --max-warnings 933",
     "format": "prettier --write ."
   },
   "devDependencies": {

@@ -23,7 +23,6 @@ function request({ record, profile }: Sources): Stub {
   const getPatientRecord = answer(record);
   const getProfileSummary = answer(profile);
   return {
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- two of ApiClient's methods; the rest is unreachable from this resolver
     locals: {
       apiClient: {
         patientRecord: { getPatientRecord },

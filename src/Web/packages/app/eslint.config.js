@@ -45,6 +45,28 @@ export default ts.config(
   prettier,
   ...svelte.configs['flat/prettier'],
   {
+    // 374 findings, near all on typed index access; the noise buried every other warning.
+    rules: { "security/detect-object-injection": "off" }
+  },
+  {
+    // Recommended warnings with no findings left; as errors they stay at none.
+    rules: Object.fromEntries(
+      [
+        "security/detect-bidi-characters",
+        "security/detect-buffer-noassert",
+        "security/detect-child-process",
+        "security/detect-disable-mustache-escape",
+        "security/detect-eval-with-expression",
+        "security/detect-new-buffer",
+        "security/detect-no-csrf-before-method-override",
+        "security/detect-non-literal-require",
+        "security/detect-possible-timing-attacks",
+        "security/detect-pseudoRandomBytes",
+        "svelte/no-at-debug-tags"
+      ].map((rule) => [rule, "error"])
+    )
+  },
+  {
     languageOptions: {
 	  globals: {
 	    ...globals.browser,
@@ -164,9 +186,9 @@ export default ts.config(
       }],
       "shadcn/no-raw-colors": "warn",
       "shadcn/no-arbitrary-values": ["warn", { allow: ["layout"], deny: ["text-[10px]", "text-[11px]"] }],
-      "shadcn/no-inline-styles": "warn",
+      "shadcn/no-inline-styles": "error",
       // `lead` is a hook the typography plugin styles inside `prose`.
-      "shadcn/no-unknown-classes": ["warn", { allow: ["lead"] }],
+      "shadcn/no-unknown-classes": ["error", { allow: ["lead"] }],
       "shadcn/require-static-classes": "warn"
     }
   },
@@ -204,7 +226,7 @@ export default ts.config(
     // active theme's tokens cannot express.
     files: ["src/routes/(authenticated)/settings/appearance/+page.svelte"],
     rules: {
-      "shadcn/no-inline-styles": ["warn", { allow: ["background"] }]
+      "shadcn/no-inline-styles": ["error", { allow: ["background"] }]
     }
   },
   {
@@ -230,6 +252,27 @@ export default ts.config(
           varsIgnorePattern: "^_",
           caughtErrorsIgnorePattern: "^_"
         }
+      ]
+    }
+  },
+  {
+    // Tests build partial mocks of framework and API types, which only an assertion can type.
+    files: [
+      "**/*.test.ts",
+      "**/*.test.svelte",
+      "**/*.spec.ts",
+      "**/*.test-harness.svelte",
+      "**/*.test-stub.svelte",
+      "**/*-test-wrapper.svelte",
+      "src/lib/test-stubs/**",
+      "src/lib/test-fixtures/**",
+      "e2e/**",
+      "vitest.browser.setup.ts"
+    ],
+    rules: {
+      "@typescript-eslint/consistent-type-assertions": [
+        "error",
+        { assertionStyle: "as", objectLiteralTypeAssertions: "allow" }
       ]
     }
   },

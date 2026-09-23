@@ -20,7 +20,6 @@ type DeviceReported = Omit<IOBPillData, "basalIob" | "activity"> & {
 
 const asPillData = (data: DeviceReported): IOBPillData =>
   // The null is the point: this asserts past the very lie the fix is about.
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
   data as IOBPillData;
 
 const withNulls = (extra: Partial<DeviceReported>): IOBPillData =>

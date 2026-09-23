@@ -58,7 +58,6 @@ function runLoad(situation: Situation) {
     },
   };
 
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- a stub of the one Cookies method this load touches; implementing the full interface would say nothing
   const cookies = { get: () => undefined } as unknown as Cookies;
 
   const event = {
@@ -69,7 +68,6 @@ function runLoad(situation: Situation) {
     }),
   };
 
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- the load reads three fields of the request event; the rest of SvelteKit's ServerLoadEvent is not reachable from here
   const data = load(event as unknown as LoadEvent) as unknown as Promise<LoadedData>;
   return { data, getMyPermissions, getShareAppearance };
 }

@@ -85,8 +85,13 @@
           {:else}
             <div class="flex justify-between items-start gap-2 text-sm">
               <span class="text-muted-foreground shrink-0">{item.label}</span>
-              <span class="text-right font-medium wrap-break-word">
-                {@html item.value}
+              <span
+                class={cn(
+                  "text-right font-medium wrap-break-word",
+                  item.tone === "destructive" && "text-destructive"
+                )}
+              >
+                {#if item.lead}<b>{item.lead}</b>{/if}{item.value}
               </span>
             </div>
           {/if}

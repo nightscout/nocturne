@@ -39,16 +39,19 @@
     if (data.lastEnacted) {
       const timeAgo = formatTimeAgo(data.lastEnacted.time);
 
+      let lead: string | undefined;
       let actionText = "";
       if (data.lastEnacted.bolusVolume) {
-        actionText = `<b>Automatic Bolus</b> ${data.lastEnacted.bolusVolume}U`;
+        lead = "Automatic Bolus";
+        actionText = ` ${data.lastEnacted.bolusVolume}U`;
         if (data.lastEnacted.type === "cancel") {
           actionText += " (Temp Basal Canceled)";
         }
       } else if (data.lastEnacted.type === "cancel") {
-        actionText = "<b>Temp Basal Canceled</b>";
+        lead = "Temp Basal Canceled";
       } else if (data.lastEnacted.rate != null) {
-        actionText = `<b>Temp Basal Started</b> ${data.lastEnacted.rate.toFixed(2)}U/hour for ${data.lastEnacted.duration}m`;
+        lead = "Temp Basal Started";
+        actionText = ` ${data.lastEnacted.rate.toFixed(2)}U/hour for ${data.lastEnacted.duration}m`;
       }
 
       if (data.lastEnacted.reason) {
@@ -70,6 +73,7 @@
 
       items.push({
         label: timeAgo,
+        lead,
         value: actionText,
       });
     }
@@ -78,7 +82,8 @@
     if (data.status === "error" && data.failureReason) {
       items.push({
         label: "Error",
-        value: `<span class="text-destructive">${data.failureReason}</span>`,
+        value: data.failureReason,
+        tone: "destructive",
       });
     }
 

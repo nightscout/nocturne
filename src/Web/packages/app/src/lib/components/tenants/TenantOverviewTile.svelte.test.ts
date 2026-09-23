@@ -153,7 +153,6 @@ describe("TenantOverviewTile", () => {
     render(TenantOverviewTile, {
       props: {
         tenant: makeTenant({
-          // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- NSwag types this Date, but the wire value is an unvalidated string
           lastReadingAt: "not-a-timestamp" as unknown as Date,
         }),
         baseDomain: "example.com",
@@ -177,7 +176,6 @@ describe("TenantOverviewTile", () => {
   it("falls back to muted styling for an unrecognized status string", async () => {
     render(TenantOverviewTile, {
       props: {
-        // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- simulate a server enum value this client build doesn't know
         tenant: makeTenant({ status: "SomethingNew" as GlucoseStatus }),
         baseDomain: "example.com",
       },

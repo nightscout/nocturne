@@ -17,7 +17,7 @@ declare global {
   interface Array<T> {
     map<U>(
       cb: (value: T, i: number, self: T[]) => U,
-      thisArg?: any
+      thisArg?: unknown
     ): { [K in keyof this]: U };
   }
 
