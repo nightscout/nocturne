@@ -34,7 +34,7 @@
   import { describeSubmitError } from "$lib/forms";
 
   const effectivePermissions: string[] = $derived(
-    (page.data as any).effectivePermissions ?? []
+    page.data.effectivePermissions ?? []
   );
   const hasStar = $derived(effectivePermissions.includes("*"));
   const canCreateGuestLinks = $derived(

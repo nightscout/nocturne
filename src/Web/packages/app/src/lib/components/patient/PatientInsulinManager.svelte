@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { labelFor } from "$lib/components/ui/enum-value";
   import { formatMediumDate } from "$lib/utils/formatting";
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
@@ -133,7 +134,7 @@
   let insulinRole = $state<string | InsulinRole>(InsulinRole.Bolus);
   let insulinIsPrimary = $state(false);
 
-  let dialogFormulations = $derived(formulationsForCategory(insulinCategory as string));
+  let dialogFormulations = $derived(formulationsForCategory(insulinCategory));
 
   const activeForm = $derived(editing?.id ? insulinList.updateForm : insulinList.createForm);
   const dialogSaving = $derived(!!insulinList.createForm.pending || !!insulinList.updateForm.pending);
@@ -335,12 +336,12 @@
                 {insulin.name ?? "Unnamed"}
               </span>
               <Badge variant="secondary">
-                {insulinCategoryLabels[(insulin.insulinCategory ?? "") as InsulinCategory] ??
+                {labelFor(insulinCategoryLabels, insulin.insulinCategory) ??
                   insulin.insulinCategory}
               </Badge>
               {#if insulin.role}
                 <Badge variant="outline">
-                  {insulinRoleLabels[insulin.role as InsulinRole] ?? insulin.role}
+                  {labelFor(insulinRoleLabels, insulin.role) ?? insulin.role}
                 </Badge>
               {/if}
               {#if insulin.isCurrent}

@@ -27,6 +27,7 @@
     updateRole,
     deleteRole,
   } from "$lib/api/generated/roles.generated.remote";
+  import type { TenantRoleDto } from "$lib/api/generated/nocturne-api-client";
 
   // Query
   const rolesQuery = getRoles();
@@ -83,7 +84,7 @@
     isCreateOpen = false;
   }
 
-  function openEditDialog(role: any) {
+  function openEditDialog(role: TenantRoleDto) {
     editId = role.id ?? "";
     editName = role.name ?? "";
     editDescription = role.description ?? "";
@@ -95,7 +96,7 @@
     isEditOpen = true;
   }
 
-  function openDeleteDialog(role: any) {
+  function openDeleteDialog(role: TenantRoleDto) {
     deleteId = role.id ?? "";
     deleteName = role.name ?? "";
     deleteMemberCount = role.memberCount ?? 0;

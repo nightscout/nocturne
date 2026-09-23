@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { enumValue } from "$lib/components/ui/enum-value";
   import type { Bolus } from "$lib/api";
   import { BolusType } from "$lib/api";
   import { Input } from "$lib/components/ui/input";
@@ -67,7 +68,7 @@
         type="single"
         value={bolus.bolusType ?? BolusType.Normal}
         onValueChange={(v) => {
-          bolus.bolusType = v as BolusType;
+          bolus.bolusType = enumValue(BolusType, v) ?? bolus.bolusType;
         }}
       >
         <Select.Trigger id="bolus-type">

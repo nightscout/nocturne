@@ -22,7 +22,7 @@
   import { satisfiesScope } from "$lib/authorization/scopes";
 
   const isPlatformAdmin = $derived(
-    (page.data as { isPlatformAdmin?: boolean }).isPlatformAdmin ?? false
+    page.data.isPlatformAdmin === true
   );
 
   // The two tools answer to different gates: deduplication is RequireAdmin, so it resolves to
@@ -30,8 +30,7 @@
   // member opens to set a sleep schedule, so neither control is offered to someone the API
   // would refuse.
   const effectivePermissions: string[] = $derived(
-    (page.data as { effectivePermissions?: string[] }).effectivePermissions ??
-      []
+    page.data.effectivePermissions ?? []
   );
   const canDeduplicate = $derived(satisfiesScope(effectivePermissions, "*"));
   const canManageData = $derived(

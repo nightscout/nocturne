@@ -432,7 +432,7 @@
           formState = "submitting";
           try {
             await submit();
-            const result = submitIssue.result as CreateIssueResponse | undefined;
+            const result: CreateIssueResponse | undefined = submitIssue.result;
             if (!result) {
               // A redirect (e.g. expired session -> login) resolves submit()
               // without a result; the navigation is already underway.

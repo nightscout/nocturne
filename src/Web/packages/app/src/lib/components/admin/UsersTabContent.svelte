@@ -31,9 +31,9 @@
     openEditSubject: (subject: TenantMemberDto) => void;
     togglePlatformAdmin: (subject: TenantMemberDto) => void;
     deleteSubjectHandler: (id: string) => void;
-    getSubjectIcon: (subject: TenantMemberDto) => any;
+    getSubjectIcon: (subject: TenantMemberDto) => typeof Users;
     isSystemSubjectCheck: (subject: TenantMemberDto) => boolean;
-    formatDate: (date: any) => string;
+    formatDate: (date: Date | string | null | undefined) => string;
   }
 
   let {
@@ -84,9 +84,7 @@
             {@const Icon = getSubjectIcon(subject)}
             {@const isPublicSubject =
               isSystemSubjectCheck(subject) && subject.name === "Public"}
-            {@const isPlatformAdmin = (
-              subject as TenantMemberDto & { isPlatformAdmin?: boolean }
-            ).isPlatformAdmin}
+            {@const isPlatformAdmin = subject.isPlatformAdmin}
             <div
               class="flex items-center justify-between p-4 rounded-lg border {isPublicSubject
                 ? 'bg-primary/5 border-primary/20'

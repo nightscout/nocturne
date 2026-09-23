@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { isRecord } from "$lib/utils/type-guards";
   import * as Card from "$lib/components/ui/card";
   import * as Avatar from "$lib/components/ui/avatar";
   import { Button } from "$lib/components/ui/button";
@@ -142,12 +143,10 @@
             avatarError = null;
             try {
               await submit();
-              const result = uploadAvatar.result as
-                | { avatarUrl: string }
-                | undefined;
+              const result: unknown = uploadAvatar.result;
               // A redirect (e.g. expired session -> login) resolves submit()
               // without a result; the navigation is already underway.
-              if (result) {
+              if (isRecord(result) && typeof result.avatarUrl === "string") {
                 localAvatarUrl = result.avatarUrl;
                 authStore.updateAvatarUrl(result.avatarUrl);
               }

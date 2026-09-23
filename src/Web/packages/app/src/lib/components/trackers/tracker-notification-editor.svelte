@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { enumValue } from "$lib/components/ui/enum-value";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
@@ -67,10 +68,10 @@
     notifications = notifications.filter((_, i) => i !== index);
   }
 
-  function updateNotification(
+  function updateNotification<K extends keyof TrackerNotification>(
     index: number,
-    field: keyof TrackerNotification,
-    value: any
+    field: K,
+    value: TrackerNotification[K]
   ) {
     notifications = notifications.map((n, i) =>
       i === index ? { ...n, [field]: value } : n
@@ -115,7 +116,10 @@
             <Select.Root
               type="single"
               value={notification.urgency}
-              onValueChange={(v) => updateNotification(i, "urgency", v)}
+              onValueChange={(v) => {
+                const urgency = enumValue(NotificationUrgency, v);
+                if (urgency) updateNotification(i, "urgency", urgency);
+              }}
             >
               <Select.Trigger class="w-full">
                 <span class={config.color}>{config.label}</span>

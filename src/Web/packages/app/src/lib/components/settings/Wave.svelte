@@ -43,14 +43,12 @@
 
   $effect(() => {
     // Get pixel ratio with fallback for older browsers
-    const screenWithDPI = screen as Screen & {
-      deviceXDPI?: number;
-      logicalXDPI?: number;
-    };
+    const deviceXDPI = "deviceXDPI" in screen ? screen.deviceXDPI : undefined;
+    const logicalXDPI = "logicalXDPI" in screen ? screen.logicalXDPI : undefined;
     pixelRatio =
       window.devicePixelRatio ||
-      (screenWithDPI.deviceXDPI && screenWithDPI.logicalXDPI
-        ? screenWithDPI.deviceXDPI / screenWithDPI.logicalXDPI
+      (typeof deviceXDPI === "number" && typeof logicalXDPI === "number" && deviceXDPI && logicalXDPI
+        ? deviceXDPI / logicalXDPI
         : 1);
     updateSize(canvasWidth, canvasHeight, peaks);
   });

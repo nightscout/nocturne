@@ -35,7 +35,7 @@
   import { describeSubmitError } from "$lib/forms/submit-error";
 
   const effectivePermissions: string[] = $derived(
-    (page.data as any).effectivePermissions ?? [],
+    page.data.effectivePermissions ?? [],
   );
   const canManageSharing = $derived(
     effectivePermissions.includes("*") ||

@@ -143,7 +143,7 @@
 
   {@const notificationStatus = getStatusIcon(
     capabilities.notifications,
-    capabilities.notificationPermission as string
+    capabilities.notificationPermission
   )}
   {@const NotificationStatusIcon = notificationStatus.icon}
   {@const vibrationStatus = getStatusIcon(capabilities.vibration)}

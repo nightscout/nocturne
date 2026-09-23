@@ -4,10 +4,10 @@
   import * as Card from "$lib/components/ui/card";
   import { Trash2, Link, Loader2, Check } from "lucide-svelte";
   import { formatMediumDateTime } from "$lib/utils/formatting";
-  import type { TenantRoleDto } from "$lib/api/generated/nocturne-api-client";
+  import type { MemberInviteInfo, TenantRoleDto } from "$lib/api/generated/nocturne-api-client";
 
   interface Props {
-    invites: any[]; // invite objects with id, label, roleIds, expiresAt, maxUses, useCount, limitTo24Hours, usedBy
+    invites: MemberInviteInfo[];
     roles: TenantRoleDto[];
     onRevoke: (inviteId: string) => void;
     isRevoking: boolean;
@@ -83,7 +83,7 @@
           variant="ghost-destructive"
           size="sm"
           class="shrink-0"
-          disabled={isRevoking && invite.id}
+          disabled={isRevoking && !!invite.id}
           onclick={() => onRevoke(invite.id!)}
         >
           {#if isRevoking && invite.id}

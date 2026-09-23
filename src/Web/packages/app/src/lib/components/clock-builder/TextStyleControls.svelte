@@ -10,10 +10,9 @@
     COLOR_OPTIONS,
     CUSTOM_COLOR_OPTION,
     DEFAULT_ELEMENT_COLOR,
-    ELEMENT_INFO,
+    elementInfo,
     FONT_OPTIONS,
     FONT_WEIGHT_OPTIONS,
-    type ClockElementType,
     type InternalElement,
   } from "$lib/clock-builder";
   import type { ClockElement } from "$lib/api";
@@ -28,6 +27,8 @@
 
   let { element, onUpdateStyle, onUpdateElement, onUpdateCustomStyle, onRemoveCustomStyle }: Props =
     $props();
+
+  const info = $derived(elementInfo(element.type));
 
   const colorOption = $derived(
     COLOR_OPTIONS.find((o) => o.value === element.style?.color)?.value ??
@@ -46,18 +47,14 @@
 
   <div class="space-y-2">
     <Label>
-      Size: {element.size ||
-        ELEMENT_INFO[element.type as ClockElementType]?.defaultSize ||
-        20}
+      Size: {element.size || info?.defaultSize || 20}
     </Label>
     <Slider
       type="single"
-      value={element.size ||
-        ELEMENT_INFO[element.type as ClockElementType]?.defaultSize ||
-        20}
+      value={element.size || info?.defaultSize || 20}
       onValueChange={(v: number) => onUpdateElement({ size: v })}
-      min={ELEMENT_INFO[element.type as ClockElementType]?.minSize ?? 10}
-      max={ELEMENT_INFO[element.type as ClockElementType]?.maxSize ?? 100}
+      min={info?.minSize ?? 10}
+      max={info?.maxSize ?? 100}
       step={1}
     />
   </div>
@@ -223,11 +220,16 @@
         onclick={() => {
           const propInput = document.getElementById(
             `new-css-prop-${element._id}`
-          ) as HTMLInputElement;
+          );
           const valInput = document.getElementById(
             `new-css-val-${element._id}`
-          ) as HTMLInputElement;
-          if (propInput?.value && valInput?.value) {
+          );
+          if (
+            propInput instanceof HTMLInputElement &&
+            valInput instanceof HTMLInputElement &&
+            propInput.value &&
+            valInput.value
+          ) {
             onUpdateCustomStyle(propInput.value, valInput.value);
             propInput.value = "";
             valInput.value = "";

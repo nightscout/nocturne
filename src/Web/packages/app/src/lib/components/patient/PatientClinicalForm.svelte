@@ -1,8 +1,9 @@
 <script lang="ts">
+  import { labelFor } from "$lib/components/ui/enum-value";
   import { Input } from "$lib/components/ui/input";
   import * as Select from "$lib/components/ui/select";
   import { FormField } from "$lib/forms";
-  import { DiabetesType, BiologicalSex } from "$api";
+  import { DiabetesType } from "$api";
   import { diabetesTypeLabels, biologicalSexLabels } from "./labels";
   import { ClinicalState } from "./state.svelte";
   import TimezoneCombobox from "./TimezoneCombobox.svelte";
@@ -64,7 +65,7 @@
             aria-describedby={field["aria-describedby"]}
           >
             {clinical.diabetesType
-              ? (diabetesTypeLabels[clinical.diabetesType as DiabetesType] ?? clinical.diabetesType)
+              ? (labelFor(diabetesTypeLabels, clinical.diabetesType) ?? clinical.diabetesType)
               : "Select type"}
           </Select.Trigger>
           <Select.Content>
@@ -122,7 +123,7 @@
         <Select.Root type="single" name="sex" bind:value={clinical.sex}>
           <Select.Trigger {...field}>
             {clinical.sex
-              ? (biologicalSexLabels[clinical.sex as BiologicalSex] ?? clinical.sex)
+              ? (labelFor(biologicalSexLabels, clinical.sex) ?? clinical.sex)
               : "Select sex"}
           </Select.Trigger>
           <Select.Content>

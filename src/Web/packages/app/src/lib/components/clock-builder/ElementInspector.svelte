@@ -10,12 +10,11 @@
   import { X, Trash2 } from "lucide-svelte";
   import type { ClockElement, TrackerDefinitionDto } from "$lib/api";
   import {
-    ELEMENT_INFO,
+    elementInfo,
     VISIBILITY_OPTIONS,
     TRACKER_SHOW_OPTIONS,
     TRACKER_CATEGORIES,
     CHART_FEATURE_OPTIONS,
-    type ClockElementType,
     type InternalElement,
     isTextElement,
     isShowOptionChecked,
@@ -53,7 +52,17 @@
     onRemoveCustomStyle,
   }: Props = $props();
 
-  const info = $derived(ELEMENT_INFO[element.type as ClockElementType]);
+  const info = $derived(elementInfo(element.type));
+
+  function chartFlag(
+    config: InternalElement["chartConfig"],
+    key: string
+  ): boolean | undefined {
+    const flag: unknown = config
+      ? Object.entries(config).find(([name]) => name === key)?.[1]
+      : undefined;
+    return typeof flag === "boolean" ? flag : undefined;
+  }
 
   function toggleShowOption(currentShow: string[] | undefined, option: string) {
     const show = currentShow ?? [];
@@ -360,9 +369,7 @@
             {#each CHART_FEATURE_OPTIONS as { key, label, defaultValue } (key)}
               <div class="flex items-center gap-2">
                 <Checkbox
-                  checked={element.chartConfig?.[
-                    key as keyof typeof element.chartConfig
-                  ] ?? defaultValue}
+                  checked={chartFlag(element.chartConfig, key) ?? defaultValue}
                   onCheckedChange={(v: boolean) =>
                     onUpdateElement({
                       chartConfig: {

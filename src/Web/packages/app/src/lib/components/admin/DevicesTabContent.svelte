@@ -15,7 +15,7 @@
 
   interface Props {
     grants: OAuthGrantDto[];
-    formatDate: (date: any) => string;
+    formatDate: (date: Date | string | null | undefined) => string;
     revokeGrant: (id: string) => void;
   }
 

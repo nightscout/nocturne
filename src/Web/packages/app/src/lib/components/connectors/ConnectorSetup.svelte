@@ -1,12 +1,6 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import type {
-    AvailableConnector,
-    ConnectorConfigurationResponse,
-    ConnectorStatusInfo,
-    ConnectorDataSummary,
-    ConnectorCapabilities,
-  } from "$lib/api/generated/nocturne-api-client";
+  import type { AvailableConnector } from "$lib/api/generated/nocturne-api-client";
   import {
     getAllConnectorStatus,
     getConfiguration as getConnectorConfiguration,
@@ -119,15 +113,15 @@
       : null
   );
 
-  const existingConfig = $derived((configQuery?.current ?? null) as ConnectorConfigurationResponse | null);
-  const effectiveConfig = $derived((effectiveConfigQuery?.current ?? null) as Record<string, unknown> | null);
-  const dataSummary = $derived((dataSummaryQuery?.current ?? null) as ConnectorDataSummary | null);
-  const connectorCapabilities = $derived((capabilitiesQuery?.current ?? null) as ConnectorCapabilities | null);
+  const existingConfig = $derived(configQuery?.current ?? null);
+  const effectiveConfig = $derived(effectiveConfigQuery?.current ?? null);
+  const dataSummary = $derived(dataSummaryQuery?.current ?? null);
+  const connectorCapabilities = $derived(capabilitiesQuery?.current ?? null);
 
   const connectorStatus = $derived.by(() => {
     const statuses = statusQuery.current;
     if (!statuses || !activeId) return null;
-    return (statuses as ConnectorStatusInfo[]).find(
+    return statuses.find(
       (s) => s.connectorName?.toLowerCase() === activeId!.toLowerCase()
     ) ?? null;
   });
@@ -241,7 +235,7 @@
     try {
       await saveConfiguration({
         connectorName: connectorInfo.id,
-        request: config as any,
+        request: config,
       });
 
       if (Object.keys(newSecrets).length > 0) {

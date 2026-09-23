@@ -27,8 +27,8 @@
   }: Props = $props();
 
   const allTimezones: string[] =
-    typeof Intl !== "undefined" && "supportedValuesOf" in Intl
-      ? (Intl as unknown as { supportedValuesOf(key: string): string[] }).supportedValuesOf("timeZone")
+    typeof Intl !== "undefined" && typeof Intl.supportedValuesOf === "function"
+      ? Intl.supportedValuesOf("timeZone")
       : [];
 
   let popoverOpen = $state(false);

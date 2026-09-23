@@ -66,7 +66,7 @@
   const groupedApps = $derived.by(() => {
     const groups: Record<string, UploaderApp[]> = {};
     for (const app of filteredApps) {
-      const cat = app.category ?? (UploaderCategory.Uploader as string);
+      const cat: string = app.category ?? UploaderCategory.Uploader;
       if (!groups[cat]) groups[cat] = [];
       groups[cat].push(app);
     }

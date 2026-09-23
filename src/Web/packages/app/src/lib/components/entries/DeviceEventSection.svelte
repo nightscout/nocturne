@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { enumValue } from "$lib/components/ui/enum-value";
   import type { DeviceEvent } from "$lib/api";
   import { DeviceEventType } from "$lib/api";
   import { Label } from "$lib/components/ui/label";
@@ -60,7 +61,7 @@
       type="single"
       value={deviceEvent.eventType ?? DeviceEventType.SiteChange}
       onValueChange={(v) => {
-        deviceEvent.eventType = v as DeviceEventType;
+        deviceEvent.eventType = enumValue(DeviceEventType, v) ?? deviceEvent.eventType;
       }}
     >
       <Select.Trigger id="device-event-type">

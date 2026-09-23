@@ -11,7 +11,7 @@
     supportedLocales,
     getNativeLanguageLabel,
     setLanguage,
-    type SupportedLocale,
+    isSupportedLocale,
   } from "$lib/stores/appearance-store.svelte";
 
   interface Props {
@@ -27,7 +27,7 @@
 
   async function handleChange(value: string | undefined) {
     if (!value) return;
-    await setLanguage(value as SupportedLocale, onLanguageChange);
+    if (isSupportedLocale(value)) await setLanguage(value, onLanguageChange);
   }
 </script>
 

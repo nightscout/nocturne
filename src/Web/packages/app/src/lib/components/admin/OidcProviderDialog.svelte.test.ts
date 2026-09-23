@@ -26,11 +26,13 @@ function make_provider(
 	};
 }
 
+const NO_ROLES: TenantRoleDto[] = [];
+
 function default_props(overrides: Record<string, unknown> = {}) {
 	return {
 		open: false,
-		editingProvider: null as OidcProviderResponse | null,
-		roles: [] as TenantRoleDto[],
+		editingProvider: null,
+		roles: NO_ROLES,
 		onSave: vi.fn(async () => {}),
 		onCancel: vi.fn(),
 		...overrides,

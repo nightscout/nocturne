@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { enumValue } from "$lib/components/ui/enum-value";
   import * as Dialog from "$lib/components/ui/dialog";
   import * as Alert from "$lib/components/ui/alert";
   import * as Select from "$lib/components/ui/select";
@@ -37,7 +38,7 @@
         name: "name",
         email: "email",
         picture: "avatar_url",
-      } as Record<string, string>,
+      } satisfies Record<string, string>,
     },
   };
 
@@ -45,7 +46,7 @@
     open: boolean;
     editingProvider: OidcProviderResponse | null;
     roles: TenantRoleDto[];
-    onSave: (providerData: any) => Promise<void>;
+    onSave: (providerData: Record<string, unknown>) => Promise<void>;
     onCancel: () => void;
   }
 
@@ -270,7 +271,10 @@
         <Select.Root
           type="single"
           value={providerType}
-          onValueChange={(v) => onProviderTypeChange(v as OidcProviderType)}
+          onValueChange={(v) => {
+            const type = enumValue(OidcProviderType, v);
+            if (type) onProviderTypeChange(type);
+          }}
         >
           <Select.Trigger id="provider-type">
             {isOAuth2 ? "OAuth 2.0" : "OpenID Connect"}

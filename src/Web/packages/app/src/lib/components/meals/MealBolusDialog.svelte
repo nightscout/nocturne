@@ -34,15 +34,27 @@
   let deletingBolusId = $state<string | null>(null);
   const deletion = useToastSubmission("Failed to delete bolus");
 
-  let editForm = $state({
-    insulin: null as number | null,
-    bolusType: undefined as BolusType | undefined,
-    programmed: undefined as number | undefined,
-    delivered: undefined as number | undefined,
-    duration: undefined as number | undefined,
+  interface BolusEditForm {
+    insulin: number | null;
+    bolusType: BolusType | undefined;
+    programmed: number | undefined;
+    delivered: number | undefined;
+    duration: number | undefined;
+    automatic: boolean;
+    insulinType: string;
+    patientInsulinId: string | undefined;
+    isBasalInsulin: boolean;
+  }
+
+  let editForm = $state<BolusEditForm>({
+    insulin: null,
+    bolusType: undefined,
+    programmed: undefined,
+    delivered: undefined,
+    duration: undefined,
     automatic: false,
     insulinType: "",
-    patientInsulinId: undefined as string | undefined,
+    patientInsulinId: undefined,
     isBasalInsulin: false,
   });
 
@@ -56,9 +68,7 @@
 
   // Fetch patient insulins for the form dropdown
   const insulinsResource = patientRemote.getInsulins();
-  let patientInsulins = $derived(
-    (insulinsResource.current ?? []) as PatientInsulin[],
-  );
+  let patientInsulins: PatientInsulin[] = $derived(insulinsResource.current ?? []);
 
   // Reset to list mode when dialog opens
   $effect(() => {

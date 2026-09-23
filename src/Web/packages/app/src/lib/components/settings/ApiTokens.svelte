@@ -34,7 +34,7 @@
   let {
     createOpen = $bindable(false),
     prefillLabel = "",
-    prefillScopes = [] as string[],
+    prefillScopes = [],
     onCreateClose,
   }: {
     createOpen?: boolean;

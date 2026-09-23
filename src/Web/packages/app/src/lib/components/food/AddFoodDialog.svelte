@@ -123,14 +123,14 @@
         protein: foodProtein,
         energy: foodEnergy,
         gi: foodGi,
-      } as Food;
+      };
 
       const result = editingFoodId
         ? await updateFood({ foodId: editingFoodId, request: payload })
         : await createFood(payload);
 
       toast.success(editingFoodId ? "Food updated successfully" : "Food created successfully");
-      onSave?.(result as Food);
+      onSave?.(result);
       onOpenChange(false);
     });
   }

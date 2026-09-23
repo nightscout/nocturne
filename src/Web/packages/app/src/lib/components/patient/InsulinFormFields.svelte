@@ -1,14 +1,11 @@
 <script lang="ts">
+  import { labelFor } from "$lib/components/ui/enum-value";
   import { Label } from "$lib/components/ui/label";
   import { Input } from "$lib/components/ui/input";
   import { Checkbox } from "$lib/components/ui/checkbox";
   import { Textarea } from "$lib/components/ui/textarea";
   import * as Select from "$lib/components/ui/select";
-  import {
-    type InsulinCategory,
-    type InsulinFormulation,
-    type InsulinRole,
-  } from "$api";
+  import { type InsulinFormulation } from "$api";
   import {
     insulinCategoryLabels,
     insulinCategoryDescriptions,
@@ -75,7 +72,7 @@
     Object.entries(insulinCategoryLabels).map(([value, label]) => ({
       value,
       label,
-      description: insulinCategoryDescriptions[value as InsulinCategory] ?? "",
+      description: labelFor(insulinCategoryDescriptions, value) ?? "",
     })),
   );
 
@@ -101,7 +98,7 @@
       >
         <Select.Trigger id="insulin-category">
           {category
-            ? (insulinCategoryLabels[category as InsulinCategory] ?? category)
+            ? (labelFor(insulinCategoryLabels, category) ?? category)
             : "Select category"}
         </Select.Trigger>
         <Select.Content>
@@ -176,7 +173,7 @@
       <Label for="insulin-role">Role</Label>
       <Select.Root type="single" name="{namePrefix}role" bind:value={role}>
         <Select.Trigger id="insulin-role">
-          {insulinRoleLabels[role as InsulinRole] ?? role}
+          {labelFor(insulinRoleLabels, role) ?? role}
         </Select.Trigger>
         <Select.Content>
           {#each Object.entries(insulinRoleLabels) as [value, label] (value)}
@@ -184,7 +181,7 @@
               <div>
                 <div>{label}</div>
                 <div class="text-xs text-muted-foreground">
-                  {insulinRoleDescriptions[value as InsulinRole] ?? ""}
+                  {labelFor(insulinRoleDescriptions, value) ?? ""}
                 </div>
               </div>
             </Select.Item>

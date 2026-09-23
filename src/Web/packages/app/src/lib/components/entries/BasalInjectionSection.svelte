@@ -1,5 +1,6 @@
 <script lang="ts">
-  import type { BasalInjection, PatientInsulin, InsulinCategory } from "$lib/api";
+  import { labelFor } from "$lib/components/ui/enum-value";
+  import type { BasalInjection, PatientInsulin } from "$lib/api";
   import * as Select from "$lib/components/ui/select";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
@@ -20,9 +21,7 @@
   // role). The hidden form submits insulinContext.patientInsulinId; the server
   // resolves the full TreatmentInsulinContext snapshot at write time.
   const insulinsResource = patientRemote.getInsulins();
-  let patientInsulins = $derived(
-    (insulinsResource.current ?? []) as PatientInsulin[],
-  );
+  let patientInsulins: PatientInsulin[] = $derived(insulinsResource.current ?? []);
 
   let eligibleInsulins = $derived(
     patientInsulins.filter(
@@ -85,9 +84,8 @@
             <div>
               <div>{insulin.name}</div>
               <div class="text-xs text-muted-foreground">
-                {insulinCategoryLabels[
-                  insulin.insulinCategory as InsulinCategory
-                ] ?? insulin.insulinCategory}
+                {labelFor(insulinCategoryLabels, insulin.insulinCategory) ??
+                  insulin.insulinCategory}
               </div>
             </div>
           </Select.Item>

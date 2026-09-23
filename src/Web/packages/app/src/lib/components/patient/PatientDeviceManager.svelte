@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { labelFor } from "$lib/components/ui/enum-value";
   import { formatMediumDate } from "$lib/utils/formatting";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
@@ -239,7 +240,7 @@
               <Select.Root type="single" name="deviceCategory" bind:value={inlineCategory}>
                 <Select.Trigger id="device-category">
                   {inlineCategory
-                    ? (deviceCategoryLabels[inlineCategory as DeviceCategory] ?? inlineCategory)
+                    ? (labelFor(deviceCategoryLabels, inlineCategory) ?? inlineCategory)
                     : "Select category"}
                 </Select.Trigger>
                 <Select.Content>
@@ -276,7 +277,7 @@
                 <Select.Root type="single" name="aidAlgorithm" bind:value={inlineAidAlgorithm}>
                   <Select.Trigger id="aid-algorithm">
                     {inlineAidAlgorithm
-                      ? (aidAlgorithmLabels[inlineAidAlgorithm as AidAlgorithm] ?? inlineAidAlgorithm)
+                      ? (labelFor(aidAlgorithmLabels, inlineAidAlgorithm) ?? inlineAidAlgorithm)
                       : "Select algorithm"}
                   </Select.Trigger>
                   <Select.Content>
@@ -329,7 +330,7 @@
                 {device.manufacturer ?? "Unknown"} {device.model ?? ""}
               </span>
               <Badge variant="secondary">
-                {deviceCategoryLabels[(device.deviceCategory ?? "") as DeviceCategory] ??
+                {labelFor(deviceCategoryLabels, device.deviceCategory) ??
                   device.deviceCategory}
               </Badge>
               {#if device.isCurrent}
@@ -476,7 +477,7 @@
             <Label for="device-category">Category</Label>
             <Select.Root type="single" name="{namePrefix}deviceCategory" bind:value={deviceCategory}>
               <Select.Trigger id="device-category">
-                {deviceCategoryLabels[deviceCategory as DeviceCategory] ?? deviceCategory}
+                {labelFor(deviceCategoryLabels, deviceCategory) ?? deviceCategory}
               </Select.Trigger>
               <Select.Content>
                 {#each Object.entries(deviceCategoryLabels) as [value, label] (value)}
@@ -513,7 +514,7 @@
               <Select.Root type="single" name="{namePrefix}aidAlgorithm" bind:value={deviceAidAlgorithm}>
                 <Select.Trigger id="device-aid">
                   {deviceAidAlgorithm
-                    ? (aidAlgorithmLabels[deviceAidAlgorithm as AidAlgorithm] ?? deviceAidAlgorithm)
+                    ? (labelFor(aidAlgorithmLabels, deviceAidAlgorithm) ?? deviceAidAlgorithm)
                     : "Select algorithm"}
                 </Select.Trigger>
                 <Select.Content>

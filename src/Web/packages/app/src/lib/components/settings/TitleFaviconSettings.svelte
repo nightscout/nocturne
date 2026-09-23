@@ -127,7 +127,7 @@
             placeholder="e.g., Nocturne"
             value={settings.customPrefix}
             onchange={(e: Event & { currentTarget: HTMLInputElement }) => {
-              settings.customPrefix = (e.target as HTMLInputElement).value;
+              settings.customPrefix = e.currentTarget.value;
             }}
           />
           <p class="text-xs text-muted-foreground">

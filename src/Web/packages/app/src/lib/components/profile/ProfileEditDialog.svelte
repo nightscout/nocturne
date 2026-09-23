@@ -11,22 +11,31 @@
   import { Badge } from "$lib/components/ui/badge";
 
   // Local type definitions for profile
+  interface TimeValue {
+    time?: string;
+    value?: number;
+  }
+
+  interface ProfileData {
+    units?: string;
+    timezone?: string;
+    dia?: number;
+    carbs_hr?: number;
+    basal?: TimeValue[];
+    carbratio?: TimeValue[];
+    sens?: TimeValue[];
+    target_low?: TimeValue[];
+    target_high?: TimeValue[];
+  }
+
   interface Profile {
     id?: string;
     defaultProfile?: string;
     created_at?: string;
-    store?: Record<string, any>;
-    [key: string]: any;
-  }
-
-  interface ProfileData {
-    [key: string]: any;
-  }
-
-  interface TimeValue {
-    time?: number;
-    value?: number;
-    [key: string]: any;
+    units?: string;
+    icon?: string;
+    isExternallyManaged?: boolean;
+    store?: Record<string, ProfileData>;
   }
   import { BG_UNITS } from "$lib/constants/profile-icons";
   import ProfileIconPicker from "./ProfileIconPicker.svelte";
@@ -148,7 +157,7 @@
     if (!store || !store[field]?.[index]) return;
 
     if (prop === "time") {
-      store[field]![index].time = value as string;
+      store[field]![index].time = String(value);
     } else {
       store[field]![index].value = Number(value);
     }
@@ -157,19 +166,19 @@
     editedProfile = { ...editedProfile };
   }
 
-  function updateStoreField(field: keyof ProfileData, value: any) {
+  function updateStoreField<K extends keyof ProfileData>(field: K, value: ProfileData[K]) {
     if (!editedProfile?.store || !editedStoreName) return;
 
     const store = editedProfile.store[editedStoreName];
     if (!store) return;
 
-    (store as any)[field] = value;
+    store[field] = value;
     editedProfile = { ...editedProfile };
   }
 
-  function updateProfileField(field: keyof Profile, value: any) {
+  function updateProfileField<K extends keyof Profile>(field: K, value: Profile[K]) {
     if (!editedProfile) return;
-    (editedProfile as any)[field] = value;
+    editedProfile[field] = value;
     editedProfile = { ...editedProfile };
   }
 </script>
@@ -219,7 +228,7 @@
               <div class="space-y-2">
                 <Label>Icon</Label>
                 <ProfileIconPicker
-                  selectedIcon={(editedProfile as any).icon ?? "user"}
+                  selectedIcon={editedProfile.icon ?? "user"}
                   disabled={false}
                 />
               </div>

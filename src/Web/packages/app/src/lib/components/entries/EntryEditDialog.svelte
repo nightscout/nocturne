@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { isRecord } from "$lib/utils/type-guards";
   import type { Bolus, CarbIntake, BGCheck, Note, DeviceEvent, BasalInjection } from "$lib/api";
   import { BolusType, GlucoseType, GlucoseUnit, DeviceEventType } from "$lib/api";
   import type { EntryRecord, EntryCategoryId } from "$lib/constants/entry-categories";
@@ -131,20 +132,24 @@
     entry ? getDataSourceDisplayName(entry.data.dataSource ?? entry.data.device) : null,
   );
 
+  function isEntryCategoryId(key: string): key is EntryCategoryId {
+    return Object.hasOwn(ENTRY_CATEGORIES, key);
+  }
+
   let activeSectionCount = $derived(
     Object.values(sections).filter((s) => s != null).length,
   );
 
   let activeSectionKeys = $derived(
-    (Object.keys(sections) as EntryCategoryId[]).filter(
-      (k) => sections[k] != null,
-    ),
+    Object.keys(sections)
+      .filter(isEntryCategoryId)
+      .filter((k) => sections[k] != null),
   );
 
   let inactiveSectionKeys = $derived(
-    (Object.keys(ENTRY_CATEGORIES) as EntryCategoryId[]).filter(
-      (k) => sections[k] == null,
-    ),
+    Object.keys(ENTRY_CATEGORIES)
+      .filter(isEntryCategoryId)
+      .filter((k) => sections[k] == null),
   );
 
   // Determine which form to use per section (create vs update)
@@ -469,8 +474,8 @@
       if (result) {
         // If creating with pending foods, add them
         if (!existingCarbsRecord?.data.id && carbsPendingFoods.length > 0) {
-          const newId = (result as any)?.id;
-          if (newId) {
+          const newId = isRecord(result) ? result.id : undefined;
+          if (typeof newId === "string" && newId) {
             for (const pf of carbsPendingFoods) {
               await addCarbIntakeFood({ id: newId, request: pf.request });
             }

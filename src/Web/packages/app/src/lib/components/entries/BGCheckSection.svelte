@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { enumValue } from "$lib/components/ui/enum-value";
   import type { BGCheck } from "$lib/api";
   import { GlucoseType, GlucoseUnit } from "$lib/api";
   import { Input } from "$lib/components/ui/input";
@@ -57,7 +58,7 @@
         type="single"
         value={bgCheck.glucoseType ?? GlucoseType.Finger}
         onValueChange={(v) => {
-          bgCheck.glucoseType = v as GlucoseType;
+          bgCheck.glucoseType = enumValue(GlucoseType, v) ?? bgCheck.glucoseType;
         }}
       >
         <Select.Trigger id="bg-type">
@@ -77,7 +78,7 @@
         type="single"
         value={bgCheck.units ?? GlucoseUnit.MgDl}
         onValueChange={(v) => {
-          bgCheck.units = v as GlucoseUnit;
+          bgCheck.units = enumValue(GlucoseUnit, v) ?? bgCheck.units;
         }}
       >
         <Select.Trigger id="bg-units">

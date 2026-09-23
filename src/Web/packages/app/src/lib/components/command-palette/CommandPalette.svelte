@@ -75,21 +75,17 @@
   });
 
   const groupedItems = $derived.by(() => {
-    const groups: Partial<Record<CommandPaletteGroup, CommandPaletteItem[]>> =
-      {};
+    const groups: CommandPaletteGroup[] = [];
     for (const item of mainGroupItems) {
-      (groups[item.group] ??= []).push(item);
+      if (!groups.includes(item.group)) groups.push(item.group);
     }
 
-    const entries = Object.entries(groups) as [
-      CommandPaletteGroup,
-      CommandPaletteItem[],
-    ][];
-    const sorted = entries.sort(
-      ([a], [b]) => groupMeta[a].order - groupMeta[b].order
-    );
-
-    return sorted;
+    return groups
+      .sort((a, b) => groupMeta[a].order - groupMeta[b].order)
+      .map((group): [CommandPaletteGroup, CommandPaletteItem[]] => [
+        group,
+        mainGroupItems.filter((item) => item.group === group),
+      ]);
   });
 
   function getStatValue(itemId: string): string | undefined {

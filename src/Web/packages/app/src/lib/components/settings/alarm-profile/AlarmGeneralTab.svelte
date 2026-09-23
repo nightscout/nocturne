@@ -102,7 +102,7 @@
         type="single"
         value={profile.priority}
         onValueChange={(value) => {
-          if (value) profile.priority = value as AlarmPriority;
+          if (value) profile.priority = priorities.find((p) => p === value) ?? profile.priority;
         }}
       >
         <SelectTrigger>
