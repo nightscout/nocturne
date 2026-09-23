@@ -58,7 +58,8 @@
 //!   whose face flux is bounded analytically (`swirl::SWIRL_FLUX_PER_SPEED`)
 //!   and split into enough substeps per tick to stay within
 //!   `swirl::SWIRL_FACE_LIMIT`, so it never empties a cell either and its
-//!   safety clamp does not engage at any `swirl_speed` up to the substep cap.
+//!   safety clamp does not engage; `swirl_speed` is clamped to what the
+//!   substep cap can carry.
 //! - Viscosity and diffusion coefficients are per-neighbour explicit
 //!   Laplacian weights and must stay below `0.25` total (`viscosity <= 0.25`,
 //!   `pigment_diffusion <= 1.0` since it is divided by four).
@@ -162,8 +163,8 @@ pub struct SimParams {
     pub lift_flow_gain: f32,
     /// Swirl speed, short-axis cells per tick per unit noise gradient (the
     /// peak is about 1.5x): pigment drifts several cells before a standing
-    /// film settles it. The substep count follows from it
-    /// (`swirl::Geometry`).
+    /// film settles it. The substep count follows from it, and it is clamped
+    /// to `swirl::SWIRL_MAX_SPEED` (`swirl::Geometry`).
     pub swirl_speed: f32,
     /// Swirl noise lattice cells per isotropic unit; sets the tendril size
     /// relative to the artwork rather than to the grid.

@@ -301,8 +301,9 @@ one; every corner of a blocking cell is zero, so no face carries pigment into
 it and the edge is never drained. Water itself is never moved. Because the
 taper is a smoothstep of a distance, its slope per cell is bounded, which
 bounds every face flux (`swirl::SWIRL_FLUX_PER_SPEED`); the swirl runs in as
-many substeps per tick as keep that bound within `SWIRL_FACE_LIMIT`, so its
-safety clamp does not engage below the substep cap.
+many substeps per tick as keep that bound within `SWIRL_FACE_LIMIT`, and
+`swirl_speed` is clamped to what the substep cap can carry, so its safety
+clamp never engages.
 
 ## Numerical limits (`domain::sim`)
 
@@ -310,7 +311,7 @@ safety clamp does not engage below the substep cap.
 |---|---|---|
 | `DT` | `1` per tick | fixed timestep; determinism |
 | max velocity | `0.45` cells/tick | keeps `|u| + |v| < 1` so upwind advection never drains a cell |
-| swirl face flux | `<= 0.5` per face per substep (`swirl::SWIRL_FACE_LIMIT`); substeps `ceil(swirl_speed * SWIRL_FLUX_PER_SPEED / SWIRL_FACE_LIMIT)`, capped at `SWIRL_MAX_SUBSTEPS` | balanced fluxes move at most twice the largest face out of a cell; the analytic bound guarantees the limit up to the cap |
+| swirl face flux | `<= 0.5` per face per substep (`swirl::SWIRL_FACE_LIMIT`); substeps `ceil(swirl_speed * SWIRL_FLUX_PER_SPEED / SWIRL_FACE_LIMIT)`, capped at `SWIRL_MAX_SUBSTEPS`, with `swirl_speed` clamped to `SWIRL_MAX_SPEED` | balanced fluxes move at most twice the largest face out of a cell; the analytic bound guarantees the limit |
 | viscosity | `0.1` | explicit Laplacian weight; keep `<= 0.25` |
 | pigment diffusion | `0.05` | divided by four per neighbour; keep `<= 1.0` |
 | water diffusion | `0.1` | same |

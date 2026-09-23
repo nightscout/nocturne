@@ -42,10 +42,14 @@ pub const SWIRL_FACE_LIMIT: f32 = 0.5;
 ///   `0.75 / SWIRL_TAPER`.
 pub const SWIRL_FLUX_PER_SPEED: f32 = 1.5 + 0.75 / SWIRL_TAPER;
 
-/// Cap on substeps per tick. Only a `swirl_speed` beyond
-/// `SWIRL_MAX_SUBSTEPS * SWIRL_FACE_LIMIT / SWIRL_FLUX_PER_SPEED` reaches it,
-/// and past that the face clamp can engage.
+/// Cap on substeps per tick.
 pub const SWIRL_MAX_SUBSTEPS: u32 = 64;
+
+/// Largest `swirl_speed` the substep cap can keep within the face limit,
+/// with a hair of headroom for `f32` rounding in the substep count; a faster
+/// setting is clamped to it, so the flux bound always holds.
+pub const SWIRL_MAX_SPEED: f32 =
+    SWIRL_MAX_SUBSTEPS as f32 * SWIRL_FACE_LIMIT / SWIRL_FLUX_PER_SPEED * 0.999;
 
 /// Per-scene swirl constants, computed once on the host from the grid size,
 /// aspect and parameters and shared by both backends.
@@ -69,13 +73,15 @@ pub struct Geometry {
 }
 
 impl Geometry {
+    /// `speed` is clamped to [`SWIRL_MAX_SPEED`].
     pub fn new(size: u32, aspect: f32, speed: f32, frequency: f32) -> Geometry {
         let (ax, ay) = isotropic_scale(aspect);
         let f = frequency.max(1e-3);
         let size_f = size as f32;
         let radius = |a: f32| ((size_f / a * SWIRL_TAPER / f) as u32).max(1);
         let (radius_x, radius_y) = (radius(ax), radius(ay));
-        let substeps = ((speed.max(0.0) * SWIRL_FLUX_PER_SPEED / SWIRL_FACE_LIMIT).ceil() as u32)
+        let speed = speed.clamp(0.0, SWIRL_MAX_SPEED);
+        let substeps = ((speed * SWIRL_FLUX_PER_SPEED / SWIRL_FACE_LIMIT).ceil() as u32)
             .clamp(1, SWIRL_MAX_SUBSTEPS);
         Geometry {
             radius_x,
@@ -179,13 +185,21 @@ mod tests {
 
     #[test]
     fn substeps_keep_the_flux_bound_within_the_face_limit() {
-        for speed in [0.05, 0.8, 3.0, 10.0] {
-            let geo = Geometry::new(256, 1.0, speed, 8.0);
-            assert!(
-                speed / geo.substeps as f32 * SWIRL_FLUX_PER_SPEED <= SWIRL_FACE_LIMIT,
-                "speed {speed} in {} substeps",
-                geo.substeps
-            );
+        // Aspects either side of square, and a 12-cell grid whose taper
+        // radius rounds below one cell and is raised to it.
+        for (size, aspect) in [(256, 1.0), (256, 0.25), (256, 4.0), (12, 1.0)] {
+            for speed in [0.05, 0.8, 3.0, 10.0, 11.0, 1e6] {
+                let geo = Geometry::new(size, aspect, speed, 8.0);
+                let used = speed.min(SWIRL_MAX_SPEED);
+                assert!(
+                    used / geo.substeps as f32 * SWIRL_FLUX_PER_SPEED <= SWIRL_FACE_LIMIT,
+                    "speed {speed} on {size} at {aspect} in {} substeps",
+                    geo.substeps
+                );
+                assert!(geo.substeps <= SWIRL_MAX_SUBSTEPS);
+            }
         }
+        let tiny = Geometry::new(12, 1.0, 1.0, 8.0);
+        assert_eq!((tiny.radius_x, tiny.radius_y), (1, 1), "max(1) binds");
     }
 }

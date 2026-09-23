@@ -762,25 +762,27 @@ fn standing_water_stirs_tendrils_without_moving_or_losing_pigment() {
     );
 }
 
-/// A ragged standing film: random depths (some too thin to swirl), dry
-/// holes and dry margins, wet cells on every grid border, and a random
-/// suspended load, with pigment `k` only in the wet cells.
-fn ragged_film(seed: u64) -> SimulationGrid {
-    const S: u32 = 96;
-    let field = PaperField::generate(&Paper::cold_press(Seed(seed)), S, S);
-    let mut grid = SimulationGrid::new(&field, 2).with_swirl_seed(Seed(seed));
+/// A ragged standing film on a `size` grid stretched to `aspect`: random
+/// depths (some too thin to swirl), dry holes and dry margins, wet cells on
+/// every grid border, and a random suspended load in the wet cells.
+fn ragged_film(seed: u64, size: u32, aspect: f32) -> SimulationGrid {
+    let field = PaperField::generate(&Paper::cold_press(Seed(seed)), size, size);
+    let mut grid = SimulationGrid::new(&field, 2)
+        .with_aspect(aspect)
+        .with_swirl_seed(Seed(seed));
     let mut rng = Seed(seed).stream();
-    let w = S as usize;
-    for i in 0..grid.cell_count() {
+    let w = size as usize;
+    let n = w * w;
+    for i in 0..n {
         let (x, y) = (i % w, i / w);
-        let margin = (x > 60 && y > 60) || (x < 20 && y > 70);
+        let margin = (x > w * 5 / 8 && y > w * 5 / 8) || (x < w / 5 && y > w * 3 / 4);
         if margin || rng.next_f32() < 0.03 {
             continue;
         }
         grid.wet[i] = 1.0;
         grid.pressure[i] = 0.05 + 0.95 * rng.next_f32();
         for k in 0..2 {
-            grid.pigments_in_water[k * w * w + i] = rng.next_f32();
+            grid.pigments_in_water[k * n + i] = rng.next_f32();
         }
     }
     grid
@@ -798,8 +800,10 @@ fn swirl_only(grid: &mut SimulationGrid, params: &SimParams, ticks: u32) {
 #[test]
 fn the_swirl_conserves_a_ragged_field_and_never_carries_pigment_into_a_blocked_cell() {
     let params = SimParams::default();
-    for seed in [3, 11, 29] {
-        let mut grid = ragged_film(seed);
+    // Square, both stretches, and a 12-cell grid whose taper radius is raised
+    // to its one-cell floor.
+    for (seed, size, aspect) in [(3, 96, 1.0), (11, 96, 0.25), (29, 96, 4.0), (5, 12, 1.0)] {
+        let mut grid = ragged_film(seed, size, aspect);
         let before = grid.clone();
         swirl_only(&mut grid, &params, 40);
         let loaded: f64 = before.pigments_in_water.iter().map(|&v| v as f64).sum();

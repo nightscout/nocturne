@@ -51,8 +51,6 @@ struct Params {
     max_deposited: f32,
     carry_min: f32,
     carry_reach: f32,
-    swirl_speed: f32,
-    swirl_frequency: f32,
     swirl_drift: f32,
     swirl_depth: f32,
     swirl_radius_x: u32,
@@ -63,6 +61,8 @@ struct Params {
     swirl_step_y: f32,
     swirl_scale: f32,
     _pad2: f32,
+    _pad3: f32,
+    _pad4: f32,
 };
 
 struct Stroke {
@@ -112,7 +112,6 @@ fn o_m() -> u32 { return 7u * P.n; }
 fn o_g(k: u32) -> u32 { return (8u + k) * P.n; }
 fn o_d(k: u32) -> u32 { return (8u + P.pigment_count + k) * P.n; }
 fn o_dry_rate() -> u32 { return (8u + 2u * P.pigment_count) * P.n; }
-fn o_aspect() -> u32 { return o_dry_rate() + 2u; }
 fn o_settle_share() -> u32 { return o_dry_rate() + 3u; }
 fn o_tick() -> u32 { return o_dry_rate() + 4u; }
 fn o_swirl_seed() -> u32 { return o_dry_rate() + 5u; }

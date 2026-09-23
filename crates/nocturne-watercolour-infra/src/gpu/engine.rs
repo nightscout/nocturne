@@ -96,8 +96,6 @@ struct ParamsUniform {
     max_deposited: f32,
     carry_min: f32,
     carry_reach: f32,
-    swirl_speed: f32,
-    swirl_frequency: f32,
     swirl_drift: f32,
     swirl_depth: f32,
     /// `swirl::Geometry` for the loaded scene's size and aspect.
@@ -109,6 +107,8 @@ struct ParamsUniform {
     swirl_step_y: f32,
     swirl_scale: f32,
     _pad2: f32,
+    _pad3: f32,
+    _pad4: f32,
 }
 
 impl ParamsUniform {
@@ -159,8 +159,6 @@ impl ParamsUniform {
             max_deposited: sim::MAX_DEPOSITED,
             carry_min: sim::CARRY_MIN,
             carry_reach: sim::CARRY_REACH,
-            swirl_speed: p.swirl_speed,
-            swirl_frequency: p.swirl_frequency,
             swirl_drift: p.swirl_drift,
             swirl_depth: p.swirl_depth,
             swirl_radius_x: geo.radius_x,
@@ -171,6 +169,8 @@ impl ParamsUniform {
             swirl_step_y: geo.step_y,
             swirl_scale: geo.scale,
             _pad2: 0.0,
+            _pad3: 0.0,
+            _pad4: 0.0,
         }
     }
 }
@@ -1402,7 +1402,10 @@ impl Simulator for GpuEngine {
                 self.loaded_mut()?.maybe_wet = true;
             }
             Operation::DryAll => self.loaded_mut()?.maybe_wet = false,
-            _ => {}
+            Operation::Dry { .. }
+            | Operation::Settle { .. }
+            | Operation::SetMask(_)
+            | Operation::ClearMask => {}
         }
         let rasterize = |path: &[_], radius, softness, span: StrokeSpan| {
             paint::rasterize_path_span(
