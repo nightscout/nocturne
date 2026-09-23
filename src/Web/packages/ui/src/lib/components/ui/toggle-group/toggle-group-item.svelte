@@ -32,7 +32,9 @@
       variant: toggleVariant,
       size: resolvedSize,
     }),
-    "min-w-0 flex-1 shrink-0 shadow-none focus:z-10 focus-visible:z-10",
+    "min-w-0 shrink-0 shadow-none focus:z-10 focus-visible:z-10",
+    // Joined and segmented items share the group's width; spaced chips size to their labels.
+    (joined || segmented) && "flex-1",
     joined &&
       "rounded-none first:rounded-l-md last:rounded-r-md data-[variant=outline]:border-l-0 data-[variant=outline]:first:border-l",
     segmented &&
