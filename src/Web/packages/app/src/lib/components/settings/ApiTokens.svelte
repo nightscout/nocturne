@@ -258,14 +258,14 @@
                 <div class="flex items-center gap-2">
                   <p class="text-sm font-medium">{grant.label}</p>
                   {#if grant.isLegacy}
-                    <Badge variant="outline" class="text-xs border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                    <Badge variant="outline" class="border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
                       Legacy — rotate to per-device key
                     </Badge>
                   {/if}
                 </div>
                 <div class="flex flex-wrap gap-1.5">
                   {#each grant.scopes as scope}
-                    <Badge variant="outline" class="text-xs font-mono">
+                    <Badge variant="outline" class="font-mono">
                       {scope}
                     </Badge>
                   {/each}
@@ -338,7 +338,7 @@
             type="text"
             value={createdToken}
             readonly
-            class="font-mono text-sm"
+            class="font-mono"
           />
           <Button variant="outline" size="icon" onclick={copyToken}>
             {#if copiedToken}

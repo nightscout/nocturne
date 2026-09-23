@@ -73,12 +73,12 @@
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2 flex-wrap">
                     <span class="font-medium">{getUploaderName(uploader)}</span>
-                    <Badge variant="outline" class="text-xs capitalize">
+                    <Badge variant="outline" class="capitalize">
                       {uploader.platform}
                     </Badge>
                     {#if active}
                       <Badge
-                        class="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100 text-xs"
+                        class="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100"
                       >
                         <CheckCircle class="h-3 w-3 mr-1" />
                         Active

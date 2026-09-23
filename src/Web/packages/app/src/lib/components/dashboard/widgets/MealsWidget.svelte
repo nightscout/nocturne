@@ -30,7 +30,7 @@
     <div class="space-y-2">
       <div class="flex items-center justify-between">
         <span class="text-2xl font-bold">{totalCarbs}g</span>
-        <Badge variant="secondary" class="text-xs">
+        <Badge variant="secondary">
           {recentMeals.length} meal{recentMeals.length !== 1 ? "s" : ""}
         </Badge>
       </div>
@@ -41,7 +41,7 @@
       </div>
       <div class="flex flex-wrap gap-1 mt-1">
         {#each recentMeals.slice(0, 3) as carbIntake}
-          <Badge variant="outline" class="text-xs">
+          <Badge variant="outline">
             {carbIntake.carbs ?? 0}g
           </Badge>
         {/each}

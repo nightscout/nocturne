@@ -149,7 +149,7 @@
                 <div class="flex items-center gap-2 flex-wrap">
                   <span class="font-medium">{connector.name}</span>
                   {#if configured}
-                    <Badge variant="secondary" class="text-xs text-green-600">
+                    <Badge variant="secondary" class="text-green-600">
                       Connected
                     </Badge>
                   {/if}
@@ -230,11 +230,11 @@
                     <div class="flex-1 min-w-0">
                       <div class="flex items-center gap-2 flex-wrap">
                         <span class="font-medium">{getUploaderName(app)}</span>
-                        <Badge variant="outline" class="text-xs gap-1">
+                        <Badge variant="outline">
                           {getPlatformLabel(app.platform)}
                         </Badge>
                         {#if detected}
-                          <Badge variant="secondary" class="text-xs text-green-600">
+                          <Badge variant="secondary" class="text-green-600">
                             Connected
                           </Badge>
                         {/if}

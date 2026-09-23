@@ -263,11 +263,11 @@
         {deduplicationStatus?.state === "Completed" ? "Done" : "Close"}
       </Button>
       {#if isDeduplicating}
-        <Button variant="destructive" onclick={cancelDeduplication} class="gap-2">
+        <Button variant="destructive" onclick={cancelDeduplication}>
           Cancel Job
         </Button>
       {:else if !deduplicationStatus || deduplicationStatus.state === "Failed" || deduplicationStatus.state === "Cancelled"}
-        <Button onclick={startDeduplication} class="gap-2">
+        <Button onclick={startDeduplication}>
           <Link2 class="h-4 w-4" />
           Start Deduplication
         </Button>

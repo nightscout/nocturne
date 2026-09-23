@@ -432,7 +432,7 @@
         {#if visibleHrefs.has("/reports/executive-summary")}
           <Button
             href="/reports/executive-summary"
-            class="gap-2 rounded-full px-5"
+            class="rounded-full px-5"
           >
             <Gauge class="h-4 w-4" />
             Executive Summary
@@ -442,7 +442,7 @@
           <Button
             href="/reports/agp"
             variant="outline"
-            class="gap-2 rounded-full px-5"
+            class="rounded-full px-5"
           >
             <BarChart3 class="h-4 w-4" />
             AGP Report
@@ -452,7 +452,7 @@
           <Button
             href="/reports/readings"
             variant="outline"
-            class="gap-2 rounded-full px-5"
+            class="rounded-full px-5"
           >
             <Calendar class="h-4 w-4" />
             Day-by-Day

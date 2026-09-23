@@ -171,7 +171,7 @@
         </p>
         <div class="grid gap-4 @sm:grid-cols-3">
           <div class="space-y-2">
-            <Label class="text-sm">Min Delta</Label>
+            <Label>Min Delta</Label>
             <div class="flex items-center gap-2">
               <Input
                 type="number"
@@ -185,7 +185,7 @@
             </div>
           </div>
           <div class="space-y-2">
-            <Label class="text-sm">Extend by</Label>
+            <Label>Extend by</Label>
             <div class="flex items-center gap-2">
               <Input
                 type="number"
@@ -197,7 +197,7 @@
             </div>
           </div>
           <div class="space-y-2">
-            <Label class="text-sm">Max Total</Label>
+            <Label>Max Total</Label>
             <div class="flex items-center gap-2">
               <Input
                 type="number"

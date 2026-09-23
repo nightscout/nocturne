@@ -45,7 +45,7 @@
         note.isAnnouncement = checked === true;
       }}
     />
-    <Label for="note-announcement" class="text-sm font-normal cursor-pointer">
+    <Label for="note-announcement" class="font-normal cursor-pointer">
       Is Announcement
     </Label>
   </div>

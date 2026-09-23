@@ -123,7 +123,7 @@
                     Verified
                   </Badge>
                 {:else}
-                  <Badge variant="outline" class="shrink-0 text-xs">
+                  <Badge variant="outline" class="shrink-0">
                     Self-registered
                   </Badge>
                 {/if}

@@ -74,7 +74,7 @@
                     <div class="font-medium flex items-center gap-2">
                       {grant.clientDisplayName || grant.clientId || "Unknown Device"}
                       {#if grant.isKnownClient}
-                        <Badge variant="secondary" class="text-xs">
+                        <Badge variant="secondary">
                           Verified
                         </Badge>
                       {/if}

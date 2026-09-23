@@ -397,7 +397,7 @@
     variant="destructive"
     size="sm"
     onclick={onRemove}
-    class="w-full gap-2"
+    class="w-full"
   >
     <Trash2 class="size-4" />
     Remove

@@ -348,7 +348,7 @@
               </CardDescription>
             </div>
             <div class="flex items-center gap-2 shrink-0">
-              <Label class="cursor-pointer text-sm" for="rule-enabled">
+              <Label class="cursor-pointer" for="rule-enabled">
                 Enabled
               </Label>
               <Switch
@@ -411,7 +411,7 @@
                 }}
               />
               <div class="space-y-0.5">
-                <Label class="cursor-pointer text-sm" for="rule-allow-dnd">
+                <Label class="cursor-pointer" for="rule-allow-dnd">
                   Allow through Do Not Disturb
                 </Label>
                 <p class="text-xs text-muted-foreground">
@@ -594,7 +594,7 @@
                     <Button
                       variant="ghost"
                       size="sm"
-                      class="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left text-xs h-auto"
+                      class="flex min-w-0 flex-1 items-center px-2 py-1.5 text-left text-xs h-auto"
                       onclick={() => openReplay(h.startedAt)}
                       title="Replay this day in the simulator"
                     >

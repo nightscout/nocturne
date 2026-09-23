@@ -80,7 +80,7 @@
 
 <div class={cn("space-y-3", className)}>
   <div class="flex items-center justify-between">
-    <Label class="text-sm font-medium">Notification Thresholds</Label>
+    <Label>Notification Thresholds</Label>
     <Button
       variant="outline"
       size="sm"

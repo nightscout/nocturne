@@ -105,7 +105,7 @@
         <Popover.Root bind:open={foodFilterOpen}>
           <Popover.Trigger>
             {#snippet child({ props }: { props: Record<string, unknown> })}
-              <Button variant="outline" size="sm" class="gap-2" {...props}>
+              <Button variant="outline" size="sm" {...props}>
                 Foods
                 {#if selectedFoods.length > 0}
                   <Badge variant="secondary" class="ml-1">
@@ -184,7 +184,7 @@
         </span>
 
         {#each selectedFoods as food}
-          <Badge variant="outline" class="gap-1">
+          <Badge variant="outline">
             {food}
             <button
               onclick={() => toggleFoodFilter(food)}
@@ -196,7 +196,7 @@
         {/each}
 
         {#if searchQuery.trim()}
-          <Badge variant="outline" class="gap-1">
+          <Badge variant="outline">
             "{searchQuery}"
             <button
               onclick={() => (searchQuery = "")}

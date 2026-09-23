@@ -41,7 +41,7 @@
             </p>
             {#if invite.roleIds?.length}
               {#each invite.roleIds as roleId}
-                <Badge variant="secondary" class="text-xs">
+                <Badge variant="secondary">
                   {getRoleName(roleId)}
                 </Badge>
               {/each}

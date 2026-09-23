@@ -286,7 +286,7 @@
 
       {#if startPreview.length > 0}
         <div class="rounded-lg border bg-muted/50 p-3 mt-2">
-          <Label class="text-xs mb-2 block font-medium">
+          <Label class="text-xs mb-2 block">
             Notification Schedule (Adjusted)
           </Label>
           <div class="space-y-2">

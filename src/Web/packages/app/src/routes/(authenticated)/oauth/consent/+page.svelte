@@ -268,7 +268,7 @@
               />
               <Label
                 for="limit-24-hours"
-                class="text-sm font-medium cursor-pointer"
+                class="cursor-pointer"
               >
                 Only share data from the last 24 hours
               </Label>

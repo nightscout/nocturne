@@ -47,7 +47,7 @@
       {#snippet child({ props }: { props: Record<string, unknown> })}
         <Button
           variant="ghost"
-          class="w-full justify-start gap-2 px-2 {collapsed
+          class="w-full justify-start px-2 {collapsed
             ? 'justify-center'
             : ''} {className}"
           {...props}
@@ -162,7 +162,7 @@
     variant="ghost"
     data-testid="sign-in-link"
     href="/auth/login"
-    class="w-full justify-start gap-2 px-2 {collapsed
+    class="w-full justify-start px-2 {collapsed
       ? 'justify-center'
       : ''} {className}"
   >

@@ -424,7 +424,7 @@
           </Select.Root>
         </div>
 
-        <Button variant="outline" size="sm" onclick={swap} class="gap-2">
+        <Button variant="outline" size="sm" onclick={swap}>
           <ArrowLeftRight class="h-4 w-4" />
           Swap
         </Button>
@@ -432,7 +432,6 @@
           size="sm"
           disabled={!isDirty}
           onclick={() => commit(draft, preset)}
-          class="gap-2"
         >
           Load
         </Button>
@@ -451,7 +450,7 @@
                 value={p.label}
                 oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
                   setLabel(cfg.side, e.currentTarget.value)}
-                class="h-7 border-0 bg-transparent px-1 text-sm font-semibold focus-visible:ring-1"
+                class="h-7 border-0 px-1 font-semibold focus-visible:ring-1"
               />
               <span class="ml-auto font-mono text-[11px] text-muted-foreground">
                 {dayCount(p.from, p.to)}d

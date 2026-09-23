@@ -343,7 +343,7 @@
                       type="text"
                       value={createdUrl}
                       readonly
-                      class="font-mono text-sm"
+                      class="font-mono"
                     />
                     <Button
                       variant="outline"

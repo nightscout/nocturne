@@ -51,7 +51,7 @@
         </div>
         {#if tenant.activeAlertCount != null && tenant.activeAlertCount > 0}
           <Badge
-            class="shrink-0 gap-1 {alertBadgeClass}"
+            class="shrink-0 {alertBadgeClass}"
             data-testid="alert-badge"
           >
             <Bell class="h-3 w-3" aria-hidden="true" />

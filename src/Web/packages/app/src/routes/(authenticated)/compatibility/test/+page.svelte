@@ -439,7 +439,7 @@
               onCheckedChange={(checked: boolean) =>
                 (hashApiSecret = checked === true)}
             />
-            <Label for="hashApiSecret" class="font-normal text-sm">
+            <Label for="hashApiSecret" class="font-normal">
               Hash API secret (SHA1)
             </Label>
           </div>

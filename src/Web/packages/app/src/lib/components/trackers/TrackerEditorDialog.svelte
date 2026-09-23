@@ -358,7 +358,7 @@
   </div>
 
   <div class="space-y-3 pt-2 border-t">
-    <Label class="text-sm font-medium">Event Integration (Nightscout)</Label>
+    <Label>Event Integration (Nightscout)</Label>
     <p class="text-xs text-muted-foreground -mt-1">
       Optionally create treatment events when this tracker starts or completes.
       This maintains compatibility with existing CAGE/SAGE pills.

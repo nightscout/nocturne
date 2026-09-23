@@ -173,7 +173,7 @@
           </p>
         </div>
       </div>
-      <Badge variant="secondary" class="gap-1">
+      <Badge variant="secondary">
         <Clock class="h-3 w-3" />
         {profileNames.length} profile{profileNames.length !== 1 ? "s" : ""}
       </Badge>
@@ -261,7 +261,7 @@
                       {#if isDefault}
                         <Badge
                           variant="default"
-                          class="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100 text-xs"
+                          class="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100"
                         >
                           Active
                         </Badge>
@@ -277,7 +277,7 @@
                         </Button>
                       {/if}
                       {#if isExternal}
-                        <Badge variant="outline" class="text-xs gap-1">
+                        <Badge variant="outline">
                           <Lock class="h-3 w-3" />
                           {profileTherapy?.enteredBy ?? "External"}
                         </Badge>
@@ -329,7 +329,7 @@
                     </Badge>
                   {/if}
                   {#if therapy.isExternallyManaged}
-                    <Badge variant="outline" class="gap-1">
+                    <Badge variant="outline">
                       <Lock class="h-3 w-3" />
                       Read-only
                     </Badge>

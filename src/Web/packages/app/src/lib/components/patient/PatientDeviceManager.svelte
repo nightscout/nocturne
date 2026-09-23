@@ -327,14 +327,14 @@
               <span class="font-medium text-sm">
                 {device.manufacturer ?? "Unknown"} {device.model ?? ""}
               </span>
-              <Badge variant="secondary" class="text-xs">
+              <Badge variant="secondary">
                 {deviceCategoryLabels[(device.deviceCategory ?? "") as DeviceCategory] ??
                   device.deviceCategory}
               </Badge>
               {#if device.isCurrent}
                 <Badge
                   variant="default"
-                  class="text-xs bg-green-600 hover:bg-green-700"
+                  class="bg-green-600 hover:bg-green-700"
                 >
                   Current
                 </Badge>
@@ -430,7 +430,7 @@
                   {source.device || source.dataSource || "Unknown source"}
                 </span>
                 {#if source.device && source.dataSource}
-                  <Badge variant="outline" class="text-xs font-mono">{source.dataSource}</Badge>
+                  <Badge variant="outline" class="font-mono">{source.dataSource}</Badge>
                 {/if}
               </div>
               <div class="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">

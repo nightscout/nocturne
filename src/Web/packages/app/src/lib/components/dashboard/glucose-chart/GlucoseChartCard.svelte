@@ -339,7 +339,7 @@
         {#if displayDemoMode}
           <Badge
             variant="outline"
-            class="text-xs border-border text-muted-foreground"
+            class="border-border text-muted-foreground"
           >
             Demo
           </Badge>
@@ -467,7 +467,7 @@
     {@render chartBody()}
   </div>
 {:else}
-  <Card class="@container bg-card border-border">
+  <Card class="@container border-border">
     {@render chartBody()}
   </Card>
 {/if}

@@ -110,7 +110,7 @@
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <form
 	data-testid="food-composer"
-	class="mx-4 my-3 rounded-[10px] p-3.5"
+	class="mx-4 my-3 rounded-lg p-3.5"
 	style="border: 1px solid var(--carbs-border); background: var(--carbs-bg-subtle)"
 	onsubmit={handleSubmit}
 	onkeydown={handleKeydown}

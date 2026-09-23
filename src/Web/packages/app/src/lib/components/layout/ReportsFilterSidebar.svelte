@@ -142,7 +142,7 @@
           Report Filters
         </Sheet.Title>
       </div>
-      <Sheet.Description class="text-sm text-muted-foreground">
+      <Sheet.Description>
         Adjust the date range for your report.
       </Sheet.Description>
     </Sheet.Header>
@@ -151,7 +151,7 @@
       <div class="px-6 py-4 space-y-6">
         <!-- Quick Date Presets -->
         <div class="space-y-3">
-          <Label class="text-sm font-medium">Quick Selection</Label>
+          <Label>Quick Selection</Label>
           <div class="grid grid-cols-3 gap-2">
             {#each dayPresets as preset}
               <Button
@@ -170,7 +170,7 @@
 
         <!-- Calendar Selection -->
         <div class="space-y-3">
-          <Label class="text-sm font-medium flex items-center gap-2">
+          <Label class="flex items-center">
             <Calendar class="h-4 w-4" />
             Custom Date Range
           </Label>

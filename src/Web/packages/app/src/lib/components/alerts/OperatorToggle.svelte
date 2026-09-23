@@ -42,7 +42,7 @@
   onValueChange={(next: string) => {
     if (next === "and" || next === "or") onChange(next);
   }}
-  class="rounded-md border bg-background p-0.5 font-medium"
+  class="border bg-background p-0.5 font-medium"
 >
   <ToggleGroup.Item
     value="and"

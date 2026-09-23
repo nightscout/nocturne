@@ -171,47 +171,47 @@
           <!-- Status badge -->
           {#if syncProgress?.phase === "Syncing" || status === "syncing"}
             <Badge
-              class="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100 text-xs"
+              class="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100"
             >
               <Loader2 class="h-3 w-3 mr-1 animate-spin" />
               Syncing
             </Badge>
           {:else if syncProgress?.phase === "Completed"}
             <Badge
-              class="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100 text-xs"
+              class="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100"
             >
               <CheckCircle class="h-3 w-3 mr-1" />
               Sync Complete
             </Badge>
           {:else if syncProgress?.phase === "Failed"}
-            <Badge variant="destructive" class="text-xs">
+            <Badge variant="destructive">
               <AlertCircle class="h-3 w-3 mr-1" />
               Sync Failed
             </Badge>
           {:else if status === "backing-off"}
             <Badge
               variant="secondary"
-              class="bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-100 text-xs"
+              class="bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-100"
             >
               <Clock class="h-3 w-3 mr-1" />
               Backing Off
             </Badge>
           {:else if status === "error"}
-            <Badge variant="destructive" class="text-xs">
+            <Badge variant="destructive">
               <AlertCircle class="h-3 w-3 mr-1" />
               Error
             </Badge>
           {:else if status === "configured"}
             <Badge
               variant="secondary"
-              class="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100 text-xs"
+              class="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100"
             >
               <Clock class="h-3 w-3 mr-1" />
               Configured
             </Badge>
           {:else if status === "active"}
             <Badge
-              class="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100 text-xs"
+              class="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100"
             >
               <CheckCircle class="h-3 w-3 mr-1" />
               Active
@@ -219,7 +219,7 @@
           {:else if status === "stale"}
             <Badge
               variant="secondary"
-              class="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-100 text-xs"
+              class="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-100"
             >
               <Clock class="h-3 w-3 mr-1" />
               Stale
@@ -227,18 +227,18 @@
           {:else if status === "disabled"}
             <Badge
               variant="secondary"
-              class="bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100 text-xs"
+              class="bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100"
             >
               <WifiOff class="h-3 w-3 mr-1" />
               Disabled
             </Badge>
           {:else if status === "offline"}
-            <Badge variant="outline" class="text-xs">
+            <Badge variant="outline">
               <WifiOff class="h-3 w-3 mr-1" />
               Offline
             </Badge>
           {:else if status === "inactive"}
-            <Badge variant="outline" class="text-xs">
+            <Badge variant="outline">
               <AlertCircle class="h-3 w-3 mr-1" />
               Inactive
             </Badge>
@@ -268,7 +268,7 @@
               </Tooltip.Trigger>
               <Tooltip.Portal>
                 <Tooltip.Content
-                  class="z-50 overflow-hidden rounded-md bg-popover px-3 py-2 text-sm text-popover-foreground shadow-md"
+                  class="z-50 overflow-hidden bg-popover py-2 text-sm text-popover-foreground shadow-md"
                 >
                   <div class="space-y-1">
                     <div class="font-medium text-xs text-muted-foreground mb-1">
@@ -303,7 +303,7 @@
                 </Tooltip.Trigger>
                 <Tooltip.Portal>
                   <Tooltip.Content
-                    class="z-50 overflow-hidden rounded-md bg-popover px-3 py-2 text-sm text-popover-foreground shadow-md"
+                    class="z-50 overflow-hidden bg-popover py-2 text-sm text-popover-foreground shadow-md"
                   >
                     <div class="space-y-1">
                       <div

@@ -166,7 +166,7 @@
   });
 </script>
 
-<Card class="border">
+<Card>
   <CardHeader>
     <CardTitle class="flex items-center gap-2">
       <Lightbulb class="h-5 w-5 text-amber-500" />

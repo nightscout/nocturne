@@ -278,7 +278,7 @@
                     </span>
                     <span class="text-sm">{formatInsulinDisplay(bolus.insulin)}U</span>
                     {#if bolus.bolusType}
-                      <Badge variant="secondary" class="text-xs">
+                      <Badge variant="secondary">
                         {bolus.bolusType}
                       </Badge>
                     {/if}

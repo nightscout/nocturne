@@ -79,7 +79,7 @@
       </p>
     </div>
     <div class="flex items-center gap-2">
-      <Label class="text-sm font-medium whitespace-nowrap">Trip</Label>
+      <Label class="whitespace-nowrap">Trip</Label>
       <Input
         type="number"
         bind:value={tripDays}
@@ -125,7 +125,7 @@
           Enable some supplies above to generate your list
         {/if}
       </p>
-      <Button size="lg" disabled={totalItems === 0} onclick={generateList} class="gap-2">
+      <Button size="lg" disabled={totalItems === 0} onclick={generateList}>
         <ListChecks class="h-4 w-4" />
         Generate Packing List
       </Button>

@@ -334,19 +334,19 @@
               <span class="font-medium text-sm">
                 {insulin.name ?? "Unnamed"}
               </span>
-              <Badge variant="secondary" class="text-xs">
+              <Badge variant="secondary">
                 {insulinCategoryLabels[(insulin.insulinCategory ?? "") as InsulinCategory] ??
                   insulin.insulinCategory}
               </Badge>
               {#if insulin.role}
-                <Badge variant="outline" class="text-xs">
+                <Badge variant="outline">
                   {insulinRoleLabels[insulin.role as InsulinRole] ?? insulin.role}
                 </Badge>
               {/if}
               {#if insulin.isCurrent}
                 <Badge
                   variant="default"
-                  class="text-xs bg-green-600 hover:bg-green-700"
+                  class="bg-green-600 hover:bg-green-700"
                 >
                   Current
                 </Badge>
@@ -354,7 +354,6 @@
               {#if insulin.isPrimary}
                 <Badge
                   variant="default"
-                  class="text-xs"
                 >
                   Primary
                 </Badge>

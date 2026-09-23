@@ -502,7 +502,7 @@
             <Button
               href="/reports/agp"
               variant="outline"
-              class="h-auto py-4 flex-col gap-2"
+              class="h-auto py-4 flex-col"
             >
               <BarChart3 class="w-5 h-5" />
               <span class="text-xs">AGP Report</span>
@@ -510,7 +510,7 @@
             <Button
               href="/reports/readings"
               variant="outline"
-              class="h-auto py-4 flex-col gap-2"
+              class="h-auto py-4 flex-col"
             >
               <Calendar class="w-5 h-5" />
               <span class="text-xs">Day-by-Day</span>
@@ -518,7 +518,7 @@
             <Button
               href="/reports/treatments"
               variant="outline"
-              class="h-auto py-4 flex-col gap-2"
+              class="h-auto py-4 flex-col"
             >
               <Activity class="w-5 h-5" />
               <span class="text-xs">Treatments</span>
@@ -526,7 +526,7 @@
             <Button
               href="/reports"
               variant="outline"
-              class="h-auto py-4 flex-col gap-2"
+              class="h-auto py-4 flex-col"
             >
               <BookOpen class="w-5 h-5" />
               <span class="text-xs">All Reports</span>

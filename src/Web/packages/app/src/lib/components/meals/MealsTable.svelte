@@ -158,7 +158,7 @@
             )}
             <!-- Day separator row -->
             <Table.Row
-              class="bg-muted/50 hover:bg-muted/60 cursor-pointer transition-colors"
+              class="bg-muted/50 hover:bg-muted/60 cursor-pointer"
               onclick={() => onToggleDate(day.date)}
             >
               <Table.Cell class="py-2">
@@ -207,7 +207,7 @@
                 <!-- Main meal row -->
                 <Table.Row
                   class={cn(
-                    "transition-colors cursor-pointer",
+                    "cursor-pointer",
                     isExpanded && "bg-accent/30"
                   )}
                   onclick={() => onAddFood(meal)}

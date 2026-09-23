@@ -272,7 +272,7 @@
         onValueChange={(next: string) => {
           if (next === "percent" || next === "mmol") a1cUnit = next;
         }}
-        class="shrink-0 rounded-md border bg-background p-0.5"
+        class="shrink-0 border bg-background p-0.5"
       >
         <ToggleGroup.Item value="percent" class="h-8 px-3 text-xs" aria-label="Show as percent">
           %

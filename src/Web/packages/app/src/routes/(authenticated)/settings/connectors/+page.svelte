@@ -392,7 +392,7 @@
         </p>
       </div>
     </div>
-    <Button variant="outline" size="sm" onclick={refreshAll} class="gap-2">
+    <Button variant="outline" size="sm" onclick={refreshAll}>
       <RefreshCw
         class="h-4 w-4 {isLoading || isLoadingConnectorStatuses
           ? 'animate-spin'
@@ -459,14 +459,14 @@
                   {#if isDemo}
                     <Badge
                       variant="secondary"
-                      class="bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-100 text-xs"
+                      class="bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-100"
                     >
                       <Sparkles class="h-3 w-3 mr-1" />
                       Demo
                     </Badge>
                   {/if}
                   {#if matchingUploader}
-                    <Badge variant="outline" class="text-xs">
+                    <Badge variant="outline">
                       {getUploaderName(matchingUploader)}
                     </Badge>
                   {/if}

@@ -207,7 +207,7 @@
           </div>
           <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
             {#if role.slug}
-              <Badge variant="outline" class="font-mono text-xs">{role.slug}</Badge>
+              <Badge variant="outline" class="font-mono">{role.slug}</Badge>
             {/if}
             <Badge variant="secondary">
               {role.permissions?.length ?? 0} permission{(role.permissions?.length ?? 0) !== 1 ? "s" : ""}

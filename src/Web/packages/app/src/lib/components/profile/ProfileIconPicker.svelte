@@ -94,7 +94,7 @@
 
 <Popover.Root bind:open>
   <Popover.Trigger {disabled} class="w-full">
-    <Button variant="outline" class="w-full justify-start gap-2" {disabled}>
+    <Button variant="outline" class="w-full justify-start" {disabled}>
       <CurrentIcon class="h-4 w-4" />
       <span>{currentIconName}</span>
     </Button>

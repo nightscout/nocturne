@@ -55,7 +55,7 @@
             <Icon class="h-4 w-4 text-muted-foreground" />
             {config.label}
             {#if categoryTotal > 0}
-              <Badge variant="secondary" class="text-xs font-normal tabular-nums">
+              <Badge variant="secondary" class="font-normal tabular-nums">
                 {categoryTotal} items
               </Badge>
             {/if}

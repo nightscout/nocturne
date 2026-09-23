@@ -205,7 +205,7 @@
               <Input
                 bind:value={newLabel}
                 placeholder="Item name..."
-                class="flex-1 h-8 text-sm"
+                class="flex-1 h-8"
                 onkeydown={(e: KeyboardEvent) => e.key === "Enter" && addItem()}
               />
               <Button size="sm" class="h-8" onclick={addItem} disabled={!newLabel.trim()}>
@@ -245,7 +245,7 @@
             <Input
               bind:value={newLabel}
               placeholder="Item name..."
-              class="flex-1 h-8 text-sm"
+              class="flex-1 h-8"
               onkeydown={(e: KeyboardEvent) => e.key === "Enter" && addItem()}
             />
             <Button size="sm" class="h-8" onclick={addItem} disabled={!newLabel.trim()}>
@@ -265,7 +265,7 @@
     {:else if addingToCategory === null}
       <Button
         variant="outline"
-        class="w-full gap-2"
+        class="w-full"
         onclick={() => startAdding("Custom")}
       >
         <Plus class="h-4 w-4" />

@@ -56,7 +56,7 @@
 <div class="@container">
 <div class="grid grid-cols-1 @4xl:grid-cols-3 gap-4">
   <!-- Total Records -->
-  <Card.Root class="bg-card">
+  <Card.Root>
     <Card.Content class="p-4">
       <div class="flex items-center justify-between">
         <div>
@@ -84,7 +84,7 @@
   </Card.Root>
 
   <!-- Insulin -->
-  <Card.Root class="bg-card">
+  <Card.Root>
     <Card.Content class="p-4">
       <div class="flex items-center justify-between">
         <div>
@@ -114,7 +114,7 @@
   </Card.Root>
 
   <!-- Carbs -->
-  <Card.Root class="bg-card">
+  <Card.Root>
     <Card.Content class="p-4">
       <div class="flex items-center justify-between">
         <div>

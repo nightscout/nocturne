@@ -569,7 +569,7 @@
           <Button
             href="/auth/login"
             size="lg"
-            class="w-full @sm:w-auto min-w-[200px] font-medium"
+            class="w-full @sm:w-auto min-w-[200px]"
           >
             <User class="mr-2 h-5 w-5" />
             Sign In with Nocturne

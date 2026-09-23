@@ -94,7 +94,7 @@
     <div class="flex items-center justify-between space-x-2">
       <div class="flex items-center space-x-2">
         <div class="w-2 h-2 rounded-full {statusConfig.color}"></div>
-        <Badge variant={statusConfig.variant} class="text-xs">
+        <Badge variant={statusConfig.variant}>
           {statusConfig.text}
         </Badge>
       </div>

@@ -60,7 +60,7 @@
     >
       <Link class="h-3.5 w-3.5" />
       Linked Records
-      <Badge variant="secondary" class="text-xs h-5 px-1.5">
+      <Badge variant="secondary" class="h-5 px-1.5">
         {records.length}
       </Badge>
     </h4>
@@ -79,7 +79,7 @@
         <div class="flex items-center gap-2">
           <Badge
             variant="outline"
-            class="{linkedStyle.colorClass} {linkedStyle.bgClass} {linkedStyle.borderClass} text-xs"
+            class="{linkedStyle.colorClass} {linkedStyle.bgClass} {linkedStyle.borderClass}"
           >
             {linkedCategory.name}
           </Badge>

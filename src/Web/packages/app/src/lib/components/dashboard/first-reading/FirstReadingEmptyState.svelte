@@ -101,7 +101,7 @@
             </div>
           </div>
         {/each}
-        <Button variant="outline" href={connectorsPath} class="gap-2">
+        <Button variant="outline" href={connectorsPath}>
           <Plug class="h-4 w-4" />
           Manage connectors
           <ArrowRight class="h-4 w-4" />

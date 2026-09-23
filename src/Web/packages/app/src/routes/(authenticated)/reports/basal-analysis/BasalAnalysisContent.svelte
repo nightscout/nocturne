@@ -108,7 +108,6 @@
           <Button
             variant="outline"
             size="sm"
-            class="gap-2"
             onclick={() => window.print()}
           >
             <Printer class="h-4 w-4" />
@@ -118,7 +117,6 @@
             href="/reports/insulin-delivery"
             variant="outline"
             size="sm"
-            class="gap-2"
           >
             Insulin Delivery
             <ArrowRight class="h-4 w-4" />
@@ -179,7 +177,7 @@
 
     <!-- Key Stats Cards -->
     <div class="grid grid-cols-2 gap-4 @lg:grid-cols-4">
-      <Card class="border">
+      <Card>
         <CardContent class="pt-6 text-center">
           <div class="text-2xl font-bold tabular-nums">
             {basalStats.avgRate.toFixed(2)}
@@ -188,7 +186,7 @@
           <div class="text-[10px] text-muted-foreground/60">U/hr</div>
         </CardContent>
       </Card>
-      <Card class="border">
+      <Card>
         <CardContent class="pt-6 text-center">
           <div class="text-2xl font-bold tabular-nums">
             {basalStats.totalDelivered.toFixed(1)}
@@ -201,7 +199,7 @@
           </div>
         </CardContent>
       </Card>
-      <Card class="border">
+      <Card>
         <CardContent class="pt-6 text-center">
           <div class="text-2xl font-bold tabular-nums">
             {tempBasalInfo.perDay.toFixed(1)}
@@ -212,7 +210,7 @@
           <div class="text-[10px] text-muted-foreground/60">per day avg</div>
         </CardContent>
       </Card>
-      <Card class="border">
+      <Card>
         <CardContent class="pt-6 text-center">
           <div class="flex items-center justify-center gap-2">
             <span class="text-lg font-bold text-green-600">
@@ -232,7 +230,7 @@
     </div>
 
     <!-- Main Percentile Chart -->
-    <Card class="border">
+    <Card>
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <Gauge class="h-5 w-5 text-muted-foreground" />
@@ -252,7 +250,7 @@
     </Card>
 
     <!-- Hourly Insulin Delivery -->
-    <Card class="border">
+    <Card>
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <Clock class="h-5 w-5 text-muted-foreground" />
@@ -269,7 +267,7 @@
 
     <!-- Insights Section -->
     {#if basalStats.count > 0}
-      <Card class="border">
+      <Card>
         <CardHeader>
           <CardTitle class="flex items-center gap-2">
             <Info class="h-5 w-5 text-muted-foreground" />
@@ -381,7 +379,7 @@
     <Separator class="print:hidden" />
     <div class="flex flex-wrap items-center justify-center gap-2 print:hidden">
       <Button href="/reports" variant="outline" size="sm">← All Reports</Button>
-      <Button href="/reports/insulin-delivery" size="sm" class="gap-2">
+      <Button href="/reports/insulin-delivery" size="sm">
         Insulin Delivery Report
         <ArrowRight class="h-4 w-4" />
       </Button>

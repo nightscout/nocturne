@@ -213,7 +213,7 @@
               <span class="text-sm text-muted-foreground">U/hr</span>
             </div>
             {#if data.basal.isTemp}
-              <Badge variant="secondary" class="text-xs">Temp</Badge>
+              <Badge variant="secondary">Temp</Badge>
             {:else}
               <span class="text-xs text-muted-foreground">Scheduled</span>
             {/if}

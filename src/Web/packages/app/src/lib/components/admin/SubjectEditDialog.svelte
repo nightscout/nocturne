@@ -112,7 +112,7 @@
                 />
                 <div class="flex-1">
                   <span class="text-sm font-medium">{role.name}</span>
-                  <Badge variant="secondary" class="text-xs ml-2">Predefined</Badge>
+                  <Badge variant="secondary" class="ml-2">Predefined</Badge>
                 </div>
               </label>
             {/each}

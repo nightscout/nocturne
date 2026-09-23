@@ -93,7 +93,7 @@
             <span class="text-xs font-medium truncate max-w-[60%]">
               {tracker.definition.name}
             </span>
-            <Badge variant="outline" class="text-xs tabular-nums">
+            <Badge variant="outline" class="tabular-nums">
               {tracker.displayAge}
             </Badge>
           </div>

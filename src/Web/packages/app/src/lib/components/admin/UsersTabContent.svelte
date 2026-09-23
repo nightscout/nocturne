@@ -106,18 +106,18 @@
                   <div class="font-medium flex items-center gap-2">
                     {subject.name}
                     {#if isPublicSubject}
-                      <Badge variant="secondary" class="text-xs">
+                      <Badge variant="secondary">
                         <Globe class="h-3 w-3 mr-1" />
                         Unauthenticated Access
                       </Badge>
                     {/if}
                     {#if subject.roles && subject.roles.some((r: TenantMemberRoleDto) => r.name === "admin")}
-                      <Badge variant="default" class="text-xs">
+                      <Badge variant="default">
                         Admin
                       </Badge>
                     {/if}
                     {#if isPlatformAdmin}
-                      <Badge variant="default" class="text-xs">
+                      <Badge variant="default">
                         <ShieldCheck class="h-3 w-3 mr-1" />
                         Platform Admin
                       </Badge>

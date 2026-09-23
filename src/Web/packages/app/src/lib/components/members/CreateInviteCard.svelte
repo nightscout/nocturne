@@ -158,7 +158,7 @@
             type="text"
             value={createdInviteUrl}
             readonly
-            class="font-mono text-sm"
+            class="font-mono"
           />
           <Button variant="outline" size="icon" onclick={copyInviteUrl}>
             {#if copiedInvite}

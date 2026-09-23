@@ -127,7 +127,7 @@
             {/if}
           </div>
           <div class="flex items-center gap-2">
-            <Label for="switch-{category}" class="text-sm text-muted-foreground">
+            <Label for="switch-{category}" class="text-muted-foreground">
               {state.enabled ? "Enabled" : "Disabled"}
             </Label>
             <Switch
@@ -146,7 +146,7 @@
                 <div class="flex items-center gap-2">
                   <Label for="field-{category}-{name}">{field.label ?? name}</Label>
                   {#if fieldConfigured}
-                    <Badge variant="outline" class="text-xs">Set</Badge>
+                    <Badge variant="outline">Set</Badge>
                   {/if}
                 </div>
                 <Input

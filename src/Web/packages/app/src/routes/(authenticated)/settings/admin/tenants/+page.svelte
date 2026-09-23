@@ -373,7 +373,7 @@
                   {member.name ?? "Unnamed user"}
                 </p>
                 {#if member.isPlatformAdmin}
-                  <Badge variant="default" class="mt-1 text-xs">
+                  <Badge variant="default" class="mt-1">
                     <ShieldCheck class="mr-1 h-3 w-3" />
                     Platform admin
                   </Badge>

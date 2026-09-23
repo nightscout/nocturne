@@ -90,7 +90,7 @@
 
     <!-- Heading -->
     <h1
-      class="font-[Montserrat] font-[250] text-[52px] max-[820px]:text-[36px] leading-tight"
+      class="font-[Montserrat] font-[250] text-[52px] max-[820px]:text-4xl leading-tight"
     >
       {#if path === "migration"}
         Your data is <em

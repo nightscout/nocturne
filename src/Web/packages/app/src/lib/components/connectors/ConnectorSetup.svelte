@@ -475,7 +475,7 @@
               <div class="flex flex-wrap gap-1 justify-end">
                 {#if connectorCapabilities.supportedDataTypes && connectorCapabilities.supportedDataTypes.length > 0}
                   {#each connectorCapabilities.supportedDataTypes as dataType (dataType)}
-                    <Badge variant="outline" class="text-xs">
+                    <Badge variant="outline">
                       {dataType}
                     </Badge>
                   {/each}
@@ -492,7 +492,6 @@
                 variant={connectorCapabilities.supportsHistoricalSync
                   ? "default"
                   : "secondary"}
-                class="text-xs"
               >
                 {connectorCapabilities.supportsHistoricalSync
                   ? "Supported"
@@ -515,7 +514,6 @@
                 variant={connectorCapabilities.supportsManualSync
                   ? "default"
                   : "secondary"}
-                class="text-xs"
               >
                 {connectorCapabilities.supportsManualSync
                   ? "Enabled"

@@ -142,7 +142,7 @@
           }}
         >
           <SelectTrigger
-            class="h-7 w-[90px] bg-transparent border-none text-xs text-muted-foreground focus:ring-0 focus:ring-offset-0 px-2 data-[placeholder]:text-muted-foreground"
+            class="h-7 w-[90px] border-none text-xs text-muted-foreground focus:ring-0 focus:ring-offset-0 px-2"
           >
             <div class="flex items-center gap-1.5 truncate">
               {#if !predictionEnabled.current}

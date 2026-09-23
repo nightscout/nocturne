@@ -85,7 +85,7 @@
     >
       <Select.Trigger
         id="device-kind-{index}"
-        class="h-8 w-48 text-sm"
+        class="h-8 w-48"
         data-testid="device-kind-trigger"
       >
         {selectedKind ? deviceKindLabel(selectedKind) : "Select a kind"}
@@ -121,7 +121,7 @@
               />
               <div class="grid gap-0.5 leading-none">
                 <Label
-                  class="text-sm font-normal"
+                  class="font-normal"
                   for="device-cap-{index}-{key}"
                 >
                   {cap.label}

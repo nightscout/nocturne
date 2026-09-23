@@ -131,7 +131,6 @@
         <Button
           variant="outline"
           size="sm"
-          class="gap-2"
           onclick={() => window.print()}
         >
           <Printer class="h-4 w-4" />
@@ -141,7 +140,6 @@
           href="/reports/basal-analysis"
           variant="outline"
           size="sm"
-          class="gap-2"
         >
           Basal Analysis
           <ArrowRight class="h-4 w-4" />
@@ -200,7 +198,7 @@
 
   <!-- Key Summary Stats -->
   <div class="grid grid-cols-2 gap-4 @md:grid-cols-3 @lg:grid-cols-5">
-    <Card class="border @lg:col-span-1">
+    <Card class="@lg:col-span-1">
       <CardContent class="pt-6 text-center">
         <div class="text-3xl font-bold tabular-nums text-primary">
           {(insulinStats.tdd ?? 0).toFixed(1)}
@@ -209,7 +207,7 @@
         <div class="text-[10px] text-muted-foreground/60">units/day</div>
       </CardContent>
     </Card>
-    <Card class="border">
+    <Card>
       <CardContent class="pt-6 text-center">
         <div class="text-2xl font-bold tabular-nums text-amber-600">
           {(insulinStats.basalPercent ?? 0).toFixed(0)}%
@@ -220,7 +218,7 @@
         </div>
       </CardContent>
     </Card>
-    <Card class="border">
+    <Card>
       <CardContent class="pt-6 text-center">
         <div class="text-2xl font-bold tabular-nums text-blue-600">
           {(insulinStats.bolusPercent ?? 0).toFixed(0)}%
@@ -231,7 +229,7 @@
         </div>
       </CardContent>
     </Card>
-    <Card class="border">
+    <Card>
       <CardContent class="pt-6 text-center">
         <div class="text-2xl font-bold tabular-nums">
           {(insulinStats.bolusesPerDay ?? 0).toFixed(1)}
@@ -242,7 +240,7 @@
         </div>
       </CardContent>
     </Card>
-    <Card class="border">
+    <Card>
       <CardContent class="pt-6 text-center">
         <div class="text-2xl font-bold tabular-nums">
           {(insulinStats.icRatio ?? 0) > 0
@@ -258,7 +256,7 @@
   </div>
 
   <!-- Ratio Banner -->
-  <Card class="border border-muted">
+  <Card class="border-muted">
     <CardContent class="flex items-center gap-4 py-4">
       <div class="rounded-lg bg-primary/10 p-3">
         <Target class="h-6 w-6 text-primary" />
@@ -278,7 +276,7 @@
   </Card>
 
   <!-- Daily Basal/Bolus Breakdown Chart -->
-  <Card class="border">
+  <Card>
     <CardHeader>
       <CardTitle class="flex items-center gap-2">
         <PieChart class="h-5 w-5 text-muted-foreground" />
@@ -295,7 +293,7 @@
   </Card>
 
   <!-- Hourly Insulin Delivery -->
-  <Card class="border">
+  <Card>
     <CardHeader>
       <CardTitle class="flex items-center gap-2">
         <Syringe class="h-5 w-5 text-muted-foreground" />
@@ -312,7 +310,7 @@
 
   <!-- Bolus Breakdown -->
   {#if (insulinStats.bolusCount ?? 0) > 0}
-    <Card class="border">
+    <Card>
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <Info class="h-5 w-5 text-muted-foreground" />
@@ -426,7 +424,7 @@
   {/if}
 
   <!-- Clinical Notes -->
-  <Card class="border bg-muted/30">
+  <Card class="bg-muted/30">
     <CardHeader>
       <CardTitle class="flex items-center gap-2 text-base">
         <Layers class="h-5 w-5 text-muted-foreground" />
@@ -459,7 +457,7 @@
   <Separator class="print:hidden" />
   <div class="flex flex-wrap items-center justify-center gap-2 print:hidden">
     <Button href="/reports" variant="outline" size="sm">← All Reports</Button>
-    <Button href="/reports/basal-analysis" size="sm" class="gap-2">
+    <Button href="/reports/basal-analysis" size="sm">
       Basal Rate Analysis
       <ArrowRight class="h-4 w-4" />
     </Button>

@@ -154,7 +154,7 @@
                   </span>
                 </div>
                 {#if food.category}
-                  <Badge variant="outline" class="text-xs">
+                  <Badge variant="outline">
                     {food.category}
                   </Badge>
                 {/if}

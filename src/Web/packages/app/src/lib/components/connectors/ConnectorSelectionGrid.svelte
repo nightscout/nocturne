@@ -67,7 +67,7 @@
               <span class="font-medium">{connector.name}</span>
               {#if connector.isConfigured}
                 <Badge
-                  class="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100 text-xs"
+                  class="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100"
                 >
                   <CheckCircle class="h-3 w-3 mr-1" />
                   Configured

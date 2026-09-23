@@ -87,7 +87,6 @@
         <Button
           variant="outline"
           size="sm"
-          class="gap-2"
           onclick={() => window.print()}
         >
           <Printer class="w-4 h-4" />

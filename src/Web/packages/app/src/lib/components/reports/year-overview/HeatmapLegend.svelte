@@ -132,7 +132,7 @@
       <Button
         variant="ghost"
         size="sm"
-        class="h-7 px-2 shrink-0 text-muted-foreground hover:text-foreground hover:bg-muted/80 rounded-md gap-1.5 text-xs"
+        class="h-7 px-2 shrink-0 text-muted-foreground hover:text-foreground hover:bg-muted/80 gap-1.5 text-xs"
         title={isPoppedOut ? "Return panel to the page" : "Float panel in the top-right corner"}
         onclick={() => isPoppedOut = !isPoppedOut}
       >

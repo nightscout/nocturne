@@ -146,7 +146,7 @@
           type="button"
           variant="ghost"
           onclick={() => (showAddFood = true)}
-          class="h-auto w-full justify-center rounded-md border border-dashed p-4 text-sm font-normal text-muted-foreground"
+          class="h-auto w-full justify-center border border-dashed p-4 font-normal text-muted-foreground"
         >
           <Plus class="mr-1.5 h-4 w-4" />
           Add a food to this carb entry
@@ -190,7 +190,7 @@
           type="button"
           variant="ghost"
           onclick={() => (showAddFood = true)}
-          class="h-auto w-full justify-center rounded-md border border-dashed p-3 text-sm font-normal text-muted-foreground"
+          class="h-auto w-full justify-center border border-dashed p-3 font-normal text-muted-foreground"
         >
           <Plus class="mr-1.5 h-4 w-4" />
           Add food

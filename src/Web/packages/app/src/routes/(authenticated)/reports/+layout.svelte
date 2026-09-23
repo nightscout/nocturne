@@ -122,7 +122,6 @@
                             variant="outline"
                             size="sm"
                             onclick={() => (filterSidebarOpen = true)}
-                            class="gap-2"
                     >
                         <Filter class="w-4 h-4"/>
                         <span class="hidden sm:inline">Filters</span>

@@ -177,7 +177,7 @@
       <!-- View Day in Review Button -->
       <div class="mt-6">
         <Button
-          class="w-full gap-2"
+          class="w-full"
           onclick={() => {
             if (selectedDay) navigateToDayInReview(selectedDay.dateString);
           }}

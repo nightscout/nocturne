@@ -79,7 +79,7 @@
     <div class="flex items-center gap-2">
       <Button
         variant="link"
-        class="h-auto p-0 text-sm font-semibold truncate"
+        class="h-auto p-0 font-semibold truncate"
         onclick={onEdit}
       >
         {rule.name ?? "(unnamed)"}

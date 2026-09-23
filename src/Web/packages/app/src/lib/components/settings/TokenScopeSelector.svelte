@@ -238,7 +238,7 @@
           }}
           disabled={covered}
         >
-          <Select.Trigger class="w-40 h-8 text-sm">
+          <Select.Trigger class="w-40 h-8">
             {getLevelLabel(cat)}
           </Select.Trigger>
           <Select.Content>
@@ -267,7 +267,7 @@
           if (v) setLevel(cat, v);
         }}
       >
-        <Select.Trigger class="w-40 h-8 text-sm">
+        <Select.Trigger class="w-40 h-8">
           {getLevelLabel(cat)}
         </Select.Trigger>
         <Select.Content>

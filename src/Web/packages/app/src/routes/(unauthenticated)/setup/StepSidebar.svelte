@@ -33,7 +33,7 @@
 
   <!-- Display heading -->
   <h2
-    class="font-[Montserrat] text-[36px] font-[250] leading-tight -tracking-[0.02em] text-white"
+    class="font-[Montserrat] text-4xl font-[250] leading-tight -tracking-[0.02em] text-white"
   >
     {#if path === "fresh"}
       Let's get your data <em class="not-italic" style="color: var(--onb-accent);">flowing.</em>

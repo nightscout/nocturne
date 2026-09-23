@@ -132,7 +132,7 @@
     <!-- Left side: Demo badge + COB/Basal pills + Tracker Pills -->
     <div class="flex items-center gap-2 order-1">
       {#if displayDemoMode}
-        <Badge variant="secondary" class="flex items-center gap-1">
+        <Badge variant="secondary" class="flex items-center">
           <div class="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
           Demo Mode
         </Badge>

@@ -69,7 +69,7 @@
   };
 
   const PICKER_BTN =
-    "flex h-auto w-full items-start justify-start gap-2 rounded px-2 py-1.5 text-left font-normal hover:bg-muted";
+    "flex h-auto w-full items-start justify-start rounded px-2 py-1.5 text-left font-normal hover:bg-muted";
 </script>
 
 <Popover.Root>

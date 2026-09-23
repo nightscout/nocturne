@@ -110,7 +110,7 @@
             <div class="flex items-center gap-2">
               <Gauge class="h-5 w-5 text-muted-foreground" />
               <span class="text-2xl font-bold tabular-nums">{Math.round(report.score)}</span>
-              <Badge variant="outline" class="ml-auto text-xs">{scoreBadgeLabel}</Badge>
+              <Badge variant="outline" class="ml-auto">{scoreBadgeLabel}</Badge>
             </div>
           </CardContent>
         </Card>

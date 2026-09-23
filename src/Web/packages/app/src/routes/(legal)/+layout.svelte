@@ -32,7 +32,7 @@
   <!-- Footer -->
   <footer class="border-t border-border/40 bg-muted/30">
     <div class="container mx-auto px-4 py-6 flex flex-col md:flex-row justify-between items-center gap-4">
-      <Button variant="ghost" href="/auth/login" class="gap-2">
+      <Button variant="ghost" href="/auth/login">
         <ArrowLeft class="w-4 h-4" />
         Back to Login
       </Button>

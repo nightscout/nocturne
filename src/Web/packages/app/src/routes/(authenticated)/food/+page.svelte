@@ -52,7 +52,7 @@
   </div>
 
   <!-- Main card -->
-  <div class="overflow-hidden rounded-[14px] border border-border bg-card">
+  <div class="overflow-hidden rounded-xl border border-border bg-card">
     <!-- Toolbar -->
     <div class="flex flex-wrap items-center gap-2.5 border-b border-border bg-card px-4 py-3.5">
       <div data-testid="food-search" class="flex h-[38px] min-w-[180px] flex-1 items-center gap-2 rounded-lg border border-border bg-white/[0.04] px-2.5 text-[13px] focus-within:border-ring focus-within:bg-white/[0.07]">
@@ -83,7 +83,7 @@
       <Separator orientation="vertical" class="h-5" />
 
       <Select.Root type="single" bind:value={state.sort}>
-        <Select.Trigger data-testid="food-sort" class="h-8 rounded-lg border border-border bg-white/4 px-2.5 text-xs">
+        <Select.Trigger data-testid="food-sort" class="h-8 rounded-lg border-border bg-white/4 px-2.5 text-xs">
           {state.sort === 'name' ? 'Sort: A → Z' : state.sort === 'carbs' ? 'Sort: Carbs (high)' : 'Sort: Recently added'}
         </Select.Trigger>
         <Select.Content>

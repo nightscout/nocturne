@@ -131,7 +131,7 @@
   <Label>Insulin</Label>
   {#if form.insulinType && !form.patientInsulinId}
     <div class="mb-1.5">
-      <Badge variant="secondary" class="text-xs">
+      <Badge variant="secondary">
         {form.insulinType} (unlinked)
       </Badge>
     </div>
@@ -172,7 +172,7 @@
 <div class="flex gap-6">
   <div class="flex items-center gap-2">
     <Checkbox id="automatic" bind:checked={form.automatic} />
-    <Label for="automatic" class="text-sm font-normal cursor-pointer">
+    <Label for="automatic" class="font-normal cursor-pointer">
       Automatic
     </Label>
   </div>
@@ -183,7 +183,7 @@
     />
     <Label
       for="isBasalInsulin"
-      class="text-sm font-normal cursor-pointer"
+      class="font-normal cursor-pointer"
     >
       Basal Insulin
     </Label>

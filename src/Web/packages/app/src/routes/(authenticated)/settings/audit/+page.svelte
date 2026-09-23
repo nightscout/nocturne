@@ -265,7 +265,7 @@
           {#if mHasDateFilter}
             <div class="mt-4 flex flex-wrap items-center gap-2 pt-4 border-t text-sm">
               <span class="text-muted-foreground">Date range:</span>
-              <Badge variant="outline" class="gap-1">
+              <Badge variant="outline">
                 {mFrom} to {mTo}
                 <button
                   onclick={resetMutationDateFilter}
@@ -352,7 +352,7 @@
             {#if rHasDateFilter}
               <div class="mt-4 flex flex-wrap items-center gap-2 pt-4 border-t text-sm">
                 <span class="text-muted-foreground">Date range:</span>
-                <Badge variant="outline" class="gap-1">
+                <Badge variant="outline">
                   {rFrom} to {rTo}
                   <button
                     onclick={resetReadDateFilter}

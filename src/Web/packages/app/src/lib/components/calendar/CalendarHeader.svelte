@@ -67,7 +67,7 @@
         value={viewMode}
         onValueChange={(value: string) =>
           value && setViewMode(value as ViewMode)}
-        class="border rounded-md"
+        class="border"
       >
         <ToggleGroup.Item value="tir" class="text-xs px-3">
           TIR

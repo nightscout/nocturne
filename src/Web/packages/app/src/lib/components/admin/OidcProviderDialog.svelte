@@ -402,7 +402,6 @@
           variant="outline"
           onclick={testProviderConnection}
           disabled={testingProvider || !providerIssuerUrl || !providerClientId}
-          class="gap-2"
         >
           {#if testingProvider}
             <Loader2 class="h-4 w-4 animate-spin" />
@@ -445,7 +444,7 @@
       <Button variant="outline" onclick={handleCancel}>
         Cancel
       </Button>
-      <Button onclick={handleSave} disabled={providerSaving} class="gap-2">
+      <Button onclick={handleSave} disabled={providerSaving}>
         {#if providerSaving}
           <Loader2 class="h-4 w-4 animate-spin" />
         {/if}

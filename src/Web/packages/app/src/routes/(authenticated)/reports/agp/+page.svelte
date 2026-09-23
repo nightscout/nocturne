@@ -71,7 +71,6 @@
         <Button
           variant="outline"
           size="sm"
-          class="gap-2"
           onclick={() => window.print()}
         >
           <Printer class="w-4 h-4" />
@@ -81,7 +80,6 @@
           href="/reports/executive-summary"
           variant="outline"
           size="sm"
-          class="gap-2"
         >
           Summary
           <ArrowRight class="w-4 h-4" />
@@ -298,7 +296,7 @@
   <Separator />
 
   <!-- Clinical Context Footer -->
-  <Card class="border bg-muted/30">
+  <Card class="bg-muted/30">
     <CardContent class="pt-6">
       <div class="grid grid-cols-1 @3xl:grid-cols-3 gap-6 text-sm">
         <div>

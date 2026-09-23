@@ -257,7 +257,7 @@
       {#if user.permissions.length > 0}
         <div class="flex flex-wrap gap-2">
           {#each user.permissions as permission}
-            <Badge variant="outline" class="text-xs font-mono">
+            <Badge variant="outline" class="font-mono">
               {permission}
             </Badge>
           {/each}

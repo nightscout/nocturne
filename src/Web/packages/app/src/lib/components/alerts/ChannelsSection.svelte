@@ -166,7 +166,7 @@
               <Input
                 id="channel-dest-{i}"
                 type="text"
-                class="h-8 text-sm"
+                class="h-8"
                 placeholder={opt.destinationPlaceholder}
                 aria-invalid={error != null}
                 aria-describedby={error != null
@@ -200,7 +200,7 @@
                   id="channel-secret-{i}"
                   type="password"
                   autocomplete="off"
-                  class="h-8 text-sm"
+                  class="h-8"
                   placeholder={ch.hasSecret ? "Saved — type to replace" : "Shared with your receiver"}
                   aria-describedby="channel-secret-helper-{i}"
                   value={ch.secret ?? ""}
@@ -237,7 +237,7 @@
             <Input
               id="channel-label-{i}"
               type="text"
-              class="h-8 text-sm"
+              class="h-8"
               placeholder="Family channel, work phone…"
               value={ch.destinationLabel ?? ""}
               oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
@@ -283,7 +283,7 @@
                 {...props}
                 type="button"
                 variant="ghost"
-                class="flex h-auto w-full items-start justify-start gap-2 rounded px-2 py-1.5 text-left font-normal hover:bg-muted"
+                class="flex h-auto w-full items-start justify-start rounded px-2 py-1.5 text-left font-normal hover:bg-muted"
                 disabled={pending || unavailable}
                 title={linked
                   ? undefined

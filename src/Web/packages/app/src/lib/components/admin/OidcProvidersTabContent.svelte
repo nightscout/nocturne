@@ -54,7 +54,7 @@
             Configure OpenID Connect providers for single sign-on.
           </CardDescription>
         </div>
-        <Button onclick={onAdd} class="gap-2">
+        <Button onclick={onAdd}>
           <Plus class="h-4 w-4" />
           Add Provider
         </Button>

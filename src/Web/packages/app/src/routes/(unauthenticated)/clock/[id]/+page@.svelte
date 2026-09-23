@@ -133,7 +133,7 @@
     <Button
       variant="ghost"
       size="sm"
-      class="gap-2 text-white/80 hover:text-white"
+      class="text-white/80 hover:text-white"
       onclick={() => goto("/clock")}
     >
       <ArrowLeft class="size-4" />
@@ -148,7 +148,7 @@
       <Button
         variant="ghost"
         size="sm"
-        class="gap-2 text-white/80 hover:text-white"
+        class="text-white/80 hover:text-white"
         onclick={() => goto(`/clock/config/${id}`)}
       >
         <Settings class="size-4" />

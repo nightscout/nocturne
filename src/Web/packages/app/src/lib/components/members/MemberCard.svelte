@@ -122,12 +122,12 @@
             {member.name ?? "Unknown"}
           </span>
           {#each member.roles ?? [] as role (role.slug)}
-            <Badge variant="secondary" class="text-xs">
+            <Badge variant="secondary">
               {role.name ?? role.slug ?? "Unknown"}
             </Badge>
           {/each}
           {#if member.directPermissions?.length}
-            <Badge variant="outline" class="text-xs">
+            <Badge variant="outline">
               {member.directPermissions.length} direct permission{member
                 .directPermissions.length !== 1
                 ? "s"

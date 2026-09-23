@@ -311,9 +311,9 @@
           <div class="flex flex-wrap items-center gap-2">
             <Label>{meta.label}</Label>
             {#if hasUnsavedChanges(propName)}
-              <Badge variant="default" class="text-xs">Unsaved</Badge>
+              <Badge variant="default">Unsaved</Badge>
             {:else if hasUserOverride(propName)}
-              <Badge variant="secondary" class="text-xs">Modified</Badge>
+              <Badge variant="secondary">Modified</Badge>
               <Button
                 variant="ghost"
                 size="sm"
@@ -324,7 +324,7 @@
                 <RotateCcw class="h-3 w-3" />
               </Button>
             {:else if hasEnvOverride(propName)}
-              <Badge variant="outline" class="text-xs">From Env</Badge>
+              <Badge variant="outline">From Env</Badge>
             {/if}
           </div>
           {#if meta.description}
@@ -346,9 +346,9 @@
       <div class="flex flex-wrap items-center gap-2">
         <Label>{meta.label}</Label>
         {#if hasUnsavedChanges(propName)}
-          <Badge variant="default" class="text-xs">Unsaved</Badge>
+          <Badge variant="default">Unsaved</Badge>
         {:else if hasUserOverride(propName)}
-          <Badge variant="secondary" class="text-xs">Modified</Badge>
+          <Badge variant="secondary">Modified</Badge>
           <Button
             variant="ghost"
             size="sm"
@@ -359,7 +359,7 @@
             <RotateCcw class="h-3 w-3" />
           </Button>
         {:else if hasEnvOverride(propName)}
-          <Badge variant="outline" class="text-xs">From Env</Badge>
+          <Badge variant="outline">From Env</Badge>
         {/if}
       </div>
       <Select
@@ -385,9 +385,9 @@
       <div class="flex flex-wrap items-center gap-2">
         <Label>{meta.label}</Label>
         {#if hasUnsavedChanges(propName)}
-          <Badge variant="default" class="text-xs">Unsaved</Badge>
+          <Badge variant="default">Unsaved</Badge>
         {:else if hasUserOverride(propName)}
-          <Badge variant="secondary" class="text-xs">Modified</Badge>
+          <Badge variant="secondary">Modified</Badge>
           <Button
             variant="ghost"
             size="sm"
@@ -398,7 +398,7 @@
             <RotateCcw class="h-3 w-3" />
           </Button>
         {:else if hasEnvOverride(propName)}
-          <Badge variant="outline" class="text-xs">From Env</Badge>
+          <Badge variant="outline">From Env</Badge>
         {/if}
       </div>
       <Input
@@ -437,9 +437,9 @@
       <div class="flex flex-wrap items-center gap-2">
         <Label>{meta.label}</Label>
         {#if hasUnsavedChanges(propName)}
-          <Badge variant="default" class="text-xs">Unsaved</Badge>
+          <Badge variant="default">Unsaved</Badge>
         {:else if hasUserOverride(propName)}
-          <Badge variant="secondary" class="text-xs">Modified</Badge>
+          <Badge variant="secondary">Modified</Badge>
           <Button
             variant="ghost"
             size="sm"
@@ -450,7 +450,7 @@
             <RotateCcw class="h-3 w-3" />
           </Button>
         {:else if hasEnvOverride(propName)}
-          <Badge variant="outline" class="text-xs">From Env</Badge>
+          <Badge variant="outline">From Env</Badge>
         {/if}
       </div>
       <Input
@@ -500,7 +500,7 @@
             <div class="flex items-center justify-between">
               <CardTitle class="flex items-center gap-2">
                 {advancedGroup.name}
-                <Badge variant="secondary" class="text-xs font-normal">
+                <Badge variant="secondary" class="font-normal">
                   {advancedGroup.properties.length} settings
                 </Badge>
               </CardTitle>
@@ -540,9 +540,9 @@
           Sensitive credentials are stored encrypted and never displayed after
           saving.
           {#if hasSecrets}
-            <Badge variant="outline" class="ml-2 text-xs">Configured</Badge>
+            <Badge variant="outline" class="ml-2">Configured</Badge>
           {:else}
-            <Badge variant="destructive" class="ml-2 text-xs">
+            <Badge variant="destructive" class="ml-2">
               Not configured
             </Badge>
           {/if}

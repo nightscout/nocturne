@@ -229,7 +229,7 @@
               <div class="flex items-center gap-2">
                 <span class="font-medium">{link.name}</span>
                 {#if link.badge}
-                  <Badge variant="secondary" class="text-xs">
+                  <Badge variant="secondary">
                     {link.badge}
                   </Badge>
                 {/if}
@@ -302,7 +302,7 @@
           target="_blank"
           rel="noopener noreferrer"
         >
-          <Button variant="outline" class="gap-2">
+          <Button variant="outline">
             <Users class="h-4 w-4" />
             Get Help on Discord
             <ExternalLink class="h-3 w-3" />
@@ -331,7 +331,6 @@
         </div>
         <Button
           variant="outline"
-          class="gap-2"
           onclick={resetTutorials}
           disabled={resettingTutorials}
         >
@@ -392,7 +391,7 @@
       </div>
 
       <div class="flex flex-wrap gap-2">
-        <Button variant="outline" class="gap-2" onclick={copyLogs}>
+        <Button variant="outline" onclick={copyLogs}>
           {#if logsCopied}
             <CheckCircle class="h-4 w-4 text-green-500" />
             Copied!
@@ -401,7 +400,7 @@
             Copy to Clipboard
           {/if}
         </Button>
-        <Button variant="outline" class="gap-2" onclick={downloadLogs}>
+        <Button variant="outline" onclick={downloadLogs}>
           <Download class="h-4 w-4" />
           Download Logs
         </Button>
@@ -488,7 +487,7 @@
           target="_blank"
           rel="noopener noreferrer"
         >
-          <Button variant="ghost" size="sm" class="gap-2">
+          <Button variant="ghost" size="sm">
             <GithubIcon class="h-4 w-4" />
             Star on GitHub
           </Button>
@@ -498,7 +497,7 @@
           target="_blank"
           rel="noopener noreferrer"
         >
-          <Button variant="ghost" size="sm" class="gap-2">
+          <Button variant="ghost" size="sm">
             <Heart class="h-4 w-4" />
             Donate
           </Button>

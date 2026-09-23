@@ -79,7 +79,7 @@
               }}
             >
               <div class="flex items-center gap-2 @md:gap-3">
-                <Badge variant="outline" class="text-xs @md:text-sm {category.colorClass}">
+                <Badge variant="outline" class="@md:text-sm {category.colorClass}">
                   {category.name}
                 </Badge>
                 <div>

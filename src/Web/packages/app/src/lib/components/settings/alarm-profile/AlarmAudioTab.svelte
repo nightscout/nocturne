@@ -206,7 +206,7 @@
           class="grid gap-4 @sm:grid-cols-3 p-4 bg-muted/50 rounded-lg"
         >
           <div class="space-y-2">
-            <Label class="text-sm">Start Volume</Label>
+            <Label>Start Volume</Label>
             <div class="flex items-center gap-2">
               <Input
                 type="number"
@@ -219,7 +219,7 @@
             </div>
           </div>
           <div class="space-y-2">
-            <Label class="text-sm">Max Volume</Label>
+            <Label>Max Volume</Label>
             <div class="flex items-center gap-2">
               <Input
                 type="number"
@@ -232,7 +232,7 @@
             </div>
           </div>
           <div class="space-y-2">
-            <Label class="text-sm">Ramp Duration</Label>
+            <Label>Ramp Duration</Label>
             <div class="flex items-center gap-2">
               <Input
                 type="number"

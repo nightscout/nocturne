@@ -113,7 +113,7 @@
         variant="outline"
         size="sm"
         onclick={onReset}
-        class="w-full gap-2"
+        class="w-full"
       >
         <RotateCcw class="size-3" />
         Reset to default

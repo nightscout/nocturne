@@ -387,7 +387,7 @@
           </p>
           <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external absolute GitHub issue URL -->
           <a href={issueUrl} target="_blank" rel="noopener noreferrer">
-            <Button variant="outline" class="gap-2">
+            <Button variant="outline">
               <ExternalLink class="h-4 w-4" />
               View on GitHub
             </Button>
@@ -594,7 +594,7 @@
 
             <!-- Debug Info Toggles -->
             <div class="space-y-3">
-              <Label class="text-sm font-medium">Diagnostic Info (included automatically)</Label>
+              <Label>Diagnostic Info (included automatically)</Label>
               <p class="text-xs text-muted-foreground">
                 Browser, screen size, route, and locale are always included. Toggle
                 additional info below:
@@ -608,7 +608,7 @@
               <div class="space-y-3">
                 <div class="flex items-center justify-between">
                   <div class="space-y-0.5">
-                    <Label class="text-sm">Tenant slug</Label>
+                    <Label>Tenant slug</Label>
                     <p class="text-xs text-muted-foreground">
                       Your instance identifier
                     </p>
@@ -618,7 +618,7 @@
 
                 <div class="flex items-center justify-between">
                   <div class="space-y-0.5">
-                    <Label class="text-sm">CGM source</Label>
+                    <Label>CGM source</Label>
                     <p class="text-xs text-muted-foreground">
                       Your connector type
                     </p>
@@ -628,7 +628,7 @@
 
                 <div class="flex items-center justify-between">
                   <div class="space-y-0.5">
-                    <Label class="text-sm">Recent errors</Label>
+                    <Label>Recent errors</Label>
                     <p class="text-xs text-muted-foreground">
                       {recentFailureCount === 0
                         ? "No failed requests recorded this session"
@@ -640,7 +640,7 @@
 
                 <div class="flex items-center justify-between">
                   <div class="space-y-0.5">
-                    <Label class="text-sm">Settings</Label>
+                    <Label>Settings</Label>
                     <p class="text-xs text-muted-foreground">
                       {includeSettings && !collectedSettings
                         ? "Collecting…"

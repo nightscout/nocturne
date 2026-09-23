@@ -45,7 +45,7 @@
   />
   <Label
     for="isAnnouncement"
-    class="text-sm font-normal cursor-pointer"
+    class="font-normal cursor-pointer"
   >
     Announcement
   </Label>

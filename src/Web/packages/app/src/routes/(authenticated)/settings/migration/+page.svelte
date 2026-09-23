@@ -299,14 +299,14 @@
               <RadioGroup.Root bind:value={mode} class="flex gap-4">
                 <div class="flex items-center space-x-2">
                   <RadioGroup.Item value="Api" id="mode-api" />
-                  <Label for="mode-api" class="flex items-center gap-2">
+                  <Label for="mode-api" class="flex items-center">
                     <Globe class="h-4 w-4" />
                     Nightscout API
                   </Label>
                 </div>
                 <div class="flex items-center space-x-2">
                   <RadioGroup.Item value="MongoDb" id="mode-mongodb" />
-                  <Label for="mode-mongodb" class="flex items-center gap-2">
+                  <Label for="mode-mongodb" class="flex items-center">
                     <Database class="h-4 w-4" />
                     MongoDB (Advanced)
                   </Label>

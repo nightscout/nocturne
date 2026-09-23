@@ -80,7 +80,7 @@
           Create and manage your custom clock displays
         </p>
       </div>
-      <Button onclick={handleCreate} disabled={creating} class="gap-2">
+      <Button onclick={handleCreate} disabled={creating}>
         {#if creating}
           <Loader2 class="size-4 animate-spin" />
         {:else}
@@ -121,7 +121,7 @@
               Create your first custom clock face to display your glucose data
               exactly how you want it.
             </p>
-            <Button onclick={handleCreate} disabled={creating} class="gap-2">
+            <Button onclick={handleCreate} disabled={creating}>
               {#if creating}
                 <Loader2 class="size-4 animate-spin" />
               {:else}

@@ -43,7 +43,7 @@
                 : ""}
             </div>
           </div>
-          <Badge variant="outline" class="text-xs {category.colorClass}">
+          <Badge variant="outline" class="{category.colorClass}">
             {category.name}
           </Badge>
         </button>

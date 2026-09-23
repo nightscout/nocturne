@@ -202,7 +202,7 @@
               </h4>
               <div class="flex flex-wrap gap-1">
                 {#each roleFormPermissions as perm}
-                  <Badge variant="secondary" class="font-mono text-xs">
+                  <Badge variant="secondary" class="font-mono">
                     {perm}
                     {#if !editingRole?.isSystem}
                       <button

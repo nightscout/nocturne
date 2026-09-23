@@ -397,7 +397,7 @@
       >
         <div class="flex flex-1 flex-col gap-4 @lg:flex-row @lg:items-end">
           <div class="flex-1 max-w-sm">
-            <Label for="search" class="text-sm font-medium">Search</Label>
+            <Label for="search">Search</Label>
             <Input
               id="search"
               type="text"
@@ -450,7 +450,7 @@
           </span>
 
           {#if activeCategory !== "all"}
-            <Badge variant="secondary" class="gap-1">
+            <Badge variant="secondary">
               {ENTRY_CATEGORIES[activeCategory].name}
               <button
                 onclick={() => setCategory("all")}
@@ -462,7 +462,7 @@
           {/if}
 
           {#if searchQuery.trim()}
-            <Badge variant="outline" class="gap-1">
+            <Badge variant="outline">
               "{searchQuery}"
               <button
                 onclick={() => setSearch("")}

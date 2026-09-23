@@ -261,7 +261,7 @@
       {#if definitionId}
         <div class="flex items-center gap-2">
           <Checkbox id="startAnother" bind:checked={startAnother} />
-          <Label for="startAnother" class="text-sm font-normal cursor-pointer">
+          <Label for="startAnother" class="font-normal cursor-pointer">
             Start another {instanceName} after completion
           </Label>
         </div>

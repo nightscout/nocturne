@@ -443,7 +443,7 @@
 										</p>
 									</div>
 								</div>
-								<Badge variant={getConfidenceVariant(suggestion.confidence ?? 0)} class="text-xs">
+								<Badge variant={getConfidenceVariant(suggestion.confidence ?? 0)}>
 									{getConfidenceLabel(suggestion.confidence ?? 0)}
 								</Badge>
 							</div>

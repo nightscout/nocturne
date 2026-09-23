@@ -498,7 +498,7 @@
             {#each filteredTreatments as row}
               {@const style = getRowTypeStyle(row.rowType)}
               <Table.Row
-                class="cursor-pointer hover:bg-muted/50 transition-colors"
+                class="cursor-pointer"
                 onclick={() => handleTreatmentClick(row)}
               >
                 <Table.Cell class="font-medium">
