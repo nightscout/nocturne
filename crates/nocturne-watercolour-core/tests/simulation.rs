@@ -496,33 +496,48 @@ fn the_kick_carries_paint_the_way_the_brush_travelled() {
     );
 }
 
-/// A dab has no direction, only an outward push, so it must stay put.
+/// Mean distance of the sheet's water from the grid centre, weighted by depth.
+fn water_radius(grid: &SimulationGrid) -> f32 {
+    let c = (N as f32 - 1.0) / 2.0;
+    let (mut moment, mut total) = (0.0, 0.0);
+    for (i, &p) in grid.pressure.iter().enumerate() {
+        let x = (i % N as usize) as f32 - c;
+        let y = (i / N as usize) as f32 - c;
+        moment += p * (x * x + y * y).sqrt();
+        total += p;
+    }
+    moment / total.max(1e-9)
+}
+
+/// A dab has no direction, only an outward push, so it must stay put while
+/// its water moves out towards the rim. The wet boundary is hard, so the
+/// push shows in where the water sits, not in how many cells are wet; it
+/// fades within a few tens of ticks, so it is read early.
 #[test]
 fn a_dab_is_pushed_outward_but_not_along() {
     let params = SimParams::default();
+    let still = without_flow(&params);
     let dab = disc(0.08, 0.6, 0.9);
     let cell = 1.0 / N as f32;
+    let after = |p: &SimParams, ticks: u32| {
+        let (mut grid, coef) = fresh(Seed(9));
+        sim::apply(&mut grid, &dab, p, Seed(1));
+        run(&mut grid, &coef, p, ticks);
+        grid
+    };
 
-    let (mut grid, coef) = fresh(Seed(9));
-    sim::apply(&mut grid, &dab, &params, Seed(1));
-    run(&mut grid, &coef, &params, 30);
-    let (cx, cy) = pigment_centroid(&grid, 0);
-    let spread = wet_cell_count(&grid);
-
-    let still = without_flow(&params);
-    let (mut grid, coef) = fresh(Seed(9));
-    sim::apply(&mut grid, &dab, &still, Seed(1));
-    run(&mut grid, &coef, &still, 30);
-    let (sx, sy) = pigment_centroid(&grid, 0);
-    let unpushed = wet_cell_count(&grid);
-
+    let (cx, cy) = pigment_centroid(&after(&params, 30), 0);
+    let (sx, sy) = pigment_centroid(&after(&still, 30), 0);
     assert!(
         (cx - sx).abs() < cell && (cy - sy).abs() < cell,
         "a dab drifted to ({cx:.4}, {cy:.4}) from ({sx:.4}, {sy:.4})"
     );
+
+    let pushed = water_radius(&after(&params, 10));
+    let unpushed = water_radius(&after(&still, 10));
     assert!(
-        spread > unpushed,
-        "the landing water did not push outward: {spread} wet cells against {unpushed}"
+        pushed > unpushed * 1.005,
+        "the landing water did not push outward: mean water radius {pushed} against {unpushed}"
     );
 }
 

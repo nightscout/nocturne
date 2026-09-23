@@ -261,7 +261,7 @@ pub const LUMINOUS_GRAIN_STRENGTH: f32 = 0.7;
 /// on-white colour is paper plus pigment, so over a dark ground it reads as
 /// a pale opaque slab; pushing its chroma makes it read as coloured light.
 /// Mirrored in `render.wgsl`.
-pub const LUMINOUS_CHROMA_GAIN: f32 = 1.45;
+pub const LUMINOUS_CHROMA_GAIN: f32 = 1.2;
 
 /// How much a light colour raises the luminous alpha: a pale colour at
 /// partial alpha over a dark ground reads as grey or olive, not as light, so

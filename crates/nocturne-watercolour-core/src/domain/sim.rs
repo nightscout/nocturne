@@ -171,7 +171,7 @@ impl Default for SimParams {
             settle_base: 0.02,
             dry_deposition: 6.0,
             settle_curve: 3.0,
-            capillary_absorb: 0.003,
+            capillary_absorb: 0.006,
             capillary_epsilon: 0.45,
             capillary_sigma: 0.6,
             capillary_rate: 0.25,
