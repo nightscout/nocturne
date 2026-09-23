@@ -1,6 +1,7 @@
 import { isInternalOnlyApiPath } from "$lib/server/internal-only-api-paths";
 import { type Handle } from "@sveltejs/kit";
 import { randomUUID } from "$lib/utils";
+import { isRecord, nonEmptyString } from "$lib/utils/type-guards";
 import type { HandleServerError } from "@sveltejs/kit";
 import { env } from "$env/dynamic/private";
 import { env as publicEnv } from "$env/dynamic/public";
@@ -235,16 +236,18 @@ const readinessHandle: Handle = async ({ event, resolve }) => {
     }
   } catch (error) {
     if (error && typeof error === "object" && "status" in error) {
-      let body: any = {};
+      let body: Record<string, unknown> = {};
       try {
-        body = JSON.parse((error as any).response ?? "{}");
+        const response = "response" in error ? error.response : undefined;
+        const parsed: unknown = JSON.parse(typeof response === "string" ? response : "{}");
+        if (isRecord(parsed)) body = parsed;
       } catch {
         // Couldn't parse — leave recoveryMode unset, which reads as "not ready"
       }
 
       const redirect = statusProbeRedirect({
         isShareHost: event.locals.isShareHost,
-        apiStatus: (error as any).status,
+        apiStatus: error.status,
         recoveryMode: body.recoveryMode === true,
         errorCode: typeof body.error === "string" ? body.error : undefined,
         marketingUrl: env.MARKETING_URL,
@@ -381,13 +384,15 @@ export const handleError: HandleServerError = async ({ error, event }) => {
     message = error.message;
 
     // Check for ApiException-style errors with response property
-    const apiError = error as Error & { response?: string; status?: number };
-    if (apiError.response) {
+    const response =
+      "response" in error && typeof error.response === "string" ? error.response : undefined;
+    if (response) {
       try {
-        const parsed = JSON.parse(apiError.response);
-        details = parsed.error || parsed.message || apiError.response;
+        const parsed: unknown = JSON.parse(response);
+        const fields = isRecord(parsed) ? parsed : {};
+        details = nonEmptyString(fields.error) ?? nonEmptyString(fields.message) ?? response;
       } catch {
-        details = apiError.response;
+        details = response;
       }
     }
   } else if (typeof error === "string") {

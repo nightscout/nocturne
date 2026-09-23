@@ -5,6 +5,17 @@ import {
   getApiBaseUrl,
 } from "$lib/server/api-client-factory";
 import { getHashedInstanceKey } from "$lib/server/instance-key";
+import { ChannelType } from "$api-clients";
+import { errorStatus } from "$lib/forms/submit-error";
+
+const CHANNEL_TYPES: readonly ChannelType[] = Object.values(ChannelType);
+
+/** The bot names channels by their wire strings; one this API does not know
+ *  cannot match a delivery, so it is dropped rather than sent. */
+function toChannelType(value: string): ChannelType[] {
+  const known = CHANNEL_TYPES.find((type) => type === value);
+  return known ? [known] : [];
+}
 
 /**
  * Adapts a NocturneApiClient to the BotApiClient interface used by @nocturne/bot.
@@ -41,7 +52,7 @@ export function buildBotApiClient(api: ApiClient): BotApiClient {
       markFailed: (deliveryId, request, signal) =>
         api.alerts.markFailed(deliveryId, request, signal),
       getPendingDeliveries: (channelType, signal) =>
-        api.alerts.getPendingDeliveries(channelType as import('$api-clients').ChannelType[] | undefined, signal),
+        api.alerts.getPendingDeliveries(channelType?.flatMap(toChannelType), signal),
     },
     system: {
       heartbeat: (request, signal) => api.system.heartbeat(request, signal),
@@ -59,12 +70,7 @@ export function buildBotApiClient(api: ApiClient): BotApiClient {
         } catch (err: unknown) {
           // 404 means "no entries" — return null so the bot can distinguish
           // "not linked" from "error".
-          if (
-            err &&
-            typeof err === "object" &&
-            "status" in err &&
-            (err as { status: number }).status === 404
-          ) {
+          if (errorStatus(err) === 404) {
             return null;
           }
           throw err;

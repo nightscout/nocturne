@@ -114,7 +114,7 @@ declare global {
 
 		// Main PageData interface that allows additional properties for reports
 		interface PageData extends Partial<BasePageData> {
-			[key: string]: any;
+			[key: string]: unknown;
 		}
 		// Shallow-routing state. Dialogs key their browser-history entries here
 		// (see useDialogHistory) so the back button can dismiss them.
