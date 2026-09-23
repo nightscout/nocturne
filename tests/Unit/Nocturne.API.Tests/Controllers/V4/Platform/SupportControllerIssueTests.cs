@@ -23,7 +23,7 @@ namespace Nocturne.API.Tests.Controllers.V4.Platform;
 /// the relay accepts is filed, and its screenshots committed, on the operator's PAT.
 /// </summary>
 [Trait("Category", "Unit")]
-public class SupportControllerIssueTests
+public class SupportControllerIssueTests : IDisposable
 {
     private const string Pat = "ghp_test123";
     private const string RelayUrl = "https://relay.example/api/v4/support/relay";
@@ -31,6 +31,7 @@ public class SupportControllerIssueTests
     private static readonly byte[] PngSignature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
 
     private readonly List<(HttpRequestMessage Message, string Body)> _sent = [];
+    private readonly List<MemoryStream> _imageStreams = [];
     private Func<HttpRequestMessage, HttpResponseMessage> _respond = DefaultResponse;
 
     private static HttpResponseMessage DefaultResponse(HttpRequestMessage request)
@@ -97,7 +98,7 @@ public class SupportControllerIssueTests
             form.Template, form.Title, form.Description, "1. Open", "Works", "Blank",
             null, null, form.DiagnosticInfo, form.Images, CancellationToken.None);
 
-    private static IFormFile Image(
+    private IFormFile Image(
         string contentType = "image/png", long size = 64, byte[]? header = null, string name = "shot.png")
     {
         header ??= contentType switch
@@ -110,15 +111,24 @@ public class SupportControllerIssueTests
         var bytes = new byte[Math.Max(size, header.Length)];
         header.CopyTo(bytes, 0);
 
-        return new FormFile(new MemoryStream(bytes), 0, bytes.Length, "images", name)
+        var stream = new MemoryStream(bytes);
+        _imageStreams.Add(stream);
+
+        return new FormFile(stream, 0, bytes.Length, "images", name)
         {
             Headers = new HeaderDictionary(),
             ContentType = contentType,
         };
     }
 
-    private static List<IFormFile> Images(int count, long size = 64) =>
+    private List<IFormFile> Images(int count, long size = 64) =>
         [.. Enumerable.Range(0, count).Select(i => Image(size: size, name: $"shot{i}.png"))];
+
+    public void Dispose()
+    {
+        foreach (var stream in _imageStreams)
+            stream.Dispose();
+    }
 
     private static int StatusOf(ActionResult<CreateIssueResponse> result) =>
         result.Result.Should().BeAssignableTo<ObjectResult>().Subject.StatusCode!.Value;
