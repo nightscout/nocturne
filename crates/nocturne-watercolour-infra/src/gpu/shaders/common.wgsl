@@ -55,6 +55,10 @@ struct Params {
     swirl_frequency: f32,
     swirl_drift: f32,
     swirl_depth: f32,
+    swirl_radius_x: u32,
+    swirl_radius_y: u32,
+    _pad2: u32,
+    _pad3: u32,
 };
 
 struct Stroke {

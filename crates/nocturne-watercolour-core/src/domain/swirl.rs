@@ -1,6 +1,6 @@
-//! Sub-grid convection in standing water: the curl of a drifting two-octave
-//! value-noise stream function. The curl of any scalar field is divergence
-//! free, so it stirs suspended pigment into tendrils without piling it up.
+//! Sub-grid convection in standing water: the curl of a drifting value-noise
+//! stream function. The curl of any scalar field is divergence free, so it
+//! stirs suspended pigment into tendrils without piling it up.
 //!
 //! Everything here is integer hashing and polynomial arithmetic in `f32`, a
 //! pure function of (cell, tick, seed), so the WGSL mirror in `flow.wgsl`
@@ -8,12 +8,25 @@
 
 use super::scene::isotropic_scale;
 
-/// Second-octave lattice frequency relative to the first. With half the
-/// amplitude its stream-function gradient weighs the same as the first's.
-pub const SWIRL_OCTAVE_GAIN: f32 = 2.0;
-/// Second-octave drift relative to the first, along the other axis, so the
-/// sum evolves instead of translating rigidly.
-pub const SWIRL_OCTAVE_DRIFT: f32 = 1.3;
+/// Width of the taper that brings the stream function to zero at the wet
+/// edge, as a share of one noise lattice cell. The edge current along the
+/// taper scales with the stream function's drop across it, so a taper much
+/// narrower than an eddy would run the edge several times faster than the
+/// interior; at half a lattice cell the two are comparable.
+pub const SWIRL_TAPER: f32 = 0.5;
+
+/// Drift along `y` per unit along `x`: an off-lattice direction, so the
+/// field never repeats with the lattice period as it slides.
+pub const SWIRL_DRIFT_SKEW: f32 = 0.618;
+
+/// Box-blur radii `(x, y)`, in cells, of the gate field the taper reads: one
+/// [`SWIRL_TAPER`] width in the isotropic metric on each axis, at least one
+/// cell. Computed once on the host so both backends use the same integers.
+pub fn taper_radii(size: u32, aspect: f32, frequency: f32) -> (u32, u32) {
+    let (ax, ay) = isotropic_scale(aspect);
+    let cells = |a: f32| ((size as f32 / a * SWIRL_TAPER / frequency.max(1e-3)) as u32).max(1);
+    (cells(ax), cells(ay))
+}
 
 /// Lattice value in `[0, 1)` for integer point `(x, y)`; a lowbias32-style
 /// integer mix, identical in WGSL `u32` arithmetic.
@@ -48,7 +61,7 @@ pub fn value_noise(qx: f32, qy: f32, seed: u32) -> f32 {
     a + (b - a) * sx + (c - a) * sy + (a - b - c + d) * sx * sy
 }
 
-/// Stream function at cell corner `(cx, cy)` (corner `(x, y)` is the top-left
+/// Centred stream function at cell corner `(cx, cy)` (corner `(x, y)` is the top-left
 /// of cell `(x, y)`), scaled so a face's flux is the difference of its two
 /// corners. `speed` is the flux, in short-axis cells per tick, for a unit
 /// noise gradient; `frequency` is lattice cells per isotropic unit, so eddies
@@ -70,14 +83,9 @@ pub fn stream(
     let px = cx as f32 / size as f32 * ax * frequency;
     let py = cy as f32 / size as f32 * ay * frequency;
     let t = tick as f32 * drift;
-    let n1 = value_noise(px, py + t, seed);
-    let n2 = value_noise(
-        px * SWIRL_OCTAVE_GAIN - t * SWIRL_OCTAVE_DRIFT,
-        py * SWIRL_OCTAVE_GAIN,
-        seed.wrapping_add(1),
-    );
+    let n = value_noise(px + t, py + t * SWIRL_DRIFT_SKEW, seed);
     let scale = speed * size as f32 / (frequency * ax * ay);
-    scale * (n1 + 0.5 * n2)
+    scale * (n - 0.5)
 }
 
 /// Face fluxes of one cell from its four corner stream values, top-left,

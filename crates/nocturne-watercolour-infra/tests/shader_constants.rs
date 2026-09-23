@@ -43,10 +43,9 @@ fn rust_value(name: &str) -> Option<f64> {
         "DRAIN_MIN" => sim::DRAIN_MIN as f64,
         "DRAIN_MAX" => sim::DRAIN_MAX as f64,
         "STROKE_WATER_PAPER_GAIN" => paint::STROKE_WATER_PAPER_GAIN as f64,
-        "SWIRL_OCTAVE_GAIN" => swirl::SWIRL_OCTAVE_GAIN as f64,
-        "SWIRL_OCTAVE_DRIFT" => swirl::SWIRL_OCTAVE_DRIFT as f64,
+        "SWIRL_DRIFT_SKEW" => swirl::SWIRL_DRIFT_SKEW as f64,
         "SWIRL_FACE_LIMIT" => sim::SWIRL_FACE_LIMIT as f64,
-        "SWIRL_EDGE_WET" => sim::SWIRL_EDGE_WET as f64,
+        "SWIRL_SUBSTEPS" => sim::SWIRL_SUBSTEPS as f64,
         _ => return None,
     };
     Some(v)

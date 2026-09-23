@@ -1,6 +1,6 @@
 // Rules: Curtis FlowOutward and MovePigment (sim::pass_blur_h, pass_blur_v,
-// pass_advect), then the standing-water swirl (sim::pass_swirl, domain::swirl)
-// and the tick clock. Separable box blur of the wet mask, then one gather pass
+// pass_advect), then the standing-water swirl (sim::pass_swirl_gate_h/v,
+// pass_swirl, domain::swirl) and the tick clock. Separable box blur of the wet mask, then one gather pass
 // that advects water and suspended pigment upwind, diffuses them between wet
 // neighbours in proportion to depth, and removes water near the wet
 // boundary (edge darkening, scaled by local depth and paper height).
@@ -98,12 +98,11 @@ fn advect(@builtin(global_invocation_id) gid: vec3<u32>) {
     scratch[so_p() + i] = clamp(np, 0.0, P.max_water_depth);
 }
 
-// Mirrors swirl::SWIRL_OCTAVE_GAIN, swirl::SWIRL_OCTAVE_DRIFT,
-// sim::SWIRL_FACE_LIMIT and sim::SWIRL_EDGE_WET.
-const SWIRL_OCTAVE_GAIN: f32 = 2.0;
-const SWIRL_OCTAVE_DRIFT: f32 = 1.3;
+// Mirrors swirl::SWIRL_DRIFT_SKEW, sim::SWIRL_FACE_LIMIT and
+// sim::SWIRL_SUBSTEPS.
+const SWIRL_DRIFT_SKEW: f32 = 0.618;
 const SWIRL_FACE_LIMIT: f32 = 0.25;
-const SWIRL_EDGE_WET: f32 = 0.5;
+const SWIRL_SUBSTEPS: u32 = 5u;
 
 fn swirl_lattice(x: i32, y: i32, seed: u32) -> f32 {
     var h = (bitcast<u32>(x) * 0x8DA6B343u) ^ (bitcast<u32>(y) * 0xD8163841u) ^ (seed * 0xCB1AB31Fu);
@@ -140,55 +139,90 @@ fn swirl_stream(cx: u32, cy: u32) -> f32 {
     let px = f32(cx) / size * ax * P.swirl_frequency;
     let py = f32(cy) / size * ay * P.swirl_frequency;
     let t = state[o_tick()] * P.swirl_drift;
-    let n1 = swirl_value_noise(px, py + t, seed);
-    let n2 = swirl_value_noise(px * SWIRL_OCTAVE_GAIN - t * SWIRL_OCTAVE_DRIFT, py * SWIRL_OCTAVE_GAIN, seed + 1u);
-    let scale = P.swirl_speed * size / (P.swirl_frequency * ax * ay);
-    return scale * (n1 + 0.5 * n2);
+    let n = swirl_value_noise(px + t, py + t * SWIRL_DRIFT_SKEW, seed);
+    let scale = P.swirl_speed / f32(SWIRL_SUBSTEPS) * size / (P.swirl_frequency * ax * ay);
+    return scale * (n - 0.5);
 }
 
-fn swirl_gate(j: u32) -> f32 {
+// sim::pass_swirl_gate_h: the raw gate blurred along x, off-grid cells dry.
+@compute @workgroup_size(256)
+fn swirl_gate_h(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let i = gid.x;
+    if i >= P.n { return; }
+    let w = i32(P.width);
+    let r = i32(P.swirl_radius_x);
+    let inv = 1.0 / f32(2 * r + 1);
+    let x = i32(i) % w;
+    let row = i32(i) - x;
+    var sum = 0.0;
+    for (var dx = -r; dx <= r; dx++) {
+        let sx = x + dx;
+        if sx >= 0 && sx < w {
+            let j = u32(row + sx);
+            if wet(j) != 0.0 {
+                sum += smoothstep(P.wet_lo, P.swirl_depth, state[o_p() + j]);
+            }
+        }
+    }
+    scratch[so_div() + i] = sum * inv;
+}
+
+// sim::pass_swirl_gate_v.
+@compute @workgroup_size(256)
+fn swirl_gate_v(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let i = gid.x;
+    if i >= P.n { return; }
+    let w = i32(P.width);
+    let h = i32(P.height);
+    let r = i32(P.swirl_radius_y);
+    let inv = 1.0 / f32(2 * r + 1);
+    let x = i32(i) % w;
+    let y = i32(i) / w;
+    var sum = 0.0;
+    for (var dy = -r; dy <= r; dy++) {
+        let sy = y + dy;
+        if sy >= 0 && sy < h {
+            sum += scratch[so_div() + u32(sy * w + x)];
+        }
+    }
+    scratch[so_q() + i] = sum * inv;
+}
+
+fn swirl_taper(x: i32, y: i32) -> f32 {
+    if x < 0 || y < 0 || x >= i32(P.width) || y >= i32(P.height) {
+        return 0.0;
+    }
+    let j = u32(y) * P.width + u32(x);
     if wet(j) == 0.0 {
         return 0.0;
     }
-    let x = j % P.width;
-    let y = j / P.width;
-    let border = f32(min(min(x, y), min(P.width - 1u - x, P.height - 1u - y)));
-    let radius = f32(P.blur_radius);
-    let border_wet = min((border + radius + 1.0) / (2.0 * radius + 1.0), 1.0);
-    let interior = smoothstep(SWIRL_EDGE_WET, 1.0, min(scratch[so_blurred() + j], border_wet));
-    return interior * smoothstep(P.wet_lo, P.swirl_depth, state[o_p() + j]);
+    return smoothstep(0.5, 1.0, scratch[so_q() + j]);
 }
 
-// (left, right, up, down) face fluxes of cell i, as sim::swirl_faces.
-fn swirl_faces(i: u32) -> vec4<f32> {
-    let gate_i = swirl_gate(i);
-    if gate_i == 0.0 || P.swirl_speed <= 0.0 {
-        return vec4<f32>(0.0);
+fn swirl_corner(cx: u32, cy: u32) -> f32 {
+    let x = i32(cx);
+    let y = i32(cy);
+    let taper = min(min(swirl_taper(x - 1, y - 1), swirl_taper(x, y - 1)), min(swirl_taper(x - 1, y), swirl_taper(x, y)));
+    if taper == 0.0 {
+        return 0.0;
     }
-    let x = i % P.width;
-    let y = i / P.width;
-    let tl = swirl_stream(x, y);
-    let tr = swirl_stream(x + 1u, y);
-    let bl = swirl_stream(x, y + 1u);
-    let br = swirl_stream(x + 1u, y + 1u);
-    let flux = vec4<f32>(bl - tl, br - tr, -(tr - tl), -(br - bl));
-    let nb = neighbours(i);
-    var out = vec4<f32>(0.0);
-    for (var f = 0u; f < 4u; f++) {
-        let j = nb[f];
-        if j != i {
-            let gate = min(gate_i, swirl_gate(j));
-            out[f] = clamp(flux[f] * gate, -SWIRL_FACE_LIMIT, SWIRL_FACE_LIMIT);
-        }
-    }
-    return out;
+    return taper * swirl_stream(cx, cy);
 }
 
 @compute @workgroup_size(256)
 fn swirl(@builtin(global_invocation_id) gid: vec3<u32>) {
     let i = gid.x;
     if i >= P.n { return; }
-    let s = swirl_faces(i);
+    var s = vec4<f32>(0.0);
+    if P.swirl_speed > 0.0 && wet(i) != 0.0 {
+        let x = i % P.width;
+        let y = i / P.width;
+        let tl = swirl_corner(x, y);
+        let tr = swirl_corner(x + 1u, y);
+        let bl = swirl_corner(x, y + 1u);
+        let br = swirl_corner(x + 1u, y + 1u);
+        s = clamp(vec4<f32>(bl - tl, br - tr, -(tr - tl), -(br - bl)), vec4<f32>(-SWIRL_FACE_LIMIT), vec4<f32>(SWIRL_FACE_LIMIT));
+    }
     let nb = neighbours(i);
     let keep = 1.0 - (max(s.y, 0.0) + max(-s.x, 0.0) + max(s.w, 0.0) + max(-s.z, 0.0)) * P.dt;
     let in_l = max(s.x, 0.0) * P.dt;

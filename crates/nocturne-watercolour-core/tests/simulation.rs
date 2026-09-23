@@ -736,16 +736,6 @@ fn front_spread(field: &[f32], w: usize) -> f64 {
     (fronts.iter().map(|f| (f - mean).powi(2)).sum::<f64>() / fronts.len() as f64).sqrt()
 }
 
-fn field_centroid(field: &[f32], w: usize) -> (f64, f64) {
-    let (mut sx, mut sy, mut m) = (0.0f64, 0.0f64, 0.0f64);
-    for (i, &v) in field.iter().enumerate() {
-        sx += (i % w) as f64 * v as f64;
-        sy += (i / w) as f64 * v as f64;
-        m += v as f64;
-    }
-    (sx / m, sy / m)
-}
-
 #[test]
 fn standing_water_stirs_tendrils_without_moving_or_losing_pigment() {
     let on = SimParams::default();
@@ -761,21 +751,68 @@ fn standing_water_stirs_tendrils_without_moving_or_losing_pigment() {
     let loaded: f64 = start.iter().map(|&v| v as f64).sum();
     let kept: f64 = stirred.iter().map(|&v| v as f64).sum();
     let (e_on, e_off) = (front_spread(&stirred, w), front_spread(&still, w));
-    let (c_on, c_off) = (field_centroid(&stirred, w), field_centroid(&still, w));
-    eprintln!(
-        "loaded {loaded} kept {kept}; front spread on {e_on} off {e_off}; centroid on {c_on:?} off {c_off:?}"
-    );
+    eprintln!("loaded {loaded} kept {kept}; front spread on {e_on} off {e_off}");
     assert!(
         (kept - loaded).abs() < 1e-3 * loaded,
         "the swirl moves pigment, it does not make or lose it: {loaded} -> {kept}"
     );
     assert!(
-        e_on > 2.0 * e_off.max(1.0),
+        e_on > 3.0 * e_off.max(1.0),
         "stirring should finger the front: spread on {e_on} off {e_off} cells"
     );
-    let drift = ((c_on.0 - c_off.0).powi(2) + (c_on.1 - c_off.1).powi(2)).sqrt();
+}
+
+/// A uniformly loaded standing film against the grid's left border and a
+/// wet edge on its other three sides, with the water held still, no drain, no
+/// blooms and no exchange with the paper, so the swirl is the only thing that
+/// could make the suspended field uneven or move pigment across the edge.
+#[test]
+fn the_swirl_leaves_a_uniform_wash_uniform_up_to_its_edges() {
+    const S: u32 = 128;
+    let params = SimParams {
+        slope_gain: 0.0,
+        pressure_gain: 0.0,
+        deposition_rate: 0.0,
+        lift_rate: 0.0,
+        flow_outward_eta: 0.0,
+        ..SimParams::default()
+    };
+    let palette = Palette::moonlight();
+    let field = PaperField::generate(&Paper::cold_press(Seed(8)), S, S);
+    let mut grid = SimulationGrid::new(&field, palette.len()).with_swirl_seed(Seed(8));
+    let w = S as usize;
+    for y in w / 8..w - w / 8 {
+        for x in 0..w - w / 8 {
+            let i = y * w + x;
+            grid.wet[i] = 1.0;
+            grid.pressure[i] = 0.6;
+            grid.pigments_in_water[i] = 0.5;
+        }
+    }
+    sim::apply(&mut grid, &Operation::Dry { rate: 0.0 }, &params, Seed(8));
+    run(
+        &mut grid,
+        &PigmentCoefficients::from_palette(&palette),
+        &params,
+        240,
+    );
+    let inside = |i: usize| (w / 8..w - w / 8).contains(&(i / w)) && i % w < w - w / 8;
+    let total = |i: usize| grid.in_water(0, i);
+    let worst = (0..grid.cell_count())
+        .filter(|&i| inside(i))
+        .map(|i| (total(i) - 0.5).abs())
+        .fold(0.0f32, f32::max);
+    let escaped: f32 = (0..grid.cell_count())
+        .filter(|&i| !inside(i))
+        .map(total)
+        .sum();
+    eprintln!("worst cell off by {worst}, escaped {escaped}");
+    assert_eq!(
+        escaped, 0.0,
+        "the swirl carried pigment across the wet edge"
+    );
     assert!(
-        drift < 1.5,
-        "a divergence-free stir should not shift the wash: centroid moved {drift} cells"
+        worst < 1e-4,
+        "a divergence-free stir that carries nothing across the edge keeps a uniform wash uniform, worst cell off by {worst}"
     );
 }

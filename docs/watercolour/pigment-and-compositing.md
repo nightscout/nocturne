@@ -290,14 +290,16 @@ standing-water swirl is the exception: its eddies are sized in the isotropic
 metric.
 
 **Standing-water swirl.** Suspended pigment in a standing film is stirred by a
-slow, drifting curl-noise current (`sim::pass_swirl`), which is what marbles a
-wet-into-wet wash instead of only blurring it. The current is the curl of a
-two-octave value-noise stream function sampled at cell corners, so each face's
-flux is the difference of its two corners and every cell's fluxes cancel: it
-moves pigment without piling it up, and never moves water. Its strength fades
-with film depth (`swirl_depth`) and toward the wet boundary over the
-flow-outward blur window, so a thinning film and a silhouette's edge stay
-still.
+slow, drifting curl-noise current (`sim::pass_swirl`), which is what marbles
+pigment laid wet into wet instead of only blurring it. The current is the curl
+of a value-noise stream function sampled at cell corners: each face's flux is
+the difference of its two corners, so every cell's fluxes cancel and a uniform
+wash stays uniform. Before it is differenced the stream function is tapered to
+zero toward thin film (`swirl_depth`), the wet edge and the grid border, using
+a box blur of the depth gate about half an eddy wide; every corner of a dry
+cell is zero, so no face carries pigment across the edge and edge cells are
+never drained. Water itself is never moved. The swirl runs in several
+substeps per tick so its speed fits the upwind limit.
 
 ## Numerical limits (`domain::sim`)
 
@@ -305,7 +307,7 @@ still.
 |---|---|---|
 | `DT` | `1` per tick | fixed timestep; determinism |
 | max velocity | `0.45` cells/tick | keeps `|u| + |v| < 1` so upwind advection never drains a cell |
-| swirl face flux | `<= 0.25` per face (`SWIRL_FACE_LIMIT`) | the swirl is its own upwind pass, so four faces together never drain a cell |
+| swirl face flux | `<= 0.25` per face per substep (`SWIRL_FACE_LIMIT`), `SWIRL_SUBSTEPS` substeps | a safety bound the default strength stays under; four faces together never drain a cell |
 | viscosity | `0.1` | explicit Laplacian weight; keep `<= 0.25` |
 | pigment diffusion | `0.05` | divided by four per neighbour; keep `<= 1.0` |
 | water diffusion | `0.1` | same |

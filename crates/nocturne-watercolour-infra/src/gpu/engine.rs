@@ -13,6 +13,7 @@ use nocturne_watercolour_core::domain::paint::{self, StampParams, StampTarget, W
 use nocturne_watercolour_core::domain::palette::MAX_PIGMENTS;
 use nocturne_watercolour_core::domain::paper::render_pixel_scale;
 use nocturne_watercolour_core::domain::sim::{self, PigmentCoefficients, SimParams};
+use nocturne_watercolour_core::domain::swirl;
 use nocturne_watercolour_core::domain::{
     Image, MAX_SETTLE_SHARE, Operation, Paper, PaperField, Scene, Seed, SimulationGrid, StrokeSpan,
 };
@@ -99,10 +100,16 @@ struct ParamsUniform {
     swirl_frequency: f32,
     swirl_drift: f32,
     swirl_depth: f32,
+    /// `swirl::taper_radii` for the loaded scene's size and aspect.
+    swirl_radius_x: u32,
+    swirl_radius_y: u32,
+    _pad2: u32,
+    _pad3: u32,
 }
 
 impl ParamsUniform {
-    fn new(width: u32, height: u32, pigment_count: u32, p: &SimParams) -> Self {
+    fn new(width: u32, height: u32, pigment_count: u32, aspect: f32, p: &SimParams) -> Self {
+        let (swirl_radius_x, swirl_radius_y) = swirl::taper_radii(width, aspect, p.swirl_frequency);
         ParamsUniform {
             width,
             height,
@@ -152,6 +159,10 @@ impl ParamsUniform {
             swirl_frequency: p.swirl_frequency,
             swirl_drift: p.swirl_drift,
             swirl_depth: p.swirl_depth,
+            swirl_radius_x,
+            swirl_radius_y,
+            _pad2: 0,
+            _pad3: 0,
         }
     }
 }
@@ -221,6 +232,8 @@ struct SimPipelines {
     blur_h: wgpu::ComputePipeline,
     blur_v: wgpu::ComputePipeline,
     advect: wgpu::ComputePipeline,
+    swirl_gate_h: wgpu::ComputePipeline,
+    swirl_gate_v: wgpu::ComputePipeline,
     swirl: wgpu::ComputePipeline,
     clock: wgpu::ComputePipeline,
     transfer: wgpu::ComputePipeline,
@@ -441,6 +454,8 @@ impl GpuEngine {
             blur_h: make("blur_h"),
             blur_v: make("blur_v"),
             advect: make("advect"),
+            swirl_gate_h: make("swirl_gate_h"),
+            swirl_gate_v: make("swirl_gate_v"),
             swirl: make("swirl"),
             clock: make("clock"),
             transfer: make("transfer"),
@@ -719,8 +734,12 @@ impl GpuEngine {
         copy(enc, lay.scratch_g(0), lay.g(0), lay.n * lay.pigment_count);
         copy(enc, lay.scratch_p(), lay.p(), lay.n);
 
-        dispatch(enc, &self.sim.swirl);
-        copy(enc, lay.scratch_g(0), lay.g(0), lay.n * lay.pigment_count);
+        dispatch(enc, &self.sim.swirl_gate_h);
+        dispatch(enc, &self.sim.swirl_gate_v);
+        for _ in 0..sim::SWIRL_SUBSTEPS {
+            dispatch(enc, &self.sim.swirl);
+            copy(enc, lay.scratch_g(0), lay.g(0), lay.n * lay.pigment_count);
+        }
 
         dispatch(enc, &self.sim.transfer);
 
@@ -1263,6 +1282,7 @@ impl Simulator for GpuEngine {
                 res,
                 res,
                 pigment_count as u32,
+                grid.aspect,
                 &self.params,
             )),
         );
