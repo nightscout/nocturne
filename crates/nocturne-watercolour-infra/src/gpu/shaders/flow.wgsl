@@ -1,14 +1,11 @@
 // Rules: Curtis FlowOutward and MovePigment (sim::pass_blur_h, pass_blur_v,
-// pass_advect, pass_pool). Separable box blur of the wet mask, then one
-// gather pass that advects water and suspended pigment upwind, diffuses them
-// between wet neighbours in proportion to depth, and removes water near the
-// wet boundary (edge darkening, scaled by local depth and paper height);
-// then the free-surface pass,
-// which runs water and its pigment down `p + pool_relief * h`, lowered at
-// the exposed rim while the sheet dries. Deviations from Curtis are those of
-// the CPU reference (water advected, pigment diffusion, depth- and
-// height-scaled drain, free-surface flux). No deviation from the CPU
-// reference.
+// pass_advect). Separable box blur of the wet mask, then one gather pass
+// that advects water and suspended pigment upwind, diffuses them between wet
+// neighbours in proportion to depth, and removes water near the wet
+// boundary (edge darkening, scaled by local depth and paper height).
+// Deviations from Curtis are those of the CPU reference (water advected,
+// pigment diffusion, depth- and height-scaled drain). No deviation from the
+// CPU reference.
 
 @compute @workgroup_size(256)
 fn blur_h(@builtin(global_invocation_id) gid: vec3<u32>) {
@@ -98,55 +95,4 @@ fn advect(@builtin(global_invocation_id) gid: vec3<u32>) {
     let drain = clamp(pi / DRAIN_DEPTH, DRAIN_MIN, DRAIN_MAX) * (1.5 - state[o_h() + i]);
     np -= P.flow_outward_eta * (1.0 - scratch[so_blurred() + i]) * drain * P.dt;
     scratch[so_p() + i] = clamp(np, 0.0, P.max_water_depth);
-}
-
-fn drying_drive() -> f32 {
-    return P.evaporation * state[o_dry_rate()] + state[o_settle_share()] * DRAIN_DEPTH;
-}
-
-fn free_surface(c: u32) -> f32 {
-    let exposure = 1.0 - scratch[so_blurred() + c];
-    return state[o_p() + c] + P.pool_relief * state[o_h() + c]
-        - P.edge_flow * drying_drive() * exposure;
-}
-
-// Antisymmetric in (i, j) bit for bit, so the gather conserves water.
-fn pool_flux(i: u32, j: u32) -> f32 {
-    if j == i || wet(j) == 0.0 {
-        return 0.0;
-    }
-    let pi = state[o_p() + i];
-    let pj = state[o_p() + j];
-    let w = P.pool_rate * 0.25 * min((pi + pj) * 0.5 / P.diffusion_depth, 1.0);
-    let eta_i = free_surface(i);
-    let eta_j = free_surface(j);
-    return clamp(w * (eta_i - eta_j), -0.25 * pj, 0.25 * pi);
-}
-
-@compute @workgroup_size(256)
-fn pool(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let i = gid.x;
-    if i >= P.n { return; }
-    let nb = neighbours(i);
-    var flux = vec4<f32>(0.0);
-    if wet(i) != 0.0 {
-        flux = vec4<f32>(pool_flux(i, nb.x), pool_flux(i, nb.y), pool_flux(i, nb.z), pool_flux(i, nb.w));
-    }
-    let pi = state[o_p() + i];
-    scratch[so_p() + i] = clamp(pi - (flux.x + flux.y + flux.z + flux.w), 0.0, P.max_water_depth);
-    for (var k = 0u; k < P.pigment_count; k++) {
-        let base = o_g(k);
-        let gi = state[base + i];
-        var ng = gi;
-        for (var t = 0u; t < 4u; t++) {
-            let f = flux[t];
-            let j = nb[t];
-            if f > 0.0 {
-                ng -= f * gi / pi;
-            } else if f < 0.0 {
-                ng -= f * state[base + j] / state[o_p() + j];
-            }
-        }
-        scratch[so_g(k) + i] = clamp(ng, 0.0, P.max_suspended);
-    }
 }

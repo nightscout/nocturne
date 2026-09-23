@@ -159,7 +159,7 @@ returns for the engine to load.
 |---|---|---|---|
 | `velocity.wgsl` | `velocity` | Curtis UpdateVelocities (`sim::pass_velocity`) | none |
 | `pressure.wgsl` | `divergence`, `jacobi_a`, `jacobi_b`, `project` | Curtis RelaxDivergence (`pass_divergence`, `pass_jacobi` x 8 ping-pong, `pass_project`) | none (host copies `q2 -> q` when the iteration count is odd) |
-| `flow.wgsl` | `blur_h`, `blur_v`, `advect`, `pool` | Curtis FlowOutward + MovePigment (`pass_blur_h/v`, `pass_advect`), then the free-surface flux (`pass_pool`) | none |
+| `flow.wgsl` | `blur_h`, `blur_v`, `advect` | Curtis FlowOutward + MovePigment (`pass_blur_h/v`, `pass_advect`) | none |
 | `transfer.wgsl` | `transfer` | Curtis TransferPigment + evaporation, capillary absorption, drying (`pass_transfer`) | none |
 | `capillary.wgsl` | `capillary`, `capillary_wet` | Curtis SimulateCapillaryFlow (`pass_capillary`) | none |
 | `apply.wgsl` | `apply_brush`, `apply_water`, `apply_lift`, `dry_all` | `paint::apply_*`, `sim::dry_all` on an uploaded stamp | none |

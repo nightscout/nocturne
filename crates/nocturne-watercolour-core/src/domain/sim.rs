@@ -39,15 +39,6 @@
 //!   (`carry`), less for dense pigment, and lift scales with the wet fraction
 //!   and flow speed (`lift_still`, `lift_flow_gain`): still or thin water
 //!   barely re-suspends a deposit.
-//! - Water also runs down a free surface `p + pool_relief * h` between wet
-//!   neighbours (`pass_pool`), carrying suspended pigment at the donor's
-//!   concentration. The divergence relaxation leaves the velocity
-//!   divergence-free, so the paper-slope force alone can circulate water but
-//!   never converge it; this flux is what pools a wash in the tooth's valleys.
-//!   While the sheet dries the surface is lowered at the exposed rim in
-//!   proportion to the drying rate, so evaporation draws a replacement
-//!   current that carries pigment outward (Deegan's coffee ring), faint in
-//!   standing water.
 //! - Stroke water is modulated by paper height at the stamp
 //!   (`paint::STROKE_WATER_PAPER_GAIN`), so a wash starts with pools in the
 //!   paper's low regions rather than as a flat slab.
@@ -157,21 +148,6 @@ pub struct SimParams {
     pub lift_still: f32,
     /// Flow speed (cells/tick) gain at which lift reaches full strength.
     pub lift_flow_gain: f32,
-    /// Per-neighbour weight (over `0.25`) of the free-surface flux: water
-    /// runs from a higher free surface `p + pool_relief * h` to a lower one
-    /// and carries its suspended pigment at the donor's concentration (see
-    /// [`pass_pool`]).
-    /// Explicit diffusion in its own pass: must stay at or below `1`.
-    pub pool_rate: f32,
-    /// Paper height's weight in the free surface, in water-depth units per
-    /// height unit: standing water settles `pool_relief * dh` deeper in a
-    /// valley than on the peak beside it.
-    pub pool_relief: f32,
-    /// Depth by which the free surface is lowered at a fully exposed rim,
-    /// per unit of the sheet's drying drive: the Deegan replacement
-    /// current. It carries pigment to the rim while the sheet dries and is
-    /// faint in standing water, whose evaporation is small.
-    pub edge_flow: f32,
 }
 
 impl Default for SimParams {
@@ -212,9 +188,6 @@ impl Default for SimParams {
             carry: 2.0,
             lift_still: 0.25,
             lift_flow_gain: 3.0,
-            pool_rate: 0.25,
-            pool_relief: 0.5,
-            edge_flow: 100.0,
         }
     }
 }
@@ -298,16 +271,6 @@ pub fn step(
     pass_blur_v(grid, params, &scratch.blur_tmp, &mut scratch.blurred);
 
     pass_advect(
-        grid,
-        params,
-        &scratch.blurred,
-        &mut scratch.g,
-        &mut scratch.p,
-    );
-    std::mem::swap(&mut grid.pigments_in_water, &mut scratch.g);
-    std::mem::swap(&mut grid.pressure, &mut scratch.p);
-
-    pass_pool(
         grid,
         params,
         &scratch.blurred,
@@ -558,51 +521,9 @@ pub fn pass_blur_v(grid: &SimulationGrid, params: &SimParams, src: &[f32], out: 
     }
 }
 
-/// How hard the sheet is drying: the evaporation rate of a film
-/// `DRAIN_DEPTH` deep. A sheet-wide scalar rather than the cell's own rate,
-/// so the free surface stays monotone in depth and the flux stays a
-/// diffusion; a depth-dependent rim term turns anti-diffusive once the
-/// wet mask breaks up and grows a checkerboard.
-#[inline]
-fn drying_drive(grid: &SimulationGrid, params: &SimParams) -> f32 {
-    params.evaporation * grid.dry_rate + grid.settle_share * DRAIN_DEPTH
-}
-
-/// The potential the free-surface flux runs down: the water surface over the
-/// paper relief, lowered at the exposed rim in proportion to how hard the
-/// sheet is drying, so evaporation draws a replacement current outward.
-#[inline]
-fn free_surface(grid: &SimulationGrid, params: &SimParams, blurred_wet: &[f32], c: usize) -> f32 {
-    let exposure = 1.0 - blurred_wet[c];
-    grid.pressure[c] + params.pool_relief * grid.paper_height[c]
-        - params.edge_flow * drying_drive(grid, params) * exposure
-}
-
-/// Free-surface flux from wet cell `i` to wet neighbour `j`, bounded by a
-/// quarter of the donor's film so no cell gives up more than it holds.
-/// Antisymmetric bit for bit (`pool_flux(j, i) == -pool_flux(i, j)`), so the
-/// gather conserves water without a scatter.
-#[inline]
-fn pool_flux(
-    grid: &SimulationGrid,
-    params: &SimParams,
-    blurred_wet: &[f32],
-    i: usize,
-    j: usize,
-) -> f32 {
-    if j == i || grid.wet[j] == 0.0 {
-        return 0.0;
-    }
-    let p = &grid.pressure;
-    let w = params.pool_rate * 0.25 * ((p[i] + p[j]) * 0.5 / params.diffusion_depth).min(1.0);
-    let eta_i = free_surface(grid, params, blurred_wet, i);
-    let eta_j = free_surface(grid, params, blurred_wet, j);
-    (w * (eta_i - eta_j)).clamp(-0.25 * p[j], 0.25 * p[i])
-}
-
 /// Moves water and suspended pigment: conservative upwind advection, depth-
-/// weighted diffusion between wet neighbours, the flow-outward water removal
-/// near the wet boundary (Curtis's edge-darkening rule).
+/// weighted diffusion between wet neighbours, and the flow-outward water
+/// removal near the wet boundary (Curtis's edge-darkening rule).
 pub fn pass_advect(
     grid: &SimulationGrid,
     params: &SimParams,
@@ -657,47 +578,6 @@ pub fn pass_advect(
         let drain = (pi / DRAIN_DEPTH).clamp(DRAIN_MIN, DRAIN_MAX) * (1.5 - grid.paper_height[i]);
         np -= params.flow_outward_eta * (1.0 - blurred_wet[i]) * drain * DT;
         out_p[i] = np.clamp(0.0, MAX_WATER_DEPTH);
-    }
-}
-
-/// Runs water down the free surface between wet neighbours (see
-/// [`free_surface`]) and carries suspended pigment with it at the donor's
-/// concentration: pooling in the tooth's valleys and the drying rim's
-/// replacement current. The projected velocity is divergence-free, so this is
-/// the only way water converges. Its own pass so the pigment it moves is
-/// bounded by the donor's pigment alone and cannot overdraw a cell that
-/// advection and diffusion have already emptied.
-pub fn pass_pool(
-    grid: &SimulationGrid,
-    params: &SimParams,
-    blurred_wet: &[f32],
-    out_g: &mut [f32],
-    out_p: &mut [f32],
-) {
-    let n = grid.cell_count();
-    let k_count = grid.pigment_count;
-    let p = &grid.pressure;
-    for i in 0..n {
-        let nb = neighbours(grid, i);
-        let flux = if grid.wet[i] == 0.0 {
-            [0.0; 4]
-        } else {
-            nb.map(|j| pool_flux(grid, params, blurred_wet, i, j))
-        };
-        out_p[i] = (p[i] - flux.iter().sum::<f32>()).clamp(0.0, MAX_WATER_DEPTH);
-        for k in 0..k_count {
-            let g = &grid.pigments_in_water[k * n..(k + 1) * n];
-            let mut ng = g[i];
-            for (t, j) in nb.into_iter().enumerate() {
-                let f = flux[t];
-                if f > 0.0 {
-                    ng -= f * g[i] / p[i];
-                } else if f < 0.0 {
-                    ng -= f * g[j] / p[j];
-                }
-            }
-            out_g[k * n + i] = ng.clamp(0.0, MAX_SUSPENDED);
-        }
     }
 }
 
