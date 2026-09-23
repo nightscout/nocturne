@@ -144,6 +144,7 @@
       <form method="POST" action="/auth/logout" class="contents">
         <DropdownMenu.Item class="w-full text-destructive focus:text-destructive">
           {#snippet child({ props }: { props: Record<string, unknown> })}
+            <!-- eslint-disable-next-line no-restricted-syntax -- DropdownMenu.Item styles its child as the menu item -->
             <button {...props} type="submit">
               <LogOut class="mr-2 h-4 w-4" />
               <span>Log out</span>

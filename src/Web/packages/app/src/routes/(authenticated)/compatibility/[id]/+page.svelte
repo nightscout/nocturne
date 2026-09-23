@@ -5,6 +5,7 @@
   import { formatDateTimeCompact } from "$lib/utils/formatting";
   import { formatElapsedMs } from "$lib/utils/duration";
   import { getMatchTypeDisplay } from "$lib/utils/compatibility-match";
+  import { Button } from "$lib/components/ui/button";
 
   // Get ID from route params (guaranteed to exist in [id] route)
   const analysisId = $derived(page.params.id ?? "");
@@ -47,12 +48,9 @@
 <div class="@container container mx-auto p-6 space-y-6">
   <!-- Header with Back Button -->
   <div class="flex items-center gap-4">
-    <button
-      onclick={() => goto("/compatibility")}
-      class="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-md transition"
-    >
+    <Button variant="secondary" onclick={() => goto("/compatibility")}>
       ← Back
-    </button>
+    </Button>
     <h1 class="text-3xl font-bold">Request Analysis Detail</h1>
   </div>
 

@@ -449,6 +449,7 @@
         })}
       >
         <!-- Submitted alongside the named fields; also serves as the browse picker -->
+        <!-- eslint-disable-next-line no-restricted-syntax -- hidden file input, opened by the drop zone -->
         <input
           bind:this={fileInput}
           type="file"
@@ -549,6 +550,7 @@
             <!-- Image Drop Zone -->
             <div class="space-y-2">
               <Label>Screenshots ({images.length}/4)</Label>
+              <!-- eslint-disable-next-line no-restricted-syntax -- file drop zone -->
               <button
                 type="button"
                 class="w-full border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer {isDragging

@@ -122,6 +122,7 @@
     </Select.Root>
     {#if colorOption === CUSTOM_COLOR_OPTION}
       <div class="flex min-w-0 gap-2">
+        <!-- eslint-disable-next-line no-restricted-syntax -- native colour picker -->
         <input
           type="color"
           value={customColor}

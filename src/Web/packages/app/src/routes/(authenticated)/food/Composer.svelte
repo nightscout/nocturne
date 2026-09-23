@@ -8,6 +8,8 @@
 	import { FOOD_UNITS, DEFAULT_PORTION, DEFAULT_GI } from '$lib/components/food';
 	import * as Select from '$lib/components/ui/select';
 	import { Button } from '$lib/components/ui/button';
+	import { Input } from '$lib/components/ui/input';
+	import { Label } from '$lib/components/ui/label';
 	import * as ToggleGroup from '$lib/components/ui/toggle-group';
 	import * as Collapsible from '$lib/components/ui/collapsible';
 
@@ -214,58 +216,55 @@
 			<div class="mt-3 grid grid-cols-5 gap-3">
 				<!-- Fat -->
 				<div class="flex flex-col gap-1">
-					<label for="composer-fat" class="text-muted-foreground font-medium uppercase text-2xs">Fat</label>
-					<div class="flex items-center rounded-md px-3 py-2 border border-input dark:bg-input/30">
-						<input
+					<Label for="composer-fat" size="sm" variant="muted">Fat</Label>
+					<div class="flex items-center gap-2">
+						<Input
 							type="number"
 							id="composer-fat"
 							name="fat"
-							class="w-full bg-transparent text-sm outline-none"
 							bind:value={draft.fat}
 							min="0"
 							step="0.1"
 						/>
-						<span class="ml-1 shrink-0 text-xs text-muted-foreground">g</span>
+						<span class="shrink-0 text-xs text-muted-foreground">g</span>
 					</div>
 				</div>
 
 				<!-- Protein -->
 				<div class="flex flex-col gap-1">
-					<label for="composer-protein" class="text-muted-foreground font-medium uppercase text-2xs">Protein</label>
-					<div class="flex items-center rounded-md px-3 py-2 border border-input dark:bg-input/30">
-						<input
+					<Label for="composer-protein" size="sm" variant="muted">Protein</Label>
+					<div class="flex items-center gap-2">
+						<Input
 							type="number"
 							id="composer-protein"
 							name="protein"
-							class="w-full bg-transparent text-sm outline-none"
 							bind:value={draft.protein}
 							min="0"
 							step="0.1"
 						/>
-						<span class="ml-1 shrink-0 text-xs text-muted-foreground">g</span>
+						<span class="shrink-0 text-xs text-muted-foreground">g</span>
 					</div>
 				</div>
 
 				<!-- Energy -->
 				<div class="flex flex-col gap-1">
-					<label for="composer-energy" class="text-muted-foreground font-medium uppercase text-2xs">Energy</label>
-					<div class="flex items-center rounded-md px-3 py-2 border border-input dark:bg-input/30">
-						<input
+					<Label for="composer-energy" size="sm" variant="muted">Energy</Label>
+					<div class="flex items-center gap-2">
+						<Input
 							type="number"
 							id="composer-energy"
 							name="energy"
-							class="w-full bg-transparent text-sm outline-none"
 							bind:value={draft.energy}
 							min="0"
 							step="1"
 						/>
-						<span class="ml-1 shrink-0 text-xs text-muted-foreground">kcal</span>
+						<span class="shrink-0 text-xs text-muted-foreground">kcal</span>
 					</div>
 				</div>
 
 				<!-- Category -->
 				<div class="flex flex-col gap-1">
-					<label for="composer-category" class="text-muted-foreground font-medium uppercase text-2xs">Category</label>
+					<Label for="composer-category" size="sm" variant="muted">Category</Label>
 					<Select.Root type="single" name="category" value={draft.category ?? ''} onValueChange={(v) => { draft = { ...draft, category: v }; }}>
 						<Select.Trigger id="composer-category" class="w-full">
 							{draft.category || 'Category'}

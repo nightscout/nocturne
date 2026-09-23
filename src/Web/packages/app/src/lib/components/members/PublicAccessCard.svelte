@@ -4,6 +4,7 @@
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
   import { Switch } from "$lib/components/ui/switch";
+  import * as ToggleGroup from "$lib/components/ui/toggle-group";
   import { copyToClipboard } from "$lib/utils";
   import {
     Globe,
@@ -390,27 +391,21 @@
               Limit public viewers to recent data only. Older history stays private.
             </div>
           </div>
-          <div class="inline-flex shrink-0 rounded-lg bg-muted p-1" data-testid="public-access-window">
-            <button
-              type="button"
-              onclick={() => setWindow(true)}
-              class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors {fullHistory
-                ? 'bg-background text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'}"
-            >
-              All history
-            </button>
-            <button
-              type="button"
-              onclick={() => setWindow(false)}
-              class="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors {!fullHistory
-                ? 'bg-background text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'}"
-            >
+          <ToggleGroup.Root
+            type="single"
+            variant="segmented"
+            size="xs"
+            class="shrink-0"
+            data-testid="public-access-window"
+            value={fullHistory ? "all" : "24h"}
+            onValueChange={(v: string) => v && setWindow(v === "all")}
+          >
+            <ToggleGroup.Item value="all">All history</ToggleGroup.Item>
+            <ToggleGroup.Item value="24h">
               <Clock class="h-3 w-3" />
               Last 24 hours
-            </button>
-          </div>
+            </ToggleGroup.Item>
+          </ToggleGroup.Root>
         </div>
 
         <!-- Plain-language summary -->

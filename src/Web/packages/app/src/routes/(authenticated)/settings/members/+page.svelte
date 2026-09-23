@@ -4,6 +4,7 @@
   import { slide } from "svelte/transition";
   import { flip } from "svelte/animate";
   import * as Card from "$lib/components/ui/card";
+  import { Button } from "$lib/components/ui/button";
   import {
     Users,
     Check,
@@ -333,9 +334,10 @@
             onCancel={() => (showCreateInvite = false)}
           />
         {:else}
-          <button
-            type="button"
-            class="w-full rounded-xl border border-dashed border-muted-foreground/25 hover:border-muted-foreground/50 bg-transparent hover:bg-muted/50 transition-colors py-4 flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-foreground cursor-pointer"
+          <Button
+            variant="dashed"
+            size="lg"
+            class="w-full"
             onclick={() => (showCreateInvite = true)}
             {@attach coachmark({
               key: "setup-invite.create-link",
@@ -345,7 +347,7 @@
           >
             <Link class="h-4 w-4" />
             Create Invite Link
-          </button>
+          </Button>
         {/if}
       {/if}
 

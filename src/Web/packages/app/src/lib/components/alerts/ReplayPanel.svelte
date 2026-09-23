@@ -7,6 +7,7 @@
     today,
   } from "@internationalized/date";
   import { Button } from "$lib/components/ui/button";
+  import { Input } from "$lib/components/ui/input";
   import { Badge } from "$lib/components/ui/badge";
   import GlucoseCalendarPicker from "./GlucoseCalendarPicker.svelte";
   import * as Popover from "$lib/components/ui/popover";
@@ -545,18 +546,20 @@
 
     <label class="flex items-center gap-1.5 text-xs text-muted-foreground">
       From
-      <input
+      <Input
         type="time"
-        class="h-8 rounded-md border bg-background px-2 text-xs text-foreground"
+        size="sm"
+        class="w-auto"
         bind:value={fromTime}
         oninput={() => (brushDomain = null)}
       />
     </label>
     <label class="flex items-center gap-1.5 text-xs text-muted-foreground">
       To
-      <input
+      <Input
         type="time"
-        class="h-8 rounded-md border bg-background px-2 text-xs text-foreground"
+        size="sm"
+        class="w-auto"
         bind:value={toTime}
         oninput={() => (brushDomain = null)}
       />

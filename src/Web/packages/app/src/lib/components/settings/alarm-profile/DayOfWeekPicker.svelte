@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { Toggle } from "$lib/components/ui/toggle";
+
   interface Props {
     activeDays: number[] | undefined;
   }
@@ -31,14 +33,12 @@
     {@const isActive =
       activeDays?.includes(day.value) ??
       (activeDays === undefined || activeDays.length === 0)}
-    <button
-      class="px-3 py-2 rounded-lg text-sm font-medium transition-colors
-        {isActive
-        ? 'bg-primary text-primary-foreground'
-        : 'bg-muted hover:bg-muted/80'}"
-      onclick={() => toggleDay(day.value)}
+    <Toggle
+      variant="outline"
+      pressed={isActive}
+      onPressedChange={() => toggleDay(day.value)}
     >
       {day.label}
-    </button>
+    </Toggle>
   {/each}
 </div>

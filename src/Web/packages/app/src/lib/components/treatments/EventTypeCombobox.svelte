@@ -125,13 +125,14 @@
       <Command.List>
         <Command.Empty>
           {#if isCustomValue}
-            <button
-              type="button"
-              class="w-full p-2 text-left text-sm hover:bg-accent rounded"
+            <Button
+              variant="ghost"
+              size="sm"
+              class="w-full justify-start"
               onclick={() => selectEventType(searchValue.trim())}
             >
               Use "{searchValue.trim()}" as custom type
-            </button>
+            </Button>
           {:else}
             No event types found.
           {/if}

@@ -264,6 +264,7 @@
                     </div>
                   </Table.Cell>
                   <Table.Cell class="py-3 text-right">
+                    <!-- eslint-disable-next-line no-restricted-syntax -- clickable value inside a table cell -->
                     <button
                       type="button"
                       class="cursor-pointer hover:opacity-80 transition-opacity"
@@ -325,6 +326,7 @@
                           >
                             {#each meal.foods ?? [] as food}
                               <div class="rounded-lg border bg-card p-3 text-sm transition-colors group relative hover:bg-accent/50">
+                                <!-- eslint-disable-next-line no-restricted-syntax -- table row region -->
                                 <button
                                   type="button"
                                   onclick={() => onEditFood(meal, food)}

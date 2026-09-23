@@ -104,6 +104,7 @@
   <Card.Header>
     <div class="flex items-start gap-4">
       <div class="relative group">
+        <!-- eslint-disable-next-line no-restricted-syntax -- the avatar is the upload trigger -->
         <button
           type="button"
           class="relative rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 cursor-pointer"
@@ -161,6 +162,7 @@
             }
           })}
         >
+          <!-- eslint-disable-next-line no-restricted-syntax -- hidden file input, opened by the avatar -->
           <input
             type="file"
             name="file"

@@ -534,6 +534,7 @@
             {#each COLOR_PALETTES as pal}
               {@const isSelected = (colors?.join(",") ?? "") === (pal.colors?.join(",") ?? "")}
               {@const themeColors = (themeStops ?? stops).map((stop) => stop.color)}
+              <!-- eslint-disable-next-line no-restricted-syntax -- palette swatch; its gradient background is the content -->
               <button
                 type="button"
                 title={pal.label}
@@ -643,6 +644,7 @@
           <div class="flex items-center gap-2 flex-wrap" aria-label="Color palette presets">
             {#each COLOR_PALETTES as pal}
               {@const isSelected = (colors?.join(",") ?? "") === (pal.colors?.join(",") ?? "")}
+              <!-- eslint-disable-next-line no-restricted-syntax -- palette swatch; its gradient background is the content -->
               <button
                 type="button"
                 title={pal.label}

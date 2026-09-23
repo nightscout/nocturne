@@ -515,14 +515,14 @@
         {/each}
       </div>
       {#if dismissedCount > 0}
-        <button
-          type="button"
-          class="text-xs text-muted-foreground hover:text-foreground transition-colors"
+        <Button
+          variant="ghost-muted"
+          size="xs"
           onclick={() => (showDismissed = !showDismissed)}
         >
           {showDismissed ? "Hide" : "Show"}
           {dismissedCount} dismissed
-        </button>
+        </Button>
       {/if}
     {/if}
   </div>

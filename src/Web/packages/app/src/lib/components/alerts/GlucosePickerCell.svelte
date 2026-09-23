@@ -50,6 +50,7 @@
   );
 </script>
 
+<!-- eslint-disable-next-line no-restricted-syntax -- calendar day cell drawing a glucose sparkline -->
 <button
   type="button"
   {disabled}

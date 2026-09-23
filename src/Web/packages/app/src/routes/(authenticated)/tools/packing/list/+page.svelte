@@ -167,6 +167,7 @@
               >
                 &times;{item.q}
               </span>
+              <!-- eslint-disable-next-line no-restricted-syntax -- inline-editable item text -->
               <input
                 type="text"
                 value={item.l}

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Label } from "$lib/components/ui/label";
   import { Input } from "$lib/components/ui/input";
+  import { Checkbox } from "$lib/components/ui/checkbox";
   import { Textarea } from "$lib/components/ui/textarea";
   import * as Select from "$lib/components/ui/select";
   import {
@@ -268,23 +269,19 @@
     <!-- Checkboxes -->
     <div class="flex items-center gap-4">
       <div class="flex items-center gap-2">
-        <input
+        <Checkbox
           id="insulin-current"
-          type="checkbox"
           name="{namePrefix}isCurrent"
           bind:checked={isCurrent}
-          class="h-4 w-4 rounded border-input"
         />
         <Label for="insulin-current">Currently in use</Label>
       </div>
 
       <div class="flex items-center gap-2">
-        <input
+        <Checkbox
           id="insulin-primary"
-          type="checkbox"
           name="{namePrefix}isPrimary"
           bind:checked={isPrimary}
-          class="h-4 w-4 rounded border-input"
         />
         <Label for="insulin-primary">Primary for this role</Label>
       </div>

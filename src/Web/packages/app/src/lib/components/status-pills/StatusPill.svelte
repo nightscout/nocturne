@@ -1,5 +1,6 @@
 <script lang="ts">
   import * as Popover from "$lib/components/ui/popover";
+  import { Button } from "$lib/components/ui/button";
   import type { AlertLevel, PillInfoItem } from "$lib/types/status-pills";
   import { cn } from "$lib/utils";
   import { PlusCircle } from "lucide-svelte";
@@ -93,16 +94,18 @@
       </div>
       {#if actionLabel && onAction}
         <div class="p-2 border-t border-border">
-          <button
-            class="flex w-full items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground cursor-pointer"
+          <Button
+            variant="ghost"
+            size="sm"
+            class="w-full justify-start"
             onclick={() => {
               onAction();
               popoverOpen = false;
             }}
           >
-            <PlusCircle class="mr-2 h-4 w-4 flex items-center justify-center" />
+            <PlusCircle class="h-4 w-4" />
             {actionLabel}
-          </button>
+          </Button>
         </div>
       {/if}
     </Popover.Content>

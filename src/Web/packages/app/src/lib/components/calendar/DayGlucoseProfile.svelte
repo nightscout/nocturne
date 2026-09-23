@@ -18,6 +18,7 @@
   let { entries, dayStartMills, onclick }: Props = $props();
 </script>
 
+<!-- eslint-disable-next-line no-restricted-syntax -- the whole chart is the click target -->
 <button
   type="button"
   class="absolute inset-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset rounded-lg"

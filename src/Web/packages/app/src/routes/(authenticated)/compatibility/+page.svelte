@@ -11,6 +11,10 @@
   import { formatElapsedMs } from "$lib/utils/duration";
   import type { AnalysisListItemDto } from "$lib/api";
   import { getMatchTypeDisplay } from "$lib/utils/compatibility-match";
+  import { Button } from "$lib/components/ui/button";
+  import { Input } from "$lib/components/ui/input";
+  import { Checkbox } from "$lib/components/ui/checkbox";
+  import * as Select from "$lib/components/ui/select";
 
   // Get filter params from URL
   const urlParams = $derived({
@@ -65,6 +69,13 @@
   let filterPath = $state("");
   let filterMethod = $state("");
   let filterMatch = $state("");
+  const matchOptions = [
+    { value: "", label: "All" },
+    { value: "0", label: "Perfect" },
+    { value: "1", label: "Minor Differences" },
+    { value: "2", label: "Major Differences" },
+    { value: "3", label: "Critical" },
+  ];
   let showCompatible = $state(false); // Hide compatible by default
 
   // Initialize filter state from fetched data
@@ -171,14 +182,12 @@
       <span class="text-sm text-muted-foreground">
         Last update: {formatDateTimeCompact(lastUpdate.toISOString())}
       </span>
-      <button
+      <Button
+        variant={isPolling ? "default" : "secondary"}
         onclick={togglePolling}
-        class="px-4 py-2 rounded-md {isPolling
-          ? 'bg-green-600 hover:bg-green-700'
-          : 'bg-gray-600 hover:bg-gray-700'} text-white transition"
       >
         {isPolling ? "Polling Active" : "Polling Paused"}
-      </button>
+      </Button>
     </div>
   </div>
 
@@ -241,11 +250,10 @@
         <label for="filterPath" class="block text-sm font-medium mb-1">
           Request Path
         </label>
-        <input
+        <Input
           type="text"
           id="filterPath"
           bind:value={filterPath}
-          class="w-full px-3 py-2 border rounded-md dark:bg-gray-700"
           placeholder="/api/v1/entries"
         />
       </div>
@@ -253,52 +261,42 @@
         <label for="filterMethod" class="block text-sm font-medium mb-1">
           Method
         </label>
-        <select
-          id="filterMethod"
-          bind:value={filterMethod}
-          class="w-full px-3 py-2 border rounded-md dark:bg-gray-700"
-        >
-          <option value="">All</option>
-          <option value="GET">GET</option>
-          <option value="POST">POST</option>
-          <option value="PUT">PUT</option>
-          <option value="DELETE">DELETE</option>
-        </select>
+        <Select.Root type="single" bind:value={filterMethod}>
+          <Select.Trigger id="filterMethod" class="w-full">
+            {filterMethod || "All"}
+          </Select.Trigger>
+          <Select.Content>
+            <Select.Item value="" label="All" />
+            <Select.Item value="GET" label="GET" />
+            <Select.Item value="POST" label="POST" />
+            <Select.Item value="PUT" label="PUT" />
+            <Select.Item value="DELETE" label="DELETE" />
+          </Select.Content>
+        </Select.Root>
       </div>
       <div>
         <label for="filterMatch" class="block text-sm font-medium mb-1">
           Match Type
         </label>
-        <select
-          id="filterMatch"
-          bind:value={filterMatch}
-          class="w-full px-3 py-2 border rounded-md dark:bg-gray-700"
-        >
-          <option value="">All</option>
-          <option value="0">Perfect</option>
-          <option value="1">Minor Differences</option>
-          <option value="2">Major Differences</option>
-          <option value="3">Critical</option>
-        </select>
+        <Select.Root type="single" bind:value={filterMatch}>
+          <Select.Trigger id="filterMatch" class="w-full">
+            {matchOptions.find((o) => o.value === filterMatch)?.label ?? "All"}
+          </Select.Trigger>
+          <Select.Content>
+            {#each matchOptions as option (option.value)}
+              <Select.Item value={option.value} label={option.label} />
+            {/each}
+          </Select.Content>
+        </Select.Root>
       </div>
       <div class="flex items-end gap-2">
-        <button
-          onclick={applyFilters}
-          class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition"
-        >
-          Apply
-        </button>
-        <button
-          onclick={clearFilters}
-          class="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-md transition"
-        >
-          Clear
-        </button>
+        <Button onclick={applyFilters}>Apply</Button>
+        <Button variant="secondary" onclick={clearFilters}>Clear</Button>
       </div>
     </div>
     <div class="mt-4">
       <label class="flex items-center gap-2">
-        <input type="checkbox" bind:checked={showCompatible} class="rounded" />
+        <Checkbox bind:checked={showCompatible} />
         <span class="text-sm">
           Show compatible requests (Perfect & Minor Differences)
         </span>

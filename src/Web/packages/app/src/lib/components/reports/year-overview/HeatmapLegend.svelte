@@ -1,6 +1,7 @@
 <script lang="ts">
   import * as Select from "$lib/components/ui/select";
   import { Button } from "$lib/components/ui/button";
+  import { Checkbox } from "$lib/components/ui/checkbox";
   import { SlidersHorizontal } from "lucide-svelte";
   import { formatGlucoseValue, getUnitLabel, type GlucoseUnits } from "$lib/utils/formatting";
   import ColorFocusRange from "./ColorFocusRange.svelte";
@@ -118,11 +119,9 @@
 
         <!-- Advanced Settings Checkbox -->
         <label class="flex items-center gap-1.5 font-medium cursor-pointer text-foreground/90 text-xs shrink-0 select-none">
-          <input
-            type="checkbox"
+          <Checkbox
             checked={advancedMode}
-            onchange={(e) => onAdvancedModeChange(e.currentTarget.checked)}
-            class="h-3.5 w-3.5 rounded border-border text-primary focus:ring-primary/40 cursor-pointer"
+            onCheckedChange={(checked: boolean) => onAdvancedModeChange(checked)}
           />
           Advanced
         </label>

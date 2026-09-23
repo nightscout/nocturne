@@ -3,6 +3,7 @@
 	import { goto } from "$app/navigation";
 	import { Loader2 } from "lucide-svelte";
 	import { Button } from "$lib/components/ui/button";
+	import { Input } from "$lib/components/ui/input";
 	import { getBotAuthorizeContext, buildTenantRedirectUrl } from "../bot.remote";
 	import { getPending, claimLink } from "$lib/api/generated/chatIdentities.generated.remote";
 	import { retainQuery } from "$lib/api/retain-query.svelte";
@@ -106,13 +107,12 @@
 		>
 			<label class="flex flex-col gap-1">
 				<span class="text-sm font-medium">Instance slug</span>
-				<input
+				<Input
 					type="text"
 					bind:value={slug}
 					required
 					pattern="[a-z0-9][a-z0-9\-]{'{ 0,62}'}[a-z0-9]?"
 					placeholder="e.g. myfamily"
-					class="px-3 py-2 border rounded-md bg-background"
 				/>
 			</label>
 			<Button type="submit" disabled={isSubmittingSlug}>

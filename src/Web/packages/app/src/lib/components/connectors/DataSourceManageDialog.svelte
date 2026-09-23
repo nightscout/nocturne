@@ -4,6 +4,7 @@
   import * as Dialog from "$lib/components/ui/dialog";
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
   import { Button } from "$lib/components/ui/button";
+  import { Input } from "$lib/components/ui/input";
   import { Badge } from "$lib/components/ui/badge";
   import { Separator } from "$lib/components/ui/separator";
   import {
@@ -295,11 +296,10 @@
                   Type <strong>DELETE</strong>
                   to confirm:
                 </label>
-                <input
+                <Input
                   id="confirm-delete"
                   type="text"
                   bind:value={deleteConfirmText}
-                  class="w-full px-3 py-2 rounded-md border bg-background text-sm"
                   placeholder="Type DELETE"
                 />
               </div>

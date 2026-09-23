@@ -2,6 +2,7 @@
   import { formatMediumDate } from "$lib/utils/formatting";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
+  import { Checkbox } from "$lib/components/ui/checkbox";
   import { Label } from "$lib/components/ui/label";
   import { Badge } from "$lib/components/ui/badge";
   import * as Card from "$lib/components/ui/card";
@@ -556,12 +557,10 @@
           </div>
 
           <div class="flex items-center gap-2">
-            <input
+            <Checkbox
               id="device-current"
-              type="checkbox"
               name="{namePrefix}isCurrent"
               bind:checked={deviceIsCurrent}
-              class="h-4 w-4 rounded border-input"
             />
             <Label for="device-current">Currently in use</Label>
           </div>

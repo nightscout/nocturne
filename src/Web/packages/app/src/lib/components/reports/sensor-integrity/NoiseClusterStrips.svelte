@@ -32,6 +32,7 @@
 
 <div class="space-y-1">
   {#each buckets as bucket (bucket.dateMs)}
+    <!-- eslint-disable-next-line no-restricted-syntax -- the chart row is the click target -->
     <button
       type="button"
       onclick={() => onSelectDay?.(bucket)}

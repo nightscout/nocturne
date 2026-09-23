@@ -47,7 +47,7 @@
   let previewingId = $state<string | null>(null);
 
   // Upload form state
-  let fileInput: HTMLInputElement | undefined;
+  let fileInput: HTMLInputElement | null = $state(null);
   let selectedFile = $state<File | null>(null);
   let customName = $state("");
 
@@ -185,13 +185,13 @@
           <div class="space-y-2">
             <Label for="audio-file">Audio File</Label>
             <div class="flex items-center gap-2">
-              <input
+              <Input
                 id="audio-file"
                 type="file"
                 accept="audio/mpeg,audio/wav,audio/ogg,audio/webm,audio/mp4,audio/aac,.mp3,.wav,.ogg,.webm,.m4a,.aac"
                 onchange={handleFileSelect}
-                bind:this={fileInput}
-                class="flex-1 h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                bind:ref={fileInput}
+                class="flex-1"
               />
             </div>
             {#if selectedFile}
@@ -259,6 +259,7 @@
             ? 'bg-primary/5 border-primary'
             : 'bg-muted/30 hover:bg-muted/50'}"
         >
+          <!-- eslint-disable-next-line no-restricted-syntax -- row region selecting the sound -->
           <button
             type="button"
             class="flex-1 flex items-center gap-3 text-left"

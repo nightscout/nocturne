@@ -224,6 +224,7 @@
     ondrop={onDropGroup}
   >
     <div class="flex items-center gap-2">
+      <!-- eslint-disable-next-line no-restricted-syntax -- drag handle, not a focusable action -->
       <button
         type="button"
         class="grid h-6 w-4 shrink-0 cursor-grab place-items-center text-muted-foreground hover:text-foreground"
@@ -279,6 +280,7 @@
     ondragstart={startDrag}
     ondragend={() => drag.end()}
   >
+    <!-- eslint-disable-next-line no-restricted-syntax -- drag handle, not a focusable action -->
     <button
       type="button"
       class="grid h-6 w-4 shrink-0 cursor-grab place-items-center text-muted-foreground hover:text-foreground"

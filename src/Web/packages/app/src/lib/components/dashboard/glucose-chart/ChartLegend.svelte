@@ -130,6 +130,7 @@
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   children: any
 )}
+  <!-- eslint-disable-next-line no-restricted-syntax -- chart legend series toggle -->
   <button
     type="button"
     class={cn(
@@ -240,6 +241,7 @@
 
   <!-- Pump mode toggle with expandable dropdown -->
   <div class="relative flex items-center">
+    <!-- eslint-disable-next-line no-restricted-syntax -- chart legend series toggle -->
     <button
       type="button"
       class={cn(
@@ -258,6 +260,7 @@
       </span>
     </button>
     {#if uniquePumpModes.length > 1 && showPumpModes}
+      <!-- eslint-disable-next-line no-restricted-syntax -- chart legend series toggle -->
       <button
         type="button"
         class="flex items-center cursor-pointer hover:bg-accent/50 px-0.5 py-0.5 rounded-r transition-colors"
@@ -293,6 +296,7 @@
     {@const uniqueEventTypes = [
       ...new Set(systemEvents.map((e) => e.eventType)),
     ]}
+    <!-- eslint-disable-next-line no-restricted-syntax -- chart legend series toggle -->
     <button
       type="button"
       class={cn(
@@ -319,6 +323,7 @@
 
   <!-- Scheduled tracker legend items -->
   {#if scheduledTrackerMarkers.length > 0}
+    <!-- eslint-disable-next-line no-restricted-syntax -- chart legend series toggle -->
     <button
       type="button"
       class={cn(

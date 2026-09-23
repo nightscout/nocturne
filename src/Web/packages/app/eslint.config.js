@@ -181,5 +181,32 @@ export default ts.config(
     rules: {
       "nocturne/no-imperative-remote-query": "warn"
     }
+  },
+  {
+    // @shadcn/lint only sees classes on known components, so a raw control
+    // escapes the design system without a finding. Hidden inputs carry form
+    // state and render nothing.
+    files: ["**/*.svelte"],
+    ignores: ["src/lib/components/ui/**", "**/*.test.svelte"],
+    rules: {
+      "no-restricted-syntax": ["warn",
+        {
+          selector: 'SvelteElement[kind="html"][name.name="button"]',
+          message: "Use <Button> with a variant and size, or <Toggle> for a pressed state, instead of a raw <button>."
+        },
+        {
+          selector: 'SvelteElement[kind="html"][name.name="input"]:not(:has(SvelteAttribute[key.name="type"] > SvelteLiteral[value="hidden"]))',
+          message: "Use <Input>, <Checkbox>, <Switch>, <RadioGroup> or <Slider> instead of a raw <input>. type=\"hidden\" is allowed."
+        },
+        {
+          selector: 'SvelteElement[kind="html"][name.name="select"]',
+          message: "Use <Select> instead of a raw <select>."
+        },
+        {
+          selector: 'SvelteElement[kind="html"][name.name="textarea"]',
+          message: "Use <Textarea> instead of a raw <textarea>."
+        }
+      ]
+    }
   }
 );

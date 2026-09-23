@@ -8,6 +8,8 @@
 	import { FOOD_UNITS } from '$lib/components/food';
 	import * as Select from '$lib/components/ui/select';
 	import { Button } from '$lib/components/ui/button';
+	import { Input } from '$lib/components/ui/input';
+	import { Label } from '$lib/components/ui/label';
 	import * as ToggleGroup from '$lib/components/ui/toggle-group';
 	import { Separator } from '$lib/components/ui/separator';
 
@@ -166,61 +168,58 @@
 
 		<!-- Fat -->
 		<div class="flex flex-col gap-1.5">
-			<label for="food-edit-fat" class="font-semibold text-xs">
-				<span class="text-muted-foreground">Fat</span>
-				<span class="ml-1 text-2xs text-foreground/30">optional</span>
-			</label>
-			<div class="flex items-center rounded-md px-3 py-2 border border-input dark:bg-input/30">
-				<input
+			<Label for="food-edit-fat" size="sm" variant="muted">
+				Fat
+				<span class="text-2xs font-normal text-foreground/30">optional</span>
+			</Label>
+			<div class="flex items-center gap-2">
+				<Input
 					type="number"
 					id="food-edit-fat"
 					name="fat"
-					class="w-full bg-transparent text-sm outline-none"
 					bind:value={draft.fat}
 					min="0"
 					step="0.1"
 				/>
-				<span class="ml-2 shrink-0 text-xs text-muted-foreground">g</span>
+				<span class="shrink-0 text-xs text-muted-foreground">g</span>
 			</div>
 		</div>
 
 		<!-- Protein -->
 		<div class="flex flex-col gap-1.5">
-			<label for="food-edit-protein" class="font-semibold text-xs">
-				<span class="text-muted-foreground">Protein</span>
-				<span class="ml-1 text-2xs text-foreground/30">optional</span>
-			</label>
-			<div class="flex items-center rounded-md px-3 py-2 border border-input dark:bg-input/30">
-				<input
+			<Label for="food-edit-protein" size="sm" variant="muted">
+				Protein
+				<span class="text-2xs font-normal text-foreground/30">optional</span>
+			</Label>
+			<div class="flex items-center gap-2">
+				<Input
 					type="number"
 					id="food-edit-protein"
 					name="protein"
-					class="w-full bg-transparent text-sm outline-none"
 					bind:value={draft.protein}
 					min="0"
 					step="0.1"
 				/>
-				<span class="ml-2 shrink-0 text-xs text-muted-foreground">g</span>
+				<span class="shrink-0 text-xs text-muted-foreground">g</span>
 			</div>
 		</div>
 
 		<!-- Energy -->
 		<div class="flex flex-col gap-1.5">
-			<label for="food-edit-energy" class="font-semibold text-xs">
-				<span class="text-muted-foreground">Energy</span>
-				<span class="ml-1 text-2xs text-foreground/30">auto</span>
-			</label>
-			<div class="flex items-center rounded-md px-3 py-2 border border-input dark:bg-input/30">
-				<input
+			<Label for="food-edit-energy" size="sm" variant="muted">
+				Energy
+				<span class="text-2xs font-normal text-foreground/30">auto</span>
+			</Label>
+			<div class="flex items-center gap-2">
+				<Input
 					type="number"
 					id="food-edit-energy"
 					name="energy"
-					class="w-full bg-transparent text-sm outline-none"
 					bind:value={draft.energy}
 					min="0"
 					step="1"
 				/>
-				<span class="ml-2 shrink-0 text-xs text-muted-foreground">kcal</span>
+				<span class="shrink-0 text-xs text-muted-foreground">kcal</span>
 			</div>
 		</div>
 	</div>

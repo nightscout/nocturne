@@ -420,6 +420,7 @@
 )}
   {@const belowThreshold = isTrackerBelowThreshold(element)}
   <div class="relative">
+    <!-- eslint-disable-next-line no-restricted-syntax -- draggable element on the clock canvas -->
     <button
       type="button"
       draggable="true"
@@ -536,6 +537,7 @@
             </div>
             <!-- Background chart selection button -->
             <div class="absolute left-2 top-2 z-20">
+              <!-- eslint-disable-next-line no-restricted-syntax -- element selector on the clock canvas -->
               <button
                 type="button"
                 class="rounded bg-black/50 px-2 py-1 text-xs text-white/70 transition-all hover:bg-black/70 hover:text-white {selectedElementId ===

@@ -271,12 +271,8 @@
 
   <!-- Skip link -->
   <div class="pt-4 text-center">
-    <button
-      type="button"
-      class="text-sm text-muted-foreground hover:text-foreground underline-offset-4 hover:underline transition-colors"
-      onclick={onSkip}
-    >
+    <Button variant="link" size="inline" onclick={onSkip}>
       Skip for now
-    </button>
+    </Button>
   </div>
 {/if}

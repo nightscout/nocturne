@@ -1,6 +1,7 @@
 <script lang="ts">
   import DateRangePicker from "$lib/components/ui/date-range-picker.svelte";
   import { Button } from "$lib/components/ui/button";
+  import { Input } from "$lib/components/ui/input";
   import { Badge } from "$lib/components/ui/badge";
   import * as Card from "$lib/components/ui/card";
   import { ChevronDown, X, Check } from "lucide-svelte";
@@ -93,11 +94,10 @@
 
         <!-- Search -->
         <div class="flex-1 min-w-[200px] max-w-sm">
-          <input
+          <Input
             type="text"
             placeholder="Search meals..."
             bind:value={searchQuery}
-            class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           />
         </div>
 

@@ -103,16 +103,17 @@
                     <div class="flex items-center gap-3">
                         <h1 class="text-lg font-semibold text-foreground">{reportName}</h1>
                         {#if showFilters}
-                            <button
-                                    type="button"
+                            <Button
+                                    variant="outline"
+                                    size="sm"
+                                    class="hidden sm:inline-flex"
                                     onclick={() => (filterSidebarOpen = true)}
-                                    class="hidden sm:flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                                     aria-label="Change date range"
                             >
                                 <Calendar class="h-3.5 w-3.5"/>
                                 <span>{dateRangeDisplay}</span>
                                 <ChevronDown class="h-3 w-3 opacity-60"/>
-                            </button>
+                            </Button>
                         {/if}
                     </div>
                 </div>

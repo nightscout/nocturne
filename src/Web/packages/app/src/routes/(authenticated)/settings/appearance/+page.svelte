@@ -51,6 +51,7 @@
   } from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import { Switch } from "$lib/components/ui/switch";
+  import { Slider } from "$lib/components/ui/slider";
   import { Label } from "$lib/components/ui/label";
   import { Separator } from "$lib/components/ui/separator";
   import { Badge } from "$lib/components/ui/badge";
@@ -706,6 +707,7 @@
                 </SelectContent>
               </Select>
               {#if chartLineColorMode.current === "single"}
+                <!-- eslint-disable-next-line no-restricted-syntax -- native colour picker -->
                 <input
                   type="color"
                   value={chartLineColor.current}
@@ -758,6 +760,7 @@
                   </SelectContent>
                 </Select>
                 {#if chartPointColorMode.current === "single"}
+                  <!-- eslint-disable-next-line no-restricted-syntax -- native colour picker -->
                   <input
                     type="color"
                     value={chartPointColor.current}
@@ -804,16 +807,15 @@
         {#if chartAreaMode.current !== "off"}
           <div class="mt-4 space-y-2">
             <FormLabel>Area opacity: {Math.round(chartAreaOpacity.current * 100)}%</FormLabel>
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.05"
+            <Slider
+              type="single"
+              min={0}
+              max={1}
+              step={0.05}
               value={chartAreaOpacity.current}
-              oninput={(e) => {
-                chartAreaOpacity.current = parseFloat(e.currentTarget.value);
+              onValueChange={(v: number) => {
+                chartAreaOpacity.current = v;
               }}
-              class="w-full"
             />
           </div>
         {/if}

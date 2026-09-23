@@ -283,7 +283,7 @@
           <Alert.Description>
             Register an OAuth app with your provider using the callback URL
             <code>{`{your-domain}`}/api/auth/oidc/callback</code>. Need GitHub?
-            <button type="button" class="underline" onclick={applyGithubPreset}>Use GitHub preset</button>.
+            <Button variant="link" size="inline" onclick={applyGithubPreset}>Use GitHub preset</Button>.
           </Alert.Description>
         </Alert.Root>
       {/if}

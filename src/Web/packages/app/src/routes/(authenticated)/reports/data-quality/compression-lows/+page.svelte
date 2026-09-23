@@ -3,6 +3,7 @@
 	import { toast } from 'svelte-sonner';
 	import { permissionGatedMutationError } from '$lib/forms';
 	import { Button } from '$lib/components/ui/button';
+	import { Input } from '$lib/components/ui/input';
 	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
 	import { Badge } from '$lib/components/ui/badge';
 	import {
@@ -357,23 +358,23 @@
 						<div class="flex flex-col items-center gap-2 @sm:flex-row @sm:items-end">
 							<div class="flex flex-col gap-1">
 								<label for="start-date" class="text-sm text-muted-foreground">Start Date</label>
-								<input
+								<Input
 									id="start-date"
 									type="date"
 									bind:value={testStartDate}
-									class="rounded border bg-background px-3 py-2"
+									class="w-auto"
 								/>
 							</div>
 							<div class="flex flex-col gap-1">
 								<label for="end-date" class="text-sm text-muted-foreground"
 									>End Date (optional)</label
 								>
-								<input
+								<Input
 									id="end-date"
 									type="date"
 									bind:value={testEndDate}
 									min={testStartDate}
-									class="rounded border bg-background px-3 py-2"
+									class="w-auto"
 								/>
 							</div>
 							<Button
@@ -413,6 +414,7 @@
 						{@const StatusIcon = getStatusIcon(suggestion.status)}
 						{@const isSelected = suggestion.id ? selectedSuggestions.has(suggestion.id) : false}
 						{@const isActive = suggestion.id === activeSuggestion}
+						<!-- eslint-disable-next-line no-restricted-syntax -- list row region with shift-click range selection -->
 						<button
 							type="button"
 							class="w-full text-left"

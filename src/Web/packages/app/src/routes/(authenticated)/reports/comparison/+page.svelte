@@ -461,15 +461,17 @@
             >
               <Popover.Trigger>
                 {#snippet child({ props }: { props: Record<string, unknown> })}
-                  <button
+                  <Button
                     {...props}
-                    class="flex w-full items-center gap-2 rounded-md border border-input bg-background px-3 py-1.5 text-xs text-left hover:bg-muted/40 transition-colors"
+                    variant="outline"
+                    size="sm"
+                    class="w-full justify-start"
                   >
                     <CalendarDays class="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                     <span class="font-mono">
                       {rangeDisplay(p.from, p.to)}
                     </span>
-                  </button>
+                  </Button>
                 {/snippet}
               </Popover.Trigger>
               <Popover.Content class="p-0 w-auto" align="start">

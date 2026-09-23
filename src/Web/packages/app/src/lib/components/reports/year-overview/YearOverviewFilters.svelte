@@ -98,12 +98,9 @@
               Show data types
             </span>
             {#if hiddenDataTypes.size > 0}
-              <button
-                class="text-xs text-primary hover:underline"
-                onclick={showAllDataTypes}
-              >
+              <Button variant="link" size="inline" onclick={showAllDataTypes}>
                 Show all
-              </button>
+              </Button>
             {/if}
           </div>
           <div class="space-y-1.5">

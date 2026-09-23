@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
+	import { Input } from '$lib/components/ui/input';
 	import {
 		Card,
 		CardContent,
@@ -257,21 +258,21 @@
 				<div class="flex flex-wrap items-end gap-4">
 					<div class="flex flex-col gap-1">
 						<label for="start-date" class="text-sm text-muted-foreground">Start Date</label>
-						<input
+						<Input
 							id="start-date"
 							type="date"
 							bind:value={testStartDate}
-							class="rounded border bg-background px-3 py-2"
+							class="w-auto"
 						/>
 					</div>
 					<div class="flex flex-col gap-1">
 						<label for="end-date" class="text-sm text-muted-foreground">End Date (optional)</label>
-						<input
+						<Input
 							id="end-date"
 							type="date"
 							bind:value={testEndDate}
 							min={testStartDate}
-							class="rounded border bg-background px-3 py-2"
+							class="w-auto"
 						/>
 					</div>
 					<Button onclick={handleTriggerDetection} disabled={isDetecting || !testStartDate}>

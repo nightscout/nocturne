@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
+  import { Button } from "$lib/components/ui/button";
   import {
     previewAlarmSound,
     stopPreview,
@@ -141,22 +142,18 @@
 
   <!-- Preview button -->
   <div class="flex items-center gap-3">
-    <button
-      type="button"
-      class="flex items-center gap-2 px-4 py-2 rounded-lg border transition-all
-        {previewState.isPlaying
-        ? 'bg-primary text-primary-foreground border-primary'
-        : 'bg-background hover:bg-muted border-input'}"
+    <Button
+      variant={previewState.isPlaying ? "default" : "outline"}
       onclick={handlePreview}
     >
       {#if previewState.isPlaying}
         <Square class="h-4 w-4 fill-current" />
-        <span class="text-sm font-medium">Stop</span>
+        Stop
       {:else}
         <Volume2 class="h-4 w-4" />
-        <span class="text-sm font-medium">Play Preview</span>
+        Play Preview
       {/if}
-    </button>
+    </Button>
 
     {#if profile.audio.ascendingVolume}
       <span class="text-xs text-muted-foreground">

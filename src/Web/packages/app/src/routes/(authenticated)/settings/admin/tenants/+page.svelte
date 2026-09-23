@@ -282,13 +282,15 @@
             >{"{slug}"}.{transitionStatus?.baseDomain}</code
           >.
         </span>
-        <button
+        <Button
+          variant="ghost-muted"
+          size="icon-xs"
+          class="shrink-0"
           onclick={dismissNotice}
-          class="shrink-0 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100"
           aria-label="Dismiss"
         >
           <X class="h-4 w-4" />
-        </button>
+        </Button>
       </Alert.Description>
     </Alert.Root>
   {/if}

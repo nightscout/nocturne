@@ -104,6 +104,7 @@
           >
             <Popover.Trigger>
               {#snippet child({ props }: { props: Record<string, unknown> })}
+                <!-- eslint-disable-next-line no-restricted-syntax -- tracker dot is a popover trigger inside a calendar cell -->
                 <button
                   {...props}
                   class="tracker-icon h-4 w-4 rounded-full flex items-center justify-center hover:scale-125 transition-transform"
@@ -224,6 +225,7 @@
           >
             <Popover.Trigger>
               {#snippet child({ props }: { props: Record<string, unknown> })}
+                <!-- eslint-disable-next-line no-restricted-syntax -- tracker dot is a popover trigger inside a calendar cell -->
                 <button
                   {...props}
                   class="tracker-icon h-4 w-4 rounded-full flex items-center justify-center hover:scale-125 transition-transform"
@@ -270,6 +272,7 @@
           >
             <Popover.Trigger>
               {#snippet child({ props }: { props: Record<string, unknown> })}
+                <!-- eslint-disable-next-line no-restricted-syntax -- tracker dot is a popover trigger inside a calendar cell -->
                 <button
                   {...props}
                   class="tracker-icon h-4 w-4 rounded-full flex items-center justify-center hover:scale-125 transition-transform"

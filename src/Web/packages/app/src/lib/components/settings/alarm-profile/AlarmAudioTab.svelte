@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
+  import { Slider } from "$lib/components/ui/slider";
   import { Switch } from "$lib/components/ui/switch";
   import { Label } from "$lib/components/ui/label";
   import { Separator } from "$lib/components/ui/separator";
@@ -248,12 +249,12 @@
           <Label>Volume</Label>
           <div class="flex items-center gap-4">
             <VolumeX class="h-4 w-4 text-muted-foreground" />
-            <input
-              type="range"
+            <Slider
+              type="single"
               bind:value={profile.audio.maxVolume}
-              min="0"
-              max="100"
-              class="flex-1 h-2 bg-muted rounded-lg appearance-none cursor-pointer"
+              min={0}
+              max={100}
+              class="flex-1"
             />
             <Volume2 class="h-4 w-4 text-muted-foreground" />
             <span class="text-sm text-muted-foreground w-12">

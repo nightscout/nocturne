@@ -34,6 +34,7 @@
   ];
 </script>
 
+<!-- eslint-disable-next-line no-restricted-syntax -- the whole chart is the click target -->
 <button
   type="button"
   class="w-full h-full cursor-pointer hover:scale-105 transition-transform focus:outline-none focus:ring-2 focus:ring-primary rounded"
