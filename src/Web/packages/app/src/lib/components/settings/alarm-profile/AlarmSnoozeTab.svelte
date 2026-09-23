@@ -9,7 +9,7 @@
     SelectItem,
     SelectTrigger,
   } from "$lib/components/ui/select";
-  import { Timer, RotateCcw, Sparkles } from "lucide-svelte";
+  import { Timer, RotateCcw } from "lucide-svelte";
   import type { AlarmProfileConfiguration } from "$lib/types/alarm-profile";
 
   interface Props {
@@ -141,73 +141,6 @@
             </p>
           </div>
           <Switch bind:checked={profile.reraise.escalate} />
-        </div>
-      </div>
-    {/if}
-  </div>
-
-  <Separator />
-
-  <div class="space-y-4">
-    <div class="flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <Sparkles class="h-5 w-5 text-muted-foreground" />
-        <div>
-          <Label>Smart Snooze</Label>
-          <p class="text-sm text-muted-foreground">
-            Auto-extend snooze if trending in correct direction
-          </p>
-        </div>
-      </div>
-      <Switch bind:checked={profile.smartSnooze.enabled} />
-    </div>
-
-    {#if profile.smartSnooze.enabled}
-      <div class="p-4 bg-muted/50 rounded-lg space-y-4">
-        <p class="text-sm text-muted-foreground">
-          For high alarms: extend if glucose is falling.
-          <br />
-          For low alarms: extend if glucose is rising.
-        </p>
-        <div class="grid gap-4 @sm:grid-cols-3">
-          <div class="space-y-2">
-            <Label>Min Delta</Label>
-            <div class="flex items-center gap-2">
-              <Input
-                type="number"
-                bind:value={profile.smartSnooze.minDeltaThreshold}
-                class="w-20"
-                min="1"
-              />
-              <span class="text-xs text-muted-foreground">
-                mg/dL/5min
-              </span>
-            </div>
-          </div>
-          <div class="space-y-2">
-            <Label>Extend by</Label>
-            <div class="flex items-center gap-2">
-              <Input
-                type="number"
-                bind:value={profile.smartSnooze.extensionMinutes}
-                class="w-20"
-                min="1"
-              />
-              <span class="text-sm text-muted-foreground">min</span>
-            </div>
-          </div>
-          <div class="space-y-2">
-            <Label>Max Total</Label>
-            <div class="flex items-center gap-2">
-              <Input
-                type="number"
-                bind:value={profile.smartSnooze.maxTotalMinutes}
-                class="w-20"
-                min="1"
-              />
-              <span class="text-sm text-muted-foreground">min</span>
-            </div>
-          </div>
         </div>
       </div>
     {/if}

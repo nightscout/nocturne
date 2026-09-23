@@ -476,7 +476,8 @@
             <CardTitle>Smart snooze</CardTitle>
             <CardDescription>
               When the user snoozes, extend the snooze automatically while these
-              conditions hold.
+              conditions hold. Each extension counts toward the alert's snooze
+              limit, and without a recent glucose reading the alert fires again.
             </CardDescription>
           </CardHeader>
           <CardContent class="space-y-4">
@@ -515,6 +516,11 @@
                   />
                 {/each}
               </div>
+              <p class="text-sm text-muted-foreground">
+                With no conditions, only high and low glucose alerts are
+                extended, and only while glucose is clearly moving back toward
+                range. Every other alert fires again when its snooze ends.
+              </p>
             {/if}
           </CardContent>
         </Card>

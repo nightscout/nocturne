@@ -98,12 +98,6 @@ public class AlarmProfileConfiguration
     public AlarmReraiseSettings Reraise { get; set; } = new();
 
     /// <summary>
-    /// Smart snooze - auto-extend snooze if glucose is trending in the right direction
-    /// </summary>
-    [JsonPropertyName("smartSnooze")]
-    public SmartSnoozeSettings SmartSnooze { get; set; } = new();
-
-    /// <summary>
     /// Time-of-day schedule - when this alarm is active
     /// </summary>
     [JsonPropertyName("schedule")]
@@ -377,43 +371,6 @@ public class AlarmReraiseSettings
     /// </summary>
     [JsonPropertyName("escalationVolumeStep")]
     public int EscalationVolumeStep { get; set; } = 20;
-}
-
-/// <summary>
-/// Smart snooze settings - auto-extend snooze when trending in right direction
-/// </summary>
-public class SmartSnoozeSettings
-{
-    /// <summary>
-    /// Whether smart snooze is enabled
-    /// </summary>
-    [JsonPropertyName("enabled")]
-    public bool Enabled { get; set; }
-
-    /// <summary>
-    /// For high alarms: auto-extend snooze if glucose is falling
-    /// For low alarms: auto-extend snooze if glucose is rising
-    /// </summary>
-    [JsonPropertyName("extendWhenTrendingCorrect")]
-    public bool ExtendWhenTrendingCorrect { get; set; } = true;
-
-    /// <summary>
-    /// Minimum delta (mg/dL per 5 min) to consider "trending correct"
-    /// </summary>
-    [JsonPropertyName("minDeltaThreshold")]
-    public int MinDeltaThreshold { get; set; } = 5;
-
-    /// <summary>
-    /// Extension duration in minutes when trending correct
-    /// </summary>
-    [JsonPropertyName("extensionMinutes")]
-    public int ExtensionMinutes { get; set; } = 15;
-
-    /// <summary>
-    /// Maximum total snooze time with extensions
-    /// </summary>
-    [JsonPropertyName("maxTotalMinutes")]
-    public int MaxTotalMinutes { get; set; } = 60;
 }
 
 /// <summary>
