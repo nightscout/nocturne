@@ -273,8 +273,11 @@ in §3 plus:
   - **C# resolves more:** `TimeZoneHelper` accepts Windows ids
     (`AUS Eastern Standard Time`) via `TryConvertWindowsIdToIanaId`. `chrono_tz` has no
     equivalent, so the crate leaves them unresolved (per-rule ⇒ false, tenant ⇒ UTC).
-    Closing it means carrying a CLDR Windows↔IANA mapping in the crate, which would then
-    need its own drift check against .NET's.
+    The .NET host closes this at its boundary instead of carrying a CLDR mapping in the
+    crate: it rewrites a Windows id to IANA in every request it sends the crate (tenant tz
+    and per-rule `time_of_day.timezone`), and a rule save stores the IANA id and rejects a
+    `timezone` no zone resolves from (`invalid_field` on `timezone`). Another host of the
+    crate must do the same.
   - **Rust resolves more:** the crate scans `chrono_tz::TZ_VARIANTS`, which includes tzdb
     *backward links* (`Etc/Greenwich`, `Etc/Zulu`, `US/Pacific`, `Asia/Calcutta`,
     `Australia/ACT`). C# scans `TimeZoneInfo.GetSystemTimeZones()` — the ICU canonical

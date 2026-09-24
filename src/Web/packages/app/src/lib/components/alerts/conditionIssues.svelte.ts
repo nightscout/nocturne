@@ -18,6 +18,7 @@ const ISSUE_MESSAGES: Record<string, string> = {
 	unknown_state: "An alert-state condition needs a state: firing, unacknowledged or acknowledged.",
 	"invalid_field:alert_id": "An alert-state condition needs a rule chosen.",
 	"invalid_field:tracker_definition_id": "A tracker condition needs a tracker chosen.",
+	"invalid_field:timezone": "A time-of-day condition has a time zone that isn't recognised. Pick one from the list and save again.",
 	minutes_not_positive: "A “for at least” duration must be 1 minute or more.",
 	child_missing: "A NOT or “for at least” wrapper has nothing inside it.",
 	condition_missing: MALFORMED,

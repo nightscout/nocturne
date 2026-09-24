@@ -103,6 +103,39 @@ public class AlertRulesControllerConditionValidationTests
         result.Result.Should().BeOfType<BadRequestObjectResult>();
     }
 
+    [Fact]
+    public async Task CreateRule_stores_a_windows_rule_zone_as_iana()
+    {
+        var (controller, db) = CreateController(new NoConditionIssues());
+
+        await controller.CreateRule(new CreateAlertRuleRequest
+        {
+            Name = "Overnight",
+            ConditionType = AlertConditionType.TimeOfDay,
+            ConditionParams = Json("""{"from": "22:00", "to": "06:00", "timezone": "AUS Eastern Standard Time"}"""),
+        }, CancellationToken.None);
+
+        var stored = await db.AlertRules.SingleAsync();
+        JsonDocument.Parse(stored.ConditionParams).RootElement.GetProperty("timezone").GetString()
+            .Should().Be("Australia/Sydney");
+    }
+
+    [Fact]
+    public void Validator_reports_a_zone_nothing_resolves()
+    {
+        var validator = new AlertRuleConditionValidator(NullLogger<AlertRuleConditionValidator>.Instance);
+
+        var issues = validator.Validate(
+            AlertConditionType.TimeOfDay,
+            """{"from": "22:00", "to": "06:00", "timezone": "Not/AZone"}""",
+            autoResolveEnabled: true,
+            """{"type": "time_of_day", "time_of_day": {"from": "06:00", "to": "07:00", "timezone": "Also/NotAZone"}}""",
+            clientConfigurationJson: null);
+
+        issues.Should().Contain(new RustValidationIssue("condition", "time_of_day", "invalid_field", "timezone"))
+            .And.Contain(new RustValidationIssue("auto_resolve", "auto_resolve", "invalid_field", "timezone"));
+    }
+
     [NativeFact]
     public void Validator_checks_the_body_the_enabled_auto_resolve_tree_and_smart_snooze_conditions()
     {

@@ -9,7 +9,8 @@ namespace Nocturne.API.Services.Alerts;
 /// Checks the condition trees a rule evaluates for everything a save rejects, through the shared
 /// Rust engine's <c>validate</c> (docs/alerts/engine-semantics.md §1.4). Those trees are the body,
 /// the auto-resolve tree when auto-resolve is on, and the smart-snooze conditions when smart
-/// snooze is on.
+/// snooze is on. A <c>time_of_day</c> timezone no zone resolves from is reported as
+/// <c>invalid_field</c> on <c>timezone</c>.
 /// </summary>
 public interface IAlertRuleConditionValidator
 {
@@ -18,7 +19,7 @@ public interface IAlertRuleConditionValidator
 
     /// <summary>
     /// The problems with the rule's trees; empty when there are none. Never throws: when the
-    /// native engine is unavailable or fails, the rule is not checked, which is logged.
+    /// native engine is unavailable or fails, only timezones are checked, which is logged.
     /// </summary>
     IReadOnlyList<RustValidationIssue> Validate(
         AlertConditionType conditionType,
@@ -52,6 +53,17 @@ public sealed class AlertRuleConditionValidator : IAlertRuleConditionValidator
         string? autoResolveParamsJson,
         string? clientConfigurationJson)
     {
+        return [.. NativeIssues(conditionType, conditionParamsJson, autoResolveEnabled, autoResolveParamsJson, clientConfigurationJson),
+            .. TimeZoneIssues(conditionType, conditionParamsJson, autoResolveEnabled, autoResolveParamsJson, clientConfigurationJson)];
+    }
+
+    private IReadOnlyList<RustValidationIssue> NativeIssues(
+        AlertConditionType conditionType,
+        string conditionParamsJson,
+        bool autoResolveEnabled,
+        string? autoResolveParamsJson,
+        string? clientConfigurationJson)
+    {
         if (!IsAvailable)
         {
             _logger.LogWarning(
@@ -78,6 +90,43 @@ public sealed class AlertRuleConditionValidator : IAlertRuleConditionValidator
         {
             _logger.LogWarning(ex, "Alert rule condition validation failed; the rule was not validated");
             return [];
+        }
+    }
+
+    private static IEnumerable<RustValidationIssue> TimeZoneIssues(
+        AlertConditionType conditionType,
+        string conditionParamsJson,
+        bool autoResolveEnabled,
+        string? autoResolveParamsJson,
+        string? clientConfigurationJson)
+    {
+        static RustValidationIssue Issue(string scope, ConditionTimeZones.UnresolvedZone zone) =>
+            new(scope, zone.Path, "invalid_field", "timezone");
+
+        foreach (var zone in ConditionTimeZones.UnresolvedInRule(conditionType, conditionParamsJson))
+            yield return Issue("condition", zone);
+
+        if (autoResolveEnabled)
+        {
+            foreach (var zone in ConditionTimeZones.UnresolvedInNode(
+                         autoResolveParamsJson, AlertConditionTypeNames.AutoResolvePathRoot))
+                yield return Issue("auto_resolve", zone);
+        }
+
+        JsonElement? snooze;
+        try
+        {
+            snooze = SmartSnoozeConditions(clientConfigurationJson);
+        }
+        catch (JsonException)
+        {
+            yield break;
+        }
+        if (snooze is { } conditions)
+        {
+            foreach (var zone in ConditionTimeZones.UnresolvedInConditionList(
+                         conditions, AlertConditionTypeNames.SnoozePathRoot))
+                yield return Issue("snooze", zone);
         }
     }
 

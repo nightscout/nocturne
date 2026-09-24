@@ -179,7 +179,7 @@ internal sealed class RustBackedAlertEngine(
         JsonElement nodeJson;
         try
         {
-            nodeJson = RustEnvelopeMapper.ParseJson(rule.AutoResolveParams);
+            nodeJson = RustEnvelopeMapper.ParseNode(rule.AutoResolveParams);
         }
         catch (JsonException ex)
         {
@@ -227,7 +227,7 @@ internal sealed class RustBackedAlertEngine(
     {
         var wire = Evaluators.AlertConditionTypeNames.ToWireString(rule.ConditionType);
         var payload = string.IsNullOrWhiteSpace(rule.ConditionParams) ? "null" : rule.ConditionParams;
-        var nodeJson = RustEnvelopeMapper.ParseJson($"{{\"type\":{JsonSerializer.Serialize(wire)},{JsonSerializer.Serialize(wire)}:{payload}}}");
+        var nodeJson = RustEnvelopeMapper.ParseNode($"{{\"type\":{JsonSerializer.Serialize(wire)},{JsonSerializer.Serialize(wire)}:{payload}}}");
 
         var request = new RustEvaluateNodeRequest
         {

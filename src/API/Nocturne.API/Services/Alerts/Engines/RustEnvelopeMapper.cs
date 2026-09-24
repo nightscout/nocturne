@@ -54,13 +54,14 @@ internal static class RustEnvelopeMapper
     /// throws <see cref="JsonException"/>, matching the managed path, where the evaluator's
     /// payload deserialisation would throw into the per-rule catch. Auto-resolve params are sent
     /// only when auto-resolve is enabled, and unparseable ones as null. They only gate
-    /// auto-resolve, which neither engine fires for a tree that does not parse.
+    /// auto-resolve, which neither engine fires for a tree that does not parse. Timezone ids go
+    /// through <see cref="ConditionTimeZones"/>.
     /// </summary>
     public static RustAlertRule BuildRule(AlertRule rule) => new()
     {
         Id = rule.Id,
         ConditionType = AlertConditionTypeNames.ToWireString(rule.ConditionType),
-        ConditionParams = ParseJson(rule.ConditionParams),
+        ConditionParams = ParseJson(ConditionTimeZones.CanonicaliseRule(rule.ConditionType, rule.ConditionParams)),
         ConfirmationReadings = rule.ConfirmationReadings,
         HysteresisMinutes = rule.HysteresisMinutes,
         AutoResolveEnabled = rule.AutoResolveEnabled,
@@ -73,7 +74,7 @@ internal static class RustEnvelopeMapper
             return null;
         try
         {
-            return ParseJson(json);
+            return ParseNode(json);
         }
         catch (JsonException)
         {
@@ -104,6 +105,9 @@ internal static class RustEnvelopeMapper
         using var doc = JsonDocument.Parse(json);
         return doc.RootElement.Clone();
     }
+
+    /// <summary>A stored full condition node, with timezone ids through <see cref="ConditionTimeZones"/>.</summary>
+    public static JsonElement ParseNode(string nodeJson) => ParseJson(ConditionTimeZones.CanonicaliseNode(nodeJson));
 
     /// <summary>
     /// Per-instance memo for <see cref="BuildContext"/>: the orchestrator (and the shadow
@@ -196,7 +200,9 @@ internal static class RustEnvelopeMapper
             GlucoseBucket = ctx.GlucoseBucket is { } gb ? WireEnum(gb) : null,
             LastCarbAt = Utc(ctx.LastCarbAt),
             LastBolusAt = Utc(ctx.LastBolusAt),
-            TenantTimeZoneId = ctx.TenantTimeZoneId,
+            TenantTimeZoneId = ctx.TenantTimeZoneId is { Length: > 0 } tenantZone
+                ? TimeZoneHelper.ToIanaIdIfWindows(tenantZone)
+                : ctx.TenantTimeZoneId,
             ActivePumpState = ctx.ActivePumpState is { } pump
                 ? new WirePumpState(WireEnum(pump.Mode), Utc(pump.StartedAt)!.Value)
                 : null,
@@ -225,7 +231,7 @@ internal static class RustEnvelopeMapper
     /// expects (child <c>type</c> strings preserved verbatim).
     /// </summary>
     public static JsonElement BuildNode(ConditionNode node) =>
-        JsonSerializer.SerializeToElement(node, EvaluatorJson.Options);
+        ConditionTimeZones.CanonicaliseNode(JsonSerializer.SerializeToElement(node, EvaluatorJson.Options));
 
     // -----------------------------------------------------------------------
     // Response mapping
