@@ -152,13 +152,29 @@ public class MarshallingStressTests
         var rule = new RustAlertRule
         {
             Id = RuleId,
-            ConditionType = "threshold",
+            ConditionType = "iob",
             ConditionParams = Element(new JsonObject()),
         };
 
         var response = RustAlertEngine.Evaluate(rule, EmptyContext(), new DateTime(2026, 1, 5, 12, 0, 0, DateTimeKind.Utc));
 
         JsonNode.Parse(response.Result!.Value.GetRawText())!["root"]!.GetValue<bool>().Should().BeFalse();
+    }
+
+    [NativeFact]
+    public void Condition_params_whose_defaults_cannot_be_evaluated_throw_typed_exception()
+    {
+        var rule = new RustAlertRule
+        {
+            Id = RuleId,
+            ConditionType = "threshold",
+            ConditionParams = Element(new JsonObject()),
+        };
+
+        var act = () => RustAlertEngine.Evaluate(rule, EmptyContext(), new DateTime(2026, 1, 5, 12, 0, 0, DateTimeKind.Utc));
+
+        act.Should().Throw<RustAlertEngineException>()
+            .WithMessage("*malformed condition_params for 'threshold': direction_missing at 'threshold'*");
     }
 
     [NativeFact]

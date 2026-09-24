@@ -137,12 +137,11 @@ public static class ContainerScenarios
 
         yield return Scenario(
             "malformed-container-payloads",
-            "a container whose payload is missing is treated as a leaf (gets a leaf id) and evaluates false",
+            "a not or sustained whose payload is missing is treated as a leaf (gets a leaf id) and evaluates false",
             [
                 Rule(1, "composite", """
-                    {"operator": "and", "conditions": [
+                    {"operator": "or", "conditions": [
                         {"type": "sustained"},
-                        {"type": "composite"},
                         {"type": "not"}
                     ]}
                     """),

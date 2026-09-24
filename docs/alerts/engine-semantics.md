@@ -49,13 +49,14 @@ name equals the type string for every kind (e.g. `"threshold": {…}`,
 `"rate_of_change": {…}`, `"alert_state": {…}`). Exactly one payload is expected; the
 engine only ever reads the payload matching `type`.
 
-- `type` is matched **lowercase-invariant** (`"Threshold"` and `"threshold"` are the same
-  kind) at every dispatch site.
-- **Unknown `type` ⇒ the node evaluates `false`** (never throws). Same for a known type
-  whose payload field is null/absent: the dispatcher serialises the missing payload as
-  `{}`, and every payload deserialisation that yields null (or a record failing its
-  null-guards) returns `false`. "Silent-false" is the universal failure mode: malformed
-  rules never crash evaluation, they just never fire.
+- `type` resolves to a kind by its wire string (case-insensitive), else by its
+  `AlertConditionType` member name or integer ordinal (case-insensitive, trimmed). The
+  payload, though, is read from the field named by the **lowercased `type`**, which exists
+  only for wire strings: `"Threshold"` reads `threshold`, but `"RateOfChange"` and `"3"`
+  resolve a kind and find no payload.
+- **Unknown `type` ⇒ the node evaluates `false`.** A known type whose payload is
+  null/absent (or unreachable, as above) evaluates the record built from `{}`, with every
+  field at its constructor default. Whether that default evaluates or throws is §1.4.
 - The full discriminator set is the
   `AlertConditionType` enum's `EnumMember` values.
 
@@ -81,6 +82,49 @@ The corpus pins boundary behaviour; the practical rule for the port is: replicat
 *comparison operator and inclusivity*, and keep elapsed-time math in f64 where C# used
 double, converting to decimal only where C# casts.
 
+### 1.4 Evaluability
+
+Some trees cannot be evaluated: the C# evaluators throw on them, and the orchestrator's
+per-rule catch skips the rule for that tick with its timers and tracker untouched (§7).
+The throw depends on what evaluation reaches, but a rule holding one is broken whether
+or not a given tick reaches it. So both engines reject these shapes **before evaluating
+anything**, anywhere in the tree, including behind a short-circuit, a `sustained` whose
+`minutes <= 0`, or a leaf whose input is null this tick:
+
+| Reason code | Shape | C# throw site |
+|---|---|---|
+| `type_missing` | a node with no `type` (a child, or an auto-resolve / snooze root) | `ConditionEvaluatorRegistry.GetEvaluator(null)` → `FromWireString(null)` |
+| `condition_missing` | a `null` slot in a composite's `conditions` | `CompositeEvaluator.EvaluateNodeAsync` reads `node.Type` |
+| `conditions_missing` | a composite with no `conditions` list, including a `composite` child with no payload | `CompositeEvaluator`: `condition.Conditions.Count` |
+| `operator_missing` | a composite with non-empty `conditions` and no `operator` | `CompositeEvaluator`: `condition.Operator.ToLowerInvariant()` |
+| `direction_missing` | a `threshold` or `rate_of_change` with no `direction` (including the `{}` default, §1.2) | `ThresholdEvaluator` / `RateOfChangeEvaluator`: `Direction.ToLowerInvariant()`, when a reading or trend rate is present |
+| `state_missing` | an `alert_state` with no `state` | `AlertStateEvaluator`: `State.ToLowerInvariant()`, when the referenced alert is active |
+
+Together with the reader's own failures (`not_an_object`, `invalid_field`, `too_deep`:
+the `JsonException` class of §1.1), these are the problems that **fail evaluation**:
+
+- Rule body: the rule is skipped — no root, leaves, tracker transition, auto-resolve or
+  timer writes. The C# engine throws `ConditionTreeFaultException` into the per-rule
+  catch; the crate's driver returns `skipped` and its `evaluate` envelope returns an
+  error, which the host treats as the same skip.
+- Auto-resolve tree: never resolves (§7 step 5, as for malformed JSON).
+- Snooze conditions: evaluate false, so the snooze clears.
+
+Everything else malformed stays evaluable and silently false (or true under `not`). A
+rule save rejects those too, together with the shapes above:
+
+| Reason code | Shape |
+|---|---|
+| `unknown_kind` | `type` names no kind |
+| `non_canonical_type` | `type` resolves but is not the exact wire string (`"Threshold"`, `"RateOfChange"`) — stored rules keep the §1.2 resolution |
+| `unknown_operator` | composite operator other than `and`/`or` (case-insensitive); comparison operator other than the exact `<` `<=` `>` `>=` `==`, or missing; `time_since_*` operator ordinal outside the enum |
+| `unknown_direction` | `threshold` direction other than `above`/`below`, `rate_of_change` other than `rising`/`falling` (case-insensitive) |
+| `unknown_state` | `alert_state` state other than `firing`/`unacknowledged`/`acknowledged` (case-insensitive) |
+| `conditions_empty` | a composite with an empty `conditions` list |
+| `child_missing` | a `not` or `sustained` with no `child` |
+| `minutes_not_positive` | a `sustained` with `minutes <= 0` |
+| `payload_missing` | a rule body whose `condition_params` is JSON `null` |
+
 ---
 
 ## 2. Tree structure, leaf identity, and paths
@@ -90,10 +134,10 @@ double, converting to decimal only where C# casts.
 Exactly three kinds are containers: `composite` (N children), `not` (1 child),
 `sustained` (1 child). Everything else is a leaf.
 
-A container whose payload is null/absent (e.g. `{"type":"composite"}` with no
-`composite` field) is **treated as a leaf** by the identity walk and the path walk (the
-`when`-guards fail, so the walkers fall through to the leaf branch). It still evaluates
-`false`. **[anomaly — but normative]**
+A container whose payload is null/absent (e.g. `{"type":"not"}` with no `not` field) is
+**treated as a leaf** by the identity walk and the path walk (the `when`-guards fail, so
+the walkers fall through to the leaf branch). A `not` or `sustained` so shaped evaluates
+`false`; a `composite` cannot be evaluated (§1.4). **[anomaly — but normative]**
 
 ### 2.2 Leaf IDs (`LeafIdentity.AssignLeafIds`)
 
@@ -174,8 +218,9 @@ below are non-strict/strict exactly as written.
 
 `composite` / `not` / `sustained` (containers):
 
-- **`composite`** — `{operator, conditions[]}`. Null payload or empty `conditions` ⇒
-  false. Operator lowercased; only `and` / `or` are recognised, anything else ⇒ false.
+- **`composite`** — `{operator, conditions[]}`. Empty `conditions` ⇒ false (a missing
+  list, missing operator or null slot cannot be evaluated, §1.4). Operator lowercased;
+  only `and` / `or` are recognised, anything else ⇒ false.
   Short-circuits (§2.4). A child of unknown kind evaluates false (which makes an `and`
   false and leaves an `or` undecided).
 - **`not`** — `{child}`. Missing child ⇒ **false** (not true). Otherwise inverts the
@@ -323,7 +368,9 @@ drops `alert_state` chains whose parents are disabled/deleted — host-side):
    Consequence: a rule whose resolve predicate is already true when its body opens
    produces an open + close pair on the same tick.
 
-Evaluation errors in one rule are caught and logged; remaining rules still evaluate.
+Evaluation errors in one rule are caught and logged; remaining rules still evaluate. A
+rule whose tree cannot be evaluated (§1.4) is skipped before step 2, so it writes no
+timers.
 
 DND suppression of **delivery** (non-critical, non-`AllowThroughDnd` rules while
 `ActiveDoNotDisturb != null`) is a dispatch-time decision and stays host-side; the
@@ -399,3 +446,4 @@ contexts; window resolution, reading fetch, and fact-timeline capture stay host-
 | 6 | Elapsed-time math mixes double→decimal casts (per-leaf, §1.3) | §1.3 | normative |
 | 7 | `loop_enaction_stale` cold-start guard is `HasEverApsCycled`, not an enaction-specific flag | §3 | normative |
 | 8 | `time_since_last_*` treats a missing anchor as +∞ (fires on cold start) — deliberately opposite to `loop_stale`'s guard | §3 | normative |
+| 9 | A multi-word kind spelled by its member name (`"RateOfChange"`, `"PumpState"`) or ordinal resolves the kind but not its payload, and evaluates the `{}` defaults | §1.2 | normative for stored rules; rejected on save (§1.4) |

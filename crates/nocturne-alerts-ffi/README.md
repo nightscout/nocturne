@@ -111,11 +111,17 @@ Unknown fields (e.g. the scenario `name`) are ignored, so a corpus
 ```
 
 Failure modes that are **data**, not errors (matching C# engine semantics):
-unknown leaf types, malformed payloads inside trees, null condition records —
-these evaluate `false` inside `result`. Envelope-level errors (`ok: false`)
-are reserved for unusable requests: malformed JSON, wrong `schema_version`,
-unknown root `condition_type`, unknown `tracker.state`, or a tracker `state`
-without `updated_at`.
+unknown leaf types, unrecognised operators or directions, containers with no
+child, null condition records — these evaluate `false` inside `result`.
+Envelope-level errors (`ok: false`) are reserved for unusable requests:
+malformed JSON, wrong `schema_version`, unknown root `condition_type`, unknown
+`tracker.state`, a tracker `state` without `updated_at`, and a rule body that
+cannot be evaluated — malformed anywhere in the tree, or one of the shapes in
+`docs/alerts/engine-semantics.md` §1.4. That last error reads
+`malformed condition_params for '<type>': <reason> at '<path>'`; the host
+skips the rule and keeps its timers and tracker unchanged, exactly as the
+managed engine's per-rule catch does. An auto-resolve tree that cannot be
+evaluated never resolves and is not an error.
 
 `result.skipped` is reserved for a root type with no evaluator (the rule is
 skipped like the orchestrator skips it: `result` is `{rule_id, skipped: true}`
@@ -180,10 +186,10 @@ auto-resolve (`root: "auto_resolve"`).
 }
 ```
 
-Unknown node kinds and missing payloads evaluate `false` (silent-fail
-parity). A structurally malformed `node` is an envelope error (`ok: false`) —
-mirroring the C# callers, which all deserialise the tree (and skip on
-`JsonException`) before dispatching into the registry. Timers are keyed by
+Unknown node kinds and missing leaf payloads evaluate `false` (silent-fail
+parity). A `node` that is malformed, or that cannot be evaluated
+(`docs/alerts/engine-semantics.md` §1.4, with paths under `root`), is an
+envelope error (`ok: false`); the C# callers treat it as `false`. Timers are keyed by
 the same `(rule_id, path)` identity as `evaluate`; sharing rows between the
 per-reading and sweep variants of a scope is intentional (see
 `docs/alerts/engine-semantics.md` §2.3).

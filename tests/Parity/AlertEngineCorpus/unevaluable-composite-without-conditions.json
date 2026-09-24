@@ -1,22 +1,45 @@
 {
   "schema_version": 1,
-  "name": "malformed-container-payloads",
-  "description": "a not or sustained whose payload is missing is treated as a leaf (gets a leaf id) and evaluates false",
+  "name": "unevaluable-composite-without-conditions",
+  "description": "a composite with no conditions list, at the root or as a child with no payload, skips the rule",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
       "name": "rule-1",
       "condition_type": "composite",
       "condition_params": {
-        "operator": "or",
+        "operator": "and"
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "and",
         "conditions": [
           {
             "type": "sustained"
           },
           {
-            "type": "not"
+            "type": "composite"
           }
         ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000003",
+      "name": "rule-3",
+      "condition_type": "threshold",
+      "condition_params": {
+        "direction": "below",
+        "value": 70
       },
       "confirmation_readings": 1,
       "hysteresis_minutes": 0,

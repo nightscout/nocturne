@@ -12,7 +12,7 @@ use nocturne_alerts_core::eval::{Env, eval_kind, eval_node};
 use nocturne_alerts_core::excursion::{
     CloseReason, ExcursionTracker, TrackerRuleConfig, TrackerStateKind, TransitionType,
 };
-use nocturne_alerts_core::model::{ConditionKind, Node, parse_payload};
+use nocturne_alerts_core::model::{ConditionKind, Node, parse_payload, parse_payload_structure};
 use nocturne_alerts_core::sustained::TimerStore;
 
 fn base() -> DateTime<Utc> {
@@ -1140,16 +1140,16 @@ fn threshold_node() -> Value {
 #[test]
 fn node_depth_limit_counts_typed_values_like_system_text_json() {
     // 30 not levels (60 objects) + threshold node and payload = 62.
-    assert!(Node::parse(&not_chain(30, threshold_node())).is_ok());
+    assert!(Node::parse_structure(&not_chain(30, threshold_node())).is_ok());
     // 63 typed objects is the most STJ builds.
-    assert!(Node::parse(&not_chain(31, json!({ "type": "threshold" }))).is_ok());
-    assert!(Node::parse(&not_chain(31, threshold_node())).is_err());
+    assert!(Node::parse_structure(&not_chain(31, json!({ "type": "threshold" }))).is_ok());
+    assert!(Node::parse_structure(&not_chain(31, threshold_node())).is_err());
     // A condition list is a typed frame too: 60 + node + payload + list + node = 64.
     let composite = json!({
         "type": "composite",
         "composite": { "operator": "and", "conditions": [{ "type": "threshold" }] }
     });
-    assert!(Node::parse(&not_chain(30, composite)).is_err());
+    assert!(Node::parse_structure(&not_chain(30, composite)).is_err());
 }
 
 #[test]
@@ -1162,16 +1162,16 @@ fn node_depth_limit_counts_ignored_properties_as_plain_json() {
         json!({ "type": "threshold", "threshold": { "direction": "below", "value": 1, "x": x } })
     };
     // 62 typed objects + 2 untyped arrays = 64 nested containers.
-    assert!(Node::parse(&not_chain(30, with_arrays(2))).is_ok());
-    assert!(Node::parse(&not_chain(30, with_arrays(3))).is_err());
+    assert!(Node::parse_structure(&not_chain(30, with_arrays(2))).is_ok());
+    assert!(Node::parse_structure(&not_chain(30, with_arrays(3))).is_err());
 }
 
 #[test]
 fn payload_depth_counts_from_the_payload_document() {
     let payload = |levels| json!({ "child": not_chain(levels, json!({ "type": "threshold", "threshold": {} })) });
     // payload + 60 + node + payload = 63.
-    assert!(parse_payload(ConditionKind::Not, &payload(30)).is_ok());
-    assert!(parse_payload(ConditionKind::Not, &payload(31)).is_err());
+    assert!(parse_payload_structure(ConditionKind::Not, &payload(30)).is_ok());
+    assert!(parse_payload_structure(ConditionKind::Not, &payload(31)).is_err());
 }
 
 #[test]

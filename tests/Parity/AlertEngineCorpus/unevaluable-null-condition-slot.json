@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "name": "malformed-container-payloads",
-  "description": "a not or sustained whose payload is missing is treated as a leaf (gets a leaf id) and evaluates false",
+  "name": "unevaluable-null-condition-slot",
+  "description": "a null composite slot skips the rule even when an earlier or-child is true",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
@@ -11,11 +11,13 @@
         "operator": "or",
         "conditions": [
           {
-            "type": "sustained"
+            "type": "threshold",
+            "threshold": {
+              "direction": "below",
+              "value": 70
+            }
           },
-          {
-            "type": "not"
-          }
+          null
         ]
       },
       "confirmation_readings": 1,
@@ -31,6 +33,20 @@
         "latest_timestamp": "2026-01-05T12:00:00Z",
         "trend_rate": 0,
         "last_reading_at": "2026-01-05T12:00:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:05:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:05:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:05:00Z",
         "has_ever_aps_cycled": false,
         "has_ever_pump_snapshot": false,
         "has_ever_uploader_snapshot": false,

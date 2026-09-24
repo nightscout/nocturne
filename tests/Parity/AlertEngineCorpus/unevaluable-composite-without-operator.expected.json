@@ -1,23 +1,18 @@
 {
   "schema_version": 1,
-  "scenario": "malformed-container-payloads",
+  "scenario": "unevaluable-composite-without-operator",
   "ticks": [
     {
       "at": "2026-01-05T12:00:00Z",
       "rules": [
         {
           "rule_id": "00000000-0000-0000-0000-000000000001",
+          "skipped": true
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000002",
           "root": false,
-          "leaves": [
-            {
-              "leaf_id": 0,
-              "value": false
-            },
-            {
-              "leaf_id": 1,
-              "value": false
-            }
-          ],
+          "leaves": [],
           "transition": "none",
           "tracker": {
             "state": "idle",

@@ -60,8 +60,8 @@ pub struct TrackerSnapshot {
 #[derive(Debug, Clone)]
 pub struct RuleOutcome {
     pub rule_id: Uuid,
-    /// Always false: every root condition kind has an evaluator. Kept for the
-    /// FFI envelope, whose `skipped` flag hosts still honour.
+    /// The rule body failed to parse (engine-semantics.md §1.4): nothing was
+    /// evaluated, no state changed, and every other field is empty.
     pub skipped: bool,
     pub root: Option<bool>,
     /// Per-leaf force-eval truths, ascending by leaf id.
@@ -72,6 +72,21 @@ pub struct RuleOutcome {
     /// Timer mutations from the root eval then the auto-resolve eval, in
     /// execution order.
     pub timer_ops: Vec<TimerOp>,
+}
+
+impl RuleOutcome {
+    fn skipped(rule_id: Uuid) -> Self {
+        Self {
+            rule_id,
+            skipped: true,
+            root: None,
+            leaves: Vec::new(),
+            transition: None,
+            tracker: None,
+            auto_resolved: false,
+            timer_ops: Vec::new(),
+        }
+    }
 }
 
 /// Evaluates every rule (in order) against one tick.
@@ -96,15 +111,13 @@ pub fn evaluate_rule(
 ) -> RuleOutcome {
     let wire = rule.condition_type.wire();
 
-    // Root eval: the evaluator receives the stored payload directly. A JSON
-    // null column is a null condition record (false). A structurally
-    // malformed payload throws JsonException in C# (the orchestrator's
-    // per-rule catch leaves the tracker untouched), so the FFI envelope
-    // rejects it before reaching here; this in-crate fallback stays
-    // fail-closed for direct embedders.
+    // A JSON null column is a null condition record, which evaluates false.
     let payload = match &rule.condition_params {
         Value::Null => None,
-        v => parse_payload(rule.condition_type, v).ok(),
+        v => match parse_payload(rule.condition_type, v) {
+            Ok(p) => Some(p),
+            Err(_) => return RuleOutcome::skipped(rule.id),
+        },
     };
 
     let root = {

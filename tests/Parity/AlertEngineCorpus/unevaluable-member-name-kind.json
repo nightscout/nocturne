@@ -1,20 +1,21 @@
 {
   "schema_version": 1,
-  "name": "malformed-container-payloads",
-  "description": "a not or sustained whose payload is missing is treated as a leaf (gets a leaf id) and evaluates false",
+  "name": "unevaluable-member-name-kind",
+  "description": "a multi-word kind spelled by its member name drops its payload, so a RateOfChange child has no direction and skips the rule",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
       "name": "rule-1",
       "condition_type": "composite",
       "condition_params": {
-        "operator": "or",
+        "operator": "and",
         "conditions": [
           {
-            "type": "sustained"
-          },
-          {
-            "type": "not"
+            "type": "RateOfChange",
+            "rate_of_change": {
+              "direction": "falling",
+              "rate": 2
+            }
           }
         ]
       },
@@ -29,7 +30,7 @@
       "context": {
         "latest_value": 65,
         "latest_timestamp": "2026-01-05T12:00:00Z",
-        "trend_rate": 0,
+        "trend_rate": -3,
         "last_reading_at": "2026-01-05T12:00:00Z",
         "has_ever_aps_cycled": false,
         "has_ever_pump_snapshot": false,

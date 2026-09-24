@@ -1,22 +1,17 @@
 {
   "schema_version": 1,
-  "name": "malformed-container-payloads",
-  "description": "a not or sustained whose payload is missing is treated as a leaf (gets a leaf id) and evaluates false",
+  "name": "unevaluable-behind-zero-minute-sustained",
+  "description": "a fault under a sustained whose minutes are not positive still skips the rule",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
       "name": "rule-1",
-      "condition_type": "composite",
+      "condition_type": "sustained",
       "condition_params": {
-        "operator": "or",
-        "conditions": [
-          {
-            "type": "sustained"
-          },
-          {
-            "type": "not"
-          }
-        ]
+        "minutes": 0,
+        "child": {
+          "type": "threshold"
+        }
       },
       "confirmation_readings": 1,
       "hysteresis_minutes": 0,

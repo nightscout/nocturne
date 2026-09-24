@@ -19,3 +19,4 @@ pub mod leaf_identity;
 pub mod model;
 pub mod paths;
 pub mod sustained;
+pub mod validate;

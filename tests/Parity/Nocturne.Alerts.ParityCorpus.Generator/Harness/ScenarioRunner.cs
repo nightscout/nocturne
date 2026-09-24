@@ -94,7 +94,22 @@ public sealed class ScenarioRunner
             CurrentPath = wire,
         };
 
-        var conditionMet = await evaluator.EvaluateAsync(rule.ConditionParams, rootContext, ct);
+        bool conditionMet;
+        try
+        {
+            if (ConditionTreeFaults.InRule(rule.ConditionType, rule.ConditionParams) is { } fault)
+                throw new ConditionTreeFaultException(fault);
+            conditionMet = await evaluator.EvaluateAsync(rule.ConditionParams, rootContext, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Orchestrator parity: its per-rule catch skips a rule whose evaluation throws,
+            // leaving the tracker and auto-resolve untouched. A throw partway through keeps
+            // the timer writes made before it, as in production, but they are not this
+            // result's ops.
+            timerStore.DrainOps();
+            return new ExpectedRuleResult { RuleId = rule.Id, Skipped = true };
+        }
 
         // Replay-parity leaf log: force-evaluate every leaf in isolation (no
         // short-circuit), using the rule-root context exactly as AlertReplayService does.
@@ -156,7 +171,7 @@ public sealed class ScenarioRunner
         {
             return false;
         }
-        if (node is null)
+        if (node is null || ConditionTreeFaults.InNode(node, AlertConditionTypeNames.AutoResolvePathRoot) is not null)
             return false;
 
         var autoResolveContext = context with

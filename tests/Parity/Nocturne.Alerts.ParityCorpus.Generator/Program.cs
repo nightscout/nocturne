@@ -28,6 +28,7 @@ scenarios.AddRange(SustainedScenarios.All());
 scenarios.AddRange(TrackerScenarios.All());
 scenarios.AddRange(TrackerAgeScenarios.All());
 scenarios.AddRange(AutoResolveScenarios.All());
+scenarios.AddRange(EvaluabilityScenarios.All());
 
 var duplicate = scenarios.GroupBy(s => s.Name).FirstOrDefault(g => g.Count() > 1);
 if (duplicate is not null)

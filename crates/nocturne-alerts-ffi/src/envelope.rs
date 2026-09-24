@@ -22,7 +22,7 @@ use nocturne_alerts_core::excursion::{
 use nocturne_alerts_core::model::{
     ALERT_CMP_OP_NAMES, ConditionKind, DAY_OF_WEEK_NAMES, GLUCOSE_BUCKET_NAMES, Node,
     PUMP_MODE_NAMES, Payload, STATE_SPAN_CATEGORY_NAMES, TEMP_BASAL_METRIC_NAMES, default_payload,
-    parse_payload,
+    parse_payload, parse_payload_structure,
 };
 use nocturne_alerts_core::paths::child_path;
 use nocturne_alerts_core::sustained::{TimerOp, TimerOpKind, TimerStore};
@@ -112,15 +112,14 @@ pub fn evaluate(request_json: &str) -> Result<Value, String> {
         )
     })?;
 
-    // Root-payload parity gate: a structurally malformed payload throws
-    // JsonException in the managed engine (caught per-rule by the orchestrator,
-    // leaving timers and tracker untouched), so it is an envelope error here —
-    // never a fail-closed evaluation that would advance the tracker.
+    // A rule body that cannot be evaluated (engine-semantics.md §1.4) skips
+    // the rule with its timers and tracker untouched; the host treats an
+    // error envelope as that skip.
     if !matches!(req.rule.condition_params, Value::Null)
-        && parse_payload(kind, &req.rule.condition_params).is_err()
+        && let Err(e) = parse_payload(kind, &req.rule.condition_params)
     {
         return Err(format!(
-            "malformed condition_params for '{}' (JsonException-equivalent)",
+            "malformed condition_params for '{}': {e}",
             req.rule.condition_type.escape_default()
         ));
     }
@@ -342,10 +341,9 @@ struct EvaluateNodeRequest {
     timers: BTreeMap<String, DateTime<Utc>>,
 }
 
-/// Evaluates one condition node for one instant. Unknown node kinds and
-/// missing payloads evaluate `false` (silent-fail parity); a structurally
-/// malformed node is an envelope error, mirroring the C# callers which all
-/// deserialise the tree (and skip on `JsonException`) before dispatching.
+/// Evaluates one condition node for one instant. A node that cannot be
+/// evaluated (engine-semantics.md §1.4) is an envelope error; the C# callers
+/// treat the matching exception as `false`.
 pub fn evaluate_node_envelope(request_json: &str) -> Result<Value, String> {
     let req: EvaluateNodeRequest =
         serde_json::from_str(request_json).map_err(|e| format!("invalid request envelope: {e}"))?;
@@ -359,8 +357,11 @@ pub fn evaluate_node_envelope(request_json: &str) -> Result<Value, String> {
     check_timestamp(req.now, "now")?;
     check_timers(&req.timers)?;
 
-    let node = Node::parse(&req.node)
-        .map_err(|_| "malformed condition node (JsonException-equivalent)".to_string())?;
+    let node = match &req.root {
+        Some(root) => Node::parse_rooted(&req.node, root),
+        None => Node::parse(&req.node),
+    }
+    .map_err(|e| format!("malformed condition node: {e}"))?;
     let root = req
         .root
         .unwrap_or_else(|| node.type_str.clone().unwrap_or_default());
@@ -460,8 +461,8 @@ pub fn leaf_paths(input_json: &str) -> Result<Value, String> {
         _ => return Err("condition node must be a JSON object".into()),
     };
 
-    let node = Node::parse(node_value)
-        .map_err(|_| "malformed condition node (JsonException-equivalent)".to_string())?;
+    let node =
+        Node::parse_structure(node_value).map_err(|e| format!("malformed condition node: {e}"))?;
     let root = root_override.unwrap_or_else(|| node.type_str.clone().unwrap_or_default());
 
     let mut paths = Vec::new();
@@ -573,13 +574,13 @@ pub fn describe(request_json: &str) -> Result<Value, String> {
         )
     })?;
 
-    // Reconstitute the node exactly as the engine's leaf log does (engine.rs):
-    // a null/malformed payload parses to `None`, so a malformed container falls
-    // through to being a single leaf — and leaf ids stay aligned with
-    // `result.leaves[]`.
+    // Reconstitute the node as the engine's leaf log does (engine.rs) so leaf
+    // ids align with `result.leaves[]`. The structural parse alone: a rule the
+    // engine skips still describes as authored, and a malformed payload
+    // collapses to a single leaf.
     let payload = match &req.condition_params {
         Value::Null => None,
-        v => parse_payload(kind, v).ok(),
+        v => parse_payload_structure(kind, v).ok(),
     };
     let full_node = Node::from_rule(kind, payload);
 

@@ -1,11 +1,11 @@
-//! Node dispatch and container evaluation.
+//! Node dispatch and container evaluation (engine-semantics.md §2.4, §3).
 //!
-//! Mirrors `ConditionEvaluatorRegistry.EvaluateNodeAsync` + the recursive
-//! container evaluators. The universal failure mode is silent-false: unknown
-//! kinds, missing payloads and conditions that would throw in C# inside a
-//! caught context all evaluate `false` rather than erroring. (Where C# would
-//! throw *uncaught*, the scenario cannot exist in the corpus — the generator
-//! itself would have crashed — so false is observably equivalent.)
+//! Evaluation cannot fail. The tree shapes whose evaluation is defined to
+//! fail (engine-semantics.md §1.4) are rejected by [`Node::parse`] and
+//! [`crate::model::parse_payload`] before a tree gets here; a tree built with
+//! the structural parse alone evaluates those shapes `false`. Everything else
+//! that is malformed — an unknown kind, operator or direction, a container
+//! with no child — evaluates `false` too, which `not` inverts.
 
 mod clock;
 mod device;
@@ -34,26 +34,10 @@ pub struct Env<'a> {
 /// Evaluates a condition node at `path`. `None` (a JSON-null child slot)
 /// evaluates false.
 pub fn eval_node(node: Option<&Node>, path: &str, env: &mut Env) -> bool {
-    let Some(node) = node else {
-        return false;
-    };
-    let Some(type_str) = node.type_str.as_deref() else {
-        return false;
-    };
-    let Some(kind) = ConditionKind::resolve(type_str) else {
-        return false;
-    };
-    // The payload switch in ConditionNodePayloads matches the lowercased type
-    // against the canonical snake_case names only — a kind resolved through
-    // the lenient enum-name path (e.g. "RateOfChange") finds no payload and
-    // evaluates with constructor defaults.
-    let lower = type_str.to_lowercase();
-    let payload = if lower == kind.wire() {
-        node.payload(&lower)
-    } else {
-        None
-    };
-    eval_kind(kind, payload, path, env)
+    match node.and_then(Node::dispatch) {
+        Some((kind, payload)) => eval_kind(kind, payload, path, env),
+        None => false,
+    }
 }
 
 /// Evaluates `kind` with the given payload (or the `{}`-defaults when absent).

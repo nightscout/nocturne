@@ -114,6 +114,9 @@ fn load_scenario(path: &PathBuf) -> (ScenarioFile, Value) {
     (scenario, expected)
 }
 
+/// Error prefix of a rule body that cannot be evaluated.
+const UNEVALUABLE_RULE: &str = "malformed condition_params for ";
+
 /// Drives one scenario through an evaluate-envelope function (C ABI or
 /// UniFFI), threading the timers/tracker state envelopes between ticks exactly
 /// as a host would, and returns the assembled expected-file Value.
@@ -148,6 +151,14 @@ fn run_scenario(scenario: &ScenarioFile, evaluate: impl Fn(&Value) -> Value) -> 
                     });
 
                     let response = evaluate(&request);
+                    if response["ok"] == Value::Bool(false)
+                        && response["error"]
+                            .as_str()
+                            .is_some_and(|e| e.starts_with(UNEVALUABLE_RULE))
+                    {
+                        // The host skips the rule and keeps its state.
+                        return json!({ "rule_id": rule_id, "skipped": true });
+                    }
                     assert_eq!(
                         response["ok"],
                         Value::Bool(true),

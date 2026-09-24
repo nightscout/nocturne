@@ -45,6 +45,10 @@ internal sealed class ManagedAlertEngine(
             return new AlertEngineEvaluation { Skipped = true };
         }
 
+        // The orchestrator's per-rule catch skips the rule.
+        if (ConditionTreeFaults.InRule(rule.ConditionType, rule.ConditionParams) is { } fault)
+            throw new ConditionTreeFaultException(fault);
+
         // Seed CurrentRuleId / CurrentPath so stateful evaluators (sustained) can key
         // persistent timers, and recursive evaluators (composite/not/sustained) can extend
         // the path as they descend. Root path is the rule's condition kind, e.g.
@@ -94,6 +98,9 @@ internal sealed class ManagedAlertEngine(
         string pathRoot,
         CancellationToken ct)
     {
+        if (ConditionTreeFaults.InNode(node, pathRoot) is { } fault)
+            throw new ConditionTreeFaultException(fault);
+
         var nodeContext = context with
         {
             CurrentRuleId = ruleId,
@@ -143,6 +150,14 @@ internal sealed class ManagedAlertEngine(
         }
 
         if (node is null) return null;
+
+        if (ConditionTreeFaults.InNode(node, AlertConditionTypeNames.AutoResolvePathRoot) is { } fault)
+        {
+            logger.LogWarning(
+                "AutoResolveParams for rule {AlertRuleId} cannot be evaluated ({Reason} at {Path}); skipping",
+                rule.Id, fault.Reason, fault.Path);
+            return null;
+        }
 
         // Path-prefix auto-resolve so any nested sustained timers don't collide with
         // timers owned by the main rule body (which roots at e.g. "composite"). Both
