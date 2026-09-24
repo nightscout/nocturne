@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
+using System.Linq;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
@@ -142,6 +143,15 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
         => await UpsertByLegacyIdAsync(
             _calibrationRepository, entry.Id, MapToCalibration(entry, result.CorrelationId), result, origin, ct);
 
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return "(none)";
+
+        var sanitized = value.Replace("\r", " ").Replace("\n", " ");
+        return new string(sanitized.Where(c => !char.IsControl(c)).ToArray());
+    }
+
     /// <inheritdoc />
     public async Task<DecompositionResult> DecomposeBatchAsync(
         IReadOnlyList<Entry> entries, WriteOrigin origin, CancellationToken ct = default)
@@ -172,7 +182,7 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
                     break;
                 default:
                     result.SkippedUnsupported++;
-                    unsupportedTypes.Add(entry.Type ?? "(none)");
+                    unsupportedTypes.Add(SanitizeForLog(entry.Type));
                     break;
             }
         }
