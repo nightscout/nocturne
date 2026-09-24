@@ -17,10 +17,12 @@ namespace Nocturne.API.Services.Alerts;
 /// <remarks>
 /// <list type="number">
 ///   <item>Close excursions whose hysteresis window has elapsed.</item>
-///   <item>Evaluate rules with a wall-clock-sensitive condition (<see cref="WallClockConditions"/>).</item>
 ///   <item>Check snoozed instances for smart-snooze extension or re-fire.</item>
+///   <item>Evaluate rules with a wall-clock-sensitive condition (<see cref="WallClockConditions"/>).</item>
 ///   <item>Run periodic auto-resolve for excursions whose conditions don't depend on the latest reading.</item>
 /// </list>
+/// The wall-clock pass evaluates every such rule of every tenant, so it runs after the two
+/// cheap, time-critical passes rather than delaying them.
 /// Each sweep creates a child DI scope so that scoped services (DbContext, tenant repositories)
 /// are properly isolated and disposed. Individual tenant failures are caught and logged without
 /// aborting the rest of the sweep.
@@ -43,6 +45,15 @@ public class AlertSweepService : BackgroundService
     /// path a writer uses.
     /// </summary>
     private const string AuditEndpoint = "service:alert-sweep";
+
+    /// <summary>
+    /// <see cref="WallClockConditions.ReferencesWallClock"/> per enabled rule, kept while the
+    /// rule's condition is unchanged, so a tree is walked, and an unwalkable one reported, once
+    /// per version rather than every tick.
+    /// </summary>
+    private readonly Dictionary<Guid, WallClockVerdict> _wallClock = [];
+
+    private sealed record WallClockVerdict(AlertConditionType Type, string Params, bool References);
 
     /// <summary>
     /// Initializes a new instance of <see cref="AlertSweepService"/>.
@@ -78,20 +89,20 @@ public class AlertSweepService : BackgroundService
 
             try
             {
-                await EvaluateWallClockRulesAsync(ct);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error evaluating wall-clock rules");
-            }
-
-            try
-            {
                 await CheckSnoozedInstancesAsync(ct);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error checking snoozed instances");
+            }
+
+            try
+            {
+                await EvaluateWallClockRulesAsync(ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error evaluating wall-clock rules");
             }
 
             try
@@ -556,6 +567,9 @@ public class AlertSweepService : BackgroundService
         var lookupRepository = lookupScope.ServiceProvider.GetRequiredService<IAlertRepository>();
 
         var enabled = await lookupRepository.GetAllEnabledRulesAsync(ct);
+        var enabledIds = enabled.Select(r => r.Id).ToHashSet();
+        foreach (var gone in _wallClock.Keys.Where(id => !enabledIds.Contains(id)).ToList())
+            _wallClock.Remove(gone);
 
         foreach (var tenantRules in enabled.GroupBy(r => r.TenantId))
         {
@@ -606,16 +620,27 @@ public class AlertSweepService : BackgroundService
 
     private bool ReferencesWallClock(AlertRuleSnapshot rule)
     {
+        if (_wallClock.TryGetValue(rule.Id, out var cached)
+            && cached.Type == rule.ConditionType
+            && string.Equals(cached.Params, rule.ConditionParams, StringComparison.Ordinal))
+        {
+            return cached.References;
+        }
+
+        bool references;
         try
         {
-            return WallClockConditions.ReferencesWallClock(rule);
+            references = WallClockConditions.ReferencesWallClock(rule);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex,
                 "Condition tree of rule {AlertRuleId} could not be walked; it evaluates per reading only",
                 rule.Id);
-            return false;
+            references = false;
         }
+
+        _wallClock[rule.Id] = new WallClockVerdict(rule.ConditionType, rule.ConditionParams, references);
+        return references;
     }
 }

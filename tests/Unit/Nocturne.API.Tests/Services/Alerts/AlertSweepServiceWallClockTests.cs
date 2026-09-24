@@ -2,13 +2,13 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.Alerts.ParityCorpus.Generator.Harness;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Tests.Services.Alerts.Engines;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Glucose;
@@ -119,6 +119,28 @@ public class AlertSweepServiceWallClockTests
     public Task Rust_backed_engine_escalates_a_child_of_a_reading_driven_parent() =>
         RunEscalationAsync(useRustEngine: true);
 
+    [Fact]
+    public async Task An_unwalkable_tree_is_reported_once_per_version()
+    {
+        var unwalkable = new AlertRule
+        {
+            Id = Guid.Parse("00000000-0000-0000-0003-0000000000b1"),
+            Name = "Unwalkable",
+            ConditionType = AlertConditionType.Composite,
+            ConditionParams = null!,
+        };
+        var fixture = new Fixture(useRustEngine: false, AlertConditionType.SignalLoss, SignalLoss15, unwalkable)
+        {
+            LastReadingAt = T0,
+        };
+
+        await fixture.SweepAt(T0.AddMinutes(1));
+        await fixture.SweepAt(T0.AddMinutes(2));
+        await fixture.SweepAt(T0.AddMinutes(3));
+
+        fixture.Logger.Warnings.Should().ContainSingle(w => w.Contains(unwalkable.Id.ToString()));
+    }
+
     private static async Task RunEscalationAsync(bool useRustEngine)
     {
         // The parent is not wall-clock, so the sweep evaluates only the child; the child's
@@ -215,6 +237,7 @@ public class AlertSweepServiceWallClockTests
         private readonly AlertSweepService _sweep;
 
         public ManualTimeProvider Time { get; } = new();
+        public ListLogger<AlertSweepService> Logger { get; } = new();
         public InMemoryTrackerRepository TrackerRepo { get; }
         public DateTime? LastReadingAt { get; set; }
         public double? LatestMgdl { get; set; }
@@ -341,7 +364,7 @@ public class AlertSweepServiceWallClockTests
             services.AddScoped<IAlertOrchestrator, AlertOrchestrator>();
 
             _sweep = new AlertSweepService(
-                services.BuildServiceProvider(), NullLogger<AlertSweepService>.Instance, Time);
+                services.BuildServiceProvider(), Logger, Time);
         }
     }
 }
