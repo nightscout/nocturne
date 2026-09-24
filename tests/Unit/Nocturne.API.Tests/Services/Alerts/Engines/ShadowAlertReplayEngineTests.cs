@@ -40,6 +40,7 @@ public class ShadowAlertReplayEngineTests
         var (engine, logger) = Shadow(managed, () => Run(new AlertReplayRunEvent(T0, RuleId, AlertReplayTransition.Fired)));
 
         (await engine.ReplayAsync(Input, CancellationToken.None)).Should().BeSameAs(managed);
+        await engine.PendingComparison;
         logger.Entries.Should().BeEmpty();
     }
 
@@ -50,8 +51,49 @@ public class ShadowAlertReplayEngineTests
         var (engine, logger) = Shadow(managed, () => Run(new AlertReplayRunEvent(T0, RuleId, AlertReplayTransition.SuppressedByDnd)));
 
         (await engine.ReplayAsync(Input, CancellationToken.None)).Should().BeSameAs(managed);
+        await engine.PendingComparison;
         logger.Warnings.Should().ContainSingle().Which.Should()
             .Contain("AlertEngineDivergence").And.Contain(RuleId.ToString()).And.Contain("field=replay.events");
+    }
+
+    [Fact]
+    public async Task A_divergence_logs_a_summary_of_each_run_not_the_runs()
+    {
+        var managedEvents = Enumerable.Range(0, 500)
+            .Select(i => new AlertReplayRunEvent(T0.AddMinutes(i), RuleId, AlertReplayTransition.Fired)).ToArray();
+        var rustEvents = managedEvents.Select((e, i) => i == 300 ? e with { Kind = AlertReplayTransition.Cleared } : e).ToArray();
+        var (engine, logger) = Shadow(Run(managedEvents), () => Run(rustEvents));
+
+        await engine.ReplayAsync(Input, CancellationToken.None);
+        await engine.PendingComparison;
+
+        var line = logger.Warnings.Should().ContainSingle().Subject;
+        line.Length.Should().BeLessThan(1000);
+        line.Should().Contain("500 items").And.Contain($"#300={T0.AddMinutes(300):O} Fired")
+            .And.Contain($"#300={T0.AddMinutes(300):O} Cleared");
+    }
+
+    [Fact]
+    public async Task A_replay_is_answered_without_waiting_for_its_comparison()
+    {
+        var release = new TaskCompletionSource<AlertReplayRun>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var managed = Run();
+        var logger = new ListLogger<ShadowAlertReplayEngine>();
+        var engine = new ShadowAlertReplayEngine(new FixedEngine(() => managed), new PendingEngine(release.Task), logger);
+
+        (await engine.ReplayAsync(Input, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5)))
+            .Should().BeSameAs(managed);
+        (await engine.ReplayAsync(Input, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5)))
+            .Should().BeSameAs(managed, "a second replay is answered while the first comparison runs");
+
+        release.SetResult(Run());
+        await engine.PendingComparison.WaitAsync(TimeSpan.FromSeconds(5));
+        logger.Warnings.Should().BeEmpty();
+    }
+
+    private sealed class PendingEngine(Task<AlertReplayRun> run) : IAlertReplayEngine
+    {
+        public Task<AlertReplayRun> ReplayAsync(AlertReplayInput input, CancellationToken ct) => run;
     }
 
     [Fact]
@@ -61,6 +103,7 @@ public class ShadowAlertReplayEngineTests
         var (engine, logger) = Shadow(managed, () => throw new RustAlertEngineException("boom"));
 
         (await engine.ReplayAsync(Input, CancellationToken.None)).Should().BeSameAs(managed);
+        await engine.PendingComparison;
         logger.Entries.Should().ContainSingle(e => e.Level == LogLevel.Warning && e.Exception is RustAlertEngineException);
     }
 }

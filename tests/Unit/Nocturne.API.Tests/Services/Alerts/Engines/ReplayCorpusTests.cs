@@ -48,6 +48,7 @@ public class ReplayCorpusTests
         var shadow = new ShadowAlertReplayEngine(ReplayScenarioRunner.Managed(), ReplayScenarioRunner.Rust(), logger);
 
         await AssertReproducesAsync(shadow, scenarioName, "shadow");
+        await shadow.PendingComparison;
 
         logger.Entries.Should().NotContain(e => e.Level >= LogLevel.Warning);
     }
