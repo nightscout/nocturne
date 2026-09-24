@@ -88,6 +88,52 @@ public sealed class ExcursionTransitionAtomicityTests : IDisposable
 
     private static readonly DateTimeOffset Now = new(2026, 1, 5, 12, 0, 0, TimeSpan.Zero);
 
+    /// <summary>
+    /// Another process opens an excursion for the rule after this one read the idle state and
+    /// before it got the rule's transition lock.
+    /// </summary>
+    private sealed class ConcurrentOpenRepository(NocturneDbContext context, Guid excursionId)
+        : AlertTrackerRepository(context)
+    {
+        public override async Task LockRuleAsync(Guid alertRuleId, CancellationToken ct = default)
+        {
+            context.AlertExcursions.Add(new AlertExcursionEntity
+            {
+                Id = excursionId, TenantId = TenantId, AlertRuleId = alertRuleId, StartedAt = Now.UtcDateTime,
+            });
+            var state = await context.AlertTrackerState.SingleAsync(s => s.AlertRuleId == alertRuleId, ct);
+            state.State = "active";
+            state.ActiveExcursionId = excursionId;
+            state.UpdatedAt = Now.UtcDateTime;
+            await context.SaveChangesAsync(ct);
+        }
+    }
+
+    [Fact]
+    public async Task A_transition_decided_from_a_state_another_process_changed_writes_nothing()
+    {
+        var theirs = Guid.Parse("00000000-0000-0000-0003-0000000000e2");
+        await using (var seed = _db.CreateContext())
+        {
+            seed.AlertTrackerState.Add(new AlertTrackerStateEntity
+            {
+                AlertRuleId = RuleId, TenantId = TenantId, State = "idle", UpdatedAt = Now.UtcDateTime.AddMinutes(-5),
+            });
+            await seed.SaveChangesAsync();
+        }
+        await using var context = _db.CreateContext();
+        var tracker = new ExcursionTracker(
+            new ConcurrentOpenRepository(context, theirs), new AlertRuleEvaluationGate(),
+            new FakeTimeProvider(Now), NullLogger<ExcursionTracker>.Instance);
+
+        var transition = await tracker.ProcessEvaluationAsync(RuleId, conditionMet: true, CancellationToken.None);
+
+        transition.Type.Should().Be(ExcursionTransitionType.None, "the other process opened and dispatched it");
+        await using var check = _db.CreateContext();
+        (await check.AlertExcursions.SingleAsync()).Id.Should().Be(theirs);
+        (await check.AlertTrackerState.SingleAsync()).ActiveExcursionId.Should().Be(theirs);
+    }
+
     private sealed class TransientFault : Exception;
 
     private sealed class RetryOnTransientFault(ExecutionStrategyDependencies dependencies)

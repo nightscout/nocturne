@@ -86,6 +86,16 @@ public interface IAlertTrackerRepository
         CancellationToken ct = default);
 
     /// <summary>
+    /// Holds <paramref name="alertRuleId"/>'s transition lock until the transaction
+    /// (<see cref="ExecuteInTransactionAsync{T}"/>) it is taken in ends, so that one process at a
+    /// time reads and writes the rule's tracker state. The default, for a store no other process
+    /// shares, takes nothing.
+    /// </summary>
+    /// <param name="alertRuleId">The rule whose transition is about to be written.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task LockRuleAsync(Guid alertRuleId, CancellationToken ct = default) => Task.CompletedTask;
+
+    /// <summary>
     /// Runs <paramref name="work"/> in one database transaction, so the writes it makes through
     /// this repository commit or roll back together. The default, for a store with no
     /// transactions, runs it as is.

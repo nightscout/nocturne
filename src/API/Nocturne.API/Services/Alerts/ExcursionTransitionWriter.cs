@@ -22,6 +22,13 @@ internal static class ExcursionTransitionWriter
     /// <paramref name="autoResolved"/> means the same evaluation's auto-resolve pass closed
     /// whichever excursion the decision left active. The decision's post-state already reflects
     /// that close.
+    /// <para>
+    /// The write takes the rule's transition lock (<see cref="IAlertTrackerRepository.LockRuleAsync"/>)
+    /// and re-reads the state under it. A state no longer equal to <paramref name="prior"/> was
+    /// written by another process after this one read it, so the decision is stale: nothing is
+    /// written and the transition is <see cref="ExcursionTransitionType.None"/>. That process has
+    /// already made and acted on the transition this one would have.
+    /// </para>
     /// </remarks>
     /// <returns>
     /// The decision's transition with the host's excursion id, and the auto-resolve close when
@@ -99,6 +106,16 @@ internal static class ExcursionTransitionWriter
                && SameInstant(stored.HysteresisStartedAt, wrote.HysteresisStartedAt);
     }
 
+    private static bool Same(AlertTrackerState? stored, AlertTrackerState? prior) =>
+        stored is null || prior is null
+            ? stored is null && prior is null
+            : stored.State == prior.State
+              && stored.ConfirmationCount == prior.ConfirmationCount
+              && stored.ActiveExcursionId == prior.ActiveExcursionId
+              && stored.AwaitingRearm == prior.AwaitingRearm
+              && SameInstant(stored.UpdatedAt, prior.UpdatedAt)
+              && SameInstant(stored.HysteresisStartedAt, prior.HysteresisStartedAt);
+
     /// <summary>Equal to the microsecond, the precision the store keeps.</summary>
     private static bool SameInstant(DateTime? stored, DateTime? wrote) =>
         stored is { } a && wrote is { } b
@@ -115,6 +132,15 @@ internal static class ExcursionTransitionWriter
         bool autoResolved,
         CancellationToken ct)
     {
+        await repository.LockRuleAsync(ruleId, ct);
+        if (!Same(await repository.GetTrackerStateAsync(ruleId, ct), prior))
+        {
+            logger.LogInformation(
+                "Tracker state of alert rule {AlertRuleId} changed since it was read; its transition was decided elsewhere",
+                ruleId);
+            return new Written(new ExcursionTransition(ExcursionTransitionType.None), null, null);
+        }
+
         var priorId = prior?.ActiveExcursionId;
         Guid? activeId = priorId;
         ExcursionTransition transition;

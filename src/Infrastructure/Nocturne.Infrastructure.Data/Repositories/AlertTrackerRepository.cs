@@ -178,6 +178,38 @@ public class AlertTrackerRepository : IAlertTrackerRepository
         }
     }
 
+    /// <summary>
+    /// First key of the two-key advisory lock form, naming the alert rule transition lock. The
+    /// second is <see cref="LockKey"/>.
+    /// </summary>
+    private const int TransitionLockClass = 0x4E41_5254;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// A PostgreSQL transaction-scoped advisory lock, so replicas sharing the database serialise
+    /// on a rule and the lock goes with the commit or rollback. Other providers have no other
+    /// process to exclude and take nothing. Two rules whose keys collide only wait for each other.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">No transaction is open on the context.</exception>
+    public virtual async Task LockRuleAsync(Guid alertRuleId, CancellationToken ct = default)
+    {
+        if (!_context.Database.IsNpgsql())
+            return;
+        if (_context.Database.CurrentTransaction is null)
+            throw new InvalidOperationException("A rule's transition lock is taken inside a transaction");
+
+        await _context.Database.ExecuteSqlAsync(
+            $"SELECT pg_advisory_xact_lock({TransitionLockClass}, {LockKey(alertRuleId)})", ct);
+    }
+
+    private static int LockKey(Guid alertRuleId)
+    {
+        Span<byte> bytes = stackalloc byte[16];
+        alertRuleId.TryWriteBytes(bytes);
+        return BitConverter.ToInt32(bytes[..4]) ^ BitConverter.ToInt32(bytes[4..8])
+            ^ BitConverter.ToInt32(bytes[8..12]) ^ BitConverter.ToInt32(bytes[12..]);
+    }
+
     /// <inheritdoc/>
     /// <remarks>
     /// Joins a transaction already open on the context. Otherwise opens one under the context's
