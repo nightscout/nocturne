@@ -31,6 +31,7 @@ char* nocturne_alerts_validate(const char* request_json);
 char* nocturne_alerts_tracker_process(const char* request_json);
 char* nocturne_alerts_tracker_force_close(const char* request_json);
 char* nocturne_alerts_tracker_close_elapsed_hysteresis(const char* request_json);
+char* nocturne_alerts_replay(const char* request_json);
 void  nocturne_alerts_free_string(char* ptr);
 ```
 
@@ -473,6 +474,82 @@ has already cleared from `tracker`. A hysteresis state without
 the window has not elapsed, so persist the returned `tracker` either way. An
 unknown `reason` is the error envelope.
 
+## Replay (`nocturne_alerts_replay`)
+
+Re-evaluates a whole rule set over a series of ticks in one call
+(`docs/alerts/engine-semantics.md` §8): what the rules would have done over a
+historical window. The host builds each tick's context as of that instant;
+the engine owns everything else for the call — one fresh timer store,
+replay-local firing state instead of the excursion tracker, and the active
+alerts `alert_state` reads. Nothing carries over between calls and nothing is
+persisted.
+
+Request:
+
+```jsonc
+{
+  "schema_version": 1,
+  "rules": [ /* ScenarioRule corpus shape, as for evaluate; any order */ ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",         // the tick instant ("now")
+      "context": { /* ScenarioContext corpus shape */ },
+      "suppressed_rule_ids": [ "…" ]         // optional; see below
+    }
+  ],
+  "include_ticks": false                    // optional; default false
+}
+```
+
+- **Order.** Rules are evaluated so that every rule runs after the rules its
+  `alert_state` leaves reference; a reference cycle keeps the given order.
+  `confirmation_readings` and `hysteresis_minutes` are ignored.
+- **Active alerts.** A tick context's `active_alerts` is replaced by the
+  replay's own: a rule is in it, `firing` from the tick it fired, until it
+  clears or auto-resolves. A rule's fire is visible to rules later in the
+  order on the same tick.
+- **No reading.** A context with neither `latest_timestamp` nor
+  `last_reading_at` reads `last_reading_at` as the tick instant, so staleness
+  and `signal_loss` see a fresh reading rather than none. Send the last
+  reading at or before the tick when there is one.
+- **Suppression.** `suppressed_rule_ids` names the rules a fire opening on
+  that tick is recorded for as `suppressed_by_dnd` instead of `fired` (the
+  host resolves Do Not Disturb). The rule fires either way.
+- A rule whose body cannot be evaluated (§1.4) is skipped on every tick, not
+  an error.
+
+Response:
+
+```jsonc
+{
+  "schema_version": 1,
+  "ok": true,
+  "order": [ "…" ],                         // rule ids in evaluation order
+  "events": [                               // by tick, then evaluation order
+    { "at": "2026-01-05T12:00:00Z", "rule_id": "…", "kind": "fired" }
+  ],
+  "leaf_transitions": [                     // evaluation order; absent for a rule never evaluated
+    { "rule_id": "…", "leaves": [
+        { "leaf_id": 0, "points": [ { "at_ms": 1767614400000, "value": true } ] } ] }
+  ],
+  "ticks": [                                // only with include_ticks
+    { "at": "2026-01-05T12:00:00Z", "rules": [
+        { "rule_id": "…", "met": true, "firing": true },
+        { "rule_id": "…", "skipped": true } ] }
+  ]
+}
+```
+
+`kind` is `fired`, `suppressed_by_dnd`, `auto_resolved`, or `cleared` (the
+body went false while firing). Each close — `cleared` or `auto_resolved` —
+removes the rule from the active alerts and clears all its sustained timers,
+so a later fire starts its durations over. Auto-resolve is evaluated only
+while the rule is firing, including on the tick it fired. The leaf log holds,
+per leaf id, the first observation and every flip, at unix milliseconds;
+`firing` is the rule's state after the tick. Errors are an unusable envelope,
+an unknown `condition_type`, a rule id listed twice, or a tick instant outside
+the supported range.
+
 ## Kotlin (UniFFI)
 
 The optional `uniffi` cargo feature adds a [UniFFI](https://mozilla.github.io/uniffi-rs/)
@@ -497,6 +574,7 @@ fun referencesWallClock(requestJson: String): String  // nocturne_alerts_referen
 fun leafPaths(requestJson: String): String            // nocturne_alerts_leaf_paths
 fun describe(requestJson: String): String             // nocturne_alerts_describe
 fun validate(requestJson: String): String             // nocturne_alerts_validate
+fun replay(requestJson: String): String               // nocturne_alerts_replay
 fun version(): String                                 // plain string, not JSON
 fun tzdbVersion(): String                             // plain string, not JSON
 ```

@@ -100,7 +100,7 @@ fn yes() -> bool {
 
 /// The corpus rule shape; unknown fields such as `name` are ignored.
 #[derive(Deserialize)]
-struct WireRule {
+pub(crate) struct WireRule {
     id: Uuid,
     condition_type: String,
     #[serde(default)]
@@ -113,6 +113,21 @@ struct WireRule {
     auto_resolve_enabled: bool,
     #[serde(default)]
     auto_resolve_params: Option<Value>,
+}
+
+impl WireRule {
+    /// An unknown `condition_type` is an error; the body is not checked.
+    pub(crate) fn into_rule(self) -> Result<Rule, String> {
+        Ok(Rule {
+            id: self.id,
+            condition_type: known_kind(&self.condition_type)?,
+            condition_params: self.condition_params,
+            confirmation_readings: self.confirmation_readings,
+            hysteresis_minutes: self.hysteresis_minutes,
+            auto_resolve_enabled: self.auto_resolve_enabled,
+            auto_resolve_params: self.auto_resolve_params,
+        })
+    }
 }
 
 pub(crate) fn one<T: From<u8>>() -> T {
@@ -173,30 +188,20 @@ impl WireTracker {
 
 pub(crate) fn evaluate(request_json: &str) -> Result<Value, String> {
     let req: EvaluateRequest = read_request(request_json, |r: &EvaluateRequest| r.schema_version)?;
-    let w = req.rule;
-    let kind = known_kind(&w.condition_type)?;
+    let rule = req.rule.into_rule()?;
 
     // A body that cannot be evaluated (engine-semantics.md §1.4) is an error,
     // which the host treats as skipping the rule with its state untouched.
-    if !w.condition_params.is_null()
-        && let Err(e) = parse_payload(kind, &w.condition_params)
+    if !rule.condition_params.is_null()
+        && let Err(e) = parse_payload(rule.condition_type, &rule.condition_params)
     {
         return Err(format!(
             "malformed condition_params for '{}': {e}",
-            w.condition_type.escape_default()
+            rule.condition_type.wire()
         ));
     }
     check_timestamp(req.now, "now")?;
 
-    let rule = Rule {
-        id: w.id,
-        condition_type: kind,
-        condition_params: w.condition_params,
-        confirmation_readings: w.confirmation_readings,
-        hysteresis_minutes: w.hysteresis_minutes,
-        auto_resolve_enabled: w.auto_resolve_enabled,
-        auto_resolve_params: w.auto_resolve_params,
-    };
     let mut state = EngineState::new();
     seed_timers(&mut state.timers, rule.id, &req.timers)?;
     if let Some(tracker) = &req.tracker {
