@@ -724,11 +724,7 @@ public class DeduplicationService : IDeduplicationService
             // canonicals' primary links to learn their event timestamps, then DB-bound the
             // neighbour query to [minCandidateTs - window, maxCandidateTs + window]. This keeps
             // the candidate path O(candidates + window-slice) rather than O(all primaries).
-            var candidatePrimaries = await _context.LinkedRecords
-                .AsNoTracking()
-                .Where(lr => lr.RecordType == recordTypeStr && lr.IsPrimary
-                             && candidateCanonicalIds.Contains(lr.CanonicalId))
-                .ToListAsync(ct);
+            var candidatePrimaries = await PrimariesOf(recordTypeStr, candidateCanonicalIds).ToListAsync(ct);
 
             if (candidatePrimaries.Count == 0)
                 return 0;
@@ -1161,6 +1157,19 @@ public class DeduplicationService : IDeduplicationService
         return query
             .OrderBy(lr => lr.SysCreatedAt)
             .ThenBy(lr => lr.Id);
+    }
+
+    /// <summary>
+    /// The primary links of <paramref name="canonicalIds"/>. The set is copied to an array because
+    /// EF expands an <see cref="IReadOnlySet{T}"/> operand into one parameter per element, so every
+    /// set size would get its own statement and plan; an array binds as one parameter.
+    /// </summary>
+    internal IQueryable<LinkedRecordEntity> PrimariesOf(string recordTypeStr, IReadOnlySet<Guid> canonicalIds)
+    {
+        var ids = canonicalIds.ToArray();
+        return _context.LinkedRecords
+            .AsNoTracking()
+            .Where(lr => lr.RecordType == recordTypeStr && lr.IsPrimary && ids.Contains(lr.CanonicalId));
     }
 
     /// <summary>

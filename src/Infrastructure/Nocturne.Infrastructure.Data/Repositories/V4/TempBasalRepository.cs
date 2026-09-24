@@ -428,10 +428,21 @@ public class TempBasalRepository : ITempBasalRepository
         // tenant. Soft-delete only the window's rows whose legacy id the source no longer reports;
         // a row with no legacy id can't be matched against the incoming set, so treat it as absent.
         return await ctx.AuditedSoftDeleteAsync(
-            ctx.TempBasals.Where(e => e.DataSource == source
-                && e.StartTimestamp >= from && e.StartTimestamp <= to
-                && (e.LegacyId == null || !keepLegacyIds.Contains(e.LegacyId))),
+            AbsentFromSource(ctx, source, from, to, keepLegacyIds),
             _auditContext, $"data_source={source}", ct);
+    }
+
+    /// <summary>
+    /// The rows <see cref="SoftDeleteAbsentBySourceAndDateRangeAsync"/> removes. The set is bound as
+    /// an array for the reason given on <see cref="DeduplicationService.PrimariesOf"/>.
+    /// </summary>
+    internal static IQueryable<TempBasalEntity> AbsentFromSource(
+        NocturneDbContext ctx, string source, DateTime from, DateTime to, IReadOnlySet<string> keepLegacyIds)
+    {
+        var keep = keepLegacyIds.ToArray();
+        return ctx.TempBasals.Where(e => e.DataSource == source
+            && e.StartTimestamp >= from && e.StartTimestamp <= to
+            && (e.LegacyId == null || !keep.Contains(e.LegacyId)));
     }
 
     /// <inheritdoc />
