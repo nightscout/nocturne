@@ -25,12 +25,8 @@ export const getUiSettings = query(async () => {
     // Same 401 handling as a generated query: the settings pages are behind the
     // authenticated layout, so an expired session has to reach the login route.
     if (errorStatus(err) === 401) {
-      const { request, url } = getRequestEvent();
-      const host =
-        request.headers.get("x-forwarded-host") ??
-        request.headers.get("host") ??
-        "";
-      if (/^[^.]+\.share\./i.test(host)) throw error(401, "Unauthorized");
+      const { url } = getRequestEvent();
+      if (locals.isShareHost) throw error(401, "Unauthorized");
 
       throw redirect(
         302,
