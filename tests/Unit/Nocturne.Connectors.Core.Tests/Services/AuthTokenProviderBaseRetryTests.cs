@@ -134,6 +134,32 @@ public class AuthTokenProviderBaseRetryTests
     }
 
     /// <summary>
+    ///     A run withdrawn mid-backoff is not a failed sign-in. Swallowing the cancellation here
+    ///     would return a null token the caller reports as a connector failure, hiding the stop.
+    /// </summary>
+    [Fact]
+    public async Task GetValidTokenAsync_CancelledDuringRetryDelay_PropagatesCancellation()
+    {
+        var tenantAccessor = new Mock<ITenantAccessor>();
+        tenantAccessor.Setup(t => t.IsResolved).Returns(true);
+        tenantAccessor.Setup(t => t.TenantId).Returns(Guid.NewGuid());
+
+        using var cts = new CancellationTokenSource();
+        using var provider = new CountingTokenProvider(
+            new HttpClient(),
+            new ConnectorTokenCache(),
+            NoOpResolver,
+            tenantAccessor.Object,
+            NullLogger<CountingTokenProvider>.Instance,
+            new CancellingRetryDelayStrategy(cts));
+
+        await FluentActions.Awaiting(() =>
+                provider.GetValidTokenAsync(new TestConnectorConfig { MaxRetryAttempts = 3 }, cts.Token))
+            .Should().ThrowAsync<OperationCanceledException>(
+                "a withdrawn run must not be reported as a failed sign-in");
+    }
+
+    /// <summary>
     ///     The configured value is what reaches the login loop, so a tenant raising or lowering
     ///     it changes how many times the connector authenticates.
     /// </summary>
@@ -394,6 +420,17 @@ public class AuthTokenProviderBaseRetryTests
                 cancellationToken);
 
             return (token, DateTime.UtcNow.AddHours(1), null);
+        }
+    }
+
+    /// <summary>Cancels the run's token partway through a delay, as a stopping host would.</summary>
+    private sealed class CancellingRetryDelayStrategy(CancellationTokenSource cts) : IRetryDelayStrategy
+    {
+        public Task ApplyRetryDelayAsync(int attemptNumber, CancellationToken cancellationToken)
+        {
+            cts.Cancel();
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
         }
     }
 }

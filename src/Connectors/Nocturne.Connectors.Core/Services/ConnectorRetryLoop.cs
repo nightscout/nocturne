@@ -74,7 +74,7 @@ public static class ConnectorRetryLoop
             if (outcome.Decision == RetryStepDecision.RetryAfterDelay && attempt < maxAttempts - 1)
             {
                 onBeforeRetryDelay?.Invoke(attempt);
-                await retryDelayStrategy.ApplyRetryDelayAsync(attempt);
+                await retryDelayStrategy.ApplyRetryDelayAsync(attempt, cancellationToken);
             }
         }
 

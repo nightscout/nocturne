@@ -142,7 +142,8 @@ public abstract class AuthTokenProviderBase<TConfig>(
             _logger.LogWarning("Failed to acquire token for {ProviderName}", GetType().Name);
             return null;
         }
-        catch (Exception ex)
+        // A withdrawn run is not a failed sign-in, so its cancellation travels instead of becoming a null token.
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             _logger.LogError(ex, "Error acquiring token for {ProviderName}", GetType().Name);
             return null;

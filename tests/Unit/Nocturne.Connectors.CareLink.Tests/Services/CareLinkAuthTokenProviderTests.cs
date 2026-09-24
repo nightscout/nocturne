@@ -145,7 +145,7 @@ public class CareLinkAuthTokenProviderTests
         tenantAccessor.Setup(t => t.TenantId).Returns(Guid.NewGuid());
 
         var retryDelay = new Mock<IRetryDelayStrategy>();
-        retryDelay.Setup(r => r.ApplyRetryDelayAsync(It.IsAny<int>())).Returns(Task.CompletedTask);
+        retryDelay.Setup(r => r.ApplyRetryDelayAsync(It.IsAny<int>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
 
         return new TestableProvider(
             new HttpClient(handler),
