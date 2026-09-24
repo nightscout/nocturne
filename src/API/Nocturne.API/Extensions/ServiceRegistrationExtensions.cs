@@ -962,12 +962,11 @@ public static class ServiceRegistrationExtensions
         // Sustained-condition timer store
         services.AddScoped<IConditionTimerStore, ConditionTimerRepository>();
 
-        // Excursion tracker. Its per-rule serialisation gate is a singleton: the sweep and the
+        // The excursion tracker's per-rule serialisation gate is a singleton: the sweep and the
         // per-reading path evaluate the same rule from different scopes.
         services.AddSingleton<AlertRuleEvaluationGate>();
-        services.AddScoped<IExcursionTracker, ExcursionTracker>();
 
-        // Alert evaluation engine seam (Alerts:Engine = managed | shadow | rust)
+        // Alert evaluation engine and excursion tracker seams (Alerts:Engine = managed | shadow | rust)
         services.AddAlertEvaluationEngine(configuration);
 
         // Alert engine core
@@ -1069,8 +1068,9 @@ public static class ServiceRegistrationExtensions
     }
 
     /// <summary>
-    /// Registers the <see cref="Nocturne.Core.Contracts.Alerts.IAlertEvaluationEngine"/>
-    /// seam: all three engine implementations plus the singleton
+    /// Registers the <see cref="Nocturne.Core.Contracts.Alerts.IAlertEvaluationEngine"/> and
+    /// <see cref="IExcursionTracker"/> seams: all three engine implementations, the tracker
+    /// deciding with the selected engine, plus the singleton
     /// <see cref="Nocturne.API.Services.Alerts.Engines.AlertEngineSelection"/> resolved
     /// from the <c>Alerts:Engine</c> flag (<c>managed</c> | <c>shadow</c> | <c>rust</c>,
     /// default <c>managed</c>). Program resolves the selection at startup so the native-library
@@ -1102,6 +1102,36 @@ public static class ServiceRegistrationExtensions
             Nocturne.API.Services.Alerts.Engines.IShadowRuleEvaluator,
             Nocturne.API.Services.Alerts.Engines.RustShadowRuleEvaluator>();
         services.AddScoped<Nocturne.API.Services.Alerts.Engines.ShadowAlertEngine>();
+
+        // The managed engine always tracks with the managed decider; shadow mode compares
+        // through ShadowAlertEngine instead.
+        services.AddScoped(sp => new ExcursionTracker(
+            sp.GetRequiredService<Nocturne.Core.Contracts.Repositories.IAlertTrackerRepository>(),
+            sp.GetRequiredService<AlertRuleEvaluationGate>(),
+            sp.GetRequiredService<TimeProvider>(),
+            sp.GetRequiredService<ILogger<ExcursionTracker>>()));
+        services.AddScoped<IExcursionTracker>(sp =>
+        {
+            var mode = sp.GetRequiredService<Nocturne.API.Services.Alerts.Engines.AlertEngineSelection>().Mode;
+            if (mode == Nocturne.API.Services.Alerts.Engines.AlertEngineMode.Managed)
+                return sp.GetRequiredService<ExcursionTracker>();
+
+            var errors = sp.GetRequiredService<Nocturne.API.Services.Alerts.Engines.AlertEngineErrors>();
+            IExcursionDecider decider = mode == Nocturne.API.Services.Alerts.Engines.AlertEngineMode.Rust
+                ? new Nocturne.API.Services.Alerts.Engines.RustExcursionDecider(
+                    errors, Nocturne.API.Services.Alerts.Engines.AlertEngineErrors.RustEngine)
+                : new Nocturne.API.Services.Alerts.Engines.ShadowExcursionDecider(
+                    ManagedExcursionDecider.Instance,
+                    new Nocturne.API.Services.Alerts.Engines.RustExcursionDecider(
+                        errors, Nocturne.API.Services.Alerts.Engines.AlertEngineErrors.ShadowEngine),
+                    sp.GetRequiredService<ILogger<Nocturne.API.Services.Alerts.Engines.ShadowExcursionDecider>>());
+            return new ExcursionTracker(
+                sp.GetRequiredService<Nocturne.Core.Contracts.Repositories.IAlertTrackerRepository>(),
+                sp.GetRequiredService<AlertRuleEvaluationGate>(),
+                sp.GetRequiredService<TimeProvider>(),
+                sp.GetRequiredService<ILogger<ExcursionTracker>>(),
+                decider);
+        });
 
         services.AddSingleton(sp =>
         {

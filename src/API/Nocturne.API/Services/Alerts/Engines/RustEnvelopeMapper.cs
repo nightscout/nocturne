@@ -272,6 +272,28 @@ internal static class RustEnvelopeMapper
         _ => throw new ArgumentOutOfRangeException(nameof(wire), wire, null),
     };
 
+    public static RustCloseReason CloseReasonToRust(ExcursionCloseReason reason) => reason switch
+    {
+        ExcursionCloseReason.Hysteresis => RustCloseReason.Hysteresis,
+        ExcursionCloseReason.AutoResolve => RustCloseReason.Auto,
+        ExcursionCloseReason.Manual => RustCloseReason.Manual,
+        _ => throw new ArgumentOutOfRangeException(nameof(reason), reason, null),
+    };
+
+    /// <summary>
+    /// The engine's post-state as a <see cref="TrackerPostState"/>, or <see langword="null"/> when
+    /// it holds no per-rule state.
+    /// </summary>
+    public static TrackerPostState? PostStateFromWire(RustTrackerState tracker) =>
+        tracker.State is null
+            ? null
+            : new TrackerPostState(
+                tracker.State,
+                tracker.ConfirmationCount,
+                tracker.ActiveExcursionOrdinal is not null,
+                tracker.UpdatedAt!.Value,
+                tracker.HysteresisStartedAt);
+
     /// <summary>Wire form of a managed transition type (for shadow comparison logging).</summary>
     public static string TransitionToWire(ExcursionTransitionType type) => type switch
     {

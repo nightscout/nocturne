@@ -76,13 +76,10 @@ internal static class EngineTestHarness
         IConditionTimerStore timerStore,
         InMemoryTrackerRepository trackerRepo)
     {
-        var gate = new AlertRuleEvaluationGate();
-        var tracker = new ExcursionTracker(trackerRepo, gate, time, NullLogger<ExcursionTracker>.Instance);
         return new RustBackedAlertEngine(
             timerStore,
             trackerRepo,
-            tracker,
-            gate,
+            new AlertRuleEvaluationGate(),
             new AlertEngineErrors(new TestMeterFactory(), time),
             time,
             NullLogger<RustBackedAlertEngine>.Instance);

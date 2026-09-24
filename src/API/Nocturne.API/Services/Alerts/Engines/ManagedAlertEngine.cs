@@ -9,7 +9,7 @@ namespace Nocturne.API.Services.Alerts.Engines;
 
 /// <summary>
 /// The in-process C# implementation of <see cref="IAlertEvaluationEngine"/>: wraps
-/// <see cref="ConditionEvaluatorRegistry"/> and <see cref="IExcursionTracker"/> into the
+/// <see cref="ConditionEvaluatorRegistry"/> and a managed-deciding <see cref="ExcursionTracker"/> into the
 /// per-rule driver sequence (root eval with the canonical wire-string root path → excursion
 /// tracker → unconditional auto-resolve under the <c>auto_resolve</c> path root).
 /// </summary>
@@ -21,7 +21,7 @@ namespace Nocturne.API.Services.Alerts.Engines;
 /// </remarks>
 internal sealed class ManagedAlertEngine(
     ConditionEvaluatorRegistry evaluatorRegistry,
-    IExcursionTracker excursionTracker,
+    ExcursionTracker excursionTracker,
     ILogger<ManagedAlertEngine> logger)
     : IAlertEvaluationEngine
 {

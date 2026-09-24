@@ -126,7 +126,6 @@ public class AlertEngineSelectionTests
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton(Mock.Of<IConditionTimerStore>());
         services.AddSingleton(Mock.Of<IAlertTrackerRepository>());
-        services.AddSingleton(Mock.Of<IExcursionTracker>());
         services.AddSingleton<AlertRuleEvaluationGate>();
         services.AddAlertEvaluators();
         services.AddScoped<ConditionEvaluatorRegistry>();
@@ -172,5 +171,19 @@ public class AlertEngineSelectionTests
 
         scope.ServiceProvider.GetRequiredService<IAlertEvaluationEngine>()
             .Should().BeOfType<ShadowAlertEngine>();
+    }
+
+    [Theory]
+    [InlineData(null, typeof(ManagedExcursionDecider))]
+    [InlineData("rust", typeof(RustExcursionDecider))]
+    [InlineData("shadow", typeof(ShadowExcursionDecider))]
+    public void The_excursion_tracker_decides_with_the_selected_engine(string? engineFlag, Type decider)
+    {
+        using var provider = BuildProvider(engineFlag, nativeProbe: Present);
+        using var scope = provider.CreateScope();
+
+        scope.ServiceProvider.GetRequiredService<IExcursionTracker>()
+            .Should().BeOfType<ExcursionTracker>()
+            .Which.Decider.Should().BeOfType(decider);
     }
 }

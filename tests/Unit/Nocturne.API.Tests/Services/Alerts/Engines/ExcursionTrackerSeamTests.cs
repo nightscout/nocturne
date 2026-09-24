@@ -1,0 +1,304 @@
+using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
+using Nocturne.Alerts.ParityCorpus.Generator.Harness;
+using Nocturne.API.Services.Alerts;
+using Nocturne.API.Services.Alerts.Engines;
+using Nocturne.API.Tests.Services.BackgroundServices;
+using Nocturne.API.Tests.TestDoubles;
+using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Models;
+using Nocturne.Core.Models.Alerts;
+using Xunit;
+
+namespace Nocturne.API.Tests.Services.Alerts.Engines;
+
+/// <summary>
+/// The <see cref="IExcursionTracker"/> seam over one persistence path. Every scenario runs once
+/// with the managed decider and once with the Rust one, and both must leave the same excursion
+/// rows and tracker state.
+/// </summary>
+public class ExcursionTrackerSeamTests
+{
+    private static readonly Guid RuleId = Guid.Parse("00000000-0000-0000-0000-0000000000d1");
+    private static readonly DateTime T0 = new(2026, 1, 5, 12, 0, 0, DateTimeKind.Utc);
+
+    public enum Engine { Managed, Rust }
+
+    private sealed class Fixture
+    {
+        public Fixture(Engine engine, int confirmationReadings = 1, int hysteresisMinutes = 0)
+        {
+            Time.SetUtcNow(T0);
+            Repository = new RecordingTrackerRepository(new AlertRule
+            {
+                Id = RuleId,
+                Name = "low",
+                ConfirmationReadings = confirmationReadings,
+                HysteresisMinutes = hysteresisMinutes,
+            });
+            IExcursionDecider decider = engine == Engine.Managed
+                ? ManagedExcursionDecider.Instance
+                : new RustExcursionDecider(new AlertEngineErrors(new TestMeterFactory(), Time), AlertEngineErrors.RustEngine);
+            Tracker = new ExcursionTracker(
+                Repository, new AlertRuleEvaluationGate(), Time, NullLogger<ExcursionTracker>.Instance, decider);
+        }
+
+        public ManualTimeProvider Time { get; } = new();
+
+        public RecordingTrackerRepository Repository { get; }
+
+        public ExcursionTracker Tracker { get; }
+
+        public AlertTrackerState? State => Repository.States.GetValueOrDefault(RuleId);
+
+        public Task<ExcursionTransition> Process(bool met) =>
+            Tracker.ProcessEvaluationAsync(RuleId, met, CancellationToken.None);
+
+        public void At(TimeSpan offset) => Time.SetUtcNow(T0 + offset);
+    }
+
+    [Fact] public Task Opens_an_excursion_managed() => Opens_an_excursion(Engine.Managed);
+    [NativeFact] public Task Opens_an_excursion_rust() => Opens_an_excursion(Engine.Rust);
+
+    private static async Task Opens_an_excursion(Engine engine)
+    {
+        var f = new Fixture(engine);
+
+        var opened = await f.Process(true);
+
+        opened.Type.Should().Be(ExcursionTransitionType.ExcursionOpened);
+        var excursion = f.Repository.Excursions.Values.Should().ContainSingle().Subject;
+        opened.ExcursionId.Should().Be(excursion.Id);
+        excursion.StartedAt.Should().Be(T0);
+        f.State.Should().BeEquivalentTo(new { State = "active", ConfirmationCount = 0, ActiveExcursionId = excursion.Id, UpdatedAt = T0 });
+    }
+
+    [Fact] public Task Confirms_before_opening_managed() => Confirms_before_opening(Engine.Managed);
+    [NativeFact] public Task Confirms_before_opening_rust() => Confirms_before_opening(Engine.Rust);
+
+    private static async Task Confirms_before_opening(Engine engine)
+    {
+        var f = new Fixture(engine, confirmationReadings: 2);
+
+        (await f.Process(true)).Type.Should().Be(ExcursionTransitionType.None);
+        f.State!.State.Should().Be("confirming");
+        f.State.ConfirmationCount.Should().Be(1);
+        f.Repository.Excursions.Should().BeEmpty();
+
+        (await f.Process(true)).Type.Should().Be(ExcursionTransitionType.ExcursionOpened);
+        f.Repository.Excursions.Should().ContainSingle();
+    }
+
+    [Fact] public Task Continues_the_open_excursion_managed() => Continues_the_open_excursion(Engine.Managed);
+    [NativeFact] public Task Continues_the_open_excursion_rust() => Continues_the_open_excursion(Engine.Rust);
+
+    private static async Task Continues_the_open_excursion(Engine engine)
+    {
+        var f = new Fixture(engine);
+        var opened = await f.Process(true);
+        f.At(TimeSpan.FromMinutes(5));
+
+        var continued = await f.Process(true);
+
+        continued.Should().Be(new ExcursionTransition(ExcursionTransitionType.ExcursionContinues, opened.ExcursionId));
+        f.Repository.Excursions.Should().ContainSingle();
+        f.State!.UpdatedAt.Should().Be(T0.AddMinutes(5));
+    }
+
+    [Fact] public Task Starts_and_resumes_hysteresis_managed() => Starts_and_resumes_hysteresis(Engine.Managed);
+    [NativeFact] public Task Starts_and_resumes_hysteresis_rust() => Starts_and_resumes_hysteresis(Engine.Rust);
+
+    private static async Task Starts_and_resumes_hysteresis(Engine engine)
+    {
+        var f = new Fixture(engine, hysteresisMinutes: 10);
+        var opened = await f.Process(true);
+        var excursion = f.Repository.Excursions[opened.ExcursionId!.Value];
+        f.At(TimeSpan.FromMinutes(1));
+
+        var started = await f.Process(false);
+
+        started.Should().Be(new ExcursionTransition(ExcursionTransitionType.HysteresisStarted, opened.ExcursionId));
+        excursion.HysteresisStartedAt.Should().Be(T0.AddMinutes(1));
+        f.State!.State.Should().Be("hysteresis");
+        f.State.HysteresisStartedAt.Should().Be(T0.AddMinutes(1));
+
+        f.At(TimeSpan.FromMinutes(2));
+        var resumed = await f.Process(true);
+
+        resumed.Should().Be(new ExcursionTransition(ExcursionTransitionType.HysteresisResumed, opened.ExcursionId));
+        excursion.HysteresisStartedAt.Should().BeNull();
+        f.State!.State.Should().Be("active");
+        f.State.HysteresisStartedAt.Should().BeNull();
+        f.State.ActiveExcursionId.Should().Be(opened.ExcursionId);
+    }
+
+    [Fact] public Task Closes_elapsed_hysteresis_only_once_the_window_has_passed_managed() =>
+        Closes_elapsed_hysteresis_only_once_the_window_has_passed(Engine.Managed);
+    [NativeFact] public Task Closes_elapsed_hysteresis_only_once_the_window_has_passed_rust() =>
+        Closes_elapsed_hysteresis_only_once_the_window_has_passed(Engine.Rust);
+
+    private static async Task Closes_elapsed_hysteresis_only_once_the_window_has_passed(Engine engine)
+    {
+        var f = new Fixture(engine, hysteresisMinutes: 10);
+        var opened = await f.Process(true);
+        await f.Process(false);
+        var writes = f.Repository.Writes.Count;
+
+        f.At(TimeSpan.FromMinutes(9));
+        (await f.Tracker.CloseElapsedHysteresisAsync(RuleId, CancellationToken.None))
+            .Type.Should().Be(ExcursionTransitionType.None);
+        f.Repository.Writes.Should().HaveCount(writes, "an unchanged state is not rewritten");
+
+        f.At(TimeSpan.FromMinutes(10));
+        var closed = await f.Tracker.CloseElapsedHysteresisAsync(RuleId, CancellationToken.None);
+
+        closed.Should().Be(new ExcursionTransition(
+            ExcursionTransitionType.ExcursionClosed, opened.ExcursionId, ExcursionCloseReason.Hysteresis));
+        f.Repository.Excursions[opened.ExcursionId!.Value].EndedAt.Should().Be(T0.AddMinutes(10));
+        f.State.Should().BeEquivalentTo(new
+        {
+            State = "idle", ConfirmationCount = 0, ActiveExcursionId = (Guid?)null,
+            HysteresisStartedAt = (DateTime?)null, UpdatedAt = T0.AddMinutes(10),
+        });
+    }
+
+    [Fact] public Task Close_elapsed_hysteresis_persists_an_adopted_start_managed() =>
+        Close_elapsed_hysteresis_persists_an_adopted_start(Engine.Managed);
+    [NativeFact] public Task Close_elapsed_hysteresis_persists_an_adopted_start_rust() =>
+        Close_elapsed_hysteresis_persists_an_adopted_start(Engine.Rust);
+
+    private static async Task Close_elapsed_hysteresis_persists_an_adopted_start(Engine engine)
+    {
+        var f = new Fixture(engine, hysteresisMinutes: 10);
+        var opened = await f.Process(true);
+        var legacy = f.State!;
+        f.Repository.States[RuleId] = new AlertTrackerState
+        {
+            AlertRuleId = RuleId,
+            State = "hysteresis",
+            ActiveExcursionId = legacy.ActiveExcursionId,
+            UpdatedAt = T0,
+        };
+        f.At(TimeSpan.FromMinutes(3));
+
+        (await f.Tracker.CloseElapsedHysteresisAsync(RuleId, CancellationToken.None))
+            .Type.Should().Be(ExcursionTransitionType.None);
+
+        f.State.Should().BeEquivalentTo(new
+        {
+            State = "hysteresis", HysteresisStartedAt = (DateTime?)T0, UpdatedAt = T0,
+            ActiveExcursionId = opened.ExcursionId,
+        });
+    }
+
+    [Theory]
+    [InlineData(ExcursionCloseReason.Manual)]
+    [InlineData(ExcursionCloseReason.AutoResolve)]
+    public Task Force_close_closes_from_any_open_state_managed(ExcursionCloseReason reason) =>
+        Force_close_closes_from_any_open_state(Engine.Managed, reason);
+
+    [NativeTheory]
+    [InlineData(ExcursionCloseReason.Manual)]
+    [InlineData(ExcursionCloseReason.AutoResolve)]
+    public Task Force_close_closes_from_any_open_state_rust(ExcursionCloseReason reason) =>
+        Force_close_closes_from_any_open_state(Engine.Rust, reason);
+
+    private static async Task Force_close_closes_from_any_open_state(Engine engine, ExcursionCloseReason reason)
+    {
+        var f = new Fixture(engine, hysteresisMinutes: 10);
+        var first = await f.Process(true);
+        f.At(TimeSpan.FromMinutes(1));
+
+        var fromActive = await f.Tracker.ForceCloseAsync(RuleId, reason, CancellationToken.None);
+
+        fromActive.Should().Be(new ExcursionTransition(ExcursionTransitionType.ExcursionClosed, first.ExcursionId, reason));
+        f.Repository.Excursions[first.ExcursionId!.Value].EndedAt.Should().Be(T0.AddMinutes(1));
+        f.State.Should().BeEquivalentTo(new { State = "idle", ActiveExcursionId = (Guid?)null, UpdatedAt = T0.AddMinutes(1) });
+
+        var second = await f.Process(true);
+        await f.Process(false);
+        var fromHysteresis = await f.Tracker.ForceCloseAsync(RuleId, reason, CancellationToken.None);
+
+        fromHysteresis.Should().Be(new ExcursionTransition(ExcursionTransitionType.ExcursionClosed, second.ExcursionId, reason));
+        f.State!.HysteresisStartedAt.Should().BeNull();
+    }
+
+    [Fact] public Task Force_close_without_an_excursion_writes_nothing_managed() =>
+        Force_close_without_an_excursion_writes_nothing(Engine.Managed);
+    [NativeFact] public Task Force_close_without_an_excursion_writes_nothing_rust() =>
+        Force_close_without_an_excursion_writes_nothing(Engine.Rust);
+
+    private static async Task Force_close_without_an_excursion_writes_nothing(Engine engine)
+    {
+        var f = new Fixture(engine, confirmationReadings: 3);
+        (await f.Tracker.ForceCloseAsync(RuleId, ExcursionCloseReason.Manual, CancellationToken.None))
+            .Type.Should().Be(ExcursionTransitionType.None);
+        await f.Process(true);
+        var writes = f.Repository.Writes.Count;
+
+        (await f.Tracker.ForceCloseAsync(RuleId, ExcursionCloseReason.Manual, CancellationToken.None))
+            .Type.Should().Be(ExcursionTransitionType.None);
+
+        f.Repository.Writes.Should().HaveCount(writes);
+        f.State!.State.Should().Be("confirming");
+    }
+}
+
+/// <summary>
+/// In-memory <see cref="IAlertTrackerRepository"/> that records each write.
+/// </summary>
+internal sealed class RecordingTrackerRepository(params AlertRule[] rules) : IAlertTrackerRepository
+{
+    private readonly Dictionary<Guid, AlertRule> _rules = rules.ToDictionary(r => r.Id);
+
+    public Dictionary<Guid, AlertTrackerState> States { get; } = new();
+
+    public Dictionary<Guid, AlertExcursion> Excursions { get; } = new();
+
+    public List<string> Writes { get; } = [];
+
+    public Task<AlertTrackerState?> GetTrackerStateAsync(Guid alertRuleId, CancellationToken ct = default) =>
+        Task.FromResult(States.GetValueOrDefault(alertRuleId));
+
+    public Task UpsertTrackerStateAsync(AlertTrackerState state, CancellationToken ct = default)
+    {
+        Write("upsert");
+        States[state.AlertRuleId] = state;
+        return Task.CompletedTask;
+    }
+
+    public Task<AlertRule?> GetRuleAsync(Guid alertRuleId, CancellationToken ct = default) =>
+        Task.FromResult(_rules.GetValueOrDefault(alertRuleId));
+
+    public Task<AlertExcursion> CreateExcursionAsync(Guid alertRuleId, DateTime startedAt, CancellationToken ct = default)
+    {
+        Write("create");
+        var excursion = new AlertExcursion { Id = Guid.CreateVersion7(), AlertRuleId = alertRuleId, StartedAt = startedAt };
+        Excursions[excursion.Id] = excursion;
+        return Task.FromResult(excursion);
+    }
+
+    public Task CloseExcursionAsync(Guid excursionId, DateTime endedAt, CancellationToken ct = default)
+    {
+        Write("close");
+        Excursions[excursionId].EndedAt = endedAt;
+        return Task.CompletedTask;
+    }
+
+    public Task SetHysteresisStartedAsync(Guid excursionId, DateTime hysteresisStartedAt, CancellationToken ct = default)
+    {
+        Write("set_hysteresis");
+        Excursions[excursionId].HysteresisStartedAt = hysteresisStartedAt;
+        return Task.CompletedTask;
+    }
+
+    public Task ClearHysteresisAsync(Guid excursionId, CancellationToken ct = default)
+    {
+        Write("clear_hysteresis");
+        Excursions[excursionId].HysteresisStartedAt = null;
+        return Task.CompletedTask;
+    }
+
+    private void Write(string operation) => Writes.Add(operation);
+}

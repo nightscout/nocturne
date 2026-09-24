@@ -6,8 +6,8 @@ namespace Nocturne.API.Services.Alerts.Engines;
 
 /// <summary>
 /// Counts native alert engine failures (<see cref="RustAlertEngineException"/>) and remembers the
-/// latest for <see cref="AlertEngineHealthCheck"/>. A failure skips only the rule it happened on,
-/// which is otherwise visible only as a log line per rule per tick.
+/// latest for <see cref="AlertEngineHealthCheck"/>. A failure skips only the rule or tracker
+/// operation it happened on, which is otherwise visible only as a log line per rule per tick.
 /// </summary>
 /// <remarks>
 /// No rule or tenant identity is a tag. A tag value is a time series, and a tenant id would label
@@ -38,7 +38,10 @@ internal sealed class AlertEngineErrors
     /// <summary>The most recent failure, or <see langword="null"/> when none has happened.</summary>
     public AlertEngineError? Latest => Volatile.Read(ref _latest);
 
-    /// <param name="operation">The native entry point: <c>evaluate</c> or <c>evaluate_node</c>.</param>
+    /// <param name="operation">
+    /// The native entry point: <c>evaluate</c>, <c>evaluate_node</c>, <c>tracker_process</c>,
+    /// <c>tracker_force_close</c> or <c>tracker_close_elapsed_hysteresis</c>.
+    /// </param>
     /// <param name="engine"><see cref="RustEngine"/> or <see cref="ShadowEngine"/>.</param>
     public void Record(string operation, string engine)
     {
