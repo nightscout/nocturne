@@ -28,13 +28,15 @@ internal sealed record AlertEngineSelection(AlertEngineMode Mode, string Configu
 /// startup failure: serving alerts from the managed engine instead would leave an operator
 /// believing the Rust engine is live when it is not. <c>shadow</c> only observes, so it falls
 /// back to managed, logged at Error because the comparison it was configured for is not running.
+/// Any other value is a startup failure too: a misspelt <c>rust</c> would otherwise run managed.
 /// </remarks>
 internal static class AlertEngineSelector
 {
     public const string ConfigurationKey = "Alerts:Engine";
 
     /// <exception cref="InvalidOperationException">
-    /// <c>rust</c> is configured and the native library fails its probe.
+    /// <c>rust</c> is configured and the native library fails its probe, or the value is none of
+    /// the three.
     /// </exception>
     public static AlertEngineSelection Select(string? configured, Func<NativeProbeResult> nativeProbe, ILogger logger)
     {
@@ -80,9 +82,8 @@ internal static class AlertEngineSelector
             }
 
             default:
-                logger.LogWarning(
-                    "Unknown Alerts:Engine value '{Configured}'; using the managed engine", configured);
-                return new AlertEngineSelection(AlertEngineMode.Managed, normalized);
+                throw new InvalidOperationException(
+                    $"Unknown Alerts:Engine value '{configured}'; expected managed, shadow or rust");
         }
     }
 }

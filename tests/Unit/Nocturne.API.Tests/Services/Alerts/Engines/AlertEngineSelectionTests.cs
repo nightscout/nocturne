@@ -18,7 +18,7 @@ namespace Nocturne.API.Tests.Services.Alerts.Engines;
 /// <summary>
 /// The <c>Alerts:Engine</c> flag: default resolves the managed engine; <c>rust</c> refuses to
 /// start without a native library that passes its probe; <c>shadow</c> falls back to managed
-/// with an Error; unknown values fall back to managed.
+/// with an Error; unknown values refuse to start.
 /// </summary>
 public class AlertEngineSelectionTests
 {
@@ -100,15 +100,11 @@ public class AlertEngineSelectionTests
     }
 
     [Fact]
-    public void Unknown_values_fall_back_to_managed_with_a_warning()
+    public void Unknown_values_refuse_to_start()
     {
-        var logger = new ListLogger<object>();
+        var act = () => AlertEngineSelector.Select("rsut", Present, new ListLogger<object>());
 
-        var selection = AlertEngineSelector.Select("kotlin", Present, logger);
-
-        selection.Mode.Should().Be(AlertEngineMode.Managed);
-        logger.Entries.Should().ContainSingle(e =>
-            e.Level == LogLevel.Warning && e.Message.Contains("Unknown Alerts:Engine value"));
+        act.Should().Throw<InvalidOperationException>().WithMessage("*Unknown Alerts:Engine value 'rsut'*");
     }
 
     // -----------------------------------------------------------------------
