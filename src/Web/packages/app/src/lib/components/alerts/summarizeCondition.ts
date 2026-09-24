@@ -1,4 +1,5 @@
 import type { ConditionNode } from "./types";
+import { PumpModeState } from "$api-clients";
 import { bg, bgLabel } from "$lib/utils/formatting";
 
 /**
@@ -183,7 +184,8 @@ export function summarizeCondition(
 		case "pump_state": {
 			const p = node.pump_state;
 			if (!p) return "";
-			const verb = p.is_active ? `Pump ${pumpModeLabel(p.mode ?? "")}` : `Pump not ${pumpModeLabel(p.mode ?? "")}`;
+			const label = p.mode ? pumpModeLabel(p.mode) : "";
+			const verb = p.is_active ? `Pump ${label}` : `Pump not ${label}`;
 			return p.for_minutes ? `${verb} for ${formatMinutes(p.for_minutes)}` : verb;
 		}
 		case "state_span_active": {
@@ -226,19 +228,21 @@ function dayLabel(day: number | string): string {
 	return names[idx] ?? String(day);
 }
 
-function pumpModeLabel(mode: string): string {
-	switch (mode) {
-		case "automatic": return "in Automatic";
-		case "limited": return "Limited";
-		case "manual": return "in Manual";
-		case "boost": return "Boosting";
-		case "ease_off": return "Easing Off";
-		case "sleep": return "in Sleep mode";
-		case "exercise": return "in Exercise mode";
-		case "suspended": return "Suspended";
-		case "off": return "Off";
-		default: return mode;
-	}
+const PUMP_MODE_LABELS: Record<PumpModeState, string> = {
+	[PumpModeState.Automatic]: "in Automatic",
+	[PumpModeState.Limited]: "Limited",
+	[PumpModeState.Manual]: "in Manual",
+	[PumpModeState.Boost]: "Boosting",
+	[PumpModeState.EaseOff]: "Easing Off",
+	[PumpModeState.Sleep]: "in Sleep mode",
+	[PumpModeState.Exercise]: "in Exercise mode",
+	[PumpModeState.Liberty]: "in Liberty mode",
+	[PumpModeState.Suspended]: "Suspended",
+	[PumpModeState.Off]: "Off",
+};
+
+function pumpModeLabel(mode: PumpModeState): string {
+	return PUMP_MODE_LABELS[mode];
 }
 
 function stateSpanLabel(category: string, state: string | null | undefined): string {

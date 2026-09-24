@@ -10,6 +10,7 @@ import {
 	parseChannelMetadata,
 	validateChannels,
 	type ChannelDef,
+	type ConditionNode,
 } from "./types";
 import { AlertConditionType, AlertRuleSeverity, ChannelType } from "$api-clients";
 
@@ -178,6 +179,48 @@ describe("parseRule", () => {
 		expect(state.clientConfig.snooze.smartSnooze).toBe(true);
 		expect(state.clientConfig.snooze.maxCount).toBe(3);
 		expect(state.clientConfig.snooze.smartSnoozeExtendMinutes).toBe(10);
+	});
+
+	it("stamps a distinct _uid on every node of a reloaded snooze group", () => {
+		const state = parseRule({
+			name: "Snooze",
+			conditionType: AlertConditionType.Threshold,
+			conditionParams: { direction: "below", value: 70 },
+			clientConfiguration: {
+				snooze: {
+					conditions: [
+						{
+							type: "composite",
+							composite: {
+								operator: "and",
+								conditions: [
+									{
+										type: "threshold",
+										threshold: { direction: "below", value: 70 },
+									},
+									{ type: "trend", trend: { bucket: "falling" } },
+								],
+							},
+						},
+					],
+				},
+			},
+		} as never);
+
+		const nodes: ConditionNode[] = [];
+		const walk = (node: ConditionNode) => {
+			nodes.push(node);
+			for (const child of node.composite?.conditions ?? []) walk(child);
+			if (node.not?.child) walk(node.not.child);
+			if (node.sustained?.child) walk(node.sustained.child);
+		};
+		for (const root of state.clientConfig.snooze.conditions) walk(root);
+
+		expect(nodes).toHaveLength(3);
+		expect(
+			nodes.every((n) => typeof n._uid === "string" && n._uid.length > 0)
+		).toBe(true);
+		expect(new Set(nodes.map((n) => n._uid)).size).toBe(nodes.length);
 	});
 
 	it("parses auto-resolve params from a full ConditionNode envelope", () => {

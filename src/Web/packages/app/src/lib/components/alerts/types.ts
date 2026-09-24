@@ -822,7 +822,11 @@ function parseSnoozeConditions(snooze: unknown): ConditionNode[] {
 			// at the group level, and pre-existing snooze entries (which were
 			// stored as flat leaves under the legacy SnoozeTab) need wrapping
 			// before they can be mounted.
-			out.push(ensureCompositeRoot(adoptWireNode({ ...entry, type: entry.type })));
+			const node = ensureCompositeRoot(
+				adoptWireNode({ ...entry, type: entry.type }),
+			);
+			assignUidsRecursive(node);
+			out.push(node);
 		}
 	}
 	return out;
