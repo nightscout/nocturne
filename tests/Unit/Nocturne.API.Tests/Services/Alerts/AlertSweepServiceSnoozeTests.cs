@@ -115,6 +115,7 @@ public class AlertSweepServiceSnoozeTests
                 .Options));
         services.AddAlertEvaluators();
         services.AddScoped<ConditionEvaluatorRegistry>();
+        services.AddSingleton<ConditionVersionLog>();
         services.AddScoped<IAlertEvaluationEngine, ManagedAlertEngine>();
 
         await using var provider = services.BuildServiceProvider();

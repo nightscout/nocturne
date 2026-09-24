@@ -67,6 +67,7 @@ internal static class EngineTestHarness
         var engine = new ManagedAlertEngine(
             provider.GetRequiredService<ConditionEvaluatorRegistry>(),
             tracker,
+            new ConditionVersionLog(),
             NullLogger<ManagedAlertEngine>.Instance);
         return (engine, provider);
     }

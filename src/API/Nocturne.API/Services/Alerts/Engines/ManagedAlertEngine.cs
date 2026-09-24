@@ -22,6 +22,7 @@ namespace Nocturne.API.Services.Alerts.Engines;
 internal sealed class ManagedAlertEngine(
     ConditionEvaluatorRegistry evaluatorRegistry,
     ExcursionTracker excursionTracker,
+    ConditionVersionLog conditionLog,
     ILogger<ManagedAlertEngine> logger)
     : IAlertEvaluationEngine
 {
@@ -39,7 +40,12 @@ internal sealed class ManagedAlertEngine(
         {
             // Orchestrator parity: no evaluator for the root type means the rule is
             // skipped entirely — no tracker call, no auto-resolve.
-            logger.LogWarning("No evaluator registered for condition type '{ConditionType}'", rule.ConditionType);
+            if (conditionLog.FirstFor(rule.Id, rule.ConditionType, rule.ConditionParams))
+            {
+                logger.LogWarning(
+                    "No evaluator registered for condition type '{ConditionType}' of alert rule {AlertRuleId}; the rule is skipped until it is edited",
+                    rule.ConditionType, rule.Id);
+            }
             return new AlertEngineEvaluation { Skipped = true };
         }
 
