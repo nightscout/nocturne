@@ -415,32 +415,6 @@ public class AlertRepository : IAlertRepository
             .ToList();
     }
 
-    /// <summary>
-    /// Gets all enabled rules for signal loss detection.
-    /// </summary>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>A collection of signal loss rule snapshots.</returns>
-    public virtual async Task<IReadOnlyList<SignalLossRuleSnapshot>> GetEnabledSignalLossRulesAsync(
-        CancellationToken ct)
-    {
-        // Cross-tenant scan: iterate active tenants so RLS scopes each query correctly.
-        var results = new List<SignalLossRuleSnapshot>();
-        foreach (var tenantId in await GetActiveTenantIdsAsync(ct))
-        {
-            await using var context = await _contextFactory.CreateDbContextAsync(ct);
-            context.TenantId = tenantId;
-
-            var rows = await context.AlertRules
-                .AsNoTracking()
-                .Where(r => r.IsEnabled && r.ConditionType == AlertConditionType.SignalLoss)
-                .Select(r => new SignalLossRuleSnapshot(r.Id, r.TenantId, r.ConditionParams))
-                .ToListAsync(ct);
-            results.AddRange(rows);
-        }
-
-        return results;
-    }
-
     /// <inheritdoc/>
     public virtual async Task<IReadOnlyList<AlertRuleSnapshot>> GetEnabledRulesByConditionTypeAsync(
         AlertConditionType conditionType, CancellationToken ct)

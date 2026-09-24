@@ -49,7 +49,7 @@ public class AlertRepositoryTenantScopingTests
     }
 
     [Fact]
-    public async Task GetEnabledSignalLossRulesAsync_ReturnsRulesAcrossEveryActiveTenant()
+    public async Task GetEnabledRulesByConditionTypeAsync_ReturnsRulesAcrossEveryActiveTenant()
     {
         var options = NewStore();
         await SeedAsync(options, ctx =>
@@ -65,7 +65,7 @@ public class AlertRepositoryTenantScopingTests
         // tenants itself rather than depending on whatever tenant the pool last left behind.
         var repo = new AlertRepository(new InMemoryContextFactory(options, staleTenantId: Guid.Empty));
 
-        var rules = await repo.GetEnabledSignalLossRulesAsync(CancellationToken.None);
+        var rules = await repo.GetEnabledRulesByConditionTypeAsync(AlertConditionType.SignalLoss, CancellationToken.None);
 
         rules.Select(r => r.TenantId).Should().BeEquivalentTo([TenantA, TenantB]);
     }

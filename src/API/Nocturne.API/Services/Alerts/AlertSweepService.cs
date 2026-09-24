@@ -17,7 +17,7 @@ namespace Nocturne.API.Services.Alerts;
 /// <remarks>
 /// <list type="number">
 ///   <item>Close excursions whose hysteresis window has expired.</item>
-///   <item>Evaluate signal-loss rules for tenants with stale CGM readings.</item>
+///   <item>Evaluate signal-loss rules on the wall clock.</item>
 ///   <item>Check snoozed instances for smart-snooze extension or re-fire.</item>
 ///   <item>Run periodic auto-resolve for excursions whose conditions don't depend on the latest reading.</item>
 /// </list>
@@ -185,62 +185,26 @@ public class AlertSweepService : BackgroundService
     }
 
     /// <summary>
-    /// Evaluate signal loss rules: for tenants whose last reading is older than the timeout,
-    /// feed conditionMet=true into the excursion tracker.
+    /// Evaluates enabled <c>signal_loss</c> rules through the orchestrator's full pipeline. The
+    /// condition only holds between readings, so without this pass it would never fire; the
+    /// excursion tracker dedupes a continuing outage, and once readings resume this pass (or
+    /// the per-reading path) feeds false and the excursion closes through hysteresis.
     /// </summary>
-    private async Task EvaluateSignalLossAsync(CancellationToken ct)
-    {
-        using var lookupScope = _serviceProvider.CreateScope();
-        var repository = lookupScope.ServiceProvider.GetRequiredService<IAlertRepository>();
-
-        var now = DateTime.UtcNow;
-
-        var signalLossRules = await repository.GetEnabledSignalLossRulesAsync(ct);
-
-        if (signalLossRules.Count == 0) return;
-
-        // Group rules by tenant
-        var rulesByTenant = signalLossRules.GroupBy(r => r.TenantId);
-
-        foreach (var tenantGroup in rulesByTenant)
-        {
-            var tenantId = tenantGroup.Key;
-
-            // Get tenant context
-            var tenantContext = await repository.GetTenantAlertContextAsync(tenantId, ct);
-            if (tenantContext is null || !tenantContext.IsActive) continue;
-
-            foreach (var rule in tenantGroup)
+    /// <remarks>
+    /// <see cref="SensorContext.LastReadingAt"/> stays null for a tenant that has never had a
+    /// reading, which <see cref="SignalLossEvaluator"/> treats as cold start rather than an outage.
+    /// </remarks>
+    internal Task EvaluateSignalLossAsync(CancellationToken ct) =>
+        EvaluateRulesOnWallClockAsync(
+            AlertConditionType.SignalLoss,
+            tenant => new SensorContext
             {
-                try
-                {
-                    // Parse timeout from condition params
-                    var conditionParams = JsonSerializer.Deserialize<SignalLossCondition>(rule.ConditionParams);
-                    if (conditionParams is null) continue;
-
-                    var timeout = TimeSpan.FromMinutes(conditionParams.TimeoutMinutes);
-                    var lastReading = tenantContext.LastReadingAt ?? DateTime.MinValue;
-
-                    if (now - lastReading < timeout) continue;
-
-                    // Signal loss detected for this rule. Create a scoped service and evaluate.
-                    using var tenantScope = _serviceProvider.CreateScope();
-                    var tenantAccessor = tenantScope.ServiceProvider.GetRequiredService<ITenantAccessor>();
-                    tenantAccessor.SetTenant(new TenantContext(tenantContext.TenantId, tenantContext.Slug ?? string.Empty, tenantContext.DisplayName ?? string.Empty, true, IsDemo: false));
-
-                    using var systemScope = SystemAuditScope.PushForScope(
-                        tenantScope.ServiceProvider, AuditEndpoint);
-
-                    var excursionTracker = tenantScope.ServiceProvider.GetRequiredService<IExcursionTracker>();
-                    await excursionTracker.ProcessEvaluationAsync(rule.Id, true, ct);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error evaluating signal loss for rule {RuleId}", rule.Id);
-                }
-            }
-        }
-    }
+                LatestValue = null,
+                LatestTimestamp = tenant.LastReadingAt,
+                TrendRate = null,
+                LastReadingAt = tenant.LastReadingAt,
+            },
+            ct);
 
     /// <summary>
     /// Extends or clears each snoozed instance whose snooze has expired. Extension needs the rule's
@@ -272,7 +236,7 @@ public class AlertSweepService : BackgroundService
                 modifiedCount += await ProcessTenantSnoozesAsync(
                     repository, tenantGroup.Key, tenantGroup.ToList(), configsByInstance, now, ct);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex)
             {
                 _logger.LogError(ex, "Error processing expired snoozes for tenant {TenantId}", tenantGroup.Key);
             }
@@ -609,16 +573,34 @@ public class AlertSweepService : BackgroundService
     /// "sensor expired" alert. The excursion state machine dedupes: once opened, further
     /// sweep passes are ExcursionContinues no-ops.
     /// </summary>
-    internal async Task EvaluateTrackerAgeRulesAsync(CancellationToken ct)
+    /// <remarks>
+    /// LatestValue stays null: tracker_age doesn't read it, and the most recent
+    /// reading-dependent evaluation already ran on the per-reading path.
+    /// </remarks>
+    internal Task EvaluateTrackerAgeRulesAsync(CancellationToken ct) =>
+        EvaluateRulesOnWallClockAsync(
+            AlertConditionType.TrackerAge,
+            tenant => new SensorContext
+            {
+                LatestValue = null,
+                LatestTimestamp = tenant.LastReadingAt,
+                TrendRate = null,
+                LastReadingAt = tenant.LastReadingAt ?? DateTime.MinValue,
+            },
+            ct);
+
+    private async Task EvaluateRulesOnWallClockAsync(
+        AlertConditionType conditionType,
+        Func<TenantAlertContext, SensorContext> buildContext,
+        CancellationToken ct)
     {
         using var lookupScope = _serviceProvider.CreateScope();
         var lookupRepository = lookupScope.ServiceProvider.GetRequiredService<IAlertRepository>();
 
-        var trackerRules = await lookupRepository.GetEnabledRulesByConditionTypeAsync(
-            AlertConditionType.TrackerAge, ct);
-        if (trackerRules.Count == 0) return;
+        var rules = await lookupRepository.GetEnabledRulesByConditionTypeAsync(conditionType, ct);
+        if (rules.Count == 0) return;
 
-        foreach (var tenantGroup in trackerRules.GroupBy(r => r.TenantId))
+        foreach (var tenantGroup in rules.GroupBy(r => r.TenantId))
         {
             var tenantId = tenantGroup.Key;
             var tenantContext = await lookupRepository.GetTenantAlertContextAsync(tenantId, ct);
@@ -638,24 +620,14 @@ public class AlertSweepService : BackgroundService
 
             var orchestrator = tenantScope.ServiceProvider.GetRequiredService<IAlertOrchestrator>();
 
-            // LatestValue stays null: tracker_age doesn't read it, and the most recent
-            // reading-dependent evaluation already ran on the per-reading path.
-            var baseContext = new SensorContext
-            {
-                LatestValue = null,
-                LatestTimestamp = tenantContext.LastReadingAt,
-                TrendRate = null,
-                LastReadingAt = tenantContext.LastReadingAt ?? DateTime.MinValue,
-            };
-
             try
             {
-                await orchestrator.EvaluateRulesAsync(tenantGroup.ToList(), baseContext, ct);
+                await orchestrator.EvaluateRulesAsync(tenantGroup.ToList(), buildContext(tenantContext), ct);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex,
-                    "Tracker-age rule evaluation failed for tenant {TenantId}", tenantId);
+                    "{ConditionType} rule evaluation failed for tenant {TenantId}", conditionType, tenantId);
             }
         }
     }

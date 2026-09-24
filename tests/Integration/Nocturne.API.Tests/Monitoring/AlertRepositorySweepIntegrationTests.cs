@@ -62,7 +62,8 @@ public class AlertRepositorySweepIntegrationTests : AspireIntegrationTestBase
         var repo = new AlertRepository(factory);
 
         // Cross-tenant sweep: must surface signal-loss rules for BOTH tenants.
-        var signalLoss = await repo.GetEnabledSignalLossRulesAsync(CancellationToken.None);
+        var signalLoss = await repo.GetEnabledRulesByConditionTypeAsync(
+            AlertConditionType.SignalLoss, CancellationToken.None);
         var signalLossTenants = signalLoss.Select(r => r.TenantId).ToHashSet();
         signalLossTenants.Should().Contain(tenantA);
         signalLossTenants.Should().Contain(tenantB);

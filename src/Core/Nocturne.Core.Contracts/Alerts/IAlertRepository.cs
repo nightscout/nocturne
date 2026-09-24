@@ -165,17 +165,9 @@ public interface IAlertRepository
     Task MarkInstanceSuppressedAsync(Guid tenantId, Guid instanceId, string reason, CancellationToken ct);
 
     /// <summary>
-    /// Returns all enabled signal-loss detection rules across all tenants.
-    /// Used by background services that monitor for stale sensor data.
-    /// </summary>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>A read-only list of enabled signal-loss rule snapshots.</returns>
-    Task<IReadOnlyList<SignalLossRuleSnapshot>> GetEnabledSignalLossRulesAsync(CancellationToken ct);
-
-    /// <summary>
     /// Returns all enabled rules with the given root condition type across all tenants.
     /// Used by the sweep service to periodically evaluate wall-clock-driven rules
-    /// (e.g. <c>tracker_age</c>) that must fire even when no new reading arrives.
+    /// (<c>tracker_age</c>, <c>signal_loss</c>) that must fire even when no new reading arrives.
     /// Rules that only reference the type inside a composite tree are not returned —
     /// those still evaluate on the per-reading path.
     /// </summary>
