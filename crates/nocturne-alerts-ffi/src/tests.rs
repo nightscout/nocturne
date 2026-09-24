@@ -271,6 +271,81 @@ fn state_threading_survives_serialisation() {
     );
 }
 
+fn hysteresis_request(now: &str, tracker: Value) -> Value {
+    json!({
+        "schema_version": 1,
+        "rule": {
+            "id": "00000000-0000-0000-0000-00000000abce",
+            "condition_type": "threshold",
+            "condition_params": { "direction": "below", "value": 70 },
+            "hysteresis_minutes": 30,
+        },
+        "context": { "latest_value": 100, "latest_timestamp": now },
+        "now": now,
+        "tracker": tracker,
+    })
+}
+
+#[test]
+fn hysteresis_start_round_trips_and_anchors_expiry() {
+    let entered = evaluate(&hysteresis_request(
+        "2026-01-05T12:05:00Z",
+        json!({
+            "state": "active",
+            "confirmation_count": 0,
+            "active_excursion_ordinal": 1,
+            "updated_at": "2026-01-05T12:00:00Z",
+            "next_excursion_ordinal": 2,
+        }),
+    ));
+    assert_eq!(entered["result"]["transition"], json!("hysteresis_started"));
+    assert_eq!(
+        entered["tracker"]["hysteresis_started_at"],
+        json!("2026-01-05T12:05:00Z")
+    );
+    assert_eq!(
+        entered["result"]["tracker"]["hysteresis_started_at"],
+        json!("2026-01-05T12:05:00Z")
+    );
+
+    let held = evaluate(&hysteresis_request(
+        "2026-01-05T12:30:00Z",
+        entered["tracker"].clone(),
+    ));
+    assert_eq!(held["result"]["transition"], json!("none"));
+    assert_eq!(
+        held["tracker"]["hysteresis_started_at"],
+        json!("2026-01-05T12:05:00Z")
+    );
+
+    let closed = evaluate(&hysteresis_request(
+        "2026-01-05T12:35:00Z",
+        held["tracker"].clone(),
+    ));
+    assert_eq!(closed["result"]["transition"], json!("closed"));
+    assert!(closed["tracker"].get("hysteresis_started_at").is_none());
+}
+
+#[test]
+fn hysteresis_state_without_a_start_adopts_updated_at() {
+    let response = evaluate(&hysteresis_request(
+        "2026-01-05T12:30:00Z",
+        json!({
+            "state": "hysteresis",
+            "confirmation_count": 0,
+            "active_excursion_ordinal": 1,
+            "updated_at": "2026-01-05T12:10:00Z",
+            "next_excursion_ordinal": 2,
+        }),
+    ));
+    assert_eq!(response["ok"], Value::Bool(true));
+    assert_eq!(response["result"]["transition"], json!("none"));
+    assert_eq!(
+        response["tracker"]["hysteresis_started_at"],
+        json!("2026-01-05T12:10:00Z")
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Evaluate node (auxiliary scopes: snooze conditions, sweep auto-resolve)
 // ---------------------------------------------------------------------------

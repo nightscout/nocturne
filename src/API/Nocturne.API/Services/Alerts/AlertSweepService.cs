@@ -16,7 +16,7 @@ namespace Nocturne.API.Services.Alerts;
 /// </summary>
 /// <remarks>
 /// <list type="number">
-///   <item>Close excursions whose hysteresis window has expired.</item>
+///   <item>Close excursions whose hysteresis window has elapsed.</item>
 ///   <item>Evaluate signal-loss rules on the wall clock.</item>
 ///   <item>Check snoozed instances for smart-snooze extension or re-fire.</item>
 ///   <item>Run periodic auto-resolve for excursions whose conditions don't depend on the latest reading.</item>
@@ -119,8 +119,9 @@ public class AlertSweepService : BackgroundService
     }
 
     /// <summary>
-    /// Close excursions that are currently in hysteresis. Routes through the tracker
-    /// (single owner of <c>AlertTrackerState.ActiveExcursionId</c>) and the shared
+    /// Closes excursions whose hysteresis window has elapsed, so a window still expires when no
+    /// evaluation arrives. Routes through the tracker (single owner of
+    /// <c>AlertTrackerState.ActiveExcursionId</c>, and of the window check) and the shared
     /// resolution handler so resolution_reason="hysteresis" is stamped, pending deliveries
     /// expire, and <c>alert_resolved</c> broadcasts — same close pathway the orchestrator's
     /// per-reading hysteresis-expiry uses.
@@ -161,8 +162,7 @@ public class AlertSweepService : BackgroundService
             {
                 try
                 {
-                    var transition = await tracker.ForceCloseAsync(
-                        excursion.AlertRuleId, ExcursionCloseReason.Hysteresis, ct);
+                    var transition = await tracker.CloseElapsedHysteresisAsync(excursion.AlertRuleId, ct);
                     if (transition.Type == ExcursionTransitionType.ExcursionClosed)
                     {
                         await resolutionHandler.HandleClosedAsync(transition, tenantId, ct);

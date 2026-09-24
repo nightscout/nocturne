@@ -81,6 +81,7 @@ internal static class RustEnvelopeMapper
                 ConfirmationCount = state.ConfirmationCount,
                 ActiveExcursionOrdinal = state.ActiveExcursionId is null ? null : ActiveExcursionSentinel,
                 UpdatedAt = DateTime.SpecifyKind(state.UpdatedAt, DateTimeKind.Utc),
+                HysteresisStartedAt = Utc(state.HysteresisStartedAt),
                 NextExcursionOrdinal = ActiveExcursionSentinel + 1,
             };
 

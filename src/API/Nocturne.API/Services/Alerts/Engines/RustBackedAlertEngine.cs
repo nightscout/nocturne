@@ -118,6 +118,7 @@ internal sealed class RustBackedAlertEngine(
                 ConfirmationCount = post.ConfirmationCount,
                 ActiveExcursionId = post.ActiveExcursionOrdinal is null ? null : activeExcursionId,
                 UpdatedAt = post.UpdatedAt ?? now,
+                HysteresisStartedAt = post.HysteresisStartedAt,
             }, ct);
         }
 

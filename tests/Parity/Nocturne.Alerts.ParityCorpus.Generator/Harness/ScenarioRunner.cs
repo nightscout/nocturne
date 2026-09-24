@@ -144,6 +144,7 @@ public sealed class ScenarioRunner
                     State = state.State,
                     ConfirmationCount = state.ConfirmationCount,
                     Excursion = trackerRepo.OrdinalOf(state.ActiveExcursionId),
+                    HysteresisStartedAt = state.HysteresisStartedAt,
                 },
             AutoResolved = autoResolved ? true : null,
             TimerOps = timerStore.DrainOps() is { Count: > 0 } ops ? ops : null,

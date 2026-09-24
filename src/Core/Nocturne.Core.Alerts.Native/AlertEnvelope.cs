@@ -109,9 +109,16 @@ public sealed record RustTrackerState
     [JsonPropertyName("active_excursion_ordinal")]
     public int? ActiveExcursionOrdinal { get; init; }
 
-    /// <summary>Required whenever <see cref="State"/> is present (drives hysteresis expiry).</summary>
+    /// <summary>Required whenever <see cref="State"/> is present.</summary>
     [JsonPropertyName("updated_at")]
     public DateTime? UpdatedAt { get; init; }
+
+    /// <summary>
+    /// When the excursion entered hysteresis; present only in the <c>hysteresis</c> state. The
+    /// engine adopts <see cref="UpdatedAt"/> once when it is missing there.
+    /// </summary>
+    [JsonPropertyName("hysteresis_started_at")]
+    public DateTime? HysteresisStartedAt { get; init; }
 
     /// <summary>1-based ordinal the next opened excursion will receive.</summary>
     [JsonPropertyName("next_excursion_ordinal")]

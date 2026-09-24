@@ -59,6 +59,7 @@ public class AlertTrackerRepository : IAlertTrackerRepository
                 ConfirmationCount = state.ConfirmationCount,
                 ActiveExcursionId = state.ActiveExcursionId,
                 UpdatedAt = state.UpdatedAt,
+                HysteresisStartedAt = state.HysteresisStartedAt,
             });
         }
         else
@@ -67,6 +68,7 @@ public class AlertTrackerRepository : IAlertTrackerRepository
             existing.ConfirmationCount = state.ConfirmationCount;
             existing.ActiveExcursionId = state.ActiveExcursionId;
             existing.UpdatedAt = state.UpdatedAt;
+            existing.HysteresisStartedAt = state.HysteresisStartedAt;
         }
 
         await _context.SaveChangesAsync(ct);
@@ -180,6 +182,7 @@ public class AlertTrackerRepository : IAlertTrackerRepository
         ConfirmationCount = entity.ConfirmationCount,
         ActiveExcursionId = entity.ActiveExcursionId,
         UpdatedAt = entity.UpdatedAt,
+        HysteresisStartedAt = entity.HysteresisStartedAt,
     };
 
     private static AlertRule MapAlertRule(AlertRuleEntity entity) => new()

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "name": "tracker-hysteresis-expiry-on-gap",
-  "description": "the per-evaluation expiry proxy is the previous tick\u0027s UpdatedAt: with HysteresisMinutes=10, 5-minute ticks never expire, but a 10-minute evaluation gap closes",
+  "name": "tracker-hysteresis-reentry-restarts-window",
+  "description": "a true tick in hysteresis resumes the same excursion; the next false tick starts a fresh window",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
@@ -12,7 +12,7 @@
         "value": 70
       },
       "confirmation_readings": 1,
-      "hysteresis_minutes": 10,
+      "hysteresis_minutes": 15,
       "auto_resolve_enabled": false
     }
   ],
@@ -46,23 +46,9 @@
       }
     },
     {
-      "at": "2026-01-05T12:10:00Z",
-      "context": {
-        "latest_value": 100,
-        "latest_timestamp": "2026-01-05T12:10:00Z",
-        "trend_rate": 0,
-        "last_reading_at": "2026-01-05T12:10:00Z",
-        "has_ever_aps_cycled": false,
-        "has_ever_pump_snapshot": false,
-        "has_ever_uploader_snapshot": false,
-        "has_ever_aps_sensitivity": false,
-        "sleep_session_active": false
-      }
-    },
-    {
       "at": "2026-01-05T12:15:00Z",
       "context": {
-        "latest_value": 100,
+        "latest_value": 65,
         "latest_timestamp": "2026-01-05T12:15:00Z",
         "trend_rate": 0,
         "last_reading_at": "2026-01-05T12:15:00Z",
@@ -74,12 +60,40 @@
       }
     },
     {
-      "at": "2026-01-05T12:25:00Z",
+      "at": "2026-01-05T12:20:00Z",
       "context": {
         "latest_value": 100,
-        "latest_timestamp": "2026-01-05T12:25:00Z",
+        "latest_timestamp": "2026-01-05T12:20:00Z",
         "trend_rate": 0,
-        "last_reading_at": "2026-01-05T12:25:00Z",
+        "last_reading_at": "2026-01-05T12:20:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:30:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:30:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:30:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:35:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:35:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:35:00Z",
         "has_ever_aps_cycled": false,
         "has_ever_pump_snapshot": false,
         "has_ever_uploader_snapshot": false,

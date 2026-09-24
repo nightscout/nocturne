@@ -78,6 +78,21 @@ public interface IExcursionTracker
     Task<ExcursionTransition> ForceCloseAsync(Guid alertRuleId, ExcursionCloseReason reason, CancellationToken ct);
 
     /// <summary>
+    /// Closes the rule's excursion with reason <see cref="ExcursionCloseReason.Hysteresis"/> when
+    /// it is in hysteresis and <c>HysteresisMinutes</c> have elapsed since it entered, without
+    /// evaluating the condition. The periodic counterpart of the expiry check
+    /// <see cref="ProcessEvaluationAsync"/> makes on a false evaluation, so a window still
+    /// expires when no evaluation arrives.
+    /// </summary>
+    /// <param name="alertRuleId">The rule whose hysteresis window to check.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>
+    /// <see cref="ExcursionTransitionType.ExcursionClosed"/> when the window had elapsed; otherwise
+    /// <see cref="ExcursionTransitionType.None"/>.
+    /// </returns>
+    Task<ExcursionTransition> CloseElapsedHysteresisAsync(Guid alertRuleId, CancellationToken ct);
+
+    /// <summary>
     /// Returns the open excursion id for the rule, or <see langword="null"/>
     /// when the rule is idle/confirming. Both <c>active</c> and <c>hysteresis</c>
     /// states count as having an open excursion (the underlying record has

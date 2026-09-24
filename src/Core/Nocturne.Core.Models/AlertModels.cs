@@ -580,9 +580,15 @@ public class AlertTrackerState
     public Guid? ActiveExcursionId { get; set; }
 
     /// <summary>
-    /// Timestamp of the last state transition.
+    /// Timestamp of the last evaluation.
     /// </summary>
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// When the active excursion entered hysteresis; set only in the "hysteresis" state.
+    /// Hysteresis expires <see cref="AlertRule.HysteresisMinutes"/> after this instant.
+    /// </summary>
+    public DateTime? HysteresisStartedAt { get; set; }
 }
 
 /// <summary>

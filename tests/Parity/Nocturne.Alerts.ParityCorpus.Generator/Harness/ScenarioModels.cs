@@ -274,6 +274,10 @@ public sealed record ExpectedTrackerState
     /// snapshot engine-independent.
     /// </summary>
     public int? Excursion { get; init; }
+
+    /// <summary>When the excursion entered hysteresis; present only in the hysteresis state.</summary>
+    [JsonPropertyName("hysteresis_started_at")]
+    public DateTime? HysteresisStartedAt { get; init; }
 }
 
 public sealed record ExpectedTimerOp(

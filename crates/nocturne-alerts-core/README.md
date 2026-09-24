@@ -22,12 +22,12 @@ The crate is **pure evaluation**: no I/O, no clock, no persistence.
   - sustained-condition timers — [`sustained::TimerStore`], keyed by
     `(rule_id, condition_path)` and recording observable set/clear mutations;
   - the excursion state machine — [`excursion::ExcursionTracker`]
-    (idle → confirming → active → hysteresis), including the sliding
-    `UpdatedAt` hysteresis-expiry proxy, verbatim.
+    (idle → confirming → active → hysteresis), with hysteresis expiring
+    against the persisted `hysteresis_started_at` (semantics doc §6.1).
 - Host-side and out of scope: context enrichment, persistence, delivery/DND
-  dispatch suppression, sweep scheduling (including the wall-clock cadence
-  `signal_loss` depends on, semantics doc §5), and the sweep's hysteresis
-  force-close.
+  dispatch suppression, and sweep scheduling (including the wall-clock cadence
+  `signal_loss` depends on, semantics doc §5, and the sweep's hysteresis
+  close).
 
 ## Layout
 

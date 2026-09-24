@@ -54,6 +54,7 @@ pub struct TrackerSnapshot {
     pub confirmation_count: i32,
     /// 1-based ordinal of the active excursion, when one is active.
     pub excursion: Option<u32>,
+    pub hysteresis_started_at: Option<DateTime<Utc>>,
 }
 
 /// Everything observable from one rule evaluation on one tick.
@@ -166,6 +167,7 @@ pub fn evaluate_rule(
         state: s.state,
         confirmation_count: s.confirmation_count,
         excursion: s.active_excursion,
+        hysteresis_started_at: s.hysteresis_started_at,
     });
 
     RuleOutcome {

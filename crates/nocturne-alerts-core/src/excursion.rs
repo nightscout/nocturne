@@ -1,10 +1,7 @@
-//! `ExcursionTracker` state machine: idle → confirming → active → hysteresis.
-//!
-//! Reproduces the C# tracker exactly, including the sliding hysteresis-expiry
-//! proxy: the per-evaluation expiry check uses the **previous** evaluation's
-//! `UpdatedAt` (`now >= prev_updated_at + HysteresisMinutes`), and `UpdatedAt`
-//! is rewritten to `now` after **every** evaluation. The production sweep that
-//! force-closes all hysteresis windows is host-side and out of scope.
+//! `ExcursionTracker` state machine: idle → confirming → active → hysteresis
+//! (`docs/alerts/engine-semantics.md` §6). Hysteresis expires against the
+//! instant the excursion entered hysteresis, persisted as
+//! `hysteresis_started_at`.
 
 use std::collections::HashMap;
 
@@ -84,6 +81,9 @@ pub struct TrackerState {
     /// tracker's lifetime), engine-independent like the corpus snapshots.
     pub active_excursion: Option<u32>,
     pub updated_at: DateTime<Utc>,
+    /// When the active excursion entered hysteresis; set only in
+    /// [`TrackerStateKind::Hysteresis`].
+    pub hysteresis_started_at: Option<DateTime<Utc>>,
 }
 
 /// Rule inputs consumed by the tracker.
@@ -112,7 +112,13 @@ impl ExcursionTracker {
 
     /// Restores persisted per-rule state. Used by hosts that carry tracker
     /// state across evaluations as data (e.g. the FFI envelope).
-    pub fn restore_state(&mut self, rule_id: Uuid, state: TrackerState) {
+    ///
+    /// State persisted before `hysteresis_started_at` existed carries none
+    /// while in hysteresis; its `updated_at` is adopted once as the start.
+    pub fn restore_state(&mut self, rule_id: Uuid, mut state: TrackerState) {
+        if state.state == TrackerStateKind::Hysteresis && state.hysteresis_started_at.is_none() {
+            state.hysteresis_started_at = Some(state.updated_at);
+        }
         self.states.insert(rule_id, state);
     }
 
@@ -150,6 +156,7 @@ impl ExcursionTracker {
             confirmation_count: 0,
             active_excursion: None,
             updated_at: now,
+            hysteresis_started_at: None,
         });
 
         let transition = match state.state {
@@ -157,7 +164,7 @@ impl ExcursionTracker {
             TrackerStateKind::Confirming => {
                 self.handle_confirming(&mut state, config, condition_met)
             }
-            TrackerStateKind::Active => handle_active(&mut state, condition_met),
+            TrackerStateKind::Active => handle_active(&mut state, condition_met, now),
             TrackerStateKind::Hysteresis => {
                 handle_hysteresis(&mut state, config, condition_met, now)
             }
@@ -233,6 +240,7 @@ impl ExcursionTracker {
         state.state = TrackerStateKind::Idle;
         state.confirmation_count = 0;
         state.active_excursion = None;
+        state.hysteresis_started_at = None;
         state.updated_at = now;
         Transition {
             kind: TransitionType::ExcursionClosed,
@@ -242,7 +250,7 @@ impl ExcursionTracker {
     }
 }
 
-fn handle_active(state: &mut TrackerState, condition_met: bool) -> Transition {
+fn handle_active(state: &mut TrackerState, condition_met: bool, now: DateTime<Utc>) -> Transition {
     if condition_met {
         return Transition {
             kind: TransitionType::ExcursionContinues,
@@ -251,6 +259,7 @@ fn handle_active(state: &mut TrackerState, condition_met: bool) -> Transition {
         };
     }
     state.state = TrackerStateKind::Hysteresis;
+    state.hysteresis_started_at = Some(now);
     Transition {
         kind: TransitionType::HysteresisStarted,
         excursion: state.active_excursion,
@@ -266,6 +275,7 @@ fn handle_hysteresis(
 ) -> Transition {
     if condition_met {
         state.state = TrackerStateKind::Active;
+        state.hysteresis_started_at = None;
         return Transition {
             kind: TransitionType::HysteresisResumed,
             excursion: state.active_excursion,
@@ -273,18 +283,13 @@ fn handle_hysteresis(
         };
     }
 
-    // Sliding proxy [anomaly — normative]: the previous evaluation's
-    // UpdatedAt stands in for "hysteresis started"; DateTime.AddMinutes of an
-    // int minute count is an exact millisecond addition. An expiry past the
-    // representable calendar never arrives.
-    let hysteresis_expiry = state
-        .updated_at
-        .checked_add_signed(TimeDelta::minutes(i64::from(config.hysteresis_minutes)));
-    if hysteresis_expiry.is_some_and(|expiry| now >= expiry) {
+    let started = state.hysteresis_started_at.unwrap_or(state.updated_at);
+    if hysteresis_elapsed(started, config.hysteresis_minutes, now) {
         let excursion = state.active_excursion;
         state.state = TrackerStateKind::Idle;
         state.confirmation_count = 0;
         state.active_excursion = None;
+        state.hysteresis_started_at = None;
         return Transition {
             kind: TransitionType::ExcursionClosed,
             excursion,
@@ -292,4 +297,17 @@ fn handle_hysteresis(
         };
     }
     Transition::none()
+}
+
+/// `now - started >= hysteresis_minutes` as exact whole minutes, so a
+/// non-positive window has always elapsed and an expiry past the representable
+/// calendar never arrives (§6.1).
+pub fn hysteresis_elapsed(
+    started: DateTime<Utc>,
+    hysteresis_minutes: i32,
+    now: DateTime<Utc>,
+) -> bool {
+    started
+        .checked_add_signed(TimeDelta::minutes(i64::from(hysteresis_minutes)))
+        .is_some_and(|expiry| now >= expiry)
 }

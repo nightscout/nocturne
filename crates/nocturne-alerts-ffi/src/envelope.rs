@@ -82,9 +82,13 @@ struct WireTracker {
     confirmation_count: i32,
     #[serde(default)]
     active_excursion_ordinal: Option<u32>,
-    /// Required whenever `state` is present (drives hysteresis expiry).
+    /// Required whenever `state` is present.
     #[serde(default)]
     updated_at: Option<DateTime<Utc>>,
+    /// When the excursion entered hysteresis. Absent in hysteresis (state
+    /// persisted before the field existed) adopts `updated_at` once.
+    #[serde(default)]
+    hysteresis_started_at: Option<DateTime<Utc>>,
     /// 1-based ordinal the next opened excursion will receive. Shared across
     /// all rules of a tenant/scenario; thread it between calls.
     #[serde(default = "default_next_ordinal")]
@@ -152,6 +156,9 @@ pub fn evaluate(request_json: &str) -> Result<Value, String> {
                 .updated_at
                 .ok_or("tracker.updated_at is required when tracker.state is present")?;
             check_timestamp(updated_at, "tracker.updated_at")?;
+            if let Some(at) = w.hysteresis_started_at {
+                check_timestamp(at, "tracker.hysteresis_started_at")?;
+            }
             state.tracker.restore_state(
                 rule.id,
                 TrackerState {
@@ -159,6 +166,7 @@ pub fn evaluate(request_json: &str) -> Result<Value, String> {
                     confirmation_count: w.confirmation_count,
                     active_excursion: w.active_excursion_ordinal,
                     updated_at,
+                    hysteresis_started_at: w.hysteresis_started_at,
                 },
             );
         }
@@ -263,6 +271,9 @@ fn outcome_json(outcome: &RuleOutcome) -> Value {
         if let Some(excursion) = tracker.excursion {
             t.insert("excursion".into(), Value::Number(excursion.into()));
         }
+        if let Some(at) = tracker.hysteresis_started_at {
+            t.insert("hysteresis_started_at".into(), Value::String(fmt_at(at)));
+        }
         o.insert("tracker".into(), Value::Object(t));
     }
     if outcome.auto_resolved {
@@ -287,7 +298,8 @@ fn timers_json(state: &EngineState, rule_id: Uuid) -> Value {
 }
 
 /// Post-evaluation tracker state. `state`/`confirmation_count`/`updated_at`
-/// (and `active_excursion_ordinal` when an excursion is active) are present
+/// (plus `active_excursion_ordinal` when an excursion is active and
+/// `hysteresis_started_at` while in hysteresis) are present
 /// only once per-rule state exists; `next_excursion_ordinal` is always
 /// present and must be threaded into the next call (shared across rules).
 fn tracker_state_json(state: &EngineState, rule_id: Uuid) -> Value {
@@ -305,6 +317,9 @@ fn tracker_state_json(state: &EngineState, rule_id: Uuid) -> Value {
             );
         }
         t.insert("updated_at".into(), Value::String(fmt_at(s.updated_at)));
+        if let Some(at) = s.hysteresis_started_at {
+            t.insert("hysteresis_started_at".into(), Value::String(fmt_at(at)));
+        }
     }
     t.insert(
         "next_excursion_ordinal".into(),

@@ -311,8 +311,8 @@ like any other.
 
 ## 6. Excursion state machine (`ExcursionTracker`)
 
-Per-rule persisted state: `{State, ConfirmationCount, ActiveExcursionId, UpdatedAt}` with
-states `idle | confirming | active | hysteresis`. Rule inputs: `ConfirmationReadings`
+Per-rule persisted state: `{State, ConfirmationCount, ActiveExcursionId, UpdatedAt,
+HysteresisStartedAt}` with states `idle | confirming | active | hysteresis`. Rule inputs: `ConfirmationReadings`
 (default 1), `HysteresisMinutes`. One evaluation = one `ProcessEvaluationAsync(ruleId,
 conditionMet)` call. **After every call**, regardless of transition, `state.UpdatedAt =
 now` is persisted. Unknown stored state string ⇒ no-op transition `None`.
@@ -324,35 +324,34 @@ now` is persisted. Unknown stored state string ⇒ no-op transition `None`.
 | confirming | false | → **idle**, count reset, None (a single false fully resets confirmation) |
 | confirming | true | `++ConfirmationCount`; if `count >= ConfirmationReadings` ⇒ open → **active**, `ExcursionOpened` (count resets to 0 on open) |
 | active | true | `ExcursionContinues` |
-| active | false | → **hysteresis**, stamp `HysteresisStartedAt = now` on the excursion row, emit `HysteresisStarted` |
-| hysteresis | true | → **active**, clear `HysteresisStartedAt`, emit `HysteresisResumed` |
-| hysteresis | false | expiry check (below). Expired ⇒ close excursion → **idle**, emit `ExcursionClosed(reason: hysteresis)`; else None |
+| active | false | → **hysteresis**, `HysteresisStartedAt = now` (state and excursion row), emit `HysteresisStarted` |
+| hysteresis | true | → **active**, clear `HysteresisStartedAt`, emit `HysteresisResumed` (same excursion) |
+| hysteresis | false | expiry check (below). Expired ⇒ close excursion → **idle**, clear `HysteresisStartedAt`, emit `ExcursionClosed(reason: hysteresis)`; else None |
 
-### 6.1 Hysteresis expiry quirk **[anomaly — but normative]**
+### 6.1 Hysteresis expiry
 
-The per-evaluation expiry check uses `state.UpdatedAt` as the "hysteresis start" proxy:
-`expired = now >= state.UpdatedAt + HysteresisMinutes`. But `UpdatedAt` is rewritten
-after **every** evaluation — so on consecutive evaluations in hysteresis the proxy
-slides forward. Effective per-reading behaviour: the window expires only when the gap
-between two consecutive evaluations is `>= HysteresisMinutes`. With 5-minute readings,
-`HysteresisMinutes <= 5` closes on the next reading; `HysteresisMinutes > 5` would
-*never* close via this path.
+`expired = now >= HysteresisStartedAt + HysteresisMinutes`, with the window an exact
+whole-minute duration. The start is the instant of the evaluation that entered hysteresis
+and does not move until the excursion resumes or closes, so a window closes on the first
+false evaluation at or past its end, whatever the evaluation cadence. A non-positive
+`HysteresisMinutes` has always expired: the excursion closes on the first false evaluation
+after the one that entered hysteresis. A window whose end is past the representable
+calendar never expires. A re-entry (a true evaluation) resumes the same excursion; the
+next false evaluation starts a fresh window.
 
-In production that is masked by the sweep: `CloseHysteresisWindowsAsync` (every 30 s)
-force-closes **every** open excursion with `HysteresisStartedAt != null` — it does
-**not** check `HysteresisMinutes` at all. Net live behaviour today: hysteresis ends
-within ~30 seconds of the condition clearing, regardless of configuration.
+State persisted before `HysteresisStartedAt` existed has none while in hysteresis. Both
+engines adopt that state's `UpdatedAt` as the start, once, and persist it.
 
-Port boundary: the crate reproduces the tracker exactly (including the sliding proxy);
-the sweep's force-close-all stays a host decision. The corpus pins the tracker; the
-sweep anomaly is recorded here so nobody "fixes" the tracker to match the comment above
-it.
+A host must also expire windows when no evaluation arrives. The backend sweep
+(`CloseHysteresisWindowsAsync`, every 30 s) asks the tracker to close each excursion in
+hysteresis whose window has elapsed (`CloseElapsedHysteresisAsync`), without evaluating
+the condition. A window is therefore at most ~30 s late.
 
 ### 6.2 Force-close
 
-`ForceCloseAsync(ruleId, reason)` (used by auto-resolve, manual close, sweep): if the
-tracker has an `ActiveExcursionId` (any state), close the excursion, reset to idle,
-emit `ExcursionClosed(reason)`; otherwise None. `GetActiveExcursionIdAsync` returns the
+`ForceCloseAsync(ruleId, reason)` (used by auto-resolve, manual close, rule disable): if
+the tracker has an `ActiveExcursionId` (any state), close the excursion, reset to idle
+(clearing `HysteresisStartedAt`), emit `ExcursionClosed(reason)`; otherwise None. `GetActiveExcursionIdAsync` returns the
 id only in `active`/`hysteresis` states.
 
 ---
@@ -448,7 +447,7 @@ contexts; window resolution, reading fetch, and fact-timeline capture stay host-
 | 2 | Path segments preserve the stored JSON's casing of `type` | §2.3 | normative |
 | 3 | `not` over an unknown child kind yields true | §3 | normative |
 | 4 | *(retired: `signal_loss` is an ordinary leaf evaluated on the wall clock)* | §5 | resolved |
-| 5 | Hysteresis expiry proxy slides with every evaluation; sweep force-closes all hysteresis excursions regardless of `HysteresisMinutes` | §6.1 | tracker part normative for crate; sweep host-side |
+| 5 | *(retired: hysteresis expires against a persisted `HysteresisStartedAt`, in the tracker and the sweep)* | §6.1 | resolved |
 | 6 | Elapsed-time math mixes double→decimal casts (per-leaf, §1.3) | §1.3 | normative |
 | 7 | `loop_enaction_stale` cold-start guard is `HasEverApsCycled`, not an enaction-specific flag | §3 | normative |
 | 8 | `time_since_last_*` treats a missing anchor as +∞ (fires on cold start) — deliberately opposite to `loop_stale`'s guard | §3 | normative |

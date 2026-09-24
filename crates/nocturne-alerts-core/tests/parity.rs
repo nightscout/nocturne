@@ -143,6 +143,12 @@ fn outcome_json(outcome: &RuleOutcome) -> Value {
         if let Some(excursion) = tracker.excursion {
             t.insert("excursion".into(), Value::Number(excursion.into()));
         }
+        if let Some(at) = tracker.hysteresis_started_at {
+            t.insert(
+                "hysteresis_started_at".into(),
+                Value::String(at.to_rfc3339_opts(SecondsFormat::AutoSi, true)),
+            );
+        }
         o.insert("tracker".into(), Value::Object(t));
     }
     if outcome.auto_resolved {

@@ -146,8 +146,8 @@ public class ExcursionTracker(
                 state.ActiveExcursionId);
         }
 
-        // Start hysteresis
         state.State = StateHysteresis;
+        state.HysteresisStartedAt = now;
 
         if (state.ActiveExcursionId.HasValue)
         {
@@ -168,8 +168,8 @@ public class ExcursionTracker(
     {
         if (conditionMet)
         {
-            // Resume excursion
             state.State = StateActive;
+            state.HysteresisStartedAt = null;
 
             if (state.ActiveExcursionId.HasValue)
             {
@@ -181,40 +181,72 @@ public class ExcursionTracker(
                 state.ActiveExcursionId);
         }
 
-        // Check if hysteresis has expired.
-        // We need to read the excursion to get HysteresisStartedAt.
-        // For simplicity, we use the excursion record's HysteresisStartedAt.
-        // If we can't find it, close immediately.
-        var excursionId = state.ActiveExcursionId;
+        if (!HysteresisElapsed(state, rule, now))
+            return new ExcursionTransition(ExcursionTransitionType.None);
 
-        // The hysteresis started when we transitioned to this state.
-        // We recorded it on the excursion entity via SetHysteresisStartedAsync.
-        // For the expiry check, we need to know when hysteresis started.
-        // We'll use state.UpdatedAt as the proxy for when hysteresis started
-        // (it was set when we entered hysteresis state).
-        var hysteresisStart = state.UpdatedAt;
-        var hysteresisExpiry = hysteresisStart.AddMinutes(rule.HysteresisMinutes);
+        return await CloseFromHysteresisAsync(state, now, ct);
+    }
 
-        if (now >= hysteresisExpiry)
+    /// <inheritdoc/>
+    public async Task<ExcursionTransition> CloseElapsedHysteresisAsync(Guid alertRuleId, CancellationToken ct)
+    {
+        using var lease = await gate.AcquireAsync(alertRuleId, ct);
+
+        var state = await repository.GetTrackerStateAsync(alertRuleId, ct);
+        if (state is null || state.State != StateHysteresis)
+            return new ExcursionTransition(ExcursionTransitionType.None);
+
+        var rule = await repository.GetRuleAsync(alertRuleId, ct);
+        if (rule is null)
+            return new ExcursionTransition(ExcursionTransitionType.None);
+
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        var adoptsStart = state.HysteresisStartedAt is null;
+        if (HysteresisElapsed(state, rule, now))
         {
-            // Hysteresis expired, close excursion
-            if (excursionId.HasValue)
-            {
-                await repository.CloseExcursionAsync(excursionId.Value, now, ct);
-            }
-
-            state.State = StateIdle;
-            state.ConfirmationCount = 0;
-            state.ActiveExcursionId = null;
-
-            return new ExcursionTransition(
-                ExcursionTransitionType.ExcursionClosed,
-                excursionId,
-                ExcursionCloseReason.Hysteresis);
+            var transition = await CloseFromHysteresisAsync(state, now, ct);
+            state.UpdatedAt = now;
+            await repository.UpsertTrackerStateAsync(state, ct);
+            return transition;
         }
 
-        // Still in hysteresis, no transition
+        if (adoptsStart)
+        {
+            await repository.UpsertTrackerStateAsync(state, ct);
+        }
         return new ExcursionTransition(ExcursionTransitionType.None);
+    }
+
+    /// <summary>
+    /// <c>now - HysteresisStartedAt &gt;= HysteresisMinutes</c>, so a non-positive window has
+    /// always elapsed. A state persisted before <see cref="AlertTrackerState.HysteresisStartedAt"/>
+    /// existed has none while in hysteresis; its <see cref="AlertTrackerState.UpdatedAt"/> is
+    /// adopted once as the start and persisted with the state.
+    /// </summary>
+    private static bool HysteresisElapsed(AlertTrackerState state, AlertRule rule, DateTime now)
+    {
+        state.HysteresisStartedAt ??= state.UpdatedAt;
+        return now >= state.HysteresisStartedAt.Value.AddMinutes(rule.HysteresisMinutes);
+    }
+
+    private async Task<ExcursionTransition> CloseFromHysteresisAsync(
+        AlertTrackerState state, DateTime now, CancellationToken ct)
+    {
+        var excursionId = state.ActiveExcursionId;
+        if (excursionId.HasValue)
+        {
+            await repository.CloseExcursionAsync(excursionId.Value, now, ct);
+        }
+
+        state.State = StateIdle;
+        state.ConfirmationCount = 0;
+        state.ActiveExcursionId = null;
+        state.HysteresisStartedAt = null;
+
+        return new ExcursionTransition(
+            ExcursionTransitionType.ExcursionClosed,
+            excursionId,
+            ExcursionCloseReason.Hysteresis);
     }
 
     /// <inheritdoc/>
@@ -239,6 +271,7 @@ public class ExcursionTracker(
         state.State = StateIdle;
         state.ConfirmationCount = 0;
         state.ActiveExcursionId = null;
+        state.HysteresisStartedAt = null;
         state.UpdatedAt = now;
         await repository.UpsertTrackerStateAsync(state, ct);
 
