@@ -3,6 +3,12 @@
 //! envelope, plus the error-envelope contract (null, invalid UTF-8, malformed
 //! JSON, bad schema, panic path).
 
+#![allow(
+    unsafe_code,
+    clippy::undocumented_unsafe_blocks,
+    reason = "tests call the C ABI"
+)]
+
 use std::ffi::{CStr, CString, c_char};
 use std::fs;
 use std::path::PathBuf;

@@ -12,6 +12,7 @@ use crate::model::{ConditionKind, Node, parse_payload};
 /// move. Containers are not: a `sustained` over a reading-driven child only
 /// extrapolates the last reading. `time_of_day` and `day_of_week` gate
 /// reading-driven leaves, so the next reading bounds their delay.
+#[must_use]
 pub fn is_wall_clock(kind: ConditionKind) -> bool {
     match kind {
         ConditionKind::SignalLoss
@@ -53,6 +54,7 @@ pub fn is_wall_clock(kind: ConditionKind) -> bool {
 /// Whether a stored rule's root kind, or any leaf of its tree, is wall-clock
 /// sensitive. A root kind that does not resolve, or a container payload that
 /// does not parse, is false: it cannot be evaluated either.
+#[must_use]
 pub fn references_wall_clock(condition_type: &str, condition_params: &Value) -> bool {
     let Some(kind) = ConditionKind::resolve(condition_type) else {
         return false;

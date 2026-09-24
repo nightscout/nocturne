@@ -37,6 +37,7 @@ pub(crate) fn first_evaluation_fault_in_payload(payload: &Payload) -> Option<Par
 /// Every problem saving a rule body should reject: `condition_params` as
 /// stored for `condition_type`. A structurally malformed payload reports only
 /// its first error, as the reader stops there.
+#[must_use]
 pub fn validate_rule(condition_type: &str, condition_params: &Value) -> Vec<ParseError> {
     let Some(kind) =
         ConditionKind::from_wire(condition_type).filter(|k| k.wire() == condition_type)
@@ -62,6 +63,7 @@ pub fn validate_rule(condition_type: &str, condition_params: &Value) -> Vec<Pars
 
 /// Every problem saving a full condition node should reject, with paths
 /// rooted at `root` (`auto_resolve`, `snooze`, …).
+#[must_use]
 pub fn validate_node(node: &Value, root: &str) -> Vec<ParseError> {
     match Node::parse_structure_rooted(node, root) {
         Err(e) => vec![e],

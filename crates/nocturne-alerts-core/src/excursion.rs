@@ -158,7 +158,7 @@ impl ExcursionTracker {
     /// The 1-based ordinal the next opened excursion will receive.
     #[must_use]
     pub fn next_excursion_ordinal(&self) -> u32 {
-        self.next_ordinal + 1
+        self.next_ordinal.saturating_add(1)
     }
 
     /// Sets the 1-based ordinal the next opened excursion will receive

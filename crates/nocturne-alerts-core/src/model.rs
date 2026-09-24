@@ -362,9 +362,9 @@ pub(crate) fn parse_decimal_literal(s: &str) -> Option<Decimal> {
         };
         mantissa = widened;
         if next < digits.len() {
-            next += 1;
+            next = next.saturating_add(1);
         }
-        e -= 1;
+        e = e.saturating_sub(1);
     }
 
     if let Some((&digit, tail)) = digits.get(next..).and_then(<[u8]>::split_first) {
@@ -373,10 +373,10 @@ pub(crate) fn parse_decimal_literal(s: &str) -> Option<Decimal> {
             && mantissa.is_multiple_of(2)
             && tail.iter().all(|&d| d == 0);
         if digit >= 5 && !tie_to_even {
-            mantissa += 1;
+            mantissa = mantissa.saturating_add(1);
             if mantissa > MAX_MANTISSA {
                 mantissa = MAX_MANTISSA / 10 + 1;
-                e += 1;
+                e = e.saturating_add(1);
             }
         }
     }
@@ -387,7 +387,8 @@ pub(crate) fn parse_decimal_literal(s: &str) -> Option<Decimal> {
     let mut d = if e <= -(MAX_SCALE + 1) {
         Decimal::from_i128_with_scale(0, scale_u32(MAX_SCALE))
     } else {
-        Decimal::try_from_i128_with_scale(i128::try_from(mantissa).ok()?, scale_u32(-e)).ok()?
+        let scale = scale_u32(e.saturating_neg());
+        Decimal::try_from_i128_with_scale(i128::try_from(mantissa).ok()?, scale).ok()?
     };
     d.set_sign_negative(negative && !d.is_zero());
     Some(d)
@@ -418,7 +419,11 @@ fn parse_saturating_exponent(s: &str) -> Option<i64> {
             .saturating_add(i64::from(b.wrapping_sub(b'0')))
             .min(limit)
     });
-    Some(if negative { -magnitude } else { magnitude })
+    Some(if negative {
+        magnitude.saturating_neg()
+    } else {
+        magnitude
+    })
 }
 
 pub(crate) fn decimal_from_number(n: &serde_json::Number) -> Option<Decimal> {

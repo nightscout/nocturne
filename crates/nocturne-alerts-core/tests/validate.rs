@@ -1,5 +1,14 @@
 //! Evaluability (parse-time) and save-time validation of condition trees.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    reason = "test code"
+)]
+
 use chrono::{DateTime, TimeZone, Utc};
 use serde_json::{Value, json};
 use uuid::Uuid;

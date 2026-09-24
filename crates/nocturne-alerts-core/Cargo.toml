@@ -13,3 +13,6 @@ rust_decimal = { version = "1", features = ["serde"] }
 chrono = { version = "0.4", default-features = false, features = ["std", "serde"] }
 chrono-tz = "0.10"
 uuid = { version = "1", features = ["serde"] }
+
+[lints]
+workspace = true

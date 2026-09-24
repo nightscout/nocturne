@@ -2,6 +2,15 @@
 //! `tests/Parity/AlertEngineCorpus/` through the Rust engine and asserts an
 //! exact (semantic) match against the C#-generated `.expected.json` snapshot.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    reason = "test code"
+)]
+
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::PathBuf;

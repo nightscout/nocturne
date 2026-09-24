@@ -2,6 +2,15 @@
 //! (`ConditionEvaluatorTests.cs`, `ExcursionTrackerTests.cs`), covering null
 //! permutations and state-machine edges the corpus may not pin individually.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    reason = "test code"
+)]
+
 use chrono::{DateTime, TimeDelta, TimeZone, Utc};
 use rust_decimal::Decimal;
 use serde_json::{Value, json};

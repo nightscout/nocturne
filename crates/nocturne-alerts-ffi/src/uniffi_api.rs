@@ -10,62 +10,62 @@ use crate::{envelope, envelope_string, validate_envelope};
 /// `nocturne_alerts_evaluate`.
 #[uniffi::export]
 #[must_use]
-pub fn evaluate(request_json: String) -> String {
+pub(crate) fn evaluate(request_json: String) -> String {
     envelope_string(|| envelope::evaluate(&request_json))
 }
 
 /// `nocturne_alerts_evaluate_node`.
 #[uniffi::export]
 #[must_use]
-pub fn evaluate_node(request_json: String) -> String {
+pub(crate) fn evaluate_node(request_json: String) -> String {
     envelope_string(|| envelope::evaluate_node(&request_json))
 }
 
 /// `nocturne_alerts_classify`.
 #[uniffi::export]
 #[must_use]
-pub fn classify(request_json: String) -> String {
+pub(crate) fn classify(request_json: String) -> String {
     envelope_string(|| envelope::classify_rule(&request_json))
 }
 
 /// `nocturne_alerts_references_wall_clock`.
 #[uniffi::export]
 #[must_use]
-pub fn references_wall_clock(request_json: String) -> String {
+pub(crate) fn references_wall_clock(request_json: String) -> String {
     envelope_string(|| envelope::wall_clock(&request_json))
 }
 
 /// `nocturne_alerts_leaf_paths`.
 #[uniffi::export]
 #[must_use]
-pub fn leaf_paths(request_json: String) -> String {
+pub(crate) fn leaf_paths(request_json: String) -> String {
     envelope_string(|| envelope::leaf_paths(&request_json))
 }
 
 /// `nocturne_alerts_describe`.
 #[uniffi::export]
 #[must_use]
-pub fn describe(request_json: String) -> String {
+pub(crate) fn describe(request_json: String) -> String {
     envelope_string(|| envelope::describe(&request_json))
 }
 
 /// `nocturne_alerts_validate`.
 #[uniffi::export]
 #[must_use]
-pub fn validate(request_json: String) -> String {
+pub(crate) fn validate(request_json: String) -> String {
     envelope_string(|| validate_envelope::validate(&request_json))
 }
 
 /// `nocturne_alerts_version`: a plain version string, not JSON.
 #[uniffi::export]
 #[must_use]
-pub fn version() -> String {
+pub(crate) fn version() -> String {
     env!("CARGO_PKG_VERSION").to_owned()
 }
 
 /// `nocturne_alerts_tzdb_version`: a plain string, not JSON.
 #[uniffi::export]
 #[must_use]
-pub fn tzdb_version() -> String {
+pub(crate) fn tzdb_version() -> String {
     nocturne_alerts_core::TZDB_VERSION.to_owned()
 }

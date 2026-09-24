@@ -15,5 +15,6 @@ pub(super) fn signal_loss(p: &SignalLossPayload, env: &Env) -> bool {
     let Some(last_reading_at) = env.ctx.last_reading_at else {
         return env.ctx.latest_timestamp.is_some();
     };
-    env.now - last_reading_at >= Duration::minutes(i64::from(p.timeout_minutes))
+    env.now.signed_duration_since(last_reading_at)
+        >= Duration::minutes(i64::from(p.timeout_minutes))
 }

@@ -1,6 +1,12 @@
 //! `nocturne_alerts_validate` through the C ABI, and the evaluate envelopes'
 //! rejection of trees that cannot be evaluated.
 
+#![allow(
+    unsafe_code,
+    clippy::undocumented_unsafe_blocks,
+    reason = "tests call the C ABI"
+)]
+
 use std::ffi::{CStr, CString};
 
 use serde_json::{Value, json};
