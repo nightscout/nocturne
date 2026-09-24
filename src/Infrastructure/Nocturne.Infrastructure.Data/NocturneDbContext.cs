@@ -680,6 +680,21 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
                 .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NULL");
         }
 
+        // GetBlockingLegacyIdsAsync also wants the user tombstones, which the unique index above
+        // leaves out, so without this the lookup scans every row the tenant owns: 719 ms and 187k
+        // buffers to find 200 ids on the largest production tenant. With it, the planner answers
+        // the OR in WhereBlocksRecreation with a BitmapOr over the two partial indexes. Tombstones
+        // only, not every soft-deleted row, because that is the arm the OR asks for and it keeps
+        // the index near 1.5% of the unique one. Named, because an unnamed HasIndex on the same
+        // columns would reconfigure the unique index instead of adding this one.
+        foreach (var entity in V4LegacyIdRecordEntities.Select(t => modelBuilder.Entity(t)))
+        {
+            var name = $"ix_{entity.Metadata.GetTableName()}_tenant_legacy_id_user_deleted";
+            entity.HasIndex([nameof(ITenantScoped.TenantId), nameof(IV4Entity.LegacyId)], name)
+                .HasDatabaseName(name)
+                .HasFilter("legacy_id IS NOT NULL AND deleted_by_user");
+        }
+
         foreach (var entity in V4CorrelationIndexedEntities.Select(t => modelBuilder.Entity(t)))
         {
             entity.HasIndex(nameof(IV4Entity.CorrelationId))
