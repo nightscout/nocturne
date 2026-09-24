@@ -48,7 +48,7 @@ internal static class ConditionTimeZones
     public static string CanonicaliseClientConfiguration(string clientConfigurationJson) =>
         Rewrite(clientConfigurationJson, config =>
         {
-            if (SnoozeConditions(config) is { } conditions)
+            if (SmartSnoozeConfig.ConditionsNode(config) is { } conditions)
                 foreach (var condition in conditions)
                     VisitNode(condition, string.Empty, (tod, _) => CanonicaliseZone(tod));
         });
@@ -178,14 +178,6 @@ internal static class ConditionTimeZones
         }
         return null;
     }
-
-    private static JsonArray? SnoozeConditions(JsonNode config) =>
-        config is JsonObject root
-        && Property(root, "snooze") is { } snoozeKey
-        && root[snoozeKey] is JsonObject snooze
-        && Property(snooze, "conditions") is { } conditionsKey
-            ? snooze[conditionsKey] as JsonArray
-            : null;
 
     /// <summary>
     /// Edits JSON that mentions <c>time_of_day</c> at all, or that is known to be a

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Nocturne.API.Services.Alerts.Evaluators;
 using Nocturne.Core.Models;
 
@@ -43,6 +44,54 @@ internal sealed record SmartSnoozeConfig(
     public static SmartSnoozeConfig Default { get; } =
         new(false, DefaultExtendMinutes, DefaultMaxCount, null);
 
+    private const string SectionProperty = "snooze";
+    private const string SmartSnoozeProperty = "smartSnooze";
+    private const string ConditionsProperty = "conditions";
+
+    /// <summary>
+    /// The raw <see cref="Conditions"/> the sweep evaluates: present only when
+    /// <see cref="SmartSnooze"/> is on and <c>conditions</c> is a list. Null for unreadable JSON.
+    /// </summary>
+    public static JsonElement? EvaluatedConditions(string? clientConfiguration)
+    {
+        if (string.IsNullOrWhiteSpace(clientConfiguration))
+            return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(clientConfiguration);
+            return Section(doc.RootElement) is { } snooze
+                   && snooze.TryGetProperty(SmartSnoozeProperty, out var smart)
+                   && smart.ValueKind == JsonValueKind.True
+                   && ConditionList(snooze) is { } conditions
+                ? conditions.Clone()
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>The <c>conditions</c> list in a mutable <c>client_configuration</c>, whether or not smart snooze is on.</summary>
+    public static JsonArray? ConditionsNode(JsonNode? clientConfiguration) =>
+        clientConfiguration is JsonObject root
+        && root[SectionProperty] is JsonObject snooze
+            ? snooze[ConditionsProperty] as JsonArray
+            : null;
+
+    private static JsonElement? Section(JsonElement root) =>
+        root.ValueKind == JsonValueKind.Object
+        && root.TryGetProperty(SectionProperty, out var snooze)
+        && snooze.ValueKind == JsonValueKind.Object
+            ? snooze
+            : null;
+
+    private static JsonElement? ConditionList(JsonElement snooze) =>
+        snooze.TryGetProperty(ConditionsProperty, out var conditions)
+        && conditions.ValueKind == JsonValueKind.Array
+            ? conditions
+            : null;
+
     public static SmartSnoozeConfig Parse(string? clientConfiguration)
     {
         if (string.IsNullOrWhiteSpace(clientConfiguration))
@@ -61,15 +110,15 @@ internal sealed record SmartSnoozeConfig(
         using (doc)
         {
             if (doc.RootElement.ValueKind != JsonValueKind.Object
-                || !doc.RootElement.TryGetProperty("snooze", out var snooze))
+                || !doc.RootElement.TryGetProperty(SectionProperty, out _))
                 return Default;
-            if (snooze.ValueKind != JsonValueKind.Object)
+            if (Section(doc.RootElement) is not { } snooze)
                 return Default with { Malformed = true };
 
             var malformed = false;
 
             var smartSnooze = false;
-            if (snooze.TryGetProperty("smartSnooze", out var smartEl))
+            if (snooze.TryGetProperty(SmartSnoozeProperty, out var smartEl))
             {
                 if (smartEl.ValueKind is JsonValueKind.True or JsonValueKind.False)
                     smartSnooze = smartEl.GetBoolean();
@@ -81,8 +130,7 @@ internal sealed record SmartSnoozeConfig(
             var maxCount = ReadNonNegativeInt(snooze, "maxCount", DefaultMaxCount, ref malformed);
 
             IReadOnlyList<ConditionNode>? conditions = null;
-            if (snooze.TryGetProperty("conditions", out var conditionsEl)
-                && conditionsEl.ValueKind == JsonValueKind.Array)
+            if (ConditionList(snooze) is { } conditionsEl)
             {
                 try
                 {
