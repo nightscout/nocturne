@@ -32,8 +32,7 @@ pub enum ReplayEventKind {
     Fired,
     SuppressedByDnd,
     AutoResolved,
-    /// The body went false while firing; replay closes without an event a
-    /// host shows.
+    /// The body went false while firing.
     Cleared,
 }
 
