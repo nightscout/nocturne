@@ -15,14 +15,15 @@
     Info,
     TrendingUp,
     ArrowRight,
+    ArrowLeft,
     HelpCircle,
     Syringe,
     Layers,
-    Target,
   } from "lucide-svelte";
   import BasalBolusRatioChart from "$lib/components/reports/BasalBolusRatioChart.svelte";
   import InsulinDeliveryChart from "$lib/components/reports/InsulinDeliveryChart.svelte";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
+  import FigureStrip from "$lib/components/reports/FigureStrip.svelte";
   import type { InsulinDeliveryStatistics } from "$lib/api";
   import {
     getInsulinDeliveryStatistics,
@@ -114,7 +115,6 @@
 
 {#if insulinResource.current}
 <div class="@container container mx-auto max-w-7xl space-y-8 p-3 @md:p-6">
-  <!-- Header -->
   <div class="space-y-4">
     <div class="flex flex-wrap items-center justify-between gap-4 print:hidden">
       <div>
@@ -138,7 +138,6 @@
       </div>
     </div>
 
-    <!-- Period info -->
     <div class="flex items-center gap-2 text-sm text-muted-foreground print:hidden">
       <Calendar class="h-4 w-4" />
       <span>
@@ -154,7 +153,6 @@
     <ReliabilityBadge reliability={insulinStats?.reliability} />
   </div>
 
-  <!-- What is this report - Educational Card -->
   <Card variant="info">
     <CardHeader class="pb-3">
       <CardTitle class="flex items-center gap-2 text-base">
@@ -185,86 +183,16 @@
     </CardContent>
   </Card>
 
-  <!-- Key Summary Stats -->
-  <div class="grid grid-cols-2 gap-4 @md:grid-cols-3 @lg:grid-cols-5">
-    <Card class="@lg:col-span-1">
-      <CardContent class="pt-6 text-center">
-        <div class="text-3xl font-bold tabular-nums text-primary">
-          {(insulinStats.tdd ?? 0).toFixed(1)}
-        </div>
-        <div class="text-xs font-medium text-muted-foreground">Avg TDD</div>
-        <div class="text-2xs text-muted-foreground/60">units/day</div>
-      </CardContent>
-    </Card>
-    <Card>
-      <CardContent class="pt-6 text-center">
-        <div class="text-2xl font-bold tabular-nums">
-          {(insulinStats.basalPercent ?? 0).toFixed(0)}%
-        </div>
-        <div class="text-xs font-medium text-muted-foreground">Basal</div>
-        <div class="text-2xs text-muted-foreground/60">
-          {(insulinStats.totalBasal ?? 0).toFixed(1)}U total
-        </div>
-      </CardContent>
-    </Card>
-    <Card>
-      <CardContent class="pt-6 text-center">
-        <div class="text-2xl font-bold tabular-nums">
-          {(insulinStats.bolusPercent ?? 0).toFixed(0)}%
-        </div>
-        <div class="text-xs font-medium text-muted-foreground">Bolus</div>
-        <div class="text-2xs text-muted-foreground/60">
-          {(insulinStats.totalBolus ?? 0).toFixed(1)}U total
-        </div>
-      </CardContent>
-    </Card>
-    <Card>
-      <CardContent class="pt-6 text-center">
-        <div class="text-2xl font-bold tabular-nums">
-          {(insulinStats.bolusesPerDay ?? 0).toFixed(1)}
-        </div>
-        <div class="text-xs font-medium text-muted-foreground">Boluses/Day</div>
-        <div class="text-2xs text-muted-foreground/60">
-          avg {(insulinStats.avgBolus ?? 0).toFixed(1)}U each
-        </div>
-      </CardContent>
-    </Card>
-    <Card>
-      <CardContent class="pt-6 text-center">
-        <div class="text-2xl font-bold tabular-nums">
-          {(insulinStats.icRatio ?? 0) > 0
-            ? `1:${(insulinStats.icRatio ?? 0).toFixed(0)}`
-            : "–"}
-        </div>
-        <div class="text-xs font-medium text-muted-foreground">Avg I:C</div>
-        <div class="text-2xs text-muted-foreground/60">
-          {(insulinStats.totalCarbs ?? 0).toFixed(0)}g carbs
-        </div>
-      </CardContent>
-    </Card>
-  </div>
+  <FigureStrip
+    figures={[
+      { label: "Avg TDD", value: (insulinStats.tdd ?? 0).toFixed(1), unit: "units/day" },
+      { label: "Basal", value: (insulinStats.basalPercent ?? 0).toFixed(0), unit: "%", note: `${(insulinStats.totalBasal ?? 0).toFixed(1)}U total` },
+      { label: "Bolus", value: (insulinStats.bolusPercent ?? 0).toFixed(0), unit: "%", note: `${(insulinStats.totalBolus ?? 0).toFixed(1)}U total` },
+      { label: "Boluses/Day", value: (insulinStats.bolusesPerDay ?? 0).toFixed(1), note: `avg ${(insulinStats.avgBolus ?? 0).toFixed(1)}U each` },
+      { label: "Avg I:C", value: (insulinStats.icRatio ?? 0) > 0 ? `1:${(insulinStats.icRatio ?? 0).toFixed(0)}` : "–", note: `${(insulinStats.totalCarbs ?? 0).toFixed(0)}g carbs` },
+    ]}
+  />
 
-  <!-- Ratio Banner -->
-  <Card>
-    <CardContent class="flex items-center gap-4 py-4">
-      <div class="rounded-lg bg-primary/10 p-3">
-        <Target class="h-6 w-6 text-primary" />
-      </div>
-      <div>
-        <h3 class="font-semibold">
-          Basal/Bolus Ratio: {(insulinStats.basalPercent ?? 0).toFixed(0)}% / {(insulinStats.bolusPercent ?? 0).toFixed(
-            0
-          )}%
-        </h3>
-        <p class="text-sm text-muted-foreground">
-          A typical split is around 50/50; 40/60 and 60/40 are both common. Diet,
-          activity and pump settings all move it.
-        </p>
-      </div>
-    </CardContent>
-  </Card>
-
-  <!-- Daily Basal/Bolus Breakdown Chart -->
   <Card>
     <CardHeader>
       <CardTitle class="flex items-center gap-2">
@@ -281,7 +209,6 @@
     </CardContent>
   </Card>
 
-  <!-- Hourly Insulin Delivery -->
   <Card>
     <CardHeader>
       <CardTitle class="flex items-center gap-2">
@@ -297,7 +224,6 @@
     </CardContent>
   </Card>
 
-  <!-- Bolus Breakdown -->
   {#if (insulinStats.bolusCount ?? 0) > 0}
     <Card>
       <CardHeader>
@@ -310,56 +236,45 @@
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div class="grid gap-4 @3xl:grid-cols-3 print:grid-cols-3">
-          <div class="rounded-lg border bg-card p-4 text-center">
-            <div class="text-3xl font-bold">
-              {insulinStats.bolusCount ?? 0}
-            </div>
-            <div class="text-sm font-medium text-muted-foreground">
-              Total Boluses
-            </div>
-            <div class="mt-1 text-xs text-muted-foreground/60">
-              Over {dayCount} days
-            </div>
+        <dl class="m-0 divide-y divide-border">
+          <div class="flex flex-wrap items-baseline justify-between gap-x-4 py-2 first:pt-0">
+            <dt class="text-sm font-medium text-muted-foreground">Total Boluses</dt>
+            <dd class="m-0 flex items-baseline gap-2">
+              <span class="text-lg font-semibold tabular-nums">{insulinStats.bolusCount ?? 0}</span>
+              <span class="text-xs text-muted-foreground">Over {dayCount} days</span>
+            </dd>
           </div>
-
-          <div class="rounded-lg border bg-card p-4 text-center">
-            <div class="text-3xl font-bold">
-              {insulinStats.mealBoluses ?? 0}
-            </div>
-            <div class="text-sm font-medium text-muted-foreground">
-              Meal Boluses
-            </div>
-            <div class="mt-1 text-xs text-muted-foreground/60">
-              {(insulinStats.bolusCount ?? 0) > 0
-                ? (
-                    ((insulinStats.mealBoluses ?? 0) / (insulinStats.bolusCount ?? 1)) *
-                    100
-                  ).toFixed(0)
-                : 0}% of boluses
-            </div>
+          <div class="flex flex-wrap items-baseline justify-between gap-x-4 py-2">
+            <dt class="text-sm font-medium text-muted-foreground">Meal Boluses</dt>
+            <dd class="m-0 flex items-baseline gap-2">
+              <span class="text-lg font-semibold tabular-nums">{insulinStats.mealBoluses ?? 0}</span>
+              <span class="text-xs text-muted-foreground">
+                {(insulinStats.bolusCount ?? 0) > 0
+                  ? (
+                      ((insulinStats.mealBoluses ?? 0) / (insulinStats.bolusCount ?? 1)) *
+                      100
+                    ).toFixed(0)
+                  : 0}% of boluses
+              </span>
+            </dd>
           </div>
-
-          <div class="rounded-lg border bg-card p-4 text-center">
-            <div class="text-3xl font-bold">
-              {insulinStats.correctionBoluses ?? 0}
-            </div>
-            <div class="text-sm font-medium text-muted-foreground">
-              Correction Boluses
-            </div>
-            <div class="mt-1 text-xs text-muted-foreground/60">
-              {(insulinStats.bolusCount ?? 0) > 0
-                ? (
-                    ((insulinStats.correctionBoluses ?? 0) / (insulinStats.bolusCount ?? 1)) *
-                    100
-                  ).toFixed(0)
-                : 0}% of boluses
-            </div>
+          <div class="flex flex-wrap items-baseline justify-between gap-x-4 py-2">
+            <dt class="text-sm font-medium text-muted-foreground">Correction Boluses</dt>
+            <dd class="m-0 flex items-baseline gap-2">
+              <span class="text-lg font-semibold tabular-nums">{insulinStats.correctionBoluses ?? 0}</span>
+              <span class="text-xs text-muted-foreground">
+                {(insulinStats.bolusCount ?? 0) > 0
+                  ? (
+                      ((insulinStats.correctionBoluses ?? 0) / (insulinStats.bolusCount ?? 1)) *
+                      100
+                    ).toFixed(0)
+                  : 0}% of boluses
+              </span>
+            </dd>
           </div>
-        </div>
+        </dl>
 
-        <!-- Observations based on bolus patterns -->
-        <div class="mt-4 rounded-lg border border-dashed bg-muted/30 p-4">
+        <div class="mt-2 border-t border-border pt-4">
           <h4 class="font-medium">Bolus Pattern Observations</h4>
           <ul class="mt-2 space-y-1 text-sm text-muted-foreground">
             {#if (insulinStats.correctionBoluses ?? 0) > (insulinStats.mealBoluses ?? 0)}
@@ -412,7 +327,6 @@
     </Card>
   {/if}
 
-  <!-- Clinical Notes -->
   <Card variant="muted">
     <CardHeader>
       <CardTitle class="flex items-center gap-2 text-base">
@@ -442,10 +356,12 @@
     </CardContent>
   </Card>
 
-  <!-- Navigation -->
   <Separator class="print:hidden" />
   <div class="flex flex-wrap items-center justify-center gap-2 print:hidden">
-    <Button href="/reports" variant="outline" size="sm">← All Reports</Button>
+    <Button href="/reports" variant="outline" size="sm">
+      <ArrowLeft class="h-4 w-4" />
+      All Reports
+    </Button>
     <Button href="/reports/basal-analysis" size="sm">
       Basal Rate Analysis
       <ArrowRight class="h-4 w-4" />
@@ -455,7 +371,6 @@
     </Button>
   </div>
 
-  <!-- Footer -->
   <div class="space-y-1 text-center text-xs text-muted-foreground">
     <p class="print:hidden">
       Report generated from {formatNumber(insulinStats.bolusCount)} boluses between

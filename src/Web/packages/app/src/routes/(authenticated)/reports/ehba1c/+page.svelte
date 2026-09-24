@@ -325,7 +325,7 @@
         {#if latest && extremes}
           <div class="mb-4 flex flex-wrap items-baseline gap-x-6 gap-y-1">
             <div>
-              <span class="text-3xl font-semibold">{formatA1c(latest.estimatedA1cPercent)}</span>
+              <span class="text-3xl font-semibold tabular-nums">{formatA1c(latest.estimatedA1cPercent)}</span>
               <span class="ml-2 text-sm text-muted-foreground">
                 latest estimate ({formatLongDate(latest.date)})
               </span>

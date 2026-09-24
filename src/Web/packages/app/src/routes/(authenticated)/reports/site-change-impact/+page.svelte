@@ -12,14 +12,10 @@
   import {
     Calendar,
     Info,
-    TrendingUp,
-    TrendingDown,
     ArrowLeft,
     HelpCircle,
     Clock,
-    Lightbulb,
     RefreshCw,
-    Target,
   } from "lucide-svelte";
   import SiteChangeIcon from "$lib/components/icons/SiteChangeIcon.svelte";
   import SiteChangeImpactChart from "$lib/components/reports/SiteChangeImpactChart.svelte";
@@ -60,7 +56,6 @@
 
 {#if siteChangeResource.current}
 <div class="@container container mx-auto max-w-7xl space-y-8 p-3 @md:p-6">
-  <!-- Header -->
   <div class="space-y-4">
     <div class="flex flex-wrap items-center justify-between gap-4 print:hidden">
       <div>
@@ -80,42 +75,41 @@
       </div>
     </div>
 
-    <!-- Date Range Info -->
-    <Card variant="muted" class={analysis?.siteChangeCount ? undefined : "print:hidden"}>
-      <CardContent
-        class="flex flex-wrap items-center justify-between gap-4 py-3"
-      >
-        <div class="flex items-center gap-2 text-sm print:hidden">
-          <Calendar class="h-4 w-4 text-muted-foreground" />
-          <span class="font-medium">{formatDate(startDate)}</span>
-          <span class="text-muted-foreground">to</span>
-          <span class="font-medium">{formatDate(endDate)}</span>
-          <span class="text-muted-foreground">({dayCount} days)</span>
-        </div>
-        {#if analysis?.siteChangeCount}
-          <div class="flex items-center gap-4 text-sm">
-            <div class="flex items-center gap-2">
-              <RefreshCw class="h-4 w-4 text-muted-foreground" />
-              <span class="font-medium">{analysis.siteChangeCount}</span>
-              <span class="text-muted-foreground">site changes analyzed</span>
-            </div>
-            {#if analysis.averageDaysBetweenChanges}
-              <Separator orientation="vertical" class="h-4" />
-              <div class="flex items-center gap-2">
-                <Calendar class="h-4 w-4 text-muted-foreground" />
-                <span class="font-medium">{analysis.averageDaysBetweenChanges}</span>
-                <span class="text-muted-foreground">days between changes (avg)</span>
-              </div>
-            {/if}
+    <div
+      class={[
+        "flex flex-wrap items-center justify-between gap-4",
+        !analysis?.siteChangeCount && "print:hidden",
+      ]}
+    >
+      <div class="flex items-center gap-2 text-sm print:hidden">
+        <Calendar class="h-4 w-4 text-muted-foreground" />
+        <span class="font-medium">{formatDate(startDate)}</span>
+        <span class="text-muted-foreground">to</span>
+        <span class="font-medium">{formatDate(endDate)}</span>
+        <span class="text-muted-foreground">({dayCount} days)</span>
+      </div>
+      {#if analysis?.siteChangeCount}
+        <div class="flex items-center gap-4 text-sm">
+          <div class="flex items-center gap-2">
+            <RefreshCw class="h-4 w-4 text-muted-foreground" />
+            <span class="font-medium">{analysis.siteChangeCount}</span>
+            <span class="text-muted-foreground">site changes analyzed</span>
           </div>
-        {/if}
-      </CardContent>
-    </Card>
+          {#if analysis.averageDaysBetweenChanges}
+            <Separator orientation="vertical" class="h-4" />
+            <div class="flex items-center gap-2">
+              <Calendar class="h-4 w-4 text-muted-foreground" />
+              <span class="font-medium">{analysis.averageDaysBetweenChanges}</span>
+              <span class="text-muted-foreground">days between changes (avg)</span>
+            </div>
+          {/if}
+        </div>
+      {/if}
+    </div>
   </div>
 
   <Separator class="print:hidden" />
 
-  <!-- Main Chart -->
   <Card>
     <CardHeader>
       <CardTitle class="flex items-center gap-2">
@@ -142,7 +136,6 @@
     </CardContent>
   </Card>
 
-  <!-- Educational Card -->
   <Card variant="info">
     <CardHeader>
       <CardTitle
@@ -179,11 +172,8 @@
         </div>
       </div>
 
-      <div class="rounded-md bg-info/5 p-3">
-        <p class="flex items-center gap-2 font-medium">
-          <Lightbulb class="h-4 w-4" />
-          What to look for
-        </p>
+      <div class="border-t border-info/20 pt-3">
+        <p class="font-medium">What to look for</p>
         <p class="text-info/80">
           A consistent rise in the hours before site changes is a pattern worth
           discussing with your care team.
@@ -192,7 +182,6 @@
     </CardContent>
   </Card>
 
-  <!-- Insights Card (when data is available) -->
   {#if analysis?.hasSufficientData && analysis?.summary}
     {@const summary = analysis.summary}
     {@const percentImprovement = summary.percentImprovement ?? 0}
@@ -206,10 +195,9 @@
         </CardTitle>
       </CardHeader>
       <CardContent class="space-y-4">
-        <div class="grid gap-4 @lg:grid-cols-2">
-          <div class="flex items-start gap-3 rounded-lg bg-muted/50 p-4">
+        <div class="divide-y divide-border">
+          <div class="pb-3">
             {#if percentImprovement > 5}
-              <TrendingDown class="h-5 w-5 shrink-0 text-muted-foreground" />
               <div>
                 <p class="font-medium">Average glucose after a site change</p>
                 <p class="text-sm text-muted-foreground">
@@ -218,7 +206,6 @@
                 </p>
               </div>
             {:else if percentImprovement < -5}
-              <TrendingUp class="h-5 w-5 shrink-0 text-muted-foreground" />
               <div>
                 <p class="font-medium">Average glucose after a site change</p>
                 <p class="text-sm text-muted-foreground">
@@ -228,7 +215,6 @@
                 </p>
               </div>
             {:else}
-              <Info class="h-5 w-5 shrink-0 text-muted-foreground" />
               <div>
                 <p class="font-medium">Average glucose after a site change</p>
                 <p class="text-sm text-muted-foreground">
@@ -240,8 +226,7 @@
             {/if}
           </div>
 
-          <div class="flex items-start gap-3 rounded-lg bg-muted/50 p-4">
-            <Target class="h-5 w-5 shrink-0 text-muted-foreground" />
+          <div class="pt-3">
             <div>
               <p class="font-medium">Time in range around a site change</p>
               <p class="text-sm text-muted-foreground">

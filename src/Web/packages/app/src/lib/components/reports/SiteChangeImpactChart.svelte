@@ -238,57 +238,39 @@
       ]}
     />
 
-    <!-- Summary Statistics -->
     {#if analysis.summary}
-      <div class="mt-6 grid grid-cols-2 gap-4 @lg:grid-cols-4 print:grid-cols-4">
-        <div class="rounded-lg bg-muted/50 p-3 text-center">
-          <div class="text-sm text-muted-foreground">Avg Before</div>
-          <div class="text-xl font-semibold">
+      <dl class="mt-6 grid grid-cols-2 gap-4 border-t border-border pt-4 @lg:grid-cols-4 print:grid-cols-4">
+        <div>
+          <dt class="text-sm text-muted-foreground">Avg before</dt>
+          <dd class="m-0 text-lg font-semibold tabular-nums">
             {analysis.summary.avgGlucoseBeforeChange != null
               ? bg(analysis.summary.avgGlucoseBeforeChange)
               : "–"}
-            <span class="text-xs text-muted-foreground">{bgLabel()}</span>
-          </div>
+            <span class="text-xs font-normal text-muted-foreground">{bgLabel()}</span>
+          </dd>
         </div>
-        <div class="rounded-lg bg-muted/50 p-3 text-center">
-          <div class="text-sm text-muted-foreground">Avg After</div>
-          <div class="text-xl font-semibold">
+        <div>
+          <dt class="text-sm text-muted-foreground">Avg after</dt>
+          <dd class="m-0 text-lg font-semibold tabular-nums">
             {analysis.summary.avgGlucoseAfterChange != null
               ? bg(analysis.summary.avgGlucoseAfterChange)
               : "–"}
-            <span class="text-xs text-muted-foreground">{bgLabel()}</span>
-          </div>
+            <span class="text-xs font-normal text-muted-foreground">{bgLabel()}</span>
+          </dd>
         </div>
-        <div class="rounded-lg bg-muted/50 p-3 text-center">
-          <div class="text-sm text-muted-foreground">TIR Before</div>
-          <div class="text-xl font-semibold">
-            {analysis.summary.timeInRangeBeforeChange?.toFixed(0)}%
-          </div>
+        <div>
+          <dt class="text-sm text-muted-foreground">TIR before</dt>
+          <dd class="m-0 text-lg font-semibold tabular-nums">
+            {analysis.summary.timeInRangeBeforeChange?.toFixed(0)}<span class="text-xs font-normal text-muted-foreground">%</span>
+          </dd>
         </div>
-        <div class="rounded-lg bg-muted/50 p-3 text-center">
-          <div class="text-sm text-muted-foreground">TIR After</div>
-          <div class="text-xl font-semibold">
-            {analysis.summary.timeInRangeAfterChange?.toFixed(0)}%
-          </div>
+        <div>
+          <dt class="text-sm text-muted-foreground">TIR after</dt>
+          <dd class="m-0 text-lg font-semibold tabular-nums">
+            {analysis.summary.timeInRangeAfterChange?.toFixed(0)}<span class="text-xs font-normal text-muted-foreground">%</span>
+          </dd>
         </div>
-      </div>
-
-      {#if analysis.summary?.percentImprovement !== undefined && analysis.summary?.percentImprovement > 0}
-        <div class="mt-4 rounded-lg bg-success/10 p-3 text-center text-success print:text-foreground">
-          <span class="font-medium">
-            ↓ {analysis.summary?.percentImprovement.toFixed(1)}% improvement
-          </span>
-          <span class="text-sm opacity-80">after site change</span>
-        </div>
-      {:else if analysis.summary?.percentImprovement !== undefined && analysis.summary?.percentImprovement < 0}
-        <div class="mt-4 rounded-lg bg-warning/10 p-3 text-center text-warning print:text-foreground">
-          <span class="font-medium">
-            ↑ {Math.abs(analysis.summary?.percentImprovement).toFixed(1)}%
-            higher
-          </span>
-          <span class="text-sm opacity-80">after site change</span>
-        </div>
-      {/if}
+      </dl>
     {/if}
   {:else if analysis && !analysis.hasSufficientData}
     <div

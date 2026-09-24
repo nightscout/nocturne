@@ -6,7 +6,8 @@
     CardHeader,
     CardTitle,
   } from "$lib/components/ui/card";
-  import { Footprints, TrendingUp, Calendar } from "lucide-svelte";
+  import { Footprints } from "lucide-svelte";
+  import FigureStrip from "$lib/components/reports/FigureStrip.svelte";
   import {
     Actogram,
     extentOf,
@@ -64,7 +65,6 @@
 </svelte:head>
 
 <div class="@container container mx-auto space-y-6 p-3 @md:p-6 max-w-7xl">
-  <!-- Header -->
   <div class="print:hidden">
     <h1 class="text-2xl @md:text-3xl font-bold">Step Count</h1>
     <p class="text-muted-foreground">
@@ -72,58 +72,14 @@
     </p>
   </div>
 
-  <!-- Summary Cards -->
-  <div class="grid grid-cols-1 @sm:grid-cols-3 gap-4">
-    <Card>
-      <CardHeader class="pb-2">
-        <CardTitle variant="muted" class="text-sm font-medium">
-          Total Steps
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div class="flex items-center gap-2">
-          <Footprints class="h-5 w-5 text-primary" />
-          <span class="text-2xl font-bold tabular-nums">
-            {formatNumber(totalSteps)}
-          </span>
-        </div>
-      </CardContent>
-    </Card>
+  <FigureStrip
+    figures={[
+      { label: "Total steps", value: formatNumber(totalSteps), unit: "steps" },
+      { label: "Daily average", value: formatNumber(dailyAverage), unit: "steps/day" },
+      { label: "Period", value: String(dayCount), unit: "days" },
+    ]}
+  />
 
-    <Card>
-      <CardHeader class="pb-2">
-        <CardTitle variant="muted" class="text-sm font-medium">
-          Daily Average
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div class="flex items-center gap-2">
-          <TrendingUp class="h-5 w-5 text-primary" />
-          <span class="text-2xl font-bold tabular-nums">
-            {formatNumber(dailyAverage)}
-          </span>
-          <span class="text-sm text-muted-foreground">steps/day</span>
-        </div>
-      </CardContent>
-    </Card>
-
-    <Card>
-      <CardHeader class="pb-2">
-        <CardTitle variant="muted" class="text-sm font-medium">
-          Period
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div class="flex items-center gap-2">
-          <Calendar class="h-5 w-5 text-muted-foreground" />
-          <span class="text-2xl font-bold tabular-nums">{dayCount}</span>
-          <span class="text-sm text-muted-foreground">days</span>
-        </div>
-      </CardContent>
-    </Card>
-  </div>
-
-  <!-- Actogram -->
   <Card class="print:break-inside-auto!">
     <CardHeader>
       <CardTitle class="flex items-center gap-2">
@@ -153,7 +109,7 @@
         {#snippet tooltipValue({ point })}
           {@const steps = typeof point.steps === "number" ? point.steps : 0}
           <span class="text-muted-foreground">Steps</span>
-          <span class="ml-auto font-mono font-medium tabular-nums">{formatNumber(steps)}</span>
+          <span class="ml-auto font-medium tabular-nums">{formatNumber(steps)}</span>
         {/snippet}
         {#snippet row(ctx: ActogramRowContext)}
           {#each ctx.data as { point, hoursFromStart, isExtended }, i (i)}

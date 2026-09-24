@@ -9,16 +9,7 @@
     CardTitle,
   } from "$lib/components/ui/card";
   import * as Select from "$lib/components/ui/select";
-  import {
-    Moon,
-    Calendar,
-    CalendarRange,
-    Sparkles,
-    Gauge,
-    Sunrise,
-    TriangleAlert,
-    Activity,
-  } from "lucide-svelte";
+  import { Moon, CalendarRange } from "lucide-svelte";
   import {
     Actogram,
     buildDayRange,
@@ -31,9 +22,7 @@
   import { resolve } from "$app/paths";
   import { dayKeyFor, buildNightsByDayKey } from "$lib/utils/sleep-night-mapping";
   import { bgDelta, bgLabel, formatShortDate } from "$lib/utils/formatting";
-  import SleepSummaryTile, {
-    type TileDelta,
-  } from "$lib/components/reports/sleep/SleepSummaryTile.svelte";
+  import FigureStrip, { type Figure } from "$lib/components/reports/FigureStrip.svelte";
   import SleepCompositionChart from "$lib/components/reports/sleep/SleepCompositionChart.svelte";
   import SleepWeeklyBreakdown from "$lib/components/reports/sleep/SleepWeeklyBreakdown.svelte";
   import { SleepSource } from "$api";
@@ -152,13 +141,11 @@
     return formatShortDate(day);
   }
 
-  // --- Empty-state detection -------------------------------------------------
   const hasActogramSleep = $derived(sleepPoints.length > 0);
   const hasTrendsNights = $derived((sleepSummary?.nightCount ?? 0) > 0);
   const fullyEmpty = $derived(!hasTrendsNights && !hasActogramSleep);
   const showCompositionCard = $derived(hasTrendsNights);
 
-  // --- Delta arrows (adapted from the comparison report's diffRows) ---------
   function signedNumber(value: number, digits = 0): string {
     const abs = Math.abs(value);
     if (abs < (digits === 0 ? 0.5 : 0.05)) return "±0";
@@ -166,49 +153,21 @@
     return `${sign}${abs.toFixed(digits)}`;
   }
 
-  /** goodWhen="up": positive deltas render as an improvement (in-range green). */
-  function directionalDelta(
-    value: number | null | undefined,
-    goodWhen: "up" | "down",
-    format: (v: number) => string,
-    digits = 0
-  ): TileDelta | null {
-    if (value == null) return null;
-    const flat = Math.abs(value) < (digits === 0 ? 0.5 : 0.05);
-    const direction: TileDelta["direction"] = flat ? "flat" : value > 0 ? "up" : "down";
-    const tone: TileDelta["tone"] = flat
-      ? "neutral"
-      : (goodWhen === "up") === (direction === "up")
-        ? "good"
-        : "bad";
-    return { text: format(value), direction, tone, title: "vs prior 7 nights" };
+  function withDelta(caption: string, delta: string | null): string {
+    return delta == null ? caption : `${caption} · ${delta} vs prior 7 nights`;
   }
 
-  /** Always muted — direction of dawn rise isn't colored as better/worse. */
-  function neutralDelta(
-    value: number | null | undefined,
-    format: (v: number) => string
-  ): TileDelta | null {
-    if (value == null) return null;
-    const direction: TileDelta["direction"] =
-      Math.abs(value) < 0.05 ? "flat" : value > 0 ? "up" : "down";
-    return { text: format(value), direction, tone: "neutral", title: "vs prior 7 nights" };
-  }
-
+  const priorWeek = $derived(sleepSummary?.last7dVsPrior7d);
   const scoreDelta = $derived(
-    directionalDelta(sleepSummary?.last7dVsPrior7d?.scoreDelta, "up", (v) => signedNumber(v))
+    priorWeek?.scoreDelta == null ? null : signedNumber(priorWeek.scoreDelta)
   );
   const tirDelta = $derived(
-    directionalDelta(sleepSummary?.last7dVsPrior7d?.tirDelta, "up", (v) => `${signedNumber(v)} pp`)
+    priorWeek?.tirDelta == null ? null : `${signedNumber(priorWeek.tirDelta)} pp`
   );
   const dawnDelta = $derived(
-    neutralDelta(
-      sleepSummary?.last7dVsPrior7d?.dawnRiseDelta,
-      (v) => `${bgDelta(v)} ${bgLabel()}`
-    )
+    priorWeek?.dawnRiseDelta == null ? null : `${bgDelta(priorWeek.dawnRiseDelta)} ${bgLabel()}`
   );
 
-  // --- Tile captions -----------------------------------------------------
   const scoredNightsCount = $derived(sleepNights.filter((n) => n.sleepScore != null).length);
   const hasComputedScore = $derived(
     sleepNights.some((n) => n.sleepScore != null && n.scoreSource === "Computed")
@@ -229,6 +188,72 @@
   const lowsCaption = $derived(
     `${Math.round(sleepSummary?.nightsWithHypoPct ?? 0)}% of nights`
   );
+
+  const sleepFigures = $derived.by((): Figure[] => {
+    const s = sleepSummary;
+    const figures: Figure[] = [];
+    if (hasTrendsNights) {
+      figures.push({
+        label: "Average sleep",
+        value: formatHoursMinutes((s?.meanAsleepMinutes ?? 0) / 60),
+        note: "per night",
+      });
+    }
+    figures.push({
+      label: "Nights tracked",
+      value: `${s?.nightCount ?? 0} of ${s?.daysInRange ?? 0}`,
+      unit: "nights",
+      note: nightsTrackedCaption,
+    });
+    if (s?.meanScore != null) {
+      figures.push({
+        label: "Sleep score",
+        value: Math.round(s.meanScore).toString(),
+        note: withDelta(scoreCaption, scoreDelta),
+      });
+    }
+    if (s?.meanHrvMs != null) {
+      figures.push({
+        label: "HRV",
+        value: Math.round(s.meanHrvMs).toString(),
+        unit: "ms",
+        note: "overnight average",
+      });
+    }
+    return figures;
+  });
+
+  // meanTirPct is non-null exactly when overnight CGM data exists; hypo counts are only
+  // meaningful on CGM nights, so the lows figure shares the TIR figure's gate.
+  const overnightFigures = $derived.by((): Figure[] => {
+    const s = sleepSummary;
+    const figures: Figure[] = [];
+    if (s?.meanTirPct != null) {
+      figures.push({
+        label: "Overnight TIR",
+        value: Math.round(s.meanTirPct).toString(),
+        unit: "%",
+        note: withDelta(tirCaption, tirDelta),
+      });
+    }
+    if (s?.meanDawnRiseMg != null) {
+      figures.push({
+        label: "Dawn rise",
+        value: bgDelta(s.meanDawnRiseMg, true),
+        unit: bgLabel(),
+        note: withDelta("avg pre-wake change", dawnDelta),
+      });
+    }
+    if (s?.meanTirPct != null) {
+      figures.push({
+        label: "Overnight lows",
+        value: (s.totalHypoCount ?? 0).toString(),
+        unit: "lows",
+        note: lowsCaption,
+      });
+    }
+    return figures;
+  });
 </script>
 
 <svelte:head>
@@ -240,7 +265,6 @@
 </svelte:head>
 
 <div class="@container container mx-auto space-y-6 p-3 @md:p-6 max-w-7xl">
-  <!-- Header -->
   <div class="print:hidden">
     <h1 class="text-2xl @md:text-3xl font-bold">Sleep & Overnight</h1>
     <p class="text-muted-foreground">
@@ -251,11 +275,7 @@
   {#if fullyEmpty}
     <Card>
       <CardContent class="p-12 text-center">
-        <div
-          class="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-muted"
-        >
-          <Moon class="h-10 w-10 text-muted-foreground" />
-        </div>
+        <Moon class="mx-auto mb-4 size-8 text-muted-foreground" />
         <h2 class="mb-2 text-xl font-semibold">No sleep data</h2>
         <p class="mx-auto max-w-md text-muted-foreground">
           Sleep sessions arrive from connected sources (Apple Health, Health
@@ -265,81 +285,12 @@
       </CardContent>
     </Card>
   {:else}
-    <!-- Summary Cards -->
-    <div class="grid grid-cols-2 @sm:grid-cols-4 gap-4">
-      {#if hasTrendsNights}
-        <SleepSummaryTile
-          icon={Moon}
-          iconClass="text-report-lifestyle"
-          label="Average Sleep"
-          value={formatHoursMinutes((sleepSummary?.meanAsleepMinutes ?? 0) / 60)}
-          caption="per night"
-        />
-      {/if}
-
-      <SleepSummaryTile
-        icon={Calendar}
-        label="Nights Tracked"
-        value={`${sleepSummary?.nightCount ?? 0} of ${sleepSummary?.daysInRange ?? 0}`}
-        caption={nightsTrackedCaption}
-      />
-
-      {#if sleepSummary?.meanScore != null}
-        <SleepSummaryTile
-          icon={Sparkles}
-          label="Sleep Score"
-          value={Math.round(sleepSummary.meanScore).toString()}
-          caption={scoreCaption}
-          delta={scoreDelta}
-        />
-      {/if}
-
-      {#if sleepSummary?.meanTirPct != null}
-        <SleepSummaryTile
-          icon={Gauge}
-          label="Overnight TIR"
-          value={`${Math.round(sleepSummary.meanTirPct)}%`}
-          caption={tirCaption}
-          delta={tirDelta}
-        />
-      {/if}
-
-      {#if sleepSummary?.meanDawnRiseMg != null}
-        <SleepSummaryTile
-          icon={Sunrise}
-          label="Dawn Rise"
-          value={bgDelta(sleepSummary.meanDawnRiseMg, true)}
-          unit={bgLabel()}
-          caption="avg pre-wake change"
-          delta={dawnDelta}
-        />
-      {/if}
-
-      <!-- meanTirPct is non-null exactly when overnight CGM data exists; hypo
-           counts are only meaningful on CGM nights, so the lows tile shares
-           the TIR tile's gate. -->
-      {#if sleepSummary?.meanTirPct != null}
-        <SleepSummaryTile
-          icon={TriangleAlert}
-          label="Overnight Lows"
-          value={(sleepSummary?.totalHypoCount ?? 0).toString()}
-          caption={lowsCaption}
-        />
-      {/if}
-
-      {#if sleepSummary?.meanHrvMs != null}
-        <SleepSummaryTile
-          icon={Activity}
-          label="HRV"
-          value={Math.round(sleepSummary.meanHrvMs).toString()}
-          unit="ms"
-          caption="overnight average"
-        />
-      {/if}
-    </div>
+    <FigureStrip figures={sleepFigures} />
+    {#if overnightFigures.length > 0}
+      <FigureStrip figures={overnightFigures} />
+    {/if}
 
     {#if hasTrendsNights && sleepWeeks.length > 0}
-      <!-- Weekly Breakdown -->
       <Card>
         <CardHeader>
           <CardTitle class="flex items-center gap-2">
@@ -355,7 +306,6 @@
     {/if}
 
     {#if showCompositionCard}
-      <!-- Sleep Composition -->
       <Card>
         <CardHeader>
           <CardTitle class="flex items-center gap-2">
@@ -400,7 +350,6 @@
       </Card>
     {/if}
 
-    <!-- Actogram -->
     <Card class="print:break-inside-auto!">
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
@@ -424,7 +373,7 @@
             {@const span = sleepSpanOf(point)}
             <div class="size-2 rounded-full bg-lane" data-lane={span.state.toLowerCase()}></div>
             <span class="text-muted-foreground">Sleep</span>
-            <span class="ml-auto font-mono font-medium tabular-nums capitalize">{span.state.toLowerCase()}</span>
+            <span class="ml-auto font-medium capitalize">{span.state.toLowerCase()}</span>
           {/snippet}
           {#snippet rowLabel({ day })}
             {@const linkDate = nightDateByDayKey.get(dayKeyFor(day))}

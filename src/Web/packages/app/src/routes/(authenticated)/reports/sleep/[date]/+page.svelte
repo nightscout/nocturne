@@ -4,8 +4,8 @@
   import { getSingleNightByDate } from "$api/generated/sleepReports.generated.remote";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
   import { Card, CardContent, CardHeader, CardTitle } from "$lib/components/ui/card";
-  import { Badge } from "$lib/components/ui/badge";
-  import { ArrowLeft, Gauge, Bed, Percent, Activity } from "lucide-svelte";
+  import { ArrowLeft } from "lucide-svelte";
+  import FigureStrip, { type Figure } from "$lib/components/reports/FigureStrip.svelte";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import Hypnogram from "$lib/components/reports/sleep/single-night/Hypnogram.svelte";
   import StageCompositionCard from "$lib/components/reports/sleep/single-night/StageCompositionCard.svelte";
@@ -53,8 +53,6 @@
     period: printedDate && timeSpan ? { label: `${printedDate}, ${timeSpan}` } : undefined,
   }));
 
-  // ---- Tile row -----------------------------------------------------------
-
   const scoreBadgeLabel = $derived(report?.scoreSource === "Device" ? "Device" : "Estimated");
 
   const timeAsleepMinutes = $derived.by(() => {
@@ -63,7 +61,20 @@
     return Math.max(0, (b.totalMinutes ?? 0) - (b.awakeMinutes ?? 0));
   });
 
-  // ---- TIR strip ------------------------------------------------------------
+  // Overnight TIR is left to the stacked chart below, which already labels every band.
+  const figures = $derived.by((): Figure[] => {
+    const list: Figure[] = [];
+    if (report?.score != null) {
+      list.push({ label: "Sleep score", value: Math.round(report.score).toString(), note: scoreBadgeLabel });
+    }
+    if (timeAsleepMinutes != null) {
+      list.push({ label: "Time asleep", value: formatMinutesDuration(timeAsleepMinutes) });
+    }
+    if (session?.efficiency != null) {
+      list.push({ label: "Efficiency", value: Math.round(session.efficiency).toString(), unit: "%" });
+    }
+    return list;
+  });
 
   const tirPercentages = $derived.by(() => {
     const tir = report?.overnightTir;
@@ -84,7 +95,6 @@
 
 {#if report && session}
   <div class="@container container mx-auto max-w-7xl space-y-6 p-3 @md:p-6">
-    <!-- Header -->
     <div>
       <a
         href={resolve("/(authenticated)/reports/sleep")}
@@ -102,74 +112,10 @@
       {/if}
     </div>
 
-    <!-- Tile row -->
-    <div class="grid grid-cols-2 gap-4 @lg:grid-cols-4">
-      {#if report.score != null}
-        <Card>
-          <CardHeader class="pb-2">
-            <CardTitle variant="muted" class="text-sm font-medium">Sleep Score</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div class="flex items-center gap-2">
-              <Gauge class="h-5 w-5 text-muted-foreground" />
-              <span class="text-2xl font-bold tabular-nums">{Math.round(report.score)}</span>
-              <Badge variant="outline" class="ml-auto">{scoreBadgeLabel}</Badge>
-            </div>
-          </CardContent>
-        </Card>
-      {/if}
+    {#if figures.length > 0}
+      <FigureStrip {figures} />
+    {/if}
 
-      {#if timeAsleepMinutes != null}
-        <Card>
-          <CardHeader class="pb-2">
-            <CardTitle variant="muted" class="text-sm font-medium">Time Asleep</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div class="flex items-center gap-2">
-              <Bed class="h-5 w-5 text-muted-foreground" />
-              <span class="text-2xl font-bold whitespace-nowrap tabular-nums">
-                {formatMinutesDuration(timeAsleepMinutes)}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-      {/if}
-
-      {#if report.overnightTir}
-        <Card>
-          <CardHeader class="pb-2">
-            <CardTitle variant="muted" class="text-sm font-medium">Overnight TIR</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div class="flex items-center gap-2">
-              <Percent class="h-5 w-5 text-muted-foreground" />
-              <span class="text-2xl font-bold tabular-nums">
-                {Math.round(report.overnightTir.inRangePct ?? 0)}%
-              </span>
-            </div>
-            <p class="mt-1 text-xs text-muted-foreground tabular-nums">
-              Mean {bg(report.overnightTir.meanBg ?? 0)} {bgLabel()}
-            </p>
-          </CardContent>
-        </Card>
-      {/if}
-
-      {#if session.efficiency != null}
-        <Card>
-          <CardHeader class="pb-2">
-            <CardTitle variant="muted" class="text-sm font-medium">Efficiency</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div class="flex items-center gap-2">
-              <Activity class="h-5 w-5 text-muted-foreground" />
-              <span class="text-2xl font-bold tabular-nums">{Math.round(session.efficiency)}%</span>
-            </div>
-          </CardContent>
-        </Card>
-      {/if}
-    </div>
-
-    <!-- Hypnogram -->
     {#if startTime && endTime}
       <Card>
         <CardHeader>
@@ -186,9 +132,7 @@
       </Card>
     {/if}
 
-    <!-- Overnight TIR / stage composition / pre-wake / biometrics, paired 2×2 -->
     <div class="grid gap-6 @lg:grid-cols-2">
-      <!-- TIR strip -->
       <Card class="@container">
         <CardHeader>
           <CardTitle>Overnight Time in Range</CardTitle>
@@ -207,15 +151,12 @@
         </CardContent>
       </Card>
 
-      <!-- Stage composition -->
       <StageCompositionCard breakdown={report.stageBreakdown} />
 
-      <!-- Dawn phenomenon -->
       {#if report.dawnPhenomenon}
         <DawnPhenomenonCard dawnPhenomenon={report.dawnPhenomenon} />
       {/if}
 
-      <!-- Biometrics -->
       <BiometricsCard
         avgHeartRate={session.avgHeartRate}
         minHeartRate={session.minHeartRate}

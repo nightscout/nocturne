@@ -6,7 +6,8 @@
     CardHeader,
     CardTitle,
   } from "$lib/components/ui/card";
-  import { HeartPulse, TrendingDown, TrendingUp, Calendar } from "lucide-svelte";
+  import { HeartPulse } from "lucide-svelte";
+  import FigureStrip from "$lib/components/reports/FigureStrip.svelte";
   import {
     Actogram,
     extentOf,
@@ -74,7 +75,6 @@
 </svelte:head>
 
 <div class="@container container mx-auto space-y-6 p-3 @md:p-6 max-w-7xl">
-  <!-- Header -->
   <div class="print:hidden">
     <h1 class="text-2xl @md:text-3xl font-bold">Heart Rate</h1>
     <p class="text-muted-foreground">
@@ -82,73 +82,15 @@
     </p>
   </div>
 
-  <!-- Summary Cards -->
-  <div class="grid grid-cols-2 @sm:grid-cols-4 gap-4">
-    <Card>
-      <CardHeader class="pb-2">
-        <CardTitle variant="muted" class="text-sm font-medium">
-          Average
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div class="flex items-center gap-2">
-          <HeartPulse class="h-5 w-5 text-heart-rate" />
-          <span class="text-2xl font-bold tabular-nums">{avgBpm}</span>
-          <span class="text-sm text-muted-foreground">bpm</span>
-        </div>
-      </CardContent>
-    </Card>
+  <FigureStrip
+    figures={[
+      { label: "Average", value: String(avgBpm), unit: "bpm" },
+      { label: "Resting estimate", value: String(restingBpm), unit: "bpm" },
+      { label: "Min / Max", value: `${minBpm} / ${maxBpm}`, unit: "bpm" },
+      { label: "Readings", value: formatNumber(selectedRates.length) },
+    ]}
+  />
 
-    <Card>
-      <CardHeader class="pb-2">
-        <CardTitle variant="muted" class="text-sm font-medium">
-          Resting Estimate
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div class="flex items-center gap-2">
-          <TrendingDown class="h-5 w-5 text-muted-foreground" />
-          <span class="text-2xl font-bold tabular-nums">{restingBpm}</span>
-          <span class="text-sm text-muted-foreground">bpm</span>
-        </div>
-      </CardContent>
-    </Card>
-
-    <Card>
-      <CardHeader class="pb-2">
-        <CardTitle variant="muted" class="text-sm font-medium">
-          Min / Max
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div class="flex items-center gap-2">
-          <TrendingUp class="h-5 w-5 text-muted-foreground" />
-          <span class="text-2xl font-bold tabular-nums">
-            {minBpm}<span class="text-muted-foreground font-normal">/</span>{maxBpm}
-          </span>
-          <span class="text-sm text-muted-foreground">bpm</span>
-        </div>
-      </CardContent>
-    </Card>
-
-    <Card>
-      <CardHeader class="pb-2">
-        <CardTitle variant="muted" class="text-sm font-medium">
-          Readings
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div class="flex items-center gap-2">
-          <Calendar class="h-5 w-5 text-muted-foreground" />
-          <span class="text-2xl font-bold tabular-nums">
-            {formatNumber(selectedRates.length)}
-          </span>
-        </div>
-      </CardContent>
-    </Card>
-  </div>
-
-  <!-- Actogram -->
   <Card class="print:break-inside-auto!">
     <CardHeader>
       <CardTitle class="flex items-center gap-2">
@@ -179,7 +121,7 @@
         {#snippet tooltipValue({ point })}
           {@const bpm = typeof point.bpm === "number" ? point.bpm : 0}
           <span class="text-muted-foreground">Heart Rate</span>
-          <span class="ml-auto font-mono font-medium tabular-nums">{bpm} bpm</span>
+          <span class="ml-auto font-medium tabular-nums">{bpm} bpm</span>
         {/snippet}
         {#snippet row(ctx: ActogramRowContext)}
           {#each ctx.data as { point, hoursFromStart, isExtended }, i (i)}

@@ -397,7 +397,6 @@
     </p>
   {/if}
 
-  <!-- Summary Stats -->
   <TreatmentStatsCard {treatmentSummary} counts={filteredCounts} dayCount={dateInfo.dayCount} />
 
   <!-- Category Tabs — view toggle, print chaff -->

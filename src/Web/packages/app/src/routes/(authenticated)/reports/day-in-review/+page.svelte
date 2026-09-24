@@ -271,58 +271,51 @@
 
 {#if dayDataResource.current}
 <div class="@container space-y-6 p-3 @md:p-6">
-  <!-- Header with Navigation -->
-  <Card.Root class="print:hidden">
-    <Card.Content class="p-4">
-      <div
-        class="flex flex-col gap-3 @2xl:flex-row @2xl:flex-wrap @2xl:items-center @2xl:justify-between"
+  <div
+    class="flex flex-col gap-3 print:hidden @2xl:flex-row @2xl:flex-wrap @2xl:items-center @2xl:justify-between"
+  >
+    <Button
+      variant="ghost"
+      size="sm"
+      class="self-start @2xl:self-auto"
+      onclick={goBackToPreviousView}
+    >
+      <ArrowLeft class="h-4 w-4 mr-2" />
+      Back to Previous View
+    </Button>
+
+    <div class="flex items-center justify-center gap-2">
+      <Button
+        variant="outline"
+        size="icon"
+        class="shrink-0"
+        onclick={() => goToDayOffset(-1)}
       >
-        <Button
-          variant="ghost"
-          size="sm"
-          class="self-start @2xl:self-auto"
-          onclick={goBackToPreviousView}
-        >
-          <ArrowLeft class="h-4 w-4 mr-2" />
-          Back to Previous View
-        </Button>
-
-        <div class="flex items-center justify-center gap-2">
-          <Button
-            variant="outline"
-            size="icon"
-            class="shrink-0"
-            onclick={() => goToDayOffset(-1)}
-          >
-            <ChevronLeft class="h-4 w-4" />
-          </Button>
-          <div
-            class="flex min-w-0 items-center justify-center gap-2 px-1 @2xl:min-w-[220px]"
-          >
-            <Calendar class="h-4 w-4 shrink-0 text-muted-foreground" />
-            <span class="truncate text-base font-medium @2xl:text-lg">
-              {dateDisplay}
-            </span>
-          </div>
-          <Button
-            variant="outline"
-            size="icon"
-            class="shrink-0"
-            onclick={() => goToDayOffset(1)}
-          >
-            <ChevronRight class="h-4 w-4" />
-          </Button>
-        </div>
-
-        <div class="hidden @2xl:block @2xl:w-[100px]"><!-- Spacer for alignment --></div>
+        <ChevronLeft class="h-4 w-4" />
+      </Button>
+      <div
+        class="flex min-w-0 items-center justify-center gap-2 px-1 @2xl:min-w-[220px]"
+      >
+        <Calendar class="h-4 w-4 shrink-0 text-muted-foreground" />
+        <span class="truncate text-base font-medium @2xl:text-lg">
+          {dateDisplay}
+        </span>
       </div>
-    </Card.Content>
-  </Card.Root>
+      <Button
+        variant="outline"
+        size="icon"
+        class="shrink-0"
+        onclick={() => goToDayOffset(1)}
+      >
+        <ChevronRight class="h-4 w-4" />
+      </Button>
+    </div>
 
-  <!-- Summary Stats -->
+    <div class="hidden @2xl:block @2xl:w-[100px]"><!-- Spacer for alignment --></div>
+  </div>
+
   <div class="grid @4xl:grid-cols-3 print:grid-cols-3 gap-6">
-    <!-- Glucose Overview -->
-    <Card.Root class="@4xl:col-span-2 print:col-span-2">
+      <Card.Root class="@4xl:col-span-2 print:col-span-2">
       <Card.Content class="p-4 space-y-4">
         <TIRStackedChart
           percentages={analysis?.timeInRange?.percentages}
@@ -378,8 +371,7 @@
       </Card.Content>
     </Card.Root>
 
-    <!-- Treatment Summary -->
-    <Card.Root>
+      <Card.Root>
       <Card.Content class="p-4 flex flex-col items-center gap-4">
         <InsulinDonutChart
           boluses={dayData?.boluses ?? []}
@@ -391,7 +383,7 @@
         <div class="grid grid-cols-2 gap-x-6 gap-y-2 text-sm w-full">
           <div>
             <div class="text-muted-foreground">Total Carbs</div>
-            <div class="font-bold tabular-nums">
+            <div class="font-medium tabular-nums">
               {(summary?.totals?.food?.carbs ?? 0).toFixed(0)}g
             </div>
           </div>
@@ -406,7 +398,6 @@
     </Card.Root>
   </div>
 
-  <!-- Main Glucose Chart with Treatment Markers -->
   <GlucoseChartCard
     dateRange={{
       from:
@@ -430,7 +421,7 @@
     externalPredictionData={selectedPredictionData}
   />
 
-  <!-- Historical Prediction Scrubber + APS State: both follow the scrubber, which paper cannot move -->
+  <!-- Both follow the scrubber, which paper cannot move. -->
   {#if hasApsSnapshots}
     <div class="space-y-6 print:hidden">
       <RetrospectiveTimeScrubber
@@ -443,7 +434,6 @@
     </div>
   {/if}
 
-  <!-- Treatments Timeline with Filter/Sort -->
   <Card.Root>
     <Card.Header class="pb-2">
       <div class="flex flex-wrap items-center justify-between gap-4">

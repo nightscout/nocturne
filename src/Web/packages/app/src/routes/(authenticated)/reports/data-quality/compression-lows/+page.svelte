@@ -59,7 +59,6 @@
 	const mutationError = (err: unknown) =>
 		permissionGatedMutationError(err, NEEDS_GLUCOSE_READWRITE);
 
-	// Create resource with automatic layout registration - load ALL suggestions
 	const suggestionsResource = contextResource(
 		() => getCompressionLowSuggestions({}),
 		{ errorTitle: 'Error Loading Compression Low History' }
@@ -407,7 +406,7 @@
 		{#if suggestions.length === 0}
 			<Card>
 				<CardContent class="py-12 text-center">
-					<History class="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
+					<History class="mx-auto mb-3 size-6 text-muted-foreground" aria-hidden="true" />
 					<h2 class="mb-2 text-lg font-semibold">No compression lows detected yet</h2>
 					<p class="mb-4 text-muted-foreground">
 						When compression lows are detected during your sleep, they will appear here.
@@ -458,7 +457,7 @@
 		{:else if filteredSuggestions.length === 0}
 			<Card>
 				<CardContent class="py-12 text-center">
-					<AlertTriangle class="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
+					<AlertTriangle class="mx-auto mb-3 size-6 text-muted-foreground" aria-hidden="true" />
 					<h2 class="mb-2 text-lg font-semibold">No matching results</h2>
 					<p class="text-muted-foreground">Try changing your filter criteria.</p>
 				</CardContent>
@@ -505,7 +504,6 @@
 			</div>
 
 			<div class="grid gap-6 @3xl:grid-cols-3">
-				<!-- Suggestion List -->
 				<div class="max-h-[600px] space-y-2 overflow-y-auto pr-2 print:hidden">
 					{#each filteredSuggestions as suggestion, index (suggestion.id)}
 						{@const StatusIcon = getStatusIcon(suggestion.status)}
@@ -525,12 +523,13 @@
 										: ''}"
 							>
 								<div class="flex items-center gap-3">
-									<div
-										class="review-status flex h-8 w-8 items-center justify-center rounded-full"
+									<span
+										class="review-status flex shrink-0 items-center"
 										data-status={suggestion.status?.toLowerCase() ?? ''}
 									>
-										<StatusIcon class="h-4 w-4" />
-									</div>
+										<StatusIcon class="size-4" aria-hidden="true" />
+										<span class="sr-only">{getStatusLabel(suggestion.status)}</span>
+									</span>
 									<div>
 										<p class="font-medium">
 											{suggestion.nightOf ? formatNightOf(suggestion.nightOf) : 'Unknown date'}
@@ -548,7 +547,6 @@
 					{/each}
 				</div>
 
-				<!-- Chart and Actions -->
 				<div class="@3xl:col-span-2">
 					{#if suggestionDetail}
 						<Card>
@@ -560,18 +558,17 @@
 											: 'Unknown'}
 									</CardTitle>
 									<div
-										class="review-status flex h-8 min-w-8 items-center justify-center gap-1.5 rounded-full print:px-2.5"
+										class="review-status flex items-center gap-1.5"
 										data-status={suggestionDetail.suggestion?.status?.toLowerCase() ?? ''}
 									>
-										<DetailStatusIcon class="h-4 w-4" />
-										<span class="hidden text-sm font-medium print:inline">
+										<DetailStatusIcon class="size-4" aria-hidden="true" />
+										<span class="text-sm font-medium">
 											{getStatusLabel(suggestionDetail.suggestion?.status)}
 										</span>
 									</div>
 								</div>
 							</CardHeader>
 							<CardContent>
-								<!-- Glucose Chart with Brush -->
 								{#if suggestionDetail?.entries && suggestionDetail.entries.length > 0 && chartDateRange}
 									{#key chartDateRange.from.getTime() + '-' + chartDateRange.to.getTime()}
 										{@const chartEngine = createChartDataEngine({
@@ -601,37 +598,37 @@
 									{/key}
 								{/if}
 
-								<!-- Stats -->
-								<div class="mb-6 grid grid-cols-3 gap-4 text-center">
-									<div>
-										<p class="text-2xl font-bold">
+								<dl class="m-0 mb-6 grid grid-cols-3 divide-x divide-border border-y border-border">
+									<div class="py-3 pr-4">
+										<dt class="text-sm text-muted-foreground">Lowest ({bgLabel()})</dt>
+										<dd class="m-0 mt-1 text-lg font-semibold tabular-nums">
 											{suggestionDetail.suggestion?.lowestGlucose != null
 												? bg(suggestionDetail.suggestion.lowestGlucose)
 												: '-'}
-										</p>
-										<p class="text-sm text-muted-foreground">Lowest ({bgLabel()})</p>
+										</dd>
 									</div>
-									<div>
-										<p class="text-2xl font-bold">
+									<div class="px-4 py-3">
+										<dt class="text-sm text-muted-foreground">Drop Rate ({bgLabel()}/min)</dt>
+										<dd class="m-0 mt-1 text-lg font-semibold tabular-nums">
 											{suggestionDetail.suggestion?.dropRate != null
 												? bg(suggestionDetail.suggestion.dropRate)
 												: '-'}
-										</p>
-										<p class="text-sm text-muted-foreground">Drop Rate ({bgLabel()}/min)</p>
+										</dd>
 									</div>
-									<div>
-										<p class="text-2xl font-bold">{suggestionDetail.suggestion?.recoveryMinutes ?? '-'}</p>
-										<p class="text-sm text-muted-foreground">Recovery (min)</p>
+									<div class="py-3 pl-4">
+										<dt class="text-sm text-muted-foreground">Recovery (min)</dt>
+										<dd class="m-0 mt-1 text-lg font-semibold tabular-nums">
+											{suggestionDetail.suggestion?.recoveryMinutes ?? '-'}
+										</dd>
 									</div>
-								</div>
+								</dl>
 
-								<!-- Time Range Display -->
 								{#if brushDomain}
-									<div class="mb-6 rounded-lg bg-muted p-4">
+									<div class="mb-6 border-b border-border pb-4">
 										<p class="text-sm text-muted-foreground">
 											{isPending ? 'Selected Range' : 'Exclusion Range'}
 										</p>
-										<p class="font-medium">
+										<p class="font-medium tabular-nums">
 											{time(brushDomain[0])} - {time(brushDomain[1])}
 										</p>
 										{#if isPending && canReviewSuggestions}
@@ -642,11 +639,10 @@
 									</div>
 								{/if}
 
-								<!-- Bulk Selection Bar -->
 								{#if isBulkMode && canReviewSuggestions}
 									<div
-									class="mb-4 flex items-center justify-between rounded-lg bg-primary/10 p-3 print:hidden"
-								>
+										class="mb-4 flex items-center justify-between border-b border-border pb-3 print:hidden"
+									>
 										<span class="text-sm font-medium">{selectionCount} selected</span>
 										<div class="flex gap-2">
 											<Button
@@ -679,7 +675,6 @@
 									</div>
 								{/if}
 
-								<!-- Actions -->
 								{#if !isBulkMode && canReviewSuggestions}
 									{#if isPending}
 										<div class="flex gap-4 print:hidden">
@@ -743,24 +738,18 @@
 	/* Review status is a backend enum; the colour comes from the theme's status
 	   vars keyed off data-status. Anything not yet reviewed uses the default. */
 	.review-status {
-		background: color-mix(in oklab, var(--status-warning) 15%, transparent);
 		color: var(--status-warning);
 	}
 	.review-status[data-status='accepted'] {
-		background: color-mix(in oklab, var(--status-normal) 15%, transparent);
 		color: var(--status-normal);
 	}
 	.review-status[data-status='dismissed'] {
-		background: var(--muted);
 		color: var(--muted-foreground);
 	}
-	/* A tint prints near-white, so print carries the status as a word in ink. */
 	@media print {
 		.review-status,
 		.review-status[data-status] {
-			background: transparent;
 			color: var(--foreground);
-			box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--foreground) 40%, transparent);
 		}
 	}
 </style>

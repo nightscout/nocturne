@@ -38,7 +38,6 @@
     class="fixed right-0 top-14 z-30 flex h-[calc(100vh-3.5rem)] w-80 flex-col border-l border-border bg-card shadow-lg lg:w-96"
     transition:slide={{ axis: "x", duration: 200, easing: cubicOut }}
   >
-    <!-- Panel Header -->
     <div
       class="flex items-center justify-between border-b border-border px-4 py-3"
     >
@@ -48,9 +47,7 @@
       </Button>
     </div>
 
-    <!-- Panel Content -->
     <div class="flex-1 overflow-y-auto px-4 py-4">
-      <!-- Date -->
       <div class="mb-4">
         <h4 class="text-lg font-semibold">
           {formatSelectedDate(selectedDay.dateString)}
@@ -59,22 +56,19 @@
 
       <Separator class="mb-4" />
 
-      <!-- Average Glucose -->
       {#if selectedDay.averageGlucoseMgdl != null}
         <div class="mb-4">
-          <div
-            class="text-xs font-medium uppercase tracking-wide text-muted-foreground"
-          >
-            Average Glucose
-          </div>
-          <div class="mt-1 text-2xl font-bold tabular-nums">
+          <div class="text-sm font-medium text-muted-foreground">Average Glucose</div>
+          <div class="mt-1 flex items-center gap-2">
             <span
-              class="text-(--avg-color)"
+              class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-(--avg-color)"
               style:--avg-color={glucoseColorScale(selectedDay.averageGlucoseMgdl)}
-            >
+              aria-hidden="true"
+            ></span>
+            <span class="text-2xl font-semibold tabular-nums">
               {formatGlucoseValue(selectedDay.averageGlucoseMgdl, units)}
             </span>
-            <span class="text-sm font-normal text-muted-foreground">
+            <span class="text-sm text-muted-foreground">
               {unitLabel}
             </span>
           </div>
@@ -82,100 +76,76 @@
         <Separator class="mb-4" />
       {/if}
 
-      <!-- Insulin & Carbs Summary -->
       {#if selectedDay.totalDailyDose != null || selectedDay.totalCarbs != null}
         <div class="mb-4">
           {#if selectedDay.totalDailyDose != null}
-            <div
-              class="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground"
-            >
-              Insulin
-            </div>
-            <div class="space-y-2">
-              <div
-                class="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2 text-sm"
-              >
-                <span>Bolus</span>
-                <span class="font-medium tabular-nums">
+            <div class="mb-1 text-sm font-medium text-muted-foreground">Insulin</div>
+            <dl class="m-0 divide-y divide-border text-sm">
+              <div class="flex items-center justify-between py-2">
+                <dt>Bolus</dt>
+                <dd class="m-0 font-medium tabular-nums">
                   {formatUnits(selectedDay.totalBolusUnits)}
-                </span>
+                </dd>
               </div>
-              <div
-                class="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2 text-sm"
-              >
-                <span>Basal</span>
-                <span class="font-medium tabular-nums">
+              <div class="flex items-center justify-between py-2">
+                <dt>Basal</dt>
+                <dd class="m-0 font-medium tabular-nums">
                   {formatUnits(selectedDay.totalBasalUnits)}
-                </span>
+                </dd>
               </div>
-              <div
-                class="flex items-center justify-between rounded-md bg-primary/10 px-3 py-2 text-sm font-medium"
-              >
-                <span>Total Daily Dose</span>
-                <span class="tabular-nums">
+              <div class="flex items-center justify-between py-2 font-medium">
+                <dt>Total Daily Dose</dt>
+                <dd class="m-0 font-semibold tabular-nums">
                   {formatUnits(selectedDay.totalDailyDose)}
-                </span>
+                </dd>
               </div>
-            </div>
+            </dl>
           {/if}
           {#if selectedDay.totalCarbs != null}
             <div
-              class="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground {selectedDay.totalDailyDose !=
+              class="mb-1 text-sm font-medium text-muted-foreground {selectedDay.totalDailyDose !=
               null
                 ? 'mt-4'
                 : ''}"
             >
               Carbs
             </div>
-            <div
-              class="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2 text-sm"
-            >
-              <span>Total Carbs</span>
-              <span class="font-medium tabular-nums">
-                {selectedDay.totalCarbs.toFixed(0)}g
-              </span>
-            </div>
+            <dl class="m-0 text-sm">
+              <div class="flex items-center justify-between py-2">
+                <dt>Total Carbs</dt>
+                <dd class="m-0 font-medium tabular-nums">
+                  {selectedDay.totalCarbs.toFixed(0)}g
+                </dd>
+              </div>
+            </dl>
           {/if}
         </div>
         <Separator class="mb-4" />
       {/if}
 
-      <!-- Total Count -->
       <div class="mb-4">
-        <div
-          class="text-xs font-medium uppercase tracking-wide text-muted-foreground"
-        >
-          Total Records
-        </div>
-        <div class="mt-1 text-xl font-bold tabular-nums">
+        <div class="text-sm font-medium text-muted-foreground">Total Records</div>
+        <div class="mt-1 text-lg font-semibold tabular-nums">
           {selectedDay.totalCount}
         </div>
       </div>
 
-      <!-- Per-data-type Counts -->
       {#if getVisibleCounts(selectedDay.counts).length > 0}
         {@const visiblePanelCounts = getVisibleCounts(selectedDay.counts)}
         <Separator class="mb-4" />
         <div class="mb-4">
-          <div
-            class="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground"
-          >
-            By Data Type
-          </div>
-          <div class="space-y-2">
+          <div class="mb-1 text-sm font-medium text-muted-foreground">By Data Type</div>
+          <dl class="m-0 divide-y divide-border text-sm">
             {#each visiblePanelCounts as [key, count] (key)}
-              <div
-                class="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2 text-sm"
-              >
-                <span>{getDataTypeLabel(key)}</span>
-                <span class="font-medium tabular-nums">{count}</span>
+              <div class="flex items-center justify-between py-2">
+                <dt>{getDataTypeLabel(key)}</dt>
+                <dd class="m-0 font-medium tabular-nums">{count}</dd>
               </div>
             {/each}
-          </div>
+          </dl>
         </div>
       {/if}
 
-      <!-- View Day in Review Button -->
       <div class="mt-6">
         <Button
           class="w-full"

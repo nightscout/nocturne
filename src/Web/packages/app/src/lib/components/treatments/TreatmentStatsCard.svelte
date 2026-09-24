@@ -1,11 +1,8 @@
 <script lang="ts">
-  import * as Card from "$lib/components/ui/card";
-  import { Badge } from "$lib/components/ui/badge";
+  import FigureStrip from "$lib/components/reports/FigureStrip.svelte";
   import type { EntryCategoryId } from "$lib/constants/entry-categories";
   import type { TreatmentSummary } from "$lib/api";
   import { ENTRY_CATEGORIES } from "$lib/constants/entry-categories";
-  import { Activity } from "lucide-svelte";
-  import { BolusIcon, CarbsIcon } from "$lib/components/icons";
 
   interface Props {
     treatmentSummary: TreatmentSummary;
@@ -33,94 +30,29 @@
   let avgCarbsPerEntry = $derived(
     carbEntriesCount > 0 ? totalCarbs / carbEntriesCount : 0
   );
+
+  const categoryBreakdown = $derived(
+    Object.values(ENTRY_CATEGORIES)
+      .filter((cat) => counts[cat.id] > 0)
+      .map((cat) => `${cat.name} ${counts[cat.id]}`)
+      .join(" · ")
+  );
 </script>
 
-<div class="@container">
-<div class="grid grid-cols-1 @4xl:grid-cols-3 print:grid-cols-3 gap-4">
-  <!-- Total Records -->
-  <Card.Root>
-    <Card.Content class="p-4">
-      <div class="flex items-center justify-between">
-        <div>
-          <p class="text-sm font-medium text-muted-foreground">
-            Total Records
-          </p>
-          <p class="text-2xl font-bold tabular-nums">{counts.all}</p>
-        </div>
-        <div
-          class="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center print:hidden"
-        >
-          <Activity class="h-5 w-5 text-primary" />
-        </div>
-      </div>
-      <div class="mt-2 flex flex-wrap gap-1 print:gap-x-3">
-        {#each Object.values(ENTRY_CATEGORIES) as cat (cat.id)}
-          {#if counts[cat.id] > 0}
-            <Badge variant="secondary" size="sm">
-              {cat.name} <span class="opacity-70">{counts[cat.id]}</span>
-            </Badge>
-          {/if}
-        {/each}
-      </div>
-    </Card.Content>
-  </Card.Root>
-
-  <!-- Insulin -->
-  <Card.Root>
-    <Card.Content class="p-4">
-      <div class="flex items-center justify-between">
-        <div>
-          <p class="text-sm font-medium text-muted-foreground">Insulin</p>
-          <p
-            class="text-2xl font-bold tabular-nums text-entry-bolus print:text-foreground"
-          >
-            {totalInsulin.toFixed(1)}U
-          </p>
-        </div>
-        <div
-          class="h-10 w-10 rounded-lg bg-insulin-bolus/10 flex items-center justify-center print:hidden"
-        >
-          <BolusIcon size={20} />
-        </div>
-      </div>
-      <div
-        class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground"
-      >
-        <span>{bolusCount} boluses</span>
-        <span>•</span>
-        <span>{dailyAvgBoluses.toFixed(1)}/day</span>
-        <span>•</span>
-        <span>{avgInsulinPerBolus.toFixed(1)}U avg</span>
-      </div>
-    </Card.Content>
-  </Card.Root>
-
-  <!-- Carbs -->
-  <Card.Root>
-    <Card.Content class="p-4">
-      <div class="flex items-center justify-between">
-        <div>
-          <p class="text-sm font-medium text-muted-foreground">Carbs</p>
-          <p class="text-2xl font-bold tabular-nums text-entry-carbs print:text-foreground">
-            {totalCarbs.toFixed(0)}g
-          </p>
-        </div>
-        <div
-          class="h-10 w-10 rounded-lg bg-carbs/10 flex items-center justify-center print:hidden"
-        >
-          <CarbsIcon size={20} />
-        </div>
-      </div>
-      <div
-        class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground"
-      >
-        <span>{carbEntriesCount} meals</span>
-        <span>•</span>
-        <span>{dailyAvgCarbs.toFixed(0)}g/day</span>
-        <span>•</span>
-        <span>{avgCarbsPerEntry.toFixed(0)}g avg/meal</span>
-      </div>
-    </Card.Content>
-  </Card.Root>
-</div>
-</div>
+<FigureStrip
+  figures={[
+    { label: "Total Records", value: String(counts.all), note: categoryBreakdown || undefined },
+    {
+      label: "Insulin",
+      value: totalInsulin.toFixed(1),
+      unit: "U",
+      note: `${bolusCount} boluses · ${dailyAvgBoluses.toFixed(1)}/day · ${avgInsulinPerBolus.toFixed(1)}U avg`,
+    },
+    {
+      label: "Carbs",
+      value: totalCarbs.toFixed(0),
+      unit: "g",
+      note: `${carbEntriesCount} meals · ${dailyAvgCarbs.toFixed(0)}g/day · ${avgCarbsPerEntry.toFixed(0)}g avg/meal`,
+    },
+  ]}
+/>

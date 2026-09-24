@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ArrowLeftRight, ArrowRight, CalendarDays } from "lucide-svelte";
+  import { ArrowLeft, ArrowLeftRight, ArrowRight, CalendarDays } from "lucide-svelte";
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
@@ -445,10 +445,10 @@
         </Button>
       </div>
 
-      <div class="grid gap-4 @xl:grid-cols-2">
+      <div class="grid gap-4 border-t border-border pt-4 @xl:grid-cols-2">
         {#each sideConfigs as cfg (cfg.side)}
           {@const p = draft[cfg.side]}
-          <div class="rounded-md border border-border bg-card p-3">
+          <div>
             <div class="mb-2 flex items-center gap-2">
               <span
                 class="inline-block h-2 w-2 rounded-full bg-(--dot)"
@@ -461,7 +461,7 @@
                 size="sm"
                 variant="title"
               />
-              <span class="ml-auto font-mono text-xs text-muted-foreground">
+              <span class="ml-auto text-xs text-muted-foreground tabular-nums">
                 {dayCount(p.from, p.to)}d
               </span>
             </div>
@@ -478,7 +478,7 @@
                     class="w-full justify-start"
                   >
                     <CalendarDays class="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    <span class="font-mono">
+                    <span class="tabular-nums">
                       {rangeDisplay(p.from, p.to)}
                     </span>
                   </Button>
@@ -506,33 +506,30 @@
     </Card.Content>
   </Card.Root>
 
-  <!-- Diff-first strip -->
   <Card.Root>
     <Card.Content class="space-y-4 p-6 print:space-y-2 print:p-4">
       <div class="flex flex-wrap items-center gap-3 border-b border-border pb-3 print:hidden">
-        <span class="inline-flex items-center gap-2 rounded-full bg-muted px-3 py-1.5 text-xs font-medium">
+        <span class="inline-flex items-center gap-2 text-sm font-medium">
           <span
             class="inline-block h-2 w-2 rounded-full bg-muted-foreground"
           ></span>
           {committed.a.label}
         </span>
-        <span class="font-mono text-xs uppercase tracking-widest text-muted-foreground">
-          vs
-        </span>
-        <span class="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium">
+        <span class="text-sm text-muted-foreground">vs</span>
+        <span class="inline-flex items-center gap-2 text-sm font-medium">
           <span
             class="inline-block h-2 w-2 rounded-full bg-glucose-in-range"
           ></span>
           {committed.b.label}
         </span>
-        <span class="ml-auto font-mono text-xs text-muted-foreground">
+        <span class="ml-auto text-xs text-muted-foreground tabular-nums">
           {rangeDisplay(committed.a.from, committed.a.to)}
           <ArrowRight class="mx-1 inline h-3 w-3" />
           {rangeDisplay(committed.b.from, committed.b.to)}
         </span>
       </div>
 
-      <div class="space-y-1">
+      <div class="divide-y divide-border">
         <div
           class="hidden gap-4 px-3 text-xs font-medium text-muted-foreground print:grid print:[grid-template-columns:minmax(140px,1fr)_90px_90px_minmax(120px,2fr)_100px]"
         >
@@ -544,13 +541,13 @@
         </div>
         {#each diffRows as row (row.key)}
           <div
-            class="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded border border-border bg-card px-3 py-2.5 print:py-1.5 @2xl:grid @2xl:flex-nowrap @2xl:gap-4 @2xl:[grid-template-columns:minmax(140px,1fr)_90px_90px_minmax(120px,2fr)_100px]"
+            class="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2.5 print:py-1.5 @2xl:grid @2xl:flex-nowrap @2xl:gap-4 @2xl:[grid-template-columns:minmax(140px,1fr)_90px_90px_minmax(120px,2fr)_100px]"
           >
             <div class="w-full text-sm font-medium @2xl:w-auto">{row.label}</div>
-            <div class="font-mono text-sm tabular-nums text-muted-foreground @2xl:text-right">
+            <div class="text-sm tabular-nums text-muted-foreground @2xl:text-right">
               {valueText(row.key, row.av)}
             </div>
-            <div class="font-mono text-sm font-semibold tabular-nums @2xl:text-right">
+            <div class="text-sm font-semibold tabular-nums @2xl:text-right">
               {valueText(row.key, row.bv)}
             </div>
             <div class="relative order-last h-2 w-full overflow-hidden rounded-full bg-muted @2xl:order-none @2xl:w-auto">
@@ -565,7 +562,7 @@
               ></div>
             </div>
             <div
-              class="ml-auto font-mono text-xs font-semibold tabular-nums @2xl:ml-0 @2xl:text-right"
+              class="ml-auto text-sm font-semibold tabular-nums @2xl:ml-0 @2xl:text-right"
             >
               {row.deltaText}
             </div>
@@ -573,15 +570,20 @@
         {/each}
       </div>
 
-      <div class="flex justify-between font-mono text-2xs uppercase tracking-wider text-muted-foreground">
-        <span>← lower in {committed.b.label}</span>
-        <span>no change</span>
-        <span>higher in {committed.b.label} →</span>
+      <div class="flex justify-between text-xs text-muted-foreground">
+        <span class="inline-flex items-center gap-1">
+          <ArrowLeft class="h-3 w-3" aria-hidden="true" />
+          Lower in {committed.b.label}
+        </span>
+        <span>No change</span>
+        <span class="inline-flex items-center gap-1">
+          Higher in {committed.b.label}
+          <ArrowRight class="h-3 w-3" aria-hidden="true" />
+        </span>
       </div>
     </Card.Content>
   </Card.Root>
 
-  <!-- Stacked TIR comparison -->
   <Card.Root>
     <Card.Header>
       <Card.Title>Time in Range — stacked comparison</Card.Title>
@@ -599,7 +601,7 @@
                 style:--dot={col.accent}
               ></span>
               <span class="text-sm font-semibold">{col.periodLabel}</span>
-              <span class="ml-auto font-mono text-xs text-muted-foreground">
+              <span class="ml-auto text-xs text-muted-foreground tabular-nums">
                 {col.range}
               </span>
             </div>

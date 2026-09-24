@@ -1,7 +1,6 @@
 <script lang="ts">
   import { LineChart } from "layerchart";
   import { parseDate } from "@internationalized/date";
-  import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import { ChevronLeft, ChevronRight, Calendar } from "lucide-svelte";
   import { getWeekdayAverages } from "$api/reports.remote";
@@ -103,31 +102,25 @@
 
 {#if weekdayResource.current}
 <div class="@container space-y-6 p-3 @md:p-6">
-  <!-- Week-stepper controls — navigation chaff; the compared date range stays
-       visible in the layout's print header. -->
-  <Card.Root class="print:hidden">
-    <Card.Content class="p-4">
-      <div class="flex flex-wrap items-center justify-center gap-2 @md:justify-start">
-        <Button variant="outline" size="icon" onclick={previousWeek}>
-          <ChevronLeft class="h-4 w-4" />
-        </Button>
-        <div class="flex items-center gap-2 min-w-[200px] justify-center">
-          <Calendar class="h-4 w-4 text-muted-foreground" />
-          <span class="text-sm font-medium">{dateRangeDisplay}</span>
-        </div>
-        <Button variant="outline" size="icon" onclick={nextWeek}>
-          <ChevronRight class="h-4 w-4" />
-        </Button>
-        {#if !reportsParams.isDefault}
-          <Button variant="ghost" size="sm" onclick={goToCurrentWeek}>
-            Reset
-          </Button>
-        {/if}
-      </div>
-    </Card.Content>
-  </Card.Root>
+  <!-- The compared date range stays visible in the layout's print header. -->
+  <div class="flex flex-wrap items-center justify-center gap-2 @md:justify-start print:hidden">
+    <Button variant="outline" size="icon" onclick={previousWeek}>
+      <ChevronLeft class="h-4 w-4" />
+    </Button>
+    <div class="flex items-center gap-2 min-w-[200px] justify-center">
+      <Calendar class="h-4 w-4 text-muted-foreground" />
+      <span class="text-sm font-medium">{dateRangeDisplay}</span>
+    </div>
+    <Button variant="outline" size="icon" onclick={nextWeek}>
+      <ChevronRight class="h-4 w-4" />
+    </Button>
+    {#if !reportsParams.isDefault}
+      <Button variant="ghost" size="sm" onclick={goToCurrentWeek}>
+        Reset
+      </Button>
+    {/if}
+  </div>
 
-  <!-- Day-of-week comparison chart -->
   <div class="w-full space-y-2 rounded-sm border p-4 print:[--weekday-ink:45%]">
     {#if chartData.length > 0}
       <div class="h-[280px] @md:h-[360px] print:h-[520px]">

@@ -17,6 +17,7 @@
   import { AmbulatoryGlucoseProfile } from "$lib/components/ambulatory-glucose-profile";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
+  import FigureStrip from "$lib/components/reports/FigureStrip.svelte";
   import GlycemicRiskIndexChart from "$lib/components/reports/GlycemicRiskIndexChart.svelte";
   import ScheduledBasalRateChart from "$lib/components/reports/ScheduledBasalRateChart.svelte";
   import HourlyBolusChart from "$lib/components/reports/HourlyBolusChart.svelte";
@@ -55,6 +56,8 @@
   const insulinStats = $derived(data.insulinDeliveryStats);
   const analysis = $derived(data.analysis);
   const aidMetrics = $derived(data.aidSystemMetrics);
+  const stats = $derived(analysis?.basicStats ?? {});
+  const variability = $derived(analysis?.glycemicVariability ?? {});
   const lastUpdated = $derived(reportsResource.current?.dateRange?.lastUpdated);
   const startDate = $derived(reportsResource.date.from);
   const endDate = $derived(reportsResource.date.to);
@@ -71,7 +74,6 @@
 
 {#if reportsResource.current}
 <div class="@container container mx-auto space-y-8 p-3 @md:p-6 max-w-7xl">
-  <!-- Header -->
   <div class="space-y-4">
     <div class="print:hidden">
       <h1 class="text-2xl @md:text-3xl font-bold flex items-center gap-3">
@@ -83,7 +85,6 @@
       </p>
     </div>
 
-    <!-- Period info -->
     <div class="flex items-center gap-2 text-sm text-muted-foreground">
       <Calendar class="w-4 h-4 print:hidden" />
       <span class="print:hidden">
@@ -96,9 +97,20 @@
     </div>
   </div>
 
-  <!-- Top Row: Insulin Summary + Glucose Metrics -->
+  <FigureStrip
+    figures={[
+      { label: "Avg Total Daily Dose", value: insulinStats?.tdd?.toFixed(1) ?? "--", unit: "U/day" },
+      { label: "Average", value: stats.mean ? String(bg(stats.mean)) : "--", unit: bgLabel() },
+      { label: "Est. A1C", value: variability.estimatedA1c?.toFixed(1) ?? "--", unit: "%", note: "From mean glucose" },
+      { label: "CV", value: variability.coefficientOfVariation?.toFixed(0) ?? "--", unit: "%", note: "Target: ≤33%" },
+    ]}
+  />
+
+  {#if analysis?.reliability}
+    <ReliabilityBadge reliability={analysis.reliability} />
+  {/if}
+
   <div class="grid grid-cols-1 @3xl:grid-cols-2 print:grid-cols-2 gap-6">
-    <!-- Insulin Summary Card -->
     <Card>
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
@@ -114,15 +126,6 @@
         {@const avgBolus = insulinStats?.totalBolus != null ? insulinStats.totalBolus / dayCount : null}
         {@const avgScheduled = insulinStats?.scheduledBasal != null ? insulinStats.scheduledBasal / dayCount : null}
 
-        <!-- TDD -->
-        <div class="flex items-baseline justify-between">
-          <span class="text-sm text-muted-foreground">Avg Total Daily Dose</span>
-          <span class="text-2xl font-bold">
-            {insulinStats?.tdd?.toFixed(1) ?? "--"} U/day
-          </span>
-        </div>
-
-        <!-- Basal / Bolus Split Bar -->
         {@const basalPct = insulinStats?.basalPercent ?? 0}
         {@const bolusPct = insulinStats?.bolusPercent ?? 0}
         <div class="space-y-1">
@@ -150,7 +153,6 @@
 
         <Separator />
 
-        <!-- Delivered vs Scheduled (daily avg) -->
         <div class="grid grid-cols-2 gap-4 text-sm">
           <div>
             <div class="text-muted-foreground">Avg Delivered Basal</div>
@@ -164,7 +166,6 @@
 
         <Separator />
 
-        <!-- Bolus breakdown (daily avg) -->
         <div class="grid grid-cols-2 gap-4 text-sm">
           <div>
             <div class="text-muted-foreground">Boluses/Day</div>
@@ -190,7 +191,6 @@
       </CardContent>
     </Card>
 
-    <!-- Glucose Metrics Card -->
     <Card>
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
@@ -203,40 +203,11 @@
       </CardHeader>
       <CardContent class="space-y-4">
         {#if analysis}
-          {@const stats = analysis.basicStats ?? {}}
-          {@const variability = analysis.glycemicVariability ?? {}}
           {@const tir = analysis.timeInRange?.percentages ?? {}}
-          {@const cvMet = (variability.coefficientOfVariation ?? 50) <= 33}
-
-          <!-- Average, GMI, CV -->
-          <div class="grid grid-cols-3 gap-2 @sm:gap-4 text-center">
-            <div>
-              <div class="text-2xl font-bold">{stats.mean ? bg(stats.mean) : "--"}</div>
-              <div class="text-xs text-muted-foreground">Average</div>
-              <div class="text-2xs text-muted-foreground/70">{bgLabel()}</div>
-            </div>
-            <div>
-              <div class="text-2xl font-bold">{variability.estimatedA1c?.toFixed(1) ?? "--"}%</div>
-              <div class="text-xs text-muted-foreground">Est. A1C</div>
-              <div class="text-2xs text-muted-foreground/70">From mean glucose</div>
-            </div>
-            <div>
-              <div class="text-2xl font-bold">{variability.coefficientOfVariation?.toFixed(0) ?? "--"}%</div>
-              <div class="text-xs text-muted-foreground">CV</div>
-              <div class="text-2xs {cvMet ? 'text-status-normal' : 'text-status-warning'} print:text-muted-foreground">
-                Target: ≤33%
-                <span class="hidden print:inline">({cvMet ? "met" : "not met"})</span>
-              </div>
-            </div>
-          </div>
-
-          <Separator />
-
-          <!-- TIR Horizontal Stacked Bar -->
           <div class="space-y-2">
             <div class="text-sm font-medium">Time in Range</div>
-            <div class="h-32 w-full print:h-auto">
-              <TIRStackedChart percentages={tir} orientation="horizontal" />
+            <div class="h-56 w-full">
+              <TIRStackedChart percentages={tir} />
             </div>
           </div>
         {:else}
@@ -248,13 +219,7 @@
     </Card>
   </div>
 
-  {#if analysis?.reliability}
-    <ReliabilityBadge reliability={analysis.reliability} />
-  {/if}
-
-  <!-- Middle Row: AID Use (stub) + GRI -->
   <div class="grid grid-cols-1 @3xl:grid-cols-2 gap-6">
-    <!-- AID Use Card (stubbed) -->
     <Card>
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
@@ -295,7 +260,6 @@
       </CardContent>
     </Card>
 
-    <!-- GRI Card -->
     <Card>
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
@@ -318,7 +282,6 @@
     </Card>
   </div>
 
-  <!-- Glucose Pattern — unified section matching iCoDE-2 layout -->
   <Card>
     <CardHeader>
       <CardTitle class="flex items-center gap-2">
@@ -330,12 +293,10 @@
       </CardDescription>
     </CardHeader>
     <CardContent class="space-y-6">
-      <!-- AGP -->
       <div class="h-80 w-full @2xl:h-96">
         <AmbulatoryGlucoseProfile averagedStats={data.averagedStats} />
       </div>
 
-      <!-- Scheduled Basal Rate -->
       <div>
         <h4 class="text-sm font-semibold text-muted-foreground mb-1">Scheduled Basal Rate</h4>
         <div class="h-24 w-full">
@@ -343,13 +304,11 @@
         </div>
       </div>
 
-      <!-- User-Initiated Boluses Per Day -->
       <div class="w-full">
         <h4 class="text-sm font-semibold text-muted-foreground mb-1">User-Initiated Boluses Per Day</h4>
         <HourlyBolusChart {boluses} {dayCount} />
       </div>
 
-      <!-- Schedule Bands -->
       <ScheduleFooter profile={data.profileSummary} />
     </CardContent>
   </Card>
