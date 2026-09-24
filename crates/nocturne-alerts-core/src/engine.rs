@@ -159,22 +159,58 @@ pub fn evaluate_rule(
     state: &mut EngineState,
     log_leaves: bool,
 ) -> RuleOutcome {
+    let Some(body) = evaluate_body(rule, ctx, now, &mut state.timers, log_leaves) else {
+        return RuleOutcome {
+            rule_id: rule.id,
+            evaluation: None,
+        };
+    };
+
+    let config = TrackerRuleConfig {
+        confirmation_readings: rule.confirmation_readings,
+        hysteresis_minutes: rule.hysteresis_minutes,
+    };
+    let transition = state
+        .tracker
+        .process_evaluation(rule.id, config, body.root, now);
+    let auto_resolved = rule.auto_resolve_enabled && try_auto_resolve(rule, ctx, now, state);
+
+    RuleOutcome {
+        rule_id: rule.id,
+        evaluation: Some(Evaluation {
+            root: body.root,
+            leaves: body.leaves,
+            transition,
+            tracker: state.tracker.state(rule.id).copied(),
+            auto_resolved,
+            timer_ops: state.timers.drain_ops(),
+        }),
+    }
+}
+
+/// A rule body's truth for one tick.
+pub(crate) struct BodyOutcome {
+    pub(crate) root: bool,
+    pub(crate) leaves: Option<Vec<bool>>,
+}
+
+/// The root truth and, when `log_leaves`, each leaf alone, or `None` when the
+/// body cannot be evaluated (engine-semantics.md §1.4).
+pub(crate) fn evaluate_body(
+    rule: &Rule,
+    ctx: &SensorContext,
+    now: DateTime<Utc>,
+    timers: &mut TimerStore,
+    log_leaves: bool,
+) -> Option<BodyOutcome> {
     // A JSON null body is a null condition record, which evaluates false.
     let payload = match &rule.condition_params {
         Value::Null => None,
-        v => match parse_payload(rule.condition_type, v) {
-            Ok(p) => Some(p),
-            Err(_) => {
-                return RuleOutcome {
-                    rule_id: rule.id,
-                    evaluation: None,
-                };
-            }
-        },
+        v => Some(parse_payload(rule.condition_type, v).ok()?),
     };
 
     let wire = rule.condition_type.wire();
-    let mut env = Env::new(now, rule.id, ctx, &mut state.timers);
+    let mut env = Env::new(now, rule.id, ctx, timers);
     let root = payload
         .as_ref()
         .is_some_and(|p| eval_payload(p, wire, &mut env));
@@ -188,39 +224,36 @@ pub fn evaluate_rule(
             .map(|leaf| eval_node(leaf, wire, &mut env))
             .collect()
     });
-
-    let config = TrackerRuleConfig {
-        confirmation_readings: rule.confirmation_readings,
-        hysteresis_minutes: rule.hysteresis_minutes,
-    };
-    let transition = state.tracker.process_evaluation(rule.id, config, root, now);
-    let auto_resolved = rule.auto_resolve_enabled && try_auto_resolve(rule, ctx, now, state);
-
-    RuleOutcome {
-        rule_id: rule.id,
-        evaluation: Some(Evaluation {
-            root,
-            leaves,
-            transition,
-            tracker: state.tracker.state(rule.id).copied(),
-            auto_resolved,
-            timer_ops: state.timers.drain_ops(),
-        }),
-    }
+    Some(BodyOutcome { root, leaves })
 }
 
-/// Only while an excursion is active or in hysteresis. A tree that does not
-/// parse never resolves; one that evaluates true at the `auto_resolve` root
-/// force-closes the excursion.
+/// Only while an excursion is active or in hysteresis; one that the
+/// auto-resolve tree holds for force-closes the excursion.
 fn try_auto_resolve(
     rule: &Rule,
     ctx: &SensorContext,
     now: DateTime<Utc>,
     state: &mut EngineState,
 ) -> bool {
-    if state.tracker.active_excursion_id(rule.id).is_none() {
+    if state.tracker.active_excursion_id(rule.id).is_none()
+        || !auto_resolve_holds(rule, ctx, now, &mut state.timers)
+    {
         return false;
     }
+    let transition = state
+        .tracker
+        .force_close(rule.id, CloseReason::AutoResolve, now);
+    transition.kind == TransitionType::ExcursionClosed
+}
+
+/// Whether the rule's auto-resolve tree evaluates true at the `auto_resolve`
+/// root. A tree that is absent, null or does not parse never holds.
+pub(crate) fn auto_resolve_holds(
+    rule: &Rule,
+    ctx: &SensorContext,
+    now: DateTime<Utc>,
+    timers: &mut TimerStore,
+) -> bool {
     let Some(node) = rule
         .auto_resolve_params
         .as_ref()
@@ -229,12 +262,6 @@ fn try_auto_resolve(
     else {
         return false;
     };
-    let mut env = Env::new(now, rule.id, ctx, &mut state.timers);
-    if !eval_node(Some(&node), AUTO_RESOLVE_ROOT, &mut env) {
-        return false;
-    }
-    let transition = state
-        .tracker
-        .force_close(rule.id, CloseReason::AutoResolve, now);
-    transition.kind == TransitionType::ExcursionClosed
+    let mut env = Env::new(now, rule.id, ctx, timers);
+    eval_node(Some(&node), AUTO_RESOLVE_ROOT, &mut env)
 }

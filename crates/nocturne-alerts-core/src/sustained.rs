@@ -76,6 +76,17 @@ impl TimerStore {
         }
     }
 
+    /// Clears every timer of `rule_id`, recording a clear for each.
+    pub(crate) fn clear_all_for_rule(&mut self, rule_id: Uuid) {
+        if let Some(timers) = self.timers.remove(&rule_id) {
+            self.log.extend(timers.into_keys().map(|path| TimerOp {
+                kind: TimerOpKind::Clear,
+                path,
+                at: None,
+            }));
+        }
+    }
+
     /// The ops recorded since the last drain.
     pub fn drain_ops(&mut self) -> Vec<TimerOp> {
         std::mem::take(&mut self.log)

@@ -24,6 +24,7 @@ pub mod excursion;
 mod leaf_identity;
 pub mod model;
 pub mod paths;
+pub mod replay;
 pub mod sustained;
 pub mod validate;
 pub mod wall_clock;
