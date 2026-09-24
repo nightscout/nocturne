@@ -65,7 +65,7 @@ internal static class ConditionTreeFaults
             return new(path, "type_missing");
 
         var payload = ConditionNodePayloads.Select(node);
-        return Resolve(node.Type) switch
+        return AlertConditionTypeNames.Resolve(node.Type) switch
         {
             AlertConditionType.Composite => InComposite(payload as CompositeCondition, path),
             AlertConditionType.Not => InChild((payload as NotCondition)?.Child, path),
@@ -97,11 +97,6 @@ internal static class ConditionTreeFaults
         }
         return null;
     }
-
-    /// <summary>The kind <see cref="ConditionEvaluatorRegistry.GetEvaluator(string)"/> dispatches to.</summary>
-    private static AlertConditionType? Resolve(string type) =>
-        AlertConditionTypeNames.FromWireString(type)
-        ?? (Enum.TryParse<AlertConditionType>(type, ignoreCase: true, out var parsed) ? parsed : null);
 
     private static ConditionTreeFault? InChild(ConditionNode? child, string path) =>
         child is null ? null : InNode(child, $"{path}[0].{child.Type}");
