@@ -308,21 +308,11 @@ function makeDefault(kind: ConditionKind): ConditionNode {
 			return { type: "trend", trend: { bucket: "falling" } };
 		case "time_of_day":
 			// Stamp the browser's IANA timezone at creation time so the saved rule JSON is
-			// self-documenting and survives a future tenant tz change. The backend
-			// evaluator also falls back to the tenant tz when this is null, but writing
-			// it here keeps "what hour did the rule author mean?" answerable from the
-			// rule payload alone. The Intl guard keeps server-rendered call sites safe
-			// even though defaultPayload is currently only invoked from event handlers.
+			// self-documenting and survives a future tenant tz change. Without one the
+			// backend evaluates in the tenant's zone.
 			return {
 				type: "time_of_day",
-				time_of_day: {
-					from: "22:00",
-					to: "06:00",
-					timezone:
-						typeof Intl !== "undefined"
-							? Intl.DateTimeFormat().resolvedOptions().timeZone
-							: undefined,
-				},
+				time_of_day: { from: "22:00", to: "06:00", timezone: browserTimeZone() },
 			};
 		case "iob":
 			return { type: "iob", iob: { operator: ">=", value: 1 } };
@@ -451,6 +441,23 @@ function makeDefault(kind: ConditionKind): ConditionNode {
 					minutes: 0,
 				},
 			};
+	}
+}
+
+/**
+ * The browser's IANA timezone, or `undefined` when it reports none a rule can be
+ * evaluated in (`Etc/Unknown`, or an id `Intl` itself rejects), so the rule
+ * falls back to the tenant's zone instead of being refused on save.
+ */
+export function browserTimeZone(): string | undefined {
+	if (typeof Intl === "undefined") return undefined;
+	const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+	if (!zone || zone === "Etc/Unknown") return undefined;
+	try {
+		new Intl.DateTimeFormat("en", { timeZone: zone });
+		return zone;
+	} catch {
+		return undefined;
 	}
 }
 

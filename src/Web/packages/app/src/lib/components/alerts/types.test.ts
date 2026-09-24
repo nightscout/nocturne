@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import {
+	browserTimeZone,
 	defaultClientConfig,
 	defaultPayload,
 	nodeFromApi,
@@ -629,5 +630,31 @@ describe("validateChannels", () => {
 
 	it("accepts an empty channel list", () => {
 		expect(validateChannels([])).toBeNull();
+	});
+});
+
+describe("browserTimeZone", () => {
+	afterEach(() => vi.restoreAllMocks());
+
+	const reporting = (timeZone: string) =>
+		vi.spyOn(Intl.DateTimeFormat.prototype, "resolvedOptions").mockReturnValue({
+			...new Intl.DateTimeFormat().resolvedOptions(),
+			timeZone,
+		});
+
+	it("is the zone the browser reports", () => {
+		reporting("Europe/London");
+		expect(browserTimeZone()).toBe("Europe/London");
+	});
+
+	it("is undefined when the browser cannot tell, so the rule uses the tenant's zone", () => {
+		reporting("Etc/Unknown");
+		expect(browserTimeZone()).toBeUndefined();
+		expect(defaultPayload("time_of_day").time_of_day?.timezone).toBeUndefined();
+	});
+
+	it("is undefined for an id Intl rejects", () => {
+		reporting("Not/AZone");
+		expect(browserTimeZone()).toBeUndefined();
 	});
 });

@@ -19,7 +19,7 @@ describe("conditionIssuesMessage", () => {
 			"An alert-state condition needs a rule chosen."
 		);
 		expect(conditionIssuesMessage(rejected(400, "invalid_field:timezone"))).toBe(
-			"A time-of-day condition has a time zone that isn't recognised. Pick one from the list and save again."
+			"A time-of-day condition has a time zone that isn't recognised. Pick one from its time zone list, or clear it to use the profile's, and save again."
 		);
 		expect(conditionIssuesMessage(rejected(400, "invalid_field:value"))).toBe(
 			"Part of this rule's conditions is malformed, so it can't be saved."

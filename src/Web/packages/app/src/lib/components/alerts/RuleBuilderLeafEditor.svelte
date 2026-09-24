@@ -3,6 +3,9 @@
   import * as Select from "$lib/components/ui/select";
   import * as ToggleGroup from "$lib/components/ui/toggle-group";
   import { Switch } from "$lib/components/ui/switch";
+  import { Button } from "$lib/components/ui/button";
+  import TimezoneCombobox from "$lib/components/patient/TimezoneCombobox.svelte";
+  import { X } from "lucide-svelte";
   import { bg, bgLabel, convertFromDisplayUnits } from "$lib/utils/formatting";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import { untrack } from "svelte";
@@ -349,6 +352,28 @@
         if (node.time_of_day) node.time_of_day.to = e.currentTarget.value;
       }}
     />
+    <TimezoneCombobox
+      class="h-7 w-44 text-xs"
+      placeholder="Profile time zone"
+      value={node.time_of_day.timezone ?? undefined}
+      onValueChange={(zone) => {
+        if (node.time_of_day) node.time_of_day.timezone = zone;
+      }}
+    />
+    {#if node.time_of_day.timezone}
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        class="h-7 w-7"
+        aria-label="Use the profile time zone"
+        onclick={() => {
+          if (node.time_of_day) node.time_of_day.timezone = undefined;
+        }}
+      >
+        <X class="h-3.5 w-3.5" />
+      </Button>
+    {/if}
   {:else if (node.type === "iob" || node.type === "cob" || node.type === "reservoir" || node.type === "site_age" || node.type === "sensor_age" || node.type === "pump_battery" || node.type === "uploader_battery" || node.type === "sensitivity_ratio") && node[node.type]}
     {@const payload = node[node.type]!}
     {@const suffix = leafSuffix(node.type)}
