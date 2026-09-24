@@ -186,6 +186,17 @@ public class AlertSweepServiceSnoozeTests
     }
 
     [Fact]
+    public async Task HighSnooze_ASensorErrorReading_IsNotAFall()
+    {
+        FiveMinuteReadings(200, 200, 0);
+        var instance = Instance(SmartOn, conditionParams: HighRule);
+
+        await SweepAsync(instance);
+
+        ShouldBeCleared(instance);
+    }
+
+    [Fact]
     public async Task StaleReadings_ClearTheSnooze()
     {
         FiveMinuteReadings(50, 60, 75, ageMinutes: 20);

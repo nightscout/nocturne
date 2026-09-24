@@ -562,7 +562,8 @@ machine-checkable form is `tests/Parity/AlertEngineCorpus/replay/`.
     clears.
   - The trend fallback (smart snooze on, no conditions) applies to `threshold` rules only
     and compares the newest reading (at most 11 minutes old) with the readings closest to
-    5 and 10 minutes before it (each within ±2.5 minutes; both must exist). Extend when,
+    5 and 10 minutes before it (each within ±2.5 minutes; both must exist), all of them
+    readings with a glucose value: a sensor-error or warm-up reading is not a point. Extend when,
     in mg/dL and strictly greater: `below` — rise over 5 min > 4 or over 10 min > 10;
     `above` — fall over 5 min > 1 or over 10 min > 2 (xDrip's `trendingToAlertEnd`, on
     wall-clock spans rather than reading counts). Every other case clears. A second host
