@@ -449,6 +449,10 @@ quiet. An auto-resolve close from `hysteresis` (the last evaluation found the co
 false) does not set `AwaitingRearm`, nor does any other close reason. A manual close while
 the condition holds re-opens on the next evaluation, once.
 
+The host clears `AwaitingRearm` when a rule's condition, auto-resolve configuration or
+enablement changes: the hold was taken against the rule as it was when the auto-resolve
+closed it.
+
 State persisted before `AwaitingRearm` existed has none and reads as armed.
 
 ---
