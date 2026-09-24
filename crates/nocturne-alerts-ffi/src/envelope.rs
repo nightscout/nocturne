@@ -74,8 +74,7 @@ fn seed_timers(timers: &mut TimerStore, rule_id: Uuid, wire: &WireTimers) -> Res
 fn timers_json(timers: &TimerStore, rule_id: Uuid) -> Value {
     timers
         .snapshot_for_rule(rule_id)
-        .into_iter()
-        .map(|(path, at)| (path, format_instant(at).into()))
+        .map(|(path, at)| (path.to_owned(), format_instant(at).into()))
         .collect::<Map<_, _>>()
         .into()
 }
@@ -91,6 +90,12 @@ struct EvaluateRequest {
     /// Absent or null: never evaluated.
     #[serde(default)]
     tracker: Option<WireTracker>,
+    #[serde(default = "yes")]
+    include_leaves: bool,
+}
+
+fn yes() -> bool {
+    true
 }
 
 /// The corpus rule shape; unknown fields such as `name` are ignored.
@@ -194,7 +199,7 @@ pub(crate) fn evaluate(request_json: &str) -> Result<Value, String> {
         tracker.restore(&mut state.tracker, rule.id)?;
     }
 
-    let outcome = evaluate_rule(&rule, &req.context, req.now, &mut state);
+    let outcome = evaluate_rule(&rule, &req.context, req.now, &mut state, req.include_leaves);
     Ok(ok(json!({
         "result": outcome.to_json(),
         "timers": timers_json(&state.timers, rule.id),

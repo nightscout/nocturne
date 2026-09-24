@@ -201,12 +201,12 @@ fn reading(value: i64) -> SensorContext {
 fn a_rule_that_cannot_be_evaluated_is_skipped_with_its_state_untouched() {
     let mut state = EngineState::new();
     let good = rule(json!({ "operator": "and", "conditions": [low()] }));
-    let opened = evaluate_rule(&good, &reading(60), now(), &mut state);
+    let opened = evaluate_rule(&good, &reading(60), now(), &mut state, true);
     assert!(opened.evaluation.is_some_and(|e| e.tracker.is_some()));
     let before = format!("{:?}", state.tracker.state(good.id));
 
     let bad = rule(json!({ "operator": "and", "conditions": [low(), null] }));
-    let outcome = evaluate_rule(&bad, &reading(200), now(), &mut state);
+    let outcome = evaluate_rule(&bad, &reading(200), now(), &mut state, true);
     assert!(outcome.evaluation.is_none());
     assert_eq!(format!("{:?}", state.tracker.state(bad.id)), before);
 }
@@ -223,7 +223,7 @@ fn an_auto_resolve_tree_that_cannot_be_evaluated_never_resolves() {
             null
         ]),
     ));
-    let outcome = evaluate_rule(&r, &reading(60), now(), &mut state);
+    let outcome = evaluate_rule(&r, &reading(60), now(), &mut state, true);
     assert!(outcome.evaluation.is_some_and(|e| !e.auto_resolved));
     assert!(state.tracker.active_excursion_id(r.id).is_some());
 }

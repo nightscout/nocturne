@@ -57,8 +57,8 @@ pub struct RuleOutcome {
 #[derive(Debug, Clone)]
 pub struct Evaluation {
     pub root: bool,
-    /// Each leaf evaluated alone, indexed by leaf id; empty unless requested.
-    pub leaves: Vec<bool>,
+    /// Each leaf evaluated alone, indexed by leaf id, when requested.
+    pub leaves: Option<Vec<bool>>,
     pub transition: Transition,
     pub tracker: Option<TrackerState>,
     pub auto_resolved: bool,
@@ -97,13 +97,15 @@ impl RuleOutcome {
             return Value::Object(o);
         };
         o.insert("root".into(), e.root.into());
-        let leaves = e.leaves.iter().enumerate();
-        o.insert(
-            "leaves".into(),
-            leaves
-                .map(|(leaf_id, value)| json!({ "leaf_id": leaf_id, "value": value }))
-                .collect(),
-        );
+        if let Some(leaves) = &e.leaves {
+            let leaves = leaves.iter().enumerate();
+            o.insert(
+                "leaves".into(),
+                leaves
+                    .map(|(leaf_id, value)| json!({ "leaf_id": leaf_id, "value": value }))
+                    .collect(),
+            );
+        }
         o.insert("transition".into(), e.transition.kind.wire().into());
         if let Some(reason) = e.transition.close_reason {
             o.insert("close_reason".into(), reason.wire().into());
@@ -145,16 +147,17 @@ pub fn evaluate_tick(
 ) -> Vec<RuleOutcome> {
     rules
         .iter()
-        .map(|rule| evaluate_rule(rule, ctx, now, state))
+        .map(|rule| evaluate_rule(rule, ctx, now, state, true))
         .collect()
 }
 
-/// Evaluates one rule for one tick.
+/// Evaluates one rule for one tick, and each leaf alone when `log_leaves`.
 pub fn evaluate_rule(
     rule: &Rule,
     ctx: &SensorContext,
     now: DateTime<Utc>,
     state: &mut EngineState,
+    log_leaves: bool,
 ) -> RuleOutcome {
     // A JSON null body is a null condition record, which evaluates false.
     let payload = match &rule.condition_params {
@@ -179,10 +182,12 @@ pub fn evaluate_rule(
     // Leaves evaluate alone, with no short-circuit, at the rule's root path;
     // a leaf touches no timers.
     let full_node = Node::from_rule(rule.condition_type, payload);
-    let leaves = collect_leaves(&full_node)
-        .into_iter()
-        .map(|leaf| eval_node(leaf, wire, &mut env))
-        .collect();
+    let leaves = log_leaves.then(|| {
+        collect_leaves(&full_node)
+            .into_iter()
+            .map(|leaf| eval_node(leaf, wire, &mut env))
+            .collect()
+    });
 
     let config = TrackerRuleConfig {
         confirmation_readings: rule.confirmation_readings,

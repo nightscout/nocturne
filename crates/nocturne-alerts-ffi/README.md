@@ -88,9 +88,15 @@ preserves sub-second precision when present.
     "updated_at": "2026-01-05T11:55:00Z",   // REQUIRED whenever state is present
     "hysteresis_started_at": null,          // set only in hysteresis; absent there = adopt updated_at once
     "next_excursion_ordinal": 4             // default 1; see "State threading"
-  }
+  },
+  "include_leaves": true                    // optional; default true
 }
 ```
+
+`include_leaves: false` skips the leaf log: every leaf is otherwise evaluated
+alone on every call, and `result.leaves` is then absent. Nothing else in the
+response changes, so a host that does not read `result.leaves` on the live
+path should send `false`.
 
 Unknown fields (e.g. the scenario `name`) are ignored, so a corpus
 `ScenarioRule` object can be passed as `rule` verbatim.

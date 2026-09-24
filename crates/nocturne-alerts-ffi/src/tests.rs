@@ -55,6 +55,36 @@ fn version_returns_crate_version() {
 }
 
 #[test]
+fn include_leaves_false_omits_only_the_leaf_log() {
+    let mut request = json!({
+        "schema_version": 1,
+        "rule": {
+            "id": "00000000-0000-0000-0000-000000000001",
+            "condition_type": "composite",
+            "condition_params": { "operator": "and", "conditions": [
+                { "type": "threshold", "threshold": { "direction": "below", "value": 70 } },
+                { "type": "sustained", "sustained": { "minutes": 5, "child":
+                    { "type": "iob", "iob": { "operator": "<", "value": 1 } } } }
+            ] }
+        },
+        "context": { "latest_value": 60, "latest_timestamp": "2026-01-05T12:00:00Z", "iob_units": 0 },
+        "now": "2026-01-05T12:00:00Z",
+    });
+    let mut with_leaves = evaluate(&request);
+    assert_eq!(
+        with_leaves["result"]["leaves"].as_array().map(Vec::len),
+        Some(2)
+    );
+    request["include_leaves"] = json!(false);
+    let without = evaluate(&request);
+    with_leaves["result"]
+        .as_object_mut()
+        .unwrap()
+        .remove("leaves");
+    assert_eq!(without, with_leaves);
+}
+
+#[test]
 fn tzdb_version_is_the_compiled_release() {
     unsafe {
         let ptr = nocturne_alerts_tzdb_version();
