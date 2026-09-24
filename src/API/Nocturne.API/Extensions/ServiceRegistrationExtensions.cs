@@ -84,6 +84,7 @@ using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Shared.Services;
 using JwtOptions = Nocturne.Core.Models.Configuration.JwtOptions;
 using OidcOptions = Nocturne.Core.Models.Configuration.OidcOptions;
+using OpenTelemetry.Metrics;
 
 namespace Nocturne.API.Extensions;
 
@@ -1048,6 +1049,11 @@ public static class ServiceRegistrationExtensions
             pollingService: typeof(ConnectorBackgroundService<,>)
         );
         services.AddSingleton(ConnectorSyncBudget.FromConfiguration(configuration, services));
+        // IMeterFactory comes from the host; AddMetrics keeps the registration self-sufficient for a
+        // host that has not enabled the OpenTelemetry metrics pipeline.
+        services.AddMetrics();
+        services.AddSingleton<ConnectorSyncMetrics>();
+        services.ConfigureOpenTelemetryMeterProvider(metrics => metrics.AddMeter(ConnectorSyncMetrics.MeterName));
         // After AddConnectors: the installers register the token caches as IConnectorCacheInvalidator
         // with TryAddSingleton, which a prior registration of the interface would silently suppress.
         services.AddSingleton<ConnectorPollerNudge>();

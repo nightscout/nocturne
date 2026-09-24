@@ -57,8 +57,9 @@ public class ConnectorBackgroundServiceTests
             Action? onSyncCompleted = null,
             ConnectorSyncBudget? budget = null,
             ConnectorPollerNudge? nudge = null,
-            TimeSpan? unconfiguredRecheck = null)
-            : base(serviceProvider, budget ?? new ConnectorSyncBudget(), logger, nudge)
+            TimeSpan? unconfiguredRecheck = null,
+            ConnectorSyncMetrics? metrics = null)
+            : base(serviceProvider, budget ?? new ConnectorSyncBudget(), logger, nudge, metrics)
         {
             _syncResult = syncResult;
             _onSync = onSync;
@@ -582,6 +583,70 @@ public class ConnectorBackgroundServiceTests
                 It.IsAny<CancellationToken>()),
             Times.Once,
             "Expected error message to be cleared on successful sync");
+    }
+
+    /// <summary>
+    /// A sync must leave one duration with the outcome and one slot-wait measurement, tagged with the
+    /// connector and never the tenant.
+    /// </summary>
+    [Fact]
+    public async Task SuccessfulSync_RecordsDurationAndSlotWait()
+    {
+        var (cleanup, connStr) = CreateSqliteDb();
+        using var _ = cleanup;
+
+        using var factory = new TestMeterFactory();
+        using var listener = new ConnectorMetricListener(factory);
+        var budget = new ConnectorSyncBudget();
+        var metrics = new ConnectorSyncMetrics(factory, budget);
+
+        var configServiceMock = BuildEnabledConfigMock();
+        var serviceProvider = BuildServiceProvider(
+            connStr, configServiceMock, new TestConnectorConfig { Enabled = true, SyncIntervalMinutes = 5 });
+
+        var sut = new TestConnectorBackgroundService(
+            serviceProvider,
+            new SyncResult { Success = true, Message = "OK" },
+            NullLogger<TestConnectorBackgroundService>.Instance,
+            budget: budget,
+            metrics: metrics);
+
+        await sut.ExecuteOnceAsync(CancellationToken.None);
+
+        listener.SlotWaits.Should().ContainSingle("a sync takes exactly one slot");
+        listener.SlotWaits[0].Connector.Should().Be("TestConnector");
+
+        listener.Durations.Should().ContainSingle("a sync is measured exactly once");
+        listener.Durations[0].Connector.Should().Be("TestConnector");
+        listener.Durations[0].Outcome.Should().Be("success");
+    }
+
+    [Fact]
+    public async Task FailedSync_RecordsFailureOutcome()
+    {
+        var (cleanup, connStr) = CreateSqliteDb();
+        using var _ = cleanup;
+
+        using var factory = new TestMeterFactory();
+        using var listener = new ConnectorMetricListener(factory);
+        var budget = new ConnectorSyncBudget();
+        var metrics = new ConnectorSyncMetrics(factory, budget);
+
+        var configServiceMock = BuildEnabledConfigMock();
+        var serviceProvider = BuildServiceProvider(
+            connStr, configServiceMock, new TestConnectorConfig { Enabled = true, SyncIntervalMinutes = 5 });
+
+        var sut = new TestConnectorBackgroundService(
+            serviceProvider,
+            new SyncResult { Success = false, Errors = ["upstream refused"] },
+            NullLogger<TestConnectorBackgroundService>.Instance,
+            budget: budget,
+            metrics: metrics);
+
+        await sut.ExecuteOnceAsync(CancellationToken.None);
+
+        listener.Durations.Should().ContainSingle();
+        listener.Durations[0].Outcome.Should().Be("failure");
     }
 
     /// <summary>
