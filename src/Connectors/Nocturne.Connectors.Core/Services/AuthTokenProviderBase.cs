@@ -170,7 +170,7 @@ public abstract class AuthTokenProviderBase<TConfig>(
             var result = await AcquireTokenAsync(config, cancellationToken);
             return !string.IsNullOrEmpty(result.Token);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             _logger.LogWarning(ex, "Credential verification failed for {ProviderName}", GetType().Name);
             return false;
