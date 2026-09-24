@@ -72,6 +72,28 @@ public class ResponseStrictnessTests
         act.Should().Throw<RustAlertEngineException>();
     }
 
+    [Theory]
+    [InlineData("""[{"op":"set","path":"sustained"}]""")]
+    [InlineData("""[{"op":"clear","path":"sustained","at":"2026-01-05T12:00:00Z"}]""")]
+    [InlineData("""[{"op":"reset","path":"sustained"}]""")]
+    [InlineData("""[{"op":"clear"}]""")]
+    public void A_malformed_timer_op_throws(string ops)
+    {
+        var act = () => RustAlertEngine.ParseEvaluateNodeResponse(
+            $$"""{"schema_version":1,"ok":true,"value":true,"timers":{},"timer_ops":{{ops}}}""");
+
+        act.Should().Throw<RustAlertEngineException>();
+    }
+
+    [Fact]
+    public void Timer_ops_parse()
+    {
+        var response = RustAlertEngine.ParseEvaluateNodeResponse(
+            """{"schema_version":1,"ok":true,"value":true,"timers":{},"timer_ops":[{"op":"set","path":"a","at":"2026-01-05T12:00:00Z"},{"op":"clear","path":"b"}]}""");
+
+        response.TimerOps!.Select(o => o.Op).Should().Equal(RustTimerOpKind.Set, RustTimerOpKind.Clear);
+    }
+
     [Fact]
     public void Another_schema_version_throws()
     {

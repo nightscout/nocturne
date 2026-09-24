@@ -112,6 +112,7 @@ public static class RustAlertEngine
         Require(!leavesRequested || result.Leaves is not null, "evaluate", "result.leaves");
         Require(result.Transition is not null, "evaluate", "result.transition");
         Require((result.Transition == RustTransition.Closed) == (result.CloseReason is not null), "evaluate", "result.close_reason");
+        RequireTimerOps(result.TimerOps, "evaluate", "result.timer_ops");
         return result;
     }
 
@@ -137,6 +138,7 @@ public static class RustAlertEngine
         var response = ParseResponse<RustEvaluateNodeResponse>(responseJson, "evaluate_node");
         Require(response.Value is not null, "evaluate_node", "value");
         Require(response.Timers is not null, "evaluate_node", "timers");
+        RequireTimerOps(response.TimerOps, "evaluate_node", "timer_ops");
         return response;
     }
 
@@ -230,6 +232,12 @@ public static class RustAlertEngine
             throw new RustAlertEngineException(
                 $"Rust alert engine rejected the {operation} request: {response.Error ?? "(no error message)"}");
         return response;
+    }
+
+    private static void RequireTimerOps(List<RustTimerOp>? ops, string operation, string field)
+    {
+        foreach (var op in ops ?? [])
+            Require((op.Op == RustTimerOpKind.Set) == (op.At is not null), operation, $"{field}.at");
     }
 
     private static void Require(bool present, string operation, string field)

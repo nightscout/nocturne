@@ -262,11 +262,19 @@ public sealed record RustLeafValue(
     [property: JsonPropertyName("leaf_id")] int LeafId,
     [property: JsonPropertyName("value")] bool Value);
 
-/// <summary>One sustained-timer mutation: <c>op</c> is <c>set</c> (with <c>at</c>) or <c>clear</c>.</summary>
+/// <summary>One sustained-timer mutation; <see cref="At"/> is present exactly on a <see cref="RustTimerOpKind.Set"/>.</summary>
 public sealed record RustTimerOp(
-    [property: JsonPropertyName("op")] string Op,
-    [property: JsonPropertyName("path")] string Path,
+    [property: JsonPropertyName("op"), JsonRequired] RustTimerOpKind Op,
+    [property: JsonPropertyName("path"), JsonRequired] string Path,
     [property: JsonPropertyName("at")] DateTime? At);
+
+/// <summary>Timer op wire values in <see cref="RustTimerOp.Op"/>.</summary>
+[JsonConverter(typeof(StrictStringEnumConverter<RustTimerOpKind>))]
+public enum RustTimerOpKind
+{
+    [JsonStringEnumMemberName("set")] Set,
+    [JsonStringEnumMemberName("clear")] Clear,
+}
 
 /// <summary>Request envelope for <c>nocturne_alerts_evaluate_node</c>.</summary>
 public sealed record RustEvaluateNodeRequest

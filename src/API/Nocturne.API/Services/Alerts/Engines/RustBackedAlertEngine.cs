@@ -232,21 +232,12 @@ internal sealed class RustBackedAlertEngine(
 
     private async Task ApplyTimerOpsAsync(Guid ruleId, IReadOnlyList<RustTimerOp>? ops, CancellationToken ct)
     {
-        if (ops is null) return;
-        foreach (var op in ops)
+        foreach (var op in ops ?? [])
         {
-            switch (op.Op)
-            {
-                case "set" when op.At is { } at:
-                    await timerStore.SetFirstTrueAsync(ruleId, op.Path, at, ct);
-                    break;
-                case "clear":
-                    await timerStore.ClearAsync(ruleId, op.Path, ct);
-                    break;
-                default:
-                    logger.LogWarning("Unknown timer op '{Op}' for rule {AlertRuleId} path {Path}", op.Op, ruleId, op.Path);
-                    break;
-            }
+            if (op.Op == RustTimerOpKind.Set)
+                await timerStore.SetFirstTrueAsync(ruleId, op.Path, op.At!.Value, ct);
+            else
+                await timerStore.ClearAsync(ruleId, op.Path, ct);
         }
     }
 
