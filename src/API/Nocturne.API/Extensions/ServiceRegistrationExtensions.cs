@@ -1091,6 +1091,7 @@ public static class ServiceRegistrationExtensions
     {
         services.AddMetrics();
         services.AddSingleton<Nocturne.API.Services.Alerts.Engines.AlertEngineErrors>();
+        services.AddSingleton<Nocturne.API.Services.Alerts.Engines.ConditionVersionLog>();
         services.ConfigureOpenTelemetryMeterProvider(metrics =>
             metrics.AddMeter(Nocturne.API.Services.Alerts.Engines.AlertEngineErrors.MeterName));
         services.AddHealthChecks()

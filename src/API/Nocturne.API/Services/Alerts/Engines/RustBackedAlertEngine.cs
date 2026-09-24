@@ -75,8 +75,10 @@ internal sealed class RustBackedAlertEngine(
 
         if (result.Skipped)
         {
-            // No evaluator for the root type: state passes through unchanged, nothing persisted.
-            logger.LogWarning("No evaluator registered for condition type '{ConditionType}'", rule.ConditionType);
+            // The envelope rejects a body that does not parse before evaluating it, so this is
+            // reached only if the two checks disagree; the orchestrator logs rejections.
+            logger.LogWarning(
+                "Rust engine skipped alert rule {AlertRuleId}: its condition tree cannot be evaluated", rule.Id);
             return new AlertEngineEvaluation { Skipped = true };
         }
 

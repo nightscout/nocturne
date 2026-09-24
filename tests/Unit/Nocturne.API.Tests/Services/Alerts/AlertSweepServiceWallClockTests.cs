@@ -5,7 +5,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Nocturne.Alerts.ParityCorpus.Generator.Harness;
 using Nocturne.API.Multitenancy;
+using Microsoft.Extensions.Logging;
 using Nocturne.API.Services.Alerts;
+using Nocturne.API.Services.Alerts.Engines;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Tests.Services.Alerts.Engines;
 using Nocturne.API.Tests.TestDoubles;
@@ -156,6 +158,35 @@ public class AlertSweepServiceWallClockTests
     }
 
     [Fact]
+    public Task Managed_engine_reports_an_unevaluable_tree_once() =>
+        RunUnevaluableAsync(useRustEngine: false);
+
+    [NativeFact]
+    public Task Rust_backed_engine_reports_an_unevaluable_tree_once() =>
+        RunUnevaluableAsync(useRustEngine: true);
+
+    private static async Task RunUnevaluableAsync(bool useRustEngine)
+    {
+        const string lossAndBroken = """
+            {"operator": "and", "conditions": [
+              {"type": "signal_loss", "signal_loss": {"timeout_minutes": 15}},
+              {"type": "composite"}
+            ]}
+            """;
+        var fixture = new Fixture(useRustEngine, AlertConditionType.Composite, lossAndBroken)
+        {
+            LastReadingAt = T0,
+        };
+
+        await fixture.SweepAt(T0.AddMinutes(1));
+        await fixture.SweepAt(T0.AddMinutes(2));
+        await fixture.SweepAt(T0.AddMinutes(3));
+
+        fixture.OrchestratorLogger.Entries.Should().ContainSingle(e => e.Level >= LogLevel.Warning)
+            .Which.Message.Should().Contain("cannot be evaluated");
+    }
+
+    [Fact]
     public async Task An_unwalkable_tree_is_reported_once_per_version()
     {
         var unwalkable = new AlertRule
@@ -274,6 +305,7 @@ public class AlertSweepServiceWallClockTests
 
         public ManualTimeProvider Time { get; } = new();
         public ListLogger<AlertSweepService> Logger { get; } = new();
+        public ListLogger<AlertOrchestrator> OrchestratorLogger { get; } = new();
         public InMemoryTrackerRepository TrackerRepo { get; }
         public DateTime? LastReadingAt { get; set; }
         public double? LatestMgdl { get; set; }
@@ -406,6 +438,8 @@ public class AlertSweepServiceWallClockTests
                     .UseSqlite("DataSource=:memory:")
                     .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
                     .Options));
+            services.AddSingleton<ConditionVersionLog>();
+            services.AddSingleton<ILogger<AlertOrchestrator>>(OrchestratorLogger);
             services.AddScoped<IAlertOrchestrator, AlertOrchestrator>();
 
             _sweep = new AlertSweepService(

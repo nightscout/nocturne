@@ -2,7 +2,10 @@ using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
+using Nocturne.API.Services.Alerts.Engines;
+using Nocturne.API.Services.Alerts.Evaluators;
 using Nocturne.API.Services.Realtime;
+using Nocturne.Core.Alerts.Native;
 
 namespace Nocturne.API.Services.Alerts;
 
@@ -19,8 +22,9 @@ namespace Nocturne.API.Services.Alerts;
 /// persistence (sustained timers, tracker state, excursion rows); which engine runs
 /// (managed C# evaluators, Rust over FFI, or shadow) is selected by <c>Alerts:Engine</c>.
 /// Errors from individual rule evaluations are caught and logged without aborting the rest of
-/// the evaluation pass. Delayed escalation is a separate rule whose tree references the parent
-/// through an <c>alert_state</c> condition.
+/// the evaluation pass. A rule whose stored condition tree cannot be evaluated fails the same way
+/// on every pass, so that is logged once per version of the condition. Delayed escalation is a
+/// separate rule whose tree references the parent through an <c>alert_state</c> condition.
 /// </remarks>
 /// <seealso cref="IAlertOrchestrator"/>
 /// <seealso cref="IAlertEvaluationEngine"/>
@@ -33,6 +37,7 @@ internal sealed class AlertOrchestrator(
     ISensorContextEnricher contextEnricher,
     IAlertAcknowledgementService acknowledgementService,
     IExcursionResolutionHandler resolutionHandler,
+    ConditionVersionLog conditionLog,
     TimeProvider timeProvider,
     ILogger<AlertOrchestrator> logger)
     : IAlertOrchestrator
@@ -68,6 +73,16 @@ internal sealed class AlertOrchestrator(
             try
             {
                 await EvaluateRuleAsync(rule, enriched, tenantId, ct);
+            }
+            catch (Exception ex) when (ex is ConditionTreeFaultException
+                                       or RustAlertEngineException { IsConditionRejection: true })
+            {
+                if (conditionLog.FirstFor(rule.Id, rule.ConditionType, rule.ConditionParams))
+                {
+                    logger.LogWarning(ex,
+                        "Condition tree of alert rule {AlertRuleId} cannot be evaluated; the rule is skipped until it is edited",
+                        rule.Id);
+                }
             }
             catch (Exception ex)
             {
