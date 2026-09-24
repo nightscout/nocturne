@@ -659,6 +659,80 @@ fn tracker_restore_without_hysteresis_start_adopts_updated_at() {
 }
 
 #[test]
+fn tracker_close_elapsed_hysteresis_closes_once_the_window_has_elapsed() {
+    let mut tracker = ExcursionTracker::new();
+    let config = cfg(1, 30);
+    let _ = tracker.process_evaluation(rule_id(), config, true, at(0));
+    let _ = tracker.process_evaluation(rule_id(), config, false, at(5));
+
+    let t = tracker.close_elapsed_hysteresis(rule_id(), config, at(34));
+    assert_eq!(t.kind, TransitionType::None);
+    let state = tracker.state(rule_id()).unwrap();
+    assert_eq!(state.state, TrackerStateKind::Hysteresis);
+    assert_eq!(
+        state.updated_at,
+        at(5),
+        "a check that does not close writes nothing"
+    );
+
+    let t = tracker.close_elapsed_hysteresis(rule_id(), config, at(35));
+    assert_eq!(t.kind, TransitionType::ExcursionClosed);
+    assert_eq!(t.close_reason, Some(CloseReason::Hysteresis));
+    assert_eq!(t.excursion, Some(1));
+    let state = tracker.state(rule_id()).unwrap();
+    assert_eq!(state.state, TrackerStateKind::Idle);
+    assert_eq!(state.active_excursion, None);
+    assert_eq!(state.hysteresis_started_at, None);
+    assert_eq!(state.updated_at, at(35));
+}
+
+#[test]
+fn tracker_close_elapsed_hysteresis_ignores_every_other_state() {
+    let mut tracker = ExcursionTracker::new();
+    let config = cfg(2, 0);
+    let t = tracker.close_elapsed_hysteresis(rule_id(), config, at(0));
+    assert_eq!(t.kind, TransitionType::None);
+    assert!(tracker.state(rule_id()).is_none());
+
+    let _ = tracker.process_evaluation(rule_id(), config, true, at(0));
+    let t = tracker.close_elapsed_hysteresis(rule_id(), config, at(60));
+    assert_eq!(t.kind, TransitionType::None);
+    assert_eq!(
+        tracker.state(rule_id()).unwrap().state,
+        TrackerStateKind::Confirming
+    );
+
+    let _ = tracker.process_evaluation(rule_id(), config, true, at(5));
+    let t = tracker.close_elapsed_hysteresis(rule_id(), config, at(60));
+    assert_eq!(t.kind, TransitionType::None);
+    assert_eq!(
+        tracker.state(rule_id()).unwrap().state,
+        TrackerStateKind::Active
+    );
+}
+
+#[test]
+fn tracker_close_elapsed_hysteresis_matches_the_evaluation_expiry() {
+    for minutes in [-5, 0, 5, 12, 30] {
+        let expected = hysteresis_close_minute(minutes);
+        let mut tracker = ExcursionTracker::new();
+        let config = cfg(1, minutes);
+        let _ = tracker.process_evaluation(rule_id(), config, true, at(0));
+        let _ = tracker.process_evaluation(rule_id(), config, false, at(5));
+        let closed_at = (10..=120)
+            .step_by(5)
+            .find(|&m| {
+                tracker
+                    .close_elapsed_hysteresis(rule_id(), config, at(m))
+                    .kind
+                    == TransitionType::ExcursionClosed
+            })
+            .unwrap();
+        assert_eq!(closed_at, expected, "hysteresis_minutes {minutes}");
+    }
+}
+
+#[test]
 fn tracker_force_close_from_active_resets_to_idle() {
     let mut tracker = ExcursionTracker::new();
     let _ = tracker.process_evaluation(rule_id(), cfg(1, 0), true, at(0));

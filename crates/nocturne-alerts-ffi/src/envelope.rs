@@ -115,12 +115,12 @@ struct WireRule {
     auto_resolve_params: Option<Value>,
 }
 
-fn one<T: From<u8>>() -> T {
+pub(crate) fn one<T: From<u8>>() -> T {
     T::from(1)
 }
 
 #[derive(Deserialize)]
-struct WireTracker {
+pub(crate) struct WireTracker {
     /// Absent or null: no per-rule state yet, only the shared ordinal.
     #[serde(default)]
     state: Option<String>,
@@ -139,7 +139,11 @@ struct WireTracker {
 }
 
 impl WireTracker {
-    fn restore(&self, tracker: &mut ExcursionTracker, rule_id: Uuid) -> Result<(), String> {
+    pub(crate) fn restore(
+        &self,
+        tracker: &mut ExcursionTracker,
+        rule_id: Uuid,
+    ) -> Result<(), String> {
         tracker.set_next_excursion_ordinal(self.next_excursion_ordinal);
         let Some(s) = &self.state else {
             return Ok(());
@@ -209,7 +213,7 @@ pub(crate) fn evaluate(request_json: &str) -> Result<Value, String> {
 
 /// The tracker after evaluation. The per-rule fields are present once the
 /// rule has state; `next_excursion_ordinal` always is.
-fn tracker_json(tracker: &ExcursionTracker, rule_id: Uuid) -> Value {
+pub(crate) fn tracker_json(tracker: &ExcursionTracker, rule_id: Uuid) -> Value {
     let mut t = Map::new();
     if let Some(s) = tracker.state(rule_id) {
         t.insert("state".into(), s.state.wire().into());

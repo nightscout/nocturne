@@ -81,6 +81,16 @@ impl CloseReason {
             CloseReason::Manual => "manual",
         }
     }
+
+    #[must_use]
+    pub fn from_wire(s: &str) -> Option<Self> {
+        match s {
+            "hysteresis" => Some(CloseReason::Hysteresis),
+            "auto" => Some(CloseReason::AutoResolve),
+            "manual" => Some(CloseReason::Manual),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -253,6 +263,31 @@ impl ExcursionTracker {
         }
     }
 
+    /// Closes the rule's excursion when it is in hysteresis and the window has
+    /// elapsed (§6.1), without an evaluation: a host's periodic check for
+    /// windows no evaluation arrives to close. Any other state is a `None`
+    /// transition and unchanged, except that a hysteresis state without a
+    /// start keeps the `updated_at` it adopts.
+    pub fn close_elapsed_hysteresis(
+        &mut self,
+        rule_id: Uuid,
+        config: TrackerRuleConfig,
+        now: DateTime<Utc>,
+    ) -> Transition {
+        let Some(state) = self.states.get_mut(&rule_id) else {
+            return Transition::none();
+        };
+        if state.state != TrackerStateKind::Hysteresis {
+            return Transition::none();
+        }
+        let started = *state.hysteresis_started_at.get_or_insert(state.updated_at);
+        if !hysteresis_elapsed(started, config.hysteresis_minutes, now) {
+            return Transition::none();
+        }
+        state.updated_at = now;
+        close_from_hysteresis(state)
+    }
+
     /// Closes the rule's excursion, if it has one, from any state (§6.2);
     /// otherwise a `None` transition.
     pub fn force_close(
@@ -315,18 +350,22 @@ fn handle_hysteresis(
 
     let started = state.hysteresis_started_at.unwrap_or(state.updated_at);
     if hysteresis_elapsed(started, config.hysteresis_minutes, now) {
-        let excursion = state.active_excursion;
-        state.state = TrackerStateKind::Idle;
-        state.confirmation_count = 0;
-        state.active_excursion = None;
-        state.hysteresis_started_at = None;
-        return Transition {
-            kind: TransitionType::ExcursionClosed,
-            excursion,
-            close_reason: Some(CloseReason::Hysteresis),
-        };
+        return close_from_hysteresis(state);
     }
     Transition::none()
+}
+
+fn close_from_hysteresis(state: &mut TrackerState) -> Transition {
+    let excursion = state.active_excursion;
+    state.state = TrackerStateKind::Idle;
+    state.confirmation_count = 0;
+    state.active_excursion = None;
+    state.hysteresis_started_at = None;
+    Transition {
+        kind: TransitionType::ExcursionClosed,
+        excursion,
+        close_reason: Some(CloseReason::Hysteresis),
+    }
 }
 
 /// `now - started >= hysteresis_minutes` as exact whole minutes, so a

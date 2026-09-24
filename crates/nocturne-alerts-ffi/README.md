@@ -28,6 +28,9 @@ char* nocturne_alerts_classify(const char* request_json);
 char* nocturne_alerts_references_wall_clock(const char* request_json);
 char* nocturne_alerts_describe(const char* request_json);
 char* nocturne_alerts_validate(const char* request_json);
+char* nocturne_alerts_tracker_process(const char* request_json);
+char* nocturne_alerts_tracker_force_close(const char* request_json);
+char* nocturne_alerts_tracker_close_elapsed_hysteresis(const char* request_json);
 void  nocturne_alerts_free_string(char* ptr);
 ```
 
@@ -424,6 +427,51 @@ node's condition path under that scope's root (a null slot's path ends in
 on, when there is one. Neither ever carries a payload value. A malformed tree
 reports only its first structural error, as the reader stops there. A rule with
 issues is `ok: true`; only an unusable envelope is the error envelope.
+
+## Tracker (`nocturne_alerts_tracker_*`)
+
+The excursion state machine (`docs/alerts/engine-semantics.md` §6) without a
+condition tree, for the host paths that move a tracker without evaluating a
+rule: feeding an externally decided truth, closing an excursion by hand or on
+auto-resolve, and the periodic close of hysteresis windows no evaluation
+arrives to close. The `tracker` object in and out is the evaluate envelope's,
+threaded the same way (see "State threading").
+
+Requests (all take `schema_version` and `now`; `tracker` absent or null means
+the rule has never been evaluated):
+
+```jsonc
+// nocturne_alerts_tracker_process: one evaluation's truth
+{ "schema_version": 1, "tracker": { /* … */ }, "now": "…",
+  "config": { "confirmation_readings": 1, "hysteresis_minutes": 0 },  // both optional
+  "condition_met": true }
+
+// nocturne_alerts_tracker_force_close: from any state holding an excursion (§6.2)
+{ "schema_version": 1, "tracker": { /* … */ }, "now": "…",
+  "reason": "manual" }                       // hysteresis | auto | manual
+
+// nocturne_alerts_tracker_close_elapsed_hysteresis: only in hysteresis, only once the window has elapsed (§6.1)
+{ "schema_version": 1, "tracker": { /* … */ }, "now": "…",
+  "config": { "hysteresis_minutes": 30 } }
+```
+
+Response:
+
+```jsonc
+{
+  "schema_version": 1,
+  "ok": true,
+  "transition": { "type": "closed", "excursion_ordinal": 3, "close_reason": "manual" },
+  "tracker": { /* full post-state; persist verbatim */ }
+}
+```
+
+`transition.type` is the evaluate result's `transition` vocabulary;
+`excursion_ordinal` names the excursion the transition involved, which a close
+has already cleared from `tracker`. A hysteresis state without
+`hysteresis_started_at` adopts `updated_at` on the close-elapsed call even when
+the window has not elapsed, so persist the returned `tracker` either way. An
+unknown `reason` is the error envelope.
 
 ## Kotlin (UniFFI)
 

@@ -15,6 +15,7 @@ compile_error!("the FFI boundary catches panics, which needs panic = \"unwind\""
 
 mod c_abi;
 mod envelope;
+mod tracker_envelope;
 mod validate_envelope;
 
 #[cfg(feature = "uniffi")]
@@ -25,6 +26,9 @@ uniffi::setup_scaffolding!("nocturne_alerts");
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod tracker_tests;
 
 #[cfg(test)]
 mod validate_tests;

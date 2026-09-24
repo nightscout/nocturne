@@ -37,11 +37,14 @@ fn call(f: unsafe extern "C" fn(*const c_char) -> *mut c_char, input: &str) -> S
     }
 }
 
-fn call_json(f: unsafe extern "C" fn(*const c_char) -> *mut c_char, input: &str) -> Value {
+pub(crate) fn call_json(
+    f: unsafe extern "C" fn(*const c_char) -> *mut c_char,
+    input: &str,
+) -> Value {
     serde_json::from_str(&call(f, input)).expect("FFI returned valid JSON")
 }
 
-fn evaluate(request: &Value) -> Value {
+pub(crate) fn evaluate(request: &Value) -> Value {
     call_json(nocturne_alerts_evaluate, &request.to_string())
 }
 
@@ -111,16 +114,16 @@ fn free_string_accepts_null() {
 // ---------------------------------------------------------------------------
 
 #[derive(serde::Deserialize)]
-struct ScenarioFile {
-    name: String,
-    rules: Vec<Value>,
-    ticks: Vec<ScenarioTick>,
+pub(crate) struct ScenarioFile {
+    pub(crate) name: String,
+    pub(crate) rules: Vec<Value>,
+    pub(crate) ticks: Vec<ScenarioTick>,
 }
 
 #[derive(serde::Deserialize)]
-struct ScenarioTick {
-    at: String,
-    context: Value,
+pub(crate) struct ScenarioTick {
+    pub(crate) at: String,
+    pub(crate) context: Value,
 }
 
 fn corpus_dir() -> PathBuf {
@@ -132,7 +135,7 @@ fn corpus_dir() -> PathBuf {
 
 /// Lists every corpus scenario file (excluding the `.expected.json`
 /// snapshots), sorted for determinism.
-fn scenario_paths() -> Vec<PathBuf> {
+pub(crate) fn scenario_paths() -> Vec<PathBuf> {
     let mut paths: Vec<PathBuf> = fs::read_dir(corpus_dir())
         .expect("read corpus dir")
         .map(|e| e.expect("dir entry").path())
@@ -147,7 +150,7 @@ fn scenario_paths() -> Vec<PathBuf> {
     paths
 }
 
-fn load_scenario(path: &PathBuf) -> (ScenarioFile, Value) {
+pub(crate) fn load_scenario(path: &PathBuf) -> (ScenarioFile, Value) {
     let scenario: ScenarioFile =
         serde_json::from_str(&fs::read_to_string(path).expect("read scenario"))
             .unwrap_or_else(|e| panic!("parse {}: {e}", path.display()));
@@ -162,7 +165,7 @@ fn load_scenario(path: &PathBuf) -> (ScenarioFile, Value) {
 }
 
 /// Error prefix of a rule body that cannot be evaluated.
-const UNEVALUABLE_RULE: &str = "malformed condition_params for ";
+pub(crate) const UNEVALUABLE_RULE: &str = "malformed condition_params for ";
 
 /// Drives one scenario through an evaluate-envelope function (C ABI or
 /// UniFFI), threading the timers/tracker state envelopes between ticks exactly
@@ -539,7 +542,7 @@ fn evaluate_node_rejects_null_pointer() {
 // Error envelopes
 // ---------------------------------------------------------------------------
 
-fn assert_error(response: &Value, fragment: &str) {
+pub(crate) fn assert_error(response: &Value, fragment: &str) {
     assert_eq!(response["schema_version"], json!(1));
     assert_eq!(response["ok"], Value::Bool(false));
     let error = response["error"].as_str().expect("error message present");

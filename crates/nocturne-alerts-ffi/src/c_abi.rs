@@ -6,7 +6,7 @@ use std::ffi::{CStr, CString, c_char};
 
 use serde_json::Value;
 
-use crate::{envelope, envelope_string, error_json, validate_envelope};
+use crate::{envelope, envelope_string, error_json, tracker_envelope, validate_envelope};
 
 type Handler = fn(&str) -> Result<Value, String>;
 
@@ -138,6 +138,56 @@ pub unsafe extern "C" fn nocturne_alerts_describe(request_json: *const c_char) -
 pub unsafe extern "C" fn nocturne_alerts_validate(request_json: *const c_char) -> *mut c_char {
     // SAFETY: forwarded from this function's contract.
     unsafe { entry(request_json, "request", validate_envelope::validate) }
+}
+
+/// Advances one rule's excursion tracker for one evaluation, without
+/// evaluating a condition tree. Free the result with
+/// [`nocturne_alerts_free_string`].
+///
+/// # Safety
+/// `request_json` must be null or a NUL-terminated string valid for reads for
+/// the duration of the call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nocturne_alerts_tracker_process(
+    request_json: *const c_char,
+) -> *mut c_char {
+    // SAFETY: forwarded from this function's contract.
+    unsafe { entry(request_json, "request", tracker_envelope::process) }
+}
+
+/// Closes one rule's excursion, if it has one, from any tracker state. Free
+/// the result with [`nocturne_alerts_free_string`].
+///
+/// # Safety
+/// `request_json` must be null or a NUL-terminated string valid for reads for
+/// the duration of the call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nocturne_alerts_tracker_force_close(
+    request_json: *const c_char,
+) -> *mut c_char {
+    // SAFETY: forwarded from this function's contract.
+    unsafe { entry(request_json, "request", tracker_envelope::force_close) }
+}
+
+/// Closes one rule's excursion when its hysteresis window has elapsed,
+/// without an evaluation. Free the result with
+/// [`nocturne_alerts_free_string`].
+///
+/// # Safety
+/// `request_json` must be null or a NUL-terminated string valid for reads for
+/// the duration of the call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nocturne_alerts_tracker_close_elapsed_hysteresis(
+    request_json: *const c_char,
+) -> *mut c_char {
+    // SAFETY: forwarded from this function's contract.
+    unsafe {
+        entry(
+            request_json,
+            "request",
+            tracker_envelope::close_elapsed_hysteresis,
+        )
+    }
 }
 
 /// Frees a string returned by any other `nocturne_alerts_*` function. Null is

@@ -5,7 +5,7 @@
 //! handler through the same panic guard: panics and unusable requests come
 //! back as the error envelope, never as a foreign exception.
 
-use crate::{envelope, envelope_string, validate_envelope};
+use crate::{envelope, envelope_string, tracker_envelope, validate_envelope};
 
 /// `nocturne_alerts_evaluate`.
 #[uniffi::export]
@@ -54,6 +54,27 @@ pub(crate) fn describe(request_json: &str) -> String {
 #[must_use]
 pub(crate) fn validate(request_json: &str) -> String {
     envelope_string(|| validate_envelope::validate(request_json))
+}
+
+/// `nocturne_alerts_tracker_process`.
+#[uniffi::export]
+#[must_use]
+pub(crate) fn tracker_process(request_json: &str) -> String {
+    envelope_string(|| tracker_envelope::process(request_json))
+}
+
+/// `nocturne_alerts_tracker_force_close`.
+#[uniffi::export]
+#[must_use]
+pub(crate) fn tracker_force_close(request_json: &str) -> String {
+    envelope_string(|| tracker_envelope::force_close(request_json))
+}
+
+/// `nocturne_alerts_tracker_close_elapsed_hysteresis`.
+#[uniffi::export]
+#[must_use]
+pub(crate) fn tracker_close_elapsed_hysteresis(request_json: &str) -> String {
+    envelope_string(|| tracker_envelope::close_elapsed_hysteresis(request_json))
 }
 
 /// `nocturne_alerts_version`: a plain version string, not JSON.
