@@ -266,8 +266,7 @@ impl ExcursionTracker {
     /// Closes the rule's excursion when it is in hysteresis and the window has
     /// elapsed (§6.1), without an evaluation: a host's periodic check for
     /// windows no evaluation arrives to close. Any other state is a `None`
-    /// transition and unchanged, except that a hysteresis state without a
-    /// start keeps the `updated_at` it adopts.
+    /// transition and unchanged.
     pub fn close_elapsed_hysteresis(
         &mut self,
         rule_id: Uuid,
@@ -277,11 +276,9 @@ impl ExcursionTracker {
         let Some(state) = self.states.get_mut(&rule_id) else {
             return Transition::none();
         };
-        if state.state != TrackerStateKind::Hysteresis {
-            return Transition::none();
-        }
-        let started = *state.hysteresis_started_at.get_or_insert(state.updated_at);
-        if !hysteresis_elapsed(started, config.hysteresis_minutes, now) {
+        if state.state != TrackerStateKind::Hysteresis
+            || !hysteresis_elapsed(state, config.hysteresis_minutes, now)
+        {
             return Transition::none();
         }
         state.updated_at = now;
@@ -348,8 +345,7 @@ fn handle_hysteresis(
         };
     }
 
-    let started = state.hysteresis_started_at.unwrap_or(state.updated_at);
-    if hysteresis_elapsed(started, config.hysteresis_minutes, now) {
+    if hysteresis_elapsed(state, config.hysteresis_minutes, now) {
         return close_from_hysteresis(state);
     }
     Transition::none()
@@ -368,11 +364,16 @@ fn close_from_hysteresis(state: &mut TrackerState) -> Transition {
     }
 }
 
-/// `now - started >= hysteresis_minutes` as exact whole minutes, so a
-/// non-positive window has always elapsed and an expiry past the representable
-/// calendar never arrives (§6.1).
-fn hysteresis_elapsed(started: DateTime<Utc>, hysteresis_minutes: i32, now: DateTime<Utc>) -> bool {
-    started
-        .checked_add_signed(TimeDelta::minutes(i64::from(hysteresis_minutes)))
+/// `now - hysteresis_started_at >= hysteresis_minutes` as exact whole
+/// minutes, so a non-positive window has always elapsed and an expiry past the
+/// representable calendar never arrives (§6.1). Every hysteresis state has a
+/// start: entering hysteresis sets one and [`ExcursionTracker::restore_state`]
+/// adopts one.
+fn hysteresis_elapsed(state: &TrackerState, hysteresis_minutes: i32, now: DateTime<Utc>) -> bool {
+    state
+        .hysteresis_started_at
+        .and_then(|started| {
+            started.checked_add_signed(TimeDelta::minutes(i64::from(hysteresis_minutes)))
+        })
         .is_some_and(|expiry| now >= expiry)
 }
