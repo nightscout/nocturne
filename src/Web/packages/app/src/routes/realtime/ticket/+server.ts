@@ -1,12 +1,15 @@
 import { json } from "@sveltejs/kit";
 import type { RequestHandler } from "./$types";
 import { env } from "$env/dynamic/private";
-import { signHandshakeTicket } from "@nocturne/bridge/ticket";
+import {
+  REALTIME_ADMISSION_PATH,
+  signHandshakeTicket,
+} from "@nocturne/bridge/ticket";
+import type { RealtimeAdmission } from "$lib/api";
 import {
   getApiBaseUrl,
   createServerHttpClient,
 } from "$lib/server/api-client-factory";
-import { getHashedInstanceKey } from "$lib/server/instance-key";
 import { getEffectiveHost, getOriginalProto } from "$lib/server/request-host";
 import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
 
@@ -15,13 +18,13 @@ import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
  * realtime bridge for the tenant this request's host resolves to.
  *
  * The browser's Socket.IO handshake reaches the bridge directly, outside this
- * BFF — so it can't refresh the 15-minute access token or attach the service
- * instance key the way a proxied `/api` call does. Instead, this endpoint (which
- * IS inside the BFF) replays the connection's read against the API's per-tenant
- * read policy and, only on a 2xx, signs a ticket the bridge verifies locally.
- * This mirrors the read policy exactly — authenticated members and public-read
- * tenants pass; private/cross-tenant connections do not — without the bridge
- * making a per-connection API call.
+ * BFF, so it can't refresh the 15-minute access token the way a proxied `/api`
+ * call does. Instead, this endpoint (which IS inside the BFF) asks the API for
+ * the connection's realtime admission and, only on a 2xx, signs a ticket the
+ * bridge verifies locally. The admission is gated on the same glucose read as
+ * the API's own feed, and says whether the credential may join the tenant-wide
+ * room; the ticket carries that answer so the bridge needs no per-connection
+ * API call.
  *
  * Always responds 200 with `{ token: string | null, retry?: boolean }`. A null
  * token means no ticket was minted; `retry: true` distinguishes a transient
@@ -44,15 +47,14 @@ export const GET: RequestHandler = async (event) => {
     return json({ token: null, retry: true });
   }
 
-  // Probe the read endpoint from inside the BFF so the instance key is attached,
-  // session cookies are forwarded, and any token rotation flows back to the
-  // browser as Set-Cookie.
+  // Carries only the caller's own cookies. The instance key would authenticate
+  // a visitor with no cookie as the instance service and admit them to any
+  // tenant's room. Token rotation still flows back to the browser.
   const httpClient = createServerHttpClient(event.fetch, {
     accessToken: event.cookies.get(AUTH_COOKIE_NAMES.accessToken),
     refreshToken: event.cookies.get(AUTH_COOKIE_NAMES.refreshToken),
     guestSessionToken: event.cookies.get(AUTH_COOKIE_NAMES.guestSession),
     platformAccessToken: event.cookies.get(AUTH_COOKIE_NAMES.platformAccess),
-    hashedInstanceKey: getHashedInstanceKey(),
     extraHeaders: {
       "X-Forwarded-Host": effectiveHost,
       "X-Forwarded-Proto": getOriginalProto(event.request),
@@ -72,11 +74,18 @@ export const GET: RequestHandler = async (event) => {
   let probeStatus: number;
   try {
     const probe = await httpClient.fetch(
-      `${apiBaseUrl}/api/v1/entries?count=1`,
-      { method: "GET", signal: AbortSignal.timeout(5000) },
+      `${apiBaseUrl}${REALTIME_ADMISSION_PATH}`,
+      { method: "GET", signal: AbortSignal.timeout(5000) }
     );
     if (probe.ok) {
-      return json({ token: signHandshakeTicket(secret, effectiveHost) });
+      const admission: Partial<RealtimeAdmission> = await probe.json();
+      return json({
+        token: signHandshakeTicket(
+          secret,
+          effectiveHost,
+          admission.tenantRelay === true
+        ),
+      });
     }
     probeStatus = probe.status;
   } catch {
