@@ -108,11 +108,17 @@ public class MemberInviteService : IMemberInviteService
         var inviteUrl =
             $"{origin}{IMemberInviteService.JoinPath}?{IMemberInviteService.TokenQueryParameter}={token}";
 
+        var createdByName = await _dbContext.Subjects
+            .Where(s => s.Id == createdBySubjectId)
+            .Select(s => s.Name)
+            .FirstOrDefaultAsync();
+
         return new MemberInviteResult(
             entity.Id,
             token,
             inviteUrl,
-            entity.ExpiresAt);
+            entity.ExpiresAt,
+            createdByName ?? "");
     }
 
     /// <inheritdoc />
@@ -132,7 +138,7 @@ public class MemberInviteService : IMemberInviteService
         if (entity == null)
             return null;
 
-        return MapToInfo(entity);
+        return MapToInfo(entity, await LoadRolesAsync(tenantId, entity.RoleIds));
     }
 
     /// <inheritdoc />
@@ -241,7 +247,8 @@ public class MemberInviteService : IMemberInviteService
             .OrderByDescending(i => i.CreatedAt)
             .ToListAsync();
 
-        return entities.Select(MapToInfo).ToList();
+        var roles = await LoadRolesAsync(tenantId, entities.SelectMany(i => i.RoleIds).Distinct().ToList());
+        return entities.Select(e => MapToInfo(e, roles)).ToList();
     }
 
     /// <inheritdoc />
@@ -267,8 +274,30 @@ public class MemberInviteService : IMemberInviteService
         return true;
     }
 
-    private static MemberInviteInfo MapToInfo(MemberInviteEntity entity)
+    private async Task<Dictionary<Guid, TenantRoleEntity>> LoadRolesAsync(Guid tenantId, List<Guid> roleIds)
     {
+        if (roleIds.Count == 0)
+            return [];
+
+        return await _dbContext.TenantRoles
+            .Where(r => r.TenantId == tenantId && roleIds.Contains(r.Id))
+            .ToDictionaryAsync(r => r.Id);
+    }
+
+    private static MemberInviteInfo MapToInfo(
+        MemberInviteEntity entity, IReadOnlyDictionary<Guid, TenantRoleEntity> roles)
+    {
+        // A deleted role grants nothing on acceptance, so it is not described either.
+        var grantedRoles = entity.RoleIds
+            .Where(roles.ContainsKey)
+            .Select(id => roles[id])
+            .ToList();
+
+        var permissions = grantedRoles
+            .SelectMany(r => r.Permissions)
+            .Union(entity.DirectPermissions ?? [])
+            .ToList();
+
         return new MemberInviteInfo(
             entity.Id,
             entity.TenantId,
@@ -291,6 +320,8 @@ public class MemberInviteService : IMemberInviteService
                     m.SubjectId,
                     m.Subject?.Name,
                     m.SysCreatedAt))
-                .ToList());
+                .ToList(),
+            grantedRoles.Select(r => r.Name).ToList(),
+            permissions);
     }
 }

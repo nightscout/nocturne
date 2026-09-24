@@ -323,7 +323,9 @@ public class OidcAuthServiceLoginGateTests
         IsExpired: false,
         IsRevoked: false,
         CreatedAt: DateTime.UtcNow,
-        UsedBy: []);
+        UsedBy: [],
+        RoleNames: ["Viewer"],
+        Permissions: []);
 
     [Fact]
     [Trait("Category", "Unit")]

@@ -432,6 +432,19 @@ public static class Scope
     /// <seealso cref="ReadScopes"/>
     public static bool IsReadScope(string scope) => ReadScopes.Contains(scope);
 
+    /// <summary>
+    /// Whether <paramref name="permissions"/> let a member see the record while changing no
+    /// records, no treatment settings and nobody's access. This is narrower than "changes
+    /// nothing": <see cref="MemberPersonalScopes"/> are allowed, and <see cref="DeviceNotify"/>
+    /// acknowledges an alert, which halts its escalation for everyone. Counting it as a change
+    /// instead would make no member view-only, since every member with a permission holds it.
+    /// False when nothing is readable.
+    /// </summary>
+    /// <param name="permissions">A member's effective permissions.</param>
+    public static bool IsViewOnlyForRecordsAndAccess(IReadOnlyCollection<string> permissions) =>
+        permissions.Any(IsReadScope)
+        && permissions.All(p => IsReadScope(p) || MemberPersonalScopes.Contains(p));
+
     /// <summary>Whether a scope string is one an OAuth client may request.</summary>
     public static bool IsValid(string scope)
     {

@@ -161,14 +161,13 @@ public class MemberInviteController : ControllerBase
     /// </summary>
     /// <remarks>
     /// Anonymous, because the invitee may have no account yet. A caller who does arrive signed in
-    /// is reported in <see cref="MemberInviteInfo.Viewer"/> so the join page can offer acceptance
+    /// is reported in <see cref="JoinInviteInfo.Viewer"/> so the join page can offer acceptance
     /// instead of a second registration — including when they are signed in as a member of some
     /// other tenant on this instance, whose session cookie is domain-wide.
     /// <para>
     /// The token is the whole of the authorization, so an invite that can no longer be accepted
     /// answers with the reason alone, as the sibling alert-invite lookup does. The record it would
-    /// otherwise return names the tenant, the inviter, the roles and permissions being granted and
-    /// every subject that has already joined through it.
+    /// otherwise return names the tenant, the inviter, and the roles and permissions being granted.
     /// </para>
     /// </remarks>
     [HttpGet("{token}/info")]
@@ -176,7 +175,7 @@ public class MemberInviteController : ControllerBase
     [EnableRateLimiting("invite-lookup")]
     [InviteTokenAuthorized]
     [RemoteQuery]
-    [ProducesResponseType(typeof(MemberInviteInfo), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(JoinInviteInfo), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetInviteInfo(string token, CancellationToken ct)
@@ -201,13 +200,24 @@ public class MemberInviteController : ControllerBase
 
         var subjectId = HttpContext.GetSubjectId();
         if (subjectId == null)
-            return Ok(invite);
+            return Ok(ToJoinInfo(invite, null));
 
         var authContext = HttpContext.GetAuthContext();
         var isMember = await _tenantMemberService.IsMemberAsync(subjectId.Value, tenantId, ct);
 
-        return Ok(invite with { Viewer = new InviteViewer(subjectId, authContext?.SubjectName, isMember) });
+        return Ok(ToJoinInfo(invite, new InviteViewer(subjectId, authContext?.SubjectName, isMember)));
     }
+
+    private static JoinInviteInfo ToJoinInfo(MemberInviteInfo invite, InviteViewer? viewer) => new(
+        invite.TenantName,
+        invite.CreatedByName,
+        invite.RoleNames,
+        invite.Permissions,
+        invite.LimitTo24Hours,
+        invite.ExpiresAt,
+        invite.Permissions.Count > 0,
+        Scope.IsViewOnlyForRecordsAndAccess(invite.Permissions),
+        viewer);
 
     /// <summary>
     /// Accept an invite and join the tenant.

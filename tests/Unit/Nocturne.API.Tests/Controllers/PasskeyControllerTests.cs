@@ -1001,7 +1001,7 @@ public class PasskeyControllerTests : IDisposable
         inviteService.Setup(s => s.GetInviteByTokenAsync("invite-token", _tenantId))
             .ReturnsAsync(new MemberInviteInfo(
                 Guid.CreateVersion7(), _tenantId, "Test", "Owner", [], null, null, false,
-                DateTime.UtcNow.AddDays(1), null, 0, true, false, false, DateTime.UtcNow, []));
+                DateTime.UtcNow.AddDays(1), null, 0, true, false, false, DateTime.UtcNow, [], [], []));
         inviteService.Setup(s => s.AcceptInviteAsync(It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<Guid>()))
             .ReturnsAsync(new AcceptMemberInviteResult(true, MembershipId: Guid.CreateVersion7()));
         return inviteService;

@@ -122,6 +122,7 @@ public class MemberInviteServiceTests : IDisposable
 
         result.Token.Should().Be(FakeToken);
         result.InviteUrl.Should().Be($"https://{BaseDomain}/join?token={FakeToken}");
+        result.CreatedByName.Should().Be("Creator User");
         result.Id.Should().NotBeEmpty();
         result.ExpiresAt.Should().BeAfter(DateTime.UtcNow);
 
@@ -442,6 +443,60 @@ public class MemberInviteServiceTests : IDisposable
 
         (await _service.GetInviteByTokenAsync(FakeToken, Guid.CreateVersion7())).Should().BeNull();
         (await _service.GetInviteByTokenAsync(FakeToken, _tenantId)).Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task GetInviteByTokenAsync_describesWhatAcceptingGrants()
+    {
+        await _service.CreateInviteAsync(
+            _tenantId,
+            _creatorSubjectId,
+            OwnerPermissions,
+            [_followerRoleId],
+            directPermissions: [Scope.SleepRead]);
+
+        var info = await _service.GetInviteByTokenAsync(FakeToken, _tenantId);
+
+        info!.TenantName.Should().Be("Test Tenant");
+        info.CreatedByName.Should().Be("Creator User");
+        info.RoleNames.Should().Equal("Follower");
+        info.Permissions.Should().BeEquivalentTo([Scope.GlucoseRead, Scope.ReportsRead, Scope.SleepRead]);
+    }
+
+    /// <summary>
+    /// Acceptance drops a deleted role, so describing it would promise access the invitee never gets.
+    /// </summary>
+    [Fact]
+    public async Task GetInviteByTokenAsync_whenARoleWasDeleted_omitsItsNameAndPermissions()
+    {
+        await _service.CreateInviteAsync(
+            _tenantId,
+            _creatorSubjectId,
+            OwnerPermissions,
+            [_followerRoleId],
+            directPermissions: [Scope.SleepRead]);
+
+        _dbContext.TenantRoles.Remove(await _dbContext.TenantRoles.SingleAsync(r => r.Id == _followerRoleId));
+        await _dbContext.SaveChangesAsync();
+
+        var info = await _service.GetInviteByTokenAsync(FakeToken, _tenantId);
+
+        info!.RoleNames.Should().BeEmpty();
+        info.Permissions.Should().Equal(Scope.SleepRead);
+    }
+
+    [Fact]
+    public async Task GetInvitesForTenantAsync_describesEachInvitesRoles()
+    {
+        await _service.CreateInviteAsync(
+            _tenantId,
+            _creatorSubjectId,
+            OwnerPermissions,
+            [_followerRoleId]);
+
+        var invites = await _service.GetInvitesForTenantAsync(_tenantId);
+
+        invites.Should().ContainSingle().Which.RoleNames.Should().Equal("Follower");
     }
 
     /// <summary>
