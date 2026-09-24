@@ -4,7 +4,7 @@ import {
   visibleReportCategories,
   getSidebarReportItems,
   type ReportViewer,
-} from "./report-navigation";
+} from "./report-navigation.svelte";
 
 /** Seed-role grants, as `MemberScopeMiddleware` resolves them. */
 const OWNER = ["*"];
@@ -23,7 +23,32 @@ function hrefs(viewer: ReportViewer): string[] {
     .map((r) => r.href);
 }
 
-const everyHref = reportCategories.flatMap((c) => c.reports).map((r) => r.href);
+const everyHref = reportCategories()
+  .flatMap((c) => c.reports)
+  .map((r) => r.href);
+
+describe("reportCategories", () => {
+  it("lists each destination once", () => {
+    expect(new Set(everyHref).size).toBe(everyHref.length);
+  });
+
+  it("offers no report that only forwards to another page", () => {
+    expect(everyHref).not.toContain("/reports/month-to-month");
+  });
+
+  it("names the year overview for what it shows on every surface", () => {
+    const yearOverview = reportCategories()
+      .flatMap((c) => c.reports)
+      .find((r) => r.href === "/reports/year-overview");
+
+    expect(yearOverview?.title).toBe("Year Overview");
+    expect(
+      getSidebarReportItems({ grantedScopes: OWNER, anonymous: false }).find(
+        (i) => i.href === "/reports/year-overview"
+      )?.title
+    ).toBe("Year Overview");
+  });
+});
 
 describe("visibleReportCategories", () => {
   it("offers every report to a full-scope member", () => {
@@ -57,11 +82,7 @@ describe("visibleReportCategories", () => {
       anonymous: true,
     });
 
-    expect(visible).toEqual([
-      "/reports/year-overview",
-      "/reports/readings",
-      "/reports/month-to-month",
-    ]);
+    expect(visible).toEqual(["/reports/year-overview", "/reports/readings"]);
   });
 
   it("still withholds member-only reports from a share holding their scopes", () => {

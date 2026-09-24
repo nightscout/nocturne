@@ -10,7 +10,7 @@
         installPrintFitFallback,
         printReport,
     } from "$lib/components/reports/print/report-print.svelte";
-    import {reportCategories} from "$lib/navigation/report-navigation";
+    import {reportCategories} from "$lib/navigation/report-navigation.svelte";
     import {Filter, Calendar, ChevronDown, Printer} from "lucide-svelte";
     import {useDateParams, setDateParamsContext, createSharedRangeUse} from "$lib/hooks/date-params.svelte";
     import {createResourceContext} from "$lib/hooks/resource-context.svelte";
@@ -47,8 +47,8 @@
     let reportRoot = $state<HTMLElement | null>(null);
     $effect(() => installPrintFitFallback(() => reportRoot));
 
-    const registryTitles = new Map(
-        reportCategories.flatMap((c) => c.reports).map((r) => [r.href, r.title])
+    const registryTitles = $derived(
+        new Map(reportCategories().flatMap((c) => c.reports).map((r) => [r.href, r.title]))
     );
 
     // Extract report name from the URL
