@@ -369,8 +369,10 @@ confirm it N× faster at a shorter periodic cadence. It should express that conf
 Per-rule persisted state: `{State, ConfirmationCount, ActiveExcursionId, UpdatedAt,
 HysteresisStartedAt, AwaitingRearm}` with states `idle | confirming | active | hysteresis`. Rule inputs: `ConfirmationReadings`
 (default 1), `HysteresisMinutes`. One evaluation = one `ProcessEvaluationAsync(ruleId,
-conditionMet)` call. **After every call**, regardless of transition, `state.UpdatedAt =
-now` is persisted. A stored state string naming none of the four states is read as
+conditionMet)` call. **Every call**, regardless of transition, decides `state.UpdatedAt =
+now`. The host persists a decision only when it changes another field: the only reader of
+`UpdatedAt` is the hysteresis-start adoption below, and the decision that adopts it persists
+the start. A stored state string naming none of the four states is read as
 `active` when the row holds an `ActiveExcursionId`, so that excursion goes on to close,
 and as `idle` otherwise, so the rule can fire again; its confirmation count, hysteresis
 start and re-arm flag (§6.3) are dropped. Every operation reads it so.
