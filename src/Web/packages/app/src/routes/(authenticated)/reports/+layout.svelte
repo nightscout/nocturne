@@ -159,7 +159,7 @@
     {/if}
 
     <!-- Main Content -->
-    <main class="relative">
+    <div class="relative">
         {#if useResourceGuard}
             <ResourceGuard
                 loading={resourceCtx.loading}
@@ -174,7 +174,7 @@
         {:else}
             {@render children()}
         {/if}
-    </main>
+    </div>
 
     <!-- Filter Sidebar -->
     {#if showFilters}
