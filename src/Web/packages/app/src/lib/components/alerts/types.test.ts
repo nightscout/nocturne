@@ -700,7 +700,7 @@ describe("reading a stored rule", () => {
 		});
 	});
 
-	it("fills auto-resolve and snooze leaves too, and leaves is_active alone", () => {
+	it("fills auto-resolve and snooze leaves too", () => {
 		const state = parseRule(
 			stored({
 				autoResolveEnabled: true,
@@ -713,7 +713,9 @@ describe("reading a stored rule", () => {
 		const body = buildBody(state);
 
 		expect(body.autoResolveParams).toEqual({ type: "staleness", staleness: { operator: ">=", value: 20 } });
-		expect(body.clientConfiguration.snooze.conditions).toEqual([{ type: "pump_suspended", pump_suspended: {} }]);
+		expect(body.clientConfiguration.snooze.conditions).toEqual([
+			{ type: "pump_suspended", pump_suspended: { is_active: false } },
+		]);
 	});
 
 	it("saves a group with no list or child without throwing, keeping a root one for the save to report", () => {

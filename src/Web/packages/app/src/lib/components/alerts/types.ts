@@ -457,12 +457,13 @@ export function browserTimeZone(): string | undefined {
 }
 
 const comparisonShown = { operator: ">=", value: 0 };
+const inactiveShown = { is_active: false };
 
 /**
  * What `RuleBuilderLeafEditor` shows for a leaf field a stored rule leaves out,
  * which {@link nodeFromApi} writes into the model so that saving sends what was
- * shown. `is_active` is left out: the editor's switch and its label disagree
- * about a missing one.
+ * shown. A missing `is_active` is `false`, as the engines read it; a new leaf
+ * is created with it set.
  */
 const SHOWN_DEFAULTS: Partial<Record<ConditionKind, Record<string, unknown>>> = {
 	threshold: { direction: "below", value: 0 },
@@ -486,8 +487,12 @@ const SHOWN_DEFAULTS: Partial<Record<ConditionKind, Record<string, unknown>>> = 
 	alert_state: { state: "firing" },
 	time_since_last_carb: { operator: AlertComparisonOperator.Gte, minutes: 0 },
 	time_since_last_bolus: { operator: AlertComparisonOperator.Gte, minutes: 0 },
-	pump_state: { mode: PumpModeState.Suspended },
-	state_span_active: { category: StateSpanCategory.Override },
+	pump_suspended: inactiveShown,
+	override_active: inactiveShown,
+	do_not_disturb: inactiveShown,
+	sleep_session_active: inactiveShown,
+	pump_state: { mode: PumpModeState.Suspended, is_active: false },
+	state_span_active: { category: StateSpanCategory.Override, is_active: false },
 	tracker_age: { operator: ">=", minutes: 0 },
 };
 

@@ -500,7 +500,7 @@
     {@const payload = node[node.type]!}
     <span class="text-xs text-muted-foreground">is</span>
     <Switch
-      checked={payload.is_active ?? true}
+      checked={payload.is_active ?? false}
       onCheckedChange={(checked: boolean) => {
         payload.is_active = checked;
         if (!checked) payload.for_minutes = undefined;
@@ -659,7 +659,7 @@
     </Select.Root>
     <span class="text-xs text-muted-foreground">is</span>
     <Switch
-      checked={node.pump_state.is_active ?? true}
+      checked={node.pump_state.is_active ?? false}
       onCheckedChange={(checked: boolean) => {
         if (!node.pump_state) return;
         node.pump_state.is_active = checked;
@@ -717,7 +717,7 @@
     />
     <span class="text-xs text-muted-foreground">is</span>
     <Switch
-      checked={node.state_span_active.is_active ?? true}
+      checked={node.state_span_active.is_active ?? false}
       onCheckedChange={(checked: boolean) => {
         if (!node.state_span_active) return;
         node.state_span_active.is_active = checked;
@@ -745,7 +745,7 @@
   {:else if node.type === "sleep_session_active" && node.sleep_session_active}
     <span class="text-xs text-muted-foreground">sleep session is</span>
     <Switch
-      checked={node.sleep_session_active.is_active ?? true}
+      checked={node.sleep_session_active.is_active ?? false}
       onCheckedChange={(checked) => {
         if (node.sleep_session_active)
           node.sleep_session_active.is_active = checked;
