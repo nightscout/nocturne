@@ -97,6 +97,14 @@ pub extern "C" fn nocturne_alerts_version() -> *mut c_char {
     into_c_string(env!("CARGO_PKG_VERSION").to_owned())
 }
 
+/// Returns the IANA time zone database release compiled into the library
+/// (e.g. `2025b`) as a plain, non-JSON string. Free with
+/// [`nocturne_alerts_free_string`].
+#[unsafe(no_mangle)]
+pub extern "C" fn nocturne_alerts_tzdb_version() -> *mut c_char {
+    into_c_string(nocturne_alerts_core::TZDB_VERSION.to_owned())
+}
+
 /// Evaluates one rule for one tick. Free the result with
 /// [`nocturne_alerts_free_string`].
 ///
@@ -132,6 +140,20 @@ pub unsafe extern "C" fn nocturne_alerts_evaluate_node(request_json: *const c_ch
 pub unsafe extern "C" fn nocturne_alerts_classify(request_json: *const c_char) -> *mut c_char {
     // SAFETY: forwarded from this function's contract.
     unsafe { entry(request_json, "request", envelope::classify_rule) }
+}
+
+/// Whether a rule must also be evaluated on a timer, not only per reading.
+/// Free the result with [`nocturne_alerts_free_string`].
+///
+/// # Safety
+/// `request_json` must be null or a NUL-terminated string valid for reads for
+/// the duration of the call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nocturne_alerts_references_wall_clock(
+    request_json: *const c_char,
+) -> *mut c_char {
+    // SAFETY: forwarded from this function's contract.
+    unsafe { entry(request_json, "request", envelope::wall_clock) }
 }
 
 /// Enumerates the condition paths and leaf ids of a condition tree. Free the

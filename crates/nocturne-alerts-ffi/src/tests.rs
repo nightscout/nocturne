@@ -12,7 +12,7 @@ use serde_json::{Map, Value, json};
 use crate::{
     envelope_string, nocturne_alerts_classify, nocturne_alerts_describe, nocturne_alerts_evaluate,
     nocturne_alerts_evaluate_node, nocturne_alerts_free_string, nocturne_alerts_leaf_paths,
-    nocturne_alerts_version,
+    nocturne_alerts_references_wall_clock, nocturne_alerts_tzdb_version, nocturne_alerts_version,
 };
 
 /// Calls an FFI function with `input`, copies the result into a Rust string
@@ -51,6 +51,17 @@ fn version_returns_crate_version() {
         let version = CStr::from_ptr(ptr).to_str().unwrap().to_string();
         nocturne_alerts_free_string(ptr);
         assert_eq!(version, env!("CARGO_PKG_VERSION"));
+    }
+}
+
+#[test]
+fn tzdb_version_is_the_compiled_release() {
+    unsafe {
+        let ptr = nocturne_alerts_tzdb_version();
+        let version = CStr::from_ptr(ptr).to_str().unwrap().to_string();
+        nocturne_alerts_free_string(ptr);
+        assert_eq!(version, nocturne_alerts_core::TZDB_VERSION);
+        assert!(version.len() >= 5 && version.starts_with("20"), "{version}");
     }
 }
 
@@ -851,6 +862,55 @@ fn classify_defaults_missing_params_to_undirected() {
     assert_eq!(response["scope_class"], json!("undirected"));
 }
 
+fn wall_clock(condition_type: &str, condition_params: Value) -> Value {
+    call_json(
+        nocturne_alerts_references_wall_clock,
+        &json!({
+            "schema_version": 1,
+            "condition_type": condition_type,
+            "condition_params": condition_params,
+        })
+        .to_string(),
+    )
+}
+
+#[test]
+fn references_wall_clock_selects_nested_wall_clock_leaves() {
+    let nested = json!({
+        "operator": "and",
+        "conditions": [
+            { "type": "threshold", "threshold": { "direction": "below", "value": 70 } },
+            { "type": "staleness", "staleness": { "operator": ">", "value": 20 } },
+        ]
+    });
+    let response = wall_clock("composite", nested);
+    assert_eq!(response["ok"], json!(true));
+    assert_eq!(response["references_wall_clock"], json!(true));
+    assert_eq!(
+        wall_clock("threshold", json!({ "direction": "below", "value": 70 }))["references_wall_clock"],
+        json!(false)
+    );
+    assert_eq!(
+        wall_clock("no_such_kind", json!({}))["references_wall_clock"],
+        json!(false)
+    );
+}
+
+#[test]
+fn references_wall_clock_rejects_a_bad_envelope() {
+    assert_error(
+        &call_json(nocturne_alerts_references_wall_clock, "{ nope"),
+        "invalid request envelope",
+    );
+    assert_error(
+        &call_json(
+            nocturne_alerts_references_wall_clock,
+            r#"{"schema_version":2,"condition_type":"signal_loss"}"#,
+        ),
+        "unsupported schema_version 2",
+    );
+}
+
 #[test]
 fn classify_rejects_null_pointer() {
     let response: Value = unsafe {
@@ -1311,6 +1371,27 @@ mod uniffi_surface {
     #[test]
     fn version_matches_crate_version() {
         assert_eq!(uniffi_api::version(), env!("CARGO_PKG_VERSION"));
+        assert_eq!(
+            uniffi_api::tzdb_version(),
+            nocturne_alerts_core::TZDB_VERSION
+        );
+    }
+
+    #[test]
+    fn classify_and_wall_clock_share_the_envelope_contract() {
+        let request = json!({
+            "schema_version": 1,
+            "condition_type": "signal_loss",
+            "condition_params": { "timeout_minutes": 15 }
+        })
+        .to_string();
+        let classified: Value =
+            serde_json::from_str(&uniffi_api::classify(request.clone())).expect("valid JSON");
+        assert_eq!(classified["scope_class"], json!("undirected"));
+        let wall_clock: Value =
+            serde_json::from_str(&uniffi_api::references_wall_clock(request)).expect("valid JSON");
+        assert_eq!(wall_clock["ok"], json!(true));
+        assert_eq!(wall_clock["references_wall_clock"], json!(true));
     }
 
     #[test]

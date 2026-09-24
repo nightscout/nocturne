@@ -20,6 +20,7 @@ use nocturne_alerts_core::model::{
 };
 use nocturne_alerts_core::paths::node_child_path;
 use nocturne_alerts_core::sustained::{TimerOp, TimerStore};
+use nocturne_alerts_core::wall_clock::references_wall_clock;
 
 pub(crate) const SCHEMA_VERSION: i64 = 1;
 
@@ -287,6 +288,15 @@ pub(crate) fn classify_rule(request_json: &str) -> Result<Value, String> {
     let req = read_rule_body(request_json)?;
     let class = classify(&req.condition_type, &req.condition_params);
     Ok(ok(json!({ "scope_class": class.wire() })))
+}
+
+/// Whether a rule must also be evaluated on a timer, not only per reading
+/// (engine-semantics.md §5.1). An unknown type or unevaluable body is
+/// `false`, not an error.
+pub(crate) fn wall_clock(request_json: &str) -> Result<Value, String> {
+    let req = read_rule_body(request_json)?;
+    let wall_clock = references_wall_clock(&req.condition_type, &req.condition_params);
+    Ok(ok(json!({ "references_wall_clock": wall_clock })))
 }
 
 /// Every node slot's condition path and the leaves' paths by leaf id. Input

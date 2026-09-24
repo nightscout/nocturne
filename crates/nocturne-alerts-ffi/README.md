@@ -20,10 +20,12 @@ The crate builds a `cdylib` and a `staticlib`, library name `nocturne_alerts`.
 
 ```c
 char* nocturne_alerts_version(void);
+char* nocturne_alerts_tzdb_version(void);
 char* nocturne_alerts_evaluate(const char* request_json);
 char* nocturne_alerts_evaluate_node(const char* request_json);
 char* nocturne_alerts_leaf_paths(const char* condition_node_json);
 char* nocturne_alerts_classify(const char* request_json);
+char* nocturne_alerts_references_wall_clock(const char* request_json);
 char* nocturne_alerts_describe(const char* request_json);
 char* nocturne_alerts_validate(const char* request_json);
 void  nocturne_alerts_free_string(char* ptr);
@@ -32,8 +34,10 @@ void  nocturne_alerts_free_string(char* ptr);
 - All strings are UTF-8, NUL-terminated. Every returned pointer is owned by
   the caller and must be released with `nocturne_alerts_free_string` exactly
   once (null is a no-op).
-- `nocturne_alerts_version` returns a plain version string (e.g. `0.1.0`),
-  not JSON. Everything else returns a JSON envelope.
+- `nocturne_alerts_version` returns the crate version (e.g. `0.1.0`) and
+  `nocturne_alerts_tzdb_version` the IANA time zone database release compiled
+  in (e.g. `2025b`), both plain strings, not JSON. Everything else returns a
+  JSON envelope.
 - The library never panics across the boundary and never crashes on bad
   input: panics, null pointers, invalid UTF-8 and malformed JSON all come
   back as the error envelope:
@@ -275,6 +279,32 @@ default that never lets a scoped mute silence an unclassifiable rule. Only a
 structurally malformed *envelope* (bad JSON, wrong `schema_version`) comes back
 as the error envelope.
 
+## References wall clock (`nocturne_alerts_references_wall_clock`)
+
+Whether a rule must be evaluated on a timer as well as per reading: its root
+kind, or any leaf of its tree, measures elapsed time against an anchor a
+reading does not move (`docs/alerts/engine-semantics.md` §5.1). A host that
+evaluates only when a reading arrives never fires such a rule while readings
+stop, so it schedules these rules on its sweep. The request is the rule body,
+as for `classify`:
+
+```jsonc
+{
+  "schema_version": 1,
+  "condition_type": "composite",
+  "condition_params": { "operator": "and", "conditions": [ /* … */ ] }
+}
+```
+
+Response:
+
+```jsonc
+{ "schema_version": 1, "ok": true, "references_wall_clock": true }
+```
+
+An unknown `condition_type`, or a body that cannot be evaluated, is `false`
+(it cannot fire either), not an error; only a malformed envelope is.
+
 ## Describe (`nocturne_alerts_describe`)
 
 Decodes a rule's opaque condition tree into a **structured, leaf-id-tagged
@@ -404,19 +434,22 @@ bindings and the compiled library must come from the same uniffi version.
 
 The Kotlin surface is deliberately JSON-in/JSON-out — the **same envelope
 documented above is the contract for both consumers** (no parallel typed
-surface that could drift). Six functions, delegating to the exact same
-internal handlers as the C ABI, with the same panic guard (panics and unusable
-requests come back as the `ok: false` envelope, never as an exception):
+surface that could drift). Each function runs the same internal handler as its
+C counterpart, with the same panic guard (panics and unusable requests come
+back as the `ok: false` envelope, never as an exception):
 
 ```kotlin
 package uniffi.nocturne_alerts
 
-fun evaluate(requestJson: String): String      // nocturne_alerts_evaluate
-fun evaluateNode(requestJson: String): String  // nocturne_alerts_evaluate_node
-fun leafPaths(requestJson: String): String     // nocturne_alerts_leaf_paths
-fun describe(requestJson: String): String      // nocturne_alerts_describe
-fun validate(requestJson: String): String      // nocturne_alerts_validate
-fun version(): String                          // plain version string, not JSON
+fun evaluate(requestJson: String): String             // nocturne_alerts_evaluate
+fun evaluateNode(requestJson: String): String         // nocturne_alerts_evaluate_node
+fun classify(requestJson: String): String             // nocturne_alerts_classify
+fun referencesWallClock(requestJson: String): String  // nocturne_alerts_references_wall_clock
+fun leafPaths(requestJson: String): String            // nocturne_alerts_leaf_paths
+fun describe(requestJson: String): String             // nocturne_alerts_describe
+fun validate(requestJson: String): String             // nocturne_alerts_validate
+fun version(): String                                 // plain string, not JSON
+fun tzdbVersion(): String                             // plain string, not JSON
 ```
 
 Memory is managed by the generated bindings (no `free` counterpart needed).
@@ -462,7 +495,11 @@ checksum the API at load time and refuse a mismatched library.
 
 ## Versioning
 
-`schema_version` covers the envelope layer. Behavioural changes to evaluation
+`schema_version` covers the envelope layer. The time zone rules `time_of_day`
+and `day_of_week` apply are the IANA release compiled into the library
+(`chrono-tz`), not the host's; `nocturne_alerts_tzdb_version` reports it, so a
+host can log it at load and notice when it falls behind a zone change. Keeping
+it current means updating the `chrono-tz` dependency and rebuilding. Behavioural changes to evaluation
 itself are governed by the golden corpus: both the Rust core (`tests/parity.rs`),
 this crate's FFI round-trip test, and the .NET three-way suite
 (`tests/Unit/Nocturne.Alerts.Native.Tests`) pin every scenario against the
