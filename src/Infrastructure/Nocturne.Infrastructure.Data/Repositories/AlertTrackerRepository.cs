@@ -93,6 +93,15 @@ public class AlertTrackerRepository : IAlertTrackerRepository
         return entity == null ? null : MapAlertRule(entity);
     }
 
+    /// <inheritdoc/>
+    public virtual async Task<AlertExcursion?> GetExcursionAsync(Guid excursionId, CancellationToken ct = default)
+    {
+        var entity = await _context.AlertExcursions
+            .AsNoTracking()
+            .FirstOrDefaultAsync(e => e.Id == excursionId, ct);
+        return entity is null ? null : MapAlertExcursion(entity);
+    }
+
     /// <summary>
     /// Create a new excursion record and return it.
     /// </summary>

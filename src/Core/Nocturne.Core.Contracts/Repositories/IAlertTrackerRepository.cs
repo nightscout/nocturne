@@ -54,6 +54,13 @@ public interface IAlertTrackerRepository
         DateTime startedAt,
         CancellationToken ct = default);
 
+    /// <summary>The excursion with <paramref name="excursionId"/>, or <c>null</c> if there is none.</summary>
+    /// <param name="excursionId">The unique identifier of the <see cref="AlertExcursion"/>.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<AlertExcursion?> GetExcursionAsync(
+        Guid excursionId,
+        CancellationToken ct = default);
+
     /// <summary>
     /// Close an excursion by setting its <c>EndedAt</c> timestamp.
     /// </summary>

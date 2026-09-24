@@ -142,8 +142,12 @@ public sealed class ExcursionTransitionAtomicityTests : IDisposable
         protected override bool ShouldRetryOn(Exception exception) => exception is TransientFault;
     }
 
-    /// <summary>Fails the first commit, either before it reaches the store or after it lands.</summary>
-    private sealed class FirstCommitFault(bool afterCommit) : DbTransactionInterceptor
+    /// <summary>
+    /// Fails the first commit, either before it reaches the store or after it lands. After it
+    /// lands, <paramref name="concurrentWrite"/> first runs, as another process writing the rule's
+    /// state once the lock is released.
+    /// </summary>
+    private sealed class FirstCommitFault(bool afterCommit, Func<Task>? concurrentWrite = null) : DbTransactionInterceptor
     {
         private int _remaining = 1;
 
@@ -160,16 +164,23 @@ public sealed class ExcursionTransitionAtomicityTests : IDisposable
             DbTransaction transaction, TransactionEndEventData eventData, CancellationToken cancellationToken = default)
         {
             if (afterCommit && Interlocked.Decrement(ref _remaining) == 0)
-                throw new TransientFault();
+                return FailAfterAsync();
             return Task.CompletedTask;
+        }
+
+        private async Task FailAfterAsync()
+        {
+            if (concurrentWrite is not null)
+                await concurrentWrite();
+            throw new TransientFault();
         }
     }
 
-    private NocturneDbContext RetryingContext(bool faultAfterCommit) =>
+    private NocturneDbContext RetryingContext(bool faultAfterCommit, Func<Task>? concurrentWrite = null) =>
         new(new DbContextOptionsBuilder<NocturneDbContext>()
             .UseSqlite(_db.Connection, o => o.ExecutionStrategy(d => new RetryOnTransientFault(d)))
             .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .AddInterceptors(new FirstCommitFault(faultAfterCommit))
+            .AddInterceptors(new FirstCommitFault(faultAfterCommit, concurrentWrite))
             .Options) { TenantId = TenantId };
 
     private static ExcursionTracker TrackerOver(NocturneDbContext context) =>
@@ -204,6 +215,67 @@ public sealed class ExcursionTransitionAtomicityTests : IDisposable
         var excursion = await check.AlertExcursions.SingleAsync();
         excursion.Id.Should().Be(opened.ExcursionId!.Value);
         (await check.AlertTrackerState.SingleAsync()).ActiveExcursionId.Should().Be(excursion.Id);
+    }
+
+    [Fact]
+    public async Task An_open_whose_commit_landed_is_reported_though_another_process_wrote_the_state_since()
+    {
+        async Task EnterHysteresis()
+        {
+            await using var other = _db.CreateContext();
+            var state = await other.AlertTrackerState.SingleAsync(s => s.AlertRuleId == RuleId);
+            state.State = "hysteresis";
+            state.HysteresisStartedAt = Now.UtcDateTime.AddSeconds(30);
+            state.UpdatedAt = Now.UtcDateTime.AddSeconds(30);
+            await other.SaveChangesAsync();
+        }
+        await using var context = RetryingContext(faultAfterCommit: true, EnterHysteresis);
+
+        var opened = await TrackerOver(context).ProcessEvaluationAsync(RuleId, conditionMet: true, null, CancellationToken.None);
+
+        opened.Type.Should().Be(ExcursionTransitionType.ExcursionOpened, "the open committed, so it must be dispatched");
+        await using var check = _db.CreateContext();
+        opened.ExcursionId.Should().Be((await check.AlertExcursions.SingleAsync()).Id);
+    }
+
+    [Fact]
+    public async Task A_close_whose_commit_landed_is_reported_though_another_process_opened_since()
+    {
+        var excursionId = Guid.Parse("00000000-0000-0000-0003-0000000000e1");
+        var theirs = Guid.Parse("00000000-0000-0000-0003-0000000000e2");
+        await using (var seed = _db.CreateContext())
+        {
+            seed.AlertExcursions.Add(new AlertExcursionEntity
+            {
+                Id = excursionId, TenantId = TenantId, AlertRuleId = RuleId, StartedAt = Now.UtcDateTime.AddHours(-1),
+            });
+            seed.AlertTrackerState.Add(new AlertTrackerStateEntity
+            {
+                AlertRuleId = RuleId, TenantId = TenantId, State = "active",
+                ActiveExcursionId = excursionId, UpdatedAt = Now.UtcDateTime.AddMinutes(-5),
+            });
+            await seed.SaveChangesAsync();
+        }
+        async Task OpenAnother()
+        {
+            await using var other = _db.CreateContext();
+            other.AlertExcursions.Add(new AlertExcursionEntity
+            {
+                Id = theirs, TenantId = TenantId, AlertRuleId = RuleId, StartedAt = Now.UtcDateTime.AddSeconds(30),
+            });
+            var state = await other.AlertTrackerState.SingleAsync(s => s.AlertRuleId == RuleId);
+            state.State = "active";
+            state.ActiveExcursionId = theirs;
+            state.UpdatedAt = Now.UtcDateTime.AddSeconds(30);
+            await other.SaveChangesAsync();
+        }
+        await using var context = RetryingContext(faultAfterCommit: true, OpenAnother);
+
+        var closed = await TrackerOver(context).ForceCloseAsync(
+            RuleId, ExcursionCloseReason.Manual, CancellationToken.None);
+
+        closed.Should().Be(new ExcursionTransition(
+            ExcursionTransitionType.ExcursionClosed, excursionId, ExcursionCloseReason.Manual));
     }
 
     [Fact]

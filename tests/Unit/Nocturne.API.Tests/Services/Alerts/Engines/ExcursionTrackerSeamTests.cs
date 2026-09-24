@@ -398,6 +398,9 @@ internal sealed class RecordingTrackerRepository(params AlertRule[] rules) : IAl
         return Task.FromResult(excursion);
     }
 
+    public Task<AlertExcursion?> GetExcursionAsync(Guid excursionId, CancellationToken ct = default) =>
+        Task.FromResult(Excursions.GetValueOrDefault(excursionId));
+
     public Task CloseExcursionAsync(Guid excursionId, DateTime endedAt, CancellationToken ct = default)
     {
         Write("close");

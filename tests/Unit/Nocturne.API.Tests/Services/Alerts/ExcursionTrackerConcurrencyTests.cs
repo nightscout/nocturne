@@ -153,6 +153,11 @@ public class ExcursionTrackerConcurrencyTests
             return Task.FromResult(excursion);
         }
 
+        public Task<AlertExcursion?> GetExcursionAsync(Guid excursionId, CancellationToken ct = default)
+        {
+            lock (_sync) return Task.FromResult(Excursions.FirstOrDefault(e => e.Id == excursionId));
+        }
+
         public Task CloseExcursionAsync(Guid excursionId, DateTime endedAt, CancellationToken ct = default)
         {
             lock (_sync)

@@ -84,18 +84,36 @@ internal static class ExcursionTransitionWriter
             : new ExcursionTransition(ExcursionTransitionType.None);
 
     private sealed record Written(
-        ExcursionTransition Transition, ExcursionTransition? AutoResolve, AlertTrackerState? State);
+        ExcursionTransition Transition, ExcursionTransition? AutoResolve, AlertTrackerState? State, DateTime Now);
 
     /// <summary>
-    /// Whether an attempt whose commit reported failure committed anyway. Every attempt that
-    /// writes anything writes a tracker state differing from the prior one, and the store holds
-    /// either the prior state (rolled back) or the attempt's (committed).
+    /// Whether an attempt whose commit reported failure committed anyway, judged by the rows only
+    /// that attempt could have written. The rule's lock is released at commit, so another process
+    /// may have written the tracker state since: a committed open, close or hysteresis start is
+    /// recognised by its excursion row instead, whose new id or <c>now</c> no other write shares.
+    /// Only the transitions no excursion row records are judged by the tracker state.
     /// </summary>
     private static async Task<bool> LandedAsync(
         IAlertTrackerRepository repository, Written attempt, CancellationToken ct)
     {
         if (attempt.State is not { } wrote)
             return false;
+
+        if (attempt.Transition is { Type: ExcursionTransitionType.ExcursionOpened, ExcursionId: { } opened })
+            return await repository.GetExcursionAsync(opened, ct) is not null;
+
+        var closed = attempt.AutoResolve?.ExcursionId
+                     ?? (attempt.Transition.Type == ExcursionTransitionType.ExcursionClosed
+                         ? attempt.Transition.ExcursionId
+                         : null);
+        if (closed is { } closedId)
+            return await repository.GetExcursionAsync(closedId, ct) is { EndedAt: { } ended }
+                   && SameInstant(ended, attempt.Now);
+
+        if (attempt.Transition is { Type: ExcursionTransitionType.HysteresisStarted, ExcursionId: { } started })
+            return await repository.GetExcursionAsync(started, ct) is { HysteresisStartedAt: { } at }
+                   && SameInstant(at, attempt.Now);
+
         var stored = await repository.GetTrackerStateAsync(wrote.AlertRuleId, ct);
         return stored is not null
                && stored.State == wrote.State
@@ -138,7 +156,7 @@ internal static class ExcursionTransitionWriter
             logger.LogInformation(
                 "Tracker state of alert rule {AlertRuleId} changed since it was read; its transition was decided elsewhere",
                 ruleId);
-            return new Written(new ExcursionTransition(ExcursionTransitionType.None), null, null);
+            return new Written(new ExcursionTransition(ExcursionTransitionType.None), null, null, now);
         }
 
         var priorId = prior?.ActiveExcursionId;
@@ -208,7 +226,7 @@ internal static class ExcursionTransitionWriter
             await repository.UpsertTrackerStateAsync(state, ct);
         }
 
-        return new Written(transition, autoResolve, state);
+        return new Written(transition, autoResolve, state, now);
     }
 
     private static async Task CloseAsync(
