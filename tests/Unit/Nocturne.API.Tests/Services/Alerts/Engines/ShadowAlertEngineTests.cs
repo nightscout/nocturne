@@ -4,8 +4,10 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Nocturne.Alerts.ParityCorpus.Generator.Harness;
 using Nocturne.API.Services.Alerts.Engines;
+using Nocturne.API.Services.Alerts.Evaluators;
 using Nocturne.API.Tests.Services.BackgroundServices;
 using Nocturne.API.Tests.TestDoubles;
+using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
@@ -240,6 +242,60 @@ public class ShadowAlertEngineTests
         var divergence = logger.Entries.Should().ContainSingle(e =>
             e.Message.Contains("field=managed_threw")).Subject;
         divergence.Message.Should().Contain("rust=threw InvalidOperationException");
+    }
+
+    private static AlertRule BuildUnevaluableRule()
+    {
+        var rule = BuildThresholdRule();
+        rule.ConditionType = AlertConditionType.Composite;
+        rule.ConditionParams = """{"operator":"and"}""";
+        return rule;
+    }
+
+    [Fact]
+    public async Task Both_engines_skipping_an_unevaluable_rule_is_not_a_divergence()
+    {
+        var rule = BuildUnevaluableRule();
+        var fake = new FakeShadowEvaluator(throws: new RustAlertEngineException("malformed condition_params"));
+        var (engine, logger, _, _, provider) = BuildShadowEngine(rule, fake);
+        await using var _ = provider;
+
+        var act = async () => await engine.EvaluateRuleAsync(
+            ToSnapshot(rule), LowGlucoseContext(), AlertEngineOptions.Default, CancellationToken.None);
+
+        await act.Should().ThrowAsync<ConditionTreeFaultException>();
+        fake.Calls.Should().Be(1);
+        logger.Entries.Should().NotContain(e => e.Level >= LogLevel.Warning);
+    }
+
+    [Fact]
+    public async Task A_shadow_skip_alongside_a_managed_throw_is_not_a_divergence()
+    {
+        var rule = BuildUnevaluableRule();
+        var fake = new FakeShadowEvaluator(() => new ShadowRuleOutcome { Skipped = true });
+        var (engine, logger, _, _, provider) = BuildShadowEngine(rule, fake);
+        await using var _ = provider;
+
+        var act = async () => await engine.EvaluateRuleAsync(
+            ToSnapshot(rule), LowGlucoseContext(), AlertEngineOptions.Default, CancellationToken.None);
+
+        await act.Should().ThrowAsync<ConditionTreeFaultException>();
+        logger.Entries.Should().NotContain(e => e.Level >= LogLevel.Warning);
+    }
+
+    [NativeFact]
+    public async Task Real_rust_shadow_skips_an_unevaluable_rule_with_the_managed_engine()
+    {
+        var rule = BuildUnevaluableRule();
+        var (engine, logger, _, _, provider) = BuildShadowEngine(
+            rule, new RustShadowRuleEvaluator(new AlertEngineErrors(new TestMeterFactory(), TimeProvider.System)));
+        await using var _ = provider;
+
+        var act = async () => await engine.EvaluateRuleAsync(
+            ToSnapshot(rule), LowGlucoseContext(), AlertEngineOptions.Default, CancellationToken.None);
+
+        await act.Should().ThrowAsync<ConditionTreeFaultException>();
+        logger.Entries.Should().NotContain(e => e.Level >= LogLevel.Warning);
     }
 
     [NativeFact]

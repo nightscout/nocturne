@@ -146,16 +146,9 @@ internal sealed class ShadowAlertEngine(
             snapshotError = ex;
         }
 
-        // The managed engine stays authoritative, including when it throws — the orchestrator's
-        // per-rule catch is what decides a throwing rule is skipped, so the exception has to
-        // reach it unchanged. But a throw is precisely the divergence class shadow mode is
-        // otherwise blind to: the managed evaluators NRE on a missing payload field and the rule
-        // is skipped, whereas the Rust engine fails closed to `false` — which moves an active
-        // excursion into hysteresis and lets the 30s sweep force-close a live alert. The corpus
-        // can't cover it either (the generator has no try/catch, so a throwing scenario cannot
-        // be authored). Run the secondary engine on the same pre-state so the log carries what it
-        // actually produced — the whole point is to learn which side diverges, and "managed threw"
-        // on its own says nothing about the Rust half — then rethrow untouched.
+        // A managed throw reaches the orchestrator unchanged, since its per-rule catch is what
+        // skips the rule. The secondary engine still runs on the same pre-state: a managed throw
+        // is a skip, and only the secondary outcome says whether Rust skipped too.
         AlertEngineEvaluation managed;
         try
         {
@@ -196,12 +189,18 @@ internal sealed class ShadowAlertEngine(
 
     /// <summary>
     /// Logs the <c>managed_threw</c> divergence, including what the secondary engine produced for
-    /// the same rule and pre-state. Runs the secondary evaluation itself because the normal
-    /// comparison path is unreachable once the managed call has thrown; the evaluation is pure, so
-    /// running it here persists nothing. Reports the Rust side as <c>(unavailable)</c> when the
-    /// pre-state snapshot failed or the rule row was missing, and as its own error when the
-    /// secondary engine also fails — never as a value it did not produce.
+    /// the same rule and pre-state, unless it skipped the rule too. Runs the secondary evaluation
+    /// itself because the normal comparison path is unreachable once the managed call has thrown;
+    /// the evaluation is pure, so running it here persists nothing. Reports the Rust side as
+    /// <c>(unavailable)</c> when the pre-state snapshot failed or the rule row was missing, and as
+    /// its own error when the secondary engine fails otherwise, never as a value it did not produce.
     /// </summary>
+    /// <remarks>
+    /// Both engines skip a rule they cannot evaluate (docs/alerts/engine-semantics.md §1.4): the
+    /// managed engine by throwing, the Rust engine by rejecting it
+    /// (<see cref="RustAlertEngineException"/>) or reporting it skipped. That is agreement, and a
+    /// stored rule of that shape would otherwise log a divergence on every tick.
+    /// </remarks>
     private async Task LogManagedThrewAsync(
         AlertRuleSnapshot rule,
         SensorContext context,
@@ -223,13 +222,22 @@ internal sealed class ShadowAlertEngine(
             {
                 var shadow = await shadowEvaluator.EvaluateAsync(
                     ruleRow, context, now, preTimers, preTracker, ct);
-                shadowOutcome = shadow.Skipped
-                    ? "skipped"
-                    : $"root={shadow.Root} transition={RustEnvelopeMapper.TransitionToWire(shadow.Transition)} auto_resolved={shadow.AutoResolved}";
+                if (shadow.Skipped)
+                {
+                    LogBothSkipped(rule.Id, managedError);
+                    return;
+                }
+                shadowOutcome =
+                    $"root={shadow.Root} transition={RustEnvelopeMapper.TransitionToWire(shadow.Transition)} auto_resolved={shadow.AutoResolved}";
             }
             catch (OperationCanceledException)
             {
                 throw;
+            }
+            catch (RustAlertEngineException)
+            {
+                LogBothSkipped(rule.Id, managedError);
+                return;
             }
             catch (Exception ex)
             {
@@ -241,6 +249,11 @@ internal sealed class ShadowAlertEngine(
             "AlertEngineDivergence rule={RuleId} engine={Engine} field=managed_threw managed={Managed} rust={Rust}",
             rule.Id, shadowEvaluator.Name, $"threw {managedError.GetType().Name}", shadowOutcome);
     }
+
+    private void LogBothSkipped(Guid ruleId, Exception managedError) =>
+        logger.LogDebug(
+            "Both alert engines skipped rule {RuleId} (managed threw {ManagedError}); engine={Engine}",
+            ruleId, managedError.GetType().Name, shadowEvaluator.Name);
 
     /// <inheritdoc/>
     public Task<bool> EvaluateNodeAsync(
