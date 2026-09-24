@@ -7,8 +7,6 @@ namespace Nocturne.API.Tests.Controllers.V4.Monitoring;
 /// <summary>An <see cref="IAlertRuleConditionValidator"/> that accepts every rule.</summary>
 internal sealed class NoConditionIssues : IAlertRuleConditionValidator
 {
-    public bool IsAvailable => true;
-
     public IReadOnlyList<RustValidationIssue> Validate(
         AlertConditionType conditionType,
         string conditionParamsJson,

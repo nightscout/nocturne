@@ -1,6 +1,8 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Nocturne.API.Services.Alerts.Evaluators;
 using Nocturne.Core.Alerts.Native;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 
 namespace Nocturne.API.Services.Alerts;
@@ -14,12 +16,10 @@ namespace Nocturne.API.Services.Alerts;
 /// </summary>
 public interface IAlertRuleConditionValidator
 {
-    /// <summary>Whether the native engine backing <see cref="Validate"/> can be loaded.</summary>
-    bool IsAvailable { get; }
-
     /// <summary>
-    /// The problems with the rule's trees; empty when there are none. Never throws: when the
-    /// native engine is unavailable or fails, only timezones are checked, which is logged.
+    /// The problems with the rule's trees; empty when there are none. Never throws. When the
+    /// native engine is unavailable or fails, only the problems that fail evaluation are found
+    /// (<see cref="ConditionTreeFaults"/>), plus timezones, and that is logged.
     /// </summary>
     IReadOnlyList<RustValidationIssue> Validate(
         AlertConditionType conditionType,
@@ -32,18 +32,26 @@ public interface IAlertRuleConditionValidator
 /// <inheritdoc />
 public sealed class AlertRuleConditionValidator : IAlertRuleConditionValidator
 {
+    private const string ConditionScope = "condition";
+    private const string AutoResolveScope = "auto_resolve";
+    private const string SnoozeScope = "snooze";
+
     private static readonly JsonElement JsonNull = JsonDocument.Parse("null").RootElement.Clone();
 
     private readonly ILogger<AlertRuleConditionValidator> _logger;
-    private readonly Lazy<bool> _available = new(AlertsInterop.IsAvailable);
+    private readonly Lazy<bool> _available;
+    private int _unavailableLogged;
 
     public AlertRuleConditionValidator(ILogger<AlertRuleConditionValidator> logger)
+        : this(logger, AlertsInterop.IsAvailable)
     {
-        _logger = logger;
     }
 
-    /// <inheritdoc />
-    public bool IsAvailable => _available.Value;
+    internal AlertRuleConditionValidator(ILogger<AlertRuleConditionValidator> logger, Func<bool> isAvailable)
+    {
+        _logger = logger;
+        _available = new Lazy<bool>(isAvailable);
+    }
 
     /// <inheritdoc />
     public IReadOnlyList<RustValidationIssue> Validate(
@@ -53,32 +61,36 @@ public sealed class AlertRuleConditionValidator : IAlertRuleConditionValidator
         string? autoResolveParamsJson,
         string? clientConfigurationJson)
     {
-        return [.. NativeIssues(conditionType, conditionParamsJson, autoResolveEnabled, autoResolveParamsJson, clientConfigurationJson),
-            .. TimeZoneIssues(conditionType, conditionParamsJson, autoResolveEnabled, autoResolveParamsJson, clientConfigurationJson)];
+        var autoResolve = autoResolveEnabled ? autoResolveParamsJson : null;
+        var snooze = SmartSnoozeConfig.EvaluatedConditions(clientConfigurationJson);
+        return [.. ConditionIssues(conditionType, conditionParamsJson, autoResolve, snooze),
+            .. TimeZoneIssues(conditionType, conditionParamsJson, autoResolve, snooze)];
     }
 
-    private IReadOnlyList<RustValidationIssue> NativeIssues(
-        AlertConditionType conditionType,
-        string conditionParamsJson,
-        bool autoResolveEnabled,
-        string? autoResolveParamsJson,
-        string? clientConfigurationJson)
+    private IReadOnlyList<RustValidationIssue> ConditionIssues(
+        AlertConditionType conditionType, string conditionParamsJson, string? autoResolveJson, JsonElement? snooze)
     {
-        if (!IsAvailable)
+        if (!_available.Value)
         {
-            _logger.LogWarning(
-                "nocturne_alerts native library unavailable; alert rule conditions were not validated");
-            return [];
+            if (Interlocked.Exchange(ref _unavailableLogged, 1) == 0)
+            {
+                _logger.LogWarning(
+                    "nocturne_alerts native library unavailable; alert rule conditions are checked only for problems that fail evaluation");
+            }
+            return ManagedIssues(conditionType, conditionParamsJson, autoResolveJson, snooze);
         }
+
+        if (!TryParse(conditionParamsJson, out var body) || !TryParse(autoResolveJson, out var autoResolve))
+            return ManagedIssues(conditionType, conditionParamsJson, autoResolveJson, snooze);
 
         try
         {
             return RustAlertEngine.Validate(new RustValidateRequest
             {
                 ConditionType = AlertConditionTypeNames.ToWireString(conditionType),
-                ConditionParams = Parse(conditionParamsJson) ?? JsonNull,
-                AutoResolveParams = autoResolveEnabled ? Parse(autoResolveParamsJson) : null,
-                SnoozeConditions = SmartSnoozeConditions(clientConfigurationJson),
+                ConditionParams = body ?? JsonNull,
+                AutoResolveParams = autoResolve,
+                SnoozeConditions = snooze,
             });
         }
         catch (Exception ex) when (
@@ -88,73 +100,132 @@ public sealed class AlertRuleConditionValidator : IAlertRuleConditionValidator
                 or EntryPointNotFoundException
                 or BadImageFormatException)
         {
-            _logger.LogWarning(ex, "Alert rule condition validation failed; the rule was not validated");
-            return [];
+            _logger.LogWarning(ex,
+                "Alert rule condition validation failed in the native engine; checking only for problems that fail evaluation");
+            return ManagedIssues(conditionType, conditionParamsJson, autoResolveJson, snooze);
         }
     }
 
-    private static IEnumerable<RustValidationIssue> TimeZoneIssues(
-        AlertConditionType conditionType,
-        string conditionParamsJson,
-        bool autoResolveEnabled,
-        string? autoResolveParamsJson,
-        string? clientConfigurationJson)
+    /// <summary>
+    /// What makes the managed engine skip the rule on every tick. That is the shapes
+    /// <see cref="ConditionTreeFaults"/> finds, and JSON that does not read as the evaluators'
+    /// models, coded and pathed as the Rust engine reports them.
+    /// </summary>
+    private static List<RustValidationIssue> ManagedIssues(
+        AlertConditionType conditionType, string conditionParamsJson, string? autoResolveJson, JsonElement? snooze)
     {
-        static RustValidationIssue Issue(string scope, ConditionTimeZones.UnresolvedZone zone) =>
-            new(scope, zone.Path, "invalid_field", "timezone");
+        var issues = new List<RustValidationIssue>();
+        var wire = AlertConditionTypeNames.ToWireString(conditionType);
 
-        foreach (var zone in ConditionTimeZones.UnresolvedInRule(conditionType, conditionParamsJson))
-            yield return Issue("condition", zone);
+        if (!TryParse(conditionParamsJson, out var body))
+            issues.Add(Issue(ConditionScope, wire, "not_an_object"));
+        else if (body is null or { ValueKind: JsonValueKind.Null })
+            issues.Add(Issue(ConditionScope, wire, "payload_missing"));
+        else if (!ReadNode(new JsonObject { ["type"] = wire, [wire] = JsonNode.Parse(body.Value.GetRawText()) }.ToJsonString(), out _))
+            issues.Add(Issue(ConditionScope, wire, "invalid_field"));
+        else if (ConditionTreeFaults.InRule(conditionType, conditionParamsJson) is { } fault)
+            issues.Add(Issue(ConditionScope, fault));
 
-        if (autoResolveEnabled)
+        if (!TryParse(autoResolveJson, out var autoResolve))
+            issues.Add(Issue(AutoResolveScope, AlertConditionTypeNames.AutoResolvePathRoot, "not_an_object"));
+        else if (autoResolve is { ValueKind: not JsonValueKind.Null } tree)
+            AddNodeIssues(issues, AutoResolveScope, AlertConditionTypeNames.AutoResolvePathRoot, tree.GetRawText());
+
+        if (snooze is { ValueKind: JsonValueKind.Array } list && list.GetArrayLength() > 0)
         {
-            foreach (var zone in ConditionTimeZones.UnresolvedInNode(
-                         autoResolveParamsJson, AlertConditionTypeNames.AutoResolvePathRoot))
-                yield return Issue("auto_resolve", zone);
+            var composite = new JsonObject
+            {
+                ["type"] = "composite",
+                ["composite"] = new JsonObject
+                {
+                    ["operator"] = "and",
+                    ["conditions"] = JsonNode.Parse(list.GetRawText()),
+                },
+            };
+            AddNodeIssues(issues, SnoozeScope, AlertConditionTypeNames.SnoozePathRoot, composite.ToJsonString());
         }
 
-        JsonElement? snooze;
+        return issues;
+    }
+
+    private static void AddNodeIssues(List<RustValidationIssue> issues, string scope, string root, string nodeJson)
+    {
+        if (!ReadNode(nodeJson, out var node))
+            issues.Add(Issue(scope, root, "invalid_field"));
+        else if (ConditionTreeFaults.InNode(node, root) is { } fault)
+            issues.Add(Issue(scope, fault));
+    }
+
+    private static bool ReadNode(string json, out ConditionNode? node)
+    {
         try
         {
-            snooze = SmartSnoozeConditions(clientConfigurationJson);
+            node = JsonSerializer.Deserialize<ConditionNode>(json, EvaluatorJson.Options);
+            return true;
         }
         catch (JsonException)
         {
-            yield break;
+            node = null;
+            return false;
         }
+    }
+
+    private static RustValidationIssue Issue(string scope, string path, string reason) =>
+        new(scope, path, reason, null);
+
+    private static RustValidationIssue Issue(string scope, ConditionTreeFault fault) =>
+        new(scope, fault.Path, fault.Reason, FaultField(fault.Reason));
+
+    /// <summary>The field the Rust engine names for each <see cref="ConditionTreeFaults"/> reason.</summary>
+    private static string? FaultField(string reason) => reason switch
+    {
+        "type_missing" => "type",
+        "conditions_missing" => "conditions",
+        "operator_missing" => "operator",
+        "direction_missing" => "direction",
+        "state_missing" => "state",
+        _ => null,
+    };
+
+    private static IEnumerable<RustValidationIssue> TimeZoneIssues(
+        AlertConditionType conditionType, string conditionParamsJson, string? autoResolveJson, JsonElement? snooze)
+    {
+        static RustValidationIssue ZoneIssue(string scope, ConditionTimeZones.UnresolvedZone zone) =>
+            new(scope, zone.Path, "invalid_field", "timezone");
+
+        foreach (var zone in ConditionTimeZones.UnresolvedInRule(conditionType, conditionParamsJson))
+            yield return ZoneIssue(ConditionScope, zone);
+
+        foreach (var zone in ConditionTimeZones.UnresolvedInNode(
+                     autoResolveJson, AlertConditionTypeNames.AutoResolvePathRoot))
+            yield return ZoneIssue(AutoResolveScope, zone);
+
         if (snooze is { } conditions)
         {
             foreach (var zone in ConditionTimeZones.UnresolvedInConditionList(
                          conditions, AlertConditionTypeNames.SnoozePathRoot))
-                yield return Issue("snooze", zone);
+                yield return ZoneIssue(SnoozeScope, zone);
         }
-    }
-
-    /// <summary>A JSON value, or null for a blank string (a missing tree).</summary>
-    private static JsonElement? Parse(string? json)
-    {
-        if (string.IsNullOrWhiteSpace(json))
-            return null;
-        using var doc = JsonDocument.Parse(json);
-        return doc.RootElement.Clone();
     }
 
     /// <summary>
-    /// <c>snooze.conditions</c> when smart snooze is on and they are a list, the only case the
-    /// sweep evaluates them (<see cref="SmartSnoozeConfig"/>).
+    /// Whether <paramref name="json"/> is readable JSON; <paramref name="value"/> is null for a
+    /// blank string (a missing tree).
     /// </summary>
-    private static JsonElement? SmartSnoozeConditions(string? clientConfigurationJson)
+    private static bool TryParse(string? json, out JsonElement? value)
     {
-        if (Parse(clientConfigurationJson) is not { ValueKind: JsonValueKind.Object } config
-            || !config.TryGetProperty("snooze", out var snooze)
-            || snooze.ValueKind != JsonValueKind.Object
-            || !snooze.TryGetProperty("smartSnooze", out var smart)
-            || smart.ValueKind != JsonValueKind.True
-            || !snooze.TryGetProperty("conditions", out var conditions)
-            || conditions.ValueKind != JsonValueKind.Array)
+        value = null;
+        if (string.IsNullOrWhiteSpace(json))
+            return true;
+        try
         {
-            return null;
+            using var doc = JsonDocument.Parse(json);
+            value = doc.RootElement.Clone();
+            return true;
         }
-        return conditions;
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 }

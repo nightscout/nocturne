@@ -36,13 +36,6 @@ public sealed class AlertRuleConditionAuditService : BackgroundService
             var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
             var validator = scope.ServiceProvider.GetRequiredService<IAlertRuleConditionValidator>();
 
-            if (!validator.IsAvailable)
-            {
-                _logger.LogWarning(
-                    "nocturne_alerts native library unavailable; skipping the alert rule condition audit");
-                return;
-            }
-
             List<Guid> tenantIds;
             await using (var lookup = await factory.CreateDbContextAsync(stoppingToken))
             {
@@ -56,40 +49,13 @@ public sealed class AlertRuleConditionAuditService : BackgroundService
             var flagged = 0;
             foreach (var tenantId in tenantIds)
             {
-                await using var db = await factory.CreateDbContextAsync(stoppingToken);
-                db.TenantId = tenantId;
-
-                var rules = await db.AlertRules
-                    .AsNoTracking()
-                    .Where(r => r.TenantId == tenantId && r.IsEnabled)
-                    .Select(r => new
-                    {
-                        r.Id,
-                        r.ConditionType,
-                        r.ConditionParams,
-                        r.AutoResolveEnabled,
-                        r.AutoResolveParams,
-                        r.ClientConfiguration,
-                    })
-                    .ToListAsync(stoppingToken);
-
-                foreach (var rule in rules)
+                try
                 {
-                    var issues = validator.Validate(
-                        rule.ConditionType,
-                        rule.ConditionParams,
-                        rule.AutoResolveEnabled,
-                        rule.AutoResolveParams,
-                        rule.ClientConfiguration);
-                    if (issues.Count == 0)
-                        continue;
-
-                    flagged++;
-                    _logger.LogWarning(
-                        "Alert rule {AlertRuleId} for tenant {TenantId} has conditions a save would reject: {Issues}",
-                        rule.Id,
-                        tenantId,
-                        string.Join("; ", issues.Select(i => $"{i.Scope} {i.Path}: {i.Reason}")));
+                    flagged += await AuditTenantAsync(factory, validator, tenantId, stoppingToken);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger.LogError(ex, "Error auditing alert rule conditions for tenant {TenantId}", tenantId);
                 }
             }
 
@@ -103,5 +69,50 @@ public sealed class AlertRuleConditionAuditService : BackgroundService
         {
             _logger.LogError(ex, "Error auditing alert rule conditions");
         }
+    }
+
+    private async Task<int> AuditTenantAsync(
+        IDbContextFactory<NocturneDbContext> factory,
+        IAlertRuleConditionValidator validator,
+        Guid tenantId,
+        CancellationToken ct)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        db.TenantId = tenantId;
+
+        var rules = await db.AlertRules
+            .AsNoTracking()
+            .Where(r => r.TenantId == tenantId && r.IsEnabled)
+            .Select(r => new
+            {
+                r.Id,
+                r.ConditionType,
+                r.ConditionParams,
+                r.AutoResolveEnabled,
+                r.AutoResolveParams,
+                r.ClientConfiguration,
+            })
+            .ToListAsync(ct);
+
+        var flagged = 0;
+        foreach (var rule in rules)
+        {
+            var issues = validator.Validate(
+                rule.ConditionType,
+                rule.ConditionParams,
+                rule.AutoResolveEnabled,
+                rule.AutoResolveParams,
+                rule.ClientConfiguration);
+            if (issues.Count == 0)
+                continue;
+
+            flagged++;
+            _logger.LogWarning(
+                "Alert rule {AlertRuleId} for tenant {TenantId} has conditions a save would reject: {Issues}",
+                rule.Id,
+                tenantId,
+                string.Join("; ", issues.Select(i => $"{i.Scope} {i.Path}: {i.Reason}")));
+        }
+        return flagged;
     }
 }

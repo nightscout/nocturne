@@ -32,7 +32,6 @@ public class AlertRuleConditionAuditServiceTests
 
     public AlertRuleConditionAuditServiceTests()
     {
-        _validator.SetupGet(v => v.IsAvailable).Returns(true);
         _validator
             .Setup(v => v.Validate(It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>()))
             .Returns((AlertConditionType _, string body, bool _, string? _, string? _) => body == Rejected
@@ -108,17 +107,28 @@ public class AlertRuleConditionAuditServiceTests
     }
 
     [Fact]
-    public async Task Skips_the_scan_when_the_native_library_is_unavailable()
+    public async Task A_failing_tenant_does_not_stop_the_others()
     {
+        var secondTenant = Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc");
+        var secondRule = Guid.Parse("00000000-0000-0000-0000-0000000000a2");
         await SeedAsync();
-        _validator.SetupGet(v => v.IsAvailable).Returns(false);
+        await using (var db = new NocturneDbContext(_options))
+        {
+            db.Tenants.Add(new TenantEntity { Id = secondTenant, Slug = "second", IsActive = true });
+            db.AlertRules.Add(Rule(secondRule, secondTenant, Rejected));
+            await db.SaveChangesAsync();
+        }
+        var calls = 0;
+        _validator
+            .Setup(v => v.Validate(It.IsAny<AlertConditionType>(), Rejected, It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>()))
+            .Returns(() => ++calls == 1
+                ? throw new InvalidOperationException("boom")
+                : [new RustValidationIssue("condition", "composite", "conditions_empty", "conditions")]);
 
         await RunAsync();
 
-        _logger.Warnings.Should().ContainSingle().Which.Should().Contain("skipping the alert rule condition audit");
-        _validator.Verify(
-            v => v.Validate(It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>()),
-            Times.Never);
+        _logger.Entries.Should().ContainSingle(e => e.Level == LogLevel.Error && e.Exception is InvalidOperationException);
+        _logger.Warnings.Should().ContainSingle(w => w.StartsWith("1 enabled alert rule(s)"));
     }
 
     [Fact]
