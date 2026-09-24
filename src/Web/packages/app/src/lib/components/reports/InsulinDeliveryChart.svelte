@@ -16,7 +16,6 @@
 
   let { data, showStacked = true }: Props = $props();
 
-  // Format hour for display
   function formatHour(hour: number): string {
     if (hour === 0) return "12 AM";
     if (hour < 12) return `${hour} AM`;
@@ -40,7 +39,6 @@
     return Math.max(2, Math.ceil(maxValue * 1.2));
   });
 
-  // Check if we have both scheduled and temp basal data
   const hasScheduledBasalData = $derived(
     chartData.some((d) => (d.scheduledBasal ?? 0) > 0)
   );
@@ -139,7 +137,6 @@
       />
     {/if}
 
-    <!-- Time period insights -->
     {#if chartData.length >= 24}
       {@const morning = chartData.slice(6, 12).reduce((s, d) => s + displayValue(d), 0)}
       {@const afternoon = chartData
@@ -149,29 +146,25 @@
         chartData.slice(18, 24).reduce((s, d) => s + displayValue(d), 0) +
         chartData.slice(0, 6).reduce((s, d) => s + displayValue(d), 0)}
       {@const totalDaily = morning + afternoon + evening}
-      <div class="mt-4 grid grid-cols-3 gap-3 text-center">
-        <div class="rounded-lg border bg-card p-3">
-          <div class="text-lg font-bold">{morning.toFixed(1)}U</div>
-          <div class="text-xs text-muted-foreground">Morning (6am-12pm)</div>
-          <div class="text-xs font-medium text-muted-foreground">
-            {totalDaily > 0 ? ((morning / totalDaily) * 100).toFixed(0) : 0}%
+      {@const periods = [
+        { label: "Morning (6am-12pm)", units: morning },
+        { label: "Afternoon (12pm-6pm)", units: afternoon },
+        { label: "Evening/Night", units: evening },
+      ]}
+      <dl class="m-0 mt-4 grid grid-cols-3 divide-x divide-border border-t border-border">
+        {#each periods as period (period.label)}
+          <div class="px-3 pt-3 first:pl-0 last:pr-0">
+            <dt class="text-xs text-muted-foreground">{period.label}</dt>
+            <dd class="m-0 mt-1 flex flex-wrap items-baseline gap-x-1">
+              <span class="text-lg font-semibold tabular-nums">{period.units.toFixed(1)}</span>
+              <span class="text-xs text-muted-foreground">U</span>
+              <span class="ml-1 text-xs text-muted-foreground tabular-nums">
+                {totalDaily > 0 ? ((period.units / totalDaily) * 100).toFixed(0) : 0}%
+              </span>
+            </dd>
           </div>
-        </div>
-        <div class="rounded-lg border bg-card p-3">
-          <div class="text-lg font-bold">{afternoon.toFixed(1)}U</div>
-          <div class="text-xs text-muted-foreground">Afternoon (12pm-6pm)</div>
-          <div class="text-xs font-medium text-muted-foreground">
-            {totalDaily > 0 ? ((afternoon / totalDaily) * 100).toFixed(0) : 0}%
-          </div>
-        </div>
-        <div class="rounded-lg border bg-card p-3">
-          <div class="text-lg font-bold">{evening.toFixed(1)}U</div>
-          <div class="text-xs text-muted-foreground">Evening/Night</div>
-          <div class="text-xs font-medium text-muted-foreground">
-            {totalDaily > 0 ? ((evening / totalDaily) * 100).toFixed(0) : 0}%
-          </div>
-        </div>
-      </div>
+        {/each}
+      </dl>
     {/if}
   {:else}
     <div

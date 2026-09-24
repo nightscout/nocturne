@@ -3,7 +3,7 @@
   import { Button } from "$lib/components/ui/button";
   import type { AlertLevel, PillInfoItem } from "$lib/types/status-pills";
   import { cn } from "$lib/utils";
-  import { PlusCircle } from "lucide-svelte";
+  import { PlusCircle, TriangleAlert, History } from "lucide-svelte";
 
   interface StatusPillProps {
     /** Display value shown in the pill */
@@ -38,41 +38,45 @@
     onAction,
   }: StatusPillProps = $props();
 
-  /** Get pill styling based on alert level */
-  // eslint-disable-next-line shadcn/require-static-classes -- this is the pill component: levelClasses is its variant table, and PopoverTrigger renders unstyled.
-  const pillClasses = $derived.by(() => {
-    const baseClasses =
-      "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-sm font-medium transition-colors cursor-pointer select-none";
+  // eslint-disable-next-line shadcn/require-static-classes -- this is the status item itself, and PopoverTrigger renders unstyled.
+  const pillClasses = $derived(
+    cn(
+      "inline-flex flex-col items-start rounded-md px-3 py-1 text-left whitespace-nowrap transition-colors cursor-pointer select-none hover:bg-accent/50",
+      isStale && "opacity-60",
+      className
+    )
+  );
 
-    const levelClasses: Record<AlertLevel, string> = {
-      none: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-      info: "bg-info/10 text-info hover:bg-info/20",
-      warn: "bg-warning/10 text-warning hover:bg-warning/20",
-      urgent:
-        "bg-destructive/10 text-destructive hover:bg-destructive/20",
-    };
-
-    const staleClasses = isStale ? "opacity-60" : "";
-
-    return cn(baseClasses, levelClasses[level], staleClasses, className);
-  });
-
-  /** Get label styling based on level */
-  const labelClasses = $derived.by(() => {
-    const baseClasses = "text-xs font-normal opacity-75";
-    return cn(baseClasses);
-  });
+  // Severity is urgency, read as text; warn and urgent also carry an icon so the level is never colour alone.
+  const valueTone: Record<AlertLevel, string> = {
+    none: "",
+    info: "text-severity-info",
+    warn: "text-severity-warn",
+    urgent: "text-severity-urgent",
+  };
+  const labelClasses = "text-xs text-muted-foreground";
   let popoverOpen = $state(false);
 </script>
+
+{#snippet item()}
+  <span class={labelClasses}>{label}</span>
+  <span class="flex items-center gap-1 text-sm font-medium tabular-nums {valueTone[level]}">
+    {#if level === "warn" || level === "urgent"}
+      <TriangleAlert class="size-3.5" aria-hidden="true" />
+      <span class="sr-only">{level === "urgent" ? "Urgent:" : "Warning:"}</span>
+    {/if}
+    {value}
+    {#if isStale}
+      <History class="size-3 text-muted-foreground" aria-hidden="true" />
+      <span class="sr-only">(not current)</span>
+    {/if}
+  </span>
+{/snippet}
 
 {#if showPopover && info.length > 0}
   <Popover.Root bind:open={popoverOpen}>
     <Popover.Trigger class={pillClasses}>
-      <span class={labelClasses}>{label}</span>
-      <span>{value}</span>
-      {#if isStale}
-        <span class="text-xs opacity-50">?</span>
-      {/if}
+      {@render item()}
     </Popover.Trigger>
     <Popover.Content class="w-80 p-0" align="center" side="bottom">
       <div class="px-4 py-3 border-b border-border">
@@ -118,10 +122,6 @@
   </Popover.Root>
 {:else}
   <div class={pillClasses}>
-    <span class={labelClasses}>{label}</span>
-    <span>{value}</span>
-    {#if isStale}
-      <span class="text-xs opacity-50">?</span>
-    {/if}
+    {@render item()}
   </div>
 {/if}

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-23T23:39:57.059575+00:00",
+  "generatedAt": "2026-09-24T03:25:36.718860+00:00",
   "title": "Design System: Nocturne",
   "extensions": {
     "colorMeta": {
@@ -516,6 +516,22 @@
       "description": "The signature current-reading tile: a range fill, heavy numerals, the trend, the delta, and the age. It turns muted when stale.",
       "html": "<div class=\"ds-gvi\"><div class=\"ds-gvi-tile\">91</div><div class=\"ds-gvi-meta\"><span>&#8594; +1 mg/dL</span><span>1 min ago</span></div></div>",
       "css": ".ds-gvi { font-family: Cabin, sans-serif; display: inline-flex; align-items: center; gap: 10px; color: var(--foreground, oklch(0.13 0.028 261.692)); } .ds-gvi-tile { font-size: 36px; font-weight: 700; padding: 8px 16px; border-radius: 10px; background: var(--glucose-in-range, oklch(0.6 0.118 184.704)); color: #fff; transition: transform 300ms; } .ds-gvi-tile:hover { transform: scale(1.03); } .ds-gvi-meta { display: flex; flex-direction: column; font-size: 12px; color: var(--muted-foreground, oklch(0.551 0.027 264.364)); }"
+    },
+    {
+      "name": "Figure Strip",
+      "kind": "custom",
+      "refersTo": "figure-strip",
+      "description": "A report's headline figures in one ruled panel: label, figure, unit and an optional reference note. Each figure appears once per page.",
+      "html": "<dl class=\"ds-strip\"><div><dt>Time in range</dt><dd>75<span>%</span></dd><p>Target: ≥70%</p></div><div><dt>Average</dt><dd>141<span>mg/dL</span></dd></div><div><dt>CV</dt><dd>40<span>%</span></dd><p>Target: ≤33%</p></div></dl>",
+      "css": ".ds-strip { font-family: Cabin, sans-serif; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin: 0; background: var(--border, oklch(0.928 0.006 264.531)); border: 1px solid var(--border, oklch(0.928 0.006 264.531)); border-radius: 14px; overflow: hidden; width: 480px; } .ds-strip > div { background: var(--card, oklch(1 0 0)); padding: 12px 16px; } .ds-strip dt { font-size: 12px; color: var(--muted-foreground, oklch(0.551 0.027 264.364)); } .ds-strip dd { margin: 4px 0 0; font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--foreground, oklch(0.13 0.028 261.692)); } .ds-strip dd span { font-size: 12px; font-weight: 400; color: var(--muted-foreground, oklch(0.551 0.027 264.364)); margin-left: 4px; } .ds-strip p { margin: 2px 0 0; font-size: 10px; color: var(--muted-foreground, oklch(0.551 0.027 264.364)); }"
+    },
+    {
+      "name": "Status Item",
+      "kind": "custom",
+      "refersTo": "status-item",
+      "description": "One entry in the dashboard's status line (COB, basal, IOB, loop, trackers): muted label over a single-line tabular value. Warn and urgent add an icon beside the severity tone.",
+      "html": "<div class=\"ds-status\"><button><span>COB</span><strong>12 g</strong></button><button><span>Temp basal</span><strong>1.10 U/h</strong></button><button><span>Trio</span><strong class=\"warn\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3\"/><path d=\"M12 9v4\"/><path d=\"M12 17h.01\"/></svg> 10:30 · eventual 104 mg/dL</strong></button></div>",
+      "css": ".ds-status { font-family: Cabin, sans-serif; display: flex; gap: 8px; } .ds-status button { display: inline-flex; flex-direction: column; align-items: flex-start; padding: 4px 12px; border: none; border-radius: 8px; background: transparent; cursor: pointer; white-space: nowrap; } .ds-status button:hover { background: color-mix(in oklab, var(--accent, oklch(0.967 0.003 264.542)) 50%, transparent); } .ds-status button:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring, oklch(0.707 0.022 261.325)) 50%, transparent); border-color: var(--ring, oklch(0.707 0.022 261.325)); } .ds-status span { font-size: 12px; color: var(--muted-foreground, oklch(0.551 0.027 264.364)); } .ds-status strong { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--foreground, oklch(0.13 0.028 261.692)); } .ds-status strong.warn { color: var(--severity-warn, oklch(0.49 0.1 75.834)); }"
     }
   ],
   "narrative": {
@@ -571,6 +587,10 @@
       "**Do** use the `overlay` variants over fullscreen clock and alarm surfaces whose background the theme does not own."
     ],
     "donts": [
+      "**Don't** lay out stat figures as a row of separate cards, or put two figures of the same size side by side competing. Use the Figure Strip, and keep the current reading the largest number on any screen.",
+      "**Don't** build a grid of same-size cards of icon, heading and text. Destinations are ruled lists.",
+      "**Don't** nest a bordered or filled tile inside a card row. Rows inside a card are divided by rules.",
+      "**Don't** set uppercase tracked labels above headings, or number sections, unless the sequence itself is information.",
       "**Don't** use Tailwind palette literals (`bg-green-500`, `text-orange-500`) for any clinical or outcome state.",
       "**Don't** use `--success` or `--warning` for glucose or therapy state. They are UI outcomes. Use the `--glucose-*`, `--status-*`, or `--severity-*` families.",
       "**Don't** use `--glucose-in-range` as a brand or decorative accent. In the portal, use `--brand`.",

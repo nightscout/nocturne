@@ -128,7 +128,7 @@
 </script>
 
 {#if hasVisiblePills}
-  <div class={cn("flex flex-wrap items-center gap-2", className)}>
+  <div class={cn("flex flex-wrap items-center gap-x-2 gap-y-1", className)}>
     {#each visibleInstances as instance (instance.id)}
       <TrackerPill
         {instance}

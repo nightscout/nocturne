@@ -740,10 +740,9 @@
             bind:sentinelElement={sentinelElements[year]}
           />
 
-          <!-- GRI Chart for year -->
           {@const griPeriods = griTimelineData.get(year) ?? []}
           {#if griPeriods.length > 1}
-            <div class="mt-4 rounded-lg border border-border bg-card p-4">
+            <div class="mt-4 border-t border-border pt-4">
               <GlycemicRiskIndexChart
                 gri={griPeriods[griPeriods.length - 1]?.gri ?? { score: 0 }}
                 timeSeriesData={griPeriods}

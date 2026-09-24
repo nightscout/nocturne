@@ -1,7 +1,11 @@
 <script lang="ts">
   import { Chart, Svg, Axis, Polygon, Points, Tooltip } from "layerchart";
   import { scaleLinear } from "d3-scale";
-  import type { GlycemicRiskIndex, GriTimelinePeriod } from "$lib/api/generated/nocturne-api-client";
+  import {
+    GRIZone,
+    type GlycemicRiskIndex,
+    type GriTimelinePeriod,
+  } from "$lib/api/generated/nocturne-api-client";
   import { formatGlucoseValue, formatMonthYear, getUnitLabel } from "$lib/utils/formatting";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import { patternClass, type TextureKey } from "$lib/components/charts/print/chart-print-patterns";
@@ -151,6 +155,20 @@
     }))
   );
 
+  const ZONE_LETTER: Record<GRIZone, string> = {
+    [GRIZone.A]: "A",
+    [GRIZone.B]: "B",
+    [GRIZone.C]: "C",
+    [GRIZone.D]: "D",
+    [GRIZone.E]: "E",
+  };
+
+  const currentZone = $derived.by(() => {
+    if (gri.zone == null) return undefined;
+    const letter = ZONE_LETTER[gri.zone];
+    return zones.find((zone) => zone.label === letter);
+  });
+
   const singlePoint = $derived(
     clampToPlot(gri.hypoglycemiaComponent ?? 0, gri.hyperglycemiaComponent ?? 0)
   );
@@ -161,21 +179,6 @@
 
 <div class="@container">
   <div class="flex flex-col items-center gap-4 @md:flex-row @md:items-start @md:gap-6">
-    <!-- GRI Score Display -->
-    <div class="flex shrink-0 flex-col items-center gap-1">
-      <span class="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-        GRI
-      </span>
-      <div class="flex h-24 w-24 items-center justify-center rounded-full border-4 border-muted">
-        <span class="text-3xl font-bold">{Math.round(gri.score ?? 0)}</span>
-      </div>
-      <p class="max-w-[120px] text-center text-2xs leading-tight text-muted-foreground">
-        Risk is indicated in percentiles &mdash; 0 is lowest risk and 100 is
-        highest risk
-      </p>
-    </div>
-
-    <!-- Scatter Plot -->
     <div class="w-full @md:max-w-[250px] @md:flex-1">
       <div class="aspect-square w-full">
         <Chart
@@ -189,7 +192,7 @@
         >
           {#snippet children({ context })}
             <Svg>
-              <!-- Zone polygons (rendered back-to-front: E first so A is on top) -->
+              <!-- E first so A draws on top. -->
               {#each zones as zone (zone.label)}
                 <Polygon
                   points={zone.vertices.map((v) => ({
@@ -205,7 +208,6 @@
               {/each}
 
               {#if isTimeSeries}
-                <!-- Time-series connecting lines (dotted) -->
                 {#each timeSeriesPoints as point, i (i)}
                   {#if i > 0}
                     {@const prev = timeSeriesPoints[i - 1]}
@@ -221,7 +223,6 @@
                   {/if}
                 {/each}
 
-                <!-- Time-series data points -->
                 {#each timeSeriesPoints as point, i (i)}
                   <circle
                     cx={context.xScale(point.hypo)}
@@ -251,7 +252,6 @@
                   </text>
                 {/each}
               {:else}
-                <!-- Patient position dot (single point mode) -->
                 <Points
                   data={[singlePoint]}
                   x="hypo"
@@ -330,6 +330,23 @@
     </div>
 
     <div class="shrink-0 space-y-3">
+      <div class="border-b border-border pb-3">
+        <dl class="m-0">
+          <dt class="text-xs text-muted-foreground">GRI</dt>
+          <dd class="m-0 mt-0.5">
+            <span class="text-2xl font-semibold tabular-nums">{Math.round(gri.score ?? 0)}</span>
+            {#if currentZone}
+              <span class="ml-1 text-sm text-muted-foreground">
+                Zone {currentZone.label} ({currentZone.range})
+              </span>
+            {/if}
+          </dd>
+        </dl>
+        <p class="mt-1 max-w-40 text-2xs leading-tight text-muted-foreground">
+          Risk is indicated in percentiles &mdash; 0 is lowest risk and 100 is
+          highest risk
+        </p>
+      </div>
       <ChartKey items={zoneKey} class="flex-col items-start gap-y-1.5 text-2xs" />
       {#if isTimeSeries}
         <ol class="hidden space-y-0.5 text-2xs text-muted-foreground print:block">

@@ -27,7 +27,6 @@
 
   let { data = null, loading = false }: Props = $props();
 
-  // Extract data from prop
   const ratioData = $derived(data);
   const chartData = $derived(ratioData?.dailyData ?? []);
   const averageBasalPercent = $derived(ratioData?.averageBasalPercent ?? 0);
@@ -53,7 +52,6 @@
       </div>
     </div>
   {:else if chartData.length > 0 && chartData.some((d) => (d.total ?? 0) > 0)}
-    <!-- Stacked Bar Chart -->
     <div class="h-75 w-full">
       <BarChart
         data={chartData}
@@ -93,25 +91,17 @@
       ]}
     />
 
-    <!-- Ideal ratio guidance -->
-    <div class="mt-4 rounded-lg border border-dashed bg-muted/30 p-3">
-      <p class="text-center text-sm text-muted-foreground">
-        <strong>Typical ratios:</strong>
-        Most people with Type 1 diabetes have around 50% basal and 50% bolus. Ratios
-        can vary based on diet, activity level, and individual needs.
-        {#if averageBasalPercent > 60}
-          <span class="text-warning">
-            Your basal percentage is higher than typical — consider discussing
-            with your healthcare provider.
-          </span>
-        {:else if averageBolusPercent > 60}
-          <span class="text-info">
-            Your bolus percentage is higher than typical — this may indicate
-            high carb meals or frequent corrections.
-          </span>
-        {/if}
+    {#if averageBasalPercent > 60}
+      <p class="mt-3 text-xs text-muted-foreground">
+        Your basal percentage is higher than typical — consider discussing
+        with your healthcare provider.
       </p>
-    </div>
+    {:else if averageBolusPercent > 60}
+      <p class="mt-3 text-xs text-muted-foreground">
+        Your bolus percentage is higher than typical — this may indicate
+        high carb meals or frequent corrections.
+      </p>
+    {/if}
   {:else}
     <div
       class="flex h-[350px] w-full items-center justify-center text-muted-foreground"

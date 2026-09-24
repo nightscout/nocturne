@@ -1,6 +1,6 @@
 <script lang="ts">
   import StatusPill from "./StatusPill.svelte";
-  import { bg, formatLocale } from "$lib/utils/formatting";
+  import { bg, bgLabel, formatLocale } from "$lib/utils/formatting";
   import type {
     LoopPillData,
     PillInfoItem,
@@ -90,30 +90,22 @@
     return items;
   });
 
-  /** Get status symbol */
-  const statusSymbol = $derived.by((): string => {
-    if (!data) return "⚠";
-
-    switch (data.status) {
+  const statusWord = $derived.by((): string => {
+    switch (data?.status) {
       case "enacted":
-        return "⌁";
+        return "enacted";
       case "recommendation":
-        return "⏀";
+        return "suggested";
       case "looping":
-        return "↻";
+        return "looping";
       case "error":
-        return "x";
-      case "warning":
+        return "error";
       default:
-        return "⚠";
+        return "not recent";
     }
   });
 
-  /** Build label with loop name and symbol */
-  const pillLabel = $derived.by(() => {
-    const name = data?.loopName ?? "Loop";
-    return `${name} ${statusSymbol}`;
-  });
+  const pillLabel = $derived(`${data?.loopName ?? "Loop"} · ${statusWord}`);
 
   /** Build display value with time and eventual BG */
   const display = $derived.by(() => {
@@ -128,7 +120,7 @@
     );
 
     if (data.eventualBG != null) {
-      return `${time} ↝ ${bg(data.eventualBG)}`;
+      return `${time} · eventual ${bg(data.eventualBG)} ${bgLabel()}`;
     }
 
     return time;

@@ -125,75 +125,62 @@
   }
 </script>
 
-<!-- Header section - hidden on mobile since MobileHeader handles BG display -->
+<!-- Desktop only: on mobile, MobileHeader carries the reading. -->
 <div class="@container">
   <h1 class="sr-only">Nocturne</h1>
-  <div class="hidden @md:flex items-center justify-between gap-6">
-    <!-- Left side: Demo badge + COB/Basal pills + Tracker Pills -->
-    <div class="flex items-center gap-2 order-1">
+  <div class="hidden @md:flex items-center gap-6">
+    <div class="flex shrink-0 items-center gap-3">
+      <GlucoseValueIndicator
+        displayValue={displayCurrentBG}
+        rawBgMgdl={rawCurrentBG}
+        {isLoading}
+        {isStale}
+        {isDisconnected}
+        {statusText}
+        {statusTooltip}
+        size="lg"
+      />
+      <div class="text-sm text-muted-foreground tabular-nums">
+        {displayBgDelta}
+      </div>
+    </div>
+
+    <div class="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
       {#if displayDemoMode}
-        <Badge variant="demo" class="flex items-center">
-          <div class="w-2 h-2 bg-demo rounded-full animate-pulse"></div>
+        <Badge variant="demo">
+          <span class="size-2 rounded-full bg-demo animate-pulse" aria-hidden="true"></span>
           Demo Mode
         </Badge>
       {/if}
-      <!-- All status pills in a single line -->
       {#if showPills}
         <COBPill data={realtimeStore.pillsData.cob} />
         <BasalPill data={realtimeStore.pillsData.basal} />
         <IOBPill data={realtimeStore.pillsData.iob} />
         <LoopPill data={realtimeStore.pillsData.loop} />
-        <!-- Reservoir is optional: many pumps/pods report no numeric value
-             (e.g. Omnipod above 50 U), so only show the pill when present. -->
+        <!-- Many pumps and pods report no numeric reservoir (e.g. Omnipod above 50 U). -->
         {#if realtimeStore.currentReservoir !== null}
           <ReservoirPill reservoir={realtimeStore.currentReservoir} />
         {/if}
       {/if}
-      <!-- Tracker Pills -->
       {#if trackerPillsEnabled && realtimeStore.trackerInstances.length > 0}
         <TrackerPillBar
           instances={realtimeStore.trackerInstances}
           definitions={realtimeStore.trackerDefinitions}
           onComplete={handleTrackerComplete}
-          class="flex-nowrap"
+          class="contents"
         />
       {/if}
     </div>
 
-    <!-- Right side: Clock, BG, Delta (semantic order: BG first for accessibility) -->
-    <div class="flex items-center gap-4 order-2">
-      <!-- BG Display with connection/stale status - semantically first -->
-      <div class="flex items-center gap-2 order-2">
-        <GlucoseValueIndicator
-          displayValue={displayCurrentBG}
-          rawBgMgdl={rawCurrentBG}
-          {isLoading}
-          {isStale}
-          {isDisconnected}
-          {statusText}
-          {statusTooltip}
-          size="lg"
-        />
-        <div class="text-center">
-          <div class="text-sm text-muted-foreground">
-            {displayBgDelta}
-          </div>
-        </div>
-      </div>
-      <!-- Current Time Display - visually first -->
-      <div
-        class="flex items-center gap-2 text-lg font-medium tabular-nums order-1"
-      >
-        <Clock class="h-4 w-4 text-muted-foreground" />
-        {formattedLocalTime}
-      </div>
+    <div class="flex shrink-0 items-center gap-1.5 text-sm text-muted-foreground tabular-nums">
+      <Clock class="size-4" aria-hidden="true" />
+      {formattedLocalTime}
     </div>
   </div>
 </div>
 
-<!-- Status Pills Bar - visible only on mobile (all pills in header on desktop) -->
 {#if showPills}
-  <div class="mt-2 flex flex-wrap items-center gap-2 @md:hidden">
+  <div class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 @md:hidden">
     <COBPill data={realtimeStore.pillsData.cob} />
     <BasalPill data={realtimeStore.pillsData.basal} />
     <IOBPill data={realtimeStore.pillsData.iob} />

@@ -303,6 +303,9 @@ A report's headline figures sit in one `FigureStrip` (`packages/app/src/lib/comp
 ### Page header
 A page's `h1` (24px bold) sits beside its section icon in a 48px tile (`rounded-xl`, `--primary` at 10%, the icon 24px in `--primary`), with a one-line description under the heading. This tile is the one sanctioned icon tile; it marks the page, not individual items on it.
 
+### Status line
+The dashboard header leads with the current reading, followed by one wrapping line of status items: COB, basal, IOB, loop, reservoir and trackers. Each item is a muted 12px label over a 14px medium, tabular, single-line value, with no fill at rest and a hover fill of `--accent` at 50%. Alert levels tone the value with the `--severity-*` tokens, and warn, hazard and urgent add a `TriangleAlert` icon so the level is never colour alone. A stale item fades to 60% and adds a `History` icon. A tracker shows its used lifespan as a hairline under the item. The clock sits last, in muted text.
+
 ### Lists of links
 Indexes of destinations, such as the reports hub, the settings hub and the portal's docs and install pages, are ruled lists: a row per link with title, description and a trailing chevron, and a hover fill of `--accent` at 50%. They are not grids of cards with icon tiles.
 

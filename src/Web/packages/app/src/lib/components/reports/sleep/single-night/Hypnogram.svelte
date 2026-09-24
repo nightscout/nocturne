@@ -409,7 +409,7 @@
                   <div class="flex items-center gap-1.5">
                     <div class="size-2 rounded-full bg-(--dot)" style:--dot={d.glucose.color}></div>
                     <span class="text-muted-foreground">Glucose</span>
-                    <span class="ml-auto pl-3 font-mono font-medium tabular-nums">
+                    <span class="ml-auto pl-3 font-medium tabular-nums">
                       {bg(d.glucose.sgv)} {bgLabel()}
                     </span>
                   </div>
@@ -425,7 +425,7 @@
                   <div class="flex items-center gap-1.5">
                     <div class="size-2 rounded-full bg-insulin-basal"></div>
                     <span class="text-muted-foreground">Basal</span>
-                    <span class="ml-auto pl-3 font-mono font-medium tabular-nums">
+                    <span class="ml-auto pl-3 font-medium tabular-nums">
                       {d.basalRate.toFixed(2)} U/h
                     </span>
                   </div>
@@ -434,7 +434,7 @@
                   <div class="flex items-center gap-1.5">
                     <div class="size-2 rounded-full border border-muted-foreground/50"></div>
                     <span class="text-muted-foreground">Scheduled</span>
-                    <span class="ml-auto pl-3 font-mono font-medium tabular-nums">
+                    <span class="ml-auto pl-3 font-medium tabular-nums">
                       {d.scheduledBasalRate.toFixed(2)} U/h
                     </span>
                   </div>
