@@ -19,6 +19,28 @@ public sealed class RustAlertEngineException : Exception
     public RustAlertEngineException(string message, Exception innerException) : base(message, innerException)
     {
     }
+
+    /// <param name="message">The exception message.</param>
+    /// <param name="rejection">The <c>error</c> of the engine's <c>ok: false</c> envelope.</param>
+    public RustAlertEngineException(string message, string? rejection) : base(message)
+    {
+        Rejection = rejection;
+    }
+
+    /// <summary>
+    /// The <c>error</c> the engine answered with when it rejected the request, or
+    /// <see langword="null"/> when the host refused the engine's response or the call failed.
+    /// </summary>
+    public string? Rejection { get; }
+
+    /// <summary>
+    /// The engine rejected the request's condition tree, node or kind as one it cannot evaluate
+    /// (docs/alerts/engine-semantics.md §1.4). The fault is in the stored rule, not the engine.
+    /// </summary>
+    public bool IsConditionRejection =>
+        Rejection is { } error
+        && (error.StartsWith("malformed condition", StringComparison.Ordinal)
+            || error.StartsWith("unknown condition_type", StringComparison.Ordinal));
 }
 
 /// <summary>
@@ -258,7 +280,8 @@ public static partial class RustAlertEngine
                 $"Rust alert engine answered {operation} with schema_version {response.SchemaVersion}, expected {AlertEnvelopeJson.SchemaVersion}");
         if (!response.Ok)
             throw new RustAlertEngineException(
-                $"Rust alert engine rejected the {operation} request: {response.Error ?? "(no error message)"}");
+                $"Rust alert engine rejected the {operation} request: {response.Error ?? "(no error message)"}",
+                response.Error);
         return response;
     }
 

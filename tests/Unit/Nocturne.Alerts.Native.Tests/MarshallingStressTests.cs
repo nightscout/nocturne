@@ -174,7 +174,8 @@ public class MarshallingStressTests
         var act = () => RustAlertEngine.Evaluate(rule, EmptyContext(), new DateTime(2026, 1, 5, 12, 0, 0, DateTimeKind.Utc));
 
         act.Should().Throw<RustAlertEngineException>()
-            .WithMessage("*malformed condition_params for 'threshold': direction_missing at 'threshold'*");
+            .WithMessage("*malformed condition_params for 'threshold': direction_missing at 'threshold'*")
+            .Which.IsConditionRejection.Should().BeTrue();
     }
 
     [NativeFact]
@@ -190,7 +191,8 @@ public class MarshallingStressTests
         var act = () => RustAlertEngine.Evaluate(rule, EmptyContext(), new DateTime(2026, 1, 5, 12, 0, 0, DateTimeKind.Utc));
 
         act.Should().Throw<RustAlertEngineException>()
-            .WithMessage("*unknown condition_type 'definitely_not_a_condition'*");
+            .WithMessage("*unknown condition_type 'definitely_not_a_condition'*")
+            .Which.IsConditionRejection.Should().BeTrue();
     }
 
     [NativeFact]
@@ -211,7 +213,8 @@ public class MarshallingStressTests
 
         var act = () => RustAlertEngine.Evaluate(request);
 
-        act.Should().Throw<RustAlertEngineException>().WithMessage("*unsupported schema_version 42*");
+        act.Should().Throw<RustAlertEngineException>().WithMessage("*unsupported schema_version 42*")
+            .Which.IsConditionRejection.Should().BeFalse();
     }
 
     [NativeFact]

@@ -52,6 +52,52 @@ public class AlertEngineErrorsTests
         errors.Latest.Should().BeNull();
     }
 
+    [Fact]
+    public void A_condition_rejection_is_not_a_failure()
+    {
+        using var factory = new TestMeterFactory();
+        var errors = new AlertEngineErrors(factory, _time);
+
+        var act = () => errors.Track<int>("evaluate", AlertEngineErrors.RustEngine,
+            () => throw new RustAlertEngineException("rejected", "malformed condition node: type_missing"));
+
+        act.Should().Throw<RustAlertEngineException>();
+        errors.Latest.Should().BeNull();
+        errors.Window().Should().Be((1L, 0L));
+    }
+
+    [Fact]
+    public async Task The_rust_engine_is_unhealthy_while_most_calls_fail()
+    {
+        using var factory = new TestMeterFactory();
+        var errors = new AlertEngineErrors(factory, _time);
+        var rust = new AlertEngineSelection(AlertEngineMode.Rust, "rust");
+        void Fail() => FluentActions.Invoking(() => errors.Track<int>("evaluate", AlertEngineErrors.RustEngine,
+            () => throw new RustAlertEngineException("bad"))).Should().Throw<RustAlertEngineException>();
+
+        for (var i = 0; i < AlertEngineHealthCheck.UnhealthyMinimumFailures; i++) Fail();
+        errors.Track("evaluate", AlertEngineErrors.RustEngine, () => 1);
+        (await CheckAsync(rust, errors)).Status.Should().Be(HealthStatus.Unhealthy);
+
+        for (var i = 0; i < 20; i++) errors.Track("evaluate", AlertEngineErrors.RustEngine, () => 1);
+        (await CheckAsync(rust, errors)).Status.Should().Be(HealthStatus.Degraded, "most calls succeed");
+
+        _time.Advance(AlertEngineErrors.WindowLength);
+        (await CheckAsync(rust, errors)).Status.Should().Be(HealthStatus.Healthy);
+    }
+
+    [Fact]
+    public async Task Fewer_failures_than_the_minimum_are_only_degraded()
+    {
+        using var factory = new TestMeterFactory();
+        var errors = new AlertEngineErrors(factory, _time);
+
+        errors.Record("evaluate", AlertEngineErrors.RustEngine);
+
+        (await CheckAsync(new AlertEngineSelection(AlertEngineMode.Rust, "rust"), errors))
+            .Status.Should().Be(HealthStatus.Degraded);
+    }
+
     private async Task<HealthCheckResult> CheckAsync(AlertEngineSelection selection, AlertEngineErrors errors) =>
         await new AlertEngineHealthCheck(selection, errors, _time)
             .CheckHealthAsync(new HealthCheckContext());
