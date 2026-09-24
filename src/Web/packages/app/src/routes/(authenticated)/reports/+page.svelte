@@ -31,7 +31,7 @@
   // Default: 14 days is standard for reports overview
   const reportsParams = requireDateParamsContext(14);
 
-  const grantedScopes: string[] = $derived(
+  const grantedScopes = $derived(
     page.data.effectivePermissions ?? []
   );
   const viewer = $derived({

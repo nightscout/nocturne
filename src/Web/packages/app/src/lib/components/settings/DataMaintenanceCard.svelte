@@ -29,7 +29,7 @@
   // the wildcard; deleting demo data is tenant.settings. Data Quality is a page an ordinary
   // member opens to set a sleep schedule, so neither control is offered to someone the API
   // would refuse.
-  const effectivePermissions: string[] = $derived(
+  const effectivePermissions = $derived(
     page.data.effectivePermissions ?? []
   );
   const canDeduplicate = $derived(satisfiesScope(effectivePermissions, "*"));

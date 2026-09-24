@@ -2,6 +2,7 @@
 	import { timeDay } from "d3-time";
 	import { withAll } from "$lib/utils/collections";
 	import { page } from '$app/state';
+	import { satisfiesScope } from '$lib/authorization/scopes';
 	import { toast } from 'svelte-sonner';
 	import { permissionGatedMutationError } from '$lib/forms';
 	import { Button } from '$lib/components/ui/button';
@@ -44,14 +45,10 @@
 	import { bg, bgLabel, formatShortDate, time } from "$lib/utils/formatting";
 	import type { CompressionLowSuggestion } from '$lib/api';
 
-	const effectivePermissions: string[] = $derived(
-		page.data.effectivePermissions ?? []
-	);
 	// Accepting, dismissing, deleting and re-running detection all write state
 	// spans and suggestion rows, so the server gates them on glucose.readwrite.
 	const canReviewSuggestions = $derived(
-		effectivePermissions.includes('*') ||
-			effectivePermissions.includes('glucose.readwrite')
+		satisfiesScope(page.data.effectivePermissions ?? [], 'glucose.readwrite')
 	);
 	const NEEDS_GLUCOSE_READWRITE =
 		'Reviewing compression lows requires the glucose.readwrite permission.';

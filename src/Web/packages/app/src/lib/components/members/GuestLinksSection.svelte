@@ -1,6 +1,7 @@
 <script lang="ts">
   import { formatDayTime } from "$lib/utils/formatting";
   import { page } from "$app/state";
+  import { satisfiesScope } from "$lib/authorization/scopes";
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
   import { Badge } from "$lib/components/ui/badge";
@@ -33,12 +34,8 @@
   import { retainQuery } from "$lib/api/retain-query.svelte";
   import { describeSubmitError } from "$lib/forms";
 
-  const effectivePermissions: string[] = $derived(
-    page.data.effectivePermissions ?? []
-  );
-  const hasStar = $derived(effectivePermissions.includes("*"));
   const canCreateGuestLinks = $derived(
-    hasStar || effectivePermissions.includes("sharing.guest")
+    satisfiesScope(page.data.effectivePermissions ?? [], "sharing.guest")
   );
 
   // UI state

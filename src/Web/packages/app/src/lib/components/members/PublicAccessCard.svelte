@@ -2,6 +2,7 @@
   import { toggled } from "$lib/utils/collections";
   import { formatDayTime } from "$lib/utils/formatting";
   import { page } from "$app/state";
+  import { satisfiesScope } from "$lib/authorization/scopes";
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
   import { Switch } from "$lib/components/ui/switch";
@@ -34,12 +35,8 @@
   import { retainQuery } from "$lib/api/retain-query.svelte";
   import { describeSubmitError } from "$lib/forms/submit-error";
 
-  const effectivePermissions: string[] = $derived(
-    page.data.effectivePermissions ?? [],
-  );
   const canManageSharing = $derived(
-    effectivePermissions.includes("*") ||
-      effectivePermissions.includes("sharing.manage"),
+    satisfiesScope(page.data.effectivePermissions ?? [], "sharing.manage"),
   );
 
   const shareQuery = $derived(canManageSharing ? getShareLink() : null);
