@@ -989,6 +989,7 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<IRuleScopeClassifier, RuleScopeClassifier>();
         services.AddHostedService<RuleScopeClassBackfillService>();
         services.AddSingleton<IAlertRuleConditionValidator, AlertRuleConditionValidator>();
+        services.AddHostedService<AlertRuleConditionAuditService>();
 
         // Delivery providers
         services.AddScoped<Nocturne.API.Services.Alerts.Providers.WebPushProvider>();
