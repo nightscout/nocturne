@@ -161,21 +161,31 @@ jobs:
             --logger "trx;LogFileName=alerts-ffi-parity.trx" \
             -p:GenerateNSwagClient=false \
             || exit 1
-      # Engine-seam tests (IAlertEvaluationEngine): corpus parity for both the managed and
-      # rust-backed seam adapters, cross-engine timer continuity, shadow-mode divergence
-      # logging, and Alerts:Engine flag selection. The rust-backed theories require the
-      # cdylib built above; NOCTURNE_ALERTS_REQUIRE_NATIVE turns silent skips into failures.
-      - name: Engine seam tests (managed + rust adapters, shadow, flag)
+      # Engine-seam tests (IAlertEvaluationEngine) plus every API test class holding a
+      # [NativeFact]/[NativeTheory], which the unit job skips for want of the cdylib. The
+      # classes are found by grep, each in a file named after it, so a new native test
+      # cannot be left out; NOCTURNE_ALERTS_REQUIRE_NATIVE turns silent skips into failures.
+      - name: Engine seam and native-backed API tests
         env:
           NOCTURNE_ALERTS_NATIVE_DIR: ${{ github.workspace }}/crates/target/release
           NOCTURNE_ALERTS_REQUIRE_NATIVE: "1"
           Alerts__Engine: rust
         run: |
+          set -euo pipefail
+          filter="FullyQualifiedName~Services.Alerts.Engines"
+          for file in $(grep -rlE '\[Native(Fact|Theory)' tests/Unit/Nocturne.API.Tests --include='*.cs'); do
+            class=$(basename "$file" .cs)
+            if ! grep -qE "class ${class}\b" "$file"; then
+              echo "::error file=$file::holds native tests but declares no class named $class"
+              exit 1
+            fi
+            filter="$filter|FullyQualifiedName~.${class}."
+          done
+          echo "Filter: $filter"
           dotnet test tests/Unit/Nocturne.API.Tests/Nocturne.API.Tests.csproj \
-            --filter "FullyQualifiedName~Services.Alerts.Engines" \
+            --filter "$filter" \
             --logger "trx;LogFileName=alerts-engine-seam.trx" \
-            -p:GenerateNSwagClient=false \
-            || exit 1
+            -p:GenerateNSwagClient=false
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
