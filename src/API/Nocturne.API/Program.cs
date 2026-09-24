@@ -31,7 +31,6 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Configuration;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Interceptors;
-using OpenTelemetry.Logs;
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using JwtOptions = Nocturne.Core.Models.Configuration.JwtOptions;
@@ -132,20 +131,6 @@ builder.Services.AddCompatibilityProxyServices(builder.Configuration);
 
 // In-process, so each replica caches independently and entries are lost on restart.
 builder.Services.AddNocturneMemoryCache();
-
-builder.Logging.ClearProviders();
-builder.Logging.AddOpenTelemetry(logging =>
-{
-    if (builder.Environment.IsDevelopment() || !builder.Configuration.IsOtlpConfigured())
-    {
-        logging.AddConsoleExporter();
-    }
-});
-
-var loopApnsKeyId = builder.Configuration["Loop:ApnsKeyId"];
-Console.WriteLine(
-    $"Loop configuration loaded - APNS Key ID: {(string.IsNullOrEmpty(loopApnsKeyId) ? "Not configured" : $"{loopApnsKeyId[..Math.Min(4, loopApnsKeyId.Length)]}****")}"
-);
 
 // Add response caching for GET endpoints
 builder.Services.AddResponseCaching();
@@ -288,6 +273,11 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+var loopApnsKeyId = app.Configuration["Loop:ApnsKeyId"];
+app.Logger.LogInformation(
+    "Loop configuration loaded - APNS Key ID: {LoopApnsKeyId}",
+    string.IsNullOrEmpty(loopApnsKeyId) ? "Not configured" : $"{loopApnsKeyId[..Math.Min(4, loopApnsKeyId.Length)]}****");
 
 // Surface the effective credentialed-CORS base domain so operators can see what's active.
 // An invalid base (bare suffix, single-label, or empty) fails closed: cross-origin CORS is
