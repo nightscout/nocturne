@@ -13,7 +13,6 @@
     PieChart,
     Calendar,
     Info,
-    TrendingUp,
     ArrowRight,
     ArrowLeft,
     HelpCircle,
@@ -176,9 +175,8 @@
         </li>
       </ul>
       <p class="text-muted-foreground">
-        A typical split is around 50/50, but this can vary based on diet,
-        activity, and individual needs. Some people do well with 40/60 or 60/40
-        ratios.
+        A typical split is around 50/50, and it varies with diet, activity and
+        individual needs.
       </p>
     </CardContent>
   </Card>
@@ -274,55 +272,6 @@
           </div>
         </dl>
 
-        <div class="mt-2 border-t border-border pt-4">
-          <h4 class="font-medium">Bolus Pattern Observations</h4>
-          <ul class="mt-2 space-y-1 text-sm text-muted-foreground">
-            {#if (insulinStats.correctionBoluses ?? 0) > (insulinStats.mealBoluses ?? 0)}
-              <li class="flex items-start gap-2">
-                <Info class="mt-0.5 h-4 w-4 shrink-0 text-info" />
-                <span>
-                  Correction boluses ({insulinStats.correctionBoluses ?? 0})
-                  outnumber meal boluses ({insulinStats.mealBoluses ?? 0}) in this
-                  period.
-                </span>
-              </li>
-            {/if}
-            {#if (insulinStats.bolusesPerDay ?? 0) < 3}
-              <li class="flex items-start gap-2">
-                <Info class="mt-0.5 h-4 w-4 shrink-0 text-info" />
-                <span>
-                  Low bolus frequency — typical for low-carb diets or those with
-                  significant basal coverage.
-                </span>
-              </li>
-            {:else if (insulinStats.bolusesPerDay ?? 0) > 8}
-              <li class="flex items-start gap-2">
-                <Info class="mt-0.5 h-4 w-4 shrink-0 text-info" />
-                <span>
-                  High bolus frequency — {(insulinStats.bolusesPerDay ?? 0).toFixed(
-                    1
-                  )} boluses per day, which may include many small corrections.
-                </span>
-              </li>
-            {/if}
-            {#if (insulinStats.avgBolus ?? 0) > 0}
-              <li class="flex items-start gap-2">
-                <TrendingUp class="mt-0.5 h-4 w-4 shrink-0 text-info" />
-                <span>
-                  Average bolus size of {(insulinStats.avgBolus ?? 0).toFixed(1)}U —
-                  {#if (insulinStats.avgBolus ?? 0) < 2}
-                    smaller boluses may indicate frequent snacking or active
-                    lifestyle.
-                  {:else if (insulinStats.avgBolus ?? 0) > 8}
-                    larger boluses typical for higher carb meals.
-                  {:else}
-                    moderate bolus sizes.
-                  {/if}
-                </span>
-              </li>
-            {/if}
-          </ul>
-        </div>
       </CardContent>
     </Card>
   {/if}

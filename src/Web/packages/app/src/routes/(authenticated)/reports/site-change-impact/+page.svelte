@@ -159,8 +159,6 @@
           <p class="font-medium">Before Site Change (Left)</p>
           <p class="text-info/80">
             Shows glucose patterns in the hours before you changed your site.
-            Higher glucose here may indicate absorption issues with an aging
-            site.
           </p>
         </div>
         <div>
@@ -237,8 +235,7 @@
         </div>
         <p class="text-xs text-muted-foreground">
           These are averages across {analysis.siteChangeCount ?? 0} site changes
-          in this window, not a per-change result. Discuss any patterns with your
-          care team.
+          in this window, not a per-change result.
         </p>
       </CardContent>
     </Card>

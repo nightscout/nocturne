@@ -241,7 +241,7 @@
           {/each}
           <p class="text-xs text-muted-foreground">
             The percentile bands above show when in the day variation and
-            excursions occur. Discuss any patterns with your care team.
+            excursions occur.
           </p>
         </CardContent>
       </Card>
@@ -253,13 +253,13 @@
   <!-- Clinical Context Footer -->
   <Card variant="muted">
     <CardContent class="pt-6">
-      <div class="grid grid-cols-1 @3xl:grid-cols-3 print:grid-cols-3 gap-6 text-sm">
+      <div class="grid grid-cols-1 @3xl:grid-cols-2 print:grid-cols-2 gap-6 text-sm">
         <div>
           <h4 class="font-semibold mb-2">About This Report</h4>
           <p class="text-muted-foreground">
             The AGP is a standardized report format recommended by diabetes
-            organizations worldwide. It's designed to quickly show patterns that
-            help optimize treatment.
+            organizations worldwide. It shows how glucose varies across a typical
+            day.
           </p>
         </div>
         <div>
@@ -268,13 +268,6 @@
             This AGP follows international consensus guidelines. The modal day
             view with 10th-90th percentile bands helps identify variability
             patterns and timing of excursions.
-          </p>
-        </div>
-        <div>
-          <h4 class="font-semibold mb-2">Next Steps</h4>
-          <p class="text-muted-foreground">
-            Use this report with your care team to identify specific times of
-            day that need attention and to track progress over time.
           </p>
         </div>
       </div>

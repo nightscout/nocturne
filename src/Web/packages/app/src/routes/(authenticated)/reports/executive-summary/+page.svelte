@@ -256,8 +256,7 @@
             {/if}
 
             <div class="text-sm text-muted-foreground">
-              Target for time below {bg(70)} {bgLabel()} is under 4%. Discuss any
-              patterns with your care team.
+              Target for time below {bg(70)} {bgLabel()} is under 4%.
             </div>
           </CardContent>
         </Card>

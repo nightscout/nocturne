@@ -29,8 +29,6 @@
 
   const ratioData = $derived(data);
   const chartData = $derived(ratioData?.dailyData ?? []);
-  const averageBasalPercent = $derived(ratioData?.averageBasalPercent ?? 0);
-  const averageBolusPercent = $derived(ratioData?.averageBolusPercent ?? 0);
 
   const MAX_X_LABELS = 10;
   const xTicks = $derived.by(() => {
@@ -91,17 +89,6 @@
       ]}
     />
 
-    {#if averageBasalPercent > 60}
-      <p class="mt-3 text-xs text-muted-foreground">
-        Your basal percentage is higher than typical — consider discussing
-        with your healthcare provider.
-      </p>
-    {:else if averageBolusPercent > 60}
-      <p class="mt-3 text-xs text-muted-foreground">
-        Your bolus percentage is higher than typical — this may indicate
-        high carb meals or frequent corrections.
-      </p>
-    {/if}
   {:else}
     <div
       class="flex h-[350px] w-full items-center justify-center text-muted-foreground"

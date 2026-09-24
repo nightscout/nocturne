@@ -147,13 +147,8 @@
             The <strong>shaded bands</strong>
             show the range of variation (10th-90th percentile)
           </li>
-          <li>Wider bands indicate more variability in your basal needs</li>
+          <li>Wider bands mean the delivered rate varied more at that hour</li>
         </ul>
-        <p class="text-muted-foreground">
-          Use this to identify times when your basal insulin may need
-          adjustment, or to discuss temp basal patterns with your healthcare
-          provider.
-        </p>
       </CardContent>
     </Card>
 
@@ -216,28 +211,15 @@
                 Your basal rates ranged from
                 <strong>{basalStats.minRate.toFixed(2)} U/hr</strong>
                 to <strong>{basalStats.maxRate.toFixed(2)} U/hr</strong>.
-                {#if basalStats.maxRate - basalStats.minRate > 0.5}
-                  This indicates significant variation in your basal needs
-                  throughout the day.
-                {:else}
-                  Your basal rates are relatively consistent.
-                {/if}
               </p>
             </div>
 
             <div class="py-3">
               <h4 class="font-medium">Temp Basal Activity</h4>
               <p class="text-sm text-muted-foreground">
-                {#if tempBasalInfo.perDay > 10}
-                  High temp basal activity ({tempBasalInfo.perDay.toFixed(
-                    1
-                  )}/day) suggests active automated or manual adjustments.
-                {:else if tempBasalInfo.perDay > 3}
-                  Moderate temp basal activity — typical for automated
-                  insulin delivery systems.
-                {:else if tempBasalInfo.perDay > 0}
-                  Low temp basal activity — your basal rates may be
-                  well-tuned.
+                {#if tempBasalInfo.perDay > 0}
+                  <strong class="tabular-nums">{tempBasalInfo.perDay.toFixed(1)}</strong>
+                  temp basals per day on average.
                 {:else}
                   No temp basal activity recorded in this period.
                 {/if}
@@ -249,8 +231,7 @@
                 <h4 class="font-medium">Suspend/Zero Temp Basals</h4>
                 <p class="text-sm text-muted-foreground">
                   <strong>{tempBasalInfo.zeroTemps}</strong>
-                  zero or suspend temp basals were recorded. This often indicates
-                  low glucose prevention or manual suspensions.
+                  zero or suspend temp basals were recorded.
                 </p>
               </div>
             {/if}

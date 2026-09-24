@@ -168,8 +168,7 @@
       <p>
         This is a retrospective analysis of recorded readings. A flagged window indicates a pattern
         that is statistically unlikely to be physiologic; it does not by itself identify the cause.
-        Boundaries are determined after the fact from surrounding readings. Discuss any patterns with
-        your care team.
+        Boundaries are determined after the fact from surrounding readings.
       </p>
     </div>
   </div>
