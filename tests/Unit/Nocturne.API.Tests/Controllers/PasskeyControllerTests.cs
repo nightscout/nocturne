@@ -1329,6 +1329,56 @@ public class PasskeyControllerTests : IDisposable
         response.RecoveryMode.Should().BeFalse();
     }
 
+    [Fact]
+    public async Task GetAuthStatus_OnlyCredentialIsOnADisabledProvider_ReturnsSetupRequired()
+    {
+        // Arrange — the identity cannot sign in, so the tenant is not past first-run setup
+        await EnsureTenantAsync(_tenantId);
+
+        var providerId = Guid.CreateVersion7();
+        _dbContext.OidcProviders.Add(new OidcProviderEntity
+        {
+            Id = providerId,
+            Name = "Disabled provider",
+            IssuerUrl = "https://idp.invalid",
+            ClientId = "client",
+            IsEnabled = false,
+        });
+
+        var subjectId = Guid.CreateVersion7();
+        _dbContext.Subjects.Add(new SubjectEntity
+        {
+            Id = subjectId,
+            Name = "Locked Out",
+            IsActive = true,
+            IsSystemSubject = false,
+        });
+        _dbContext.SubjectOidcIdentities.Add(new SubjectOidcIdentityEntity
+        {
+            Id = Guid.CreateVersion7(),
+            SubjectId = subjectId,
+            ProviderId = providerId,
+            OidcSubjectId = "ext-1",
+            Issuer = "https://idp.invalid",
+            LinkedAt = DateTime.UtcNow,
+        });
+        _dbContext.TenantMembers.Add(new TenantMemberEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = _tenantId,
+            SubjectId = subjectId,
+        });
+        await _dbContext.SaveChangesAsync();
+
+        // Act
+        var result = await _controller.GetAuthStatus();
+
+        // Assert
+        var okResult = Assert.IsType<OkObjectResult>(result);
+        var response = Assert.IsType<AuthStatusResponse>(okResult.Value);
+        response.SetupRequired.Should().BeTrue();
+    }
+
     #endregion
 
     #region ListCredentials reports whether the account has a backup way in

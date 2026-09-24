@@ -45,5 +45,5 @@ public static class OrphanedSubjectFilter
                 && !s.IsSystemSubject
                 && !s.IsDemoSubject
                 && !db.PasskeyCredentials.Any(p => p.SubjectId == s.Id)
-                && !db.SubjectOidcIdentities.Any(i => i.SubjectId == s.Id));
+                && !db.WorkingOidcIdentities().Any(i => i.SubjectId == s.Id));
 }

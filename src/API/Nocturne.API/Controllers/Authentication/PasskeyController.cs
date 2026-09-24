@@ -475,7 +475,7 @@ public class PasskeyController : ControllerBase
             .Where(match)
             .Where(s => !s.IsSystemSubject
                 && !_dbContext.PasskeyCredentials.Any(c => c.SubjectId == s.Id)
-                && !_dbContext.SubjectOidcIdentities.Any(o => o.SubjectId == s.Id))
+                && !_dbContext.WorkingOidcIdentities().Any(o => o.SubjectId == s.Id))
             .OrderByDescending(s => s.Id)
             .Select(s => s.Id)
             .ToListAsync();
@@ -865,7 +865,7 @@ public class PasskeyController : ControllerBase
             .Where(m => m.TenantId == tenantId)
             .AnyAsync(m =>
                 db.PasskeyCredentials.Any(c => c.SubjectId == m.SubjectId) ||
-                db.SubjectOidcIdentities.Any(o => o.SubjectId == m.SubjectId));
+                db.WorkingOidcIdentities().Any(o => o.SubjectId == m.SubjectId));
     }
 
     /// <summary>

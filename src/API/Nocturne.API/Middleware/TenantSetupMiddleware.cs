@@ -186,7 +186,7 @@ public class TenantSetupMiddleware
             .Where(m => m.TenantId == tenantId)
             .AnyAsync(m =>
                 db.PasskeyCredentials.Any(c => c.SubjectId == m.SubjectId) ||
-                db.SubjectOidcIdentities.Any(i => i.SubjectId == m.SubjectId), ct);
+                db.WorkingOidcIdentities().Any(i => i.SubjectId == m.SubjectId), ct);
         if (!hasCredentials)
         {
             var passkeyCount = memberCount > 0
@@ -198,7 +198,7 @@ public class TenantSetupMiddleware
             var oidcCount = memberCount > 0
                 ? await db.TenantMembers
                     .Where(m => m.TenantId == tenantId)
-                    .SelectMany(m => db.SubjectOidcIdentities.Where(i => i.SubjectId == m.SubjectId))
+                    .SelectMany(m => db.WorkingOidcIdentities().Where(i => i.SubjectId == m.SubjectId))
                     .CountAsync(ct)
                 : 0;
 

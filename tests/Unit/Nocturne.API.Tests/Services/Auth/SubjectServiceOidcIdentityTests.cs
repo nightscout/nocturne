@@ -218,6 +218,22 @@ public class SubjectServiceOidcIdentityTests : IDisposable
         (await _db.PasskeyCredentials.CountAsync()).Should().Be(1);
     }
 
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task TryRemoveOidcIdentityAsync_WhenOnlyOtherIdentityIsOnDisabledProvider_ReturnsLastPrimaryFactor()
+    {
+        var subjectId = await SeedSubjectAsync();
+        var enabledProviderId = await SeedProviderAsync("Enabled");
+        var disabledProviderId = await SeedProviderAsync("Disabled", isEnabled: false);
+        var enabledIdentityId = await SeedIdentityAsync(subjectId, enabledProviderId, "enabled");
+        await SeedIdentityAsync(subjectId, disabledProviderId, "disabled");
+
+        var result = await _service.TryRemoveOidcIdentityAsync(subjectId, enabledIdentityId);
+
+        result.Should().Be(FactorRemovalResult.LastPrimaryFactor);
+        (await _db.SubjectOidcIdentities.CountAsync()).Should().Be(2);
+    }
+
     // -- TryRemovePasskeyCredentialAsync -----------------------------------------
 
     [Fact]
