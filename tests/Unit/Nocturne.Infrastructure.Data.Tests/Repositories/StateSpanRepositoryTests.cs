@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.Core.Contracts.Audit;
@@ -24,6 +25,7 @@ public class StateSpanRepositoryTests : IDisposable
     private readonly NocturneDbContext _context;
     private readonly Mock<IDeduplicationService> _mockDedup;
     private readonly StateSpanRepository _repository;
+    private readonly SaveCounter _saves = new();
 
     /// <summary>
     /// The one audit context both the repository and the interceptor read, so flipping
@@ -43,7 +45,7 @@ public class StateSpanRepositoryTests : IDisposable
         httpContextAccessor.Setup(x => x.HttpContext).Returns((HttpContext)null!);
 
         _db = TestDbContextFactory.CreateSqliteWithTenant(
-                TestTenantId, "test", new MutationAuditInterceptor(httpContextAccessor.Object))
+                TestTenantId, "test", new MutationAuditInterceptor(httpContextAccessor.Object), _saves)
             .SeedTenant(OtherTenantId, "other");
 
         _context = _db.CreateContext();
@@ -63,6 +65,20 @@ public class StateSpanRepositoryTests : IDisposable
         public string? TraceId { get; init; }
         public string? Endpoint { get; init; }
         public bool IsSystem { get; set; }
+    }
+
+    private sealed class SaveCounter : SaveChangesInterceptor
+    {
+        public int Count { get; private set; }
+
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            Count++;
+            return base.SavingChangesAsync(eventData, result, cancellationToken);
+        }
     }
 
     public void Dispose()
@@ -684,14 +700,14 @@ public class StateSpanRepositoryTests : IDisposable
             Source = "glooko-connector",
             OriginalId = "glooko-illness-1",
         };
-        await _repository.UpsertActivityAsStateSpanAsync(activity);
+        await _repository.UpsertStateSpanAsync(activity);
         var originalRowId = (await RowsForAsync("glooko-illness-1")).Single().Id;
 
         (await _repository.DeleteActivityStateSpanAsync("glooko-illness-1")).Should().BeTrue();
 
         (await _repository.GetActivityStateSpansAsync()).Should().BeEmpty();
 
-        await _repository.UpsertActivityAsStateSpanAsync(activity);
+        await _repository.UpsertStateSpanAsync(activity);
 
         (await _repository.GetActivityStateSpansAsync()).Should().BeEmpty(
             "a user-deleted activity must not come back on the next sync");
@@ -739,5 +755,222 @@ public class StateSpanRepositoryTests : IDisposable
             CancellationToken.None);
 
         result.Should().BeNull();
+    }
+
+    // --- Bulk upsert ---
+
+    private static readonly DateTime BatchDay = new(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc);
+
+    private static StateSpan Span(
+        StateSpanCategory category, string state, int startHour, string originalId, int? endHour = null) => new()
+    {
+        Category = category,
+        State = state,
+        StartTimestamp = BatchDay.AddHours(startHour),
+        EndTimestamp = endHour is { } end ? BatchDay.AddHours(end) : null,
+        Source = "connector",
+        OriginalId = originalId,
+    };
+
+    private Task<Dictionary<string, StateSpanEntity>> LiveRowsAsync() =>
+        _context.StateSpans.AsNoTracking().ToDictionaryAsync(s => s.OriginalId!);
+
+    [Fact]
+    public async Task BulkUpsertAsync_ExclusiveBatch_EachSpanSupersedesTheOneBeforeIt()
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 9, "ov-stored"));
+
+        await _repository.BulkUpsertAsync(
+        [
+            Span(StateSpanCategory.Override, "Custom", 10, "ov-a"),
+            Span(StateSpanCategory.Override, "Eating", 11, "ov-b"),
+            Span(StateSpanCategory.Override, "Custom", 12, "ov-c"),
+        ]);
+
+        var rows = await LiveRowsAsync();
+        rows["ov-stored"].EndTimestamp.Should().Be(BatchDay.AddHours(10));
+        rows["ov-stored"].SupersededById.Should().Be(rows["ov-a"].Id);
+        rows["ov-a"].EndTimestamp.Should().Be(BatchDay.AddHours(11));
+        rows["ov-a"].SupersededById.Should().Be(rows["ov-b"].Id);
+        rows["ov-b"].EndTimestamp.Should().Be(BatchDay.AddHours(12));
+        rows["ov-b"].SupersededById.Should().Be(rows["ov-c"].Id);
+        rows["ov-c"].EndTimestamp.Should().BeNull();
+        rows["ov-c"].SupersededById.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task BulkUpsertAsync_OutOfOrderBatch_SupersedesInInputOrderNotStartOrder()
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Profile, "Active", 3, "pr-stored"));
+
+        await _repository.BulkUpsertAsync(
+        [
+            Span(StateSpanCategory.Profile, "Active", 10, "pr-late"),
+            Span(StateSpanCategory.Profile, "Active", 5, "pr-early"),
+        ]);
+
+        var rows = await LiveRowsAsync();
+        rows["pr-stored"].EndTimestamp.Should().Be(BatchDay.AddHours(10));
+        rows["pr-stored"].SupersededById.Should().Be(rows["pr-late"].Id);
+        rows["pr-late"].EndTimestamp.Should().BeNull("a span starting before it cannot supersede it");
+        rows["pr-early"].EndTimestamp.Should().BeNull("the stored span was already closed when it arrived");
+    }
+
+    [Fact]
+    public async Task BulkUpsertAsync_PumpModeBatch_SupersedesOnlyTheSameState()
+    {
+        await _repository.BulkUpsertAsync(
+        [
+            Span(StateSpanCategory.PumpMode, PumpModeState.Automatic.ToString(), 10, "pm-auto-1"),
+            Span(StateSpanCategory.PumpMode, PumpModeState.Suspended.ToString(), 11, "pm-suspend"),
+            Span(StateSpanCategory.PumpMode, PumpModeState.Automatic.ToString(), 12, "pm-auto-2"),
+        ]);
+
+        var rows = await LiveRowsAsync();
+        rows["pm-auto-1"].SupersededById.Should().Be(rows["pm-auto-2"].Id);
+        rows["pm-auto-1"].EndTimestamp.Should().Be(BatchDay.AddHours(12));
+        rows["pm-suspend"].EndTimestamp.Should().BeNull();
+        rows["pm-auto-2"].EndTimestamp.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task BulkUpsertAsync_MixedBatch_UpdatesStoredRowsWithoutDuplicating()
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Exercise, "Running", 8, "ex-stored"));
+        var storedId = (await RowsForAsync("ex-stored")).Single().Id;
+
+        var count = await _repository.BulkUpsertAsync(
+        [
+            Span(StateSpanCategory.Exercise, "Running", 8, "ex-stored", endHour: 9),
+            Span(StateSpanCategory.Exercise, "Cycling", 10, "ex-new"),
+            Span(StateSpanCategory.Exercise, "Cycling", 10, "ex-new", endHour: 11),
+        ]);
+
+        count.Should().Be(3);
+        var stored = (await RowsForAsync("ex-stored")).Should().ContainSingle().Subject;
+        stored.Id.Should().Be(storedId);
+        stored.EndTimestamp.Should().Be(BatchDay.AddHours(9));
+        (await RowsForAsync("ex-new")).Should().ContainSingle()
+            .Which.EndTimestamp.Should().Be(
+                BatchDay.AddHours(11), "a repeated OriginalId updates the row its first occurrence inserted");
+    }
+
+    [Fact]
+    public async Task BulkUpsertAsync_UserDeletedSpan_IsNotRecreated_WhileTheRestOfTheBatchLands()
+    {
+        await _repository.UpsertStateSpanAsync(ConnectorSpan());
+        var originalRowId = (await RowsForAsync("glooko-exercise-1")).Single().Id;
+        (await _repository.DeleteStateSpanAsync("glooko-exercise-1")).Should().BeTrue();
+
+        await _repository.BulkUpsertAsync(
+            [ConnectorSpan(), Span(StateSpanCategory.Exercise, "Cycling", 10, "ex-new")]);
+
+        (await RowsForAsync("glooko-exercise-1")).Should().ContainSingle()
+            .Which.Id.Should().Be(originalRowId);
+        (await RowsForAsync("ex-new")).Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task BulkUpsertAsync_UserDeletedOpenSpan_IsNotSupersededByALaterSpanInTheBatch()
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 9, "ov-deleted"));
+        (await _repository.DeleteStateSpanAsync("ov-deleted")).Should().BeTrue();
+
+        await _repository.BulkUpsertAsync(
+        [
+            Span(StateSpanCategory.Override, "Custom", 9, "ov-deleted"),
+            Span(StateSpanCategory.Override, "Custom", 10, "ov-new"),
+        ]);
+
+        var tombstone = (await RowsForAsync("ov-deleted")).Should().ContainSingle().Subject;
+        tombstone.DeletedAt.Should().NotBeNull();
+        tombstone.EndTimestamp.Should().BeNull();
+        tombstone.SupersededById.Should().BeNull();
+        (await RowsForAsync("ov-new")).Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task BulkUpsertAsync_LeavesNoStateSpanTracked_EvenForEveryTombstoneItLoaded()
+    {
+        foreach (var hour in new[] { 8, 9 })
+        {
+            var tombstone = SpanEntity(
+                _context.TenantId, StateSpanCategory.Exercise, "Running", BatchDay.AddHours(hour), null);
+            tombstone.OriginalId = "ex-twice-deleted";
+            tombstone.DeletedAt = BatchDay.AddHours(hour + 1);
+            _context.StateSpans.Add(tombstone);
+            _context.Entry(tombstone).Property("DeletedByUser").CurrentValue = true;
+        }
+        await _context.SaveChangesAsync();
+        _context.ChangeTracker.Clear();
+
+        await _repository.BulkUpsertAsync(
+        [
+            Span(StateSpanCategory.Exercise, "Running", 8, "ex-twice-deleted"),
+            Span(StateSpanCategory.Override, "Custom", 10, "ov-new"),
+        ]);
+
+        _context.ChangeTracker.Entries<StateSpanEntity>().Should().BeEmpty();
+        (await RowsForAsync("ex-twice-deleted")).Should().HaveCount(2).And.OnlyContain(r => r.DeletedAt != null);
+    }
+
+    [Fact]
+    public async Task BulkUpsertAsync_SystemSweptSpan_IsRecreated()
+    {
+        await _repository.UpsertStateSpanAsync(ConnectorSpan());
+        _auditContext.IsSystem = true;
+        (await _repository.DeleteStateSpanAsync("glooko-exercise-1")).Should().BeTrue();
+        _auditContext.IsSystem = false;
+
+        await _repository.BulkUpsertAsync([ConnectorSpan()]);
+
+        var rows = await RowsForAsync("glooko-exercise-1");
+        rows.Should().HaveCount(2);
+        rows.Should().ContainSingle(r => r.DeletedAt == null);
+    }
+
+    [Fact]
+    public async Task BulkUpsertAsync_SavesOnceAndDeduplicatesEveryNewSpanTogether()
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 9, "ov-stored"));
+        _mockDedup.Invocations.Clear();
+        var savesBefore = _saves.Count;
+
+        await _repository.BulkUpsertAsync(
+        [
+            Span(StateSpanCategory.Override, "Custom", 9, "ov-stored", endHour: 10),
+            Span(StateSpanCategory.Override, "Custom", 10, "ov-a"),
+            Span(StateSpanCategory.Override, "Custom", 11, "ov-b"),
+            Span(StateSpanCategory.Exercise, "Running", 12, "ex-a"),
+        ]);
+
+        _saves.Count.Should().Be(savesBefore + 1);
+        var rows = await LiveRowsAsync();
+        var expectedIds = new[] { rows["ov-a"].Id, rows["ov-b"].Id, rows["ex-a"].Id };
+        _mockDedup.Verify(d => d.DeduplicateBatchAsync(
+            RecordType.StateSpan,
+            It.Is<IReadOnlyList<DeduplicationInput>>(inputs =>
+                inputs.Select(i => i.RecordId).SequenceEqual(expectedIds)),
+            It.IsAny<CancellationToken>()), Times.Once);
+        _mockDedup.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task CreateActivitiesAsStateSpansAsync_SavesOnceAndReturnsEverySpanInInputOrder()
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Exercise, "Running", 8, "act-stored"));
+        var savesBefore = _saves.Count;
+
+        var created = (await _repository.CreateActivitiesAsStateSpansAsync(
+        [
+            Span(StateSpanCategory.Exercise, "Running", 8, "act-stored", endHour: 9),
+            Span(StateSpanCategory.Illness, "Flu", 10, "act-a"),
+            Span(StateSpanCategory.Travel, "Flight", 12, "act-b"),
+        ])).ToList();
+
+        _saves.Count.Should().Be(savesBefore + 1);
+        created.Select(s => s.OriginalId).Should().Equal("act-stored", "act-a", "act-b");
+        created[0].EndTimestamp.Should().Be(BatchDay.AddHours(9));
+        (await RowsForAsync("act-stored")).Should().ContainSingle();
     }
 }
