@@ -309,6 +309,49 @@ describe('SocketIOServer.handleAuthorize', () => {
   });
 });
 
+describe('SocketIOServer tracker broadcast fan-out', () => {
+  async function startedServer() {
+    const server = new SocketIOServer(
+      createServer(),
+      {},
+      'nocturne.run',
+      [],
+      SECRET,
+      'http://api.internal',
+    );
+    await server.start();
+    return server;
+  }
+
+  it('re-emits a trackerUpdate to the tenant room', async () => {
+    const server = await startedServer();
+
+    const emitted: { room: string; event: string; payload: unknown }[] = [];
+    vi.spyOn(server.getIO()!, 'to').mockImplementation(
+      (room: string) =>
+        ({
+          emit: (event: string, payload: unknown) => emitted.push({ room, event, payload }),
+        }) as never,
+    );
+
+    const payload = { action: 'create', instance: { id: 'tracker-1' } };
+    server.broadcastTrackerUpdate(payload, 'rhys');
+
+    expect(emitted).toEqual([{ room: 'tenant:rhys', event: 'trackerUpdate', payload }]);
+    server.getIO()!.close();
+  });
+
+  it('refuses to broadcast a trackerUpdate without a tenant slug', async () => {
+    const server = await startedServer();
+    const toSpy = vi.spyOn(server.getIO()!, 'to');
+
+    server.broadcastTrackerUpdate({ action: 'create', instance: { id: 'tracker-1' } });
+
+    expect(toSpy).not.toHaveBeenCalled();
+    server.getIO()!.close();
+  });
+});
+
 // ---------------------------------------------------------------------------
 // v3 /storage namespace — AAPS / xDrip+ / NightGuard uploaders
 // ---------------------------------------------------------------------------

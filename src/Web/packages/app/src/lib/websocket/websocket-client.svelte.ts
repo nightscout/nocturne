@@ -17,6 +17,7 @@ import {
   parseStatus,
   parseStorageEvent,
   parseSyncProgress,
+  parseTrackerUpdate,
   parseUrgentAlarm,
 } from "./payloads";
 import { isRecord } from "$lib/utils/type-guards";
@@ -384,6 +385,13 @@ export class WebSocketClient {
       this.updateMessageStats();
       const notification = parseNotification(data);
       if (notification) this.eventHandlers.notificationUpdated?.(notification);
+    });
+
+    // Tracker events
+    this.socket.on("trackerUpdate", (data: unknown) => {
+      this.updateMessageStats();
+      const event = parseTrackerUpdate(data);
+      if (event) this.eventHandlers.trackerUpdate?.(event);
     });
 
     this.socket.on("syncProgress", (data: unknown) => {
