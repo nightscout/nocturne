@@ -101,4 +101,24 @@ public class ResponseStrictnessTests
 
         act.Should().Throw<RustAlertEngineException>().WithMessage($"*'{missing}'*");
     }
+
+    [Fact]
+    public void An_unparseable_response_does_not_echo_its_body()
+    {
+        const string body = """{"schema_version":1,"ok":true,"value":"187 mg/dL","timers":{}}""";
+
+        var act = () => RustAlertEngine.ParseEvaluateNodeResponse(body);
+
+        act.Should().Throw<RustAlertEngineException>()
+            .Which.Message.Should().Contain("$.value").And.NotContain("187");
+    }
+
+    [Fact]
+    public void An_unparseable_result_does_not_echo_its_body()
+    {
+        var act = () => RuleResult($$"""{"rule_id":"{{RuleId}}","root":"187","leaves":[],"transition":"none"}""");
+
+        act.Should().Throw<RustAlertEngineException>()
+            .Which.Message.Should().Contain("$.root").And.NotContain("187");
+    }
 }

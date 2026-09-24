@@ -6,6 +6,10 @@ namespace Nocturne.Core.Alerts.Native;
 /// Thrown when the Rust alert engine returns an <c>ok: false</c> envelope, or a response that
 /// is unparseable, of another <c>schema_version</c>, or missing a field its shape requires.
 /// </summary>
+/// <remarks>
+/// The message names the operation and the offending field or JSON path, never the response
+/// body: that body carries the tenant's glucose context, and this message is logged.
+/// </remarks>
 public sealed class RustAlertEngineException : Exception
 {
     public RustAlertEngineException(string message) : base(message)
@@ -91,7 +95,8 @@ public static class RustAlertEngine
         }
         catch (JsonException ex)
         {
-            throw new RustAlertEngineException($"Rust alert engine returned an unparseable evaluate result: {ex.Message}", ex);
+            throw new RustAlertEngineException(
+                $"Rust alert engine returned an unparseable evaluate result at {ex.Path ?? "$"}", ex);
         }
         Require(result is not null, "evaluate", "result");
         if (result!.Skipped)
@@ -236,7 +241,8 @@ public static class RustAlertEngine
         }
         catch (JsonException ex)
         {
-            throw new RustAlertEngineException($"Rust alert engine returned an unparseable {operation} response: {responseJson}", ex);
+            throw new RustAlertEngineException(
+                $"Rust alert engine returned an unparseable {operation} response at {ex.Path ?? "$"}", ex);
         }
     }
 }
