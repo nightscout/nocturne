@@ -39,6 +39,7 @@ The crate is pure evaluation: no I/O, no clock, no persistence.
 | `sustained` | timer store and the `sustained` container |
 | `excursion` | the excursion state machine, including force-close |
 | `engine` | the per-rule driver (root → leaf log → tracker → auto-resolve) and the corpus result shape |
+| `replay` | the replay driver: a rule set over a series of ticks with replay-local firing state (semantics §8) |
 | `validate` | the evaluability check parsing applies and the save-time check hosts apply |
 | `classify` | scope classes for scoped Do Not Disturb |
 | `wall_clock` | which rules need periodic evaluation |

@@ -52,11 +52,14 @@ pub fn is_wall_clock(kind: ConditionKind) -> bool {
 }
 
 /// Whether a stored rule's root kind, or any leaf of its tree, is wall-clock
-/// sensitive. A root kind that does not resolve, or a container payload that
-/// does not parse, is false: it cannot be evaluated either.
+/// sensitive. The root kind is `condition_type` as evaluation reads it, a
+/// kind's wire name ignoring ASCII case; anything else is false. A wall-clock
+/// root is true whatever its body. Otherwise the body is read as evaluation
+/// reads it, and one that cannot be evaluated is false; nested kinds resolve
+/// as node dispatch resolves them (engine-semantics.md §1.2).
 #[must_use]
 pub fn references_wall_clock(condition_type: &str, condition_params: &Value) -> bool {
-    let Some(kind) = ConditionKind::resolve(condition_type) else {
+    let Some(kind) = ConditionKind::from_wire(condition_type) else {
         return false;
     };
     if is_wall_clock(kind) {
@@ -130,6 +133,19 @@ mod tests {
             &json!({"direction": "below", "value": 70})
         ));
         assert!(!references_wall_clock("no_such_kind", &json!({})));
+    }
+
+    #[test]
+    fn a_root_that_is_not_a_wire_name_is_not_selected() {
+        assert!(references_wall_clock(
+            "SIGNAL_LOSS",
+            &json!({"timeout_minutes": 15})
+        ));
+        assert!(!references_wall_clock(
+            "SignalLoss",
+            &json!({"timeout_minutes": 15})
+        ));
+        assert!(!references_wall_clock("2", &json!({"timeout_minutes": 15})));
     }
 
     #[test]

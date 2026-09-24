@@ -2,8 +2,8 @@
 //!
 //! Evaluation cannot fail: the shapes whose evaluation fails (§1.4) are
 //! rejected when a tree is parsed. Anything else malformed, such as an unknown
-//! kind, operator or direction, or a container with no child, is `false`,
-//! which `not` inverts.
+//! kind, operator or direction, a `not` or `sustained` with no child, or a
+//! composite with an empty list, is `false`, which `not` inverts.
 
 pub(crate) mod clock;
 mod device;

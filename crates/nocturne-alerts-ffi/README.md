@@ -130,12 +130,13 @@ Unknown fields (e.g. the scenario `name`) are ignored, so a corpus
 ```
 
 Failure modes that are **data**, not errors: unknown leaf types,
-unrecognised operators or directions, containers with no
-child, null condition records — these evaluate `false` inside `result`.
-Envelope-level errors (`ok: false`) are reserved for unusable requests:
-malformed JSON, wrong `schema_version`, unknown root `condition_type`, a
-tracker `state` without `updated_at`, and a rule body that
-cannot be evaluated — malformed anywhere in the tree, or one of the shapes in
+unrecognised operators or directions, a `not` or `sustained` with no child, a
+composite with an empty `conditions` list, a JSON `null` rule body — these
+evaluate `false` inside `result` (and `not` inverts them). Envelope-level
+errors (`ok: false`) are reserved for unusable requests: malformed JSON, wrong
+`schema_version`, unknown root `condition_type`, a tracker `state` without
+`updated_at`, an instant (`now`, a timer, a tracker or context timestamp)
+before 0001-01-01 or from 10000-01-01 UTC on, and a rule body that cannot be evaluated — malformed anywhere in the tree, or one of the shapes in
 `docs/alerts/engine-semantics.md` §1.4. That last error reads
 `malformed condition_params for '<type>': <reason> at '<path>'`; the host
 skips the rule and keeps its timers and tracker unchanged. An auto-resolve
@@ -311,8 +312,14 @@ Response:
 { "schema_version": 1, "ok": true, "references_wall_clock": true }
 ```
 
-An unknown `condition_type`, or a body that cannot be evaluated, is `false`
-(it cannot fire either), not an error; only a malformed envelope is.
+`condition_type` is read as `evaluate` reads it: a kind's wire name, ignoring
+ASCII case. Anything else (a member name such as `SignalLoss`, an ordinal, an
+unknown kind) is `false`, not an error. A wall-clock root kind is `true`
+whatever its body, so a host sweeps it and its `evaluate` rejects the body as
+it would per reading. Any other root is `true` only when its body can be
+evaluated and holds a wall-clock kind at any depth, a nested `type` resolving
+as node dispatch resolves it (semantics §1.2). Only a malformed envelope is
+the error envelope.
 
 ## Describe (`nocturne_alerts_describe`)
 
@@ -579,6 +586,9 @@ fun referencesWallClock(requestJson: String): String  // nocturne_alerts_referen
 fun leafPaths(requestJson: String): String            // nocturne_alerts_leaf_paths
 fun describe(requestJson: String): String             // nocturne_alerts_describe
 fun validate(requestJson: String): String             // nocturne_alerts_validate
+fun trackerProcess(requestJson: String): String       // nocturne_alerts_tracker_process
+fun trackerForceClose(requestJson: String): String    // nocturne_alerts_tracker_force_close
+fun trackerCloseElapsedHysteresis(requestJson: String): String // nocturne_alerts_tracker_close_elapsed_hysteresis
 fun replay(requestJson: String): String               // nocturne_alerts_replay
 fun version(): String                                 // plain string, not JSON
 fun tzdbVersion(): String                             // plain string, not JSON
