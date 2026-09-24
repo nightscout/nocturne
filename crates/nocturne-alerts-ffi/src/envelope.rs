@@ -165,8 +165,6 @@ impl WireTracker {
         let Some(s) = &self.state else {
             return Ok(());
         };
-        let state = TrackerStateKind::from_wire(s)
-            .ok_or_else(|| format!("unknown tracker state '{}'", s.escape_default()))?;
         let updated_at = self
             .updated_at
             .ok_or("tracker.updated_at is required when tracker.state is present")?;
@@ -174,9 +172,8 @@ impl WireTracker {
         if let Some(at) = self.hysteresis_started_at {
             check_timestamp(at, "tracker.hysteresis_started_at")?;
         }
-        tracker.restore_state(
-            rule_id,
-            TrackerState {
+        let restored = match TrackerStateKind::from_wire(s) {
+            Some(state) => TrackerState {
                 state,
                 confirmation_count: self.confirmation_count,
                 active_excursion: self.active_excursion_ordinal,
@@ -184,7 +181,9 @@ impl WireTracker {
                 hysteresis_started_at: self.hysteresis_started_at,
                 awaiting_rearm: self.awaiting_rearm,
             },
-        );
+            None => TrackerState::recovered(self.active_excursion_ordinal, updated_at),
+        };
+        tracker.restore_state(rule_id, restored);
         Ok(())
     }
 }

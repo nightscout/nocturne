@@ -164,15 +164,17 @@ public class TrackerBindingTests
     }
 
     [NativeFact]
-    public void A_corrupt_tracker_state_is_an_engine_error()
+    public void An_unknown_tracker_state_holding_an_excursion_reads_as_active()
     {
-        var act = () => RustAlertEngine.TrackerForceClose(new RustTrackerForceCloseRequest
+        var response = RustAlertEngine.TrackerForceClose(new RustTrackerForceCloseRequest
         {
             Tracker = Active with { State = "sideways" },
             Now = Now,
             Reason = RustCloseReason.Auto,
         });
 
-        act.Should().Throw<RustAlertEngineException>().WithMessage("*tracker_force_close*");
+        response.Transition!.Type.Should().Be(RustTransition.Closed);
+        response.Tracker!.State.Should().Be("idle");
+        response.Tracker.AwaitingRearm.Should().BeTrue();
     }
 }

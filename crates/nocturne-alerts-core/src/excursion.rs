@@ -129,6 +129,28 @@ pub struct TrackerState {
     pub awaiting_rearm: bool,
 }
 
+impl TrackerState {
+    /// What a stored tracker whose state string names no state is read as
+    /// (engine-semantics.md §6): active while it holds an excursion, so that
+    /// excursion goes on to close, otherwise idle, so the rule can fire.
+    /// Confirmation, hysteresis and re-arm start over.
+    #[must_use]
+    pub fn recovered(active_excursion: Option<u32>, updated_at: DateTime<Utc>) -> Self {
+        TrackerState {
+            state: if active_excursion.is_some() {
+                TrackerStateKind::Active
+            } else {
+                TrackerStateKind::Idle
+            },
+            confirmation_count: 0,
+            active_excursion,
+            updated_at,
+            hysteresis_started_at: None,
+            awaiting_rearm: false,
+        }
+    }
+}
+
 /// Rule inputs consumed by the tracker.
 #[derive(Debug, Clone, Copy)]
 pub struct TrackerRuleConfig {

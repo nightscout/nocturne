@@ -152,6 +152,68 @@ fn an_auto_resolve_close_round_trips_awaiting_rearm_until_a_false_evaluation() {
 }
 
 #[test]
+fn an_unknown_stored_state_reads_as_active_with_an_excursion_and_idle_without() {
+    let stored = |excursion: Option<u32>| {
+        let mut tracker = json!({
+            "state": "firing",
+            "confirmation_count": 2,
+            "updated_at": "2026-01-05T11:55:00Z",
+            "hysteresis_started_at": "2026-01-05T11:50:00Z",
+            "awaiting_rearm": true,
+            "next_excursion_ordinal": 4,
+        });
+        if let Some(ordinal) = excursion {
+            tracker["active_excursion_ordinal"] = json!(ordinal);
+        }
+        tracker
+    };
+
+    let idle = process_at(&stored(None), true, "2026-01-05T12:00:00Z", 0);
+    assert_eq!(
+        idle["transition"],
+        json!({ "type": "opened", "excursion_ordinal": 4 })
+    );
+
+    let active = process_at(&stored(Some(3)), false, "2026-01-05T12:00:00Z", 30);
+    assert_eq!(
+        active["transition"],
+        json!({ "type": "hysteresis_started", "excursion_ordinal": 3 })
+    );
+    assert_eq!(
+        active["tracker"]["hysteresis_started_at"],
+        json!("2026-01-05T12:00:00Z")
+    );
+
+    let closed = force_close(&json!({
+        "schema_version": 1,
+        "tracker": stored(Some(3)),
+        "reason": "manual",
+        "now": "2026-01-05T12:00:00Z",
+    }));
+    assert_eq!(
+        closed["transition"],
+        json!({ "type": "closed", "excursion_ordinal": 3, "close_reason": "manual" })
+    );
+
+    let swept = close_elapsed(&json!({
+        "schema_version": 1,
+        "tracker": stored(None),
+        "config": { "hysteresis_minutes": 0 },
+        "now": "2026-01-05T12:00:00Z",
+    }));
+    assert_eq!(swept["transition"], json!({ "type": "none" }));
+    assert_eq!(
+        swept["tracker"],
+        json!({
+            "state": "idle",
+            "confirmation_count": 0,
+            "updated_at": "2026-01-05T11:55:00Z",
+            "next_excursion_ordinal": 4,
+        })
+    );
+}
+
+#[test]
 fn force_close_without_an_excursion_changes_nothing() {
     let idle = process_at(&Value::Null, false, "2026-01-05T12:00:00Z", 0);
     let response = force_close(&json!({
@@ -260,16 +322,6 @@ fn tracker_entry_points_reject_unusable_requests() {
             "now": now,
         })),
         "tracker.updated_at is required",
-    );
-    assert_error(
-        &process(&json!({
-            "schema_version": 1,
-            "tracker": { "state": "firing", "updated_at": now },
-            "config": {},
-            "condition_met": true,
-            "now": now,
-        })),
-        "unknown tracker state",
     );
     assert_error(
         &force_close(&json!({ "schema_version": 1, "reason": "snoozed", "now": now })),

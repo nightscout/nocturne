@@ -11,15 +11,14 @@ internal sealed class ManagedExcursionDecider : IExcursionDecider
 {
     public static readonly ManagedExcursionDecider Instance = new();
 
-    private const string StateIdle = "idle";
-    private const string StateConfirming = "confirming";
-    private const string StateActive = "active";
-    private const string StateHysteresis = "hysteresis";
+    private const string StateIdle = TrackerPostState.Idle;
+    private const string StateConfirming = TrackerPostState.Confirming;
+    private const string StateActive = TrackerPostState.Active;
+    private const string StateHysteresis = TrackerPostState.Hysteresis;
 
     private static TrackerDecision None(TrackerPostState? post) => new(ExcursionTransitionType.None, null, post);
 
     /// <inheritdoc/>
-    /// <remarks>An unknown stored state is left as it is, apart from <c>UpdatedAt</c>.</remarks>
     public TrackerDecision Process(
         Guid ruleId, AlertTrackerState? state, TrackerConfig config, bool conditionMet, DateTime now)
     {
@@ -34,7 +33,7 @@ internal sealed class ManagedExcursionDecider : IExcursionDecider
                 : (ExcursionTransitionType.HysteresisStarted, null,
                     s with { State = StateHysteresis, HysteresisStartedAt = now }),
             StateHysteresis => Hysteresis(s, config, conditionMet, now),
-            _ => (ExcursionTransitionType.None, (ExcursionCloseReason?)null, s),
+            _ => throw new System.Diagnostics.UnreachableException($"{nameof(TrackerPostState.Of)} reads every state as a known one"),
         };
 
         return new TrackerDecision(type, reason, post with { UpdatedAt = now });

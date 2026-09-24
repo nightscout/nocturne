@@ -107,13 +107,21 @@ public class ExcursionTracker : IExcursionTracker
     public async Task<Guid?> GetActiveExcursionIdAsync(Guid alertRuleId, CancellationToken ct) =>
         ActiveExcursionOf(await _repository.GetTrackerStateAsync(alertRuleId, ct));
 
-    /// <summary>The open excursion of a state that is active or in hysteresis.</summary>
+    /// <summary>The open excursion of a state that reads as active or in hysteresis.</summary>
     internal static Guid? ActiveExcursionOf(AlertTrackerState? state) =>
-        state?.State is "active" or "hysteresis" ? state.ActiveExcursionId : null;
+        TrackerPostState.Of(state)?.State is TrackerPostState.Active or TrackerPostState.Hysteresis
+            ? state!.ActiveExcursionId
+            : null;
 
     private async Task<ExcursionTransition> PersistAsync(
         Guid alertRuleId, AlertTrackerState? state, TrackerDecision decision, DateTime now, CancellationToken ct)
     {
+        if (state is not null && !TrackerPostState.IsKnown(state.State))
+        {
+            _logger.LogWarning(
+                "Alert rule {AlertRuleId} has an unknown tracker state {State}; read as {ReadAs}",
+                alertRuleId, state.State, TrackerPostState.Of(state)!.State);
+        }
         var (transition, _) = await ExcursionTransitionWriter.ApplyAsync(
             _repository, _logger, alertRuleId, state, decision, now, ct);
         return transition;

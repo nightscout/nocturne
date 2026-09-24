@@ -16,16 +16,31 @@ internal sealed record TrackerPostState(
     DateTime? HysteresisStartedAt,
     bool AwaitingRearm = false)
 {
-    public static TrackerPostState? Of(AlertTrackerState? state) =>
-        state is null
-            ? null
-            : new TrackerPostState(
-                state.State,
-                state.ConfirmationCount,
-                state.ActiveExcursionId is not null,
-                state.UpdatedAt,
-                state.HysteresisStartedAt,
-                state.AwaitingRearm);
+    public const string Idle = "idle";
+    public const string Confirming = "confirming";
+    public const string Active = "active";
+    public const string Hysteresis = "hysteresis";
+
+    /// <summary>Whether <paramref name="state"/> names a state the state machine has.</summary>
+    public static bool IsKnown(string? state) => state is Idle or Confirming or Active or Hysteresis;
+
+    /// <summary>
+    /// The stored state as the state machine reads it (docs/alerts/engine-semantics.md §6). A
+    /// state string naming no state reads as <c>active</c> while the row holds an excursion, so
+    /// that excursion goes on to close. Otherwise it reads as <c>idle</c>, so the rule can fire.
+    /// Confirmation, hysteresis and re-arm start over.
+    /// </summary>
+    public static TrackerPostState? Of(AlertTrackerState? state)
+    {
+        if (state is null)
+            return null;
+        var hasExcursion = state.ActiveExcursionId is not null;
+        return IsKnown(state.State)
+            ? new TrackerPostState(
+                state.State, state.ConfirmationCount, hasExcursion, state.UpdatedAt,
+                state.HysteresisStartedAt, state.AwaitingRearm)
+            : new TrackerPostState(hasExcursion ? Active : Idle, 0, hasExcursion, state.UpdatedAt, null);
+    }
 }
 
 /// <summary>

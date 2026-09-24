@@ -85,7 +85,7 @@ preserves sub-second precision when present.
     "sustained": "2026-01-05T11:55:00Z"     // condition path -> first-true instant
   },
   "tracker": {                              // optional; absent = never evaluated
-    "state": "active",                      // idle|confirming|active|hysteresis; absent = no per-rule state yet
+    "state": "active",                      // idle|confirming|active|hysteresis; absent = no per-rule state yet; any other string reads as active with an excursion, else idle (semantics §6)
     "confirmation_count": 0,
     "active_excursion_ordinal": 3,          // present only while an excursion is active
     "updated_at": "2026-01-05T11:55:00Z",   // REQUIRED whenever state is present
@@ -133,8 +133,8 @@ Failure modes that are **data**, not errors: unknown leaf types,
 unrecognised operators or directions, containers with no
 child, null condition records — these evaluate `false` inside `result`.
 Envelope-level errors (`ok: false`) are reserved for unusable requests:
-malformed JSON, wrong `schema_version`, unknown root `condition_type`, unknown
-`tracker.state`, a tracker `state` without `updated_at`, and a rule body that
+malformed JSON, wrong `schema_version`, unknown root `condition_type`, a
+tracker `state` without `updated_at`, and a rule body that
 cannot be evaluated — malformed anywhere in the tree, or one of the shapes in
 `docs/alerts/engine-semantics.md` §1.4. That last error reads
 `malformed condition_params for '<type>': <reason> at '<path>'`; the host

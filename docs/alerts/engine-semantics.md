@@ -359,7 +359,10 @@ Per-rule persisted state: `{State, ConfirmationCount, ActiveExcursionId, Updated
 HysteresisStartedAt, AwaitingRearm}` with states `idle | confirming | active | hysteresis`. Rule inputs: `ConfirmationReadings`
 (default 1), `HysteresisMinutes`. One evaluation = one `ProcessEvaluationAsync(ruleId,
 conditionMet)` call. **After every call**, regardless of transition, `state.UpdatedAt =
-now` is persisted. Unknown stored state string ⇒ no-op transition `None`.
+now` is persisted. A stored state string naming none of the four states is read as
+`active` when the row holds an `ActiveExcursionId`, so that excursion goes on to close,
+and as `idle` otherwise, so the rule can fire again; its confirmation count, hysteresis
+start and re-arm flag (§6.3) are dropped. Every operation reads it so.
 
 | State | met | Result |
 |---|---|---|

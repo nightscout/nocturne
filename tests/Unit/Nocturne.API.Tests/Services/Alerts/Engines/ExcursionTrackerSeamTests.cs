@@ -192,6 +192,43 @@ public class ExcursionTrackerSeamTests
         });
     }
 
+    [Fact] public Task An_unknown_stored_state_reads_as_idle_or_active_managed() =>
+        An_unknown_stored_state_reads_as_idle_or_active(Engine.Managed);
+    [NativeFact] public Task An_unknown_stored_state_reads_as_idle_or_active_rust() =>
+        An_unknown_stored_state_reads_as_idle_or_active(Engine.Rust);
+
+    private static async Task An_unknown_stored_state_reads_as_idle_or_active(Engine engine)
+    {
+        var f = new Fixture(engine, confirmationReadings: 1, hysteresisMinutes: 10);
+        var opened = await f.Process(true);
+        AlertTrackerState Unknown(Guid? excursion) => new()
+        {
+            AlertRuleId = RuleId,
+            State = "paused",
+            ConfirmationCount = 2,
+            ActiveExcursionId = excursion,
+            UpdatedAt = T0,
+            HysteresisStartedAt = T0,
+            AwaitingRearm = true,
+        };
+
+        f.Repository.States[RuleId] = Unknown(opened.ExcursionId);
+        (await f.Tracker.GetActiveExcursionIdAsync(RuleId, CancellationToken.None)).Should().Be(opened.ExcursionId);
+        f.At(TimeSpan.FromMinutes(1));
+        (await f.Process(false)).Should().Be(
+            new ExcursionTransition(ExcursionTransitionType.HysteresisStarted, opened.ExcursionId));
+        f.State.Should().BeEquivalentTo(new
+        {
+            State = "hysteresis", ConfirmationCount = 0, ActiveExcursionId = opened.ExcursionId,
+            HysteresisStartedAt = (DateTime?)T0.AddMinutes(1), AwaitingRearm = false,
+        });
+
+        f.Repository.States[RuleId] = Unknown(null);
+        f.At(TimeSpan.FromMinutes(2));
+        (await f.Process(true)).Type.Should().Be(ExcursionTransitionType.ExcursionOpened);
+        f.State.Should().BeEquivalentTo(new { State = "active", ConfirmationCount = 0, AwaitingRearm = false });
+    }
+
     [Theory]
     [InlineData(ExcursionCloseReason.Manual)]
     [InlineData(ExcursionCloseReason.AutoResolve)]
