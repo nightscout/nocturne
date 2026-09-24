@@ -1765,7 +1765,6 @@ msgstr "Carbs:"
 #. 0: selectedDay.totalCarbs.toFixed(0)
 #. 0: d.totalCarbs.toFixed(0)
 #. 0: totalCarbs
-#. 0: totalCarbs
 #. 0: actualUnattributed
 #. 0: unspecifiedCarbs
 #. 0: (summary?.totals?.food?.carbs ?? 0).toFixed(0)
@@ -1788,7 +1787,6 @@ msgstr "Carbs:"
 #: src/lib/components/reports/GlycemicRiskIndexChart.svelte
 #: src/lib/components/reports/year-overview/DayDetailPanel.svelte
 #: src/lib/components/reports/year-overview/YearHeatmap.svelte
-#: src/lib/components/treatments/TreatmentFoodBreakdown.svelte
 #: src/lib/components/treatments/TreatmentFoodEntryEditDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodEntryEditDialog.svelte
 #: src/lib/components/treatments/TreatmentPortionsForm.svelte
@@ -2297,15 +2295,11 @@ msgid "Chart Lookback: {0}h"
 msgstr "Chart Lookback: {0}h"
 
 #. 0: item.label
-#. 0: item.label
-#: src/lib/components/command-palette/CommandPalette.svelte
 #: src/lib/components/command-palette/CommandPalette.svelte
 msgid "Unpin {0}"
 msgstr "Unpin {0}"
 
 #. 0: item.label
-#. 0: item.label
-#: src/lib/components/command-palette/CommandPalette.svelte
 #: src/lib/components/command-palette/CommandPalette.svelte
 msgid "Pin {0}"
 msgstr "Pin {0}"
@@ -3240,7 +3234,6 @@ msgstr "Connect your CGM app or AID system to push data to Nocturne"
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 #: src/lib/components/treatments/CarbBreakdownBar.svelte
-#: src/lib/components/treatments/TreatmentFoodBreakdown.svelte
 #: src/lib/components/treatments/TreatmentFoodEntryEditDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
 #: src/routes/(authenticated)/notifications/+page.svelte
@@ -3927,13 +3920,11 @@ msgstr "Foods"
 msgid "Link foods to this carb intake."
 msgstr "Link foods to this carb intake."
 
-#: src/lib/components/treatments/TreatmentFoodBreakdown.svelte
-msgid "<0/> Add Food"
-msgstr "<0/> Add Food"
+#~ msgid "<0/> Add Food"
+#~ msgstr "<0/> Add Food"
 
-#: src/lib/components/treatments/TreatmentFoodBreakdown.svelte
-msgid "No foods added yet."
-msgstr "No foods added yet."
+#~ msgid "No foods added yet."
+#~ msgstr "No foods added yet."
 
 #. 0: formatCarbDisplay(carbGrams)
 #. 0: formatCarbDisplay(carbGrams)
@@ -3962,19 +3953,15 @@ msgstr "{0}g carbs"
 
 #. 0: pendingTotalCarbs
 #. 0: breakdown.attributedCarbs
-#. 0: breakdown.attributedCarbs
 #: src/lib/components/entries/CarbIntakeSection.svelte
 #: src/lib/components/entries/FoodBreakdown.svelte
-#: src/lib/components/treatments/TreatmentFoodBreakdown.svelte
 msgid "Attributed {0}g"
 msgstr "Attributed {0}g"
 
 #. 0: unspecifiedCarbs
 #. 0: breakdown.unspecifiedCarbs
-#. 0: breakdown.unspecifiedCarbs
 #: src/lib/components/entries/CarbIntakeSection.svelte
 #: src/lib/components/entries/FoodBreakdown.svelte
-#: src/lib/components/treatments/TreatmentFoodBreakdown.svelte
 msgid "Unspecified {0}g"
 msgstr "Unspecified {0}g"
 
@@ -4187,28 +4174,23 @@ msgid "<0/> Saving..."
 msgstr "<0/> Saving..."
 
 #: src/lib/components/entries/FoodBreakdown.svelte
-#: src/lib/components/treatments/TreatmentFoodBreakdown.svelte
 msgid "Unable to load food breakdown."
 msgstr "Unable to load food breakdown."
 
 #: src/lib/components/entries/FoodBreakdown.svelte
-#: src/lib/components/treatments/TreatmentFoodBreakdown.svelte
 msgid "Food Breakdown"
 msgstr "Food Breakdown"
 
 #: src/lib/components/entries/FoodBreakdown.svelte
-#: src/lib/components/treatments/TreatmentFoodBreakdown.svelte
 msgid "Add foods to match carbs when it helps. Partial attribution is fine."
 msgstr "Add foods to match carbs when it helps. Partial attribution is fine."
 
 #: src/lib/components/entries/FoodBreakdown.svelte
-#: src/lib/components/treatments/TreatmentFoodBreakdown.svelte
 msgid "Loading breakdown..."
 msgstr "Loading breakdown..."
 
 #: src/lib/components/entries/FoodBreakdown.svelte
 #: src/lib/components/reports/year-overview/DayDetailPanel.svelte
-#: src/lib/components/treatments/TreatmentFoodBreakdown.svelte
 #: src/routes/(authenticated)/reports/day-in-review/+page.svelte
 msgid "Total Carbs"
 msgstr "Total Carbs"
@@ -9958,6 +9940,7 @@ msgstr "Enter Nocturne <0/>"
 msgid "Save and continue <0/>"
 msgstr "Save and continue <0/>"
 
+#: src/routes/(unauthenticated)/setup/+page@.svelte
 #: src/routes/(unauthenticated)/setup/+page@.svelte
 #: src/routes/(unauthenticated)/setup/steps/TenantIdentity.svelte
 msgid "Continue <0/>"
@@ -21655,9 +21638,8 @@ msgstr "Copy link"
 msgid "Match my preference"
 msgstr "Match my preference"
 
-#: src/lib/components/connectors/CareLinkConnectPanel.svelte
-msgid "Couldn't copy the code to the clipboard. Copy it manually instead."
-msgstr "Couldn't copy the code to the clipboard. Copy it manually instead."
+#~ msgid "Couldn't copy the code to the clipboard. Copy it manually instead."
+#~ msgstr "Couldn't copy the code to the clipboard. Copy it manually instead."
 
 #: src/lib/components/connectors/CareLinkConnectPanel.svelte
 msgid "<0/> Open in the desktop app"
@@ -21706,13 +21688,7 @@ msgstr "This data source has no data left to delete."
 msgid "Nothing left to delete"
 msgstr "Nothing left to delete"
 
-#: src/lib/components/connectors/UploaderSetupDialog.svelte
-#: src/lib/components/connectors/UploaderSetupView.svelte
-#: src/lib/components/members/GuestLinksSection.svelte
-#: src/lib/components/support/IssueCreatorDialog.svelte
-#: src/routes/(authenticated)/clock/config/[id]/+page.svelte
-#: src/routes/(authenticated)/settings/connectors/+page.svelte
-#: src/routes/(authenticated)/settings/support/+page.svelte
+#: src/lib/hooks/copy-feedback.svelte.ts
 msgid "Couldn't copy to the clipboard. Copy it manually instead."
 msgstr "Couldn't copy to the clipboard. Copy it manually instead."
 
@@ -21753,10 +21729,8 @@ msgstr "Account settings"
 msgid "Adjust the date range for your report."
 msgstr "Adjust the date range for your report."
 
-#: src/lib/components/members/CreateInviteCard.svelte
-#: src/lib/components/members/PublicAccessCard.svelte
-msgid "Couldn't copy the link to the clipboard. Copy it manually instead."
-msgstr "Couldn't copy the link to the clipboard. Copy it manually instead."
+#~ msgid "Couldn't copy the link to the clipboard. Copy it manually instead."
+#~ msgstr "Couldn't copy the link to the clipboard. Copy it manually instead."
 
 #: src/lib/components/members/CreateInviteCard.svelte
 msgid "Link expires"
@@ -21874,9 +21848,8 @@ msgstr "Publishes the interactive API reference and its OpenAPI specification on
 msgid "Open the API reference <0/>"
 msgstr "Open the API reference <0/>"
 
-#: src/lib/components/settings/ApiTokens.svelte
-msgid "Couldn't copy the token to the clipboard. Copy it manually instead."
-msgstr "Couldn't copy the token to the clipboard. Copy it manually instead."
+#~ msgid "Couldn't copy the token to the clipboard. Copy it manually instead."
+#~ msgstr "Couldn't copy the token to the clipboard. Copy it manually instead."
 
 #: src/lib/components/settings/DashboardWidgetConfigurator.svelte
 msgid "Widget names could not be loaded, so widgets are listed by their internal id. Choosing and reordering them still works."
@@ -22343,9 +22316,8 @@ msgstr "Failed to change whether this provider is enabled."
 msgid "Interrupted"
 msgstr "Interrupted"
 
-#: src/routes/(authenticated)/settings/account/+page.svelte
-msgid "Couldn't copy the codes to the clipboard. Copy them manually instead."
-msgstr "Couldn't copy the codes to the clipboard. Copy them manually instead."
+#~ msgid "Couldn't copy the codes to the clipboard. Copy them manually instead."
+#~ msgstr "Couldn't copy the codes to the clipboard. Copy them manually instead."
 
 #: src/routes/(authenticated)/settings/account/+page.svelte
 msgid "Every recovery code has been used"
@@ -22415,10 +22387,8 @@ msgstr "On the login page, choose <0/>, enter your username and one of your rema
 msgid "A code doesn't sign you in on its own: it gives you ten minutes to set up a new passkey, and you sign in with that."
 msgstr "A code doesn't sign you in on its own: it gives you ten minutes to set up a new passkey, and you sign in with that."
 
-#: src/routes/(fullscreen)/connect/prelude/+page.svelte
-#: src/routes/(fullscreen)/connect/xdrip/+page.svelte
-msgid "Couldn't copy to the clipboard. Select the address above and copy it manually."
-msgstr "Couldn't copy to the clipboard. Select the address above and copy it manually."
+#~ msgid "Couldn't copy to the clipboard. Select the address above and copy it manually."
+#~ msgstr "Couldn't copy to the clipboard. Select the address above and copy it manually."
 
 #: src/routes/(unauthenticated)/setup/steps/AccountCreation.svelte
 msgid "We couldn't start sign-in with that provider. Please try again."

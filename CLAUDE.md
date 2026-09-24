@@ -279,7 +279,9 @@ Design notes:
   presenting neither a cookie nor an `Authorization` header (the legacy `api-secret`
   header) would be served another credential's unredacted body. Those endpoints
   (`ChartDataController`'s dashboard, `ActogramController`) declare
-  `ResponseCacheLocation.Client`.
+  `ResponseCacheLocation.Client`. Hand-set `Cache-Control` headers follow the same rule:
+  a tenant data read is never `public` (V3 reads send `private, max-age=60`, pinned by
+  `V3CacheControlTests`).
 
 ## Testing
 

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import { satisfiesScope } from "$lib/authorization/scopes";
   import * as Card from "$lib/components/ui/card";
   import { Switch } from "$lib/components/ui/switch";
   import { BookOpen, ExternalLink } from "lucide-svelte";
@@ -10,12 +11,8 @@
   import { retainQuery } from "$lib/api/retain-query.svelte";
   import { describeSubmitError } from "$lib/forms/submit-error";
 
-  const effectivePermissions: string[] = $derived(
-    page.data.effectivePermissions ?? [],
-  );
   const canManageSettings = $derived(
-    effectivePermissions.includes("*") ||
-      effectivePermissions.includes("tenant.settings"),
+    satisfiesScope(page.data.effectivePermissions ?? [], "tenant.settings"),
   );
 
   const settingsQuery = $derived(canManageSettings ? getTenantSettings() : null);

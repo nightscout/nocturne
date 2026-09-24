@@ -17,7 +17,7 @@
   import { update as updateClockFace } from "$api/generated/clockFaces.generated.remote";
   import GlucoseChartCard from "$lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte";
   import type { ClockElement, TrackerDefinitionDto } from "$lib/api";
-  import { copyToClipboard } from "$lib/utils";
+  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
 
   // Clock builder imports
   import {
@@ -51,6 +51,7 @@
   let selectedElementId = $state<string | null>(null);
   let addMenuOpen = $state<"top" | "bottom" | null>(null);
   let settingsOpen = $state(false);
+  const copy = createCopyFeedback();
 
   // Get ID from route params
   const clockFaceId = $derived(page.params.id);
@@ -363,15 +364,10 @@
   }
 
   async function copyLink() {
-    const copied = await copyToClipboard(
-      `${window.location.origin}/clock/${clockFaceId}`
-    );
-    if (copied) {
+    if (await copy.copy(`${window.location.origin}/clock/${clockFaceId}`)) {
       toast.success(
         "Link copied. Anyone with this link can see live glucose readings, with no sign-in."
       );
-    } else {
-      toast.error("Couldn't copy to the clipboard. Copy it manually instead.");
     }
   }
 

@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createServer } from 'http';
 import SocketIOServer, { pickHandshakeHost, resolveTenantSlug } from './socketio-server.js';
@@ -62,7 +63,33 @@ function makeServer(tenantSlugs: string[] = []): SocketIOServer {
 }
 
 function fakeSocket(headers: HandshakeHeaders, auth: { token?: string } = {}) {
-  return { id: 'sock1', handshake: { headers, auth }, data: {} as Record<string, unknown> };
+  return {
+    id: 'sock1',
+    handshake: { headers, auth },
+    data: {} as Record<string, unknown>,
+    join: vi.fn(),
+    on: vi.fn(),
+    emit: vi.fn(),
+  };
+}
+
+/** Admits `socket` through the handshake, then hands it to the server's own connection handler. */
+async function connect(server: SocketIOServer, socket: ReturnType<typeof fakeSocket>) {
+  await server.start();
+  const next = vi.fn();
+  await server.authorizeHandshake(socket as never, next);
+  const handlers = server.getIO()!.of('/').listeners('connection');
+  expect(handlers).toHaveLength(1);
+  handlers[0](socket);
+  await server.stop();
+  return next;
+}
+
+/** A ticket signed with the instance key but carrying no admission, as minted before it existed. */
+function ticketWithoutAdmission(host: string): string {
+  const payload = Buffer.from(JSON.stringify({ h: host, exp: Date.now() + 60_000 }), 'utf-8')
+    .toString('base64url');
+  return `${payload}.${createHmac('sha256', SECRET).update(payload).digest('hex')}`;
 }
 
 describe('SocketIOServer.authorizeHandshake', () => {
@@ -71,7 +98,7 @@ describe('SocketIOServer.authorizeHandshake', () => {
     const next = vi.fn();
 
     await server.authorizeHandshake(
-      fakeSocket({ host: 'evil.com' }, { token: signHandshakeTicket(SECRET, 'evil.com') }) as never,
+      fakeSocket({ host: 'evil.com' }, { token: signHandshakeTicket(SECRET, 'evil.com', true) }) as never,
       next,
     );
 
@@ -100,7 +127,7 @@ describe('SocketIOServer.authorizeHandshake', () => {
     // only a connection offering no ticket at all falls through to the legacy path.
     const server = makeServer();
     const next = vi.fn();
-    const ticket = signHandshakeTicket(SECRET, 'rhys.nocturne.run');
+    const ticket = signHandshakeTicket(SECRET, 'rhys.nocturne.run', true);
     const socket = fakeSocket(
       { 'x-forwarded-host': 'rhys.nocturne.run' },
       { token: ticket.slice(0, -1) + (ticket.endsWith('a') ? 'b' : 'a') },
@@ -118,7 +145,7 @@ describe('SocketIOServer.authorizeHandshake', () => {
     const next = vi.fn();
     const socket = fakeSocket(
       { 'x-forwarded-host': 'rhys.nocturne.run' },
-      { token: signHandshakeTicket(SECRET, 'someone-else.nocturne.run') },
+      { token: signHandshakeTicket(SECRET, 'someone-else.nocturne.run', true) },
     );
 
     await server.authorizeHandshake(socket as never, next);
@@ -131,7 +158,7 @@ describe('SocketIOServer.authorizeHandshake', () => {
     const server = makeServer();
     const next = vi.fn();
     // Sign a ticket that expired one minute ago.
-    const expired = signHandshakeTicket(SECRET, 'rhys.nocturne.run', -60_000);
+    const expired = signHandshakeTicket(SECRET, 'rhys.nocturne.run', true, -60_000);
     const socket = fakeSocket({ 'x-forwarded-host': 'rhys.nocturne.run' }, { token: expired });
 
     await server.authorizeHandshake(socket as never, next);
@@ -146,7 +173,7 @@ describe('SocketIOServer.authorizeHandshake', () => {
     const next = vi.fn();
     const socket = fakeSocket(
       { 'x-forwarded-host': 'rhys.nocturne.run' },
-      { token: signHandshakeTicket(SECRET, 'rhys.nocturne.run') },
+      { token: signHandshakeTicket(SECRET, 'rhys.nocturne.run', true) },
     );
 
     await server.authorizeHandshake(socket as never, next);
@@ -160,7 +187,7 @@ describe('SocketIOServer.authorizeHandshake', () => {
     const next = vi.fn();
     const socket = fakeSocket(
       { 'x-forwarded-host': 'rhys.nocturne.run' },
-      { token: signHandshakeTicket(SECRET, 'rhys.nocturne.run:443') },
+      { token: signHandshakeTicket(SECRET, 'rhys.nocturne.run:443', true) },
     );
 
     await server.authorizeHandshake(socket as never, next);
@@ -174,13 +201,41 @@ describe('SocketIOServer.authorizeHandshake', () => {
     const next = vi.fn();
     const socket = fakeSocket(
       { host: 'nocturne.run' },
-      { token: signHandshakeTicket(SECRET, 'nocturne.run') },
+      { token: signHandshakeTicket(SECRET, 'nocturne.run', true) },
     );
 
     await server.authorizeHandshake(socket as never, next);
 
     expect(next).toHaveBeenCalledWith();
     expect(socket.data.tenantSlug).toBe('only');
+  });
+
+  it('joins a member ticket to the tenant room', async () => {
+    const server = makeServer();
+    const socket = fakeSocket(
+      { 'x-forwarded-host': 'rhys.nocturne.run' },
+      { token: signHandshakeTicket(SECRET, 'rhys.nocturne.run', true) },
+    );
+
+    await connect(server, socket);
+
+    expect(socket.join).toHaveBeenCalledWith('tenant:rhys');
+  });
+
+  it.each([
+    ['a restricted ticket', () => signHandshakeTicket(SECRET, 'rhys.nocturne.run', false)],
+    ['a ticket carrying no admission', () => ticketWithoutAdmission('rhys.nocturne.run')],
+  ])('admits %s but keeps it out of the tenant room', async (_case, mint) => {
+    // The tenant room carries every category and every member's in-app
+    // notifications; a guest link or anonymous share holds single categories.
+    const server = makeServer();
+    const socket = fakeSocket({ 'x-forwarded-host': 'rhys.nocturne.run' }, { token: mint() });
+
+    const next = await connect(server, socket);
+
+    expect(next).toHaveBeenCalledWith();
+    expect(socket.data.tenantSlug).toBe('rhys');
+    expect(socket.join).not.toHaveBeenCalled();
   });
 });
 
@@ -209,8 +264,12 @@ describe('SocketIOServer.handleAuthorize', () => {
     vi.unstubAllGlobals();
   });
 
-  it('joins the tenant room when the API accepts the credential', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+  function admission(body: unknown) {
+    return { ok: true, status: 200, json: () => Promise.resolve(body) };
+  }
+
+  it('joins the tenant room when the API admits the credential to it', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(admission({ tenantRelay: true }));
     vi.stubGlobal('fetch', fetchMock);
 
     const server = makeApiServer();
@@ -228,14 +287,32 @@ describe('SocketIOServer.handleAuthorize', () => {
     // The probe must carry the client's credential scoped to its own tenant, and
     // must NOT carry the bridge's instance key.
     const [url, init] = fetchMock.mock.calls[0];
-    expect(String(url)).toContain('/api/v1/entries');
+    expect(String(url)).toBe('http://api.internal/api/v4/me/realtime-admission');
     expect(init.headers['api-secret']).toBe('sha1hash');
     expect(init.headers['X-Forwarded-Host']).toBe('rhys.nocturne.run');
     expect(init.headers['X-Instance-Key']).toBeUndefined();
   });
 
+  it.each([
+    ['restricted', { tenantRelay: false }],
+    ['silent on the tenant room', {}],
+  ])('authorizes a credential the API admission leaves %s without joining it', async (_case, body) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(admission(body)));
+
+    const server = makeApiServer();
+    const socket = pendingSocket('rhys');
+    const callback = vi.fn();
+
+    await server.handleAuthorize(socket as never, { token: 'guest-token' }, callback);
+
+    expect(socket.join).not.toHaveBeenCalled();
+    expect(socket.disconnect).not.toHaveBeenCalled();
+    expect(socket.data.tenantSlug).toBe('rhys');
+    expect(callback).toHaveBeenCalledWith(expect.objectContaining({ read: true }));
+  });
+
   it('passes a subject token through as a query parameter', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    const fetchMock = vi.fn().mockResolvedValue(admission({ tenantRelay: true }));
     vi.stubGlobal('fetch', fetchMock);
 
     const server = makeApiServer();

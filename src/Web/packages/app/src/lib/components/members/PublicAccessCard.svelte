@@ -2,11 +2,12 @@
   import { toggled } from "$lib/utils/collections";
   import { formatDayTime } from "$lib/utils/formatting";
   import { page } from "$app/state";
+  import { satisfiesScope } from "$lib/authorization/scopes";
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
   import { Switch } from "$lib/components/ui/switch";
   import * as ToggleGroup from "$lib/components/ui/toggle-group";
-  import { copyToClipboard } from "$lib/utils";
+  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
   import {
     Globe,
     Lock,
@@ -34,12 +35,8 @@
   import { retainQuery } from "$lib/api/retain-query.svelte";
   import { describeSubmitError } from "$lib/forms/submit-error";
 
-  const effectivePermissions: string[] = $derived(
-    page.data.effectivePermissions ?? [],
-  );
   const canManageSharing = $derived(
-    effectivePermissions.includes("*") ||
-      effectivePermissions.includes("sharing.manage"),
+    satisfiesScope(page.data.effectivePermissions ?? [], "sharing.manage"),
   );
 
   const shareQuery = $derived(canManageSharing ? getShareLink() : null);
@@ -57,7 +54,7 @@
 
   let busy = $state(false);
   let confirmingRotate = $state(false);
-  let copied = $state(false);
+  const copy = createCopyFeedback();
   let errorMessage = $state<string | null>(null);
   let scopeWritesInFlight = $state(0);
 
@@ -192,12 +189,7 @@
   async function copyLink() {
     const url = await loadUrl();
     if (!url) return;
-    if (!(await copyToClipboard(url))) {
-      errorMessage = "Couldn't copy the link to the clipboard. Copy it manually instead.";
-      return;
-    }
-    copied = true;
-    setTimeout(() => (copied = false), 2000);
+    await copy.copy(url);
   }
 
   function formatDate(date: Date | string | undefined | null): string {
@@ -292,7 +284,7 @@
                   disabled={revealing}
                   onclick={copyLink}
                 >
-                  {#if copied}
+                  {#if copy.isCopied()}
                     <Check class="mr-1.5 h-4 w-4 text-success" />
                   {:else}
                     <Copy class="mr-1.5 h-4 w-4" />

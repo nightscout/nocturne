@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { quickcolors } from '../../../utils.ts';
-	import { buttonVariants } from '@nocturne/ui/ui/button';
+	import { Button } from '@nocturne/ui/ui/button';
 	import * as Popover from '@nocturne/ui/ui/popover';
 	import { Toggle } from '@nocturne/ui/ui/toggle';
 	import { cn } from '@nocturne/ui/utils';
@@ -10,10 +10,9 @@
 	import strings from '../../../strings.ts';
 
 	interface Props {
-		class?: string;
 		editor: Editor;
 	}
-	const { class: className = '', editor }: Props = $props();
+	const { editor }: Props = $props();
 
 	const currentColor = $derived.by(() => editor.getAttributes('textStyle').color);
 	const currentHighlight = $derived.by(() => editor.getAttributes('highlight').color);
@@ -27,27 +26,28 @@
 </script>
 
 <Popover.Root>
-	<Popover.Trigger>
-		<EdraToolTip tooltip={strings.toolbar.color.buttonTitle}>
-			<div
-				class={buttonVariants({
-					variant: 'ghost',
-					size: 'icon',
-					class: cn(
-						'gap-0.5',
-						currentColor && 'text-(--text-colour)!',
-						currentHighlight && 'bg-(--highlight-tint)!',
-						className
-					)
-				})}
-				style:--text-colour={currentColor}
-				style:--highlight-tint={currentHighlight && `${currentHighlight}75`}
-			>
-				<span>{strings.toolbar.color.templateCharacter}</span>
-				<ChevronDown class="text-muted-foreground size-2!" />
-			</div>
-		</EdraToolTip>
-	</Popover.Trigger>
+	<EdraToolTip tooltip={strings.toolbar.color.buttonTitle}>
+		{#snippet children({ props }: { props: Record<string, unknown> })}
+			<Popover.Trigger {...props}>
+				{#snippet child({ props }: { props: Record<string, unknown> })}
+					<Button {...props} variant="ghost" size="icon">
+						<span
+							class={cn(
+								'flex size-full items-center justify-center gap-0.5 rounded-md',
+								currentColor && 'text-(--text-colour)',
+								currentHighlight && 'bg-(--highlight-tint)'
+							)}
+							style:--text-colour={currentColor}
+							style:--highlight-tint={currentHighlight && `${currentHighlight}75`}
+						>
+							<span>{strings.toolbar.color.templateCharacter}</span>
+							<ChevronDown class="text-muted-foreground size-2!" />
+						</span>
+					</Button>
+				{/snippet}
+			</Popover.Trigger>
+		{/snippet}
+	</EdraToolTip>
 	<Popover.Content class="size-fit" portalProps={{ disabled: true, to: undefined }}>
 		<div class="text-muted-foreground my-2 text-xs">{strings.toolbar.color.textColors}</div>
 		<!-- Each swatch is painted in the author's content colour, which the theme does not own. -->
