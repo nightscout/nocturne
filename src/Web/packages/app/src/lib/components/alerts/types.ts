@@ -247,14 +247,9 @@ export function ensureCompositeRoot(node: ConditionNode): ConditionNode {
  * single-leaf rules stay flat on the wire.
  */
 export function flattenSingleChildRoot(node: ConditionNode): ConditionNode {
-	if (
-		node.type === "composite" &&
-		node.composite &&
-		node.composite.conditions.length === 1
-	) {
-		return node.composite.conditions[0];
-	}
-	return node;
+	const conditions = node.type === "composite" ? node.composite?.conditions : undefined;
+	const only: unknown = conditions?.length === 1 ? conditions[0] : undefined;
+	return isConditionNode(only) ? only : node;
 }
 
 // ---------------------------------------------------------------------------
@@ -461,6 +456,50 @@ export function browserTimeZone(): string | undefined {
 	}
 }
 
+const comparisonShown = { operator: ">=", value: 0 };
+
+/**
+ * What `RuleBuilderLeafEditor` shows for a leaf field a stored rule leaves out,
+ * which {@link nodeFromApi} writes into the model so that saving sends what was
+ * shown. `is_active` is left out: the editor's switch and its label disagree
+ * about a missing one.
+ */
+const SHOWN_DEFAULTS: Partial<Record<ConditionKind, Record<string, unknown>>> = {
+	threshold: { direction: "below", value: 0 },
+	predicted: { operator: "<=", value: 0, within_minutes: 0 },
+	rate_of_change: { direction: "falling", rate: 0 },
+	trend: { bucket: "falling" },
+	staleness: comparisonShown,
+	time_of_day: { from: "00:00", to: "23:59" },
+	iob: comparisonShown,
+	cob: comparisonShown,
+	reservoir: comparisonShown,
+	site_age: comparisonShown,
+	sensor_age: comparisonShown,
+	pump_battery: comparisonShown,
+	uploader_battery: comparisonShown,
+	sensitivity_ratio: comparisonShown,
+	loop_stale: { operator: ">", minutes: 0 },
+	loop_enaction_stale: { operator: ">", minutes: 0 },
+	signal_loss: { timeout_minutes: 0 },
+	temp_basal: { metric: TempBasalMetric.Rate, operator: ">=", value: 0 },
+	alert_state: { state: "firing" },
+	time_since_last_carb: { operator: AlertComparisonOperator.Gte, minutes: 0 },
+	time_since_last_bolus: { operator: AlertComparisonOperator.Gte, minutes: 0 },
+	pump_state: { mode: PumpModeState.Suspended },
+	state_span_active: { category: StateSpanCategory.Override },
+	tracker_age: { operator: ">=", minutes: 0 },
+};
+
+function fillShownDefaults(node: ConditionNode): void {
+	const defaults = SHOWN_DEFAULTS[node.type];
+	const payload: unknown = Reflect.get(node, node.type);
+	if (!defaults || !isRecord(payload)) return;
+	for (const [field, value] of Object.entries(defaults)) {
+		if (payload[field] === undefined || payload[field] === null) payload[field] = value;
+	}
+}
+
 // ---------------------------------------------------------------------------
 // (De)serialise to/from API conditionParams field
 // ---------------------------------------------------------------------------
@@ -483,6 +522,11 @@ export function nodeFromApiEnvelope(envelope: unknown): ConditionNode | null {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null;
+}
+
+/** A value the editor holds as a node: an object with a string `type`. */
+function isConditionNode(value: unknown): value is ConditionNode {
+	return isRecord(value) && typeof value.type === "string";
 }
 
 /**
@@ -512,9 +556,7 @@ export function nodeFromApi(
 	// render an unselectable value in the editor (the dropdown only offers `>`
 	// and `>=`). Coerce on inbound and warn so we notice if it ever happens.
 	coerceStalenessOperator(node);
-	// Recursively assign uids to nested nodes so keyed each-blocks have stable
-	// identity for every level of the tree, not just the root.
-	assignUidsRecursive(node);
+	adoptTree(node);
 	return node;
 }
 
@@ -535,13 +577,30 @@ function coerceStalenessOperator(node: ConditionNode): void {
 	}
 }
 
-function assignUidsRecursive(node: ConditionNode): void {
+/**
+ * Gives every node of a tree read off the wire a `_uid`, so keyed each-blocks
+ * have stable identity at every level, and its {@link SHOWN_DEFAULTS}.
+ */
+function adoptTree(node: ConditionNode): void {
 	if (!node._uid) node._uid = newUid();
-	if (node.composite?.conditions) {
-		for (const child of node.composite.conditions) assignUidsRecursive(child);
-	}
-	if (node.not?.child) assignUidsRecursive(node.not.child);
-	if (node.sustained?.child) assignUidsRecursive(node.sustained.child);
+	fillShownDefaults(node);
+	for (const child of childrenOf(node)) adoptTree(child);
+}
+
+/**
+ * The nodes directly under `node`. A stored group can lack its list or child,
+ * and a list can hold `null` slots; those contribute nothing.
+ */
+function childrenOf(node: ConditionNode): ConditionNode[] {
+	const children: unknown[] =
+		node.type === "composite"
+			? (node.composite?.conditions ?? [])
+			: node.type === "not"
+				? [node.not?.child]
+				: node.type === "sustained"
+					? [node.sustained?.child]
+					: [];
+	return children.filter(isConditionNode);
 }
 
 /**
@@ -555,20 +614,25 @@ export function stripEditorFields(node: ConditionNode): ConditionNode {
 	for (const [key, value] of Object.entries(cleaned)) {
 		if (value === undefined) Reflect.deleteProperty(cleaned, key);
 	}
-	// Recurse into nested children so uids in the subtree are also stripped.
+	// Recurse into nested children so uids in the subtree are also stripped. A
+	// stored group missing its list or child keeps it missing, for the save to report.
 	if (node.composite) {
 		cleaned.composite = {
-			operator: node.composite.operator,
-			conditions: node.composite.conditions.map(stripEditorFields),
+			...node.composite,
+			conditions: node.composite.conditions?.map((c) =>
+				isConditionNode(c) ? stripEditorFields(c) : c,
+			),
 		};
 	}
 	if (node.not) {
-		cleaned.not = { child: stripEditorFields(node.not.child) };
+		const child: unknown = node.not.child;
+		cleaned.not = { ...node.not, child: isConditionNode(child) ? stripEditorFields(child) : node.not.child };
 	}
 	if (node.sustained) {
+		const child: unknown = node.sustained.child;
 		cleaned.sustained = {
-			minutes: node.sustained.minutes,
-			child: stripEditorFields(node.sustained.child),
+			...node.sustained,
+			child: isConditionNode(child) ? stripEditorFields(child) : node.sustained.child,
 		};
 	}
 	return cleaned;
@@ -582,18 +646,20 @@ export function stripEditorFields(node: ConditionNode): ConditionNode {
  */
 function withoutEmptyGroups(node: ConditionNode): ConditionNode | null {
 	if (node.type === "composite" && node.composite) {
-		const conditions = node.composite.conditions
+		const conditions = childrenOf(node)
 			.map(withoutEmptyGroups)
 			.filter((c): c is ConditionNode => c !== null);
 		if (conditions.length === 0) return null;
 		return { ...node, composite: { ...node.composite, conditions } };
 	}
 	if (node.type === "not" && node.not) {
-		const child = withoutEmptyGroups(node.not.child);
-		return child ? { ...node, not: { child } } : null;
+		const [inner] = childrenOf(node);
+		const child = inner ? withoutEmptyGroups(inner) : null;
+		return child ? { ...node, not: { ...node.not, child } } : null;
 	}
 	if (node.type === "sustained" && node.sustained) {
-		const child = withoutEmptyGroups(node.sustained.child);
+		const [inner] = childrenOf(node);
+		const child = inner ? withoutEmptyGroups(inner) : null;
 		return child ? { ...node, sustained: { ...node.sustained, child } } : null;
 	}
 	return node;
@@ -630,8 +696,7 @@ export function nodeToApi(
  * dirty detection (compare `JSON.stringify` of current vs. saved body).
  */
 export function buildBody(state: RuleEditorState) {
-	const flat = serialisableRoot(state.condition!);
-	const api = nodeToApi(flat);
+	const api = nodeToApi(stripEditorFields(serialisableRoot(state.condition!)));
 	return {
 		name: state.name,
 		description: state.description || undefined,
@@ -867,7 +932,7 @@ function parseSnoozeConditions(snooze: unknown): ConditionNode[] {
 			const node = ensureCompositeRoot(
 				adoptWireNode({ ...entry, type: entry.type }),
 			);
-			assignUidsRecursive(node);
+			adoptTree(node);
 			out.push(node);
 		}
 	}
