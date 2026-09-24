@@ -27,6 +27,8 @@ export const cardVariants = tv({
       default: "",
       // A stat tile whose figure and label sit directly in the card, without Card.Content.
       sm: "p-4",
+      // A panel split into ruled cells that carry their own padding, e.g. a row of figures.
+      flush: "gap-0 overflow-hidden py-0",
     },
     // A card that is itself a link, wrapped in an <a>.
     interactive: {

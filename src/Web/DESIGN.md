@@ -282,6 +282,7 @@ Components come from shadcn-svelte, extended in `packages/ui` with Tailwind Vari
   - primary (report headline figures);
   - muted (supporting notes, filter bars);
   - dashed (empty state);
+  - `size="flush"` (no padding or gap, clipped): a panel split into ruled cells that carry their own padding, such as the dashboard's widget row.
   - `interactive` (a card that is a link; hover fills with accent at 50%).
 
 ### Inputs / Fields
@@ -295,6 +296,12 @@ The sidebar navigation is a list of rows, each a 16px Lucide icon with 14px text
 
 ### Banner
 A sticky, full-width strip for app-wide conditions such as a stale connection or maintenance. It uses 14px type, an 8px × 16px pad, a bottom hairline in the tone at 30%, and an opaque `*-subtle` fill so that scrolling content never shows through. It comes in warning and info variants.
+
+### Figure Strip
+A report's headline figures sit in one `FigureStrip` (`packages/app/src/lib/components/reports/FigureStrip.svelte`): a flush card whose cells are divided by 1px rules. Each cell has a muted label, the figure at 20px semibold with tabular numerals, the unit in the label grade, and an optional note such as the consensus target. A figure appears once per page. Supporting cards explain or break it down rather than repeating it larger.
+
+### Lists of links
+Indexes of destinations, such as the reports hub, the settings hub and the portal's docs and install pages, are ruled lists: a row per link with title, description and a trailing chevron, and a hover fill of `--accent` at 50%. They are not grids of cards with icon tiles.
 
 ### Glucose Value Indicator (signature)
 The current reading is a solid tile filled with the range colour, holding the value in heavy numerals, with a trend arrow, the delta, and the age of the reading beside it. It comes in `lg` (dashboard and top bar), `sm` (sidebar), and `xs` (collapsed sidebar). It pulses once when the value changes. When the reading is stale, the fill drops to `--muted`. When the connection is lost, the border turns dashed, and stale plus disconnected flashes the border. The value is never shown without its age.
@@ -314,6 +321,10 @@ Charts are drawn with layerchart. The main glucose chart stacks lanes over a sha
 - **Do** use the `overlay` variants over fullscreen clock and alarm surfaces whose background the theme does not own.
 
 ### Don't:
+- **Don't** lay out stat figures as a row of separate cards, or put two figures of the same size side by side competing. Use the Figure Strip, and keep the current reading the largest number on any screen.
+- **Don't** put an icon in a tinted tile beside a page heading, or build a grid of same-size cards of icon, heading and text. Headings carry themselves, and destinations are ruled lists.
+- **Don't** nest a bordered or filled tile inside a card row. Rows inside a card are divided by rules.
+- **Don't** set uppercase tracked labels above headings, or number sections, unless the sequence itself is information.
 - **Don't** use Tailwind palette literals (`bg-green-500`, `text-orange-500`) for any clinical or outcome state.
 - **Don't** use `--success` or `--warning` for glucose or therapy state. They are UI outcomes. Use the `--glucose-*`, `--status-*`, or `--severity-*` families.
 - **Don't** use `--glucose-in-range` as a brand or decorative accent. In the portal, use `--brand`.

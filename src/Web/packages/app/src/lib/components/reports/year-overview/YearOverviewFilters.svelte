@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { CalendarDays, Filter, SlidersHorizontal } from "lucide-svelte";
+  import { Filter, SlidersHorizontal } from "lucide-svelte";
   import * as Select from "$lib/components/ui/select";
   import { Button } from "$lib/components/ui/button";
   import * as Popover from "$lib/components/ui/popover";
@@ -30,11 +30,6 @@
   class="mb-6 flex flex-col gap-4 @sm:flex-row @sm:items-center @sm:justify-between"
 >
   <div class="flex items-center gap-3">
-    <div
-      class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10"
-    >
-      <CalendarDays class="h-5 w-5 text-primary" />
-    </div>
     <div>
       <h1 class="text-2xl font-bold tracking-tight">Year Overview</h1>
       <p class="text-sm text-muted-foreground">

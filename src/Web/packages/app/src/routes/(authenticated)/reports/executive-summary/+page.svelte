@@ -6,7 +6,8 @@
     CardHeader,
     CardTitle,
   } from "$lib/components/ui/card";
-  import { Item } from "$lib/components/ui/item";
+  import { Button } from "$lib/components/ui/button";
+  import FigureStrip from "$lib/components/reports/FigureStrip.svelte";
   import { Progress } from "$lib/components/ui/progress";
   import {
     Gauge,
@@ -15,7 +16,6 @@
     Shield,
     AlertTriangle,
     Activity,
-    Zap,
     BarChart3,
     Calendar,
     BookOpen,
@@ -70,55 +70,16 @@
       {@const totalLows = (tir?.low ?? 0) + (tir?.veryLow ?? 0)}
       {@const totalHighs = (tir?.high ?? 0) + (tir?.veryHigh ?? 0)}
 
-      <!-- A metric tile: the figure, or an explicit empty state when the window
-           has no value for it, plus the consensus target it is read against. -->
-      {#snippet metricTile(
-        label: string,
-        value: number | null | undefined,
-        digits: number,
-        target: string
-      )}
-        <div>
-          {#if value != null}
-            <div class="text-2xl font-bold tabular-nums">
-              {value.toFixed(digits)}%
-            </div>
-          {:else}
-            <div class="text-sm font-medium text-muted-foreground">No data</div>
-          {/if}
-          <div class="text-xs text-muted-foreground">{label}</div>
-          <div class="text-2xs text-muted-foreground/70">Target {target}</div>
-        </div>
-      {/snippet}
-
-      <!-- Headline Metrics -->
-      <Card variant="primary">
-        <CardContent class="pt-6">
-          <div
-            class="flex flex-col @3xl:flex-row items-center justify-between gap-6"
-          >
-            <div class="flex-1 text-center @3xl:text-left space-y-2">
-              <h2 class="text-lg font-semibold">Headline metrics</h2>
-              <p class="text-sm text-muted-foreground">
-                Time in Range, glucose variability and estimated A1C over the
-                last {dayCount} days, each shown with the consensus target it is
-                read against.
-              </p>
-            </div>
-
-            <div class="grid grid-cols-3 gap-3 @sm:gap-6 text-center shrink-0">
-              {@render metricTile("TIR", tir?.target, 0, "≥70%")}
-              {@render metricTile(
-                "CV",
-                variability?.coefficientOfVariation,
-                0,
-                "≤33%"
-              )}
-              {@render metricTile("eA1C", variability?.estimatedA1c, 1, "<7%")}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <FigureStrip
+        figures={[
+          { label: "Time in range", value: tir?.target?.toFixed(0) ?? "–", unit: "%", note: "Target: ≥70%" },
+          { label: "Below range", value: totalLows.toFixed(1), unit: "%", note: "Target: <4%" },
+          { label: "Above range", value: totalHighs.toFixed(1), unit: "%", note: "Target: <25%" },
+          { label: "Est. A1C", value: variability?.estimatedA1c?.toFixed(1) ?? "–", unit: "%", note: "Target: <7%" },
+          { label: "CV", value: variability?.coefficientOfVariation?.toFixed(0) ?? "–", unit: "%", note: "Target: ≤33%" },
+          { label: "Average", value: String(bgOr(stats?.mean)), unit: bgLabel(), note: `Over ${dayCount} days` },
+        ]}
+      />
 
       <!-- Primary Metrics Grid -->
       <div class="grid grid-cols-1 @2xl:grid-cols-2 @4xl:grid-cols-3 gap-6">
@@ -183,12 +144,9 @@
             </CardTitle>
           </CardHeader>
           <CardContent class="space-y-4">
-            <div class="text-center">
+            <div>
               {#if variability?.estimatedA1c != null}
-                <div class="text-5xl font-bold tabular-nums">
-                  {variability.estimatedA1c.toFixed(1)}%
-                </div>
-                <p class="text-sm text-muted-foreground mt-1">
+                <p class="text-sm text-muted-foreground">
                   Target: below 7%. Your care team sets your individual target.
                 </p>
               {:else}
@@ -202,8 +160,7 @@
               <ReliabilityBadge reliability={analysis?.reliability} />
             </div>
 
-            <!-- What this means -->
-            <div class="bg-muted/50 rounded-lg p-3 text-sm space-y-2">
+            <div class="text-sm space-y-2 border-t pt-3">
               <p>
                 <strong>What is eA1C?</strong>
                 This estimates what your lab A1C would be based on your average glucose.
@@ -232,41 +189,28 @@
             </CardTitle>
           </CardHeader>
           <CardContent class="space-y-4">
-            <div class="text-center">
-              {#if variability?.coefficientOfVariation != null}
-                <div class="text-5xl font-bold tabular-nums">
-                  {variability.coefficientOfVariation.toFixed(0)}%
-                </div>
-              {:else}
-                <div class="text-lg font-medium text-muted-foreground">
-                  No data for this window
-                </div>
-              {/if}
-              <p class="text-sm text-muted-foreground mt-1">
-                Coefficient of Variation (CV)
-              </p>
-            </div>
+            {#if variability?.coefficientOfVariation == null}
+              <div class="text-lg font-medium text-muted-foreground">
+                No data for this window
+              </div>
+            {/if}
 
-            <p class="text-xs text-muted-foreground">
+            <p class="text-sm text-muted-foreground">
               Target: ≤33%. Lower means steadier glucose with fewer ups and
               downs.
             </p>
 
             <!-- Additional variability metrics -->
-            <div class="grid grid-cols-2 gap-2 text-xs border-t pt-3">
-              <div>
-                <div class="font-medium">
-                  {bgOr(stats?.standardDeviation)} {bgLabel()}
-                </div>
-                <div class="text-muted-foreground">Std. Deviation</div>
+            <dl class="m-0 divide-y divide-border border-t text-sm">
+              <div class="flex justify-between py-2">
+                <dt class="text-muted-foreground">Standard deviation</dt>
+                <dd class="m-0 font-medium tabular-nums">{bgOr(stats?.standardDeviation)} {bgLabel()}</dd>
               </div>
-              <div>
-                <div class="font-medium">
-                  {bgOr(variability?.meanAmplitudeGlycemicExcursions)} {bgLabel()}
-                </div>
-                <div class="text-muted-foreground">MAGE</div>
+              <div class="flex justify-between py-2">
+                <dt class="text-muted-foreground">MAGE</dt>
+                <dd class="m-0 font-medium tabular-nums">{bgOr(variability?.meanAmplitudeGlycemicExcursions)} {bgLabel()}</dd>
               </div>
-            </div>
+            </dl>
           </CardContent>
         </Card>
       </div>
@@ -285,16 +229,8 @@
             </CardDescription>
           </CardHeader>
           <CardContent class="space-y-4">
-            <div class="flex items-center justify-between">
-              <div>
-                <div class="text-3xl font-bold tabular-nums">
-                  {totalLows.toFixed(1)}%
-                </div>
-                <p class="text-sm text-muted-foreground">
-                  Total time below range
-                </p>
-              </div>
-              <div class="text-right text-sm">
+            <div>
+              <div class="space-y-1 text-sm tabular-nums">
                 <div class="flex items-center gap-2">
                   <TextureSwatch texture="very-low" />
                   <span>&lt;{bg(54)}: {tir?.veryLow?.toFixed(1) ?? 0}%</span>
@@ -308,10 +244,10 @@
 
             <!-- Episodes count if available -->
             {#if analysis?.timeInRange?.episodes}
-              <div class="bg-muted/50 rounded p-3 text-sm">
+              <div class="border-t pt-3 text-sm">
                 <div class="flex justify-between">
-                  <span>Low episodes:</span>
-                  <span class="font-medium">
+                  <span class="text-muted-foreground">Low episodes</span>
+                  <span class="font-medium tabular-nums">
                     {(analysis.timeInRange.episodes.low ?? 0) +
                       (analysis.timeInRange.episodes.veryLow ?? 0)}
                   </span>
@@ -319,7 +255,7 @@
               </div>
             {/if}
 
-            <div class="bg-muted/50 rounded p-3 text-sm text-muted-foreground">
+            <div class="text-sm text-muted-foreground">
               Target for time below {bg(70)} {bgLabel()} is under 4%. Discuss any
               patterns with your care team.
             </div>
@@ -338,16 +274,8 @@
             </CardDescription>
           </CardHeader>
           <CardContent class="space-y-4">
-            <div class="flex items-center justify-between">
-              <div>
-                <div class="text-3xl font-bold tabular-nums">
-                  {totalHighs.toFixed(1)}%
-                </div>
-                <p class="text-sm text-muted-foreground">
-                  Total time above range
-                </p>
-              </div>
-              <div class="text-right text-sm">
+            <div>
+              <div class="space-y-1 text-sm tabular-nums">
                 <div class="flex items-center gap-2">
                   <TextureSwatch texture="high" />
                   <span>{bg(180)}-{bg(250)}: {tir?.high?.toFixed(1) ?? 0}%</span>
@@ -359,7 +287,7 @@
               </div>
             </div>
 
-            <div class="bg-muted/50 rounded p-3 text-sm text-muted-foreground">
+            <div class="text-sm text-muted-foreground">
               Target for time above {bg(180)} {bgLabel()} is under 25%. The AGP
               report shows the times of day when highs occur most.
             </div>
@@ -381,32 +309,22 @@
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div class="grid grid-cols-2 gap-4">
-              <div class="space-y-1">
-                <div class="text-2xl font-bold">
-                  {bgOr(stats?.mean)}
+            <dl class="m-0 divide-y divide-border text-sm">
+              {#each [
+                { label: "Average", value: stats?.mean },
+                { label: "Median", value: stats?.median },
+                { label: "Lowest", value: stats?.min },
+                { label: "Highest", value: stats?.max },
+              ] as { label, value } (label)}
+                <div class="flex items-baseline justify-between py-2">
+                  <dt class="text-muted-foreground">{label}</dt>
+                  <dd class="m-0 font-semibold tabular-nums">
+                    {bgOr(value)}
+                    <span class="text-xs font-normal text-muted-foreground">{bgLabel()}</span>
+                  </dd>
                 </div>
-                <div class="text-xs text-muted-foreground">Average ({bgLabel()})</div>
-              </div>
-              <div class="space-y-1">
-                <div class="text-2xl font-bold">
-                  {bgOr(stats?.median)}
-                </div>
-                <div class="text-xs text-muted-foreground">Median ({bgLabel()})</div>
-              </div>
-              <div class="space-y-1">
-                <div class="text-2xl font-bold">
-                  {bgOr(stats?.min)}
-                </div>
-                <div class="text-xs text-muted-foreground">Lowest ({bgLabel()})</div>
-              </div>
-              <div class="space-y-1">
-                <div class="text-2xl font-bold">
-                  {bgOr(stats?.max)}
-                </div>
-                <div class="text-xs text-muted-foreground">Highest ({bgLabel()})</div>
-              </div>
-            </div>
+              {/each}
+            </dl>
 
             <!-- Percentiles -->
             <div class="mt-4 pt-4 border-t">
@@ -464,8 +382,8 @@
             />
 
             {#if (quality?.cgmActivePercent ?? 0) < 70}
-              <div class="bg-muted/50 rounded p-2 text-sm text-muted-foreground">
-                <AlertTriangle class="w-4 h-4 inline mr-1" />
+              <div class="text-sm text-muted-foreground">
+                <AlertTriangle class="w-4 h-4 inline mr-1 text-warning" />
                 Limited data may affect report accuracy.
               </div>
             {/if}
@@ -488,51 +406,12 @@
         </Card>
       </div>
 
-      <!-- Navigation to Other Reports -->
-      <Card variant="muted" class="print:hidden">
-        <CardHeader>
-          <CardTitle class="flex items-center gap-2">
-            <Zap class="w-5 h-5" />
-            Explore More Reports
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div class="grid grid-cols-2 @3xl:grid-cols-4 gap-3">
-            <Item
-              href="/reports/agp"
-              variant="outline"
-              class="flex-col justify-center"
-            >
-              <BarChart3 class="w-5 h-5" />
-              <span class="text-xs">AGP Report</span>
-            </Item>
-            <Item
-              href="/reports/readings"
-              variant="outline"
-              class="flex-col justify-center"
-            >
-              <Calendar class="w-5 h-5" />
-              <span class="text-xs">Day-by-Day</span>
-            </Item>
-            <Item
-              href="/reports/treatments"
-              variant="outline"
-              class="flex-col justify-center"
-            >
-              <Activity class="w-5 h-5" />
-              <span class="text-xs">Treatments</span>
-            </Item>
-            <Item
-              href="/reports"
-              variant="outline"
-              class="flex-col justify-center"
-            >
-              <BookOpen class="w-5 h-5" />
-              <span class="text-xs">All Reports</span>
-            </Item>
-          </div>
-        </CardContent>
-      </Card>
+      <nav class="flex flex-wrap gap-2 print:hidden" aria-label="More reports">
+        <Button href="/reports/agp" variant="outline" size="sm"><BarChart3 />AGP Report</Button>
+        <Button href="/reports/readings" variant="outline" size="sm"><Calendar />Day-by-Day</Button>
+        <Button href="/reports/treatments" variant="outline" size="sm"><Activity />Treatments</Button>
+        <Button href="/reports" variant="ghost" size="sm"><BookOpen />All reports</Button>
+      </nav>
     {/if}
 
     <!-- Footer -->

@@ -3,7 +3,6 @@
   import { onMount } from "svelte";
   import WidgetCard from "./WidgetCard.svelte";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
-  import { TrendingUp, TrendingDown, Minus } from "lucide-svelte";
   import { getMultiPeriodStatistics } from "$api/generated/statistics.generated.remote";
   import { MediaQuery } from "svelte/reactivity";
   import { Button } from "$lib/components/ui/button";
@@ -35,7 +34,7 @@
     <Button
       variant="ghost-muted"
       size="xs"
-      class="-ml-2"
+      class="-mr-2"
       onclick={toggleView}
     >
       {showAverage ? "90-Day Avg" : "Last 24h"}
@@ -86,49 +85,26 @@
         />
       </div>
 
-      <!-- TIR percentage with improvement indicator -->
-      <div class="flex items-center justify-between">
+      <div class="flex items-baseline justify-between gap-2">
         <div class="flex items-baseline gap-2">
-          <span class="text-2xl font-bold text-glucose-in-range">
+          <span class="text-xl font-semibold tabular-nums">
             {inRange.toFixed(0)}%
           </span>
-          {#if improvement !== null}
-            {@const absImprovement = Math.abs(improvement)}
-            {#if absImprovement >= 0.5}
-              <span
-                class="inline-flex items-center gap-0.5 text-xs font-medium {improvement > 0
-                  ? 'text-success'
-                  : 'text-destructive'}"
-              >
-                {#if improvement > 0}
-                  <TrendingUp class="h-3 w-3" />
-                  +{improvement.toFixed(1)}%
-                {:else}
-                  <TrendingDown class="h-3 w-3" />
-                  {improvement.toFixed(1)}%
-                {/if}
-              </span>
-            {:else}
-              <span class="inline-flex items-center gap-0.5 text-xs font-medium text-muted-foreground">
-                <Minus class="h-3 w-3" />
-                vs 90d
-              </span>
-            {/if}
+          <span class="text-xs text-muted-foreground">in range</span>
+          {#if improvement !== null && Math.abs(improvement) >= 0.5}
+            <span class="text-xs text-muted-foreground tabular-nums">
+              {improvement > 0 ? "+" : ""}{improvement.toFixed(1)}% vs 90d
+            </span>
           {/if}
         </div>
-        <span class="text-xs text-muted-foreground">
+        <span class="text-xs text-muted-foreground tabular-nums">
           {formatNumber(totalReadings)} readings
         </span>
       </div>
 
-      <!-- Low/High summary -->
-      <div class="flex justify-between text-xs text-muted-foreground mt-1">
-        <span class="text-glucose-low">
-          ↓ {(veryLow + low).toFixed(0)}%
-        </span>
-        <span class="text-glucose-high">
-          ↑ {(high + veryHigh).toFixed(0)}%
-        </span>
+      <div class="flex justify-between text-xs text-muted-foreground mt-1 tabular-nums">
+        <span>Below {(veryLow + low).toFixed(0)}%</span>
+        <span>Above {(high + veryHigh).toFixed(0)}%</span>
       </div>
       <ReliabilityBadge reliability={showAverage ? stats?.last90Days?.reliability : stats?.lastDay?.reliability} />
     {:else}

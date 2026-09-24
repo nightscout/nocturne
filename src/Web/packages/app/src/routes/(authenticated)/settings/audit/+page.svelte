@@ -8,7 +8,6 @@
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
   import {
-    ScrollText,
     Settings2,
     Loader2,
     Info,
@@ -159,9 +158,6 @@
 
 <div class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6">
   <div class="flex items-center gap-3">
-    <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
-      <ScrollText class="h-6 w-6 text-primary" />
-    </div>
     <div>
       <h1 class="text-2xl font-bold tracking-tight">Audit Log</h1>
       <p class="text-muted-foreground">

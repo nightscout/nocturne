@@ -1,47 +1,3 @@
-<script lang="ts" module>
-  import { tv, type VariantProps } from "tailwind-variants";
-
-  export const categoryVariants = tv({
-    slots: {
-      card: "group relative overflow-hidden rounded-2xl border-0 bg-linear-to-br transition-all duration-500 hover:scale-[1.02] hover:shadow-2xl",
-      iconWrap:
-        "flex h-14 w-14 items-center justify-center rounded-xl transition-transform duration-500 group-hover:scale-110",
-      icon: "h-7 w-7",
-      title: "text-xl font-semibold tracking-tight text-foreground",
-      subtitle: "text-sm font-medium text-muted-foreground",
-    },
-    variants: {
-      category: {
-        overview: {
-          card: "from-report-overview/5 to-report-overview/15",
-          iconWrap: "bg-report-overview/15",
-          icon: "text-report-overview",
-        },
-        patterns: {
-          card: "from-report-patterns/5 to-report-patterns/15",
-          iconWrap: "bg-report-patterns/15",
-          icon: "text-report-patterns",
-        },
-        lifestyle: {
-          card: "from-report-lifestyle/5 to-report-lifestyle/15",
-          iconWrap: "bg-report-lifestyle/15",
-          icon: "text-report-lifestyle",
-        },
-        treatment: {
-          card: "from-report-treatment/5 to-report-treatment/15",
-          iconWrap: "bg-report-treatment/15",
-          icon: "text-report-treatment",
-        },
-      },
-    },
-    defaultVariants: {
-      category: "overview",
-    },
-  });
-
-  export type CategoryType = VariantProps<typeof categoryVariants>["category"];
-</script>
-
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import {
@@ -49,10 +5,10 @@
     AlertTriangle,
     ArrowRight,
     BarChart3,
-    Activity,
     Calendar,
     ChevronRight,
   } from "lucide-svelte";
+  import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "$lib/components/ui/card";
   import { page } from "$app/state";
   import {
     reportsOverviewScopes,
@@ -65,13 +21,11 @@
   import { getReportsData } from "$api/reports.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import { formatGlucoseRange, formatGlucoseValue, formatLocale, formatNumber, formatNumericDate, formatShortDate, getUnitLabel } from "$lib/utils/formatting";
+  import { formatGlucoseRange, formatGlucoseValue, formatLocale, formatNumber, formatShortDate, getUnitLabel } from "$lib/utils/formatting";
   import ReportsSkeleton from "$lib/components/reports/ReportsSkeleton.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
   import { remoteErrorMessage } from "$lib/api/remote-error";
   import { coachmark } from "@nocturne/coach";
-  import { fly, fade, scale } from "svelte/transition";
-  import { cubicOut, elasticOut } from "svelte/easing";
 
   // Get shared date params from context (set by reports layout)
   // Default: 14 days is standard for reports overview
@@ -145,10 +99,12 @@
     };
   });
 
-  // Animation delay helper
-  function staggerDelay(index: number): number {
-    return 80 + index * 60;
-  }
+  const CATEGORY_ICON_CLASS = {
+    overview: "text-report-overview",
+    patterns: "text-report-patterns",
+    lifestyle: "text-report-lifestyle",
+    treatment: "text-report-treatment",
+  } as const;
 </script>
 
 <svelte:head>
@@ -163,12 +119,8 @@
   <ReportsSkeleton />
 {:else if reportsResource.error}
   <div class="flex min-h-[60vh] items-center justify-center px-4">
-    <div class="max-w-md space-y-4 text-center" in:fade={{ duration: 300 }}>
-      <div
-        class="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10"
-      >
-        <AlertTriangle class="h-8 w-8 text-destructive" />
-      </div>
+    <div class="max-w-md space-y-4 text-center">
+      <AlertTriangle class="mx-auto size-6 text-destructive" aria-hidden="true" />
       <h2 class="text-xl font-semibold">Unable to load reports</h2>
       <p class="text-muted-foreground">
         {remoteErrorMessage(reportsResource.error, "Something went wrong")}
@@ -179,408 +131,179 @@
     </div>
   </div>
 {:else}
-  <div class="@container min-h-screen">
-    {#if canLoadSummary}
-    <!-- Hero Section with Key Metrics -->
-    <section
-      class="relative overflow-hidden bg-linear-to-b from-muted/60 via-background to-transparent pb-8 pt-6"
-    >
-      <!-- Subtle decorative background -->
-      <div
-        class="pointer-events-none absolute inset-0 overflow-hidden opacity-30 dark:opacity-20"
-      >
-        <div
-          class="absolute -right-20 -top-20 h-96 w-96 rounded-full bg-linear-to-br from-report-overview/40 to-report-patterns/40 blur-3xl"
-        ></div>
-        <div
-          class="absolute -bottom-32 -left-20 h-80 w-80 rounded-full bg-linear-to-br from-report-lifestyle/40 to-report-lifestyle/20 blur-3xl"
-        ></div>
+  <div class="@container mx-auto max-w-6xl space-y-10 px-3 py-6 @md:px-6">
+    <header class="flex flex-col gap-4 @3xl:flex-row @3xl:items-end @3xl:justify-between">
+      <div>
+        <h1 class="text-3xl font-bold tracking-tight">Reports</h1>
+        <p class="mt-1 text-muted-foreground tabular-nums">
+          {formatShortDate(startDate)} – {formatShortDate(endDate, true)}
+          {#if canLoadSummary}
+            · {formatNumber(entries.length)} readings
+          {/if}
+        </p>
       </div>
-
-      <div class="container relative mx-auto max-w-6xl px-3">
-        <!-- Header -->
-        <div
-          class="mb-8 text-center"
-          in:fly={{ y: -20, duration: 600, delay: 100, easing: cubicOut }}
-        >
-          <div
-            class="mb-3 inline-flex items-center gap-2 rounded-full bg-primary/5 px-4 py-1.5 text-sm font-medium text-primary"
-          >
-            <Calendar class="h-4 w-4" />
-            {formatShortDate(startDate)} – {formatShortDate(endDate, true)}
-          </div>
-          <h1
-            class="bg-linear-to-r from-foreground via-foreground/80 to-foreground/90 bg-clip-text text-4xl font-bold tracking-tight text-transparent @lg:text-5xl"
-          >
-            Your Glucose Report
-          </h1>
-          <p class="mt-3 text-lg text-muted-foreground">
-            {formatNumber(entries.length)} readings analyzed
-          </p>
-        </div>
-
-        {#if analysis}
-          {@const tirValue = tir?.target}
-          <!-- Main Metric Hero Card -->
-          <div
-            class="mb-8"
-            in:fly={{ y: 30, duration: 700, delay: 200, easing: cubicOut }}
-          >
-            <div
-              class="relative overflow-hidden rounded-3xl bg-card p-5 shadow-xl shadow-border/50 @lg:p-6 @3xl:p-8 dark:shadow-none dark:ring-1 dark:ring-white/10"
-            >
-              <!-- Accent bar -->
-              <div
-                class="absolute left-0 top-0 h-1.5 w-full bg-glucose-in-range"
-              ></div>
-
-              <div
-                class="grid items-center gap-6 @3xl:grid-cols-[1fr_1.3fr_1fr] @3xl:gap-8"
-              >
-                <!-- Left: Time in Range highlight -->
-                <div class="text-center @3xl:text-left">
-                  <div class="mb-1 text-sm font-medium text-muted-foreground">
-                    Time in Range
-                  </div>
-                  <div
-                    class="flex items-baseline justify-center gap-2 @3xl:justify-start"
-                  >
-                    {#if tirValue != null}
-                      <span
-                        class="text-6xl font-bold tabular-nums @lg:text-7xl"
-                      >
-                        {tirValue.toFixed(0)}
-                      </span>
-                      <span class="text-2xl font-medium text-muted-foreground">
-                        %
-                      </span>
-                    {:else}
-                      <span class="text-2xl font-medium text-muted-foreground">
-                        No data
-                      </span>
-                    {/if}
-                  </div>
-                  <p class="mt-2 text-sm text-muted-foreground">
-                    Consensus target: at least 70%
-                  </p>
-                </div>
-
-                <!-- Center: TIR Chart -->
-                <div
-                  class="flex h-64 justify-center @sm:h-72 @3xl:h-96"
-                  in:scale={{
-                    start: 0.9,
-                    duration: 600,
-                    delay: 400,
-                    easing: elasticOut,
-                  }}
-                >
-                  <TIRStackedChart percentages={tir} personalRange={personalRangeOverlay} showThresholds />
-                </div>
-
-                <!-- Right: Secondary metrics -->
-                <div class="space-y-4">
-                  <div class="grid grid-cols-2 gap-3 @sm:gap-4 @3xl:gap-6">
-                    <div
-                      class="min-w-0 rounded-2xl bg-muted/50 p-4 text-center"
-                    >
-                      <div
-                        class="text-xs font-medium uppercase tracking-wide text-muted-foreground"
-                      >
-                        Est. A1C
-                      </div>
-                      <div
-                        class="mt-1 text-3xl font-bold tabular-nums text-foreground"
-                      >
-                        {variability?.estimatedA1c?.toFixed(1) ?? "–"}
-                        <span class="text-lg font-normal text-muted-foreground">
-                          %
-                        </span>
-                      </div>
-                    </div>
-                    <div
-                      class="min-w-0 rounded-2xl bg-muted/50 p-4 text-center"
-                    >
-                      <div
-                        class="text-xs font-medium uppercase tracking-wide text-muted-foreground"
-                      >
-                        Variability
-                      </div>
-                      <div
-                        class="mt-1 text-3xl font-bold tabular-nums text-foreground"
-                      >
-                        {variability?.coefficientOfVariation?.toFixed(0) ?? "–"}
-                        <span class="text-lg font-normal text-muted-foreground">
-                          %
-                        </span>
-                      </div>
-                    </div>
-                    <div
-                      class="min-w-0 rounded-2xl bg-muted/50 p-4 text-center"
-                    >
-                      <div
-                        class="text-xs font-medium uppercase tracking-wide text-muted-foreground"
-                      >
-                        Average
-                      </div>
-                      <div
-                        class="mt-1 text-3xl font-bold tabular-nums text-foreground"
-                      >
-                        {stats?.mean
-                          ? formatGlucoseValue(stats.mean, units)
-                          : "–"}
-                        <span class="text-sm font-normal text-muted-foreground">
-                          {glucoseFormatting.unitLabel}
-                        </span>
-                      </div>
-                    </div>
-                    <div
-                      class="min-w-0 rounded-2xl bg-muted/50 p-4 text-center"
-                    >
-                      <div
-                        class="text-xs font-medium uppercase tracking-wide text-muted-foreground"
-                      >
-                        Time Low
-                      </div>
-                      <div
-                        class="mt-1 text-3xl font-bold tabular-nums text-foreground"
-                      >
-                        {((tir?.low ?? 0) + (tir?.veryLow ?? 0)).toFixed(1)}
-                        <span class="text-lg font-normal text-muted-foreground">
-                          %
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  {#if analysis?.reliability?.meetsReliabilityCriteria === false}
-                    <div class="flex justify-center">
-                      <ReliabilityBadge reliability={analysis.reliability} />
-                    </div>
-                  {/if}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- AGP Preview -->
-          <div
-            class="rounded-2xl bg-card p-4 shadow-lg shadow-border/30 @sm:p-6 dark:bg-card/80 dark:shadow-none dark:ring-1 dark:ring-white/5"
-            in:fly={{ y: 30, duration: 600, delay: 350, easing: cubicOut }}
-          >
-            <div
-              class="mb-4 flex flex-col gap-3 @sm:flex-row @sm:items-center @sm:justify-between"
-            >
-              <div class="min-w-0">
-                <h2 class="flex items-center gap-2 text-lg font-semibold">
-                  <Activity class="h-5 w-5 shrink-0 text-muted-foreground" />
-                  Your Typical Day
-                </h2>
-                <p class="text-sm text-muted-foreground">
-                  Glucose pattern over 24 hours
-                </p>
-              </div>
-              <Button
-                href="/reports/agp"
-                variant="ghost"
-                size="sm"
-                class="shrink-0 self-start @sm:self-auto"
-              >
-                Full Report
-                <ArrowRight class="h-4 w-4" />
-              </Button>
-            </div>
-            <div class="h-64">
-              <AmbulatoryGlucoseProfile {averagedStats} />
-            </div>
-          </div>
-        {:else if !isLoading}
-          <!-- No Data State -->
-          <div
-            class="rounded-3xl bg-card p-12 text-center shadow-lg"
-            in:fade={{ duration: 400 }}
-          >
-            <div
-              class="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-warning/10"
-            >
-              <AlertTriangle class="h-10 w-10 text-warning" />
-            </div>
-            <h2 class="mb-2 text-xl font-semibold">No Data Available</h2>
-            <p class="mx-auto max-w-md text-muted-foreground">
-              There aren't enough glucose readings in the selected date range to
-              generate analytics. Try selecting a larger date range.
-            </p>
-          </div>
-        {/if}
-      </div>
-    </section>
-    {/if}
-
-    <!-- Quick Actions -->
-    <section class="container mx-auto max-w-6xl px-3 py-6">
-      <div
-        class="flex flex-wrap items-center justify-center gap-3"
-        in:fly={{ y: 20, duration: 500, delay: 450, easing: cubicOut }}
-      >
+      <div class="flex flex-wrap gap-2">
         {#if visibleHrefs.has("/reports/executive-summary")}
-          <Button
-            href="/reports/executive-summary"
-          >
-            <Gauge class="h-4 w-4" />
+          <Button href="/reports/executive-summary">
+            <Gauge />
             Executive Summary
           </Button>
         {/if}
         {#if visibleHrefs.has("/reports/agp")}
-          <Button
-            href="/reports/agp"
-            variant="outline"
-          >
-            <BarChart3 class="h-4 w-4" />
+          <Button href="/reports/agp" variant="outline">
+            <BarChart3 />
             AGP Report
           </Button>
         {/if}
         {#if visibleHrefs.has("/reports/readings")}
-          <Button
-            href="/reports/readings"
-            variant="outline"
-          >
-            <Calendar class="h-4 w-4" />
+          <Button href="/reports/readings" variant="outline">
+            <Calendar />
             Day-by-Day
           </Button>
         {/if}
       </div>
-    </section>
+    </header>
 
-    <!-- Report Categories -->
-    <section class="container mx-auto max-w-6xl px-3 pb-16 pt-8">
-      <div
-        class="mb-10 text-center"
-        in:fly={{ y: 20, duration: 500, delay: 500, easing: cubicOut }}
-      >
-        <h2 class="text-3xl font-bold tracking-tight">Explore Your Data</h2>
-        <p class="mt-2 text-muted-foreground">
-          Dive deeper into specific aspects of your diabetes management
-        </p>
-      </div>
+    {#if canLoadSummary}
+      {#if analysis}
+        {@const tirValue = tir?.target}
+        <Card size="flush">
+          <div class="grid @3xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+            <div class="flex flex-col gap-4 p-6">
+              <h2 class="text-sm font-medium text-muted-foreground">Time in range</h2>
+              {#if tirValue != null}
+                <div class="h-64 @sm:h-72">
+                  <TIRStackedChart percentages={tir} personalRange={personalRangeOverlay} showThresholds />
+                </div>
+              {:else}
+                <p class="text-xl text-muted-foreground">No data</p>
+              {/if}
+              <p class="text-sm text-muted-foreground">Consensus target: at least 70% of time in range.</p>
+              {#if analysis?.reliability?.meetsReliabilityCriteria === false}
+                <ReliabilityBadge reliability={analysis.reliability} />
+              {/if}
+            </div>
 
-      <div class="grid gap-6 @3xl:grid-cols-2" {@attach coachmark({
+            <dl class="m-0 divide-y divide-border border-t border-border @3xl:border-t-0 @3xl:border-l">
+              <div class="flex items-baseline justify-between gap-4 px-6 py-4">
+                <dt class="text-sm text-muted-foreground">Average glucose</dt>
+                <dd class="m-0 text-lg font-semibold tabular-nums">
+                  {stats?.mean ? formatGlucoseValue(stats.mean, units) : "–"}
+                  <span class="text-sm font-normal text-muted-foreground">{glucoseFormatting.unitLabel}</span>
+                </dd>
+              </div>
+              <div class="flex items-baseline justify-between gap-4 px-6 py-4">
+                <dt class="text-sm text-muted-foreground">Estimated A1C</dt>
+                <dd class="m-0 text-lg font-semibold tabular-nums">
+                  {variability?.estimatedA1c?.toFixed(1) ?? "–"}<span class="text-sm font-normal text-muted-foreground">%</span>
+                </dd>
+              </div>
+              <div class="flex items-baseline justify-between gap-4 px-6 py-4">
+                <dt class="text-sm text-muted-foreground">Coefficient of variation</dt>
+                <dd class="m-0 text-lg font-semibold tabular-nums">
+                  {variability?.coefficientOfVariation?.toFixed(0) ?? "–"}<span class="text-sm font-normal text-muted-foreground">%</span>
+                </dd>
+              </div>
+              <div class="flex items-baseline justify-between gap-4 px-6 py-4">
+                <dt class="text-sm text-muted-foreground">Time below range</dt>
+                <dd class="m-0 text-lg font-semibold tabular-nums">
+                  {((tir?.low ?? 0) + (tir?.veryLow ?? 0)).toFixed(1)}<span class="text-sm font-normal text-muted-foreground">%</span>
+                </dd>
+              </div>
+            </dl>
+          </div>
+        </Card>
+
+        <Card>
+          <CardHeader class="flex flex-row items-start justify-between gap-4">
+            <div>
+              <CardTitle>Typical day</CardTitle>
+              <CardDescription>Glucose over 24 hours, across the whole range</CardDescription>
+            </div>
+            <Button href="/reports/agp" variant="ghost" size="sm">
+              Full report
+              <ArrowRight />
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <div class="h-64">
+              <AmbulatoryGlucoseProfile {averagedStats} />
+            </div>
+          </CardContent>
+        </Card>
+      {:else if !isLoading}
+        <Card variant="dashed">
+          <CardContent class="text-center">
+            <h2 class="mb-2 text-lg font-semibold">No data in this range</h2>
+            <p class="mx-auto max-w-md text-muted-foreground">
+              There aren't enough glucose readings between these dates to
+              summarise. Choose a longer date range.
+            </p>
+          </CardContent>
+        </Card>
+      {/if}
+    {/if}
+
+    <section
+      class="grid gap-x-12 gap-y-10 @3xl:grid-cols-2"
+      aria-label="All reports"
+      {@attach coachmark({
         key: "setup-reports.categories",
         title: "Start with Executive Summary",
-        description: "It combines your key metrics into a single page \u2014 great for clinic visits or sharing with your endo.",
+        description: "It combines your key metrics into a single page — great for clinic visits or sharing with your endo.",
         completeOn: { event: "click" },
-      })}>
-        {#each categories as category, categoryIndex (category.id)}
-          {@const CategoryIcon = category.icon}
-          {@const styles = categoryVariants({
-            category: category.id,
-          })}
-          <div
-            class={styles.card()}
-            in:fly={{
-              y: 40,
-              duration: 600,
-              delay: staggerDelay(categoryIndex),
-              easing: cubicOut,
-            }}
-          >
-            <div class="p-6">
-              <!-- Category Header -->
-              <div class="mb-5 flex items-start gap-4">
-                <div class={styles.iconWrap()}>
-                  <CategoryIcon class={styles.icon()} />
-                </div>
-                <div class="flex-1">
-                  <h3 class={styles.title()}>{category.title}</h3>
-                  <p class={styles.subtitle()}>{category.subtitle}</p>
-                </div>
-              </div>
-
-              <!-- Reports List -->
-              <div class="space-y-2">
-                {#each category.reports as report (report.href)}
-                  {@const ReportIcon = report.icon}
-                  {#if report.status === "available"}
-                    <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- report.href is a literal in-app path from report-navigation.ts -->
-                    <a href={report.href}
-                      class="group/report flex items-center gap-3 rounded-xl bg-white/60 p-3 transition-all hover:bg-white hover:shadow-md dark:bg-white/5 dark:hover:bg-white/10"
-                    >
-                      <div
-                        class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-card shadow-sm dark:bg-muted"
-                      >
-                        <ReportIcon
-                          class="h-5 w-5 text-muted-foreground"
-                        />
-                      </div>
-                      <div class="min-w-0 flex-1">
-                        <div
-                          class="font-medium text-foreground"
-                        >
-                          {report.title}
-                        </div>
-                        <div
-                          class="truncate text-sm text-muted-foreground"
-                        >
-                          {report.description}
-                        </div>
-                      </div>
-                      <ChevronRight
-                        class="h-5 w-5 text-muted-foreground transition-transform group-hover/report:translate-x-0.5"
-                      />
-                    </a>
-                  {:else}
-                    <div
-                      class="flex items-center gap-3 rounded-xl bg-white/30 p-3 opacity-60 dark:bg-white/5"
-                    >
-                      <div
-                        class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-card/50 dark:bg-muted/50"
-                      >
-                        <ReportIcon
-                          class="h-5 w-5 text-muted-foreground"
-                        />
-                      </div>
-                      <div class="min-w-0 flex-1">
-                        <div
-                          class="font-medium text-muted-foreground"
-                        >
-                          {report.title}
-                        </div>
-                        <div class="text-sm text-muted-foreground">
-                          Coming soon
-                        </div>
-                      </div>
-                    </div>
-                  {/if}
-                {/each}
-              </div>
-            </div>
+      })}
+    >
+      {#each categories as category (category.id)}
+        {@const CategoryIcon = category.icon}
+        <div>
+          <div class="mb-1 flex items-center gap-2">
+            <CategoryIcon class="size-5 {CATEGORY_ICON_CLASS[category.id]}" aria-hidden="true" />
+            <h2 class="text-lg font-semibold">{category.title}</h2>
           </div>
-        {/each}
-      </div>
+          <p class="mb-3 text-sm text-muted-foreground">{category.subtitle}</p>
+          <ul class="m-0 list-none divide-y divide-border border-y border-border p-0">
+            {#each category.reports as report (report.href)}
+              <li>
+                {#if report.status === "available"}
+                  <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- report.href is a literal in-app path from report-navigation.ts -->
+                  <a href={report.href}
+                    class="group/report -mx-2 flex items-center gap-3 rounded-md px-2 py-3 transition-colors hover:bg-accent/50"
+                  >
+                    <div class="min-w-0 flex-1">
+                      <div class="font-medium text-foreground">{report.title}</div>
+                      <div class="truncate text-sm text-muted-foreground">{report.description}</div>
+                    </div>
+                    <ChevronRight class="size-4 shrink-0 text-muted-foreground transition-transform group-hover/report:translate-x-0.5" aria-hidden="true" />
+                  </a>
+                {:else}
+                  <div class="flex items-center gap-3 py-3">
+                    <div class="min-w-0 flex-1">
+                      <div class="font-medium text-muted-foreground">{report.title}</div>
+                      <div class="text-sm text-muted-foreground">Coming soon</div>
+                    </div>
+                  </div>
+                {/if}
+              </li>
+            {/each}
+          </ul>
+        </div>
+      {/each}
     </section>
 
-    <!-- Footer Note -->
-    <section class="container mx-auto max-w-6xl px-3 pb-12">
-      <div
-        class="rounded-2xl bg-muted/50 p-6 text-center"
-        in:fade={{ duration: 400, delay: 800 }}
-      >
-        <p class="text-sm text-muted-foreground">
-          <span class="font-medium">
-            {formatNumber(entries.length)} readings
-          </span>
-          from {formatNumericDate(startDate)} to {formatNumericDate(endDate)}
-          {#if lastUpdated}
-            <span class="mx-2 opacity-50">•</span>
-            Last updated {new Date(lastUpdated).toLocaleTimeString(formatLocale(), {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          {/if}
+    <footer class="space-y-1 text-sm text-muted-foreground">
+      {#if lastUpdated}
+        <p class="tabular-nums">
+          Last updated {new Date(lastUpdated).toLocaleTimeString(formatLocale(), {
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
         </p>
-        <p class="mt-1 text-xs text-muted-foreground/70">
-          This report is for informational purposes. Always consult your
-          healthcare provider for medical advice.
-        </p>
-      </div>
-    </section>
+      {/if}
+      <p class="text-xs">
+        This report is for informational purposes. Always consult your
+        healthcare provider for medical advice.
+      </p>
+    </footer>
   </div>
 {/if}

@@ -76,10 +76,10 @@
 <WidgetCard title="BG Delta">
   <div class="flex items-center justify-between">
     <div>
-      <div class="text-2xl font-bold">
-        {displayBgDelta}
-      </div>
-      <p class="text-xs text-muted-foreground">{unitLabel}</p>
+      <p class="flex items-baseline gap-1.5">
+        <span class="text-xl font-semibold tabular-nums">{displayBgDelta}</span>
+        <span class="text-xs text-muted-foreground">{unitLabel}</span>
+      </p>
     </div>
 
     <!-- Connection indicator -->

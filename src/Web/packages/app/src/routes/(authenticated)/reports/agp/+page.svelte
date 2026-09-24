@@ -18,6 +18,7 @@
   } from "lucide-svelte";
   import { AmbulatoryGlucoseProfile } from "$lib/components/ambulatory-glucose-profile";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
+  import FigureStrip from "$lib/components/reports/FigureStrip.svelte";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
   import { getReportsData } from "$api/reports.remote";
   import { bg, bgLabel, bgRange, formatMediumDateTime, formatNumber, formatNumericDate } from "$lib/utils/formatting";
@@ -109,7 +110,7 @@
         <summary class="cursor-pointer text-info hover:underline">
           How to read this chart
         </summary>
-        <div class="mt-2 space-y-2 pl-4 border-l-2 border-info/30">
+        <div class="mt-2 space-y-2 pl-4 border-l border-info/30">
           <p>
             <strong>The dark line</strong>
             is your median (middle) glucose at each hour — what happens most often.
@@ -138,49 +139,16 @@
     {@const stats = analysis.basicStats ?? {}}
     {@const variability = analysis.glycemicVariability ?? {}}
 
-    <!-- Quick Stats Grid -->
-    <div class="grid grid-cols-2 @lg:grid-cols-4 @3xl:grid-cols-6 print:grid-cols-6 gap-4 print:gap-2">
-      <Card variant="success" size="sm" class="text-center">
-        <div class="text-3xl font-bold text-glucose-in-range print:text-foreground">
-          {tir.target?.toFixed(0) ?? "–"}%
-        </div>
-        <div class="text-xs text-muted-foreground">Time in Range</div>
-        <div class="text-2xs text-glucose-in-range print:text-muted-foreground">Target: ≥70%</div>
-      </Card>
-      <Card size="sm" class="text-center">
-        <div class="text-3xl font-bold">{stats.mean ? bg(stats.mean) : "–"}</div>
-        <div class="text-xs text-muted-foreground">Average</div>
-        <div class="text-2xs text-muted-foreground/70">{bgLabel()}</div>
-      </Card>
-      <Card size="sm" class="text-center">
-        <div class="text-3xl font-bold">
-          {variability.estimatedA1c?.toFixed(1) ?? "–"}%
-        </div>
-        <div class="text-xs text-muted-foreground">Est. A1C</div>
-        <div class="text-2xs text-muted-foreground/70">From mean glucose</div>
-      </Card>
-      <Card size="sm" class="text-center">
-        <div class="text-3xl font-bold">
-          {variability.coefficientOfVariation?.toFixed(0) ?? "–"}%
-        </div>
-        <div class="text-xs text-muted-foreground">CV</div>
-        <div class="text-2xs text-muted-foreground/70">Target: ≤33%</div>
-      </Card>
-      <Card size="sm" class="text-center">
-        <div class="text-3xl font-bold text-glucose-very-low print:text-foreground">
-          {((tir.low ?? 0) + (tir.veryLow ?? 0)).toFixed(1)}%
-        </div>
-        <div class="text-xs text-muted-foreground">Below Range</div>
-        <div class="text-2xs text-glucose-very-low print:text-muted-foreground">Target: &lt;4%</div>
-      </Card>
-      <Card size="sm" class="text-center">
-        <div class="text-3xl font-bold text-glucose-high print:text-foreground">
-          {((tir.high ?? 0) + (tir.veryHigh ?? 0)).toFixed(1)}%
-        </div>
-        <div class="text-xs text-muted-foreground">Above Range</div>
-        <div class="text-2xs text-glucose-high print:text-muted-foreground">Target: &lt;25%</div>
-      </Card>
-    </div>
+    <FigureStrip
+      figures={[
+        { label: "Time in range", value: tir.target?.toFixed(0) ?? "–", unit: "%", note: "Target: ≥70%" },
+        { label: "Average", value: stats.mean ? String(bg(stats.mean)) : "–", unit: bgLabel() },
+        { label: "Est. A1C", value: variability.estimatedA1c?.toFixed(1) ?? "–", unit: "%", note: "From mean glucose" },
+        { label: "CV", value: variability.coefficientOfVariation?.toFixed(0) ?? "–", unit: "%", note: "Target: ≤33%" },
+        { label: "Below range", value: ((tir.low ?? 0) + (tir.veryLow ?? 0)).toFixed(1), unit: "%", note: "Target: <4%" },
+        { label: "Above range", value: ((tir.high ?? 0) + (tir.veryHigh ?? 0)).toFixed(1), unit: "%", note: "Target: <25%" },
+      ]}
+    />
 
     <ReliabilityBadge reliability={analysis?.reliability} />
 
@@ -256,7 +224,7 @@
           ]}
           {#each observations as observation (observation.label)}
             <div
-              class="flex flex-wrap items-baseline justify-between gap-2 rounded-lg bg-muted/50 p-3"
+              class="flex flex-wrap items-baseline justify-between gap-2 border-b pb-3 last-of-type:border-b-0"
             >
               <div>
                 <p class="font-medium">{observation.label}</p>
@@ -264,7 +232,7 @@
                   Consensus target: {observation.target}
                 </p>
               </div>
-              <p class="text-2xl font-bold tabular-nums">
+              <p class="text-lg font-semibold tabular-nums">
                 {observation.value != null
                   ? observation.format(observation.value)
                   : "No data"}

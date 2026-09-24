@@ -161,11 +161,6 @@
     <!-- Header -->
     <div class="flex flex-wrap items-start justify-between gap-2">
       <div class="flex items-center gap-3">
-        <div
-          class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10"
-        >
-          <User class="h-6 w-6 text-primary" />
-        </div>
         <div>
           <h1 class="text-2xl font-bold tracking-tight">Profile</h1>
           <p class="text-muted-foreground">

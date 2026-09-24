@@ -16,7 +16,6 @@
   import { Progress } from "$lib/components/ui/progress";
   import * as Alert from "$lib/components/ui/alert";
   import {
-    Import,
     Loader2,
     AlertTriangle,
     CheckCircle2,
@@ -225,9 +224,6 @@
 <div class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6">
   <!-- Header -->
   <div class="flex items-center gap-3">
-    <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
-      <Import class="h-6 w-6 text-primary" />
-    </div>
     <div>
       <h1 class="text-2xl font-bold tracking-tight">Data Migration</h1>
       <p class="text-muted-foreground">
