@@ -96,8 +96,8 @@
   type EntriesByDate = Record<string, { mills: number; mgdl: number }[]>;
   const punchCardQuery = $derived(
     getPunchCardData({
-      startDate: startOfMonth(viewMonth).toDate(tz).toISOString(),
-      endDate: endOfMonth(viewMonth).toDate(tz).toISOString(),
+      startDate: startOfMonth(viewMonth).toString(),
+      endDate: endOfMonth(viewMonth).toString(),
     })
   );
   const entriesByDate = $derived.by<EntriesByDate>(() => {

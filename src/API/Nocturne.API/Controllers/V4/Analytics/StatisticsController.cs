@@ -945,15 +945,15 @@ public class StatisticsController : ControllerBase
     /// and treatment summaries inline (no per-day round-trips). Replaces a frontend orchestrator
     /// that was issuing ~62 sequential HTTP calls per 31-day month.
     /// </summary>
-    /// <param name="startDate">Inclusive start of the date range.</param>
-    /// <param name="endDate">Inclusive end of the date range.</param>
+    /// <param name="startDate">Inclusive start calendar date in the tenant's timezone.</param>
+    /// <param name="endDate">Inclusive end calendar date in the tenant's timezone.</param>
     /// <returns><see cref="PunchCardResponse"/> with months, days, and global maxes for chart scaling.</returns>
     [HttpGet("punch-card")]
     [RequireScope(Scope.GlucoseRead)]
     [RemoteQuery]
     public async Task<ActionResult<PunchCardResponse>> GetPunchCardData(
-        [FromQuery] DateTime startDate,
-        [FromQuery] DateTime endDate,
+        [FromQuery] DateOnly startDate,
+        [FromQuery] DateOnly endDate,
         CancellationToken cancellationToken = default
     )
     {
@@ -962,8 +962,8 @@ public class StatisticsController : ControllerBase
             ? TimeZoneHelper.GetTimeZoneInfoFromId(tzId)
             : TimeZoneInfo.Utc;
 
-        var startLocalDate = DateTime.SpecifyKind(startDate.Date, DateTimeKind.Unspecified);
-        var endLocalDate = DateTime.SpecifyKind(endDate.Date, DateTimeKind.Unspecified);
+        var startLocalDate = startDate.ToDateTime(TimeOnly.MinValue);
+        var endLocalDate = endDate.ToDateTime(TimeOnly.MinValue);
         var startDt = TimeZoneInfo.ConvertTimeToUtc(startLocalDate, tz);
         var endDt = TimeZoneInfo.ConvertTimeToUtc(endLocalDate.AddDays(1).AddTicks(-1), tz);
 

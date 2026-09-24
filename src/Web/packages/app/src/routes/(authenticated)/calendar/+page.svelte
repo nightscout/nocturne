@@ -68,13 +68,13 @@
 
   // Calculate date range for current view (full month)
   // Timezone-free strings keep the hydration key stable across SSR/client timezones.
-  // The endpoint reads only each bound's date, so a day travels as its UTC midnight.
+  // The endpoint takes these as calendar dates in the tenant's timezone.
   const dateRangeInput = $derived.by(() => {
     const month = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}`;
     const lastDay = new Date(currentYear, currentMonth + 1, 0).getDate();
     return {
-      startDate: `${month}-01T00:00:00Z`,
-      endDate: `${month}-${String(lastDay).padStart(2, "0")}T00:00:00Z`,
+      startDate: `${month}-01`,
+      endDate: `${month}-${String(lastDay).padStart(2, "0")}`,
     };
   });
 
