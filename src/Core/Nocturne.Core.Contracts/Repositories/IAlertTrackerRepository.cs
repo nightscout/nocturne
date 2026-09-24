@@ -92,8 +92,14 @@ public interface IAlertTrackerRepository
     /// </summary>
     /// <remarks>
     /// <paramref name="work"/> can run more than once when the store retries a transient failure.
+    /// Each attempt starts from the store's committed rows, not from what an earlier attempt read
+    /// or wrote. A failure can leave it unknown whether the commit landed: the store then asks
+    /// <paramref name="verifySucceeded"/>, with the result that attempt produced, whether its
+    /// writes are there, and returns that result instead of running <paramref name="work"/>
+    /// again. Without it, a commit that landed but reported failure runs the work twice.
     /// </remarks>
     Task<T> ExecuteInTransactionAsync<T>(
         Func<CancellationToken, Task<T>> work,
+        Func<T, CancellationToken, Task<bool>>? verifySucceeded = null,
         CancellationToken ct = default) => work(ct);
 }

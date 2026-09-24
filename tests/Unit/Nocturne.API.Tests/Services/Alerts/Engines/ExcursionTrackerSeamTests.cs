@@ -327,7 +327,10 @@ internal sealed class RecordingTrackerRepository(params AlertRule[] rules) : IAl
         return Task.CompletedTask;
     }
 
-    public async Task<T> ExecuteInTransactionAsync<T>(Func<CancellationToken, Task<T>> work, CancellationToken ct = default)
+    public async Task<T> ExecuteInTransactionAsync<T>(
+        Func<CancellationToken, Task<T>> work,
+        Func<T, CancellationToken, Task<bool>>? verifySucceeded = null,
+        CancellationToken ct = default)
     {
         Transactions++;
         _inTransaction = true;

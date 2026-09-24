@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
@@ -60,6 +61,7 @@ public class AlertTrackerRepository : IAlertTrackerRepository
                 ActiveExcursionId = state.ActiveExcursionId,
                 UpdatedAt = state.UpdatedAt,
                 HysteresisStartedAt = state.HysteresisStartedAt,
+                AwaitingRearm = state.AwaitingRearm,
             });
         }
         else
@@ -69,6 +71,7 @@ public class AlertTrackerRepository : IAlertTrackerRepository
             existing.ActiveExcursionId = state.ActiveExcursionId;
             existing.UpdatedAt = state.UpdatedAt;
             existing.HysteresisStartedAt = state.HysteresisStartedAt;
+            existing.AwaitingRearm = state.AwaitingRearm;
         }
 
         await _context.SaveChangesAsync(ct);
@@ -179,23 +182,44 @@ public class AlertTrackerRepository : IAlertTrackerRepository
     /// <remarks>
     /// Joins a transaction already open on the context. Otherwise opens one under the context's
     /// execution strategy. Opening the connection sets the tenant GUCs (TenantConnectionInterceptor),
-    /// so every statement in the transaction runs under the context's tenant.
+    /// so every statement in the transaction runs under the context's tenant. Each attempt, and
+    /// the verification, starts with an empty change tracker: an entity an earlier attempt saved
+    /// stays tracked as unchanged after its transaction rolls back, so a retry setting it to the
+    /// same values would write nothing.
     /// </remarks>
     public virtual async Task<T> ExecuteInTransactionAsync<T>(
         Func<CancellationToken, Task<T>> work,
+        Func<T, CancellationToken, Task<bool>>? verifySucceeded = null,
         CancellationToken ct = default)
     {
         if (_context.Database.CurrentTransaction is not null)
             return await work(ct);
 
+        var completed = false;
+        T result = default!;
         var strategy = _context.Database.CreateExecutionStrategy();
-        return await strategy.ExecuteAsync(async () =>
-        {
-            await using var transaction = await _context.Database.BeginTransactionAsync(ct);
-            var result = await work(ct);
-            await transaction.CommitAsync(ct);
-            return result;
-        });
+        return await strategy.ExecuteAsync(
+            (object?)null,
+            async (_, _, token) =>
+            {
+                completed = false;
+                _context.ChangeTracker.Clear();
+                await using var transaction = await _context.Database.BeginTransactionAsync(token);
+                result = await work(token);
+                completed = true;
+                await transaction.CommitAsync(token);
+                return result;
+            },
+            verifySucceeded is null
+                ? null
+                : async (_, _, token) =>
+                {
+                    if (!completed)
+                        return new ExecutionResult<T>(false, default!);
+                    _context.ChangeTracker.Clear();
+                    return new ExecutionResult<T>(await verifySucceeded(result, token), result);
+                },
+            ct);
     }
 
     private static AlertTrackerState MapTrackerState(AlertTrackerStateEntity entity) => new()
@@ -206,6 +230,7 @@ public class AlertTrackerRepository : IAlertTrackerRepository
         ActiveExcursionId = entity.ActiveExcursionId,
         UpdatedAt = entity.UpdatedAt,
         HysteresisStartedAt = entity.HysteresisStartedAt,
+        AwaitingRearm = entity.AwaitingRearm,
     };
 
     private static AlertRule MapAlertRule(AlertRuleEntity entity) => new()

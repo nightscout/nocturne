@@ -27,7 +27,7 @@ internal static class ExcursionTransitionWriter
     /// The decision's transition with the host's excursion id, and the auto-resolve close when
     /// <paramref name="autoResolved"/> closed one.
     /// </returns>
-    public static Task<(ExcursionTransition Transition, ExcursionTransition? AutoResolve)> ApplyAsync(
+    public static async Task<(ExcursionTransition Transition, ExcursionTransition? AutoResolve)> ApplyAsync(
         IAlertTrackerRepository repository,
         ILogger logger,
         Guid ruleId,
@@ -35,11 +35,44 @@ internal static class ExcursionTransitionWriter
         TrackerDecision decision,
         DateTime now,
         CancellationToken ct,
-        bool autoResolved = false) =>
-        repository.ExecuteInTransactionAsync(
-            token => WriteAsync(repository, logger, ruleId, prior, decision, now, autoResolved, token), ct);
+        bool autoResolved = false)
+    {
+        var written = await repository.ExecuteInTransactionAsync(
+            token => WriteAsync(repository, logger, ruleId, prior, decision, now, autoResolved, token),
+            (attempt, token) => LandedAsync(repository, attempt, token),
+            ct);
+        return (written.Transition, written.AutoResolve);
+    }
 
-    private static async Task<(ExcursionTransition, ExcursionTransition?)> WriteAsync(
+    private sealed record Written(
+        ExcursionTransition Transition, ExcursionTransition? AutoResolve, AlertTrackerState? State);
+
+    /// <summary>
+    /// Whether an attempt whose commit reported failure committed anyway. Every attempt that
+    /// writes anything writes a tracker state differing from the prior one, and the store holds
+    /// either the prior state (rolled back) or the attempt's (committed).
+    /// </summary>
+    private static async Task<bool> LandedAsync(
+        IAlertTrackerRepository repository, Written attempt, CancellationToken ct)
+    {
+        if (attempt.State is not { } wrote)
+            return false;
+        var stored = await repository.GetTrackerStateAsync(wrote.AlertRuleId, ct);
+        return stored is not null
+               && stored.State == wrote.State
+               && stored.ConfirmationCount == wrote.ConfirmationCount
+               && stored.ActiveExcursionId == wrote.ActiveExcursionId
+               && SameInstant(stored.UpdatedAt, wrote.UpdatedAt)
+               && SameInstant(stored.HysteresisStartedAt, wrote.HysteresisStartedAt);
+    }
+
+    /// <summary>Equal to the microsecond, the precision the store keeps.</summary>
+    private static bool SameInstant(DateTime? stored, DateTime? wrote) =>
+        stored is { } a && wrote is { } b
+            ? Math.Abs((a - b).Ticks) < TimeSpan.TicksPerMicrosecond
+            : stored is null && wrote is null;
+
+    private static async Task<Written> WriteAsync(
         IAlertTrackerRepository repository,
         ILogger logger,
         Guid ruleId,
@@ -99,10 +132,11 @@ internal static class ExcursionTransitionWriter
             activeId = null;
         }
 
+        AlertTrackerState? state = null;
         if (decision.Post is { } post
             && (post != TrackerPostState.Of(prior) || (post.HasExcursion ? activeId : null) != priorId))
         {
-            await repository.UpsertTrackerStateAsync(new AlertTrackerState
+            state = new AlertTrackerState
             {
                 AlertRuleId = ruleId,
                 State = post.State,
@@ -110,10 +144,12 @@ internal static class ExcursionTransitionWriter
                 ActiveExcursionId = post.HasExcursion ? activeId : null,
                 UpdatedAt = post.UpdatedAt,
                 HysteresisStartedAt = post.HysteresisStartedAt,
-            }, ct);
+                AwaitingRearm = post.AwaitingRearm,
+            };
+            await repository.UpsertTrackerStateAsync(state, ct);
         }
 
-        return (transition, autoResolve);
+        return new Written(transition, autoResolve, state);
     }
 
     private static async Task CloseAsync(
