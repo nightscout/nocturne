@@ -2,6 +2,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using Nocturne.API.Services.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 
@@ -9,7 +10,7 @@ namespace Nocturne.Alerts.ParityCorpus.Generator.Harness;
 
 /// <summary>
 /// The wire names, in ordinal order, of every enum the Rust engine mirrors as an
-/// ordinal-indexed table. The Rust suite asserts each of its tables equals the committed
+/// ordinal-indexed table, plus the wall-clock condition kinds it mirrors as a set. The Rust suite asserts each of its tables equals the committed
 /// manifest. A reordered, inserted or removed member then fails that test instead of
 /// silently shifting integer-form payloads onto the wrong member.
 /// </summary>
@@ -36,6 +37,7 @@ public static class EnumManifest
             ["StateSpanCategory"] = WireNames<StateSpanCategory>(),
             ["TempBasalMetric"] = WireNames<TempBasalMetric>(),
             ["TrendBucket"] = WireNames<TrendBucket>(),
+            ["WallClockConditionTypes"] = WallClockWireNames(),
         };
         var json = root.ToJsonString(new JsonSerializerOptions
         {
@@ -51,6 +53,16 @@ public static class EnumManifest
         options.Converters.Add(new JsonStringEnumConverter<TEnum>());
         return new JsonArray(ContiguousValues<TEnum>()
             .Select(v => (JsonNode)JsonSerializer.Deserialize<string>(JsonSerializer.Serialize(v, options))!)
+            .ToArray());
+    }
+
+    /// <summary>The wire names of <see cref="WallClockConditions.Kinds"/>, in ordinal order.</summary>
+    private static JsonArray WallClockWireNames()
+    {
+        var wire = WireNames<AlertConditionType>();
+        return new JsonArray(ContiguousValues<AlertConditionType>()
+            .Where(WallClockConditions.Kinds.Contains)
+            .Select(v => (JsonNode)wire[(int)v]!.GetValue<string>())
             .ToArray());
     }
 

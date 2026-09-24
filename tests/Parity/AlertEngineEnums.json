@@ -127,5 +127,22 @@
     "flat",
     "falling",
     "falling_fast"
+  ],
+  "WallClockConditionTypes": [
+    "signal_loss",
+    "staleness",
+    "site_age",
+    "sensor_age",
+    "alert_state",
+    "loop_stale",
+    "loop_enaction_stale",
+    "pump_suspended",
+    "override_active",
+    "do_not_disturb",
+    "time_since_last_carb",
+    "time_since_last_bolus",
+    "pump_state",
+    "state_span_active",
+    "tracker_age"
   ]
 }

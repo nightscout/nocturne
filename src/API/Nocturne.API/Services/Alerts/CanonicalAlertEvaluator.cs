@@ -2,6 +2,7 @@ using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.Alerts;
 
@@ -14,9 +15,9 @@ namespace Nocturne.API.Services.Alerts;
 /// Callers publish in chunks and re-publish readings they have already stored, so the same
 /// canonical reading arrives here many times over; <see cref="AlertEvaluationWatermark"/> collapses
 /// those repeats to one pass per reading per
-/// <see cref="AlertEvaluationWatermark.MaxSkipWindow"/>. Signal loss, hysteresis closure, snooze
-/// expiry, auto-resolve and tracker age are owned by <see cref="AlertSweepService"/>'s own timer;
-/// every other clock-driven rule is covered by the skip window rather than by the sweep.
+/// <see cref="AlertEvaluationWatermark.MaxSkipWindow"/>. Hysteresis closure, snooze expiry,
+/// auto-resolve and rules containing a <see cref="WallClockConditions"/> kind are also driven by
+/// the timer in <see cref="AlertSweepService"/>.
 /// </remarks>
 internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
 {
@@ -40,6 +41,18 @@ internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
+    /// <summary>
+    /// The base context an evaluation pass starts from for <paramref name="latest"/>, the
+    /// tenant's newest canonical reading; the orchestrator's enricher fills in the rest.
+    /// </summary>
+    internal static SensorContext ContextFor(SensorGlucose latest) => new()
+    {
+        LatestValue = (decimal)latest.Mgdl,
+        LatestTimestamp = latest.Timestamp,
+        TrendRate = (decimal?)latest.TrendRate,
+        LastReadingAt = latest.Timestamp,
+    };
+
     /// <inheritdoc />
     public async Task EvaluateAsync(CancellationToken ct = default)
     {
@@ -57,15 +70,7 @@ internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
                 return;
             }
 
-            var context = new SensorContext
-            {
-                LatestValue = (decimal)latest.Mgdl,
-                LatestTimestamp = latest.Timestamp,
-                TrendRate = (decimal?)latest.TrendRate,
-                LastReadingAt = latest.Timestamp,
-            };
-
-            await _alertOrchestrator.EvaluateAsync(context, ct);
+            await _alertOrchestrator.EvaluateAsync(ContextFor(latest), ct);
 
             _watermark.Record(tenantId, latest);
         }

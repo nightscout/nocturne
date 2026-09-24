@@ -17,7 +17,7 @@ namespace Nocturne.API.Services.Alerts;
 /// <remarks>
 /// <list type="number">
 ///   <item>Close excursions whose hysteresis window has elapsed.</item>
-///   <item>Evaluate signal-loss rules on the wall clock.</item>
+///   <item>Evaluate rules with a wall-clock-sensitive condition (<see cref="WallClockConditions"/>).</item>
 ///   <item>Check snoozed instances for smart-snooze extension or re-fire.</item>
 ///   <item>Run periodic auto-resolve for excursions whose conditions don't depend on the latest reading.</item>
 /// </list>
@@ -80,11 +80,11 @@ public class AlertSweepService : BackgroundService
 
             try
             {
-                await EvaluateSignalLossAsync(ct);
+                await EvaluateWallClockRulesAsync(ct);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error evaluating signal loss");
+                _logger.LogError(ex, "Error evaluating wall-clock rules");
             }
 
             try
@@ -103,15 +103,6 @@ public class AlertSweepService : BackgroundService
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error evaluating auto-resolve");
-            }
-
-            try
-            {
-                await EvaluateTrackerAgeRulesAsync(ct);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error evaluating tracker-age rules");
             }
         }
 
@@ -183,28 +174,6 @@ public class AlertSweepService : BackgroundService
             _logger.LogInformation("Closed {Count} excursions in hysteresis", closedCount);
         }
     }
-
-    /// <summary>
-    /// Evaluates enabled <c>signal_loss</c> rules through the orchestrator's full pipeline. The
-    /// condition only holds between readings, so without this pass it would never fire; the
-    /// excursion tracker dedupes a continuing outage, and once readings resume this pass (or
-    /// the per-reading path) feeds false and the excursion closes through hysteresis.
-    /// </summary>
-    /// <remarks>
-    /// <see cref="SensorContext.LastReadingAt"/> stays null for a tenant that has never had a
-    /// reading, which <see cref="SignalLossEvaluator"/> treats as cold start rather than an outage.
-    /// </remarks>
-    internal Task EvaluateSignalLossAsync(CancellationToken ct) =>
-        EvaluateRulesOnWallClockAsync(
-            AlertConditionType.SignalLoss,
-            tenant => new SensorContext
-            {
-                LatestValue = null,
-                LatestTimestamp = tenant.LastReadingAt,
-                TrendRate = null,
-                LastReadingAt = tenant.LastReadingAt,
-            },
-            ct);
 
     /// <summary>
     /// Extends or clears each snoozed instance whose snooze has expired. Extension needs the rule's
@@ -567,37 +536,28 @@ public class AlertSweepService : BackgroundService
     }
 
     /// <summary>
-    /// Periodically evaluates enabled <c>tracker_age</c> rules through the orchestrator's
-    /// full pipeline. Tracker ages advance with the wall clock, not with readings — the
-    /// per-reading path alone would delay (or, with a dead sensor, entirely drop) a
-    /// "sensor expired" alert. The excursion state machine dedupes: once opened, further
-    /// sweep passes are ExcursionContinues no-ops.
+    /// Evaluates every enabled rule whose tree contains a <see cref="WallClockConditions"/> kind
+    /// through the orchestrator's full pipeline. Those conditions change truth with the clock
+    /// alone, so between readings, or with no readings at all, only this pass moves them. The
+    /// excursion tracker dedupes: a condition that stays true is <c>ExcursionContinues</c>.
     /// </summary>
     /// <remarks>
-    /// LatestValue stays null: tracker_age doesn't read it, and the most recent
-    /// reading-dependent evaluation already ran on the per-reading path.
+    /// The context is the one the per-reading path builds for the tenant's newest canonical
+    /// reading (<see cref="CanonicalAlertEvaluator.ContextFor"/>). Reading-driven leaves in the
+    /// same tree therefore judge exactly what the last per-reading pass judged. A context
+    /// without the glucose facts would read them false and close an excursion they hold open.
+    /// With no canonical reading, <see cref="SensorContext.LastReadingAt"/> falls back to the
+    /// tenant's newest reading of any source. It stays null for a tenant that has never had
+    /// one, which <c>signal_loss</c> and <c>staleness</c> treat as cold start.
     /// </remarks>
-    internal Task EvaluateTrackerAgeRulesAsync(CancellationToken ct) =>
-        EvaluateRulesOnWallClockAsync(
-            AlertConditionType.TrackerAge,
-            tenant => new SensorContext
-            {
-                LatestValue = null,
-                LatestTimestamp = tenant.LastReadingAt,
-                TrendRate = null,
-                LastReadingAt = tenant.LastReadingAt ?? DateTime.MinValue,
-            },
-            ct);
-
-    private async Task EvaluateRulesOnWallClockAsync(
-        AlertConditionType conditionType,
-        Func<TenantAlertContext, SensorContext> buildContext,
-        CancellationToken ct)
+    internal async Task EvaluateWallClockRulesAsync(CancellationToken ct)
     {
         using var lookupScope = _serviceProvider.CreateScope();
         var lookupRepository = lookupScope.ServiceProvider.GetRequiredService<IAlertRepository>();
 
-        var rules = await lookupRepository.GetEnabledRulesByConditionTypeAsync(conditionType, ct);
+        var rules = (await lookupRepository.GetAllEnabledRulesAsync(ct))
+            .Where(ReferencesWallClock)
+            .ToList();
         if (rules.Count == 0) return;
 
         foreach (var tenantGroup in rules.GroupBy(r => r.TenantId))
@@ -618,17 +578,43 @@ public class AlertSweepService : BackgroundService
             using var systemScope = SystemAuditScope.PushForScope(
                 tenantScope.ServiceProvider, AuditEndpoint);
 
-            var orchestrator = tenantScope.ServiceProvider.GetRequiredService<IAlertOrchestrator>();
-
             try
             {
-                await orchestrator.EvaluateRulesAsync(tenantGroup.ToList(), buildContext(tenantContext), ct);
+                var latest = await tenantScope.ServiceProvider
+                    .GetRequiredService<ICanonicalGlucoseService>()
+                    .GetLatestAsync(ct);
+                var context = latest is { Mgdl: > 0 }
+                    ? CanonicalAlertEvaluator.ContextFor(latest)
+                    : new SensorContext
+                    {
+                        LatestValue = null,
+                        LatestTimestamp = tenantContext.LastReadingAt,
+                        TrendRate = null,
+                        LastReadingAt = tenantContext.LastReadingAt,
+                    };
+
+                var orchestrator = tenantScope.ServiceProvider.GetRequiredService<IAlertOrchestrator>();
+                await orchestrator.EvaluateRulesAsync(tenantGroup.ToList(), context, ct);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                _logger.LogError(ex,
-                    "{ConditionType} rule evaluation failed for tenant {TenantId}", conditionType, tenantId);
+                _logger.LogError(ex, "Wall-clock rule evaluation failed for tenant {TenantId}", tenantId);
             }
+        }
+    }
+
+    private bool ReferencesWallClock(AlertRuleSnapshot rule)
+    {
+        try
+        {
+            return WallClockConditions.ReferencesWallClock(rule);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Condition tree of rule {AlertRuleId} could not be walked; it evaluates per reading only",
+                rule.Id);
+            return false;
         }
     }
 }

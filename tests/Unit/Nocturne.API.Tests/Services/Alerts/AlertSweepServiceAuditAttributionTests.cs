@@ -8,6 +8,7 @@ using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Audit;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
@@ -29,7 +30,7 @@ public class AlertSweepServiceAuditAttributionTests
     /// user mutations with every actor field null.
     /// </summary>
     [Fact]
-    public async Task EvaluateTrackerAgeRulesAsync_SystemAttributesTheTenantScope()
+    public async Task EvaluateWallClockRulesAsync_SystemAttributesTheTenantScope()
     {
         var rule = new AlertRuleSnapshot(
             Guid.NewGuid(), Tenant, "sensor expired", AlertConditionType.TrackerAge,
@@ -37,7 +38,7 @@ public class AlertSweepServiceAuditAttributionTests
 
         var repository = new Mock<IAlertRepository>();
         repository
-            .Setup(x => x.GetEnabledRulesByConditionTypeAsync(AlertConditionType.TrackerAge, It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetAllEnabledRulesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync([rule]);
         repository
             .Setup(x => x.GetTenantAlertContextAsync(Tenant, It.IsAny<CancellationToken>()))
@@ -48,6 +49,7 @@ public class AlertSweepServiceAuditAttributionTests
 
         var services = new ServiceCollection();
         services.AddSingleton(repository.Object);
+        services.AddSingleton(Mock.Of<ICanonicalGlucoseService>());
         services.AddScoped<ITenantAccessor>(_ => Mock.Of<ITenantAccessor>());
         services.AddScoped<IAuditContext, AuditContext>();
         services.AddScoped(_ => new NocturneDbContext(
@@ -77,7 +79,7 @@ public class AlertSweepServiceAuditAttributionTests
             NullLogger<AlertSweepService>.Instance);
 
         // Act
-        await sut.EvaluateTrackerAgeRulesAsync(CancellationToken.None);
+        await sut.EvaluateWallClockRulesAsync(CancellationToken.None);
 
         // Assert
         scopeContextAudit.Should().NotBeNull();

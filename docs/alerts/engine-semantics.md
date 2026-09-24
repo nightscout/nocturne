@@ -298,14 +298,55 @@ It is `staleness{operator: ">=", value: timeout_minutes}` with an exact-duration
 and the non-positive-timeout guard.
 
 The leaf can only turn true *between* readings — a reading arriving sets `LastReadingAt`
-to the reading's time — so per-reading evaluation alone never fires it. Every host must
-also evaluate enabled `signal_loss`-rooted rules on the wall clock through the normal
-driver sequence (§7), with `LastReadingAt` / `LatestTimestamp` set to the newest known
-reading (null when there has never been one). The backend does this from
-`AlertSweepService` every 30 s; Prelude needs an equivalent periodic evaluation. The
-excursion tracker dedupes: a continuing outage is `continues`, and the first evaluation
-after readings resume feeds false, so the excursion goes through hysteresis and closes
-like any other.
+to the reading's time — so per-reading evaluation alone never fires it. It is one of the
+wall-clock kinds below.
+
+### 5.1 Wall-clock evaluation
+
+A **wall-clock kind** is one whose truth can change while every fact except `now` stands
+still: it measures elapsed time against an anchor that a reading does not move.
+
+| Wall-clock | Anchor |
+|---|---|
+| `signal_loss`, `staleness` | newest reading |
+| `loop_stale`, `loop_enaction_stale` | last loop cycle / enactment |
+| `site_age`, `sensor_age`, `tracker_age` | site change, sensor start, tracker start or schedule |
+| `time_since_last_carb`, `time_since_last_bolus` | last treatment |
+| `alert_state` | the other alert's trigger or acknowledgement (`for_minutes`) |
+| `pump_suspended`, `override_active`, `do_not_disturb`, `pump_state`, `state_span_active` | start of the span (`for_minutes`) |
+
+Every other kind is not wall-clock. Two cases are deliberate:
+
+- **`sustained`** is a container. Over a reading-driven child its timer only extrapolates
+  the last reading, so it does not by itself make a rule wall-clock.
+- **`time_of_day`, `day_of_week`** are calendar gates over reading-driven leaves; the next
+  reading bounds how late a gate opening is noticed.
+
+A rule is wall-clock when its root kind, or any node of its condition tree, is a
+wall-clock kind. Every host must evaluate enabled wall-clock rules periodically as well as
+per reading, through the normal driver sequence (§7). Otherwise such a rule stays unfired
+for as long as no reading arrives. The backend does this from `AlertSweepService` every
+30 s; Prelude needs an equivalent periodic evaluation. The crate's
+`wall_clock::references_wall_clock` and the backend's `WallClockConditions` hold the
+classification; the enum manifest's `WallClockConditionTypes` keeps them equal.
+
+A periodic evaluation uses the context the per-reading path builds for the newest
+reading, with only `now` advanced. Its `LastReadingAt` / `LatestTimestamp` are that
+reading's (null when there has never been one), and its glucose facts are that reading's
+however old. Reading-driven leaves therefore repeat the verdict of the last per-reading
+evaluation. A context without the glucose facts would read them false and move an excursion
+they hold open into hysteresis.
+
+The excursion tracker dedupes: a continuing outage is `continues`, and the first evaluation
+after readings resume feeds false, so the excursion goes through hysteresis and closes like
+any other.
+
+A periodic evaluation is an evaluation to the tracker, so it advances confirmation (§6).
+The backend stores no `ConfirmationReadings` or `HysteresisMinutes`: every rule reads 1
+and 0, and the alerts redesign migrated both into `sustained` wrappers, which are
+cadence-independent. So no stored rule is affected. A host that does carry `confirmation_readings > 1` for a wall-clock rule would
+confirm it N× faster at a shorter periodic cadence. It should express that confirmation as
+`sustained` instead.
 
 ---
 
@@ -390,9 +431,11 @@ with a fake clock, a **fresh in-memory timer store**, and these conventions:
 
 - Rules are **topologically sorted** by `alert_state` references (parents before
   children); cycles fall back to insertion order.
-- Per tick, glucose is snapped to the most recent reading at-or-before the tick;
-  no-data ticks clamp `LastReadingAt = tick` (staleness reads as 0, not ∞, and
-  `signal_loss` never fires in replay).
+- Per tick, glucose is snapped to the most recent reading at-or-before the tick, and
+  `LastReadingAt` is that reading's time, so a gap inside the window reads as stale and
+  fires `signal_loss`. A tick before the window's first reading clamps
+  `LastReadingAt = tick`: the window holds no earlier reading, so staleness reads as 0 and
+  `signal_loss` cannot fire on an outage that began before the window.
 - Root truth uses the normal evaluators (short-circuit, shared timer store); leaf log
   uses force-eval of every leaf (no short-circuit, same context, root path). Points are
   recorded on first observation and on every flip (`LeafTransitionPoint(atMs, value)`,
@@ -419,7 +462,7 @@ contexts; window resolution, reading fetch, and fact-timeline capture stay host-
 - Context enrichment (`SensorContextEnricher` / Prelude's local assembler)
 - Persistence of timers (`alert_condition_timers`), tracker state, excursions, instances
 - Delivery channels, DND dispatch suppression, info auto-ack
-- Sweep scheduling (30 s cadence) — including the wall-clock evaluation `signal_loss` needs (§5) — and hysteresis force-close (§6.1)
+- Sweep scheduling (30 s cadence) — including the wall-clock evaluation of §5.1 and the hysteresis expiry of §6.1
 - Smart snooze policy (extend/clear, max counts, trend-favorable heuristic) — but note
   snooze *conditions* are evaluated through the normal node dispatch with
   `CurrentPath = "snooze"`, wrapped as `composite{and, [conditions]}`; that evaluation

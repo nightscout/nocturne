@@ -11,24 +11,28 @@ using Nocturne.API.Services.Audit;
 using Nocturne.API.Tests.Services.Alerts.Engines;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
+using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Alerts;
 
 /// <summary>
-/// A signal-loss rule driven only by <see cref="AlertSweepService"/> ticks, through the real
-/// orchestrator and each evaluation engine over in-memory tracker state.
+/// Rules driven only by <see cref="AlertSweepService"/> ticks, through the real orchestrator and
+/// each evaluation engine over in-memory tracker state.
 /// </summary>
 [Trait("Category", "Unit")]
-public class AlertSweepServiceSignalLossTests
+public class AlertSweepServiceWallClockTests
 {
     private static readonly Guid Tenant = Guid.Parse("00000000-0000-0000-0003-000000000001");
     private static readonly Guid RuleId = Guid.Parse("00000000-0000-0000-0003-000000000002");
     private static readonly DateTime T0 = new(2026, 1, 5, 12, 0, 0, DateTimeKind.Utc);
+
+    private const string SignalLoss15 = """{"timeout_minutes": 15}""";
 
     [Fact]
     public Task Managed_engine_opens_dispatches_once_and_closes_on_resume() =>
@@ -41,74 +45,162 @@ public class AlertSweepServiceSignalLossTests
     [Fact]
     public async Task Tenant_with_no_reading_history_does_not_fire()
     {
-        var fixture = new Fixture(useRustEngine: false) { LastReadingAt = null };
+        var fixture = new Fixture(useRustEngine: false, AlertConditionType.SignalLoss, SignalLoss15)
+        {
+            LastReadingAt = null,
+        };
 
-        fixture.Time.SetUtcNow(T0.AddHours(6));
-        await fixture.Sweep.EvaluateSignalLossAsync(CancellationToken.None);
+        await fixture.SweepAt(T0.AddHours(6));
 
         fixture.Dispatches.Should().Be(0);
         fixture.InstancesCreated.Should().Be(0);
     }
 
+    [Fact]
+    public Task Managed_engine_fires_signal_loss_nested_in_a_night_window() =>
+        RunNightOutageAsync(useRustEngine: false);
+
+    [NativeFact]
+    public Task Rust_backed_engine_fires_signal_loss_nested_in_a_night_window() =>
+        RunNightOutageAsync(useRustEngine: true);
+
+    [Fact]
+    public async Task Reading_driven_leaves_keep_the_verdict_of_the_last_reading()
+    {
+        // Opened by a low reading. The sweep re-judges that same reading, so it must not feed
+        // false and start hysteresis.
+        const string lowOrLoss = """
+            {"operator": "or", "conditions": [
+              {"type": "threshold", "threshold": {"direction": "below", "value": 70}},
+              {"type": "signal_loss", "signal_loss": {"timeout_minutes": 15}}
+            ]}
+            """;
+        var fixture = new Fixture(useRustEngine: false, AlertConditionType.Composite, lowOrLoss)
+        {
+            LastReadingAt = T0,
+            LatestMgdl = 60,
+        };
+
+        await fixture.SweepAt(T0.AddMinutes(1));
+        fixture.InstancesCreated.Should().Be(1);
+
+        await fixture.SweepAt(T0.AddMinutes(2));
+        await fixture.SweepAt(T0.AddMinutes(4));
+        (await fixture.TrackerRepo.GetTrackerStateAsync(RuleId))!.State.Should().Be("active");
+        fixture.Closed.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Rule_without_a_wall_clock_leaf_is_not_evaluated()
+    {
+        const string nightLow = """
+            {"operator": "and", "conditions": [
+              {"type": "threshold", "threshold": {"direction": "below", "value": 70}},
+              {"type": "time_of_day", "time_of_day": {"from": "22:00", "to": "06:00", "timezone": null}}
+            ]}
+            """;
+        var fixture = new Fixture(useRustEngine: false, AlertConditionType.Composite, nightLow)
+        {
+            LastReadingAt = T0,
+            LatestMgdl = 60,
+        };
+
+        await fixture.SweepAt(T0.AddHours(11));
+
+        fixture.InstancesCreated.Should().Be(0);
+        (await fixture.TrackerRepo.GetTrackerStateAsync(RuleId)).Should().BeNull();
+    }
+
     private static async Task RunOutageAsync(bool useRustEngine)
     {
-        var fixture = new Fixture(useRustEngine) { LastReadingAt = T0 };
-
-        async Task SweepAt(double minutes)
+        var fixture = new Fixture(useRustEngine, AlertConditionType.SignalLoss, SignalLoss15)
         {
-            fixture.Time.SetUtcNow(T0.AddMinutes(minutes));
-            await fixture.Sweep.EvaluateSignalLossAsync(CancellationToken.None);
-        }
+            LastReadingAt = T0,
+        };
 
-        await SweepAt(14.5);
+        await fixture.SweepAt(T0.AddMinutes(14.5));
         fixture.InstancesCreated.Should().Be(0, "the 15-minute timeout has not elapsed");
 
-        await SweepAt(15);
+        await fixture.SweepAt(T0.AddMinutes(15));
         fixture.InstancesCreated.Should().Be(1);
         fixture.Dispatches.Should().Be(1);
         fixture.LastPayload!.AlertType.Should().Be(AlertConditionType.SignalLoss);
 
-        await SweepAt(15.5);
-        await SweepAt(16);
-        await SweepAt(45);
+        await fixture.SweepAt(T0.AddMinutes(15.5));
+        await fixture.SweepAt(T0.AddMinutes(16));
+        await fixture.SweepAt(T0.AddMinutes(45));
         fixture.InstancesCreated.Should().Be(1, "a continuing outage is one excursion");
         fixture.Dispatches.Should().Be(1, "a continuing outage must not re-dispatch every sweep");
 
         fixture.LastReadingAt = T0.AddMinutes(46);
-        await SweepAt(46);
+        await fixture.SweepAt(T0.AddMinutes(46));
         fixture.Closed.Should().BeEmpty("with hysteresis the first false evaluation only starts the window");
 
-        await SweepAt(46.5);
+        await fixture.SweepAt(T0.AddMinutes(46.5));
         fixture.Closed.Should().ContainSingle()
             .Which.Type.Should().Be(ExcursionTransitionType.ExcursionClosed);
         (await fixture.TrackerRepo.GetTrackerStateAsync(RuleId))!.State.Should().Be("idle");
         fixture.Dispatches.Should().Be(1);
     }
 
+    private static async Task RunNightOutageAsync(bool useRustEngine)
+    {
+        const string nightLoss = """
+            {"operator": "and", "conditions": [
+              {"type": "signal_loss", "signal_loss": {"timeout_minutes": 15}},
+              {"type": "time_of_day", "time_of_day": {"from": "22:00", "to": "06:00", "timezone": null}}
+            ]}
+            """;
+        var fixture = new Fixture(useRustEngine, AlertConditionType.Composite, nightLoss)
+        {
+            LastReadingAt = T0.AddHours(9),
+            LatestMgdl = 110,
+        };
+
+        await fixture.SweepAt(T0.AddHours(9).AddMinutes(20));
+        fixture.InstancesCreated.Should().Be(0, "the outage is 20 minutes old but it is 21:20");
+
+        await fixture.SweepAt(T0.AddHours(10));
+        fixture.InstancesCreated.Should().Be(1, "at 22:00 the window opens on an outage already past 15 minutes");
+        fixture.Dispatches.Should().Be(1);
+        fixture.LastPayload!.AlertType.Should().Be(AlertConditionType.Composite);
+
+        await fixture.SweepAt(T0.AddHours(10).AddMinutes(30));
+        fixture.Dispatches.Should().Be(1, "a continuing outage must not re-dispatch every sweep");
+    }
+
     private sealed class Fixture
     {
+        private readonly AlertSweepService _sweep;
+
         public ManualTimeProvider Time { get; } = new();
         public InMemoryTrackerRepository TrackerRepo { get; }
-        public AlertSweepService Sweep { get; }
         public DateTime? LastReadingAt { get; set; }
+        public double? LatestMgdl { get; set; }
         public int InstancesCreated { get; private set; }
         public int Dispatches { get; private set; }
         public AlertPayload? LastPayload { get; private set; }
         public List<ExcursionTransition> Closed { get; } = [];
 
-        public Fixture(bool useRustEngine)
+        public Task SweepAt(DateTime at)
+        {
+            Time.SetUtcNow(at);
+            return _sweep.EvaluateWallClockRulesAsync(CancellationToken.None);
+        }
+
+        public Fixture(bool useRustEngine, AlertConditionType conditionType, string conditionParams)
         {
             var rule = new AlertRule
             {
                 Id = RuleId,
-                Name = "Signal loss",
-                ConditionType = AlertConditionType.SignalLoss,
-                ConditionParams = """{"timeout_minutes": 15}""",
+                Name = "Wall clock",
+                ConditionType = conditionType,
+                ConditionParams = conditionParams,
                 ConfirmationReadings = 1,
                 HysteresisMinutes = 0,
             };
             var snapshot = new AlertRuleSnapshot(
-                RuleId, Tenant, rule.Name, AlertConditionType.SignalLoss, rule.ConditionParams,
+                RuleId, Tenant, rule.Name, conditionType, rule.ConditionParams,
                 AlertRuleSeverity.Warning, "{}", 0, false, null);
 
             TrackerRepo = new InMemoryTrackerRepository([rule]);
@@ -133,7 +225,7 @@ public class AlertSweepServiceSignalLossTests
 
             var repository = new Mock<IAlertRepository>();
             repository
-                .Setup(x => x.GetEnabledRulesByConditionTypeAsync(AlertConditionType.SignalLoss, It.IsAny<CancellationToken>()))
+                .Setup(x => x.GetAllEnabledRulesAsync(It.IsAny<CancellationToken>()))
                 .ReturnsAsync([snapshot]);
             repository
                 .Setup(x => x.GetTenantAlertContextAsync(Tenant, It.IsAny<CancellationToken>()))
@@ -149,6 +241,14 @@ public class AlertSweepServiceSignalLossTests
                 .Setup(x => x.GetChannelsForRuleAsync(Tenant, RuleId, It.IsAny<CancellationToken>()))
                 .ReturnsAsync([]);
             services.AddSingleton(repository.Object);
+
+            var canonical = new Mock<ICanonicalGlucoseService>();
+            canonical
+                .Setup(x => x.GetLatestAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() => LastReadingAt is { } at
+                    ? new SensorGlucose { Timestamp = at, Mgdl = LatestMgdl ?? 120 }
+                    : null);
+            services.AddSingleton(canonical.Object);
 
             var delivery = new Mock<IAlertDeliveryService>();
             delivery
@@ -188,7 +288,7 @@ public class AlertSweepServiceSignalLossTests
                     .Options));
             services.AddScoped<IAlertOrchestrator, AlertOrchestrator>();
 
-            Sweep = new AlertSweepService(
+            _sweep = new AlertSweepService(
                 services.BuildServiceProvider(), NullLogger<AlertSweepService>.Instance, Time);
         }
     }

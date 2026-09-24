@@ -49,7 +49,7 @@ public class AlertRepositoryTenantScopingTests
     }
 
     [Fact]
-    public async Task GetEnabledRulesByConditionTypeAsync_ReturnsRulesAcrossEveryActiveTenant()
+    public async Task GetAllEnabledRulesAsync_ReturnsRulesAcrossEveryActiveTenant()
     {
         var options = NewStore();
         await SeedAsync(options, ctx =>
@@ -58,16 +58,17 @@ public class AlertRepositoryTenantScopingTests
             ctx.AlertRules.AddRange(
                 NewRule(TenantA, "Signal loss A", AlertConditionType.SignalLoss),
                 NewRule(TenantB, "Signal loss B", AlertConditionType.SignalLoss),
-                NewRule(TenantA, "Unrelated threshold")); // must not appear
+                NewRule(TenantA, "Threshold A"));
         });
 
         // Starts from an unset (Guid.Empty) context — the cross-tenant sweep must enumerate
         // tenants itself rather than depending on whatever tenant the pool last left behind.
         var repo = new AlertRepository(new InMemoryContextFactory(options, staleTenantId: Guid.Empty));
 
-        var rules = await repo.GetEnabledRulesByConditionTypeAsync(AlertConditionType.SignalLoss, CancellationToken.None);
+        var rules = await repo.GetAllEnabledRulesAsync(CancellationToken.None);
 
-        rules.Select(r => r.TenantId).Should().BeEquivalentTo([TenantA, TenantB]);
+        rules.Select(r => (r.TenantId, r.Name)).Should().BeEquivalentTo(
+            [(TenantA, "Signal loss A"), (TenantA, "Threshold A"), (TenantB, "Signal loss B")]);
     }
 
     private static DbContextOptions<NocturneDbContext> NewStore() =>

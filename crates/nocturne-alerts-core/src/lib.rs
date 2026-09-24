@@ -20,3 +20,4 @@ pub mod model;
 pub mod paths;
 pub mod sustained;
 pub mod validate;
+pub mod wall_clock;

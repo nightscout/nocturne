@@ -416,8 +416,7 @@ public class AlertRepository : IAlertRepository
     }
 
     /// <inheritdoc/>
-    public virtual async Task<IReadOnlyList<AlertRuleSnapshot>> GetEnabledRulesByConditionTypeAsync(
-        AlertConditionType conditionType, CancellationToken ct)
+    public virtual async Task<IReadOnlyList<AlertRuleSnapshot>> GetAllEnabledRulesAsync(CancellationToken ct)
     {
         // Cross-tenant scan: iterate active tenants so RLS scopes each query correctly.
         var results = new List<AlertRuleSnapshot>();
@@ -428,7 +427,8 @@ public class AlertRepository : IAlertRepository
 
             var rows = await context.AlertRules
                 .AsNoTracking()
-                .Where(r => r.IsEnabled && r.ConditionType == conditionType)
+                .Where(r => r.IsEnabled)
+                .OrderBy(r => r.SortOrder)
                 .Select(r => new AlertRuleSnapshot(
                     r.Id, r.TenantId, r.Name, r.ConditionType,
                     r.ConditionParams, r.Severity, r.ClientConfiguration, r.SortOrder,
