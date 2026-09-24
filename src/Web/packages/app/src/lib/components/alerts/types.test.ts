@@ -482,6 +482,50 @@ describe("buildBody", () => {
 		expect(ch.metadata).toEqual({ capabilities: ["notify", "tray_flash"] });
 	});
 
+	it("drops a nested group left with no conditions, and any wrapper around it", () => {
+		const state = parseRule(null);
+		state.condition = {
+			type: "composite",
+			composite: {
+				operator: "and",
+				conditions: [
+					defaultPayload("threshold"),
+					{ type: "composite", composite: { operator: "or", conditions: [] } },
+					{
+						type: "not",
+						not: { child: { type: "composite", composite: { operator: "and", conditions: [] } } },
+					},
+				],
+			},
+		};
+		const body = buildBody(state);
+		expect(body.conditionType).toBe("threshold");
+		expect(body.conditionParams).toEqual({ direction: "below", value: 70 });
+	});
+
+	it("keeps an empty root group so saving reports it", () => {
+		const state = parseRule(null);
+		state.condition = { type: "composite", composite: { operator: "and", conditions: [] } };
+		const body = buildBody(state);
+		expect(body.conditionType).toBe("composite");
+		expect(body.conditionParams).toEqual({ operator: "and", conditions: [] });
+	});
+
+	it("drops empty groups from auto-resolve and snooze conditions", () => {
+		const state = parseRule(null);
+		const empty: ConditionNode = { type: "composite", composite: { operator: "or", conditions: [] } };
+		state.autoResolveCondition = {
+			type: "composite",
+			composite: { operator: "and", conditions: [defaultPayload("iob"), empty] },
+		};
+		state.clientConfig.snooze.conditions = [empty, defaultPayload("trend")];
+		const body = buildBody(state);
+		expect(body.autoResolveParams).toEqual({ type: "iob", iob: { operator: ">=", value: 1 } });
+		expect(body.clientConfiguration.snooze.conditions).toEqual([
+			{ type: "trend", trend: { bucket: "falling" } },
+		]);
+	});
+
 	it("omits metadata for channels without it", () => {
 		const state = parseRule({
 			name: "Test",

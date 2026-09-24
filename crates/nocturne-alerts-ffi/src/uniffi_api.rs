@@ -8,7 +8,7 @@
 //! unusable requests come back as `{"schema_version":1,"ok":false,"error":…}`,
 //! never as a foreign exception.
 
-use crate::{envelope, envelope_string};
+use crate::{envelope, envelope_string, validate_envelope};
 
 /// Evaluates one rule for one tick (Kotlin counterpart of
 /// `nocturne_alerts_evaluate`). `request_json` and the returned string are the
@@ -38,6 +38,13 @@ pub fn leaf_paths(request_json: String) -> String {
 #[uniffi::export]
 pub fn describe(request_json: String) -> String {
     envelope_string(|| envelope::describe(&request_json))
+}
+
+/// Checks a rule's condition trees for everything a save should reject
+/// (Kotlin counterpart of `nocturne_alerts_validate`).
+#[uniffi::export]
+pub fn validate(request_json: String) -> String {
+    envelope_string(|| validate_envelope::validate(&request_json))
 }
 
 /// Returns the crate version as a plain (non-JSON) string, exactly like

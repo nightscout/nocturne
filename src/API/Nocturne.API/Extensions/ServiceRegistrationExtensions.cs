@@ -988,6 +988,7 @@ public static class ServiceRegistrationExtensions
         // the static native engine, so a singleton. Backfilled once at startup.
         services.AddSingleton<IRuleScopeClassifier, RuleScopeClassifier>();
         services.AddHostedService<RuleScopeClassBackfillService>();
+        services.AddSingleton<IAlertRuleConditionValidator, AlertRuleConditionValidator>();
 
         // Delivery providers
         services.AddScoped<Nocturne.API.Services.Alerts.Providers.WebPushProvider>();

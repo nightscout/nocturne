@@ -15,6 +15,7 @@
 //!   [`nocturne_alerts_free_string`] exactly once.
 
 mod envelope;
+mod validate_envelope;
 
 #[cfg(feature = "uniffi")]
 mod uniffi_api;
@@ -24,6 +25,9 @@ uniffi::setup_scaffolding!("nocturne_alerts");
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod validate_tests;
 
 use std::any::Any;
 use std::ffi::{CStr, CString, c_char};
@@ -191,6 +195,23 @@ pub unsafe extern "C" fn nocturne_alerts_describe(request_json: *const c_char) -
     boundary(|| {
         let input = unsafe { read_utf8(request_json, "request") }?;
         envelope::describe(input)
+    })
+}
+
+/// Checks a rule's condition tree, auto-resolve tree and smart-snooze
+/// conditions for everything a save should reject, returning each problem
+/// with its condition path. Request/response envelopes are documented in
+/// `README.md`; a rule with problems is `ok: true, valid: false`, not an
+/// error. Free the result with [`nocturne_alerts_free_string`].
+///
+/// # Safety
+/// `request_json` must be null or a NUL-terminated string valid for reads for
+/// the duration of the call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nocturne_alerts_validate(request_json: *const c_char) -> *mut c_char {
+    boundary(|| {
+        let input = unsafe { read_utf8(request_json, "request") }?;
+        validate_envelope::validate(input)
     })
 }
 

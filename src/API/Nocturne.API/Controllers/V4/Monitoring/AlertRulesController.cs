@@ -53,6 +53,7 @@ public class AlertRulesController : ControllerBase
     private readonly IAlertReferenceService _referenceService;
     private readonly IAlertDeliveryService _deliveryService;
     private readonly IRuleScopeClassifier _scopeClassifier;
+    private readonly IAlertRuleConditionValidator _conditionValidator;
     private readonly ISecretEncryptionService _encryption;
     private readonly ILogger<AlertRulesController> _logger;
 
@@ -64,6 +65,7 @@ public class AlertRulesController : ControllerBase
         IAlertReferenceService referenceService,
         IAlertDeliveryService deliveryService,
         IRuleScopeClassifier scopeClassifier,
+        IAlertRuleConditionValidator conditionValidator,
         ISecretEncryptionService encryption,
         ILogger<AlertRulesController> logger)
     {
@@ -71,6 +73,7 @@ public class AlertRulesController : ControllerBase
         _referenceService = referenceService;
         _deliveryService = deliveryService;
         _scopeClassifier = scopeClassifier;
+        _conditionValidator = conditionValidator;
         _encryption = encryption;
         _logger = logger;
     }
@@ -129,6 +132,10 @@ public class AlertRulesController : ControllerBase
     {
         if (RejectPumpModeOnGenericStateSpan(request.ConditionType, request.ConditionParams) is { } badRequest)
             return badRequest;
+
+        if (RejectInvalidConditions(request.ConditionType, request.ConditionParams,
+                request.AutoResolveEnabled, request.AutoResolveParams, request.ClientConfiguration) is { } invalid)
+            return invalid;
 
         // No cycle detection on create: the new id is server-generated, so the proposed tree
         // cannot reference an id it doesn't yet know. Cycles can only be introduced via PUT.
@@ -204,6 +211,10 @@ public class AlertRulesController : ControllerBase
     {
         if (RejectPumpModeOnGenericStateSpan(request.ConditionType, request.ConditionParams) is { } badRequest)
             return badRequest;
+
+        if (RejectInvalidConditions(request.ConditionType, request.ConditionParams,
+                request.AutoResolveEnabled, request.AutoResolveParams, request.ClientConfiguration) is { } invalid)
+            return invalid;
 
         await using var db = await _contextFactory.CreateAsync(ct);
 
@@ -831,6 +842,42 @@ public class AlertRulesController : ControllerBase
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Returns a <c>400</c> validation problem when a condition tree the rule evaluates has a
+    /// problem (docs/alerts/engine-semantics.md §1.4). Each <c>errors</c> key is
+    /// <c>{scope}:{path}</c> and each value a reason code, suffixed <c>:{field}</c> when the
+    /// problem is on a field; the <c>issues</c> extension carries the same list structured.
+    /// </summary>
+    private ActionResult? RejectInvalidConditions(
+        AlertConditionType type,
+        object? conditionParams,
+        bool autoResolveEnabled,
+        object? autoResolveParams,
+        object? clientConfiguration)
+    {
+        var issues = _conditionValidator.Validate(
+            type,
+            conditionParams is not null ? JsonSerializer.Serialize(conditionParams) : "{}",
+            autoResolveEnabled,
+            autoResolveParams is not null ? JsonSerializer.Serialize(autoResolveParams) : null,
+            clientConfiguration is not null ? JsonSerializer.Serialize(clientConfiguration) : null);
+        if (issues.Count == 0)
+            return null;
+
+        var errors = issues
+            .GroupBy(i => $"{i.Scope}:{i.Path}")
+            .ToDictionary(
+                g => g.Key,
+                g => g.Select(i => i.Field is null ? i.Reason : $"{i.Reason}:{i.Field}").ToArray());
+        var problem = new ValidationProblemDetails(errors)
+        {
+            Title = "The rule's conditions cannot be saved.",
+            Status = StatusCodes.Status400BadRequest,
+        };
+        problem.Extensions["issues"] = issues;
+        return ValidationProblem(problem);
     }
 
     /// <summary>

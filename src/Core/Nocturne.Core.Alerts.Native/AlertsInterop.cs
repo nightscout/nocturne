@@ -120,6 +120,14 @@ public static partial class AlertsInterop
     [LibraryImport(LibraryName, EntryPoint = "nocturne_alerts_classify", StringMarshalling = StringMarshalling.Utf8)]
     private static partial IntPtr ClassifyNative(string requestJson);
 
+    /// <summary>
+    /// Checks a rule's condition trees for everything a save should reject. Request/response
+    /// are the JSON envelopes documented in crates/nocturne-alerts-ffi/README.md. Must be
+    /// freed with FreeString.
+    /// </summary>
+    [LibraryImport(LibraryName, EntryPoint = "nocturne_alerts_validate", StringMarshalling = StringMarshalling.Utf8)]
+    private static partial IntPtr ValidateNative(string requestJson);
+
     #endregion
 
     #region Managed wrappers
@@ -138,6 +146,9 @@ public static partial class AlertsInterop
 
     /// <summary>Raw classify call: request envelope JSON in, response envelope JSON out.</summary>
     public static string Classify(string requestJson) => ConsumeString(ClassifyNative(requestJson), "{}");
+
+    /// <summary>Raw validate call: request envelope JSON in, response envelope JSON out.</summary>
+    public static string Validate(string requestJson) => ConsumeString(ValidateNative(requestJson), "{}");
 
     private static string ConsumeString(IntPtr ptr, string fallback)
     {

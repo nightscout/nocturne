@@ -45,6 +45,7 @@ public class AlertRulesControllerChannelDestinationTests
             Mock.Of<IAlertReferenceService>(),
             Mock.Of<IAlertDeliveryService>(),
             Mock.Of<IRuleScopeClassifier>(),
+            new NoConditionIssues(),
             Mock.Of<ISecretEncryptionService>(),
             Mock.Of<ILogger<AlertRulesController>>());
 

@@ -178,6 +178,27 @@ public static class RustAlertEngine
         return response.ScopeClass;
     }
 
+    /// <summary>
+    /// Every problem saving the rule's condition trees should reject, each with its scope,
+    /// condition path and reason code. Empty when the rule is valid.
+    /// </summary>
+    /// <exception cref="RustAlertEngineException">
+    /// The engine rejected the request (<c>ok: false</c>, a malformed envelope) or returned an
+    /// unparseable response.
+    /// </exception>
+    public static IReadOnlyList<RustValidationIssue> Validate(RustValidateRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var requestJson = JsonSerializer.Serialize(request, AlertEnvelopeJson.Options);
+        var responseJson = AlertsInterop.Validate(requestJson);
+        var response = Deserialize<RustValidateResponse>(responseJson, "validate");
+
+        if (!response.Ok)
+            throw new RustAlertEngineException($"Rust alert engine rejected the validate request: {response.Error ?? "(no error message)"}");
+        return response.Issues ?? [];
+    }
+
     private static T Deserialize<T>(string responseJson, string operation)
     {
         try

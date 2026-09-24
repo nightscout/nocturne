@@ -125,6 +125,12 @@ rule save rejects those too, together with the shapes above:
 | `minutes_not_positive` | a `sustained` with `minutes <= 0` |
 | `payload_missing` | a rule body whose `condition_params` is JSON `null` |
 
+The crate's `validate` entry point is the single implementation of the save-time check;
+`AlertRulesController` returns its issues as a 400. Each issue carries its scope
+(`condition`, `auto_resolve`, `snooze`), the node's condition path (§2.3; a null slot's
+path ends in `.`), the reason code and, where there is one, the payload field. Reason
+codes never carry payload values.
+
 ---
 
 ## 2. Tree structure, leaf identity, and paths
@@ -432,7 +438,7 @@ contexts; window resolution, reading fetch, and fact-timeline capture stay host-
     (Prelude) must implement the same predicate; `SmartSnoozeTrendGate` is the reference.
   - `client_configuration.snooze.maxCount` (default 3) caps one count shared by manual
     snoozes and automatic extensions.
-- Rule CRUD, validation, `RuleReferenceResolver.FilterEvaluable`, topo-sort inputs
+- Rule CRUD, host-specific validation (channels, tracker and alert references), `RuleReferenceResolver.FilterEvaluable`, topo-sort inputs; the condition-tree check itself is the crate's `validate` (§1.4)
 
 ## 10. Known anomalies index
 

@@ -25,6 +25,7 @@ char* nocturne_alerts_evaluate_node(const char* request_json);
 char* nocturne_alerts_leaf_paths(const char* condition_node_json);
 char* nocturne_alerts_classify(const char* request_json);
 char* nocturne_alerts_describe(const char* request_json);
+char* nocturne_alerts_validate(const char* request_json);
 void  nocturne_alerts_free_string(char* ptr);
 ```
 
@@ -341,6 +342,52 @@ Response — a recursive `tree`:
   it collapses to a single best-effort leaf with default operands, mirroring
   the engine's silent-fail.
 
+## Validate (`nocturne_alerts_validate`)
+
+The save-time check of a rule's condition trees: everything
+`docs/alerts/engine-semantics.md` §1.4 rejects, both the shapes that cannot be
+evaluated and the ones that evaluate but can never mean what was written
+(unknown kinds, unrecognised operators, empty groups, …). Hosts call it before
+storing a rule and refuse the save when `valid` is false; the backend does so in
+`AlertRulesController` (a 400).
+
+Request:
+
+```jsonc
+{
+  "schema_version": 1,
+  "condition_type": "composite",                     // wire name, checked exactly
+  "condition_params": { "operator": "and", "conditions": [ /* … */ ] },
+  "auto_resolve_params": { "type": "threshold", /* … */ },  // optional; null/absent = not checked
+  "snooze_conditions": [ /* ConditionNode, … */ ]    // optional; checked as composite{and}
+}
+```
+
+Pass `auto_resolve_params` only when auto-resolve is enabled, and
+`snooze_conditions` only when smart snooze is on — the trees the rule actually
+evaluates. An empty `snooze_conditions` list is valid (the trend fallback).
+
+Response:
+
+```jsonc
+{
+  "schema_version": 1,
+  "ok": true,
+  "valid": false,
+  "issues": [
+    { "scope": "condition", "path": "composite[1].", "reason": "condition_missing", "field": null },
+    { "scope": "snooze", "path": "snooze[0].sustained", "reason": "minutes_not_positive", "field": "minutes" }
+  ]
+}
+```
+
+`scope` is `condition`, `auto_resolve` or `snooze`; `path` is the offending
+node's condition path under that scope's root (a null slot's path ends in
+`.`); `reason` is a stable code from §1.4 and `field` the payload field it is
+on, when there is one. Neither ever carries a payload value. A malformed tree
+reports only its first structural error, as the reader stops there. A rule with
+issues is `ok: true`; only an unusable envelope is the error envelope.
+
 ## Kotlin (UniFFI)
 
 The optional `uniffi` cargo feature adds a [UniFFI](https://mozilla.github.io/uniffi-rs/)
@@ -351,7 +398,7 @@ bindings and the compiled library must come from the same uniffi version.
 
 The Kotlin surface is deliberately JSON-in/JSON-out — the **same envelope
 documented above is the contract for both consumers** (no parallel typed
-surface that could drift). Five functions, delegating to the exact same
+surface that could drift). Six functions, delegating to the exact same
 internal handlers as the C ABI, with the same panic guard (panics and unusable
 requests come back as the `ok: false` envelope, never as an exception):
 
@@ -362,6 +409,7 @@ fun evaluate(requestJson: String): String      // nocturne_alerts_evaluate
 fun evaluateNode(requestJson: String): String  // nocturne_alerts_evaluate_node
 fun leafPaths(requestJson: String): String     // nocturne_alerts_leaf_paths
 fun describe(requestJson: String): String      // nocturne_alerts_describe
+fun validate(requestJson: String): String      // nocturne_alerts_validate
 fun version(): String                          // plain version string, not JSON
 ```
 

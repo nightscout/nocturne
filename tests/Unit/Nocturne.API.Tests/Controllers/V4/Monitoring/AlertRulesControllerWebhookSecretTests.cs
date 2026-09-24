@@ -190,6 +190,7 @@ public class AlertRulesControllerWebhookSecretTests
             Mock.Of<IAlertReferenceService>(),
             Mock.Of<IAlertDeliveryService>(),
             Mock.Of<IRuleScopeClassifier>(),
+            new NoConditionIssues(),
             encryption,
             Mock.Of<ILogger<AlertRulesController>>());
 

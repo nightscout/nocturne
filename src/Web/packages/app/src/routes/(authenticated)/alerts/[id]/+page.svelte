@@ -13,6 +13,7 @@
     testFire,
   } from "$api/generated/alertRules.generated.remote";
   import { describeSubmitError } from "$lib/forms/submit-error";
+  import { conditionIssuesMessage } from "$lib/components/alerts/conditionIssues.svelte";
   import { getAlertHistory } from "$api/generated/alerts.generated.remote";
   import { z } from "zod";
   import { AlertRuleSeverity, AlertConditionType } from "$api-clients";
@@ -159,7 +160,8 @@
         savedBody = buildBody(editor);
       }
     } catch (e) {
-      error = describeSubmitError(e, "Failed to save the alert rule. Please try again.");
+      const described = describeSubmitError(e, "Failed to save the alert rule. Please try again.");
+      error = conditionIssuesMessage(e) ?? described;
     } finally {
       saving = false;
     }

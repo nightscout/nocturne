@@ -568,6 +568,40 @@ export function stripEditorFields(node: ConditionNode): ConditionNode {
 }
 
 /**
+ * Removes every group the editor has left with no conditions, and any NOT or
+ * sustained wrapper whose child that removes. An empty group is not part of the
+ * rule the person sees, and the server rejects one. Returns `null` when nothing
+ * is left.
+ */
+function withoutEmptyGroups(node: ConditionNode): ConditionNode | null {
+	if (node.type === "composite" && node.composite) {
+		const conditions = node.composite.conditions
+			.map(withoutEmptyGroups)
+			.filter((c): c is ConditionNode => c !== null);
+		if (conditions.length === 0) return null;
+		return { ...node, composite: { ...node.composite, conditions } };
+	}
+	if (node.type === "not" && node.not) {
+		const child = withoutEmptyGroups(node.not.child);
+		return child ? { ...node, not: { child } } : null;
+	}
+	if (node.type === "sustained" && node.sustained) {
+		const child = withoutEmptyGroups(node.sustained.child);
+		return child ? { ...node, sustained: { ...node.sustained, child } } : null;
+	}
+	return node;
+}
+
+/**
+ * {@link flattenSingleChildRoot} after {@link withoutEmptyGroups}. A root with
+ * nothing left keeps its empty group, so the save reports that the rule has no
+ * conditions rather than sending none.
+ */
+function serialisableRoot(node: ConditionNode): ConditionNode {
+	return flattenSingleChildRoot(withoutEmptyGroups(node) ?? node);
+}
+
+/**
  * Extract the kind-specific payload for the API. Returns `null` when there's
  * no node.
  */
@@ -589,7 +623,7 @@ export function nodeToApi(
  * dirty detection (compare `JSON.stringify` of current vs. saved body).
  */
 export function buildBody(state: RuleEditorState) {
-	const flat = flattenSingleChildRoot(state.condition!);
+	const flat = serialisableRoot(state.condition!);
 	const api = nodeToApi(flat);
 	return {
 		name: state.name,
@@ -602,15 +636,16 @@ export function buildBody(state: RuleEditorState) {
 		allowThroughDnd: state.allowThroughDnd,
 		autoResolveEnabled: state.autoResolveEnabled,
 		autoResolveParams: state.autoResolveCondition
-			? stripEditorFields(flattenSingleChildRoot(state.autoResolveCondition))
+			? stripEditorFields(serialisableRoot(state.autoResolveCondition))
 			: undefined,
 		clientConfiguration: {
 			...state.clientConfig,
 			snooze: {
 				...state.clientConfig.snooze,
-				conditions: state.clientConfig.snooze.conditions.map((c) =>
-					stripEditorFields(flattenSingleChildRoot(c))
-				),
+				conditions: state.clientConfig.snooze.conditions
+					.map(withoutEmptyGroups)
+					.filter((c): c is ConditionNode => c !== null)
+					.map((c) => stripEditorFields(flattenSingleChildRoot(c))),
 			},
 		},
 		channels: state.channels.map((c) => ({
