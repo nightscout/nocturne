@@ -24,6 +24,25 @@ internal interface IShadowRuleEvaluator
         IReadOnlyDictionary<string, DateTime> timers,
         AlertTrackerState? trackerState,
         CancellationToken ct);
+
+    /// <summary>Evaluates one condition node against explicit pre-state timers. Must not persist anything.</summary>
+    Task<ShadowNodeOutcome> EvaluateNodeAsync(
+        Guid ruleId,
+        ConditionNode node,
+        string pathRoot,
+        SensorContext context,
+        DateTime now,
+        IReadOnlyDictionary<string, DateTime> timers,
+        CancellationToken ct);
+
+    /// <summary>Runs the sweep's auto-resolve against explicit pre-state. Must not persist anything.</summary>
+    Task<ShadowAutoResolveOutcome> EvaluateAutoResolveAsync(
+        AlertRuleSnapshot rule,
+        SensorContext context,
+        DateTime now,
+        IReadOnlyDictionary<string, DateTime> timers,
+        AlertTrackerState? trackerState,
+        CancellationToken ct);
 }
 
 /// <summary>
@@ -45,11 +64,25 @@ internal sealed record ShadowRuleOutcome
     public bool PostHasActiveExcursion { get; init; }
 }
 
+/// <summary>The comparable surface of one shadow node evaluation.</summary>
+internal sealed record ShadowNodeOutcome(bool Value, IReadOnlyDictionary<string, DateTime> PostTimers);
+
+/// <summary>
+/// The comparable surface of one shadow auto-resolve. <c>PostTracker</c> is <see langword="null"/>
+/// when the rule has no tracker state.
+/// </summary>
+internal sealed record ShadowAutoResolveOutcome(
+    ExcursionTransitionType Transition,
+    ExcursionCloseReason? CloseReason,
+    IReadOnlyDictionary<string, DateTime> PostTimers,
+    TrackerPostState? PostTracker);
+
 /// <summary>
 /// <see cref="IShadowRuleEvaluator"/> over the Rust FFI. Pure: state goes in as data and
 /// the response is only compared, never persisted.
 /// </summary>
-internal sealed class RustShadowRuleEvaluator(AlertEngineErrors errors) : IShadowRuleEvaluator
+internal sealed class RustShadowRuleEvaluator(AlertEngineErrors errors, ILogger<RustShadowRuleEvaluator> logger)
+    : IShadowRuleEvaluator
 {
     public string Name => "rust";
 
@@ -88,6 +121,42 @@ internal sealed class RustShadowRuleEvaluator(AlertEngineErrors errors) : IShado
             PostHasActiveExcursion = response.Tracker.ActiveExcursionOrdinal is not null,
         });
     }
+
+    public Task<ShadowNodeOutcome> EvaluateNodeAsync(
+        Guid ruleId,
+        ConditionNode node,
+        string pathRoot,
+        SensorContext context,
+        DateTime now,
+        IReadOnlyDictionary<string, DateTime> timers,
+        CancellationToken ct)
+    {
+        var response = RustAuxiliaryEvaluation.EvaluateNode(
+            errors, AlertEngineErrors.ShadowEngine, ruleId, RustEnvelopeMapper.BuildNode(node), pathRoot,
+            context, now, timers);
+        return Task.FromResult(new ShadowNodeOutcome(response.Value!.Value, response.Timers!));
+    }
+
+    public Task<ShadowAutoResolveOutcome> EvaluateAutoResolveAsync(
+        AlertRuleSnapshot rule,
+        SensorContext context,
+        DateTime now,
+        IReadOnlyDictionary<string, DateTime> timers,
+        AlertTrackerState? trackerState,
+        CancellationToken ct)
+    {
+        var unchanged = new ShadowAutoResolveOutcome(
+            ExcursionTransitionType.None, null, timers, TrackerPostState.Of(trackerState));
+        if (!RustAuxiliaryEvaluation.AttemptsAutoResolve(rule, trackerState))
+            return Task.FromResult(unchanged);
+
+        var outcome = RustAuxiliaryEvaluation.AutoResolve(
+            errors, AlertEngineErrors.ShadowEngine, rule, context, now, timers, trackerState, logger);
+        var postTimers = (IReadOnlyDictionary<string, DateTime>?)outcome.Node?.Timers ?? timers;
+        return Task.FromResult(outcome.Close is { } close
+            ? new ShadowAutoResolveOutcome(close.Type, close.CloseReason, postTimers, close.Post)
+            : unchanged with { PostTimers = postTimers });
+    }
 }
 
 /// <summary>
@@ -98,9 +167,8 @@ internal sealed class RustShadowRuleEvaluator(AlertEngineErrors errors) : IShado
 /// failures are logged as <c>AlertEngineShadowError</c> and never escape to the caller.
 /// </summary>
 /// <remarks>
-/// Only <see cref="EvaluateRuleAsync"/> is shadowed. <see cref="EvaluateNodeAsync"/> and
-/// <see cref="EvaluateAutoResolveAsync"/> pass straight through to the managed engine, so
-/// smart-snooze conditions and the sweep's auto-resolve are not compared.
+/// All three operations are shadowed. Node divergences carry the path root as a field prefix
+/// (<c>snooze.value</c>), and auto-resolve divergences <c>auto_resolve.</c>.
 /// </remarks>
 internal sealed class ShadowAlertEngine(
     ManagedAlertEngine managedEngine,
@@ -130,17 +198,7 @@ internal sealed class ShadowAlertEngine(
         {
             ruleRow = await trackerRepository.GetRuleAsync(rule.Id, ct);
             preTimers = await timerStore.GetAllForRuleAsync(rule.Id, ct);
-            var state = await trackerRepository.GetTrackerStateAsync(rule.Id, ct);
-            // Detach: the managed tracker mutates the same entity instance it loaded.
-            preTracker = state is null ? null : new AlertTrackerState
-            {
-                AlertRuleId = state.AlertRuleId,
-                State = state.State,
-                ConfirmationCount = state.ConfirmationCount,
-                ActiveExcursionId = state.ActiveExcursionId,
-                UpdatedAt = state.UpdatedAt,
-                HysteresisStartedAt = state.HysteresisStartedAt,
-            };
+            preTracker = Detach(await trackerRepository.GetTrackerStateAsync(rule.Id, ct));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -163,8 +221,7 @@ internal sealed class ShadowAlertEngine(
 
         if (snapshotError is not null)
         {
-            logger.LogWarning(snapshotError,
-                "AlertEngineShadowError rule={RuleId} engine={Engine} stage=snapshot", rule.Id, shadowEvaluator.Name);
+            LogShadowError(snapshotError, rule.Id, "snapshot");
             return managed;
         }
 
@@ -181,8 +238,7 @@ internal sealed class ShadowAlertEngine(
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            logger.LogWarning(ex,
-                "AlertEngineShadowError rule={RuleId} engine={Engine} stage=evaluate", rule.Id, shadowEvaluator.Name);
+            LogShadowError(ex, rule.Id, "evaluate");
         }
 
         return managed;
@@ -257,14 +313,149 @@ internal sealed class ShadowAlertEngine(
             ruleId, managedError.GetType().Name, shadowEvaluator.Name);
 
     /// <inheritdoc/>
-    public Task<bool> EvaluateNodeAsync(
-        Guid ruleId, ConditionNode node, SensorContext context, string pathRoot, CancellationToken ct) =>
-        managedEngine.EvaluateNodeAsync(ruleId, node, context, pathRoot, ct);
+    public async Task<bool> EvaluateNodeAsync(
+        Guid ruleId, ConditionNode node, SensorContext context, string pathRoot, CancellationToken ct)
+    {
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        IReadOnlyDictionary<string, DateTime>? preTimers = null;
+        try
+        {
+            preTimers = await timerStore.GetAllForRuleAsync(ruleId, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogShadowError(ex, ruleId, "snapshot");
+        }
+
+        bool managed;
+        try
+        {
+            managed = await managedEngine.EvaluateNodeAsync(ruleId, node, context, pathRoot, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            if (preTimers is not null)
+                await LogNodeManagedThrewAsync(ruleId, node, pathRoot, context, now, preTimers, ex, ct);
+            throw;
+        }
+
+        if (preTimers is null)
+            return managed;
+
+        try
+        {
+            var shadow = await shadowEvaluator.EvaluateNodeAsync(ruleId, node, pathRoot, context, now, preTimers, ct);
+            var compare = Comparison(ruleId);
+            if (managed != shadow.Value)
+                compare.Diverged($"{pathRoot}.value", managed, shadow.Value);
+            compare.Timers($"{pathRoot}.timers", await timerStore.GetAllForRuleAsync(ruleId, ct), shadow.PostTimers);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogShadowError(ex, ruleId, pathRoot);
+        }
+
+        return managed;
+    }
+
+    /// <summary>
+    /// The node counterpart of <see cref="LogManagedThrewAsync"/>: a managed throw is agreement
+    /// when the Rust engine rejects the node too.
+    /// </summary>
+    private async Task LogNodeManagedThrewAsync(
+        Guid ruleId,
+        ConditionNode node,
+        string pathRoot,
+        SensorContext context,
+        DateTime now,
+        IReadOnlyDictionary<string, DateTime> preTimers,
+        Exception managedError,
+        CancellationToken ct)
+    {
+        string shadowOutcome;
+        try
+        {
+            var shadow = await shadowEvaluator.EvaluateNodeAsync(ruleId, node, pathRoot, context, now, preTimers, ct);
+            shadowOutcome = $"value={shadow.Value}";
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (RustAlertEngineException)
+        {
+            LogBothSkipped(ruleId, managedError);
+            return;
+        }
+        catch (Exception ex)
+        {
+            shadowOutcome = $"threw {ex.GetType().Name}";
+        }
+
+        Comparison(ruleId).Diverged(
+            $"{pathRoot}.managed_threw", $"threw {managedError.GetType().Name}", shadowOutcome);
+    }
 
     /// <inheritdoc/>
-    public Task<ExcursionTransition> EvaluateAutoResolveAsync(
-        AlertRuleSnapshot rule, SensorContext context, CancellationToken ct) =>
-        managedEngine.EvaluateAutoResolveAsync(rule, context, ct);
+    public async Task<ExcursionTransition> EvaluateAutoResolveAsync(
+        AlertRuleSnapshot rule, SensorContext context, CancellationToken ct)
+    {
+        const string operation = "auto_resolve";
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        IReadOnlyDictionary<string, DateTime>? preTimers = null;
+        AlertTrackerState? preTracker = null;
+        try
+        {
+            preTimers = await timerStore.GetAllForRuleAsync(rule.Id, ct);
+            preTracker = Detach(await trackerRepository.GetTrackerStateAsync(rule.Id, ct));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            preTimers = null;
+            LogShadowError(ex, rule.Id, "snapshot");
+        }
+
+        var managed = await managedEngine.EvaluateAutoResolveAsync(rule, context, ct);
+        if (preTimers is null)
+            return managed;
+
+        try
+        {
+            var shadow = await shadowEvaluator.EvaluateAutoResolveAsync(rule, context, now, preTimers, preTracker, ct);
+            var compare = Comparison(rule.Id);
+            compare.Transition(operation, managed.Type, managed.CloseReason, shadow.Transition, shadow.CloseReason);
+            compare.Timers($"{operation}.timers", await timerStore.GetAllForRuleAsync(rule.Id, ct), shadow.PostTimers);
+            compare.PostState(
+                operation,
+                TrackerPostState.Of(await trackerRepository.GetTrackerStateAsync(rule.Id, ct)),
+                shadow.PostTracker,
+                exactInstants: false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogShadowError(ex, rule.Id, operation);
+        }
+
+        return managed;
+    }
+
+    /// <summary>A copy, since the managed tracker's store can hand back the instance it later mutates.</summary>
+    private static AlertTrackerState? Detach(AlertTrackerState? state) =>
+        state is null ? null : new AlertTrackerState
+        {
+            AlertRuleId = state.AlertRuleId,
+            State = state.State,
+            ConfirmationCount = state.ConfirmationCount,
+            ActiveExcursionId = state.ActiveExcursionId,
+            UpdatedAt = state.UpdatedAt,
+            HysteresisStartedAt = state.HysteresisStartedAt,
+        };
+
+    private ShadowComparison Comparison(Guid ruleId) => new(logger, shadowEvaluator.Name, ruleId);
+
+    private void LogShadowError(Exception ex, Guid ruleId, string stage) =>
+        logger.LogWarning(ex,
+            "AlertEngineShadowError rule={RuleId} engine={Engine} stage={Stage}", ruleId, shadowEvaluator.Name, stage);
 
     private async Task CompareAsync(
         Guid ruleId,
@@ -272,80 +463,44 @@ internal sealed class ShadowAlertEngine(
         ShadowRuleOutcome shadow,
         CancellationToken ct)
     {
+        var compare = Comparison(ruleId);
         if (managed.Skipped || shadow.Skipped)
         {
             if (managed.Skipped != shadow.Skipped)
-                LogDivergence(ruleId, "skipped", managed.Skipped, shadow.Skipped);
+                compare.Diverged("skipped", managed.Skipped, shadow.Skipped);
             return;
         }
 
         if (managed.ConditionMet != shadow.Root)
-            LogDivergence(ruleId, "condition_met", managed.ConditionMet, shadow.Root);
+            compare.Diverged("condition_met", managed.ConditionMet, shadow.Root);
 
         if (managed.Transition.Type != shadow.Transition)
-            LogDivergence(ruleId, "transition",
+            compare.Diverged("transition",
                 RustEnvelopeMapper.TransitionToWire(managed.Transition.Type),
                 RustEnvelopeMapper.TransitionToWire(shadow.Transition));
 
         if (managed.Transition.CloseReason != shadow.CloseReason)
-            LogDivergence(ruleId, "close_reason",
+            compare.Diverged("close_reason",
                 RustEnvelopeMapper.CloseReasonToWire(managed.Transition.CloseReason) ?? "(none)",
                 RustEnvelopeMapper.CloseReasonToWire(shadow.CloseReason) ?? "(none)");
 
         if (managed.AutoResolved != shadow.AutoResolved)
-            LogDivergence(ruleId, "auto_resolved", managed.AutoResolved, shadow.AutoResolved);
+            compare.Diverged("auto_resolved", managed.AutoResolved, shadow.AutoResolved);
 
-        // Post-state comparisons: the managed engine has persisted by now, so the stores
-        // hold its post-state; the shadow outcome carries the engine-computed post-state.
-        var managedPostTimers = await timerStore.GetAllForRuleAsync(ruleId, ct);
-        if (!TimersEqual(managedPostTimers, shadow.PostTimers))
-            LogDivergence(ruleId, "timers", FormatTimers(managedPostTimers), FormatTimers(shadow.PostTimers));
+        // The managed engine has persisted by now, so the stores hold its post-state.
+        compare.Timers("timers", await timerStore.GetAllForRuleAsync(ruleId, ct), shadow.PostTimers);
 
         var managedPostState = await trackerRepository.GetTrackerStateAsync(ruleId, ct);
         var managedTrackerState = managedPostState?.State;
         if (!string.Equals(managedTrackerState, shadow.PostTrackerState, StringComparison.Ordinal))
-            LogDivergence(ruleId, "tracker_state", managedTrackerState ?? "(none)", shadow.PostTrackerState ?? "(none)");
+            compare.Diverged("tracker_state", managedTrackerState ?? "(none)", shadow.PostTrackerState ?? "(none)");
 
         var managedConfirmation = managedPostState?.ConfirmationCount ?? 0;
         if (managedConfirmation != shadow.PostConfirmationCount)
-            LogDivergence(ruleId, "confirmation_count", managedConfirmation, shadow.PostConfirmationCount);
+            compare.Diverged("confirmation_count", managedConfirmation, shadow.PostConfirmationCount);
 
         var managedHasExcursion = managedPostState?.ActiveExcursionId is not null;
         if (managedHasExcursion != shadow.PostHasActiveExcursion)
-            LogDivergence(ruleId, "active_excursion", managedHasExcursion, shadow.PostHasActiveExcursion);
+            compare.Diverged("active_excursion", managedHasExcursion, shadow.PostHasActiveExcursion);
     }
-
-    private void LogDivergence(Guid ruleId, string field, object managed, object shadow)
-    {
-        logger.LogWarning(
-            "AlertEngineDivergence rule={RuleId} engine={Engine} field={Field} managed={Managed} rust={Rust}",
-            ruleId, shadowEvaluator.Name, field, managed, shadow);
-    }
-
-    /// <summary>
-    /// The shadow run pins its own "now" just before the managed run starts, while the
-    /// managed evaluators read the clock mid-evaluation — so freshly-set timer instants
-    /// legitimately differ by however long the managed pass took. Anything inside this
-    /// window is clock skew, not divergence.
-    /// </summary>
-    private static readonly TimeSpan TimerSkewTolerance = TimeSpan.FromSeconds(5);
-
-    private static bool TimersEqual(
-        IReadOnlyDictionary<string, DateTime> managed,
-        IReadOnlyDictionary<string, DateTime> shadow)
-    {
-        if (managed.Count != shadow.Count) return false;
-        foreach (var (path, at) in managed)
-        {
-            if (!shadow.TryGetValue(path, out var other)) return false;
-            if ((other - at).Duration() > TimerSkewTolerance) return false;
-        }
-        return true;
-    }
-
-    private static string FormatTimers(IReadOnlyDictionary<string, DateTime> timers) =>
-        timers.Count == 0
-            ? "(empty)"
-            : string.Join(";", timers.OrderBy(kv => kv.Key, StringComparer.Ordinal)
-                .Select(kv => $"{kv.Key}={kv.Value:O}"));
 }

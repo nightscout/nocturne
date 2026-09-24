@@ -49,15 +49,39 @@ public class ShadowAlertEngineTests
         LastReadingAt = T0,
     };
 
+    private static RustShadowRuleEvaluator RustShadow() => new(
+        new AlertEngineErrors(new TestMeterFactory(), TimeProvider.System),
+        Microsoft.Extensions.Logging.Abstractions.NullLogger<RustShadowRuleEvaluator>.Instance);
+
+    /// <summary>Only the per-rule evaluation; the node and auto-resolve shadows have their own tests.</summary>
+    private abstract class RuleOnlyShadowEvaluator : IShadowRuleEvaluator
+    {
+        public abstract string Name { get; }
+
+        public abstract Task<ShadowRuleOutcome> EvaluateAsync(
+            AlertRule rule, SensorContext context, DateTime now,
+            IReadOnlyDictionary<string, DateTime> timers, AlertTrackerState? trackerState, CancellationToken ct);
+
+        public Task<ShadowNodeOutcome> EvaluateNodeAsync(
+            Guid ruleId, ConditionNode node, string pathRoot, SensorContext context, DateTime now,
+            IReadOnlyDictionary<string, DateTime> timers, CancellationToken ct) =>
+            throw new NotSupportedException();
+
+        public Task<ShadowAutoResolveOutcome> EvaluateAutoResolveAsync(
+            AlertRuleSnapshot rule, SensorContext context, DateTime now,
+            IReadOnlyDictionary<string, DateTime> timers, AlertTrackerState? trackerState, CancellationToken ct) =>
+            throw new NotSupportedException();
+    }
+
     private sealed class FakeShadowEvaluator(
         Func<ShadowRuleOutcome>? outcome = null,
-        Exception? throws = null) : IShadowRuleEvaluator
+        Exception? throws = null) : RuleOnlyShadowEvaluator
     {
         public int Calls { get; private set; }
 
-        public string Name => "fake";
+        public override string Name => "fake";
 
-        public Task<ShadowRuleOutcome> EvaluateAsync(
+        public override Task<ShadowRuleOutcome> EvaluateAsync(
             AlertRule rule, SensorContext context, DateTime now,
             IReadOnlyDictionary<string, DateTime> timers, AlertTrackerState? trackerState, CancellationToken ct)
         {
@@ -244,13 +268,13 @@ public class ShadowAlertEngineTests
         divergence.Message.Should().Contain("rust=threw InvalidOperationException");
     }
 
-    private sealed class CapturingShadowEvaluator : IShadowRuleEvaluator
+    private sealed class CapturingShadowEvaluator : RuleOnlyShadowEvaluator
     {
         public AlertTrackerState? SeenTracker { get; private set; }
 
-        public string Name => "capture";
+        public override string Name => "capture";
 
-        public Task<ShadowRuleOutcome> EvaluateAsync(
+        public override Task<ShadowRuleOutcome> EvaluateAsync(
             AlertRule rule, SensorContext context, DateTime now,
             IReadOnlyDictionary<string, DateTime> timers, AlertTrackerState? trackerState, CancellationToken ct)
         {
@@ -327,7 +351,7 @@ public class ShadowAlertEngineTests
     {
         var rule = BuildUnevaluableRule();
         var (engine, logger, _, _, provider) = BuildShadowEngine(
-            rule, new RustShadowRuleEvaluator(new AlertEngineErrors(new TestMeterFactory(), TimeProvider.System)));
+            rule, RustShadow());
         await using var _ = provider;
 
         var act = async () => await engine.EvaluateRuleAsync(
@@ -341,7 +365,7 @@ public class ShadowAlertEngineTests
     public async Task Real_rust_shadow_agrees_with_the_managed_engine()
     {
         var rule = BuildThresholdRule();
-        var (engine, logger, _, _, provider) = BuildShadowEngine(rule, new RustShadowRuleEvaluator(new AlertEngineErrors(new TestMeterFactory(), TimeProvider.System)));
+        var (engine, logger, _, _, provider) = BuildShadowEngine(rule, RustShadow());
         await using var _ = provider;
 
         // Two ticks: open at 60, hysteresis at 120 — both must agree end to end.
