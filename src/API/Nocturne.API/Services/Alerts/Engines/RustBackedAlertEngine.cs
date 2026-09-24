@@ -77,7 +77,7 @@ internal sealed class RustBackedAlertEngine(
             return (response, RustAlertEngine.GetRuleResult(response));
         });
 
-        if (result.Skipped == true)
+        if (result.Skipped)
         {
             // No evaluator for the root type: state passes through unchanged, nothing persisted.
             logger.LogWarning("No evaluator registered for condition type '{ConditionType}'", rule.ConditionType);
@@ -93,7 +93,7 @@ internal sealed class RustBackedAlertEngine(
             rule.Id, result, priorExcursionId, now, ct);
 
         ExcursionTransition? autoResolveTransition = null;
-        if (result.AutoResolved == true)
+        if (result.AutoResolved)
         {
             // The engine force-closed the excursion in its auto-resolve pass (reason auto).
             // Close whichever excursion was active after the main transition (a same-call
@@ -121,18 +121,18 @@ internal sealed class RustBackedAlertEngine(
                 State = post.State,
                 ConfirmationCount = post.ConfirmationCount,
                 ActiveExcursionId = post.ActiveExcursionOrdinal is null ? null : activeExcursionId,
-                UpdatedAt = post.UpdatedAt ?? now,
+                UpdatedAt = post.UpdatedAt!.Value,
                 HysteresisStartedAt = post.HysteresisStartedAt,
             }, ct);
         }
 
         return new AlertEngineEvaluation
         {
-            ConditionMet = result.Root ?? false,
+            ConditionMet = result.Root!.Value,
             Transition = transition,
             AutoResolveTransition = autoResolveTransition,
             LeafValues = options.IncludeLeafValues
-                ? (result.Leaves ?? []).ToDictionary(l => l.LeafId, l => l.Value)
+                ? result.Leaves!.ToDictionary(l => l.LeafId, l => l.Value)
                 : null,
         };
     }
@@ -157,7 +157,7 @@ internal sealed class RustBackedAlertEngine(
         var response = EvaluateNodeNative(request);
 
         await ApplyTimerOpsAsync(ruleId, response.TimerOps, ct);
-        return response.Value;
+        return response.Value!.Value;
     }
 
     /// <inheritdoc/>
@@ -201,7 +201,7 @@ internal sealed class RustBackedAlertEngine(
             };
             var response = EvaluateNodeNative(request);
             await ApplyTimerOpsAsync(rule.Id, response.TimerOps, ct);
-            shouldResolve = response.Value;
+            shouldResolve = response.Value!.Value;
         }
         catch (RustAlertEngineException ex)
         {
@@ -240,7 +240,7 @@ internal sealed class RustBackedAlertEngine(
         };
         var response = EvaluateNodeNative(request);
         await ApplyTimerOpsAsync(rule.Id, response.TimerOps, ct);
-        return response.Value;
+        return response.Value!.Value;
     }
 
     private RustEvaluateNodeResponse EvaluateNodeNative(RustEvaluateNodeRequest request) =>
@@ -277,7 +277,7 @@ internal sealed class RustBackedAlertEngine(
         DateTime now,
         CancellationToken ct)
     {
-        var type = RustEnvelopeMapper.TransitionFromWire(result.Transition);
+        var type = RustEnvelopeMapper.TransitionFromWire(result.Transition!.Value);
         switch (type)
         {
             case ExcursionTransitionType.ExcursionOpened:
@@ -303,7 +303,7 @@ internal sealed class RustBackedAlertEngine(
                     await trackerRepository.CloseExcursionAsync(closeId, now, ct);
                 return (
                     new ExcursionTransition(type, priorExcursionId,
-                        RustEnvelopeMapper.CloseReasonFromWire(result.CloseReason) ?? ExcursionCloseReason.Hysteresis),
+                        RustEnvelopeMapper.CloseReasonFromWire(result.CloseReason!.Value)),
                     null);
 
             case ExcursionTransitionType.ExcursionContinues:

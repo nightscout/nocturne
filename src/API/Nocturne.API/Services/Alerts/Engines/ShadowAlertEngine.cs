@@ -2,6 +2,7 @@ using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Alerts;
 
 namespace Nocturne.API.Services.Alerts.Engines;
 
@@ -33,9 +34,8 @@ internal sealed record ShadowRuleOutcome
 {
     public bool Skipped { get; init; }
     public bool Root { get; init; }
-    /// <summary>Transition wire form (<c>none | opened | continues | hysteresis_started | hysteresis_resumed | closed</c>).</summary>
-    public string Transition { get; init; } = "none";
-    public string? CloseReason { get; init; }
+    public ExcursionTransitionType Transition { get; init; }
+    public ExcursionCloseReason? CloseReason { get; init; }
     public bool AutoResolved { get; init; }
     /// <summary>Post-evaluation timers (<c>path → first-true</c>).</summary>
     public IReadOnlyDictionary<string, DateTime> PostTimers { get; init; } = new Dictionary<string, DateTime>();
@@ -74,15 +74,17 @@ internal sealed class RustShadowRuleEvaluator(AlertEngineErrors errors) : IShado
 
         return Task.FromResult(new ShadowRuleOutcome
         {
-            Skipped = result.Skipped == true,
+            Skipped = result.Skipped,
             Root = result.Root ?? false,
-            Transition = result.Transition ?? "none",
-            CloseReason = result.CloseReason,
-            AutoResolved = result.AutoResolved == true,
-            PostTimers = response.Timers ?? new Dictionary<string, DateTime>(),
-            PostTrackerState = response.Tracker?.State,
-            PostConfirmationCount = response.Tracker?.ConfirmationCount ?? 0,
-            PostHasActiveExcursion = response.Tracker?.ActiveExcursionOrdinal is not null,
+            Transition = result.Transition is { } transition
+                ? RustEnvelopeMapper.TransitionFromWire(transition)
+                : ExcursionTransitionType.None,
+            CloseReason = result.CloseReason is { } reason ? RustEnvelopeMapper.CloseReasonFromWire(reason) : null,
+            AutoResolved = result.AutoResolved,
+            PostTimers = response.Timers!,
+            PostTrackerState = response.Tracker!.State,
+            PostConfirmationCount = response.Tracker.ConfirmationCount,
+            PostHasActiveExcursion = response.Tracker.ActiveExcursionOrdinal is not null,
         });
     }
 }
@@ -223,7 +225,7 @@ internal sealed class ShadowAlertEngine(
                     ruleRow, context, now, preTimers, preTracker, ct);
                 shadowOutcome = shadow.Skipped
                     ? "skipped"
-                    : $"root={shadow.Root} transition={shadow.Transition} auto_resolved={shadow.AutoResolved}";
+                    : $"root={shadow.Root} transition={RustEnvelopeMapper.TransitionToWire(shadow.Transition)} auto_resolved={shadow.AutoResolved}";
             }
             catch (OperationCanceledException)
             {
@@ -266,13 +268,15 @@ internal sealed class ShadowAlertEngine(
         if (managed.ConditionMet != shadow.Root)
             LogDivergence(ruleId, "condition_met", managed.ConditionMet, shadow.Root);
 
-        var managedTransition = RustEnvelopeMapper.TransitionToWire(managed.Transition.Type);
-        if (!string.Equals(managedTransition, shadow.Transition, StringComparison.Ordinal))
-            LogDivergence(ruleId, "transition", managedTransition, shadow.Transition);
+        if (managed.Transition.Type != shadow.Transition)
+            LogDivergence(ruleId, "transition",
+                RustEnvelopeMapper.TransitionToWire(managed.Transition.Type),
+                RustEnvelopeMapper.TransitionToWire(shadow.Transition));
 
-        var managedCloseReason = RustEnvelopeMapper.CloseReasonToWire(managed.Transition.CloseReason);
-        if (!string.Equals(managedCloseReason, shadow.CloseReason, StringComparison.Ordinal))
-            LogDivergence(ruleId, "close_reason", managedCloseReason ?? "(none)", shadow.CloseReason ?? "(none)");
+        if (managed.Transition.CloseReason != shadow.CloseReason)
+            LogDivergence(ruleId, "close_reason",
+                RustEnvelopeMapper.CloseReasonToWire(managed.Transition.CloseReason) ?? "(none)",
+                RustEnvelopeMapper.CloseReasonToWire(shadow.CloseReason) ?? "(none)");
 
         if (managed.AutoResolved != shadow.AutoResolved)
             LogDivergence(ruleId, "auto_resolved", managed.AutoResolved, shadow.AutoResolved);

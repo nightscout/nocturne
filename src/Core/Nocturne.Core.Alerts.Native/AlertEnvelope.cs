@@ -10,6 +10,9 @@ namespace Nocturne.Core.Alerts.Native;
 /// </summary>
 public static class AlertEnvelopeJson
 {
+    /// <summary>The envelope <c>schema_version</c> this binding speaks, in both directions.</summary>
+    public const int SchemaVersion = 1;
+
     public static readonly JsonSerializerOptions Options = BuildOptions();
 
     private static JsonSerializerOptions BuildOptions()
@@ -129,7 +132,7 @@ public sealed record RustTrackerState
 public sealed record RustEvaluateRequest
 {
     [JsonPropertyName("schema_version")]
-    public int SchemaVersion { get; init; } = 1;
+    public int SchemaVersion { get; init; } = AlertEnvelopeJson.SchemaVersion;
 
     public required RustAlertRule Rule { get; init; }
 
@@ -145,12 +148,24 @@ public sealed record RustEvaluateRequest
     public RustTrackerState? Tracker { get; init; }
 }
 
-/// <summary>Response envelope for <c>nocturne_alerts_evaluate</c>.</summary>
-public sealed record RustEvaluateResponse
+/// <summary>The fields every nocturne_alerts response envelope carries, success or error.</summary>
+public interface IRustResponseEnvelope
 {
-    [JsonPropertyName("schema_version")]
+    int SchemaVersion { get; }
+
+    bool Ok { get; }
+
+    /// <summary>Error message when <see cref="Ok"/> is false.</summary>
+    string? Error { get; }
+}
+
+/// <summary>Response envelope for <c>nocturne_alerts_evaluate</c>.</summary>
+public sealed record RustEvaluateResponse : IRustResponseEnvelope
+{
+    [JsonPropertyName("schema_version"), JsonRequired]
     public int SchemaVersion { get; init; }
 
+    [JsonRequired]
     public bool Ok { get; init; }
 
     /// <summary>Error message when <see cref="Ok"/> is false.</summary>
@@ -171,38 +186,66 @@ public sealed record RustEvaluateResponse
 
 /// <summary>
 /// Typed view of <see cref="RustEvaluateResponse.Result"/> — the corpus
-/// <c>ExpectedRuleResult</c> wire shape. Deserialize with
-/// <see cref="AlertEnvelopeJson.Options"/>.
+/// <c>ExpectedRuleResult</c> wire shape. Read it through <see cref="RustAlertEngine.GetRuleResult"/>,
+/// which rejects a result missing a field its shape requires.
 /// </summary>
 public sealed record RustRuleResult
 {
-    [JsonPropertyName("rule_id")]
+    [JsonPropertyName("rule_id"), JsonRequired]
     public Guid RuleId { get; init; }
 
-    /// <summary>True when the rule's root type has no evaluator and the rule was skipped.</summary>
-    public bool? Skipped { get; init; }
+    /// <summary>The rule was skipped; the wire carries <c>skipped</c> only when true.</summary>
+    public bool Skipped { get; init; }
 
-    /// <summary>Root condition truth.</summary>
+    /// <summary>Root condition truth; present on every result that was not skipped.</summary>
     public bool? Root { get; init; }
 
-    /// <summary>Per-leaf force-eval truths, ascending by leaf id.</summary>
+    /// <summary>Per-leaf force-eval truths, ascending by leaf id; present on every result that was not skipped.</summary>
     public List<RustLeafValue>? Leaves { get; init; }
 
-    /// <summary>Tracker transition wire form: <c>none | opened | continues | hysteresis_started | hysteresis_resumed | closed</c>.</summary>
-    public string? Transition { get; init; }
+    /// <summary>Tracker transition; present on every result that was not skipped.</summary>
+    public RustTransition? Transition { get; init; }
 
-    /// <summary>Close reason wire form (<c>hysteresis | auto | manual</c>) when <see cref="Transition"/> is <c>closed</c>.</summary>
+    /// <summary>Present exactly when <see cref="Transition"/> is <see cref="RustTransition.Closed"/>.</summary>
     [JsonPropertyName("close_reason")]
-    public string? CloseReason { get; init; }
+    public RustCloseReason? CloseReason { get; init; }
 
-    /// <summary>True when the auto-resolve pass force-closed the excursion during this call.</summary>
+    /// <summary>The auto-resolve pass force-closed the excursion; the wire carries it only when true.</summary>
     [JsonPropertyName("auto_resolved")]
-    public bool? AutoResolved { get; init; }
+    public bool AutoResolved { get; init; }
 
-    /// <summary>Sustained-timer mutations performed during the call, in execution order.</summary>
+    /// <summary>Sustained-timer mutations performed during the call, in execution order; omitted when none.</summary>
     [JsonPropertyName("timer_ops")]
     public List<RustTimerOp>? TimerOps { get; init; }
 }
+
+/// <summary>Tracker transition wire values in <see cref="RustRuleResult.Transition"/>.</summary>
+[JsonConverter(typeof(StrictStringEnumConverter<RustTransition>))]
+public enum RustTransition
+{
+    [JsonStringEnumMemberName("none")] None,
+    [JsonStringEnumMemberName("opened")] Opened,
+    [JsonStringEnumMemberName("continues")] Continues,
+    [JsonStringEnumMemberName("hysteresis_started")] HysteresisStarted,
+    [JsonStringEnumMemberName("hysteresis_resumed")] HysteresisResumed,
+    [JsonStringEnumMemberName("closed")] Closed,
+}
+
+/// <summary>Close reason wire values in <see cref="RustRuleResult.CloseReason"/>.</summary>
+[JsonConverter(typeof(StrictStringEnumConverter<RustCloseReason>))]
+public enum RustCloseReason
+{
+    [JsonStringEnumMemberName("hysteresis")] Hysteresis,
+    [JsonStringEnumMemberName("auto")] Auto,
+    [JsonStringEnumMemberName("manual")] Manual,
+}
+
+/// <summary>
+/// Reads only the declared member names; an integer or an unknown name is a
+/// <see cref="JsonException"/>, so a value this binding does not know never maps to a default.
+/// </summary>
+public sealed class StrictStringEnumConverter<TEnum>() : JsonStringEnumConverter<TEnum>(null, allowIntegerValues: false)
+    where TEnum : struct, Enum;
 
 /// <summary>One per-leaf force-eval truth in <see cref="RustRuleResult.Leaves"/>.</summary>
 public sealed record RustLeafValue(
@@ -219,7 +262,7 @@ public sealed record RustTimerOp(
 public sealed record RustEvaluateNodeRequest
 {
     [JsonPropertyName("schema_version")]
-    public int SchemaVersion { get; init; } = 1;
+    public int SchemaVersion { get; init; } = AlertEnvelopeJson.SchemaVersion;
 
     /// <summary>The rule whose timer rows the tree's sustained nodes are keyed under.</summary>
     [JsonPropertyName("rule_id")]
@@ -242,18 +285,19 @@ public sealed record RustEvaluateNodeRequest
 }
 
 /// <summary>Response envelope for <c>nocturne_alerts_evaluate_node</c>.</summary>
-public sealed record RustEvaluateNodeResponse
+public sealed record RustEvaluateNodeResponse : IRustResponseEnvelope
 {
-    [JsonPropertyName("schema_version")]
+    [JsonPropertyName("schema_version"), JsonRequired]
     public int SchemaVersion { get; init; }
 
+    [JsonRequired]
     public bool Ok { get; init; }
 
     /// <summary>Error message when <see cref="Ok"/> is false.</summary>
     public string? Error { get; init; }
 
-    /// <summary>The node's truth.</summary>
-    public bool Value { get; init; }
+    /// <summary>The node's truth; present on every successful response.</summary>
+    public bool? Value { get; init; }
 
     /// <summary>Post-evaluation timer state to persist for the rule.</summary>
     public Dictionary<string, DateTime>? Timers { get; init; }
@@ -264,11 +308,12 @@ public sealed record RustEvaluateNodeResponse
 }
 
 /// <summary>Response envelope for <c>nocturne_alerts_leaf_paths</c>.</summary>
-public sealed record RustLeafPathsResponse
+public sealed record RustLeafPathsResponse : IRustResponseEnvelope
 {
-    [JsonPropertyName("schema_version")]
+    [JsonPropertyName("schema_version"), JsonRequired]
     public int SchemaVersion { get; init; }
 
+    [JsonRequired]
     public bool Ok { get; init; }
 
     public string? Error { get; init; }
@@ -296,7 +341,7 @@ public sealed record RustLeafPath(
 public sealed record RustClassifyRequest
 {
     [JsonPropertyName("schema_version")]
-    public int SchemaVersion { get; init; } = 1;
+    public int SchemaVersion { get; init; } = AlertEnvelopeJson.SchemaVersion;
 
     /// <summary>Wire-format condition type discriminator (e.g. <c>"threshold"</c>).</summary>
     [JsonPropertyName("condition_type")]
@@ -311,11 +356,12 @@ public sealed record RustClassifyRequest
 }
 
 /// <summary>Response envelope for <c>nocturne_alerts_classify</c>.</summary>
-public sealed record RustClassifyResponse
+public sealed record RustClassifyResponse : IRustResponseEnvelope
 {
-    [JsonPropertyName("schema_version")]
+    [JsonPropertyName("schema_version"), JsonRequired]
     public int SchemaVersion { get; init; }
 
+    [JsonRequired]
     public bool Ok { get; init; }
 
     /// <summary>Error message when <see cref="Ok"/> is false.</summary>

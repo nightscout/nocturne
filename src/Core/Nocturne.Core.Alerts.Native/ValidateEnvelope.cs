@@ -10,7 +10,7 @@ namespace Nocturne.Core.Alerts.Native;
 public sealed record RustValidateRequest
 {
     [JsonPropertyName("schema_version")]
-    public int SchemaVersion { get; init; } = 1;
+    public int SchemaVersion { get; init; } = AlertEnvelopeJson.SchemaVersion;
 
     /// <summary>Wire-format condition type discriminator (e.g. <c>"threshold"</c>).</summary>
     [JsonPropertyName("condition_type")]
@@ -30,11 +30,12 @@ public sealed record RustValidateRequest
 }
 
 /// <summary>Response envelope for <c>nocturne_alerts_validate</c>.</summary>
-public sealed record RustValidateResponse
+public sealed record RustValidateResponse : IRustResponseEnvelope
 {
-    [JsonPropertyName("schema_version")]
+    [JsonPropertyName("schema_version"), JsonRequired]
     public int SchemaVersion { get; init; }
 
+    [JsonRequired]
     public bool Ok { get; init; }
 
     /// <summary>Error message when <see cref="Ok"/> is false.</summary>

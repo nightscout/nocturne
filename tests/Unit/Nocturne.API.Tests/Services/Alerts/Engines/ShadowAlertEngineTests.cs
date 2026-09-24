@@ -83,7 +83,7 @@ public class ShadowAlertEngineTests
     private static ShadowRuleOutcome AgreeingOutcome() => new()
     {
         Root = true,
-        Transition = "opened",
+        Transition = ExcursionTransitionType.ExcursionOpened,
         AutoResolved = false,
         PostTimers = new Dictionary<string, DateTime>(),
         PostTrackerState = "active",
@@ -117,7 +117,7 @@ public class ShadowAlertEngineTests
         var fake = new FakeShadowEvaluator(() => new ShadowRuleOutcome
         {
             Root = false,
-            Transition = "none",
+            Transition = ExcursionTransitionType.None,
             AutoResolved = false,
             PostTimers = new Dictionary<string, DateTime>(),
             PostTrackerState = "idle",
@@ -188,7 +188,7 @@ public class ShadowAlertEngineTests
         var fake = new FakeShadowEvaluator(() => new ShadowRuleOutcome
         {
             Root = false,
-            Transition = "hysteresis_started",
+            Transition = ExcursionTransitionType.HysteresisStarted,
             AutoResolved = false,
             PostTimers = new Dictionary<string, DateTime>(),
             PostTrackerState = "hysteresis",

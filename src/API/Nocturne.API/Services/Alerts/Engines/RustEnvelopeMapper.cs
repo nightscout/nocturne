@@ -217,24 +217,23 @@ internal static class RustEnvelopeMapper
     // Response mapping
     // -----------------------------------------------------------------------
 
-    public static ExcursionTransitionType TransitionFromWire(string? wire) => wire switch
+    public static ExcursionTransitionType TransitionFromWire(RustTransition wire) => wire switch
     {
-        "none" or null => ExcursionTransitionType.None,
-        "opened" => ExcursionTransitionType.ExcursionOpened,
-        "continues" => ExcursionTransitionType.ExcursionContinues,
-        "hysteresis_started" => ExcursionTransitionType.HysteresisStarted,
-        "hysteresis_resumed" => ExcursionTransitionType.HysteresisResumed,
-        "closed" => ExcursionTransitionType.ExcursionClosed,
-        _ => throw new InvalidOperationException($"Unknown transition wire value '{wire}'"),
+        RustTransition.None => ExcursionTransitionType.None,
+        RustTransition.Opened => ExcursionTransitionType.ExcursionOpened,
+        RustTransition.Continues => ExcursionTransitionType.ExcursionContinues,
+        RustTransition.HysteresisStarted => ExcursionTransitionType.HysteresisStarted,
+        RustTransition.HysteresisResumed => ExcursionTransitionType.HysteresisResumed,
+        RustTransition.Closed => ExcursionTransitionType.ExcursionClosed,
+        _ => throw new ArgumentOutOfRangeException(nameof(wire), wire, null),
     };
 
-    public static ExcursionCloseReason? CloseReasonFromWire(string? wire) => wire switch
+    public static ExcursionCloseReason CloseReasonFromWire(RustCloseReason wire) => wire switch
     {
-        null => null,
-        "hysteresis" => ExcursionCloseReason.Hysteresis,
-        "auto" => ExcursionCloseReason.AutoResolve,
-        "manual" => ExcursionCloseReason.Manual,
-        _ => throw new InvalidOperationException($"Unknown close reason wire value '{wire}'"),
+        RustCloseReason.Hysteresis => ExcursionCloseReason.Hysteresis,
+        RustCloseReason.Auto => ExcursionCloseReason.AutoResolve,
+        RustCloseReason.Manual => ExcursionCloseReason.Manual,
+        _ => throw new ArgumentOutOfRangeException(nameof(wire), wire, null),
     };
 
     /// <summary>Wire form of a managed transition type (for shadow comparison logging).</summary>
