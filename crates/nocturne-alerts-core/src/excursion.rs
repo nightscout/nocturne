@@ -1,7 +1,6 @@
-//! `ExcursionTracker` state machine: idle → confirming → active → hysteresis
-//! (`docs/alerts/engine-semantics.md` §6). Hysteresis expires against the
-//! instant the excursion entered hysteresis, persisted as
-//! `hysteresis_started_at`.
+//! The excursion state machine, idle → confirming → active → hysteresis
+//! (engine-semantics.md §6). Hysteresis expires against the instant the
+//! excursion entered it, persisted as `hysteresis_started_at`.
 
 use std::collections::HashMap;
 
@@ -108,8 +107,7 @@ impl Transition {
 pub struct TrackerState {
     pub state: TrackerStateKind,
     pub confirmation_count: i32,
-    /// Active excursion as a stable 1-based ordinal (creation order within the
-    /// tracker's lifetime), engine-independent like the corpus snapshots.
+    /// The active excursion's 1-based creation ordinal.
     pub active_excursion: Option<u32>,
     pub updated_at: DateTime<Utc>,
     /// When the active excursion entered hysteresis; set only in
@@ -143,11 +141,8 @@ impl ExcursionTracker {
         self.states.get(&rule_id)
     }
 
-    /// Restores persisted per-rule state. Used by hosts that carry tracker
-    /// state across evaluations as data (e.g. the FFI envelope).
-    ///
-    /// State persisted before `hysteresis_started_at` existed carries none
-    /// while in hysteresis; its `updated_at` is adopted once as the start.
+    /// Restores persisted per-rule state. State in hysteresis with no
+    /// `hysteresis_started_at` adopts its `updated_at` as the start.
     pub fn restore_state(&mut self, rule_id: Uuid, mut state: TrackerState) {
         if state.state == TrackerStateKind::Hysteresis && state.hysteresis_started_at.is_none() {
             state.hysteresis_started_at = Some(state.updated_at);
@@ -167,7 +162,7 @@ impl ExcursionTracker {
         self.next_ordinal = next.saturating_sub(1);
     }
 
-    /// `GetActiveExcursionIdAsync`: returns the id only in active/hysteresis.
+    /// The excursion's ordinal while it is active or in hysteresis.
     #[must_use]
     pub fn active_excursion_id(&self, rule_id: Uuid) -> Option<u32> {
         let state = self.states.get(&rule_id)?;
@@ -177,8 +172,8 @@ impl ExcursionTracker {
         }
     }
 
-    /// One evaluation = one call. `state.updated_at = now` is persisted after
-    /// every call regardless of transition.
+    /// Advances the rule's state for one evaluation; `updated_at` becomes
+    /// `now` whatever the transition.
     pub fn process_evaluation(
         &mut self,
         rule_id: Uuid,
@@ -258,8 +253,8 @@ impl ExcursionTracker {
         }
     }
 
-    /// `ForceCloseAsync`: closes from any state with an `ActiveExcursionId`;
-    /// otherwise a no-op `None` transition.
+    /// Closes the rule's excursion, if it has one, from any state (§6.2);
+    /// otherwise a `None` transition.
     pub fn force_close(
         &mut self,
         rule_id: Uuid,

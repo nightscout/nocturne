@@ -197,7 +197,7 @@ wire_enum! {
 }
 
 wire_enum! {
-    /// `System.DayOfWeek`.
+    /// Sunday first, as the host's `DayOfWeek` numbers days.
     pub enum DayOfWeek {
         Sunday = "Sunday",
         Monday = "Monday",

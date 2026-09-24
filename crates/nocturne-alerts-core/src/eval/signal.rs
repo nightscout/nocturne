@@ -1,4 +1,4 @@
-//! `signal_loss` leaf (semantics doc §5).
+//! `signal_loss` leaf (engine-semantics.md §5).
 
 use chrono::Duration;
 

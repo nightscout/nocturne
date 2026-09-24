@@ -2,7 +2,7 @@
 //! (engine-semantics.md §1.4).
 //!
 //! Two tiers share one walk. Problems whose [`Reason::fails_evaluation`] is
-//! true make evaluation throw, so parsing rejects them and the rule is
+//! true make evaluation fail, so parsing rejects them and the rule is
 //! skipped. The rest leave a rule that evaluates but can never mean what its
 //! author wrote (a node that is always false or always true); stored rules
 //! keep evaluating them, and saving a rule rejects them.

@@ -29,8 +29,8 @@ pub struct TempBasalSnapshot {
     pub started_at: DateTime<Utc>,
 }
 
-/// `OverrideSnapshot` / `PumpSuspensionSnapshot` / `DoNotDisturbSnapshot` —
-/// the evaluators only read `StartedAt`.
+/// An override, pump suspension or Do Not Disturb span; only its start is
+/// read.
 #[derive(Debug, Clone, Copy)]
 pub struct StartedSpan {
     pub started_at: DateTime<Utc>,
@@ -234,10 +234,9 @@ fn opt_dec(n: Option<&Number>, what: &str) -> Result<Option<Decimal>, String> {
     n.map(|n| dec(n, what)).transpose()
 }
 
-/// Rejects an instant outside the .NET `DateTime` domain (0001-01-01 up to,
-/// not including, 10000-01-01 UTC), which the C# host can never produce and
-/// whose elapsed-time arithmetic has no C# counterpart. The error names the
-/// field, never the value.
+/// Rejects an instant outside 0001-01-01 up to, not including, 10000-01-01
+/// UTC, the host `DateTime` domain, whose elapsed-time arithmetic has no host
+/// counterpart outside it. The error names the field, never the value.
 pub fn check_timestamp(at: DateTime<Utc>, field: &str) -> Result<DateTime<Utc>, String> {
     let min = NaiveDate::from_ymd_opt(1, 1, 1).and_then(|d| d.and_hms_opt(0, 0, 0));
     let end = NaiveDate::from_ymd_opt(10_000, 1, 1).and_then(|d| d.and_hms_opt(0, 0, 0));

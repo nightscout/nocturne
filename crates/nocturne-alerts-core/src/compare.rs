@@ -25,8 +25,7 @@ impl Unit {
     }
 }
 
-/// .NET `TimeSpan` ticks (100 ns units) for a chrono duration; `None` past
-/// the `i64` tick range, which no .NET `TimeSpan` can hold.
+/// 100 ns ticks; `None` past the `i64` range.
 fn ticks(d: TimeDelta) -> Option<i64> {
     d.num_seconds()
         .checked_mul(10_000_000)?

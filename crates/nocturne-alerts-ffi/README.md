@@ -48,9 +48,8 @@ void  nocturne_alerts_free_string(char* ptr);
 
 ## Evaluate envelope (`nocturne_alerts_evaluate`)
 
-One call = one rule evaluated for one tick, mirroring the orchestrator
-contract (`AlertOrchestrator.EvaluateRuleAsync`: root eval → leaf force-eval
-log → excursion tracker → auto-resolve). The engine is stateless between
+One call evaluates one rule for one tick: root, leaf log, excursion tracker,
+then auto-resolve (`docs/alerts/engine-semantics.md` §7). The engine is stateless between
 calls: **all** evaluation state (sustained timers, tracker) is carried in and
 out as data, and the host persists it.
 
@@ -124,8 +123,8 @@ Unknown fields (e.g. the scenario `name`) are ignored, so a corpus
 }
 ```
 
-Failure modes that are **data**, not errors (matching C# engine semantics):
-unknown leaf types, unrecognised operators or directions, containers with no
+Failure modes that are **data**, not errors: unknown leaf types,
+unrecognised operators or directions, containers with no
 child, null condition records — these evaluate `false` inside `result`.
 Envelope-level errors (`ok: false`) are reserved for unusable requests:
 malformed JSON, wrong `schema_version`, unknown root `condition_type`, unknown
@@ -133,14 +132,11 @@ malformed JSON, wrong `schema_version`, unknown root `condition_type`, unknown
 cannot be evaluated — malformed anywhere in the tree, or one of the shapes in
 `docs/alerts/engine-semantics.md` §1.4. That last error reads
 `malformed condition_params for '<type>': <reason> at '<path>'`; the host
-skips the rule and keeps its timers and tracker unchanged, exactly as the
-managed engine's per-rule catch does. An auto-resolve tree that cannot be
-evaluated never resolves and is not an error.
+skips the rule and keeps its timers and tracker unchanged. An auto-resolve
+tree that cannot be evaluated never resolves and is not an error.
 
-`result.skipped` is reserved for a root type with no evaluator (the rule is
-skipped like the orchestrator skips it: `result` is `{rule_id, skipped: true}`
-and the state passes through unchanged). Every current root type has an
-evaluator, so the engine never sets it.
+`result.skipped` belongs to the corpus shape; since a body that cannot be
+evaluated is an error envelope, this envelope never sets it.
 
 ### State threading
 
@@ -166,9 +162,8 @@ evaluator, so the engine never sets it.
 
 Evaluates a single condition tree for one instant **outside** the per-rule
 driver: no tracker, no auto-resolve, no leaf log — just the node's truth plus
-sustained-timer state threading. This is the FFI counterpart of
-`ConditionEvaluatorRegistry.EvaluateNodeAsync` and exists for the auxiliary
-evaluation scopes the backend runs against reserved path roots:
+sustained-timer state threading. It serves the auxiliary evaluation scopes a
+host runs against reserved path roots:
 smart-snooze conditions (`root: "snooze"`) and the sweep's periodic
 auto-resolve (`root: "auto_resolve"`).
 
@@ -203,23 +198,23 @@ auto-resolve (`root: "auto_resolve"`).
 }
 ```
 
-Unknown node kinds and missing leaf payloads evaluate `false` (silent-fail
-parity). A `node` that is malformed, or that cannot be evaluated
-(`docs/alerts/engine-semantics.md` §1.4, with paths under `root`), is an
-envelope error (`ok: false`); the C# callers treat it as `false`. Timers are keyed by
+Unknown node kinds and missing leaf payloads evaluate `false`. A `node` that
+is malformed, or that cannot be evaluated (`docs/alerts/engine-semantics.md`
+§1.4, with paths under `root`), is an envelope error (`ok: false`), which a
+host treats as `false`. Timers are keyed by
 the same `(rule_id, path)` identity as `evaluate`; sharing rows between the
 per-reading and sweep variants of a scope is intentional (see
 `docs/alerts/engine-semantics.md` §2.3).
 
 ## Leaf paths (`nocturne_alerts_leaf_paths`)
 
-For timer-pruning hosts (`IConditionTimerStore.PruneToPathsAsync`): given a
-condition tree, returns the canonical path of every node slot plus the
-leaf-id/path pairs (`LeafIdentity.AssignLeafIds` pre-order ids).
+For hosts that prune stale timers: given a condition tree, returns the
+condition path of every node slot and each leaf's path by leaf id
+(`docs/alerts/engine-semantics.md` §2.2–2.3).
 
-Input is either a full ConditionNode object, or a wrapper that overrides the
-root path segment (defaults to the node's verbatim `type` string, matching
-`ConditionPath.Walk`; pass `"auto_resolve"` for auto-resolve trees):
+Input is either a full condition node, or a wrapper naming the root path
+segment (default: the node's `type` as written; pass `"auto_resolve"` for
+auto-resolve trees):
 
 ```jsonc
 { "type": "composite", "composite": { … } }
@@ -247,8 +242,8 @@ Response:
 }
 ```
 
-Container nodes whose payload/child is missing are leaves (the normative
-`LeafIdentity` anomaly); a JSON-null child slot of a composite is a leaf whose
+Container nodes whose payload or child is missing are leaves (§2.2); a
+JSON-null child slot of a composite is a leaf whose
 path has an empty type segment (`composite[2].`). Pruning timers to the
 `paths` set is always safe — it is a superset of every path a timer can be
 keyed under for that tree.
@@ -372,8 +367,8 @@ Response — a recursive `tree`:
   `operator` / `minutes` / nested `conditions`/`child` — and **no `leaf_id`**.
 - **Leaves** carry `leaf_id`, the verbatim `type`, the resolved canonical
   `kind` (or `null` for an unknown/`null` slot), and decoded `params`.
-- **Leaf ids match `evaluate` exactly.** The walk is the same pre-order
-  `collect_leaves` over the same reconstituted node, so a malformed container
+- **Leaf ids match `evaluate` exactly.** Both number the same node's leaves in
+  the same pre-order walk, so a malformed container
   (missing `child`/`conditions`) collapses to a single leaf and a JSON-`null`
   composite slot is a typeless leaf — identical to the force-eval log.
 - **Operands are decoded for rendering:** enum ordinals become wire names

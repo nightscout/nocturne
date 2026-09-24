@@ -1,11 +1,9 @@
 //! Node dispatch and container evaluation (engine-semantics.md §2.4, §3).
 //!
-//! Evaluation cannot fail. The tree shapes whose evaluation is defined to
-//! fail (engine-semantics.md §1.4) are rejected by [`Node::parse`] and
-//! [`crate::model::parse_payload`] before a tree gets here; a tree built with
-//! the structural parse alone evaluates those shapes `false`. Everything else
-//! that is malformed — an unknown kind, operator or direction, a container
-//! with no child — evaluates `false` too, which `not` inverts.
+//! Evaluation cannot fail: the shapes whose evaluation fails (§1.4) are
+//! rejected when a tree is parsed. Anything else malformed, such as an unknown
+//! kind, operator or direction, or a container with no child, is `false`,
+//! which `not` inverts.
 
 mod clock;
 mod device;
@@ -142,18 +140,13 @@ pub fn eval_kind(
     }
 }
 
-/// `CompositeEvaluator`: operator lowercased, only `and`/`or` recognised,
-/// document-order short-circuit. Children skipped by short-circuit are not
-/// evaluated at all (observable through sustained timers).
+/// `and` / `or` short-circuit in document order; a child the short-circuit
+/// skips is not evaluated at all, which its sustained timers show. An absent
+/// or empty list, or an unknown operator, is false.
 fn composite(p: &crate::model::CompositePayload, path: &str, env: &mut Env) -> bool {
-    // C# checks `condition is null || condition.Conditions.Count == 0` first:
-    // a null list NREs (observed false), an empty list is false.
-    let Some(conditions) = &p.conditions else {
+    let Some(conditions) = p.conditions.as_deref().filter(|c| !c.is_empty()) else {
         return false;
     };
-    if conditions.is_empty() {
-        return false;
-    }
     match p.operator.value {
         Some(CompositeOp::And) => {
             for (i, child) in conditions.iter().enumerate() {
@@ -182,8 +175,8 @@ fn eval_composite_child(child: Option<&Node>, index: usize, path: &str, env: &mu
     eval_node(Some(node), &node_child_path(path, index, Some(node)), env)
 }
 
-/// `NotEvaluator`: missing child → false (not true). Otherwise inverts the
-/// child — so `not` over an unknown child kind yields true. **[normative]**
+/// A missing child is false, not true; otherwise the child inverted, so
+/// `not` over an unknown kind is true.
 fn not(p: &crate::model::NotPayload, path: &str, env: &mut Env) -> bool {
     let Some(child) = &p.child else {
         return false;
