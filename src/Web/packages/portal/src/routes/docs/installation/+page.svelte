@@ -1,16 +1,7 @@
 <script lang="ts">
   import { resolve } from "$app/paths";
   import { Button } from "@nocturne/ui/ui/button";
-  import {
-    ArrowRight,
-    Cloud,
-    Database,
-    Globe,
-    Network,
-    ChevronDown,
-    ExternalLink,
-    MapPin,
-  } from "@lucide/svelte";
+  import { ArrowRight, ChevronDown, ExternalLink, MapPin } from "@lucide/svelte";
   import SystemRequirements from "$lib/components/docs/SystemRequirements.svelte";
   import PikaPodsVoteCard from "$lib/components/PikaPodsVoteCard.svelte";
 
@@ -24,6 +15,36 @@
     }
     return shuffled;
   }
+
+  const PLATFORMS = [
+    {
+      href: resolve("/docs/installation/docker-compose"),
+      logo: "/logos/docker-compose.png",
+      title: "Docker Compose",
+      desc: "Deploy directly on any Linux server, VPS, or Raspberry Pi using Docker Compose from the command line.",
+    },
+    {
+      href: resolve("/docs/installation/portainer"),
+      logo: "/logos/portainer.jpg",
+      title: "Portainer",
+      desc: "Deploy using the Portainer web interface. Great for managing your stack visually without SSH access.",
+    },
+    {
+      href: resolve("/docs/installation/oracle-cloud"),
+      title: "Oracle Cloud",
+      desc: "One command in the browser sets up a free server, HTTPS and Nocturne. No SSH or Docker knowledge needed.",
+    },
+    {
+      href: resolve("/docs/installation/byo-postgres"),
+      title: "Bring Your Own PostgreSQL",
+      desc: "Use a managed PostgreSQL service (RDS, Cloud SQL, Supabase, Neon) or an existing shared database instance. Requires a one-time role bootstrap.",
+    },
+    {
+      href: resolve("/docs/installation/reverse-proxy"),
+      title: "Bring Your Own Reverse Proxy",
+      desc: "Terminate TLS with nginx, Traefik, or an existing edge instead of the bundled Caddy. Covers the forwarded headers Nocturne requires.",
+    },
+  ];
 
   const managedProviders = shuffle([
     {
@@ -48,213 +69,60 @@
   <SystemRequirements />
 
   <h2 class="text-2xl font-bold mt-8 mb-4">Choose Your Platform</h2>
-  <div class="grid gap-4 not-prose">
-    <a
-      href={resolve("/docs/installation/docker-compose")}
-      class="p-6 rounded-xl border border-border/60 bg-card/50 hover:bg-card hover:border-primary/30 transition-colors group"
-    >
-      <div class="flex items-start gap-4">
-        <div
-          class="w-12 h-12 rounded-lg bg-docs-install/15 flex items-center justify-center shrink-0"
-        >
-          <img
-            src="/logos/docker-compose.png"
-            alt="Docker Compose"
-            class="w-7 h-7 object-contain"
-          />
-        </div>
-        <div class="flex-1">
-          <h3
-            class="text-lg font-semibold mb-1 group-hover:text-primary transition-colors"
-          >
-            Docker Compose
-          </h3>
-          <p class="text-sm text-muted-foreground">
-            Deploy directly on any Linux server, VPS, or Raspberry Pi using
-            Docker Compose from the command line.
-          </p>
-        </div>
-        <ArrowRight
-          class="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors mt-1"
-        />
-      </div>
-    </a>
+  <ul class="not-prose m-0 p-0 list-none border-t border-border">
+    {#each PLATFORMS as platform (platform.title)}
+      <li class="border-b border-border">
+        <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- platform.href is resolve()d in PLATFORMS -->
+        <a href={platform.href} class="group flex items-start gap-4 py-5 no-underline text-inherit">
+          {#if platform.logo}
+            <img src={platform.logo} alt="" class="size-8 rounded-md object-contain shrink-0 mt-0.5" />
+          {:else}
+            <span class="size-8 shrink-0" aria-hidden="true"></span>
+          {/if}
+          <div class="flex-1">
+            <h3 class="text-lg font-semibold text-foreground m-0 mb-1 group-hover:underline underline-offset-4">{platform.title}</h3>
+            <p class="text-sm text-muted-foreground m-0">{platform.desc}</p>
+          </div>
+          <ArrowRight class="size-5 mt-1 text-muted-foreground group-hover:text-foreground transition-colors" aria-hidden="true" />
+        </a>
+      </li>
+    {/each}
+  </ul>
+  <p class="text-sm text-muted-foreground mt-4 mb-0">
+    Guides for GCP, Azure, Heroku, and other cloud platforms are coming soon.
+  </p>
 
-    <a
-      href={resolve("/docs/installation/portainer")}
-      class="p-6 rounded-xl border border-border/60 bg-card/50 hover:bg-card hover:border-primary/30 transition-colors group"
-    >
-      <div class="flex items-start gap-4">
-        <div
-          class="w-12 h-12 rounded-lg flex items-center justify-center shrink-0 overflow-hidden"
-        >
-          <img
-            src="/logos/portainer.jpg"
-            alt="Portainer"
-            class="w-full h-full object-cover"
-          />
-        </div>
-        <div class="flex-1">
-          <h3
-            class="text-lg font-semibold mb-1 group-hover:text-primary transition-colors"
-          >
-            Portainer
-          </h3>
-          <p class="text-sm text-muted-foreground">
-            Deploy using the Portainer web interface. Great for managing your
-            stack visually without SSH access.
-          </p>
-        </div>
-        <ArrowRight
-          class="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors mt-1"
-        />
-      </div>
-    </a>
-
-    <a
-      href={resolve("/docs/installation/oracle-cloud")}
-      class="p-6 rounded-xl border border-border/60 bg-card/50 hover:bg-card hover:border-primary/30 transition-colors group"
-    >
-      <div class="flex items-start gap-4">
-        <div
-          class="w-12 h-12 rounded-lg bg-docs-oracle/15 flex items-center justify-center shrink-0"
-        >
-          <Cloud class="w-7 h-7 text-docs-oracle" />
-        </div>
-        <div class="flex-1">
-          <h3
-            class="text-lg font-semibold mb-1 group-hover:text-primary transition-colors"
-          >
-            Oracle Cloud
-          </h3>
-          <p class="text-sm text-muted-foreground">
-            One command in the browser sets up a free server, HTTPS and Nocturne.
-            No SSH or Docker knowledge needed.
-          </p>
-        </div>
-        <ArrowRight
-          class="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors mt-1"
-        />
-      </div>
-    </a>
-
-    <a
-      href={resolve("/docs/installation/byo-postgres")}
-      class="p-6 rounded-xl border border-border/60 bg-card/50 hover:bg-card hover:border-primary/30 transition-colors group"
-    >
-      <div class="flex items-start gap-4">
-        <div
-          class="w-12 h-12 rounded-lg bg-docs-postgres/15 flex items-center justify-center shrink-0"
-        >
-          <Database class="w-6 h-6 text-docs-postgres" />
-        </div>
-        <div class="flex-1">
-          <h3
-            class="text-lg font-semibold mb-1 group-hover:text-primary transition-colors"
-          >
-            Bring Your Own PostgreSQL
-          </h3>
-          <p class="text-sm text-muted-foreground">
-            Use a managed PostgreSQL service (RDS, Cloud SQL, Supabase, Neon) or
-            an existing shared database instance. Requires a one-time role
-            bootstrap.
-          </p>
-        </div>
-        <ArrowRight
-          class="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors mt-1"
-        />
-      </div>
-    </a>
-
-    <a
-      href={resolve("/docs/installation/reverse-proxy")}
-      class="p-6 rounded-xl border border-border/60 bg-card/50 hover:bg-card hover:border-primary/30 transition-colors group"
-    >
-      <div class="flex items-start gap-4">
-        <div
-          class="w-12 h-12 rounded-lg bg-docs-proxy/15 flex items-center justify-center shrink-0"
-        >
-          <Network class="w-6 h-6 text-docs-proxy" />
-        </div>
-        <div class="flex-1">
-          <h3
-            class="text-lg font-semibold mb-1 group-hover:text-primary transition-colors"
-          >
-            Bring Your Own Reverse Proxy
-          </h3>
-          <p class="text-sm text-muted-foreground">
-            Terminate TLS with nginx, Traefik, or an existing edge instead of the
-            bundled Caddy. Covers the forwarded headers Nocturne requires.
-          </p>
-        </div>
-        <ArrowRight
-          class="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors mt-1"
-        />
-      </div>
-    </a>
-
-    <div class="p-6 rounded-xl border border-border/60 bg-card/30 opacity-60">
-      <div class="flex items-start gap-4">
-        <div
-          class="w-12 h-12 rounded-lg bg-docs-cloud/15 flex items-center justify-center shrink-0"
-        >
-          <Cloud class="w-6 h-6 text-docs-cloud" />
-        </div>
-        <div class="flex-1">
-          <h3 class="text-lg font-semibold mb-1">Cloud Providers</h3>
-          <p class="text-sm text-muted-foreground">
-            Guides for GCP, Azure, Heroku, and other cloud platforms are coming
-            soon.
-          </p>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <h2 class="text-2xl font-bold mt-8 mb-4">Managed Instances</h2>
+  <h2 class="text-2xl font-bold mt-12 mb-4">Managed Instances</h2>
   <p class="text-muted-foreground mb-4">
     Don't want to self-host? These Nocturne-as-a-Service providers handle the
     infrastructure so you can focus on your diabetes management.
   </p>
-  <div class="grid gap-4 not-prose mb-4">
+  <ul class="not-prose m-0 mb-4 p-0 list-none border-t border-border">
     {#each managedProviders as provider (provider.url)}
-      <a
-        href={provider.url}
-        target="_blank"
-        rel="external noopener noreferrer"
-        class="p-6 rounded-xl border border-border/60 bg-card/50 hover:bg-card hover:border-primary/30 transition-colors group"
-      >
-        <div class="flex items-start gap-4">
-          <div
-            class="w-12 h-12 rounded-lg bg-docs-managed/15 flex items-center justify-center shrink-0"
-          >
-            <Globe class="w-6 h-6 text-docs-managed" />
-          </div>
+      <li class="border-b border-border">
+        <a
+          href={provider.url}
+          target="_blank"
+          rel="external noopener noreferrer"
+          class="group flex items-start gap-4 py-5 no-underline text-inherit"
+        >
           <div class="flex-1">
-            <h3
-              class="text-lg font-semibold mb-1 group-hover:text-primary transition-colors"
-            >
-              {provider.name}
-            </h3>
-            <p class="text-sm text-muted-foreground mb-2">
-              {provider.blurb}
-            </p>
-            <div class="flex items-center gap-4 text-xs text-muted-foreground">
+            <h3 class="text-lg font-semibold text-foreground m-0 mb-1 group-hover:underline underline-offset-4">{provider.name}</h3>
+            <p class="text-sm text-muted-foreground m-0 mb-2">{provider.blurb}</p>
+            <p class="flex items-center gap-4 text-xs text-muted-foreground m-0">
               <span class="flex items-center gap-1">
-                <MapPin class="w-3 h-3" />
+                <MapPin class="size-3" aria-hidden="true" />
                 {provider.location}
               </span>
               <span>{provider.license} license</span>
-            </div>
+            </p>
           </div>
-          <ExternalLink
-            class="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors mt-1"
-          />
-        </div>
-      </a>
+          <ExternalLink class="size-5 mt-1 text-muted-foreground group-hover:text-foreground transition-colors" aria-hidden="true" />
+        </a>
+      </li>
     {/each}
-        <PikaPodsVoteCard />
-  </div>
+    <li class="border-b border-border"><PikaPodsVoteCard /></li>
+  </ul>
 
   <Button
     variant="subtle"
@@ -269,9 +137,7 @@
     Want to list your service here?
   </Button>
   {#if showListingRequirements}
-    <div
-      class="mt-3 p-4 rounded-lg border border-border/60 bg-card/30 text-sm text-muted-foreground"
-    >
+    <div class="mt-3 text-sm text-muted-foreground">
       <p class="mb-3">
         We welcome Nocturne-as-a-Service providers. To request a listing, please
         provide the following:

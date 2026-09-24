@@ -182,7 +182,7 @@ Defined in `packages/ui/src/styles/nocturne-theme.css`. Each token family has ex
 The portal renders dark only (`app.html` pins `.dark`), so the `brand` and `sunken` values in the frontmatter are their dark values.
 - **`--brand`**: the portal's accent. It is a separate token from `--glucose-in-range` because theme packs can repoint that one.
 - **`--sunken`**: recessed terminals and demo canvases.
-- **`--feature-*`, `--contribute-*`, `--docs-*`**: identity-only accent families.
+- **`--feature-*`**: the identity accent of each headline feature, used only for its check marks and the demos.
 - **`--highlight`**: carries a per-item accent.
 
 ### Named Rules

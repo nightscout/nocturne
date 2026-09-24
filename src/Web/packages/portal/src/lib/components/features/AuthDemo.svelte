@@ -7,13 +7,9 @@
     class="rounded-xl border border-white/10 bg-sunken p-6 flex flex-col gap-4 overflow-hidden relative h-(--demo-h)"
     style:--demo-h="{height}px"
 >
-    <!-- Soft glow -->
-    <div class="absolute -top-8 -right-8 size-56 rounded-full pointer-events-none bg-radial from-glucose-in-range/18 to-transparent to-60%"
-         aria-hidden="true"></div>
-
     <!-- Header -->
     <div class="relative">
-        <div class="font-mono text-sm tracking-wider uppercase text-glucose-in-range font-bold mb-1.5">
+        <div class="text-lg font-semibold text-foreground mb-1">
             Sign in to your Nocturne
         </div>
         <div class="text-sm text-muted-foreground">No password to forget, leak, or reset.</div>
@@ -35,7 +31,7 @@
     </button>
 
     <!-- Divider -->
-    <div class="flex items-center gap-3 font-mono text-xs text-muted-foreground/60 tracking-wider uppercase relative">
+    <div class="flex items-center gap-3 text-xs text-muted-foreground relative">
         <span class="flex-1 h-px bg-white/10"></span>
         <span>or</span>
         <span class="flex-1 h-px bg-white/10"></span>
@@ -69,7 +65,7 @@
             { label: "Open source · auditable code",  icon: "check" },
         ] as b (b.icon)}
             <div class="flex items-center gap-2.5 text-sm text-foreground/80">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" class="stroke-glucose-in-range"
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" class="stroke-brand"
                      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     {#if b.icon === "shield"}
                         <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>

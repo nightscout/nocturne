@@ -1,5 +1,4 @@
 <script lang="ts">
-    import { Cloud } from "@lucide/svelte";
     import Callout from "@nocturne/cms/components/Callout.svelte";
     import NextSteps from "$lib/components/docs/NextSteps.svelte";
     import SupportNocturne from "$lib/components/docs/SupportNocturne.svelte";
@@ -11,12 +10,7 @@
 </script>
 
 <div class="max-w-3xl">
-    <div class="flex items-center gap-4 mb-4">
-        <div class="w-12 h-12 rounded-lg bg-docs-oracle/15 flex items-center justify-center shrink-0">
-            <Cloud class="w-7 h-7 text-docs-oracle" />
-        </div>
-        <h1 class="text-4xl font-bold tracking-tight">Oracle Cloud</h1>
-    </div>
+    <h1 class="text-4xl font-bold tracking-tight mb-4">Oracle Cloud</h1>
     <p class="text-lg text-muted-foreground mb-8">
         Run Nocturne on Oracle Cloud's Always Free tier. One command in the browser sets
         up the server, the network, HTTPS and Nocturne itself. No SSH or Docker knowledge

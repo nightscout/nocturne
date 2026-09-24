@@ -1,6 +1,6 @@
 <script lang="ts">
     import { resolve } from "$app/paths";
-    import { Github, Heart } from "@lucide/svelte";
+    import { Github } from "@lucide/svelte";
     import LanguageSelector from "./LanguageSelector.svelte";
     import { track } from "$lib/analytics";
 </script>
@@ -146,10 +146,7 @@
             </p>
             <div class="flex items-center gap-4">
                 <LanguageSelector compact />
-                <p class="text-sm text-muted-foreground flex items-center gap-1.5">
-                    Made with <Heart class="w-4 h-4 text-contribute-donate fill-contribute-donate" /> by the
-                    diabetes community
-                </p>
+                <p class="text-sm text-muted-foreground">Built by the diabetes community</p>
             </div>
         </div>
     </div>

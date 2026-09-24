@@ -62,7 +62,7 @@
                     <span class="text-sm text-muted-foreground">/ month</span>
                 </div>
                 <div
-                    class="mt-1 text-xs font-semibold tracking-widest uppercase {tier.featured
+                    class="mt-1 text-sm font-semibold {tier.featured
                         ? 'text-brand'
                         : 'text-muted-foreground'}"
                 >

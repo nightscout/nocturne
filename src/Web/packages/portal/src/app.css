@@ -20,26 +20,6 @@
   --feature-realtime: oklch(0.666 0.179 58.318);
   --feature-open-source: oklch(0.488 0.243 264.376);
 
-  /* A way to help on /get-involved; its GitHub label takes the same hue. */
-  --contribute-translate: oklch(0.55 0.16 250);
-  --contribute-support: oklch(0.52 0.17 280);
-  --contribute-donate: oklch(0.55 0.2 18);
-  --contribute-docs: oklch(0.55 0.15 160);
-  --contribute-peer: oklch(0.58 0.15 70);
-  --contribute-spread: oklch(0.58 0.16 40);
-  --contribute-sponsor: oklch(0.54 0.19 330);
-  --contribute-data: oklch(0.52 0.13 200);
-
-  /* A docs link card's icon tile. Identity only, like the app's report-* accents. */
-  --docs-quick-start: oklch(0.627 0.194 149.214);
-  --docs-install: oklch(0.546 0.245 262.881);
-  --docs-configure: oklch(0.558 0.288 302.321);
-  --docs-api: oklch(0.646 0.222 41.116);
-  --docs-oracle: oklch(0.577 0.245 27.325);
-  --docs-postgres: oklch(0.596 0.145 163.225);
-  --docs-proxy: oklch(0.588 0.158 241.966);
-  --docs-cloud: oklch(0.558 0.288 302.321);
-  --docs-managed: oklch(0.666 0.179 58.318);
 }
 
 .dark {
@@ -54,24 +34,6 @@
   --feature-realtime: oklch(0.769 0.188 70);
   --feature-open-source: oklch(0.488 0.243 264.376);
 
-  --contribute-translate: oklch(0.65 0.16 250);
-  --contribute-support: oklch(0.62 0.17 280);
-  --contribute-donate: oklch(0.62 0.2 18);
-  --contribute-docs: oklch(0.65 0.15 160);
-  --contribute-peer: oklch(0.66 0.15 70);
-  --contribute-spread: oklch(0.68 0.16 40);
-  --contribute-sponsor: oklch(0.64 0.19 330);
-  --contribute-data: oklch(0.6 0.13 200);
-
-  --docs-quick-start: oklch(0.723 0.219 149.579);
-  --docs-install: oklch(0.623 0.214 259.815);
-  --docs-configure: oklch(0.627 0.265 303.9);
-  --docs-api: oklch(0.705 0.213 47.604);
-  --docs-oracle: oklch(0.577 0.245 27.325);
-  --docs-postgres: oklch(0.696 0.17 162.48);
-  --docs-proxy: oklch(0.685 0.169 237.323);
-  --docs-cloud: oklch(0.627 0.265 303.9);
-  --docs-managed: oklch(0.769 0.188 70.08);
 }
 
 @theme inline {
@@ -108,21 +70,4 @@
   --color-feature-privacy: var(--feature-privacy);
   --color-feature-realtime: var(--feature-realtime);
   --color-feature-open-source: var(--feature-open-source);
-  --color-contribute-translate: var(--contribute-translate);
-  --color-contribute-support: var(--contribute-support);
-  --color-contribute-donate: var(--contribute-donate);
-  --color-contribute-docs: var(--contribute-docs);
-  --color-contribute-peer: var(--contribute-peer);
-  --color-contribute-spread: var(--contribute-spread);
-  --color-contribute-sponsor: var(--contribute-sponsor);
-  --color-contribute-data: var(--contribute-data);
-  --color-docs-quick-start: var(--docs-quick-start);
-  --color-docs-install: var(--docs-install);
-  --color-docs-configure: var(--docs-configure);
-  --color-docs-api: var(--docs-api);
-  --color-docs-oracle: var(--docs-oracle);
-  --color-docs-postgres: var(--docs-postgres);
-  --color-docs-proxy: var(--docs-proxy);
-  --color-docs-cloud: var(--docs-cloud);
-  --color-docs-managed: var(--docs-managed);
 }

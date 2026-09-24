@@ -1,17 +1,11 @@
 <script lang="ts">
-    import { Database } from "@lucide/svelte";
     import CodeBlock from "$lib/components/docs/CodeBlock.svelte";
     import SupportNocturne from "$lib/components/docs/SupportNocturne.svelte";
     import bootstrapSql from "$lib/release/bootstrap-roles.sql?raw";
 </script>
 
 <div class="max-w-3xl">
-    <div class="flex items-center gap-3 mb-4">
-        <div class="w-10 h-10 rounded-lg bg-docs-postgres/15 flex items-center justify-center">
-            <Database class="w-5 h-5 text-docs-postgres" />
-        </div>
-        <h1 class="text-4xl font-bold tracking-tight">Bring Your Own PostgreSQL</h1>
-    </div>
+    <h1 class="text-4xl font-bold tracking-tight mb-4">Bring Your Own PostgreSQL</h1>
 
     <p class="text-lg text-muted-foreground mb-8">
         For deployments that use a managed PostgreSQL service or an existing shared database server

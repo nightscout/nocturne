@@ -104,33 +104,22 @@
 </script>
 
 <div class="max-w-[900px] mx-auto px-6">
-    <!-- Page heading -->
-    <div class="pt-20 pb-15 border-b border-border">
-        <div class="font-mono text-xs tracking-eyebrow uppercase text-muted-foreground mb-4">FAQ</div>
-        <h1 class="text-headline font-bold text-foreground m-0 mb-4">
-            Common questions.<br />
-            <em class="text-glucose-in-range">Straight answers.</em>
-        </h1>
-        <p class="text-base leading-relaxed text-muted-foreground max-w-[520px] m-0">
+    <div class="pt-20 pb-15">
+        <h1 class="text-headline font-bold text-foreground m-0 mb-4">Frequently asked questions</h1>
+        <p class="text-lead text-muted-foreground max-w-[560px] m-0">
             Answers to frequent questions about Nocturne, installation, migration,
             and the technology stack.
         </p>
     </div>
 
-    <!-- FAQ Categories -->
     <div class="flex flex-col">
         {#each faqCategories as category, ci (ci)}
             <section class="py-16 border-t border-border">
-                <div class="mb-8">
-                    <div class="font-brand text-xs font-bold tracking-eyebrow uppercase text-muted-foreground">0{ci + 1} &middot; {category.title}</div>
-                </div>
+                <h2 class="text-subsection font-bold text-foreground m-0 mb-6">{category.title}</h2>
 
                 <Accordion.Root type="multiple">
                     {#each category.questions as faq, index (index)}
-                        <!-- eslint-disable-next-line shadcn/no-restyle -- the only accordion drawn as separate cards; an AccordionItem variant would serve this one call site -->
-                        <Accordion.Item class="mb-3 rounded-lg border border-border/60 bg-card/50 px-6 overflow-hidden"
-                            value="{category.title}-{index}"
-                        >
+                        <Accordion.Item value="{category.title}-{index}">
                             <Accordion.Trigger class="w-full">
                                 {faq.question}
                             </Accordion.Trigger>
@@ -144,10 +133,9 @@
         {/each}
     </div>
 
-    <!-- Still Have Questions -->
     <section class="border-t border-border py-20">
-        <div class="font-mono text-xs tracking-eyebrow uppercase text-muted-foreground">Still have questions?</div>
-        <h2 class="text-subsection font-bold text-foreground mt-3">Check the docs or ask the community.</h2>
+        <h2 class="text-subsection font-bold text-foreground m-0">Still have questions?</h2>
+        <p class="text-muted-foreground m-0 mt-3">Check the docs or ask the community.</p>
         <div class="flex flex-col sm:flex-row gap-4 mt-6">
             <Button href="/docs" size="lg">
                 Browse documentation

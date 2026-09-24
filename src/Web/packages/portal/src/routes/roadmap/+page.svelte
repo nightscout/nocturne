@@ -46,16 +46,11 @@
 </script>
 
 <div class="max-w-[900px] mx-auto px-6">
-    <!-- Page heading -->
-    <div class="pt-20 pb-15 border-b border-border">
-        <div class="font-mono text-xs tracking-eyebrow uppercase text-muted-foreground mb-4">Roadmap</div>
-        <h1 class="text-headline font-bold text-foreground m-0 mb-4">
-            What's next.<br />
-            <em class="text-glucose-in-range">What's done.</em>
-        </h1>
-        <p class="text-base leading-relaxed text-muted-foreground max-w-[520px] m-0 mb-6">
-            Track Nocturne's development milestones. See what's shipping,
-            what's in progress, and what's already shipped.
+    <div class="pt-20 pb-15">
+        <h1 class="text-headline font-bold text-foreground m-0 mb-4">Roadmap</h1>
+        <p class="text-lead text-muted-foreground max-w-[560px] m-0 mb-6">
+            Nocturne's development milestones, live from GitHub: what's being
+            built now, what's next, and what has already shipped.
         </p>
         <div class="flex gap-3 items-center">
             <Button
@@ -87,30 +82,20 @@
         </div>
     {:else if error}
         <div class="flex flex-col items-center justify-center gap-3 py-25 text-muted-foreground text-sm">
-            <div
-                class="size-10 rounded-full flex items-center justify-center text-destructive bg-destructive/15"
-            >
-                <AlertCircle class="w-5 h-5" />
-            </div>
+            <AlertCircle class="size-5 text-destructive" aria-hidden="true" />
             <p class="font-semibold text-foreground m-0">Failed to load roadmap</p>
             <p class="m-0 text-sm">{error}</p>
             <Button onclick={loadRoadmap} variant="outline" size="sm">Try again</Button>
         </div>
     {:else if roadmapData.length === 0}
         <div class="flex flex-col items-center justify-center gap-3 py-25 text-muted-foreground text-sm">
-            <div class="size-10 rounded-full bg-muted flex items-center justify-center">
-                <Milestone class="w-5 h-5 text-muted-foreground" />
-            </div>
+            <Milestone class="size-5" aria-hidden="true" />
             <p class="m-0 text-sm">No milestones found.</p>
         </div>
     {:else}
-        <!-- In Progress -->
         {#if grouped.inProgress.length > 0}
             <section class="py-16 border-t border-border">
-                <div class="mb-8">
-                    <div class="font-brand text-xs font-bold tracking-eyebrow uppercase text-muted-foreground mb-2.5">01 &middot; In Progress</div>
-                    <h2 class="text-subsection font-bold text-foreground m-0">Currently <em class="text-glucose-in-range">building.</em></h2>
-                </div>
+                <h2 class="text-subsection font-bold text-foreground m-0 mb-8">In progress</h2>
                 <div class="grid gap-4">
                     {#each grouped.inProgress as milestone (milestone.id)}
                         <MilestoneCard {milestone} status={getMilestoneStatus(milestone)} />
@@ -119,13 +104,9 @@
             </section>
         {/if}
 
-        <!-- Upcoming -->
         {#if grouped.upcoming.length > 0}
             <section class="py-16 border-t border-border">
-                <div class="mb-8">
-                    <div class="font-brand text-xs font-bold tracking-eyebrow uppercase text-muted-foreground mb-2.5">0{grouped.inProgress.length > 0 ? 2 : 1} &middot; Upcoming</div>
-                    <h2 class="text-subsection font-bold text-foreground m-0">On the <em class="text-glucose-in-range">horizon.</em></h2>
-                </div>
+                <h2 class="text-subsection font-bold text-foreground m-0 mb-8">Upcoming</h2>
                 <div class="grid gap-4">
                     {#each grouped.upcoming as milestone (milestone.id)}
                         <MilestoneCard {milestone} status={getMilestoneStatus(milestone)} />
@@ -134,13 +115,9 @@
             </section>
         {/if}
 
-        <!-- Completed -->
         {#if grouped.completed.length > 0}
             <section class="py-16 border-t border-border">
-                <div class="mb-8">
-                    <div class="font-brand text-xs font-bold tracking-eyebrow uppercase text-muted-foreground mb-2.5">0{[grouped.inProgress.length > 0, grouped.upcoming.length > 0].filter(Boolean).length + 1} &middot; Completed</div>
-                    <h2 class="text-subsection font-bold text-foreground m-0">Already <em class="text-glucose-in-range">shipped.</em></h2>
-                </div>
+                <h2 class="text-subsection font-bold text-foreground m-0 mb-8">Completed</h2>
                 <div class="grid gap-4">
                     {#each grouped.completed as milestone (milestone.id)}
                         <MilestoneCard {milestone} status={getMilestoneStatus(milestone)} />

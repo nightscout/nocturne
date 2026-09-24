@@ -236,7 +236,7 @@
 
         <!-- Rules sidebar -->
         <div class="shrink-0 overflow-y-auto border-b border-white/8 p-2" data-testid="rule-sidebar">
-            <div class="font-mono text-2xs tracking-widest uppercase text-muted-foreground/60 px-1 pb-1.5">Rules</div>
+            <div class="text-xs font-medium text-muted-foreground px-1 pb-1.5">Rules</div>
             {#each ruleStates as r (r.id)}
                 <Collapsible.Root open variant="outline" class="mb-1.5">
                     <div class="flex items-center gap-2 px-2 py-1.5 text-sm">
@@ -252,7 +252,7 @@
                                 aria-hidden="true"
                             ></span>
                             <span class="flex-1 min-w-0 truncate">{r.name}</span>
-                            <span class="shrink-0 rounded px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-wide {severityChip(r.severity)}">
+                            <span class="shrink-0 rounded px-1.5 py-0.5 text-2xs font-semibold {severityChip(r.severity)}">
                                 {r.disabled ? "Off" : "On"}
                             </span>
                         </Collapsible.Trigger>
@@ -371,7 +371,7 @@
                                   opacity={dimmed ? 0.25 : 1} />
                         {/each}
                     </svg>
-                    <span class="font-mono text-xs text-muted-foreground tabular-nums shrink-0 w-[68px] text-right">
+                    <span class="text-xs text-muted-foreground tabular-nums shrink-0 w-[68px] text-right">
                         {formatTime(currentDate)}
                     </span>
                 </div>
@@ -389,7 +389,7 @@
                         <div class="flex items-center gap-3 px-3 py-2">
                             <span class="size-2 rounded-full shrink-0 bg-(--severity)"
                                   style:--severity={isResolved ? "var(--glucose-in-range)" : severityVar(ev.severity)}></span>
-                            <span class="font-mono text-xs text-muted-foreground tabular-nums w-12 shrink-0">
+                            <span class="text-xs text-muted-foreground tabular-nums w-12 shrink-0">
                                 {formatTime(new Date(ev.tMs))}
                             </span>
                             <span class="shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold {isResolved

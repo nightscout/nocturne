@@ -95,13 +95,13 @@
     />
     {#if !userTyping}
       <span
-        class="cursor-blink ml-0.5 inline-block w-0.5 h-5 bg-glucose-in-range align-middle pointer-events-none"
+        class="cursor-blink ml-0.5 inline-block w-0.5 h-5 bg-brand align-middle pointer-events-none"
         aria-hidden="true"
       ></span>
     {/if}
-    <span class="font-mono text-xs shrink-0 flex items-center gap-1.5">
+    <span class="text-xs tabular-nums shrink-0 flex items-center gap-1.5">
       {#if query}
-        <span class="text-glucose-in-range px-2.5 py-1 rounded-full bg-glucose-in-range/15 border border-glucose-in-range/30">
+        <span class="text-brand px-2.5 py-1 rounded-full bg-brand/15 border border-brand/30">
           {activeMatches} match{activeMatches === 1 ? "" : "es"}
         </span>
         {#if comingSoonMatches > 0}
@@ -110,7 +110,7 @@
           </span>
         {/if}
       {:else}
-        <span class="text-glucose-in-range px-2.5 py-1 rounded-full bg-glucose-in-range/15 border border-glucose-in-range/30">
+        <span class="text-brand px-2.5 py-1 rounded-full bg-brand/15 border border-brand/30">
           {activeMatches} live
         </span>
         <span class="text-muted-foreground px-2.5 py-1 rounded-full bg-muted/30 border border-border">
@@ -135,7 +135,7 @@
                     {c.comingSoon
           ? 'opacity-50 bg-white/2 border-white/4 cursor-pointer hover:opacity-70'
           : isMatch
-            ? 'bg-glucose-in-range/14 border-glucose-in-range/50'
+            ? 'bg-brand/14 border-brand/50'
             : 'bg-white/4 border-white/6'}"
       >
         <img
@@ -150,7 +150,7 @@
         {#if c.comingSoon}
           <Clock class="size-3.5 text-muted-foreground shrink-0 ml-auto" />
         {:else if isMatch}
-          <Check class="size-3.5 text-glucose-in-range shrink-0 ml-auto" />
+          <Check class="size-3.5 text-brand shrink-0 ml-auto" />
         {/if}
       </svelte:element>
     {/each}
