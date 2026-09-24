@@ -68,8 +68,9 @@ internal sealed class RustShadowRuleEvaluator(AlertEngineErrors errors) : IShado
                 RustEnvelopeMapper.BuildContext(context),
                 now,
                 RustEnvelopeMapper.BuildTimers(timers),
-                RustEnvelopeMapper.BuildTracker(trackerState));
-            return (response, RustAlertEngine.GetRuleResult(response));
+                RustEnvelopeMapper.BuildTracker(trackerState),
+                includeLeaves: false);
+            return (response, RustAlertEngine.GetRuleResult(response, leavesRequested: false));
         });
 
         return Task.FromResult(new ShadowRuleOutcome

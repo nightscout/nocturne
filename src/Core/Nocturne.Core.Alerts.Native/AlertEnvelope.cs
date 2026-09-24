@@ -146,6 +146,13 @@ public sealed record RustEvaluateRequest
     public Dictionary<string, DateTime>? Timers { get; init; }
 
     public RustTrackerState? Tracker { get; init; }
+
+    /// <summary>
+    /// Whether <c>result.leaves</c> is produced. Every leaf is otherwise evaluated alone on every
+    /// call, so a caller that does not read the leaves sends false.
+    /// </summary>
+    [JsonPropertyName("include_leaves")]
+    public bool IncludeLeaves { get; init; } = true;
 }
 
 /// <summary>The fields every nocturne_alerts response envelope carries, success or error.</summary>
@@ -200,7 +207,10 @@ public sealed record RustRuleResult
     /// <summary>Root condition truth; present on every result that was not skipped.</summary>
     public bool? Root { get; init; }
 
-    /// <summary>Per-leaf force-eval truths, ascending by leaf id; present on every result that was not skipped.</summary>
+    /// <summary>
+    /// Per-leaf force-eval truths, ascending by leaf id; present on every result that was not
+    /// skipped when the request set <see cref="RustEvaluateRequest.IncludeLeaves"/>.
+    /// </summary>
     public List<RustLeafValue>? Leaves { get; init; }
 
     /// <summary>Tracker transition; present on every result that was not skipped.</summary>

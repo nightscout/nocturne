@@ -73,8 +73,9 @@ internal sealed class RustBackedAlertEngine(
                 RustEnvelopeMapper.BuildContext(context),
                 now,
                 timers,
-                RustEnvelopeMapper.BuildTracker(trackerState));
-            return (response, RustAlertEngine.GetRuleResult(response));
+                RustEnvelopeMapper.BuildTracker(trackerState),
+                options.IncludeLeafValues);
+            return (response, RustAlertEngine.GetRuleResult(response, options.IncludeLeafValues));
         });
 
         if (result.Skipped)

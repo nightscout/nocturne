@@ -52,6 +52,15 @@ public class ResponseStrictnessTests
         act.Should().Throw<RustAlertEngineException>().WithMessage($"*'{missing}'*");
     }
 
+    [Fact]
+    public void Leaves_are_optional_when_they_were_not_requested()
+    {
+        var response = RustAlertEngine.ParseEvaluateResponse(
+            Evaluate($$"""{"rule_id":"{{RuleId}}","root":true,"transition":"none"}"""));
+
+        RustAlertEngine.GetRuleResult(response, leavesRequested: false).Leaves.Should().BeNull();
+    }
+
     [Theory]
     [InlineData("\"sideways\"")]
     [InlineData("3")]

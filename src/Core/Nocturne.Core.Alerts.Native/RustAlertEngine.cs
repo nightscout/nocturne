@@ -70,7 +70,8 @@ public static class RustAlertEngine
         JsonElement context,
         DateTime now,
         IReadOnlyDictionary<string, DateTime>? timers = null,
-        RustTrackerState? tracker = null)
+        RustTrackerState? tracker = null,
+        bool includeLeaves = true)
     {
         return Evaluate(new RustEvaluateRequest
         {
@@ -79,15 +80,17 @@ public static class RustAlertEngine
             Now = now,
             Timers = timers is null ? null : new Dictionary<string, DateTime>(timers),
             Tracker = tracker,
+            IncludeLeaves = includeLeaves,
         });
     }
 
     /// <summary>
     /// Deserializes the typed rule result out of an evaluate response, requiring the fields a
-    /// result that was not skipped always carries.
+    /// result that was not skipped always carries, and its leaves when
+    /// <paramref name="leavesRequested"/>.
     /// </summary>
     /// <exception cref="RustAlertEngineException">The result payload was unparseable or incomplete.</exception>
-    public static RustRuleResult GetRuleResult(RustEvaluateResponse response)
+    public static RustRuleResult GetRuleResult(RustEvaluateResponse response, bool leavesRequested = true)
     {
         ArgumentNullException.ThrowIfNull(response);
         Require(response.Result is not null, "evaluate", "result");
@@ -106,7 +109,7 @@ public static class RustAlertEngine
             return result;
 
         Require(result.Root is not null, "evaluate", "result.root");
-        Require(result.Leaves is not null, "evaluate", "result.leaves");
+        Require(!leavesRequested || result.Leaves is not null, "evaluate", "result.leaves");
         Require(result.Transition is not null, "evaluate", "result.transition");
         Require((result.Transition == RustTransition.Closed) == (result.CloseReason is not null), "evaluate", "result.close_reason");
         return result;
