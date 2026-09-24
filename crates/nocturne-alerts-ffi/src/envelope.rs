@@ -1,14 +1,12 @@
-//! Request/response envelope: serde wire types, the per-call evaluation
-//! driver, and the leaf/path enumerator. The JSON shapes reuse the golden
-//! corpus interchange format (`ScenarioRule` / `ScenarioContext` /
-//! `ExpectedRuleResult`) verbatim wherever one exists; the state-carrying
-//! `timers` / `tracker` objects are defined here and documented in the crate
-//! `README.md`.
+//! The request and response envelopes documented in the crate `README.md`.
+//! Rules, contexts and results use the golden corpus interchange shapes; the
+//! `timers` and `tracker` objects carry evaluation state between calls.
 
 use std::collections::BTreeMap;
 
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
+use serde::de::DeserializeOwned;
 use serde_json::{Map, Value, json};
 use uuid::Uuid;
 
@@ -16,18 +14,70 @@ use nocturne_alerts_core::classify::classify;
 use nocturne_alerts_core::context::{SensorContext, check_timestamp};
 use nocturne_alerts_core::engine::{EngineState, Rule, evaluate_rule, format_instant};
 use nocturne_alerts_core::eval::{Env, eval_node};
-use nocturne_alerts_core::excursion::{TrackerState, TrackerStateKind};
+use nocturne_alerts_core::excursion::{ExcursionTracker, TrackerState, TrackerStateKind};
 use nocturne_alerts_core::model::{
     ConditionKind, Container, Node, parse_payload, parse_payload_structure,
 };
 use nocturne_alerts_core::paths::node_child_path;
 use nocturne_alerts_core::sustained::{TimerOp, TimerStore};
 
-pub const SCHEMA_VERSION: i64 = 1;
+pub(crate) const SCHEMA_VERSION: i64 = 1;
 
-// ---------------------------------------------------------------------------
-// Request wire types
-// ---------------------------------------------------------------------------
+/// Reads a request envelope and checks its `schema_version`.
+pub(crate) fn read_request<T: DeserializeOwned>(
+    request_json: &str,
+    schema_version: impl FnOnce(&T) -> i64,
+) -> Result<T, String> {
+    let req: T =
+        serde_json::from_str(request_json).map_err(|e| format!("invalid request envelope: {e}"))?;
+    match schema_version(&req) {
+        SCHEMA_VERSION => Ok(req),
+        other => Err(format!(
+            "unsupported schema_version {other} (expected {SCHEMA_VERSION})"
+        )),
+    }
+}
+
+/// The `ok: true` envelope around `fields`.
+pub(crate) fn ok(fields: Value) -> Value {
+    let mut o = Map::new();
+    o.insert("schema_version".into(), SCHEMA_VERSION.into());
+    o.insert("ok".into(), true.into());
+    if let Value::Object(fields) = fields {
+        o.extend(fields);
+    }
+    Value::Object(o)
+}
+
+fn known_kind(condition_type: &str) -> Result<ConditionKind, String> {
+    ConditionKind::from_wire(condition_type).ok_or_else(|| {
+        format!(
+            "unknown condition_type '{}'",
+            condition_type.escape_default()
+        )
+    })
+}
+
+/// Persisted sustained-timer state for one rule: `path -> first_true`.
+type WireTimers = BTreeMap<String, DateTime<Utc>>;
+
+/// Checks and loads persisted timers.
+fn seed_timers(timers: &mut TimerStore, rule_id: Uuid, wire: &WireTimers) -> Result<(), String> {
+    for (path, &at) in wire {
+        timers.seed(rule_id, path, check_timestamp(at, "timers")?);
+    }
+    Ok(())
+}
+
+/// A rule's timers after evaluation: `path -> first_true`.
+fn timers_json(timers: &TimerStore, rule_id: Uuid) -> Value {
+    timers
+        .snapshot_for_rule(rule_id)
+        .into_iter()
+        .map(|(path, at)| (path, format_instant(at).into()))
+        .collect::<Map<_, _>>()
+        .into()
+}
 
 #[derive(Deserialize)]
 struct EvaluateRequest {
@@ -35,26 +85,21 @@ struct EvaluateRequest {
     rule: WireRule,
     context: SensorContext,
     now: DateTime<Utc>,
-    /// Persisted sustained-timer state for this rule: `path -> first_true`.
     #[serde(default)]
-    timers: BTreeMap<String, DateTime<Utc>>,
-    /// Persisted tracker state. Absent/null means "never evaluated".
+    timers: WireTimers,
+    /// Absent or null: never evaluated.
     #[serde(default)]
     tracker: Option<WireTracker>,
 }
 
-fn default_confirmation_readings() -> i32 {
-    1
-}
-
-/// `ScenarioRule` corpus shape (unknown fields such as `name` are ignored).
+/// The corpus rule shape; unknown fields such as `name` are ignored.
 #[derive(Deserialize)]
 struct WireRule {
     id: Uuid,
     condition_type: String,
     #[serde(default)]
     condition_params: Value,
-    #[serde(default = "default_confirmation_readings")]
+    #[serde(default = "one")]
     confirmation_readings: i32,
     #[serde(default)]
     hysteresis_minutes: i32,
@@ -64,14 +109,13 @@ struct WireRule {
     auto_resolve_params: Option<Value>,
 }
 
-fn default_next_ordinal() -> u32 {
-    1
+fn one<T: From<u8>>() -> T {
+    T::from(1)
 }
 
 #[derive(Deserialize)]
 struct WireTracker {
-    /// `idle | confirming | active | hysteresis`; absent/null means no
-    /// per-rule state exists yet (only the shared ordinal counter is carried).
+    /// Absent or null: no per-rule state yet, only the shared ordinal.
     #[serde(default)]
     state: Option<String>,
     #[serde(default)]
@@ -81,200 +125,128 @@ struct WireTracker {
     /// Required whenever `state` is present.
     #[serde(default)]
     updated_at: Option<DateTime<Utc>>,
-    /// When the excursion entered hysteresis. Absent in hysteresis (state
-    /// persisted before the field existed) adopts `updated_at` once.
+    /// Absent in hysteresis, `updated_at` is adopted once.
     #[serde(default)]
     hysteresis_started_at: Option<DateTime<Utc>>,
-    /// 1-based ordinal the next opened excursion will receive. Shared across
-    /// all rules of a tenant/scenario; thread it between calls.
-    #[serde(default = "default_next_ordinal")]
+    #[serde(default = "one")]
     next_excursion_ordinal: u32,
 }
 
-// ---------------------------------------------------------------------------
-// Evaluate
-// ---------------------------------------------------------------------------
-
-pub fn evaluate(request_json: &str) -> Result<Value, String> {
-    let req: EvaluateRequest =
-        serde_json::from_str(request_json).map_err(|e| format!("invalid request envelope: {e}"))?;
-    if req.schema_version != SCHEMA_VERSION {
-        return Err(format!(
-            "unsupported schema_version {} (expected {SCHEMA_VERSION})",
-            req.schema_version
-        ));
+impl WireTracker {
+    fn restore(&self, tracker: &mut ExcursionTracker, rule_id: Uuid) -> Result<(), String> {
+        tracker.set_next_excursion_ordinal(self.next_excursion_ordinal);
+        let Some(s) = &self.state else {
+            return Ok(());
+        };
+        let state = TrackerStateKind::from_wire(s)
+            .ok_or_else(|| format!("unknown tracker state '{}'", s.escape_default()))?;
+        let updated_at = self
+            .updated_at
+            .ok_or("tracker.updated_at is required when tracker.state is present")?;
+        check_timestamp(updated_at, "tracker.updated_at")?;
+        if let Some(at) = self.hysteresis_started_at {
+            check_timestamp(at, "tracker.hysteresis_started_at")?;
+        }
+        tracker.restore_state(
+            rule_id,
+            TrackerState {
+                state,
+                confirmation_count: self.confirmation_count,
+                active_excursion: self.active_excursion_ordinal,
+                updated_at,
+                hysteresis_started_at: self.hysteresis_started_at,
+            },
+        );
+        Ok(())
     }
+}
 
-    let kind = ConditionKind::from_wire(&req.rule.condition_type).ok_or_else(|| {
-        format!(
-            "unknown condition_type '{}'",
-            req.rule.condition_type.escape_default()
-        )
-    })?;
+pub(crate) fn evaluate(request_json: &str) -> Result<Value, String> {
+    let req: EvaluateRequest = read_request(request_json, |r: &EvaluateRequest| r.schema_version)?;
+    let w = req.rule;
+    let kind = known_kind(&w.condition_type)?;
 
-    // A rule body that cannot be evaluated (engine-semantics.md §1.4) skips
-    // the rule with its timers and tracker untouched; the host treats an
-    // error envelope as that skip.
-    if !matches!(req.rule.condition_params, Value::Null)
-        && let Err(e) = parse_payload(kind, &req.rule.condition_params)
+    // A body that cannot be evaluated (engine-semantics.md §1.4) is an error,
+    // which the host treats as skipping the rule with its state untouched.
+    if !w.condition_params.is_null()
+        && let Err(e) = parse_payload(kind, &w.condition_params)
     {
         return Err(format!(
             "malformed condition_params for '{}': {e}",
-            req.rule.condition_type.escape_default()
+            w.condition_type.escape_default()
         ));
     }
-
     check_timestamp(req.now, "now")?;
-    check_timers(&req.timers)?;
 
     let rule = Rule {
-        id: req.rule.id,
+        id: w.id,
         condition_type: kind,
-        condition_params: req.rule.condition_params,
-        confirmation_readings: req.rule.confirmation_readings,
-        hysteresis_minutes: req.rule.hysteresis_minutes,
-        auto_resolve_enabled: req.rule.auto_resolve_enabled,
-        auto_resolve_params: req.rule.auto_resolve_params,
+        condition_params: w.condition_params,
+        confirmation_readings: w.confirmation_readings,
+        hysteresis_minutes: w.hysteresis_minutes,
+        auto_resolve_enabled: w.auto_resolve_enabled,
+        auto_resolve_params: w.auto_resolve_params,
     };
-
     let mut state = EngineState::new();
-    for (path, at) in &req.timers {
-        state.timers.seed(rule.id, path, *at);
-    }
-    if let Some(w) = &req.tracker {
-        state
-            .tracker
-            .set_next_excursion_ordinal(w.next_excursion_ordinal);
-        if let Some(s) = &w.state {
-            let state_kind = TrackerStateKind::from_wire(s)
-                .ok_or_else(|| format!("unknown tracker state '{}'", s.escape_default()))?;
-            let updated_at = w
-                .updated_at
-                .ok_or("tracker.updated_at is required when tracker.state is present")?;
-            check_timestamp(updated_at, "tracker.updated_at")?;
-            if let Some(at) = w.hysteresis_started_at {
-                check_timestamp(at, "tracker.hysteresis_started_at")?;
-            }
-            state.tracker.restore_state(
-                rule.id,
-                TrackerState {
-                    state: state_kind,
-                    confirmation_count: w.confirmation_count,
-                    active_excursion: w.active_excursion_ordinal,
-                    updated_at,
-                    hysteresis_started_at: w.hysteresis_started_at,
-                },
-            );
-        }
+    seed_timers(&mut state.timers, rule.id, &req.timers)?;
+    if let Some(tracker) = &req.tracker {
+        tracker.restore(&mut state.tracker, rule.id)?;
     }
 
     let outcome = evaluate_rule(&rule, &req.context, req.now, &mut state);
-
-    Ok(json!({
-        "schema_version": SCHEMA_VERSION,
-        "ok": true,
+    Ok(ok(json!({
         "result": outcome.to_json(),
         "timers": timers_json(&state.timers, rule.id),
-        "tracker": tracker_state_json(&state, rule.id),
-    }))
+        "tracker": tracker_json(&state.tracker, rule.id),
+    })))
 }
 
-fn check_timers(timers: &BTreeMap<String, DateTime<Utc>>) -> Result<(), String> {
-    timers
-        .values()
-        .try_for_each(|at| check_timestamp(*at, "timers").map(|_| ()))
-}
-
-/// Post-evaluation timer state for the rule: `path -> first_true`.
-fn timers_json(timers: &TimerStore, rule_id: Uuid) -> Value {
-    timers
-        .snapshot_for_rule(rule_id)
-        .into_iter()
-        .map(|(path, at)| (path, Value::String(format_instant(at))))
-        .collect::<Map<_, _>>()
-        .into()
-}
-
-/// Post-evaluation tracker state. `state`/`confirmation_count`/`updated_at`
-/// (plus `active_excursion_ordinal` when an excursion is active and
-/// `hysteresis_started_at` while in hysteresis) are present
-/// only once per-rule state exists; `next_excursion_ordinal` is always
-/// present and must be threaded into the next call (shared across rules).
-fn tracker_state_json(state: &EngineState, rule_id: Uuid) -> Value {
+/// The tracker after evaluation. The per-rule fields are present once the
+/// rule has state; `next_excursion_ordinal` always is.
+fn tracker_json(tracker: &ExcursionTracker, rule_id: Uuid) -> Value {
     let mut t = Map::new();
-    if let Some(s) = state.tracker.state(rule_id) {
-        t.insert("state".into(), Value::String(s.state.wire().into()));
-        t.insert(
-            "confirmation_count".into(),
-            Value::Number(s.confirmation_count.into()),
-        );
+    if let Some(s) = tracker.state(rule_id) {
+        t.insert("state".into(), s.state.wire().into());
+        t.insert("confirmation_count".into(), s.confirmation_count.into());
         if let Some(excursion) = s.active_excursion {
-            t.insert(
-                "active_excursion_ordinal".into(),
-                Value::Number(excursion.into()),
-            );
+            t.insert("active_excursion_ordinal".into(), excursion.into());
         }
-        t.insert(
-            "updated_at".into(),
-            Value::String(format_instant(s.updated_at)),
-        );
+        t.insert("updated_at".into(), format_instant(s.updated_at).into());
         if let Some(at) = s.hysteresis_started_at {
-            t.insert(
-                "hysteresis_started_at".into(),
-                Value::String(format_instant(at)),
-            );
+            t.insert("hysteresis_started_at".into(), format_instant(at).into());
         }
     }
     t.insert(
         "next_excursion_ordinal".into(),
-        Value::Number(state.tracker.next_excursion_ordinal().into()),
+        tracker.next_excursion_ordinal().into(),
     );
     Value::Object(t)
 }
 
-// ---------------------------------------------------------------------------
-// Evaluate node
-// ---------------------------------------------------------------------------
-
-/// Request for `nocturne_alerts_evaluate_node`: a single condition tree
-/// evaluated outside the per-rule driver (no tracker, no auto-resolve). Used
-/// by hosts for auxiliary evaluation scopes — smart-snooze conditions
-/// (`root: "snooze"`) and the sweep's periodic auto-resolve
-/// (`root: "auto_resolve"`) — which in C# go through
-/// `ConditionEvaluatorRegistry.EvaluateNodeAsync` with a reserved path root.
+/// One condition tree for one instant, outside the per-rule driver: no
+/// tracker, no auto-resolve, no leaf log.
 #[derive(Deserialize)]
 struct EvaluateNodeRequest {
     schema_version: i64,
-    /// Keys sustained timers, exactly like the rule id in `evaluate`.
+    /// Keys sustained timers, as the rule id does in `evaluate`.
     rule_id: Uuid,
-    /// A full ConditionNode object (`{"type": …, …}`).
     node: Value,
-    /// Root path segment override (e.g. `"snooze"`, `"auto_resolve"`).
-    /// Defaults to the node's verbatim `type` string.
+    /// The root path segment; defaults to the node's `type` as written.
     #[serde(default)]
     root: Option<String>,
     context: SensorContext,
     now: DateTime<Utc>,
-    /// Persisted sustained-timer state for the rule: `path -> first_true`.
     #[serde(default)]
-    timers: BTreeMap<String, DateTime<Utc>>,
+    timers: WireTimers,
 }
 
-/// Evaluates one condition node for one instant. A node that cannot be
-/// evaluated (engine-semantics.md §1.4) is an envelope error; the C# callers
-/// treat the matching exception as `false`.
-pub fn evaluate_node_envelope(request_json: &str) -> Result<Value, String> {
+/// A node that cannot be evaluated (engine-semantics.md §1.4) is an error.
+pub(crate) fn evaluate_node(request_json: &str) -> Result<Value, String> {
     let req: EvaluateNodeRequest =
-        serde_json::from_str(request_json).map_err(|e| format!("invalid request envelope: {e}"))?;
-    if req.schema_version != SCHEMA_VERSION {
-        return Err(format!(
-            "unsupported schema_version {} (expected {SCHEMA_VERSION})",
-            req.schema_version
-        ));
-    }
-
+        read_request(request_json, |r: &EvaluateNodeRequest| r.schema_version)?;
     check_timestamp(req.now, "now")?;
-    check_timers(&req.timers)?;
+    let mut timers = TimerStore::new();
+    seed_timers(&mut timers, req.rule_id, &req.timers)?;
 
     let node = match &req.root {
         Some(root) => Node::parse_rooted(&req.node, root),
@@ -285,195 +257,108 @@ pub fn evaluate_node_envelope(request_json: &str) -> Result<Value, String> {
         .root
         .unwrap_or_else(|| node.type_str.clone().unwrap_or_default());
 
-    let mut timers = TimerStore::new();
-    for (path, at) in &req.timers {
-        timers.seed(req.rule_id, path, *at);
-    }
-
-    let value = {
-        let mut env = Env::new(req.now, req.rule_id, &req.context, &mut timers);
-        eval_node(Some(&node), &root, &mut env)
-    };
-
+    let mut env = Env::new(req.now, req.rule_id, &req.context, &mut timers);
+    let value = eval_node(Some(&node), &root, &mut env);
     let ops = timers.drain_ops();
-
-    Ok(json!({
-        "schema_version": SCHEMA_VERSION,
-        "ok": true,
+    Ok(ok(json!({
         "value": value,
         "timers": timers_json(&timers, req.rule_id),
         "timer_ops": ops.iter().map(TimerOp::to_json).collect::<Vec<_>>(),
-    }))
+    })))
 }
 
-// ---------------------------------------------------------------------------
-// Classify
-// ---------------------------------------------------------------------------
-
-/// Request for `nocturne_alerts_classify`: a rule's root `condition_type` plus
-/// its payload-only `condition_params` (exactly as stored in
-/// `alert_rules.condition_params`). Mirrors `WireRule`'s discriminator + payload
-/// pair, without the per-rule driver fields classification never reads.
+/// A rule body as stored: its root `condition_type` and payload-only
+/// `condition_params`.
 #[derive(Deserialize)]
-struct ClassifyRequest {
+struct RuleBodyRequest {
     schema_version: i64,
     condition_type: String,
     #[serde(default)]
     condition_params: Value,
 }
 
-/// Derives a rule's scope class (`low | high | composite | undirected`) for
-/// scoped Do Not Disturb (ADR 0004). Unlike `evaluate`, an unknown
-/// `condition_type` or malformed `condition_params` is **not** an envelope
-/// error: the crate's `classify` silent-fails to `undirected` (all-only), the
-/// safe default that never lets a scoped mute silence an unclassifiable rule.
-/// Only a structurally malformed *envelope* is an error.
-pub fn classify_envelope(request_json: &str) -> Result<Value, String> {
-    let req: ClassifyRequest =
-        serde_json::from_str(request_json).map_err(|e| format!("invalid request envelope: {e}"))?;
-    if req.schema_version != SCHEMA_VERSION {
-        return Err(format!(
-            "unsupported schema_version {} (expected {SCHEMA_VERSION})",
-            req.schema_version
-        ));
-    }
-
-    let class = classify(&req.condition_type, &req.condition_params);
-
-    Ok(json!({
-        "schema_version": SCHEMA_VERSION,
-        "ok": true,
-        "scope_class": class.wire(),
-    }))
+fn read_rule_body(request_json: &str) -> Result<RuleBodyRequest, String> {
+    read_request(request_json, |r: &RuleBodyRequest| r.schema_version)
 }
 
-// ---------------------------------------------------------------------------
-// Leaf paths
-// ---------------------------------------------------------------------------
+/// A rule's scope class for scoped Do Not Disturb (ADR 0004). An unknown
+/// type or unevaluable body is `undirected`, not an error.
+pub(crate) fn classify_rule(request_json: &str) -> Result<Value, String> {
+    let req = read_rule_body(request_json)?;
+    let class = classify(&req.condition_type, &req.condition_params);
+    Ok(ok(json!({ "scope_class": class.wire() })))
+}
 
-/// Input: a full ConditionNode object (`{"type": …, …}`), or a wrapper
-/// `{"node": {…}, "root": "auto_resolve"}` overriding the root path segment
-/// (defaults to the node's verbatim `type` string, mirroring
-/// `ConditionPath.Walk`).
-pub fn leaf_paths(input_json: &str) -> Result<Value, String> {
+/// Every node slot's condition path and the leaves' paths by leaf id. Input
+/// is a condition node, or `{"node": …, "root": …}` naming the root segment,
+/// which defaults to the node's `type` as written.
+pub(crate) fn leaf_paths(input_json: &str) -> Result<Value, String> {
     let v: Value = serde_json::from_str(input_json).map_err(|e| format!("invalid JSON: {e}"))?;
-
     let (node_value, root_override) = match &v {
-        Value::Object(o) if o.contains_key("node") => {
-            let root = match o.get("root") {
-                None | Some(Value::Null) => None,
-                Some(Value::String(s)) => Some(s.clone()),
+        Value::Object(o) => match o.get("node") {
+            Some(node) => match o.get("root") {
+                None | Some(Value::Null) => (node, None),
+                Some(Value::String(s)) => (node, Some(s.clone())),
                 Some(_) => return Err("'root' must be a string".into()),
-            };
-            (o.get("node").expect("checked above"), root)
-        }
-        Value::Object(_) => (&v, None),
+            },
+            None => (&v, None),
+        },
         _ => return Err("condition node must be a JSON object".into()),
     };
 
     let node =
         Node::parse_structure(node_value).map_err(|e| format!("malformed condition node: {e}"))?;
     let root = root_override.unwrap_or_else(|| node.type_str.clone().unwrap_or_default());
-
     let mut paths = Vec::new();
     let mut leaves = Vec::new();
-    walk(Some(&node), root.clone(), &mut paths, &mut leaves);
-
-    Ok(json!({
-        "schema_version": SCHEMA_VERSION,
-        "ok": true,
+    walk_paths(Some(&node), root.clone(), &mut paths, &mut leaves);
+    let leaves = leaves.iter().enumerate();
+    Ok(ok(json!({
         "root": root,
         "paths": paths,
         "leaves": leaves
-            .iter()
-            .enumerate()
             .map(|(leaf_id, path)| json!({ "leaf_id": leaf_id, "path": path }))
             .collect::<Vec<_>>(),
-    }))
+    })))
 }
 
-/// Pre-order walk emitting every node slot's canonical path; leaves are
-/// assigned ids as `collect_leaves` does.
-fn walk(node: Option<&Node>, path: String, paths: &mut Vec<String>, leaves: &mut Vec<String>) {
+/// Pre-order; leaves are pushed in leaf-id order.
+fn walk_paths(
+    node: Option<&Node>,
+    path: String,
+    paths: &mut Vec<String>,
+    leaves: &mut Vec<String>,
+) {
     paths.push(path.clone());
     match node.and_then(Node::container) {
         Some(container) => {
             for (i, child) in container.children().enumerate() {
-                walk(child, node_child_path(&path, i, child), paths, leaves);
+                walk_paths(child, node_child_path(&path, i, child), paths, leaves);
             }
         }
         None => leaves.push(path),
     }
 }
 
-// ---------------------------------------------------------------------------
-// Describe (ADR 0007 — condition readouts)
-// ---------------------------------------------------------------------------
-
-/// Request for `nocturne_alerts_describe`: a rule's stored `condition_type` +
-/// `condition_params` (the same split shape `classify` takes). Static — no
-/// `SensorContext`, no `now`.
-#[derive(Deserialize)]
-struct DescribeRequest {
-    schema_version: i64,
-    condition_type: String,
-    #[serde(default)]
-    condition_params: Value,
-}
-
-/// Decodes a rule's opaque condition tree into a structured, leaf-id-tagged
-/// description for host-rendered condition readouts (Prelude, ADR 0007).
-///
-/// Leaf ids are assigned by the **same** pre-order walk the engine uses for its
-/// force-eval log (`collect_leaves` over `Node::from_rule`), so a host joins
-/// this static description to each tick's `result.leaves[]` by `leaf_id`. The
-/// description carries only authored operands (thresholds, durations,
-/// operators) and tree structure — never truth or observed values, which the
-/// host pairs in from `evaluate` and its own `SensorContext`.
-pub fn describe(request_json: &str) -> Result<Value, String> {
-    let req: DescribeRequest =
-        serde_json::from_str(request_json).map_err(|e| format!("invalid request envelope: {e}"))?;
-    if req.schema_version != SCHEMA_VERSION {
-        return Err(format!(
-            "unsupported schema_version {} (expected {SCHEMA_VERSION})",
-            req.schema_version
-        ));
-    }
-
-    let kind = ConditionKind::from_wire(&req.condition_type).ok_or_else(|| {
-        format!(
-            "unknown condition_type '{}'",
-            req.condition_type.escape_default()
-        )
-    })?;
-
-    // Reconstitute the node as the engine's leaf log does (engine.rs) so leaf
-    // ids align with `result.leaves[]`. The structural parse alone: a rule the
-    // engine skips still describes as authored, and a malformed payload
-    // collapses to a single leaf.
+/// A rule's condition tree as leaf-id-tagged authored operands, for condition
+/// readouts (ADR 0007). Leaf ids and paths match `evaluate`'s leaf log and
+/// timer keys. A body that does not parse describes as one leaf with default
+/// operands.
+pub(crate) fn describe(request_json: &str) -> Result<Value, String> {
+    let req = read_rule_body(request_json)?;
+    let kind = known_kind(&req.condition_type)?;
     let payload = match &req.condition_params {
         Value::Null => None,
         v => parse_payload_structure(kind, v).ok(),
     };
-    let full_node = Node::from_rule(kind, payload);
-
-    // Root path is the kind's wire name — the same root the engine keys timers
-    // and leaf paths under, so a host joins a sustained node's `path` straight
-    // to its persisted timer (`condition_timers.path`).
-    let root_path = kind.wire().to_string();
-    let mut next_leaf_id = 0;
-    let tree = describe_node(Some(&full_node), root_path, &mut next_leaf_id);
-
-    Ok(json!({
-        "schema_version": SCHEMA_VERSION,
-        "ok": true,
-        "tree": tree,
-    }))
+    let node = Node::from_rule(kind, payload);
+    let tree = describe_node(Some(&node), kind.wire().to_owned(), &mut 0);
+    Ok(ok(json!({ "tree": tree })))
 }
 
-/// Pre-order walk assigning leaf ids as `collect_leaves` does. A leaf
-/// describes the payload evaluation reads, so a kind reached through its
-/// member name or ordinal shows its defaults, not the operands it ignores.
+/// Pre-order, numbering leaves as the leaf log does. A leaf shows the payload
+/// evaluation reads, so a kind reached through its member name or ordinal
+/// shows its defaults, not the operands it ignores.
 fn describe_node(node: Option<&Node>, path: String, next_leaf_id: &mut usize) -> Value {
     if let Some(container) = node.and_then(Node::container) {
         let mut children = container
@@ -498,7 +383,7 @@ fn describe_node(node: Option<&Node>, path: String, next_leaf_id: &mut usize) ->
     }
 
     let leaf_id = *next_leaf_id;
-    *next_leaf_id += 1;
+    *next_leaf_id = leaf_id.saturating_add(1);
     let payload = node.and_then(Node::dispatch);
     json!({
         "leaf_id": leaf_id,

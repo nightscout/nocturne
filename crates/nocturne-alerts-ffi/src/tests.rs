@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use serde_json::{Map, Value, json};
 
 use crate::{
-    boundary, nocturne_alerts_classify, nocturne_alerts_describe, nocturne_alerts_evaluate,
+    envelope_string, nocturne_alerts_classify, nocturne_alerts_describe, nocturne_alerts_evaluate,
     nocturne_alerts_evaluate_node, nocturne_alerts_free_string, nocturne_alerts_leaf_paths,
     nocturne_alerts_version,
 };
@@ -664,12 +664,8 @@ fn evaluate_node_rejects_now_outside_the_dotnet_range() {
 
 #[test]
 fn boundary_converts_panics_to_error_envelopes() {
-    let ptr = boundary(|| panic!("deliberate test panic"));
-    let response: Value = unsafe {
-        let out = CStr::from_ptr(ptr).to_str().unwrap().to_string();
-        nocturne_alerts_free_string(ptr);
-        serde_json::from_str(&out).unwrap()
-    };
+    let response: Value =
+        serde_json::from_str(&envelope_string(|| panic!("deliberate test panic"))).unwrap();
     assert_error(&response, "panic in alert engine: deliberate test panic");
 }
 

@@ -8,7 +8,7 @@ use nocturne_alerts_core::model::ParseError;
 use nocturne_alerts_core::paths::{AUTO_RESOLVE_ROOT, SNOOZE_ROOT};
 use nocturne_alerts_core::validate::{validate_node, validate_rule};
 
-use crate::envelope::SCHEMA_VERSION;
+use crate::envelope::{ok, read_request};
 
 #[derive(Deserialize)]
 struct ValidateRequest {
@@ -16,24 +16,17 @@ struct ValidateRequest {
     condition_type: String,
     #[serde(default)]
     condition_params: Value,
-    /// A full ConditionNode, checked when present and not null.
+    /// A full condition node, checked when present and not null.
     #[serde(default)]
     auto_resolve_params: Option<Value>,
-    /// `client_configuration.snooze.conditions`, checked as the
-    /// `composite{and}` the sweep evaluates them as.
+    /// Smart-snooze conditions, checked as the `composite{and}` they
+    /// evaluate as.
     #[serde(default)]
     snooze_conditions: Option<Vec<Value>>,
 }
 
-pub fn validate(request_json: &str) -> Result<Value, String> {
-    let req: ValidateRequest =
-        serde_json::from_str(request_json).map_err(|e| format!("invalid request envelope: {e}"))?;
-    if req.schema_version != SCHEMA_VERSION {
-        return Err(format!(
-            "unsupported schema_version {} (expected {SCHEMA_VERSION})",
-            req.schema_version
-        ));
-    }
+pub(crate) fn validate(request_json: &str) -> Result<Value, String> {
+    let req: ValidateRequest = read_request(request_json, |r: &ValidateRequest| r.schema_version)?;
 
     let mut issues = Vec::new();
     push(
@@ -56,12 +49,7 @@ pub fn validate(request_json: &str) -> Result<Value, String> {
         push(&mut issues, "snooze", validate_node(&wrapped, SNOOZE_ROOT));
     }
 
-    Ok(json!({
-        "schema_version": SCHEMA_VERSION,
-        "ok": true,
-        "valid": issues.is_empty(),
-        "issues": issues,
-    }))
+    Ok(ok(json!({ "valid": issues.is_empty(), "issues": issues })))
 }
 
 fn push(issues: &mut Vec<Value>, scope: &str, found: Vec<ParseError>) {
