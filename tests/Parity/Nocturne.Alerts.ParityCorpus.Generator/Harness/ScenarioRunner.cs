@@ -105,9 +105,13 @@ public sealed class ScenarioRunner
         {
             // Orchestrator parity: its per-rule catch skips a rule whose evaluation throws,
             // leaving the tracker and auto-resolve untouched. A throw partway through keeps
-            // the timer writes made before it, as in production, but they are not this
-            // result's ops.
-            timerStore.DrainOps();
+            // the timer writes made before it, which the Rust engine never makes for a
+            // skipped rule, so a scenario that reaches one is a divergence, not a snapshot.
+            if (timerStore.DrainOps() is { Count: > 0 } written)
+            {
+                throw new InvalidOperationException(
+                    $"Rule {rule.Id} wrote {written.Count} timer op(s) before its evaluation threw: {ex.Message}");
+            }
             return new ExpectedRuleResult { RuleId = rule.Id, Skipped = true };
         }
 
