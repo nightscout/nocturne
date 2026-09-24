@@ -220,9 +220,17 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
     /// by <see cref="DecomposeAsync"/> and <see cref="DecomposeBatchAsync"/> so it lives in exactly
     /// one place.
     /// </summary>
+    private static string? SanitizeForLog(string? value)
+    {
+        return value?
+            .Replace("\r", string.Empty)
+            .Replace("\n", string.Empty);
+    }
+
     private TreatmentClassification ClassifyTreatment(Treatment treatment)
     {
         var eventType = treatment.EventType?.Trim();
+        var sanitizedEventTypeForLog = SanitizeForLog(treatment.EventType);
         var hasInsulin = treatment.Insulin is > 0;
         var hasCarbs = treatment.Carbs is > 0;
 
@@ -330,7 +338,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             {
                 Logger.LogInformation(
                     "Unrecognized event type '{EventType}', producing records based on data (insulin={HasInsulin}, carbs={HasCarbs})",
-                    treatment.EventType, hasInsulin, hasCarbs);
+                    sanitizedEventTypeForLog, hasInsulin, hasCarbs);
             }
         }
 
@@ -363,7 +371,9 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         if (c.ProducesNothing)
         {
             result.SkippedUnsupported++;
-            Logger.LogWarning("Skipped a treatment whose event type Nocturne does not store: {EventType}", treatment.EventType);
+            Logger.LogWarning(
+                "Skipped a treatment whose event type Nocturne does not store: {EventType}",
+                SanitizeForLog(treatment.EventType));
         }
 
         // Handle StateSpan delegation
