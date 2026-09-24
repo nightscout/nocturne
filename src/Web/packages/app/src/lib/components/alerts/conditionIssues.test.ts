@@ -35,6 +35,9 @@ describe("conditionIssuesMessage", () => {
 			"empty_window",
 			"list_empty:days",
 			"pump_mode_category:category",
+			"minutes_not_positive:timeout_minutes",
+			"minutes_not_positive:within_minutes",
+			"minutes_negative:minutes",
 		]) {
 			expect(conditionIssuesMessage(rejected(400, code)), code).not.toBeNull();
 		}

@@ -285,7 +285,10 @@ fn saving_reports_every_problem_in_the_tree() {
             issue("composite[6].composite", Reason::UnknownOperator),
             issue("composite[7].composite", Reason::ConditionsEmpty),
             issue("composite[8].not", Reason::ChildMissing),
-            issue("composite[9].sustained", Reason::MinutesNotPositive),
+            issue(
+                "composite[9].sustained",
+                Reason::MinutesNotPositive("minutes")
+            ),
             issue("composite[9].sustained", Reason::ChildMissing),
             issue("composite[10].", Reason::ConditionMissing),
             issue("composite[11].rate_of_change", Reason::FieldMissing("rate")),
@@ -604,6 +607,85 @@ fn saving_rejects_a_generic_state_span_on_the_pump_mode_category() {
         )]
     );
     assert_eq!(Reason::PumpModeCategory.field(), Some("category"));
+}
+
+#[test]
+fn saving_rejects_durations_that_leave_a_leaf_never_or_always_true() {
+    for minutes in [0, -5] {
+        assert_eq!(
+            issues_of("signal_loss", json!({ "timeout_minutes": minutes })),
+            at_leaf(
+                "signal_loss",
+                &[Reason::MinutesNotPositive("timeout_minutes")]
+            ),
+            "{minutes}"
+        );
+        assert_eq!(
+            issues_of(
+                "predicted",
+                json!({ "operator": "<=", "value": 70, "within_minutes": minutes })
+            ),
+            at_leaf("predicted", &[Reason::MinutesNotPositive("within_minutes")]),
+            "{minutes}"
+        );
+    }
+    for (kind, payload, field) in [
+        (
+            "staleness",
+            json!({ "operator": ">", "value": -1 }),
+            "value",
+        ),
+        (
+            "loop_stale",
+            json!({ "operator": "<", "minutes": -10 }),
+            "minutes",
+        ),
+        (
+            "loop_enaction_stale",
+            json!({ "operator": ">=", "minutes": -10 }),
+            "minutes",
+        ),
+        (
+            "time_since_last_carb",
+            json!({ "operator": ">=", "minutes": -1 }),
+            "minutes",
+        ),
+        (
+            "time_since_last_bolus",
+            json!({ "operator": "<", "minutes": -1 }),
+            "minutes",
+        ),
+    ] {
+        assert_eq!(
+            issues_of(kind, payload),
+            at_leaf(kind, &[Reason::MinutesNegative(field)]),
+            "{kind}"
+        );
+    }
+    for (kind, payload) in [
+        ("staleness", json!({ "operator": ">", "value": 0 })),
+        ("loop_stale", json!({ "operator": ">", "minutes": 0 })),
+        (
+            "time_since_last_carb",
+            json!({ "operator": ">=", "minutes": 0 }),
+        ),
+        (
+            "tracker_age",
+            json!({ "tracker_definition_id": "00000000-0000-0000-0000-0000000000bb",
+                    "operator": ">=", "minutes": -60 }),
+        ),
+        (
+            "pump_suspended",
+            json!({ "is_active": true, "for_minutes": -5 }),
+        ),
+    ] {
+        assert_eq!(issues_of(kind, payload), vec![], "{kind}");
+    }
+    assert_eq!(
+        Reason::MinutesNotPositive("timeout_minutes").field(),
+        Some("timeout_minutes")
+    );
+    assert!(!Reason::MinutesNegative("minutes").fails_evaluation());
 }
 
 #[test]

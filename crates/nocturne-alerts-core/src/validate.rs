@@ -187,6 +187,9 @@ fn check_payload(
         }
     }
     let raw_field = |name: &str| raw.and_then(|o| get_ci(o, name));
+    // An operand `required_fields` already reports missing is not also
+    // reported for the default it reads as.
+    let written = |name: &str| raw.is_none_or(|o| get_ci(o, name).is_some_and(|v| !v.is_null()));
 
     let problem = match payload {
         Payload::Composite(p) => {
@@ -222,7 +225,7 @@ fn check_payload(
         },
         Payload::Sustained(p) => {
             if p.minutes <= 0 {
-                report(found, tier, path, Reason::MinutesNotPositive);
+                report(found, tier, path, Reason::MinutesNotPositive("minutes"));
             }
             match &p.child {
                 None => Some(Reason::ChildMissing),
@@ -253,15 +256,32 @@ fn check_payload(
         | Payload::PumpBattery(p)
         | Payload::UploaderBattery(p)
         | Payload::SensitivityRatio(p) => operator_problem(&p.operator),
-        Payload::LoopStale(p) | Payload::LoopEnactionStale(p) => operator_problem(&p.operator),
-        Payload::Staleness(p) => operator_problem(&p.operator),
-        Payload::Predicted(p) => operator_problem(&p.operator),
+        Payload::LoopStale(p) | Payload::LoopEnactionStale(p) => {
+            negative(p.minutes, "minutes", tier, path, found);
+            operator_problem(&p.operator)
+        }
+        Payload::Staleness(p) => {
+            negative(p.value, "value", tier, path, found);
+            operator_problem(&p.operator)
+        }
+        Payload::Predicted(p) => {
+            if p.within_minutes <= 0 && written("within_minutes") {
+                report(
+                    found,
+                    tier,
+                    path,
+                    Reason::MinutesNotPositive("within_minutes"),
+                );
+            }
+            operator_problem(&p.operator)
+        }
         Payload::TrackerAge(p) => operator_problem(&p.operator),
         Payload::TempBasal(p) => {
             undefined(p.metric, "metric", tier, path, found);
             operator_problem(&p.operator)
         }
         Payload::TimeSinceLastCarb(p) | Payload::TimeSinceLastBolus(p) => {
+            negative(p.minutes, "minutes", tier, path, found);
             matches!(p.operator, EnumValue::Undefined(_)).then_some(Reason::UnknownOperator)
         }
         Payload::Trend(p) => word_problem(
@@ -285,8 +305,9 @@ fn check_payload(
             EnumValue::Undefined(_) => Some(Reason::UnknownValue("category")),
             EnumValue::Known(_) => None,
         },
-        Payload::SignalLoss(_)
-        | Payload::PumpSuspended(_)
+        Payload::SignalLoss(p) => (p.timeout_minutes <= 0 && written("timeout_minutes"))
+            .then_some(Reason::MinutesNotPositive("timeout_minutes")),
+        Payload::PumpSuspended(_)
         | Payload::OverrideActive(_)
         | Payload::DoNotDisturb(_)
         | Payload::SleepSessionActive(_) => None,
@@ -345,6 +366,14 @@ fn word_problem<T>(word: &Spelled<T>, missing: Reason, unknown: Reason) -> Optio
 /// A missing comparison operator compares false, like an unknown one.
 fn operator_problem<T>(operator: &Spelled<T>) -> Option<Reason> {
     operator.value.is_none().then_some(Reason::UnknownOperator)
+}
+
+/// An elapsed time is never negative, and an absent anchor reads as an
+/// infinite one, so a negative bound compares the same way every tick.
+fn negative(bound: i32, field: &'static str, tier: Tier, path: &str, found: &mut Vec<ParseError>) {
+    if bound < 0 {
+        report(found, tier, path, Reason::MinutesNegative(field));
+    }
 }
 
 fn undefined<E>(

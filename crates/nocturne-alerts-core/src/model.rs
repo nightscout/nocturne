@@ -60,8 +60,13 @@ pub enum Reason {
     ConditionsEmpty,
     /// A `not` or `sustained` with no `child`.
     ChildMissing,
-    /// A `sustained` whose `minutes` is zero or negative.
-    MinutesNotPositive,
+    /// A duration that is zero or negative where that leaves its node never
+    /// true: `sustained` `minutes`, `signal_loss` `timeout_minutes`,
+    /// `predicted` `within_minutes`.
+    MinutesNotPositive(&'static str),
+    /// A negative elapsed-time bound, which every operator compares the same
+    /// way against an elapsed time that is never negative.
+    MinutesNegative(&'static str),
     /// A property no condition node or payload of its kind has.
     UnknownField,
     /// A required operand is absent, so it would read as its default.
@@ -101,7 +106,8 @@ impl Reason {
             Reason::UnknownState => "unknown_state",
             Reason::ConditionsEmpty => "conditions_empty",
             Reason::ChildMissing => "child_missing",
-            Reason::MinutesNotPositive => "minutes_not_positive",
+            Reason::MinutesNotPositive(_) => "minutes_not_positive",
+            Reason::MinutesNegative(_) => "minutes_negative",
             Reason::UnknownField => "unknown_field",
             Reason::FieldMissing(_) => "field_missing",
             Reason::UnknownValue(_) => "unknown_value",
@@ -120,7 +126,9 @@ impl Reason {
             | Reason::FieldMissing(f)
             | Reason::UnknownValue(f)
             | Reason::InvalidTime(f)
-            | Reason::ListEmpty(f) => Some(f),
+            | Reason::ListEmpty(f)
+            | Reason::MinutesNotPositive(f)
+            | Reason::MinutesNegative(f) => Some(f),
             Reason::PumpModeCategory => Some("category"),
             Reason::TypeMissing | Reason::UnknownKind | Reason::NonCanonicalType => Some("type"),
             Reason::ConditionsMissing | Reason::ConditionsEmpty => Some("conditions"),
@@ -128,7 +136,6 @@ impl Reason {
             Reason::DirectionMissing | Reason::UnknownDirection => Some("direction"),
             Reason::StateMissing | Reason::UnknownState => Some("state"),
             Reason::ChildMissing => Some("child"),
-            Reason::MinutesNotPositive => Some("minutes"),
             Reason::NotAnObject
             | Reason::TooDeep
             | Reason::ConditionMissing
