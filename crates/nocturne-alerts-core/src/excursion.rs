@@ -124,8 +124,8 @@ pub struct TrackerState {
     /// [`TrackerStateKind::Hysteresis`].
     pub hysteresis_started_at: Option<DateTime<Utc>>,
     /// Idle after an auto-resolve closed an excursion whose condition still
-    /// held: the rule opens nothing until an evaluation finds its condition
-    /// false (engine-semantics.md §6.3).
+    /// held: the rule opens nothing until an evaluation finds its condition or
+    /// its auto-resolve tree false (engine-semantics.md §6.3).
     pub awaiting_rearm: bool,
 }
 
@@ -208,13 +208,25 @@ impl ExcursionTracker {
         }
     }
 
+    /// Whether the rule is idle awaiting re-arm (§6.3), so its evaluation
+    /// reads the auto-resolve tree before the tracker.
+    #[must_use]
+    pub fn awaiting_rearm(&self, rule_id: Uuid) -> bool {
+        self.states
+            .get(&rule_id)
+            .is_some_and(|s| s.state == TrackerStateKind::Idle && s.awaiting_rearm)
+    }
+
     /// Advances the rule's state for one evaluation; `updated_at` becomes
-    /// `now` whatever the transition.
+    /// `now` whatever the transition. `auto_resolve_met` is the rule's
+    /// auto-resolve tree this evaluation, read only while the rule awaits
+    /// re-arm (§6.3); a rule without one passes false.
     pub fn process_evaluation(
         &mut self,
         rule_id: Uuid,
         config: TrackerRuleConfig,
         condition_met: bool,
+        auto_resolve_met: bool,
         now: DateTime<Utc>,
     ) -> Transition {
         let mut state = *self.states.entry(rule_id).or_insert(TrackerState {
@@ -227,7 +239,9 @@ impl ExcursionTracker {
         });
 
         let transition = match state.state {
-            TrackerStateKind::Idle => self.handle_idle(&mut state, config, condition_met),
+            TrackerStateKind::Idle => {
+                self.handle_idle(&mut state, config, condition_met, auto_resolve_met)
+            }
             TrackerStateKind::Confirming => {
                 self.handle_confirming(&mut state, config, condition_met)
             }
@@ -247,10 +261,13 @@ impl ExcursionTracker {
         state: &mut TrackerState,
         config: TrackerRuleConfig,
         condition_met: bool,
+        auto_resolve_met: bool,
     ) -> Transition {
         if state.awaiting_rearm {
-            state.awaiting_rearm = condition_met;
-            return Transition::none();
+            if condition_met && auto_resolve_met {
+                return Transition::none();
+            }
+            state.awaiting_rearm = false;
         }
         if !condition_met {
             return Transition::none();

@@ -20,13 +20,14 @@ internal sealed class ManagedExcursionDecider : IExcursionDecider
 
     /// <inheritdoc/>
     public TrackerDecision Process(
-        Guid ruleId, AlertTrackerState? state, TrackerConfig config, bool conditionMet, DateTime now)
+        Guid ruleId, AlertTrackerState? state, TrackerConfig config, bool conditionMet, bool autoResolveMet,
+        DateTime now)
     {
         var s = TrackerPostState.Of(state) ?? new TrackerPostState(StateIdle, 0, false, now, null);
 
         var (type, reason, post) = s.State switch
         {
-            StateIdle => Idle(s, config, conditionMet),
+            StateIdle => Idle(s, config, conditionMet, autoResolveMet),
             StateConfirming => Confirming(s, config, conditionMet),
             StateActive => conditionMet
                 ? (ExcursionTransitionType.ExcursionContinues, null, s)
@@ -40,10 +41,14 @@ internal sealed class ManagedExcursionDecider : IExcursionDecider
     }
 
     private static (ExcursionTransitionType, ExcursionCloseReason?, TrackerPostState) Idle(
-        TrackerPostState s, TrackerConfig config, bool conditionMet)
+        TrackerPostState s, TrackerConfig config, bool conditionMet, bool autoResolveMet)
     {
         if (s.AwaitingRearm)
-            return (ExcursionTransitionType.None, null, s with { AwaitingRearm = conditionMet });
+        {
+            if (conditionMet && autoResolveMet)
+                return (ExcursionTransitionType.None, null, s);
+            s = s with { AwaitingRearm = false };
+        }
         if (!conditionMet)
             return (ExcursionTransitionType.None, null, s);
         if (config.ConfirmationReadings <= 1)

@@ -1,23 +1,30 @@
 {
   "schema_version": 1,
-  "name": "auto-resolve-waits-for-rearm",
-  "description": "an auto-resolve that closes an active excursion leaves the rule idle awaiting re-arm: while the body and the resolve tree both hold it opens nothing, however often it is evaluated against the same reading, and an evaluation that finds the body false re-arms it",
+  "name": "auto-resolve-relapse-reopens",
+  "description": "a rule awaiting re-arm evaluates its auto-resolve tree on every evaluation, under the same auto_resolve root and timers: a sustained resolve that keeps holding against the same reading opens nothing, and one that goes false while the body holds re-arms and opens in that evaluation",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
       "name": "rule-1",
-      "condition_type": "iob",
+      "condition_type": "threshold",
       "condition_params": {
-        "operator": "\u003E=",
-        "value": 3
+        "direction": "below",
+        "value": 70
       },
       "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": true,
       "auto_resolve_params": {
-        "type": "trend",
-        "trend": {
-          "bucket": "flat"
+        "type": "sustained",
+        "sustained": {
+          "minutes": 10,
+          "child": {
+            "type": "threshold",
+            "threshold": {
+              "direction": "above",
+              "value": 60
+            }
+          }
         }
       }
     }
@@ -26,44 +33,10 @@
     {
       "at": "2026-01-05T12:00:00Z",
       "context": {
-        "latest_value": 100,
+        "latest_value": 65,
         "latest_timestamp": "2026-01-05T12:00:00Z",
         "trend_rate": 0,
         "last_reading_at": "2026-01-05T12:00:00Z",
-        "trend_bucket": "flat",
-        "iob_units": 4,
-        "has_ever_aps_cycled": false,
-        "has_ever_pump_snapshot": false,
-        "has_ever_uploader_snapshot": false,
-        "has_ever_aps_sensitivity": false,
-        "sleep_session_active": false
-      }
-    },
-    {
-      "at": "2026-01-05T12:01:00Z",
-      "context": {
-        "latest_value": 100,
-        "latest_timestamp": "2026-01-05T12:00:00Z",
-        "trend_rate": 0,
-        "last_reading_at": "2026-01-05T12:00:00Z",
-        "trend_bucket": "flat",
-        "iob_units": 4,
-        "has_ever_aps_cycled": false,
-        "has_ever_pump_snapshot": false,
-        "has_ever_uploader_snapshot": false,
-        "has_ever_aps_sensitivity": false,
-        "sleep_session_active": false
-      }
-    },
-    {
-      "at": "2026-01-05T12:02:00Z",
-      "context": {
-        "latest_value": 100,
-        "latest_timestamp": "2026-01-05T12:00:00Z",
-        "trend_rate": 0,
-        "last_reading_at": "2026-01-05T12:00:00Z",
-        "trend_bucket": "flat",
-        "iob_units": 4,
         "has_ever_aps_cycled": false,
         "has_ever_pump_snapshot": false,
         "has_ever_uploader_snapshot": false,
@@ -74,12 +47,10 @@
     {
       "at": "2026-01-05T12:05:00Z",
       "context": {
-        "latest_value": 100,
+        "latest_value": 65,
         "latest_timestamp": "2026-01-05T12:05:00Z",
         "trend_rate": 0,
         "last_reading_at": "2026-01-05T12:05:00Z",
-        "trend_bucket": "flat",
-        "iob_units": 2,
         "has_ever_aps_cycled": false,
         "has_ever_pump_snapshot": false,
         "has_ever_uploader_snapshot": false,
@@ -90,12 +61,38 @@
     {
       "at": "2026-01-05T12:10:00Z",
       "context": {
-        "latest_value": 100,
+        "latest_value": 65,
         "latest_timestamp": "2026-01-05T12:10:00Z",
         "trend_rate": 0,
         "last_reading_at": "2026-01-05T12:10:00Z",
-        "trend_bucket": "rising",
-        "iob_units": 4,
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:11:00Z",
+      "context": {
+        "latest_value": 65,
+        "latest_timestamp": "2026-01-05T12:10:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:10:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:12:00Z",
+      "context": {
+        "latest_value": 65,
+        "latest_timestamp": "2026-01-05T12:10:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:10:00Z",
         "has_ever_aps_cycled": false,
         "has_ever_pump_snapshot": false,
         "has_ever_uploader_snapshot": false,
@@ -106,12 +103,10 @@
     {
       "at": "2026-01-05T12:15:00Z",
       "context": {
-        "latest_value": 100,
+        "latest_value": 66,
         "latest_timestamp": "2026-01-05T12:15:00Z",
         "trend_rate": 0,
         "last_reading_at": "2026-01-05T12:15:00Z",
-        "trend_bucket": "flat",
-        "iob_units": 2,
         "has_ever_aps_cycled": false,
         "has_ever_pump_snapshot": false,
         "has_ever_uploader_snapshot": false,
@@ -122,12 +117,24 @@
     {
       "at": "2026-01-05T12:20:00Z",
       "context": {
-        "latest_value": 100,
+        "latest_value": 45,
         "latest_timestamp": "2026-01-05T12:20:00Z",
         "trend_rate": 0,
         "last_reading_at": "2026-01-05T12:20:00Z",
-        "trend_bucket": "rising",
-        "iob_units": 4,
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:25:00Z",
+      "context": {
+        "latest_value": 45,
+        "latest_timestamp": "2026-01-05T12:25:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:25:00Z",
         "has_ever_aps_cycled": false,
         "has_ever_pump_snapshot": false,
         "has_ever_uploader_snapshot": false,

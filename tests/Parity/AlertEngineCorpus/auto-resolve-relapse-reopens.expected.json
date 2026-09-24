@@ -1,0 +1,188 @@
+{
+  "schema_version": 1,
+  "scenario": "auto-resolve-relapse-reopens",
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "opened",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 1
+          },
+          "timer_ops": [
+            {
+              "op": "set",
+              "path": "auto_resolve",
+              "at": "2026-01-05T12:00:00Z"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "at": "2026-01-05T12:05:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "continues",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 1
+          }
+        }
+      ]
+    },
+    {
+      "at": "2026-01-05T12:10:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "continues",
+          "tracker": {
+            "state": "idle",
+            "confirmation_count": 0,
+            "awaiting_rearm": true
+          },
+          "auto_resolved": true
+        }
+      ]
+    },
+    {
+      "at": "2026-01-05T12:11:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "confirmation_count": 0,
+            "awaiting_rearm": true
+          }
+        }
+      ]
+    },
+    {
+      "at": "2026-01-05T12:12:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "confirmation_count": 0,
+            "awaiting_rearm": true
+          }
+        }
+      ]
+    },
+    {
+      "at": "2026-01-05T12:15:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "confirmation_count": 0,
+            "awaiting_rearm": true
+          }
+        }
+      ]
+    },
+    {
+      "at": "2026-01-05T12:20:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "opened",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 2
+          },
+          "timer_ops": [
+            {
+              "op": "clear",
+              "path": "auto_resolve"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "at": "2026-01-05T12:25:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "continues",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 2
+          }
+        }
+      ]
+    }
+  ]
+}

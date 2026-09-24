@@ -17,6 +17,7 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use nocturne_alerts_core::context::SensorContext;
+use nocturne_alerts_core::engine::{EngineState, Evaluation, Rule, evaluate_rule};
 use nocturne_alerts_core::enums::WireEnum;
 use nocturne_alerts_core::eval::{Env, eval_node, eval_payload as eval_parsed};
 use nocturne_alerts_core::excursion::{
@@ -463,7 +464,7 @@ fn at(minutes: i64) -> DateTime<Utc> {
 #[test]
 fn tracker_idle_false_evaluation_stays_idle() {
     let mut tracker = ExcursionTracker::new();
-    let t = tracker.process_evaluation(rule_id(), cfg(1, 0), false, at(0));
+    let t = tracker.process_evaluation(rule_id(), cfg(1, 0), false, false, at(0));
     assert_eq!(t.kind, TransitionType::None);
     assert_eq!(
         tracker.state(rule_id()).unwrap().state,
@@ -474,7 +475,7 @@ fn tracker_idle_false_evaluation_stays_idle() {
 #[test]
 fn tracker_idle_true_with_confirmation_greater_than_1_transitions_to_confirming() {
     let mut tracker = ExcursionTracker::new();
-    let t = tracker.process_evaluation(rule_id(), cfg(3, 0), true, at(0));
+    let t = tracker.process_evaluation(rule_id(), cfg(3, 0), true, false, at(0));
     assert_eq!(t.kind, TransitionType::None);
     let state = tracker.state(rule_id()).unwrap();
     assert_eq!(state.state, TrackerStateKind::Confirming);
@@ -484,7 +485,7 @@ fn tracker_idle_true_with_confirmation_greater_than_1_transitions_to_confirming(
 #[test]
 fn tracker_idle_true_with_confirmation_1_goes_directly_to_active() {
     let mut tracker = ExcursionTracker::new();
-    let t = tracker.process_evaluation(rule_id(), cfg(1, 0), true, at(0));
+    let t = tracker.process_evaluation(rule_id(), cfg(1, 0), true, false, at(0));
     assert_eq!(t.kind, TransitionType::ExcursionOpened);
     assert_eq!(t.excursion, Some(1));
     let state = tracker.state(rule_id()).unwrap();
@@ -495,8 +496,8 @@ fn tracker_idle_true_with_confirmation_1_goes_directly_to_active() {
 #[test]
 fn tracker_confirming_false_evaluation_resets_to_idle() {
     let mut tracker = ExcursionTracker::new();
-    let _ = tracker.process_evaluation(rule_id(), cfg(3, 0), true, at(0));
-    let t = tracker.process_evaluation(rule_id(), cfg(3, 0), false, at(5));
+    let _ = tracker.process_evaluation(rule_id(), cfg(3, 0), true, false, at(0));
+    let t = tracker.process_evaluation(rule_id(), cfg(3, 0), false, false, at(5));
     assert_eq!(t.kind, TransitionType::None);
     let state = tracker.state(rule_id()).unwrap();
     assert_eq!(state.state, TrackerStateKind::Idle);
@@ -506,8 +507,8 @@ fn tracker_confirming_false_evaluation_resets_to_idle() {
 #[test]
 fn tracker_confirming_true_evaluation_increases_counter() {
     let mut tracker = ExcursionTracker::new();
-    let _ = tracker.process_evaluation(rule_id(), cfg(3, 0), true, at(0));
-    let t = tracker.process_evaluation(rule_id(), cfg(3, 0), true, at(5));
+    let _ = tracker.process_evaluation(rule_id(), cfg(3, 0), true, false, at(0));
+    let t = tracker.process_evaluation(rule_id(), cfg(3, 0), true, false, at(5));
     assert_eq!(t.kind, TransitionType::None);
     assert_eq!(tracker.state(rule_id()).unwrap().confirmation_count, 2);
 }
@@ -515,9 +516,9 @@ fn tracker_confirming_true_evaluation_increases_counter() {
 #[test]
 fn tracker_confirming_reaches_threshold_opens_excursion() {
     let mut tracker = ExcursionTracker::new();
-    let _ = tracker.process_evaluation(rule_id(), cfg(3, 0), true, at(0));
-    let _ = tracker.process_evaluation(rule_id(), cfg(3, 0), true, at(5));
-    let t = tracker.process_evaluation(rule_id(), cfg(3, 0), true, at(10));
+    let _ = tracker.process_evaluation(rule_id(), cfg(3, 0), true, false, at(0));
+    let _ = tracker.process_evaluation(rule_id(), cfg(3, 0), true, false, at(5));
+    let t = tracker.process_evaluation(rule_id(), cfg(3, 0), true, false, at(10));
     assert_eq!(t.kind, TransitionType::ExcursionOpened);
     let state = tracker.state(rule_id()).unwrap();
     assert_eq!(state.state, TrackerStateKind::Active);
@@ -528,8 +529,8 @@ fn tracker_confirming_reaches_threshold_opens_excursion() {
 #[test]
 fn tracker_active_true_evaluation_continues_excursion() {
     let mut tracker = ExcursionTracker::new();
-    let _ = tracker.process_evaluation(rule_id(), cfg(1, 0), true, at(0));
-    let t = tracker.process_evaluation(rule_id(), cfg(1, 0), true, at(5));
+    let _ = tracker.process_evaluation(rule_id(), cfg(1, 0), true, false, at(0));
+    let t = tracker.process_evaluation(rule_id(), cfg(1, 0), true, false, at(5));
     assert_eq!(t.kind, TransitionType::ExcursionContinues);
     assert_eq!(t.excursion, Some(1));
 }
@@ -537,8 +538,8 @@ fn tracker_active_true_evaluation_continues_excursion() {
 #[test]
 fn tracker_active_false_evaluation_starts_hysteresis() {
     let mut tracker = ExcursionTracker::new();
-    let _ = tracker.process_evaluation(rule_id(), cfg(1, 30), true, at(0));
-    let t = tracker.process_evaluation(rule_id(), cfg(1, 30), false, at(5));
+    let _ = tracker.process_evaluation(rule_id(), cfg(1, 30), true, false, at(0));
+    let t = tracker.process_evaluation(rule_id(), cfg(1, 30), false, false, at(5));
     assert_eq!(t.kind, TransitionType::HysteresisStarted);
     assert_eq!(
         tracker.state(rule_id()).unwrap().state,
@@ -549,9 +550,9 @@ fn tracker_active_false_evaluation_starts_hysteresis() {
 #[test]
 fn tracker_hysteresis_true_evaluation_resumes_excursion() {
     let mut tracker = ExcursionTracker::new();
-    let _ = tracker.process_evaluation(rule_id(), cfg(1, 30), true, at(0));
-    let _ = tracker.process_evaluation(rule_id(), cfg(1, 30), false, at(5));
-    let t = tracker.process_evaluation(rule_id(), cfg(1, 30), true, at(10));
+    let _ = tracker.process_evaluation(rule_id(), cfg(1, 30), true, false, at(0));
+    let _ = tracker.process_evaluation(rule_id(), cfg(1, 30), false, false, at(5));
+    let t = tracker.process_evaluation(rule_id(), cfg(1, 30), true, false, at(10));
     assert_eq!(t.kind, TransitionType::HysteresisResumed);
     assert_eq!(t.excursion, Some(1));
     assert_eq!(
@@ -565,10 +566,10 @@ fn tracker_hysteresis_true_evaluation_resumes_excursion() {
 fn hysteresis_close_minute(hysteresis_minutes: i32) -> i64 {
     let mut tracker = ExcursionTracker::new();
     let config = cfg(1, hysteresis_minutes);
-    let _ = tracker.process_evaluation(rule_id(), config, true, at(0));
-    let _ = tracker.process_evaluation(rule_id(), config, false, at(5));
+    let _ = tracker.process_evaluation(rule_id(), config, true, false, at(0));
+    let _ = tracker.process_evaluation(rule_id(), config, false, false, at(5));
     for minute in (10..=120).step_by(5) {
-        let t = tracker.process_evaluation(rule_id(), config, false, at(minute));
+        let t = tracker.process_evaluation(rule_id(), config, false, false, at(minute));
         if t.kind == TransitionType::ExcursionClosed {
             assert_eq!(t.close_reason, Some(CloseReason::Hysteresis));
             assert_eq!(t.excursion, Some(1));
@@ -603,9 +604,9 @@ fn tracker_hysteresis_window_measures_from_entry_not_the_last_evaluation() {
 #[test]
 fn tracker_hysteresis_entry_records_its_start() {
     let mut tracker = ExcursionTracker::new();
-    let _ = tracker.process_evaluation(rule_id(), cfg(1, 30), true, at(0));
-    let _ = tracker.process_evaluation(rule_id(), cfg(1, 30), false, at(5));
-    let _ = tracker.process_evaluation(rule_id(), cfg(1, 30), false, at(10));
+    let _ = tracker.process_evaluation(rule_id(), cfg(1, 30), true, false, at(0));
+    let _ = tracker.process_evaluation(rule_id(), cfg(1, 30), false, false, at(5));
+    let _ = tracker.process_evaluation(rule_id(), cfg(1, 30), false, false, at(10));
     let state = tracker.state(rule_id()).unwrap();
     assert_eq!(state.hysteresis_started_at, Some(at(5)));
     assert_eq!(state.updated_at, at(10));
@@ -615,9 +616,9 @@ fn tracker_hysteresis_entry_records_its_start() {
 fn tracker_hysteresis_reentry_resumes_and_restarts_the_window() {
     let mut tracker = ExcursionTracker::new();
     let config = cfg(1, 30);
-    let _ = tracker.process_evaluation(rule_id(), config, true, at(0));
-    let _ = tracker.process_evaluation(rule_id(), config, false, at(5));
-    let t = tracker.process_evaluation(rule_id(), config, true, at(20));
+    let _ = tracker.process_evaluation(rule_id(), config, true, false, at(0));
+    let _ = tracker.process_evaluation(rule_id(), config, false, false, at(5));
+    let t = tracker.process_evaluation(rule_id(), config, true, false, at(20));
     assert_eq!(t.kind, TransitionType::HysteresisResumed);
     assert_eq!(t.excursion, Some(1));
     assert_eq!(
@@ -625,12 +626,12 @@ fn tracker_hysteresis_reentry_resumes_and_restarts_the_window() {
         None
     );
 
-    let t = tracker.process_evaluation(rule_id(), config, false, at(25));
+    let t = tracker.process_evaluation(rule_id(), config, false, false, at(25));
     assert_eq!(t.kind, TransitionType::HysteresisStarted);
     // 30 minutes after the first entry, but only 10 after the second.
-    let t = tracker.process_evaluation(rule_id(), config, false, at(35));
+    let t = tracker.process_evaluation(rule_id(), config, false, false, at(35));
     assert_eq!(t.kind, TransitionType::None);
-    let t = tracker.process_evaluation(rule_id(), config, false, at(55));
+    let t = tracker.process_evaluation(rule_id(), config, false, false, at(55));
     assert_eq!(t.kind, TransitionType::ExcursionClosed);
     assert_eq!(t.excursion, Some(1));
 }
@@ -654,9 +655,9 @@ fn tracker_restore_without_hysteresis_start_adopts_updated_at() {
         Some(at(5))
     );
     let config = cfg(1, 30);
-    let t = tracker.process_evaluation(rule_id(), config, false, at(30));
+    let t = tracker.process_evaluation(rule_id(), config, false, false, at(30));
     assert_eq!(t.kind, TransitionType::None);
-    let t = tracker.process_evaluation(rule_id(), config, false, at(35));
+    let t = tracker.process_evaluation(rule_id(), config, false, false, at(35));
     assert_eq!(t.kind, TransitionType::ExcursionClosed);
 }
 
@@ -664,8 +665,8 @@ fn tracker_restore_without_hysteresis_start_adopts_updated_at() {
 fn tracker_close_elapsed_hysteresis_closes_once_the_window_has_elapsed() {
     let mut tracker = ExcursionTracker::new();
     let config = cfg(1, 30);
-    let _ = tracker.process_evaluation(rule_id(), config, true, at(0));
-    let _ = tracker.process_evaluation(rule_id(), config, false, at(5));
+    let _ = tracker.process_evaluation(rule_id(), config, true, false, at(0));
+    let _ = tracker.process_evaluation(rule_id(), config, false, false, at(5));
 
     let t = tracker.close_elapsed_hysteresis(rule_id(), config, at(34));
     assert_eq!(t.kind, TransitionType::None);
@@ -696,7 +697,7 @@ fn tracker_close_elapsed_hysteresis_ignores_every_other_state() {
     assert_eq!(t.kind, TransitionType::None);
     assert!(tracker.state(rule_id()).is_none());
 
-    let _ = tracker.process_evaluation(rule_id(), config, true, at(0));
+    let _ = tracker.process_evaluation(rule_id(), config, true, false, at(0));
     let t = tracker.close_elapsed_hysteresis(rule_id(), config, at(60));
     assert_eq!(t.kind, TransitionType::None);
     assert_eq!(
@@ -704,7 +705,7 @@ fn tracker_close_elapsed_hysteresis_ignores_every_other_state() {
         TrackerStateKind::Confirming
     );
 
-    let _ = tracker.process_evaluation(rule_id(), config, true, at(5));
+    let _ = tracker.process_evaluation(rule_id(), config, true, false, at(5));
     let t = tracker.close_elapsed_hysteresis(rule_id(), config, at(60));
     assert_eq!(t.kind, TransitionType::None);
     assert_eq!(
@@ -719,8 +720,8 @@ fn tracker_close_elapsed_hysteresis_matches_the_evaluation_expiry() {
         let expected = hysteresis_close_minute(minutes);
         let mut tracker = ExcursionTracker::new();
         let config = cfg(1, minutes);
-        let _ = tracker.process_evaluation(rule_id(), config, true, at(0));
-        let _ = tracker.process_evaluation(rule_id(), config, false, at(5));
+        let _ = tracker.process_evaluation(rule_id(), config, true, false, at(0));
+        let _ = tracker.process_evaluation(rule_id(), config, false, false, at(5));
         let closed_at = (10..=120)
             .step_by(5)
             .find(|&m| {
@@ -737,7 +738,7 @@ fn tracker_close_elapsed_hysteresis_matches_the_evaluation_expiry() {
 #[test]
 fn tracker_force_close_from_active_resets_to_idle() {
     let mut tracker = ExcursionTracker::new();
-    let _ = tracker.process_evaluation(rule_id(), cfg(1, 0), true, at(0));
+    let _ = tracker.process_evaluation(rule_id(), cfg(1, 0), true, false, at(0));
     let t = tracker.force_close(rule_id(), CloseReason::Manual, at(5));
     assert_eq!(t.kind, TransitionType::ExcursionClosed);
     assert_eq!(t.close_reason, Some(CloseReason::Manual));
@@ -750,8 +751,8 @@ fn tracker_force_close_from_active_resets_to_idle() {
 #[test]
 fn tracker_force_close_from_hysteresis_resets_to_idle() {
     let mut tracker = ExcursionTracker::new();
-    let _ = tracker.process_evaluation(rule_id(), cfg(1, 60), true, at(0));
-    let _ = tracker.process_evaluation(rule_id(), cfg(1, 60), false, at(5));
+    let _ = tracker.process_evaluation(rule_id(), cfg(1, 60), true, false, at(0));
+    let _ = tracker.process_evaluation(rule_id(), cfg(1, 60), false, false, at(5));
     let t = tracker.force_close(rule_id(), CloseReason::AutoResolve, at(10));
     assert_eq!(t.kind, TransitionType::ExcursionClosed);
     assert_eq!(t.close_reason, Some(CloseReason::AutoResolve));
@@ -764,21 +765,126 @@ fn tracker_force_close_from_hysteresis_resets_to_idle() {
 #[test]
 fn tracker_auto_resolve_of_an_active_excursion_waits_for_a_false_evaluation() {
     let mut tracker = ExcursionTracker::new();
-    let _ = tracker.process_evaluation(rule_id(), cfg(1, 0), true, at(0));
+    let _ = tracker.process_evaluation(rule_id(), cfg(1, 0), true, false, at(0));
     let _ = tracker.force_close(rule_id(), CloseReason::AutoResolve, at(0));
-    assert!(tracker.state(rule_id()).unwrap().awaiting_rearm);
+    assert!(tracker.awaiting_rearm(rule_id()));
 
     for minute in [1, 2, 3] {
-        let t = tracker.process_evaluation(rule_id(), cfg(1, 0), true, at(minute));
-        assert_eq!(t.kind, TransitionType::None, "still met at {minute}");
+        let t = tracker.process_evaluation(rule_id(), cfg(1, 0), true, true, at(minute));
+        assert_eq!(t.kind, TransitionType::None, "both still met at {minute}");
     }
-    let t = tracker.process_evaluation(rule_id(), cfg(1, 0), false, at(4));
+    let t = tracker.process_evaluation(rule_id(), cfg(1, 0), false, true, at(4));
     assert_eq!(t.kind, TransitionType::None);
-    assert!(!tracker.state(rule_id()).unwrap().awaiting_rearm);
+    assert!(!tracker.awaiting_rearm(rule_id()));
 
-    let t = tracker.process_evaluation(rule_id(), cfg(1, 0), true, at(5));
+    let t = tracker.process_evaluation(rule_id(), cfg(1, 0), true, true, at(5));
     assert_eq!(t.kind, TransitionType::ExcursionOpened);
     assert_eq!(t.excursion, Some(2));
+}
+
+#[test]
+fn tracker_awaiting_rearm_opens_on_the_evaluation_whose_auto_resolve_is_false() {
+    for confirmation_readings in [1, 2] {
+        let mut tracker = ExcursionTracker::new();
+        let config = cfg(confirmation_readings, 0);
+        for minute in 0..confirmation_readings {
+            let _ = tracker.process_evaluation(rule_id(), config, true, false, at(minute.into()));
+        }
+        let _ = tracker.force_close(rule_id(), CloseReason::AutoResolve, at(2));
+        assert!(tracker.awaiting_rearm(rule_id()));
+
+        let t = tracker.process_evaluation(rule_id(), config, true, false, at(3));
+        assert!(!tracker.awaiting_rearm(rule_id()));
+        let expected = if confirmation_readings == 1 {
+            TransitionType::ExcursionOpened
+        } else {
+            TransitionType::None
+        };
+        assert_eq!(t.kind, expected, "confirmation {confirmation_readings}");
+        let state = tracker.state(rule_id()).unwrap();
+        assert_eq!(
+            state.state,
+            if confirmation_readings == 1 {
+                TrackerStateKind::Active
+            } else {
+                TrackerStateKind::Confirming
+            }
+        );
+    }
+}
+
+/// Low below 70, auto-resolved once glucose has held above 60 for 10 minutes.
+fn relapsing_low_rule() -> Rule {
+    Rule {
+        id: rule_id(),
+        condition_type: ConditionKind::Threshold,
+        condition_params: json!({ "direction": "below", "value": 70 }),
+        confirmation_readings: 1,
+        hysteresis_minutes: 0,
+        auto_resolve_enabled: true,
+        auto_resolve_params: Some(json!({
+            "type": "sustained",
+            "sustained": { "minutes": 10, "child": {
+                "type": "threshold", "threshold": { "direction": "above", "value": 60 } } },
+        })),
+    }
+}
+
+fn reading_ctx(minutes: i64, mgdl: i64) -> SensorContext {
+    SensorContext {
+        latest_value: Some(Decimal::from(mgdl)),
+        latest_timestamp: Some(at(minutes)),
+        last_reading_at: Some(at(minutes)),
+        ..Default::default()
+    }
+}
+
+fn evaluation(rule: &Rule, state: &mut EngineState, minutes: i64, mgdl: i64) -> Evaluation {
+    evaluate_rule(rule, &reading_ctx(minutes, mgdl), at(minutes), state, false)
+        .evaluation
+        .unwrap()
+}
+
+#[test]
+fn an_auto_resolved_rule_reopens_when_its_resolve_tree_goes_false_while_its_body_holds() {
+    let rule = relapsing_low_rule();
+    let mut state = EngineState::new();
+    assert_eq!(
+        evaluation(&rule, &mut state, 0, 65).transition.kind,
+        TransitionType::ExcursionOpened
+    );
+    let _ = evaluation(&rule, &mut state, 5, 65);
+    let resolved = evaluation(&rule, &mut state, 10, 65);
+    assert!(resolved.auto_resolved);
+    assert!(resolved.tracker.unwrap().awaiting_rearm);
+
+    let held = evaluation(&rule, &mut state, 15, 66);
+    assert_eq!(
+        held.transition.kind,
+        TransitionType::None,
+        "resolve still holds"
+    );
+    assert!(held.tracker.unwrap().awaiting_rearm);
+
+    let relapse = evaluation(&rule, &mut state, 20, 45);
+    assert_eq!(relapse.transition.kind, TransitionType::ExcursionOpened);
+    assert!(!relapse.auto_resolved);
+    assert!(!relapse.tracker.unwrap().awaiting_rearm);
+}
+
+#[test]
+fn an_awaiting_rule_keeps_its_resolve_timer_running_so_a_standing_resolve_never_reopens() {
+    let rule = relapsing_low_rule();
+    let mut state = EngineState::new();
+    for minute in [0, 5] {
+        let _ = evaluation(&rule, &mut state, minute, 65);
+    }
+    assert!(evaluation(&rule, &mut state, 10, 65).auto_resolved);
+    for minute in (15..=120).step_by(5) {
+        let e = evaluation(&rule, &mut state, minute, 65);
+        assert_eq!(e.transition.kind, TransitionType::None, "at {minute}");
+        assert!(e.timer_ops.is_empty(), "at {minute}: {:?}", e.timer_ops);
+    }
 }
 
 #[test]
@@ -790,16 +896,16 @@ fn tracker_closes_other_than_auto_resolve_of_an_active_excursion_stay_armed() {
     ];
     for (active, reason) in closes {
         let mut tracker = ExcursionTracker::new();
-        let _ = tracker.process_evaluation(rule_id(), cfg(1, 60), true, at(0));
+        let _ = tracker.process_evaluation(rule_id(), cfg(1, 60), true, false, at(0));
         if !active {
-            let _ = tracker.process_evaluation(rule_id(), cfg(1, 60), false, at(1));
+            let _ = tracker.process_evaluation(rule_id(), cfg(1, 60), false, false, at(1));
         }
         let _ = tracker.force_close(rule_id(), reason, at(2));
         assert!(
             !tracker.state(rule_id()).unwrap().awaiting_rearm,
             "{reason:?}"
         );
-        let t = tracker.process_evaluation(rule_id(), cfg(1, 60), true, at(3));
+        let t = tracker.process_evaluation(rule_id(), cfg(1, 60), true, false, at(3));
         assert_eq!(t.kind, TransitionType::ExcursionOpened, "{reason:?}");
     }
 }
@@ -807,7 +913,7 @@ fn tracker_closes_other_than_auto_resolve_of_an_active_excursion_stay_armed() {
 #[test]
 fn tracker_force_close_from_idle_is_noop() {
     let mut tracker = ExcursionTracker::new();
-    let _ = tracker.process_evaluation(rule_id(), cfg(1, 0), false, at(0));
+    let _ = tracker.process_evaluation(rule_id(), cfg(1, 0), false, false, at(0));
     let t = tracker.force_close(rule_id(), CloseReason::Manual, at(5));
     assert_eq!(t.kind, TransitionType::None);
 }
@@ -815,7 +921,7 @@ fn tracker_force_close_from_idle_is_noop() {
 #[test]
 fn tracker_force_close_from_confirming_is_noop() {
     let mut tracker = ExcursionTracker::new();
-    let _ = tracker.process_evaluation(rule_id(), cfg(3, 0), true, at(0));
+    let _ = tracker.process_evaluation(rule_id(), cfg(3, 0), true, false, at(0));
     let t = tracker.force_close(rule_id(), CloseReason::Manual, at(5));
     assert_eq!(t.kind, TransitionType::None);
     assert_eq!(
@@ -828,29 +934,29 @@ fn tracker_force_close_from_confirming_is_noop() {
 fn tracker_get_active_excursion_id_by_state() {
     let mut tracker = ExcursionTracker::new();
     // Idle: none.
-    let _ = tracker.process_evaluation(rule_id(), cfg(1, 60), false, at(0));
+    let _ = tracker.process_evaluation(rule_id(), cfg(1, 60), false, false, at(0));
     assert_eq!(tracker.active_excursion_id(rule_id()), None);
     // Active: some.
-    let _ = tracker.process_evaluation(rule_id(), cfg(1, 60), true, at(5));
+    let _ = tracker.process_evaluation(rule_id(), cfg(1, 60), true, false, at(5));
     assert_eq!(tracker.active_excursion_id(rule_id()), Some(1));
     // Hysteresis: some.
-    let _ = tracker.process_evaluation(rule_id(), cfg(1, 60), false, at(10));
+    let _ = tracker.process_evaluation(rule_id(), cfg(1, 60), false, false, at(10));
     assert_eq!(tracker.active_excursion_id(rule_id()), Some(1));
 
     // Confirming: none.
     let rule2 = Uuid::from_u128(2);
     let mut tracker2 = ExcursionTracker::new();
-    let _ = tracker2.process_evaluation(rule2, cfg(3, 0), true, at(0));
+    let _ = tracker2.process_evaluation(rule2, cfg(3, 0), true, false, at(0));
     assert_eq!(tracker2.active_excursion_id(rule2), None);
 }
 
 #[test]
 fn tracker_reopen_after_close_creates_fresh_excursion_ordinal() {
     let mut tracker = ExcursionTracker::new();
-    let _ = tracker.process_evaluation(rule_id(), cfg(1, 0), true, at(0));
-    let _ = tracker.process_evaluation(rule_id(), cfg(1, 0), false, at(5));
-    let _ = tracker.process_evaluation(rule_id(), cfg(1, 0), false, at(10));
-    let t = tracker.process_evaluation(rule_id(), cfg(1, 0), true, at(15));
+    let _ = tracker.process_evaluation(rule_id(), cfg(1, 0), true, false, at(0));
+    let _ = tracker.process_evaluation(rule_id(), cfg(1, 0), false, false, at(5));
+    let _ = tracker.process_evaluation(rule_id(), cfg(1, 0), false, false, at(10));
+    let t = tracker.process_evaluation(rule_id(), cfg(1, 0), true, false, at(15));
     assert_eq!(t.kind, TransitionType::ExcursionOpened);
     assert_eq!(t.excursion, Some(2));
 }
@@ -1037,7 +1143,7 @@ fn tracker_confirmation_count_saturates_on_restored_state() {
             awaiting_rearm: false,
         },
     );
-    let t = tracker.process_evaluation(rule_id(), cfg(i32::MAX, 0), true, at(5));
+    let t = tracker.process_evaluation(rule_id(), cfg(i32::MAX, 0), true, false, at(5));
     assert_eq!(t.kind, TransitionType::ExcursionOpened);
 }
 
@@ -1047,9 +1153,9 @@ fn tracker_excursion_ordinal_saturates() {
     tracker.set_next_excursion_ordinal(u32::MAX);
     let first = Uuid::from_u128(1);
     let second = Uuid::from_u128(2);
-    let t = tracker.process_evaluation(first, cfg(1, 0), true, at(0));
+    let t = tracker.process_evaluation(first, cfg(1, 0), true, false, at(0));
     assert_eq!(t.excursion, Some(u32::MAX));
-    let t = tracker.process_evaluation(second, cfg(1, 0), true, at(0));
+    let t = tracker.process_evaluation(second, cfg(1, 0), true, false, at(0));
     assert_eq!(t.kind, TransitionType::ExcursionOpened);
     assert_eq!(t.excursion, Some(u32::MAX));
 }
@@ -1120,8 +1226,13 @@ fn hysteresis_expiry_past_the_calendar_does_not_panic() {
             awaiting_rearm: false,
         },
     );
-    let t =
-        tracker.process_evaluation(rule_id(), cfg(1, i32::MAX), false, DateTime::<Utc>::MAX_UTC);
+    let t = tracker.process_evaluation(
+        rule_id(),
+        cfg(1, i32::MAX),
+        false,
+        false,
+        DateTime::<Utc>::MAX_UTC,
+    );
     assert_eq!(t.kind, TransitionType::None);
 }
 

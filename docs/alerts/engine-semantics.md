@@ -375,7 +375,8 @@ confirm it N× faster at a shorter periodic cadence. It should express that conf
 Per-rule persisted state: `{State, ConfirmationCount, ActiveExcursionId, UpdatedAt,
 HysteresisStartedAt, AwaitingRearm}` with states `idle | confirming | active | hysteresis`. Rule inputs: `ConfirmationReadings`
 (default 1), `HysteresisMinutes`. One evaluation = one `ProcessEvaluationAsync(ruleId,
-conditionMet)` call. **Every call**, regardless of transition, decides `state.UpdatedAt =
+conditionMet, autoResolveMet)` call, where `autoResolveMet` is read only while the rule
+awaits re-arm (§6.3). **Every call**, regardless of transition, decides `state.UpdatedAt =
 now`. The host persists a decision only when it changes another field: the only reader of
 `UpdatedAt` is the hysteresis-start adoption below, and the decision that adopts it persists
 the start. A stored state string naming none of the four states is read as
@@ -385,8 +386,8 @@ start and re-arm flag (§6.3) are dropped. Every operation reads it so.
 
 | State | met | Result |
 |---|---|---|
-| idle, awaiting re-arm | true | None (§6.3) |
-| idle, awaiting re-arm | false | clear `AwaitingRearm`, None |
+| idle, awaiting re-arm | true, and `autoResolveMet` | None (§6.3) |
+| idle, awaiting re-arm | false, or not `autoResolveMet` | clear `AwaitingRearm`, then as idle below in the same call |
 | idle | false | None |
 | idle | true | `ConfirmationReadings <= 1` ⇒ open excursion → **active**, emit `ExcursionOpened`. Else → **confirming**, `ConfirmationCount = 1`, emit None |
 | confirming | false | → **idle**, count reset, None (a single false fully resets confirmation) |
@@ -433,11 +434,20 @@ since wall-clock rules are evaluated every 30 s against the newest reading (§5.
 would repeat for as long as both trees hold.
 
 So an auto-resolve close from `active` (the last evaluation found the condition true)
-leaves the rule idle with `AwaitingRearm` set. While it is set an evaluation opens
-nothing; the first evaluation that finds the condition false clears it, and the rule then
-confirms and opens as usual. An auto-resolve close from `hysteresis` (the last evaluation
-found it false) does not set it, nor does any other close reason. A manual close while the
-condition holds re-opens on the next evaluation, once.
+leaves the rule idle with `AwaitingRearm` set. While it is set, every evaluation also
+evaluates the auto-resolve tree, before the tracker, at the same `auto_resolve` root and
+against the same timers as the post-tracker pass (§7 step 5), so a `sustained` inside it
+keeps its first-true instant and keeps running. An evaluation that finds both the condition
+and the auto-resolve tree true opens nothing. The first that finds either false clears
+`AwaitingRearm` and carries on as an idle evaluation: a true condition then opens (or starts
+confirming) in that same evaluation, so a relapse — the condition still holding while what
+resolved it no longer does — alerts at once. An auto-resolve that is disabled, absent,
+malformed or cannot be evaluated reads as false and re-arms.
+
+Nothing flips while both trees hold, so evaluations against one stale reading (§5.1) stay
+quiet. An auto-resolve close from `hysteresis` (the last evaluation found the condition
+false) does not set `AwaitingRearm`, nor does any other close reason. A manual close while
+the condition holds re-opens on the next evaluation, once.
 
 State persisted before `AwaitingRearm` existed has none and reads as armed.
 
@@ -450,16 +460,19 @@ drops `alert_state` chains whose parents are disabled/deleted — host-side):
 
 1. Root context: `CurrentRuleId = rule.Id`, `CurrentPath = wire(rule.ConditionType)`.
 2. `conditionMet` = evaluate the rule tree.
-3. `transition` = tracker.ProcessEvaluation(rule, conditionMet).
+3. `transition` = tracker.ProcessEvaluation(rule, conditionMet, autoResolveMet). Only when
+   the stored state is idle awaiting re-arm, `autoResolveMet` is the auto-resolve tree
+   evaluated first, exactly as in step 5; otherwise it is not evaluated here.
 4. Open/close side effects (instances, delivery, DND suppression, info auto-ack) —
    host-side, out of crate scope.
 5. **Unconditionally** (even on the same tick as an open), if `AutoResolveEnabled` and
-   `AutoResolveParams` non-blank and an active excursion exists: deserialise the
-   auto-resolve tree; evaluate it with `CurrentPath = "auto_resolve"`; if true,
-   force-close with reason `auto`. A malformed auto-resolve JSON is skipped silently.
-   Consequence: a rule whose resolve predicate is already true when its body opens
-   produces an open + close pair on the same tick, then opens nothing until its body has
-   been false (§6.3).
+   `AutoResolveParams` non-blank and an active excursion exists, and step 3 did not
+   evaluate the tree: deserialise the auto-resolve tree; evaluate it with
+   `CurrentPath = "auto_resolve"`; if true, force-close with reason `auto`. A malformed
+   auto-resolve JSON is skipped silently. An evaluation therefore reads the tree at most
+   once; one that re-armed and opened in step 3 found it false. Consequence: a rule whose
+   resolve predicate is already true when its body opens produces an open + close pair on
+   the same tick, then opens nothing while both trees hold (§6.3).
 
 Evaluation errors in one rule are caught and logged; remaining rules still evaluate. A
 rule whose tree cannot be evaluated (§1.4) is skipped before step 2, so it writes no
@@ -513,14 +526,16 @@ machine-checkable form is `tests/Parity/AlertEngineCorpus/replay/`.
      shared timer store). The leaf log force-evaluates every leaf alone at the same root
      path and records each leaf's first observation and every flip
      (`LeafTransitionPoint(atMs, value)`, unix ms).
-  3. `met && !firing` ⇒ `fired`, or `suppressed_by_dnd` when the host named the rule for
-     the tick, unless the rule awaits re-arm (step 4); the rule becomes firing either way. `!met && firing` ⇒ `cleared`: the rule
-     stops firing and **all its timers are cleared**, the auto-resolve tree's included.
-  4. While firing — including on the tick it fired — an enabled auto-resolve tree that
-     parses and is evaluable is evaluated at `auto_resolve` (§7 step 5); true ⇒
-     `auto_resolved`, and the rule stops firing and its timers are cleared, as for a clear.
-     It then fires again only after a tick whose body is false, as the tracker re-arms
-     (§6.3).
+  3. A rule awaiting re-arm (step 5) evaluates its enabled, evaluable auto-resolve tree at
+     `auto_resolve`; when `met` is false or the tree is, it re-arms on this tick (§6.3).
+  4. `met && !firing` ⇒ `fired`, or `suppressed_by_dnd` when the host named the rule for
+     the tick, unless the rule still awaits re-arm; the rule becomes firing either way.
+     `!met && firing` ⇒ `cleared`: the rule stops firing and **all its timers are
+     cleared**, the auto-resolve tree's included.
+  5. While firing — including on the tick it fired — and unless step 3 evaluated it, an
+     enabled auto-resolve tree that parses and is evaluable is evaluated at `auto_resolve`
+     (§7 step 5); true ⇒ `auto_resolved`: the rule stops firing and awaits re-arm, and its
+     timers are kept, as the tracker keeps them.
 - **Output**: the evaluation order; events by tick then evaluation order; the leaf log per
   rule in evaluation order; and, on request, each rule's `met`/`firing` (or `skipped`)
   after every tick. The backend's API drops `cleared`, which has no event kind there.

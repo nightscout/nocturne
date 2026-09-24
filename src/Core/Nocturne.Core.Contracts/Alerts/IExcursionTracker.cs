@@ -58,9 +58,18 @@ public interface IExcursionTracker
     /// </summary>
     /// <param name="alertRuleId">The <see cref="Nocturne.Core.Models.AlertRule"/> being evaluated.</param>
     /// <param name="conditionMet">Whether the alert condition is currently met.</param>
+    /// <param name="autoResolveMet">
+    /// Evaluates the rule's auto-resolve tree for this evaluation. Called, under the rule's lease,
+    /// only while the rule is idle awaiting re-arm (docs/alerts/engine-semantics.md §6.3);
+    /// <see langword="null"/> for a rule without one, which reads as false.
+    /// </param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>An <see cref="ExcursionTransition"/> describing the state change.</returns>
-    Task<ExcursionTransition> ProcessEvaluationAsync(Guid alertRuleId, bool conditionMet, CancellationToken ct);
+    Task<ExcursionTransition> ProcessEvaluationAsync(
+        Guid alertRuleId,
+        bool conditionMet,
+        Func<CancellationToken, Task<bool>>? autoResolveMet,
+        CancellationToken ct);
 
     /// <summary>
     /// Closes any active excursion for the rule out-of-band from the per-reading

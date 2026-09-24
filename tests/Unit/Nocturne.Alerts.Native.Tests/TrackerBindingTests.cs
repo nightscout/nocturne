@@ -177,4 +177,30 @@ public class TrackerBindingTests
         response.Tracker!.State.Should().Be("idle");
         response.Tracker.AwaitingRearm.Should().BeTrue();
     }
+
+    [NativeTheory]
+    [InlineData(true, RustTransition.None)]
+    [InlineData(false, RustTransition.Opened)]
+    public void Process_awaiting_rearm_reads_the_auto_resolve_truth(bool autoResolveMet, RustTransition expected)
+    {
+        var awaiting = new RustTrackerState
+        {
+            State = "idle",
+            UpdatedAt = Now.AddMinutes(-1),
+            AwaitingRearm = true,
+            NextExcursionOrdinal = 2,
+        };
+
+        var response = RustAlertEngine.TrackerProcess(new RustTrackerProcessRequest
+        {
+            Tracker = awaiting,
+            Now = Now,
+            Config = new RustTrackerConfig(),
+            ConditionMet = true,
+            AutoResolveMet = autoResolveMet,
+        });
+
+        response.Transition!.Type.Should().Be(expected);
+        response.Tracker!.AwaitingRearm.Should().Be(autoResolveMet);
+    }
 }

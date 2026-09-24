@@ -55,6 +55,7 @@ public class ExcursionTracker : IExcursionTracker
     public async Task<ExcursionTransition> ProcessEvaluationAsync(
         Guid alertRuleId,
         bool conditionMet,
+        Func<CancellationToken, Task<bool>>? autoResolveMet,
         CancellationToken ct)
     {
         // A concurrent evaluation of the same rule waits on the lease and re-reads the committed
@@ -70,7 +71,8 @@ public class ExcursionTracker : IExcursionTracker
 
         var state = await _repository.GetTrackerStateAsync(alertRuleId, ct);
         var now = _timeProvider.GetUtcNow().UtcDateTime;
-        var decision = Decider.Process(alertRuleId, state, TrackerConfig.Of(rule), conditionMet, now);
+        var resolveMet = AwaitsRearm(state) && autoResolveMet is not null && await autoResolveMet(ct);
+        var decision = Decider.Process(alertRuleId, state, TrackerConfig.Of(rule), conditionMet, resolveMet, now);
         return await PersistAsync(alertRuleId, state, decision, now, ct);
     }
 
@@ -106,6 +108,10 @@ public class ExcursionTracker : IExcursionTracker
     /// <inheritdoc/>
     public async Task<Guid?> GetActiveExcursionIdAsync(Guid alertRuleId, CancellationToken ct) =>
         ActiveExcursionOf(await _repository.GetTrackerStateAsync(alertRuleId, ct));
+
+    /// <summary>Whether a state reads as idle awaiting re-arm (docs/alerts/engine-semantics.md §6.3).</summary>
+    internal static bool AwaitsRearm(AlertTrackerState? state) =>
+        TrackerPostState.Of(state) is { State: TrackerPostState.Idle, AwaitingRearm: true };
 
     /// <summary>The open excursion of a state that reads as active or in hysteresis.</summary>
     internal static Guid? ActiveExcursionOf(AlertTrackerState? state) =>

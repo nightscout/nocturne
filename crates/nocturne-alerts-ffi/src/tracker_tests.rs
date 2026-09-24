@@ -126,8 +126,21 @@ fn force_close_reports_the_excursion_it_closed() {
     );
 }
 
+fn process_resolving(tracker: &Value, met: bool, auto_resolve_met: bool, now: &str) -> Value {
+    let response = process(&json!({
+        "schema_version": 1,
+        "tracker": tracker,
+        "config": { "confirmation_readings": 1, "hysteresis_minutes": 0 },
+        "condition_met": met,
+        "auto_resolve_met": auto_resolve_met,
+        "now": now,
+    }));
+    assert_eq!(response["ok"], json!(true), "{}", response["error"]);
+    response
+}
+
 #[test]
-fn an_auto_resolve_close_round_trips_awaiting_rearm_until_a_false_evaluation() {
+fn an_auto_resolve_close_round_trips_awaiting_rearm_until_either_tree_is_false() {
     let opened = process_at(&Value::Null, true, "2026-01-05T12:00:00Z", 0);
     let closed = force_close(&json!({
         "schema_version": 1,
@@ -137,18 +150,27 @@ fn an_auto_resolve_close_round_trips_awaiting_rearm_until_a_false_evaluation() {
     }));
     assert_eq!(closed["tracker"]["awaiting_rearm"], json!(true));
 
-    let held = process_at(&closed["tracker"], true, "2026-01-05T12:00:30Z", 0);
+    let held = process_resolving(&closed["tracker"], true, true, "2026-01-05T12:00:30Z");
     assert_eq!(held["transition"], json!({ "type": "none" }));
     assert_eq!(held["tracker"]["awaiting_rearm"], json!(true));
 
-    let rearmed = process_at(&held["tracker"], false, "2026-01-05T12:01:00Z", 0);
+    let rearmed = process_resolving(&held["tracker"], false, true, "2026-01-05T12:01:00Z");
     assert!(rearmed["tracker"].get("awaiting_rearm").is_none());
-
     let reopened = process_at(&rearmed["tracker"], true, "2026-01-05T12:01:30Z", 0);
     assert_eq!(
         reopened["transition"],
         json!({ "type": "opened", "excursion_ordinal": 2 })
     );
+
+    let relapse = process_resolving(&held["tracker"], true, false, "2026-01-05T12:01:00Z");
+    assert_eq!(
+        relapse["transition"],
+        json!({ "type": "opened", "excursion_ordinal": 2 })
+    );
+    assert!(relapse["tracker"].get("awaiting_rearm").is_none());
+
+    let absent = process_at(&held["tracker"], true, "2026-01-05T12:01:00Z", 0);
+    assert_eq!(absent["transition"]["type"], json!("opened"));
 }
 
 #[test]
@@ -344,10 +366,38 @@ fn tracker_config(rule: &Value) -> Value {
     })
 }
 
+/// The rule's enabled auto-resolve tree at the `auto_resolve` root against
+/// the timers before the tick; the body's timers sit under other roots, so the
+/// order `evaluate` reads them in does not matter.
+fn auto_resolve_holds(
+    rule: &Value,
+    tick: &crate::tests::ScenarioTick,
+    timers: Option<&Value>,
+) -> bool {
+    let node = &rule["auto_resolve_params"];
+    if rule["auto_resolve_enabled"] != json!(true) || node.is_null() {
+        return false;
+    }
+    let response = call_json(
+        crate::nocturne_alerts_evaluate_node,
+        &json!({
+            "schema_version": 1,
+            "rule_id": rule["id"],
+            "node": node,
+            "root": "auto_resolve",
+            "context": tick.context,
+            "now": tick.at,
+            "timers": timers.cloned().unwrap_or_else(|| json!({})),
+        })
+        .to_string(),
+    );
+    response["ok"] == json!(true) && response["value"] == json!(true)
+}
+
 /// Every corpus scenario, run through `evaluate` while a second tracker per
 /// rule follows the same ticks through the tracker entry points: `process`
-/// with the tick's root truth, then `force_close` when auto-resolve closed
-/// the excursion. The two trackers and transitions must agree at every step.
+/// with the tick's root truth (and, awaiting re-arm, its auto-resolve truth),
+/// then `force_close` when auto-resolve closed the excursion. The two trackers and transitions must agree at every step.
 #[test]
 fn tracker_entry_points_follow_the_evaluate_tracker_across_the_corpus() {
     let paths = scenario_paths();
@@ -391,11 +441,14 @@ fn tracker_entry_points_follow_the_evaluate_tracker_across_the_corpus() {
                     .cloned()
                     .unwrap_or_else(|| json!({}));
                 shadow["next_excursion_ordinal"] = json!(next_ordinal);
+                let auto_resolve_met = shadow["awaiting_rearm"] == json!(true)
+                    && auto_resolve_holds(rule, tick, timers.get(&rule_id));
                 let processed = process(&json!({
                     "schema_version": 1,
                     "tracker": shadow,
                     "config": tracker_config(rule),
                     "condition_met": result["root"],
+                    "auto_resolve_met": auto_resolve_met,
                     "now": tick.at,
                 }));
                 assert_eq!(processed["ok"], json!(true), "{at}: {}", processed["error"]);

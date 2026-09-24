@@ -121,10 +121,19 @@ public sealed class ScenarioRunner
         var node = BuildFullNode(wire, scenarioRule.ConditionParams);
         var leafValues = await forceRunner.EvaluateAllLeavesAsync(node, rootContext, registry, ct);
 
-        var transition = await tracker.ProcessEvaluationAsync(rule.Id, conditionMet, ct);
+        var rearmReadResolve = false;
+        var transition = await tracker.ProcessEvaluationAsync(
+            rule.Id,
+            conditionMet,
+            token =>
+            {
+                rearmReadResolve = true;
+                return AutoResolveHoldsAsync(rule, context, registry, token);
+            },
+            ct);
 
         var autoResolved = false;
-        if (rule.AutoResolveEnabled && !string.IsNullOrWhiteSpace(rule.AutoResolveParams))
+        if (rule.AutoResolveEnabled && !string.IsNullOrWhiteSpace(rule.AutoResolveParams) && !rearmReadResolve)
         {
             autoResolved = await TryAutoResolveAsync(rule, context, registry, tracker, ct);
         }
@@ -168,6 +177,23 @@ public sealed class ScenarioRunner
         if (activeExcursionId is null)
             return false;
 
+        if (!await AutoResolveHoldsAsync(rule, context, registry, ct))
+            return false;
+
+        var transition = await tracker.ForceCloseAsync(rule.Id, ExcursionCloseReason.AutoResolve, ct);
+        return transition.Type == ExcursionTransitionType.ExcursionClosed;
+    }
+
+    /// <summary>Mirrors <c>ManagedAlertEngine.AutoResolveHoldsAsync</c>.</summary>
+    private static async Task<bool> AutoResolveHoldsAsync(
+        AlertRule rule,
+        SensorContext context,
+        ConditionEvaluatorRegistry registry,
+        CancellationToken ct)
+    {
+        if (!rule.AutoResolveEnabled || string.IsNullOrWhiteSpace(rule.AutoResolveParams))
+            return false;
+
         ConditionNode? node;
         try
         {
@@ -186,12 +212,7 @@ public sealed class ScenarioRunner
             CurrentPath = AlertConditionTypeNames.AutoResolvePathRoot,
         };
 
-        var shouldResolve = await registry.EvaluateNodeAsync(node, autoResolveContext, ct);
-        if (!shouldResolve)
-            return false;
-
-        var transition = await tracker.ForceCloseAsync(rule.Id, ExcursionCloseReason.AutoResolve, ct);
-        return transition.Type == ExcursionTransitionType.ExcursionClosed;
+        return await registry.EvaluateNodeAsync(node, autoResolveContext, ct);
     }
 
     /// <summary>

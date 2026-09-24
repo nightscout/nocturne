@@ -82,12 +82,29 @@ public static class ReplayScenarios
                 Reading(15, 65m), // fires again; the resolve timer is set anew, not 15 minutes old
                 Reading(20, 65m),
                 Reading(25, 65m), // resolve has held 10 minutes: auto-resolved
-                Reading(30, 65m), // body still true: awaits re-arm, no fire
+                Reading(30, 65m), // body and resolve still true: awaits re-arm, no fire
+            ]);
+
+        yield return Replay(
+            "replay-auto-resolve-relapse",
+            "a rule awaiting re-arm evaluates its auto-resolve tree every tick, keeping that tree's timers, and fires again on the tick the tree goes false while the body still holds",
+            [Rule(1, "threshold", Low70, autoResolveParams: """
+                {"type": "sustained", "sustained": {"minutes": 10, "child":
+                    {"type": "threshold", "threshold": {"direction": "above", "value": 60}}}}
+                """)],
+            [
+                Reading(0, 65m),  // fires; the resolve timer is set
+                Reading(5, 65m),
+                Reading(10, 65m), // resolve has held 10 minutes: auto-resolved, its timer kept
+                Reading(15, 66m), // both still true: no fire
+                Reading(20, 66m), // no fire
+                Reading(25, 45m), // resolve false, body true: re-armed and fires on this tick
+                Reading(30, 45m), // still firing; the resolve child is false
             ]);
 
         yield return Replay(
             "replay-auto-resolve",
-            "auto-resolve is evaluated only while firing, including on the tick that fires; after it the rule fires again only once its body has been false",
+            "auto-resolve is evaluated while firing, including on the tick that fires, and while awaiting re-arm; after it the rule fires again once its body or its auto-resolve tree is false",
             [Rule(1, "threshold", Low70, autoResolveParams: """
                 {"type": "iob", "iob": {"operator": "<=", "value": 0.5}}
                 """)],
@@ -96,7 +113,7 @@ public static class ReplayScenarios
                 At(5, Ctx(T(5), 65m) with { IobUnits = 2m }),    // fires
                 At(10, Ctx(T(10), 65m) with { IobUnits = 1m }),
                 At(15, Ctx(T(15), 65m) with { IobUnits = 0.4m }), // auto-resolved
-                At(20, Ctx(T(20), 65m) with { IobUnits = 0.3m }), // body still true: awaits re-arm, no fire
+                At(20, Ctx(T(20), 65m) with { IobUnits = 0.3m }), // body and resolve still true: awaits re-arm, no fire
                 At(25, Ctx(T(25), 100m) with { IobUnits = 0.3m }), // body false: re-armed
                 At(30, Ctx(T(30), 65m) with { IobUnits = 0.3m }), // fires again and resolves on the same tick
             ]);

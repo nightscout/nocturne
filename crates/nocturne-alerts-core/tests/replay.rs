@@ -180,6 +180,55 @@ fn an_auto_resolve_true_on_the_opening_tick_fires_and_resolves_it_once_until_rea
 }
 
 #[test]
+fn an_auto_resolved_rule_fires_again_when_its_resolve_tree_goes_false_while_its_body_holds() {
+    let mut r = rule(1, ConditionKind::Threshold, below(70));
+    r.auto_resolve_enabled = true;
+    r.auto_resolve_params = Some(json!({
+        "type": "sustained",
+        "sustained": { "minutes": 10, "child": {
+            "type": "threshold", "threshold": { "direction": "above", "value": 60 } } },
+    }));
+    let ticks = [
+        reading(0, 65),
+        reading(5, 65),
+        reading(10, 65), // resolve held 10 minutes: auto-resolved
+        reading(15, 65), // resolve still holds: nothing
+        reading(20, 45), // resolve false, body true: fires
+    ];
+    let out = replay(&[r], ticks, with_ticks()).unwrap();
+
+    assert_eq!(
+        kinds(&out.events),
+        vec![
+            (0, id(1), ReplayEventKind::Fired),
+            (10, id(1), ReplayEventKind::AutoResolved),
+            (20, id(1), ReplayEventKind::Fired),
+        ]
+    );
+}
+
+#[test]
+fn an_auto_resolve_that_keeps_holding_keeps_its_timer_and_never_fires_again() {
+    let mut r = rule(1, ConditionKind::Threshold, below(70));
+    r.auto_resolve_enabled = true;
+    r.auto_resolve_params = Some(json!({
+        "type": "sustained",
+        "sustained": { "minutes": 10, "child": {
+            "type": "threshold", "threshold": { "direction": "above", "value": 60 } } },
+    }));
+    let ticks = (0..=24).map(|n| reading(n * 5, 65));
+    let out = replay(&[r], ticks, with_ticks()).unwrap();
+
+    assert_eq!(
+        kinds(&out.events),
+        vec![
+            (0, id(1), ReplayEventKind::Fired),
+            (10, id(1), ReplayEventKind::AutoResolved),
+        ]
+    );
+}
+
+#[test]
 fn an_unevaluable_body_is_skipped_on_every_tick() {
     let rules = [rule(
         1,

@@ -22,10 +22,11 @@ internal sealed class ShadowExcursionDecider(
     private const string Engine = "rust";
 
     public TrackerDecision Process(
-        Guid ruleId, AlertTrackerState? state, TrackerConfig config, bool conditionMet, DateTime now) =>
+        Guid ruleId, AlertTrackerState? state, TrackerConfig config, bool conditionMet, bool autoResolveMet,
+        DateTime now) =>
         Shadow(ruleId, "tracker_process",
-            managed.Process(ruleId, state, config, conditionMet, now),
-            () => rust.Process(ruleId, state, config, conditionMet, now));
+            managed.Process(ruleId, state, config, conditionMet, autoResolveMet, now),
+            () => rust.Process(ruleId, state, config, conditionMet, autoResolveMet, now));
 
     public TrackerDecision ForceClose(
         Guid ruleId, AlertTrackerState? state, ExcursionCloseReason reason, DateTime now) =>

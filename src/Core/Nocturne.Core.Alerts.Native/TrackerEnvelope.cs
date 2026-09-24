@@ -27,6 +27,13 @@ public sealed record RustTrackerProcessRequest
 
     [JsonPropertyName("condition_met")]
     public required bool ConditionMet { get; init; }
+
+    /// <summary>
+    /// The auto-resolve tree this evaluation; read only while the tracker awaits re-arm
+    /// (docs/alerts/engine-semantics.md §6.3).
+    /// </summary>
+    [JsonPropertyName("auto_resolve_met")]
+    public bool AutoResolveMet { get; init; }
 }
 
 /// <summary>Request envelope for <c>nocturne_alerts_tracker_force_close</c>.</summary>

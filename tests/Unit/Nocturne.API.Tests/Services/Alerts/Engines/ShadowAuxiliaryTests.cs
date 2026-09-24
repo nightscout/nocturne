@@ -159,7 +159,7 @@ public class ShadowAuxiliaryTests
 
     private sealed class FixedDecider(TrackerDecision decision) : IExcursionDecider
     {
-        public TrackerDecision Process(Guid ruleId, AlertTrackerState? state, TrackerConfig config, bool conditionMet, DateTime now) => decision;
+        public TrackerDecision Process(Guid ruleId, AlertTrackerState? state, TrackerConfig config, bool conditionMet, bool autoResolveMet, DateTime now) => decision;
 
         public TrackerDecision ForceClose(Guid ruleId, AlertTrackerState? state, ExcursionCloseReason reason, DateTime now) => decision;
 
@@ -168,7 +168,7 @@ public class ShadowAuxiliaryTests
 
     private sealed class ThrowingDecider : IExcursionDecider
     {
-        public TrackerDecision Process(Guid ruleId, AlertTrackerState? state, TrackerConfig config, bool conditionMet, DateTime now) => throw new InvalidOperationException();
+        public TrackerDecision Process(Guid ruleId, AlertTrackerState? state, TrackerConfig config, bool conditionMet, bool autoResolveMet, DateTime now) => throw new InvalidOperationException();
 
         public TrackerDecision ForceClose(Guid ruleId, AlertTrackerState? state, ExcursionCloseReason reason, DateTime now) => throw new InvalidOperationException();
 
@@ -228,14 +228,14 @@ public class ShadowAuxiliaryTests
                 new RustExcursionDecider(new AlertEngineErrors(new TestMeterFactory(), time), AlertEngineErrors.ShadowEngine),
                 logger));
 
-        await tracker.ProcessEvaluationAsync(RuleId, true, CancellationToken.None);
-        await tracker.ProcessEvaluationAsync(RuleId, false, CancellationToken.None);
+        await tracker.ProcessEvaluationAsync(RuleId, true, null, CancellationToken.None);
+        await tracker.ProcessEvaluationAsync(RuleId, false, null, CancellationToken.None);
         time.SetUtcNow(T0.AddMinutes(5));
         await tracker.CloseElapsedHysteresisAsync(RuleId, CancellationToken.None);
-        await tracker.ProcessEvaluationAsync(RuleId, true, CancellationToken.None);
+        await tracker.ProcessEvaluationAsync(RuleId, true, null, CancellationToken.None);
         await tracker.ForceCloseAsync(RuleId, ExcursionCloseReason.Manual, CancellationToken.None);
-        await tracker.ProcessEvaluationAsync(RuleId, true, CancellationToken.None);
-        await tracker.ProcessEvaluationAsync(RuleId, false, CancellationToken.None);
+        await tracker.ProcessEvaluationAsync(RuleId, true, null, CancellationToken.None);
+        await tracker.ProcessEvaluationAsync(RuleId, false, null, CancellationToken.None);
         time.SetUtcNow(T0.AddMinutes(20));
         var closed = await tracker.CloseElapsedHysteresisAsync(RuleId, CancellationToken.None);
 

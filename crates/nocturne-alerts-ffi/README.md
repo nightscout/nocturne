@@ -157,8 +157,8 @@ evaluated is an error envelope, this envelope never sets it.
   evaluation. `hysteresis_started_at` is what hysteresis expiry measures
   from; dropping it makes every restore adopt `updated_at`, which slides the
   window forward on each evaluation. `awaiting_rearm` holds an auto-resolved
-  rule off until its condition is false; dropping it lets the next
-  evaluation re-open and re-dispatch.
+  rule off while both its condition and its auto-resolve tree hold; dropping
+  it lets the next evaluation re-open and re-dispatch.
 - **`next_excursion_ordinal`** is the 1-based ordinal the next opened
   excursion will receive. It is **shared across all rules** of a tenant (the
   corpus assigns excursion ordinals in creation order across the whole
@@ -477,7 +477,8 @@ the rule has never been evaluated):
 // nocturne_alerts_tracker_process: one evaluation's truth
 { "schema_version": 1, "tracker": { /* … */ }, "now": "…",
   "config": { "confirmation_readings": 1, "hysteresis_minutes": 0 },  // both optional
-  "condition_met": true }
+  "condition_met": true,
+  "auto_resolve_met": true }                 // optional, default false; see below
 
 // nocturne_alerts_tracker_force_close: from any state holding an excursion (§6.2)
 { "schema_version": 1, "tracker": { /* … */ }, "now": "…",
@@ -487,6 +488,14 @@ the rule has never been evaluated):
 { "schema_version": 1, "tracker": { /* … */ }, "now": "…",
   "config": { "hysteresis_minutes": 30 } }
 ```
+
+`auto_resolve_met` is the rule's auto-resolve tree this evaluation, and is read
+only while the tracker awaits re-arm (§6.3): the rule then stays held off when
+both it and `condition_met` are true, and otherwise re-arms and goes on through
+the state machine in the same call, so a `condition_met` of true opens (or
+starts confirming) at once. Evaluate the tree at the `auto_resolve` root with
+`nocturne_alerts_evaluate_node` before this call when the stored tracker has
+`awaiting_rearm`; a rule without an enabled, evaluable tree sends false.
 
 Response:
 
@@ -573,10 +582,11 @@ Response:
 ```
 
 `kind` is `fired`, `suppressed_by_dnd`, `auto_resolved`, or `cleared` (the
-body went false while firing). Each close — `cleared` or `auto_resolved` —
-removes the rule from the active alerts and clears all its sustained timers,
-so a later fire starts its durations over. Auto-resolve is evaluated only
-while the rule is firing, including on the tick it fired. The leaf log holds,
+body went false while firing). Each close removes the rule from the active
+alerts. A `cleared` also clears all its sustained timers, so a later fire
+starts its durations over; an `auto_resolved` keeps them. Auto-resolve is
+evaluated while the rule is firing, including on the tick it fired, and on
+every tick while it awaits re-arm (engine-semantics.md §6.3, §8). The leaf log holds,
 per leaf id, the first observation and every flip, at unix milliseconds;
 `firing` is the rule's state after the tick. Errors are an unusable envelope,
 an unknown `condition_type`, a rule id listed twice, or a tick instant outside

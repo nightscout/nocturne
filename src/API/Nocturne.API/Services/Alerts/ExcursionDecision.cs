@@ -65,8 +65,13 @@ internal readonly record struct TrackerConfig(int ConfirmationReadings, int Hyst
 /// </summary>
 internal interface IExcursionDecider
 {
-    /// <summary>One evaluation's truth.</summary>
-    TrackerDecision Process(Guid ruleId, AlertTrackerState? state, TrackerConfig config, bool conditionMet, DateTime now);
+    /// <summary>
+    /// One evaluation's truth. <paramref name="autoResolveMet"/> is the auto-resolve tree's, read
+    /// only while the rule awaits re-arm (docs/alerts/engine-semantics.md §6.3).
+    /// </summary>
+    TrackerDecision Process(
+        Guid ruleId, AlertTrackerState? state, TrackerConfig config, bool conditionMet, bool autoResolveMet,
+        DateTime now);
 
     /// <summary>Closes the excursion, if there is one, from any state.</summary>
     TrackerDecision ForceClose(Guid ruleId, AlertTrackerState? state, ExcursionCloseReason reason, DateTime now);

@@ -60,7 +60,7 @@ public sealed class ExcursionTransitionAtomicityTests : IDisposable
             new FakeTimeProvider(new DateTimeOffset(2026, 1, 5, 12, 0, 0, TimeSpan.Zero)),
             NullLogger<ExcursionTracker>.Instance);
 
-        var act = () => tracker.ProcessEvaluationAsync(RuleId, conditionMet: true, CancellationToken.None);
+        var act = () => tracker.ProcessEvaluationAsync(RuleId, conditionMet: true, null, CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>();
         await using var check = _db.CreateContext();
@@ -78,7 +78,7 @@ public sealed class ExcursionTransitionAtomicityTests : IDisposable
             new FakeTimeProvider(new DateTimeOffset(2026, 1, 5, 12, 0, 0, TimeSpan.Zero)),
             NullLogger<ExcursionTracker>.Instance);
 
-        var opened = await tracker.ProcessEvaluationAsync(RuleId, conditionMet: true, CancellationToken.None);
+        var opened = await tracker.ProcessEvaluationAsync(RuleId, conditionMet: true, null, CancellationToken.None);
 
         await using var check = _db.CreateContext();
         var excursion = await check.AlertExcursions.SingleAsync();
@@ -126,7 +126,7 @@ public sealed class ExcursionTransitionAtomicityTests : IDisposable
             new ConcurrentOpenRepository(context, theirs), new AlertRuleEvaluationGate(),
             new FakeTimeProvider(Now), NullLogger<ExcursionTracker>.Instance);
 
-        var transition = await tracker.ProcessEvaluationAsync(RuleId, conditionMet: true, CancellationToken.None);
+        var transition = await tracker.ProcessEvaluationAsync(RuleId, conditionMet: true, null, CancellationToken.None);
 
         transition.Type.Should().Be(ExcursionTransitionType.None, "the other process opened and dispatched it");
         await using var check = _db.CreateContext();
@@ -181,7 +181,7 @@ public sealed class ExcursionTransitionAtomicityTests : IDisposable
     {
         await using var context = RetryingContext(faultAfterCommit: false);
 
-        var opened = await TrackerOver(context).ProcessEvaluationAsync(RuleId, conditionMet: true, CancellationToken.None);
+        var opened = await TrackerOver(context).ProcessEvaluationAsync(RuleId, conditionMet: true, null, CancellationToken.None);
 
         opened.Type.Should().Be(ExcursionTransitionType.ExcursionOpened);
         await using var check = _db.CreateContext();
@@ -197,7 +197,7 @@ public sealed class ExcursionTransitionAtomicityTests : IDisposable
     {
         await using var context = RetryingContext(faultAfterCommit: true);
 
-        var opened = await TrackerOver(context).ProcessEvaluationAsync(RuleId, conditionMet: true, CancellationToken.None);
+        var opened = await TrackerOver(context).ProcessEvaluationAsync(RuleId, conditionMet: true, null, CancellationToken.None);
 
         opened.Type.Should().Be(ExcursionTransitionType.ExcursionOpened);
         await using var check = _db.CreateContext();

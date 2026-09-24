@@ -52,8 +52,8 @@ public class ExcursionTrackerSeamTests
 
         public AlertTrackerState? State => Repository.States.GetValueOrDefault(RuleId);
 
-        public Task<ExcursionTransition> Process(bool met) =>
-            Tracker.ProcessEvaluationAsync(RuleId, met, CancellationToken.None);
+        public Task<ExcursionTransition> Process(bool met, bool autoResolveMet = false) =>
+            Tracker.ProcessEvaluationAsync(RuleId, met, _ => Task.FromResult(autoResolveMet), CancellationToken.None);
 
         public void At(TimeSpan offset) => Time.SetUtcNow(T0 + offset);
     }
@@ -227,6 +227,26 @@ public class ExcursionTrackerSeamTests
         f.At(TimeSpan.FromMinutes(2));
         (await f.Process(true)).Type.Should().Be(ExcursionTransitionType.ExcursionOpened);
         f.State.Should().BeEquivalentTo(new { State = "active", ConfirmationCount = 0, AwaitingRearm = false });
+    }
+
+    [Fact] public Task An_auto_resolved_rule_holds_while_both_trees_hold_managed() =>
+        An_auto_resolved_rule_holds_while_both_trees_hold(Engine.Managed);
+    [NativeFact] public Task An_auto_resolved_rule_holds_while_both_trees_hold_rust() =>
+        An_auto_resolved_rule_holds_while_both_trees_hold(Engine.Rust);
+
+    private static async Task An_auto_resolved_rule_holds_while_both_trees_hold(Engine engine)
+    {
+        var f = new Fixture(engine);
+        await f.Process(true);
+        await f.Tracker.ForceCloseAsync(RuleId, ExcursionCloseReason.AutoResolve, CancellationToken.None);
+
+        f.At(TimeSpan.FromMinutes(1));
+        (await f.Process(true, autoResolveMet: true)).Type.Should().Be(ExcursionTransitionType.None);
+        f.State!.AwaitingRearm.Should().BeTrue();
+
+        f.At(TimeSpan.FromMinutes(2));
+        (await f.Process(true, autoResolveMet: false)).Type.Should().Be(ExcursionTransitionType.ExcursionOpened);
+        f.State.Should().BeEquivalentTo(new { State = "active", AwaitingRearm = false });
     }
 
     [Theory]

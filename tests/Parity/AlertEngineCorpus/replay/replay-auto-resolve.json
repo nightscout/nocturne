@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "replay-auto-resolve",
-  "description": "auto-resolve is evaluated only while firing, including on the tick that fires; after it the rule fires again only once its body has been false",
+  "description": "auto-resolve is evaluated while firing, including on the tick that fires, and while awaiting re-arm; after it the rule fires again once its body or its auto-resolve tree is false",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",

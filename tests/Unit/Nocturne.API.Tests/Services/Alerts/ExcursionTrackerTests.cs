@@ -64,7 +64,7 @@ public class ExcursionTrackerTests
         _mockRepo.Setup(x => x.UpsertTrackerStateAsync(It.IsAny<AlertTrackerState>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
-        var result = await _tracker.ProcessEvaluationAsync(_ruleId, false, CancellationToken.None);
+        var result = await _tracker.ProcessEvaluationAsync(_ruleId, false, null, CancellationToken.None);
 
         result.Type.Should().Be(ExcursionTransitionType.None);
         result.ExcursionId.Should().BeNull();
@@ -80,7 +80,7 @@ public class ExcursionTrackerTests
             .Callback<AlertTrackerState, CancellationToken>((s, _) => savedState = s)
             .Returns(Task.CompletedTask);
 
-        var result = await _tracker.ProcessEvaluationAsync(_ruleId, true, CancellationToken.None);
+        var result = await _tracker.ProcessEvaluationAsync(_ruleId, true, null, CancellationToken.None);
 
         result.Type.Should().Be(ExcursionTransitionType.None);
         savedState.Should().NotBeNull();
@@ -111,7 +111,7 @@ public class ExcursionTrackerTests
             .Callback<AlertTrackerState, CancellationToken>((s, _) => savedState = s)
             .Returns(Task.CompletedTask);
 
-        var result = await _tracker.ProcessEvaluationAsync(_ruleId, true, CancellationToken.None);
+        var result = await _tracker.ProcessEvaluationAsync(_ruleId, true, null, CancellationToken.None);
 
         result.Type.Should().Be(ExcursionTransitionType.ExcursionOpened);
         result.ExcursionId.Should().Be(excursionId);
@@ -139,7 +139,7 @@ public class ExcursionTrackerTests
             .Callback<AlertTrackerState, CancellationToken>((s, _) => savedState = s)
             .Returns(Task.CompletedTask);
 
-        var result = await _tracker.ProcessEvaluationAsync(_ruleId, false, CancellationToken.None);
+        var result = await _tracker.ProcessEvaluationAsync(_ruleId, false, null, CancellationToken.None);
 
         result.Type.Should().Be(ExcursionTransitionType.None);
         savedState!.State.Should().Be("idle");
@@ -162,7 +162,7 @@ public class ExcursionTrackerTests
             .Callback<AlertTrackerState, CancellationToken>((s, _) => savedState = s)
             .Returns(Task.CompletedTask);
 
-        var result = await _tracker.ProcessEvaluationAsync(_ruleId, true, CancellationToken.None);
+        var result = await _tracker.ProcessEvaluationAsync(_ruleId, true, null, CancellationToken.None);
 
         result.Type.Should().Be(ExcursionTransitionType.None);
         savedState!.State.Should().Be("confirming");
@@ -189,7 +189,7 @@ public class ExcursionTrackerTests
             .Callback<AlertTrackerState, CancellationToken>((s, _) => savedState = s)
             .Returns(Task.CompletedTask);
 
-        var result = await _tracker.ProcessEvaluationAsync(_ruleId, true, CancellationToken.None);
+        var result = await _tracker.ProcessEvaluationAsync(_ruleId, true, null, CancellationToken.None);
 
         result.Type.Should().Be(ExcursionTransitionType.ExcursionOpened);
         result.ExcursionId.Should().Be(excursionId);
@@ -227,17 +227,17 @@ public class ExcursionTrackerTests
             .ReturnsAsync(new AlertExcursion { Id = excursionId, AlertRuleId = _ruleId });
 
         // Call 1: idle -> confirming (count=1)
-        var r1 = await _tracker.ProcessEvaluationAsync(_ruleId, true, CancellationToken.None);
+        var r1 = await _tracker.ProcessEvaluationAsync(_ruleId, true, null, CancellationToken.None);
         r1.Type.Should().Be(ExcursionTransitionType.None);
         savedStates[0].ConfirmationCount.Should().Be(1);
 
         // Call 2: confirming -> confirming (count=2)
-        var r2 = await _tracker.ProcessEvaluationAsync(_ruleId, true, CancellationToken.None);
+        var r2 = await _tracker.ProcessEvaluationAsync(_ruleId, true, null, CancellationToken.None);
         r2.Type.Should().Be(ExcursionTransitionType.None);
         savedStates[1].ConfirmationCount.Should().Be(2);
 
         // Call 3: confirming -> active (count reaches 3)
-        var r3 = await _tracker.ProcessEvaluationAsync(_ruleId, true, CancellationToken.None);
+        var r3 = await _tracker.ProcessEvaluationAsync(_ruleId, true, null, CancellationToken.None);
         r3.Type.Should().Be(ExcursionTransitionType.ExcursionOpened);
         r3.ExcursionId.Should().Be(excursionId);
     }
@@ -260,7 +260,7 @@ public class ExcursionTrackerTests
         _mockRepo.Setup(x => x.UpsertTrackerStateAsync(It.IsAny<AlertTrackerState>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
-        var result = await _tracker.ProcessEvaluationAsync(_ruleId, true, CancellationToken.None);
+        var result = await _tracker.ProcessEvaluationAsync(_ruleId, true, null, CancellationToken.None);
 
         result.Type.Should().Be(ExcursionTransitionType.ExcursionContinues);
         result.ExcursionId.Should().Be(excursionId);
@@ -283,7 +283,7 @@ public class ExcursionTrackerTests
             .Callback<AlertTrackerState, CancellationToken>((s, _) => savedState = s)
             .Returns(Task.CompletedTask);
 
-        var result = await _tracker.ProcessEvaluationAsync(_ruleId, false, CancellationToken.None);
+        var result = await _tracker.ProcessEvaluationAsync(_ruleId, false, null, CancellationToken.None);
 
         result.Type.Should().Be(ExcursionTransitionType.HysteresisStarted);
         result.ExcursionId.Should().Be(excursionId);
@@ -321,7 +321,7 @@ public class ExcursionTrackerTests
         // Advance time by 2 minutes (within 5 min hysteresis)
         _timeProvider.Advance(TimeSpan.FromMinutes(2));
 
-        var result = await _tracker.ProcessEvaluationAsync(_ruleId, true, CancellationToken.None);
+        var result = await _tracker.ProcessEvaluationAsync(_ruleId, true, null, CancellationToken.None);
 
         result.Type.Should().Be(ExcursionTransitionType.HysteresisResumed);
         result.ExcursionId.Should().Be(excursionId);
@@ -352,7 +352,7 @@ public class ExcursionTrackerTests
         // Advance 3 minutes (still within 5 min hysteresis)
         _timeProvider.Advance(TimeSpan.FromMinutes(3));
 
-        var result = await _tracker.ProcessEvaluationAsync(_ruleId, false, CancellationToken.None);
+        var result = await _tracker.ProcessEvaluationAsync(_ruleId, false, null, CancellationToken.None);
 
         result.Type.Should().Be(ExcursionTransitionType.None);
     }
@@ -380,7 +380,7 @@ public class ExcursionTrackerTests
         // Advance past hysteresis expiry
         _timeProvider.Advance(TimeSpan.FromMinutes(6));
 
-        var result = await _tracker.ProcessEvaluationAsync(_ruleId, false, CancellationToken.None);
+        var result = await _tracker.ProcessEvaluationAsync(_ruleId, false, null, CancellationToken.None);
 
         result.Type.Should().Be(ExcursionTransitionType.ExcursionClosed);
         result.ExcursionId.Should().Be(excursionId);
@@ -403,7 +403,7 @@ public class ExcursionTrackerTests
         _mockRepo.Setup(x => x.GetRuleAsync(_ruleId, It.IsAny<CancellationToken>()))
             .ReturnsAsync((AlertRule?)null);
 
-        var result = await _tracker.ProcessEvaluationAsync(_ruleId, true, CancellationToken.None);
+        var result = await _tracker.ProcessEvaluationAsync(_ruleId, true, null, CancellationToken.None);
 
         result.Type.Should().Be(ExcursionTransitionType.None);
     }
@@ -428,7 +428,7 @@ public class ExcursionTrackerTests
         _mockRepo.Setup(x => x.UpsertTrackerStateAsync(It.IsAny<AlertTrackerState>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
-        var result = await _tracker.ProcessEvaluationAsync(_ruleId, true, CancellationToken.None);
+        var result = await _tracker.ProcessEvaluationAsync(_ruleId, true, null, CancellationToken.None);
 
         result.Type.Should().Be(ExcursionTransitionType.ExcursionOpened);
         result.ExcursionId.Should().Be(newExcursionId);
@@ -455,7 +455,7 @@ public class ExcursionTrackerTests
 
         _timeProvider.Advance(TimeSpan.FromMinutes(10));
 
-        var result = await _tracker.ProcessEvaluationAsync(_ruleId, false, CancellationToken.None);
+        var result = await _tracker.ProcessEvaluationAsync(_ruleId, false, null, CancellationToken.None);
 
         result.Type.Should().Be(ExcursionTransitionType.ExcursionClosed);
         result.ExcursionId.Should().Be(excursionId);
@@ -491,34 +491,34 @@ public class ExcursionTrackerTests
             .ReturnsAsync(new AlertExcursion { Id = excursionId, AlertRuleId = _ruleId });
 
         // 1. idle -> confirming (first true)
-        var r1 = await _tracker.ProcessEvaluationAsync(_ruleId, true, CancellationToken.None);
+        var r1 = await _tracker.ProcessEvaluationAsync(_ruleId, true, null, CancellationToken.None);
         r1.Type.Should().Be(ExcursionTransitionType.None);
         currentState!.State.Should().Be("confirming");
 
         // 2. confirming -> active (second true, reaches threshold)
-        var r2 = await _tracker.ProcessEvaluationAsync(_ruleId, true, CancellationToken.None);
+        var r2 = await _tracker.ProcessEvaluationAsync(_ruleId, true, null, CancellationToken.None);
         r2.Type.Should().Be(ExcursionTransitionType.ExcursionOpened);
 
         // 3. active -> active (true continues)
-        var r3 = await _tracker.ProcessEvaluationAsync(_ruleId, true, CancellationToken.None);
+        var r3 = await _tracker.ProcessEvaluationAsync(_ruleId, true, null, CancellationToken.None);
         r3.Type.Should().Be(ExcursionTransitionType.ExcursionContinues);
 
         // 4. active -> hysteresis (false)
-        var r4 = await _tracker.ProcessEvaluationAsync(_ruleId, false, CancellationToken.None);
+        var r4 = await _tracker.ProcessEvaluationAsync(_ruleId, false, null, CancellationToken.None);
         r4.Type.Should().Be(ExcursionTransitionType.HysteresisStarted);
 
         // 5. hysteresis -> active (true before expiry)
         _timeProvider.Advance(TimeSpan.FromMinutes(1));
-        var r5 = await _tracker.ProcessEvaluationAsync(_ruleId, true, CancellationToken.None);
+        var r5 = await _tracker.ProcessEvaluationAsync(_ruleId, true, null, CancellationToken.None);
         r5.Type.Should().Be(ExcursionTransitionType.HysteresisResumed);
 
         // 6. active -> hysteresis again (false)
-        var r6 = await _tracker.ProcessEvaluationAsync(_ruleId, false, CancellationToken.None);
+        var r6 = await _tracker.ProcessEvaluationAsync(_ruleId, false, null, CancellationToken.None);
         r6.Type.Should().Be(ExcursionTransitionType.HysteresisStarted);
 
         // 7. hysteresis -> idle (false after expiry)
         _timeProvider.Advance(TimeSpan.FromMinutes(4));
-        var r7 = await _tracker.ProcessEvaluationAsync(_ruleId, false, CancellationToken.None);
+        var r7 = await _tracker.ProcessEvaluationAsync(_ruleId, false, null, CancellationToken.None);
         r7.Type.Should().Be(ExcursionTransitionType.ExcursionClosed);
         currentState!.State.Should().Be("idle");
     }
@@ -548,10 +548,12 @@ public class ExcursionTrackerTests
             .ReturnsAsync(new AlertExcursion { Id = Guid.NewGuid(), AlertRuleId = _ruleId });
     }
 
-    private async Task<ExcursionTransition> EvaluateAt(int minute, bool met)
+    private async Task<ExcursionTransition> EvaluateAt(int minute, bool met, bool? autoResolveMet = null)
     {
         _timeProvider.SetUtcNow(new DateTimeOffset(2026, 3, 22, 12, 0, 0, TimeSpan.Zero).AddMinutes(minute));
-        return await _tracker.ProcessEvaluationAsync(_ruleId, met, CancellationToken.None);
+        return await _tracker.ProcessEvaluationAsync(
+            _ruleId, met, autoResolveMet is { } resolve ? _ => Task.FromResult(resolve) : null,
+            CancellationToken.None);
     }
 
     [Theory]
@@ -717,14 +719,47 @@ public class ExcursionTrackerTests
         (await _mockRepo.Object.GetTrackerStateAsync(_ruleId))!.AwaitingRearm.Should().BeTrue();
 
         for (var minute = 1; minute <= 3; minute++)
-            (await EvaluateAt(minute, true)).Type.Should().Be(ExcursionTransitionType.None, $"minute {minute}");
+            (await EvaluateAt(minute, true, autoResolveMet: true)).Type.Should().Be(ExcursionTransitionType.None, $"minute {minute}");
 
-        (await EvaluateAt(4, false)).Type.Should().Be(ExcursionTransitionType.None);
+        (await EvaluateAt(4, false, autoResolveMet: true)).Type.Should().Be(ExcursionTransitionType.None);
         (await _mockRepo.Object.GetTrackerStateAsync(_ruleId))!.AwaitingRearm.Should().BeFalse();
-        (await EvaluateAt(5, true)).Type.Should().Be(ExcursionTransitionType.ExcursionOpened);
+        (await EvaluateAt(5, true, autoResolveMet: true)).Type.Should().Be(ExcursionTransitionType.ExcursionOpened);
         _mockRepo.Verify(
             x => x.CreateExcursionAsync(_ruleId, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()),
             Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task AutoResolve_OfAnActiveExcursion_ReopensAtOnceWhenTheResolveTreeGoesFalse()
+    {
+        UseStatefulRepository(0);
+        await EvaluateAt(0, true);
+        await ForceCloseAt(0, ExcursionCloseReason.AutoResolve);
+        (await EvaluateAt(1, true, autoResolveMet: true)).Type.Should().Be(ExcursionTransitionType.None);
+
+        (await EvaluateAt(2, true, autoResolveMet: false)).Type.Should().Be(ExcursionTransitionType.ExcursionOpened);
+        (await _mockRepo.Object.GetTrackerStateAsync(_ruleId))!.AwaitingRearm.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task AutoResolve_IsReadOnlyWhileAwaitingRearm()
+    {
+        UseStatefulRepository(0);
+        var reads = 0;
+        Task<bool> Resolve(CancellationToken _)
+        {
+            reads++;
+            return Task.FromResult(true);
+        }
+
+        _timeProvider.SetUtcNow(new DateTimeOffset(2026, 3, 22, 12, 0, 0, TimeSpan.Zero));
+        await _tracker.ProcessEvaluationAsync(_ruleId, true, Resolve, CancellationToken.None);
+        reads.Should().Be(0, "an armed rule");
+        await ForceCloseAt(0, ExcursionCloseReason.AutoResolve);
+
+        _timeProvider.SetUtcNow(new DateTimeOffset(2026, 3, 22, 12, 1, 0, TimeSpan.Zero));
+        await _tracker.ProcessEvaluationAsync(_ruleId, true, Resolve, CancellationToken.None);
+        reads.Should().Be(1);
     }
 
     [Theory]
@@ -865,7 +900,7 @@ public class ExcursionTrackerTests
 
         _timeProvider.Advance(TimeSpan.FromMinutes(6));
 
-        var result = await _tracker.ProcessEvaluationAsync(_ruleId, false, CancellationToken.None);
+        var result = await _tracker.ProcessEvaluationAsync(_ruleId, false, null, CancellationToken.None);
 
         result.Type.Should().Be(ExcursionTransitionType.ExcursionClosed);
         result.CloseReason.Should().Be(ExcursionCloseReason.Hysteresis);

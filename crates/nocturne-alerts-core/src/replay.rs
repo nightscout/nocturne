@@ -174,7 +174,17 @@ pub fn replay(
             record_leaves(leaf_log, body.leaves.unwrap_or_default(), at);
 
             let met = body.root;
-            firing.awaiting_rearm &= met;
+            let rearm_read_resolve = firing.awaiting_rearm;
+            if rearm_read_resolve {
+                firing.awaiting_rearm = met
+                    && auto_resolve_holds(
+                        rule.id,
+                        prepared.auto_resolve.as_ref(),
+                        &ctx,
+                        at,
+                        &mut timers,
+                    );
+            }
             let mut now_firing = met && !firing.awaiting_rearm;
             if now_firing && !firing.firing {
                 let kind = if tick.suppressed_rule_ids.contains(&rule.id) {
@@ -197,6 +207,7 @@ pub fn replay(
             }
 
             if now_firing
+                && !rearm_read_resolve
                 && auto_resolve_holds(
                     rule.id,
                     prepared.auto_resolve.as_ref(),
@@ -205,7 +216,7 @@ pub fn replay(
                     &mut timers,
                 )
             {
-                close(&mut ctx, &mut timers, rule.id);
+                ctx.active_alerts.remove(&rule.id);
                 events.push(event(at, rule.id, ReplayEventKind::AutoResolved));
                 now_firing = false;
                 firing.awaiting_rearm = true;
@@ -257,8 +268,8 @@ struct Prepared<'a> {
 }
 
 /// A rule's replay-local firing state. `awaiting_rearm` follows an
-/// auto-resolve until the body is false, as the tracker's does
-/// (engine-semantics.md §6.3).
+/// auto-resolve until the body or the auto-resolve tree is false, as the
+/// tracker's does (engine-semantics.md §6.3).
 #[derive(Debug, Clone, Copy, Default)]
 struct Firing {
     firing: bool,
@@ -269,7 +280,8 @@ fn event(at: DateTime<Utc>, rule_id: Uuid, kind: ReplayEventKind) -> ReplayEvent
     ReplayEvent { at, rule_id, kind }
 }
 
-/// A rule stops firing: it leaves the active alerts and its timers reset.
+/// A rule's body went false while firing: it leaves the active alerts and
+/// its timers reset.
 fn close(ctx: &mut SensorContext, timers: &mut TimerStore, rule_id: Uuid) {
     ctx.active_alerts.remove(&rule_id);
     timers.clear_all_for_rule(rule_id);

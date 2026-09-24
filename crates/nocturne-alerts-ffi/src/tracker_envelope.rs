@@ -43,6 +43,10 @@ struct ProcessRequest {
     tracker: Option<WireTracker>,
     config: WireConfig,
     condition_met: bool,
+    /// The auto-resolve tree this evaluation; read only while awaiting
+    /// re-arm, and absent is false.
+    #[serde(default)]
+    auto_resolve_met: bool,
     now: DateTime<Utc>,
 }
 
@@ -95,12 +99,18 @@ fn transition_json(t: Transition) -> Value {
     Value::Object(o)
 }
 
-/// One evaluation's `condition_met` through the state machine.
+/// One evaluation's `condition_met` (and, awaiting re-arm, its
+/// `auto_resolve_met`) through the state machine.
 pub(crate) fn process(request_json: &str) -> Result<Value, String> {
     let req: ProcessRequest = read_request(request_json, |r: &ProcessRequest| r.schema_version)?;
     let mut tracker = restore(req.tracker.as_ref(), req.now)?;
-    let transition =
-        tracker.process_evaluation(RULE, (&req.config).into(), req.condition_met, req.now);
+    let transition = tracker.process_evaluation(
+        RULE,
+        (&req.config).into(),
+        req.condition_met,
+        req.auto_resolve_met,
+        req.now,
+    );
     Ok(respond(transition, &tracker))
 }
 

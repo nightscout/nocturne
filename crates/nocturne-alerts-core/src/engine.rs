@@ -255,14 +255,28 @@ pub fn evaluate_parsed_rule(
 ) -> RuleOutcome {
     let body = evaluate_body(rule, body, ctx, now, &mut state.timers, log_leaves);
 
+    // Awaiting re-arm, the resolve tree is read before the tracker, and is
+    // then the evaluation's only read of it (engine-semantics.md §6.3).
+    let awaiting = state.tracker.awaiting_rearm(rule.id);
+    let auto_resolve_met = awaiting
+        && rule.auto_resolve_enabled
+        && auto_resolve_holds(
+            rule.id,
+            rule.parse_auto_resolve().as_ref(),
+            ctx,
+            now,
+            &mut state.timers,
+        );
     let config = TrackerRuleConfig {
         confirmation_readings: rule.confirmation_readings,
         hysteresis_minutes: rule.hysteresis_minutes,
     };
-    let transition = state
-        .tracker
-        .process_evaluation(rule.id, config, body.root, now);
-    let auto_resolved = rule.auto_resolve_enabled && try_auto_resolve(rule, ctx, now, state);
+    let transition =
+        state
+            .tracker
+            .process_evaluation(rule.id, config, body.root, auto_resolve_met, now);
+    let auto_resolved =
+        !awaiting && rule.auto_resolve_enabled && try_auto_resolve(rule, ctx, now, state);
 
     RuleOutcome {
         rule_id: rule.id,

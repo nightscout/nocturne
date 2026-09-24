@@ -14,13 +14,15 @@ namespace Nocturne.API.Services.Alerts.Engines;
 internal sealed class RustExcursionDecider(AlertEngineErrors errors, string engine) : IExcursionDecider
 {
     public TrackerDecision Process(
-        Guid ruleId, AlertTrackerState? state, TrackerConfig config, bool conditionMet, DateTime now) =>
+        Guid ruleId, AlertTrackerState? state, TrackerConfig config, bool conditionMet, bool autoResolveMet,
+        DateTime now) =>
         errors.Track("tracker_process", engine, () => ToDecision(RustAlertEngine.TrackerProcess(new RustTrackerProcessRequest
         {
             Tracker = RustEnvelopeMapper.BuildTracker(state),
             Now = now,
             Config = ToWire(config),
             ConditionMet = conditionMet,
+            AutoResolveMet = autoResolveMet,
         })));
 
     public TrackerDecision ForceClose(

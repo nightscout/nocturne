@@ -67,7 +67,7 @@ public class ExcursionTrackerConcurrencyTests
         IAlertTrackerRepository repository, AlertRuleEvaluationGate gate, Guid ruleId) =>
         Task.Run(() => new ExcursionTracker(
                 repository, gate, new FakeTimeProvider(Now), NullLogger<ExcursionTracker>.Instance)
-            .ProcessEvaluationAsync(ruleId, true, CancellationToken.None));
+            .ProcessEvaluationAsync(ruleId, true, null, CancellationToken.None));
 
     private static AlertRule Rule(Guid id) => new()
     {

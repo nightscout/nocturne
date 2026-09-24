@@ -31,8 +31,8 @@ internal sealed class ManagedAlertReplayEngine(ILogger<ManagedAlertReplayEngine>
         var forceRunner = new ForceEvalRunner();
 
         var firing = new bool[ordered.Count];
-        // Set by an auto-resolve and held while the body stays true, as the tracker's re-arm is
-        // (docs/alerts/engine-semantics.md §6.3).
+        // Set by an auto-resolve and held while the body and the auto-resolve tree stay true, as
+        // the tracker's re-arm is (docs/alerts/engine-semantics.md §6.3).
         var awaitingRearm = new bool[ordered.Count];
         var leafLogs = new Dictionary<int, (bool Last, List<LeafTransitionPoint> Points)>?[ordered.Count];
         // One map for the whole pass, so a parent's fire is visible to its children later in the
@@ -96,7 +96,13 @@ internal sealed class ManagedAlertReplayEngine(ILogger<ManagedAlertReplayEngine>
                 }
                 RecordLeaves(ref leafLogs[i], leafValues, tick);
 
-                awaitingRearm[i] &= met;
+                var rearmReadResolve = awaitingRearm[i];
+                if (rearmReadResolve)
+                {
+                    awaitingRearm[i] = met
+                        && resolvers[i] is { } heldNode
+                        && await AutoResolveHoldsAsync(registry, heldNode, ruleContext, rule.Id, tick, ct);
+                }
                 var currentlyFiring = met && !awaitingRearm[i];
                 if (currentlyFiring && !firing[i])
                 {
@@ -115,33 +121,13 @@ internal sealed class ManagedAlertReplayEngine(ILogger<ManagedAlertReplayEngine>
 
                 // After the fire, so a resolve predicate already true on the opening tick yields a
                 // fired and an auto-resolved event together.
-                if (currentlyFiring && rule.AutoResolveEnabled && resolvers[i] is { } resolveNode)
+                if (currentlyFiring && !rearmReadResolve && resolvers[i] is { } resolveNode
+                    && await AutoResolveHoldsAsync(registry, resolveNode, ruleContext, rule.Id, tick, ct))
                 {
-                    var resolveContext = ruleContext with
-                    {
-                        CurrentPath = AlertConditionTypeNames.AutoResolvePathRoot,
-                    };
-                    bool shouldResolve;
-                    try
-                    {
-                        shouldResolve = await registry.EvaluateNodeAsync(resolveNode, resolveContext, ct);
-                    }
-                    catch (Exception ex) when (ex is not OperationCanceledException)
-                    {
-                        logger.LogWarning(ex,
-                            "Replay auto-resolve evaluation failed for rule {RuleId} at {Tick}; treating as not-resolved",
-                            rule.Id, tick);
-                        shouldResolve = false;
-                    }
-
-                    if (shouldResolve)
-                    {
-                        events.Add(new AlertReplayRunEvent(tick, rule.Id, AlertReplayTransition.AutoResolved));
-                        activeAlerts.Remove(rule.Id);
-                        await timerStore.ClearAllForRuleAsync(rule.Id, ct);
-                        currentlyFiring = false;
-                        awaitingRearm[i] = true;
-                    }
+                    events.Add(new AlertReplayRunEvent(tick, rule.Id, AlertReplayTransition.AutoResolved));
+                    activeAlerts.Remove(rule.Id);
+                    currentlyFiring = false;
+                    awaitingRearm[i] = true;
                 }
 
                 firing[i] = currentlyFiring;
@@ -161,6 +147,28 @@ internal sealed class ManagedAlertReplayEngine(ILogger<ManagedAlertReplayEngine>
         }
 
         return new AlertReplayRun(ordered.Select(r => r.Id).ToList(), events, leafTransitions, tickOutcomes);
+    }
+
+    private async Task<bool> AutoResolveHoldsAsync(
+        ConditionEvaluatorRegistry registry,
+        ConditionNode resolveNode,
+        SensorContext ruleContext,
+        Guid ruleId,
+        DateTime tick,
+        CancellationToken ct)
+    {
+        var resolveContext = ruleContext with { CurrentPath = AlertConditionTypeNames.AutoResolvePathRoot };
+        try
+        {
+            return await registry.EvaluateNodeAsync(resolveNode, resolveContext, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex,
+                "Replay auto-resolve evaluation failed for rule {RuleId} at {Tick}; treating as not-resolved",
+                ruleId, tick);
+            return false;
+        }
     }
 
     /// <summary>A leaf's first observation and every flip; a tick with no leaf values records nothing.</summary>

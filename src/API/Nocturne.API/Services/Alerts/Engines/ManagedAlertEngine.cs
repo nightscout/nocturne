@@ -73,14 +73,25 @@ internal sealed class ManagedAlertEngine(
             leafValues = await ForceEvaluateLeavesAsync(rule, rootContext, ct);
         }
 
-        var transition = await excursionTracker.ProcessEvaluationAsync(rule.Id, conditionMet, ct);
+        // Awaiting re-arm, the tracker reads the resolve tree first, and that is the evaluation's
+        // only read of it (docs/alerts/engine-semantics.md §6.3).
+        var rearmReadResolve = false;
+        var transition = await excursionTracker.ProcessEvaluationAsync(
+            rule.Id,
+            conditionMet,
+            token =>
+            {
+                rearmReadResolve = true;
+                return AutoResolveHoldsAsync(rule, context, token);
+            },
+            ct);
 
         // Orchestrator parity: after a close (hysteresis expiry) the per-reading pass
         // returns without an auto-resolve attempt. (The attempt would be a no-op anyway —
         // the active-excursion gate fails once the tracker is idle — but skipping keeps
         // the call sequence byte-identical.)
         ExcursionTransition? autoResolveTransition = null;
-        if (transition.Type != ExcursionTransitionType.ExcursionClosed)
+        if (transition.Type != ExcursionTransitionType.ExcursionClosed && !rearmReadResolve)
         {
             autoResolveTransition = await TryAutoResolveAsync(rule, context, ct);
         }
@@ -124,9 +135,8 @@ internal sealed class ManagedAlertEngine(
     }
 
     /// <summary>
-    /// Extracted verbatim from <c>AlertOrchestrator.TryAutoResolveAsync</c>: evaluates
-    /// <see cref="AlertRuleSnapshot.AutoResolveParams"/> against the enriched context under
-    /// the <c>auto_resolve</c> path root and force-closes the active excursion when true.
+    /// Evaluates <see cref="AlertRuleSnapshot.AutoResolveParams"/> against the enriched context
+    /// under the <c>auto_resolve</c> path root and force-closes the active excursion when true.
     /// Returns null when auto-resolve was not attempted or did not fire; otherwise the
     /// <see cref="IExcursionTracker.ForceCloseAsync"/> transition.
     /// </summary>
@@ -142,6 +152,24 @@ internal sealed class ManagedAlertEngine(
         if (activeExcursionId is null)
             return null;
 
+        if (!await AutoResolveHoldsAsync(rule, context, ct))
+            return null;
+
+        return await excursionTracker.ForceCloseAsync(rule.Id, ExcursionCloseReason.AutoResolve, ct);
+    }
+
+    /// <summary>
+    /// Whether the rule's enabled auto-resolve tree holds at the <c>auto_resolve</c> path root.
+    /// A tree that is absent, malformed, cannot be evaluated or throws does not.
+    /// </summary>
+    private async Task<bool> AutoResolveHoldsAsync(
+        AlertRuleSnapshot rule,
+        SensorContext context,
+        CancellationToken ct)
+    {
+        if (!rule.AutoResolveEnabled || string.IsNullOrWhiteSpace(rule.AutoResolveParams))
+            return false;
+
         ConditionNode? node;
         try
         {
@@ -150,17 +178,17 @@ internal sealed class ManagedAlertEngine(
         catch (JsonException ex)
         {
             logger.LogWarning(ex, "Failed to parse AutoResolveParams for rule {AlertRuleId}; skipping", rule.Id);
-            return null;
+            return false;
         }
 
-        if (node is null) return null;
+        if (node is null) return false;
 
         if (ConditionTreeFaults.InNode(node, AlertConditionTypeNames.AutoResolvePathRoot) is { } fault)
         {
             logger.LogWarning(
                 "AutoResolveParams for rule {AlertRuleId} cannot be evaluated ({Reason} at {Path}); skipping",
                 rule.Id, fault.Reason, fault.Path);
-            return null;
+            return false;
         }
 
         // Path-prefix auto-resolve so any nested sustained timers don't collide with
@@ -173,20 +201,15 @@ internal sealed class ManagedAlertEngine(
             CurrentPath = AlertConditionTypeNames.AutoResolvePathRoot,
         };
 
-        bool shouldResolve;
         try
         {
-            shouldResolve = await evaluatorRegistry.EvaluateNodeAsync(node, autoResolveContext, ct);
+            return await evaluatorRegistry.EvaluateNodeAsync(node, autoResolveContext, ct);
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Auto-resolve evaluation failed for rule {AlertRuleId}", rule.Id);
-            return null;
+            return false;
         }
-
-        if (!shouldResolve) return null;
-
-        return await excursionTracker.ForceCloseAsync(rule.Id, ExcursionCloseReason.AutoResolve, ct);
     }
 
     private async Task<IReadOnlyDictionary<int, bool>> ForceEvaluateLeavesAsync(
