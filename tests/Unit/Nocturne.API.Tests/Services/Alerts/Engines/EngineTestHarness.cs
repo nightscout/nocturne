@@ -83,6 +83,7 @@ internal static class EngineTestHarness
             trackerRepo,
             new AlertRuleEvaluationGate(),
             new AlertEngineErrors(new TestMeterFactory(), time),
+            new ConditionVersionLog(),
             time,
             NullLogger<RustBackedAlertEngine>.Instance);
     }

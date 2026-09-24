@@ -25,6 +25,7 @@ internal sealed class RustBackedAlertEngine(
     IAlertTrackerRepository trackerRepository,
     AlertRuleEvaluationGate gate,
     AlertEngineErrors errors,
+    ConditionVersionLog conditionLog,
     TimeProvider timeProvider,
     ILogger<RustBackedAlertEngine> logger)
     : IAlertEvaluationEngine
@@ -77,8 +78,12 @@ internal sealed class RustBackedAlertEngine(
         {
             // The envelope rejects a body that does not parse before evaluating it, so this is
             // reached only if the two checks disagree; the orchestrator logs rejections.
-            logger.LogWarning(
-                "Rust engine skipped alert rule {AlertRuleId}: its condition tree cannot be evaluated", rule.Id);
+            if (conditionLog.FirstFor(rule.Id, rule.ConditionType, rule.ConditionParams))
+            {
+                logger.LogWarning(
+                    "Rust engine skipped alert rule {AlertRuleId}: its condition tree cannot be evaluated; the rule is skipped until it is edited",
+                    rule.Id);
+            }
             return new AlertEngineEvaluation { Skipped = true };
         }
 
