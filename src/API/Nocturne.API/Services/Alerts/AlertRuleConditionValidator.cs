@@ -19,7 +19,8 @@ public interface IAlertRuleConditionValidator
     /// <summary>
     /// The problems with the rule's trees; empty when there are none. Never throws. When the
     /// native engine is unavailable or fails, only the problems that fail evaluation are found
-    /// (<see cref="ConditionTreeFaults"/>), plus timezones, and that is logged.
+    /// (<see cref="ConditionTreeFaults"/>), plus a <c>PumpMode</c> <c>state_span_active</c> and
+    /// timezones, and that is logged.
     /// </summary>
     IReadOnlyList<RustValidationIssue> Validate(
         AlertConditionType conditionType,
@@ -205,9 +206,10 @@ public sealed class AlertRuleConditionValidator : IAlertRuleConditionValidator
     }
 
     /// <summary>
-    /// What makes the managed engine skip the rule on every tick. That is the shapes
-    /// <see cref="ConditionTreeFaults"/> finds, and JSON that does not read as the evaluators'
-    /// models, coded and pathed as the Rust engine reports them.
+    /// What makes the managed engine skip the rule on every tick, and a <c>state_span_active</c>
+    /// on the <c>PumpMode</c> category, which never fires. The first is the shapes
+    /// <see cref="ConditionTreeFaults"/> finds and JSON that does not read as the evaluators'
+    /// models. All are coded and pathed as the Rust engine reports them.
     /// </summary>
     private static List<RustValidationIssue> ManagedIssues(
         AlertConditionType conditionType, string conditionParamsJson, string? autoResolveJson, JsonElement? snooze)
@@ -219,10 +221,12 @@ public sealed class AlertRuleConditionValidator : IAlertRuleConditionValidator
             issues.Add(Issue(ConditionScope, wire, "not_an_object"));
         else if (body is null or { ValueKind: JsonValueKind.Null })
             issues.Add(Issue(ConditionScope, wire, "payload_missing"));
-        else if (!ReadNode(new JsonObject { ["type"] = wire, [wire] = JsonNode.Parse(body.Value.GetRawText()) }.ToJsonString(), out _))
+        else if (!ReadNode(new JsonObject { ["type"] = wire, [wire] = JsonNode.Parse(body.Value.GetRawText()) }.ToJsonString(), out var bodyNode))
             issues.Add(Issue(ConditionScope, wire, "invalid_field"));
         else if (ConditionTreeFaults.InRule(conditionType, conditionParamsJson) is { } fault)
             issues.Add(Issue(ConditionScope, fault));
+        else
+            AddPumpModeIssues(issues, ConditionScope, bodyNode, wire);
 
         if (!TryParse(autoResolveJson, out var autoResolve))
             issues.Add(Issue(AutoResolveScope, AlertConditionTypeNames.AutoResolvePathRoot, "not_an_object"));
@@ -252,6 +256,36 @@ public sealed class AlertRuleConditionValidator : IAlertRuleConditionValidator
             issues.Add(Issue(scope, root, "invalid_field"));
         else if (ConditionTreeFaults.InNode(node, root) is { } fault)
             issues.Add(Issue(scope, fault));
+        else
+            AddPumpModeIssues(issues, scope, node, root);
+    }
+
+    /// <summary>
+    /// Every <c>state_span_active</c> on <see cref="StateSpanCategory.PumpMode"/> in the tree, in
+    /// pre-order: it evaluates false (<see cref="StateSpanActiveEvaluator"/>), so a rule holding
+    /// one never fires on it; pump modes are <c>pump_state</c>'s.
+    /// </summary>
+    private static void AddPumpModeIssues(
+        List<RustValidationIssue> issues, string scope, ConditionNode? node, string path)
+    {
+        if (node?.Type is null)
+            return;
+        switch (ConditionNodePayloads.Select(node))
+        {
+            case StateSpanActiveCondition { Category: StateSpanCategory.PumpMode }:
+                issues.Add(new RustValidationIssue(scope, path, "pump_mode_category", "category"));
+                break;
+            case CompositeCondition { Conditions: { } children }:
+                for (var i = 0; i < children.Count; i++)
+                    AddPumpModeIssues(issues, scope, children[i], $"{path}[{i}].{children[i]?.Type}");
+                break;
+            case NotCondition { Child: { } child }:
+                AddPumpModeIssues(issues, scope, child, $"{path}[0].{child.Type}");
+                break;
+            case SustainedCondition { Child: { } child }:
+                AddPumpModeIssues(issues, scope, child, $"{path}[0].{child.Type}");
+                break;
+        }
     }
 
     private static bool ReadNode(string json, out ConditionNode? node)

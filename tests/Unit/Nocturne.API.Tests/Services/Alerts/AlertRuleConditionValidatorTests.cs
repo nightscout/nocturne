@@ -81,6 +81,50 @@ public class AlertRuleConditionValidatorTests
             .Should().Equal(new RustValidationIssue("condition", "time_of_day", "invalid_field", "timezone"));
     }
 
+    private const string PumpModeSpan = """{"type":"state_span_active","state_span_active":{"category":"PumpMode","is_active":true}}""";
+
+    public static TheoryData<AlertConditionType, string, bool, string?, string?, RustValidationIssue> PumpModeSpans => new()
+    {
+        {
+            AlertConditionType.StateSpanActive, """{"category":"PumpMode","is_active":true}""", false, null, null,
+            new RustValidationIssue("condition", "state_span_active", "pump_mode_category", "category")
+        },
+        {
+            AlertConditionType.Sustained, """{"minutes":10,"child":{"type":"not","not":{"child":""" + PumpModeSpan + "}}}", false, null, null,
+            new RustValidationIssue("condition", "sustained[0].not[0].state_span_active", "pump_mode_category", "category")
+        },
+        {
+            AlertConditionType.Threshold, """{"direction":"below","value":70}""", true,
+            """{"type":"composite","composite":{"operator":"or","conditions":[{"type":"trend","trend":{"bucket":"flat"}},""" + PumpModeSpan + "]}}", null,
+            new RustValidationIssue("auto_resolve", "auto_resolve[1].state_span_active", "pump_mode_category", "category")
+        },
+        {
+            AlertConditionType.Threshold, """{"direction":"below","value":70}""", false, null,
+            """{"snooze":{"smartSnooze":true,"conditions":[""" + PumpModeSpan + "]}}",
+            new RustValidationIssue("snooze", "snooze[0].state_span_active", "pump_mode_category", "category")
+        },
+    };
+
+    [Theory]
+    [MemberData(nameof(PumpModeSpans))]
+    public void Without_the_native_engine_rejects_a_generic_state_span_on_the_pump_mode_category(
+        AlertConditionType type, string body, bool autoResolveEnabled, string? autoResolve, string? clientConfiguration,
+        RustValidationIssue expected)
+    {
+        Unavailable().Validate(type, body, autoResolveEnabled, autoResolve, clientConfiguration)
+            .Should().Equal(expected);
+    }
+
+    [NativeTheory]
+    [MemberData(nameof(PumpModeSpans))]
+    public void The_native_engine_reports_a_pump_mode_state_span_as_the_fallback_does(
+        AlertConditionType type, string body, bool autoResolveEnabled, string? autoResolve, string? clientConfiguration,
+        RustValidationIssue expected)
+    {
+        new AlertRuleConditionValidator(_logger).Validate(type, body, autoResolveEnabled, autoResolve, clientConfiguration)
+            .Should().Equal(expected);
+    }
+
     [NativeTheory]
     [InlineData("""{"operator":"and","conditions":[{"type":"threshold","threshold":{"value":70}}]}""", false, null, null)]
     [InlineData("""{"operator":"and","conditions":[{"type":"threshold","threshold":{"direction":"below","value":70}}]}""",
