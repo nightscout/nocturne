@@ -221,15 +221,17 @@
     <AppSidebar user={data.user} isPlatformAdmin={data.isPlatformAdmin} isPlatformAccessGrant={data.isPlatformAccessGrant} isGuestSession={data.isGuestSession} currentSlug={data.tenantSlug} baseDomain={data.baseDomain} tenantless={data.tenantless} />
     <Sidebar.Inset>
       <MobileHeader />
-      {#if data.isDemo}
-        <DemoBanner nextResetAt={data.nextResetAt} />
-      {/if}
-      {#if data.isGuestSession && data.guestExpiresAt}
-        <GuestBanner expiresAt={data.guestExpiresAt} />
-      {/if}
-      {#if !tenantless && data.user && !data.isGuestSession && !data.isDemo}
-        <BackupSignInPrompt />
-      {/if}
+      <div class="sticky top-(--mobile-header-offset,0px) z-40 transition-all duration-300 md:top-0">
+          {#if data.isDemo}
+            <DemoBanner nextResetAt={data.nextResetAt} />
+          {/if}
+          {#if data.isGuestSession && data.guestExpiresAt}
+            <GuestBanner expiresAt={data.guestExpiresAt} />
+          {/if}
+          {#if !tenantless && data.user && !data.isGuestSession && !data.isDemo}
+            <BackupSignInPrompt />
+          {/if}
+      </div>
       {#if data.user && !data.isGuestSession}
         <SessionExpiryWatcher />
       {/if}

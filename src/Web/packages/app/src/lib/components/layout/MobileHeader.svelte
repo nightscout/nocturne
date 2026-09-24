@@ -61,6 +61,13 @@
 
     lastScrollY = currentScrollY;
   }
+
+  // The layout's sticky banner strip reads this to sit flush under the header as it slides.
+  $effect(() => {
+    const root = document.documentElement;
+    root.style.setProperty("--mobile-header-offset", isVisible ? "3.5rem" : "0px");
+    return () => root.style.removeProperty("--mobile-header-offset");
+  });
 </script>
 
 <svelte:window onscroll={handleScroll} />
