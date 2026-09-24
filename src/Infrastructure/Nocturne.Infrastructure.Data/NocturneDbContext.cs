@@ -684,8 +684,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         // leaves out, so without this the lookup scans every row the tenant owns: 719 ms and 187k
         // buffers to find 200 ids on the largest production tenant. With it, the planner answers
         // the OR in WhereBlocksRecreation with a BitmapOr over the two partial indexes. Tombstones
-        // only, not every soft-deleted row, because that is the arm the OR asks for and it keeps
-        // the index near 1.5% of the unique one. Named, because an unnamed HasIndex on the same
+        // only, not every soft-deleted row, because that is the arm the OR asks for; on production
+        // that is 1.5% of sensor_glucose and at most 15% of any table. Named, because an unnamed HasIndex on the same
         // columns would reconfigure the unique index instead of adding this one.
         foreach (var entity in V4LegacyIdRecordEntities.Select(t => modelBuilder.Entity(t)))
         {
