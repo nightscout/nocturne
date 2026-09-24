@@ -1,11 +1,11 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Alerts.Evaluators;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
-using Nocturne.Core.Models.Alerts.Conditions;
 
 namespace Nocturne.API.Services.Alerts.Engines;
 
@@ -225,77 +225,16 @@ internal sealed class ManagedAlertReplayEngine(ILogger<ManagedAlertReplayEngine>
     }
 
     /// <summary>
-    /// Reconstructs a <see cref="ConditionNode"/> from a rule's stored type+payload, or null when
-    /// the payload does not deserialise: the rule is then skipped on every tick.
+    /// The full node <c>{"type": wire, wire: payload}</c> for a rule's stored type and payload, or
+    /// null when the payload is not JSON: the rule is then skipped on every tick.
     /// </summary>
     private ConditionNode? BuildNodeForRule(AlertRuleSnapshot rule)
     {
         try
         {
-            return rule.ConditionType switch
-            {
-                AlertConditionType.Composite => new ConditionNode("composite",
-                    Composite: JsonSerializer.Deserialize<CompositeCondition>(rule.ConditionParams, EvaluatorJson.Options)),
-                AlertConditionType.Not => new ConditionNode("not",
-                    Not: JsonSerializer.Deserialize<NotCondition>(rule.ConditionParams, EvaluatorJson.Options)),
-                AlertConditionType.Sustained => new ConditionNode("sustained",
-                    Sustained: JsonSerializer.Deserialize<SustainedCondition>(rule.ConditionParams, EvaluatorJson.Options)),
-                AlertConditionType.AlertState => new ConditionNode("alert_state",
-                    AlertState: JsonSerializer.Deserialize<AlertStateCondition>(rule.ConditionParams, EvaluatorJson.Options)),
-                AlertConditionType.Threshold => new ConditionNode("threshold",
-                    Threshold: JsonSerializer.Deserialize<ThresholdCondition>(rule.ConditionParams, EvaluatorJson.Options)),
-                AlertConditionType.RateOfChange => new ConditionNode("rate_of_change",
-                    RateOfChange: JsonSerializer.Deserialize<RateOfChangeCondition>(rule.ConditionParams, EvaluatorJson.Options)),
-                AlertConditionType.Staleness => new ConditionNode("staleness",
-                    Staleness: JsonSerializer.Deserialize<StalenessCondition>(rule.ConditionParams, EvaluatorJson.Options)),
-                AlertConditionType.Predicted => new ConditionNode("predicted",
-                    Predicted: JsonSerializer.Deserialize<PredictedCondition>(rule.ConditionParams, EvaluatorJson.Options)),
-                AlertConditionType.Trend => new ConditionNode("trend",
-                    Trend: JsonSerializer.Deserialize<TrendCondition>(rule.ConditionParams, EvaluatorJson.Options)),
-                AlertConditionType.TimeOfDay => new ConditionNode("time_of_day",
-                    TimeOfDay: JsonSerializer.Deserialize<TimeOfDayCondition>(rule.ConditionParams, EvaluatorJson.Options)),
-                AlertConditionType.Iob => new ConditionNode("iob",
-                    Iob: JsonSerializer.Deserialize<IobCondition>(rule.ConditionParams, EvaluatorJson.Options)),
-                AlertConditionType.Cob => new ConditionNode("cob",
-                    Cob: JsonSerializer.Deserialize<CobCondition>(rule.ConditionParams, EvaluatorJson.Options)),
-                AlertConditionType.Reservoir => new ConditionNode("reservoir",
-                    Reservoir: JsonSerializer.Deserialize<ReservoirCondition>(rule.ConditionParams, EvaluatorJson.Options)),
-                AlertConditionType.SiteAge => new ConditionNode("site_age",
-                    SiteAge: JsonSerializer.Deserialize<SiteAgeCondition>(rule.ConditionParams, EvaluatorJson.Options)),
-                AlertConditionType.SensorAge => new ConditionNode("sensor_age",
-                    SensorAge: JsonSerializer.Deserialize<SensorAgeCondition>(rule.ConditionParams, EvaluatorJson.Options)),
-                AlertConditionType.LoopStale => new ConditionNode("loop_stale",
-                    LoopStale: JsonSerializer.Deserialize<LoopStaleCondition>(rule.ConditionParams, EvaluatorJson.Options)),
-                AlertConditionType.LoopEnactionStale => new ConditionNode("loop_enaction_stale",
-                    LoopEnactionStale: JsonSerializer.Deserialize<LoopEnactionStaleCondition>(rule.ConditionParams, EvaluatorJson.Options)),
-                AlertConditionType.PumpSuspended => new ConditionNode("pump_suspended",
-                    PumpSuspended: JsonSerializer.Deserialize<PumpSuspendedCondition>(rule.ConditionParams, EvaluatorJson.Options)),
-                AlertConditionType.PumpBattery => new ConditionNode("pump_battery",
-                    PumpBattery: JsonSerializer.Deserialize<PumpBatteryCondition>(rule.ConditionParams, EvaluatorJson.Options)),
-                AlertConditionType.TempBasal => new ConditionNode("temp_basal",
-                    TempBasal: JsonSerializer.Deserialize<TempBasalCondition>(rule.ConditionParams, EvaluatorJson.Options)),
-                AlertConditionType.UploaderBattery => new ConditionNode("uploader_battery",
-                    UploaderBattery: JsonSerializer.Deserialize<UploaderBatteryCondition>(rule.ConditionParams, EvaluatorJson.Options)),
-                AlertConditionType.OverrideActive => new ConditionNode("override_active",
-                    OverrideActive: JsonSerializer.Deserialize<OverrideActiveCondition>(rule.ConditionParams, EvaluatorJson.Options)),
-                AlertConditionType.SensitivityRatio => new ConditionNode("sensitivity_ratio",
-                    SensitivityRatio: JsonSerializer.Deserialize<SensitivityRatioCondition>(rule.ConditionParams, EvaluatorJson.Options)),
-                AlertConditionType.DoNotDisturb => new ConditionNode("do_not_disturb",
-                    DoNotDisturb: JsonSerializer.Deserialize<DoNotDisturbCondition>(rule.ConditionParams, EvaluatorJson.Options)),
-                AlertConditionType.GlucoseBucket => new ConditionNode("glucose_bucket",
-                    GlucoseBucket: JsonSerializer.Deserialize<GlucoseBucketCondition>(rule.ConditionParams, EvaluatorJson.Options)),
-                AlertConditionType.TimeSinceLastCarb => new ConditionNode("time_since_last_carb",
-                    TimeSinceLastCarb: JsonSerializer.Deserialize<TimeSinceLastCarbCondition>(rule.ConditionParams, EvaluatorJson.Options)),
-                AlertConditionType.TimeSinceLastBolus => new ConditionNode("time_since_last_bolus",
-                    TimeSinceLastBolus: JsonSerializer.Deserialize<TimeSinceLastBolusCondition>(rule.ConditionParams, EvaluatorJson.Options)),
-                AlertConditionType.DayOfWeek => new ConditionNode("day_of_week",
-                    DayOfWeek: JsonSerializer.Deserialize<DayOfWeekCondition>(rule.ConditionParams, EvaluatorJson.Options)),
-                AlertConditionType.PumpState => new ConditionNode("pump_state",
-                    PumpState: JsonSerializer.Deserialize<PumpStateCondition>(rule.ConditionParams, EvaluatorJson.Options)),
-                AlertConditionType.StateSpanActive => new ConditionNode("state_span_active",
-                    StateSpanActive: JsonSerializer.Deserialize<StateSpanActiveCondition>(rule.ConditionParams, EvaluatorJson.Options)),
-                _ => null,
-            };
+            var wire = AlertConditionTypeNames.ToWireString(rule.ConditionType);
+            var node = new JsonObject { ["type"] = wire, [wire] = JsonNode.Parse(rule.ConditionParams) };
+            return node.Deserialize<ConditionNode>(EvaluatorJson.Options);
         }
         catch (JsonException ex)
         {

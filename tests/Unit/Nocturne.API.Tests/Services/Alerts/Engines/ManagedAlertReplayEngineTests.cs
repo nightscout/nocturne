@@ -62,4 +62,29 @@ public class ManagedAlertReplayEngineTests
 
         run.Events.Should().ContainSingle().Which.Kind.Should().Be(AlertReplayTransition.Fired);
     }
+
+    [Theory]
+    [InlineData(AlertConditionType.SignalLoss)]
+    [InlineData(AlertConditionType.Staleness)]
+    public async Task AReadingGap_FiresAWallClockRootedRule(AlertConditionType type)
+    {
+        var ruleId = Guid.NewGuid();
+        var conditionParams = type == AlertConditionType.SignalLoss
+            ? """{"timeout_minutes":15}"""
+            : """{"operator":">=","value":15}""";
+        var rule = Rule(ruleId, type, conditionParams);
+        var stale = (int minutes) => Tick(minutes, new SensorContext
+        {
+            LatestValue = 100m,
+            LatestTimestamp = T0,
+            TrendRate = 0m,
+            LastReadingAt = T0,
+        });
+
+        var run = await _engine.ReplayAsync(
+            new AlertReplayInput([rule], [Reading(0, 100m), stale(5), stale(10), stale(15)]), CancellationToken.None);
+
+        run.Events.Should().ContainSingle().Which.Should().Be(
+            new AlertReplayRunEvent(T0.AddMinutes(15), ruleId, AlertReplayTransition.Fired));
+    }
 }
