@@ -408,6 +408,7 @@ fn close_from_hysteresis(state: &mut TrackerState) -> Transition {
     state.confirmation_count = 0;
     state.active_excursion = None;
     state.hysteresis_started_at = None;
+    state.awaiting_rearm = false;
     Transition {
         kind: TransitionType::ExcursionClosed,
         excursion,

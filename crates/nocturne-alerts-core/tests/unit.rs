@@ -21,7 +21,8 @@ use nocturne_alerts_core::engine::{EngineState, Evaluation, Rule, evaluate_rule}
 use nocturne_alerts_core::enums::WireEnum;
 use nocturne_alerts_core::eval::{Env, eval_node, eval_payload as eval_parsed};
 use nocturne_alerts_core::excursion::{
-    CloseReason, ExcursionTracker, TrackerRuleConfig, TrackerStateKind, TransitionType,
+    CloseReason, ExcursionTracker, TrackerRuleConfig, TrackerState, TrackerStateKind,
+    TransitionType,
 };
 use nocturne_alerts_core::model::{ConditionKind, Node, parse_payload, parse_payload_structure};
 use nocturne_alerts_core::sustained::TimerStore;
@@ -1210,6 +1211,29 @@ fn elapsed_across_the_whole_domain_still_evaluates() {
         &ctx,
         now
     ));
+}
+
+#[test]
+fn a_hysteresis_close_leaves_the_rule_armed() {
+    let restored = || TrackerState {
+        state: TrackerStateKind::Hysteresis,
+        confirmation_count: 0,
+        active_excursion: Some(1),
+        updated_at: at(0),
+        hysteresis_started_at: Some(at(0)),
+        awaiting_rearm: true,
+    };
+    let mut by_evaluation = ExcursionTracker::new();
+    by_evaluation.restore_state(rule_id(), restored());
+    let t = by_evaluation.process_evaluation(rule_id(), cfg(1, 5), false, true, at(10));
+    assert_eq!(t.kind, TransitionType::ExcursionClosed);
+    assert!(!by_evaluation.state(rule_id()).unwrap().awaiting_rearm);
+
+    let mut by_sweep = ExcursionTracker::new();
+    by_sweep.restore_state(rule_id(), restored());
+    let t = by_sweep.close_elapsed_hysteresis(rule_id(), cfg(1, 5), at(10));
+    assert_eq!(t.kind, TransitionType::ExcursionClosed);
+    assert!(!by_sweep.state(rule_id()).unwrap().awaiting_rearm);
 }
 
 #[test]
