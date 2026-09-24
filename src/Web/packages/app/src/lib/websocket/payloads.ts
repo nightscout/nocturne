@@ -111,7 +111,7 @@ export function parseTrackerUpdate(data: unknown): TrackerUpdateEvent | null {
 
   return {
     action: fields.action,
-    instance: instance as TrackerUpdateEvent["instance"],
+    instance,
   };
 }
 
