@@ -105,11 +105,11 @@
     {#if page.url.pathname !== "/reports"}
         <ReportPrintHeader title={reportName} period={printPeriod} />
 
-        <!-- Report Header - unified sticky header with sidebar trigger -->
-        <!-- On mobile (md:hidden), position below the MobileHeader with top-14 -->
-        <!-- On desktop (md:top-0), position at top since main header is hidden for reports -->
+        <!-- top-0 at every width: <main> (overflow-auto) is the sticky container and already
+             starts below the fixed MobileHeader, so an extra top-14 pushed this bar onto the
+             page heading on phones. -->
         <div
-                class="sticky top-14 md:top-0 z-20 border-b border-border bg-card/95 backdrop-blur supports-backdrop-filter:bg-card/60 print:hidden"
+                class="sticky top-0 z-20 border-b border-border bg-card/95 backdrop-blur supports-backdrop-filter:bg-card/60 print:hidden"
         >
             <div class="flex h-14 items-center justify-between gap-2 px-3 @md:px-6">
                 <div class="flex items-center gap-2">
