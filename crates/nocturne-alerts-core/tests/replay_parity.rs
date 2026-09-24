@@ -15,28 +15,15 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 use serde_json::Value;
-use uuid::Uuid;
 
-use nocturne_alerts_core::engine::Rule;
-use nocturne_alerts_core::model::ConditionKind;
+use nocturne_alerts_core::engine::{Rule, WireRule};
 use nocturne_alerts_core::replay::{ReplayOptions, ReplayTick, replay};
 
 #[derive(Deserialize)]
 struct ReplayScenarioFile {
     name: String,
-    rules: Vec<ScenarioRule>,
+    rules: Vec<WireRule>,
     ticks: Vec<ReplayTick>,
-}
-
-#[derive(Deserialize)]
-struct ScenarioRule {
-    id: Uuid,
-    condition_type: String,
-    condition_params: Value,
-    #[serde(default)]
-    auto_resolve_enabled: bool,
-    #[serde(default)]
-    auto_resolve_params: Option<Value>,
 }
 
 fn replay_corpus_dir() -> PathBuf {
@@ -58,16 +45,7 @@ fn run(path: &Path) -> Result<(), String> {
     let rules: Vec<Rule> = scenario
         .rules
         .into_iter()
-        .map(|r| Rule {
-            id: r.id,
-            condition_type: ConditionKind::from_wire(&r.condition_type)
-                .unwrap_or_else(|| panic!("unknown condition_type '{}'", r.condition_type)),
-            condition_params: r.condition_params,
-            confirmation_readings: 1,
-            hysteresis_minutes: 0,
-            auto_resolve_enabled: r.auto_resolve_enabled,
-            auto_resolve_params: r.auto_resolve_params,
-        })
+        .map(|r| Rule::try_from(r).unwrap_or_else(|e| panic!("{e}")))
         .collect();
     let options = ReplayOptions {
         include_ticks: true,

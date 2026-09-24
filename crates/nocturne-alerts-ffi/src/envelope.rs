@@ -12,17 +12,27 @@ use uuid::Uuid;
 
 use nocturne_alerts_core::classify::classify;
 use nocturne_alerts_core::context::{SensorContext, check_timestamp};
-use nocturne_alerts_core::engine::{EngineState, Rule, evaluate_rule, format_instant};
+use nocturne_alerts_core::engine::{
+    EngineState, Rule, WireRule, evaluate_parsed_rule, format_instant,
+};
+use nocturne_alerts_core::enums::WireEnum;
 use nocturne_alerts_core::eval::{Env, eval_node};
 use nocturne_alerts_core::excursion::{ExcursionTracker, TrackerState, TrackerStateKind};
-use nocturne_alerts_core::model::{
-    ConditionKind, Container, Node, parse_payload, parse_payload_structure,
-};
+use nocturne_alerts_core::model::{ConditionKind, Container, Node, parse_payload_structure};
 use nocturne_alerts_core::paths::node_child_path;
 use nocturne_alerts_core::sustained::{TimerOp, TimerStore};
 use nocturne_alerts_core::wall_clock::references_wall_clock;
 
 pub(crate) const SCHEMA_VERSION: i64 = 1;
+
+fn known_kind(condition_type: &str) -> Result<ConditionKind, String> {
+    ConditionKind::from_name(condition_type).ok_or_else(|| {
+        format!(
+            "unknown condition_type '{}'",
+            condition_type.escape_default()
+        )
+    })
+}
 
 /// Reads a request envelope and checks its `schema_version`.
 pub(crate) fn read_request<T: DeserializeOwned>(
@@ -48,15 +58,6 @@ pub(crate) fn ok(fields: Value) -> Value {
         o.extend(fields);
     }
     Value::Object(o)
-}
-
-fn known_kind(condition_type: &str) -> Result<ConditionKind, String> {
-    ConditionKind::from_wire(condition_type).ok_or_else(|| {
-        format!(
-            "unknown condition_type '{}'",
-            condition_type.escape_default()
-        )
-    })
 }
 
 /// Persisted sustained-timer state for one rule: `path -> first_true`.
@@ -96,38 +97,6 @@ struct EvaluateRequest {
 
 fn yes() -> bool {
     true
-}
-
-/// The corpus rule shape; unknown fields such as `name` are ignored.
-#[derive(Deserialize)]
-pub(crate) struct WireRule {
-    id: Uuid,
-    condition_type: String,
-    #[serde(default)]
-    condition_params: Value,
-    #[serde(default = "one")]
-    confirmation_readings: i32,
-    #[serde(default)]
-    hysteresis_minutes: i32,
-    #[serde(default)]
-    auto_resolve_enabled: bool,
-    #[serde(default)]
-    auto_resolve_params: Option<Value>,
-}
-
-impl WireRule {
-    /// An unknown `condition_type` is an error; the body is not checked.
-    pub(crate) fn into_rule(self) -> Result<Rule, String> {
-        Ok(Rule {
-            id: self.id,
-            condition_type: known_kind(&self.condition_type)?,
-            condition_params: self.condition_params,
-            confirmation_readings: self.confirmation_readings,
-            hysteresis_minutes: self.hysteresis_minutes,
-            auto_resolve_enabled: self.auto_resolve_enabled,
-            auto_resolve_params: self.auto_resolve_params,
-        })
-    }
 }
 
 pub(crate) fn one<T: From<u8>>() -> T {
@@ -190,18 +159,16 @@ impl WireTracker {
 
 pub(crate) fn evaluate(request_json: &str) -> Result<Value, String> {
     let req: EvaluateRequest = read_request(request_json, |r: &EvaluateRequest| r.schema_version)?;
-    let rule = req.rule.into_rule()?;
+    let rule = Rule::try_from(req.rule)?;
 
     // A body that cannot be evaluated (engine-semantics.md §1.4) is an error,
     // which the host treats as skipping the rule with its state untouched.
-    if !rule.condition_params.is_null()
-        && let Err(e) = parse_payload(rule.condition_type, &rule.condition_params)
-    {
-        return Err(format!(
+    let body = rule.parse_body().map_err(|e| {
+        format!(
             "malformed condition_params for '{}': {e}",
-            rule.condition_type.wire()
-        ));
-    }
+            rule.condition_type.name()
+        )
+    })?;
     check_timestamp(req.now, "now")?;
 
     let mut state = EngineState::new();
@@ -210,7 +177,14 @@ pub(crate) fn evaluate(request_json: &str) -> Result<Value, String> {
         tracker.restore(&mut state.tracker, rule.id)?;
     }
 
-    let outcome = evaluate_rule(&rule, &req.context, req.now, &mut state, req.include_leaves);
+    let outcome = evaluate_parsed_rule(
+        &rule,
+        &body,
+        &req.context,
+        req.now,
+        &mut state,
+        req.include_leaves,
+    );
     Ok(ok(json!({
         "result": outcome.to_json(),
         "timers": timers_json(&state.timers, rule.id),
@@ -381,7 +355,7 @@ pub(crate) fn describe(request_json: &str) -> Result<Value, String> {
         v => parse_payload_structure(kind, v).ok(),
     };
     let node = Node::from_rule(kind, payload);
-    let tree = describe_node(Some(&node), kind.wire().to_owned(), &mut 0);
+    let tree = describe_node(Some(&node), kind.name().to_owned(), &mut 0);
     Ok(ok(json!({ "tree": tree })))
 }
 
@@ -418,7 +392,7 @@ fn describe_node(node: Option<&Node>, path: String, next_leaf_id: &mut usize) ->
         "leaf_id": leaf_id,
         "path": path,
         "type": node.and_then(|n| n.type_str.as_deref()),
-        "kind": payload.as_ref().map(|p| p.kind().wire()),
+        "kind": payload.as_ref().map(|p| p.kind().name()),
         "params": payload,
     })
 }

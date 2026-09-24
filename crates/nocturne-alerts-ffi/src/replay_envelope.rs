@@ -5,9 +5,10 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use nocturne_alerts_core::context::check_timestamp;
+use nocturne_alerts_core::engine::{Rule, WireRule};
 use nocturne_alerts_core::replay::{ReplayOptions, ReplayTick, replay as run_replay};
 
-use crate::envelope::{WireRule, ok, read_request};
+use crate::envelope::{ok, read_request};
 
 #[derive(Deserialize)]
 struct ReplayRequest {
@@ -25,7 +26,7 @@ pub(crate) fn replay(request_json: &str) -> Result<Value, String> {
     let rules = req
         .rules
         .into_iter()
-        .map(WireRule::into_rule)
+        .map(Rule::try_from)
         .collect::<Result<Vec<_>, _>>()?;
     for tick in &req.ticks {
         check_timestamp(tick.at, "ticks.at")?;

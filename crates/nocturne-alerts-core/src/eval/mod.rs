@@ -19,7 +19,7 @@ use uuid::Uuid;
 use crate::compare::{Unit, decimal_from_f64_cs, elapsed};
 use crate::context::SensorContext;
 use crate::enums::{CmpOp, CompositeOp, holds};
-use crate::model::{ConditionKind, Node, Payload};
+use crate::model::{Node, Payload};
 use crate::paths::node_child_path;
 use crate::sustained::{TimerStore, eval_sustained};
 
@@ -124,19 +124,6 @@ pub fn eval_payload(payload: &Payload, path: &str, env: &mut Env) -> bool {
         Payload::StateSpanActive(p) => spans::state_span_active(p, env),
         Payload::SleepSessionActive(p) => spans::sleep_session_active(p, env),
         Payload::TrackerAge(p) => device::tracker_age(p, env),
-    }
-}
-
-/// Evaluates `kind` with the given payload, or its defaults when absent.
-pub fn eval_kind(
-    kind: ConditionKind,
-    payload: Option<&Payload>,
-    path: &str,
-    env: &mut Env,
-) -> bool {
-    match payload {
-        Some(p) => eval_payload(p, path, env),
-        None => eval_payload(&Payload::default_for(kind), path, env),
     }
 }
 

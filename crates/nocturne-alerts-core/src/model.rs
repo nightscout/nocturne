@@ -305,23 +305,12 @@ condition_kinds! {
 }
 
 impl ConditionKind {
-    #[must_use]
-    pub fn wire(self) -> &'static str {
-        self.name()
-    }
-
-    /// The kind whose wire name is `s`, ignoring ASCII case.
-    #[must_use]
-    pub fn from_wire(s: &str) -> Option<Self> {
-        Self::from_name(s)
-    }
-
     /// The kind a node's `type` names (engine-semantics.md §1.2): its wire
     /// name, else its member name or ordinal, trimmed and ignoring ASCII case.
     #[must_use]
     pub fn resolve(type_str: &str) -> Option<Self> {
         let trimmed = type_str.trim();
-        Self::from_wire(type_str)
+        Self::from_name(type_str)
             .or_else(|| {
                 Self::ALL
                     .iter()
@@ -852,7 +841,7 @@ pub fn parse_payload(kind: ConditionKind, v: &Value) -> ParseResult<Payload> {
 
 /// The structural pass of [`parse_payload`] alone.
 pub fn parse_payload_structure(kind: ConditionKind, v: &Value) -> ParseResult<Payload> {
-    let root = kind.wire();
+    let root = kind.name();
     check_json_depth(v).map_err(|e| e.placed_at(root))?;
     parse_payload_at(kind, v, 1, root)
 }
@@ -955,12 +944,12 @@ impl Node {
             let type_str = read_string(obj, "type")?;
             let mut payloads = Vec::new();
             for &kind in ConditionKind::ALL {
-                match get_ci(obj, kind.wire()) {
+                match get_ci(obj, kind.name()) {
                     None | Some(Value::Null) => {}
                     Some(pv @ Value::Object(_)) => {
                         payloads.push(parse_payload_at(kind, pv, level.saturating_add(1), path)?);
                     }
-                    Some(_) => return Err(invalid(kind.wire())),
+                    Some(_) => return Err(invalid(kind.name())),
                 }
             }
             Ok(Node { type_str, payloads })
@@ -973,7 +962,7 @@ impl Node {
     #[must_use]
     pub fn from_rule(kind: ConditionKind, payload: Option<Payload>) -> Node {
         Node {
-            type_str: Some(kind.wire().to_owned()),
+            type_str: Some(kind.name().to_owned()),
             payloads: payload.into_iter().collect(),
         }
     }
@@ -992,7 +981,10 @@ impl Node {
     pub fn dispatch(&self) -> Option<Cow<'_, Payload>> {
         let type_str = self.type_str.as_deref()?;
         let kind = ConditionKind::resolve(type_str)?;
-        let stored = if type_str.to_lowercase() == kind.wire() {
+        // §1.2 reads the payload named by the lowercased `type`. A `type` that
+        // resolves is ASCII apart from surrounding whitespace, which neither
+        // comparison matches, so folding ASCII case decides the same.
+        let stored = if type_str.eq_ignore_ascii_case(kind.name()) {
             self.payload(kind)
         } else {
             None

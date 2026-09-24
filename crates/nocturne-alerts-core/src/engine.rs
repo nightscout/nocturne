@@ -2,16 +2,18 @@
 //! the leaf log, the excursion tracker, then auto-resolve.
 
 use chrono::{DateTime, SecondsFormat, Utc};
+use serde::Deserialize;
 use serde_json::{Map, Value, json};
 use uuid::Uuid;
 
 use crate::context::SensorContext;
+use crate::enums::WireEnum;
 use crate::eval::{Env, eval_node, eval_payload};
 use crate::excursion::{
     CloseReason, ExcursionTracker, TrackerRuleConfig, TrackerState, Transition, TransitionType,
 };
 use crate::leaf_identity::collect_leaves;
-use crate::model::{ConditionKind, Node, parse_payload};
+use crate::model::{ConditionKind, Node, ParseResult, parse_payload};
 use crate::paths::AUTO_RESOLVE_ROOT;
 use crate::sustained::{TimerOp, TimerStore};
 
@@ -28,6 +30,77 @@ pub struct Rule {
     pub auto_resolve_enabled: bool,
     /// A full condition node, or `None`.
     pub auto_resolve_params: Option<Value>,
+}
+
+impl Rule {
+    /// The body as the full node `{"type": <wire>, "<wire>": <payload>}`,
+    /// parsed and checked for evaluability (engine-semantics.md §1.4). A JSON
+    /// `null` body has no payload property, and its root evaluates false.
+    ///
+    /// # Errors
+    /// The body cannot be evaluated.
+    pub fn parse_body(&self) -> ParseResult<Node> {
+        let payload = match &self.condition_params {
+            Value::Null => None,
+            v => Some(parse_payload(self.condition_type, v)?),
+        };
+        Ok(Node::from_rule(self.condition_type, payload))
+    }
+
+    /// The auto-resolve tree when it is present, not `null` and evaluable.
+    /// Whether auto-resolve is enabled is for the caller to check.
+    pub(crate) fn parse_auto_resolve(&self) -> Option<Node> {
+        self.auto_resolve_params
+            .as_ref()
+            .filter(|v| !v.is_null())
+            .and_then(|v| Node::parse(v).ok())
+    }
+}
+
+/// A rule in the golden corpus `ScenarioRule` shape, which the FFI envelopes
+/// also take; unknown fields such as `name` are ignored.
+#[derive(Debug, Clone, Deserialize)]
+pub struct WireRule {
+    pub id: Uuid,
+    /// A kind's wire name, ignoring ASCII case.
+    pub condition_type: String,
+    #[serde(default)]
+    pub condition_params: Value,
+    #[serde(default = "one")]
+    pub confirmation_readings: i32,
+    #[serde(default)]
+    pub hysteresis_minutes: i32,
+    #[serde(default)]
+    pub auto_resolve_enabled: bool,
+    #[serde(default)]
+    pub auto_resolve_params: Option<Value>,
+}
+
+fn one() -> i32 {
+    1
+}
+
+/// Only the `condition_type` is checked, not the body.
+impl TryFrom<WireRule> for Rule {
+    type Error = String;
+
+    fn try_from(w: WireRule) -> Result<Self, String> {
+        let condition_type = ConditionKind::from_name(&w.condition_type).ok_or_else(|| {
+            format!(
+                "unknown condition_type '{}'",
+                w.condition_type.escape_default()
+            )
+        })?;
+        Ok(Rule {
+            id: w.id,
+            condition_type,
+            condition_params: w.condition_params,
+            confirmation_readings: w.confirmation_readings,
+            hysteresis_minutes: w.hysteresis_minutes,
+            auto_resolve_enabled: w.auto_resolve_enabled,
+            auto_resolve_params: w.auto_resolve_params,
+        })
+    }
 }
 
 /// Evaluation state carried across ticks: sustained timers and the excursion
@@ -162,12 +235,25 @@ pub fn evaluate_rule(
     state: &mut EngineState,
     log_leaves: bool,
 ) -> RuleOutcome {
-    let Some(body) = evaluate_body(rule, ctx, now, &mut state.timers, log_leaves) else {
-        return RuleOutcome {
+    match rule.parse_body() {
+        Ok(body) => evaluate_parsed_rule(rule, &body, ctx, now, state, log_leaves),
+        Err(_) => RuleOutcome {
             rule_id: rule.id,
             evaluation: None,
-        };
-    };
+        },
+    }
+}
+
+/// [`evaluate_rule`] with the body already read by [`Rule::parse_body`].
+pub fn evaluate_parsed_rule(
+    rule: &Rule,
+    body: &Node,
+    ctx: &SensorContext,
+    now: DateTime<Utc>,
+    state: &mut EngineState,
+    log_leaves: bool,
+) -> RuleOutcome {
+    let body = evaluate_body(rule, body, ctx, now, &mut state.timers, log_leaves);
 
     let config = TrackerRuleConfig {
         confirmation_readings: rule.confirmation_readings,
@@ -197,37 +283,31 @@ pub(crate) struct BodyOutcome {
     pub(crate) leaves: Option<Vec<bool>>,
 }
 
-/// The root truth and, when `log_leaves`, each leaf alone, or `None` when the
-/// body cannot be evaluated (engine-semantics.md §1.4).
+/// The root truth of a body read by [`Rule::parse_body`] and, when
+/// `log_leaves`, each leaf alone.
 pub(crate) fn evaluate_body(
     rule: &Rule,
+    body: &Node,
     ctx: &SensorContext,
     now: DateTime<Utc>,
     timers: &mut TimerStore,
     log_leaves: bool,
-) -> Option<BodyOutcome> {
-    // A JSON null body is a null condition record, which evaluates false.
-    let payload = match &rule.condition_params {
-        Value::Null => None,
-        v => Some(parse_payload(rule.condition_type, v).ok()?),
-    };
-
-    let wire = rule.condition_type.wire();
+) -> BodyOutcome {
+    let wire = rule.condition_type.name();
     let mut env = Env::new(now, rule.id, ctx, timers);
-    let root = payload
-        .as_ref()
+    let root = body
+        .payload(rule.condition_type)
         .is_some_and(|p| eval_payload(p, wire, &mut env));
 
     // Leaves evaluate alone, with no short-circuit, at the rule's root path;
     // a leaf touches no timers.
-    let full_node = Node::from_rule(rule.condition_type, payload);
     let leaves = log_leaves.then(|| {
-        collect_leaves(&full_node)
+        collect_leaves(body)
             .into_iter()
             .map(|leaf| eval_node(leaf, wire, &mut env))
             .collect()
     });
-    Some(BodyOutcome { root, leaves })
+    BodyOutcome { root, leaves }
 }
 
 /// Only while an excursion is active or in hysteresis; one that the
@@ -239,7 +319,13 @@ fn try_auto_resolve(
     state: &mut EngineState,
 ) -> bool {
     if state.tracker.active_excursion_id(rule.id).is_none()
-        || !auto_resolve_holds(rule, ctx, now, &mut state.timers)
+        || !auto_resolve_holds(
+            rule.id,
+            rule.parse_auto_resolve().as_ref(),
+            ctx,
+            now,
+            &mut state.timers,
+        )
     {
         return false;
     }
@@ -249,22 +335,18 @@ fn try_auto_resolve(
     transition.kind == TransitionType::ExcursionClosed
 }
 
-/// Whether the rule's auto-resolve tree evaluates true at the `auto_resolve`
-/// root. A tree that is absent, null or does not parse never holds.
+/// Whether an auto-resolve tree read by [`Rule::parse_auto_resolve`]
+/// evaluates true at the `auto_resolve` root; no tree never holds.
 pub(crate) fn auto_resolve_holds(
-    rule: &Rule,
+    rule_id: Uuid,
+    tree: Option<&Node>,
     ctx: &SensorContext,
     now: DateTime<Utc>,
     timers: &mut TimerStore,
 ) -> bool {
-    let Some(node) = rule
-        .auto_resolve_params
-        .as_ref()
-        .filter(|v| !v.is_null())
-        .and_then(|v| Node::parse(v).ok())
-    else {
+    let Some(tree) = tree else {
         return false;
     };
-    let mut env = Env::new(now, rule.id, ctx, timers);
-    eval_node(Some(&node), AUTO_RESOLVE_ROOT, &mut env)
+    let mut env = Env::new(now, rule_id, ctx, timers);
+    eval_node(Some(tree), AUTO_RESOLVE_ROOT, &mut env)
 }

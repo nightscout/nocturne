@@ -11,7 +11,7 @@
 
 use serde_json::{Map, Value};
 
-use crate::enums::{EnumValue, Spelled, StateSpanCategory};
+use crate::enums::{EnumValue, Spelled, StateSpanCategory, WireEnum};
 use crate::eval::clock::parse_hh_mm;
 use crate::model::{
     ConditionKind, Node, ParseError, Payload, Reason, get_ci, parse_payload_structure,
@@ -38,7 +38,7 @@ pub(crate) fn first_evaluation_fault_in_payload(payload: &Payload) -> Option<Par
     check_payload(
         payload,
         None,
-        payload.kind().wire(),
+        payload.kind().name(),
         Tier::Evaluation,
         &mut found,
     );
@@ -51,7 +51,7 @@ pub(crate) fn first_evaluation_fault_in_payload(payload: &Payload) -> Option<Par
 #[must_use]
 pub fn validate_rule(condition_type: &str, condition_params: &Value) -> Vec<ParseError> {
     let Some(kind) =
-        ConditionKind::from_wire(condition_type).filter(|k| k.wire() == condition_type)
+        ConditionKind::from_name(condition_type).filter(|k| k.name() == condition_type)
     else {
         let reason = match ConditionKind::resolve(condition_type) {
             Some(_) => Reason::NonCanonicalType,
@@ -60,7 +60,7 @@ pub fn validate_rule(condition_type: &str, condition_params: &Value) -> Vec<Pars
         return vec![ParseError::new(condition_type, reason)];
     };
     if condition_params.is_null() {
-        return vec![ParseError::new(kind.wire(), Reason::PayloadMissing)];
+        return vec![ParseError::new(kind.name(), Reason::PayloadMissing)];
     }
     match parse_payload_structure(kind, condition_params) {
         Err(e) => vec![e],
@@ -69,7 +69,7 @@ pub fn validate_rule(condition_type: &str, condition_params: &Value) -> Vec<Pars
             check_payload(
                 &payload,
                 condition_params.as_object(),
-                kind.wire(),
+                kind.name(),
                 Tier::Save,
                 &mut found,
             );
@@ -125,7 +125,7 @@ fn check_node(
     let Some(payload) = node.dispatch() else {
         return report(found, tier, path, Reason::UnknownKind);
     };
-    let wire = payload.kind().wire();
+    let wire = payload.kind().name();
     if type_str != wire {
         report(found, tier, path, Reason::NonCanonicalType);
     }
@@ -134,7 +134,7 @@ fn check_node(
     // absent or null payload is written as no properties at all.
     let empty = Map::new();
     let raw_payload = raw
-        .filter(|_| type_str.to_lowercase() == wire)
+        .filter(|_| type_str.eq_ignore_ascii_case(wire))
         .map(|o| get_ci(o, wire).and_then(Value::as_object).unwrap_or(&empty));
     check_payload(&payload, raw_payload, path, tier, found);
 }
@@ -143,7 +143,7 @@ fn check_node(
 /// the one its `type` names, which are parsed but not evaluated), or the web
 /// rule editor's node key `_uid`, which rules it saved still carry.
 fn is_node_property(name: &str) -> bool {
-    name.eq_ignore_ascii_case("type") || name == "_uid" || ConditionKind::from_wire(name).is_some()
+    name.eq_ignore_ascii_case("type") || name == "_uid" || ConditionKind::from_name(name).is_some()
 }
 
 fn check_child(

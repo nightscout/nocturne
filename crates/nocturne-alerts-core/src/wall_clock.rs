@@ -5,6 +5,7 @@
 
 use serde_json::Value;
 
+use crate::enums::WireEnum;
 use crate::leaf_identity::collect_leaves;
 use crate::model::{ConditionKind, Node, parse_payload};
 
@@ -59,7 +60,7 @@ pub fn is_wall_clock(kind: ConditionKind) -> bool {
 /// as node dispatch resolves them (engine-semantics.md §1.2).
 #[must_use]
 pub fn references_wall_clock(condition_type: &str, condition_params: &Value) -> bool {
-    let Some(kind) = ConditionKind::from_wire(condition_type) else {
+    let Some(kind) = ConditionKind::from_name(condition_type) else {
         return false;
     };
     if is_wall_clock(kind) {
@@ -102,7 +103,7 @@ mod tests {
         let ours: Vec<String> = manifest_names("AlertConditionType")
             .into_iter()
             .filter(|wire| {
-                ConditionKind::from_wire(wire)
+                ConditionKind::from_name(wire)
                     .map(is_wall_clock)
                     .expect("manifest kind resolves")
             })

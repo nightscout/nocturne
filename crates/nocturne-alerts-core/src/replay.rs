@@ -132,9 +132,17 @@ pub fn replay(
     ticks: impl IntoIterator<Item = ReplayTick>,
     options: ReplayOptions,
 ) -> Result<ReplayOutcome, ReplayError> {
-    let ordered: Vec<&Rule> = evaluation_order(rules)?
+    let ordered: Vec<Prepared<'_>> = evaluation_order(rules)?
         .into_iter()
         .filter_map(|i| rules.get(i))
+        .map(|rule| Prepared {
+            rule,
+            body: rule.parse_body().ok(),
+            auto_resolve: rule
+                .auto_resolve_enabled
+                .then(|| rule.parse_auto_resolve())
+                .flatten(),
+        })
         .collect();
 
     let mut timers = TimerStore::new();
@@ -153,14 +161,16 @@ pub fn replay(
         }
 
         let mut rule_ticks = Vec::with_capacity(ordered.len());
-        for ((rule, firing), leaf_log) in ordered.iter().zip(&mut firing).zip(&mut leaf_logs) {
-            let Some(body) = evaluate_body(rule, &ctx, at, &mut timers, true) else {
+        for ((prepared, firing), leaf_log) in ordered.iter().zip(&mut firing).zip(&mut leaf_logs) {
+            let rule = prepared.rule;
+            let Some(body) = &prepared.body else {
                 rule_ticks.push(ReplayRuleTick {
                     rule_id: rule.id,
                     state: None,
                 });
                 continue;
             };
+            let body = evaluate_body(rule, body, &ctx, at, &mut timers, true);
             record_leaves(leaf_log, body.leaves.unwrap_or_default(), at);
 
             let met = body.root;
@@ -187,8 +197,13 @@ pub fn replay(
             }
 
             if now_firing
-                && rule.auto_resolve_enabled
-                && auto_resolve_holds(rule, &ctx, at, &mut timers)
+                && auto_resolve_holds(
+                    rule.id,
+                    prepared.auto_resolve.as_ref(),
+                    &ctx,
+                    at,
+                    &mut timers,
+                )
             {
                 close(&mut ctx, &mut timers, rule.id);
                 events.push(event(at, rule.id, ReplayEventKind::AutoResolved));
@@ -219,18 +234,26 @@ pub fn replay(
         .iter()
         .zip(leaf_logs)
         .filter(|(_, log)| !log.is_empty())
-        .map(|(rule, log)| RuleLeafLog {
-            rule_id: rule.id,
+        .map(|(prepared, log)| RuleLeafLog {
+            rule_id: prepared.rule.id,
             leaves: log.into_iter().map(|(_, points)| points).collect(),
         })
         .collect();
 
     Ok(ReplayOutcome {
-        order: ordered.iter().map(|r| r.id).collect(),
+        order: ordered.iter().map(|p| p.rule.id).collect(),
         events,
         leaf_transitions,
         ticks: tick_outcomes,
     })
+}
+
+/// A rule with its body and enabled auto-resolve tree read once for the call;
+/// `body` is `None` when it cannot be evaluated.
+struct Prepared<'a> {
+    rule: &'a Rule,
+    body: Option<Node>,
+    auto_resolve: Option<Node>,
 }
 
 /// A rule's replay-local firing state. `awaiting_rearm` follows an

@@ -18,11 +18,11 @@ use std::path::PathBuf;
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use serde_json::{Value, json};
-use uuid::Uuid;
 
 use nocturne_alerts_core::context::SensorContext;
-use nocturne_alerts_core::engine::{EngineState, Rule, RuleOutcome, evaluate_tick, format_instant};
-use nocturne_alerts_core::model::ConditionKind;
+use nocturne_alerts_core::engine::{
+    EngineState, Rule, RuleOutcome, WireRule, evaluate_tick, format_instant,
+};
 
 // ---------------------------------------------------------------------------
 // Scenario wire format (ScenarioModels.cs)
@@ -31,27 +31,8 @@ use nocturne_alerts_core::model::ConditionKind;
 #[derive(Deserialize)]
 struct ScenarioFile {
     name: String,
-    rules: Vec<ScenarioRule>,
+    rules: Vec<WireRule>,
     ticks: Vec<ScenarioTick>,
-}
-
-fn default_confirmation_readings() -> i32 {
-    1
-}
-
-#[derive(Deserialize)]
-struct ScenarioRule {
-    id: Uuid,
-    condition_type: String,
-    condition_params: Value,
-    #[serde(default = "default_confirmation_readings")]
-    confirmation_readings: i32,
-    #[serde(default)]
-    hysteresis_minutes: i32,
-    #[serde(default)]
-    auto_resolve_enabled: bool,
-    #[serde(default)]
-    auto_resolve_params: Option<Value>,
 }
 
 #[derive(Deserialize)]
@@ -75,19 +56,9 @@ fn run_scenario(scenario: &ScenarioFile) -> Value {
     let rules: Vec<Rule> = scenario
         .rules
         .iter()
-        .map(|r| Rule {
-            id: r.id,
-            condition_type: ConditionKind::from_wire(&r.condition_type).unwrap_or_else(|| {
-                panic!(
-                    "scenario '{}': unknown condition_type '{}'",
-                    scenario.name, r.condition_type
-                )
-            }),
-            condition_params: r.condition_params.clone(),
-            confirmation_readings: r.confirmation_readings,
-            hysteresis_minutes: r.hysteresis_minutes,
-            auto_resolve_enabled: r.auto_resolve_enabled,
-            auto_resolve_params: r.auto_resolve_params.clone(),
+        .map(|r| {
+            Rule::try_from(r.clone())
+                .unwrap_or_else(|e| panic!("scenario '{}': {e}", scenario.name))
         })
         .collect();
 

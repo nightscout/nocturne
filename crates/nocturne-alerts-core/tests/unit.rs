@@ -17,7 +17,8 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use nocturne_alerts_core::context::SensorContext;
-use nocturne_alerts_core::eval::{Env, eval_kind, eval_node};
+use nocturne_alerts_core::enums::WireEnum;
+use nocturne_alerts_core::eval::{Env, eval_node, eval_payload as eval_parsed};
 use nocturne_alerts_core::excursion::{
     CloseReason, ExcursionTracker, TrackerRuleConfig, TrackerStateKind, TransitionType,
 };
@@ -55,7 +56,7 @@ fn eval_payload_at(
     let parsed = parse_payload(kind, payload).expect("payload parses");
     let mut timers = TimerStore::new();
     let mut env = Env::new(now, Uuid::nil(), ctx, &mut timers);
-    eval_kind(kind, Some(&parsed), kind.wire(), &mut env)
+    eval_parsed(&parsed, kind.name(), &mut env)
 }
 
 fn eval_tree(node_json: &Value, ctx: &SensorContext) -> bool {
