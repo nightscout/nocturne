@@ -3,6 +3,7 @@ using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Realtime;
@@ -359,7 +360,23 @@ public class TrackerTriggerServiceTests
 
         await _sut.OnCreatedAsync([Event(new DateTime(2026, 9, 11, 10, 43, 30, DateTimeKind.Utc))]);
 
-        _broadcast.Verify(b => b.BroadcastTrackerUpdateAsync("complete", It.IsAny<object>()), Times.Once);
-        _broadcast.Verify(b => b.BroadcastTrackerUpdateAsync("create", It.IsAny<object>()), Times.Once);
+        _broadcast.Verify(
+            b => b.BroadcastTrackerUpdateAsync(
+                "complete",
+                It.IsAny<TrackerInstanceDto>(),
+                It.IsAny<string>(),
+                It.IsAny<TrackerVisibility>()
+            ),
+            Times.Once
+        );
+        _broadcast.Verify(
+            b => b.BroadcastTrackerUpdateAsync(
+                "create",
+                It.IsAny<TrackerInstanceDto>(),
+                It.IsAny<string>(),
+                It.IsAny<TrackerVisibility>()
+            ),
+            Times.Once
+        );
     }
 }

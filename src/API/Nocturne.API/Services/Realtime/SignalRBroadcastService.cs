@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Options;
+using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Hubs;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -71,9 +72,20 @@ public interface ISignalRBroadcastService
     Task BroadcastStorageDeleteAsync(string collectionName, object data);
 
     /// <summary>
-    /// Broadcast tracker update to authorized clients (for real-time tracker notifications)
+    /// Broadcast a tracker instance update, routed by its definition's visibility: a Public instance
+    /// reaches the tenant's authorized clients, a Private one only its owner's subject group.
     /// </summary>
-    Task BroadcastTrackerUpdateAsync(string action, object trackerInstance);
+    /// <remarks>
+    /// Mirrors the HTTP read rule in
+    /// <see cref="Nocturne.Infrastructure.Data.Repositories.TrackerRepository.GetActiveInstancesAsync"/>:
+    /// only a Public definition is visible tenant-wide, otherwise just to its owner.
+    /// </remarks>
+    Task BroadcastTrackerUpdateAsync(
+        string action,
+        TrackerInstanceDto trackerInstance,
+        string ownerSubjectId,
+        TrackerVisibility visibility
+    );
 
     /// <summary>
     /// Broadcast configuration change event to subscribers via ConfigHub
@@ -447,7 +459,12 @@ public class SignalRBroadcastService : ISignalRBroadcastService
     }
 
     /// <inheritdoc />
-    public async Task BroadcastTrackerUpdateAsync(string action, object trackerInstance)
+    public async Task BroadcastTrackerUpdateAsync(
+        string action,
+        TrackerInstanceDto trackerInstance,
+        string ownerSubjectId,
+        TrackerVisibility visibility
+    )
     {
         try
         {
@@ -456,8 +473,11 @@ public class SignalRBroadcastService : ISignalRBroadcastService
                 action
             );
             var payload = new { action, instance = trackerInstance };
+            var group = visibility == TrackerVisibility.Public
+                ? RealtimeGroups.Authorized
+                : RealtimeGroups.ForSubject(ownerSubjectId);
             await _dataHubContext
-                .Clients.Group(TenantGroup(RealtimeGroups.Authorized))
+                .Clients.Group(TenantGroup(group))
                 .SendCoreAsync("trackerUpdate", new[] { payload });
             _logger.LogDebug("Tracker update broadcast completed for action {Action}", action);
         }

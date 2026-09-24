@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
+using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Hubs;
 using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Models;
@@ -460,6 +461,55 @@ public class SignalRBroadcastServiceTests
                     It.IsAny<Func<It.IsAnyType, Exception?, string>>()
                 ),
             Times.Once
+        );
+    }
+
+    [Fact]
+    public async Task BroadcastTrackerUpdateAsync_PublicInstance_ReachesAuthorizedGroup()
+    {
+        var instance = new TrackerInstanceDto { Id = Guid.NewGuid() };
+
+        await _service.BroadcastTrackerUpdateAsync(
+            "create",
+            instance,
+            Guid.NewGuid().ToString(),
+            TrackerVisibility.Public
+        );
+
+        _mockDataClients.Verify(
+            x => x.Group("00000000-0000-0000-0000-000000000001:authorized"),
+            Times.Once
+        );
+        _mockDataGroupProxy.Verify(
+            x => x.SendCoreAsync("trackerUpdate", It.Is<object[]>(args => args.Length == 1), default),
+            Times.Once
+        );
+    }
+
+    [Fact]
+    public async Task BroadcastTrackerUpdateAsync_PrivateInstance_ReachesOnlyTheOwnersSubjectGroup()
+    {
+        var owner = Guid.NewGuid();
+        var instance = new TrackerInstanceDto { Id = Guid.NewGuid() };
+
+        await _service.BroadcastTrackerUpdateAsync(
+            "create",
+            instance,
+            owner.ToString(),
+            TrackerVisibility.Private
+        );
+
+        _mockDataClients.Verify(
+            x => x.Group($"00000000-0000-0000-0000-000000000001:user-{owner:D}"),
+            Times.Once
+        );
+        _mockDataClients.Verify(
+            x => x.Group("00000000-0000-0000-0000-000000000001:authorized"),
+            Times.Never
+        );
+        _mockDataClients.Verify(
+            x => x.Group("00000000-0000-0000-0000-000000000001:relay"),
+            Times.Never
         );
     }
 }
