@@ -846,7 +846,7 @@ internal sealed class AlertReplayService(
             var node = BuildNodeForRule(rule);
             if (node is not null)
             {
-                foreach (var refId in ExtractAlertStateRefs(node))
+                foreach (var refId in ConditionTreeWalker.AlertStateReferences(node))
                 {
                     if (byId.ContainsKey(refId)) deps.Add(refId);
                 }
@@ -883,23 +883,6 @@ internal sealed class AlertReplayService(
         return result;
     }
 
-    private static IEnumerable<Guid> ExtractAlertStateRefs(ConditionNode node)
-    {
-        if (node.AlertState is { } alertState) yield return alertState.AlertId;
-        if (node.Composite is { } composite)
-        {
-            foreach (var child in composite.Conditions)
-                foreach (var id in ExtractAlertStateRefs(child)) yield return id;
-        }
-        if (node.Not is { Child: { } notChild })
-        {
-            foreach (var id in ExtractAlertStateRefs(notChild)) yield return id;
-        }
-        if (node.Sustained is { Child: { } sustainedChild })
-        {
-            foreach (var id in ExtractAlertStateRefs(sustainedChild)) yield return id;
-        }
-    }
 
     /// <summary>
     /// Manual <see cref="TimeProvider"/> used in replay so each tick can advance "now"

@@ -16,13 +16,13 @@ public static class ConditionTreeWalker
     /// fails closed for this combination, so without rejecting upfront the user gets a rule
     /// that silently never fires.
     /// </summary>
-    public static bool ContainsPumpModeStateSpan(ConditionNode root)
+    public static bool ContainsPumpModeStateSpan(ConditionNode? root)
     {
         if (root is null) return false;
 
         // Leaf check: state_span_active with PumpMode.
         if (root.StateSpanActive is { Category: StateSpanCategory.PumpMode }
-            && string.Equals(root.Type, "state_span_active", System.StringComparison.OrdinalIgnoreCase))
+            && string.Equals(root.Type, "state_span_active", StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
@@ -30,18 +30,32 @@ public static class ConditionTreeWalker
         // Recurse into wrappers — same shape as ConditionPath.Walk.
         switch (root.Type?.ToLowerInvariant())
         {
-            case "composite" when root.Composite is not null:
-                foreach (var child in root.Composite.Conditions)
+            case "composite" when root.Composite?.Conditions is { } children:
+                foreach (var child in children)
                 {
                     if (ContainsPumpModeStateSpan(child)) return true;
                 }
                 return false;
-            case "not" when root.Not is not null:
-                return ContainsPumpModeStateSpan(root.Not.Child);
-            case "sustained" when root.Sustained is not null:
-                return ContainsPumpModeStateSpan(root.Sustained.Child);
+            case "not":
+                return ContainsPumpModeStateSpan(root.Not?.Child);
+            case "sustained":
+                return ContainsPumpModeStateSpan(root.Sustained?.Child);
             default:
                 return false;
         }
+    }
+
+    /// <summary>
+    /// Every <c>alert_state</c> target id in <paramref name="root"/>'s tree, in pre-order,
+    /// skipping missing children.
+    /// </summary>
+    public static IEnumerable<Guid> AlertStateReferences(ConditionNode? root)
+    {
+        if (root is null) yield break;
+        if (root.AlertState is { } alertState) yield return alertState.AlertId;
+        foreach (var child in root.Composite?.Conditions ?? [])
+            foreach (var id in AlertStateReferences(child)) yield return id;
+        foreach (var id in AlertStateReferences(root.Not?.Child)) yield return id;
+        foreach (var id in AlertStateReferences(root.Sustained?.Child)) yield return id;
     }
 }

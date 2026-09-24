@@ -83,5 +83,11 @@ internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
         {
             _logger.LogWarning(ex, "Alert evaluation against the canonical stream failed");
         }
+        catch (Exception ex)
+        {
+            // Runs inline in glucose ingestion: the reading is already stored, so a fault here
+            // must not fail the write that triggered it.
+            _logger.LogError(ex, "Alert evaluation against the canonical stream failed unexpectedly");
+        }
     }
 }

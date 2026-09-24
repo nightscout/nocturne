@@ -53,7 +53,7 @@ internal sealed class AlertOrchestrator(
         if (tenantId == Guid.Empty || rules.Count == 0) return;
 
         // Drop chained rules whose alert_state references resolve to disabled/deleted parents.
-        var evaluable = RuleReferenceResolver.FilterEvaluable(rules);
+        var evaluable = RuleReferenceResolver.FilterEvaluable(rules, logger);
         if (evaluable.Count == 0) return;
 
         // One enrichment pass for the whole batch — RuleDataNeeds only fetches what any rule

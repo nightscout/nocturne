@@ -25,9 +25,11 @@ public static class RuleReferenceResolver
 {
     /// <summary>
     /// Returns the subset of <paramref name="rules"/> that have no <c>alert_state</c> references
-    /// to rule ids outside the input set. Order is preserved.
+    /// to rule ids outside the input set. Order is preserved. A rule whose tree cannot be walked
+    /// is kept, so the engine's per-rule skip handles it rather than this pass failing.
     /// </summary>
-    public static IReadOnlyList<AlertRuleSnapshot> FilterEvaluable(IReadOnlyList<AlertRuleSnapshot> rules)
+    public static IReadOnlyList<AlertRuleSnapshot> FilterEvaluable(
+        IReadOnlyList<AlertRuleSnapshot> rules, ILogger? logger = null)
     {
         if (rules.Count == 0) return rules;
 
@@ -37,7 +39,17 @@ public static class RuleReferenceResolver
         var keep = new List<AlertRuleSnapshot>(rules.Count);
         foreach (var rule in rules)
         {
-            if (AllReferencesResolve(rule, enabledIds))
+            bool resolves;
+            try
+            {
+                resolves = AllReferencesResolve(rule, enabledIds);
+            }
+            catch (Exception ex)
+            {
+                logger?.LogError(ex, "Could not resolve alert_state references of alert rule {AlertRuleId}", rule.Id);
+                resolves = true;
+            }
+            if (resolves)
                 keep.Add(rule);
         }
         return keep;
@@ -56,7 +68,7 @@ public static class RuleReferenceResolver
                 {
                     var composite = TryDeserialize<CompositeCondition>(rule.ConditionParams);
                     if (composite is null) return true;
-                    foreach (var child in composite.Conditions)
+                    foreach (var child in composite.Conditions ?? [])
                         if (!NodeReferencesResolve(child, rule.Id, enabledIds)) return false;
                     return true;
                 }
@@ -75,7 +87,7 @@ public static class RuleReferenceResolver
         }
     }
 
-    private static bool NodeReferencesResolve(ConditionNode node, Guid ownerRuleId, HashSet<Guid> enabledIds)
+    private static bool NodeReferencesResolve(ConditionNode? node, Guid ownerRuleId, HashSet<Guid> enabledIds)
     {
         var unresolved = ConditionPath.Walk<UnresolvedMarker>(node, (visited, _) =>
         {

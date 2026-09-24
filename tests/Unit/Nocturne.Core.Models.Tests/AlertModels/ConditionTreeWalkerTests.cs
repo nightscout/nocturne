@@ -99,4 +99,19 @@ public class ConditionTreeWalkerTests
 
         ConditionTreeWalker.ContainsPumpModeStateSpan(tree).Should().BeTrue();
     }
+
+    [Fact]
+    public void MissingChildrenAreSkipped()
+    {
+        var tree = new ConditionNode("composite",
+            Composite: new CompositeCondition("and", new List<ConditionNode>
+            {
+                null!,
+                new("composite", Composite: new CompositeCondition("or", null!)),
+                new("not", Not: new NotCondition(null!)),
+                StateSpan(StateSpanCategory.PumpMode),
+            }));
+
+        ConditionTreeWalker.ContainsPumpModeStateSpan(tree).Should().BeTrue();
+    }
 }
