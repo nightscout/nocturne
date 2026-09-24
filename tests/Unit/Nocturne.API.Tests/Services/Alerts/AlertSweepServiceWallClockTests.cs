@@ -120,6 +120,42 @@ public class AlertSweepServiceWallClockTests
         RunEscalationAsync(useRustEngine: true);
 
     [Fact]
+    public Task Managed_engine_measures_signal_loss_from_the_last_usable_reading() =>
+        RunErrorReadingOutageAsync(useRustEngine: false);
+
+    [NativeFact]
+    public Task Rust_backed_engine_measures_signal_loss_from_the_last_usable_reading() =>
+        RunErrorReadingOutageAsync(useRustEngine: true);
+
+    private static async Task RunErrorReadingOutageAsync(bool useRustEngine)
+    {
+        var fixture = new Fixture(useRustEngine, AlertConditionType.SignalLoss, SignalLoss15);
+        fixture.Readings.Add(new SensorGlucose { Timestamp = T0, Mgdl = 110 });
+        for (var minutes = 5; minutes <= 20; minutes += 5)
+            fixture.Readings.Add(new SensorGlucose { Timestamp = T0.AddMinutes(minutes), Mgdl = 0 });
+        fixture.LastReadingAt = T0.AddMinutes(20);
+
+        await fixture.SweepAt(T0.AddMinutes(14));
+        fixture.InstancesCreated.Should().Be(0);
+
+        await fixture.SweepAt(T0.AddMinutes(20.5));
+        fixture.InstancesCreated.Should().Be(1, "error readings are not signal: the last usable one is 20 minutes old");
+    }
+
+    [Fact]
+    public async Task An_outage_with_no_usable_reading_in_the_lookback_still_fires()
+    {
+        var fixture = new Fixture(useRustEngine: false, AlertConditionType.SignalLoss, SignalLoss15);
+        for (var minutes = 0; minutes <= 60; minutes += 5)
+            fixture.Readings.Add(new SensorGlucose { Timestamp = T0.AddMinutes(minutes), Mgdl = 0 });
+        fixture.LastReadingAt = T0.AddMinutes(60);
+
+        await fixture.SweepAt(T0.AddMinutes(60.5));
+
+        fixture.InstancesCreated.Should().Be(1);
+    }
+
+    [Fact]
     public async Task An_unwalkable_tree_is_reported_once_per_version()
     {
         var unwalkable = new AlertRule
@@ -247,6 +283,9 @@ public class AlertSweepServiceWallClockTests
         public List<ExcursionTransition> Closed { get; } = [];
         public Dictionary<Guid, ActiveAlertSnapshot> ActiveAlerts { get; } = [];
 
+        /// <summary>The canonical stream; when empty, one reading at <see cref="LastReadingAt"/>.</summary>
+        public List<SensorGlucose> Readings { get; } = [];
+
         public Task SweepAt(DateTime at)
         {
             Time.SetUtcNow(at);
@@ -319,9 +358,15 @@ public class AlertSweepServiceWallClockTests
             var canonical = new Mock<ICanonicalGlucoseService>();
             canonical
                 .Setup(x => x.GetLatestAsync(It.IsAny<CancellationToken>()))
-                .ReturnsAsync(() => LastReadingAt is { } at
-                    ? new SensorGlucose { Timestamp = at, Mgdl = LatestMgdl ?? 120 }
-                    : null);
+                .ReturnsAsync(() => Readings.Count > 0
+                    ? Readings.MaxBy(r => r.Timestamp)
+                    : LastReadingAt is { } at
+                        ? new SensorGlucose { Timestamp = at, Mgdl = LatestMgdl ?? 120 }
+                        : null);
+            canonical
+                .Setup(x => x.GetRecentAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((DateTime since, CancellationToken _) =>
+                    Readings.Where(r => r.Timestamp >= since).OrderByDescending(r => r.Timestamp).ToList());
             services.AddSingleton(canonical.Object);
 
             var delivery = new Mock<IAlertDeliveryService>();
