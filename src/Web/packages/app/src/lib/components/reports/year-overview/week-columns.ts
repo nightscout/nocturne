@@ -1,4 +1,4 @@
-import { timeDay, timeMonday } from "d3-time";
+import { timeDay, timeMonday, timeWeek } from "d3-time";
 import { uniqueBy } from "$lib/utils/collections";
 import { toDayString } from "$lib/utils/date-range";
 
@@ -23,7 +23,11 @@ export function weekBounds(date: Date): { from: string; to: string } {
   return { from: toDayString(monday), to: toDayString(timeDay.offset(monday, 6)) };
 }
 
-/** One column per heatmap x position, labelled by the week of its first dated cell. */
+/**
+ * One column per heatmap x position, labelled by the ISO week of the column's
+ * Monday. Columns run Sunday to Saturday, so the Monday is the day after the
+ * column's Sunday even when that Sunday falls outside the year's dated cells.
+ */
 export function getWeekColumns(
   cells: Array<{ x: number; data?: { date?: Date } }>
 ): WeekColumn[] {
@@ -31,6 +35,9 @@ export function getWeekColumns(
     cell.data?.date ? [{ x: cell.x, date: cell.data.date }] : []
   );
   return uniqueBy(dated, (cell) => cell.x)
-    .map(({ x, date }) => ({ x, weekNumber: isoWeekNumber(date), ...weekBounds(date) }))
+    .map(({ x, date }) => {
+      const monday = timeDay.offset(timeWeek.floor(date), 1);
+      return { x, weekNumber: isoWeekNumber(monday), ...weekBounds(monday) };
+    })
     .sort((a, b) => a.x - b.x);
 }
