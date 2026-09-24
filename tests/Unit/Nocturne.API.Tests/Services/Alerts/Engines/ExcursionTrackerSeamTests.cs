@@ -214,8 +214,13 @@ public class ExcursionTrackerSeamTests
 
         fromActive.Should().Be(new ExcursionTransition(ExcursionTransitionType.ExcursionClosed, first.ExcursionId, reason));
         f.Repository.Excursions[first.ExcursionId!.Value].EndedAt.Should().Be(T0.AddMinutes(1));
-        f.State.Should().BeEquivalentTo(new { State = "idle", ActiveExcursionId = (Guid?)null, UpdatedAt = T0.AddMinutes(1) });
+        f.State.Should().BeEquivalentTo(new
+        {
+            State = "idle", ActiveExcursionId = (Guid?)null, UpdatedAt = T0.AddMinutes(1),
+            AwaitingRearm = reason == ExcursionCloseReason.AutoResolve,
+        });
 
+        await f.Process(false);
         var second = await f.Process(true);
         await f.Process(false);
         var fromHysteresis = await f.Tracker.ForceCloseAsync(RuleId, reason, CancellationToken.None);
@@ -242,6 +247,36 @@ public class ExcursionTrackerSeamTests
 
         f.Repository.Writes.Should().HaveCount(writes);
         f.State!.State.Should().Be("confirming");
+    }
+
+    [Fact] public Task A_state_changed_only_in_its_timestamp_is_not_written_managed() =>
+        A_state_changed_only_in_its_timestamp_is_not_written(Engine.Managed);
+    [NativeFact] public Task A_state_changed_only_in_its_timestamp_is_not_written_rust() =>
+        A_state_changed_only_in_its_timestamp_is_not_written(Engine.Rust);
+
+    private static async Task A_state_changed_only_in_its_timestamp_is_not_written(Engine engine)
+    {
+        var f = new Fixture(engine);
+        await f.Process(false);
+        f.Repository.Writes.Should().Equal("upsert");
+
+        f.At(TimeSpan.FromMinutes(1));
+        await f.Process(false);
+        f.Repository.Writes.Should().Equal("upsert");
+        f.Repository.Transactions.Should().Be(1);
+
+        f.At(TimeSpan.FromMinutes(2));
+        await f.Process(true);
+        var (writes, transactions) = (f.Repository.Writes.Count, f.Repository.Transactions);
+
+        f.At(TimeSpan.FromMinutes(3));
+        (await f.Process(true)).Type.Should().Be(ExcursionTransitionType.ExcursionContinues);
+        (await f.Tracker.CloseElapsedHysteresisAsync(RuleId, CancellationToken.None))
+            .Type.Should().Be(ExcursionTransitionType.None);
+
+        f.Repository.Writes.Should().HaveCount(writes);
+        f.Repository.Transactions.Should().Be(transactions);
+        f.State!.UpdatedAt.Should().Be(T0 + TimeSpan.FromMinutes(2));
     }
 
     [Fact] public Task Each_transition_writes_in_one_transaction_managed() =>

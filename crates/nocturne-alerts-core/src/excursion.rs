@@ -123,6 +123,10 @@ pub struct TrackerState {
     /// When the active excursion entered hysteresis; set only in
     /// [`TrackerStateKind::Hysteresis`].
     pub hysteresis_started_at: Option<DateTime<Utc>>,
+    /// Idle after an auto-resolve closed an excursion whose condition still
+    /// held: the rule opens nothing until an evaluation finds its condition
+    /// false (engine-semantics.md §6.3).
+    pub awaiting_rearm: bool,
 }
 
 /// Rule inputs consumed by the tracker.
@@ -197,6 +201,7 @@ impl ExcursionTracker {
             active_excursion: None,
             updated_at: now,
             hysteresis_started_at: None,
+            awaiting_rearm: false,
         });
 
         let transition = match state.state {
@@ -221,6 +226,10 @@ impl ExcursionTracker {
         config: TrackerRuleConfig,
         condition_met: bool,
     ) -> Transition {
+        if state.awaiting_rearm {
+            state.awaiting_rearm = condition_met;
+            return Transition::none();
+        }
         if !condition_met {
             return Transition::none();
         }
@@ -286,7 +295,8 @@ impl ExcursionTracker {
     }
 
     /// Closes the rule's excursion, if it has one, from any state (§6.2);
-    /// otherwise a `None` transition.
+    /// otherwise a `None` transition. An auto-resolve close of an active
+    /// excursion leaves the rule awaiting re-arm (§6.3).
     pub fn force_close(
         &mut self,
         rule_id: Uuid,
@@ -299,6 +309,8 @@ impl ExcursionTracker {
         let Some(excursion) = state.active_excursion else {
             return Transition::none();
         };
+        state.awaiting_rearm =
+            reason == CloseReason::AutoResolve && state.state == TrackerStateKind::Active;
         state.state = TrackerStateKind::Idle;
         state.confirmation_count = 0;
         state.active_excursion = None;

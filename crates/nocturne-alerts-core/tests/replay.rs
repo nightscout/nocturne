@@ -148,19 +148,25 @@ fn a_continuous_fire_is_one_event_and_a_clear_resets_the_sustained_timer() {
 }
 
 #[test]
-fn an_auto_resolve_true_on_the_opening_tick_fires_and_resolves_it() {
+fn an_auto_resolve_true_on_the_opening_tick_fires_and_resolves_it_once_until_rearmed() {
     let mut r = rule(1, ConditionKind::Threshold, below(70));
     r.auto_resolve_enabled = true;
     r.auto_resolve_params = Some(json!({ "type": "threshold", "threshold": below(100) }));
-    let out = replay(&[r], [reading(0, 60), reading(5, 60)], with_ticks()).unwrap();
+    let ticks = [
+        reading(0, 60),
+        reading(5, 60),  // still met: awaits re-arm
+        reading(10, 80), // body false: re-armed
+        reading(15, 60),
+    ];
+    let out = replay(&[r], ticks, with_ticks()).unwrap();
 
     assert_eq!(
         kinds(&out.events),
         vec![
             (0, id(1), ReplayEventKind::Fired),
             (0, id(1), ReplayEventKind::AutoResolved),
-            (5, id(1), ReplayEventKind::Fired),
-            (5, id(1), ReplayEventKind::AutoResolved),
+            (15, id(1), ReplayEventKind::Fired),
+            (15, id(1), ReplayEventKind::AutoResolved),
         ]
     );
     let ticks = out.ticks.unwrap();

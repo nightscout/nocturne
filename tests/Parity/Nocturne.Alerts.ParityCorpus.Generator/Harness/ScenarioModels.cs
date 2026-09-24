@@ -278,6 +278,10 @@ public sealed record ExpectedTrackerState
     /// <summary>When the excursion entered hysteresis; present only in the hysteresis state.</summary>
     [JsonPropertyName("hysteresis_started_at")]
     public DateTime? HysteresisStartedAt { get; init; }
+
+    /// <summary>Present, as true, only while an auto-resolved rule awaits a false evaluation.</summary>
+    [JsonPropertyName("awaiting_rearm")]
+    public bool? AwaitingRearm { get; init; }
 }
 
 public sealed record ExpectedTimerOp(

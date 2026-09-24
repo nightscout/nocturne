@@ -149,6 +149,8 @@ pub(crate) struct WireTracker {
     /// Absent in hysteresis, `updated_at` is adopted once.
     #[serde(default)]
     hysteresis_started_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    awaiting_rearm: bool,
     #[serde(default = "one")]
     next_excursion_ordinal: u32,
 }
@@ -180,6 +182,7 @@ impl WireTracker {
                 active_excursion: self.active_excursion_ordinal,
                 updated_at,
                 hysteresis_started_at: self.hysteresis_started_at,
+                awaiting_rearm: self.awaiting_rearm,
             },
         );
         Ok(())
@@ -229,6 +232,9 @@ pub(crate) fn tracker_json(tracker: &ExcursionTracker, rule_id: Uuid) -> Value {
         t.insert("updated_at".into(), format_instant(s.updated_at).into());
         if let Some(at) = s.hysteresis_started_at {
             t.insert("hysteresis_started_at".into(), format_instant(at).into());
+        }
+        if s.awaiting_rearm {
+            t.insert("awaiting_rearm".into(), true.into());
         }
     }
     t.insert(

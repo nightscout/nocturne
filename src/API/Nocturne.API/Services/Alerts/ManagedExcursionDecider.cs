@@ -43,6 +43,8 @@ internal sealed class ManagedExcursionDecider : IExcursionDecider
     private static (ExcursionTransitionType, ExcursionCloseReason?, TrackerPostState) Idle(
         TrackerPostState s, TrackerConfig config, bool conditionMet)
     {
+        if (s.AwaitingRearm)
+            return (ExcursionTransitionType.None, null, s with { AwaitingRearm = conditionMet });
         if (!conditionMet)
             return (ExcursionTransitionType.None, null, s);
         if (config.ConfirmationReadings <= 1)
@@ -80,6 +82,7 @@ internal sealed class ManagedExcursionDecider : IExcursionDecider
     }
 
     /// <inheritdoc/>
+    /// <remarks>An auto-resolve close of an active excursion leaves the rule awaiting re-arm.</remarks>
     public TrackerDecision ForceClose(
         Guid ruleId, AlertTrackerState? state, ExcursionCloseReason reason, DateTime now)
     {
@@ -87,7 +90,11 @@ internal sealed class ManagedExcursionDecider : IExcursionDecider
         if (s is not { HasExcursion: true })
             return None(s);
 
-        return new TrackerDecision(ExcursionTransitionType.ExcursionClosed, reason, Closed(s) with { UpdatedAt = now });
+        return new TrackerDecision(ExcursionTransitionType.ExcursionClosed, reason, Closed(s) with
+        {
+            UpdatedAt = now,
+            AwaitingRearm = reason == ExcursionCloseReason.AutoResolve && s.State == StateActive,
+        });
     }
 
     /// <inheritdoc/>
@@ -122,5 +129,9 @@ internal sealed class ManagedExcursionDecider : IExcursionDecider
         now >= s.HysteresisStartedAt!.Value.AddMinutes(config.HysteresisMinutes);
 
     private static TrackerPostState Closed(TrackerPostState s) =>
-        s with { State = StateIdle, ConfirmationCount = 0, HasExcursion = false, HysteresisStartedAt = null };
+        s with
+        {
+            State = StateIdle, ConfirmationCount = 0, HasExcursion = false, HysteresisStartedAt = null,
+            AwaitingRearm = false,
+        };
 }

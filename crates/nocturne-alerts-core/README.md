@@ -21,7 +21,8 @@ The crate is pure evaluation: no I/O, no clock, no persistence.
   condition path, recording each set and clear) and the excursion state
   machine ([`excursion::ExcursionTracker`], idle → confirming → active →
   hysteresis, expiring against the persisted `hysteresis_started_at`,
-  semantics §6.1).
+  semantics §6.1, and holding an auto-resolved rule off until its condition is
+  false, §6.3).
 - Out of scope, host-side: context enrichment, persistence, delivery and DND
   suppression, and sweep scheduling. [`wall_clock::references_wall_clock`]
   says which rules the sweep must evaluate (semantics §5.1).

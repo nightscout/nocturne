@@ -66,6 +66,9 @@ internal sealed class ShadowComparison(ILogger logger, string engine, Guid ruleI
         if ((managed?.HasExcursion ?? false) != (shadow?.HasExcursion ?? false))
             Diverged($"{operation}.active_excursion", managed?.HasExcursion ?? false, shadow?.HasExcursion ?? false);
 
+        if ((managed?.AwaitingRearm ?? false) != (shadow?.AwaitingRearm ?? false))
+            Diverged($"{operation}.awaiting_rearm", managed?.AwaitingRearm ?? false, shadow?.AwaitingRearm ?? false);
+
         if (!InstantsEqual(managed?.HysteresisStartedAt, shadow?.HysteresisStartedAt, exactInstants))
             Diverged($"{operation}.hysteresis_started_at",
                 Format(managed?.HysteresisStartedAt), Format(shadow?.HysteresisStartedAt));

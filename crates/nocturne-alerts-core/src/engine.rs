@@ -123,6 +123,9 @@ impl RuleOutcome {
             if let Some(at) = tracker.hysteresis_started_at {
                 t.insert("hysteresis_started_at".into(), format_instant(at).into());
             }
+            if tracker.awaiting_rearm {
+                t.insert("awaiting_rearm".into(), true.into());
+            }
             o.insert("tracker".into(), Value::Object(t));
         }
         if e.auto_resolved {

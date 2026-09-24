@@ -449,6 +449,7 @@ internal sealed class ShadowAlertEngine(
             ActiveExcursionId = state.ActiveExcursionId,
             UpdatedAt = state.UpdatedAt,
             HysteresisStartedAt = state.HysteresisStartedAt,
+            AwaitingRearm = state.AwaitingRearm,
         };
 
     private ShadowComparison Comparison(Guid ruleId) => new(logger, shadowEvaluator.Name, ruleId);

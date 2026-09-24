@@ -139,7 +139,7 @@ pub fn replay(
 
     let mut timers = TimerStore::new();
     let mut active = HashMap::new();
-    let mut firing = vec![false; ordered.len()];
+    let mut firing = vec![Firing::default(); ordered.len()];
     let mut leaf_logs: Vec<Vec<(bool, Vec<LeafPoint>)>> = vec![Vec::new(); ordered.len()];
     let mut events = Vec::new();
     let mut tick_outcomes = options.include_ticks.then(Vec::new);
@@ -153,7 +153,7 @@ pub fn replay(
         }
 
         let mut rule_ticks = Vec::with_capacity(ordered.len());
-        for ((rule, was_firing), leaf_log) in ordered.iter().zip(&mut firing).zip(&mut leaf_logs) {
+        for ((rule, firing), leaf_log) in ordered.iter().zip(&mut firing).zip(&mut leaf_logs) {
             let Some(body) = evaluate_body(rule, &ctx, at, &mut timers, true) else {
                 rule_ticks.push(ReplayRuleTick {
                     rule_id: rule.id,
@@ -164,8 +164,9 @@ pub fn replay(
             record_leaves(leaf_log, body.leaves.unwrap_or_default(), at);
 
             let met = body.root;
-            let mut now_firing = met;
-            if met && !*was_firing {
+            firing.awaiting_rearm &= met;
+            let mut now_firing = met && !firing.awaiting_rearm;
+            if now_firing && !firing.firing {
                 let kind = if tick.suppressed_rule_ids.contains(&rule.id) {
                     ReplayEventKind::SuppressedByDnd
                 } else {
@@ -180,7 +181,7 @@ pub fn replay(
                         acknowledged_at: None,
                     },
                 );
-            } else if !met && *was_firing {
+            } else if !met && firing.firing {
                 close(&mut ctx, &mut timers, rule.id);
                 events.push(event(at, rule.id, ReplayEventKind::Cleared));
             }
@@ -192,9 +193,10 @@ pub fn replay(
                 close(&mut ctx, &mut timers, rule.id);
                 events.push(event(at, rule.id, ReplayEventKind::AutoResolved));
                 now_firing = false;
+                firing.awaiting_rearm = true;
             }
 
-            *was_firing = now_firing;
+            firing.firing = now_firing;
             timers.drain_ops();
             rule_ticks.push(ReplayRuleTick {
                 rule_id: rule.id,
@@ -229,6 +231,15 @@ pub fn replay(
         leaf_transitions,
         ticks: tick_outcomes,
     })
+}
+
+/// A rule's replay-local firing state. `awaiting_rearm` follows an
+/// auto-resolve until the body is false, as the tracker's does
+/// (engine-semantics.md §6.3).
+#[derive(Debug, Clone, Copy, Default)]
+struct Firing {
+    firing: bool,
+    awaiting_rearm: bool,
 }
 
 fn event(at: DateTime<Utc>, rule_id: Uuid, kind: ReplayEventKind) -> ReplayEvent {

@@ -90,6 +90,7 @@ preserves sub-second precision when present.
     "active_excursion_ordinal": 3,          // present only while an excursion is active
     "updated_at": "2026-01-05T11:55:00Z",   // REQUIRED whenever state is present
     "hysteresis_started_at": null,          // set only in hysteresis; absent there = adopt updated_at once
+    "awaiting_rearm": true,                 // present only when true; absent = armed (§6.3)
     "next_excursion_ordinal": 4             // default 1; see "State threading"
   },
   "include_leaves": true                    // optional; default true
@@ -113,7 +114,7 @@ Unknown fields (e.g. the scenario `name`) are ignored, so a corpus
   "result": { /* ExpectedRuleResult corpus shape:
                  rule_id, skipped?, root, leaves[], transition, close_reason?,
                  tracker {state, confirmation_count, excursion?,
-                          hysteresis_started_at?},
+                          hysteresis_started_at?, awaiting_rearm?},
                  auto_resolved?, timer_ops[] */ },
   "timers": { "sustained": "2026-01-05T12:00:00Z" },  // full post-state; persist verbatim
   "tracker": {                                        // full post-state; persist verbatim
@@ -122,6 +123,7 @@ Unknown fields (e.g. the scenario `name`) are ignored, so a corpus
     "active_excursion_ordinal": 3,
     "updated_at": "2026-01-05T12:00:00Z",
     "hysteresis_started_at": "…",                     // present only while in hysteresis
+    "awaiting_rearm": true,                            // present only when true
     "next_excursion_ordinal": 4
   }
 }
@@ -149,11 +151,13 @@ evaluated is an error envelope, this envelope never sets it.
   send it back on the rule's next evaluation. (It is keyed by path only — the
   rule id is implicit in the call.)
 - **`tracker`** per-rule fields (`state`, `confirmation_count`,
-  `active_excursion_ordinal`, `updated_at`, `hysteresis_started_at`)
-  round-trip the same way and are absent until the rule's first non-skipped
+  `active_excursion_ordinal`, `updated_at`, `hysteresis_started_at`,
+  `awaiting_rearm`) round-trip the same way and are absent until the rule's first non-skipped
   evaluation. `hysteresis_started_at` is what hysteresis expiry measures
   from; dropping it makes every restore adopt `updated_at`, which slides the
-  window forward on each evaluation.
+  window forward on each evaluation. `awaiting_rearm` holds an auto-resolved
+  rule off until its condition is false; dropping it lets the next
+  evaluation re-open and re-dispatch.
 - **`next_excursion_ordinal`** is the 1-based ordinal the next opened
   excursion will receive. It is **shared across all rules** of a tenant (the
   corpus assigns excursion ordinals in creation order across the whole

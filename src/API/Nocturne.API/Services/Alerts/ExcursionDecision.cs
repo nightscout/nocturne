@@ -13,7 +13,8 @@ internal sealed record TrackerPostState(
     int ConfirmationCount,
     bool HasExcursion,
     DateTime UpdatedAt,
-    DateTime? HysteresisStartedAt)
+    DateTime? HysteresisStartedAt,
+    bool AwaitingRearm = false)
 {
     public static TrackerPostState? Of(AlertTrackerState? state) =>
         state is null
@@ -23,7 +24,8 @@ internal sealed record TrackerPostState(
                 state.ConfirmationCount,
                 state.ActiveExcursionId is not null,
                 state.UpdatedAt,
-                state.HysteresisStartedAt);
+                state.HysteresisStartedAt,
+                state.AwaitingRearm);
 }
 
 /// <summary>

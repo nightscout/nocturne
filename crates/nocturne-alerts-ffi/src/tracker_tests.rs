@@ -127,6 +127,31 @@ fn force_close_reports_the_excursion_it_closed() {
 }
 
 #[test]
+fn an_auto_resolve_close_round_trips_awaiting_rearm_until_a_false_evaluation() {
+    let opened = process_at(&Value::Null, true, "2026-01-05T12:00:00Z", 0);
+    let closed = force_close(&json!({
+        "schema_version": 1,
+        "tracker": opened["tracker"],
+        "reason": "auto",
+        "now": "2026-01-05T12:00:00Z",
+    }));
+    assert_eq!(closed["tracker"]["awaiting_rearm"], json!(true));
+
+    let held = process_at(&closed["tracker"], true, "2026-01-05T12:00:30Z", 0);
+    assert_eq!(held["transition"], json!({ "type": "none" }));
+    assert_eq!(held["tracker"]["awaiting_rearm"], json!(true));
+
+    let rearmed = process_at(&held["tracker"], false, "2026-01-05T12:01:00Z", 0);
+    assert!(rearmed["tracker"].get("awaiting_rearm").is_none());
+
+    let reopened = process_at(&rearmed["tracker"], true, "2026-01-05T12:01:30Z", 0);
+    assert_eq!(
+        reopened["transition"],
+        json!({ "type": "opened", "excursion_ordinal": 2 })
+    );
+}
+
+#[test]
 fn force_close_without_an_excursion_changes_nothing() {
     let idle = process_at(&Value::Null, false, "2026-01-05T12:00:00Z", 0);
     let response = force_close(&json!({

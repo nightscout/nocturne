@@ -31,6 +31,9 @@ internal sealed class ManagedAlertReplayEngine(ILogger<ManagedAlertReplayEngine>
         var forceRunner = new ForceEvalRunner();
 
         var firing = new bool[ordered.Count];
+        // Set by an auto-resolve and held while the body stays true, as the tracker's re-arm is
+        // (docs/alerts/engine-semantics.md §6.3).
+        var awaitingRearm = new bool[ordered.Count];
         var leafLogs = new Dictionary<int, (bool Last, List<LeafTransitionPoint> Points)>?[ordered.Count];
         // One map for the whole pass, so a parent's fire is visible to its children later in the
         // order on the same tick.
@@ -93,8 +96,9 @@ internal sealed class ManagedAlertReplayEngine(ILogger<ManagedAlertReplayEngine>
                 }
                 RecordLeaves(ref leafLogs[i], leafValues, tick);
 
-                var currentlyFiring = met;
-                if (met && !firing[i])
+                awaitingRearm[i] &= met;
+                var currentlyFiring = met && !awaitingRearm[i];
+                if (currentlyFiring && !firing[i])
                 {
                     var kind = replayTick.SuppressedRuleIds.Contains(rule.Id)
                         ? AlertReplayTransition.SuppressedByDnd
@@ -136,6 +140,7 @@ internal sealed class ManagedAlertReplayEngine(ILogger<ManagedAlertReplayEngine>
                         activeAlerts.Remove(rule.Id);
                         await timerStore.ClearAllForRuleAsync(rule.Id, ct);
                         currentlyFiring = false;
+                        awaitingRearm[i] = true;
                     }
                 }
 

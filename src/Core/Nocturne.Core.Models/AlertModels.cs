@@ -589,6 +589,12 @@ public class AlertTrackerState
     /// Hysteresis expires <see cref="AlertRule.HysteresisMinutes"/> after this instant.
     /// </summary>
     public DateTime? HysteresisStartedAt { get; set; }
+
+    /// <summary>
+    /// Idle after an auto-resolve closed an excursion whose condition still held: the rule opens
+    /// nothing until an evaluation finds its condition false (docs/alerts/engine-semantics.md §6.3).
+    /// </summary>
+    public bool AwaitingRearm { get; set; }
 }
 
 /// <summary>

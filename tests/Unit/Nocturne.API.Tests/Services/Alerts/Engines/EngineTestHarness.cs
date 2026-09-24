@@ -144,6 +144,7 @@ internal static class EngineTestHarness
                     ConfirmationCount = state.ConfirmationCount,
                     Excursion = trackerRepo.OrdinalOf(state.ActiveExcursionId),
                     HysteresisStartedAt = state.HysteresisStartedAt,
+                    AwaitingRearm = state.AwaitingRearm ? true : null,
                 },
             AutoResolved = evaluation.AutoResolved ? true : null,
             TimerOps = timerStore.DrainOps() is { Count: > 0 } ops ? ops : null,

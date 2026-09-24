@@ -97,6 +97,7 @@ internal static class RustEnvelopeMapper
                 ActiveExcursionOrdinal = state.ActiveExcursionId is null ? null : ActiveExcursionSentinel,
                 UpdatedAt = DateTime.SpecifyKind(state.UpdatedAt, DateTimeKind.Utc),
                 HysteresisStartedAt = Utc(state.HysteresisStartedAt),
+                AwaitingRearm = state.AwaitingRearm,
                 NextExcursionOrdinal = ActiveExcursionSentinel + 1,
             };
 
@@ -292,7 +293,8 @@ internal static class RustEnvelopeMapper
                 tracker.ConfirmationCount,
                 tracker.ActiveExcursionOrdinal is not null,
                 tracker.UpdatedAt!.Value,
-                tracker.HysteresisStartedAt);
+                tracker.HysteresisStartedAt,
+                tracker.AwaitingRearm);
 
     /// <summary>Wire form of a managed transition type (for shadow comparison logging).</summary>
     public static string TransitionToWire(ExcursionTransitionType type) => type switch

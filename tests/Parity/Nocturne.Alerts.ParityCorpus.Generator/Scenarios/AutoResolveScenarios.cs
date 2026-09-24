@@ -84,7 +84,23 @@ public static class AutoResolveScenarios
             [
                 Tick(T(0), Ctx(T(0), glucose: 100m) with { TrendBucket = "flat" }),  // idle: resolve pass does nothing
                 Tick(T(5), Ctx(T(5), glucose: 65m) with { TrendBucket = "flat" }),   // opened, then resolve true -> closed same tick
-                Tick(T(10), Ctx(T(10), glucose: 65m) with { TrendBucket = "flat" }), // re-opens and closes again
+                Tick(T(10), Ctx(T(10), glucose: 65m) with { TrendBucket = "flat" }), // body still true: awaits re-arm, opens nothing
+            ]);
+
+        yield return Scenario(
+            "auto-resolve-waits-for-rearm",
+            "an auto-resolve that closes an active excursion leaves the rule idle awaiting re-arm: it opens nothing until an evaluation finds the body false, however often it is evaluated meanwhile",
+            [Rule(1, "iob", """{"operator": ">=", "value": 3}""", autoResolveParams: """
+                {"type": "trend", "trend": {"bucket": "flat"}}
+                """)],
+            [
+                Tick(T(0), Ctx(T(0)) with { IobUnits = 4m, TrendBucket = "flat" }),     // opened, auto-resolved on the same tick
+                Tick(T(1), Ctx(T(0)) with { IobUnits = 4m, TrendBucket = "flat" }),     // a wall-clock evaluation against the same reading: none
+                Tick(T(2), Ctx(T(0)) with { IobUnits = 4m, TrendBucket = "flat" }),     // none
+                Tick(T(5), Ctx(T(5)) with { IobUnits = 2m, TrendBucket = "flat" }),     // body false: re-armed
+                Tick(T(10), Ctx(T(10)) with { IobUnits = 4m, TrendBucket = "rising" }), // opens again; resolve false
+                Tick(T(15), Ctx(T(15)) with { IobUnits = 2m, TrendBucket = "flat" }),   // hysteresis, then auto-resolved: body already false, so armed
+                Tick(T(20), Ctx(T(20)) with { IobUnits = 4m, TrendBucket = "rising" }), // opens
             ]);
     }
 }

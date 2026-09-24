@@ -645,6 +645,7 @@ fn tracker_restore_without_hysteresis_start_adopts_updated_at() {
             active_excursion: Some(1),
             updated_at: at(5),
             hysteresis_started_at: None,
+            awaiting_rearm: false,
         },
     );
     assert_eq!(
@@ -757,6 +758,49 @@ fn tracker_force_close_from_hysteresis_resets_to_idle() {
         tracker.state(rule_id()).unwrap().state,
         TrackerStateKind::Idle
     );
+}
+
+#[test]
+fn tracker_auto_resolve_of_an_active_excursion_waits_for_a_false_evaluation() {
+    let mut tracker = ExcursionTracker::new();
+    let _ = tracker.process_evaluation(rule_id(), cfg(1, 0), true, at(0));
+    let _ = tracker.force_close(rule_id(), CloseReason::AutoResolve, at(0));
+    assert!(tracker.state(rule_id()).unwrap().awaiting_rearm);
+
+    for minute in [1, 2, 3] {
+        let t = tracker.process_evaluation(rule_id(), cfg(1, 0), true, at(minute));
+        assert_eq!(t.kind, TransitionType::None, "still met at {minute}");
+    }
+    let t = tracker.process_evaluation(rule_id(), cfg(1, 0), false, at(4));
+    assert_eq!(t.kind, TransitionType::None);
+    assert!(!tracker.state(rule_id()).unwrap().awaiting_rearm);
+
+    let t = tracker.process_evaluation(rule_id(), cfg(1, 0), true, at(5));
+    assert_eq!(t.kind, TransitionType::ExcursionOpened);
+    assert_eq!(t.excursion, Some(2));
+}
+
+#[test]
+fn tracker_closes_other_than_auto_resolve_of_an_active_excursion_stay_armed() {
+    let closes: [(bool, CloseReason); 3] = [
+        (true, CloseReason::Manual),
+        (true, CloseReason::Hysteresis),
+        (false, CloseReason::AutoResolve),
+    ];
+    for (active, reason) in closes {
+        let mut tracker = ExcursionTracker::new();
+        let _ = tracker.process_evaluation(rule_id(), cfg(1, 60), true, at(0));
+        if !active {
+            let _ = tracker.process_evaluation(rule_id(), cfg(1, 60), false, at(1));
+        }
+        let _ = tracker.force_close(rule_id(), reason, at(2));
+        assert!(
+            !tracker.state(rule_id()).unwrap().awaiting_rearm,
+            "{reason:?}"
+        );
+        let t = tracker.process_evaluation(rule_id(), cfg(1, 60), true, at(3));
+        assert_eq!(t.kind, TransitionType::ExcursionOpened, "{reason:?}");
+    }
 }
 
 #[test]
@@ -989,6 +1033,7 @@ fn tracker_confirmation_count_saturates_on_restored_state() {
             active_excursion: None,
             updated_at: at(0),
             hysteresis_started_at: None,
+            awaiting_rearm: false,
         },
     );
     let t = tracker.process_evaluation(rule_id(), cfg(i32::MAX, 0), true, at(5));
@@ -1071,6 +1116,7 @@ fn hysteresis_expiry_past_the_calendar_does_not_panic() {
             active_excursion: Some(1),
             updated_at: DateTime::<Utc>::MAX_UTC,
             hysteresis_started_at: None,
+            awaiting_rearm: false,
         },
     );
     let t =

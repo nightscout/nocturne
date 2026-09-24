@@ -123,6 +123,13 @@ public sealed record RustTrackerState
     [JsonPropertyName("hysteresis_started_at")]
     public DateTime? HysteresisStartedAt { get; init; }
 
+    /// <summary>
+    /// Idle after an auto-resolve closed an excursion whose condition still held; the wire
+    /// carries it only when true.
+    /// </summary>
+    [JsonPropertyName("awaiting_rearm")]
+    public bool AwaitingRearm { get; init; }
+
     /// <summary>1-based ordinal the next opened excursion will receive.</summary>
     [JsonPropertyName("next_excursion_ordinal")]
     public int NextExcursionOrdinal { get; init; } = 1;

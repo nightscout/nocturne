@@ -699,6 +699,50 @@ public class ExcursionTrackerTests
 
     #endregion
 
+    #region Re-arm after auto-resolve
+
+    private async Task<ExcursionTransition> ForceCloseAt(int minute, ExcursionCloseReason reason)
+    {
+        _timeProvider.SetUtcNow(new DateTimeOffset(2026, 3, 22, 12, 0, 0, TimeSpan.Zero).AddMinutes(minute));
+        return await _tracker.ForceCloseAsync(_ruleId, reason, CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task AutoResolve_OfAnActiveExcursion_OpensNothingUntilTheConditionIsFalse()
+    {
+        UseStatefulRepository(0);
+        (await EvaluateAt(0, true)).Type.Should().Be(ExcursionTransitionType.ExcursionOpened);
+        (await ForceCloseAt(0, ExcursionCloseReason.AutoResolve)).Type.Should().Be(ExcursionTransitionType.ExcursionClosed);
+        (await _mockRepo.Object.GetTrackerStateAsync(_ruleId))!.AwaitingRearm.Should().BeTrue();
+
+        for (var minute = 1; minute <= 3; minute++)
+            (await EvaluateAt(minute, true)).Type.Should().Be(ExcursionTransitionType.None, $"minute {minute}");
+
+        (await EvaluateAt(4, false)).Type.Should().Be(ExcursionTransitionType.None);
+        (await _mockRepo.Object.GetTrackerStateAsync(_ruleId))!.AwaitingRearm.Should().BeFalse();
+        (await EvaluateAt(5, true)).Type.Should().Be(ExcursionTransitionType.ExcursionOpened);
+        _mockRepo.Verify(
+            x => x.CreateExcursionAsync(_ruleId, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()),
+            Times.Exactly(2));
+    }
+
+    [Theory]
+    [InlineData(true, ExcursionCloseReason.Manual)]
+    [InlineData(false, ExcursionCloseReason.AutoResolve)]
+    public async Task OtherCloses_LeaveTheRuleArmed(bool active, ExcursionCloseReason reason)
+    {
+        UseStatefulRepository(60);
+        await EvaluateAt(0, true);
+        if (!active)
+            (await EvaluateAt(1, false)).Type.Should().Be(ExcursionTransitionType.HysteresisStarted);
+
+        (await ForceCloseAt(2, reason)).Type.Should().Be(ExcursionTransitionType.ExcursionClosed);
+        (await _mockRepo.Object.GetTrackerStateAsync(_ruleId))!.AwaitingRearm.Should().BeFalse();
+        (await EvaluateAt(3, true)).Type.Should().Be(ExcursionTransitionType.ExcursionOpened);
+    }
+
+    #endregion
+
     #region ForceCloseAsync
 
     [Fact]
