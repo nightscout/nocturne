@@ -1,13 +1,11 @@
 <script lang="ts">
     import * as Accordion from "@nocturne/ui/ui/accordion";
     import { Button } from "@nocturne/ui/ui/button";
-    import { ArrowRight, HelpCircle, Download, RefreshCw, Code } from "@lucide/svelte";
+    import { ArrowRight } from "@lucide/svelte";
 
     const faqCategories = [
         {
             title: "General",
-            icon: HelpCircle,
-            color: "bg-blue-500/15 text-blue-500",
             questions: [
                 {
                     question: "What is Nocturne?",
@@ -33,8 +31,6 @@
         },
         {
             title: "Installation",
-            icon: Download,
-            color: "bg-green-500/15 text-green-500",
             questions: [
                 {
                     question: "What are the system requirements?",
@@ -56,8 +52,6 @@
         },
         {
             title: "Migration",
-            icon: RefreshCw,
-            color: "bg-orange-500/15 text-orange-500",
             questions: [
                 {
                     question: "Can I migrate my existing Nightscout data?",
@@ -79,8 +73,6 @@
         },
         {
             title: "Technical",
-            icon: Code,
-            color: "bg-purple-500/15 text-purple-500",
             questions: [
                 {
                     question: "What technology stack does Nocturne use?",

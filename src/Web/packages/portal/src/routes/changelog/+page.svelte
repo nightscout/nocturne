@@ -3,7 +3,6 @@
     import { Button } from "@nocturne/ui/ui/button";
     import { renderReleaseMarkdown } from "$lib/utils/release-markdown";
     import {
-        Tag,
         ExternalLink,
         Loader2,
         AlertCircle,
@@ -68,7 +67,6 @@
         });
     }
 
-    // Initial load
     loadChangelog();
 </script>
 
@@ -78,7 +76,6 @@
 </svelte:head>
 
 <div class="container mx-auto px-4 py-12">
-    <!-- Hero -->
     <div class="text-center mb-12">
         <h1 class="text-4xl md:text-5xl font-bold tracking-tight mb-4">
             Changelog
@@ -116,10 +113,10 @@
         </div>
     {:else if error}
         <div class="flex flex-col items-center justify-center py-20">
-            <div class="w-16 h-16 rounded-full bg-destructive/15 flex items-center justify-center mb-4">
-                <AlertCircle class="w-8 h-8 text-destructive" />
-            </div>
-            <p class="text-destructive font-medium mb-2">Failed to load changelog</p>
+            <p class="flex items-center gap-2 text-destructive font-medium mb-2">
+                <AlertCircle class="size-4" aria-hidden="true" />
+                Failed to load changelog
+            </p>
             <p class="text-sm text-muted-foreground mb-4">{error}</p>
             <Button onclick={() => loadChangelog()} variant="outline" size="sm">
                 Try Again
@@ -127,17 +124,12 @@
         </div>
     {:else if releases.length === 0}
         <div class="flex flex-col items-center justify-center py-20">
-            <div class="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
-                <Tag class="w-8 h-8 text-muted-foreground" />
-            </div>
             <p class="text-muted-foreground">No releases found</p>
         </div>
     {:else}
-        <!-- Releases -->
         <div class="max-w-4xl mx-auto">
             {#each releases as release, i (release.id)}
                 <div class="grid grid-cols-1 md:grid-cols-[180px_1fr] gap-4 md:gap-8">
-                    <!-- Sticky version label (left column) -->
                     <div class="md:sticky md:top-20 md:self-start">
                         <div class="flex md:flex-col items-baseline md:items-start gap-2 md:gap-1 mb-2 md:mb-0">
                             <a
@@ -159,7 +151,6 @@
                         </div>
                     </div>
 
-                    <!-- Release content (right column) -->
                     <div class="pb-10 {i < releases.length - 1 ? 'border-b border-border/40 mb-10' : ''}">
                         <h2 class="text-xl font-semibold mb-2">
                             {release.name || release.tag_name}
@@ -208,7 +199,6 @@
             {/each}
         </div>
 
-        <!-- Load More -->
         {#if hasMore}
             <div class="flex justify-center mt-8">
                 <Button

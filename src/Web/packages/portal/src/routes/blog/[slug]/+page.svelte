@@ -12,10 +12,12 @@
 
 <div class="container mx-auto px-4 py-8 max-w-3xl">
   <article class="prose prose-neutral dark:prose-invert max-w-none">
-    <div class="mb-8 not-prose">
-      <time class="text-sm text-muted-foreground">{data.meta?.date}</time>
-      <p class="text-sm text-muted-foreground mt-1">By {data.meta?.author}</p>
-    </div>
+    <header class="mb-8 not-prose">
+      <h1 class="text-4xl font-bold tracking-tight mb-3">{data.meta?.title}</h1>
+      <p class="text-sm text-muted-foreground">
+        <time datetime={data.meta?.date}>{data.meta?.date}</time> &middot; By {data.meta?.author}
+      </p>
+    </header>
 
     <data.content />
   </article>
