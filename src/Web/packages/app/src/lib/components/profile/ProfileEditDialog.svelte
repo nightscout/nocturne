@@ -39,6 +39,7 @@
   }
   import { BG_UNITS } from "$lib/constants/profile-icons";
   import ProfileIconPicker from "./ProfileIconPicker.svelte";
+  import TimezoneCombobox from "$lib/components/patient/TimezoneCombobox.svelte";
   import {
     Edit,
     Plus,
@@ -258,20 +259,10 @@
               <!-- Timezone -->
               <div class="space-y-2">
                 <Label>Timezone</Label>
-                <Select.Root
-                  type="single"
+                <TimezoneCombobox
                   value={storeData.timezone ?? ""}
                   onValueChange={(v) => updateStoreField("timezone", v)}
-                >
-                  <Select.Trigger class="w-full">
-                    {storeData.timezone ?? "Select timezone"}
-                  </Select.Trigger>
-                  <Select.Content>
-                    {#each Intl.DateTimeFormat().resolvedOptions().timeZone as tz, i (i)}
-                      <Select.Item value={tz}>{tz}</Select.Item>
-                    {/each}
-                  </Select.Content>
-                </Select.Root>
+                />
               </div>
 
               <!-- DIA -->

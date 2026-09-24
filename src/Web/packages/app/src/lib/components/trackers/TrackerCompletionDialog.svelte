@@ -131,11 +131,9 @@
       case TrackerCategory.Cannula:
       case TrackerCategory.Consumable:
         return [...consumableReasons, ...generalReasons];
-      case TrackerCategory.Battery:
-        // Battery uses general + failed (device failure)
-        return [CompletionReason.Failed, ...generalReasons];
       case TrackerCategory.Reminder:
       case TrackerCategory.Custom:
+      case TrackerCategory.Battery:
       default:
         return generalReasons;
     }
@@ -244,7 +242,7 @@
             {completionReasonLabels[completionReason]}
           </Select.Trigger>
           <Select.Content>
-            {#each availableReasons as reason, i (i)}
+            {#each availableReasons as reason (reason)}
               <Select.Item value={reason} label={completionReasonLabels[reason]} />
             {/each}
           </Select.Content>

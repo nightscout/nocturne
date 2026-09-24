@@ -128,7 +128,7 @@
           {@const level = event.eventType === "due" ? getTrackerLevel(event.instance, def) : "none"}
           {@const category = def?.category ?? TrackerCategory.Consumable}
           {@const startTime = formatTrackerStartTime(event.instance.startedAt)}
-          {@const popoverId = `${event.instance.id}-${event.date}`}
+          {@const popoverId = `${event.instance.id}-${event.eventType}-${event.date}`}
           <Popover.Root
             open={openPopoverId === popoverId}
             onOpenChange={(open) => (openPopoverId = open ? popoverId : null)}
@@ -249,7 +249,7 @@
           {@const level = event.eventType === "due" ? getTrackerLevel(event.instance, def) : "none"}
           {@const category = def?.category ?? TrackerCategory.Consumable}
           {@const startTime = formatTrackerStartTime(event.instance.startedAt)}
-          {@const popoverId = `${event.instance.id}-${event.date}`}
+          {@const popoverId = `${event.instance.id}-${event.eventType}-${event.date}`}
           <Popover.Root
             open={openPopoverId === popoverId}
             onOpenChange={(open) => (openPopoverId = open ? popoverId : null)}
@@ -296,7 +296,7 @@
           {@const level = event.eventType === "due" ? getTrackerLevel(event.instance, def) : "none"}
           {@const category = def?.category ?? TrackerCategory.Consumable}
           {@const startTime = formatTrackerStartTime(event.instance.startedAt)}
-          {@const popoverId = `${event.instance.id}-${event.date}`}
+          {@const popoverId = `${event.instance.id}-${event.eventType}-${event.date}`}
           <Popover.Root
             open={openPopoverId === popoverId}
             onOpenChange={(open) => (openPopoverId = open ? popoverId : null)}

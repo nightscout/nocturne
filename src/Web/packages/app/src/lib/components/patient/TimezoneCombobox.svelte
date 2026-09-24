@@ -8,6 +8,7 @@
   interface Props {
     /** Currently selected IANA timezone id */
     value?: string;
+    onValueChange?: (value: string) => void;
     id?: string;
     placeholder?: string;
     disabled?: boolean;
@@ -18,6 +19,7 @@
 
   let {
     value = $bindable(),
+    onValueChange,
     id,
     placeholder = "Select timezone...",
     disabled = false,
@@ -42,6 +44,7 @@
 
   function selectTimezone(tz: string) {
     value = tz;
+    onValueChange?.(tz);
     popoverOpen = false;
     searchValue = "";
   }

@@ -6,6 +6,7 @@
   import * as Select from "$lib/components/ui/select";
   import { BG_UNITS, DEFAULT_PROFILE_ICON } from "$lib/constants/profile-icons";
   import ProfileIconPicker from "./ProfileIconPicker.svelte";
+  import TimezoneCombobox from "$lib/components/patient/TimezoneCombobox.svelte";
   import { Plus } from "lucide-svelte";
 
   interface Props {
@@ -161,16 +162,7 @@
       <!-- Timezone -->
       <div class="space-y-2">
         <Label for="timezone">Timezone</Label>
-        <Select.Root type="single" bind:value={formState.timezone}>
-          <Select.Trigger class="w-full">
-            {formState.timezone}
-          </Select.Trigger>
-          <Select.Content>
-            {#each Intl.DateTimeFormat().resolvedOptions().timeZone as tz, i (i)}
-              <Select.Item value={tz}>{tz}</Select.Item>
-            {/each}
-          </Select.Content>
-        </Select.Root>
+        <TimezoneCombobox id="timezone" bind:value={formState.timezone} />
       </div>
 
       <!-- DIA and Carbs/hr in a grid -->
