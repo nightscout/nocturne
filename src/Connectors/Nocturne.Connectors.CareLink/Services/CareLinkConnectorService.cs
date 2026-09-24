@@ -87,7 +87,7 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
         CareLinkConnectorConfiguration config,
         CancellationToken cancellationToken)
     {
-        var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
+        var result = new SyncResult { Success = true };
 
         // Authenticate with per-tenant config
         if (!await AuthenticateWithConfigAsync(config))
@@ -107,7 +107,6 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
         var data = await TryFetchDataAsync(config, userInfo, isCarePartner, result, cancellationToken);
         if (data == null)
         {
-            result.EndTime = DateTimeOffset.UtcNow;
             return result;
         }
 
@@ -125,7 +124,6 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
         // Persist refresh token if it changed during sync
         await PersistRefreshTokenIfChangedAsync(cancellationToken);
 
-        result.EndTime = DateTimeOffset.UtcNow;
         return result;
     }
 

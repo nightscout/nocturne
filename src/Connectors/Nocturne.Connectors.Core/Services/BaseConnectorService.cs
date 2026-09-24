@@ -138,12 +138,9 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     /// </remarks>
     protected SyncResult AuthenticationFailedResult()
     {
-        var now = DateTimeOffset.UtcNow;
         return new SyncResult
         {
             Success = false,
-            StartTime = now,
-            EndTime = now,
             Message = _authenticationFailureReason ?? "Authentication failed",
             Errors = { _authenticationFailureReason ?? $"Authentication failed for {ConnectorSource}" },
         };
@@ -1408,8 +1405,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             return new SyncResult
             {
                 Success = false,
-                StartTime = DateTimeOffset.UtcNow,
-                EndTime = DateTimeOffset.UtcNow,
                 Errors = { ex.Message }
             };
         }
