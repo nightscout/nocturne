@@ -87,6 +87,20 @@ public class AlertEngineErrorsTests
     }
 
     [Fact]
+    public async Task A_failing_shadow_engine_is_only_degraded_as_managed_serves_alerts()
+    {
+        using var factory = new TestMeterFactory();
+        var errors = new AlertEngineErrors(factory, _time);
+        for (var i = 0; i < 2 * AlertEngineHealthCheck.UnhealthyMinimumFailures; i++)
+            errors.Record("evaluate", AlertEngineErrors.ShadowEngine);
+
+        var result = await CheckAsync(new AlertEngineSelection(AlertEngineMode.Shadow, "shadow"), errors);
+
+        result.Status.Should().Be(HealthStatus.Degraded);
+        result.Description.Should().Contain("shadow");
+    }
+
+    [Fact]
     public async Task Fewer_failures_than_the_minimum_are_only_degraded()
     {
         using var factory = new TestMeterFactory();

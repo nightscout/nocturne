@@ -141,7 +141,8 @@ internal sealed record AlertEngineError(DateTimeOffset At, string Operation, str
 /// Reports Unhealthy while most native calls fail: <see cref="UnhealthyFailureRate"/> of the calls
 /// in <see cref="AlertEngineErrors.WindowLength"/>, and at least <see cref="UnhealthyMinimumFailures"/>.
 /// Reports Degraded while any failed within <see cref="FailingWindow"/>, or when shadow mode fell
-/// back to managed at startup.
+/// back to managed at startup. In shadow mode the managed engine serves alerts whatever the Rust
+/// engine does, so failures there are at most Degraded.
 /// </summary>
 internal sealed class AlertEngineHealthCheck(
     AlertEngineSelection selection,
@@ -178,7 +179,8 @@ internal sealed class AlertEngineHealthCheck(
                 ["calls"] = calls,
                 ["failures"] = failures,
             };
-            var failing = failures >= UnhealthyMinimumFailures && failures >= calls * UnhealthyFailureRate;
+            var failing = selection.Mode != AlertEngineMode.Shadow
+                          && failures >= UnhealthyMinimumFailures && failures >= calls * UnhealthyFailureRate;
             var description =
                 $"The {latest.Engine} alert engine failed {failures} of {calls} calls in the last {FailingWindow.TotalMinutes:0} minutes, latest '{latest.Operation}' at {latest.At:O}";
             return Task.FromResult(failing
