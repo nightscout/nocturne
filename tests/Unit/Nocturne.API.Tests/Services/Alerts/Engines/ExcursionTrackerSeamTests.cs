@@ -243,20 +243,47 @@ public class ExcursionTrackerSeamTests
         f.Repository.Writes.Should().HaveCount(writes);
         f.State!.State.Should().Be("confirming");
     }
+
+    [Fact] public Task Each_transition_writes_in_one_transaction_managed() =>
+        Each_transition_writes_in_one_transaction(Engine.Managed);
+    [NativeFact] public Task Each_transition_writes_in_one_transaction_rust() =>
+        Each_transition_writes_in_one_transaction(Engine.Rust);
+
+    private static async Task Each_transition_writes_in_one_transaction(Engine engine)
+    {
+        var f = new Fixture(engine);
+
+        await f.Process(true);
+        await f.Process(false);
+        await f.Tracker.CloseElapsedHysteresisAsync(RuleId, CancellationToken.None);
+
+        f.Repository.WritesOutsideTransaction.Should().Be(0);
+        f.Repository.Transactions.Should().Be(3);
+        f.Repository.Writes.Should().Equal(
+            "create", "upsert",
+            "set_hysteresis", "upsert",
+            "close", "upsert");
+    }
 }
 
 /// <summary>
-/// In-memory <see cref="IAlertTrackerRepository"/> that records each write.
+/// In-memory <see cref="IAlertTrackerRepository"/> that records each write and whether it ran
+/// inside <see cref="ExecuteInTransactionAsync{T}"/>.
 /// </summary>
 internal sealed class RecordingTrackerRepository(params AlertRule[] rules) : IAlertTrackerRepository
 {
     private readonly Dictionary<Guid, AlertRule> _rules = rules.ToDictionary(r => r.Id);
+    private bool _inTransaction;
 
     public Dictionary<Guid, AlertTrackerState> States { get; } = new();
 
     public Dictionary<Guid, AlertExcursion> Excursions { get; } = new();
 
     public List<string> Writes { get; } = [];
+
+    public int Transactions { get; private set; }
+
+    public int WritesOutsideTransaction { get; private set; }
 
     public Task<AlertTrackerState?> GetTrackerStateAsync(Guid alertRuleId, CancellationToken ct = default) =>
         Task.FromResult(States.GetValueOrDefault(alertRuleId));
@@ -300,5 +327,24 @@ internal sealed class RecordingTrackerRepository(params AlertRule[] rules) : IAl
         return Task.CompletedTask;
     }
 
-    private void Write(string operation) => Writes.Add(operation);
+    public async Task<T> ExecuteInTransactionAsync<T>(Func<CancellationToken, Task<T>> work, CancellationToken ct = default)
+    {
+        Transactions++;
+        _inTransaction = true;
+        try
+        {
+            return await work(ct);
+        }
+        finally
+        {
+            _inTransaction = false;
+        }
+    }
+
+    private void Write(string operation)
+    {
+        Writes.Add(operation);
+        if (!_inTransaction)
+            WritesOutsideTransaction++;
+    }
 }

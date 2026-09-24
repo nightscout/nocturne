@@ -7,7 +7,8 @@ namespace Nocturne.API.Services.Alerts;
 
 /// <summary>
 /// Persists a <see cref="TrackerDecision"/>, whichever engine made it: the excursion rows its
-/// transition implies and the rule's tracker state. The host owns
+/// transition implies and the rule's tracker state, in one transaction
+/// (<see cref="IAlertTrackerRepository.ExecuteInTransactionAsync{T}"/>). The host owns
 /// excursion ids, so the decision's "has an excursion" becomes the prior excursion's id, or
 /// the id of the one this write opens.
 /// </summary>
@@ -35,7 +36,8 @@ internal static class ExcursionTransitionWriter
         DateTime now,
         CancellationToken ct,
         bool autoResolved = false) =>
-        WriteAsync(repository, logger, ruleId, prior, decision, now, autoResolved, ct);
+        repository.ExecuteInTransactionAsync(
+            token => WriteAsync(repository, logger, ruleId, prior, decision, now, autoResolved, token), ct);
 
     private static async Task<(ExcursionTransition, ExcursionTransition?)> WriteAsync(
         IAlertTrackerRepository repository,

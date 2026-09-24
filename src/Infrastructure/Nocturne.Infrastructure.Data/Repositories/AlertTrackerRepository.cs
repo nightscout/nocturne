@@ -175,6 +175,29 @@ public class AlertTrackerRepository : IAlertTrackerRepository
         }
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Joins a transaction already open on the context. Otherwise opens one under the context's
+    /// execution strategy. Opening the connection sets the tenant GUCs (TenantConnectionInterceptor),
+    /// so every statement in the transaction runs under the context's tenant.
+    /// </remarks>
+    public virtual async Task<T> ExecuteInTransactionAsync<T>(
+        Func<CancellationToken, Task<T>> work,
+        CancellationToken ct = default)
+    {
+        if (_context.Database.CurrentTransaction is not null)
+            return await work(ct);
+
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync(ct);
+            var result = await work(ct);
+            await transaction.CommitAsync(ct);
+            return result;
+        });
+    }
+
     private static AlertTrackerState MapTrackerState(AlertTrackerStateEntity entity) => new()
     {
         AlertRuleId = entity.AlertRuleId,

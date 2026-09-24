@@ -84,4 +84,16 @@ public interface IAlertTrackerRepository
     Task ClearHysteresisAsync(
         Guid excursionId,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Runs <paramref name="work"/> in one database transaction, so the writes it makes through
+    /// this repository commit or roll back together. The default, for a store with no
+    /// transactions, runs it as is.
+    /// </summary>
+    /// <remarks>
+    /// <paramref name="work"/> can run more than once when the store retries a transient failure.
+    /// </remarks>
+    Task<T> ExecuteInTransactionAsync<T>(
+        Func<CancellationToken, Task<T>> work,
+        CancellationToken ct = default) => work(ct);
 }

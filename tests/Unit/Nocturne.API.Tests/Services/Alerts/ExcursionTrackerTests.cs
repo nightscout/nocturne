@@ -24,7 +24,8 @@ public class ExcursionTrackerTests
 
     public ExcursionTrackerTests()
     {
-        _mockRepo = new Mock<IAlertTrackerRepository>();
+        // CallBase runs the interface's default ExecuteInTransactionAsync, which runs its work.
+        _mockRepo = new Mock<IAlertTrackerRepository> { CallBase = true };
         _timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 3, 22, 12, 0, 0, TimeSpan.Zero));
 
         var logger = new Mock<ILogger<ExcursionTracker>>();
