@@ -515,8 +515,8 @@ Request:
 - **Suppression.** `suppressed_rule_ids` names the rules a fire opening on
   that tick is recorded for as `suppressed_by_dnd` instead of `fired` (the
   host resolves Do Not Disturb). The rule fires either way.
-- A rule whose body cannot be evaluated (§1.4) is skipped on every tick, not
-  an error.
+- A rule whose body cannot be evaluated (§1.4), or whose `condition_params`
+  is neither an object nor null, is skipped on every tick, not an error.
 
 Response:
 
@@ -548,7 +548,8 @@ while the rule is firing, including on the tick it fired. The leaf log holds,
 per leaf id, the first observation and every flip, at unix milliseconds;
 `firing` is the rule's state after the tick. Errors are an unusable envelope,
 an unknown `condition_type`, a rule id listed twice, or a tick instant outside
-the supported range.
+the supported range. The replay corpus in `tests/Parity/AlertEngineCorpus/replay/`
+pins this envelope.
 
 ## Kotlin (UniFFI)
 

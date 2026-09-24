@@ -427,36 +427,58 @@ DND suppression of **delivery** (non-critical, non-`AllowThroughDnd` rules while
 
 ---
 
-## 8. Replay semantics (crate's replay driver)
+## 8. Replay semantics (the replay driver)
 
-Replay re-evaluates stored rules over a historical window at a fixed **5-minute tick**
-with a fake clock, a **fresh in-memory timer store**, and these conventions:
+Replay answers "what would these rules have done over this window": the rule set is
+re-evaluated at a fixed **5-minute tick** over a historical window. The host builds each
+tick's context and the driver evaluates every tick in one call — `replay::replay` in the
+crate, `nocturne_alerts_replay` over the C ABI and UniFFI, `IAlertReplayEngine` in the
+backend (`Alerts:Engine` selects managed, Rust, or shadow, as for evaluation). The
+machine-checkable form is `tests/Parity/AlertEngineCorpus/replay/`.
 
-- Rules are **topologically sorted** by `alert_state` references (parents before
-  children); cycles fall back to insertion order.
-- Per tick, glucose is snapped to the most recent reading at-or-before the tick, and
-  `LastReadingAt` is that reading's time, so a gap inside the window reads as stale and
-  fires `signal_loss`. A tick before the window's first reading clamps
-  `LastReadingAt = tick`: the window holds no earlier reading, so staleness reads as 0 and
-  `signal_loss` cannot fire on an outage that began before the window.
-- Root truth uses the normal evaluators (short-circuit, shared timer store); leaf log
-  uses force-eval of every leaf (no short-circuit, same context, root path). Points are
-  recorded on first observation and on every flip (`LeafTransitionPoint(atMs, value)`,
-  unix-ms).
-- Firing state is tracked per rule replay-locally: `met && !wasFiring` ⇒ `Fired` event
-  (or `SuppressedByDnd` under the same gate as live delivery suppression — but the
-  active-alerts entry is seeded either way); `!met && wasFiring` ⇒ silent clear (no
-  event) **plus `ClearAllForRule` on the timer store**; auto-resolve mirrors §7 step 5
-  (evaluated only while firing) and emits `AutoResolved`, removes the active-alerts
-  entry, and clears the rule's timers.
-- `ActiveAlerts` is a single mutable map shared across the whole replay pass so
-  same-tick parent fires are visible to children later in the topo order
-  (`ActiveAlertSnapshot("firing", tick, null)`).
-- The excursion tracker (confirmation/hysteresis) is **not** consulted in replay —
-  replay events are condition-truth edges, not tracker transitions.
+**Host side** (`AlertReplayService`; out of the driver's scope):
 
-The crate exposes this as a deterministic replay driver taking pre-enriched per-tick
-contexts; window resolution, reading fetch, and fact-timeline capture stay host-side.
+- Window resolution, the canonical reading stream, and per-tick enrichment as of the tick.
+  Glucose is the most recent reading at or before the tick, and `LastReadingAt` is that
+  reading's time, so a gap after a reading reads as stale.
+- Do Not Disturb: for each tick, the rules a fire opening on it is recorded for as
+  suppressed (the gate live delivery applies on open, receipt-gated to the tick).
+- Fact timelines, and mapping the driver's output to the API's events and leaf log.
+
+**Driver**, given the rules in any order and the ticks in time order:
+
+- **Order.** Rules are topologically sorted by `alert_state` references (parents first).
+  References are read from every payload property a node carries, whatever its `type`,
+  and only to rules in the set. A cycle keeps the given order for every rule. Two rules
+  with one id are an error.
+- **State.** One fresh timer store for the whole call; nothing is read from or written to
+  persistent state. The excursion tracker is **not** consulted: confirmation and
+  hysteresis do not apply, and replay's firing state is replay-local.
+- **No reading.** A tick context with neither `LatestTimestamp` nor `LastReadingAt` reads
+  `LastReadingAt = tick`, so a tick before the window's first reading reads as zero
+  staleness and `signal_loss` cannot fire on an outage that began before the window.
+- **Active alerts.** One map for the whole call replaces each tick context's
+  `ActiveAlerts`. A rule enters it as `ActiveAlertSnapshot("firing", tick, null)` when it
+  fires and leaves it when it clears or auto-resolves, so a parent's change is visible to
+  children later in the order on the same tick.
+- **Per rule per tick**, in order:
+  1. A rule whose body cannot be evaluated (§1.4), or whose `condition_params` is not a
+     payload, is **skipped**: no leaf log, no firing change. Its `alert_state` children
+     never see it fire.
+  2. Root truth `met` by the normal evaluators at the rule's root path (short-circuit,
+     shared timer store). The leaf log force-evaluates every leaf alone at the same root
+     path and records each leaf's first observation and every flip
+     (`LeafTransitionPoint(atMs, value)`, unix ms).
+  3. `met && !firing` ⇒ `fired`, or `suppressed_by_dnd` when the host named the rule for
+     the tick; the rule becomes firing either way. `!met && firing` ⇒ `cleared`: the rule
+     stops firing and **all its timers are cleared**, the auto-resolve tree's included.
+  4. While firing — including on the tick it fired — an enabled auto-resolve tree that
+     parses and is evaluable is evaluated at `auto_resolve` (§7 step 5); true ⇒
+     `auto_resolved`, and the rule stops firing and its timers are cleared, as for a clear.
+     A body still true on the next tick fires again.
+- **Output**: the evaluation order; events by tick then evaluation order; the leaf log per
+  rule in evaluation order; and, on request, each rule's `met`/`firing` (or `skipped`)
+  after every tick. The backend's API drops `cleared`, which has no event kind there.
 
 ---
 
