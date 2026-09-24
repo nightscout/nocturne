@@ -5,6 +5,7 @@ using Nocturne.Alerts.ParityCorpus.Generator.Scenarios;
 
 // Corpus generator: runs every scenario through the live C# alert engine and writes
 // <name>.json (scenario) + <name>.expected.json (snapshot) into the corpus directory.
+// Replay scenarios run through the C# replay and land in its replay/ subdirectory.
 //
 // Usage:
 //   dotnet run --project tests/Parity/Nocturne.Alerts.ParityCorpus.Generator            # (re)generate
@@ -78,6 +79,47 @@ foreach (var scenario in scenarios.OrderBy(s => s.Name, StringComparer.Ordinal))
     }
 }
 
+var replayScenarios = ReplayScenarios.All().ToList();
+var duplicateReplay = replayScenarios.GroupBy(s => s.Name).FirstOrDefault(g => g.Count() > 1);
+if (duplicateReplay is not null)
+{
+    Console.Error.WriteLine($"Duplicate replay scenario name: {duplicateReplay.Key}");
+    return 1;
+}
+
+var replayDir = Path.Combine(corpusDir, CorpusLocator.ReplaySubdirectory);
+Directory.CreateDirectory(replayDir);
+foreach (var scenario in replayScenarios.OrderBy(s => s.Name, StringComparer.Ordinal))
+{
+    ReplayExpectedFile expected;
+    try
+    {
+        expected = await ReplayScenarioRunner.RunAsync(ReplayScenarioRunner.Managed(), scenario, CancellationToken.None);
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"FAIL replay/{scenario.Name}: {ex.Message}");
+        failures++;
+        continue;
+    }
+
+    var scenarioJson = (JsonSerializer.Serialize(scenario, CorpusJson.Options) + "\n").ReplaceLineEndings("\n");
+    var expectedJson = (JsonSerializer.Serialize(expected, CorpusJson.Options) + "\n").ReplaceLineEndings("\n");
+    var scenarioPath = Path.Combine(replayDir, $"{scenario.Name}.json");
+    var expectedPath = Path.Combine(replayDir, $"{scenario.Name}.expected.json");
+    if (check)
+    {
+        failures += Verify(scenarioPath, scenarioJson);
+        failures += Verify(expectedPath, expectedJson);
+    }
+    else
+    {
+        await File.WriteAllTextAsync(scenarioPath, scenarioJson, new UTF8Encoding(false));
+        await File.WriteAllTextAsync(expectedPath, expectedJson, new UTF8Encoding(false));
+        written += 2;
+    }
+}
+
 var manifestPath = EnumManifest.PathFor(corpusDir);
 var manifestJson = EnumManifest.Render();
 if (check)
@@ -104,11 +146,23 @@ if (check)
             failures++;
         }
     }
+
+    var expectedReplayNames = replayScenarios
+        .SelectMany(s => new[] { $"{s.Name}.json", $"{s.Name}.expected.json" })
+        .ToHashSet(StringComparer.Ordinal);
+    foreach (var file in Directory.EnumerateFiles(replayDir, "*.json"))
+    {
+        if (!expectedReplayNames.Contains(Path.GetFileName(file)))
+        {
+            Console.Error.WriteLine($"STALE replay/{Path.GetFileName(file)} (no matching replay scenario)");
+            failures++;
+        }
+    }
 }
 
 Console.WriteLine(check
-    ? $"Checked {scenarios.Count} scenarios against {corpusDir}: {(failures == 0 ? "up to date" : $"{failures} mismatches")}"
-    : $"Wrote {written} files for {scenarios.Count} scenarios to {corpusDir}");
+    ? $"Checked {scenarios.Count} scenarios and {replayScenarios.Count} replay scenarios against {corpusDir}: {(failures == 0 ? "up to date" : $"{failures} mismatches")}"
+    : $"Wrote {written} files for {scenarios.Count} scenarios and {replayScenarios.Count} replay scenarios to {corpusDir}");
 
 return failures == 0 ? 0 : 1;
 

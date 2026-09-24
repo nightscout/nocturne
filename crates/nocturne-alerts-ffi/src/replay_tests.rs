@@ -1,4 +1,8 @@
-//! The replay entry point through the C ABI and its envelope errors.
+//! The replay entry point through the C ABI: the replay corpus round-trip and
+//! the envelope errors.
+
+use std::fs;
+use std::path::PathBuf;
 
 use serde_json::{Value, json};
 
@@ -7,6 +11,13 @@ use crate::tests::{assert_error, call_json};
 
 fn replay(request: &Value) -> Value {
     call_json(nocturne_alerts_replay, &request.to_string())
+}
+
+fn replay_corpus_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/Parity/AlertEngineCorpus/replay")
+        .canonicalize()
+        .expect("replay corpus directory exists")
 }
 
 fn threshold_rule(id: &str) -> Value {
@@ -25,6 +36,55 @@ fn tick(at: &str, mgdl: i64) -> Value {
 }
 
 const RULE_1: &str = "00000000-0000-0000-0000-000000000001";
+
+#[test]
+fn replay_corpus_round_trips_through_the_c_abi() {
+    let mut paths: Vec<PathBuf> = fs::read_dir(replay_corpus_dir())
+        .expect("read replay corpus dir")
+        .map(|e| e.expect("dir entry").path())
+        .filter(|p| {
+            p.extension().is_some_and(|ext| ext == "json")
+                && !p.to_string_lossy().ends_with(".expected.json")
+        })
+        .collect();
+    paths.sort();
+    assert!(!paths.is_empty(), "no replay scenarios found");
+
+    for path in paths {
+        let scenario: Value =
+            serde_json::from_str(&fs::read_to_string(&path).expect("read scenario"))
+                .expect("parse scenario");
+        let expected_path = path.with_extension("expected.json");
+        let mut expected: Value =
+            serde_json::from_str(&fs::read_to_string(&expected_path).expect("read expected"))
+                .expect("parse expected");
+
+        let mut response = replay(&json!({
+            "schema_version": 1,
+            "rules": scenario["rules"],
+            "ticks": scenario["ticks"],
+            "include_ticks": true,
+        }));
+        assert_eq!(
+            response["ok"],
+            json!(true),
+            "{}: {}",
+            path.display(),
+            response["error"]
+        );
+
+        for (object, fields) in [
+            (&mut response, ["schema_version", "ok"]),
+            (&mut expected, ["schema_version", "scenario"]),
+        ] {
+            let map = object.as_object_mut().expect("object");
+            for field in fields {
+                map.remove(field);
+            }
+        }
+        assert_eq!(response, expected, "{}", path.display());
+    }
+}
 
 #[test]
 fn the_tick_log_is_absent_unless_asked_for() {
