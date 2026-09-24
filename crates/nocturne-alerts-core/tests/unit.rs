@@ -906,19 +906,6 @@ fn temp_basal_percent_in_range_still_compares() {
 }
 
 #[test]
-fn trend_out_of_range_bucket_ordinal_is_false() {
-    let ctx = SensorContext {
-        trend_bucket: Some(99),
-        ..Default::default()
-    };
-    assert!(!eval_payload(
-        ConditionKind::Trend,
-        &json!({"bucket": "flat"}),
-        &ctx
-    ));
-}
-
-#[test]
 fn tracker_confirmation_count_saturates_on_restored_state() {
     let mut tracker = ExcursionTracker::new();
     tracker.restore_state(

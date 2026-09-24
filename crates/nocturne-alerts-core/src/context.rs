@@ -1,10 +1,8 @@
-//! `SensorContext` as plain data: pure input to the evaluators, deserialisable
-//! from the corpus scenario context wire format (see `ScenarioModels.cs`).
-//! Enum-valued facts are stored as C# enum ordinals so payload comparisons are
-//! direct integer equality. A name the table does not know (a host newer than
-//! this crate) degrades only that fact: an unknown bucket reads as absent and
-//! an unknown pump mode or state-span category drops that entry, so every
-//! other leaf still evaluates.
+//! `SensorContext` as plain data: pure input to the evaluators, read from the
+//! context wire format (engine-semantics.md §4). An enum name this crate does
+//! not know (a host newer than it) degrades only that fact: an unknown bucket
+//! reads as absent and an unknown pump mode or state-span category drops that
+//! entry, so every other leaf still evaluates.
 
 use std::collections::HashMap;
 
@@ -14,10 +12,8 @@ use serde::Deserialize;
 use serde_json::{Map, Number, Value};
 use uuid::Uuid;
 
-use crate::model::{
-    GLUCOSE_BUCKET_NAMES, PUMP_MODE_NAMES, STATE_SPAN_CATEGORY_NAMES, TREND_BUCKET_NAMES,
-    decimal_from_number, enum_ordinal,
-};
+use crate::enums::{GlucoseBucket, PumpMode, StateSpanCategory, TrendBucket, WireEnum};
+use crate::model::decimal_from_number;
 
 #[derive(Debug, Clone)]
 pub struct ActiveAlertSnapshot {
@@ -42,8 +38,7 @@ pub struct StartedSpan {
 
 #[derive(Debug, Clone, Copy)]
 pub struct PumpStateSnapshot {
-    /// `PumpModeState` ordinal.
-    pub mode: i64,
+    pub mode: PumpMode,
     pub started_at: DateTime<Utc>,
 }
 
@@ -66,8 +61,7 @@ pub struct SensorContext {
     pub latest_timestamp: Option<DateTime<Utc>>,
     pub trend_rate: Option<Decimal>,
     pub last_reading_at: Option<DateTime<Utc>>,
-    /// `TrendBucket` ordinal (0 unknown … 5 falling_fast).
-    pub trend_bucket: Option<i64>,
+    pub trend_bucket: Option<TrendBucket>,
     pub iob_units: Option<Decimal>,
     pub cob_grams: Option<Decimal>,
     pub reservoir_units: Option<Decimal>,
@@ -91,15 +85,14 @@ pub struct SensorContext {
     pub has_ever_pump_snapshot: bool,
     pub has_ever_uploader_snapshot: bool,
     pub has_ever_aps_sensitivity: bool,
-    /// `GlucoseBucket` ordinal (0 very_low … 5 very_high).
-    pub glucose_bucket: Option<i64>,
+    pub glucose_bucket: Option<GlucoseBucket>,
     pub last_carb_at: Option<DateTime<Utc>>,
     pub last_bolus_at: Option<DateTime<Utc>>,
     pub tenant_time_zone_id: Option<String>,
     pub active_pump_state: Option<PumpStateSnapshot>,
-    /// Keyed by `(StateSpanCategory ordinal, state)`; a `None` state means
-    /// "any state of this category" (the enricher loads that exact key shape).
-    pub active_state_spans: HashMap<(i64, Option<String>), StateSpanSnapshot>,
+    /// Keyed by `(category, state)`; a `None` state means "any state of this
+    /// category".
+    pub active_state_spans: HashMap<(StateSpanCategory, Option<String>), StateSpanSnapshot>,
     /// Reference timestamp of the active tracker instance per tracker
     /// definition: start time for duration trackers, scheduled time for event
     /// trackers (resolved by the enricher). Absent key = no active instance.
@@ -328,7 +321,7 @@ impl SensorContext {
         let mut active_state_spans = HashMap::new();
         for s in w.active_state_spans.unwrap_or_default() {
             let started_at = check_timestamp(s.started_at, "active_state_spans.started_at")?;
-            if let Some(category) = enum_ordinal(&STATE_SPAN_CATEGORY_NAMES, &s.category) {
+            if let Some(category) = StateSpanCategory::from_name(&s.category) {
                 active_state_spans.insert((category, s.state), StateSpanSnapshot { started_at });
             }
         }
@@ -338,9 +331,7 @@ impl SensorContext {
             latest_timestamp: opt_ts(w.latest_timestamp, "latest_timestamp")?,
             trend_rate: opt_dec(w.trend_rate.as_ref(), "trend_rate")?,
             last_reading_at: opt_ts(w.last_reading_at, "last_reading_at")?,
-            trend_bucket: w
-                .trend_bucket
-                .and_then(|s| enum_ordinal(&TREND_BUCKET_NAMES, &s)),
+            trend_bucket: w.trend_bucket.and_then(|s| TrendBucket::from_name(&s)),
             iob_units: opt_dec(w.iob_units.as_ref(), "iob_units")?,
             cob_grams: opt_dec(w.cob_grams.as_ref(), "cob_grams")?,
             reservoir_units: opt_dec(w.reservoir_units.as_ref(), "reservoir_units")?,
@@ -390,9 +381,7 @@ impl SensorContext {
             has_ever_pump_snapshot: w.has_ever_pump_snapshot,
             has_ever_uploader_snapshot: w.has_ever_uploader_snapshot,
             has_ever_aps_sensitivity: w.has_ever_aps_sensitivity,
-            glucose_bucket: w
-                .glucose_bucket
-                .and_then(|s| enum_ordinal(&GLUCOSE_BUCKET_NAMES, &s)),
+            glucose_bucket: w.glucose_bucket.and_then(|s| GlucoseBucket::from_name(&s)),
             last_carb_at: opt_ts(w.last_carb_at, "last_carb_at")?,
             last_bolus_at: opt_ts(w.last_bolus_at, "last_bolus_at")?,
             tenant_time_zone_id: w.tenant_time_zone_id,
@@ -401,7 +390,7 @@ impl SensorContext {
                 .map(|p| {
                     let started_at = check_timestamp(p.started_at, "active_pump_state.started_at")?;
                     Ok::<_, String>(
-                        enum_ordinal(&PUMP_MODE_NAMES, &p.mode)
+                        PumpMode::from_name(&p.mode)
                             .map(|mode| PumpStateSnapshot { mode, started_at }),
                     )
                 })

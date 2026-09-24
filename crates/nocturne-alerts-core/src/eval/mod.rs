@@ -18,8 +18,9 @@ use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use crate::context::SensorContext;
-use crate::model::{ConditionKind, Node, Payload, default_payload};
-use crate::paths::child_path;
+use crate::enums::CompositeOp;
+use crate::model::{ConditionKind, Node, Payload};
+use crate::paths::node_child_path;
 use crate::sustained::{TimerStore, eval_sustained};
 
 /// Per-evaluation environment: the clock instant, the rule whose timers are
@@ -34,74 +35,59 @@ pub struct Env<'a> {
 /// Evaluates a condition node at `path`. `None` (a JSON-null child slot)
 /// evaluates false.
 pub fn eval_node(node: Option<&Node>, path: &str, env: &mut Env) -> bool {
-    match node.and_then(Node::dispatch) {
-        Some((kind, payload)) => eval_kind(kind, payload, path, env),
-        None => false,
+    node.and_then(Node::dispatch)
+        .is_some_and(|payload| eval_payload(&payload, path, env))
+}
+
+/// Evaluates a payload as the node at `path`.
+pub fn eval_payload(payload: &Payload, path: &str, env: &mut Env) -> bool {
+    match payload {
+        Payload::Threshold(p) => glucose::threshold(p, env),
+        Payload::RateOfChange(p) => glucose::rate_of_change(p, env),
+        Payload::SignalLoss(p) => signal::signal_loss(p, env),
+        Payload::Composite(p) => composite(p, path, env),
+        Payload::Not(p) => not(p, path, env),
+        Payload::Sustained(p) => eval_sustained(p, path, env),
+        Payload::Staleness(p) => glucose::staleness(p, env),
+        Payload::Predicted(p) => glucose::predicted(p, env),
+        Payload::Trend(p) => glucose::trend(p, env),
+        Payload::TimeOfDay(p) => clock::time_of_day(p, env),
+        Payload::Iob(p) => insulin::iob(p, env),
+        Payload::Cob(p) => insulin::cob(p, env),
+        Payload::Reservoir(p) => insulin::reservoir(p, env),
+        Payload::SiteAge(p) => device::site_age(p, env),
+        Payload::SensorAge(p) => device::sensor_age(p, env),
+        Payload::AlertState(p) => spans::alert_state(p, env),
+        Payload::LoopStale(p) => device::loop_stale(p, env),
+        Payload::LoopEnactionStale(p) => device::loop_enaction_stale(p, env),
+        Payload::PumpSuspended(p) => device::pump_suspended(p, env),
+        Payload::PumpBattery(p) => device::pump_battery(p, env),
+        Payload::TempBasal(p) => insulin::temp_basal(p, env),
+        Payload::UploaderBattery(p) => device::uploader_battery(p, env),
+        Payload::OverrideActive(p) => spans::override_active(p, env),
+        Payload::SensitivityRatio(p) => device::sensitivity_ratio(p, env),
+        Payload::DoNotDisturb(p) => spans::do_not_disturb(p, env),
+        Payload::GlucoseBucket(p) => glucose::glucose_bucket(p, env),
+        Payload::TimeSinceLastCarb(p) => clock::time_since(p, env.ctx.last_carb_at, env),
+        Payload::TimeSinceLastBolus(p) => clock::time_since(p, env.ctx.last_bolus_at, env),
+        Payload::DayOfWeek(p) => clock::day_of_week(p, env),
+        Payload::PumpState(p) => spans::pump_state(p, env),
+        Payload::StateSpanActive(p) => spans::state_span_active(p, env),
+        Payload::SleepSessionActive(p) => spans::sleep_session_active(p, env),
+        Payload::TrackerAge(p) => device::tracker_age(p, env),
     }
 }
 
-/// Evaluates `kind` with the given payload (or the `{}`-defaults when absent).
+/// Evaluates `kind` with the given payload, or its defaults when absent.
 pub fn eval_kind(
     kind: ConditionKind,
     payload: Option<&Payload>,
     path: &str,
     env: &mut Env,
 ) -> bool {
-    let default;
-    let payload = match payload {
-        Some(p) => p,
-        None => {
-            default = default_payload(kind);
-            &default
-        }
-    };
-    match (kind, payload) {
-        (ConditionKind::Threshold, Payload::Threshold(p)) => glucose::threshold(p, env),
-        (ConditionKind::RateOfChange, Payload::RateOfChange(p)) => glucose::rate_of_change(p, env),
-        (ConditionKind::SignalLoss, Payload::SignalLoss(p)) => signal::signal_loss(p, env),
-        (ConditionKind::Composite, Payload::Composite(p)) => composite(p, path, env),
-        (ConditionKind::Not, Payload::Not(p)) => not(p, path, env),
-        (ConditionKind::Sustained, Payload::Sustained(p)) => eval_sustained(p, path, env),
-        (ConditionKind::Staleness, Payload::Staleness(p)) => glucose::staleness(p, env),
-        (ConditionKind::Predicted, Payload::Predicted(p)) => glucose::predicted(p, env),
-        (ConditionKind::Trend, Payload::Trend(p)) => glucose::trend(p, env),
-        (ConditionKind::TimeOfDay, Payload::TimeOfDay(p)) => clock::time_of_day(p, env),
-        (ConditionKind::Iob, Payload::Compare(p)) => insulin::iob(p, env),
-        (ConditionKind::Cob, Payload::Compare(p)) => insulin::cob(p, env),
-        (ConditionKind::Reservoir, Payload::Compare(p)) => insulin::reservoir(p, env),
-        (ConditionKind::SiteAge, Payload::Compare(p)) => device::site_age(p, env),
-        (ConditionKind::SensorAge, Payload::Compare(p)) => device::sensor_age(p, env),
-        (ConditionKind::AlertState, Payload::AlertState(p)) => spans::alert_state(p, env),
-        (ConditionKind::LoopStale, Payload::MinutesCompare(p)) => device::loop_stale(p, env),
-        (ConditionKind::LoopEnactionStale, Payload::MinutesCompare(p)) => {
-            device::loop_enaction_stale(p, env)
-        }
-        (ConditionKind::PumpSuspended, Payload::ActiveFor(p)) => device::pump_suspended(p, env),
-        (ConditionKind::PumpBattery, Payload::Compare(p)) => device::pump_battery(p, env),
-        (ConditionKind::TempBasal, Payload::TempBasal(p)) => insulin::temp_basal(p, env),
-        (ConditionKind::UploaderBattery, Payload::Compare(p)) => device::uploader_battery(p, env),
-        (ConditionKind::OverrideActive, Payload::ActiveFor(p)) => spans::override_active(p, env),
-        (ConditionKind::SensitivityRatio, Payload::Compare(p)) => device::sensitivity_ratio(p, env),
-        (ConditionKind::DoNotDisturb, Payload::ActiveFor(p)) => spans::do_not_disturb(p, env),
-        (ConditionKind::GlucoseBucket, Payload::GlucoseBucket(p)) => {
-            glucose::glucose_bucket(p, env)
-        }
-        (ConditionKind::TimeSinceLastCarb, Payload::TimeSince(p)) => {
-            clock::time_since(p, env.ctx.last_carb_at, env)
-        }
-        (ConditionKind::TimeSinceLastBolus, Payload::TimeSince(p)) => {
-            clock::time_since(p, env.ctx.last_bolus_at, env)
-        }
-        (ConditionKind::DayOfWeek, Payload::DayOfWeek(p)) => clock::day_of_week(p, env),
-        (ConditionKind::PumpState, Payload::PumpState(p)) => spans::pump_state(p, env),
-        (ConditionKind::StateSpanActive, Payload::StateSpan(p)) => spans::state_span_active(p, env),
-        (ConditionKind::SleepSessionActive, Payload::SleepSession(p)) => {
-            spans::sleep_session_active(p, env)
-        }
-        (ConditionKind::TrackerAge, Payload::TrackerAge(p)) => device::tracker_age(p, env),
-        // A payload variant can only be stored under its own kind's key, so a
-        // mismatch is unreachable; fail closed regardless.
-        _ => false,
+    match payload {
+        Some(p) => eval_payload(p, path, env),
+        None => eval_payload(&Payload::default_for(kind), path, env),
     }
 }
 
@@ -117,11 +103,8 @@ fn composite(p: &crate::model::CompositePayload, path: &str, env: &mut Env) -> b
     if conditions.is_empty() {
         return false;
     }
-    let Some(operator) = p.operator.as_deref() else {
-        return false;
-    };
-    match operator.to_lowercase().as_str() {
-        "and" => {
+    match p.operator.value {
+        Some(CompositeOp::And) => {
             for (i, child) in conditions.iter().enumerate() {
                 if !eval_composite_child(child.as_ref(), i, path, env) {
                     return false;
@@ -129,7 +112,7 @@ fn composite(p: &crate::model::CompositePayload, path: &str, env: &mut Env) -> b
             }
             true
         }
-        "or" => {
+        Some(CompositeOp::Or) => {
             for (i, child) in conditions.iter().enumerate() {
                 if eval_composite_child(child.as_ref(), i, path, env) {
                     return true;
@@ -137,7 +120,7 @@ fn composite(p: &crate::model::CompositePayload, path: &str, env: &mut Env) -> b
             }
             false
         }
-        _ => false,
+        None => false,
     }
 }
 
@@ -145,8 +128,7 @@ fn eval_composite_child(child: Option<&Node>, index: usize, path: &str, env: &mu
     let Some(node) = child else {
         return false;
     };
-    let child_path = child_path(path, index, node.type_str.as_deref());
-    eval_node(Some(node), &child_path, env)
+    eval_node(Some(node), &node_child_path(path, index, Some(node)), env)
 }
 
 /// `NotEvaluator`: missing child → false (not true). Otherwise inverts the
@@ -155,6 +137,5 @@ fn not(p: &crate::model::NotPayload, path: &str, env: &mut Env) -> bool {
     let Some(child) = &p.child else {
         return false;
     };
-    let child_path = child_path(path, 0, child.type_str.as_deref());
-    !eval_node(Some(child), &child_path, env)
+    !eval_node(Some(child), &node_child_path(path, 0, Some(child)), env)
 }

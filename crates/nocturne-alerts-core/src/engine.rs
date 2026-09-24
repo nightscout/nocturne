@@ -9,7 +9,7 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::context::SensorContext;
-use crate::eval::{Env, eval_kind, eval_node};
+use crate::eval::{Env, eval_node, eval_payload};
 use crate::excursion::{
     CloseReason, ExcursionTracker, TrackerRuleConfig, TrackerStateKind, Transition, TransitionType,
 };
@@ -129,7 +129,7 @@ pub fn evaluate_rule(
             timers: &mut state.timers,
         };
         match &payload {
-            Some(p) => eval_kind(rule.condition_type, Some(p), wire, &mut env),
+            Some(p) => eval_payload(p, wire, &mut env),
             None => false,
         }
     };

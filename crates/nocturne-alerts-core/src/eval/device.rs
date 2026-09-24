@@ -1,57 +1,45 @@
-//! Device/loop leaves: site_age, sensor_age, loop_stale, loop_enaction_stale,
-//! pump_suspended, pump_battery, uploader_battery, sensitivity_ratio.
+//! Device/loop leaves: site_age, sensor_age, tracker_age, loop_stale,
+//! loop_enaction_stale, pump_suspended, pump_battery, uploader_battery,
+//! sensitivity_ratio.
 
 use rust_decimal::Decimal;
 
 use super::Env;
-use crate::compare::{compare, decimal_from_f64_cs, total_days, total_hours, total_minutes};
+use crate::compare::{decimal_from_f64_cs, total_days, total_hours, total_minutes};
+use crate::enums::holds;
 use crate::model::{ActiveForPayload, ComparePayload, MinutesComparePayload, TrackerAgePayload};
 
-/// Site age in **hours** (f64 then C# decimal cast); no site change → false.
+/// Site age in **hours**; no site change → false.
 pub(super) fn site_age(p: &ComparePayload, env: &Env) -> bool {
     let Some(changed_at) = env.ctx.last_site_change_at else {
         return false;
     };
-    let Some(age) = total_hours(env.now - changed_at).and_then(decimal_from_f64_cs) else {
-        return false;
-    };
-    compare(age, p.operator.as_deref(), p.value)
+    let age = total_hours(env.now - changed_at).and_then(decimal_from_f64_cs);
+    holds(p.operator.value, age, p.value)
 }
 
-/// Sensor age in **days** (f64 then C# decimal cast); no sensor start → false.
+/// Sensor age in **days**; no sensor start → false.
 pub(super) fn sensor_age(p: &ComparePayload, env: &Env) -> bool {
     let Some(started_at) = env.ctx.last_sensor_start_at else {
         return false;
     };
-    let Some(age) = total_days(env.now - started_at).and_then(decimal_from_f64_cs) else {
-        return false;
-    };
-    compare(age, p.operator.as_deref(), p.value)
+    let age = total_days(env.now - started_at).and_then(decimal_from_f64_cs);
+    holds(p.operator.value, age, p.value)
 }
 
-/// Minutes since the active tracker instance's reference timestamp for the
-/// payload's tracker definition (start for duration trackers, scheduled time
-/// for event trackers — resolved by the enricher). Elapsed is negative before
-/// a scheduled event. No active instance → false: a tracker that isn't
-/// running has no age, deliberately opposite to time_since_last_* cold-start
-/// infinity. **[normative]**
+/// Minutes since the active tracker instance's reference timestamp (negative
+/// before a scheduled event). No active instance → false: a tracker that is
+/// not running has no age, unlike time_since_last_*'s cold-start infinity.
 pub(super) fn tracker_age(p: &TrackerAgePayload, env: &Env) -> bool {
     let Some(reference_at) = env.ctx.active_trackers.get(&p.tracker_definition_id) else {
         return false;
     };
-    let Some(minutes_since) = total_minutes(env.now - *reference_at).and_then(decimal_from_f64_cs)
-    else {
-        return false;
-    };
-    compare(
-        minutes_since,
-        p.operator.as_deref(),
-        Decimal::from(p.minutes),
-    )
+    let minutes_since = total_minutes(env.now - *reference_at).and_then(decimal_from_f64_cs);
+    holds(p.operator.value, minutes_since, Decimal::from(p.minutes))
 }
 
-/// Guarded by `HasEverApsCycled`; a null cycle timestamp is false (no infinity
-/// convention here, unlike staleness).
+/// Guarded by `has_ever_aps_cycled`; a null cycle timestamp is false (no
+/// infinity convention here, unlike staleness).
 pub(super) fn loop_stale(p: &MinutesComparePayload, env: &Env) -> bool {
     if !env.ctx.has_ever_aps_cycled {
         return false;
@@ -59,19 +47,12 @@ pub(super) fn loop_stale(p: &MinutesComparePayload, env: &Env) -> bool {
     let Some(cycle_at) = env.ctx.last_aps_cycle_at else {
         return false;
     };
-    let Some(minutes_since) = total_minutes(env.now - cycle_at).and_then(decimal_from_f64_cs)
-    else {
-        return false;
-    };
-    compare(
-        minutes_since,
-        p.operator.as_deref(),
-        Decimal::from(p.minutes),
-    )
+    let minutes_since = total_minutes(env.now - cycle_at).and_then(decimal_from_f64_cs);
+    holds(p.operator.value, minutes_since, Decimal::from(p.minutes))
 }
 
-/// Same shape against the enacted timestamp. The cold-start guard is
-/// deliberately `HasEverApsCycled`, not an enaction-specific flag. **[normative]**
+/// Same shape against the enacted timestamp, deliberately guarded by
+/// `has_ever_aps_cycled`.
 pub(super) fn loop_enaction_stale(p: &MinutesComparePayload, env: &Env) -> bool {
     if !env.ctx.has_ever_aps_cycled {
         return false;
@@ -79,67 +60,36 @@ pub(super) fn loop_enaction_stale(p: &MinutesComparePayload, env: &Env) -> bool 
     let Some(enacted_at) = env.ctx.last_aps_enacted_at else {
         return false;
     };
-    let Some(minutes_since) = total_minutes(env.now - enacted_at).and_then(decimal_from_f64_cs)
-    else {
-        return false;
-    };
-    compare(
-        minutes_since,
-        p.operator.as_deref(),
-        Decimal::from(p.minutes),
-    )
+    let minutes_since = total_minutes(env.now - enacted_at).and_then(decimal_from_f64_cs);
+    holds(p.operator.value, minutes_since, Decimal::from(p.minutes))
 }
 
-/// Guarded by `HasEverPumpSnapshot`. `for_minutes` only applies on the
-/// `is_active: true` side (no anchor exists otherwise — treated as a no-op).
+/// Guarded by `has_ever_pump_snapshot`. `for_minutes` only applies on the
+/// `is_active: true` side.
 pub(super) fn pump_suspended(p: &ActiveForPayload, env: &Env) -> bool {
     if !env.ctx.has_ever_pump_snapshot {
         return false;
     }
-    let is_currently_suspended = env.ctx.active_pump_suspension.is_some();
-    if is_currently_suspended != p.is_active {
-        return false;
-    }
-    let Some(for_minutes) = p.for_minutes else {
-        return true;
+    let Some(suspension) = env.ctx.active_pump_suspension else {
+        return !p.is_active;
     };
     if !p.is_active {
-        return true;
+        return false;
     }
-    let started_at = env
-        .ctx
-        .active_pump_suspension
-        .expect("suspension present when is_active matched")
-        .started_at;
-    total_minutes(env.now - started_at).is_some_and(|m| m >= f64::from(for_minutes))
+    p.for_minutes.is_none_or(|for_minutes| {
+        total_minutes(env.now - suspension.started_at).is_some_and(|m| m >= f64::from(for_minutes))
+    })
 }
 
 pub(super) fn pump_battery(p: &ComparePayload, env: &Env) -> bool {
-    if !env.ctx.has_ever_pump_snapshot {
-        return false;
-    }
-    match env.ctx.pump_battery_percent {
-        Some(percent) => compare(percent, p.operator.as_deref(), p.value),
-        None => false,
-    }
+    env.ctx.has_ever_pump_snapshot && holds(p.operator.value, env.ctx.pump_battery_percent, p.value)
 }
 
 pub(super) fn uploader_battery(p: &ComparePayload, env: &Env) -> bool {
-    if !env.ctx.has_ever_uploader_snapshot {
-        return false;
-    }
-    match env.ctx.uploader_battery_percent {
-        Some(percent) => compare(percent, p.operator.as_deref(), p.value),
-        None => false,
-    }
+    env.ctx.has_ever_uploader_snapshot
+        && holds(p.operator.value, env.ctx.uploader_battery_percent, p.value)
 }
 
 pub(super) fn sensitivity_ratio(p: &ComparePayload, env: &Env) -> bool {
-    if !env.ctx.has_ever_aps_sensitivity {
-        return false;
-    }
-    match env.ctx.sensitivity_ratio {
-        Some(ratio) => compare(ratio, p.operator.as_deref(), p.value),
-        None => false,
-    }
+    env.ctx.has_ever_aps_sensitivity && holds(p.operator.value, env.ctx.sensitivity_ratio, p.value)
 }

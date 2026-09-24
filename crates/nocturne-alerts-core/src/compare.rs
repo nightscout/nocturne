@@ -8,19 +8,6 @@
 use chrono::TimeDelta;
 use rust_decimal::Decimal;
 
-/// `ComparisonOps.Compare`: exact-decimal comparison; any operator other than
-/// the five known strings (including a missing/null operator) yields false.
-pub fn compare(actual: Decimal, op: Option<&str>, threshold: Decimal) -> bool {
-    match op {
-        Some("<") => actual < threshold,
-        Some("<=") => actual <= threshold,
-        Some(">") => actual > threshold,
-        Some(">=") => actual >= threshold,
-        Some("==") => actual == threshold,
-        _ => false,
-    }
-}
-
 const TICKS_PER_MINUTE: f64 = 600_000_000.0;
 const TICKS_PER_HOUR: f64 = 36_000_000_000.0;
 const TICKS_PER_DAY: f64 = 864_000_000_000.0;

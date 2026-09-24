@@ -20,11 +20,9 @@ use nocturne_alerts_core::excursion::{
     CloseReason, TrackerState, TrackerStateKind, TransitionType,
 };
 use nocturne_alerts_core::model::{
-    ALERT_CMP_OP_NAMES, ConditionKind, DAY_OF_WEEK_NAMES, GLUCOSE_BUCKET_NAMES, Node,
-    PUMP_MODE_NAMES, Payload, STATE_SPAN_CATEGORY_NAMES, TEMP_BASAL_METRIC_NAMES, default_payload,
-    parse_payload, parse_payload_structure,
+    ConditionKind, Container, Node, parse_payload, parse_payload_structure,
 };
-use nocturne_alerts_core::paths::child_path;
+use nocturne_alerts_core::paths::node_child_path;
 use nocturne_alerts_core::sustained::{TimerOp, TimerOpKind, TimerStore};
 
 pub const SCHEMA_VERSION: i64 = 1;
@@ -481,7 +479,7 @@ pub fn leaf_paths(input_json: &str) -> Result<Value, String> {
     let root = root_override.unwrap_or_else(|| node.type_str.clone().unwrap_or_default());
 
     let mut paths = Vec::new();
-    let mut leaves: Vec<(i32, String)> = Vec::new();
+    let mut leaves = Vec::new();
     walk(Some(&node), root.clone(), &mut paths, &mut leaves);
 
     Ok(json!({
@@ -491,61 +489,24 @@ pub fn leaf_paths(input_json: &str) -> Result<Value, String> {
         "paths": paths,
         "leaves": leaves
             .iter()
+            .enumerate()
             .map(|(leaf_id, path)| json!({ "leaf_id": leaf_id, "path": path }))
             .collect::<Vec<_>>(),
     }))
 }
 
-/// Pre-order walk emitting every node slot's canonical path; leaf-id
-/// assignment mirrors `LeafIdentity.AssignLeafIds` / `collect_leaves`
-/// (containers with a missing payload or child ARE leaves; a JSON-null child
-/// slot of a composite is a leaf with an empty type segment).
-fn walk(
-    node: Option<&Node>,
-    path: String,
-    paths: &mut Vec<String>,
-    leaves: &mut Vec<(i32, String)>,
-) {
+/// Pre-order walk emitting every node slot's canonical path; leaves are
+/// assigned ids as `collect_leaves` does.
+fn walk(node: Option<&Node>, path: String, paths: &mut Vec<String>, leaves: &mut Vec<String>) {
     paths.push(path.clone());
-    let Some(node) = node else {
-        leaves.push((leaves.len() as i32, path));
-        return;
-    };
-    let lower = node.type_str.as_deref().map(str::to_lowercase);
-    match lower.as_deref() {
-        Some("composite") => {
-            if let Some(Payload::Composite(p)) = node.payload("composite")
-                && let Some(children) = &p.conditions
-            {
-                for (i, child) in children.iter().enumerate() {
-                    let cp =
-                        child_path(&path, i, child.as_ref().and_then(|c| c.type_str.as_deref()));
-                    walk(child.as_ref(), cp, paths, leaves);
-                }
-                return;
+    match node.and_then(Node::container) {
+        Some(container) => {
+            for (i, child) in container.children().enumerate() {
+                walk(child, node_child_path(&path, i, child), paths, leaves);
             }
         }
-        Some("not") => {
-            if let Some(Payload::Not(p)) = node.payload("not")
-                && let Some(child) = &p.child
-            {
-                let cp = child_path(&path, 0, child.type_str.as_deref());
-                walk(Some(child), cp, paths, leaves);
-                return;
-            }
-        }
-        Some("sustained") => {
-            if let Some(Payload::Sustained(p)) = node.payload("sustained")
-                && let Some(child) = &p.child
-            {
-                let cp = child_path(&path, 0, child.type_str.as_deref());
-                walk(Some(child), cp, paths, leaves);
-                return;
-            }
-        }
-        _ => {}
+        None => leaves.push(path),
     }
-    leaves.push((leaves.len() as i32, path));
 }
 
 // ---------------------------------------------------------------------------
@@ -613,217 +574,40 @@ pub fn describe(request_json: &str) -> Result<Value, String> {
     }))
 }
 
-/// Pre-order walk mirroring `collect_leaves` / `leaf_paths::walk`: composite,
-/// not and sustained with a valid payload + child(ren) are containers
-/// (unwrapped, no leaf id); everything else — including a container whose
-/// child/conditions list is missing — is a leaf and takes the next id. A
-/// JSON-null composite slot is a typeless leaf, exactly as the engine
-/// force-evaluates it to `false`.
-fn describe_node(node: Option<&Node>, path: String, next_leaf_id: &mut i32) -> Value {
-    let Some(node) = node else {
-        let id = *next_leaf_id;
-        *next_leaf_id += 1;
-        return leaf_value(id, path, Value::Null, Value::Null, Value::Null);
-    };
-    let lower = node.type_str.as_deref().map(str::to_lowercase);
-    match lower.as_deref() {
-        Some("composite") => {
-            if let Some(Payload::Composite(p)) = node.payload("composite")
-                && let Some(children) = &p.conditions
-            {
-                let conditions: Vec<Value> = children
-                    .iter()
-                    .enumerate()
-                    .map(|(i, c)| {
-                        let cp =
-                            child_path(&path, i, c.as_ref().and_then(|n| n.type_str.as_deref()));
-                        describe_node(c.as_ref(), cp, next_leaf_id)
-                    })
-                    .collect();
-                return json!({
-                    "type": "composite",
-                    "path": path,
-                    "operator": opt_str(&p.operator),
-                    "conditions": conditions,
-                });
-            }
-        }
-        Some("not") => {
-            if let Some(Payload::Not(p)) = node.payload("not")
-                && let Some(child) = &p.child
-            {
-                let cp = child_path(&path, 0, child.type_str.as_deref());
-                return json!({
-                    "type": "not",
-                    "path": path,
-                    "child": describe_node(Some(child), cp, next_leaf_id),
-                });
-            }
-        }
-        Some("sustained") => {
-            if let Some(Payload::Sustained(p)) = node.payload("sustained")
-                && let Some(child) = &p.child
-            {
-                let cp = child_path(&path, 0, child.type_str.as_deref());
-                return json!({
-                    "type": "sustained",
-                    "path": path,
-                    "minutes": p.minutes,
-                    "child": describe_node(Some(child), cp, next_leaf_id),
-                });
-            }
-        }
-        _ => {}
+/// Pre-order walk assigning leaf ids as `collect_leaves` does. A leaf
+/// describes the payload evaluation reads, so a kind reached through its
+/// member name or ordinal shows its defaults, not the operands it ignores.
+fn describe_node(node: Option<&Node>, path: String, next_leaf_id: &mut usize) -> Value {
+    if let Some(container) = node.and_then(Node::container) {
+        let mut children = container
+            .children()
+            .enumerate()
+            .map(|(i, child)| describe_node(child, node_child_path(&path, i, child), next_leaf_id));
+        return match container {
+            Container::Composite(p, _) => json!({
+                "type": "composite",
+                "path": path,
+                "operator": p.operator,
+                "conditions": children.collect::<Vec<_>>(),
+            }),
+            Container::Not(_) => json!({ "type": "not", "path": path, "child": children.next() }),
+            Container::Sustained(p, _) => json!({
+                "type": "sustained",
+                "path": path,
+                "minutes": p.minutes,
+                "child": children.next(),
+            }),
+        };
     }
 
-    // Leaf. Resolve the kind (wire name / enum name / ordinal); an unresolvable
-    // type is an unknown leaf (the engine force-evaluates it `false`) with no
-    // params. The payload lookup is gated exactly like `eval_node`
-    // (eval/mod.rs): the stored payload is read only when the type is spelled
-    // as the canonical wire name — a kind reached through the lenient enum-name
-    // or ordinal path evaluates with constructor defaults, so describe must
-    // surface the same defaults (not the authored operands the evaluator
-    // ignored), or the readout would disagree with the leaf's truth.
-    let id = *next_leaf_id;
+    let leaf_id = *next_leaf_id;
     *next_leaf_id += 1;
-    let type_value = match &node.type_str {
-        Some(s) => Value::String(s.clone()),
-        None => Value::Null,
-    };
-    match node.type_str.as_deref().and_then(ConditionKind::resolve) {
-        Some(k) => {
-            let stored = match lower.as_deref() {
-                Some(l) if l == k.wire() => node.payload(k.wire()),
-                _ => None,
-            };
-            let params = match stored {
-                Some(p) => payload_json(p),
-                None => payload_json(&default_payload(k)),
-            };
-            leaf_value(
-                id,
-                path,
-                type_value,
-                Value::String(k.wire().to_string()),
-                params,
-            )
-        }
-        None => leaf_value(id, path, type_value, Value::Null, Value::Null),
-    }
-}
-
-fn leaf_value(leaf_id: i32, path: String, type_value: Value, kind: Value, params: Value) -> Value {
-    json!({ "leaf_id": leaf_id, "path": path, "type": type_value, "kind": kind, "params": params })
-}
-
-fn opt_str(s: &Option<String>) -> Value {
-    match s {
-        Some(x) => Value::String(x.clone()),
-        None => Value::Null,
-    }
-}
-
-fn opt_i32(n: Option<i32>) -> Value {
-    match n {
-        Some(x) => Value::Number(x.into()),
-        None => Value::Null,
-    }
-}
-
-/// Exact JSON number for a decimal operand — serde_json's `arbitrary_precision`
-/// keeps the literal, so a threshold round-trips without float loss. Falls back
-/// to a string only if a reparse ever fails (it shouldn't for a canonical
-/// decimal).
-fn dec(d: impl std::fmt::Display) -> Value {
-    let s = d.to_string();
-    serde_json::from_str::<Value>(&s).unwrap_or(Value::String(s))
-}
-
-/// Decode an enum ordinal back to its wire name; an out-of-range ordinal (the
-/// engine accepts raw integers) is surfaced verbatim as a number.
-fn enum_name(names: &[&str], ord: i64) -> Value {
-    usize::try_from(ord)
-        .ok()
-        .and_then(|i| names.get(i))
-        .map(|n| Value::String((*n).to_string()))
-        .unwrap_or_else(|| Value::Number(ord.into()))
-}
-
-fn enum_names(names: &[&str], ords: &Option<Vec<i64>>) -> Value {
-    match ords {
-        None => Value::Null,
-        Some(v) => Value::Array(v.iter().map(|o| enum_name(names, *o)).collect()),
-    }
-}
-
-/// Serialises a leaf payload to its authored operands. Containers
-/// (composite/not/sustained) only reach here via the container-as-leaf anomaly
-/// (missing child/conditions); their structural fields are emitted for context.
-fn payload_json(p: &Payload) -> Value {
-    match p {
-        Payload::Threshold(t) => {
-            json!({ "direction": opt_str(&t.direction), "value": dec(t.value) })
-        }
-        Payload::RateOfChange(r) => {
-            json!({ "direction": opt_str(&r.direction), "rate": dec(r.rate) })
-        }
-        Payload::SignalLoss(s) => json!({ "timeout_minutes": s.timeout_minutes }),
-        Payload::Composite(c) => json!({ "operator": opt_str(&c.operator) }),
-        Payload::Not(_) => json!({}),
-        Payload::Sustained(s) => json!({ "minutes": s.minutes }),
-        Payload::Staleness(s) => json!({ "operator": opt_str(&s.operator), "value": s.value }),
-        Payload::Predicted(p) => json!({
-            "operator": opt_str(&p.operator),
-            "value": dec(p.value),
-            "within_minutes": p.within_minutes,
-        }),
-        Payload::Trend(t) => json!({ "bucket": opt_str(&t.bucket) }),
-        Payload::TimeOfDay(t) => json!({
-            "from": opt_str(&t.from),
-            "to": opt_str(&t.to),
-            "timezone": opt_str(&t.timezone),
-        }),
-        Payload::Compare(c) => json!({ "operator": opt_str(&c.operator), "value": dec(c.value) }),
-        Payload::AlertState(a) => json!({
-            "alert_id": a.alert_id.to_string(),
-            "state": opt_str(&a.state),
-            "for_minutes": opt_i32(a.for_minutes),
-        }),
-        Payload::MinutesCompare(m) => {
-            json!({ "operator": opt_str(&m.operator), "minutes": m.minutes })
-        }
-        Payload::ActiveFor(a) => {
-            json!({ "is_active": a.is_active, "for_minutes": opt_i32(a.for_minutes) })
-        }
-        Payload::TempBasal(t) => json!({
-            "metric": enum_name(&TEMP_BASAL_METRIC_NAMES, t.metric),
-            "operator": opt_str(&t.operator),
-            "value": dec(t.value),
-        }),
-        Payload::GlucoseBucket(g) => {
-            json!({ "buckets": enum_names(&GLUCOSE_BUCKET_NAMES, &g.buckets) })
-        }
-        Payload::TimeSince(t) => json!({
-            "operator": enum_name(&ALERT_CMP_OP_NAMES, t.operator),
-            "minutes": t.minutes,
-        }),
-        Payload::DayOfWeek(d) => json!({ "days": enum_names(&DAY_OF_WEEK_NAMES, &d.days) }),
-        Payload::PumpState(p) => json!({
-            "mode": enum_name(&PUMP_MODE_NAMES, p.mode),
-            "is_active": p.is_active,
-            "for_minutes": opt_i32(p.for_minutes),
-        }),
-        Payload::StateSpan(s) => json!({
-            "category": enum_name(&STATE_SPAN_CATEGORY_NAMES, s.category),
-            "state": opt_str(&s.state),
-            "is_active": s.is_active,
-            "for_minutes": opt_i32(s.for_minutes),
-        }),
-        Payload::SleepSession(s) => json!({ "is_active": s.is_active }),
-        Payload::TrackerAge(t) => json!({
-            "tracker_definition_id": t.tracker_definition_id.to_string(),
-            "operator": opt_str(&t.operator),
-            "minutes": t.minutes,
-        }),
-    }
+    let payload = node.and_then(Node::dispatch);
+    json!({
+        "leaf_id": leaf_id,
+        "path": path,
+        "type": node.and_then(|n| n.type_str.as_deref()),
+        "kind": payload.as_ref().map(|p| p.kind().wire()),
+        "params": payload,
+    })
 }

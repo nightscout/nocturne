@@ -10,7 +10,7 @@ use uuid::Uuid;
 use crate::compare::total_minutes;
 use crate::eval::{Env, eval_node};
 use crate::model::SustainedPayload;
-use crate::paths::child_path;
+use crate::paths::node_child_path;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TimerOpKind {
@@ -121,8 +121,7 @@ pub(crate) fn eval_sustained(p: &SustainedPayload, path: &str, env: &mut Env) ->
     }
 
     let now = env.now;
-    let child_path = child_path(path, 0, child.type_str.as_deref());
-    let child_result = eval_node(Some(child), &child_path, env);
+    let child_result = eval_node(Some(child), &node_child_path(path, 0, Some(child)), env);
 
     if !child_result {
         env.timers.clear(env.rule_id, path);

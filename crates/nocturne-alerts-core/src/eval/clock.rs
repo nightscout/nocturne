@@ -5,6 +5,7 @@ use chrono_tz::Tz;
 
 use super::Env;
 use crate::compare::total_minutes;
+use crate::enums::{DayOfWeek, EnumValue, WireEnum};
 use crate::model::{DayOfWeekPayload, TimeOfDayPayload, TimeSincePayload};
 
 /// `TimeOnly.TryParseExact(s, "HH:mm")`: exactly two digits each, 00-23 /
@@ -106,8 +107,8 @@ pub(super) fn day_of_week(p: &DayOfWeekPayload, env: &Env) -> bool {
         .filter(|id| !id.is_empty())
         .and_then(find_tz);
     let local = local_now(env.now, tz);
-    let today = i64::from(local.weekday().num_days_from_sunday());
-    days.contains(&today)
+    DayOfWeek::from_ordinal(i64::from(local.weekday().num_days_from_sunday()))
+        .is_some_and(|today| days.contains(&EnumValue::Known(today)))
 }
 
 /// `TimeSinceComparator.Apply`: elapsed minutes in f64; a missing anchor is
@@ -122,15 +123,9 @@ pub(super) fn time_since(p: &TimeSincePayload, anchor: Option<DateTime<Utc>>, en
         },
         None => f64::INFINITY,
     };
-    let threshold = f64::from(p.minutes);
-    match p.operator {
-        0 => elapsed > threshold,
-        1 => elapsed >= threshold,
-        2 => elapsed < threshold,
-        3 => elapsed <= threshold,
-        4 => elapsed == threshold,
-        _ => false,
-    }
+    p.operator
+        .known()
+        .is_some_and(|op| op.apply(elapsed, f64::from(p.minutes)))
 }
 
 #[cfg(test)]

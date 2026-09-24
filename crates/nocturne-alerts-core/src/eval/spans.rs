@@ -3,6 +3,7 @@
 
 use super::Env;
 use crate::compare::total_minutes;
+use crate::enums::{AlertStateKind, EnumValue, StateSpanCategory};
 use crate::model::{
     ActiveForPayload, AlertStatePayload, PumpStatePayload, SleepSessionPayload, StateSpanPayload,
 };
@@ -15,32 +16,20 @@ pub(super) fn alert_state(p: &AlertStatePayload, env: &Env) -> bool {
     let Some(snapshot) = env.ctx.active_alerts.get(&p.alert_id) else {
         return false;
     };
-    let Some(state) = p.state.as_deref() else {
-        return false;
-    };
-    let state_lower = state.to_lowercase();
-    let state_matches = match state_lower.as_str() {
-        "firing" => snapshot.state.eq_ignore_ascii_case("firing"),
-        "unacknowledged" => {
-            snapshot.state.eq_ignore_ascii_case("firing") && snapshot.acknowledged_at.is_none()
+    let firing = snapshot.state.eq_ignore_ascii_case("firing");
+    let anchor = match p.state.value {
+        Some(AlertStateKind::Firing) if firing => Some(snapshot.triggered_at),
+        Some(AlertStateKind::Unacknowledged) if firing && snapshot.acknowledged_at.is_none() => {
+            Some(snapshot.triggered_at)
         }
-        "acknowledged" => snapshot.acknowledged_at.is_some(),
-        _ => false,
+        Some(AlertStateKind::Acknowledged) => snapshot.acknowledged_at,
+        _ => None,
     };
-    if !state_matches {
-        return false;
-    }
-    let Some(for_minutes) = p.for_minutes else {
-        return true;
-    };
-    let anchor = if state_lower == "acknowledged" {
-        snapshot
-            .acknowledged_at
-            .expect("acknowledged match implies acknowledged_at")
-    } else {
-        snapshot.triggered_at
-    };
-    total_minutes(env.now - anchor).is_some_and(|m| m >= f64::from(for_minutes))
+    anchor.is_some_and(|anchor| {
+        p.for_minutes.is_none_or(|for_minutes| {
+            total_minutes(env.now - anchor).is_some_and(|m| m >= f64::from(for_minutes))
+        })
+    })
 }
 
 /// No `HasEver*` guard: absence of an override is the legitimate "no override"
@@ -87,7 +76,7 @@ pub(super) fn do_not_disturb(p: &ActiveForPayload, env: &Env) -> bool {
 /// `is_active: false` is true whenever the active mode differs from the
 /// configured mode — including when no mode-span is active at all.
 pub(super) fn pump_state(p: &PumpStatePayload, env: &Env) -> bool {
-    let active_mode = env.ctx.active_pump_state.map(|s| s.mode);
+    let active_mode = env.ctx.active_pump_state.map(|s| EnumValue::Known(s.mode));
 
     if !p.is_active {
         return active_mode != Some(p.mode);
@@ -96,7 +85,7 @@ pub(super) fn pump_state(p: &PumpStatePayload, env: &Env) -> bool {
     let Some(snapshot) = env.ctx.active_pump_state else {
         return false;
     };
-    if snapshot.mode != p.mode {
+    if EnumValue::Known(snapshot.mode) != p.mode {
         return false;
     }
     let Some(for_minutes) = p.for_minutes else {
@@ -105,16 +94,15 @@ pub(super) fn pump_state(p: &PumpStatePayload, env: &Env) -> bool {
     total_minutes(env.now - snapshot.started_at).is_some_and(|m| m >= f64::from(for_minutes))
 }
 
-/// Generic state-span leaf. The PumpMode category (ordinal 0) is always false
-/// (defence in depth). The lookup key is the exact `(category, state)` pair —
-/// a null state means "any state of this category" because the enricher loads
-/// that key shape.
+/// Generic state-span leaf. The PumpMode category is always false (pump
+/// modes are `pump_state`'s). The lookup key is the exact `(category, state)`
+/// pair; a null state means "any state of this category".
 pub(super) fn state_span_active(p: &StateSpanPayload, env: &Env) -> bool {
-    if p.category == 0 {
-        return false;
-    }
-    let key = (p.category, p.state.clone());
-    let snapshot = env.ctx.active_state_spans.get(&key);
+    let snapshot = match p.category {
+        EnumValue::Known(StateSpanCategory::PumpMode) => return false,
+        EnumValue::Known(category) => env.ctx.active_state_spans.get(&(category, p.state.clone())),
+        EnumValue::Undefined(_) => None,
+    };
 
     if !p.is_active {
         return snapshot.is_none();

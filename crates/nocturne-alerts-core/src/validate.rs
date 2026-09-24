@@ -9,14 +9,9 @@
 
 use serde_json::Value;
 
-use crate::model::{
-    ALERT_CMP_OP_NAMES, ConditionKind, Node, ParseError, Payload, Reason, default_payload,
-    parse_payload_structure,
-};
-use crate::paths::child_path;
-
-/// The operators `ComparisonOps.Compare` recognises (engine-semantics.md §3).
-const COMPARE_OPERATORS: [&str; 5] = ["<", "<=", ">", ">=", "=="];
+use crate::enums::{EnumValue, Spelled};
+use crate::model::{ConditionKind, Node, ParseError, Payload, Reason, parse_payload_structure};
+use crate::paths::node_child_path;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Tier {
@@ -26,20 +21,16 @@ enum Tier {
 
 /// The first problem, in pre-order, that makes evaluating the tree rooted at
 /// `node` (whose path is `root`) fail.
-pub fn first_evaluation_fault(node: &Node, root: &str) -> Option<ParseError> {
+pub(crate) fn first_evaluation_fault(node: &Node, root: &str) -> Option<ParseError> {
     let mut found = Vec::new();
     check_node(Some(node), root, Tier::Evaluation, &mut found);
     found.into_iter().next()
 }
 
-/// [`first_evaluation_fault`] for a rule body: `payload` evaluated as `kind`,
-/// rooted at the kind's wire name.
-pub fn first_evaluation_fault_in_payload(
-    kind: ConditionKind,
-    payload: &Payload,
-) -> Option<ParseError> {
+/// [`first_evaluation_fault`] for a rule body, rooted at its kind's wire name.
+pub(crate) fn first_evaluation_fault_in_payload(payload: &Payload) -> Option<ParseError> {
     let mut found = Vec::new();
-    check_payload(payload, kind.wire(), Tier::Evaluation, &mut found);
+    check_payload(payload, payload.kind().wire(), Tier::Evaluation, &mut found);
     found.into_iter().next()
 }
 
@@ -91,34 +82,27 @@ fn report(found: &mut Vec<ParseError>, tier: Tier, path: &str, reason: Reason) {
 /// `None` is a JSON-null composite slot.
 fn check_node(node: Option<&Node>, path: &str, tier: Tier, found: &mut Vec<ParseError>) {
     let Some(node) = node else {
-        report(found, tier, path, Reason::ConditionMissing);
-        return;
+        return report(found, tier, path, Reason::ConditionMissing);
     };
     let Some(type_str) = node.type_str.as_deref() else {
-        report(found, tier, path, Reason::TypeMissing);
-        return;
+        return report(found, tier, path, Reason::TypeMissing);
     };
-    let Some((kind, stored)) = node.dispatch() else {
-        report(found, tier, path, Reason::UnknownKind);
-        return;
+    let Some(payload) = node.dispatch() else {
+        return report(found, tier, path, Reason::UnknownKind);
     };
-    if type_str != kind.wire() {
+    if type_str != payload.kind().wire() {
         report(found, tier, path, Reason::NonCanonicalType);
     }
-    let default;
-    let payload = match stored {
-        Some(p) => p,
-        None => {
-            default = default_payload(kind);
-            &default
-        }
-    };
-    check_payload(payload, path, tier, found);
+    check_payload(&payload, path, tier, found);
 }
 
 fn check_child(child: &Node, parent: &str, index: usize, tier: Tier, found: &mut Vec<ParseError>) {
-    let path = child_path(parent, index, child.type_str.as_deref());
-    check_node(Some(child), &path, tier, found);
+    check_node(
+        Some(child),
+        &node_child_path(parent, index, Some(child)),
+        tier,
+        found,
+    );
 }
 
 fn check_payload(payload: &Payload, path: &str, tier: Tier, found: &mut Vec<ParseError>) {
@@ -130,17 +114,17 @@ fn check_payload(payload: &Payload, path: &str, tier: Tier, found: &mut Vec<Pars
             if conditions.is_empty() {
                 return report(found, tier, path, Reason::ConditionsEmpty);
             }
-            match p.operator.as_deref() {
-                None => report(found, tier, path, Reason::OperatorMissing),
-                Some(op) if !is_any_ci(op, &["and", "or"]) => {
-                    report(found, tier, path, Reason::UnknownOperator)
-                }
-                Some(_) => {}
+            if let Some(reason) = word_problem(
+                &p.operator,
+                Reason::OperatorMissing,
+                Reason::UnknownOperator,
+            ) {
+                report(found, tier, path, reason);
             }
             for (i, child) in conditions.iter().enumerate() {
                 match child {
                     Some(c) => check_child(c, path, i, tier, found),
-                    None => check_node(None, &child_path(path, i, None), tier, found),
+                    None => check_node(None, &node_child_path(path, i, None), tier, found),
                 }
             }
             None
@@ -164,54 +148,61 @@ fn check_payload(payload: &Payload, path: &str, tier: Tier, found: &mut Vec<Pars
                 }
             }
         }
-        Payload::Threshold(p) => direction_problem(p.direction.as_deref(), &["above", "below"]),
-        Payload::RateOfChange(p) => {
-            direction_problem(p.direction.as_deref(), &["rising", "falling"])
+        Payload::Threshold(p) => word_problem(
+            &p.direction,
+            Reason::DirectionMissing,
+            Reason::UnknownDirection,
+        ),
+        Payload::RateOfChange(p) => word_problem(
+            &p.direction,
+            Reason::DirectionMissing,
+            Reason::UnknownDirection,
+        ),
+        Payload::AlertState(p) => {
+            word_problem(&p.state, Reason::StateMissing, Reason::UnknownState)
         }
-        Payload::AlertState(p) => match p.state.as_deref() {
-            None => Some(Reason::StateMissing),
-            Some(s) if !is_any_ci(s, &["firing", "unacknowledged", "acknowledged"]) => {
-                Some(Reason::UnknownState)
-            }
-            Some(_) => None,
-        },
-        Payload::Compare(p) => operator_problem(p.operator.as_deref()),
-        Payload::MinutesCompare(p) => operator_problem(p.operator.as_deref()),
-        Payload::Staleness(p) => operator_problem(p.operator.as_deref()),
-        Payload::Predicted(p) => operator_problem(p.operator.as_deref()),
-        Payload::TempBasal(p) => operator_problem(p.operator.as_deref()),
-        Payload::TrackerAge(p) => operator_problem(p.operator.as_deref()),
-        Payload::TimeSince(p) => (!(0..ALERT_CMP_OP_NAMES.len() as i64).contains(&p.operator))
-            .then_some(Reason::UnknownOperator),
+        Payload::Iob(p)
+        | Payload::Cob(p)
+        | Payload::Reservoir(p)
+        | Payload::SiteAge(p)
+        | Payload::SensorAge(p)
+        | Payload::PumpBattery(p)
+        | Payload::UploaderBattery(p)
+        | Payload::SensitivityRatio(p) => operator_problem(&p.operator),
+        Payload::LoopStale(p) | Payload::LoopEnactionStale(p) => operator_problem(&p.operator),
+        Payload::Staleness(p) => operator_problem(&p.operator),
+        Payload::Predicted(p) => operator_problem(&p.operator),
+        Payload::TempBasal(p) => operator_problem(&p.operator),
+        Payload::TrackerAge(p) => operator_problem(&p.operator),
+        Payload::TimeSinceLastCarb(p) | Payload::TimeSinceLastBolus(p) => {
+            matches!(p.operator, EnumValue::Undefined(_)).then_some(Reason::UnknownOperator)
+        }
         Payload::SignalLoss(_)
         | Payload::Trend(_)
         | Payload::TimeOfDay(_)
-        | Payload::ActiveFor(_)
+        | Payload::PumpSuspended(_)
+        | Payload::OverrideActive(_)
+        | Payload::DoNotDisturb(_)
         | Payload::GlucoseBucket(_)
         | Payload::DayOfWeek(_)
         | Payload::PumpState(_)
-        | Payload::StateSpan(_)
-        | Payload::SleepSession(_) => None,
+        | Payload::StateSpanActive(_)
+        | Payload::SleepSessionActive(_) => None,
     };
     if let Some(reason) = problem {
         report(found, tier, path, reason);
     }
 }
 
-/// The evaluators lowercase `direction` before matching it.
-fn direction_problem(direction: Option<&str>, known: &[&str]) -> Option<Reason> {
-    match direction {
-        None => Some(Reason::DirectionMissing),
-        Some(d) if !is_any_ci(d, known) => Some(Reason::UnknownDirection),
-        Some(_) => None,
+fn word_problem<T>(word: &Spelled<T>, missing: Reason, unknown: Reason) -> Option<Reason> {
+    match (&word.text, &word.value) {
+        (None, _) => Some(missing),
+        (Some(_), None) => Some(unknown),
+        (Some(_), Some(_)) => None,
     }
 }
 
-/// Comparison operators match exactly; a missing one compares false.
-fn operator_problem(operator: Option<&str>) -> Option<Reason> {
-    (!operator.is_some_and(|op| COMPARE_OPERATORS.contains(&op))).then_some(Reason::UnknownOperator)
-}
-
-fn is_any_ci(s: &str, known: &[&str]) -> bool {
-    known.contains(&s.to_lowercase().as_str())
+/// A missing comparison operator compares false, like an unknown one.
+fn operator_problem<T>(operator: &Spelled<T>) -> Option<Reason> {
+    operator.value.is_none().then_some(Reason::UnknownOperator)
 }

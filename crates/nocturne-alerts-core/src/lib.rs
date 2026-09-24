@@ -13,6 +13,7 @@ pub mod classify;
 pub mod compare;
 pub mod context;
 pub mod engine;
+pub mod enums;
 pub mod eval;
 pub mod excursion;
 pub mod leaf_identity;
