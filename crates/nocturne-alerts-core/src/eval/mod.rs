@@ -5,7 +5,7 @@
 //! kind, operator or direction, or a container with no child, is `false`,
 //! which `not` inverts.
 
-mod clock;
+pub(crate) mod clock;
 mod device;
 mod glucose;
 mod insulin;

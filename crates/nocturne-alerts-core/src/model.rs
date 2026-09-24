@@ -62,6 +62,22 @@ pub enum Reason {
     ChildMissing,
     /// A `sustained` whose `minutes` is zero or negative.
     MinutesNotPositive,
+    /// A property no condition node or payload of its kind has.
+    UnknownField,
+    /// A required operand is absent, so it would read as its default.
+    FieldMissing(&'static str),
+    /// An enum operand given as an ordinal no member has, or a word naming
+    /// no member.
+    UnknownValue(&'static str),
+    /// A `time_of_day` bound that is not `HH:mm`.
+    InvalidTime(&'static str),
+    /// A `time_of_day` whose `from` equals its `to`.
+    EmptyWindow,
+    /// A `glucose_bucket` or `day_of_week` list that is absent or empty.
+    ListEmpty(&'static str),
+    /// A `state_span_active` on the pump-mode category, which only
+    /// `pump_state` reads.
+    PumpModeCategory,
 }
 
 impl Reason {
@@ -86,6 +102,13 @@ impl Reason {
             Reason::ConditionsEmpty => "conditions_empty",
             Reason::ChildMissing => "child_missing",
             Reason::MinutesNotPositive => "minutes_not_positive",
+            Reason::UnknownField => "unknown_field",
+            Reason::FieldMissing(_) => "field_missing",
+            Reason::UnknownValue(_) => "unknown_value",
+            Reason::InvalidTime(_) => "invalid_time",
+            Reason::EmptyWindow => "empty_window",
+            Reason::ListEmpty(_) => "list_empty",
+            Reason::PumpModeCategory => "pump_mode_category",
         }
     }
 
@@ -93,7 +116,12 @@ impl Reason {
     #[must_use]
     pub fn field(self) -> Option<&'static str> {
         match self {
-            Reason::InvalidField(f) => Some(f),
+            Reason::InvalidField(f)
+            | Reason::FieldMissing(f)
+            | Reason::UnknownValue(f)
+            | Reason::InvalidTime(f)
+            | Reason::ListEmpty(f) => Some(f),
+            Reason::PumpModeCategory => Some("category"),
             Reason::TypeMissing | Reason::UnknownKind | Reason::NonCanonicalType => Some("type"),
             Reason::ConditionsMissing | Reason::ConditionsEmpty => Some("conditions"),
             Reason::OperatorMissing | Reason::UnknownOperator => Some("operator"),
@@ -104,7 +132,9 @@ impl Reason {
             Reason::NotAnObject
             | Reason::TooDeep
             | Reason::ConditionMissing
-            | Reason::PayloadMissing => None,
+            | Reason::PayloadMissing
+            | Reason::UnknownField
+            | Reason::EmptyWindow => None,
         }
     }
 
@@ -218,6 +248,14 @@ macro_rules! condition_kinds {
             pub fn default_for(kind: ConditionKind) -> Self {
                 match kind {
                     $(ConditionKind::$kind => Self::$kind($payload::default())),+
+                }
+            }
+
+            /// The payload property names this kind reads.
+            #[must_use]
+            pub fn fields(&self) -> &'static [&'static str] {
+                match self {
+                    $(Self::$kind(_) => $payload::FIELDS),+
                 }
             }
 
@@ -622,6 +660,8 @@ macro_rules! payload {
         }
 
         impl $name {
+            const FIELDS: &'static [&'static str] = &[$(stringify!($field)),*];
+
             fn read(r: &Reader<'_>) -> ParseResult<Self> {
                 Ok(Self { $($field: Field::read(r, stringify!($field))?),* })
             }

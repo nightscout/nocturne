@@ -9,7 +9,7 @@ use crate::enums::{DayOfWeek, EnumValue, WireEnum};
 use crate::model::{DayOfWeekPayload, TimeOfDayPayload, TimeSincePayload};
 
 /// `HH:mm` exactly: two digits each, 00-23 and 00-59.
-fn parse_hh_mm(s: &str) -> Option<NaiveTime> {
+pub(crate) fn parse_hh_mm(s: &str) -> Option<NaiveTime> {
     let two_digits = |t: &str| {
         (t.len() == 2 && t.bytes().all(|b| b.is_ascii_digit()))
             .then(|| t.parse().ok())

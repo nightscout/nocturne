@@ -288,6 +288,7 @@ fn saving_reports_every_problem_in_the_tree() {
             issue("composite[9].sustained", Reason::MinutesNotPositive),
             issue("composite[9].sustained", Reason::ChildMissing),
             issue("composite[10].", Reason::ConditionMissing),
+            issue("composite[11].rate_of_change", Reason::FieldMissing("rate")),
             issue("composite[11].rate_of_change", Reason::DirectionMissing),
         ]
     );
@@ -309,7 +310,10 @@ fn saving_rejects_a_root_that_is_not_the_wire_name_or_has_no_payload() {
     );
     assert_eq!(
         validate_rule("threshold", &json!({})),
-        vec![issue("threshold", Reason::DirectionMissing)]
+        vec![
+            issue("threshold", Reason::FieldMissing("value")),
+            issue("threshold", Reason::DirectionMissing)
+        ]
     );
 }
 
@@ -338,7 +342,10 @@ fn validating_a_node_roots_paths_at_the_scope() {
     );
     assert_eq!(
         validate_node(&tree, "auto_resolve"),
-        vec![issue("auto_resolve[1].cob", Reason::UnknownOperator)]
+        vec![
+            issue("auto_resolve[1].cob", Reason::FieldMissing("value")),
+            issue("auto_resolve[1].cob", Reason::UnknownOperator)
+        ]
     );
     assert_eq!(
         validate_node(&json!([]), "snooze"),
@@ -359,4 +366,378 @@ fn reasons_never_carry_payload_values() {
         rendered,
         vec!["unknown_direction at 'composite[0].threshold' (field 'direction')"]
     );
+}
+
+fn leaf(kind: &str, payload: Value) -> Value {
+    json!({ "type": kind, kind: payload })
+}
+
+fn issues_of(kind: &str, payload: Value) -> Vec<ParseError> {
+    validate_rule(
+        "composite",
+        &json!({ "operator": "and", "conditions": [leaf(kind, payload)] }),
+    )
+}
+
+fn at_leaf(kind: &str, reasons: &[Reason]) -> Vec<ParseError> {
+    reasons
+        .iter()
+        .map(|&r| issue(&format!("composite[0].{kind}"), r))
+        .collect()
+}
+
+#[test]
+fn saving_rejects_properties_no_node_or_payload_has() {
+    assert_eq!(
+        validate_rule("signal_loss", &json!({ "timeoutMinutes": 20 })),
+        vec![
+            issue("signal_loss", Reason::UnknownField),
+            issue("signal_loss", Reason::FieldMissing("timeout_minutes")),
+        ]
+    );
+    assert_eq!(
+        issues_of(
+            "threshold",
+            json!({ "direction": "below", "threshold": 70 })
+        ),
+        at_leaf(
+            "threshold",
+            &[Reason::UnknownField, Reason::FieldMissing("value")]
+        )
+    );
+    assert_eq!(
+        issues_of(
+            "pump_suspended",
+            json!({ "is_active": true, "forMinutes": 10 })
+        ),
+        at_leaf("pump_suspended", &[Reason::UnknownField])
+    );
+    let stray = json!({ "operator": "and", "conditions": [
+        { "type": "threshold", "threshold": { "direction": "below", "value": 70 }, "note": "x" }
+    ]});
+    assert_eq!(
+        validate_rule("composite", &stray),
+        vec![issue("composite[0].threshold", Reason::UnknownField)]
+    );
+}
+
+#[test]
+fn saving_accepts_property_names_in_any_case_and_other_kinds_payloads() {
+    let params = json!({ "operator": "and", "conditions": [
+        { "Type": "threshold", "THRESHOLD": { "Direction": "below", "VALUE": 70 },
+          "iob": { "operator": ">", "value": 1 } }
+    ]});
+    assert_eq!(validate_rule("composite", &params), vec![]);
+}
+
+#[test]
+fn saving_rejects_missing_operands_that_would_read_as_defaults() {
+    let cases: Vec<(&str, Value, Reason)> = vec![
+        (
+            "rate_of_change",
+            json!({ "direction": "falling" }),
+            Reason::FieldMissing("rate"),
+        ),
+        (
+            "staleness",
+            json!({ "operator": ">=" }),
+            Reason::FieldMissing("value"),
+        ),
+        (
+            "predicted",
+            json!({ "operator": "<", "value": 70 }),
+            Reason::FieldMissing("within_minutes"),
+        ),
+        (
+            "iob",
+            json!({ "operator": ">" }),
+            Reason::FieldMissing("value"),
+        ),
+        (
+            "alert_state",
+            json!({ "state": "firing" }),
+            Reason::FieldMissing("alert_id"),
+        ),
+        (
+            "loop_stale",
+            json!({ "operator": ">" }),
+            Reason::FieldMissing("minutes"),
+        ),
+        (
+            "override_active",
+            json!({}),
+            Reason::FieldMissing("is_active"),
+        ),
+        (
+            "sleep_session_active",
+            json!({}),
+            Reason::FieldMissing("is_active"),
+        ),
+        (
+            "temp_basal",
+            json!({ "operator": ">", "value": 1 }),
+            Reason::FieldMissing("metric"),
+        ),
+        (
+            "time_since_last_carb",
+            json!({ "minutes": 30 }),
+            Reason::FieldMissing("operator"),
+        ),
+        (
+            "pump_state",
+            json!({ "is_active": false }),
+            Reason::FieldMissing("mode"),
+        ),
+        (
+            "state_span_active",
+            json!({ "category": "Override" }),
+            Reason::FieldMissing("is_active"),
+        ),
+        (
+            "tracker_age",
+            json!({ "operator": ">=", "minutes": 30 }),
+            Reason::FieldMissing("tracker_definition_id"),
+        ),
+        ("trend", json!({}), Reason::FieldMissing("bucket")),
+    ];
+    for (kind, payload, reason) in cases {
+        assert_eq!(issues_of(kind, payload), at_leaf(kind, &[reason]), "{kind}");
+    }
+}
+
+#[test]
+fn saving_rejects_enum_values_no_member_has() {
+    let cases: Vec<(&str, Value, Reason)> = vec![
+        (
+            "trend",
+            json!({ "bucket": "sideways" }),
+            Reason::UnknownValue("bucket"),
+        ),
+        (
+            "temp_basal",
+            json!({ "metric": 7, "operator": ">", "value": 1 }),
+            Reason::UnknownValue("metric"),
+        ),
+        (
+            "glucose_bucket",
+            json!({ "buckets": ["low", 42] }),
+            Reason::UnknownValue("buckets"),
+        ),
+        (
+            "day_of_week",
+            json!({ "days": [9] }),
+            Reason::UnknownValue("days"),
+        ),
+        (
+            "pump_state",
+            json!({ "mode": 42, "is_active": false }),
+            Reason::UnknownValue("mode"),
+        ),
+        (
+            "state_span_active",
+            json!({ "category": 99, "is_active": true }),
+            Reason::UnknownValue("category"),
+        ),
+    ];
+    for (kind, payload, reason) in cases {
+        assert_eq!(issues_of(kind, payload), at_leaf(kind, &[reason]), "{kind}");
+    }
+}
+
+#[test]
+fn saving_rejects_empty_lists() {
+    for (kind, field, payload) in [
+        ("glucose_bucket", "buckets", json!({ "buckets": [] })),
+        ("glucose_bucket", "buckets", json!({})),
+        ("day_of_week", "days", json!({ "days": [] })),
+        ("day_of_week", "days", json!({ "days": null })),
+    ] {
+        assert_eq!(
+            issues_of(kind, payload),
+            at_leaf(kind, &[Reason::ListEmpty(field)]),
+            "{kind}"
+        );
+    }
+}
+
+#[test]
+fn saving_rejects_time_windows_that_never_open() {
+    assert_eq!(
+        issues_of("time_of_day", json!({ "from": "9:00", "to": "17:00" })),
+        at_leaf("time_of_day", &[Reason::InvalidTime("from")])
+    );
+    assert_eq!(
+        issues_of("time_of_day", json!({ "from": "09:00", "to": "24:00" })),
+        at_leaf("time_of_day", &[Reason::InvalidTime("to")])
+    );
+    assert_eq!(
+        issues_of("time_of_day", json!({ "from": "22:00" })),
+        at_leaf("time_of_day", &[Reason::FieldMissing("to")])
+    );
+    assert_eq!(
+        issues_of("time_of_day", json!({ "from": "08:00", "to": "08:00" })),
+        at_leaf("time_of_day", &[Reason::EmptyWindow])
+    );
+    assert_eq!(
+        issues_of(
+            "time_of_day",
+            json!({ "from": "22:00", "to": "06:00", "timezone": null })
+        ),
+        vec![]
+    );
+}
+
+#[test]
+fn saving_rejects_a_generic_state_span_on_the_pump_mode_category() {
+    let pump_mode = json!({ "category": "PumpMode", "is_active": true });
+    assert_eq!(
+        validate_rule("state_span_active", &pump_mode),
+        vec![issue("state_span_active", Reason::PumpModeCategory)]
+    );
+    let nested = json!({ "minutes": 10, "child": { "type": "not", "not": { "child":
+        leaf("state_span_active", json!({ "category": 0, "is_active": false })) } } });
+    assert_eq!(
+        validate_rule("sustained", &nested),
+        vec![issue(
+            "sustained[0].not[0].state_span_active",
+            Reason::PumpModeCategory
+        )]
+    );
+    assert_eq!(Reason::PumpModeCategory.field(), Some("category"));
+}
+
+#[test]
+fn save_only_reasons_do_not_fail_evaluation() {
+    let tree = composite(
+        "or",
+        json!([
+            leaf("signal_loss", json!({ "timeoutMinutes": 20 })),
+            leaf("time_of_day", json!({ "from": "9:00", "to": "9:00" })),
+            leaf("day_of_week", json!({ "days": [] })),
+            leaf("state_span_active", json!({ "category": "PumpMode" })),
+            leaf("trend", json!({ "bucket": "sideways" })),
+        ]),
+    );
+    assert!(Node::parse(&tree).is_ok());
+    for reason in [
+        Reason::UnknownField,
+        Reason::FieldMissing("value"),
+        Reason::UnknownValue("mode"),
+        Reason::InvalidTime("from"),
+        Reason::EmptyWindow,
+        Reason::ListEmpty("days"),
+        Reason::PumpModeCategory,
+    ] {
+        assert!(!reason.fails_evaluation(), "{reason:?}");
+    }
+}
+
+/// The shapes the producers of stored trees write: the rule editor's
+/// defaults (`makeDefault` in the web app's `alerts/types.ts`), the demo and
+/// tracker-sync seeds, and the alerts-redesign and sleep-conversion
+/// migrations. None may be rejected on save.
+#[test]
+fn every_producer_shape_saves() {
+    let tracker = "00000000-0000-0000-0000-0000000000bb";
+    let alert = "00000000-0000-0000-0000-0000000000aa";
+    let editor = vec![
+        leaf("threshold", json!({ "direction": "below", "value": 70 })),
+        leaf(
+            "rate_of_change",
+            json!({ "direction": "falling", "rate": 3 }),
+        ),
+        leaf("staleness", json!({ "operator": ">=", "value": 15 })),
+        leaf(
+            "predicted",
+            json!({ "operator": "<=", "value": 70, "within_minutes": 30 }),
+        ),
+        leaf("trend", json!({ "bucket": "falling" })),
+        leaf(
+            "time_of_day",
+            json!({ "from": "22:00", "to": "06:00", "timezone": "Australia/Sydney" }),
+        ),
+        leaf("iob", json!({ "operator": ">=", "value": 1 })),
+        leaf("cob", json!({ "operator": ">=", "value": 10 })),
+        leaf("reservoir", json!({ "operator": "<=", "value": 10 })),
+        leaf("site_age", json!({ "operator": ">=", "value": 72 })),
+        leaf("sensor_age", json!({ "operator": ">=", "value": 10 })),
+        leaf(
+            "alert_state",
+            json!({ "alert_id": alert, "state": "firing" }),
+        ),
+        leaf(
+            "alert_state",
+            json!({ "alert_id": alert, "state": "acknowledged", "for_minutes": null }),
+        ),
+        leaf("loop_stale", json!({ "operator": ">", "minutes": 15 })),
+        leaf(
+            "loop_enaction_stale",
+            json!({ "operator": ">", "minutes": 15 }),
+        ),
+        leaf("pump_suspended", json!({ "is_active": true })),
+        leaf("pump_battery", json!({ "operator": "<=", "value": 20 })),
+        leaf(
+            "temp_basal",
+            json!({ "metric": "rate", "operator": ">=", "value": 1 }),
+        ),
+        leaf("uploader_battery", json!({ "operator": "<=", "value": 20 })),
+        leaf("override_active", json!({ "is_active": true })),
+        leaf(
+            "sensitivity_ratio",
+            json!({ "operator": "<", "value": 0.8 }),
+        ),
+        leaf("do_not_disturb", json!({ "is_active": false })),
+        leaf("signal_loss", json!({ "timeout_minutes": 30 })),
+        leaf("glucose_bucket", json!({ "buckets": ["low"] })),
+        leaf(
+            "time_since_last_carb",
+            json!({ "operator": ">=", "minutes": 30 }),
+        ),
+        leaf(
+            "time_since_last_bolus",
+            json!({ "operator": ">=", "minutes": 60 }),
+        ),
+        leaf("day_of_week", json!({ "days": ["monday"] })),
+        leaf(
+            "pump_state",
+            json!({ "mode": "Suspended", "is_active": true }),
+        ),
+        leaf(
+            "state_span_active",
+            json!({ "category": "Override", "is_active": true }),
+        ),
+        leaf("sleep_session_active", json!({ "is_active": true })),
+        leaf(
+            "tracker_age",
+            json!({ "tracker_definition_id": tracker, "operator": ">=", "minutes": 0 }),
+        ),
+        leaf("sustained", json!({ "minutes": 15, "child": low() })),
+        leaf("not", json!({ "child": low() })),
+    ];
+    let body = json!({ "operator": "and", "conditions": editor });
+    assert_eq!(validate_rule("composite", &body), vec![]);
+
+    // Rules the editor saved before it stripped `_uid` from a group's children.
+    let with_uids = json!({ "operator": "or", "conditions": [
+        { "type": "threshold", "_uid": "4b1c", "threshold": { "direction": "below", "value": 70 } },
+        { "type": "not", "_uid": "4b1d", "not": { "child":
+            { "type": "trend", "_uid": "4b1e", "trend": { "bucket": "flat" } } } }
+    ]});
+    assert_eq!(validate_rule("composite", &with_uids), vec![]);
+    assert_eq!(validate_node(&leaf("composite", body), "snooze"), vec![]);
+
+    let staleness = leaf("staleness", json!({ "operator": ">", "value": 15 }));
+    for (kind, payload) in [
+        ("threshold", json!({ "direction": "below", "value": 55 })),
+        ("signal_loss", json!({ "timeout_minutes": 30 })),
+        (
+            "tracker_age",
+            json!({ "tracker_definition_id": tracker, "operator": ">=", "minutes": 90 }),
+        ),
+        ("reservoir", json!({ "operator": "<", "value": 20 })),
+        ("sleep_session_active", json!({ "is_active": true })),
+        ("sustained", json!({ "minutes": 10, "child": staleness })),
+    ] {
+        assert_eq!(validate_rule(kind, &payload), vec![], "{kind}");
+    }
 }

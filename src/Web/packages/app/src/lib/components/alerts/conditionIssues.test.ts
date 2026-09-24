@@ -26,6 +26,26 @@ describe("conditionIssuesMessage", () => {
 		);
 	});
 
+	it("has a sentence for every save-only reason the engine reports", () => {
+		for (const code of [
+			"unknown_field",
+			"field_missing:value",
+			"unknown_value:mode",
+			"invalid_time:from",
+			"empty_window",
+			"list_empty:days",
+			"pump_mode_category:category",
+		]) {
+			expect(conditionIssuesMessage(rejected(400, code)), code).not.toBeNull();
+		}
+		expect(conditionIssuesMessage(rejected(400, "list_empty:buckets"))).toBe(
+			"A glucose bucket condition needs at least one bucket chosen."
+		);
+		expect(conditionIssuesMessage(rejected(400, "field_missing:from, field_missing:to"))).toBe(
+			"A time-of-day condition needs both a start and an end time."
+		);
+	});
+
 	it("leaves other rejections to the caller", () => {
 		expect(conditionIssuesMessage(rejected(400, "Unknown tracker definition."))).toBeNull();
 		expect(conditionIssuesMessage(rejected(400, "conditions_empty; something else"))).toBeNull();

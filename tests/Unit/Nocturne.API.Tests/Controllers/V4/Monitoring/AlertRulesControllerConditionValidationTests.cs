@@ -199,4 +199,31 @@ public class AlertRulesControllerConditionValidationTests
 
         issues.Should().BeEmpty();
     }
+
+    [NativeTheory]
+    [InlineData("StateSpanActive", """{"category": "PumpMode", "is_active": true}""", "state_span_active")]
+    [InlineData("Sustained",
+        """{"minutes": 10, "child": {"type": "not", "not": {"child": {"type": "state_span_active", "state_span_active": {"category": "PumpMode", "is_active": false}}}}}""",
+        "sustained[0].not[0].state_span_active")]
+    public async Task CreateRule_rejects_a_generic_state_span_on_the_pump_mode_category(
+        string type, string conditionParams, string path)
+    {
+        var (controller, db) = CreateController(
+            new AlertRuleConditionValidator(NullLogger<AlertRuleConditionValidator>.Instance));
+
+        var result = await controller.CreateRule(new CreateAlertRuleRequest
+        {
+            Name = "Suspended",
+            ConditionType = Enum.Parse<AlertConditionType>(type),
+            ConditionParams = Json(conditionParams),
+        }, CancellationToken.None);
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>().Which.Value
+            .Should().BeOfType<ValidationProblemDetails>().Which.Errors
+            .Should().BeEquivalentTo(new Dictionary<string, string[]>
+            {
+                [$"condition:{path}"] = ["pump_mode_category:category"],
+            });
+        (await db.AlertRules.CountAsync()).Should().Be(0);
+    }
 }

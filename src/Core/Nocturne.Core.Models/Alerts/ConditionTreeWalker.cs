@@ -1,50 +1,11 @@
 namespace Nocturne.Core.Models.Alerts;
 
 /// <summary>
-/// Pure-model recursive walks over a <see cref="ConditionNode"/> tree. Mirrors the wrapper
-/// recursion used by <c>ConditionPath.Walk</c> and <c>RuleDataNeeds.VisitNode</c> in the API
-/// layer, but lives in Core.Models so validation that runs before the request reaches the
-/// evaluator pipeline (controllers, mappers) can share the same traversal.
+/// Pure-model recursive walks over a <see cref="ConditionNode"/> tree, in Core.Models so code
+/// outside the evaluator pipeline (controllers, replay) can share them.
 /// </summary>
 public static class ConditionTreeWalker
 {
-    /// <summary>
-    /// Returns true when any leaf in <paramref name="root"/>'s tree is a
-    /// <c>state_span_active</c> node carrying <see cref="StateSpanCategory.PumpMode"/>.
-    /// Pump-mode rules must use <see cref="PumpStateCondition"/> instead so the enricher
-    /// loads the dedicated pump-mode snapshot; the runtime <c>StateSpanActiveEvaluator</c>
-    /// fails closed for this combination, so without rejecting upfront the user gets a rule
-    /// that silently never fires.
-    /// </summary>
-    public static bool ContainsPumpModeStateSpan(ConditionNode? root)
-    {
-        if (root is null) return false;
-
-        // Leaf check: state_span_active with PumpMode.
-        if (root.StateSpanActive is { Category: StateSpanCategory.PumpMode }
-            && string.Equals(root.Type, "state_span_active", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        // Recurse into wrappers — same shape as ConditionPath.Walk.
-        switch (root.Type?.ToLowerInvariant())
-        {
-            case "composite" when root.Composite?.Conditions is { } children:
-                foreach (var child in children)
-                {
-                    if (ContainsPumpModeStateSpan(child)) return true;
-                }
-                return false;
-            case "not":
-                return ContainsPumpModeStateSpan(root.Not?.Child);
-            case "sustained":
-                return ContainsPumpModeStateSpan(root.Sustained?.Child);
-            default:
-                return false;
-        }
-    }
-
     /// <summary>
     /// Every <c>alert_state</c> target id in <paramref name="root"/>'s tree, in pre-order,
     /// skipping missing children.

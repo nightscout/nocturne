@@ -5,12 +5,17 @@
 //! true make evaluation fail, so parsing rejects them and the rule is
 //! skipped. The rest leave a rule that evaluates but can never mean what its
 //! author wrote (a node that is always false or always true); stored rules
-//! keep evaluating them, and saving a rule rejects them.
+//! keep evaluating them, and saving a rule rejects them. Some of those need
+//! the JSON as written, not only as parsed: which properties are present and
+//! which are not. The save tier walks it alongside the parsed tree.
 
-use serde_json::Value;
+use serde_json::{Map, Value};
 
-use crate::enums::{EnumValue, Spelled};
-use crate::model::{ConditionKind, Node, ParseError, Payload, Reason, parse_payload_structure};
+use crate::enums::{EnumValue, Spelled, StateSpanCategory};
+use crate::eval::clock::parse_hh_mm;
+use crate::model::{
+    ConditionKind, Node, ParseError, Payload, Reason, get_ci, parse_payload_structure,
+};
 use crate::paths::node_child_path;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -23,14 +28,20 @@ enum Tier {
 /// `node` (whose path is `root`) fail.
 pub(crate) fn first_evaluation_fault(node: &Node, root: &str) -> Option<ParseError> {
     let mut found = Vec::new();
-    check_node(Some(node), root, Tier::Evaluation, &mut found);
+    check_node(Some(node), None, root, Tier::Evaluation, &mut found);
     found.into_iter().next()
 }
 
 /// [`first_evaluation_fault`] for a rule body, rooted at its kind's wire name.
 pub(crate) fn first_evaluation_fault_in_payload(payload: &Payload) -> Option<ParseError> {
     let mut found = Vec::new();
-    check_payload(payload, payload.kind().wire(), Tier::Evaluation, &mut found);
+    check_payload(
+        payload,
+        None,
+        payload.kind().wire(),
+        Tier::Evaluation,
+        &mut found,
+    );
     found.into_iter().next()
 }
 
@@ -55,7 +66,13 @@ pub fn validate_rule(condition_type: &str, condition_params: &Value) -> Vec<Pars
         Err(e) => vec![e],
         Ok(payload) => {
             let mut found = Vec::new();
-            check_payload(&payload, kind.wire(), Tier::Save, &mut found);
+            check_payload(
+                &payload,
+                condition_params.as_object(),
+                kind.wire(),
+                Tier::Save,
+                &mut found,
+            );
             found
         }
     }
@@ -67,9 +84,15 @@ pub fn validate_rule(condition_type: &str, condition_params: &Value) -> Vec<Pars
 pub fn validate_node(node: &Value, root: &str) -> Vec<ParseError> {
     match Node::parse_structure_rooted(node, root) {
         Err(e) => vec![e],
-        Ok(node) => {
+        Ok(parsed) => {
             let mut found = Vec::new();
-            check_node(Some(&node), root, Tier::Save, &mut found);
+            check_node(
+                Some(&parsed),
+                node.as_object(),
+                root,
+                Tier::Save,
+                &mut found,
+            );
             found
         }
     }
@@ -81,33 +104,90 @@ fn report(found: &mut Vec<ParseError>, tier: Tier, path: &str, reason: Reason) {
     }
 }
 
-/// `None` is a JSON-null composite slot.
-fn check_node(node: Option<&Node>, path: &str, tier: Tier, found: &mut Vec<ParseError>) {
+/// `None` is a JSON-null composite slot. `raw` is the node's JSON object,
+/// given only on the save tier.
+fn check_node(
+    node: Option<&Node>,
+    raw: Option<&Map<String, Value>>,
+    path: &str,
+    tier: Tier,
+    found: &mut Vec<ParseError>,
+) {
     let Some(node) = node else {
         return report(found, tier, path, Reason::ConditionMissing);
     };
+    if raw.is_some_and(|o| o.keys().any(|k| !is_node_property(k))) {
+        report(found, tier, path, Reason::UnknownField);
+    }
     let Some(type_str) = node.type_str.as_deref() else {
         return report(found, tier, path, Reason::TypeMissing);
     };
     let Some(payload) = node.dispatch() else {
         return report(found, tier, path, Reason::UnknownKind);
     };
-    if type_str != payload.kind().wire() {
+    let wire = payload.kind().wire();
+    if type_str != wire {
         report(found, tier, path, Reason::NonCanonicalType);
     }
-    check_payload(&payload, path, tier, found);
+    // A kind reached through its member name or ordinal reads the default
+    // payload, not the stored one, so no written payload is evaluated. An
+    // absent or null payload is written as no properties at all.
+    let empty = Map::new();
+    let raw_payload = raw
+        .filter(|_| type_str.to_lowercase() == wire)
+        .map(|o| get_ci(o, wire).and_then(Value::as_object).unwrap_or(&empty));
+    check_payload(&payload, raw_payload, path, tier, found);
 }
 
-fn check_child(child: &Node, parent: &str, index: usize, tier: Tier, found: &mut Vec<ParseError>) {
+/// `type`, any kind's payload property (a node may carry payloads other than
+/// the one its `type` names, which are parsed but not evaluated), or the web
+/// rule editor's node key `_uid`, which rules it saved still carry.
+fn is_node_property(name: &str) -> bool {
+    name.eq_ignore_ascii_case("type") || name == "_uid" || ConditionKind::from_wire(name).is_some()
+}
+
+fn check_child(
+    child: &Node,
+    raw: Option<&Value>,
+    parent: &str,
+    index: usize,
+    tier: Tier,
+    found: &mut Vec<ParseError>,
+) {
     check_node(
         Some(child),
+        raw.and_then(Value::as_object),
         &node_child_path(parent, index, Some(child)),
         tier,
         found,
     );
 }
 
-fn check_payload(payload: &Payload, path: &str, tier: Tier, found: &mut Vec<ParseError>) {
+/// `raw` is the payload's JSON object as written, given only on the save
+/// tier and only when evaluation reads it.
+fn check_payload(
+    payload: &Payload,
+    raw: Option<&Map<String, Value>>,
+    path: &str,
+    tier: Tier,
+    found: &mut Vec<ParseError>,
+) {
+    if let Some(raw) = raw {
+        let fields = payload.fields();
+        if raw
+            .keys()
+            .any(|k| !fields.iter().any(|f| f.eq_ignore_ascii_case(k)))
+        {
+            report(found, tier, path, Reason::UnknownField);
+        }
+        for &field in required_fields(payload) {
+            if get_ci(raw, field).is_none_or(Value::is_null) {
+                report(found, tier, path, Reason::FieldMissing(field));
+            }
+        }
+    }
+    let raw_field = |name: &str| raw.and_then(|o| get_ci(o, name));
+
     let problem = match payload {
         Payload::Composite(p) => {
             let Some(conditions) = &p.conditions else {
@@ -123,10 +203,12 @@ fn check_payload(payload: &Payload, path: &str, tier: Tier, found: &mut Vec<Pars
             ) {
                 report(found, tier, path, reason);
             }
+            let raw_conditions = raw_field("conditions").and_then(Value::as_array);
             for (i, child) in conditions.iter().enumerate() {
+                let raw_child = raw_conditions.and_then(|c| c.get(i));
                 match child {
-                    Some(c) => check_child(c, path, i, tier, found),
-                    None => check_node(None, &node_child_path(path, i, None), tier, found),
+                    Some(c) => check_child(c, raw_child, path, i, tier, found),
+                    None => check_node(None, None, &node_child_path(path, i, None), tier, found),
                 }
             }
             None
@@ -134,7 +216,7 @@ fn check_payload(payload: &Payload, path: &str, tier: Tier, found: &mut Vec<Pars
         Payload::Not(p) => match &p.child {
             None => Some(Reason::ChildMissing),
             Some(c) => {
-                check_child(c, path, 0, tier, found);
+                check_child(c, raw_field("child"), path, 0, tier, found);
                 None
             }
         },
@@ -145,7 +227,7 @@ fn check_payload(payload: &Payload, path: &str, tier: Tier, found: &mut Vec<Pars
             match &p.child {
                 None => Some(Reason::ChildMissing),
                 Some(c) => {
-                    check_child(c, path, 0, tier, found);
+                    check_child(c, raw_field("child"), path, 0, tier, found);
                     None
                 }
             }
@@ -174,25 +256,81 @@ fn check_payload(payload: &Payload, path: &str, tier: Tier, found: &mut Vec<Pars
         Payload::LoopStale(p) | Payload::LoopEnactionStale(p) => operator_problem(&p.operator),
         Payload::Staleness(p) => operator_problem(&p.operator),
         Payload::Predicted(p) => operator_problem(&p.operator),
-        Payload::TempBasal(p) => operator_problem(&p.operator),
         Payload::TrackerAge(p) => operator_problem(&p.operator),
+        Payload::TempBasal(p) => {
+            undefined(p.metric, "metric", tier, path, found);
+            operator_problem(&p.operator)
+        }
         Payload::TimeSinceLastCarb(p) | Payload::TimeSinceLastBolus(p) => {
             matches!(p.operator, EnumValue::Undefined(_)).then_some(Reason::UnknownOperator)
         }
+        Payload::Trend(p) => word_problem(
+            &p.bucket,
+            Reason::FieldMissing("bucket"),
+            Reason::UnknownValue("bucket"),
+        ),
+        Payload::TimeOfDay(p) => {
+            let from = time_bound(p.from.as_deref(), "from", tier, path, found);
+            let to = time_bound(p.to.as_deref(), "to", tier, path, found);
+            (from.is_some() && from == to).then_some(Reason::EmptyWindow)
+        }
+        Payload::GlucoseBucket(p) => list_problem(p.buckets.as_deref(), "buckets"),
+        Payload::DayOfWeek(p) => list_problem(p.days.as_deref(), "days"),
+        Payload::PumpState(p) => {
+            undefined(p.mode, "mode", tier, path, found);
+            None
+        }
+        Payload::StateSpanActive(p) => match p.category {
+            EnumValue::Known(StateSpanCategory::PumpMode) => Some(Reason::PumpModeCategory),
+            EnumValue::Undefined(_) => Some(Reason::UnknownValue("category")),
+            EnumValue::Known(_) => None,
+        },
         Payload::SignalLoss(_)
-        | Payload::Trend(_)
-        | Payload::TimeOfDay(_)
         | Payload::PumpSuspended(_)
         | Payload::OverrideActive(_)
         | Payload::DoNotDisturb(_)
-        | Payload::GlucoseBucket(_)
-        | Payload::DayOfWeek(_)
-        | Payload::PumpState(_)
-        | Payload::StateSpanActive(_)
         | Payload::SleepSessionActive(_) => None,
     };
     if let Some(reason) = problem {
         report(found, tier, path, reason);
+    }
+}
+
+/// The operands a payload reads as a default when absent where that default
+/// is not an authored value, and no other reason reports them missing.
+fn required_fields(payload: &Payload) -> &'static [&'static str] {
+    match payload {
+        Payload::Threshold(_)
+        | Payload::Staleness(_)
+        | Payload::Iob(_)
+        | Payload::Cob(_)
+        | Payload::Reservoir(_)
+        | Payload::SiteAge(_)
+        | Payload::SensorAge(_)
+        | Payload::PumpBattery(_)
+        | Payload::UploaderBattery(_)
+        | Payload::SensitivityRatio(_) => &["value"],
+        Payload::RateOfChange(_) => &["rate"],
+        Payload::SignalLoss(_) => &["timeout_minutes"],
+        Payload::Predicted(_) => &["value", "within_minutes"],
+        Payload::AlertState(_) => &["alert_id"],
+        Payload::LoopStale(_) | Payload::LoopEnactionStale(_) => &["minutes"],
+        Payload::PumpSuspended(_)
+        | Payload::OverrideActive(_)
+        | Payload::DoNotDisturb(_)
+        | Payload::SleepSessionActive(_) => &["is_active"],
+        Payload::TempBasal(_) => &["metric", "value"],
+        Payload::TimeSinceLastCarb(_) | Payload::TimeSinceLastBolus(_) => &["operator", "minutes"],
+        Payload::PumpState(_) => &["mode", "is_active"],
+        Payload::StateSpanActive(_) => &["category", "is_active"],
+        Payload::TrackerAge(_) => &["tracker_definition_id", "minutes"],
+        Payload::Composite(_)
+        | Payload::Not(_)
+        | Payload::Sustained(_)
+        | Payload::Trend(_)
+        | Payload::TimeOfDay(_)
+        | Payload::GlucoseBucket(_)
+        | Payload::DayOfWeek(_) => &[],
     }
 }
 
@@ -207,4 +345,46 @@ fn word_problem<T>(word: &Spelled<T>, missing: Reason, unknown: Reason) -> Optio
 /// A missing comparison operator compares false, like an unknown one.
 fn operator_problem<T>(operator: &Spelled<T>) -> Option<Reason> {
     operator.value.is_none().then_some(Reason::UnknownOperator)
+}
+
+fn undefined<E>(
+    value: EnumValue<E>,
+    field: &'static str,
+    tier: Tier,
+    path: &str,
+    found: &mut Vec<ParseError>,
+) {
+    if matches!(value, EnumValue::Undefined(_)) {
+        report(found, tier, path, Reason::UnknownValue(field));
+    }
+}
+
+/// An absent or empty list matches nothing, and so does an undefined member.
+fn list_problem<E>(list: Option<&[EnumValue<E>]>, field: &'static str) -> Option<Reason> {
+    match list {
+        None | Some([]) => Some(Reason::ListEmpty(field)),
+        Some(items) => items
+            .iter()
+            .any(|v| matches!(v, EnumValue::Undefined(_)))
+            .then_some(Reason::UnknownValue(field)),
+    }
+}
+
+/// The bound as a time, reporting it when it is absent or not `HH:mm`.
+fn time_bound(
+    bound: Option<&str>,
+    field: &'static str,
+    tier: Tier,
+    path: &str,
+    found: &mut Vec<ParseError>,
+) -> Option<chrono::NaiveTime> {
+    let Some(text) = bound else {
+        report(found, tier, path, Reason::FieldMissing(field));
+        return None;
+    };
+    let time = parse_hh_mm(text);
+    if time.is_none() {
+        report(found, tier, path, Reason::InvalidTime(field));
+    }
+    time
 }

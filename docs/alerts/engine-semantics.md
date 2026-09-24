@@ -124,6 +124,17 @@ rule save rejects those too, together with the shapes above:
 | `child_missing` | a `not` or `sustained` with no `child` |
 | `minutes_not_positive` | a `sustained` with `minutes <= 0` |
 | `payload_missing` | a rule body whose `condition_params` is JSON `null` |
+| `unknown_field` | a node property other than `type` and the kinds' payload names, or a payload property its kind does not read (names match case-insensitively, as §1.1 reads them), so a misspelt operand such as `timeoutMinutes` is not silently dropped. No field is named: the property is the author's text |
+| `field_missing` | a required operand is absent (or `null` where that reads as absent): `value` on `threshold`, `staleness` and the `{operator, value}` kinds, `rate`, `timeout_minutes`, `predicted` `value`/`within_minutes`, `alert_id`, `minutes` on `loop_stale`/`loop_enaction_stale`/`time_since_*`/`tracker_age`, `is_active`, `temp_basal` `metric`, `time_since_*` `operator`, `pump_state` `mode`, `state_span_active` `category`, `tracker_definition_id`, `trend` `bucket`, `time_of_day` `from`/`to`. Each would read as its default (§1.2), which is never what was meant. A node whose payload property is absent is checked as an empty payload |
+| `unknown_value` | an enum operand no member has: an ordinal outside `temp_basal` `metric`, a `glucose_bucket` or `day_of_week` list member, `pump_state` `mode`, `state_span_active` `category`; a `trend` `bucket` naming no bucket |
+| `invalid_time` | a `time_of_day` `from` or `to` that is not exactly `HH:mm` (`"9:00"`, `"24:00"`) |
+| `empty_window` | a `time_of_day` whose `from` equals its `to`, a window that never opens |
+| `list_empty` | a `glucose_bucket` `buckets` or `day_of_week` `days` list that is absent, `null` or empty |
+| `pump_mode_category` | a `state_span_active` on the `PumpMode` category, which evaluates false (§3); pump modes are `pump_state`'s |
+
+Optional operands (`for_minutes`, `timezone`, `state_span_active` `state`) and a node's
+payloads for kinds other than its `type` are not reported. Stored rules keep evaluating
+every shape in this table as §3 describes.
 
 The crate's `validate` entry point is the single implementation of the save-time check;
 `AlertRulesController` returns its issues as a 400. Each issue carries its scope

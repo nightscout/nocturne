@@ -130,9 +130,6 @@ public class AlertRulesController : ControllerBase
     public async Task<ActionResult<AlertRuleResponse>> CreateRule(
         [FromBody] CreateAlertRuleRequest request, CancellationToken ct)
     {
-        if (RejectPumpModeOnGenericStateSpan(request.ConditionType, request.ConditionParams) is { } badRequest)
-            return badRequest;
-
         var trees = CanonicalTrees.From(
             request.ConditionType, request.ConditionParams, request.AutoResolveParams, request.ClientConfiguration);
         if (RejectInvalidConditions(request.ConditionType, trees, request.AutoResolveEnabled) is { } invalid)
@@ -212,9 +209,6 @@ public class AlertRulesController : ControllerBase
 
         if (rule is null)
             return NotFound();
-
-        if (RejectPumpModeOnGenericStateSpan(request.ConditionType, request.ConditionParams) is { } badRequest)
-            return badRequest;
 
         var trees = CanonicalTrees.From(
             request.ConditionType, request.ConditionParams, request.AutoResolveParams, request.ClientConfiguration);
@@ -876,55 +870,6 @@ public class AlertRulesController : ControllerBase
                 clientConfiguration is not null
                     ? ConditionTimeZones.CanonicaliseClientConfiguration(JsonSerializer.Serialize(clientConfiguration))
                     : null);
-    }
-
-    /// <summary>
-    /// Returns a <c>400 BadRequest</c> when the rule contains a <c>state_span_active</c> leaf
-    /// with <see cref="StateSpanCategory.PumpMode"/> anywhere in the condition tree
-    /// (including nested under composite/not/sustained wrappers). Pump-mode rules must use
-    /// the dedicated <see cref="AlertConditionType.PumpState"/> type so the enricher loads
-    /// the correct snapshot and the legacy <c>pump_suspended</c> evaluator stays uncoupled
-    /// from the generic state-span dictionary. The runtime
-    /// <c>StateSpanActiveEvaluator</c> fails closed for this combination, so without an
-    /// upfront 400 the user gets a rule that silently never fires. Returns null when the
-    /// request is acceptable.
-    /// </summary>
-    private BadRequestObjectResult? RejectPumpModeOnGenericStateSpan(
-        AlertConditionType type, object? conditionParams)
-    {
-        if (conditionParams is null)
-            return null;
-
-        // Top-level state_span_active: deserialize and check directly. This path also covers
-        // requests where the wrapper deserialization below would no-op for unknown shapes.
-        if (type == AlertConditionType.StateSpanActive)
-        {
-            try
-            {
-                var json = JsonSerializer.Serialize(conditionParams);
-                var typed = JsonSerializer.Deserialize<StateSpanActiveCondition>(json, ReferenceJsonOptions);
-                if (typed is not null && typed.Category == StateSpanCategory.PumpMode)
-                {
-                    return BadRequest("state_span_active does not accept the PumpMode category — use pump_state instead.");
-                }
-            }
-            catch (JsonException)
-            {
-                // Malformed JSON falls through to the existing rule-shape validation paths.
-            }
-            return null;
-        }
-
-        // Composite/not/sustained: reuse the same deserialization the cycle detector uses,
-        // then walk every leaf via ConditionTreeWalker. Unknown/non-wrapper kinds yield a
-        // bare ConditionNode with no payload, so the walker no-ops harmlessly.
-        var root = TryDeserializeRoot(type, conditionParams);
-        if (root is not null && ConditionTreeWalker.ContainsPumpModeStateSpan(root))
-        {
-            return BadRequest("state_span_active does not accept the PumpMode category — use pump_state instead.");
-        }
-
-        return null;
     }
 
     #endregion
