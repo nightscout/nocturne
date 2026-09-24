@@ -83,7 +83,8 @@ public class StatisticsServiceClinicalAccuracyTests
     #region GRI (Glycemic Risk Index) Tests
 
     /// <summary>
-    /// GRI formula: (3.0 × VLow%) + (2.4 × Low%) + (1.6 × VHigh%) + (0.8 × High%)
+    /// GRI formula: (3.0 × Hypo) + (1.6 × Hyper), where Hypo = VLow% + (0.8 × Low%)
+    /// and Hyper = VHigh% + (0.5 × High%)
     /// Verified against: Klonoff DC, et al. J Diabetes Sci Technol. 2023
     /// </summary>
     [Fact]
@@ -113,8 +114,9 @@ public class StatisticsServiceClinicalAccuracyTests
     public void CalculateGRI_KnownDistribution_ShouldMatchFormula()
     {
         // 2% severe low, 3% low, 60% target, 25% high, 10% severe high
-        // GRI = (3.0 * 2) + (2.4 * 3) + (1.6 * 10) + (0.8 * 25)
-        //     = 6 + 7.2 + 16 + 20 = 49.2
+        // Hypo = 2 + (0.8 * 3) = 4.4
+        // Hyper = 10 + (0.5 * 25) = 22.5
+        // GRI = (3.0 * 4.4) + (1.6 * 22.5) = 13.2 + 36 = 49.2
         var tir = new TimeInRangeMetrics
         {
             Percentages = new TimeInRangePercentages
@@ -130,9 +132,40 @@ public class StatisticsServiceClinicalAccuracyTests
         var result = _sut.CalculateGRI(tir);
 
         result.Score.Should().Be(49.2);
-        result.HypoglycemiaComponent.Should().Be(13.2); // (3.0 * 2) + (2.4 * 3)
-        result.HyperglycemiaComponent.Should().Be(36);   // (1.6 * 10) + (0.8 * 25)
+        result.HypoglycemiaComponent.Should().Be(4.4); // 2 + (0.8 * 3)
+        result.HyperglycemiaComponent.Should().Be(22.5); // 10 + (0.5 * 25)
         result.Zone.Should().Be(GRIZone.C);
+    }
+
+    /// <summary>
+    /// The consensus components re-express the original weighted sum, so the score is
+    /// unchanged: (3.0 × hypo) + (1.6 × hyper) == the classic four-term formula.
+    /// </summary>
+    [Fact]
+    public void CalculateGRI_ConsensusComponents_ShouldNotChangeScore()
+    {
+        var tir = new TimeInRangeMetrics
+        {
+            Percentages = new TimeInRangePercentages
+            {
+                VeryLow = 5,
+                Low = 10,
+                Target = 50,
+                High = 20,
+                VeryHigh = 15,
+            },
+        };
+
+        var result = _sut.CalculateGRI(tir);
+
+        // (3.0 * 5) + (2.4 * 10) + (1.6 * 15) + (0.8 * 20) = 15 + 24 + 24 + 16 = 79
+        result.HypoglycemiaComponent.Should().Be(13); // 5 + (0.8 * 10)
+        result.HyperglycemiaComponent.Should().Be(25); // 15 + (0.5 * 20)
+        result.Score.Should().Be(79);
+        result
+            .Score.Should()
+            .Be((3.0 * result.HypoglycemiaComponent) + (1.6 * result.HyperglycemiaComponent));
+        result.Zone.Should().Be(GRIZone.D);
     }
 
     [Theory]

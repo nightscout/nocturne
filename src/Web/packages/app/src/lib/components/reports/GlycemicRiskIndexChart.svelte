@@ -18,8 +18,15 @@
 
   let { gri, timeSeriesData }: Props = $props();
 
-  const HYPO_MAX = 20;
-  const HYPER_MAX = 40;
+  const HYPO_MAX = 30;
+  const HYPER_MAX = 60;
+  const HYPO_WEIGHT = 3.0;
+  const HYPER_WEIGHT = 1.6;
+
+  /** Consensus GRI value of a component pair. */
+  function griValue(hypo: number, hyper: number) {
+    return HYPO_WEIGHT * hypo + HYPER_WEIGHT * hyper;
+  }
 
   /** Pins a point to the plot's edge so nothing is drawn outside the axes. */
   function clampToPlot(hypo: number, hyper: number) {
@@ -71,14 +78,44 @@
     return formatMonthYear(date);
   }
 
-  // Zone boundaries: diagonal lines where hypo + hyper = GRI score threshold
-  // Raw GRI thresholds are used; areas beyond the max visible GRI (HYPO_MAX + HYPER_MAX) are unzoned
-  const zones: { label: string; range: string; texture: TextureKey; vertices: { x: number; y: number }[] }[] = [
-    { label: "E", range: "81-100", texture: "gri-zone-e", vertices: buildZonePolygon(40, 50) },
-    { label: "D", range: "61-80", texture: "gri-zone-d", vertices: buildZonePolygon(30, 40) },
-    { label: "C", range: "41-60", texture: "gri-zone-c", vertices: buildZonePolygon(20, 30) },
-    { label: "B", range: "21-40", texture: "gri-zone-b", vertices: buildZonePolygon(10, 20) },
-    { label: "A", range: "0-20", texture: "gri-zone-a", vertices: buildZonePolygon(0, 10) },
+  // Zone boundaries: consensus grid lines where 3.0 x hypo + 1.6 x hyper = GRI threshold.
+  // Zone E runs to the plot's far corner, since a GRI above 100 is capped into it.
+  const zones: {
+    label: string;
+    range: string;
+    texture: TextureKey;
+    vertices: { x: number; y: number }[];
+  }[] = [
+    {
+      label: "E",
+      range: "81-100",
+      texture: "gri-zone-e",
+      vertices: buildZonePolygon(80, griValue(HYPO_MAX, HYPER_MAX)),
+    },
+    {
+      label: "D",
+      range: "61-80",
+      texture: "gri-zone-d",
+      vertices: buildZonePolygon(60, 80),
+    },
+    {
+      label: "C",
+      range: "41-60",
+      texture: "gri-zone-c",
+      vertices: buildZonePolygon(40, 60),
+    },
+    {
+      label: "B",
+      range: "21-40",
+      texture: "gri-zone-b",
+      vertices: buildZonePolygon(20, 40),
+    },
+    {
+      label: "A",
+      range: "0-20",
+      texture: "gri-zone-a",
+      vertices: buildZonePolygon(0, 20),
+    },
   ];
 
   function buildZonePolygon(
@@ -103,8 +140,8 @@
 
     // Include rectangle corners that fall within this zone
     for (const corner of corners) {
-      const sum = corner.x + corner.y;
-      if (sum >= lower && sum <= upper) {
+      const value = griValue(corner.x, corner.y);
+      if (value >= lower && value <= upper) {
         allPoints.push(corner);
       }
     }
@@ -134,12 +171,12 @@
     b: { x: number; y: number },
     threshold: number
   ): { x: number; y: number } | null {
-    const sumA = a.x + a.y;
-    const sumB = b.x + b.y;
-    const denom = sumB - sumA;
+    const valueA = griValue(a.x, a.y);
+    const valueB = griValue(b.x, b.y);
+    const denom = valueB - valueA;
     if (Math.abs(denom) < 1e-10) return null;
 
-    const t = (threshold - sumA) / denom;
+    const t = (threshold - valueA) / denom;
     if (t < 0 || t > 1) return null;
 
     return {

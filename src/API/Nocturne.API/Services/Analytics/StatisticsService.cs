@@ -173,7 +173,8 @@ public class StatisticsService : IStatisticsService
     /// <summary>
     /// Calculate Glycemic Risk Index (GRI) - composite risk score from 0-100
     /// Based on: Klonoff DC, et al. J Diabetes Sci Technol. 2023
-    /// Formula: GRI = (3.0 × VLow%) + (2.4 × Low%) + (1.6 × VHigh%) + (0.8 × High%)
+    /// Hypo component = VLow% + (0.8 × Low%), Hyper component = VHigh% + (0.5 × High%)
+    /// Formula: GRI = (3.0 × Hypo) + (1.6 × Hyper)
     /// </summary>
     /// <param name="timeInRange">Time in range metrics with percentage breakdowns</param>
     /// <returns>GRI with score, zone classification, and component breakdown</returns>
@@ -181,17 +182,16 @@ public class StatisticsService : IStatisticsService
     {
         var percentages = timeInRange.Percentages;
 
-        // GRI component weights per 2023 consensus
-        const double veryLowWeight = 3.0;
-        const double lowWeight = 2.4;
-        const double highWeight = 0.8;
-        const double veryHighWeight = 1.6;
+        // Consensus component definitions and their GRI weights
+        const double lowWeight = 0.8;
+        const double highWeight = 0.5;
+        const double hypoWeight = 3.0;
+        const double hyperWeight = 1.6;
 
-        var hypoComponent = (veryLowWeight * percentages.VeryLow) + (lowWeight * percentages.Low);
-        var hyperComponent =
-            (veryHighWeight * percentages.VeryHigh) + (highWeight * percentages.High);
+        var hypoComponent = percentages.VeryLow + (lowWeight * percentages.Low);
+        var hyperComponent = percentages.VeryHigh + (highWeight * percentages.High);
 
-        var gri = hypoComponent + hyperComponent;
+        var gri = (hypoWeight * hypoComponent) + (hyperWeight * hyperComponent);
 
         // Cap at 100
         gri = Math.Min(100, Math.Round(gri * 10) / 10);

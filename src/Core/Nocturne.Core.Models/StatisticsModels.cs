@@ -1094,17 +1094,18 @@ public class GlucoseManagementIndicator
 /// <summary>
 /// Glycemic Risk Index (GRI) - composite risk score from 0-100
 /// Based on 2023 International Consensus
-/// GRI = (3.0 × VLow%) + (2.4 × Low%) + (1.6 × VHigh%) + (0.8 × High%)
+/// Hypo component = VLow% + (0.8 × Low%), Hyper component = VHigh% + (0.5 × High%)
+/// GRI = (3.0 × Hypo) + (1.6 × Hyper)
 /// </summary>
 public class GlycemicRiskIndex
 {
     /// <summary>Overall GRI score (0-100, lower is better)</summary>
     public double Score { get; set; }
 
-    /// <summary>Hypoglycemia component of the score</summary>
+    /// <summary>Hypo component = VLow% + (0.8 × Low%)</summary>
     public double HypoglycemiaComponent { get; set; }
 
-    /// <summary>Hyperglycemia component of the score</summary>
+    /// <summary>Hyper component = VHigh% + (0.5 × High%)</summary>
     public double HyperglycemiaComponent { get; set; }
 
     /// <summary>Risk zone classification</summary>
