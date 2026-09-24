@@ -49,6 +49,7 @@ using Nocturne.API.Services.Treatments;
 using Nocturne.API.Services.V4;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Nightscout.Services.WriteBack;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.CoachMarks;
@@ -1039,6 +1040,7 @@ public static class ServiceRegistrationExtensions
 
         // Connector runtime
         services.AddBaseConnectorServices();
+        services.AddScoped<PublishSkipTally>();
         services.AddScoped<IGlucosePublisher, GlucosePublisher>();
         services.AddScoped<ITreatmentPublisher, TreatmentPublisher>();
         services.AddScoped<IDevicePublisher, DevicePublisher>();

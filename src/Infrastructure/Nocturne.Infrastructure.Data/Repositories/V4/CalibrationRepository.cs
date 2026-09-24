@@ -28,7 +28,7 @@ public class CalibrationRepository : V4RepositoryBase<Calibration, CalibrationEn
     /// <param name="logger">The logger instance.</param>
     // logger is unused for this LegacyId-only type but retained for DI + direct test construction.
     public CalibrationRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext, ILogger<CalibrationRepository> logger, IV4RecordBroadcaster<Calibration>? broadcaster = null, IDataEventSink<Entry>? entrySink = null)
-        : base(contextFactory, auditContext, broadcaster, entrySink)
+        : base(contextFactory, auditContext, logger, broadcaster, entrySink)
     {
     }
 

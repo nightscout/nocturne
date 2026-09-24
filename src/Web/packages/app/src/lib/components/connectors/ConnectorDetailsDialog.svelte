@@ -30,6 +30,7 @@
   import type { SyncRequestInput } from "$lib/api/generated/schemas";
   import type { ConnectorStatusWithDescription } from "./ServerConnectorsCard.svelte";
   import { formatNumber, lastSeen } from "$lib/utils/formatting";
+  import { SkippedRecordsNote } from "$lib/components/shared";
 
   interface Props {
     open: boolean;
@@ -440,6 +441,10 @@
                   {granularSyncResult.message || "Sync failed"}
                   {@render syncedTotal(granularSyncResult.itemsSynced)}
                 {/if}
+                <SkippedRecordsNote
+                  deleted={granularSyncResult.itemsSkipped}
+                  class="mt-1 text-muted-foreground"
+                />
               </div>
             {/if}
 
@@ -490,6 +495,10 @@
                     <AlertCircle class="inline h-3 w-3 mr-1" />
                     {foodOnlySyncResult.message || "Food sync failed"}
                   {/if}
+                  <SkippedRecordsNote
+                    deleted={foodOnlySyncResult.itemsSkipped}
+                    class="mt-1 text-muted-foreground"
+                  />
                 </div>
               {/if}
 

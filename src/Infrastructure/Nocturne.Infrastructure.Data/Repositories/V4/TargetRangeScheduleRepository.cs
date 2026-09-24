@@ -28,7 +28,7 @@ public class TargetRangeScheduleRepository : V4RepositoryBase<TargetRangeSchedul
     /// <param name="logger">The logger instance.</param>
     // logger is unused for this LegacyId-only type but retained for DI + direct test construction.
     public TargetRangeScheduleRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext, ILogger<TargetRangeScheduleRepository> logger, IV4RecordBroadcaster<TargetRangeSchedule>? broadcaster = null)
-        : base(contextFactory, auditContext, broadcaster)
+        : base(contextFactory, auditContext, logger, broadcaster)
     {
     }
 

@@ -162,9 +162,11 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     )
     {
         _progressReporter = progressReporter;
+        var skippedBefore = _publisher?.SkippedDeleted ?? 0;
         try
         {
             var result = await body();
+            result.ItemsSkipped = (_publisher?.SkippedDeleted ?? 0) - skippedBefore;
             StandInFailureMessage(result);
             await ReportSyncOutcomeAsync(result.Success, FailureMessage(result), cancellationToken);
             return result;
@@ -846,7 +848,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     ///     page cannot erase what an earlier one landed. Callers report the count once the publish has
     ///     returned, so a publish that throws records nothing while one that reports failure records
     ///     the batch it handed over — the count is what reached the publisher, not what the publisher
-    ///     accepted.
+    ///     accepted. What it withheld as deleted is <see cref="SyncResult.ItemsSkipped"/>.
     /// </remarks>
     /// <param name="context">
     ///     Detail about this batch — where it came from, or what it held — appended to the success log

@@ -31,7 +31,7 @@ public class PumpSnapshotRepository : SyncUpsertRepositoryBase<PumpSnapshot, Pum
         IAuditContext auditContext,
         ILogger<PumpSnapshotRepository> logger,
         IV4RecordBroadcaster<PumpSnapshot>? broadcaster = null)
-        : base(contextFactory, auditContext, broadcaster)
+        : base(contextFactory, auditContext, logger, broadcaster)
     {
     }
 

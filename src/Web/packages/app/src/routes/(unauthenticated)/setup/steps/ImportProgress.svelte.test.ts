@@ -89,4 +89,55 @@ describe("ImportProgress", () => {
 
     await expect.element(page.getByText(/collections imported/)).not.toBeInTheDocument();
   });
+
+  // Someone who deleted a stretch of readings and re-imports it gets none of them back. The lane
+  // has to say so beside the count, or the import reads as having restored them.
+  it("shows the records a collection skipped beside its count", async () => {
+    status = {
+      state: MigrationJobState.Completed,
+      progressPercentage: 100,
+      collectionProgress: {
+        entries: {
+          collectionName: "entries",
+          isComplete: true,
+          totalDocuments: 4210,
+          documentsMigrated: 4209,
+          documentsSkippedUnsupported: 1,
+          recordsSkippedDeleted: 412,
+        },
+      },
+    };
+
+    render(ImportProgress, { jobId: "job-5", onComplete: () => {} });
+
+    await expect
+      .element(page.getByText(/412 records were not added again/))
+      .toBeVisible();
+    await expect
+      .element(page.getByText(/1 record was not added because Nocturne does not store/))
+      .toBeVisible();
+  });
+
+  // A collection whose every document was dealt with is finished even when some were of a kind
+  // Nocturne does not store; the lane must not stall short of complete.
+  it("shows the server's percentage for a lane rather than stored over total", async () => {
+    status = {
+      state: MigrationJobState.Running,
+      progressPercentage: 50,
+      collectionProgress: {
+        entries: {
+          collectionName: "entries",
+          isComplete: false,
+          totalDocuments: 10,
+          documentsMigrated: 4,
+          documentsSkippedUnsupported: 3,
+          progressPercentage: 70,
+        },
+      },
+    };
+
+    render(ImportProgress, { jobId: "job-6", onComplete: () => {} });
+
+    await expect.element(page.getByText("70%", { exact: true })).toBeVisible();
+  });
 });

@@ -80,7 +80,8 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
                 await DecomposeCalAsync(entry, result, origin, ct);
                 break;
             default:
-                Logger.LogWarning("Unknown entry type '{Type}' for entry {Id}, skipping decomposition", entry.Type, entry.Id);
+                Logger.LogWarning("Skipped an entry whose type Nocturne does not store: {Type}", entry.Type);
+                result.SkippedUnsupported++;
                 break;
         }
 
@@ -150,6 +151,7 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
         var sgvList = new List<SensorGlucose>();
         var mbgList = new List<MeterGlucose>();
         var calList = new List<Calibration>();
+        var unsupportedTypes = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var entry in entries)
         {
@@ -165,9 +167,17 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
                     calList.Add(MapToCalibration(entry, correlationId));
                     break;
                 default:
-                    Logger.LogDebug("Skipping entry with unknown type: {Type}", entry.Type);
+                    result.SkippedUnsupported++;
+                    unsupportedTypes.Add(entry.Type ?? "(none)");
                     break;
             }
+        }
+
+        if (result.SkippedUnsupported > 0)
+        {
+            Logger.LogWarning(
+                "Skipped {Count} entries whose type Nocturne does not store: {Types}",
+                result.SkippedUnsupported, string.Join(", ", unsupportedTypes));
         }
 
         if (sgvList.Count > 0)

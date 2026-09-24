@@ -24,4 +24,15 @@ public class DecompositionResult
     /// Most records implement IV4Record, but StateSpan records are also included.
     /// </summary>
     public List<object> UpdatedRecords { get; } = [];
+
+    /// <summary>
+    /// Records not written because the user had deleted them. A re-import never brings those back.
+    /// </summary>
+    public int SkippedDeleted { get; set; }
+
+    /// <summary>
+    /// Legacy records of a kind Nocturne does not store, such as an entry whose type is not a
+    /// sensor reading, meter reading or calibration.
+    /// </summary>
+    public int SkippedUnsupported { get; set; }
 }

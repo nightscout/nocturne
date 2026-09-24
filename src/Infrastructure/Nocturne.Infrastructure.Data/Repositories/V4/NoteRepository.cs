@@ -23,7 +23,6 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 public class NoteRepository : SyncKeyedRepositoryBase<Note, NoteEntity>, INoteRepository
 {
     private readonly IDeduplicationService _deduplicationService;
-    private readonly ILogger<NoteRepository> _logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="NoteRepository"/> class.
@@ -38,10 +37,9 @@ public class NoteRepository : SyncKeyedRepositoryBase<Note, NoteEntity>, INoteRe
         IAuditContext auditContext,
         ILogger<NoteRepository> logger,
         IV4RecordBroadcaster<Note>? broadcaster = null)
-        : base(contextFactory, auditContext, broadcaster)
+        : base(contextFactory, auditContext, logger, broadcaster)
     {
         _deduplicationService = deduplicationService;
-        _logger = logger;
     }
 
     /// <inheritdoc />
@@ -153,7 +151,7 @@ public class NoteRepository : SyncKeyedRepositoryBase<Note, NoteEntity>, INoteRe
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "Note", inserted.Count);
+            Logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "Note", inserted.Count);
         }
     }
 }

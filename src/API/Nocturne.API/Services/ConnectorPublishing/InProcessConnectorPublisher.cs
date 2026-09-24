@@ -1,4 +1,5 @@
 using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.Connectors.Core.Models;
 
 namespace Nocturne.API.Services.ConnectorPublishing;
 
@@ -14,6 +15,8 @@ namespace Nocturne.API.Services.ConnectorPublishing;
 /// <seealso cref="IMetadataPublisher"/>
 public class InProcessConnectorPublisher : IConnectorPublisher
 {
+    private readonly PublishSkipTally _skips;
+
     /// <inheritdoc />
     public bool IsAvailable => true;
 
@@ -29,6 +32,9 @@ public class InProcessConnectorPublisher : IConnectorPublisher
     /// <inheritdoc />
     public IMetadataPublisher Metadata { get; }
 
+    /// <inheritdoc />
+    public int SkippedDeleted => _skips.SkippedDeleted;
+
     /// <summary>
     /// Initializes a new instance of <see cref="InProcessConnectorPublisher"/>.
     /// </summary>
@@ -36,12 +42,15 @@ public class InProcessConnectorPublisher : IConnectorPublisher
     /// <param name="treatments">The treatment publisher for bolus, basal, and carb data.</param>
     /// <param name="device">The device publisher for device status and metadata.</param>
     /// <param name="metadata">The metadata publisher for connector-level metadata.</param>
+    /// <param name="skips">The scope's tally the four publishers add to.</param>
     public InProcessConnectorPublisher(
         IGlucosePublisher glucose,
         ITreatmentPublisher treatments,
         IDevicePublisher device,
-        IMetadataPublisher metadata)
+        IMetadataPublisher metadata,
+        PublishSkipTally skips)
     {
+        _skips = skips;
         Glucose = glucose;
         Treatments = treatments;
         Device = device;

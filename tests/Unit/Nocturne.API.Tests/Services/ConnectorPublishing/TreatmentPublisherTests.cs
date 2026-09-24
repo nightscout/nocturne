@@ -1,3 +1,4 @@
+using Nocturne.Connectors.Core.Models;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -53,6 +54,9 @@ public class TreatmentPublisherTests
         _mockBGCheckRepository = new Mock<IBGCheckRepository>();
         _mockBolusCalculationRepository = new Mock<IBolusCalculationRepository>();
         _mockTempBasalRepository = new Mock<ITempBasalRepository>();
+        _mockTempBasalRepository
+            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<TempBasal>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
         _mockBasalInjectionRepository = new Mock<IBasalInjectionRepository>();
         _mockNoteRepository = new Mock<INoteRepository>();
         _mockDeviceEventRepository = new Mock<IDeviceEventRepository>();
@@ -94,6 +98,7 @@ public class TreatmentPublisherTests
             _mockTherapySettingsResolver.Object,
             Mock.Of<IPatientDeviceStamper>(),
             auditContext,
+            new PublishSkipTally(),
             NullLogger<TreatmentPublisher>.Instance
         );
     }
@@ -104,7 +109,7 @@ public class TreatmentPublisherTests
         var treatments = new List<Treatment> { new() { Id = "1" } };
         _mockTreatmentService
             .Setup(s => s.CreateTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(treatments);
+            .ReturnsAsync([.. treatments]);
 
         var result = await _publisher.PublishTreatmentsAsync(treatments, "test-source", WriteOrigin.Live);
 
@@ -447,7 +452,7 @@ public class TreatmentPublisherTests
             .ReturnsAsync((PatientInsulin m, WriteOrigin _, CancellationToken _) => m);
         _mockBasalInjectionRepository
             .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<BasalInjection>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<BasalInjection> records, WriteOrigin _, CancellationToken _) => records);
+            .ReturnsAsync((IEnumerable<BasalInjection> records, WriteOrigin _, CancellationToken _) => [.. records]);
 
         var records = new List<BasalInjection>
         {
@@ -488,7 +493,7 @@ public class TreatmentPublisherTests
             .ReturnsAsync((PatientInsulin m, WriteOrigin _, CancellationToken _) => m);
         _mockBasalInjectionRepository
             .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<BasalInjection>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<BasalInjection> records, WriteOrigin _, CancellationToken _) => records);
+            .ReturnsAsync((IEnumerable<BasalInjection> records, WriteOrigin _, CancellationToken _) => [.. records]);
 
         var records = new List<BasalInjection>
         {
@@ -546,7 +551,7 @@ public class TreatmentPublisherTests
             ]);
         _mockBasalInjectionRepository
             .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<BasalInjection>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<BasalInjection> records, WriteOrigin _, CancellationToken _) => records);
+            .ReturnsAsync((IEnumerable<BasalInjection> records, WriteOrigin _, CancellationToken _) => [.. records]);
 
         var records = new List<BasalInjection>
         {
@@ -585,7 +590,7 @@ public class TreatmentPublisherTests
         var existingId = Guid.NewGuid();
         _mockBasalInjectionRepository
             .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<BasalInjection>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<BasalInjection> records, WriteOrigin _, CancellationToken _) => records);
+            .ReturnsAsync((IEnumerable<BasalInjection> records, WriteOrigin _, CancellationToken _) => [.. records]);
 
         var records = new List<BasalInjection>
         {
