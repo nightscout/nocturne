@@ -36,13 +36,10 @@ public class AlertSweepService : BackgroundService
     private readonly TimeProvider _timeProvider;
 
     /// <summary>
-    /// Audit endpoint recorded for the sweep's writes. The sweep runs with no request and no
-    /// actor, and <see cref="AlertAcknowledgementService"/> — reached through the orchestrator's
-    /// Info-severity auto-acknowledgement — stamps the scope's ambient context onto its own
-    /// contexts, so without an explicit push those acks are recorded as user mutations with every
-    /// actor field null. The other scopes' writers fall to the null-context system default today;
-    /// they carry the push so attribution is explicit rather than an accident of which context
-    /// path a writer uses.
+    /// Audit endpoint recorded for the sweep's writes, which have no request and no actor.
+    /// <see cref="AlertAcknowledgementService"/>, reached through the orchestrator's Info-severity
+    /// auto-acknowledgement, stamps the scope's ambient context onto its own contexts. Without
+    /// the push those acks would be recorded as user mutations with every actor field null.
     /// </summary>
     private const string AuditEndpoint = "service:alert-sweep";
 
@@ -143,20 +140,9 @@ public class AlertSweepService : BackgroundService
             var tenantContext = await lookupRepository.GetTenantAlertContextAsync(tenantId, ct);
             if (tenantContext is null || !tenantContext.IsActive) continue;
 
-            using var tenantScope = _serviceProvider.CreateScope();
-            var tenantAccessor = tenantScope.ServiceProvider.GetRequiredService<ITenantAccessor>();
-            tenantAccessor.SetTenant(new TenantContext(
-                tenantContext.TenantId,
-                tenantContext.Slug ?? string.Empty,
-                tenantContext.DisplayName ?? string.Empty,
-                true,
-                IsDemo: false));
-
-            using var systemScope = SystemAuditScope.PushForScope(
-                tenantScope.ServiceProvider, AuditEndpoint);
-
-            var tracker = tenantScope.ServiceProvider.GetRequiredService<IExcursionTracker>();
-            var resolutionHandler = tenantScope.ServiceProvider.GetRequiredService<IExcursionResolutionHandler>();
+            using var tenantScope = BeginTenantScope(tenantContext);
+            var tracker = tenantScope.Services.GetRequiredService<IExcursionTracker>();
+            var resolutionHandler = tenantScope.Services.GetRequiredService<IExcursionResolutionHandler>();
 
             foreach (var excursion in tenantGroup)
             {
@@ -238,23 +224,11 @@ public class AlertSweepService : BackgroundService
 
         var tenantContext = await repository.GetTenantAlertContextAsync(tenantId, ct);
 
-        using var tenantScope = _serviceProvider.CreateScope();
-        if (tenantContext is not null)
-        {
-            tenantScope.ServiceProvider.GetRequiredService<ITenantAccessor>().SetTenant(new TenantContext(
-                tenantContext.TenantId,
-                tenantContext.Slug ?? string.Empty,
-                tenantContext.DisplayName ?? string.Empty,
-                true,
-                IsDemo: false));
-        }
-
-        using var systemScope = SystemAuditScope.PushForScope(
-            tenantScope.ServiceProvider, AuditEndpoint);
+        using var tenantScope = BeginTenantScope(tenantContext);
 
         var readings = tenantContext is null
             ? []
-            : await LoadRecentReadingsAsync(tenantScope.ServiceProvider, tenantId, now, ct);
+            : await LoadRecentReadingsAsync(tenantScope.Services, tenantId, now, ct);
         var points = readings.Select(r => new GlucosePoint(r.Timestamp, r.Mgdl)).ToList();
 
         SensorContext? enrichedContext = null;
@@ -262,7 +236,7 @@ public class AlertSweepService : BackgroundService
             && tenantGroup.Any(i => configsByInstance[i.InstanceId].Conditions is { Count: > 0 }))
         {
             enrichedContext = await BuildSnoozeContextAsync(
-                tenantScope.ServiceProvider, tenantContext, readings, now, tenantGroup, configsByInstance, ct);
+                tenantScope.Services, tenantContext, readings, now, tenantGroup, configsByInstance, ct);
         }
 
         foreach (var instance in tenantGroup)
@@ -285,7 +259,7 @@ public class AlertSweepService : BackgroundService
             {
                 extend = enrichedContext is not null
                          && await EvaluateSnoozeConditionsAsync(
-                             tenantScope.ServiceProvider, instance, conditions, enrichedContext, ct);
+                             tenantScope.Services, instance, conditions, enrichedContext, ct);
                 reason = extend ? "conditions" : "conditions-failed";
             }
             else
@@ -330,6 +304,44 @@ public class AlertSweepService : BackgroundService
         }
 
         return modifiedCount;
+    }
+
+    /// <summary>
+    /// A child DI scope running as <paramref name="tenant"/>, when there is one, with
+    /// <see cref="AuditEndpoint"/> pushed for its writes.
+    /// </summary>
+    private TenantScope BeginTenantScope(TenantAlertContext? tenant)
+    {
+        var scope = _serviceProvider.CreateScope();
+        try
+        {
+            if (tenant is not null)
+            {
+                scope.ServiceProvider.GetRequiredService<ITenantAccessor>().SetTenant(new TenantContext(
+                    tenant.TenantId,
+                    tenant.Slug ?? string.Empty,
+                    tenant.DisplayName ?? string.Empty,
+                    true,
+                    IsDemo: false));
+            }
+            return new TenantScope(scope, SystemAuditScope.PushForScope(scope.ServiceProvider, AuditEndpoint));
+        }
+        catch
+        {
+            scope.Dispose();
+            throw;
+        }
+    }
+
+    private sealed class TenantScope(IServiceScope scope, IDisposable audit) : IDisposable
+    {
+        public IServiceProvider Services => scope.ServiceProvider;
+
+        public void Dispose()
+        {
+            audit.Dispose();
+            scope.Dispose();
+        }
     }
 
     private async Task<IReadOnlyList<SensorGlucose>> LoadRecentReadingsAsync(
@@ -472,7 +484,6 @@ public class AlertSweepService : BackgroundService
         if (openExcursions.Count == 0) return;
 
         var byTenant = openExcursions.GroupBy(x => x.TenantId);
-        var now = DateTime.UtcNow;
 
         foreach (var tenantGroup in byTenant)
         {
@@ -480,21 +491,10 @@ public class AlertSweepService : BackgroundService
             var tenantContext = await lookupRepository.GetTenantAlertContextAsync(tenantId, ct);
             if (tenantContext is null || !tenantContext.IsActive) continue;
 
-            using var tenantScope = _serviceProvider.CreateScope();
-            var tenantAccessor = tenantScope.ServiceProvider.GetRequiredService<ITenantAccessor>();
-            tenantAccessor.SetTenant(new TenantContext(
-                tenantContext.TenantId,
-                tenantContext.Slug ?? string.Empty,
-                tenantContext.DisplayName ?? string.Empty,
-                true,
-                IsDemo: false));
-
-            using var systemScope = SystemAuditScope.PushForScope(
-                tenantScope.ServiceProvider, AuditEndpoint);
-
-            var engine = tenantScope.ServiceProvider.GetRequiredService<IAlertEvaluationEngine>();
-            var enricher = tenantScope.ServiceProvider.GetRequiredService<ISensorContextEnricher>();
-            var resolutionHandler = tenantScope.ServiceProvider.GetRequiredService<IExcursionResolutionHandler>();
+            using var tenantScope = BeginTenantScope(tenantContext);
+            var engine = tenantScope.Services.GetRequiredService<IAlertEvaluationEngine>();
+            var enricher = tenantScope.Services.GetRequiredService<ISensorContextEnricher>();
+            var resolutionHandler = tenantScope.Services.GetRequiredService<IExcursionResolutionHandler>();
 
             // Build a baseline context from tenant freshness; enricher fills the rest.
             var baseContext = new SensorContext
@@ -581,21 +581,11 @@ public class AlertSweepService : BackgroundService
             var tenantContext = await lookupRepository.GetTenantAlertContextAsync(tenantId, ct);
             if (tenantContext is null || !tenantContext.IsActive) continue;
 
-            using var tenantScope = _serviceProvider.CreateScope();
-            var tenantAccessor = tenantScope.ServiceProvider.GetRequiredService<ITenantAccessor>();
-            tenantAccessor.SetTenant(new TenantContext(
-                tenantContext.TenantId,
-                tenantContext.Slug ?? string.Empty,
-                tenantContext.DisplayName ?? string.Empty,
-                true,
-                IsDemo: false));
-
-            using var systemScope = SystemAuditScope.PushForScope(
-                tenantScope.ServiceProvider, AuditEndpoint);
+            using var tenantScope = BeginTenantScope(tenantContext);
 
             try
             {
-                var canonical = tenantScope.ServiceProvider.GetRequiredService<ICanonicalGlucoseService>();
+                var canonical = tenantScope.Services.GetRequiredService<ICanonicalGlucoseService>();
                 var latest = await canonical.GetLatestAsync(ct);
                 var context = latest is null
                     ? new SensorContext
@@ -607,7 +597,7 @@ public class AlertSweepService : BackgroundService
                     }
                     : await UsableContextAsync(canonical, latest, ct);
 
-                var orchestrator = tenantScope.ServiceProvider.GetRequiredService<IAlertOrchestrator>();
+                var orchestrator = tenantScope.Services.GetRequiredService<IAlertOrchestrator>();
                 await orchestrator.EvaluateRulesAsync(
                     wallClockRules, tenantRules.Select(r => r.Id).ToHashSet(), context, ct);
             }
