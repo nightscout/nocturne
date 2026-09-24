@@ -202,6 +202,11 @@ public class AlertRepository : IAlertRepository
     /// <summary>
     /// Gets alert excursions that are currently in the hysteresis (recovery) period.
     /// </summary>
+    /// <remarks>
+    /// Selected by the rule's tracker state, which the tracker decides from, rather than by the
+    /// excursion's copy of the hysteresis start: a state from before that copy existed is in
+    /// hysteresis with no start on either row.
+    /// </remarks>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>A collection of hysteresis excursion snapshots.</returns>
     public virtual async Task<IReadOnlyList<HysteresisExcursionSnapshot>> GetExcursionsInHysteresisAsync(
@@ -217,11 +222,11 @@ public class AlertRepository : IAlertRepository
             await using var context = await _contextFactory.CreateDbContextAsync(ct);
             context.TenantId = tenantId;
 
-            var rows = await context.AlertExcursions
+            var rows = await context.AlertTrackerState
                 .AsNoTracking()
-                .Where(e => e.HysteresisStartedAt != null && e.EndedAt == null)
-                .Select(e => new HysteresisExcursionSnapshot(
-                    e.Id, e.TenantId, e.AlertRuleId, e.HysteresisStartedAt))
+                .Where(s => s.State == "hysteresis" && s.ActiveExcursionId != null)
+                .Select(s => new HysteresisExcursionSnapshot(
+                    s.ActiveExcursionId!.Value, s.TenantId, s.AlertRuleId, s.HysteresisStartedAt))
                 .ToListAsync(ct);
             results.AddRange(rows);
         }
