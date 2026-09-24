@@ -1,0 +1,583 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-23T23:39:57.059575+00:00",
+  "title": "Design System: Nocturne",
+  "extensions": {
+    "colorMeta": {
+      "foreground": {
+        "role": "neutral",
+        "displayName": "--foreground",
+        "canonical": "oklch(0.13 0.028 261.692)",
+        "tonalRamp": [
+          "oklch(0.15 0.028 261.692)",
+          "oklch(0.26 0.028 261.692)",
+          "oklch(0.37 0.028 261.692)",
+          "oklch(0.48 0.028 261.692)",
+          "oklch(0.60 0.028 261.692)",
+          "oklch(0.72 0.028 261.692)",
+          "oklch(0.84 0.028 261.692)",
+          "oklch(0.95 0.028 261.692)"
+        ]
+      },
+      "primary": {
+        "role": "primary",
+        "displayName": "--primary",
+        "canonical": "oklch(0.21 0.034 264.665)",
+        "tonalRamp": [
+          "oklch(0.15 0.034 264.665)",
+          "oklch(0.26 0.034 264.665)",
+          "oklch(0.37 0.034 264.665)",
+          "oklch(0.48 0.034 264.665)",
+          "oklch(0.60 0.034 264.665)",
+          "oklch(0.72 0.034 264.665)",
+          "oklch(0.84 0.034 264.665)",
+          "oklch(0.95 0.034 264.665)"
+        ]
+      },
+      "background": {
+        "role": "neutral",
+        "displayName": "--background",
+        "canonical": "oklch(1 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.26 0 0)",
+          "oklch(0.37 0 0)",
+          "oklch(0.48 0 0)",
+          "oklch(0.60 0 0)",
+          "oklch(0.72 0 0)",
+          "oklch(0.84 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "primary-foreground": {
+        "role": "neutral",
+        "displayName": "--primary-foreground",
+        "canonical": "oklch(0.985 0.002 247.839)",
+        "tonalRamp": [
+          "oklch(0.15 0.002 247.839)",
+          "oklch(0.26 0.002 247.839)",
+          "oklch(0.37 0.002 247.839)",
+          "oklch(0.48 0.002 247.839)",
+          "oklch(0.60 0.002 247.839)",
+          "oklch(0.72 0.002 247.839)",
+          "oklch(0.84 0.002 247.839)",
+          "oklch(0.95 0.002 247.839)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "--muted",
+        "canonical": "oklch(0.967 0.003 264.542)",
+        "tonalRamp": [
+          "oklch(0.15 0.003 264.542)",
+          "oklch(0.26 0.003 264.542)",
+          "oklch(0.37 0.003 264.542)",
+          "oklch(0.48 0.003 264.542)",
+          "oklch(0.60 0.003 264.542)",
+          "oklch(0.72 0.003 264.542)",
+          "oklch(0.84 0.003 264.542)",
+          "oklch(0.95 0.003 264.542)"
+        ]
+      },
+      "border": {
+        "role": "neutral",
+        "displayName": "--border",
+        "canonical": "oklch(0.928 0.006 264.531)",
+        "tonalRamp": [
+          "oklch(0.15 0.006 264.531)",
+          "oklch(0.26 0.006 264.531)",
+          "oklch(0.37 0.006 264.531)",
+          "oklch(0.48 0.006 264.531)",
+          "oklch(0.60 0.006 264.531)",
+          "oklch(0.72 0.006 264.531)",
+          "oklch(0.84 0.006 264.531)",
+          "oklch(0.95 0.006 264.531)"
+        ]
+      },
+      "muted-foreground": {
+        "role": "neutral",
+        "displayName": "--muted-foreground",
+        "canonical": "oklch(0.551 0.027 264.364)",
+        "tonalRamp": [
+          "oklch(0.15 0.027 264.364)",
+          "oklch(0.26 0.027 264.364)",
+          "oklch(0.37 0.027 264.364)",
+          "oklch(0.48 0.027 264.364)",
+          "oklch(0.60 0.027 264.364)",
+          "oklch(0.72 0.027 264.364)",
+          "oklch(0.84 0.027 264.364)",
+          "oklch(0.95 0.027 264.364)"
+        ]
+      },
+      "muted-dark": {
+        "role": "neutral",
+        "displayName": "--muted (dark)",
+        "canonical": "oklch(0.278 0.033 256.848)",
+        "tonalRamp": [
+          "oklch(0.15 0.033 256.848)",
+          "oklch(0.26 0.033 256.848)",
+          "oklch(0.37 0.033 256.848)",
+          "oklch(0.48 0.033 256.848)",
+          "oklch(0.60 0.033 256.848)",
+          "oklch(0.72 0.033 256.848)",
+          "oklch(0.84 0.033 256.848)",
+          "oklch(0.95 0.033 256.848)"
+        ]
+      },
+      "destructive": {
+        "role": "tertiary",
+        "displayName": "--destructive",
+        "canonical": "oklch(0.577 0.245 27.325)",
+        "tonalRamp": [
+          "oklch(0.15 0.245 27.325)",
+          "oklch(0.26 0.245 27.325)",
+          "oklch(0.37 0.245 27.325)",
+          "oklch(0.48 0.245 27.325)",
+          "oklch(0.60 0.245 27.325)",
+          "oklch(0.72 0.245 27.325)",
+          "oklch(0.84 0.245 27.325)",
+          "oklch(0.95 0.245 27.325)"
+        ]
+      },
+      "success": {
+        "role": "tertiary",
+        "displayName": "--success",
+        "canonical": "oklch(0.47 0.13 149.214)",
+        "tonalRamp": [
+          "oklch(0.15 0.13 149.214)",
+          "oklch(0.26 0.13 149.214)",
+          "oklch(0.37 0.13 149.214)",
+          "oklch(0.48 0.13 149.214)",
+          "oklch(0.60 0.13 149.214)",
+          "oklch(0.72 0.13 149.214)",
+          "oklch(0.84 0.13 149.214)",
+          "oklch(0.95 0.13 149.214)"
+        ]
+      },
+      "warning": {
+        "role": "tertiary",
+        "displayName": "--warning",
+        "canonical": "oklch(0.49 0.117 58.318)",
+        "tonalRamp": [
+          "oklch(0.15 0.117 58.318)",
+          "oklch(0.26 0.117 58.318)",
+          "oklch(0.37 0.117 58.318)",
+          "oklch(0.48 0.117 58.318)",
+          "oklch(0.60 0.117 58.318)",
+          "oklch(0.72 0.117 58.318)",
+          "oklch(0.84 0.117 58.318)",
+          "oklch(0.95 0.117 58.318)"
+        ]
+      },
+      "info": {
+        "role": "tertiary",
+        "displayName": "--info",
+        "canonical": "oklch(0.546 0.245 262.881)",
+        "tonalRamp": [
+          "oklch(0.15 0.245 262.881)",
+          "oklch(0.26 0.245 262.881)",
+          "oklch(0.37 0.245 262.881)",
+          "oklch(0.48 0.245 262.881)",
+          "oklch(0.60 0.245 262.881)",
+          "oklch(0.72 0.245 262.881)",
+          "oklch(0.84 0.245 262.881)",
+          "oklch(0.95 0.245 262.881)"
+        ]
+      },
+      "glucose-in-range": {
+        "role": "secondary",
+        "displayName": "--glucose-in-range",
+        "canonical": "oklch(0.6 0.118 184.704)",
+        "tonalRamp": [
+          "oklch(0.15 0.118 184.704)",
+          "oklch(0.26 0.118 184.704)",
+          "oklch(0.37 0.118 184.704)",
+          "oklch(0.48 0.118 184.704)",
+          "oklch(0.60 0.118 184.704)",
+          "oklch(0.72 0.118 184.704)",
+          "oklch(0.84 0.118 184.704)",
+          "oklch(0.95 0.118 184.704)"
+        ]
+      },
+      "glucose-tight-range": {
+        "role": "tertiary",
+        "displayName": "--glucose-tight-range",
+        "canonical": "oklch(0.72 0.16 150)",
+        "tonalRamp": [
+          "oklch(0.15 0.16 150)",
+          "oklch(0.26 0.16 150)",
+          "oklch(0.37 0.16 150)",
+          "oklch(0.48 0.16 150)",
+          "oklch(0.60 0.16 150)",
+          "oklch(0.72 0.16 150)",
+          "oklch(0.84 0.16 150)",
+          "oklch(0.95 0.16 150)"
+        ]
+      },
+      "glucose-low": {
+        "role": "tertiary",
+        "displayName": "--glucose-low",
+        "canonical": "oklch(0.646 0.222 41.116)",
+        "tonalRamp": [
+          "oklch(0.15 0.222 41.116)",
+          "oklch(0.26 0.222 41.116)",
+          "oklch(0.37 0.222 41.116)",
+          "oklch(0.48 0.222 41.116)",
+          "oklch(0.60 0.222 41.116)",
+          "oklch(0.72 0.222 41.116)",
+          "oklch(0.84 0.222 41.116)",
+          "oklch(0.95 0.222 41.116)"
+        ]
+      },
+      "glucose-very-low": {
+        "role": "tertiary",
+        "displayName": "--glucose-very-low",
+        "canonical": "oklch(0.577 0.245 27.325)",
+        "tonalRamp": [
+          "oklch(0.15 0.245 27.325)",
+          "oklch(0.26 0.245 27.325)",
+          "oklch(0.37 0.245 27.325)",
+          "oklch(0.48 0.245 27.325)",
+          "oklch(0.60 0.245 27.325)",
+          "oklch(0.72 0.245 27.325)",
+          "oklch(0.84 0.245 27.325)",
+          "oklch(0.95 0.245 27.325)"
+        ]
+      },
+      "glucose-high": {
+        "role": "tertiary",
+        "displayName": "--glucose-high",
+        "canonical": "oklch(0.65 0.18 270)",
+        "tonalRamp": [
+          "oklch(0.15 0.18 270)",
+          "oklch(0.26 0.18 270)",
+          "oklch(0.37 0.18 270)",
+          "oklch(0.48 0.18 270)",
+          "oklch(0.60 0.18 270)",
+          "oklch(0.72 0.18 270)",
+          "oklch(0.84 0.18 270)",
+          "oklch(0.95 0.18 270)"
+        ]
+      },
+      "glucose-very-high": {
+        "role": "tertiary",
+        "displayName": "--glucose-very-high",
+        "canonical": "oklch(0.55 0.25 15)",
+        "tonalRamp": [
+          "oklch(0.15 0.25 15)",
+          "oklch(0.26 0.25 15)",
+          "oklch(0.37 0.25 15)",
+          "oklch(0.48 0.25 15)",
+          "oklch(0.60 0.25 15)",
+          "oklch(0.72 0.25 15)",
+          "oklch(0.84 0.25 15)",
+          "oklch(0.95 0.25 15)"
+        ]
+      },
+      "insulin": {
+        "role": "tertiary",
+        "displayName": "--insulin",
+        "canonical": "rgb(30, 150, 252)",
+        "tonalRamp": [
+          "oklch(0.15 0.18 252)",
+          "oklch(0.26 0.18 252)",
+          "oklch(0.37 0.18 252)",
+          "oklch(0.48 0.18 252)",
+          "oklch(0.60 0.18 252)",
+          "oklch(0.72 0.18 252)",
+          "oklch(0.84 0.18 252)",
+          "oklch(0.95 0.18 252)"
+        ]
+      },
+      "basal": {
+        "role": "tertiary",
+        "displayName": "--basal",
+        "canonical": "oklch(0.75 0.134 248.6)",
+        "tonalRamp": [
+          "oklch(0.15 0.134 248.6)",
+          "oklch(0.26 0.134 248.6)",
+          "oklch(0.37 0.134 248.6)",
+          "oklch(0.48 0.134 248.6)",
+          "oklch(0.60 0.134 248.6)",
+          "oklch(0.72 0.134 248.6)",
+          "oklch(0.84 0.134 248.6)",
+          "oklch(0.95 0.134 248.6)"
+        ]
+      },
+      "carbs": {
+        "role": "tertiary",
+        "displayName": "--carbs",
+        "canonical": "oklch(0.769 0.188 70.08)",
+        "tonalRamp": [
+          "oklch(0.15 0.188 70.08)",
+          "oklch(0.26 0.188 70.08)",
+          "oklch(0.37 0.188 70.08)",
+          "oklch(0.48 0.188 70.08)",
+          "oklch(0.60 0.188 70.08)",
+          "oklch(0.72 0.188 70.08)",
+          "oklch(0.84 0.188 70.08)",
+          "oklch(0.95 0.188 70.08)"
+        ]
+      },
+      "demo": {
+        "role": "tertiary",
+        "displayName": "--demo",
+        "canonical": "oklch(0.558 0.288 302.321)",
+        "tonalRamp": [
+          "oklch(0.15 0.288 302.321)",
+          "oklch(0.26 0.288 302.321)",
+          "oklch(0.37 0.288 302.321)",
+          "oklch(0.48 0.288 302.321)",
+          "oklch(0.60 0.288 302.321)",
+          "oklch(0.72 0.288 302.321)",
+          "oklch(0.84 0.288 302.321)",
+          "oklch(0.95 0.288 302.321)"
+        ]
+      },
+      "brand": {
+        "role": "secondary",
+        "displayName": "--brand",
+        "canonical": "oklch(0.6 0.118 184.704)",
+        "tonalRamp": [
+          "oklch(0.15 0.118 184.704)",
+          "oklch(0.26 0.118 184.704)",
+          "oklch(0.37 0.118 184.704)",
+          "oklch(0.48 0.118 184.704)",
+          "oklch(0.60 0.118 184.704)",
+          "oklch(0.72 0.118 184.704)",
+          "oklch(0.84 0.118 184.704)",
+          "oklch(0.95 0.118 184.704)"
+        ]
+      },
+      "sunken": {
+        "role": "neutral",
+        "displayName": "--sunken",
+        "canonical": "oklch(0.1 0.025 261)",
+        "tonalRamp": [
+          "oklch(0.15 0.025 261)",
+          "oklch(0.26 0.025 261)",
+          "oklch(0.37 0.025 261)",
+          "oklch(0.48 0.025 261)",
+          "oklch(0.60 0.025 261)",
+          "oklch(0.72 0.025 261)",
+          "oklch(0.84 0.025 261)",
+          "oklch(0.95 0.025 261)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Portal hero only."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Portal section headings."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Card titles."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "The 14px UI default."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Badges, captions, and units."
+      },
+      "eyebrow": {
+        "displayName": "Eyebrow",
+        "purpose": "Uppercase portal section kickers, set in Montserrat."
+      },
+      "micro": {
+        "displayName": "Micro",
+        "purpose": "The 10px UI floor, for dense counts and tags."
+      }
+    },
+    "shadows": [
+      {
+        "name": "control",
+        "value": "0 1px 2px 0 oklch(0 0 0 / 5%)",
+        "purpose": "shadow-xs on buttons and inputs."
+      },
+      {
+        "name": "surface",
+        "value": "0 1px 3px 0 oklch(0 0 0 / 10%), 0 1px 2px -1px oklch(0 0 0 / 10%)",
+        "purpose": "shadow-sm on resting cards."
+      },
+      {
+        "name": "alarm",
+        "value": "0 10px 15px -3px oklch(0 0 0 / 10%), 0 4px 6px -4px oklch(0 0 0 / 10%)",
+        "purpose": "shadow-lg, only on the xl alarm button."
+      }
+    ],
+    "motion": [
+      {
+        "name": "pulse-on-change",
+        "value": "600ms",
+        "purpose": "The glucose tile pulses once when the value changes."
+      },
+      {
+        "name": "live",
+        "value": "animate-pulse",
+        "purpose": "A badge marking something that is running now."
+      },
+      {
+        "name": "flash-border",
+        "value": "animate-flash-border",
+        "purpose": "The border of a stale and disconnected reading."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px"
+      },
+      {
+        "name": "md",
+        "value": "768px"
+      },
+      {
+        "name": "lg",
+        "value": "1024px"
+      },
+      {
+        "name": "xl",
+        "value": "1280px"
+      },
+      {
+        "name": "2xl",
+        "value": "1536px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The default action: a `--primary` fill, no brand colour.",
+      "html": "<button class=\"ds-btn-primary\">Save changes</button>",
+      "css": ".ds-btn-primary { font-family: Cabin, sans-serif; font-size: 14px; font-weight: 500; border-radius: 8px; height: 36px; padding: 0 16px; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; transition: all 150ms; outline: none; background: var(--primary, oklch(0.21 0.034 264.665)); color: var(--primary-foreground, oklch(0.985 0.002 247.839)); border: 1px solid transparent; box-shadow: 0 1px 2px oklch(0 0 0 / 5%); } .ds-btn-primary:hover { background: color-mix(in oklab, var(--primary, oklch(0.21 0.034 264.665)) 90%, transparent); } .ds-btn-primary:focus-visible { box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring, oklch(0.707 0.022 261.325)) 50%, transparent); border-color: var(--ring, oklch(0.707 0.022 261.325)); }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "A secondary action on the page surface.",
+      "html": "<button class=\"ds-btn-outline\">Export</button>",
+      "css": ".ds-btn-outline { font-family: Cabin, sans-serif; font-size: 14px; font-weight: 500; border-radius: 8px; height: 36px; padding: 0 16px; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; transition: all 150ms; outline: none; background: var(--background, oklch(1 0 0)); color: var(--foreground, oklch(0.13 0.028 261.692)); border: 1px solid var(--border, oklch(0.928 0.006 264.531)); box-shadow: 0 1px 2px oklch(0 0 0 / 5%); } .ds-btn-outline:hover { background: var(--accent, oklch(0.967 0.003 264.542)); } .ds-btn-outline:focus-visible { box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring, oklch(0.707 0.022 261.325)) 50%, transparent); border-color: var(--ring, oklch(0.707 0.022 261.325)); }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "A toolbar or in-card action with no resting fill.",
+      "html": "<button class=\"ds-btn-ghost\">Cancel</button>",
+      "css": ".ds-btn-ghost { font-family: Cabin, sans-serif; font-size: 14px; font-weight: 500; border-radius: 8px; height: 36px; padding: 0 16px; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; transition: all 150ms; outline: none; background: transparent; color: var(--foreground, oklch(0.13 0.028 261.692)); border: 1px solid transparent; } .ds-btn-ghost:hover { background: var(--accent, oklch(0.967 0.003 264.542)); } .ds-btn-ghost:focus-visible { box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring, oklch(0.707 0.022 261.325)) 50%, transparent); border-color: var(--ring, oklch(0.707 0.022 261.325)); }"
+    },
+    {
+      "name": "Alarm Button",
+      "kind": "button",
+      "refersTo": "button-alarm",
+      "description": "A full-screen alarm or emergency action (size xl): a touch target read at a glance.",
+      "html": "<button class=\"ds-btn-alarm\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M10.268 21a2 2 0 0 0 3.464 0\"/><path d=\"M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326\"/></svg>Acknowledge</button>",
+      "css": ".ds-btn-alarm { font-family: Cabin, sans-serif; font-size: 18px; font-weight: 600; border-radius: 8px; height: 56px; padding: 0 32px; display: inline-flex; align-items: center; gap: 8px; border: none; cursor: pointer; outline: none; background: var(--destructive, oklch(0.577 0.245 27.325)); color: #fff; box-shadow: 0 10px 15px -3px oklch(0 0 0 / 10%), 0 4px 6px -4px oklch(0 0 0 / 10%); } .ds-btn-alarm:hover { background: color-mix(in oklab, var(--destructive, oklch(0.577 0.245 27.325)) 90%, transparent); } .ds-btn-alarm:focus-visible { box-shadow: 0 0 0 3px color-mix(in oklab, var(--destructive, oklch(0.577 0.245 27.325)) 30%, transparent); }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "A 1px `--input` field whose focus ring matches the buttons.",
+      "html": "<input class=\"ds-input\" placeholder=\"Target low (mg/dL)\" />",
+      "css": ".ds-input { font-family: Cabin, sans-serif; font-size: 14px; height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--input, oklch(0.928 0.006 264.531)); background: transparent; color: var(--foreground, oklch(0.13 0.028 261.692)); box-shadow: 0 1px 2px oklch(0 0 0 / 5%); outline: none; transition: color 150ms, box-shadow 150ms; } .ds-input::placeholder { color: var(--muted-foreground, oklch(0.551 0.027 264.364)); } .ds-input:focus-visible { box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring, oklch(0.707 0.022 261.325)) 50%, transparent); border-color: var(--ring, oklch(0.707 0.022 261.325)); }"
+    },
+    {
+      "name": "Stat Card",
+      "kind": "card",
+      "refersTo": "card-stat",
+      "description": "A stat tile: a muted label, the figure, and the unit beside the value.",
+      "html": "<div class=\"ds-card-stat\"><div class=\"ds-card-stat-label\">Time in Range</div><div class=\"ds-card-stat-figure\">86<span>%</span></div><div class=\"ds-card-stat-note\">Last 24h &middot; 288 readings</div></div>",
+      "css": ".ds-card-stat { font-family: Cabin, sans-serif; background: var(--card, oklch(1 0 0)); color: var(--card-foreground, oklch(0.13 0.028 261.692)); border: 1px solid var(--border, oklch(0.928 0.006 264.531)); border-radius: 14px; padding: 16px; box-shadow: 0 1px 3px oklch(0 0 0 / 10%); display: flex; flex-direction: column; gap: 6px; width: 220px; transition: background 150ms; } .ds-card-stat:hover { background: color-mix(in oklab, var(--accent, oklch(0.967 0.003 264.542)) 50%, transparent); } .ds-card-stat-label { font-weight: 600; line-height: 1; color: var(--muted-foreground, oklch(0.551 0.027 264.364)); } .ds-card-stat-figure { font-size: 30px; font-weight: 700; color: var(--glucose-in-range, oklch(0.6 0.118 184.704)); } .ds-card-stat-figure span { font-size: 14px; font-weight: 500; color: var(--muted-foreground, oklch(0.551 0.027 264.364)); margin-left: 2px; } .ds-card-stat-note { font-size: 12px; color: var(--muted-foreground, oklch(0.551 0.027 264.364)); }"
+    },
+    {
+      "name": "Outcome Badge",
+      "kind": "chip",
+      "refersTo": "badge-success",
+      "description": "A UI outcome chip: a 15% tint with text in the tone and no border.",
+      "html": "<span class=\"ds-badge-success\">Synced</span> <span class=\"ds-badge-warning\">Stale</span>",
+      "css": ".ds-badge-success, .ds-badge-warning { font-family: Cabin, sans-serif; display: inline-flex; align-items: center; font-size: 12px; font-weight: 500; padding: 2px 8px; border-radius: 8px; border: 1px solid transparent; } .ds-badge-success { background: color-mix(in oklab, var(--success, oklch(0.47 0.13 149.214)) 15%, transparent); color: var(--success, oklch(0.47 0.13 149.214)); } .ds-badge-warning { background: color-mix(in oklab, var(--warning, oklch(0.49 0.117 58.318)) 15%, transparent); color: var(--warning, oklch(0.49 0.117 58.318)); }"
+    },
+    {
+      "name": "Glucose Value Indicator",
+      "kind": "custom",
+      "refersTo": "glucose-value-indicator",
+      "description": "The signature current-reading tile: a range fill, heavy numerals, the trend, the delta, and the age. It turns muted when stale.",
+      "html": "<div class=\"ds-gvi\"><div class=\"ds-gvi-tile\">91</div><div class=\"ds-gvi-meta\"><span>&#8594; +1 mg/dL</span><span>1 min ago</span></div></div>",
+      "css": ".ds-gvi { font-family: Cabin, sans-serif; display: inline-flex; align-items: center; gap: 10px; color: var(--foreground, oklch(0.13 0.028 261.692)); } .ds-gvi-tile { font-size: 36px; font-weight: 700; padding: 8px 16px; border-radius: 10px; background: var(--glucose-in-range, oklch(0.6 0.118 184.704)); color: #fff; transition: transform 300ms; } .ds-gvi-tile:hover { transform: scale(1.03); } .ds-gvi-meta { display: flex; flex-direction: column; font-size: 12px; color: var(--muted-foreground, oklch(0.551 0.027 264.364)); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Clinical Ledger",
+    "overview": "Nocturne is a precise, dense, honest record of a body's data. It reads like a well-kept ledger: tabular, exact, and indifferent to fashion. The user comes to read numbers and trace lines, so the interface is a quiet grid of cards on a neutral cool-navy field. Colour is spent almost entirely on meaning. Glucose range, insulin, carbs, basal, severity, and record kind each have a named token, and nothing borrows a clinical hue for decoration.\n\nThe screens are dense on purpose. A dashboard carries a strip of device pills, stat cards, and a multi-lane glucose chart in one viewport, because the people using it read these values daily and want them together. Density is held in check by consistent card rhythm (24px inside, 24px between), hairline borders, and a type scale that rarely goes above a card title. The loudest thing on any screen should be the current reading.\n\nThe system is themeable at runtime. Nocturne is the default, and Trio, AAPS, and Classic theme packs (`packages/ui/src/styles/*-theme.css`) re-point the same tokens to match the apps users already know. Consumers therefore reference tokens and never literal values. It is also print-aware: reports print with their clinical colours intact and shadows stripped.",
+    "keyCharacteristics": [
+      "A neutral cool-navy base (hue ≈ 261–265) with near-zero chroma, in light and dark",
+      "Every clinical concept has a named token, and colour is reserved for meaning",
+      "Flat, tonal surfaces with hairline borders, and shadows that barely register",
+      "Dense, card-based layouts led by one dominant reading",
+      "Runtime theme packs, so tokens are always referenced, never hard-coded",
+      "Reports print faithfully"
+    ],
+    "rules": [
+      {
+        "name": "The One Meaning Rule",
+        "body": "A colour token has exactly one meaning. Glucose-range, outcome, severity, record-kind, and identity colours are never interchangeable, even where two share a value. `--status-warning` is not `--warning`.",
+        "section": "colors"
+      },
+      {
+        "name": "The Colour-Plus-One Rule",
+        "body": "No clinical state is carried by colour alone. Pair every range, severity, or mode colour with a second channel: a number, label, icon, position on an axis, dash pattern, or chart texture (`CHART_TEXTURES`).",
+        "section": "colors"
+      },
+      {
+        "name": "The Referenced-Not-Literal Rule",
+        "body": "Components reference tokens (`bg-glucose-low`, `var(--insulin)`) and never Tailwind palette literals such as `bg-green-500`. Theme packs and print overrides only work through tokens. The one sanctioned exception is `STATUS_TOKENS` in `packages/ui/src/lib/tokens.ts`, which exists for out-of-browser consumers (chat cards, email) and has a guard test against drift.",
+        "section": "colors"
+      },
+      {
+        "name": "The Ten-Pixel Floor Rule",
+        "body": "No UI text is set below 10px (`text-2xs`). The 3xs and 4xs steps exist only for annotations inside a chart.",
+        "section": "typography"
+      },
+      {
+        "name": "The Unit-Beside-Value Rule",
+        "body": "A glucose, insulin, or carb value is never set without its unit (mg/dL or mmol/L, U, g). The unit takes the label or muted grade so the figure leads.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat-By-Default Rule",
+        "body": "Surfaces separate by tone and hairline, not shadow. Adding a shadow step beyond `shadow-sm` to a resting surface is a system change, not a component choice.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** reference every colour through its token (`bg-glucose-low`, `text-entry-carbs`, `var(--insulin)`) so the Trio, AAPS, and Classic packs and print overrides apply.",
+      "**Do** pair every clinical colour with a second channel (value, label, icon, position, dash, or texture), per the Colour-Plus-One Rule.",
+      "**Do** use the `entry-*` text grades for any text or icon in a record kind's colour, and the chart tokens only for fills and strokes.",
+      "**Do** show every glucose value with its unit and age, and drop a stale reading to the muted treatment rather than leaving it in its range colour.",
+      "**Do** add a named `tv()` variant with a one-line use-case comment when a component needs a new look, instead of overriding classes at the call site.",
+      "**Do** keep printed reports faithful: clinical colours at `print-color-adjust: exact`, no shadows, cards unbroken across pages.",
+      "**Do** use the `overlay` variants over fullscreen clock and alarm surfaces whose background the theme does not own."
+    ],
+    "donts": [
+      "**Don't** use Tailwind palette literals (`bg-green-500`, `text-orange-500`) for any clinical or outcome state.",
+      "**Don't** use `--success` or `--warning` for glucose or therapy state. They are UI outcomes. Use the `--glucose-*`, `--status-*`, or `--severity-*` families.",
+      "**Don't** use `--glucose-in-range` as a brand or decorative accent. In the portal, use `--brand`.",
+      "**Don't** use `--demo` for anything except synthetic demo data.",
+      "**Don't** set UI text below 10px. `text-3xs` and `text-4xs` are for chart annotations only.",
+      "**Don't** raise a resting surface above `shadow-sm`. `shadow-lg` belongs only to the `xl` alarm button.",
+      "**Don't** use emoji. Icons are Lucide."
+    ]
+  }
+}
