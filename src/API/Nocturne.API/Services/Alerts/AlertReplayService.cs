@@ -24,8 +24,8 @@ namespace Nocturne.API.Services.Alerts;
 /// uploader battery, override active, sensitivity ratio), and predictions are reconstructed
 /// via the same <see cref="ISensorContextEnricher"/> the live engine uses, pinned per tick
 /// to the replay timestamp via <see cref="ISensorContextEnricher.EnrichAsOfAsync"/>.
-/// Auto-resolve (mirroring <c>AlertOrchestrator.TryAutoResolveAsync</c>) and DND suppression
-/// (mirroring <c>HandleExcursionOpened</c>'s suppressed-by-DND gate) surface as dedicated
+/// Auto-resolve (as <see cref="Engines.ManagedAlertEngine"/> runs it) and DND suppression (the
+/// gate <see cref="AlertOrchestrator"/> applies on open) surface as dedicated
 /// <see cref="AlertReplayEventKind"/> values.
 /// </summary>
 internal sealed class AlertReplayService(
@@ -310,13 +310,10 @@ internal sealed class AlertReplayService(
                     currentlyFiring = met;
                 }
 
-                // Step 2: auto-resolve. Mirrors AlertOrchestrator.EvaluateRuleAsync's
-                // unconditional fall-through to TryAutoResolveAsync after the open/continue
-                // path — runs against the same ruleContext under the AutoResolvePathRoot prefix
-                // so nested sustained timers don't collide with timers owned by the main rule
-                // body. The unconditional gate (live runs this even on a same-tick open) is the
-                // important bit: a rule whose body opens at tick T and whose resolve predicate
-                // is already true at T produces a fired+auto_resolved pair, matching live.
+                // Auto-resolve runs after the open/continue path unconditionally, as the live
+                // engine does, under the AutoResolvePathRoot prefix so its sustained timers don't
+                // collide with the rule body's. A body that opens at tick T with a resolve
+                // predicate already true at T therefore yields a fired+auto_resolved pair.
                 if (currentlyFiring
                     && rule.AutoResolveEnabled
                     && !string.IsNullOrWhiteSpace(rule.AutoResolveParams))

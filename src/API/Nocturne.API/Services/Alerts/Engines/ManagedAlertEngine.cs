@@ -10,16 +10,14 @@ namespace Nocturne.API.Services.Alerts.Engines;
 /// <summary>
 /// The in-process C# implementation of <see cref="IAlertEvaluationEngine"/>: wraps
 /// <see cref="ConditionEvaluatorRegistry"/> and <see cref="IExcursionTracker"/> into the
-/// per-rule driver sequence the orchestrator historically composed inline
-/// (root eval with the canonical wire-string root path → excursion tracker →
-/// unconditional auto-resolve under the <c>auto_resolve</c> path root).
+/// per-rule driver sequence (root eval with the canonical wire-string root path → excursion
+/// tracker → unconditional auto-resolve under the <c>auto_resolve</c> path root).
 /// </summary>
 /// <remarks>
-/// The logic here is extracted verbatim from <c>AlertOrchestrator.EvaluateRuleAsync</c> /
-/// <c>TryAutoResolveAsync</c>; the orchestrator keeps every side effect (instance
-/// creation, delivery, DND suppression, info auto-ack) and consumes the transitions this
-/// engine reports. Behaviour is pinned by the golden corpus
-/// (<c>tests/Parity/AlertEngineCorpus</c>) and the seam-level corpus tests.
+/// Side effects (instance creation, delivery, DND suppression, info auto-ack) stay with
+/// <see cref="AlertOrchestrator"/>, which consumes the transitions this engine reports.
+/// Behaviour is pinned by the golden corpus (<c>tests/Parity/AlertEngineCorpus</c>) and the
+/// seam-level corpus tests.
 /// </remarks>
 internal sealed class ManagedAlertEngine(
     ConditionEvaluatorRegistry evaluatorRegistry,

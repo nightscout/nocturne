@@ -19,8 +19,8 @@ namespace Nocturne.API.Services.Alerts;
 /// persistence (sustained timers, tracker state, excursion rows); which engine runs
 /// (managed C# evaluators, Rust over FFI, or shadow) is selected by <c>Alerts:Engine</c>.
 /// Errors from individual rule evaluations are caught and logged without aborting the rest of
-/// the evaluation pass. Escalation chains are no longer first-class — express delayed escalation
-/// as a separate alert rule whose tree references the parent via the <c>alert_state</c> condition.
+/// the evaluation pass. Delayed escalation is a separate rule whose tree references the parent
+/// through an <c>alert_state</c> condition.
 /// </remarks>
 /// <seealso cref="IAlertOrchestrator"/>
 /// <seealso cref="IAlertEvaluationEngine"/>

@@ -5,7 +5,7 @@ namespace Nocturne.API.Services.Alerts.Engines;
 /// <summary>Which <see cref="Nocturne.Core.Contracts.Alerts.IAlertEvaluationEngine"/> implementation serves evaluation.</summary>
 internal enum AlertEngineMode
 {
-    /// <summary>In-process C# evaluators (the historical engine). The default.</summary>
+    /// <summary>In-process C# evaluators. The default.</summary>
     Managed,
 
     /// <summary>Managed is authoritative; the Rust engine runs side-effect-free and divergences are logged.</summary>

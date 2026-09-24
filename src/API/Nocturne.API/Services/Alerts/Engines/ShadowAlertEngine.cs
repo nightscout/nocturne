@@ -98,10 +98,9 @@ internal sealed class RustShadowRuleEvaluator(AlertEngineErrors errors) : IShado
 /// failures are logged as <c>AlertEngineShadowError</c> and never escape to the caller.
 /// </summary>
 /// <remarks>
-/// Only <see cref="EvaluateRuleAsync"/> (the per-reading hot path) is shadowed; the
-/// auxiliary scopes (<see cref="EvaluateNodeAsync"/>, <see cref="EvaluateAutoResolveAsync"/>)
-/// pass straight through to the managed engine — they are covered by the same evaluator
-/// core that the per-rule shadow already exercises.
+/// Only <see cref="EvaluateRuleAsync"/> is shadowed. <see cref="EvaluateNodeAsync"/> and
+/// <see cref="EvaluateAutoResolveAsync"/> pass straight through to the managed engine, so
+/// smart-snooze conditions and the sweep's auto-resolve are not compared.
 /// </remarks>
 internal sealed class ShadowAlertEngine(
     ManagedAlertEngine managedEngine,

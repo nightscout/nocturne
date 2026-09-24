@@ -23,9 +23,7 @@ namespace Nocturne.API.Services.Alerts;
 /// </list>
 /// Each sweep creates a child DI scope so that scoped services (DbContext, tenant repositories)
 /// are properly isolated and disposed. Individual tenant failures are caught and logged without
-/// aborting the rest of the sweep. The escalation-advancement step that previously lived here
-/// went away with the schedule/escalation-step rip-out — express delayed escalation as a
-/// separate alert rule whose tree references the parent via the <c>alert_state</c> condition.
+/// aborting the rest of the sweep.
 /// </remarks>
 /// <seealso cref="AlertOrchestrator"/>
 /// <seealso cref="ExcursionTracker"/>
