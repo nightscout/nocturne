@@ -9,6 +9,7 @@ use chrono::{DateTime, TimeDelta, Utc};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum TrackerStateKind {
     Idle,
     Confirming,
@@ -17,6 +18,7 @@ pub enum TrackerStateKind {
 }
 
 impl TrackerStateKind {
+    #[must_use]
     pub fn wire(self) -> &'static str {
         match self {
             TrackerStateKind::Idle => "idle",
@@ -26,6 +28,7 @@ impl TrackerStateKind {
         }
     }
 
+    #[must_use]
     pub fn from_wire(s: &str) -> Option<Self> {
         match s {
             "idle" => Some(TrackerStateKind::Idle),
@@ -38,6 +41,7 @@ impl TrackerStateKind {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum TransitionType {
     None,
     ExcursionOpened,
@@ -47,14 +51,41 @@ pub enum TransitionType {
     ExcursionClosed,
 }
 
+impl TransitionType {
+    #[must_use]
+    pub fn wire(self) -> &'static str {
+        match self {
+            TransitionType::None => "none",
+            TransitionType::ExcursionOpened => "opened",
+            TransitionType::ExcursionContinues => "continues",
+            TransitionType::HysteresisStarted => "hysteresis_started",
+            TransitionType::HysteresisResumed => "hysteresis_resumed",
+            TransitionType::ExcursionClosed => "closed",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum CloseReason {
     Hysteresis,
     AutoResolve,
     Manual,
 }
 
+impl CloseReason {
+    #[must_use]
+    pub fn wire(self) -> &'static str {
+        match self {
+            CloseReason::Hysteresis => "hysteresis",
+            CloseReason::AutoResolve => "auto",
+            CloseReason::Manual => "manual",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[must_use]
 pub struct Transition {
     pub kind: TransitionType,
     /// The excursion involved, as its 1-based creation ordinal.
@@ -102,10 +133,12 @@ pub struct ExcursionTracker {
 }
 
 impl ExcursionTracker {
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
+    #[must_use]
     pub fn state(&self, rule_id: Uuid) -> Option<&TrackerState> {
         self.states.get(&rule_id)
     }
@@ -123,6 +156,7 @@ impl ExcursionTracker {
     }
 
     /// The 1-based ordinal the next opened excursion will receive.
+    #[must_use]
     pub fn next_excursion_ordinal(&self) -> u32 {
         self.next_ordinal + 1
     }
@@ -134,6 +168,7 @@ impl ExcursionTracker {
     }
 
     /// `GetActiveExcursionIdAsync`: returns the id only in active/hysteresis.
+    #[must_use]
     pub fn active_excursion_id(&self, rule_id: Uuid) -> Option<u32> {
         let state = self.states.get(&rule_id)?;
         match state.state {
@@ -302,11 +337,7 @@ fn handle_hysteresis(
 /// `now - started >= hysteresis_minutes` as exact whole minutes, so a
 /// non-positive window has always elapsed and an expiry past the representable
 /// calendar never arrives (§6.1).
-pub fn hysteresis_elapsed(
-    started: DateTime<Utc>,
-    hysteresis_minutes: i32,
-    now: DateTime<Utc>,
-) -> bool {
+fn hysteresis_elapsed(started: DateTime<Utc>, hysteresis_minutes: i32, now: DateTime<Utc>) -> bool {
     started
         .checked_add_signed(TimeDelta::minutes(i64::from(hysteresis_minutes)))
         .is_some_and(|expiry| now >= expiry)

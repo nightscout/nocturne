@@ -12,9 +12,20 @@ use crate::model::SustainedPayload;
 use crate::paths::node_child_path;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum TimerOpKind {
     Set,
     Clear,
+}
+
+impl TimerOpKind {
+    #[must_use]
+    pub fn wire(self) -> &'static str {
+        match self {
+            TimerOpKind::Set => "set",
+            TimerOpKind::Clear => "clear",
+        }
+    }
 }
 
 /// A recorded timer mutation. `at` is present only for `set`.
@@ -35,15 +46,16 @@ pub struct TimerStore {
 }
 
 impl TimerStore {
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
-    pub fn get_first_true(&self, rule_id: Uuid, path: &str) -> Option<DateTime<Utc>> {
+    pub(crate) fn get_first_true(&self, rule_id: Uuid, path: &str) -> Option<DateTime<Utc>> {
         self.map.get(&(rule_id, path.to_string())).copied()
     }
 
-    pub fn set_first_true(&mut self, rule_id: Uuid, path: &str, at: DateTime<Utc>) {
+    pub(crate) fn set_first_true(&mut self, rule_id: Uuid, path: &str, at: DateTime<Utc>) {
         self.map.insert((rule_id, path.to_string()), at);
         self.log.push(TimerOp {
             kind: TimerOpKind::Set,
@@ -52,29 +64,11 @@ impl TimerStore {
         });
     }
 
-    pub fn clear(&mut self, rule_id: Uuid, path: &str) {
+    pub(crate) fn clear(&mut self, rule_id: Uuid, path: &str) {
         if self.map.remove(&(rule_id, path.to_string())).is_some() {
             self.log.push(TimerOp {
                 kind: TimerOpKind::Clear,
                 path: path.to_string(),
-                at: None,
-            });
-        }
-    }
-
-    pub fn clear_all_for_rule(&mut self, rule_id: Uuid) {
-        let mut paths: Vec<String> = self
-            .map
-            .keys()
-            .filter(|(r, _)| *r == rule_id)
-            .map(|(_, p)| p.clone())
-            .collect();
-        paths.sort();
-        for path in paths {
-            self.map.remove(&(rule_id, path.clone()));
-            self.log.push(TimerOp {
-                kind: TimerOpKind::Clear,
-                path,
                 at: None,
             });
         }
@@ -93,6 +87,7 @@ impl TimerStore {
 
     /// Snapshot of every `(path, first_true)` entry for `rule_id`, sorted by
     /// path. The state a host persists between evaluations.
+    #[must_use]
     pub fn snapshot_for_rule(&self, rule_id: Uuid) -> Vec<(String, DateTime<Utc>)> {
         let mut entries: Vec<(String, DateTime<Utc>)> = self
             .map

@@ -7,7 +7,7 @@ use crate::model::Node;
 /// The leaves of `root` in pre-order; the vector index is the leaf id. A
 /// `None` is a JSON-null composite slot, which evaluates false.
 #[must_use]
-pub fn collect_leaves(root: &Node) -> Vec<Option<&Node>> {
+pub(crate) fn collect_leaves(root: &Node) -> Vec<Option<&Node>> {
     let mut leaves = Vec::new();
     walk(Some(root), &mut leaves);
     leaves

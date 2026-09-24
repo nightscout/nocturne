@@ -55,7 +55,7 @@ const MAX_SCALE: i32 = 28;
 /// 15-digit value. Trailing zeros are stripped from the scale, at most 14.
 /// Magnitudes below about `1e-28` become zero; `None` where .NET throws
 /// (NaN, infinity, beyond the decimal range), which callers map to `false`.
-pub fn decimal_from_f64_cs(v: f64) -> Option<Decimal> {
+pub(crate) fn decimal_from_f64_cs(v: f64) -> Option<Decimal> {
     let biased_exponent = ((v.to_bits() >> 52) & 0x7FF) as i32;
     let exp = biased_exponent - 1022;
     if exp < -94 {

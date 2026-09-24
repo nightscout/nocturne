@@ -10,13 +10,13 @@
 //! stores ([`sustained::TimerStore`], [`excursion::ExcursionTracker`]).
 
 pub mod classify;
-pub mod compare;
+mod compare;
 pub mod context;
 pub mod engine;
 pub mod enums;
 pub mod eval;
 pub mod excursion;
-pub mod leaf_identity;
+mod leaf_identity;
 pub mod model;
 pub mod paths;
 pub mod sustained;
