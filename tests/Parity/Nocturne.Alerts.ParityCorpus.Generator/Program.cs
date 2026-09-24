@@ -77,6 +77,18 @@ foreach (var scenario in scenarios.OrderBy(s => s.Name, StringComparer.Ordinal))
     }
 }
 
+var manifestPath = EnumManifest.PathFor(corpusDir);
+var manifestJson = EnumManifest.Render();
+if (check)
+{
+    failures += Verify(manifestPath, manifestJson);
+}
+else
+{
+    await File.WriteAllTextAsync(manifestPath, manifestJson, new UTF8Encoding(false));
+    written++;
+}
+
 if (check)
 {
     // Stale files (scenario renamed/removed but file still committed) are failures too.

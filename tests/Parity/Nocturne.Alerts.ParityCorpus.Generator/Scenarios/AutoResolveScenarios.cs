@@ -65,6 +65,17 @@ public static class AutoResolveScenarios
             ]);
 
         yield return Scenario(
+            "auto-resolve-unknown-enum-name",
+            "an enum name the C# enum does not declare makes the resolve tree unparseable, so it is skipped silently",
+            [Rule(1, "threshold", Low70, autoResolveParams: """
+                {"type": "state_span_active", "state_span_active": {"category": "Sleep", "state": null, "is_active": false}}
+                """)],
+            [
+                Tick(T(0), Ctx(T(0), glucose: 65m)),    // opened; resolve tree unparseable -> stays active
+                Tick(T(5), Ctx(T(5), glucose: 64m)),    // continues
+            ]);
+
+        yield return Scenario(
             "auto-resolve-only-while-excursion-active",
             "the resolve tree is only consulted while the tracker holds an active excursion (active or hysteresis)",
             [Rule(1, "threshold", Low70, autoResolveParams: """

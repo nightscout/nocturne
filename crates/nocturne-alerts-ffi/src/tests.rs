@@ -1130,7 +1130,7 @@ fn describe_decodes_remaining_enum_ordinal_operands() {
             "state_span_active",
             json!({ "category": 4, "is_active": true })
         )["params"]["category"],
-        json!("Sleep")
+        json!("Exercise")
     );
     // An out-of-range ordinal surfaces verbatim as a number (the engine accepts
     // raw integers).

@@ -193,6 +193,11 @@ impl ConditionKind {
 
 // ---------------------------------------------------------------------------
 // Enum wire tables (ordinal-indexed; ordinals mirror the C# declaration order)
+//
+// An integer payload value is the ordinal, so a table that drifts from the C#
+// enum silently rebinds integer payloads to the wrong member. The corpus
+// generator writes every mirrored enum to `tests/Parity/AlertEngineEnums.json`
+// and `enum_tables_match_manifest` pins each table to it.
 // ---------------------------------------------------------------------------
 
 pub const TEMP_BASAL_METRIC_NAMES: [&str; 2] = ["rate", "percent_of_scheduled"];
@@ -234,12 +239,11 @@ pub const PUMP_MODE_NAMES: [&str; 10] = [
     "Suspended",
     "Off",
 ];
-pub const STATE_SPAN_CATEGORY_NAMES: [&str; 10] = [
+pub const STATE_SPAN_CATEGORY_NAMES: [&str; 9] = [
     "PumpMode",
     "PumpConnectivity",
     "Override",
     "Profile",
-    "Sleep",
     "Exercise",
     "Illness",
     "Travel",
@@ -756,5 +760,49 @@ impl Node {
     /// The payload bound to the canonical name `name`, if present and non-null.
     pub fn payload(&self, name: &str) -> Option<&Payload> {
         self.payloads.get(name)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn manifest() -> Value {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../tests/Parity/AlertEngineEnums.json"
+        );
+        let text = std::fs::read_to_string(path).expect("read enum manifest");
+        serde_json::from_str(&text).expect("parse enum manifest")
+    }
+
+    fn names(manifest: &Value, enum_name: &str) -> Vec<String> {
+        manifest[enum_name]
+            .as_array()
+            .unwrap_or_else(|| panic!("{enum_name} missing from manifest"))
+            .iter()
+            .map(|v| v.as_str().expect("enum name is a string").to_string())
+            .collect()
+    }
+
+    #[test]
+    fn enum_tables_match_manifest() {
+        let m = manifest();
+        let tables: [(&str, &[&str]); 7] = [
+            ("AlertComparisonOperator", &ALERT_CMP_OP_NAMES),
+            ("DayOfWeek", &DAY_OF_WEEK_NAMES),
+            ("GlucoseBucket", &GLUCOSE_BUCKET_NAMES),
+            ("PumpModeState", &PUMP_MODE_NAMES),
+            ("StateSpanCategory", &STATE_SPAN_CATEGORY_NAMES),
+            ("TempBasalMetric", &TEMP_BASAL_METRIC_NAMES),
+            ("TrendBucket", &TREND_BUCKET_NAMES),
+        ];
+        for (enum_name, table) in tables {
+            assert_eq!(names(&m, enum_name), table, "{enum_name} drifted from C#");
+        }
+        let wires: Vec<&str> = KINDS.iter().map(|(_, wire, _)| *wire).collect();
+        assert_eq!(names(&m, "AlertConditionType"), wires);
+        let members: Vec<&str> = KINDS.iter().map(|(_, _, member)| *member).collect();
+        assert_eq!(names(&m, "AlertConditionTypeMembers"), members);
     }
 }
