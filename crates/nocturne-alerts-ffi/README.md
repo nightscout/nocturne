@@ -411,13 +411,28 @@ Request:
   "condition_type": "composite",                     // wire name, checked exactly
   "condition_params": { "operator": "and", "conditions": [ /* … */ ] },
   "auto_resolve_params": { "type": "threshold", /* … */ },  // optional; null/absent = not checked
-  "snooze_conditions": [ /* ConditionNode, … */ ]    // optional; checked as composite{and}
+  "snooze_conditions": [ /* ConditionNode, … */ ],   // optional; checked as composite{and}
+  "stored": {                                        // optional; the rule being edited, as stored
+    "condition_type": "composite",
+    "condition_params": { /* … */ },
+    "auto_resolve_params": null,                     // every tree it holds, evaluated or not
+    "snooze_conditions": null
+  }
 }
 ```
 
 Pass `auto_resolve_params` only when auto-resolve is enabled, and
 `snooze_conditions` only when smart snooze is on — the trees the rule actually
 evaluates. An empty `snooze_conditions` list is valid (the trend fallback).
+
+`stored` makes the request an edit. A property that would be `unknown_field`
+and that the stored tree of the same scope already has, at the same condition
+path, in the same object and under the same name, is removed from the request
+tree instead of reported: neither engine reads it, so removing it cannot change
+what the rule does, and the rule editor sends back whatever it loaded. Rules
+stored before the check (the alerts-redesign migration copied legacy payloads
+verbatim) stay editable. A property the stored rule does not have is still
+reported, so a new misspelling is not dropped silently.
 
 Response:
 
@@ -432,6 +447,12 @@ Response:
   ]
 }
 ```
+
+With `stored`, the response also carries `stripped`, one
+`{ "scope", "path", "field" }` per property removed (`field` is its name as
+written), and, for each scope that lost one, the tree to store in its place:
+`condition_params`, `auto_resolve_params` or `snooze_conditions`. `issues` are
+those of the trees after removal.
 
 `scope` is `condition`, `auto_resolve` or `snooze`; `path` is the offending
 node's condition path under that scope's root (a null slot's path ends in

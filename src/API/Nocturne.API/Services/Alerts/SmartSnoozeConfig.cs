@@ -72,6 +72,27 @@ internal sealed record SmartSnoozeConfig(
         }
     }
 
+    /// <summary>
+    /// The raw <see cref="Conditions"/> list, whether or not smart snooze is on. Null when there is
+    /// none or the JSON is unreadable.
+    /// </summary>
+    public static JsonElement? StoredConditions(string? clientConfiguration)
+    {
+        if (string.IsNullOrWhiteSpace(clientConfiguration))
+            return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(clientConfiguration);
+            return Section(doc.RootElement) is { } snooze && ConditionList(snooze) is { } conditions
+                ? conditions.Clone()
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>The <c>conditions</c> list in a mutable <c>client_configuration</c>, whether or not smart snooze is on.</summary>
     public static JsonArray? ConditionsNode(JsonNode? clientConfiguration) =>
         clientConfiguration is JsonObject root

@@ -331,10 +331,15 @@ impl ConditionKind {
 /// Case-insensitive property lookup; a duplicated name binds its last
 /// occurrence.
 pub(crate) fn get_ci<'a>(obj: &'a Map<String, Value>, name: &str) -> Option<&'a Value> {
-    obj.iter()
-        .rev()
-        .find(|(k, _)| k.eq_ignore_ascii_case(name))
-        .map(|(_, v)| v)
+    get_ci_entry(obj, name).map(|(_, v)| v)
+}
+
+/// [`get_ci`] with the property name as written.
+pub(crate) fn get_ci_entry<'a>(
+    obj: &'a Map<String, Value>,
+    name: &str,
+) -> Option<(&'a String, &'a Value)> {
+    obj.iter().rev().find(|(k, _)| k.eq_ignore_ascii_case(name))
 }
 
 /// Decimal from a JSON number literal (engine-semantics.md §1.3), with no

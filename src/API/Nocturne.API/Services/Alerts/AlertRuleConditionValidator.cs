@@ -27,7 +27,40 @@ public interface IAlertRuleConditionValidator
         bool autoResolveEnabled,
         string? autoResolveParamsJson,
         string? clientConfigurationJson);
+
+    /// <summary>
+    /// <see cref="Validate"/> for an edit of <paramref name="stored"/>. An <c>unknown_field</c>
+    /// property the stored rule already has at the same scope, path and object is removed from
+    /// the trees to save instead of reported (docs/alerts/engine-semantics.md §1.4), since the
+    /// rule editor sends back whatever it loaded. Without the native engine nothing is removed,
+    /// as nothing reports <c>unknown_field</c>.
+    /// </summary>
+    ConditionUpdateCheck ValidateUpdate(
+        AlertConditionType conditionType,
+        string conditionParamsJson,
+        bool autoResolveEnabled,
+        string? autoResolveParamsJson,
+        string? clientConfigurationJson,
+        StoredConditionTrees stored);
 }
+
+/// <summary>A stored rule's condition columns, as <see cref="IAlertRuleConditionValidator.ValidateUpdate"/> reads them.</summary>
+public sealed record StoredConditionTrees(
+    AlertConditionType ConditionType,
+    string ConditionParams,
+    string? AutoResolveParams,
+    string? ClientConfiguration);
+
+/// <summary>
+/// The outcome of <see cref="IAlertRuleConditionValidator.ValidateUpdate"/>: the issues left, and
+/// the trees to store, which are the request's less <see cref="Stripped"/>.
+/// </summary>
+public sealed record ConditionUpdateCheck(
+    IReadOnlyList<RustValidationIssue> Issues,
+    string ConditionParams,
+    string? AutoResolveParams,
+    string? ClientConfiguration,
+    IReadOnlyList<RustStrippedField> Stripped);
 
 /// <inheritdoc />
 public sealed class AlertRuleConditionValidator : IAlertRuleConditionValidator
@@ -63,12 +96,57 @@ public sealed class AlertRuleConditionValidator : IAlertRuleConditionValidator
     {
         var autoResolve = autoResolveEnabled ? autoResolveParamsJson : null;
         var snooze = SmartSnoozeConfig.EvaluatedConditions(clientConfigurationJson);
-        return [.. ConditionIssues(conditionType, conditionParamsJson, autoResolve, snooze),
-            .. TimeZoneIssues(conditionType, conditionParamsJson, autoResolve, snooze)];
+        var issues = NativeValidate(conditionType, conditionParamsJson, autoResolve, snooze, stored: null)?.Issues
+                     ?? ManagedIssues(conditionType, conditionParamsJson, autoResolve, snooze);
+        return [.. issues, .. TimeZoneIssues(conditionType, conditionParamsJson, autoResolve, snooze)];
     }
 
-    private IReadOnlyList<RustValidationIssue> ConditionIssues(
-        AlertConditionType conditionType, string conditionParamsJson, string? autoResolveJson, JsonElement? snooze)
+    /// <inheritdoc />
+    public ConditionUpdateCheck ValidateUpdate(
+        AlertConditionType conditionType,
+        string conditionParamsJson,
+        bool autoResolveEnabled,
+        string? autoResolveParamsJson,
+        string? clientConfigurationJson,
+        StoredConditionTrees stored)
+    {
+        ArgumentNullException.ThrowIfNull(stored);
+
+        var autoResolve = autoResolveEnabled ? autoResolveParamsJson : null;
+        var snooze = SmartSnoozeConfig.EvaluatedConditions(clientConfigurationJson);
+        var response = NativeValidate(conditionType, conditionParamsJson, autoResolve, snooze, StoredRequest(stored));
+        if (response is null)
+        {
+            return new ConditionUpdateCheck(
+                [.. ManagedIssues(conditionType, conditionParamsJson, autoResolve, snooze),
+                    .. TimeZoneIssues(conditionType, conditionParamsJson, autoResolve, snooze)],
+                conditionParamsJson, autoResolveParamsJson, clientConfigurationJson, []);
+        }
+
+        var body = response.ConditionParams?.GetRawText() ?? conditionParamsJson;
+        var autoResolveTree = response.AutoResolveParams?.GetRawText() ?? autoResolveParamsJson;
+        var clientConfiguration = response.SnoozeConditions is { } conditions
+            ? WithSnoozeConditions(clientConfigurationJson, conditions)
+            : clientConfigurationJson;
+        var timeZones = TimeZoneIssues(
+            conditionType,
+            body,
+            autoResolveEnabled ? autoResolveTree : null,
+            SmartSnoozeConfig.EvaluatedConditions(clientConfiguration));
+        return new ConditionUpdateCheck(
+            [.. response.Issues!, .. timeZones], body, autoResolveTree, clientConfiguration, response.Stripped!);
+    }
+
+    /// <summary>
+    /// The native engine's verdict, or null when it is unavailable, fails, or a tree is not JSON,
+    /// for the caller to fall back on <see cref="ManagedIssues"/>.
+    /// </summary>
+    private RustValidateResponse? NativeValidate(
+        AlertConditionType conditionType,
+        string conditionParamsJson,
+        string? autoResolveJson,
+        JsonElement? snooze,
+        RustStoredConditions? stored)
     {
         if (!_available.Value)
         {
@@ -77,11 +155,11 @@ public sealed class AlertRuleConditionValidator : IAlertRuleConditionValidator
                 _logger.LogWarning(
                     "nocturne_alerts native library unavailable; alert rule conditions are checked only for problems that fail evaluation");
             }
-            return ManagedIssues(conditionType, conditionParamsJson, autoResolveJson, snooze);
+            return null;
         }
 
         if (!TryParse(conditionParamsJson, out var body) || !TryParse(autoResolveJson, out var autoResolve))
-            return ManagedIssues(conditionType, conditionParamsJson, autoResolveJson, snooze);
+            return null;
 
         try
         {
@@ -91,6 +169,7 @@ public sealed class AlertRuleConditionValidator : IAlertRuleConditionValidator
                 ConditionParams = body ?? JsonNull,
                 AutoResolveParams = autoResolve,
                 SnoozeConditions = snooze,
+                Stored = stored,
             });
         }
         catch (Exception ex) when (
@@ -102,8 +181,27 @@ public sealed class AlertRuleConditionValidator : IAlertRuleConditionValidator
         {
             _logger.LogWarning(ex,
                 "Alert rule condition validation failed in the native engine; checking only for problems that fail evaluation");
-            return ManagedIssues(conditionType, conditionParamsJson, autoResolveJson, snooze);
+            return null;
         }
+    }
+
+    /// <summary>Every tree <paramref name="stored"/> holds that reads as JSON, evaluated or not.</summary>
+    private static RustStoredConditions StoredRequest(StoredConditionTrees stored) => new()
+    {
+        ConditionType = AlertConditionTypeNames.ToWireString(stored.ConditionType),
+        ConditionParams = TryParse(stored.ConditionParams, out var body) && body is { } b ? b : JsonNull,
+        AutoResolveParams = TryParse(stored.AutoResolveParams, out var autoResolve) ? autoResolve : null,
+        SnoozeConditions = SmartSnoozeConfig.StoredConditions(stored.ClientConfiguration),
+    };
+
+    /// <summary><paramref name="clientConfiguration"/> with its snooze conditions replaced.</summary>
+    private static string? WithSnoozeConditions(string? clientConfiguration, JsonElement conditions)
+    {
+        var root = JsonNode.Parse(clientConfiguration ?? "null");
+        if (SmartSnoozeConfig.ConditionsNode(root) is not { } list)
+            return clientConfiguration;
+        list.ReplaceWith(JsonNode.Parse(conditions.GetRawText()));
+        return root!.ToJsonString();
     }
 
     /// <summary>

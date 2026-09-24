@@ -144,3 +144,96 @@ fn evaluate_node_rejects_a_tree_that_cannot_be_evaluated_under_its_root() {
         json!("malformed condition node: state_missing at 'snooze[0].alert_state' (field 'state')")
     );
 }
+
+fn legacy_threshold() -> Value {
+    json!({ "direction": "below", "value": 70, "legacyLabel": "Low" })
+}
+
+#[test]
+fn validate_strips_unknown_properties_the_stored_rule_already_had() {
+    let snooze_leaf =
+        json!({ "type": "iob", "iob": { "operator": ">", "value": 1, "units": "U" } });
+    let response = validate(json!({
+        "schema_version": 1,
+        "condition_type": "threshold",
+        "condition_params": legacy_threshold(),
+        "auto_resolve_params": { "type": "threshold", "note": "x", "threshold": { "direction": "above", "value": 90 } },
+        "snooze_conditions": [low(), snooze_leaf],
+        "stored": {
+            "condition_type": "threshold",
+            "condition_params": legacy_threshold(),
+            "auto_resolve_params": { "type": "threshold", "note": "y", "threshold": { "direction": "above", "value": 80 } },
+            "snooze_conditions": [low(), snooze_leaf],
+        },
+    }));
+    assert_eq!(
+        response,
+        json!({
+            "schema_version": 1,
+            "ok": true,
+            "valid": true,
+            "issues": [],
+            "stripped": [
+                { "scope": "condition", "path": "threshold", "field": "legacyLabel" },
+                { "scope": "auto_resolve", "path": "auto_resolve", "field": "note" },
+                { "scope": "snooze", "path": "snooze[1].iob", "field": "units" },
+            ],
+            "condition_params": { "direction": "below", "value": 70 },
+            "auto_resolve_params": { "type": "threshold", "threshold": { "direction": "above", "value": 90 } },
+            "snooze_conditions": [low(), { "type": "iob", "iob": { "operator": ">", "value": 1 } }],
+        })
+    );
+}
+
+#[test]
+fn validate_rejects_unknown_properties_the_stored_rule_did_not_have() {
+    let response = validate(json!({
+        "schema_version": 1,
+        "condition_type": "signal_loss",
+        "condition_params": { "timeout_minutes": 20, "timeoutMinutes": 30, "legacyLabel": "Gap" },
+        "stored": {
+            "condition_type": "signal_loss",
+            "condition_params": { "timeout_minutes": 20, "legacyLabel": "Gap" },
+        },
+    }));
+    assert_eq!(response["valid"], json!(false));
+    assert_eq!(
+        response["issues"],
+        json!([{ "scope": "condition", "path": "signal_loss", "reason": "unknown_field", "field": null }])
+    );
+    assert_eq!(
+        response["stripped"],
+        json!([{ "scope": "condition", "path": "signal_loss", "field": "legacyLabel" }])
+    );
+    assert_eq!(
+        response["condition_params"],
+        json!({ "timeout_minutes": 20, "timeoutMinutes": 30 })
+    );
+}
+
+#[test]
+fn validate_matches_a_stored_property_by_path_and_object() {
+    let response = validate(json!({
+        "schema_version": 1,
+        "condition_type": "composite",
+        "condition_params": { "operator": "and", "conditions": [
+            { "type": "threshold", "threshold": { "direction": "below", "value": 70, "note": "x" } },
+            { "type": "threshold", "note": "x", "threshold": { "direction": "below", "value": 60 } },
+        ] },
+        "stored": {
+            "condition_type": "composite",
+            "condition_params": { "operator": "and", "conditions": [
+                { "type": "threshold", "note": "x", "threshold": { "direction": "below", "value": 70 } },
+            ] },
+        },
+    }));
+    assert_eq!(
+        response["issues"],
+        json!([
+            { "scope": "condition", "path": "composite[0].threshold", "reason": "unknown_field", "field": null },
+            { "scope": "condition", "path": "composite[1].threshold", "reason": "unknown_field", "field": null },
+        ])
+    );
+    assert_eq!(response["stripped"], json!([]));
+    assert!(response.get("condition_params").is_none());
+}

@@ -14,7 +14,7 @@ use serde_json::{Map, Value};
 use crate::enums::{EnumValue, Spelled, StateSpanCategory, WireEnum};
 use crate::eval::clock::parse_hh_mm;
 use crate::model::{
-    ConditionKind, Node, ParseError, Payload, Reason, get_ci, parse_payload_structure,
+    ConditionKind, Node, ParseError, Payload, Reason, get_ci, get_ci_entry, parse_payload_structure,
 };
 use crate::paths::node_child_path;
 
@@ -24,17 +24,81 @@ enum Tier {
     Save,
 }
 
+/// A property the save check reports as [`Reason::UnknownField`]. Neither
+/// engine reads it, so removing it cannot change what the rule does.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnknownKey {
+    /// Condition path of the node it is on.
+    pub path: String,
+    /// JSON Pointer (RFC 6901) to the object holding it, from the root of
+    /// the value checked.
+    pub pointer: String,
+    /// The property name as written.
+    pub key: String,
+}
+
+#[derive(Default)]
+struct Found {
+    issues: Vec<ParseError>,
+    unknown: Vec<UnknownKey>,
+}
+
+/// A JSON object as written, with its [`UnknownKey::pointer`].
+#[derive(Clone, Copy)]
+struct Raw<'a> {
+    obj: &'a Map<String, Value>,
+    pointer: &'a str,
+}
+
+impl<'a> Raw<'a> {
+    fn get(self, name: &str) -> Option<&'a Value> {
+        get_ci(self.obj, name)
+    }
+
+    /// The pointer to the property `name` resolves to, and its value.
+    fn entry(self, name: &str) -> Option<(String, &'a Value)> {
+        get_ci_entry(self.obj, name).map(|(k, v)| (child_pointer(self.pointer, k), v))
+    }
+
+    fn report_unknown(
+        self,
+        known: impl Fn(&str) -> bool,
+        tier: Tier,
+        path: &str,
+        found: &mut Found,
+    ) {
+        let unknown: Vec<UnknownKey> = self
+            .obj
+            .keys()
+            .filter(|k| !known(k))
+            .map(|k| UnknownKey {
+                path: path.to_owned(),
+                pointer: self.pointer.to_owned(),
+                key: k.clone(),
+            })
+            .collect();
+        if !unknown.is_empty() {
+            report(found, tier, path, Reason::UnknownField);
+            found.unknown.extend(unknown);
+        }
+    }
+}
+
+fn child_pointer(parent: &str, key: &str) -> String {
+    format!("{parent}/{}", key.replace('~', "~0").replace('/', "~1"))
+}
+
 /// The first problem, in pre-order, that makes evaluating the tree rooted at
 /// `node` (whose path is `root`) fail.
 pub(crate) fn first_evaluation_fault(node: &Node, root: &str) -> Option<ParseError> {
-    let mut found = Vec::new();
+    let mut found = Found::default();
     check_node(Some(node), None, root, Tier::Evaluation, &mut found);
-    found.into_iter().next()
+    found.issues.into_iter().next()
 }
 
 /// [`first_evaluation_fault`] for a rule body, rooted at its kind's wire name.
 pub(crate) fn first_evaluation_fault_in_payload(payload: &Payload) -> Option<ParseError> {
-    let mut found = Vec::new();
+    let mut found = Found::default();
     check_payload(
         payload,
         None,
@@ -42,7 +106,7 @@ pub(crate) fn first_evaluation_fault_in_payload(payload: &Payload) -> Option<Par
         Tier::Evaluation,
         &mut found,
     );
-    found.into_iter().next()
+    found.issues.into_iter().next()
 }
 
 /// Every problem saving a rule body should reject: `condition_params` as
@@ -50,6 +114,21 @@ pub(crate) fn first_evaluation_fault_in_payload(payload: &Payload) -> Option<Par
 /// its first error, as the reader stops there.
 #[must_use]
 pub fn validate_rule(condition_type: &str, condition_params: &Value) -> Vec<ParseError> {
+    check_rule(condition_type, condition_params).issues
+}
+
+/// The properties behind the [`Reason::UnknownField`] issues
+/// [`validate_rule`] reports.
+#[must_use]
+pub fn unknown_keys_in_rule(condition_type: &str, condition_params: &Value) -> Vec<UnknownKey> {
+    check_rule(condition_type, condition_params).unknown
+}
+
+fn check_rule(condition_type: &str, condition_params: &Value) -> Found {
+    let issue = |path: &str, reason| Found {
+        issues: vec![ParseError::new(path, reason)],
+        unknown: Vec::new(),
+    };
     let Some(kind) =
         ConditionKind::from_name(condition_type).filter(|k| k.name() == condition_type)
     else {
@@ -57,18 +136,23 @@ pub fn validate_rule(condition_type: &str, condition_params: &Value) -> Vec<Pars
             Some(_) => Reason::NonCanonicalType,
             None => Reason::UnknownKind,
         };
-        return vec![ParseError::new(condition_type, reason)];
+        return issue(condition_type, reason);
     };
     if condition_params.is_null() {
-        return vec![ParseError::new(kind.name(), Reason::PayloadMissing)];
+        return issue(kind.name(), Reason::PayloadMissing);
     }
     match parse_payload_structure(kind, condition_params) {
-        Err(e) => vec![e],
+        Err(e) => Found {
+            issues: vec![e],
+            unknown: Vec::new(),
+        },
         Ok(payload) => {
-            let mut found = Vec::new();
+            let mut found = Found::default();
             check_payload(
                 &payload,
-                condition_params.as_object(),
+                condition_params
+                    .as_object()
+                    .map(|obj| Raw { obj, pointer: "" }),
                 kind.name(),
                 Tier::Save,
                 &mut found,
@@ -82,13 +166,27 @@ pub fn validate_rule(condition_type: &str, condition_params: &Value) -> Vec<Pars
 /// rooted at `root` (`auto_resolve`, `snooze`, …).
 #[must_use]
 pub fn validate_node(node: &Value, root: &str) -> Vec<ParseError> {
+    check_whole_node(node, root).issues
+}
+
+/// The properties behind the [`Reason::UnknownField`] issues
+/// [`validate_node`] reports.
+#[must_use]
+pub fn unknown_keys_in_node(node: &Value, root: &str) -> Vec<UnknownKey> {
+    check_whole_node(node, root).unknown
+}
+
+fn check_whole_node(node: &Value, root: &str) -> Found {
     match Node::parse_structure_rooted(node, root) {
-        Err(e) => vec![e],
+        Err(e) => Found {
+            issues: vec![e],
+            unknown: Vec::new(),
+        },
         Ok(parsed) => {
-            let mut found = Vec::new();
+            let mut found = Found::default();
             check_node(
                 Some(&parsed),
-                node.as_object(),
+                node.as_object().map(|obj| Raw { obj, pointer: "" }),
                 root,
                 Tier::Save,
                 &mut found,
@@ -98,9 +196,9 @@ pub fn validate_node(node: &Value, root: &str) -> Vec<ParseError> {
     }
 }
 
-fn report(found: &mut Vec<ParseError>, tier: Tier, path: &str, reason: Reason) {
+fn report(found: &mut Found, tier: Tier, path: &str, reason: Reason) {
     if tier == Tier::Save || reason.fails_evaluation() {
-        found.push(ParseError::new(path, reason));
+        found.issues.push(ParseError::new(path, reason));
     }
 }
 
@@ -108,16 +206,16 @@ fn report(found: &mut Vec<ParseError>, tier: Tier, path: &str, reason: Reason) {
 /// given only on the save tier.
 fn check_node(
     node: Option<&Node>,
-    raw: Option<&Map<String, Value>>,
+    raw: Option<Raw<'_>>,
     path: &str,
     tier: Tier,
-    found: &mut Vec<ParseError>,
+    found: &mut Found,
 ) {
     let Some(node) = node else {
         return report(found, tier, path, Reason::ConditionMissing);
     };
-    if raw.is_some_and(|o| o.keys().any(|k| !is_node_property(k))) {
-        report(found, tier, path, Reason::UnknownField);
+    if let Some(raw) = raw {
+        raw.report_unknown(is_node_property, tier, path, found);
     }
     let Some(type_str) = node.type_str.as_deref() else {
         return report(found, tier, path, Reason::TypeMissing);
@@ -133,9 +231,13 @@ fn check_node(
     // payload, not the stored one, so no written payload is evaluated. An
     // absent or null payload is written as no properties at all.
     let empty = Map::new();
-    let raw_payload = raw
+    let entry = raw
         .filter(|_| type_str.eq_ignore_ascii_case(wire))
-        .map(|o| get_ci(o, wire).and_then(Value::as_object).unwrap_or(&empty));
+        .map(|o| match o.entry(wire) {
+            Some((pointer, v)) => (v.as_object().unwrap_or(&empty), pointer),
+            None => (&empty, String::new()),
+        });
+    let raw_payload = entry.as_ref().map(|(obj, pointer)| Raw { obj, pointer });
     check_payload(&payload, raw_payload, path, tier, found);
 }
 
@@ -146,17 +248,21 @@ fn is_node_property(name: &str) -> bool {
     name.eq_ignore_ascii_case("type") || name == "_uid" || ConditionKind::from_name(name).is_some()
 }
 
+/// `raw` is the child's JSON value and its pointer.
 fn check_child(
     child: &Node,
-    raw: Option<&Value>,
+    raw: Option<(String, &Value)>,
     parent: &str,
     index: usize,
     tier: Tier,
-    found: &mut Vec<ParseError>,
+    found: &mut Found,
 ) {
+    let raw = raw
+        .as_ref()
+        .and_then(|(pointer, v)| v.as_object().map(|obj| Raw { obj, pointer }));
     check_node(
         Some(child),
-        raw.and_then(Value::as_object),
+        raw,
         &node_child_path(parent, index, Some(child)),
         tier,
         found,
@@ -167,29 +273,29 @@ fn check_child(
 /// tier and only when evaluation reads it.
 fn check_payload(
     payload: &Payload,
-    raw: Option<&Map<String, Value>>,
+    raw: Option<Raw<'_>>,
     path: &str,
     tier: Tier,
-    found: &mut Vec<ParseError>,
+    found: &mut Found,
 ) {
     if let Some(raw) = raw {
         let fields = payload.fields();
-        if raw
-            .keys()
-            .any(|k| !fields.iter().any(|f| f.eq_ignore_ascii_case(k)))
-        {
-            report(found, tier, path, Reason::UnknownField);
-        }
+        raw.report_unknown(
+            |k| fields.iter().any(|f| f.eq_ignore_ascii_case(k)),
+            tier,
+            path,
+            found,
+        );
         for &field in required_fields(payload) {
-            if get_ci(raw, field).is_none_or(Value::is_null) {
+            if raw.get(field).is_none_or(Value::is_null) {
                 report(found, tier, path, Reason::FieldMissing(field));
             }
         }
     }
-    let raw_field = |name: &str| raw.and_then(|o| get_ci(o, name));
+    let raw_entry = |name: &str| raw.and_then(|o| o.entry(name));
     // An operand `required_fields` already reports missing is not also
     // reported for the default it reads as.
-    let written = |name: &str| raw.is_none_or(|o| get_ci(o, name).is_some_and(|v| !v.is_null()));
+    let written = |name: &str| raw.is_none_or(|o| o.get(name).is_some_and(|v| !v.is_null()));
 
     let problem = match payload {
         Payload::Composite(p) => {
@@ -206,9 +312,12 @@ fn check_payload(
             ) {
                 report(found, tier, path, reason);
             }
-            let raw_conditions = raw_field("conditions").and_then(Value::as_array);
+            let raw_conditions = raw_entry("conditions")
+                .and_then(|(pointer, v)| v.as_array().map(|items| (pointer, items)));
             for (i, child) in conditions.iter().enumerate() {
-                let raw_child = raw_conditions.and_then(|c| c.get(i));
+                let raw_child = raw_conditions.as_ref().and_then(|(pointer, items)| {
+                    items.get(i).map(|v| (format!("{pointer}/{i}"), v))
+                });
                 match child {
                     Some(c) => check_child(c, raw_child, path, i, tier, found),
                     None => check_node(None, None, &node_child_path(path, i, None), tier, found),
@@ -219,7 +328,7 @@ fn check_payload(
         Payload::Not(p) => match &p.child {
             None => Some(Reason::ChildMissing),
             Some(c) => {
-                check_child(c, raw_field("child"), path, 0, tier, found);
+                check_child(c, raw_entry("child"), path, 0, tier, found);
                 None
             }
         },
@@ -230,7 +339,7 @@ fn check_payload(
             match &p.child {
                 None => Some(Reason::ChildMissing),
                 Some(c) => {
-                    check_child(c, raw_field("child"), path, 0, tier, found);
+                    check_child(c, raw_entry("child"), path, 0, tier, found);
                     None
                 }
             }
@@ -370,7 +479,7 @@ fn operator_problem<T>(operator: &Spelled<T>) -> Option<Reason> {
 
 /// An elapsed time is never negative, and an absent anchor reads as an
 /// infinite one, so a negative bound compares the same way every tick.
-fn negative(bound: i32, field: &'static str, tier: Tier, path: &str, found: &mut Vec<ParseError>) {
+fn negative(bound: i32, field: &'static str, tier: Tier, path: &str, found: &mut Found) {
     if bound < 0 {
         report(found, tier, path, Reason::MinutesNegative(field));
     }
@@ -381,7 +490,7 @@ fn undefined<E>(
     field: &'static str,
     tier: Tier,
     path: &str,
-    found: &mut Vec<ParseError>,
+    found: &mut Found,
 ) {
     if matches!(value, EnumValue::Undefined(_)) {
         report(found, tier, path, Reason::UnknownValue(field));
@@ -405,7 +514,7 @@ fn time_bound(
     field: &'static str,
     tier: Tier,
     path: &str,
-    found: &mut Vec<ParseError>,
+    found: &mut Found,
 ) -> Option<chrono::NaiveTime> {
     let Some(text) = bound else {
         report(found, tier, path, Reason::FieldMissing(field));

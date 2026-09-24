@@ -143,6 +143,11 @@ The crate's `validate` entry point is the single implementation of the save-time
 path ends in `.`), the reason code and, where there is one, the payload field. Reason
 codes never carry payload values.
 
+An edit of a stored rule does not reject an `unknown_field` property the stored rule
+already has at the same scope, path and object: it is removed from the saved tree, which
+cannot change what either engine does, since neither reads it. A property the stored rule
+lacks is still rejected.
+
 ---
 
 ## 2. Tree structure, leaf identity, and paths

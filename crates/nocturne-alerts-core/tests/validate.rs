@@ -16,7 +16,9 @@ use uuid::Uuid;
 use nocturne_alerts_core::context::SensorContext;
 use nocturne_alerts_core::engine::{EngineState, Rule, evaluate_rule};
 use nocturne_alerts_core::model::{ConditionKind, Node, ParseError, Reason, parse_payload};
-use nocturne_alerts_core::validate::{validate_node, validate_rule};
+use nocturne_alerts_core::validate::{
+    UnknownKey, unknown_keys_in_node, unknown_keys_in_rule, validate_node, validate_rule,
+};
 
 fn now() -> DateTime<Utc> {
     Utc.with_ymd_and_hms(2026, 1, 5, 12, 0, 0).unwrap()
@@ -421,6 +423,75 @@ fn saving_rejects_properties_no_node_or_payload_has() {
     assert_eq!(
         validate_rule("composite", &stray),
         vec![issue("composite[0].threshold", Reason::UnknownField)]
+    );
+}
+
+fn unknown(path: &str, pointer: &str, key: &str) -> UnknownKey {
+    UnknownKey {
+        path: path.to_owned(),
+        pointer: pointer.to_owned(),
+        key: key.to_owned(),
+    }
+}
+
+#[test]
+fn unknown_keys_name_each_property_and_the_object_holding_it() {
+    let params = json!({ "operator": "and", "conditions": [
+        { "type": "threshold", "note": "x",
+          "Threshold": { "direction": "below", "value": 70, "for_minutes": 5 } },
+        { "type": "not", "not": { "child":
+            { "type": "signal_loss", "signal_loss": { "timeoutMinutes": 20, "timeout_minutes": 20 } } } }
+    ]});
+    assert_eq!(
+        unknown_keys_in_rule("composite", &params),
+        vec![
+            unknown("composite[0].threshold", "/conditions/0", "note"),
+            unknown(
+                "composite[0].threshold",
+                "/conditions/0/Threshold",
+                "for_minutes"
+            ),
+            unknown(
+                "composite[1].not[0].signal_loss",
+                "/conditions/1/not/child/signal_loss",
+                "timeoutMinutes"
+            ),
+        ]
+    );
+    assert_eq!(
+        validate_rule("composite", &params)
+            .iter()
+            .filter(|e| e.reason == Reason::UnknownField)
+            .count(),
+        3
+    );
+    assert_eq!(
+        unknown_keys_in_rule("signal_loss", &json!({ "timeoutMinutes": 20 })),
+        vec![unknown("signal_loss", "", "timeoutMinutes")]
+    );
+    assert_eq!(
+        unknown_keys_in_node(
+            &composite(
+                "and",
+                json!([
+                    low(),
+                    leaf("iob", json!({ "operator": ">", "value": 1, "units": "U" }))
+                ])
+            ),
+            "snooze"
+        ),
+        vec![unknown(
+            "snooze[1].iob",
+            "/composite/conditions/1/iob",
+            "units"
+        )]
+    );
+    assert_eq!(
+        unknown_keys_in_rule(
+            "composite",
+            &json!({ "operator": "and", "conditions": [low()] })
+        ),
+        vec![]
     );
 }
 

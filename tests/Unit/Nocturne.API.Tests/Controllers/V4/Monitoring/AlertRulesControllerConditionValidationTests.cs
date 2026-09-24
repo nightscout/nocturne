@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -8,6 +9,7 @@ using Moq;
 using Nocturne.Alerts.ParityCorpus.Generator.Harness;
 using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Services.Alerts;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models.Alerts;
@@ -25,7 +27,7 @@ public class AlertRulesControllerConditionValidationTests
     private static readonly Guid Tenant = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
 
     private static (AlertRulesController Controller, NocturneDbContext Db) CreateController(
-        IAlertRuleConditionValidator validator)
+        IAlertRuleConditionValidator validator, ILogger<AlertRulesController>? logger = null)
     {
         var options = new DbContextOptionsBuilder<NocturneDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
@@ -38,7 +40,7 @@ public class AlertRulesControllerConditionValidationTests
             Mock.Of<IRuleScopeClassifier>(),
             validator,
             Mock.Of<ISecretEncryptionService>(),
-            Mock.Of<ILogger<AlertRulesController>>());
+            logger ?? Mock.Of<ILogger<AlertRulesController>>());
         return (controller, ctx);
     }
 
@@ -90,8 +92,11 @@ public class AlertRulesControllerConditionValidationTests
     {
         var validator = new Mock<IAlertRuleConditionValidator>();
         validator
-            .Setup(v => v.Validate(It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>()))
-            .Returns([new RustValidationIssue("condition", "threshold", "direction_missing", "direction")]);
+            .Setup(v => v.ValidateUpdate(It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<StoredConditionTrees>()))
+            .Returns((AlertConditionType _, string body, bool _, string? autoResolve, string? client, StoredConditionTrees _) =>
+                new ConditionUpdateCheck(
+                    [new RustValidationIssue("condition", "threshold", "direction_missing", "direction")],
+                    body, autoResolve, client, []));
         var (controller, db) = CreateController(validator.Object);
         var id = Guid.NewGuid();
         db.AlertRules.Add(new AlertRuleEntity
@@ -120,8 +125,11 @@ public class AlertRulesControllerConditionValidationTests
     {
         var validator = new Mock<IAlertRuleConditionValidator>();
         validator
-            .Setup(v => v.Validate(It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>()))
-            .Returns([new RustValidationIssue("condition", "threshold", "direction_missing", "direction")]);
+            .Setup(v => v.ValidateUpdate(It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<StoredConditionTrees>()))
+            .Returns((AlertConditionType _, string body, bool _, string? autoResolve, string? client, StoredConditionTrees _) =>
+                new ConditionUpdateCheck(
+                    [new RustValidationIssue("condition", "threshold", "direction_missing", "direction")],
+                    body, autoResolve, client, []));
         var (controller, _) = CreateController(validator.Object);
 
         var result = await controller.UpdateRule(Guid.NewGuid(), new UpdateAlertRuleRequest
@@ -132,6 +140,64 @@ public class AlertRulesControllerConditionValidationTests
         }, CancellationToken.None);
 
         result.Result.Should().BeOfType<NotFoundResult>();
+    }
+
+    private static AlertRuleEntity LegacyRule(Guid id) => new()
+    {
+        Id = id,
+        TenantId = Tenant,
+        Name = "Low",
+        ConditionType = AlertConditionType.Threshold,
+        ConditionParams = """{"direction":"below","value":70,"legacyLabel":"Low"}""",
+    };
+
+    [NativeFact]
+    public async Task UpdateRule_saves_a_legacy_rule_without_the_properties_no_condition_reads()
+    {
+        var logger = new ListLogger<AlertRulesController>();
+        var (controller, db) = CreateController(
+            new AlertRuleConditionValidator(NullLogger<AlertRuleConditionValidator>.Instance), logger);
+        var id = Guid.NewGuid();
+        db.AlertRules.Add(LegacyRule(id));
+        await db.SaveChangesAsync();
+
+        var result = await controller.UpdateRule(id, new UpdateAlertRuleRequest
+        {
+            Name = "Low",
+            ConditionType = AlertConditionType.Threshold,
+            ConditionParams = Json("""{"direction": "below", "value": 65, "legacyLabel": "Low"}"""),
+        }, CancellationToken.None);
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+        JsonNode.Parse((await db.AlertRules.AsNoTracking().SingleAsync()).ConditionParams)!.AsObject()
+            .Select(p => p.Key).Should().Equal("direction", "value");
+        logger.Warnings.Should().ContainSingle().Which.Should().Contain("legacyLabel").And.Contain(id.ToString())
+            .And.NotContain("Low");
+    }
+
+    [NativeFact]
+    public async Task UpdateRule_rejects_an_unknown_property_the_stored_rule_did_not_have()
+    {
+        var (controller, db) = CreateController(
+            new AlertRuleConditionValidator(NullLogger<AlertRuleConditionValidator>.Instance));
+        var id = Guid.NewGuid();
+        db.AlertRules.Add(LegacyRule(id));
+        await db.SaveChangesAsync();
+
+        var result = await controller.UpdateRule(id, new UpdateAlertRuleRequest
+        {
+            Name = "Low",
+            ConditionType = AlertConditionType.Threshold,
+            ConditionParams = Json("""{"direction": "below", "value": 65, "legacyLabel": "Low", "forMinutes": 10}"""),
+        }, CancellationToken.None);
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>().Which.Value
+            .Should().BeOfType<ValidationProblemDetails>().Which.Errors
+            .Should().BeEquivalentTo(new Dictionary<string, string[]>
+            {
+                ["condition:threshold"] = ["unknown_field"],
+            });
+        (await db.AlertRules.AsNoTracking().SingleAsync()).ConditionParams.Should().Contain("legacyLabel");
     }
 
     [Fact]

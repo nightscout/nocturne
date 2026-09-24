@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using FluentAssertions;
 using Nocturne.Alerts.ParityCorpus.Generator.Harness;
 using Nocturne.API.Services.Alerts;
@@ -95,5 +96,67 @@ public class AlertRuleConditionValidatorTests
             .Validate(AlertConditionType.Composite, body, autoResolveEnabled, autoResolve, clientConfiguration);
 
         managed.Should().NotBeEmpty().And.BeSubsetOf(native);
+    }
+
+    private const string LegacyLow = """{"direction":"below","value":70,"legacyLabel":"Low"}""";
+
+    private static StoredConditionTrees Stored(
+        string conditionParams, string? autoResolve = null, string clientConfiguration = "{}") =>
+        new(AlertConditionType.Threshold, conditionParams, autoResolve, clientConfiguration);
+
+    [Fact]
+    public void Without_the_native_engine_an_edit_saves_the_trees_as_sent()
+    {
+        var check = Unavailable().ValidateUpdate(
+            AlertConditionType.Threshold, LegacyLow, false, null, "{}", Stored(LegacyLow));
+
+        check.Issues.Should().BeEmpty();
+        check.Stripped.Should().BeEmpty();
+        check.ConditionParams.Should().Be(LegacyLow);
+    }
+
+    [NativeFact]
+    public void An_edit_strips_an_unknown_property_the_stored_rule_already_had()
+    {
+        var check = new AlertRuleConditionValidator(_logger).ValidateUpdate(
+            AlertConditionType.Threshold, """{"direction":"below","value":65,"legacyLabel":"Low"}""", false, null, "{}",
+            Stored(LegacyLow));
+
+        check.Issues.Should().BeEmpty();
+        check.Stripped.Should().Equal(new RustStrippedField("condition", "threshold", "legacyLabel"));
+        check.ConditionParams.Should().Be("""{"direction":"below","value":65}""");
+    }
+
+    [NativeFact]
+    public void An_edit_still_rejects_an_unknown_property_the_stored_rule_did_not_have()
+    {
+        var check = new AlertRuleConditionValidator(_logger).ValidateUpdate(
+            AlertConditionType.SignalLoss, """{"timeoutMinutes":20}""", false, null, "{}",
+            new StoredConditionTrees(AlertConditionType.SignalLoss, """{"timeout_minutes":20}""", null, "{}"));
+
+        check.Issues.Should().Contain(new RustValidationIssue("condition", "signal_loss", "unknown_field", null));
+        check.Stripped.Should().BeEmpty();
+    }
+
+    [NativeFact]
+    public void An_edit_strips_stored_unknown_properties_from_the_auto_resolve_tree_and_snooze_conditions()
+    {
+        const string autoResolve = """{"type":"threshold","note":"x","threshold":{"direction":"above","value":90}}""";
+        const string snooze = """{"snooze":{"smartSnooze":true,"maxCount":2,"conditions":[{"type":"iob","iob":{"operator":">","value":1,"units":"U"}}]}}""";
+        const string snoozeOff = """{"snooze":{"smartSnooze":false,"conditions":[{"type":"iob","iob":{"operator":">","value":2,"units":"U"}}]}}""";
+
+        var check = new AlertRuleConditionValidator(_logger).ValidateUpdate(
+            AlertConditionType.Threshold, """{"direction":"below","value":70}""", true, autoResolve, snooze,
+            Stored("""{"direction":"below","value":70}""", autoResolve, snoozeOff));
+
+        check.Issues.Should().BeEmpty();
+        check.Stripped.Should().Equal(
+            new RustStrippedField("auto_resolve", "auto_resolve", "note"),
+            new RustStrippedField("snooze", "snooze[0].iob", "units"));
+        check.AutoResolveParams.Should().Be("""{"type":"threshold","threshold":{"direction":"above","value":90}}""");
+        JsonNode.DeepEquals(
+                JsonNode.Parse(check.ClientConfiguration!),
+                JsonNode.Parse("""{"snooze":{"smartSnooze":true,"maxCount":2,"conditions":[{"type":"iob","iob":{"operator":">","value":1}}]}}"""))
+            .Should().BeTrue(check.ClientConfiguration);
     }
 }
