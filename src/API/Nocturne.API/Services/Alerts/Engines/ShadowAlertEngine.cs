@@ -139,6 +139,7 @@ internal sealed class ShadowAlertEngine(
                 ConfirmationCount = state.ConfirmationCount,
                 ActiveExcursionId = state.ActiveExcursionId,
                 UpdatedAt = state.UpdatedAt,
+                HysteresisStartedAt = state.HysteresisStartedAt,
             };
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

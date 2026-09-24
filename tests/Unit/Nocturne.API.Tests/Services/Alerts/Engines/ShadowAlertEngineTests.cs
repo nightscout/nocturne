@@ -244,6 +244,45 @@ public class ShadowAlertEngineTests
         divergence.Message.Should().Contain("rust=threw InvalidOperationException");
     }
 
+    private sealed class CapturingShadowEvaluator : IShadowRuleEvaluator
+    {
+        public AlertTrackerState? SeenTracker { get; private set; }
+
+        public string Name => "capture";
+
+        public Task<ShadowRuleOutcome> EvaluateAsync(
+            AlertRule rule, SensorContext context, DateTime now,
+            IReadOnlyDictionary<string, DateTime> timers, AlertTrackerState? trackerState, CancellationToken ct)
+        {
+            SeenTracker = trackerState;
+            return Task.FromResult(new ShadowRuleOutcome { Skipped = true });
+        }
+    }
+
+    [Fact]
+    public async Task The_shadow_sees_the_whole_pre_state_tracker()
+    {
+        var rule = BuildThresholdRule();
+        var capture = new CapturingShadowEvaluator();
+        var (engine, _, _, trackerRepo, provider) = BuildShadowEngine(rule, capture);
+        await using var _ = provider;
+        AlertTrackerState Pre() => new()
+        {
+            AlertRuleId = RuleId,
+            State = "hysteresis",
+            ConfirmationCount = 2,
+            ActiveExcursionId = Guid.Parse("00000000-0000-0000-0000-0000000000cc"),
+            UpdatedAt = T0.AddMinutes(-1),
+            HysteresisStartedAt = T0.AddMinutes(-4),
+        };
+        await trackerRepo.UpsertTrackerStateAsync(Pre(), CancellationToken.None);
+
+        await engine.EvaluateRuleAsync(
+            ToSnapshot(rule), LowGlucoseContext(), AlertEngineOptions.Default, CancellationToken.None);
+
+        capture.SeenTracker.Should().BeEquivalentTo(Pre());
+    }
+
     private static AlertRule BuildUnevaluableRule()
     {
         var rule = BuildThresholdRule();
