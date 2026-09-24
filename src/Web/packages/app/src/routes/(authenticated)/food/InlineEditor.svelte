@@ -81,9 +81,9 @@
 	{/if}
 
 	<!-- Section 1: Name, Carbs, Portion, Unit -->
-	<div class="grid grid-cols-[1.6fr_1fr_1fr_1fr] gap-4">
+	<div class="grid grid-cols-2 gap-4 sm:grid-cols-[1.6fr_1fr_1fr_1fr]">
 		<!-- Name -->
-		<div class="flex flex-col gap-1.5">
+		<div class="col-span-2 flex flex-col gap-1.5 sm:col-span-1">
 			<label for="food-edit-name" class="text-muted-foreground font-semibold text-xs">
 				Name <span aria-hidden="true">*</span><span class="sr-only">(required)</span>
 			</label>
@@ -136,7 +136,7 @@
 		</div>
 
 		<!-- Unit -->
-		<div class="flex flex-col gap-1.5">
+		<div class="col-span-2 flex flex-col gap-1.5 sm:col-span-1">
 			<span id="food-edit-unit-label" class="text-muted-foreground font-semibold text-xs">Unit</span>
 			<ToggleGroup.Root aria-labelledby="food-edit-unit-label" type="single" value={draft.unit ?? 'g'} onValueChange={(v: string) => { if (v) draft.unit = v; }} variant="outline" size="sm" class="w-full">
 				{#each FOOD_UNITS as u (u)}
@@ -149,9 +149,9 @@
 	<Separator class="my-4" />
 
 	<!-- Section 2: GI, Fat, Protein, Energy -->
-	<div class="grid grid-cols-[1.4fr_1fr_1fr_1fr] gap-4">
+	<div class="grid grid-cols-2 gap-4 sm:grid-cols-[1.4fr_1fr_1fr_1fr]">
 		<!-- GI -->
-		<div class="flex flex-col gap-1.5">
+		<div class="col-span-2 flex flex-col gap-1.5 sm:col-span-1">
 			<span id="food-edit-gi-label" class="text-muted-foreground font-semibold text-xs">Glycemic Index</span>
 			<ToggleGroup.Root aria-labelledby="food-edit-gi-label" type="single" value={giFromInt(draft.gi)} onValueChange={(v: string) => { if (isGiLevel(v)) draft.gi = giToInt(v); }} variant="outline" size="sm" class="w-full">
 				{#each giLevels as g (g)}
@@ -223,8 +223,8 @@
 	<Separator class="my-4" />
 
 	<!-- Section 3: Category, Subcategory, Actions -->
-	<div class="flex items-center justify-between">
-		<div class="flex items-center gap-3">
+	<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+		<div class="flex flex-wrap items-center gap-3">
 			<!-- Category -->
 			<Select.Root type="single" name="category" value={draft.category ?? ''} onValueChange={(v) => { draft.category = v; }}>
 				<Select.Trigger aria-label="Category" class="w-45">
@@ -252,7 +252,7 @@
 			</Select.Root>
 		</div>
 
-		<div class="flex items-center gap-2">
+		<div class="flex flex-wrap items-center gap-2">
 			<Button variant="ghost-destructive" size="sm" onclick={handleDeleteClick}><Trash2 class="h-3.5 w-3.5" /> Delete</Button>
 			<Button variant="outline" size="sm" onclick={oncancel}>Cancel</Button>
 			<Button type="submit" size="sm"><Check class="h-3.5 w-3.5" /> Save changes</Button>

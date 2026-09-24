@@ -19,7 +19,7 @@
 
 <div
 	data-testid="food-row"
-	class="food-row"
+	class="food-row grid grid-cols-[24px_1fr_72px_24px] sm:grid-cols-[24px_1fr_110px_130px_90px_70px_24px]"
 	class:expanded
 	role="button"
 	tabindex="0"
@@ -60,15 +60,15 @@
 		<CarbPill value={food.carbs ?? 0} />
 	</span>
 
-	<span class="portion-cell">
+	<span class="portion-cell max-sm:hidden">
 		per {food.portion ?? 0} {food.unit ?? 'g'}
 	</span>
 
-	<span class="gi-cell">
+	<span class="gi-cell max-sm:hidden!">
 		<GiChip level={giFromInt(food.gi)} />
 	</span>
 
-	<span class="energy-cell">
+	<span class="energy-cell max-sm:hidden">
 		{food.energy ?? 0} kcal
 	</span>
 
@@ -80,7 +80,6 @@
 <style>
 	.food-row {
 		display: grid;
-		grid-template-columns: 24px 1fr 110px 130px 90px 70px 24px;
 		gap: 12px;
 		padding: 10px 16px;
 		align-items: center;

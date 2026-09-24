@@ -11,7 +11,7 @@
 	const { sort, onsort }: Props = $props();
 </script>
 
-<div class="header-row">
+<div class="header-row grid grid-cols-[24px_1fr_72px_24px] sm:grid-cols-[24px_1fr_110px_130px_90px_70px_24px]">
 	<span></span>
 
 	<Button variant="subtle" size="inline-xs" onclick={() => onsort('name')}>
@@ -32,11 +32,11 @@
 		</span>
 	</Button>
 
-	<span class="col-label text-xs">Portion</span>
+	<span class="col-label text-xs max-sm:hidden">Portion</span>
 
-	<span class="col-label text-xs">GI</span>
+	<span class="col-label text-xs max-sm:hidden">GI</span>
 
-	<span class="col-label text-xs text-right">Energy</span>
+	<span class="col-label text-right text-xs max-sm:hidden">Energy</span>
 
 	<span></span>
 </div>
@@ -46,7 +46,6 @@
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
 		display: grid;
-		grid-template-columns: 24px 1fr 110px 130px 90px 70px 24px;
 		gap: 12px;
 		padding: 10px 16px;
 		align-items: center;

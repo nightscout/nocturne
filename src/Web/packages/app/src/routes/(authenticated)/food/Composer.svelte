@@ -130,9 +130,9 @@
 	</div>
 
 	<!-- Single-row form -->
-	<div class="grid grid-cols-[1.6fr_110px_90px_1fr_1.4fr] items-end gap-3">
+	<div class="grid grid-cols-2 items-end gap-3 sm:grid-cols-[1.6fr_110px_90px_1fr_1.4fr]">
 		<!-- Name -->
-		<div class="flex flex-col gap-1">
+		<div class="col-span-2 flex flex-col gap-1 sm:col-span-1">
 			<label for="composer-name" class="text-muted-foreground font-medium uppercase text-2xs">Name</label>
 			<Input
 				id="composer-name"
@@ -177,7 +177,7 @@
 		</div>
 
 		<!-- Unit -->
-		<div class="flex flex-col gap-1">
+		<div class="col-span-2 flex flex-col gap-1 sm:col-span-1">
 			<span id="composer-unit-label" class="text-muted-foreground font-medium uppercase text-2xs">Unit</span>
 			<ToggleGroup.Root aria-labelledby="composer-unit-label" type="single" value={draft.unit ?? 'g'} onValueChange={(v: string) => { if (v) draft = { ...draft, unit: v }; }} variant="outline" class="w-full">
 				{#each FOOD_UNITS as u (u)}
@@ -187,7 +187,7 @@
 		</div>
 
 		<!-- GI -->
-		<div class="flex flex-col gap-1">
+		<div class="col-span-2 flex flex-col gap-1 sm:col-span-1">
 			<span id="composer-gi-label" class="text-muted-foreground font-medium uppercase text-2xs">GI</span>
 			<ToggleGroup.Root aria-labelledby="composer-gi-label" type="single" value={giFromInt(draft.gi)} onValueChange={(v: string) => { if (isGiLevel(v)) draft = { ...draft, gi: giToInt(v) }; }} variant="outline" class="w-full">
 				{#each giLevels as g (g)}
@@ -200,7 +200,7 @@
 	</div>
 
 	<!-- Footer -->
-	<div class="mt-3 flex items-center justify-between">
+	<div class="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-0">
 		<!-- Details toggle -->
 		<Collapsible.Root bind:open={showDetails}>
 			<Collapsible.Trigger>
@@ -211,7 +211,7 @@
 				{/snippet}
 			</Collapsible.Trigger>
 			<Collapsible.Content>
-			<div class="mt-3 grid grid-cols-5 gap-3">
+			<div class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-5">
 				<!-- Fat -->
 				<div class="flex flex-col gap-1">
 					<Label for="composer-fat" size="sm" variant="muted">Fat</Label>
