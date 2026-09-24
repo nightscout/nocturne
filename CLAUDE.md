@@ -86,7 +86,7 @@ Git worktrees are supported. In the main checkout, `aspire start` uses persisten
 aspire run --isolated
 ```
 
-`--isolated` randomizes all Aspire infrastructure ports (dashboard, OTLP, resource service) and creates isolated user secrets. Without it, the worktree shares `launchSettings.json` ports with main and will fail to start if main is already running.
+`--isolated` randomizes all Aspire infrastructure ports (dashboard, OTLP, resource service) and creates isolated user secrets. Without it, the worktree shares `launchSettings.json` ports with main and will fail to start if main is already running. It overrides only the `ASPIRE_*` endpoint variables, so the AppHost's `launchSettings.json` must use those names: a legacy `DOTNET_RESOURCE_SERVICE_ENDPOINT_URL` or `DOTNET_DASHBOARD_OTLP_ENDPOINT_URL` wins over the randomised port and collides across worktrees.
 
 To force persistent mode in a worktree (e.g. long-lived debugging): `NOCTURNE_DB_PERSISTENCE=persistent aspire run --isolated`.
 
