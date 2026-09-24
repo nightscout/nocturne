@@ -166,32 +166,44 @@ public static partial class AlertsInterop
 
     #region Library Loading Helpers
 
-    /// <summary>
-    /// Check if the native nocturne_alerts library can be loaded.
-    /// </summary>
-    /// <returns>True if the library loads successfully.</returns>
-    public static bool IsAvailable()
+    /// <summary>Whether the native nocturne_alerts library loads and passes <see cref="Probe"/>.</summary>
+    public static bool IsAvailable() => Probe().IsAvailable;
+
+    /// <summary>Loads the native library and checks it is usable, reporting why when it is not.</summary>
+    public static NativeProbeResult Probe()
     {
         try
         {
-            return !string.IsNullOrEmpty(GetVersion());
+            return string.IsNullOrEmpty(GetVersion())
+                ? NativeProbeResult.Unavailable("the version export returned an empty string")
+                : NativeProbeResult.Available;
         }
-        catch (DllNotFoundException)
+        catch (DllNotFoundException ex)
         {
-            return false;
+            return NativeProbeResult.Unavailable(ex.Message);
         }
-        catch (EntryPointNotFoundException)
+        catch (EntryPointNotFoundException ex)
         {
-            return false;
+            return NativeProbeResult.Unavailable(ex.Message);
         }
-        catch (BadImageFormatException)
+        catch (BadImageFormatException ex)
         {
             // A cdylib built for the wrong architecture (an arm64 .so on an amd64 host)
-            // loads far enough to fail here rather than to not be found at all. Treat it
-            // as unavailable so callers take their degraded path instead of faulting.
-            return false;
+            // loads far enough to fail here rather than to not be found at all.
+            return NativeProbeResult.Unavailable(ex.Message);
         }
     }
 
     #endregion
+}
+
+/// <summary>The outcome of <see cref="AlertsInterop.Probe"/>.</summary>
+/// <param name="Failure">Why the library is unusable, or <see langword="null"/> when it is usable.</param>
+public readonly record struct NativeProbeResult(string? Failure)
+{
+    public static NativeProbeResult Available => default;
+
+    public bool IsAvailable => Failure is null;
+
+    public static NativeProbeResult Unavailable(string failure) => new(failure);
 }

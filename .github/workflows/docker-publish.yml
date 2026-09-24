@@ -236,6 +236,28 @@ jobs:
             done
           done
 
+      # The API csproj silently skips packing the cdylib when it is missing, and
+      # Alerts:Engine=rust refuses to start without it, so check every platform's image.
+      - name: Verify the API image ships the nocturne_alerts native library
+        if: github.event_name != 'pull_request' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false)
+        run: |
+          set -euo pipefail
+          ref="${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-api:${{ steps.version.outputs.version }}"
+          for pair in "linux/amd64:linux-x64" "linux/arm64:linux-arm64"; do
+            platform="${pair%%:*}"
+            rid="${pair##*:}"
+            lib="/app/runtimes/${rid}/native/libnocturne_alerts.so"
+            docker pull --quiet --platform "$platform" "$ref" >/dev/null
+            cid=$(docker create --platform "$platform" "$ref")
+            if ! docker cp "$cid:$lib" - >/dev/null 2>&1; then
+              docker rm "$cid" >/dev/null
+              echo "::error::$ref ($platform) is missing $lib"
+              exit 1
+            fi
+            docker rm "$cid" >/dev/null
+            echo "$ref ($platform) ships $lib"
+          done
+
       - name: Collect image manifest status for PR comment
         id: image_status
         if: always() && (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false)

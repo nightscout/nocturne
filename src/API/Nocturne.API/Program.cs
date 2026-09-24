@@ -536,6 +536,9 @@ app.MapDefaultEndpoints();
 // Skip database migrations when running in NSwag/OpenAPI generation mode
 // NSwag launches the app to extract the OpenAPI schema, but we don't need DB access for that
 var isNSwagGeneration = IsRunningInNSwagContext();
+
+if (!isNSwagGeneration)
+    app.Services.GetRequiredService<Nocturne.API.Services.Alerts.Engines.AlertEngineSelection>();
 if (!isNSwagGeneration && !app.Environment.IsEnvironment("Testing"))
 {
     // Validate that the migrator connection string is present and uses a different role.

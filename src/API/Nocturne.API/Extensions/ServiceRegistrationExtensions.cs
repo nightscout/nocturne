@@ -1073,20 +1073,21 @@ public static class ServiceRegistrationExtensions
     /// seam: all three engine implementations plus the singleton
     /// <see cref="Nocturne.API.Services.Alerts.Engines.AlertEngineSelection"/> resolved
     /// from the <c>Alerts:Engine</c> flag (<c>managed</c> | <c>shadow</c> | <c>rust</c>,
-    /// default <c>managed</c>). The native-library probe runs once, on first resolution;
-    /// rust/shadow degrade gracefully to managed with a logged warning when the
-    /// nocturne_alerts library can't load.
+    /// default <c>managed</c>). Program resolves the selection at startup so the native-library
+    /// probe runs once, before the host serves traffic; see
+    /// <see cref="Nocturne.API.Services.Alerts.Engines.AlertEngineSelector"/> for what a failed
+    /// probe does in each mode.
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <param name="configuration">Configuration carrying the <c>Alerts:Engine</c> flag.</param>
     /// <param name="nativeProbe">
-    /// Native-library availability probe override for tests; defaults to
-    /// <see cref="Nocturne.Core.Alerts.Native.AlertsInterop.IsAvailable"/> (the version export).
+    /// Native-library probe override for tests; defaults to
+    /// <see cref="Nocturne.Core.Alerts.Native.AlertsInterop.Probe"/>.
     /// </param>
     public static IServiceCollection AddAlertEvaluationEngine(
         this IServiceCollection services,
         IConfiguration configuration,
-        Func<bool>? nativeProbe = null)
+        Func<Nocturne.Core.Alerts.Native.NativeProbeResult>? nativeProbe = null)
     {
         services.AddScoped<Nocturne.API.Services.Alerts.Engines.ManagedAlertEngine>();
         services.AddScoped<Nocturne.API.Services.Alerts.Engines.RustBackedAlertEngine>();
@@ -1095,15 +1096,13 @@ public static class ServiceRegistrationExtensions
             Nocturne.API.Services.Alerts.Engines.RustShadowRuleEvaluator>();
         services.AddScoped<Nocturne.API.Services.Alerts.Engines.ShadowAlertEngine>();
 
-        // Singleton so the configuration parse + native probe + selection log happen once
-        // (lazily, on the first scope that evaluates alerts).
         services.AddSingleton(sp =>
         {
             var logger = sp.GetRequiredService<ILoggerFactory>()
                 .CreateLogger(typeof(Nocturne.API.Services.Alerts.Engines.AlertEngineSelector).FullName!);
             return Nocturne.API.Services.Alerts.Engines.AlertEngineSelector.Select(
                 configuration[Nocturne.API.Services.Alerts.Engines.AlertEngineSelector.ConfigurationKey],
-                nativeProbe ?? Nocturne.Core.Alerts.Native.AlertsInterop.IsAvailable,
+                nativeProbe ?? Nocturne.Core.Alerts.Native.AlertsInterop.Probe,
                 logger);
         });
 

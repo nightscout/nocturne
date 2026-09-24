@@ -89,6 +89,39 @@ if (remoteCount < 40)
 // Step 4: Build API container
 if (!skipApi)
 {
+    // The API packs the nocturne_alerts cdylib only when it exists at publish time; without it
+    // the image cannot run Alerts:Engine=rust and scoped DND classifies every rule as undirected.
+    Console.WriteLine("==> Building nocturne_alerts native library");
+    var rustTriple = containerRid switch
+    {
+        "linux-x64" => "x86_64-unknown-linux-gnu",
+        "linux-arm64" => "aarch64-unknown-linux-gnu",
+        _ => null,
+    };
+    if (rustTriple is null)
+    {
+        Console.Error.WriteLine($"ERROR: No Rust target for CONTAINER_RID={containerRid}; expected linux-x64 or linux-arm64");
+        return 1;
+    }
+    try
+    {
+        RunCapture("cargo", ["--version"]);
+    }
+    catch (System.ComponentModel.Win32Exception)
+    {
+        Console.Error.WriteLine("ERROR: cargo was not found on PATH. The API image needs libnocturne_alerts.so built from crates/;");
+        Console.Error.WriteLine("       install Rust from https://rustup.rs (plus the target: rustup target add " + rustTriple + "), or set SKIP_API=true.");
+        return 1;
+    }
+    Run("cargo", ["build", "--release", "-p", "nocturne-alerts-ffi", "--target", rustTriple],
+        workingDir: Path.Combine(repoRoot, "crates"));
+    var nativeDir = Path.Combine(repoRoot, "crates", "target", rustTriple, "release");
+    if (!File.Exists(Path.Combine(nativeDir, "libnocturne_alerts.so")))
+    {
+        Console.Error.WriteLine($"ERROR: cargo finished but {Path.Combine(nativeDir, "libnocturne_alerts.so")} does not exist");
+        return 1;
+    }
+
     Console.WriteLine("==> Building API container");
     var publishArgs = new List<string>
     {
@@ -100,6 +133,10 @@ if (!skipApi)
         $"-p:ContainerRepository={imageRepository}/nocturne-api",
         $"-p:ContainerImageTag={version}",
     };
+    // The csproj packs linux-arm64 from target/aarch64-unknown-linux-gnu/release on its own;
+    // the linux-x64 slot reads NocturneAlertsNativeDir, which defaults to the host build.
+    if (containerRid == "linux-x64")
+        publishArgs.Add($"-p:NocturneAlertsNativeDir={nativeDir}{Path.DirectorySeparatorChar}");
 
     if (push)
         publishArgs.Add($"-p:ContainerRegistry={registry}");
