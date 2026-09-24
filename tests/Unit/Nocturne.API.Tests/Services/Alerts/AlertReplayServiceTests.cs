@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Configuration;
 using Nocturne.API.Services.Alerts;
+using Nocturne.API.Services.Alerts.Engines;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Alerts;
@@ -90,7 +91,7 @@ public class AlertReplayServiceTests
             enricher,
             _tenantAccessor.Object,
             Options.Create(new AlertEvaluationOptions()),
-            NullLogger<AlertReplayService>.Instance);
+            new ManagedAlertReplayEngine(NullLogger<ManagedAlertReplayEngine>.Instance));
     }
 
     private static AlertRuleSnapshot ThresholdRule(Guid id, string direction, decimal value,
@@ -550,7 +551,7 @@ public class AlertReplayServiceTests
     [Fact]
     public void BuildReplayServices_ResolvesEveryRuntimeConditionType()
     {
-        using var sp = AlertReplayService.BuildReplayServices(
+        using var sp = ManagedAlertReplayEngine.BuildReplayServices(
             new InMemoryConditionTimerStore(), TimeProvider.System);
         var registry = sp.GetRequiredService<Nocturne.API.Services.Alerts.Evaluators.ConditionEvaluatorRegistry>();
 

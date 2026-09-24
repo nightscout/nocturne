@@ -1113,6 +1113,10 @@ public static class ServiceRegistrationExtensions
                 logger);
         });
 
+        services.AddSingleton<Nocturne.API.Services.Alerts.Engines.ManagedAlertReplayEngine>();
+        services.AddSingleton<Nocturne.Core.Contracts.Alerts.IAlertReplayEngine>(sp =>
+            sp.GetRequiredService<Nocturne.API.Services.Alerts.Engines.ManagedAlertReplayEngine>());
+
         services.AddScoped<Nocturne.Core.Contracts.Alerts.IAlertEvaluationEngine>(sp =>
             sp.GetRequiredService<Nocturne.API.Services.Alerts.Engines.AlertEngineSelection>().Mode switch
             {
