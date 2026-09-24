@@ -133,7 +133,12 @@
                 </div>
 
                 <div class="flex items-center gap-2">
-                    <Button variant="outline" size="sm" onclick={printReport}>
+                    <Button
+                            variant="outline"
+                            size="sm"
+                            onclick={printReport}
+                            aria-label="Print report"
+                    >
                         <Printer class="w-4 h-4"/>
                         <span class="hidden sm:inline">Print</span>
                     </Button>
@@ -142,6 +147,7 @@
                                 variant="outline"
                                 size="sm"
                                 onclick={() => (filterSidebarOpen = true)}
+                                aria-label="Filters"
                         >
                             <Filter class="w-4 h-4"/>
                             <span class="hidden sm:inline">Filters</span>
