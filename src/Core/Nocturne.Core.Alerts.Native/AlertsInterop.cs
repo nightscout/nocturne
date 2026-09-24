@@ -20,6 +20,31 @@ public static partial class AlertsInterop
 {
     private const string LibraryName = "nocturne_alerts";
 
+    private const string FreeStringExport = "nocturne_alerts_free_string";
+    private const string VersionExport = "nocturne_alerts_version";
+    private const string EvaluateExport = "nocturne_alerts_evaluate";
+    private const string EvaluateNodeExport = "nocturne_alerts_evaluate_node";
+    private const string LeafPathsExport = "nocturne_alerts_leaf_paths";
+    private const string ClassifyExport = "nocturne_alerts_classify";
+    private const string ValidateExport = "nocturne_alerts_validate";
+
+    /// <summary>Every export bound below; <see cref="Probe"/> resolves each one.</summary>
+    private static readonly string[] BoundExports =
+    [
+        FreeStringExport, VersionExport, EvaluateExport, EvaluateNodeExport,
+        LeafPathsExport, ClassifyExport, ValidateExport,
+    ];
+
+    /// <summary>
+    /// The <c>nocturne-alerts-ffi</c> package version this assembly was built against, stamped
+    /// from the crate's Cargo.toml by the csproj.
+    /// </summary>
+    public static string ExpectedVersion { get; } =
+        typeof(AlertsInterop).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>()
+            .FirstOrDefault(a => a.Key == "NocturneAlertsExpectedVersion")?.Value ?? string.Empty;
+
+    private static IntPtr _resolvedHandle;
+
     static AlertsInterop()
     {
         NativeLibrary.SetDllImportResolver(typeof(AlertsInterop).Assembly, ResolveLibrary);
@@ -39,7 +64,7 @@ public static partial class AlertsInterop
         foreach (var candidate in CandidatePaths())
         {
             if (File.Exists(candidate) && NativeLibrary.TryLoad(candidate, out var handle))
-                return handle;
+                return _resolvedHandle = handle;
         }
 
         return IntPtr.Zero; // fall back to the default loader search
@@ -78,7 +103,7 @@ public static partial class AlertsInterop
     /// Free a string that was returned by a nocturne_alerts function.
     /// </summary>
     /// <param name="ptr">Pointer returned by one of the nocturne_alerts functions.</param>
-    [LibraryImport(LibraryName, EntryPoint = "nocturne_alerts_free_string")]
+    [LibraryImport(LibraryName, EntryPoint = FreeStringExport)]
     public static partial void FreeString(IntPtr ptr);
 
     #endregion
@@ -86,14 +111,14 @@ public static partial class AlertsInterop
     #region Native entry points
 
     /// <summary>Crate version as a plain string. Must be freed with FreeString.</summary>
-    [LibraryImport(LibraryName, EntryPoint = "nocturne_alerts_version")]
+    [LibraryImport(LibraryName, EntryPoint = VersionExport)]
     private static partial IntPtr VersionNative();
 
     /// <summary>
     /// Evaluates one rule for one tick. Request/response are the JSON envelopes
     /// documented in crates/nocturne-alerts-ffi/README.md. Must be freed with FreeString.
     /// </summary>
-    [LibraryImport(LibraryName, EntryPoint = "nocturne_alerts_evaluate", StringMarshalling = StringMarshalling.Utf8)]
+    [LibraryImport(LibraryName, EntryPoint = EvaluateExport, StringMarshalling = StringMarshalling.Utf8)]
     private static partial IntPtr EvaluateNative(string requestJson);
 
     /// <summary>
@@ -102,14 +127,14 @@ public static partial class AlertsInterop
     /// are the JSON envelopes documented in crates/nocturne-alerts-ffi/README.md.
     /// Must be freed with FreeString.
     /// </summary>
-    [LibraryImport(LibraryName, EntryPoint = "nocturne_alerts_evaluate_node", StringMarshalling = StringMarshalling.Utf8)]
+    [LibraryImport(LibraryName, EntryPoint = EvaluateNodeExport, StringMarshalling = StringMarshalling.Utf8)]
     private static partial IntPtr EvaluateNodeNative(string requestJson);
 
     /// <summary>
     /// Enumerates the canonical condition paths and leaf ids of a condition tree
     /// (for timer-pruning hosts). Must be freed with FreeString.
     /// </summary>
-    [LibraryImport(LibraryName, EntryPoint = "nocturne_alerts_leaf_paths", StringMarshalling = StringMarshalling.Utf8)]
+    [LibraryImport(LibraryName, EntryPoint = LeafPathsExport, StringMarshalling = StringMarshalling.Utf8)]
     private static partial IntPtr LeafPathsNative(string conditionNodeJson);
 
     /// <summary>
@@ -117,7 +142,7 @@ public static partial class AlertsInterop
     /// Not Disturb. Request/response are the JSON envelopes documented in
     /// crates/nocturne-alerts-ffi/README.md. Must be freed with FreeString.
     /// </summary>
-    [LibraryImport(LibraryName, EntryPoint = "nocturne_alerts_classify", StringMarshalling = StringMarshalling.Utf8)]
+    [LibraryImport(LibraryName, EntryPoint = ClassifyExport, StringMarshalling = StringMarshalling.Utf8)]
     private static partial IntPtr ClassifyNative(string requestJson);
 
     /// <summary>
@@ -125,7 +150,7 @@ public static partial class AlertsInterop
     /// are the JSON envelopes documented in crates/nocturne-alerts-ffi/README.md. Must be
     /// freed with FreeString.
     /// </summary>
-    [LibraryImport(LibraryName, EntryPoint = "nocturne_alerts_validate", StringMarshalling = StringMarshalling.Utf8)]
+    [LibraryImport(LibraryName, EntryPoint = ValidateExport, StringMarshalling = StringMarshalling.Utf8)]
     private static partial IntPtr ValidateNative(string requestJson);
 
     #endregion
@@ -169,14 +194,22 @@ public static partial class AlertsInterop
     /// <summary>Whether the native nocturne_alerts library loads and passes <see cref="Probe"/>.</summary>
     public static bool IsAvailable() => Probe().IsAvailable;
 
-    /// <summary>Loads the native library and checks it is usable, reporting why when it is not.</summary>
+    /// <summary>
+    /// Loads the native library and checks it is the build this binding expects: its version
+    /// equals <see cref="ExpectedVersion"/> and every bound export resolves, so a stale library
+    /// fails here rather than on the first rule it evaluates.
+    /// </summary>
     public static NativeProbeResult Probe()
     {
         try
         {
-            return string.IsNullOrEmpty(GetVersion())
-                ? NativeProbeResult.Unavailable("the version export returned an empty string")
-                : NativeProbeResult.Available;
+            var version = GetVersion();
+            var handle = _resolvedHandle;
+            if (handle == IntPtr.Zero
+                && !NativeLibrary.TryLoad(LibraryName, typeof(AlertsInterop).Assembly, null, out handle))
+                return NativeProbeResult.Unavailable("the library answered but its handle could not be obtained");
+
+            return Verify(version, ExpectedVersion, export => NativeLibrary.TryGetExport(handle, export, out _));
         }
         catch (DllNotFoundException ex)
         {
@@ -192,6 +225,20 @@ public static partial class AlertsInterop
             // loads far enough to fail here rather than to not be found at all.
             return NativeProbeResult.Unavailable(ex.Message);
         }
+    }
+
+    internal static NativeProbeResult Verify(string reportedVersion, string expectedVersion, Func<string, bool> exportResolves)
+    {
+        if (string.IsNullOrEmpty(expectedVersion))
+            return NativeProbeResult.Unavailable("this build carries no expected library version");
+        if (reportedVersion != expectedVersion)
+            return NativeProbeResult.Unavailable(
+                $"the library reports version '{reportedVersion}' but this build expects '{expectedVersion}'");
+
+        var missing = BoundExports.Where(e => !exportResolves(e)).ToList();
+        return missing.Count == 0
+            ? NativeProbeResult.Available
+            : NativeProbeResult.Unavailable($"the library does not export {string.Join(", ", missing)}");
     }
 
     #endregion
