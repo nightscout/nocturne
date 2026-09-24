@@ -300,6 +300,9 @@ A sticky, full-width strip for app-wide conditions such as a stale connection or
 ### Figure Strip
 A report's headline figures sit in one `FigureStrip` (`packages/app/src/lib/components/reports/FigureStrip.svelte`): a flush card whose cells are divided by 1px rules. Each cell has a muted label, the figure at 20px semibold with tabular numerals, the unit in the label grade, and an optional note such as the consensus target. A figure appears once per page. Supporting cards explain or break it down rather than repeating it larger.
 
+### Page header
+A page's `h1` (24px bold) sits beside its section icon in a 48px tile (`rounded-xl`, `--primary` at 10%, the icon 24px in `--primary`), with a one-line description under the heading. This tile is the one sanctioned icon tile; it marks the page, not individual items on it.
+
 ### Lists of links
 Indexes of destinations, such as the reports hub, the settings hub and the portal's docs and install pages, are ruled lists: a row per link with title, description and a trailing chevron, and a hover fill of `--accent` at 50%. They are not grids of cards with icon tiles.
 
@@ -322,7 +325,7 @@ Charts are drawn with layerchart. The main glucose chart stacks lanes over a sha
 
 ### Don't:
 - **Don't** lay out stat figures as a row of separate cards, or put two figures of the same size side by side competing. Use the Figure Strip, and keep the current reading the largest number on any screen.
-- **Don't** put an icon in a tinted tile beside a page heading, or build a grid of same-size cards of icon, heading and text. Headings carry themselves, and destinations are ruled lists.
+- **Don't** build a grid of same-size cards of icon, heading and text. Destinations are ruled lists.
 - **Don't** nest a bordered or filled tile inside a card row. Rows inside a card are divided by rules.
 - **Don't** set uppercase tracked labels above headings, or number sections, unless the sequence itself is information.
 - **Don't** use Tailwind palette literals (`bg-green-500`, `text-orange-500`) for any clinical or outcome state.

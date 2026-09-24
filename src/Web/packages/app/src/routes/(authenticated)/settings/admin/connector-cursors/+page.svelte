@@ -212,6 +212,9 @@
 
 <div class="@container container mx-auto max-w-4xl space-y-6 p-3 @md:p-6">
   <div class="flex items-center gap-3">
+    <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+      <RefreshCw class="h-6 w-6 text-primary" />
+    </div>
     <div>
       <h1 class="text-2xl font-bold tracking-tight">Reset Connector Cursors</h1>
       <p class="text-muted-foreground">

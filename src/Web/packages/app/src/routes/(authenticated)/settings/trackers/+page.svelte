@@ -25,6 +25,7 @@
   import TrackerPresetsTab from "$lib/components/trackers/TrackerPresetsTab.svelte";
   import TrackerEditorDialog from "$lib/components/trackers/TrackerEditorDialog.svelte";
   import {
+    Timer,
     AlertTriangle,
     History,
     Settings2,
@@ -463,6 +464,9 @@
 <div class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6">
   <!-- Header -->
   <div class="flex items-center gap-3">
+    <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+      <Timer class="h-6 w-6 text-primary" />
+    </div>
     <div>
       <h1 class="text-2xl font-bold tracking-tight">
         Notifications & Trackers

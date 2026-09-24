@@ -167,6 +167,9 @@
   <!-- Header -->
   <div class="flex flex-wrap items-start justify-between gap-3">
     <div class="flex items-center gap-3">
+      <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+        <Bell class="h-6 w-6 text-primary" />
+      </div>
       <div>
         <h1 class="text-2xl font-bold tracking-tight">Alerts</h1>
         <p class="text-sm text-muted-foreground">Rules that decide when, how, and where you're notified.</p>
