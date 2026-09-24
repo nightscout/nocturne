@@ -450,6 +450,7 @@
                 icon={source.icon}
                 status={mapDataSourceStatus(source)}
                 totalEntries={source.totalEntries}
+                totalCoversLast30Days
                 entriesLast24h={source.entriesLast24h}
                 lastSeen={source.lastSeen}
                 subtitle={source.name !== source.deviceId ? source.deviceId : undefined}

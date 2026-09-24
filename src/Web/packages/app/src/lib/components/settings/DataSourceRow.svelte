@@ -34,6 +34,7 @@
     status: DataSourceStatus;
     statusMessage?: string;
     totalEntries?: number;
+    totalCoversLast30Days?: boolean;
     entriesLast24h?: number;
     lastSeen?: string;
     lastSyncAttempt?: string;
@@ -56,6 +57,7 @@
     status,
     statusMessage,
     totalEntries,
+    totalCoversLast30Days = false,
     entriesLast24h,
     lastSeen,
     lastSyncAttempt,
@@ -151,6 +153,14 @@
   const itemVariant = $derived(getItemVariant(status));
 </script>
 
+{#snippet totalRecords()}
+  {#if totalCoversLast30Days}
+    {formatNumber(totalEntries)} records in the last 30 days
+  {:else}
+    {formatNumber(totalEntries)} records
+  {/if}
+{/snippet}
+
 <div class="relative">
   <Item variant={itemVariant} size="lg" class="justify-between" {onclick}>
     <div class="flex items-center gap-4 min-w-0 flex-1">
@@ -240,7 +250,7 @@
           {#if totalBreakdown && Object.keys(totalBreakdown).length > 0}
             <Tooltip.Root>
               <Tooltip.Trigger variant="term">
-                {formatNumber(totalEntries)} records
+                {@render totalRecords()}
               </Tooltip.Trigger>
               <Tooltip.Content
                 variant="popover"
@@ -262,7 +272,7 @@
               </Tooltip.Content>
             </Tooltip.Root>
           {:else}
-            {formatNumber(totalEntries)} records
+            {@render totalRecords()}
           {/if}
 
           {#if (entriesLast24h ?? 0) > 0}
