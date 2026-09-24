@@ -6,7 +6,7 @@
     import SupportNocturne from "$lib/components/docs/SupportNocturne.svelte";
     import PasswordGenerator from "$lib/components/docs/PasswordGenerator.svelte";
     import CodeBlock from "$lib/components/docs/CodeBlock.svelte";
-    import envExample from "$lib/release/docker-compose/.env.example?raw";
+    import envExample from "$lib/release/docker-compose/default.env.example?raw";
     import dockerCompose from "$lib/release/docker-compose/docker-compose.yaml?raw";
 </script>
 

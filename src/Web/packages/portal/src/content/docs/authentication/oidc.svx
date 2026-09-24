@@ -39,9 +39,11 @@ Nocturne reads providers from one of two places:
    deployments.
 
 <Callout type="info" title="Pick one, not both">
+
   As soon as <code>Oidc:Providers</code> has at least one entry in configuration, the
   database-backed providers and their management UI are ignored. Manage providers either
   through the admin UI <em>or</em> through configuration, not a mix.
+
 </Callout>
 
 ### Option A: the admin UI
@@ -118,9 +120,11 @@ Oidc__Providers__0__ClientSecret=your-client-secret
 | Google | `https://accounts.google.com` |
 
 <Callout type="tip" title="Not sure of the issuer?">
+
   Open <code>https://your-provider/.well-known/openid-configuration</code> in a browser. If
   it returns JSON with <code>authorization_endpoint</code> and <code>token_endpoint</code>,
   the part before <code>/.well-known/...</code> is your issuer URL.
+
 </Callout>
 
 ## New accounts and roles

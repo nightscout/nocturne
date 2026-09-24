@@ -61,9 +61,11 @@ member account instead of waiting for you to send them an invite. See
   link.
 
 <Callout type="tip" title="Share the least, for the shortest time">
+
   If two options would both work, pick the narrower one. A guest link that expires
   on its own is easier to live with than a public link you have to remember to
   switch off, and a Viewer role shows far less than an Administrator one.
+
 </Callout>
 
 ## Turning access back off

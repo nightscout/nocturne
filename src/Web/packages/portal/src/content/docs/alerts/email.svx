@@ -26,9 +26,11 @@ per day, which is more than enough for most alert configurations.
 4. Wait for verification. This usually takes a few minutes but can take up to 48 hours
 
 <Callout type="info" title="Free tier sending domain">
+
   On the free tier you can also send from Resend's shared domain
   (<code>onboarding@resend.dev</code>) for testing, but a verified custom domain
   is strongly recommended for production use to avoid deliverability issues.
+
 </Callout>
 
 ## 3. Create an API key
@@ -39,8 +41,10 @@ per day, which is more than enough for most alert configurations.
 4. Copy the key immediately
 
 <Callout type="warning" title="Save the API key now">
+
   Resend only displays the full API key once. If you lose it, you'll need to
   create a new one.
+
 </Callout>
 
 ## 4. Configure Nocturne
@@ -93,8 +97,10 @@ Nocturne watches for; the email address goes on a channel inside one:
 3. Verify that the **Acknowledge** link in the email works
 
 <Callout type="tip" title="Check spam folders">
+
   If the test email doesn't arrive, check the spam/junk folder. Using a verified
   custom domain with proper DNS records (SPF, DKIM) greatly improves deliverability.
+
 </Callout>
 
 ## Inbound replies (optional)

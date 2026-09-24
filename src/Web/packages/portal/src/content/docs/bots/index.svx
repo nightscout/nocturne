@@ -51,9 +51,11 @@ each given a short **label** used to disambiguate: `/bg lily`. One link is the *
 and is used when no label is given.
 
 <Callout type="info" title="BASE_DOMAIN is required">
+
   The bot builds <code>/connect</code> authorization links from your instance's
   <code>BASE_DOMAIN</code>. This is already set on any working Nocturne deployment; if links
   point at the wrong host, check that value first.
+
 </Callout>
 
 ## Configuring credentials
@@ -71,9 +73,11 @@ write-only: once saved, a field shows a **Set** badge and the input stays blank;
 blank on a later save to keep the existing value.
 
 <Callout type="warning" title="Restart after saving">
+
   The bot reads its configuration once at startup. After saving or removing credentials in
   the Admin UI, <strong>restart the Nocturne web service</strong> for the change to take
   effect.
+
 </Callout>
 
 ### Option B: Environment variables
@@ -83,14 +87,18 @@ For declarative, infrastructure-as-code deployments, set the platform's variable
 platform's page.
 
 <Callout type="info" title="Admin UI wins">
+
   If a platform is configured through the Admin UI, those values are used and the matching
   environment variables for that platform are ignored. Manage each platform in one place,
   not both.
+
 </Callout>
 
 <Callout type="tip" title="Encryption key">
+
   Saving credentials in the Admin UI requires the instance encryption key
   (<code>INSTANCE_KEY</code>) to be configured. It already is on any standard deployment.
+
 </Callout>
 
 ## Webhooks

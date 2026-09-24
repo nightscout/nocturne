@@ -63,9 +63,11 @@ that is a 15 g unspecified remainder, not an error, and Nocturne will not
 silently rewrite either figure.
 
 <Callout type="info" title="Attribution never changes your carbs">
+
   Adding, editing or removing an attribution line does not touch the carb entry's
   total. The total is what you dosed against and stays as recorded; attributions
   only describe it. If the total itself is wrong, edit the carb entry.
+
 </Callout>
 
 The **time offset** exists for meals eaten over an hour rather than a minute.
@@ -104,10 +106,12 @@ The window, the tolerances and whether notifications are raised at all are
 configurable per instance through the connector's matching settings.
 
 <Callout type="tip" title="MyFitnessPal times are approximate">
+
   MyFitnessPal does not report a usable timestamp for a food entry, so Nocturne
   infers the time from the meal name — breakfast, lunch, dinner. That is why the
   default window is a generous 30 minutes, and why reviewing before accepting is
   worth it when the meal was late.
+
 </Callout>
 
 ## Through the API

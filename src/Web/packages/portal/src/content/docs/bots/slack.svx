@@ -73,9 +73,11 @@ in each of these places that applies:
 - **Event Subscriptions**: if you enable events, set the Request URL here too.
 
 <Callout type="info" title="Verify the URL after configuring credentials">
+
   Slack verifies the Request URL by sending a signed challenge that Nocturne validates with
   your <strong>Signing Secret</strong>. Configure the credentials in step 4 and restart
   <em>before</em> saving the URL, so verification passes.
+
 </Callout>
 
 ## 6. Test it

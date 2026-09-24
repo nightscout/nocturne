@@ -42,10 +42,12 @@ shows them as a single meal event. A carb entry with no insulin correlated to it
 is still a meal event; it just has no insulin in it.
 
 <Callout type="info" title="Why not one record?">
+
   Carbs and insulin come from different places, get corrected independently, and
   are used by different calculations. Keeping them separate means a corrected
   bolus does not rewrite your carb history, and a carb entry that arrives from
   your phone can still be joined to a bolus that arrived from your pump.
+
 </Callout>
 
 ## The pages
