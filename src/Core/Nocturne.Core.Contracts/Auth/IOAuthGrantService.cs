@@ -18,6 +18,10 @@ public interface IOAuthGrantService
     /// <param name="scopes">The scopes being granted</param>
     /// <param name="grantType">The type of grant (app or follower)</param>
     /// <param name="label">Optional user-friendly label for the grant</param>
+    /// <param name="limitTo24Hours">
+    /// Whether tokens minted from the grant may read only the last 24 hours. The latest consent
+    /// sets it, as it does the label.
+    /// </param>
     /// <param name="ct">Cancellation token</param>
     Task<OAuthGrantInfo> CreateOrUpdateGrantAsync(
         Guid clientEntityId,
@@ -25,6 +29,7 @@ public interface IOAuthGrantService
         IEnumerable<string> scopes,
         string grantType = OAuthGrantTypes.App,
         string? label = null,
+        bool limitTo24Hours = false,
         CancellationToken ct = default
     );
 
@@ -157,4 +162,7 @@ public class OAuthGrantInfo
 
     /// <summary>Whether the grant has been revoked.</summary>
     public bool IsRevoked { get; set; }
+
+    /// <summary>Whether tokens minted from the grant may read only the last 24 hours.</summary>
+    public bool LimitTo24Hours { get; set; }
 }

@@ -195,6 +195,30 @@ public static class HttpContextExtensions
     }
 
     /// <summary>
+    /// The refusal a history-clamped caller reads when an action would give someone more history
+    /// than the caller can see.
+    /// </summary>
+    public const string HistoryCeilingDetail =
+        "You can see the last 24 hours only, so you cannot give anyone more history than that.";
+
+    /// <summary>
+    /// Whether the caller may read only the last 24 hours, per
+    /// <see cref="ICategoryReadContext.IsHistoryClamped"/>. This is the caller's history ceiling:
+    /// whatever the caller mints (an invite, a direct grant, a guest link, an OAuth consent)
+    /// inherits it, and a clamped caller may not lift another member's clamp or give a share
+    /// full history, because either would hand out more history than the caller can read.
+    /// </summary>
+    public static bool IsCallerHistoryClamped(this HttpContext context) =>
+        context.RequestServices?.GetService<ICategoryReadContext>()?.IsHistoryClamped == true;
+
+    /// <summary>
+    /// The history limit something this caller mints carries: the requested limit, or the
+    /// caller's own ceiling (<see cref="IsCallerHistoryClamped"/>).
+    /// </summary>
+    public static bool InheritHistoryClamp(this HttpContext context, bool requested) =>
+        requested || context.IsCallerHistoryClamped();
+
+    /// <summary>
     /// The tenant the request resolved to, or <see langword="null"/> when it resolved to none.
     /// </summary>
     public static TenantContext? GetTenantContext(this HttpContext context)

@@ -280,6 +280,21 @@ public partial class TenantRoleService(
             .ToList();
     }
 
+    /// <inheritdoc />
+    public async Task<List<string>> GetRolePermissionsAsync(
+        Guid tenantId, IReadOnlyCollection<Guid> roleIds, CancellationToken ct = default)
+    {
+        if (roleIds.Count == 0)
+            return [];
+
+        var permissionSets = await context.TenantRoles
+            .Where(r => r.TenantId == tenantId && roleIds.Contains(r.Id))
+            .Select(r => r.Permissions)
+            .ToListAsync(ct);
+
+        return permissionSets.SelectMany(permissions => permissions).Distinct().ToList();
+    }
+
     private static string GenerateSlug(string name)
     {
         var slug = name.ToLowerInvariant().Replace(' ', '-');

@@ -4,6 +4,7 @@
     import { Button } from "$lib/components/ui/button";
     import {ReportsFilterSidebar} from "$lib/components/layout";
     import ResourceGuard from "$lib/components/reports/ResourceGuard.svelte";
+    import HistoryLimitNotice from "$lib/components/layout/HistoryLimitNotice.svelte";
     import ReportPrintHeader from "$lib/components/reports/print/ReportPrintHeader.svelte";
     import {
         createReportPrintContext,
@@ -157,6 +158,8 @@
             </div>
         </div>
     {/if}
+
+    <HistoryLimitNotice class="mx-3 mt-3 w-auto @md:mx-6 print:hidden" />
 
     <!-- Main Content -->
     <main class="relative">

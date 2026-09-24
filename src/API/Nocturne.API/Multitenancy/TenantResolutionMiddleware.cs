@@ -406,6 +406,7 @@ public class TenantResolutionMiddleware
         db.IsShareContext = context.RequestServices.GetService<ICategoryReadContext>()?.IsShare == true;
         db.VisibleCategories = null;
         db.ShareFullHistory = false;
+        db.HistoryClamped = false;
     }
 
 

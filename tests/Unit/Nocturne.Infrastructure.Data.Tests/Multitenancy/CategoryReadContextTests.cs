@@ -82,4 +82,34 @@ public class CategoryReadContextTests
 
         ctx.VisibleCategoriesCsv.Should().BeEmpty();
     }
+
+    [Fact]
+    public void New_IsNotHistoryClamped()
+    {
+        new CategoryReadContext().IsHistoryClamped.Should().BeFalse(
+            "a member, owner or background job is never clamped by default (fail-open)");
+    }
+
+    [Fact]
+    public void ClampMemberHistory_ClampsANonShare()
+    {
+        var ctx = new CategoryReadContext();
+
+        ctx.ClampMemberHistory();
+
+        ctx.IsHistoryClamped.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Share_IsHistoryClamped_UntilFullHistoryIsGranted()
+    {
+        var ctx = new CategoryReadContext();
+        ctx.MarkShare();
+
+        ctx.IsHistoryClamped.Should().BeTrue("a share whose window is never resolved stays clamped");
+
+        ctx.SetFullHistory(true);
+
+        ctx.IsHistoryClamped.Should().BeFalse();
+    }
 }

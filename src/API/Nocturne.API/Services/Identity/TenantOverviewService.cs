@@ -44,6 +44,7 @@ public class TenantOverviewService : ITenantOverviewService
 
     public async Task<TenantOverviewResponse> GetOverviewAsync(
         Guid subjectId, IReadOnlySet<string> tokenScopes, AuthType authType,
+        bool credentialLimitTo24Hours = false,
         CancellationToken ct = default)
     {
         var glucoseReadTenants = await GetGlucoseReadTenantsAsync(subjectId, tokenScopes, authType, ct);
@@ -56,20 +57,22 @@ public class TenantOverviewService : ITenantOverviewService
         var staleAfter = TimeSpan.FromMinutes(_configuration.GetValue("Overview:StaleAfterMinutes", 25));
 
         var items = new List<TenantOverviewItem>();
-        foreach (var (tenant, allowed) in glucoseReadTenants)
+        foreach (var (tenant, allowed, membershipClamped) in glucoseReadTenants)
         {
             var includeAlerts = Scope.Satisfies(allowed, Scope.AlertsRead);
+            var historyClamped = membershipClamped || credentialLimitTo24Hours;
 
             try
             {
-                items.Add(await BuildItemAsync(tenant, defaults, staleAfter, includeAlerts, ct));
+                items.Add(await BuildItemAsync(
+                    tenant, defaults, staleAfter, includeAlerts, historyClamped, ct));
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 _logger.LogError(ex, "Failed to build overview for tenant {TenantId}", tenant.Id);
                 items.Add(new TenantOverviewItem(
                     tenant.Id, tenant.Slug, tenant.DisplayName,
-                    tenant.LastReadingAt, Latest: null, GlucoseStatus.Unknown,
+                    historyClamped ? null : tenant.LastReadingAt, Latest: null, GlucoseStatus.Unknown,
                     defaults, ActiveAlertCount: null, HighestActiveSeverity: null));
             }
         }
@@ -100,7 +103,10 @@ public class TenantOverviewService : ITenantOverviewService
             var allowed = ResolveAllowedScopes(membership, tokenScopes, authType);
             if (!Scope.Satisfies(allowed, Scope.GlucoseRead)) continue;
 
-            result.Add(new GlucoseReadTenant(tenant, allowed));
+            var membershipClamped = membership.LimitTo24Hours
+                && !MemberScopeResolver.IsExemptFromHistoryClamp(EffectivePermissions(membership));
+
+            result.Add(new GlucoseReadTenant(tenant, allowed, membershipClamped));
         }
 
         return result;
@@ -113,29 +119,32 @@ public class TenantOverviewService : ITenantOverviewService
     /// hide one they would serve).
     /// </summary>
     internal static IReadOnlySet<string> ResolveAllowedScopes(
-        TenantMemberEntity membership, IReadOnlySet<string> tokenScopes, AuthType authType)
-    {
-        var effective = membership.MemberRoles
+        TenantMemberEntity membership, IReadOnlySet<string> tokenScopes, AuthType authType) =>
+        MemberScopeResolver.Resolve(EffectivePermissions(membership), authType, tokenScopes);
+
+    private static HashSet<string> EffectivePermissions(TenantMemberEntity membership) =>
+        membership.MemberRoles
             .SelectMany(mr => mr.TenantRole.Permissions)
             .Union(membership.DirectPermissions ?? [])
             .ToHashSet();
-
-        return MemberScopeResolver.Resolve(effective, authType, tokenScopes);
-    }
 
     private async Task<TenantOverviewItem> BuildItemAsync(
         TenantEntity tenant,
         TenantOverviewThresholds defaults,
         TimeSpan staleAfter,
         bool includeAlerts,
+        bool historyClamped,
         CancellationToken ct)
     {
-        // Fresh scope per tenant: CanonicalGlucoseService caches per scope.
+        // Fresh scope per tenant: CanonicalGlucoseService caches per scope. The scope never passes
+        // through MemberScopeMiddleware, so the caller's clamp on this tenant is carried in here.
         SensorGlucose? latest;
         using (var scope = _scopeFactory.CreateScope())
         {
             scope.ServiceProvider.GetRequiredService<ITenantAccessor>()
                 .SetTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true, tenant.IsDemo));
+            if (historyClamped)
+                scope.ServiceProvider.GetRequiredService<ICategoryReadContext>().ClampMemberHistory();
             latest = await scope.ServiceProvider
                 .GetRequiredService<ICanonicalGlucoseService>()
                 .GetLatestAsync(ct);
@@ -170,12 +179,16 @@ public class TenantOverviewService : ITenantOverviewService
             ? null
             : new TenantOverviewReading(latest.Mgdl, latest.Delta, latest.Direction, latest.TrendRate, latest.Timestamp);
 
+        // tenant.LastReadingAt is denormalised from glucose rows RLS never sees, so a clamped
+        // caller must not read an older reading's time off it.
+        var lastReadingAt = historyClamped ? null : tenant.LastReadingAt;
+
         var status = Classify(
-            latest?.Mgdl, latest?.Timestamp, tenant.LastReadingAt, thresholds, staleAfter, DateTime.UtcNow);
+            latest?.Mgdl, latest?.Timestamp, lastReadingAt, thresholds, staleAfter, DateTime.UtcNow);
 
         return new TenantOverviewItem(
             tenant.Id, tenant.Slug, tenant.DisplayName,
-            latest?.Timestamp ?? tenant.LastReadingAt,
+            latest?.Timestamp ?? lastReadingAt,
             reading, status, thresholds,
             activeAlertCount, highestSeverity);
     }

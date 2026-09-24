@@ -14,6 +14,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Basal;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Cache.Abstractions;
+using Nocturne.Infrastructure.Data.Services;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4.Analytics;
@@ -39,11 +40,17 @@ public class StatisticsControllerTests
 
     private StatisticsController CreateController(
         ICanonicalGlucoseService? canonicalGlucose = null,
-        IStatisticsService? statisticsService = null)
+        IStatisticsService? statisticsService = null,
+        ICacheService? cacheService = null,
+        ICategoryReadContext? categoryReadContext = null)
     {
+        var tenantAccessor = new Mock<ITenantAccessor>();
+        tenantAccessor.SetupGet(a => a.Context)
+            .Returns(new TenantContext(Guid.CreateVersion7(), "test", "Test", true, false));
+
         var controller = new StatisticsController(
             statisticsService ?? _statsServiceMock.Object,
-            Mock.Of<ICacheService>(),
+            cacheService ?? Mock.Of<ICacheService>(),
             Mock.Of<IProfileProjectionService>(),
             _basalRateResolverMock.Object,
             _basalSegmentsMock.Object,
@@ -52,7 +59,7 @@ public class StatisticsControllerTests
             _bolusRepoMock.Object,
             _carbIntakeRepoMock.Object,
             _tempBasalRepoMock.Object,
-            Mock.Of<ITenantAccessor>(),
+            tenantAccessor.Object,
             _aidMetricsServiceMock.Object,
             _patientDeviceRepoMock.Object,
             _apsSnapshotRepoMock.Object,
@@ -60,7 +67,8 @@ public class StatisticsControllerTests
             _targetRangeScheduleRepoMock.Object,
             _basalInjectionRepoMock.Object,
             _activeProfileResolverMock.Object,
-            canonicalGlucose ?? TestDoubles.CanonicalGlucosePassThrough.Create());
+            canonicalGlucose ?? TestDoubles.CanonicalGlucosePassThrough.Create(),
+            categoryReadContext ?? new CategoryReadContext());
 
         controller.ControllerContext = new ControllerContext
         {
@@ -1044,5 +1052,44 @@ public class StatisticsControllerTests
         var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
         var payload = ok.Value.Should().BeOfType<AidSystemMetrics>().Subject;
         payload.PumpDeviceNames.Should().Be("YpsoPump");
+    }
+
+    [Fact]
+    public async Task GetMultiPeriodStatistics_Unclamped_ServesTheTenantCache()
+    {
+        var cached = new MultiPeriodStatistics();
+        var cache = new Mock<ICacheService>();
+        cache.Setup(c => c.GetAsync<MultiPeriodStatistics>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(cached);
+
+        var result = await CreateController(cacheService: cache.Object).GetMultiPeriodStatistics();
+
+        result.Result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeSameAs(cached);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task GetMultiPeriodStatistics_HistoryClamped_NeitherReadsNorWritesTheCache(bool share)
+    {
+        // The cache holds statistics an unclamped reader computed over 90 days; a clamped reader
+        // must not be served them, nor leave its own narrowed statistics for the next reader.
+        var cached = new MultiPeriodStatistics();
+        var cache = new Mock<ICacheService>();
+        cache.Setup(c => c.GetAsync<MultiPeriodStatistics>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(cached);
+        var category = new CategoryReadContext();
+        if (share)
+            category.MarkShare();
+        else
+            category.ClampMemberHistory();
+        SetupGlucose([]);
+        SetupEmptyTreatments();
+
+        var result = await CreateController(cacheService: cache.Object, categoryReadContext: category)
+            .GetMultiPeriodStatistics();
+
+        result.Result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().NotBeSameAs(cached);
+        cache.Invocations.Should().BeEmpty();
     }
 }

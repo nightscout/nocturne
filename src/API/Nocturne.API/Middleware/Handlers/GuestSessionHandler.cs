@@ -124,6 +124,7 @@ public class GuestSessionHandler : IAuthHandler
             Scopes = session.Scopes.ToList(),
             TokenId = session.GrantId,
             ExpiresAt = new DateTimeOffset(session.ExpiresAt, TimeSpan.Zero),
+            LimitTo24Hours = session.LimitTo24Hours,
         };
 
         return AuthResult.Success(authContext);

@@ -65,7 +65,9 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
         return new MemberInviteController(
             _inviteService.Object,
             _tenantService.Object,
-            Mock.Of<ITenantRoleService>(),
+            Mock.Of<ITenantRoleService>(r => r.GetRolePermissionsAsync(
+                It.IsAny<Guid>(), It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>())
+                == Task.FromResult(new List<string>())),
             _tenantMemberService.Object,
             tenantAccessor.Object,
             _dbContext)
@@ -329,8 +331,8 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
             IsAuthenticated = true,
             SubjectId = _callerSubjectId,
             TenantId = _tenantId,
-            LimitTo24Hours = callerClamped,
         };
+        controller.HttpContext.RequestServices = TestRequestServices.Build(callerClamped);
 
         var invite = ClinicianInvite(Guid.CreateVersion7());
         invite.LimitTo24Hours = requested;

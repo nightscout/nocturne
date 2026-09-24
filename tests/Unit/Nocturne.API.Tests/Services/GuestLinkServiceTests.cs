@@ -183,6 +183,22 @@ public class GuestLinkServiceTests : IDisposable
         grant.ActivatedUserAgent.Should().Be("Mozilla/5.0");
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task CreateGuestLink_HistoryLimit_IsStoredAndCarriedIntoTheSession(bool limitTo24Hours)
+    {
+        var created = await _service.CreateGuestLinkAsync(
+            _dataOwnerId, _creatorId, "Clamp Test", "https://example.com", limitTo24Hours: limitTo24Hours);
+
+        var grant = await _dbContext.OAuthGrants.IgnoreQueryFilters().FirstAsync(g => g.Id == created.Info.Id);
+        grant.LimitTo24Hours.Should().Be(limitTo24Hours);
+
+        var activation = await _service.ActivateAsync(created.Code, "1.2.3.4", "Agent");
+        activation.Session!.LimitTo24Hours.Should().Be(limitTo24Hours);
+        (await _service.ValidateSessionAsync(created.Info.Id))!.LimitTo24Hours.Should().Be(limitTo24Hours);
+    }
+
     [Fact]
     public async Task ValidateSessionAsync_ActiveGrant_ReturnsInfo()
     {

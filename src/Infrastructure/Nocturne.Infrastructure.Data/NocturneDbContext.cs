@@ -110,6 +110,16 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     /// </summary>
     public bool ShareFullHistory { get; set; }
 
+    /// <summary>
+    /// True when the request is clamped to the last 24 hours of time-series data, from
+    /// <c>ICategoryReadContext.IsHistoryClamped</c>. Known post-auth, so it is stamped on the
+    /// factory-created context and on the scoped context by <c>MemberScopeMiddleware</c>; carried
+    /// to the <c>app.history_clamped</c> GUC. A context that never sets it is not clamped: unlike
+    /// the share clamp this one is fail-open, so owners and background work are never narrowed by
+    /// a missed stamp.
+    /// </summary>
+    public bool HistoryClamped { get; set; }
+
     public DbSet<FoodEntity> Foods { get; set; }
 
     public DbSet<ConnectorFoodEntryEntity> ConnectorFoodEntries { get; set; }

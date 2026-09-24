@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Extensions;
+using Nocturne.Core.Contracts.Multitenancy;
 
 namespace Nocturne.API.Controllers.V4.Identity;
 
@@ -25,16 +26,45 @@ namespace Nocturne.API.Controllers.V4.Identity;
 [Produces("application/json")]
 public class MyPermissionsController : ControllerBase
 {
+    private readonly ICategoryReadContext _categoryReadContext;
+
     /// <summary>
-    /// Get the caller's effective granted scopes for the current tenant.
+    /// Initializes a new instance of <see cref="MyPermissionsController"/>.
     /// </summary>
-    /// <returns>The list of granted scope strings for the caller on the current tenant.</returns>
+    /// <param name="categoryReadContext">Says whether the request is history-clamped.</param>
+    public MyPermissionsController(ICategoryReadContext categoryReadContext)
+    {
+        _categoryReadContext = categoryReadContext;
+    }
+
+    /// <summary>
+    /// Get the caller's effective granted scopes and history window for the current tenant.
+    /// </summary>
+    /// <returns>The caller's granted scopes, and whether it may read only the last 24 hours.</returns>
     [HttpGet]
     [RemoteQuery]
-    [ProducesResponseType(typeof(List<string>), StatusCodes.Status200OK)]
-    public ActionResult<List<string>> GetMyPermissions()
+    [ProducesResponseType(typeof(MyPermissionsResponse), StatusCodes.Status200OK)]
+    public ActionResult<MyPermissionsResponse> GetMyPermissions()
     {
-        var scopes = HttpContext.GetGrantedScopes();
-        return Ok(scopes.ToList());
+        return Ok(new MyPermissionsResponse
+        {
+            Scopes = HttpContext.GetGrantedScopes().ToList(),
+            LimitTo24Hours = _categoryReadContext.IsHistoryClamped,
+        });
     }
+}
+
+/// <summary>
+/// What the caller may read on the current tenant.
+/// </summary>
+public class MyPermissionsResponse
+{
+    /// <summary>The granted scope strings.</summary>
+    public List<string> Scopes { get; set; } = [];
+
+    /// <summary>
+    /// True when the caller may read only the last 24 hours of time-series data, whether a share
+    /// without full history or a clamped member or credential.
+    /// </summary>
+    public bool LimitTo24Hours { get; set; }
 }

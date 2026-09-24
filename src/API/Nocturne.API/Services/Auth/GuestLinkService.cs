@@ -46,6 +46,7 @@ public class GuestLinkService : IGuestLinkService
         string label,
         string baseUrl,
         IEnumerable<string>? scopes = null,
+        bool limitTo24Hours = false,
         CancellationToken ct = default)
     {
         var scopeList = Scope.ValidateGrantScopes(
@@ -72,6 +73,7 @@ public class GuestLinkService : IGuestLinkService
             Label = label,
             TokenHash = hash,
             ExpiresAt = now + LinkLifetime,
+            LimitTo24Hours = limitTo24Hours,
         };
 
         _dbContext.OAuthGrants.Add(entity);
@@ -123,7 +125,8 @@ public class GuestLinkService : IGuestLinkService
             grant.SubjectId,
             grant.Scopes.AsReadOnly(),
             grant.Label,
-            grant.ExpiresAt!.Value);
+            grant.ExpiresAt!.Value,
+            grant.LimitTo24Hours);
 
         _logger.LogInformation("Guest link {GrantId} activated from {IpAddress}", grant.Id, ipAddress);
 
@@ -152,7 +155,8 @@ public class GuestLinkService : IGuestLinkService
             grant.SubjectId,
             grant.Scopes.AsReadOnly(),
             grant.Label,
-            grant.ExpiresAt!.Value);
+            grant.ExpiresAt!.Value,
+            grant.LimitTo24Hours);
     }
 
     /// <inheritdoc />

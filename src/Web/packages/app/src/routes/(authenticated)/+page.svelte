@@ -12,6 +12,7 @@
   import { isMainSectionEnabled } from "$lib/types/dashboard-widgets";
   import { coachmark } from "@nocturne/coach";
   import TenantsOverview from "$lib/components/tenants/TenantsOverview.svelte";
+  import HistoryLimitNotice from "$lib/components/layout/HistoryLimitNotice.svelte";
   import FirstReadingChartArea from "$lib/components/dashboard/first-reading/FirstReadingChartArea.svelte";
   import { tryGetRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import type { PageData } from "./$types";
@@ -59,6 +60,8 @@
   <TenantsOverview />
 {:else}
   <div class="@container p-3 @md:p-6 space-y-3 @md:space-y-6">
+    <HistoryLimitNotice />
+
     <div
       {@attach coachmark({
         key: "quick-tour.current-bg",

@@ -71,6 +71,7 @@ public class StatisticsController : ControllerBase
     private readonly IBasalInjectionRepository _basalInjectionRepository;
     private readonly IActiveProfileResolver _activeProfileResolver;
     private readonly ICanonicalGlucoseService _canonicalGlucose;
+    private readonly ICategoryReadContext _categoryReadContext;
 
     private string TenantCacheId =>
         _tenantAccessor.Context?.TenantId.ToString()
@@ -95,7 +96,8 @@ public class StatisticsController : ControllerBase
         ITargetRangeScheduleRepository targetRangeScheduleRepository,
         IBasalInjectionRepository basalInjectionRepository,
         IActiveProfileResolver activeProfileResolver,
-        ICanonicalGlucoseService canonicalGlucose
+        ICanonicalGlucoseService canonicalGlucose,
+        ICategoryReadContext categoryReadContext
     )
     {
         _statisticsService = statisticsService;
@@ -117,6 +119,7 @@ public class StatisticsController : ControllerBase
         _basalInjectionRepository = basalInjectionRepository;
         _activeProfileResolver = activeProfileResolver;
         _canonicalGlucose = canonicalGlucose;
+        _categoryReadContext = categoryReadContext;
     }
 
     private readonly record struct InsulinRecords(
@@ -383,7 +386,7 @@ public class StatisticsController : ControllerBase
     [HttpGet("range-analytics")]
     [RequireScope(Scope.ReportsRead)]
     [RemoteQuery]
-    [ResponseCache(Duration = 60, VaryByQueryKeys = new[] { "*" })]
+    [ResponseCache(Duration = 60, Location = ResponseCacheLocation.Client)]
     public async Task<ActionResult<ReportAnalysisResult>> GetRangeAnalytics(
         [FromQuery] DateTime startDate,
         [FromQuery] DateTime endDate,
@@ -473,7 +476,7 @@ public class StatisticsController : ControllerBase
     [HttpGet("weekday-averages")]
     [RequireScope(Scope.ReportsRead)]
     [RemoteQuery]
-    [ResponseCache(Duration = 60, VaryByQueryKeys = new[] { "*" })]
+    [ResponseCache(Duration = 60, Location = ResponseCacheLocation.Client)]
     public async Task<ActionResult<IEnumerable<WeekdayGlucoseSlot>>> GetWeekdayAverages(
         [FromQuery] DateTime startDate,
         [FromQuery] DateTime endDate,
@@ -712,11 +715,12 @@ public class StatisticsController : ControllerBase
     {
         var cacheKey = $"statistics:multi-period:{TenantCacheId}";
 
-        // Try to get from cache first
-        var cachedResult = await _cacheService.GetAsync<MultiPeriodStatistics>(
-            cacheKey,
-            cancellationToken
-        );
+        // A history-clamped request bypasses the cache, for the reason given on
+        // EntryCacheAdapter.
+        var useCache = !_categoryReadContext.IsHistoryClamped;
+        var cachedResult = useCache
+            ? await _cacheService.GetAsync<MultiPeriodStatistics>(cacheKey, cancellationToken)
+            : null;
         if (cachedResult != null)
         {
             return Ok(cachedResult);
@@ -894,7 +898,8 @@ public class StatisticsController : ControllerBase
         // Cache for 5 minutes — long enough to absorb rapid dashboard refreshes,
         // short enough that newly-imported connector data (basal StateSpans, etc.) appears promptly.
         var expiry = DateTime.UtcNow.AddMinutes(5);
-        await _cacheService.SetAsync(cacheKey, result, expiry, cancellationToken);
+        if (useCache)
+            await _cacheService.SetAsync(cacheKey, result, expiry, cancellationToken);
 
         return Ok(result);
     }

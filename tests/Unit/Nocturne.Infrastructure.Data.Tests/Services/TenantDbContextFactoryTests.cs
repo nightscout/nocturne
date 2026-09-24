@@ -28,12 +28,14 @@ public class TenantDbContextFactoryTests
         return accessor;
     }
 
-    private static Mock<ICategoryReadContext> Category(bool isShare, string? csv, bool fullHistory = false)
+    private static Mock<ICategoryReadContext> Category(
+        bool isShare, string? csv, bool fullHistory = false, bool historyClamped = false)
     {
         var category = new Mock<ICategoryReadContext>();
         category.Setup(c => c.IsShare).Returns(isShare);
         category.Setup(c => c.VisibleCategoriesCsv).Returns(csv);
         category.Setup(c => c.FullHistory).Returns(fullHistory);
+        category.Setup(c => c.IsHistoryClamped).Returns(historyClamped);
         return category;
     }
 
@@ -92,6 +94,29 @@ public class TenantDbContextFactoryTests
         await using var result = await factory.CreateAsync();
 
         result.ShareFullHistory.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task CreateAsync_CarriesTheRequestsHistoryClamp(bool historyClamped)
+    {
+        var factory = new TenantDbContextFactory(
+            NewPool().Object, ResolvedAccessor(Guid.NewGuid()).Object,
+            Category(isShare: false, csv: null, historyClamped: historyClamped).Object);
+        await using var result = await factory.CreateAsync();
+
+        result.HistoryClamped.Should().Be(historyClamped);
+    }
+
+    [Fact]
+    public async Task CreateAsync_NullCategoryContext_IsNotHistoryClamped()
+    {
+        var factory = new TenantDbContextFactory(
+            NewPool().Object, ResolvedAccessor(Guid.NewGuid()).Object, categoryReadContext: null);
+        await using var result = await factory.CreateAsync();
+
+        result.HistoryClamped.Should().BeFalse("background work with no request is never clamped");
     }
 
     [Fact]
@@ -182,6 +207,7 @@ public class TenantDbContextFactoryTests
             IsShareContext = true,
             VisibleCategories = "glucose.read,treatments.read",
             ShareFullHistory = true,
+            HistoryClamped = true,
         };
         var pool = new Mock<IDbContextFactory<NocturneDbContext>>();
         pool.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>())).ReturnsAsync(pooled);
@@ -193,5 +219,6 @@ public class TenantDbContextFactoryTests
         result.IsShareContext.Should().BeFalse("a non-share lease must clear a prior share's marker");
         result.VisibleCategories.Should().BeNull("a non-share lease must clear a prior share's CSV");
         result.ShareFullHistory.Should().BeFalse("a non-share lease must clear a prior share's history window");
+        result.HistoryClamped.Should().BeFalse("an unclamped lease must clear a prior member's clamp");
     }
 }

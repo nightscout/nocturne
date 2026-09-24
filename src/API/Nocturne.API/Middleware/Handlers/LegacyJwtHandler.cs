@@ -97,6 +97,7 @@ public class LegacyJwtHandler : IAuthHandler
             Scopes = claims.Scopes,
             RawToken = token,
             ExpiresAt = claims.ExpiresAt,
+            LimitTo24Hours = claims.LimitTo24Hours,
         };
 
         _logger.LogDebug(

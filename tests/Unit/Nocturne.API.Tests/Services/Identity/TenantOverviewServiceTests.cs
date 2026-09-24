@@ -540,6 +540,88 @@ public class TenantOverviewServiceTests
         item.Thresholds.Low.Should().Be(Defaults.Low);
     }
 
+    // ---- history clamp ----
+
+    [Fact]
+    public async Task GetOverview_readsEachTenantUnderTheCallersClampThere()
+    {
+        var subjectId = Guid.NewGuid();
+        var options = NewOptions();
+        var oldReading = DateTime.UtcNow.AddDays(-3);
+        var clampedTenant = SeedMembership(options, subjectId, "clamped", [Scope.GlucoseRead],
+            limitTo24Hours: true, lastReadingAt: oldReading);
+        var fullTenant = SeedMembership(options, subjectId, "full", [Scope.GlucoseRead],
+            lastReadingAt: oldReading);
+        var exemptTenant = SeedMembership(options, subjectId, "exempt", [Scope.TenantSettings, Scope.GlucoseRead],
+            limitTo24Hours: true, lastReadingAt: oldReading);
+
+        var (service, clampSeen) = NewClampObservingService(options);
+        var response = await service.GetOverviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie);
+
+        clampSeen[clampedTenant].Should().BeTrue("the glucose read must run under the membership's clamp");
+        clampSeen[fullTenant].Should().BeFalse();
+        clampSeen[exemptTenant].Should().BeFalse("a tenant.settings holder is never clamped");
+        response.Tenants.Single(t => t.Slug == "clamped").LastReadingAt.Should().BeNull(
+            "the denormalised last-reading time would reveal a reading older than 24 hours");
+        response.Tenants.Single(t => t.Slug == "full").LastReadingAt.Should().Be(oldReading);
+    }
+
+    [Fact]
+    public async Task GetOverview_aClampedCredential_isClampedOnEveryTenant()
+    {
+        var subjectId = Guid.NewGuid();
+        var options = NewOptions();
+        var tenantId = SeedMembership(options, subjectId, "full", [Scope.GlucoseRead]);
+
+        var (service, clampSeen) = NewClampObservingService(options);
+        await service.GetOverviewAsync(
+            subjectId, FullTokenScopes, AuthType.OAuthAccessToken, credentialLimitTo24Hours: true);
+
+        clampSeen[tenantId].Should().BeTrue();
+    }
+
+    /// <summary>
+    /// A service whose per-tenant scopes carry a real <see cref="ICategoryReadContext"/>, recording
+    /// whether it was history-clamped when that tenant's latest glucose was read.
+    /// </summary>
+    private static (TenantOverviewService Service, Dictionary<Guid, bool> ClampSeen) NewClampObservingService(
+        DbContextOptions<NocturneDbContext> options)
+    {
+        var clampSeen = new Dictionary<Guid, bool>();
+        var services = new ServiceCollection();
+        services.AddScoped<ICategoryReadContext, Nocturne.Infrastructure.Data.Services.CategoryReadContext>();
+        services.AddScoped<ITenantAccessor>(_ => new RecordingTenantAccessor());
+        services.AddScoped(sp =>
+        {
+            var category = sp.GetRequiredService<ICategoryReadContext>();
+            var accessor = sp.GetRequiredService<ITenantAccessor>();
+            var canonical = new Mock<ICanonicalGlucoseService>();
+            canonical.Setup(s => s.GetLatestAsync(It.IsAny<CancellationToken>()))
+                .Returns(() =>
+                {
+                    clampSeen[accessor.TenantId] = category.IsHistoryClamped;
+                    return Task.FromResult<SensorGlucose?>(null);
+                });
+            return canonical.Object;
+        });
+        var provider = services.BuildServiceProvider();
+
+        var service = new TenantOverviewService(
+            new InMemoryContextFactory(options),
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            new ConfigurationBuilder().Build(),
+            NullLogger<TenantOverviewService>.Instance);
+        return (service, clampSeen);
+    }
+
+    private sealed class RecordingTenantAccessor : ITenantAccessor
+    {
+        public Guid TenantId => Context?.TenantId ?? Guid.Empty;
+        public bool IsResolved => Context is not null;
+        public TenantContext? Context { get; private set; }
+        public void SetTenant(TenantContext context) => Context = context;
+    }
+
     // ---- helpers ----
 
     private static DbContextOptions<NocturneDbContext> NewOptions() =>
@@ -554,7 +636,9 @@ public class TenantOverviewServiceTests
         List<string>? rolePermissions,
         List<string>? directPermissions = null,
         bool revoked = false,
-        bool tenantActive = true)
+        bool tenantActive = true,
+        bool limitTo24Hours = false,
+        DateTime? lastReadingAt = null)
     {
         using var db = new NocturneDbContext(options);
         var tenant = new TenantEntity
@@ -563,6 +647,7 @@ public class TenantOverviewServiceTests
             Slug = slug,
             DisplayName = slug,
             IsActive = tenantActive,
+            LastReadingAt = lastReadingAt,
         };
         db.Tenants.Add(tenant);
 
@@ -573,6 +658,7 @@ public class TenantOverviewServiceTests
             SubjectId = subjectId,
             DirectPermissions = directPermissions,
             RevokedAt = revoked ? DateTime.UtcNow.AddDays(-1) : null,
+            LimitTo24Hours = limitTo24Hours,
         };
         db.TenantMembers.Add(member);
 

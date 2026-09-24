@@ -185,13 +185,29 @@ public class GuestSessionHandlerTests
         result.ShouldSkip.Should().BeFalse();
     }
 
-    private async Task<Guid> SeedActivatedGrantAsync(Guid tenantId)
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ClampedGuestLink_AuthenticatesClamped(bool limitTo24Hours)
+    {
+        // The guest branch of MemberScopeMiddleware never reads a membership, so the grant's own
+        // limit is the only thing that can clamp a guest.
+        var grantId = await SeedActivatedGrantAsync(_tenantId, limitTo24Hours);
+
+        var result = await _handler.AuthenticateAsync(BuildContext(_tenantId, ProtectCookie(grantId)));
+
+        result.Succeeded.Should().BeTrue();
+        result.AuthContext!.LimitTo24Hours.Should().Be(limitTo24Hours);
+    }
+
+    private async Task<Guid> SeedActivatedGrantAsync(Guid tenantId, bool limitTo24Hours = false)
     {
         await using var ctx = new NocturneDbContext(_dbOptions) { TenantId = tenantId };
         var service = new GuestLinkService(ctx, _sessionCache, NullLogger<GuestLinkService>.Instance);
 
         var created = await service.CreateGuestLinkAsync(
-            _dataOwnerId, _dataOwnerId, "Caregiver", "https://acme.example.test");
+            _dataOwnerId, _dataOwnerId, "Caregiver", "https://acme.example.test",
+            limitTo24Hours: limitTo24Hours);
         var activation = await service.ActivateAsync(created.Code, "1.2.3.4", "TestAgent");
 
         activation.Success.Should().BeTrue();

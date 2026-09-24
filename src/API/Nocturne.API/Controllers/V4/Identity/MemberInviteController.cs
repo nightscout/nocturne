@@ -76,12 +76,16 @@ public class MemberInviteController : ControllerBase
         if (subjectId == null)
             return Unauthorized();
 
-        // The clamp is an access boundary enforced in RLS via app.share_full_history, so a
-        // clamped member minting an unclamped invite would widen past their own ceiling by
-        // handing the wider access to someone else. Lifting an existing member's clamp already
-        // requires members.manage and is refused for self-edits.
-        var authContext = HttpContext.GetAuthContext();
-        var limitTo24Hours = request.LimitTo24Hours || authContext?.LimitTo24Hours == true;
+        var limitTo24Hours = HttpContext.InheritHistoryClamp(request.LimitTo24Hours);
+
+        if (limitTo24Hours)
+        {
+            var invitePermissions = (await _tenantRoleService.GetRolePermissionsAsync(
+                    _tenantAccessor.TenantId, request.RoleIds, HttpContext.RequestAborted))
+                .Concat(request.DirectPermissions ?? []);
+            if (MemberScopeResolver.IsExemptFromHistoryClamp(invitePermissions))
+                return Problem(detail: MemberScopeResolver.ExemptFromHistoryClampDetail, statusCode: 400);
+        }
 
         try
         {
@@ -323,6 +327,10 @@ public class MemberInviteController : ControllerBase
         if (!roleGrant.Ok)
             return RoleGrantProblem(roleGrant);
 
+        var rolesAfter = await _tenantRoleService.GetRolePermissionsAsync(tenantId, request.RoleIds, ct);
+        if (await WouldExemptAClampedMemberAsync(member, rolesAfter.Concat(member.DirectPermissions ?? []), ct))
+            return Problem(detail: HttpContextExtensions.HistoryCeilingDetail, statusCode: 403);
+
         // Remove existing role assignments
         _dbContext.TenantMemberRoles.RemoveRange(member.MemberRoles);
 
@@ -411,6 +419,12 @@ public class MemberInviteController : ControllerBase
                 return GrantProblem(violation);
         }
 
+        var rolePermissions = await _tenantRoleService.GetRolePermissionsAsync(
+            tenantId, member.MemberRoles.Select(mr => mr.TenantRoleId).ToList(), ct);
+        if (await WouldExemptAClampedMemberAsync(
+                member, rolePermissions.Concat(request.DirectPermissions ?? []), ct))
+            return Problem(detail: HttpContextExtensions.HistoryCeilingDetail, statusCode: 403);
+
         member.DirectPermissions = request.DirectPermissions;
         member.SysUpdatedAt = DateTime.UtcNow;
         await _dbContext.SaveChangesAsync(ct);
@@ -472,13 +486,21 @@ public class MemberInviteController : ControllerBase
         if (member == null)
             return NotFound();
 
-        // The clamp is enforced in RLS via app.share_full_history, so lifting your own is a
+        // The clamp is enforced in RLS via app.history_clamped, so lifting your own is a
         // self-widening edit — the same class the role and permission editors refuse.
         if (IsCallersOwnMembership(member))
             return Problem(detail: SelfEditDetail, statusCode: 400);
 
         if (DeviceHolderDetail(member) is { } deviceHolder)
             return Problem(detail: deviceHolder, statusCode: 400);
+
+        if (!request.LimitTo24Hours && HttpContext.IsCallerHistoryClamped())
+            return Problem(detail: HttpContextExtensions.HistoryCeilingDetail, statusCode: 403);
+
+        if (request.LimitTo24Hours
+            && MemberScopeResolver.IsExemptFromHistoryClamp(
+                await _tenantRoleService.GetEffectivePermissionsAsync(id, ct)))
+            return Problem(detail: MemberScopeResolver.ExemptFromHistoryClampDetail, statusCode: 400);
 
         member.LimitTo24Hours = request.LimitTo24Hours;
         member.SysUpdatedAt = DateTime.UtcNow;
@@ -493,6 +515,19 @@ public class MemberInviteController : ControllerBase
 
     private const string SelfEditDetail =
         "Cannot change your own roles or permissions; ask another member with members.manage.";
+
+    /// <summary>
+    /// True when a history-clamped caller's edit would leave a clamped member holding permissions
+    /// that exempt it (<see cref="MemberScopeResolver.IsExemptFromHistoryClamp"/>), lifting the
+    /// clamp sideways. See <see cref="HttpContextExtensions.IsCallerHistoryClamped"/>.
+    /// </summary>
+    private async Task<bool> WouldExemptAClampedMemberAsync(
+        TenantMemberEntity member, IEnumerable<string> permissionsAfter, CancellationToken ct) =>
+        member.LimitTo24Hours
+        && HttpContext.IsCallerHistoryClamped()
+        && MemberScopeResolver.IsExemptFromHistoryClamp(permissionsAfter)
+        && !MemberScopeResolver.IsExemptFromHistoryClamp(
+            await _tenantRoleService.GetEffectivePermissionsAsync(member.Id, ct));
 
     /// <summary>
     /// True when the target membership belongs to the calling subject. Role and permission

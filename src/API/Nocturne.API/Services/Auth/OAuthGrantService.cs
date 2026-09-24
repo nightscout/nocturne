@@ -50,6 +50,7 @@ public class OAuthGrantService : IOAuthGrantService
         IEnumerable<string> scopes,
         string grantType = OAuthGrantTypes.App,
         string? label = null,
+        bool limitTo24Hours = false,
         CancellationToken ct = default)
     {
         var existingGrant = await _dbContext.OAuthGrants
@@ -68,6 +69,7 @@ public class OAuthGrantService : IOAuthGrantService
                 .ToList();
 
             existingGrant.Scopes = mergedScopes;
+            existingGrant.LimitTo24Hours = limitTo24Hours;
 
             if (label != null)
             {
@@ -93,6 +95,7 @@ public class OAuthGrantService : IOAuthGrantService
             GrantType = grantType,
             Scopes = scopeList,
             Label = label,
+            LimitTo24Hours = limitTo24Hours,
         };
 
         _dbContext.OAuthGrants.Add(entity);
@@ -277,6 +280,7 @@ public class OAuthGrantService : IOAuthGrantService
             LastUsedIp = entity.LastUsedIp,
             LastUsedUserAgent = entity.LastUsedUserAgent,
             IsRevoked = entity.IsRevoked,
+            LimitTo24Hours = entity.LimitTo24Hours,
         };
     }
 

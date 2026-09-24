@@ -72,6 +72,7 @@ public class TenantDirectGrantController : ControllerBase
 
         var result = await _directGrantService.CreateAsync(
             dbContext, request.SubjectId, request.Label, request.Scopes, request.ExpiresAt,
+            request.LimitTo24Hours,
             HttpContext.Connection.RemoteIpAddress?.ToString(),
             Request.Headers.UserAgent.ToString(),
             actor: Actor,

@@ -37,6 +37,10 @@ public interface IDirectGrantService
     /// When the grant stops authenticating; null issues an open-ended grant. Rejected when it is
     /// not in the future — see <see cref="Validators.Auth.CreateDirectGrantRequestValidator"/>.
     /// </param>
+    /// <param name="limitTo24Hours">
+    /// Whether the grant may read only the last 24 hours of time-series data. The caller decides
+    /// whether its own limit is inherited.
+    /// </param>
     /// <param name="ipAddress">The caller's IP address, for the audit trail.</param>
     /// <param name="userAgent">The caller's user agent, for the audit trail.</param>
     /// <param name="actor">
@@ -52,6 +56,7 @@ public interface IDirectGrantService
         string label,
         IReadOnlyCollection<string>? scopes,
         DateTime? expiresAt,
+        bool limitTo24Hours,
         string? ipAddress,
         string? userAgent,
         AuthAuditActor? actor = null,
@@ -126,6 +131,7 @@ public class DirectGrantService : IDirectGrantService
         string label,
         IReadOnlyCollection<string>? scopes,
         DateTime? expiresAt,
+        bool limitTo24Hours,
         string? ipAddress,
         string? userAgent,
         AuthAuditActor? actor = null,
@@ -165,6 +171,7 @@ public class DirectGrantService : IDirectGrantService
             // before sending — authenticate with this same token via ApiKeyHandler's legacy path.
             LegacySecretHash = HashUtils.Sha1Hex(plaintextToken),
             ExpiresAt = expiresAt,
+            LimitTo24Hours = limitTo24Hours,
         };
 
         dbContext.OAuthGrants.Add(entity);
@@ -191,6 +198,7 @@ public class DirectGrantService : IDirectGrantService
             Scopes = normalizedScopes,
             CreatedAt = entity.CreatedAt,
             ExpiresAt = entity.ExpiresAt,
+            LimitTo24Hours = entity.LimitTo24Hours,
         });
     }
 
@@ -214,6 +222,7 @@ public class DirectGrantService : IDirectGrantService
                 ExpiresAt = g.ExpiresAt,
                 LastUsedAt = g.LastUsedAt,
                 IsLegacy = g.IsMigrated,
+                LimitTo24Hours = g.LimitTo24Hours,
             })
             .ToListAsync(ct);
     }

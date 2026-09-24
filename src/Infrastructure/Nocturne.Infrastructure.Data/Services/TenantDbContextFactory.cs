@@ -47,6 +47,7 @@ internal sealed class TenantDbContextFactory(
         ctx.IsShareContext = isShare;
         ctx.VisibleCategories = isShare ? categoryReadContext!.VisibleCategoriesCsv : null;
         ctx.ShareFullHistory = isShare && categoryReadContext!.FullHistory;
+        ctx.HistoryClamped = categoryReadContext?.IsHistoryClamped == true;
 
         return ctx;
     }

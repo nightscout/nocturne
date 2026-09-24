@@ -180,6 +180,7 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
     public async Task<bool> ApproveDeviceCodeAsync(
         string userCode,
         Guid subjectId,
+        bool limitTo24Hours = false,
         CancellationToken ct = default
     )
     {
@@ -238,6 +239,7 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
             client.Id,
             subjectId,
             entity.Scopes,
+            limitTo24Hours: limitTo24Hours,
             ct: ct
         );
 

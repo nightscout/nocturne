@@ -163,9 +163,11 @@ const authHandle: Handle = async ({ event, resolve }) => {
       event.locals.isPlatformAdmin = session.isPlatformAdmin ?? false;
       event.locals.isPlatformAccessGrant = session.isPlatformAccessGrant ?? false;
 
-      // Fetch effective permissions (granted scopes) for the current tenant
+      // Fetch effective permissions (granted scopes and history window) for the current tenant
       try {
-        event.locals.effectivePermissions = await apiClient.myPermissions.getMyPermissions();
+        const permissions = await apiClient.myPermissions.getMyPermissions();
+        event.locals.effectivePermissions = permissions.scopes ?? [];
+        event.locals.limitTo24Hours = permissions.limitTo24Hours ?? false;
       } catch {
         // Non-fatal — permissions will default to empty
       }

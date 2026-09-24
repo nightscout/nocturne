@@ -387,5 +387,209 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
         caller.LimitTo24Hours.Should().BeFalse("the refusal returned before the clamp was written");
     }
 
+    private const string AdministratorClampReason =
+        "An owner or a member who manages site settings cannot be limited to the last 24 hours.";
+
+    private async Task<bool> TargetClampAsync() =>
+        (await _dbContext.TenantMembers.AsNoTracking().FirstAsync(m => m.Id == _targetMemberId))
+            .LimitTo24Hours;
+
+    [Fact]
+    public async Task SetMemberLimitTo24Hours_refusesClampingAnOwner()
+    {
+        _dbContext.TenantMemberRoles.Add(new TenantMemberRoleEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantMemberId = _targetMemberId,
+            TenantRoleId = _ownerRoleId,
+        });
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+        var controller = BuildController(Scope.FullAccess);
+
+        var result = await controller.SetMemberLimitTo24Hours(
+            _targetMemberId,
+            new SetMemberLimitTo24HoursRequest(true),
+            _publicAccessCache,
+            CancellationToken.None);
+
+        ShouldRefuse(result, StatusCodes.Status400BadRequest, AdministratorClampReason);
+        (await TargetClampAsync()).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task SetMemberLimitTo24Hours_refusesClampingATenantSettingsHolder()
+    {
+        var target = await _dbContext.TenantMembers.FirstAsync(m => m.Id == _targetMemberId);
+        target.DirectPermissions = [Scope.GlucoseRead, Scope.TenantSettings];
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+        var controller = BuildController(Scope.FullAccess);
+
+        var result = await controller.SetMemberLimitTo24Hours(
+            _targetMemberId,
+            new SetMemberLimitTo24HoursRequest(true),
+            _publicAccessCache,
+            CancellationToken.None);
+
+        ShouldRefuse(result, StatusCodes.Status400BadRequest, AdministratorClampReason);
+        (await TargetClampAsync()).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task SetMemberLimitTo24Hours_clampsAFollower()
+    {
+        var controller = BuildController(Scope.FullAccess);
+
+        var result = await controller.SetMemberLimitTo24Hours(
+            _targetMemberId,
+            new SetMemberLimitTo24HoursRequest(true),
+            _publicAccessCache,
+            CancellationToken.None);
+
+        result.Should().BeOfType<NoContentResult>();
+        (await TargetClampAsync()).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task CreateInvite_refusesAClampedOwnerInvite()
+    {
+        var controller = BuildController(Scope.FullAccess);
+
+        var result = await controller.CreateInvite(new CreateMemberInviteRequest
+        {
+            RoleIds = [_ownerRoleId],
+            LimitTo24Hours = true,
+        });
+
+        ShouldRefuse(result, StatusCodes.Status400BadRequest, AdministratorClampReason);
+    }
+
+    [Fact]
+    public async Task CreateInvite_byAClampedCaller_refusesAnInviteThatWouldAdministerTheTenant()
+    {
+        // The caller's clamp is inherited, so an administrator invite would be born clamped.
+        var controller = BuildController(Scope.FullAccess);
+        controller.HttpContext.RequestServices = TestRequestServices.HistoryClamped();
+
+        var result = await controller.CreateInvite(new CreateMemberInviteRequest
+        {
+            DirectPermissions = [Scope.TenantSettings],
+        });
+
+        ShouldRefuse(result, StatusCodes.Status400BadRequest, AdministratorClampReason);
+    }
+
+    [Fact]
+    public async Task SetMemberLimitTo24Hours_byAClampedCaller_refusesLiftingAClamp()
+    {
+        var target = await _dbContext.TenantMembers.FirstAsync(m => m.Id == _targetMemberId);
+        target.LimitTo24Hours = true;
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+        var controller = BuildController(AdministratorScopes);
+        controller.HttpContext.RequestServices = TestRequestServices.HistoryClamped();
+
+        var result = await controller.SetMemberLimitTo24Hours(
+            _targetMemberId,
+            new SetMemberLimitTo24HoursRequest(false),
+            _publicAccessCache,
+            CancellationToken.None);
+
+        ShouldRefuse(result, StatusCodes.Status403Forbidden, HistoryCeilingReason);
+        (await TargetClampAsync()).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task SetMemberLimitTo24Hours_byAClampedCaller_mayStillClampAFollower()
+    {
+        var controller = BuildController(AdministratorScopes);
+        controller.HttpContext.RequestServices = TestRequestServices.HistoryClamped();
+
+        var result = await controller.SetMemberLimitTo24Hours(
+            _targetMemberId,
+            new SetMemberLimitTo24HoursRequest(true),
+            _publicAccessCache,
+            CancellationToken.None);
+
+        result.Should().BeOfType<NoContentResult>();
+        (await TargetClampAsync()).Should().BeTrue();
+    }
+
+    private const string HistoryCeilingReason =
+        "You can see the last 24 hours only, so you cannot give anyone more history than that.";
+
+    private async Task ClampTargetAsync()
+    {
+        var target = await _dbContext.TenantMembers.FirstAsync(m => m.Id == _targetMemberId);
+        target.LimitTo24Hours = true;
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+    }
+
+    [Fact]
+    public async Task SetMemberRoles_byAClampedCaller_refusesExemptingAClampedMember()
+    {
+        await ClampTargetAsync();
+        var controller = BuildController(Scope.FullAccess);
+        controller.HttpContext.RequestServices = TestRequestServices.HistoryClamped();
+
+        var result = await controller.SetMemberRoles(
+            _targetMemberId,
+            new SetMemberRolesRequest([_ownerRoleId]),
+            _publicAccessCache,
+            CancellationToken.None);
+
+        ShouldRefuse(result, StatusCodes.Status403Forbidden, HistoryCeilingReason);
+        (await _dbContext.TenantMemberRoles.AnyAsync()).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task SetMemberPermissions_byAClampedCaller_refusesExemptingAClampedMember()
+    {
+        await ClampTargetAsync();
+        var controller = BuildController(Scope.FullAccess);
+        controller.HttpContext.RequestServices = TestRequestServices.HistoryClamped();
+
+        var result = await controller.SetMemberPermissions(
+            _targetMemberId,
+            new SetMemberPermissionsRequest([Scope.GlucoseRead, Scope.TenantSettings]),
+            _publicAccessCache,
+            CancellationToken.None);
+
+        ShouldRefuse(result, StatusCodes.Status403Forbidden, HistoryCeilingReason);
+        (await TargetPermissionsAsync()).Should().BeEquivalentTo([Scope.GlucoseRead]);
+    }
+
+    [Fact]
+    public async Task SetMemberRoles_byAnUnclampedCaller_mayPromoteAClampedMember()
+    {
+        await ClampTargetAsync();
+        var controller = BuildController(Scope.FullAccess);
+        controller.HttpContext.RequestServices = TestRequestServices.Build(clamped: false);
+
+        var result = await controller.SetMemberRoles(
+            _targetMemberId,
+            new SetMemberRolesRequest([_ownerRoleId]),
+            _publicAccessCache,
+            CancellationToken.None);
+
+        result.Should().BeOfType<NoContentResult>();
+    }
+
+    [Fact]
+    public async Task CreateInvite_allowsAClampedFollowerInvite()
+    {
+        var controller = BuildController(Scope.FullAccess);
+
+        var result = await controller.CreateInvite(new CreateMemberInviteRequest
+        {
+            RoleIds = [_caretakerRoleId],
+            LimitTo24Hours = true,
+        });
+
+        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status201Created);
+    }
+
     public void Dispose() => _dbContext.Dispose();
 }

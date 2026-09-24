@@ -13,6 +13,7 @@ public interface IGuestLinkService
         string label,
         string baseUrl,
         IEnumerable<string>? scopes = null,
+        bool limitTo24Hours = false,
         CancellationToken ct = default);
 
     Task<GuestLinkActivationResult> ActivateAsync(
@@ -56,7 +57,8 @@ public record GuestSessionInfo(
     Guid DataOwnerSubjectId,
     IReadOnlyList<string> Scopes,
     string? Label,
-    DateTime ExpiresAt);
+    DateTime ExpiresAt,
+    bool LimitTo24Hours = false);
 
 public record GuestLinkInfo
 {
