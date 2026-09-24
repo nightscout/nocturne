@@ -289,6 +289,7 @@ public static class ServiceRegistrationExtensions
         // AddNocturneMemoryCache has already TryAdded it, so this is the registration for hosts
         // that do not add the cache.
         services.TryAddSingleton(TimeProvider.System);
+        services.AddSingleton<ActiveTenantSnapshot>();
 
         services.AddScoped<IStatusService, StatusService>();
         services.AddScoped<IVersionService, VersionService>();

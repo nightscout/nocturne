@@ -108,11 +108,14 @@ public sealed class SqliteTestDatabase : IDisposable
         return services;
     }
 
-    /// <summary>Adds a further tenant row, for tests that assert one tenant cannot reach another's.</summary>
-    public SqliteTestDatabase SeedTenant(Guid tenantId, string slug)
+    /// <summary>
+    /// Adds a further tenant row, for tests that assert one tenant cannot reach another's or that
+    /// read the active tenants.
+    /// </summary>
+    public SqliteTestDatabase SeedTenant(Guid tenantId, string slug, bool isActive = true)
     {
         using var db = CreateContext();
-        db.Tenants.Add(new TenantEntity { Id = tenantId, Slug = slug });
+        db.Tenants.Add(new TenantEntity { Id = tenantId, Slug = slug, IsActive = isActive });
         db.SaveChanges();
         return this;
     }
