@@ -17,7 +17,9 @@ env:
 
 jobs:
   build-and-push:
-    runs-on: ubuntu-latest
+    # The native library is built on the runner and links against its glibc, which must be
+    # no newer than the API base image's (mcr.microsoft.com/dotnet/aspnet:10.0, Ubuntu 24.04).
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
@@ -237,25 +239,26 @@ jobs:
           done
 
       # The API csproj silently skips packing the cdylib when it is missing, and
-      # Alerts:Engine=rust refuses to start without it, so check every platform's image.
-      - name: Verify the API image ships the nocturne_alerts native library
+      # Alerts:Engine=rust refuses to start without it, so load it in every platform's image.
+      - name: Verify the API image loads the nocturne_alerts native library
         if: github.event_name != 'pull_request' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false)
         run: |
           set -euo pipefail
           ref="${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-api:${{ steps.version.outputs.version }}"
+          probe="$RUNNER_TEMP/alerts-native-probe"
+          dotnet publish scripts/alerts-native-probe.cs -o "$probe"
+          find "$probe" -name '*nocturne_alerts*' -delete
           for pair in "linux/amd64:linux-x64" "linux/arm64:linux-arm64"; do
             platform="${pair%%:*}"
             rid="${pair##*:}"
-            lib="/app/runtimes/${rid}/native/libnocturne_alerts.so"
             docker pull --quiet --platform "$platform" "$ref" >/dev/null
-            cid=$(docker create --platform "$platform" "$ref")
-            if ! docker cp "$cid:$lib" - >/dev/null 2>&1; then
-              docker rm "$cid" >/dev/null
-              echo "::error::$ref ($platform) is missing $lib"
+            if ! docker run --rm --platform "$platform" --entrypoint dotnet \
+                -v "$probe:/probe:ro" \
+                -e NOCTURNE_ALERTS_NATIVE_DIR="/app/runtimes/${rid}/native" \
+                "$ref" /probe/alerts-native-probe.dll; then
+              echo "::error::$ref ($platform) does not load /app/runtimes/${rid}/native/libnocturne_alerts.so"
               exit 1
             fi
-            docker rm "$cid" >/dev/null
-            echo "$ref ($platform) ships $lib"
           done
 
       - name: Collect image manifest status for PR comment
