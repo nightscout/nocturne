@@ -1255,6 +1255,14 @@ public class DeduplicationService : IDeduplicationService
     }
 
     /// <summary>
+    /// True when two temp basal durations describe one delivery. Both must be known: an open-ended
+    /// temp basal carries no duration, and admitting a null would reduce the wide comparison to
+    /// rate alone, which for a stream that repeats the same rate all day is no evidence at all.
+    /// </summary>
+    private static bool DurationsAgree(TimeSpan? a, TimeSpan? b) =>
+        a.HasValue && b.HasValue && (a.Value - b.Value).Duration() <= ExactDurationTolerance;
+
+    /// <summary>
     /// Per-type value comparison shared by the tight and wide paths. With <paramref name="exact"/>
     /// the criteria tolerances are replaced by <see cref="ExactValueEpsilon"/> and each type adds
     /// whatever the wide window needs to keep the comparison meaningful over ten minutes.
@@ -1264,14 +1272,6 @@ public class DeduplicationService : IDeduplicationService
     /// the public surface and would otherwise be an untestable defence.
     /// </para>
     /// </summary>
-    /// <summary>
-    /// True when two temp basal durations describe one delivery. Both must be known: an open-ended
-    /// temp basal carries no duration, and admitting a null would reduce the wide comparison to
-    /// rate alone, which for a stream that repeats the same rate all day is no evidence at all.
-    /// </summary>
-    private static bool DurationsAgree(TimeSpan? a, TimeSpan? b) =>
-        a.HasValue && b.HasValue && (a.Value - b.Value).Duration() <= ExactDurationTolerance;
-
     internal static bool CriteriaMatch(RecordType recordType, MatchCriteria a, MatchCriteria b, bool exact = false)
     {
         if (exact && !WideMatchableTypes.Contains(recordType))

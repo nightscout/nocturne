@@ -578,9 +578,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     }
 
     /// <summary>
-    ///     Submits glucose data directly to the API via HTTP
-    /// </summary>
-    /// <summary>
     ///     The broadcast origin for this run's glucose-family publishes: <see cref="WriteOrigin.Backfill"/>
     ///     on the source's first-ever glucose sync (no prior data — suppress so a first sync of history
     ///     doesn't flood clients), else <see cref="WriteOrigin.Live"/>. Memoized for the run.
@@ -1322,9 +1319,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         return allSuccessful;
     }
 
-    /// <summary>
-    ///     Main sync method that handles data synchronization based on connector mode
-    /// </summary>
     /// <summary>
     ///     Main sync method for background synchronization.
     ///     Uses PerformSyncInternalAsync for sequential processing.
