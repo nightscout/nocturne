@@ -34,6 +34,7 @@ public static partial class AlertsInterop
     [
         FreeStringExport, VersionExport, TzdbVersionExport, EvaluateExport, EvaluateNodeExport,
         LeafPathsExport, ClassifyExport, ValidateExport,
+        TrackerProcessExport, TrackerForceCloseExport, TrackerCloseElapsedHysteresisExport,
     ];
 
     /// <summary>

@@ -27,7 +27,7 @@ public sealed class RustAlertEngineException : Exception
 /// evaluation state (timers, tracker) is carried as data — the caller
 /// persists what comes back and threads it into the next call.
 /// </summary>
-public static class RustAlertEngine
+public static partial class RustAlertEngine
 {
     /// <summary>The native crate version (e.g. <c>"0.1.0"</c>).</summary>
     public static string Version() => AlertsInterop.GetVersion();
