@@ -877,3 +877,72 @@ fn tracker_excursion_ordinal_saturates() {
     assert_eq!(t.kind, TransitionType::ExcursionOpened);
     assert_eq!(t.excursion, Some(u32::MAX));
 }
+
+// ---------------------------------------------------------------------------
+// Timestamp domain: the .NET DateTime range 0001-01-01 ..= 9999-12-31
+// ---------------------------------------------------------------------------
+
+fn context_error(wire: Value) -> String {
+    match serde_json::from_value::<SensorContext>(wire) {
+        Ok(_) => panic!("context should be rejected"),
+        Err(e) => e.to_string(),
+    }
+}
+
+#[test]
+fn context_rejects_a_timestamp_before_year_one_naming_only_the_field() {
+    let err = context_error(json!({ "last_reading_at": "0000-12-31T23:59:59Z" }));
+    assert!(err.contains("last_reading_at"), "{err}");
+    assert!(!err.contains("0000-12-31"), "{err}");
+}
+
+#[test]
+fn context_rejects_a_timestamp_after_year_9999_naming_only_the_field() {
+    let err = context_error(json!({
+        "active_temp_basal": { "rate": 1, "started_at": "+10000-01-01T00:00:00Z" }
+    }));
+    assert!(err.contains("started_at"), "{err}");
+    assert!(!err.contains("10000"), "{err}");
+}
+
+#[test]
+fn context_accepts_the_dotnet_datetime_bounds() {
+    let wire = json!({
+        "last_reading_at": "0001-01-01T00:00:00Z",
+        "latest_timestamp": "9999-12-31T23:59:59.9999999Z",
+    });
+    serde_json::from_value::<SensorContext>(wire).expect("bounds are in range");
+}
+
+#[test]
+fn elapsed_across_the_whole_domain_still_evaluates() {
+    let ctx = SensorContext {
+        latest_timestamp: Some(Utc.with_ymd_and_hms(1, 1, 1, 0, 0, 0).unwrap()),
+        last_reading_at: Some(Utc.with_ymd_and_hms(1, 1, 1, 0, 0, 0).unwrap()),
+        ..Default::default()
+    };
+    let now = Utc.with_ymd_and_hms(9999, 12, 31, 23, 59, 59).unwrap();
+    assert!(eval_payload_at(
+        ConditionKind::Staleness,
+        &json!({"operator": ">", "value": 15}),
+        &ctx,
+        now
+    ));
+}
+
+#[test]
+fn hysteresis_expiry_past_the_calendar_does_not_panic() {
+    let mut tracker = ExcursionTracker::new();
+    tracker.restore_state(
+        rule_id(),
+        nocturne_alerts_core::excursion::TrackerState {
+            state: TrackerStateKind::Hysteresis,
+            confirmation_count: 0,
+            active_excursion: Some(1),
+            updated_at: DateTime::<Utc>::MAX_UTC,
+        },
+    );
+    let t =
+        tracker.process_evaluation(rule_id(), cfg(1, i32::MAX), false, DateTime::<Utc>::MAX_UTC);
+    assert_eq!(t.kind, TransitionType::None);
+}

@@ -28,24 +28,27 @@ const MINUTES_PER_TICK: f64 = 1.0 / TICKS_PER_MINUTE;
 const HOURS_PER_TICK: f64 = 1.0 / TICKS_PER_HOUR;
 const DAYS_PER_TICK: f64 = 1.0 / TICKS_PER_DAY;
 
-/// .NET `TimeSpan` ticks (100 ns units) for a chrono duration.
-pub fn ticks(d: TimeDelta) -> i64 {
-    d.num_seconds() * 10_000_000 + i64::from(d.subsec_nanos()) / 100
+/// .NET `TimeSpan` ticks (100 ns units) for a chrono duration; `None` past
+/// the `i64` tick range, which no .NET `TimeSpan` can hold.
+pub fn ticks(d: TimeDelta) -> Option<i64> {
+    d.num_seconds()
+        .checked_mul(10_000_000)?
+        .checked_add(i64::from(d.subsec_nanos()) / 100)
 }
 
 /// `TimeSpan.TotalMinutes` (double): `ticks * MinutesPerTick`.
-pub fn total_minutes(d: TimeDelta) -> f64 {
-    ticks(d) as f64 * MINUTES_PER_TICK
+pub fn total_minutes(d: TimeDelta) -> Option<f64> {
+    ticks(d).map(|t| t as f64 * MINUTES_PER_TICK)
 }
 
 /// `TimeSpan.TotalHours` (double): `ticks * HoursPerTick`.
-pub fn total_hours(d: TimeDelta) -> f64 {
-    ticks(d) as f64 * HOURS_PER_TICK
+pub fn total_hours(d: TimeDelta) -> Option<f64> {
+    ticks(d).map(|t| t as f64 * HOURS_PER_TICK)
 }
 
 /// `TimeSpan.TotalDays` (double): `ticks * DaysPerTick`.
-pub fn total_days(d: TimeDelta) -> f64 {
-    ticks(d) as f64 * DAYS_PER_TICK
+pub fn total_days(d: TimeDelta) -> Option<f64> {
+    ticks(d).map(|t| t as f64 * DAYS_PER_TICK)
 }
 
 /// The C# `(decimal)double` cast: rounds the double to 15 significant digits
@@ -78,7 +81,14 @@ mod tests {
     #[test]
     fn whole_minutes_cast_exactly() {
         let d = TimeDelta::minutes(15);
-        let cast = decimal_from_f64_cs(total_minutes(d)).unwrap();
+        let cast = decimal_from_f64_cs(total_minutes(d).unwrap()).unwrap();
         assert_eq!(cast, Decimal::from(15));
+    }
+
+    #[test]
+    fn ticks_past_the_i64_range_are_none() {
+        assert_eq!(ticks(TimeDelta::MAX), None);
+        assert_eq!(ticks(TimeDelta::MIN), None);
+        assert_eq!(ticks(TimeDelta::minutes(1)), Some(600_000_000));
     }
 }

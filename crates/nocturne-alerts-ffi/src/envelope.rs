@@ -13,7 +13,7 @@ use serde_json::{Map, Value, json};
 use uuid::Uuid;
 
 use nocturne_alerts_core::classify::classify;
-use nocturne_alerts_core::context::SensorContext;
+use nocturne_alerts_core::context::{SensorContext, check_timestamp};
 use nocturne_alerts_core::engine::{EngineState, Rule, RuleOutcome, evaluate_rule};
 use nocturne_alerts_core::eval::{Env, eval_node};
 use nocturne_alerts_core::excursion::{
@@ -125,6 +125,9 @@ pub fn evaluate(request_json: &str) -> Result<Value, String> {
         ));
     }
 
+    check_timestamp(req.now, "now")?;
+    check_timers(&req.timers)?;
+
     let rule = Rule {
         id: req.rule.id,
         condition_type: kind,
@@ -149,6 +152,7 @@ pub fn evaluate(request_json: &str) -> Result<Value, String> {
             let updated_at = w
                 .updated_at
                 .ok_or("tracker.updated_at is required when tracker.state is present")?;
+            check_timestamp(updated_at, "tracker.updated_at")?;
             state.tracker.restore_state(
                 rule.id,
                 TrackerState {
@@ -170,6 +174,12 @@ pub fn evaluate(request_json: &str) -> Result<Value, String> {
         "timers": timers_json(&state, rule.id),
         "tracker": tracker_state_json(&state, rule.id),
     }))
+}
+
+fn check_timers(timers: &BTreeMap<String, DateTime<Utc>>) -> Result<(), String> {
+    timers
+        .values()
+        .try_for_each(|at| check_timestamp(*at, "timers").map(|_| ()))
 }
 
 /// RFC 3339 UTC; whole seconds render without a fraction (matching the corpus
@@ -345,6 +355,9 @@ pub fn evaluate_node_envelope(request_json: &str) -> Result<Value, String> {
             req.schema_version
         ));
     }
+
+    check_timestamp(req.now, "now")?;
+    check_timers(&req.timers)?;
 
     let node = Node::parse(&req.node)
         .map_err(|_| "malformed condition node (JsonException-equivalent)".to_string())?;

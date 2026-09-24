@@ -40,7 +40,7 @@ pub(super) fn alert_state(p: &AlertStatePayload, env: &Env) -> bool {
     } else {
         snapshot.triggered_at
     };
-    total_minutes(env.now - anchor) >= f64::from(for_minutes)
+    total_minutes(env.now - anchor).is_some_and(|m| m >= f64::from(for_minutes))
 }
 
 /// No `HasEver*` guard: absence of an override is the legitimate "no override"
@@ -61,7 +61,7 @@ pub(super) fn override_active(p: &ActiveForPayload, env: &Env) -> bool {
         .active_override
         .expect("override present when is_active matched")
         .started_at;
-    total_minutes(env.now - started_at) >= f64::from(for_minutes)
+    total_minutes(env.now - started_at).is_some_and(|m| m >= f64::from(for_minutes))
 }
 
 /// Same shape as `override_active`; a null snapshot simply means DND is off.
@@ -81,7 +81,7 @@ pub(super) fn do_not_disturb(p: &ActiveForPayload, env: &Env) -> bool {
         .active_do_not_disturb
         .expect("dnd present when is_active matched")
         .started_at;
-    total_minutes(env.now - started_at) >= f64::from(for_minutes)
+    total_minutes(env.now - started_at).is_some_and(|m| m >= f64::from(for_minutes))
 }
 
 /// `is_active: false` is true whenever the active mode differs from the
@@ -102,7 +102,7 @@ pub(super) fn pump_state(p: &PumpStatePayload, env: &Env) -> bool {
     let Some(for_minutes) = p.for_minutes else {
         return true;
     };
-    total_minutes(env.now - snapshot.started_at) >= f64::from(for_minutes)
+    total_minutes(env.now - snapshot.started_at).is_some_and(|m| m >= f64::from(for_minutes))
 }
 
 /// Generic state-span leaf. The PumpMode category (ordinal 0) is always false
@@ -125,7 +125,7 @@ pub(super) fn state_span_active(p: &StateSpanPayload, env: &Env) -> bool {
     let Some(for_minutes) = p.for_minutes else {
         return true;
     };
-    total_minutes(env.now - snapshot.started_at) >= f64::from(for_minutes)
+    total_minutes(env.now - snapshot.started_at).is_some_and(|m| m >= f64::from(for_minutes))
 }
 
 /// Sleep-session leaf. Matches the pre-computed `sleep_session_active` signal

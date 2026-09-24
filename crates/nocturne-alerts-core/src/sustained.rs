@@ -134,6 +134,6 @@ pub(crate) fn eval_sustained(p: &SustainedPayload, path: &str, env: &mut Env) ->
             env.timers.set_first_true(env.rule_id, path, now);
             false
         }
-        Some(first) => total_minutes(now - first) >= f64::from(p.minutes),
+        Some(first) => total_minutes(now - first).is_some_and(|m| m >= f64::from(p.minutes)),
     }
 }

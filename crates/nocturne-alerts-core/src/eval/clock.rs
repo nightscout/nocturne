@@ -116,7 +116,10 @@ pub(super) fn day_of_week(p: &DayOfWeekPayload, env: &Env) -> bool {
 /// fails closed.
 pub(super) fn time_since(p: &TimeSincePayload, anchor: Option<DateTime<Utc>>, env: &Env) -> bool {
     let elapsed = match anchor {
-        Some(anchor) => total_minutes(env.now - anchor),
+        Some(anchor) => match total_minutes(env.now - anchor) {
+            Some(elapsed) => elapsed,
+            None => return false,
+        },
         None => f64::INFINITY,
     };
     let threshold = f64::from(p.minutes);

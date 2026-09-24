@@ -12,7 +12,7 @@ pub(super) fn site_age(p: &ComparePayload, env: &Env) -> bool {
     let Some(changed_at) = env.ctx.last_site_change_at else {
         return false;
     };
-    let Some(age) = decimal_from_f64_cs(total_hours(env.now - changed_at)) else {
+    let Some(age) = total_hours(env.now - changed_at).and_then(decimal_from_f64_cs) else {
         return false;
     };
     compare(age, p.operator.as_deref(), p.value)
@@ -23,7 +23,7 @@ pub(super) fn sensor_age(p: &ComparePayload, env: &Env) -> bool {
     let Some(started_at) = env.ctx.last_sensor_start_at else {
         return false;
     };
-    let Some(age) = decimal_from_f64_cs(total_days(env.now - started_at)) else {
+    let Some(age) = total_days(env.now - started_at).and_then(decimal_from_f64_cs) else {
         return false;
     };
     compare(age, p.operator.as_deref(), p.value)
@@ -39,7 +39,8 @@ pub(super) fn tracker_age(p: &TrackerAgePayload, env: &Env) -> bool {
     let Some(reference_at) = env.ctx.active_trackers.get(&p.tracker_definition_id) else {
         return false;
     };
-    let Some(minutes_since) = decimal_from_f64_cs(total_minutes(env.now - *reference_at)) else {
+    let Some(minutes_since) = total_minutes(env.now - *reference_at).and_then(decimal_from_f64_cs)
+    else {
         return false;
     };
     compare(
@@ -58,7 +59,8 @@ pub(super) fn loop_stale(p: &MinutesComparePayload, env: &Env) -> bool {
     let Some(cycle_at) = env.ctx.last_aps_cycle_at else {
         return false;
     };
-    let Some(minutes_since) = decimal_from_f64_cs(total_minutes(env.now - cycle_at)) else {
+    let Some(minutes_since) = total_minutes(env.now - cycle_at).and_then(decimal_from_f64_cs)
+    else {
         return false;
     };
     compare(
@@ -77,7 +79,8 @@ pub(super) fn loop_enaction_stale(p: &MinutesComparePayload, env: &Env) -> bool 
     let Some(enacted_at) = env.ctx.last_aps_enacted_at else {
         return false;
     };
-    let Some(minutes_since) = decimal_from_f64_cs(total_minutes(env.now - enacted_at)) else {
+    let Some(minutes_since) = total_minutes(env.now - enacted_at).and_then(decimal_from_f64_cs)
+    else {
         return false;
     };
     compare(
@@ -108,7 +111,7 @@ pub(super) fn pump_suspended(p: &ActiveForPayload, env: &Env) -> bool {
         .active_pump_suspension
         .expect("suspension present when is_active matched")
         .started_at;
-    total_minutes(env.now - started_at) >= f64::from(for_minutes)
+    total_minutes(env.now - started_at).is_some_and(|m| m >= f64::from(for_minutes))
 }
 
 pub(super) fn pump_battery(p: &ComparePayload, env: &Env) -> bool {

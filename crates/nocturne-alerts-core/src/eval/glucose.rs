@@ -98,8 +98,8 @@ pub(super) fn staleness(p: &StalenessPayload, env: &Env) -> bool {
     let Some(last_reading_at) = env.ctx.last_reading_at else {
         return matches!(p.operator.as_deref(), Some(">") | Some(">="));
     };
-    let elapsed = total_minutes(env.now - last_reading_at);
-    let Some(elapsed) = decimal_from_f64_cs(elapsed) else {
+    let Some(elapsed) = total_minutes(env.now - last_reading_at).and_then(decimal_from_f64_cs)
+    else {
         return false;
     };
     compare(elapsed, p.operator.as_deref(), Decimal::from(p.value))

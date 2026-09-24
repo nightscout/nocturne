@@ -519,6 +519,63 @@ fn evaluate_rejects_tracker_state_without_updated_at() {
     assert_error(&evaluate(&request), "tracker.updated_at is required");
 }
 
+fn threshold_request_at(now: &str) -> Value {
+    json!({
+        "schema_version": 1,
+        "rule": {
+            "id": "00000000-0000-0000-0000-000000000001",
+            "condition_type": "threshold",
+            "condition_params": { "direction": "below", "value": 70 }
+        },
+        "context": {},
+        "now": now,
+    })
+}
+
+#[test]
+fn evaluate_rejects_now_outside_the_dotnet_range() {
+    let response = evaluate(&threshold_request_at("+10000-01-01T00:00:00Z"));
+    assert_error(&response, "now is outside the supported timestamp range");
+    assert!(!response["error"].as_str().unwrap().contains("10000"));
+}
+
+#[test]
+fn evaluate_rejects_timers_and_tracker_outside_the_dotnet_range() {
+    let mut request = threshold_request_at("2026-01-05T12:00:00Z");
+    request["timers"] = json!({ "threshold": "0000-06-01T00:00:00Z" });
+    assert_error(&evaluate(&request), "timers is outside");
+
+    let mut request = threshold_request_at("2026-01-05T12:00:00Z");
+    request["tracker"] = json!({
+        "state": "active",
+        "updated_at": "0000-06-01T00:00:00Z",
+        "next_excursion_ordinal": 2,
+    });
+    assert_error(&evaluate(&request), "tracker.updated_at is outside");
+}
+
+#[test]
+fn evaluate_rejects_a_context_timestamp_outside_the_dotnet_range() {
+    let mut request = threshold_request_at("2026-01-05T12:00:00Z");
+    request["context"] = json!({ "last_carb_at": "0000-06-01T00:00:00Z" });
+    assert_error(&evaluate(&request), "last_carb_at is outside");
+}
+
+#[test]
+fn evaluate_node_rejects_now_outside_the_dotnet_range() {
+    let request = json!({
+        "schema_version": 1,
+        "rule_id": "00000000-0000-0000-0000-000000000001",
+        "node": { "type": "threshold", "threshold": { "direction": "below", "value": 70 } },
+        "context": {},
+        "now": "0000-06-01T00:00:00Z",
+    });
+    assert_error(
+        &evaluate_node(&request),
+        "now is outside the supported timestamp range",
+    );
+}
+
 #[test]
 fn boundary_converts_panics_to_error_envelopes() {
     let ptr = boundary(|| panic!("deliberate test panic"));

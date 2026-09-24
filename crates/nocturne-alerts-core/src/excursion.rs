@@ -275,10 +275,12 @@ fn handle_hysteresis(
 
     // Sliding proxy [anomaly — normative]: the previous evaluation's
     // UpdatedAt stands in for "hysteresis started"; DateTime.AddMinutes of an
-    // int minute count is an exact millisecond addition.
-    let hysteresis_expiry =
-        state.updated_at + TimeDelta::milliseconds(i64::from(config.hysteresis_minutes) * 60_000);
-    if now >= hysteresis_expiry {
+    // int minute count is an exact millisecond addition. An expiry past the
+    // representable calendar never arrives.
+    let hysteresis_expiry = state
+        .updated_at
+        .checked_add_signed(TimeDelta::minutes(i64::from(config.hysteresis_minutes)));
+    if hysteresis_expiry.is_some_and(|expiry| now >= expiry) {
         let excursion = state.active_excursion;
         state.state = TrackerStateKind::Idle;
         state.confirmation_count = 0;
