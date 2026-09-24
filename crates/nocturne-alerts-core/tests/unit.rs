@@ -790,3 +790,90 @@ fn tracker_age_wire_context_round_trips() {
         &ctx
     ));
 }
+
+// ---------------------------------------------------------------------------
+// Arithmetic edges: overflow degrades the one leaf, never panics
+// ---------------------------------------------------------------------------
+
+fn temp_basal_ctx(rate: Decimal, scheduled_rate: Decimal) -> SensorContext {
+    SensorContext {
+        active_temp_basal: Some(nocturne_alerts_core::context::TempBasalSnapshot {
+            rate,
+            scheduled_rate: Some(scheduled_rate),
+            started_at: base(),
+        }),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn temp_basal_percent_division_overflow_is_false() {
+    let ctx = temp_basal_ctx(Decimal::MAX, d("0.5"));
+    assert!(!eval_payload(
+        ConditionKind::TempBasal,
+        &json!({"metric": "percent_of_scheduled", "operator": ">=", "value": 0}),
+        &ctx
+    ));
+}
+
+#[test]
+fn temp_basal_percent_multiplication_overflow_is_false() {
+    let ctx = temp_basal_ctx(Decimal::MAX, d("2"));
+    assert!(!eval_payload(
+        ConditionKind::TempBasal,
+        &json!({"metric": "percent_of_scheduled", "operator": ">=", "value": 0}),
+        &ctx
+    ));
+}
+
+#[test]
+fn temp_basal_percent_in_range_still_compares() {
+    let ctx = temp_basal_ctx(d("1.5"), d("1"));
+    assert!(eval_payload(
+        ConditionKind::TempBasal,
+        &json!({"metric": "percent_of_scheduled", "operator": "==", "value": 150}),
+        &ctx
+    ));
+}
+
+#[test]
+fn trend_out_of_range_bucket_ordinal_is_false() {
+    let ctx = SensorContext {
+        trend_bucket: Some(99),
+        ..Default::default()
+    };
+    assert!(!eval_payload(
+        ConditionKind::Trend,
+        &json!({"bucket": "flat"}),
+        &ctx
+    ));
+}
+
+#[test]
+fn tracker_confirmation_count_saturates_on_restored_state() {
+    let mut tracker = ExcursionTracker::new();
+    tracker.restore_state(
+        rule_id(),
+        nocturne_alerts_core::excursion::TrackerState {
+            state: TrackerStateKind::Confirming,
+            confirmation_count: i32::MAX,
+            active_excursion: None,
+            updated_at: at(0),
+        },
+    );
+    let t = tracker.process_evaluation(rule_id(), cfg(i32::MAX, 0), true, at(5));
+    assert_eq!(t.kind, TransitionType::ExcursionOpened);
+}
+
+#[test]
+fn tracker_excursion_ordinal_saturates() {
+    let mut tracker = ExcursionTracker::new();
+    tracker.set_next_excursion_ordinal(u32::MAX);
+    let first = Uuid::from_u128(1);
+    let second = Uuid::from_u128(2);
+    let t = tracker.process_evaluation(first, cfg(1, 0), true, at(0));
+    assert_eq!(t.excursion, Some(u32::MAX));
+    let t = tracker.process_evaluation(second, cfg(1, 0), true, at(0));
+    assert_eq!(t.kind, TransitionType::ExcursionOpened);
+    assert_eq!(t.excursion, Some(u32::MAX));
+}

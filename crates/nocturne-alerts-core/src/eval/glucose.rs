@@ -52,8 +52,10 @@ pub(super) fn trend(p: &TrendPayload, env: &Env) -> bool {
     if configured.is_empty() {
         return false;
     }
-    let actual = TREND_BUCKET_NAMES[bucket as usize];
-    actual.eq_ignore_ascii_case(configured)
+    usize::try_from(bucket)
+        .ok()
+        .and_then(|i| TREND_BUCKET_NAMES.get(i))
+        .is_some_and(|actual| actual.eq_ignore_ascii_case(configured))
 }
 
 /// True if any prediction with `OffsetMinutes <= within_minutes` satisfies the

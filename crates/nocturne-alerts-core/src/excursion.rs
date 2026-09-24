@@ -196,7 +196,7 @@ impl ExcursionTracker {
             state.confirmation_count = 0;
             return Transition::none();
         }
-        state.confirmation_count += 1;
+        state.confirmation_count = state.confirmation_count.saturating_add(1);
         if state.confirmation_count >= config.confirmation_readings {
             return self.open_excursion(state);
         }
@@ -204,7 +204,7 @@ impl ExcursionTracker {
     }
 
     fn open_excursion(&mut self, state: &mut TrackerState) -> Transition {
-        self.next_ordinal += 1;
+        self.next_ordinal = self.next_ordinal.saturating_add(1);
         let ordinal = self.next_ordinal;
         state.state = TrackerStateKind::Active;
         state.confirmation_count = 0;

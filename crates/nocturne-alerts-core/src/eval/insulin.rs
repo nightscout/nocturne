@@ -28,7 +28,8 @@ pub(super) fn reservoir(p: &ComparePayload, env: &Env) -> bool {
 /// No `HasEver*` guard by design — the condition only concerns active temps.
 /// `rate` compares U/hr; `percent_of_scheduled` compares
 /// `Rate / ScheduledRate * 100` (decimal division), false when the scheduled
-/// rate is null or zero. An undefined metric ordinal → false.
+/// rate is null or zero or the percentage overflows a decimal. An undefined
+/// metric ordinal → false.
 pub(super) fn temp_basal(p: &TempBasalPayload, env: &Env) -> bool {
     let Some(temp) = &env.ctx.active_temp_basal else {
         return false;
@@ -36,10 +37,11 @@ pub(super) fn temp_basal(p: &TempBasalPayload, env: &Env) -> bool {
     let actual = match p.metric {
         0 => Some(temp.rate),
         1 => match temp.scheduled_rate {
-            Some(scheduled) if scheduled != Decimal::ZERO => {
-                Some(temp.rate / scheduled * Decimal::from(100))
-            }
-            _ => None,
+            Some(scheduled) => temp
+                .rate
+                .checked_div(scheduled)
+                .and_then(|ratio| ratio.checked_mul(Decimal::ONE_HUNDRED)),
+            None => None,
         },
         _ => None,
     };
