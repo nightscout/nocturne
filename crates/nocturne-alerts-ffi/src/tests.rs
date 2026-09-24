@@ -1400,7 +1400,7 @@ mod uniffi_surface {
     use serde_json::{Value, json};
 
     fn evaluate(request: &Value) -> Value {
-        serde_json::from_str(&uniffi_api::evaluate(request.to_string()))
+        serde_json::from_str(&uniffi_api::evaluate(&request.to_string()))
             .expect("uniffi evaluate returned valid JSON")
     }
 
@@ -1422,10 +1422,10 @@ mod uniffi_surface {
         })
         .to_string();
         let classified: Value =
-            serde_json::from_str(&uniffi_api::classify(request.clone())).expect("valid JSON");
+            serde_json::from_str(&uniffi_api::classify(&request)).expect("valid JSON");
         assert_eq!(classified["scope_class"], json!("undirected"));
         let wall_clock: Value =
-            serde_json::from_str(&uniffi_api::references_wall_clock(request)).expect("valid JSON");
+            serde_json::from_str(&uniffi_api::references_wall_clock(&request)).expect("valid JSON");
         assert_eq!(wall_clock["ok"], json!(true));
         assert_eq!(wall_clock["references_wall_clock"], json!(true));
     }
@@ -1457,7 +1457,8 @@ mod uniffi_surface {
                 "context": { "latest_value": 60, "latest_timestamp": "2026-01-05T12:00:00Z" },
                 "now": "2026-01-05T12:00:00Z",
             })
-            .to_string(),
+            .to_string()
+            .as_str(),
         ))
         .expect("valid JSON");
         assert_eq!(response["ok"], Value::Bool(true));
@@ -1471,7 +1472,8 @@ mod uniffi_surface {
                 "root": "auto_resolve",
                 "node": { "type": "threshold", "threshold": { "direction": "above", "value": 180 } }
             })
-            .to_string(),
+            .to_string()
+            .as_str(),
         ))
         .expect("valid JSON");
         assert_eq!(response["ok"], Value::Bool(true));
@@ -1489,7 +1491,8 @@ mod uniffi_surface {
                 "condition_type": "threshold",
                 "condition_params": { "direction": "below", "value": 70 }
             })
-            .to_string(),
+            .to_string()
+            .as_str(),
         ))
         .expect("valid JSON");
         assert_eq!(response["ok"], Value::Bool(true));
@@ -1500,7 +1503,7 @@ mod uniffi_surface {
     #[test]
     fn errors_come_back_as_envelopes_not_exceptions() {
         let malformed: Value =
-            serde_json::from_str(&uniffi_api::evaluate("{ nope".to_string())).expect("valid JSON");
+            serde_json::from_str(&uniffi_api::evaluate("{ nope")).expect("valid JSON");
         assert_error(&malformed, "invalid request envelope");
 
         let bad_schema = evaluate(&json!({
