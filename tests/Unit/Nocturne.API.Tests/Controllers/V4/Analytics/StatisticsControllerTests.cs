@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 using Nocturne.API.Controllers.V4.Analytics;
+using Nocturne.API.Services.Analytics;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -34,14 +35,17 @@ public class StatisticsControllerTests
     private readonly Mock<IApsSnapshotRepository> _apsSnapshotRepoMock = new();
     private readonly Mock<IDeviceEventRepository> _deviceEventRepoMock = new();
     private readonly Mock<IAidMetricsService> _aidMetricsServiceMock = new();
+    private readonly Mock<IBasalRateResolver> _basalRateResolverMock = new();
 
-    private StatisticsController CreateController(ICanonicalGlucoseService? canonicalGlucose = null)
+    private StatisticsController CreateController(
+        ICanonicalGlucoseService? canonicalGlucose = null,
+        IStatisticsService? statisticsService = null)
     {
         var controller = new StatisticsController(
-            _statsServiceMock.Object,
+            statisticsService ?? _statsServiceMock.Object,
             Mock.Of<ICacheService>(),
             Mock.Of<IProfileProjectionService>(),
-            Mock.Of<IBasalRateResolver>(),
+            _basalRateResolverMock.Object,
             _basalSegmentsMock.Object,
             _therapySettingsResolverMock.Object,
             _glucoseRepoMock.Object,
@@ -381,6 +385,56 @@ public class StatisticsControllerTests
                 DateTimeOffset.FromUnixTimeMilliseconds(s.StartMills).UtcDateTime,
                 (DateTime?)DateTimeOffset.FromUnixTimeMilliseconds(s.EndMills).UtcDateTime,
                 s.UnitsPerHour)));
+    }
+
+    [Fact]
+    public async Task GetBasalAnalysis_FillsMissingScheduledRate_SoLegacyTempsCountAsHighAndLow()
+    {
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var tempBasals = new List<TempBasal>
+        {
+            new()
+            {
+                StartTimestamp = start,
+                EndTimestamp = start.AddMinutes(30),
+                Rate = 1.5,
+                Origin = TempBasalOrigin.Manual,
+            },
+            new()
+            {
+                StartTimestamp = start.AddHours(2),
+                EndTimestamp = start.AddHours(2).AddMinutes(30),
+                Rate = 0.5,
+                Origin = TempBasalOrigin.Manual,
+            },
+        };
+
+        _tempBasalRepoMock
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(tempBasals);
+        _bolusRepoMock
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<bool>(), It.IsAny<BolusKind?>(),
+                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<Bolus>());
+        _basalRateResolverMock
+            .Setup(r => r.BuildResolverAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Func<long, double>)(_ => 1.0));
+
+        var result = await CreateController(statisticsService: new StatisticsService())
+            .GetBasalAnalysis(start, start.AddDays(1));
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var payload = ok.Value.Should().BeOfType<BasalAnalysisResponse>().Subject;
+        payload.TempBasalInfo.HighTemps.Should().Be(1);
+        payload.TempBasalInfo.LowTemps.Should().Be(1);
     }
 
     [Fact]

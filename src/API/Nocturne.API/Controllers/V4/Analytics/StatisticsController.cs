@@ -148,6 +148,23 @@ public class StatisticsController : ControllerBase
     }
 
     /// <summary>
+    /// Fills <see cref="TempBasal.ScheduledRate"/> from the profile's scheduled rate at each
+    /// temp's start, for records that have none. Legacy-sourced temps arrive with a null rate and
+    /// <see cref="IStatisticsService.CalculateBasalAnalysis"/> can only classify a temp as high or
+    /// low against it. Scheduled-origin records are the profile baseline itself and are skipped.
+    /// </summary>
+    private async Task FillMissingScheduledRatesAsync(
+        IList<TempBasal> tempBasals, long startMills, long endMills, CancellationToken ct)
+    {
+        var rateAt = await _basalRateResolver.BuildResolverAsync(startMills, endMills, ct);
+        foreach (var tb in tempBasals)
+        {
+            if (!tb.ScheduledRate.HasValue && tb.Origin != TempBasalOrigin.Scheduled)
+                tb.ScheduledRate = rateAt(tb.StartMills);
+        }
+    }
+
+    /// <summary>
     /// Appends one <see cref="TempBasalOrigin.Scheduled"/> TempBasal per profile basal segment
     /// when the pump reported none.
     /// </summary>
@@ -1162,13 +1179,7 @@ public class StatisticsController : ControllerBase
         var (boluses, algorithmBoluses, tempBasals, basalInjections) =
             await FetchInsulinRecordsAsync(startDt, endDt, 10000, default, carbTask);
         var carbs  = await carbTask;
-        var rateAt = await _basalRateResolver.BuildResolverAsync(startMs, endMs);
-
-        foreach (var tb in tempBasals)
-        {
-            if (!tb.ScheduledRate.HasValue && tb.Origin != TempBasalOrigin.Scheduled)
-                tb.ScheduledRate = rateAt(tb.StartMills);
-        }
+        await FillMissingScheduledRatesAsync(tempBasals, startMs, endMs, HttpContext.RequestAborted);
 
         var result = _statisticsService.CalculateInsulinDeliveryStatistics(
             boluses,
@@ -1209,6 +1220,10 @@ public class StatisticsController : ControllerBase
 
         var tempBasals       = (await tempBasalTask).ToList();
         var algorithmBoluses = await algoTask;
+
+        var startMs = new DateTimeOffset(startUtc, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        var endMs   = new DateTimeOffset(endUtc,   TimeSpan.Zero).ToUnixTimeMilliseconds();
+        await FillMissingScheduledRatesAsync(tempBasals, startMs, endMs, HttpContext.RequestAborted);
 
         await AddScheduledBasalFallbackAsync(tempBasals, startUtc, endUtc, recordedBasal: null);
 
