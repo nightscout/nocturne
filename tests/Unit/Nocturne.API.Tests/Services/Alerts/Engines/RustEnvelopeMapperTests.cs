@@ -74,6 +74,23 @@ public class RustEnvelopeMapperTests
             .Should().Be("Australia/Sydney");
     }
 
+    [Theory]
+    [InlineData("""{"direction":"below","value":70}""", """{"type":"threshold","threshold":{"direction":"below","value":70}}""")]
+    [InlineData("   ", """{"type":"threshold","threshold":null}""")]
+    [InlineData(null, """{"type":"threshold","threshold":null}""")]
+    public void WrapPayload_builds_the_full_node(string? payload, string expected)
+    {
+        RustEnvelopeMapper.WrapPayload("threshold", payload).Should().Be(expected);
+    }
+
+    [Fact]
+    public void WrapPayload_rejects_a_payload_that_is_not_json()
+    {
+        var act = () => RustEnvelopeMapper.WrapPayload("threshold", "1}, \"injected\": {");
+
+        act.Should().Throw<JsonException>();
+    }
+
     [Fact]
     public void BuildContext_memoises_the_element_per_context_instance()
     {

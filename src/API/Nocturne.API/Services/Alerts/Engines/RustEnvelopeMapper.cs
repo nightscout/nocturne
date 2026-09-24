@@ -110,6 +110,28 @@ internal static class RustEnvelopeMapper
     public static JsonElement ParseNode(string nodeJson) => ParseJson(ConditionTimeZones.CanonicaliseNode(nodeJson));
 
     /// <summary>
+    /// The full node <c>{"type": wire, wire: payload}</c> for a stored payload-only body, the payload
+    /// copied verbatim; a blank body is JSON <c>null</c>.
+    /// </summary>
+    /// <exception cref="JsonException">The payload is not valid JSON.</exception>
+    public static string WrapPayload(string wire, string? payloadJson)
+    {
+        var buffer = new System.Buffers.ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("type", wire);
+            writer.WritePropertyName(wire);
+            if (string.IsNullOrWhiteSpace(payloadJson))
+                writer.WriteNullValue();
+            else
+                writer.WriteRawValue(payloadJson);
+            writer.WriteEndObject();
+        }
+        return System.Text.Encoding.UTF8.GetString(buffer.WrittenSpan);
+    }
+
+    /// <summary>
     /// Per-instance memo for <see cref="BuildContext"/>: the orchestrator (and the shadow
     /// evaluator) pass the same enriched immutable <see cref="SensorContext"/> to every
     /// rule of a tick, so the wire element is built and serialised once per context

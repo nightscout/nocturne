@@ -138,27 +138,13 @@ internal sealed class RustBackedAlertEngine(
     }
 
     /// <inheritdoc/>
-    public async Task<bool> EvaluateNodeAsync(
+    public Task<bool> EvaluateNodeAsync(
         Guid ruleId,
         ConditionNode node,
         SensorContext context,
         string pathRoot,
-        CancellationToken ct)
-    {
-        var request = new RustEvaluateNodeRequest
-        {
-            RuleId = ruleId,
-            Node = RustEnvelopeMapper.BuildNode(node),
-            Root = pathRoot,
-            Context = RustEnvelopeMapper.BuildContext(context),
-            Now = timeProvider.GetUtcNow().UtcDateTime,
-            Timers = RustEnvelopeMapper.BuildTimers(await timerStore.GetAllForRuleAsync(ruleId, ct)),
-        };
-        var response = EvaluateNodeNative(request);
-
-        await ApplyTimerOpsAsync(ruleId, response.TimerOps, ct);
-        return response.Value!.Value;
-    }
+        CancellationToken ct) =>
+        EvaluateNodeAsync(ruleId, RustEnvelopeMapper.BuildNode(node), pathRoot, context, ct);
 
     /// <inheritdoc/>
     public async Task<ExcursionTransition> EvaluateAutoResolveAsync(
@@ -190,18 +176,8 @@ internal sealed class RustBackedAlertEngine(
         bool shouldResolve;
         try
         {
-            var request = new RustEvaluateNodeRequest
-            {
-                RuleId = rule.Id,
-                Node = nodeJson,
-                Root = Evaluators.AlertConditionTypeNames.AutoResolvePathRoot,
-                Context = RustEnvelopeMapper.BuildContext(context),
-                Now = timeProvider.GetUtcNow().UtcDateTime,
-                Timers = RustEnvelopeMapper.BuildTimers(await timerStore.GetAllForRuleAsync(rule.Id, ct)),
-            };
-            var response = EvaluateNodeNative(request);
-            await ApplyTimerOpsAsync(rule.Id, response.TimerOps, ct);
-            shouldResolve = response.Value!.Value;
+            shouldResolve = await EvaluateNodeAsync(
+                rule.Id, nodeJson, Evaluators.AlertConditionTypeNames.AutoResolvePathRoot, context, ct);
         }
         catch (RustAlertEngineException ex)
         {
@@ -220,31 +196,38 @@ internal sealed class RustBackedAlertEngine(
     /// Root-eval-only fallback for a rule whose row vanished mid-evaluation: evaluates the
     /// condition tree (timers still mutate) without touching the tracker.
     /// </summary>
-    private async Task<bool> EvaluateRuleNodeWithoutTrackerAsync(
+    private Task<bool> EvaluateRuleNodeWithoutTrackerAsync(
         AlertRuleSnapshot rule,
         SensorContext context,
         CancellationToken ct)
     {
         var wire = Evaluators.AlertConditionTypeNames.ToWireString(rule.ConditionType);
-        var payload = string.IsNullOrWhiteSpace(rule.ConditionParams) ? "null" : rule.ConditionParams;
-        var nodeJson = RustEnvelopeMapper.ParseNode($"{{\"type\":{JsonSerializer.Serialize(wire)},{JsonSerializer.Serialize(wire)}:{payload}}}");
-
-        var request = new RustEvaluateNodeRequest
-        {
-            RuleId = rule.Id,
-            Node = nodeJson,
-            Root = wire,
-            Context = RustEnvelopeMapper.BuildContext(context),
-            Now = timeProvider.GetUtcNow().UtcDateTime,
-            Timers = RustEnvelopeMapper.BuildTimers(await timerStore.GetAllForRuleAsync(rule.Id, ct)),
-        };
-        var response = EvaluateNodeNative(request);
-        await ApplyTimerOpsAsync(rule.Id, response.TimerOps, ct);
-        return response.Value!.Value;
+        var node = RustEnvelopeMapper.ParseNode(
+            RustEnvelopeMapper.WrapPayload(wire, rule.ConditionParams));
+        return EvaluateNodeAsync(rule.Id, node, wire, context, ct);
     }
 
-    private RustEvaluateNodeResponse EvaluateNodeNative(RustEvaluateNodeRequest request) =>
-        errors.Track("evaluate_node", AlertEngineErrors.RustEngine, () => RustAlertEngine.EvaluateNode(request));
+    /// <summary>
+    /// Evaluates one full condition node through <c>evaluate_node</c> against the rule's persisted
+    /// timers, and persists the timer deltas the engine reports.
+    /// </summary>
+    private async Task<bool> EvaluateNodeAsync(
+        Guid ruleId, JsonElement node, string pathRoot, SensorContext context, CancellationToken ct)
+    {
+        var request = new RustEvaluateNodeRequest
+        {
+            RuleId = ruleId,
+            Node = node,
+            Root = pathRoot,
+            Context = RustEnvelopeMapper.BuildContext(context),
+            Now = timeProvider.GetUtcNow().UtcDateTime,
+            Timers = RustEnvelopeMapper.BuildTimers(await timerStore.GetAllForRuleAsync(ruleId, ct)),
+        };
+        var response = errors.Track(
+            "evaluate_node", AlertEngineErrors.RustEngine, () => RustAlertEngine.EvaluateNode(request));
+        await ApplyTimerOpsAsync(ruleId, response.TimerOps, ct);
+        return response.Value!.Value;
+    }
 
     private async Task ApplyTimerOpsAsync(Guid ruleId, IReadOnlyList<RustTimerOp>? ops, CancellationToken ct)
     {
