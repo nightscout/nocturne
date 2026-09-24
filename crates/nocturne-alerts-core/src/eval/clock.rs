@@ -1,64 +1,60 @@
 //! Wall-clock leaves: time_of_day, day_of_week, time_since_last_carb/bolus.
 
-use chrono::{DateTime, Datelike, NaiveTime, Utc};
+use chrono::{DateTime, Datelike, NaiveDateTime, NaiveTime, Utc};
 use chrono_tz::Tz;
 
 use super::Env;
-use crate::compare::total_minutes;
+use crate::compare::{Unit, elapsed};
 use crate::enums::{DayOfWeek, EnumValue, WireEnum};
 use crate::model::{DayOfWeekPayload, TimeOfDayPayload, TimeSincePayload};
 
-/// `TimeOnly.TryParseExact(s, "HH:mm")`: exactly two digits each, 00-23 /
-/// 00-59, nothing else.
+/// `HH:mm` exactly: two digits each, 00-23 and 00-59.
 fn parse_hh_mm(s: &str) -> Option<NaiveTime> {
-    let b = s.as_bytes();
-    if b.len() != 5 || b[2] != b':' {
-        return None;
-    }
-    let digit = |c: u8| -> Option<u32> { (c as char).to_digit(10) };
-    let hh = digit(b[0])? * 10 + digit(b[1])?;
-    let mm = digit(b[3])? * 10 + digit(b[4])?;
-    NaiveTime::from_hms_opt(hh, mm, 0)
+    let two_digits = |t: &str| {
+        (t.len() == 2 && t.bytes().all(|b| b.is_ascii_digit()))
+            .then(|| t.parse().ok())
+            .flatten()
+    };
+    let (hh, mm) = s.split_once(':')?;
+    NaiveTime::from_hms_opt(two_digits(hh)?, two_digits(mm)?, 0)
 }
 
-/// Resolves an IANA timezone id, mirroring the resolution order of the C#
-/// `TimeZoneHelper`: exact match first, then a case-insensitive match against
-/// the zone table.
-///
-/// The case-insensitive pass is not cosmetic. `chrono_tz`'s `FromStr` is an
-/// exact-match table lookup, while `TimeZoneHelper` deliberately resolves
-/// mis-cased ids because connector data carries them in bulk (production has
-/// ~240 rows spelling `Etc/GMT-2` as `ETC/GMT-2`). Without this the two engines
-/// disagree on every such rule: a mis-cased *per-rule* tz fails closed, so an
-/// overnight low rule never fires, and a mis-cased *tenant* tz silently shifts
-/// the whole rule set to UTC.
-///
-/// The two retries agree on that population but are not the same set. Windows
-/// ids (`AUS Eastern Standard Time`) resolve in C# and not here; conversely
-/// `TZ_VARIANTS` includes tzdb backward links (`Etc/Greenwich`, `US/Pacific`)
-/// that C#'s ICU-canonical scan rejects, so those resolve here and not there.
-/// Both divergences are cutover gates — see `docs/alerts/engine-semantics.md` §4.
+/// An IANA zone id, matched exactly and then ignoring ASCII case, since
+/// stored ids are often mis-cased (`ETC/GMT-2`). Windows ids do not resolve,
+/// and tzdb backward links (`US/Pacific`) do (engine-semantics.md §4).
 fn find_tz(id: &str) -> Option<Tz> {
-    if let Ok(tz) = id.parse::<Tz>() {
-        return Some(tz);
-    }
-    chrono_tz::TZ_VARIANTS
-        .iter()
-        .find(|tz| tz.name().eq_ignore_ascii_case(id))
-        .copied()
+    id.parse().ok().or_else(|| {
+        chrono_tz::TZ_VARIANTS
+            .iter()
+            .find(|tz| tz.name().eq_ignore_ascii_case(id))
+            .copied()
+    })
 }
 
-fn local_now(now: DateTime<Utc>, tz: Option<Tz>) -> chrono::NaiveDateTime {
-    match tz {
-        Some(tz) => now.with_timezone(&tz).naive_local(),
-        None => now.naive_utc(),
-    }
+/// `now` as wall time in the tenant's zone, or UTC when it has none or it
+/// does not resolve.
+fn tenant_local(env: &Env) -> NaiveDateTime {
+    local(
+        env.now,
+        env.ctx.tenant_time_zone_id.as_deref().and_then(zone),
+    )
 }
 
-/// Half-open `[from, to)` window in the resolved timezone; `from > to` wraps
-/// midnight. Resolution: an explicit per-rule timezone wins and fails closed
-/// when unknown; a missing per-rule tz falls back to the tenant tz (unknown
-/// tenant tz swallows to UTC); both absent → UTC.
+/// A non-empty zone id that resolves.
+fn zone(id: &str) -> Option<Tz> {
+    Some(id).filter(|id| !id.is_empty()).and_then(find_tz)
+}
+
+fn local(now: DateTime<Utc>, tz: Option<Tz>) -> NaiveDateTime {
+    tz.map_or_else(
+        || now.naive_utc(),
+        |tz| now.with_timezone(&tz).naive_local(),
+    )
+}
+
+/// Half-open `[from, to)` window; `from > to` wraps midnight. A per-rule
+/// timezone wins and fails closed when it does not resolve; without one the
+/// window is in the tenant's zone.
 pub(super) fn time_of_day(p: &TimeOfDayPayload, env: &Env) -> bool {
     let (Some(from), Some(to)) = (
         p.from.as_deref().and_then(parse_hh_mm),
@@ -66,23 +62,14 @@ pub(super) fn time_of_day(p: &TimeOfDayPayload, env: &Env) -> bool {
     ) else {
         return false;
     };
-
-    let tz = match p.timezone.as_deref() {
-        Some(tz_id) if !tz_id.is_empty() => match find_tz(tz_id) {
-            Some(tz) => Some(tz),
+    let local = match p.timezone.as_deref().filter(|id| !id.is_empty()) {
+        Some(id) => match find_tz(id) {
+            Some(tz) => local(env.now, Some(tz)),
             None => return false,
         },
-        _ => match env.ctx.tenant_time_zone_id.as_deref() {
-            Some(tenant_tz) if !tenant_tz.is_empty() => find_tz(tenant_tz),
-            _ => None,
-        },
+        None => tenant_local(env),
     };
-
-    let local = local_now(env.now, tz);
-    // TimeOnly.FromDateTime keeps sub-minute precision; corpus instants are
-    // whole seconds, so second precision suffices.
     let current = local.time();
-
     if from <= to {
         current >= from && current < to
     } else {
@@ -90,42 +77,29 @@ pub(super) fn time_of_day(p: &TimeOfDayPayload, env: &Env) -> bool {
     }
 }
 
-/// Local `now.DayOfWeek ∈ days` in the tenant timezone (unknown/missing → UTC).
-/// Day values follow `System.DayOfWeek`: 0 = Sunday … 6 = Saturday; integers
-/// outside that range simply never match.
+/// Today, in the tenant's zone, is one of `days`; an undefined day never
+/// matches.
 pub(super) fn day_of_week(p: &DayOfWeekPayload, env: &Env) -> bool {
-    let Some(days) = &p.days else {
-        return false;
-    };
-    if days.is_empty() {
-        return false;
-    }
-    let tz = env
-        .ctx
-        .tenant_time_zone_id
-        .as_deref()
-        .filter(|id| !id.is_empty())
-        .and_then(find_tz);
-    let local = local_now(env.now, tz);
-    DayOfWeek::from_ordinal(i64::from(local.weekday().num_days_from_sunday()))
-        .is_some_and(|today| days.contains(&EnumValue::Known(today)))
+    let today = tenant_local(env).weekday().num_days_from_sunday();
+    DayOfWeek::from_ordinal(i64::from(today)).is_some_and(|today| {
+        p.days
+            .iter()
+            .flatten()
+            .any(|d| *d == EnumValue::Known(today))
+    })
 }
 
-/// `TimeSinceComparator.Apply`: elapsed minutes in f64; a missing anchor is
-/// +∞ (so `>`/`>=` fire on cold start — deliberately opposite to loop_stale).
-/// Operator ordinals: 0 `>`, 1 `>=`, 2 `<`, 3 `<=`, 4 `==`; anything else
-/// fails closed.
+/// Elapsed minutes since `anchor` as a double; a missing anchor is +infinity,
+/// so `>` and `>=` hold on cold start, unlike loop_stale.
 pub(super) fn time_since(p: &TimeSincePayload, anchor: Option<DateTime<Utc>>, env: &Env) -> bool {
-    let elapsed = match anchor {
-        Some(anchor) => match total_minutes(env.now - anchor) {
-            Some(elapsed) => elapsed,
-            None => return false,
-        },
-        None => f64::INFINITY,
+    let since = match anchor {
+        Some(anchor) => elapsed(env.now, anchor, Unit::Minutes),
+        None => Some(f64::INFINITY),
     };
     p.operator
         .known()
-        .is_some_and(|op| op.apply(elapsed, f64::from(p.minutes)))
+        .zip(since)
+        .is_some_and(|(op, since)| op.apply(since, f64::from(p.minutes)))
 }
 
 #[cfg(test)]

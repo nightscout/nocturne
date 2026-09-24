@@ -15,10 +15,12 @@ mod signal;
 mod spans;
 
 use chrono::{DateTime, Utc};
+use rust_decimal::Decimal;
 use uuid::Uuid;
 
+use crate::compare::{Unit, decimal_from_f64_cs, elapsed};
 use crate::context::SensorContext;
-use crate::enums::CompositeOp;
+use crate::enums::{CmpOp, CompositeOp, holds};
 use crate::model::{ConditionKind, Node, Payload};
 use crate::paths::node_child_path;
 use crate::sustained::{TimerStore, eval_sustained};
@@ -26,10 +28,59 @@ use crate::sustained::{TimerStore, eval_sustained};
 /// Per-evaluation environment: the clock instant, the rule whose timers are
 /// keyed, the sensor context, and the mutable timer store.
 pub struct Env<'a> {
-    pub now: DateTime<Utc>,
-    pub rule_id: Uuid,
-    pub ctx: &'a SensorContext,
-    pub timers: &'a mut TimerStore,
+    pub(crate) now: DateTime<Utc>,
+    pub(crate) rule_id: Uuid,
+    pub(crate) ctx: &'a SensorContext,
+    pub(crate) timers: &'a mut TimerStore,
+}
+
+impl<'a> Env<'a> {
+    pub fn new(
+        now: DateTime<Utc>,
+        rule_id: Uuid,
+        ctx: &'a SensorContext,
+        timers: &'a mut TimerStore,
+    ) -> Self {
+        Self {
+            now,
+            rule_id,
+            ctx,
+            timers,
+        }
+    }
+
+    /// Whether `since` is at least `minutes` ago, in fractional minutes.
+    pub(crate) fn held_for(&self, since: DateTime<Utc>, minutes: i32) -> bool {
+        elapsed(self.now, since, Unit::Minutes).is_some_and(|m| m >= f64::from(minutes))
+    }
+
+    /// The time since `anchor` in `unit`, converted to decimal
+    /// (engine-semantics.md §1.3), compared against `threshold`.
+    fn compare_elapsed(
+        &self,
+        anchor: DateTime<Utc>,
+        unit: Unit,
+        op: Option<CmpOp>,
+        threshold: impl Into<Decimal>,
+    ) -> bool {
+        let actual = elapsed(self.now, anchor, unit).and_then(decimal_from_f64_cs);
+        holds(op, actual, threshold.into())
+    }
+
+    /// Whether a span's presence matches `is_active` and, on the active side,
+    /// it has held for `for_minutes` when that is set.
+    fn active_for(
+        &self,
+        is_active: bool,
+        for_minutes: Option<i32>,
+        started_at: Option<DateTime<Utc>>,
+    ) -> bool {
+        match started_at {
+            Some(at) if is_active => for_minutes.is_none_or(|m| self.held_for(at, m)),
+            Some(_) => false,
+            None => !is_active,
+        }
+    }
 }
 
 /// Evaluates a condition node at `path`. `None` (a JSON-null child slot)
@@ -58,8 +109,8 @@ pub fn eval_payload(payload: &Payload, path: &str, env: &mut Env) -> bool {
         Payload::SiteAge(p) => device::site_age(p, env),
         Payload::SensorAge(p) => device::sensor_age(p, env),
         Payload::AlertState(p) => spans::alert_state(p, env),
-        Payload::LoopStale(p) => device::loop_stale(p, env),
-        Payload::LoopEnactionStale(p) => device::loop_enaction_stale(p, env),
+        Payload::LoopStale(p) => device::loop_stale(p, env.ctx.last_aps_cycle_at, env),
+        Payload::LoopEnactionStale(p) => device::loop_stale(p, env.ctx.last_aps_enacted_at, env),
         Payload::PumpSuspended(p) => device::pump_suspended(p, env),
         Payload::PumpBattery(p) => device::pump_battery(p, env),
         Payload::TempBasal(p) => insulin::temp_basal(p, env),

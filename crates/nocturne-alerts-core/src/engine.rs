@@ -122,12 +122,7 @@ pub fn evaluate_rule(
     };
 
     let root = {
-        let mut env = Env {
-            now,
-            rule_id: rule.id,
-            ctx,
-            timers: &mut state.timers,
-        };
+        let mut env = Env::new(now, rule.id, ctx, &mut state.timers);
         match &payload {
             Some(p) => eval_payload(p, wire, &mut env),
             None => false,
@@ -139,12 +134,7 @@ pub fn evaluate_rule(
     // this contributes no timer ops.
     let full_node = Node::from_rule(rule.condition_type, payload);
     let leaves = {
-        let mut env = Env {
-            now,
-            rule_id: rule.id,
-            ctx,
-            timers: &mut state.timers,
-        };
+        let mut env = Env::new(now, rule.id, ctx, &mut state.timers);
         collect_leaves(&full_node)
             .into_iter()
             .enumerate()
@@ -207,12 +197,7 @@ fn try_auto_resolve(
     };
 
     let should_resolve = {
-        let mut env = Env {
-            now,
-            rule_id: rule.id,
-            ctx,
-            timers: &mut state.timers,
-        };
+        let mut env = Env::new(now, rule.id, ctx, &mut state.timers);
         eval_node(Some(&node), AUTO_RESOLVE_ROOT, &mut env)
     };
     if !should_resolve {

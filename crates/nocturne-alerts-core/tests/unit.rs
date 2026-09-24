@@ -45,24 +45,14 @@ fn eval_payload_at(
 ) -> bool {
     let parsed = parse_payload(kind, payload).expect("payload parses");
     let mut timers = TimerStore::new();
-    let mut env = Env {
-        now,
-        rule_id: Uuid::nil(),
-        ctx,
-        timers: &mut timers,
-    };
+    let mut env = Env::new(now, Uuid::nil(), ctx, &mut timers);
     eval_kind(kind, Some(&parsed), kind.wire(), &mut env)
 }
 
 fn eval_tree(node_json: &Value, ctx: &SensorContext) -> bool {
     let node = Node::parse(node_json).expect("node parses");
     let mut timers = TimerStore::new();
-    let mut env = Env {
-        now: base(),
-        rule_id: Uuid::nil(),
-        ctx,
-        timers: &mut timers,
-    };
+    let mut env = Env::new(base(), Uuid::nil(), ctx, &mut timers);
     let root = node.type_str.clone().unwrap_or_default();
     eval_node(Some(&node), &root, &mut env)
 }

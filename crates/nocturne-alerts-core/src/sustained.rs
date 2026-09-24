@@ -7,7 +7,6 @@ use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
-use crate::compare::total_minutes;
 use crate::eval::{Env, eval_node};
 use crate::model::SustainedPayload;
 use crate::paths::node_child_path;
@@ -133,6 +132,6 @@ pub(crate) fn eval_sustained(p: &SustainedPayload, path: &str, env: &mut Env) ->
             env.timers.set_first_true(env.rule_id, path, now);
             false
         }
-        Some(first) => total_minutes(now - first).is_some_and(|m| m >= f64::from(p.minutes)),
+        Some(first) => env.held_for(first, p.minutes),
     }
 }

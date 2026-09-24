@@ -1,10 +1,8 @@
 //! Glucose-fact leaves: threshold, rate_of_change, trend, predicted,
 //! glucose_bucket, staleness.
 
-use rust_decimal::Decimal;
-
 use super::Env;
-use crate::compare::{decimal_from_f64_cs, total_minutes};
+use crate::compare::Unit;
 use crate::enums::{CmpOp, EnumValue, RateDirection, ThresholdDirection, holds};
 use crate::model::{
     GlucoseBucketPayload, PredictedPayload, RateOfChangePayload, StalenessPayload,
@@ -71,6 +69,5 @@ pub(super) fn staleness(p: &StalenessPayload, env: &Env) -> bool {
     let Some(last_reading_at) = env.ctx.last_reading_at else {
         return matches!(p.operator.value, Some(CmpOp::Gt | CmpOp::Ge));
     };
-    let elapsed = total_minutes(env.now - last_reading_at).and_then(decimal_from_f64_cs);
-    holds(p.operator.value, elapsed, Decimal::from(p.value))
+    env.compare_elapsed(last_reading_at, Unit::Minutes, p.operator.value, p.value)
 }

@@ -385,12 +385,7 @@ pub fn evaluate_node_envelope(request_json: &str) -> Result<Value, String> {
     }
 
     let value = {
-        let mut env = Env {
-            now: req.now,
-            rule_id: req.rule_id,
-            ctx: &req.context,
-            timers: &mut timers,
-        };
+        let mut env = Env::new(req.now, req.rule_id, &req.context, &mut timers);
         eval_node(Some(&node), &root, &mut env)
     };
 

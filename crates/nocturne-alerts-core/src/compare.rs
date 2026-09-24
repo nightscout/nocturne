@@ -1,41 +1,41 @@
-//! `ComparisonOps` and the elapsed-time numeric conventions.
-//!
-//! Elapsed time is `ticks * (1.0 / TicksPerX)` (multiplication by a reciprocal
-//! constant, not division) and, where a leaf compares in decimal, goes through
-//! the .NET `(decimal)double` conversion; see `docs/alerts/engine-semantics.md`
-//! §1.3. Both are reproduced exactly, including the conversion's double-rounding.
+//! Elapsed-time and decimal-conversion numerics (engine-semantics.md §1.3):
+//! elapsed time is `ticks * (1.0 / TicksPerX)`, a multiplication by a
+//! reciprocal constant rather than a division, and a leaf comparing in decimal
+//! converts it with the .NET `(decimal)double` conversion. Both are reproduced
+//! exactly, including the conversion's double rounding.
 
-use chrono::TimeDelta;
+use chrono::{DateTime, TimeDelta, Utc};
 use rust_decimal::Decimal;
 
-const TICKS_PER_MINUTE: f64 = 600_000_000.0;
-const TICKS_PER_HOUR: f64 = 36_000_000_000.0;
-const TICKS_PER_DAY: f64 = 864_000_000_000.0;
-const MINUTES_PER_TICK: f64 = 1.0 / TICKS_PER_MINUTE;
-const HOURS_PER_TICK: f64 = 1.0 / TICKS_PER_HOUR;
-const DAYS_PER_TICK: f64 = 1.0 / TICKS_PER_DAY;
+/// The unit an elapsed time is measured in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Unit {
+    Minutes,
+    Hours,
+    Days,
+}
+
+impl Unit {
+    fn per_tick(self) -> f64 {
+        match self {
+            Unit::Minutes => 1.0 / 600_000_000.0,
+            Unit::Hours => 1.0 / 36_000_000_000.0,
+            Unit::Days => 1.0 / 864_000_000_000.0,
+        }
+    }
+}
 
 /// .NET `TimeSpan` ticks (100 ns units) for a chrono duration; `None` past
 /// the `i64` tick range, which no .NET `TimeSpan` can hold.
-pub fn ticks(d: TimeDelta) -> Option<i64> {
+fn ticks(d: TimeDelta) -> Option<i64> {
     d.num_seconds()
         .checked_mul(10_000_000)?
         .checked_add(i64::from(d.subsec_nanos()) / 100)
 }
 
-/// `TimeSpan.TotalMinutes` (double): `ticks * MinutesPerTick`.
-pub fn total_minutes(d: TimeDelta) -> Option<f64> {
-    ticks(d).map(|t| t as f64 * MINUTES_PER_TICK)
-}
-
-/// `TimeSpan.TotalHours` (double): `ticks * HoursPerTick`.
-pub fn total_hours(d: TimeDelta) -> Option<f64> {
-    ticks(d).map(|t| t as f64 * HOURS_PER_TICK)
-}
-
-/// `TimeSpan.TotalDays` (double): `ticks * DaysPerTick`.
-pub fn total_days(d: TimeDelta) -> Option<f64> {
-    ticks(d).map(|t| t as f64 * DAYS_PER_TICK)
+/// `now - since` in `unit`, as a double; `None` past the tick range.
+pub(crate) fn elapsed(now: DateTime<Utc>, since: DateTime<Utc>, unit: Unit) -> Option<f64> {
+    ticks(now.signed_duration_since(since)).map(|t| t as f64 * unit.per_tick())
 }
 
 /// Exact `f64` powers of ten `1e0..=1e28`, the scale factors the conversion
@@ -158,8 +158,9 @@ mod tests {
 
     #[test]
     fn whole_minutes_cast_exactly() {
-        let d = TimeDelta::minutes(15);
-        let cast = decimal_from_f64_cs(total_minutes(d).unwrap()).unwrap();
+        let now = DateTime::UNIX_EPOCH + TimeDelta::minutes(15);
+        let cast = decimal_from_f64_cs(elapsed(now, DateTime::UNIX_EPOCH, Unit::Minutes).unwrap())
+            .unwrap();
         assert_eq!(cast, Decimal::from(15));
     }
 
