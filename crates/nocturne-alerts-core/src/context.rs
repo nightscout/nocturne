@@ -1,14 +1,17 @@
 //! `SensorContext` as plain data: pure input to the evaluators, deserialisable
 //! from the corpus scenario context wire format (see `ScenarioModels.cs`).
 //! Enum-valued facts are stored as C# enum ordinals so payload comparisons are
-//! direct integer equality.
+//! direct integer equality. A name the table does not know (a host newer than
+//! this crate) degrades only that fact: an unknown bucket reads as absent and
+//! an unknown pump mode or state-span category drops that entry, so every
+//! other leaf still evaluates.
 
 use std::collections::HashMap;
 
 use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::Decimal;
 use serde::Deserialize;
-use serde_json::Number;
+use serde_json::{Map, Number, Value};
 use uuid::Uuid;
 
 use crate::model::{
@@ -231,7 +234,7 @@ struct WireTrackerReference {
 }
 
 fn dec(n: &Number, what: &str) -> Result<Decimal, String> {
-    decimal_from_number(n).ok_or_else(|| format!("invalid decimal for {what}: {n}"))
+    decimal_from_number(n).ok_or_else(|| format!("invalid decimal for {what}"))
 }
 
 fn opt_dec(n: Option<&Number>, what: &str) -> Result<Option<Decimal>, String> {
@@ -269,18 +272,35 @@ fn started(span: Option<WireStartedSpan>, field: &str) -> Result<Option<StartedS
     .transpose()
 }
 
-fn ord(names: &[&str], s: &str, what: &str) -> Result<i64, String> {
-    enum_ordinal(names, s).ok_or_else(|| format!("unknown {what} wire value: {s}"))
-}
-
 impl<'de> Deserialize<'de> for SensorContext {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
-        let w = WireContext::deserialize(deserializer)?;
+        let value = Value::deserialize(deserializer)?;
+        let w = WireContext::deserialize(&value)
+            .map_err(|_| serde::de::Error::custom(wire_error(&value)))?;
         Self::try_from_wire(w).map_err(serde::de::Error::custom)
     }
+}
+
+/// Names the top-level context field that fails to deserialise. serde's own
+/// messages quote the offending value, which here is health data bound for
+/// host logs.
+fn wire_error(value: &Value) -> String {
+    let Value::Object(fields) = value else {
+        return "context must be a JSON object".into();
+    };
+    fields
+        .iter()
+        .find(|(name, field)| {
+            let single = Value::Object(Map::from_iter([((*name).clone(), (*field).clone())]));
+            WireContext::deserialize(&single).is_err()
+        })
+        .map_or_else(
+            || "invalid context".into(),
+            |(name, _)| format!("invalid value for context field {name}"),
+        )
 }
 
 impl SensorContext {
@@ -307,13 +327,10 @@ impl SensorContext {
 
         let mut active_state_spans = HashMap::new();
         for s in w.active_state_spans.unwrap_or_default() {
-            let category = ord(&STATE_SPAN_CATEGORY_NAMES, &s.category, "StateSpanCategory")?;
-            active_state_spans.insert(
-                (category, s.state),
-                StateSpanSnapshot {
-                    started_at: check_timestamp(s.started_at, "active_state_spans.started_at")?,
-                },
-            );
+            let started_at = check_timestamp(s.started_at, "active_state_spans.started_at")?;
+            if let Some(category) = enum_ordinal(&STATE_SPAN_CATEGORY_NAMES, &s.category) {
+                active_state_spans.insert((category, s.state), StateSpanSnapshot { started_at });
+            }
         }
 
         Ok(SensorContext {
@@ -323,8 +340,7 @@ impl SensorContext {
             last_reading_at: opt_ts(w.last_reading_at, "last_reading_at")?,
             trend_bucket: w
                 .trend_bucket
-                .map(|s| ord(&TREND_BUCKET_NAMES, &s, "TrendBucket"))
-                .transpose()?,
+                .and_then(|s| enum_ordinal(&TREND_BUCKET_NAMES, &s)),
             iob_units: opt_dec(w.iob_units.as_ref(), "iob_units")?,
             cob_grams: opt_dec(w.cob_grams.as_ref(), "cob_grams")?,
             reservoir_units: opt_dec(w.reservoir_units.as_ref(), "reservoir_units")?,
@@ -376,20 +392,21 @@ impl SensorContext {
             has_ever_aps_sensitivity: w.has_ever_aps_sensitivity,
             glucose_bucket: w
                 .glucose_bucket
-                .map(|s| ord(&GLUCOSE_BUCKET_NAMES, &s, "GlucoseBucket"))
-                .transpose()?,
+                .and_then(|s| enum_ordinal(&GLUCOSE_BUCKET_NAMES, &s)),
             last_carb_at: opt_ts(w.last_carb_at, "last_carb_at")?,
             last_bolus_at: opt_ts(w.last_bolus_at, "last_bolus_at")?,
             tenant_time_zone_id: w.tenant_time_zone_id,
             active_pump_state: w
                 .active_pump_state
                 .map(|p| {
-                    Ok::<_, String>(PumpStateSnapshot {
-                        mode: ord(&PUMP_MODE_NAMES, &p.mode, "PumpModeState")?,
-                        started_at: check_timestamp(p.started_at, "active_pump_state.started_at")?,
-                    })
+                    let started_at = check_timestamp(p.started_at, "active_pump_state.started_at")?;
+                    Ok::<_, String>(
+                        enum_ordinal(&PUMP_MODE_NAMES, &p.mode)
+                            .map(|mode| PumpStateSnapshot { mode, started_at }),
+                    )
                 })
-                .transpose()?,
+                .transpose()?
+                .flatten(),
             active_state_spans,
             active_trackers,
             sleep_session_active: w.sleep_session_active,

@@ -946,3 +946,66 @@ fn hysteresis_expiry_past_the_calendar_does_not_panic() {
         tracker.process_evaluation(rule_id(), cfg(1, i32::MAX), false, DateTime::<Utc>::MAX_UTC);
     assert_eq!(t.kind, TransitionType::None);
 }
+
+// ---------------------------------------------------------------------------
+// Unknown context enum values degrade only the fact that carries them
+// ---------------------------------------------------------------------------
+
+#[test]
+fn unknown_context_enum_values_drop_only_their_facts() {
+    let wire = json!({
+        "latest_value": 55,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "trend_bucket": "sideways",
+        "glucose_bucket": "off_the_chart",
+        "active_pump_state": { "mode": "Turbo", "started_at": "2026-01-05T11:00:00Z" },
+        "active_state_spans": [
+            { "category": "NotACategory", "state": null, "started_at": "2026-01-05T11:00:00Z" },
+            { "category": "Illness", "state": null, "started_at": "2026-01-05T11:00:00Z" },
+        ],
+    });
+    let ctx: SensorContext = serde_json::from_value(wire).expect("context still parses");
+    assert_eq!(ctx.trend_bucket, None);
+    assert_eq!(ctx.glucose_bucket, None);
+    assert!(ctx.active_pump_state.is_none());
+    assert_eq!(ctx.active_state_spans.len(), 1);
+
+    assert!(eval_payload(
+        ConditionKind::Threshold,
+        &json!({"direction": "below", "value": 70}),
+        &ctx
+    ));
+    assert!(eval_payload(
+        ConditionKind::StateSpanActive,
+        &json!({"category": "Illness", "state": null, "is_active": true}),
+        &ctx
+    ));
+    assert!(!eval_payload(
+        ConditionKind::Trend,
+        &json!({"bucket": "flat"}),
+        &ctx
+    ));
+}
+
+#[test]
+fn context_decimal_errors_name_the_field_not_the_value() {
+    let err = serde_json::from_str::<SensorContext>(r#"{ "iob_units": 123456e30 }"#)
+        .expect_err("out-of-range decimal is rejected")
+        .to_string();
+    assert!(err.contains("iob_units"), "{err}");
+    assert!(!err.contains("123456"), "{err}");
+}
+
+#[test]
+fn context_type_errors_name_the_field_not_the_value() {
+    let err = context_error(json!({ "latest_value": "55.5", "cob_grams": 12 }));
+    assert!(err.contains("latest_value"), "{err}");
+    assert!(!err.contains("55.5"), "{err}");
+
+    let err = context_error(
+        json!({ "active_temp_basal": { "rate": "0.85", "started_at": "2026-01-05T12:00:00Z" } }),
+    );
+    assert!(err.contains("active_temp_basal"), "{err}");
+    assert!(!err.contains("0.85"), "{err}");
+}
