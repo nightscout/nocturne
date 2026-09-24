@@ -91,7 +91,7 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
                 // so the failure is visible rather than looking like a successful empty sync.
                 result.Success = false;
                 result.Errors.Add(
-                    "Could not reach Eversense. Check the Eversense account email and password, then sync again.");
+                    "Could not reach Eversense. Nocturne will try again at the next sync.");
                 result.EndTime = DateTimeOffset.UtcNow;
                 return result;
             }

@@ -191,7 +191,7 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
         var overviews = await FetchOverviewsAsync(config, cancellationToken);
 
         if (overviews == null)
-            return (null, "Could not reach Twiist. Check the Twiist account email and password, then sync again.");
+            return (null, "Could not reach Twiist. Nocturne will try again at the next sync.");
 
         if (overviews.Count == 0)
             return (null,

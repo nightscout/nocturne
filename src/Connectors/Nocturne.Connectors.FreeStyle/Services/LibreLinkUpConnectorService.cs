@@ -110,9 +110,11 @@ public class LibreConnectorService(
     }
 
     /// <summary>
-    ///     Fetches SensorGlucose records from the LibreLinkUp API.
+    ///     Fetches SensorGlucose records from the LibreLinkUp API. Null when the fetch could not
+    ///     complete, which the sync reports as a failure; an empty list is the source's answer of
+    ///     nothing new.
     /// </summary>
-    private async Task<IEnumerable<SensorGlucose>> FetchSensorGlucoseAsync(
+    private async Task<List<SensorGlucose>?> FetchSensorGlucoseAsync(
         LibreLinkUpConnectorConfiguration config, DateTime? since = null)
     {
         if (_tokenProvider.IsTokenExpired || _selectedConnection == null)
@@ -121,7 +123,7 @@ public class LibreConnectorService(
             if (!await AuthenticateWithConfigAsync(config))
             {
                 _logger.LogError("Failed to authenticate with LibreLinkUp");
-                return [];
+                return null;
             }
         }
 
@@ -129,7 +131,7 @@ public class LibreConnectorService(
         {
             _logger.LogError("Invalid LibreLinkUp patient id");
             TrackFailedRequest("Invalid patient id");
-            return [];
+            return null;
         }
 
         var url = _serverResolver.BuildUrl(config,
@@ -150,7 +152,7 @@ public class LibreConnectorService(
             operationName: "FetchSensorGlucoseData"
         );
 
-        return result ?? [];
+        return result;
     }
 
     /// <summary>
@@ -174,8 +176,15 @@ public class LibreConnectorService(
         {
             var sensorGlucose = await FetchSensorGlucoseAsync(config, request.From);
 
+            if (sensorGlucose == null)
+            {
+                RecordFetchFailure(result, SyncDataType.Glucose, activeTypes);
+                result.EndTime = DateTimeOffset.UtcNow;
+                return result;
+            }
+
             await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
-                sensorGlucose.ToList(), PublishSensorGlucoseDataAsync, config, cancellationToken);
+                sensorGlucose, PublishSensorGlucoseDataAsync, config, cancellationToken);
         }
         catch (Exception ex)
         {
