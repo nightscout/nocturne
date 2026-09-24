@@ -6,6 +6,7 @@ using Nocturne.API.Extensions;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Engines;
 using Nocturne.API.Services.Alerts.Evaluators;
+using Nocturne.API.Tests.Services.BackgroundServices;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
@@ -82,6 +83,7 @@ internal static class EngineTestHarness
             trackerRepo,
             tracker,
             gate,
+            new AlertEngineErrors(new TestMeterFactory(), time),
             time,
             NullLogger<RustBackedAlertEngine>.Instance);
     }

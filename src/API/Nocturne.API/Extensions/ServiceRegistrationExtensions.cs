@@ -1089,6 +1089,13 @@ public static class ServiceRegistrationExtensions
         IConfiguration configuration,
         Func<Nocturne.Core.Alerts.Native.NativeProbeResult>? nativeProbe = null)
     {
+        services.AddMetrics();
+        services.AddSingleton<Nocturne.API.Services.Alerts.Engines.AlertEngineErrors>();
+        services.ConfigureOpenTelemetryMeterProvider(metrics =>
+            metrics.AddMeter(Nocturne.API.Services.Alerts.Engines.AlertEngineErrors.MeterName));
+        services.AddHealthChecks()
+            .AddCheck<Nocturne.API.Services.Alerts.Engines.AlertEngineHealthCheck>("alert-engine");
+
         services.AddScoped<Nocturne.API.Services.Alerts.Engines.ManagedAlertEngine>();
         services.AddScoped<Nocturne.API.Services.Alerts.Engines.RustBackedAlertEngine>();
         services.AddScoped<

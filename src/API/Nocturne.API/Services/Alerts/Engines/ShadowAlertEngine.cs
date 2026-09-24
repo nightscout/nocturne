@@ -49,7 +49,7 @@ internal sealed record ShadowRuleOutcome
 /// <see cref="IShadowRuleEvaluator"/> over the Rust FFI. Pure: state goes in as data and
 /// the response is only compared, never persisted.
 /// </summary>
-internal sealed class RustShadowRuleEvaluator : IShadowRuleEvaluator
+internal sealed class RustShadowRuleEvaluator(AlertEngineErrors errors) : IShadowRuleEvaluator
 {
     public string Name => "rust";
 
@@ -61,13 +61,16 @@ internal sealed class RustShadowRuleEvaluator : IShadowRuleEvaluator
         AlertTrackerState? trackerState,
         CancellationToken ct)
     {
-        var response = RustAlertEngine.Evaluate(
-            RustEnvelopeMapper.BuildRule(rule),
-            RustEnvelopeMapper.BuildContext(context),
-            now,
-            RustEnvelopeMapper.BuildTimers(timers),
-            RustEnvelopeMapper.BuildTracker(trackerState));
-        var result = RustAlertEngine.GetRuleResult(response);
+        var (response, result) = errors.Track("evaluate", AlertEngineErrors.ShadowEngine, () =>
+        {
+            var response = RustAlertEngine.Evaluate(
+                RustEnvelopeMapper.BuildRule(rule),
+                RustEnvelopeMapper.BuildContext(context),
+                now,
+                RustEnvelopeMapper.BuildTimers(timers),
+                RustEnvelopeMapper.BuildTracker(trackerState));
+            return (response, RustAlertEngine.GetRuleResult(response));
+        });
 
         return Task.FromResult(new ShadowRuleOutcome
         {

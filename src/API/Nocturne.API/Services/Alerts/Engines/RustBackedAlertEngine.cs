@@ -28,6 +28,7 @@ internal sealed class RustBackedAlertEngine(
     IAlertTrackerRepository trackerRepository,
     IExcursionTracker excursionTracker,
     AlertRuleEvaluationGate gate,
+    AlertEngineErrors errors,
     TimeProvider timeProvider,
     ILogger<RustBackedAlertEngine> logger)
     : IAlertEvaluationEngine
@@ -65,13 +66,16 @@ internal sealed class RustBackedAlertEngine(
         var trackerState = await trackerRepository.GetTrackerStateAsync(rule.Id, ct);
         var priorExcursionId = trackerState?.ActiveExcursionId;
 
-        var response = RustAlertEngine.Evaluate(
-            RustEnvelopeMapper.BuildRule(ruleRow),
-            RustEnvelopeMapper.BuildContext(context),
-            now,
-            timers,
-            RustEnvelopeMapper.BuildTracker(trackerState));
-        var result = RustAlertEngine.GetRuleResult(response);
+        var (response, result) = errors.Track("evaluate", AlertEngineErrors.RustEngine, () =>
+        {
+            var response = RustAlertEngine.Evaluate(
+                RustEnvelopeMapper.BuildRule(ruleRow),
+                RustEnvelopeMapper.BuildContext(context),
+                now,
+                timers,
+                RustEnvelopeMapper.BuildTracker(trackerState));
+            return (response, RustAlertEngine.GetRuleResult(response));
+        });
 
         if (result.Skipped == true)
         {
@@ -141,7 +145,7 @@ internal sealed class RustBackedAlertEngine(
         string pathRoot,
         CancellationToken ct)
     {
-        var response = RustAlertEngine.EvaluateNode(new RustEvaluateNodeRequest
+        var request = new RustEvaluateNodeRequest
         {
             RuleId = ruleId,
             Node = RustEnvelopeMapper.BuildNode(node),
@@ -149,7 +153,8 @@ internal sealed class RustBackedAlertEngine(
             Context = RustEnvelopeMapper.BuildContext(context),
             Now = timeProvider.GetUtcNow().UtcDateTime,
             Timers = RustEnvelopeMapper.BuildTimers(await timerStore.GetAllForRuleAsync(ruleId, ct)),
-        });
+        };
+        var response = EvaluateNodeNative(request);
 
         await ApplyTimerOpsAsync(ruleId, response.TimerOps, ct);
         return response.Value;
@@ -185,7 +190,7 @@ internal sealed class RustBackedAlertEngine(
         bool shouldResolve;
         try
         {
-            var response = RustAlertEngine.EvaluateNode(new RustEvaluateNodeRequest
+            var request = new RustEvaluateNodeRequest
             {
                 RuleId = rule.Id,
                 Node = nodeJson,
@@ -193,7 +198,8 @@ internal sealed class RustBackedAlertEngine(
                 Context = RustEnvelopeMapper.BuildContext(context),
                 Now = timeProvider.GetUtcNow().UtcDateTime,
                 Timers = RustEnvelopeMapper.BuildTimers(await timerStore.GetAllForRuleAsync(rule.Id, ct)),
-            });
+            };
+            var response = EvaluateNodeNative(request);
             await ApplyTimerOpsAsync(rule.Id, response.TimerOps, ct);
             shouldResolve = response.Value;
         }
@@ -223,7 +229,7 @@ internal sealed class RustBackedAlertEngine(
         var payload = string.IsNullOrWhiteSpace(rule.ConditionParams) ? "null" : rule.ConditionParams;
         var nodeJson = RustEnvelopeMapper.ParseJson($"{{\"type\":{JsonSerializer.Serialize(wire)},{JsonSerializer.Serialize(wire)}:{payload}}}");
 
-        var response = RustAlertEngine.EvaluateNode(new RustEvaluateNodeRequest
+        var request = new RustEvaluateNodeRequest
         {
             RuleId = rule.Id,
             Node = nodeJson,
@@ -231,10 +237,14 @@ internal sealed class RustBackedAlertEngine(
             Context = RustEnvelopeMapper.BuildContext(context),
             Now = timeProvider.GetUtcNow().UtcDateTime,
             Timers = RustEnvelopeMapper.BuildTimers(await timerStore.GetAllForRuleAsync(rule.Id, ct)),
-        });
+        };
+        var response = EvaluateNodeNative(request);
         await ApplyTimerOpsAsync(rule.Id, response.TimerOps, ct);
         return response.Value;
     }
+
+    private RustEvaluateNodeResponse EvaluateNodeNative(RustEvaluateNodeRequest request) =>
+        errors.Track("evaluate_node", AlertEngineErrors.RustEngine, () => RustAlertEngine.EvaluateNode(request));
 
     private async Task ApplyTimerOpsAsync(Guid ruleId, IReadOnlyList<RustTimerOp>? ops, CancellationToken ct)
     {

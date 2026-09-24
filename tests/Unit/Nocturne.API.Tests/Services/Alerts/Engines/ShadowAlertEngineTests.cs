@@ -4,6 +4,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Nocturne.Alerts.ParityCorpus.Generator.Harness;
 using Nocturne.API.Services.Alerts.Engines;
+using Nocturne.API.Tests.Services.BackgroundServices;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
@@ -245,7 +246,7 @@ public class ShadowAlertEngineTests
     public async Task Real_rust_shadow_agrees_with_the_managed_engine()
     {
         var rule = BuildThresholdRule();
-        var (engine, logger, _, _, provider) = BuildShadowEngine(rule, new RustShadowRuleEvaluator());
+        var (engine, logger, _, _, provider) = BuildShadowEngine(rule, new RustShadowRuleEvaluator(new AlertEngineErrors(new TestMeterFactory(), TimeProvider.System)));
         await using var _ = provider;
 
         // Two ticks: open at 60, hysteresis at 120 — both must agree end to end.
