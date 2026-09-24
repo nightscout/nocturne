@@ -392,3 +392,108 @@ public sealed record RustClassifyResponse : IRustResponseEnvelope
     [JsonPropertyName("scope_class")]
     public string? ScopeClass { get; init; }
 }
+
+/// <summary>Request envelope for <c>nocturne_alerts_replay</c>.</summary>
+public sealed record RustReplayRequest
+{
+    [JsonPropertyName("schema_version")]
+    public int SchemaVersion { get; init; } = AlertEnvelopeJson.SchemaVersion;
+
+    /// <summary>The rule set, in any order; tracker configuration is ignored.</summary>
+    public required List<RustAlertRule> Rules { get; init; }
+
+    /// <summary>The ticks, in time order.</summary>
+    public required List<RustReplayTick> Ticks { get; init; }
+
+    /// <summary>Whether <see cref="RustReplayResponse.Ticks"/> reports every rule's state on every tick.</summary>
+    [JsonPropertyName("include_ticks")]
+    public bool IncludeTicks { get; init; }
+}
+
+/// <summary>One replay tick.</summary>
+public sealed record RustReplayTick
+{
+    /// <summary>The tick instant, UTC.</summary>
+    public required DateTime At { get; init; }
+
+    /// <summary>
+    /// SensorContext snapshot as of <see cref="At"/>, in the corpus <c>ScenarioContext</c> wire
+    /// shape. Its <c>active_alerts</c> are replaced by the replay's own.
+    /// </summary>
+    public required JsonElement Context { get; init; }
+
+    /// <summary>The rules a fire opening on this tick is recorded for as suppressed by Do Not Disturb.</summary>
+    [JsonPropertyName("suppressed_rule_ids")]
+    public List<Guid>? SuppressedRuleIds { get; init; }
+}
+
+/// <summary>Response envelope for <c>nocturne_alerts_replay</c>.</summary>
+public sealed record RustReplayResponse : IRustResponseEnvelope
+{
+    [JsonPropertyName("schema_version"), JsonRequired]
+    public int SchemaVersion { get; init; }
+
+    [JsonRequired]
+    public bool Ok { get; init; }
+
+    /// <summary>Error message when <see cref="Ok"/> is false.</summary>
+    public string? Error { get; init; }
+
+    /// <summary>Rule ids in evaluation order.</summary>
+    public List<Guid>? Order { get; init; }
+
+    /// <summary>By tick, then evaluation order.</summary>
+    public List<RustReplayEvent>? Events { get; init; }
+
+    /// <summary>In evaluation order; a rule skipped on every tick has none.</summary>
+    [JsonPropertyName("leaf_transitions")]
+    public List<RustReplayLeafLog>? LeafTransitions { get; init; }
+
+    /// <summary>Present exactly when the request set <see cref="RustReplayRequest.IncludeTicks"/>.</summary>
+    public List<RustReplayTickOutcome>? Ticks { get; init; }
+}
+
+public sealed record RustReplayEvent(
+    [property: JsonPropertyName("at"), JsonRequired] DateTime At,
+    [property: JsonPropertyName("rule_id"), JsonRequired] Guid RuleId,
+    [property: JsonPropertyName("kind"), JsonRequired] RustReplayEventKind Kind);
+
+/// <summary>Event wire values in <see cref="RustReplayEvent.Kind"/>.</summary>
+[JsonConverter(typeof(StrictStringEnumConverter<RustReplayEventKind>))]
+public enum RustReplayEventKind
+{
+    [JsonStringEnumMemberName("fired")] Fired,
+    [JsonStringEnumMemberName("suppressed_by_dnd")] SuppressedByDnd,
+    [JsonStringEnumMemberName("auto_resolved")] AutoResolved,
+    [JsonStringEnumMemberName("cleared")] Cleared,
+}
+
+/// <summary>One rule's leaf log: per leaf, the first observation then every flip.</summary>
+public sealed record RustReplayLeafLog(
+    [property: JsonPropertyName("rule_id"), JsonRequired] Guid RuleId,
+    [property: JsonPropertyName("leaves"), JsonRequired] List<RustReplayLeaf> Leaves);
+
+public sealed record RustReplayLeaf(
+    [property: JsonPropertyName("leaf_id"), JsonRequired] int LeafId,
+    [property: JsonPropertyName("points"), JsonRequired] List<RustReplayLeafPoint> Points);
+
+public sealed record RustReplayLeafPoint(
+    [property: JsonPropertyName("at_ms"), JsonRequired] long AtMs,
+    [property: JsonPropertyName("value"), JsonRequired] bool Value);
+
+public sealed record RustReplayTickOutcome(
+    [property: JsonPropertyName("at"), JsonRequired] DateTime At,
+    [property: JsonPropertyName("rules"), JsonRequired] List<RustReplayRuleTick> Rules);
+
+/// <summary>A rule's state after one tick; <see cref="Met"/> and <see cref="Firing"/> are present unless skipped.</summary>
+public sealed record RustReplayRuleTick
+{
+    [JsonPropertyName("rule_id"), JsonRequired]
+    public Guid RuleId { get; init; }
+
+    public bool Skipped { get; init; }
+
+    public bool? Met { get; init; }
+
+    public bool? Firing { get; init; }
+}

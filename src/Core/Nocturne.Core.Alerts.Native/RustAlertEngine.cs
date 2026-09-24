@@ -216,6 +216,34 @@ public static partial class RustAlertEngine
         return response.Issues!;
     }
 
+    /// <summary>Replays a rule set over a series of ticks through the Rust engine.</summary>
+    /// <exception cref="RustAlertEngineException">
+    /// The engine rejected the request (<c>ok: false</c>) or returned a response
+    /// <see cref="ParseReplayResponse"/> refuses.
+    /// </exception>
+    public static RustReplayResponse Replay(RustReplayRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return ParseReplayResponse(AlertsInterop.Replay(Serialize(request)), request.IncludeTicks);
+    }
+
+    /// <summary>
+    /// A successful replay envelope carries <c>order</c>, <c>events</c> and
+    /// <c>leaf_transitions</c>, and <c>ticks</c> exactly when they were asked for, with
+    /// <c>met</c> and <c>firing</c> on every rule tick that was not skipped.
+    /// </summary>
+    internal static RustReplayResponse ParseReplayResponse(string responseJson, bool ticksRequested)
+    {
+        var response = ParseResponse<RustReplayResponse>(responseJson, "replay");
+        Require(response.Order is not null, "replay", "order");
+        Require(response.Events is not null, "replay", "events");
+        Require(response.LeafTransitions is not null, "replay", "leaf_transitions");
+        Require(!ticksRequested || response.Ticks is not null, "replay", "ticks");
+        foreach (var rule in response.Ticks?.SelectMany(t => t.Rules) ?? [])
+            Require(rule.Skipped || (rule.Met is not null && rule.Firing is not null), "replay", "ticks.rules.met");
+        return response;
+    }
+
     private static string Serialize<T>(T request) => JsonSerializer.Serialize(request, AlertEnvelopeJson.Options);
 
     /// <summary>

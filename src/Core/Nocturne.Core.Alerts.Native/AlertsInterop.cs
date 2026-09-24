@@ -28,6 +28,7 @@ public static partial class AlertsInterop
     private const string LeafPathsExport = "nocturne_alerts_leaf_paths";
     private const string ClassifyExport = "nocturne_alerts_classify";
     private const string ValidateExport = "nocturne_alerts_validate";
+    private const string ReplayExport = "nocturne_alerts_replay";
 
     /// <summary>Every export bound below; <see cref="Probe"/> resolves each one.</summary>
     private static readonly string[] BoundExports =
@@ -162,6 +163,13 @@ public static partial class AlertsInterop
     [LibraryImport(LibraryName, EntryPoint = ValidateExport, StringMarshalling = StringMarshalling.Utf8)]
     private static partial IntPtr ValidateNative(string requestJson);
 
+    /// <summary>
+    /// Replays a rule set over a series of ticks. Request/response are the JSON envelopes
+    /// documented in crates/nocturne-alerts-ffi/README.md. Must be freed with FreeString.
+    /// </summary>
+    [LibraryImport(LibraryName, EntryPoint = ReplayExport, StringMarshalling = StringMarshalling.Utf8)]
+    private static partial IntPtr ReplayNative(string requestJson);
+
     #endregion
 
     #region Managed wrappers
@@ -186,6 +194,9 @@ public static partial class AlertsInterop
 
     /// <summary>Raw validate call: request envelope JSON in, response envelope JSON out.</summary>
     public static string Validate(string requestJson) => ConsumeString(ValidateNative(requestJson), "{}");
+
+    /// <summary>Raw replay call: request envelope JSON in, response envelope JSON out.</summary>
+    public static string Replay(string requestJson) => ConsumeString(ReplayNative(requestJson), "{}");
 
     private static string ConsumeString(IntPtr ptr, string fallback)
     {

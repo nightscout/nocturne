@@ -1115,7 +1115,24 @@ public static class ServiceRegistrationExtensions
 
         services.AddSingleton<Nocturne.API.Services.Alerts.Engines.ManagedAlertReplayEngine>();
         services.AddSingleton<Nocturne.Core.Contracts.Alerts.IAlertReplayEngine>(sp =>
-            sp.GetRequiredService<Nocturne.API.Services.Alerts.Engines.ManagedAlertReplayEngine>());
+        {
+            var managed = sp.GetRequiredService<Nocturne.API.Services.Alerts.Engines.ManagedAlertReplayEngine>();
+            var errors = sp.GetRequiredService<Nocturne.API.Services.Alerts.Engines.AlertEngineErrors>();
+            return sp.GetRequiredService<Nocturne.API.Services.Alerts.Engines.AlertEngineSelection>().Mode switch
+            {
+                Nocturne.API.Services.Alerts.Engines.AlertEngineMode.Rust =>
+                    new Nocturne.API.Services.Alerts.Engines.RustAlertReplayEngine(errors),
+                Nocturne.API.Services.Alerts.Engines.AlertEngineMode.Shadow =>
+                    new Nocturne.API.Services.Alerts.Engines.ShadowAlertReplayEngine(
+                        managed,
+                        new Nocturne.API.Services.Alerts.Engines.RustAlertReplayEngine(errors)
+                        {
+                            EngineTag = Nocturne.API.Services.Alerts.Engines.AlertEngineErrors.ShadowEngine,
+                        },
+                        sp.GetRequiredService<ILogger<Nocturne.API.Services.Alerts.Engines.ShadowAlertReplayEngine>>()),
+                _ => managed,
+            };
+        });
 
         services.AddScoped<Nocturne.Core.Contracts.Alerts.IAlertEvaluationEngine>(sp =>
             sp.GetRequiredService<Nocturne.API.Services.Alerts.Engines.AlertEngineSelection>().Mode switch
