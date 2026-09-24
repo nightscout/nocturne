@@ -73,7 +73,9 @@ internal static class AlertEngineSelector
                 }
 
                 var mode = normalized == "rust" ? AlertEngineMode.Rust : AlertEngineMode.Shadow;
-                logger.LogInformation("Alert evaluation engine: {Mode}", normalized);
+                logger.LogInformation(
+                    "Alert evaluation engine: {Mode} (nocturne_alerts {LibraryVersion}, tzdb {TzdbVersion})",
+                    normalized, probe.Version, probe.TzdbVersion);
                 return new AlertEngineSelection(mode, normalized);
             }
 

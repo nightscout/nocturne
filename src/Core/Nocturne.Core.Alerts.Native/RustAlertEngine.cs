@@ -32,6 +32,9 @@ public static class RustAlertEngine
     /// <summary>The native crate version (e.g. <c>"0.1.0"</c>).</summary>
     public static string Version() => AlertsInterop.GetVersion();
 
+    /// <inheritdoc cref="AlertsInterop.GetTzdbVersion"/>
+    public static string TzdbVersion() => AlertsInterop.GetTzdbVersion();
+
     /// <summary>
     /// Evaluates one rule for one tick through the Rust engine.
     /// </summary>

@@ -44,8 +44,12 @@ public class NativeProbeTests
     }
 
     [NativeFact]
-    public void The_built_library_passes_the_probe()
+    public void The_built_library_passes_the_probe_and_reports_its_releases()
     {
-        AlertsInterop.Probe().Failure.Should().BeNull();
+        var probe = AlertsInterop.Probe();
+
+        probe.Failure.Should().BeNull();
+        probe.Version.Should().Be(AlertsInterop.ExpectedVersion);
+        probe.TzdbVersion.Should().MatchRegex(@"^\d{4}[a-z]$");
     }
 }

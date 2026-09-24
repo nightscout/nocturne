@@ -22,6 +22,7 @@ public static partial class AlertsInterop
 
     private const string FreeStringExport = "nocturne_alerts_free_string";
     private const string VersionExport = "nocturne_alerts_version";
+    private const string TzdbVersionExport = "nocturne_alerts_tzdb_version";
     private const string EvaluateExport = "nocturne_alerts_evaluate";
     private const string EvaluateNodeExport = "nocturne_alerts_evaluate_node";
     private const string LeafPathsExport = "nocturne_alerts_leaf_paths";
@@ -31,7 +32,7 @@ public static partial class AlertsInterop
     /// <summary>Every export bound below; <see cref="Probe"/> resolves each one.</summary>
     private static readonly string[] BoundExports =
     [
-        FreeStringExport, VersionExport, EvaluateExport, EvaluateNodeExport,
+        FreeStringExport, VersionExport, TzdbVersionExport, EvaluateExport, EvaluateNodeExport,
         LeafPathsExport, ClassifyExport, ValidateExport,
     ];
 
@@ -115,6 +116,13 @@ public static partial class AlertsInterop
     private static partial IntPtr VersionNative();
 
     /// <summary>
+    /// The IANA time zone database release compiled into the library (e.g. <c>2025b</c>). Must be
+    /// freed with FreeString.
+    /// </summary>
+    [LibraryImport(LibraryName, EntryPoint = TzdbVersionExport)]
+    private static partial IntPtr TzdbVersionNative();
+
+    /// <summary>
     /// Evaluates one rule for one tick. Request/response are the JSON envelopes
     /// documented in crates/nocturne-alerts-ffi/README.md. Must be freed with FreeString.
     /// </summary>
@@ -160,6 +168,9 @@ public static partial class AlertsInterop
     /// <summary>Get the nocturne_alerts library version as a managed string.</summary>
     public static string GetVersion() => ConsumeString(VersionNative(), string.Empty);
 
+    /// <summary>The IANA time zone database release the library evaluates zones with.</summary>
+    public static string GetTzdbVersion() => ConsumeString(TzdbVersionNative(), string.Empty);
+
     /// <summary>Raw evaluate call: request envelope JSON in, response envelope JSON out.</summary>
     public static string Evaluate(string requestJson) => ConsumeString(EvaluateNative(requestJson), "{}");
 
@@ -196,8 +207,8 @@ public static partial class AlertsInterop
 
     /// <summary>
     /// Loads the native library and checks it is the build this binding expects: its version
-    /// equals <see cref="ExpectedVersion"/> and every bound export resolves, so a stale library
-    /// fails here rather than on the first rule it evaluates.
+    /// equals <see cref="ExpectedVersion"/>, every bound export resolves and it reports a tzdb
+    /// release, so a stale library fails here rather than on the first rule it evaluates.
     /// </summary>
     public static NativeProbeResult Probe()
     {
@@ -209,7 +220,14 @@ public static partial class AlertsInterop
                 && !NativeLibrary.TryLoad(LibraryName, typeof(AlertsInterop).Assembly, null, out handle))
                 return NativeProbeResult.Unavailable("the library answered but its handle could not be obtained");
 
-            return Verify(version, ExpectedVersion, export => NativeLibrary.TryGetExport(handle, export, out _));
+            var verified = Verify(version, ExpectedVersion, export => NativeLibrary.TryGetExport(handle, export, out _));
+            if (!verified.IsAvailable)
+                return verified;
+
+            var tzdb = GetTzdbVersion();
+            return string.IsNullOrEmpty(tzdb)
+                ? NativeProbeResult.Unavailable("the library reports no tzdb release")
+                : verified with { Version = version, TzdbVersion = tzdb };
         }
         catch (DllNotFoundException ex)
         {
@@ -246,7 +264,9 @@ public static partial class AlertsInterop
 
 /// <summary>The outcome of <see cref="AlertsInterop.Probe"/>.</summary>
 /// <param name="Failure">Why the library is unusable, or <see langword="null"/> when it is usable.</param>
-public readonly record struct NativeProbeResult(string? Failure)
+/// <param name="Version">The library version, when it is usable.</param>
+/// <param name="TzdbVersion">The IANA time zone database release it evaluates with, when it is usable.</param>
+public readonly record struct NativeProbeResult(string? Failure, string? Version = null, string? TzdbVersion = null)
 {
     public static NativeProbeResult Available => default;
 
