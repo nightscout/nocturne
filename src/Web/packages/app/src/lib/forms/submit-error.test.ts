@@ -268,6 +268,7 @@ describe("the two halves of RemoteErrorPolicy", () => {
         "Failed to execute remote function",
         "An unexpected server error occurred.",
         "A server side error occurred.",
+        `Request failed (${status})`,
       ]) {
         const synthesized = { status, body: { message } };
 
@@ -281,10 +282,21 @@ describe("the two halves of RemoteErrorPolicy", () => {
     }
   });
 
+  it("still carries a server sentence that only mentions a failed request", () => {
+    const worded = {
+      status: 400,
+      body: { message: "Request failed (400): the device code has expired." },
+    };
+
+    expect(describeSubmitError(worded, WRITE_FALLBACK)).toBe(
+      "Request failed (400): the device code has expired."
+    );
+  });
+
   /**
-   * Suppression matches four known strings, so what a server wrote about a
-   * rejected write — the reason retrying unchanged cannot fix — still reaches
-   * the person who has to change it.
+   * Suppression matches a closed set of client-written strings, so what a
+   * server wrote about a rejected write — the reason retrying unchanged cannot
+   * fix — still reaches the person who has to change it.
    */
   it("still carries a 4xx reason the server worded, flattened ModelState included", () => {
     const validation = {

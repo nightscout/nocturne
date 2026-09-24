@@ -137,7 +137,7 @@
       platformSettings = platformSettingsList ?? [];
     } catch (err) {
       console.error("Failed to load admin data:", err);
-      error = "Failed to load admin data";
+      error = remoteErrorMessage(err, "Failed to load admin data");
     } finally {
       loading = false;
     }

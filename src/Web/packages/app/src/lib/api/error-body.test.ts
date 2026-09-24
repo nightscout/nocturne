@@ -33,6 +33,36 @@ describe("parseErrorBody", () => {
     expect(body?.title).toBe("Forbidden");
   });
 
+  it("recovers an OAuth endpoint's error_description as the detail", () => {
+    const body = parseErrorBody(
+      apiException(
+        JSON.stringify({
+          error: "invalid_grant",
+          error_description:
+            "Device code is invalid, expired, or already processed.",
+        }),
+        400
+      )
+    );
+
+    expect(body?.detail).toBe(
+      "Device code is invalid, expired, or already processed."
+    );
+  });
+
+  it("prefers an RFC 7807 detail to an error_description beside it", () => {
+    const body = parseErrorBody(
+      apiException(
+        JSON.stringify({
+          detail: "This share does not include treatment data.",
+          error_description: "access_denied",
+        })
+      )
+    );
+
+    expect(body?.detail).toBe("This share does not include treatment data.");
+  });
+
   it("recovers the validation map of an undeclared 400", () => {
     const body = parseErrorBody(
       apiException(
