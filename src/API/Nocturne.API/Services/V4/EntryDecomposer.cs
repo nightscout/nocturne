@@ -80,7 +80,11 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
                 await DecomposeCalAsync(entry, result, origin, ct);
                 break;
             default:
-                Logger.LogWarning("Skipped an entry whose type Nocturne does not store: {Type}", entry.Type);
+                var sanitizedType = entry.Type?
+                    .Replace("\r", string.Empty)
+                    .Replace("\n", string.Empty);
+
+                Logger.LogWarning("Skipped an entry whose type Nocturne does not store: {Type}", sanitizedType);
                 result.SkippedUnsupported++;
                 break;
         }
