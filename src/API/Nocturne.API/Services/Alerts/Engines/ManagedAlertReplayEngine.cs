@@ -21,7 +21,7 @@ internal sealed class ManagedAlertReplayEngine(ILogger<ManagedAlertReplayEngine>
         ArgumentNullException.ThrowIfNull(input);
 
         var ordered = TopologicallySort(input.Rules);
-        var bodies = ordered.Select(BuildNodeForRule).ToList();
+        var bodies = ordered.Select(BuildEvaluableBody).ToList();
         var resolvers = ordered.Select(BuildAutoResolveNode).ToList();
 
         var fakeTime = new ReplayTimeProvider();
@@ -181,13 +181,31 @@ internal sealed class ManagedAlertReplayEngine(ILogger<ManagedAlertReplayEngine>
         }
     }
 
+    /// <summary>
+    /// The rule body, or null when it cannot be evaluated (docs/alerts/engine-semantics.md §1.4):
+    /// the rule is then skipped on every tick, as the live engine skips it.
+    /// </summary>
+    private ConditionNode? BuildEvaluableBody(AlertRuleSnapshot rule)
+    {
+        if (ConditionTreeFaults.InRule(rule.ConditionType, rule.ConditionParams) is { } fault)
+        {
+            logger.LogWarning(
+                "Replay: conditions of rule {RuleId} cannot be evaluated ({Reason} at {Path}); skipping it",
+                rule.Id, fault.Reason, fault.Path);
+            return null;
+        }
+        return BuildNodeForRule(rule);
+    }
+
+    /// <summary>The auto-resolve tree, or null when it is off, malformed or cannot be evaluated.</summary>
     private ConditionNode? BuildAutoResolveNode(AlertRuleSnapshot rule)
     {
         if (!rule.AutoResolveEnabled || string.IsNullOrWhiteSpace(rule.AutoResolveParams))
             return null;
+        ConditionNode? node;
         try
         {
-            return JsonSerializer.Deserialize<ConditionNode>(rule.AutoResolveParams, EvaluatorJson.Options);
+            node = JsonSerializer.Deserialize<ConditionNode>(rule.AutoResolveParams, EvaluatorJson.Options);
         }
         catch (JsonException ex)
         {
@@ -195,6 +213,15 @@ internal sealed class ManagedAlertReplayEngine(ILogger<ManagedAlertReplayEngine>
                 "Replay: malformed AutoResolveParams for rule {RuleId}; skipping auto-resolve", rule.Id);
             return null;
         }
+        if (node is not null
+            && ConditionTreeFaults.InNode(node, AlertConditionTypeNames.AutoResolvePathRoot) is { } fault)
+        {
+            logger.LogWarning(
+                "Replay: AutoResolveParams for rule {RuleId} cannot be evaluated ({Reason} at {Path}); skipping auto-resolve",
+                rule.Id, fault.Reason, fault.Path);
+            return null;
+        }
+        return node;
     }
 
     /// <summary>
