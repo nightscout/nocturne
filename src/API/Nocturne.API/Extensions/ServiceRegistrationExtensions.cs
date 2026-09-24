@@ -1129,6 +1129,7 @@ public static class ServiceRegistrationExtensions
     {
         services.AddScoped<IConditionEvaluator, ThresholdEvaluator>();
         services.AddScoped<IConditionEvaluator, RateOfChangeEvaluator>();
+        services.AddScoped<IConditionEvaluator, SignalLossEvaluator>();
         services.AddScoped<IConditionEvaluator, StalenessEvaluator>();
         services.AddScoped<IConditionEvaluator, CompositeEvaluator>();
         services.AddScoped<IConditionEvaluator, NotEvaluator>();

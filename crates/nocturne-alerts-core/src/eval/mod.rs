@@ -11,6 +11,7 @@ mod clock;
 mod device;
 mod glucose;
 mod insulin;
+mod signal;
 mod spans;
 
 use chrono::{DateTime, Utc};
@@ -73,9 +74,7 @@ pub fn eval_kind(
     match (kind, payload) {
         (ConditionKind::Threshold, Payload::Threshold(p)) => glucose::threshold(p, env),
         (ConditionKind::RateOfChange, Payload::RateOfChange(p)) => glucose::rate_of_change(p, env),
-        // signal_loss has no registered evaluator: false inside trees, the
-        // real behaviour is a host-side sweep (§5 of the semantics doc).
-        (ConditionKind::SignalLoss, _) => false,
+        (ConditionKind::SignalLoss, Payload::SignalLoss(p)) => signal::signal_loss(p, env),
         (ConditionKind::Composite, Payload::Composite(p)) => composite(p, path, env),
         (ConditionKind::Not, Payload::Not(p)) => not(p, path, env),
         (ConditionKind::Sustained, Payload::Sustained(p)) => eval_sustained(p, path, env),

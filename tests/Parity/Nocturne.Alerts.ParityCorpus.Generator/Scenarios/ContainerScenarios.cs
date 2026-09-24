@@ -151,7 +151,7 @@ public static class ContainerScenarios
 
         yield return Scenario(
             "unknown-and-signal-loss-in-tree",
-            "unknown node kinds and signal_loss nodes inside a tree evaluate false (signal_loss has no evaluator)",
+            "an unknown node kind inside a tree evaluates false; a signal_loss node evaluates like any other leaf",
             [
                 Rule(1, "composite", """
                     {"operator": "or", "conditions": [
@@ -161,12 +161,6 @@ public static class ContainerScenarios
                     """),
             ],
             [Tick(T(0), Ctx(T(0), glucose: 40m) with { LastReadingAt = T(-60), LatestTimestamp = T(-60) })]);
-
-        yield return Scenario(
-            "signal-loss-root-rule-skipped",
-            "a rule whose root condition type is signal_loss has no evaluator: the orchestrator skips it entirely (no tracker transition)",
-            [Rule(1, "signal_loss", """{"timeout_minutes": 15}""")],
-            [Tick(T(0), Ctx(T(0)) with { LastReadingAt = T(-60), LatestTimestamp = T(-60) })]);
 
         yield return Scenario(
             "uppercase-type-discriminators",

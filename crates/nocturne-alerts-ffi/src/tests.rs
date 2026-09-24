@@ -972,8 +972,6 @@ fn describe_leaf_ids_align_with_evaluate_force_eval_log() {
 
 #[test]
 fn describe_signal_loss_is_a_leaf_with_its_timeout() {
-    // signal_loss has no leaves in evaluate (the rule is skipped), but the host
-    // still needs to render its watchdog — describe exposes it as a leaf.
     let tree = describe_rule("signal_loss", json!({ "timeout_minutes": 20 }));
     assert_eq!(tree["leaf_id"], json!(0));
     assert_eq!(tree["kind"], json!("signal_loss"));

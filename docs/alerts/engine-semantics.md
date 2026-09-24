@@ -56,7 +56,7 @@ engine only ever reads the payload matching `type`.
   `{}`, and every payload deserialisation that yields null (or a record failing its
   null-guards) returns `false`. "Silent-false" is the universal failure mode: malformed
   rules never crash evaluation, they just never fire.
-- The full discriminator set (30 kinds + `signal_loss`, see §5) is the
+- The full discriminator set is the
   `AlertConditionType` enum's `EnumMember` values.
 
 ### 1.3 Numerics
@@ -235,25 +235,26 @@ in §3 plus:
 
 ---
 
-## 5. `signal_loss` is not part of the evaluation core
+## 5. `signal_loss` and wall-clock evaluation
 
-`signal_loss` exists in the type enum and payload model but **has no registered
-evaluator**:
+`signal_loss` is an ordinary leaf, at the root or inside a tree:
 
-- As a rule's root `ConditionType`, the orchestrator finds no evaluator, logs a warning,
-  and **skips the rule entirely** (no tracker call).
-- As a node inside a tree, dispatch returns **false** (silent-fail path).
-- The real signal-loss behaviour lives in `AlertSweepService.EvaluateSignalLossAsync`
-  (30 s cadence): for each enabled rule with `ConditionType == SignalLoss`, parse
-  `{timeout_minutes}`, compare `now - tenant.LastReadingAt` (null ⇒ `DateTime.MinValue`,
-  i.e. infinitely stale) against the timeout, and on breach call
-  `ProcessEvaluationAsync(rule, conditionMet: true)`.
-- **The sweep never feeds `false`** — a signal-loss excursion is never closed by signal
-  restoration through this path. **[anomaly — host-side]**
+| Payload | Inputs | Semantics | Null / guard behaviour |
+|---|---|---|---|
+| `timeout_minutes` (int) | `LastReadingAt`, `LatestTimestamp`, now | `now - LastReadingAt >= timeout_minutes`, compared as exact durations (no minute rounding) | `timeout_minutes <= 0` (including an absent field) ⇒ false; both `LastReadingAt` and `LatestTimestamp` null ⇒ false (cold start); only `LastReadingAt` null ⇒ infinitely stale ⇒ true |
 
-For the port: `signal_loss` stays host-side (it needs wall-clock scheduling, not a
-reading). The crate treats it as an unknown kind (false in trees). Prelude's local
-engine should implement the equivalent staleness watchdog host-side too.
+It is `staleness{operator: ">=", value: timeout_minutes}` with an exact-duration compare
+and the non-positive-timeout guard.
+
+The leaf can only turn true *between* readings — a reading arriving sets `LastReadingAt`
+to the reading's time — so per-reading evaluation alone never fires it. Every host must
+also evaluate enabled `signal_loss`-rooted rules on the wall clock through the normal
+driver sequence (§7), with `LastReadingAt` / `LatestTimestamp` set to the newest known
+reading (null when there has never been one). The backend does this from
+`AlertSweepService` every 30 s; Prelude needs an equivalent periodic evaluation. The
+excursion tracker dedupes: a continuing outage is `continues`, and the first evaluation
+after readings resume feeds false, so the excursion goes through hysteresis and closes
+like any other.
 
 ---
 
@@ -338,7 +339,8 @@ with a fake clock, a **fresh in-memory timer store**, and these conventions:
 - Rules are **topologically sorted** by `alert_state` references (parents before
   children); cycles fall back to insertion order.
 - Per tick, glucose is snapped to the most recent reading at-or-before the tick;
-  no-data ticks clamp `LastReadingAt = tick` (staleness reads as 0, not ∞).
+  no-data ticks clamp `LastReadingAt = tick` (staleness reads as 0, not ∞, and
+  `signal_loss` never fires in replay).
 - Root truth uses the normal evaluators (short-circuit, shared timer store); leaf log
   uses force-eval of every leaf (no short-circuit, same context, root path). Points are
   recorded on first observation and on every flip (`LeafTransitionPoint(atMs, value)`,
@@ -365,7 +367,7 @@ contexts; window resolution, reading fetch, and fact-timeline capture stay host-
 - Context enrichment (`SensorContextEnricher` / Prelude's local assembler)
 - Persistence of timers (`alert_condition_timers`), tracker state, excursions, instances
 - Delivery channels, DND dispatch suppression, info auto-ack
-- Sweep scheduling (30 s cadence), signal-loss watchdog (§5), hysteresis force-close (§6.1)
+- Sweep scheduling (30 s cadence) — including the wall-clock evaluation `signal_loss` needs (§5) — and hysteresis force-close (§6.1)
 - Smart snooze policy (extend/clear, max counts, trend-favorable heuristic) — but note
   snooze *conditions* are evaluated through the normal node dispatch with
   `CurrentPath = "snooze"`, wrapped as `composite{and, [conditions]}`; that evaluation
@@ -392,7 +394,7 @@ contexts; window resolution, reading fetch, and fact-timeline capture stay host-
 | 1 | Malformed container (null payload) is treated as a leaf by identity/path walks | §2.1 | normative |
 | 2 | Path segments preserve the stored JSON's casing of `type` | §2.3 | normative |
 | 3 | `not` over an unknown child kind yields true | §3 | normative |
-| 4 | `signal_loss` has no evaluator; sweep feeds only `true`, never `false` | §5 | host-side, normative |
+| 4 | *(retired: `signal_loss` is an ordinary leaf evaluated on the wall clock)* | §5 | resolved |
 | 5 | Hysteresis expiry proxy slides with every evaluation; sweep force-closes all hysteresis excursions regardless of `HysteresisMinutes` | §6.1 | tracker part normative for crate; sweep host-side |
 | 6 | Elapsed-time math mixes double→decimal casts (per-leaf, §1.3) | §1.3 | normative |
 | 7 | `loop_enaction_stale` cold-start guard is `HasEverApsCycled`, not an enaction-specific flag | §3 | normative |

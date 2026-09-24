@@ -82,8 +82,8 @@ public sealed class ScenarioRunner
         var evaluator = registry.GetEvaluator(rule.ConditionType);
         if (evaluator is null)
         {
-            // Orchestrator parity: no evaluator (e.g. signal_loss as a root type) means the
-            // rule is skipped entirely — no tracker call, no auto-resolve.
+            // Orchestrator parity: no evaluator for the root type means the rule is
+            // skipped entirely — no tracker call, no auto-resolve.
             return new ExpectedRuleResult { RuleId = rule.Id, Skipped = true };
         }
 

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "name": "signal-loss-root-rule-skipped",
-  "description": "a rule whose root condition type is signal_loss has no evaluator: the orchestrator skips it entirely (no tracker transition)",
+  "name": "signal-loss-cold-start-and-infinity",
+  "description": "no reading history is false; LastReadingAt null with LatestTimestamp set is infinitely stale (true)",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
@@ -19,10 +19,17 @@
     {
       "at": "2026-01-05T12:00:00Z",
       "context": {
-        "latest_value": 100,
-        "latest_timestamp": "2026-01-05T11:00:00Z",
-        "trend_rate": 0,
-        "last_reading_at": "2026-01-05T11:00:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:05:00Z",
+      "context": {
+        "latest_timestamp": "2026-01-05T12:04:00Z",
         "has_ever_aps_cycled": false,
         "has_ever_pump_snapshot": false,
         "has_ever_uploader_snapshot": false,

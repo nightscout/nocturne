@@ -117,9 +117,10 @@ are reserved for unusable requests: malformed JSON, wrong `schema_version`,
 unknown root `condition_type`, unknown `tracker.state`, or a tracker `state`
 without `updated_at`.
 
-A rule whose root type has no evaluator (`signal_loss`) is skipped exactly
-like the orchestrator skips it: `result` is `{rule_id, skipped: true}` and the
-state passes through unchanged.
+`result.skipped` is reserved for a root type with no evaluator (the rule is
+skipped like the orchestrator skips it: `result` is `{rule_id, skipped: true}`
+and the state passes through unchanged). Every current root type has an
+evaluator, so the engine never sets it.
 
 ### State threading
 

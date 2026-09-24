@@ -39,8 +39,8 @@ internal sealed class ManagedAlertEngine(
         var evaluator = evaluatorRegistry.GetEvaluator(rule.ConditionType);
         if (evaluator is null)
         {
-            // Orchestrator parity: no evaluator (e.g. signal_loss as a root type) means
-            // the rule is skipped entirely — no tracker call, no auto-resolve.
+            // Orchestrator parity: no evaluator for the root type means the rule is
+            // skipped entirely — no tracker call, no auto-resolve.
             logger.LogWarning("No evaluator registered for condition type '{ConditionType}'", rule.ConditionType);
             return new AlertEngineEvaluation { Skipped = true };
         }

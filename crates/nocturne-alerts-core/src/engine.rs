@@ -60,9 +60,8 @@ pub struct TrackerSnapshot {
 #[derive(Debug, Clone)]
 pub struct RuleOutcome {
     pub rule_id: Uuid,
-    /// True when no evaluator exists for the root condition type
-    /// (`signal_loss`): the rule is skipped entirely — no tracker call, no
-    /// auto-resolve, and every other field is empty.
+    /// Always false: every root condition kind has an evaluator. Kept for the
+    /// FFI envelope, whose `skipped` flag hosts still honour.
     pub skipped: bool,
     pub root: Option<bool>,
     /// Per-leaf force-eval truths, ascending by leaf id.
@@ -95,21 +94,6 @@ pub fn evaluate_rule(
     now: DateTime<Utc>,
     state: &mut EngineState,
 ) -> RuleOutcome {
-    // signal_loss has no registered evaluator: orchestrator parity is to skip
-    // the rule entirely.
-    if rule.condition_type == ConditionKind::SignalLoss {
-        return RuleOutcome {
-            rule_id: rule.id,
-            skipped: true,
-            root: None,
-            leaves: Vec::new(),
-            transition: None,
-            tracker: None,
-            auto_resolved: false,
-            timer_ops: Vec::new(),
-        };
-    }
-
     let wire = rule.condition_type.wire();
 
     // Root eval: the evaluator receives the stored payload directly. A JSON

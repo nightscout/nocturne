@@ -75,7 +75,7 @@ internal sealed class RustBackedAlertEngine(
 
         if (result.Skipped == true)
         {
-            // signal_loss as a root type: state passes through unchanged, nothing persisted.
+            // No evaluator for the root type: state passes through unchanged, nothing persisted.
             logger.LogWarning("No evaluator registered for condition type '{ConditionType}'", rule.ConditionType);
             return new AlertEngineEvaluation { Skipped = true };
         }

@@ -25,9 +25,9 @@ The crate is **pure evaluation**: no I/O, no clock, no persistence.
     (idle → confirming → active → hysteresis), including the sliding
     `UpdatedAt` hysteresis-expiry proxy, verbatim.
 - Host-side and out of scope: context enrichment, persistence, delivery/DND
-  dispatch suppression, sweep scheduling, the `signal_loss` watchdog (the crate
-  treats `signal_loss` as an unknown kind — false inside trees, skipped as a
-  root type), and the sweep's hysteresis force-close.
+  dispatch suppression, sweep scheduling (including the wall-clock cadence
+  `signal_loss` depends on, semantics doc §5), and the sweep's hysteresis
+  force-close.
 
 ## Layout
 

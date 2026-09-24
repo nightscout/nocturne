@@ -172,7 +172,7 @@ public sealed record RustRuleResult
     [JsonPropertyName("rule_id")]
     public Guid RuleId { get; init; }
 
-    /// <summary>True when the rule's root type has no evaluator (<c>signal_loss</c>) and the rule was skipped.</summary>
+    /// <summary>True when the rule's root type has no evaluator and the rule was skipped.</summary>
     public bool? Skipped { get; init; }
 
     /// <summary>Root condition truth.</summary>

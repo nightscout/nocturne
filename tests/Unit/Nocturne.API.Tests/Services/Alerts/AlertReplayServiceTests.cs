@@ -554,12 +554,8 @@ public class AlertReplayServiceTests
             new InMemoryConditionTimerStore(), TimeProvider.System);
         var registry = sp.GetRequiredService<Nocturne.API.Services.Alerts.Evaluators.ConditionEvaluatorRegistry>();
 
-        // SignalLoss is not condition-evaluator-driven — AlertSweepService handles it directly.
-        var skipped = new[] { AlertConditionType.SignalLoss };
-
         foreach (var type in Enum.GetValues<AlertConditionType>())
         {
-            if (skipped.Contains(type)) continue;
             registry.GetEvaluator(type).Should().NotBeNull(
                 "replay must support every runtime condition type, but {0} has no evaluator", type);
         }

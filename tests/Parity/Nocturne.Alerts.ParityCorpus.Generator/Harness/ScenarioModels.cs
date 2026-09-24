@@ -222,7 +222,7 @@ public sealed record ExpectedRuleResult
 
     /// <summary>
     /// True when the orchestrator found no evaluator for the rule's root condition type
-    /// (e.g. <c>signal_loss</c>) and skipped the rule without consulting the tracker.
+    /// and skipped the rule without consulting the tracker.
     /// All other fields are absent in that case.
     /// </summary>
     public bool? Skipped { get; init; }
