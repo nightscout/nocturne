@@ -236,7 +236,7 @@ public class AlertSweepService : BackgroundService
             && tenantGroup.Any(i => configsByInstance[i.InstanceId].Conditions is { Count: > 0 }))
         {
             enrichedContext = await BuildSnoozeContextAsync(
-                tenantScope.Services, tenantContext, readings, now, tenantGroup, configsByInstance, ct);
+                tenantScope.Services, tenantContext, now, tenantGroup, configsByInstance, ct);
         }
 
         foreach (var instance in tenantGroup)
@@ -360,15 +360,15 @@ public class AlertSweepService : BackgroundService
     }
 
     /// <summary>
-    /// Context for snooze conditions. Glucose facts come from the newest canonical reading only
-    /// when it is within <see cref="SmartSnoozeTrendGate.MaxLatestAge"/>: a stale value would let a
+    /// Context for snooze conditions, measured from <see cref="LastUsableReadingAsync"/>. Its
+    /// glucose facts are taken only when that reading is within
+    /// <see cref="SmartSnoozeTrendGate.MaxLatestAge"/>: a stale value would let a
     /// <c>threshold</c> or <c>trend</c> condition hold a snooze on data that no longer describes
     /// the patient, so it is left null and those conditions read false.
     /// </summary>
     private async Task<SensorContext?> BuildSnoozeContextAsync(
         IServiceProvider tenantServices,
         TenantAlertContext tenantContext,
-        IReadOnlyList<SensorGlucose> readings,
         DateTime now,
         IEnumerable<SnoozedInstanceSnapshot> tenantInstances,
         Dictionary<Guid, SmartSnoozeConfig> configsByInstance,
@@ -399,21 +399,20 @@ public class AlertSweepService : BackgroundService
                 AutoResolveParams: null));
         }
 
-        var newest = readings.Count > 0 ? readings.MaxBy(r => r.Timestamp) : null;
-        var fresh = newest is not null && now - newest.Timestamp <= SmartSnoozeTrendGate.MaxLatestAge
-            ? newest
-            : null;
-
-        var baseContext = new SensorContext
-        {
-            LatestValue = fresh is null ? null : (decimal)fresh.Mgdl,
-            LatestTimestamp = fresh?.Timestamp ?? tenantContext.LastReadingAt,
-            TrendRate = (decimal?)fresh?.TrendRate,
-            LastReadingAt = tenantContext.LastReadingAt ?? newest?.Timestamp ?? DateTime.MinValue,
-        };
-
         try
         {
+            var last = await LastUsableReadingAsync(
+                tenantServices.GetRequiredService<ICanonicalGlucoseService>(), tenantContext, ct);
+            var fresh = last.Reading is { } usable && now - usable.Timestamp <= SmartSnoozeTrendGate.MaxLatestAge
+                ? usable
+                : null;
+            var baseContext = new SensorContext
+            {
+                LatestValue = fresh is null ? null : (decimal)fresh.Mgdl,
+                LatestTimestamp = last.At,
+                TrendRate = (decimal?)fresh?.TrendRate,
+                LastReadingAt = last.At,
+            };
             return await enricher.EnrichAsync(baseContext, syntheticRules, tenantContext.TenantId, ct);
         }
         catch (Exception ex)
@@ -473,9 +472,10 @@ public class AlertSweepService : BackgroundService
     /// LatestValue is left null on the synthesised <see cref="SensorContext"/>: any
     /// LatestValue-dependent auto-resolve params (e.g. threshold-based) are still the
     /// orchestrator's job and will have been evaluated on the most recent reading.
-    /// The enricher fills in IOB/COB/predictions/etc. as needed.
+    /// Reading times come from <see cref="LastUsableReadingAsync"/>; the enricher fills in
+    /// IOB/COB/predictions/etc. as needed.
     /// </remarks>
-    private async Task EvaluateAutoResolveAsync(CancellationToken ct)
+    internal async Task EvaluateAutoResolveAsync(CancellationToken ct)
     {
         using var lookupScope = _serviceProvider.CreateScope();
         var lookupRepository = lookupScope.ServiceProvider.GetRequiredService<IAlertRepository>();
@@ -496,19 +496,19 @@ public class AlertSweepService : BackgroundService
             var enricher = tenantScope.Services.GetRequiredService<ISensorContextEnricher>();
             var resolutionHandler = tenantScope.Services.GetRequiredService<IExcursionResolutionHandler>();
 
-            // Build a baseline context from tenant freshness; enricher fills the rest.
-            var baseContext = new SensorContext
-            {
-                LatestValue = null,
-                LatestTimestamp = tenantContext.LastReadingAt,
-                TrendRate = null,
-                LastReadingAt = tenantContext.LastReadingAt ?? DateTime.MinValue,
-            };
-
             var rules = tenantGroup.Select(x => x.Rule).ToList();
             SensorContext enriched;
             try
             {
+                var last = await LastUsableReadingAsync(
+                    tenantScope.Services.GetRequiredService<ICanonicalGlucoseService>(), tenantContext, ct);
+                var baseContext = new SensorContext
+                {
+                    LatestValue = null,
+                    LatestTimestamp = last.At,
+                    TrendRate = null,
+                    LastReadingAt = last.At,
+                };
                 enriched = await enricher.EnrichAsync(baseContext, rules, tenantId, ct);
             }
             catch (Exception ex)
@@ -553,14 +553,10 @@ public class AlertSweepService : BackgroundService
     /// escalation's parent is usually reading-driven and so not in the swept set.
     /// </summary>
     /// <remarks>
-    /// The context is the one the per-reading path builds for the tenant's newest usable
-    /// canonical reading, one with a glucose value (<see cref="CanonicalAlertEvaluator.ContextFor"/>).
-    /// The per-reading path evaluates no other, so reading-driven leaves in the same tree judge
-    /// exactly what its last pass judged, and <c>signal_loss</c> counts sensor-error readings as
-    /// no signal. A context without the glucose facts would read them false and close an
-    /// excursion they hold open. With no canonical reading, <see cref="SensorContext.LastReadingAt"/>
-    /// falls back to the tenant's newest reading of any source. It stays null for a tenant that
-    /// has never had one, which <c>signal_loss</c> and <c>staleness</c> treat as cold start.
+    /// The context is the one the per-reading path builds for <see cref="LastUsableReadingAsync"/>
+    /// (<see cref="CanonicalAlertEvaluator.ContextFor"/>), so reading-driven leaves in the same
+    /// tree judge exactly what its last pass judged. A context without the glucose facts would
+    /// read them false and close an excursion they hold open.
     /// </remarks>
     internal async Task EvaluateWallClockRulesAsync(CancellationToken ct)
     {
@@ -585,17 +581,17 @@ public class AlertSweepService : BackgroundService
 
             try
             {
-                var canonical = tenantScope.Services.GetRequiredService<ICanonicalGlucoseService>();
-                var latest = await canonical.GetLatestAsync(ct);
-                var context = latest is null
-                    ? new SensorContext
+                var last = await LastUsableReadingAsync(
+                    tenantScope.Services.GetRequiredService<ICanonicalGlucoseService>(), tenantContext, ct);
+                var context = last.Reading is { } usable
+                    ? CanonicalAlertEvaluator.ContextFor(usable)
+                    : new SensorContext
                     {
                         LatestValue = null,
-                        LatestTimestamp = tenantContext.LastReadingAt,
+                        LatestTimestamp = last.At,
                         TrendRate = null,
-                        LastReadingAt = tenantContext.LastReadingAt,
-                    }
-                    : await UsableContextAsync(canonical, latest, ct);
+                        LastReadingAt = last.At,
+                    };
 
                 var orchestrator = tenantScope.Services.GetRequiredService<IAlertOrchestrator>();
                 await orchestrator.EvaluateRulesAsync(
@@ -612,30 +608,36 @@ public class AlertSweepService : BackgroundService
     internal static readonly TimeSpan UsableReadingLookback = TimeSpan.FromHours(24);
 
     /// <summary>
-    /// The context for the newest canonical reading with a glucose value at or after
-    /// <see cref="UsableReadingLookback"/> before <paramref name="latest"/>. When there is none,
-    /// the glucose facts are absent and <see cref="SensorContext.LastReadingAt"/> is the oldest
-    /// reading looked at: the outage is at least that old.
+    /// The reading every swept context measures <see cref="SensorContext.LastReadingAt"/> from:
+    /// the newest canonical reading with a glucose value, the only kind the per-reading path
+    /// evaluates, so <c>signal_loss</c> counts sensor-error and warm-up readings as no signal.
     /// </summary>
-    private static async Task<SensorContext> UsableContextAsync(
-        ICanonicalGlucoseService canonical, SensorGlucose latest, CancellationToken ct)
+    /// <remarks>
+    /// It is looked for at most <see cref="UsableReadingLookback"/> before the newest canonical
+    /// reading. With none there, <see cref="UsableReading.At"/> is the oldest reading looked at:
+    /// the outage is at least that old. With no canonical reading at all it is the tenant's
+    /// newest reading of any source, null for a tenant that has never had one, which
+    /// <c>signal_loss</c> and <c>staleness</c> treat as cold start.
+    /// </remarks>
+    internal static async Task<UsableReading> LastUsableReadingAsync(
+        ICanonicalGlucoseService canonical, TenantAlertContext tenant, CancellationToken ct)
     {
+        var latest = await canonical.GetLatestAsync(ct);
+        if (latest is null)
+            return new UsableReading(null, tenant.LastReadingAt);
         if (latest.Mgdl > 0)
-            return CanonicalAlertEvaluator.ContextFor(latest);
+            return new UsableReading(latest, latest.Timestamp);
 
         var recent = await canonical.GetRecentAsync(latest.Timestamp - UsableReadingLookback, ct);
         if (recent.Where(r => r.Mgdl > 0).MaxBy(r => r.Timestamp) is { } usable)
-            return CanonicalAlertEvaluator.ContextFor(usable);
+            return new UsableReading(usable, usable.Timestamp);
 
-        var since = recent.Count > 0 ? recent.Min(r => r.Timestamp) : latest.Timestamp;
-        return new SensorContext
-        {
-            LatestValue = null,
-            LatestTimestamp = since,
-            TrendRate = null,
-            LastReadingAt = since,
-        };
+        return new UsableReading(null, recent.Count > 0 ? recent.Min(r => r.Timestamp) : latest.Timestamp);
     }
+
+    /// <param name="Reading">The last usable reading, or null when none was found.</param>
+    /// <param name="At">What <see cref="SensorContext.LastReadingAt"/> is.</param>
+    internal sealed record UsableReading(SensorGlucose? Reading, DateTime? At);
 
     private bool ReferencesWallClock(AlertRuleSnapshot rule)
     {
