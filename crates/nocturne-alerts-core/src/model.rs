@@ -276,13 +276,120 @@ pub fn get_ci<'a>(obj: &'a Map<String, Value>, name: &str) -> Option<&'a Value> 
     found
 }
 
-/// Decimal from a JSON number literal, exact (no binary-float round trip).
+/// Decimal from a JSON number literal the way System.Text.Json reads one
+/// (`NumberToDecimal`), with no binary-float round trip. Digits accumulate
+/// into the 96-bit mantissa until it would overflow or the scale reaches 28;
+/// the next digit rounds half-to-even, where a tie is a `5` followed only by
+/// zeros within the first 29 significant digits. A magnitude below the smallest scale-28 step becomes zero rather
+/// than an error; `None` when the value exceeds the decimal range or the
+/// literal is not a JSON number.
 pub fn parse_decimal_literal(s: &str) -> Option<Decimal> {
-    if s.contains(['e', 'E']) {
-        Decimal::from_scientific(s).ok()
-    } else {
-        s.parse::<Decimal>().ok()
+    const MAX_SCALE: i64 = 28;
+    const MAX_MANTISSA: u128 = (1 << 96) - 1;
+    // Digits past the 29th reach the rounding step only as a "non-zero tail"
+    // flag, so a 5 in the 30th place always rounds up.
+    const DIGIT_BUFFER: usize = 29;
+
+    let (negative, unsigned) = match s.strip_prefix('-') {
+        Some(rest) => (true, rest),
+        None => (false, s),
+    };
+    let (mantissa_text, exponent) = match unsigned.find(['e', 'E']) {
+        Some(i) => (
+            &unsigned[..i],
+            parse_saturating_exponent(&unsigned[i + 1..])?,
+        ),
+        None => (unsigned, 0),
+    };
+    let (int_part, frac_part) = match mantissa_text.split_once('.') {
+        Some((int_part, frac_part)) => (int_part, frac_part),
+        None => (mantissa_text, ""),
+    };
+    let all_digits = int_part.bytes().chain(frac_part.bytes());
+    if int_part.is_empty() || !all_digits.clone().all(|b| b.is_ascii_digit()) {
+        return None;
     }
+
+    let leading_zeros = all_digits.clone().take_while(|&b| b == b'0').count();
+    let digits: Vec<u8> = all_digits.skip(leading_zeros).map(|b| b - b'0').collect();
+    // `value = 0.d1d2d3… × 10^e`, saturated so an absurd exponent cannot wrap.
+    let mut e = (int_part.len() as i64)
+        .saturating_sub(leading_zeros as i64)
+        .saturating_add(exponent);
+
+    if digits.is_empty() {
+        let scale = (frac_part.len() as i64).saturating_sub(exponent);
+        return Some(Decimal::from_i128_with_scale(
+            0,
+            scale.clamp(0, MAX_SCALE) as u32,
+        ));
+    }
+    if e > MAX_SCALE + 1 {
+        return None;
+    }
+
+    let mut mantissa: u128 = 0;
+    let mut next = 0;
+    while e > 0 || (next < digits.len() && e > -MAX_SCALE) {
+        let digit = digits.get(next).copied().unwrap_or(0);
+        let Some(widened) = mantissa
+            .checked_mul(10)
+            .and_then(|m| m.checked_add(u128::from(digit)))
+            .filter(|&m| m <= MAX_MANTISSA)
+        else {
+            break;
+        };
+        mantissa = widened;
+        if next < digits.len() {
+            next += 1;
+        }
+        e -= 1;
+    }
+
+    if let Some(&digit) = digits.get(next) {
+        let tie_to_even = next < DIGIT_BUFFER
+            && digit == 5
+            && mantissa.is_multiple_of(2)
+            && digits[next + 1..].iter().all(|&d| d == 0);
+        if digit >= 5 && !tie_to_even {
+            mantissa += 1;
+            if mantissa > MAX_MANTISSA {
+                mantissa = MAX_MANTISSA / 10 + 1;
+                e += 1;
+            }
+        }
+    }
+
+    if e > 0 {
+        return None;
+    }
+    let mut d = if e <= -(MAX_SCALE + 1) {
+        Decimal::from_i128_with_scale(0, MAX_SCALE as u32)
+    } else {
+        Decimal::try_from_i128_with_scale(mantissa as i128, (-e) as u32).ok()?
+    };
+    d.set_sign_negative(negative && !d.is_zero());
+    Some(d)
+}
+
+/// A JSON exponent (`[+-]?digits`), saturated to ±`i64::MAX / 2` so later
+/// scale arithmetic stays in range.
+fn parse_saturating_exponent(s: &str) -> Option<i64> {
+    let (negative, digits) = match s.as_bytes().first() {
+        Some(b'-') => (true, &s[1..]),
+        Some(b'+') => (false, &s[1..]),
+        _ => (false, s),
+    };
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let limit = i64::MAX / 2;
+    let magnitude = digits.bytes().fold(0i64, |acc, b| {
+        acc.saturating_mul(10)
+            .saturating_add(i64::from(b - b'0'))
+            .min(limit)
+    });
+    Some(if negative { -magnitude } else { magnitude })
 }
 
 pub fn decimal_from_number(n: &serde_json::Number) -> Option<Decimal> {
@@ -336,18 +443,21 @@ fn f_string(obj: &Map<String, Value>, name: &str) -> ParseResult<Option<String>>
     }
 }
 
+/// STJ reads a `Guid` only in the 36-character hyphenated form; braced,
+/// simple and URN spellings are a `JsonException`.
 fn f_uuid(obj: &Map<String, Value>, name: &str) -> ParseResult<Uuid> {
     match get_ci(obj, name) {
         None => Ok(Uuid::nil()),
-        Some(Value::String(s)) => Uuid::parse_str(s).map_err(|_| ParseError),
+        Some(Value::String(s)) if s.len() == 36 => Uuid::try_parse(s).map_err(|_| ParseError),
         Some(_) => Err(ParseError),
     }
 }
 
 /// Enum field with STJ `JsonStringEnumConverter` semantics: string matched
-/// case-insensitively against the wire-name table (falling back to a plain
-/// integer-string), or an integer accepted raw (possibly undefined). Missing
-/// field is the C# constructor default (ordinal 0).
+/// case-insensitively against the wire-name table (falling back to an
+/// integer string, surrounding whitespace allowed), or an integer accepted
+/// raw (possibly undefined). Either integer form must fit the enum's `int`
+/// underlying type. Missing field is the C# constructor default (ordinal 0).
 fn f_enum(obj: &Map<String, Value>, name: &str, names: &[&str]) -> ParseResult<i64> {
     match get_ci(obj, name) {
         None => Ok(0),
@@ -358,9 +468,13 @@ fn f_enum(obj: &Map<String, Value>, name: &str, names: &[&str]) -> ParseResult<i
 fn enum_value(v: &Value, names: &[&str]) -> ParseResult<i64> {
     match v {
         Value::String(s) => enum_ordinal(names, s)
-            .or_else(|| s.parse::<i64>().ok())
+            .or_else(|| s.trim().parse::<i32>().ok().map(i64::from))
             .ok_or(ParseError),
-        Value::Number(n) => n.as_i64().ok_or(ParseError),
+        Value::Number(n) => n
+            .as_i64()
+            .and_then(|v| i32::try_from(v).ok())
+            .map(i64::from)
+            .ok_or(ParseError),
         _ => Err(ParseError),
     }
 }
@@ -369,14 +483,18 @@ fn f_enum_list(
     obj: &Map<String, Value>,
     name: &str,
     names: &[&str],
+    level: usize,
 ) -> ParseResult<Option<Vec<i64>>> {
     match get_ci(obj, name) {
         None | Some(Value::Null) => Ok(None),
-        Some(Value::Array(items)) => items
-            .iter()
-            .map(|v| enum_value(v, names))
-            .collect::<ParseResult<Vec<_>>>()
-            .map(Some),
+        Some(Value::Array(items)) => {
+            check_typed_level(level)?;
+            items
+                .iter()
+                .map(|v| enum_value(v, names))
+                .collect::<ParseResult<Vec<_>>>()
+                .map(Some)
+        }
         Some(_) => Err(ParseError),
     }
 }
@@ -564,14 +682,61 @@ pub enum Payload {
     TrackerAge(TrackerAgePayload),
 }
 
-/// Parses the payload object for `kind`. The value must be a JSON object —
+// ---------------------------------------------------------------------------
+// Nesting depth (STJ `MaxDepth` = 64)
+// ---------------------------------------------------------------------------
+
+/// The reader rejects a 65th nested container anywhere in the document,
+/// including inside properties the model ignores.
+const MAX_JSON_DEPTH: usize = 64;
+
+/// The serializer counts one frame per typed value it builds (node, payload
+/// object, condition or enum list) and rejects the 64th nested frame.
+const MAX_TYPED_DEPTH: usize = MAX_JSON_DEPTH - 1;
+
+fn check_typed_level(level: usize) -> ParseResult<()> {
+    if level > MAX_TYPED_DEPTH {
+        Err(ParseError)
+    } else {
+        Ok(())
+    }
+}
+
+/// Rejects a document nested deeper than the reader allows, without
+/// recursing.
+fn check_json_depth(root: &Value) -> ParseResult<()> {
+    let mut pending = vec![(root, 1usize)];
+    while let Some((v, depth)) = pending.pop() {
+        let is_container = matches!(v, Value::Array(_) | Value::Object(_));
+        if is_container && depth > MAX_JSON_DEPTH {
+            return Err(ParseError);
+        }
+        match v {
+            Value::Array(items) => pending.extend(items.iter().map(|c| (c, depth + 1))),
+            Value::Object(fields) => pending.extend(fields.values().map(|c| (c, depth + 1))),
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+/// Parses the payload object for `kind`, deserialised as its own document
+/// (the stored `condition_params`). The value must be a JSON object —
 /// anything else is a `JsonException` in C#. JSON `null` is handled by the
 /// caller (a null payload *property* behaves like an absent one; a null root
 /// `condition_params` is a null condition record → false).
 pub fn parse_payload(kind: ConditionKind, v: &Value) -> ParseResult<Payload> {
+    check_json_depth(v)?;
+    parse_payload_at(kind, v, 1)
+}
+
+/// `level` is the payload object's 1-based typed nesting level.
+fn parse_payload_at(kind: ConditionKind, v: &Value, level: usize) -> ParseResult<Payload> {
+    check_typed_level(level)?;
     let Value::Object(o) = v else {
         return Err(ParseError);
     };
+    let inner = level + 1;
     let p = match kind {
         ConditionKind::Threshold => Payload::Threshold(ThresholdPayload {
             direction: f_string(o, "direction")?,
@@ -586,14 +751,14 @@ pub fn parse_payload(kind: ConditionKind, v: &Value) -> ParseResult<Payload> {
         }),
         ConditionKind::Composite => Payload::Composite(CompositePayload {
             operator: f_string(o, "operator")?,
-            conditions: parse_node_list(o, "conditions")?,
+            conditions: parse_node_list(o, "conditions", inner)?,
         }),
         ConditionKind::Not => Payload::Not(NotPayload {
-            child: parse_child(o, "child")?,
+            child: parse_child(o, "child", inner)?,
         }),
         ConditionKind::Sustained => Payload::Sustained(SustainedPayload {
             minutes: f_i32(o, "minutes")?,
-            child: parse_child(o, "child")?,
+            child: parse_child(o, "child", inner)?,
         }),
         ConditionKind::Staleness => Payload::Staleness(StalenessPayload {
             operator: f_string(o, "operator")?,
@@ -646,7 +811,7 @@ pub fn parse_payload(kind: ConditionKind, v: &Value) -> ParseResult<Payload> {
             value: f_decimal(o, "value")?,
         }),
         ConditionKind::GlucoseBucket => Payload::GlucoseBucket(GlucoseBucketPayload {
-            buckets: f_enum_list(o, "buckets", &GLUCOSE_BUCKET_NAMES)?,
+            buckets: f_enum_list(o, "buckets", &GLUCOSE_BUCKET_NAMES, inner)?,
         }),
         ConditionKind::TimeSinceLastCarb | ConditionKind::TimeSinceLastBolus => {
             Payload::TimeSince(TimeSincePayload {
@@ -655,7 +820,7 @@ pub fn parse_payload(kind: ConditionKind, v: &Value) -> ParseResult<Payload> {
             })
         }
         ConditionKind::DayOfWeek => Payload::DayOfWeek(DayOfWeekPayload {
-            days: f_enum_list(o, "days", &DAY_OF_WEEK_NAMES)?,
+            days: f_enum_list(o, "days", &DAY_OF_WEEK_NAMES, inner)?,
         }),
         ConditionKind::PumpState => Payload::PumpState(PumpStatePayload {
             mode: f_enum(o, "mode", &PUMP_MODE_NAMES)?,
@@ -687,24 +852,35 @@ pub fn default_payload(kind: ConditionKind) -> Payload {
     parse_payload(kind, &Value::Object(Map::new())).expect("empty object parses")
 }
 
-fn parse_child(obj: &Map<String, Value>, name: &str) -> ParseResult<Option<Box<Node>>> {
+fn parse_child(
+    obj: &Map<String, Value>,
+    name: &str,
+    level: usize,
+) -> ParseResult<Option<Box<Node>>> {
     match get_ci(obj, name) {
         None | Some(Value::Null) => Ok(None),
-        Some(v) => Node::parse(v).map(|n| Some(Box::new(n))),
+        Some(v) => Node::parse_at(v, level).map(|n| Some(Box::new(n))),
     }
 }
 
-fn parse_node_list(obj: &Map<String, Value>, name: &str) -> ParseResult<Option<Vec<Option<Node>>>> {
+fn parse_node_list(
+    obj: &Map<String, Value>,
+    name: &str,
+    level: usize,
+) -> ParseResult<Option<Vec<Option<Node>>>> {
     match get_ci(obj, name) {
         None | Some(Value::Null) => Ok(None),
-        Some(Value::Array(items)) => items
-            .iter()
-            .map(|v| match v {
-                Value::Null => Ok(None),
-                _ => Node::parse(v).map(Some),
-            })
-            .collect::<ParseResult<Vec<_>>>()
-            .map(Some),
+        Some(Value::Array(items)) => {
+            check_typed_level(level)?;
+            items
+                .iter()
+                .map(|v| match v {
+                    Value::Null => Ok(None),
+                    _ => Node::parse_at(v, level + 1).map(Some),
+                })
+                .collect::<ParseResult<Vec<_>>>()
+                .map(Some)
+        }
         Some(_) => Err(ParseError),
     }
 }
@@ -728,6 +904,13 @@ impl Node {
     /// and every recognised payload property must parse — a malformed payload
     /// anywhere fails the whole node, like a `JsonException`.
     pub fn parse(v: &Value) -> ParseResult<Node> {
+        check_json_depth(v)?;
+        Self::parse_at(v, 1)
+    }
+
+    /// `level` is the node object's 1-based typed nesting level.
+    fn parse_at(v: &Value, level: usize) -> ParseResult<Node> {
+        check_typed_level(level)?;
         let Value::Object(obj) = v else {
             return Err(ParseError);
         };
@@ -737,7 +920,7 @@ impl Node {
             if let Some(pv) = get_ci(obj, wire)
                 && !pv.is_null()
             {
-                payloads.insert(*wire, parse_payload(*kind, pv)?);
+                payloads.insert(*wire, parse_payload_at(*kind, pv, level + 1)?);
             }
         }
         Ok(Node { type_str, payloads })

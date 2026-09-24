@@ -1009,3 +1009,172 @@ fn context_type_errors_name_the_field_not_the_value() {
     assert!(err.contains("active_temp_basal"), "{err}");
     assert!(!err.contains("0.85"), "{err}");
 }
+
+// ---------------------------------------------------------------------------
+// Payload parsing strictness (System.Text.Json parity)
+// ---------------------------------------------------------------------------
+
+/// Parses raw JSON so number literals keep their exact spelling.
+fn raw(json: &str) -> Value {
+    serde_json::from_str(json).expect("valid JSON")
+}
+
+#[test]
+fn uuid_payload_fields_accept_only_the_hyphenated_form() {
+    let parses = |id: &str| {
+        parse_payload(
+            ConditionKind::AlertState,
+            &json!({ "alert_id": id, "state": "firing" }),
+        )
+        .is_ok()
+    };
+    assert!(parses("00000000-0000-0000-0000-0000000000cc"));
+    assert!(parses("00000000-0000-0000-0000-0000000000CC"));
+    assert!(!parses("{00000000-0000-0000-0000-0000000000cc}"));
+    assert!(!parses("000000000000000000000000000000cc"));
+    assert!(!parses("urn:uuid:00000000-0000-0000-0000-0000000000cc"));
+}
+
+#[test]
+fn enum_integers_must_fit_an_int() {
+    let parses = |category: Value| {
+        parse_payload(
+            ConditionKind::StateSpanActive,
+            &json!({ "category": category, "is_active": true }),
+        )
+        .is_ok()
+    };
+    assert!(parses(json!(2_147_483_647)));
+    assert!(parses(json!(-1)));
+    assert!(!parses(json!(2_147_483_648_i64)));
+    assert!(!parses(json!(-2_147_483_649_i64)));
+    assert!(!parses(json!("2147483648")));
+    assert!(!parses(json!("4.0")));
+    assert!(!parses(json!("0x4")));
+}
+
+#[test]
+fn enum_integer_strings_allow_surrounding_whitespace_and_a_sign() {
+    let ctx: SensorContext = serde_json::from_value(json!({
+        "active_state_spans": [
+            { "category": "Exercise", "state": null, "started_at": "2026-01-05T11:00:00Z" }
+        ]
+    }))
+    .unwrap();
+    for category in [" 4", "4 ", "+4"] {
+        assert!(
+            eval_payload(
+                ConditionKind::StateSpanActive,
+                &json!({ "category": category, "is_active": true }),
+                &ctx
+            ),
+            "{category:?}"
+        );
+    }
+}
+
+fn threshold_value(literal: &str) -> Option<String> {
+    let payload = raw(&format!(r#"{{"direction": "below", "value": {literal}}}"#));
+    match parse_payload(ConditionKind::Threshold, &payload).ok()? {
+        nocturne_alerts_core::model::Payload::Threshold(t) => Some(t.value.to_string()),
+        _ => None,
+    }
+}
+
+#[test]
+fn decimal_literals_round_like_system_text_json() {
+    // Expected strings are .NET `decimal.ToString()` of the STJ-parsed value.
+    let cases = [
+        ("1e-30", "0.0000000000000000000000000000"),
+        ("-1e-300", "0.0000000000000000000000000000"),
+        ("5e-29", "0.0000000000000000000000000000"),
+        ("1.5e-28", "0.0000000000000000000000000002"),
+        ("2.5e-28", "0.0000000000000000000000000002"),
+        (
+            "0.00000000000000000000000000025",
+            "0.0000000000000000000000000002",
+        ),
+        ("1.23e-27", "0.0000000000000000000000000012"),
+        ("0.5e1", "5"),
+        ("1E+28", "10000000000000000000000000000"),
+        ("1.50", "1.50"),
+        (
+            "12345678901234567890123456789.5",
+            "12345678901234567890123456790",
+        ),
+        (
+            "52.9920801916023291802352150425",
+            "52.992080191602329180235215043",
+        ),
+        (
+            "4.76862120714677194819717187865",
+            "4.7686212071467719481971718787",
+        ),
+        (
+            "922.94429613655535840313700185E+16",
+            "9229442961365553584.031370018",
+        ),
+    ];
+    for (literal, expected) in cases {
+        assert_eq!(
+            threshold_value(literal).as_deref(),
+            Some(expected),
+            "{literal}"
+        );
+    }
+    assert_eq!(threshold_value("1e29"), None);
+    assert_eq!(threshold_value("7.9228162514264337593543950336e28"), None);
+}
+
+fn not_chain(levels: usize, innermost: Value) -> Value {
+    (0..levels).fold(
+        innermost,
+        |child, _| json!({ "type": "not", "not": { "child": child } }),
+    )
+}
+
+fn threshold_node() -> Value {
+    json!({ "type": "threshold", "threshold": { "direction": "below", "value": 70 } })
+}
+
+#[test]
+fn node_depth_limit_counts_typed_values_like_system_text_json() {
+    // 30 not levels (60 objects) + threshold node and payload = 62.
+    assert!(Node::parse(&not_chain(30, threshold_node())).is_ok());
+    // 63 typed objects is the most STJ builds.
+    assert!(Node::parse(&not_chain(31, json!({ "type": "threshold" }))).is_ok());
+    assert!(Node::parse(&not_chain(31, threshold_node())).is_err());
+    // A condition list is a typed frame too: 60 + node + payload + list + node = 64.
+    let composite = json!({
+        "type": "composite",
+        "composite": { "operator": "and", "conditions": [{ "type": "threshold" }] }
+    });
+    assert!(Node::parse(&not_chain(30, composite)).is_err());
+}
+
+#[test]
+fn node_depth_limit_counts_ignored_properties_as_plain_json() {
+    let with_arrays = |arrays: usize| {
+        let mut x = json!(1);
+        for _ in 0..arrays {
+            x = json!([x]);
+        }
+        json!({ "type": "threshold", "threshold": { "direction": "below", "value": 1, "x": x } })
+    };
+    // 62 typed objects + 2 untyped arrays = 64 nested containers.
+    assert!(Node::parse(&not_chain(30, with_arrays(2))).is_ok());
+    assert!(Node::parse(&not_chain(30, with_arrays(3))).is_err());
+}
+
+#[test]
+fn payload_depth_counts_from_the_payload_document() {
+    let payload = |levels| json!({ "child": not_chain(levels, json!({ "type": "threshold", "threshold": {} })) });
+    // payload + 60 + node + payload = 63.
+    assert!(parse_payload(ConditionKind::Not, &payload(30)).is_ok());
+    assert!(parse_payload(ConditionKind::Not, &payload(31)).is_err());
+}
+
+#[test]
+fn very_deep_nodes_are_a_parse_error_not_a_stack_overflow() {
+    assert!(Node::parse(&not_chain(500, threshold_node())).is_err());
+}
