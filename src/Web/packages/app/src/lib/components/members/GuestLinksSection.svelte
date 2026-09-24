@@ -8,8 +8,7 @@
   import { Label } from "$lib/components/ui/label";
   import { slide } from "svelte/transition";
   import { flip } from "svelte/animate";
-  import { copyToClipboard } from "$lib/utils";
-  import { toast } from "svelte-sonner";
+  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
   import {
     Clock,
     Copy,
@@ -61,8 +60,7 @@
   let createError = $state<string | null>(null);
   let createdCode = $state<string | null>(null);
   let createdUrl = $state<string | null>(null);
-  let copiedCode = $state(false);
-  let copiedUrl = $state(false);
+  const copy = createCopyFeedback();
 
   function statusLabel(status: GuestLinkStatus | undefined): string {
     switch (status) {
@@ -176,17 +174,7 @@
   }
 
   async function copyText(text: string, type: "code" | "url") {
-    if (!(await copyToClipboard(text))) {
-      toast.error("Couldn't copy to the clipboard. Copy it manually instead.");
-      return;
-    }
-    if (type === "code") {
-      copiedCode = true;
-      setTimeout(() => (copiedCode = false), 2000);
-    } else {
-      copiedUrl = true;
-      setTimeout(() => (copiedUrl = false), 2000);
-    }
+    await copy.copy(text, type);
   }
 
   /**
@@ -321,7 +309,7 @@
                       class="shrink-0 self-center"
                       onclick={() => copyText(createdCode!, "code")}
                     >
-                      {#if copiedCode}
+                      {#if copy.isCopied("code")}
                         <Check class="h-4 w-4 text-success" />
                       {:else}
                         <Copy class="h-4 w-4" />
@@ -347,7 +335,7 @@
                       class="shrink-0"
                       onclick={() => copyText(createdUrl!, "url")}
                     >
-                      {#if copiedUrl}
+                      {#if copy.isCopied("url")}
                         <Check class="h-4 w-4 text-success" />
                       {:else}
                         <Copy class="h-4 w-4" />
