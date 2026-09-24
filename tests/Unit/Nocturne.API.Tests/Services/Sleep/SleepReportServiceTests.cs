@@ -2,7 +2,6 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Sleep;
-using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -16,8 +15,6 @@ public class SleepReportServiceTests
 {
     private readonly Mock<ISleepSessionRepository> _sessionRepo = new();
     private readonly Mock<ISensorGlucoseRepository> _glucoseRepo = new();
-    private readonly Mock<ITherapySettingsResolver> _therapySettings = new();
-    private readonly Mock<ITargetRangeResolver> _targetRange = new();
     private readonly Mock<IPatientRecordRepository> _patientRecord = new();
     private readonly SleepReportService _sut;
 
@@ -31,8 +28,6 @@ public class SleepReportServiceTests
         _sut = new SleepReportService(
             _sessionRepo.Object,
             _glucoseRepo.Object,
-            _therapySettings.Object,
-            _targetRange.Object,
             _patientRecord.Object,
             NullLogger<SleepReportService>.Instance);
     }

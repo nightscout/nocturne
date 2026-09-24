@@ -1,6 +1,4 @@
 using Microsoft.Extensions.Logging;
-using Nocturne.Core.Constants;
-using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -15,37 +13,24 @@ namespace Nocturne.API.Services.Sleep;
 /// and delegating all computation to <see cref="SleepReportCalculator"/>.
 /// </summary>
 /// <remarks>
-/// Glycemic thresholds mirror <c>ProfileLoadStage</c>: very-low (54 mg/dL) and
-/// very-high (250 mg/dL) are fixed; low/target-bottom and high/target-top come from
-/// the active profile's target range, falling back to the consensus in-range band
-/// when no therapy settings exist.
+/// Overnight TIR and hypo events use the clinical consensus bands, not the profile's
+/// personal target, so they agree with every other report.
 /// </remarks>
 public class SleepReportService : ISleepReportService
 {
-    private const double DefaultVeryLow  = GlucoseConstants.VeryLowMgdl;
-    private const double DefaultLow      = GlucoseConstants.TargetBottomMgdl;
-    private const double DefaultHigh     = GlucoseConstants.TargetTopMgdl;
-    private const double DefaultVeryHigh = GlucoseConstants.VeryHighMgdl;
-
     private readonly ISleepSessionRepository _sessions;
     private readonly ISensorGlucoseRepository _glucose;
-    private readonly ITherapySettingsResolver _therapySettingsResolver;
-    private readonly ITargetRangeResolver _targetRangeResolver;
     private readonly IPatientRecordRepository _patientRecord;
     private readonly ILogger<SleepReportService> _logger;
 
     public SleepReportService(
         ISleepSessionRepository sessions,
         ISensorGlucoseRepository glucose,
-        ITherapySettingsResolver therapySettingsResolver,
-        ITargetRangeResolver targetRangeResolver,
         IPatientRecordRepository patientRecord,
         ILogger<SleepReportService> logger)
     {
         _sessions = sessions;
         _glucose  = glucose;
-        _therapySettingsResolver = therapySettingsResolver;
-        _targetRangeResolver     = targetRangeResolver;
         _patientRecord = patientRecord;
         _logger   = logger;
     }
@@ -69,40 +54,6 @@ public class SleepReportService : ISleepReportService
         var age = today.Year - dob.Year;
         if (dob > today.AddYears(-age)) age--;
         return age;
-    }
-
-    /// <summary>
-    /// Resolves glycemic thresholds at <paramref name="timeMills"/> the same way
-    /// <c>ProfileLoadStage</c> does: very-low/very-high are fixed; low and high come
-    /// from the active profile's target range, falling back to the consensus in-range
-    /// band when no therapy settings exist for the tenant.
-    /// </summary>
-    private async Task<GlycemicThresholds> ResolveThresholdsAsync(long timeMills, CancellationToken ct)
-    {
-        if (!await _therapySettingsResolver.HasDataAsync(ct))
-        {
-            return new GlycemicThresholds
-            {
-                VeryLow      = DefaultVeryLow,
-                Low          = DefaultLow,
-                TargetBottom = DefaultLow,
-                High         = DefaultHigh,
-                TargetTop    = DefaultHigh,
-                VeryHigh     = DefaultVeryHigh,
-            };
-        }
-
-        var low  = await _targetRangeResolver.GetLowBGTargetAsync(timeMills, ct: ct);
-        var high = await _targetRangeResolver.GetHighBGTargetAsync(timeMills, ct: ct);
-        return new GlycemicThresholds
-        {
-            VeryLow      = DefaultVeryLow,
-            Low          = low,
-            TargetBottom = low,
-            High         = high,
-            TargetTop    = high,
-            VeryHigh     = DefaultVeryHigh,
-        };
     }
 
     /// <inheritdoc/>
@@ -167,7 +118,7 @@ public class SleepReportService : ISleepReportService
             afterId:        null,
             ct:             ct);
 
-        var thresholds = await ResolveThresholdsAsync(session.EndMills, ct);
+        var thresholds = new GlycemicThresholds();
         var stages    = session.Stages ?? [];
         var breakdown = SleepReportCalculator.ComputeStageBreakdown(session);
         breakdown.ReferenceRanges = await ResolveReferenceRangesAsync(ct);
@@ -238,7 +189,7 @@ public class SleepReportService : ISleepReportService
 
         // Slice the (date-range-bounded) glucose set per night so each night's
         // computation scans only its own window, not every reading in the range.
-        var thresholds = await ResolveThresholdsAsync(new DateTimeOffset(glucoseTo, TimeSpan.Zero).ToUnixTimeMilliseconds(), ct);
+        var thresholds = new GlycemicThresholds();
         var nights = sessions
             .Select(s =>
             {

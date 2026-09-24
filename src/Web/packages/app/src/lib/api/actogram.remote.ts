@@ -24,6 +24,8 @@ export const getActogramData = query(actogramSchema, async ({ from, to }) => {
 		const thresholds = {
 			...resolveGlucoseThresholds(data.thresholds),
 			glucoseYMax: data.thresholds?.glucoseYMax ?? 300,
+			targetLow: data.thresholds?.targetLow ?? null,
+			targetHigh: data.thresholds?.targetHigh ?? null,
 		};
 
 		const glucoseData = (data.glucose ?? []).map((p) => {

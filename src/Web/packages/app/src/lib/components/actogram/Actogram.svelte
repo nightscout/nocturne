@@ -7,7 +7,12 @@
     GlucosePoint,
     GlucoseThresholds,
   } from './actogram';
-  import { sliceIntoRows, sliceBgIntoRows, HOURS_PER_ROW } from './actogram';
+  import {
+    sliceIntoRows,
+    sliceBgIntoRows,
+    resolveTargetRange,
+    HOURS_PER_ROW,
+  } from './actogram';
   import ActogramRow from './ActogramRow.svelte';
   import { untrack } from 'svelte';
   import { fly } from 'svelte/transition';
@@ -186,11 +191,12 @@
     <ChartKey items={legend} class="mt-3 justify-start pl-20" />
   {/if}
   {#if bgData?.length && thresholds}
+    {@const target = resolveTargetRange(thresholds)}
     <!-- On screen the glucose dots carry their range in colour and a tooltip names them. -->
     <ChartKey
       items={[
         { texture: 'glucose-trace', label: 'Glucose', shape: 'line' },
-        { texture: 'target-range-limit', label: `Glucose target range ${bgRange(thresholds.low, thresholds.high)}`, color: 'var(--muted-foreground)', shape: 'line' },
+        { texture: 'target-range-limit', label: `Glucose target range ${bgRange(target.low, target.high)}`, color: 'var(--muted-foreground)', shape: 'line' },
       ]}
       class="mt-1 hidden justify-start pl-20 [.chart-patterns-on_&]:flex"
     />
