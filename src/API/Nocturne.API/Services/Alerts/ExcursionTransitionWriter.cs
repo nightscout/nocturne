@@ -15,8 +15,8 @@ namespace Nocturne.API.Services.Alerts;
 internal static class ExcursionTransitionWriter
 {
     /// <summary>
-    /// Writes <paramref name="decision"/> against the rule's <paramref name="prior"/> state. An
-    /// unchanged state is not rewritten.
+    /// Writes <paramref name="decision"/> against the rule's <paramref name="prior"/> state. A
+    /// decision that changes no row opens no transaction (<see cref="Changes"/>).
     /// </summary>
     /// <remarks>
     /// <paramref name="autoResolved"/> means the same evaluation's auto-resolve pass closed
@@ -37,12 +37,44 @@ internal static class ExcursionTransitionWriter
         CancellationToken ct,
         bool autoResolved = false)
     {
+        if (!Changes(prior, decision, autoResolved))
+            return (Unwritten(prior, decision), null);
+
         var written = await repository.ExecuteInTransactionAsync(
             token => WriteAsync(repository, logger, ruleId, prior, decision, now, autoResolved, token),
             (attempt, token) => LandedAsync(repository, attempt, token),
             ct);
         return (written.Transition, written.AutoResolve);
     }
+
+    /// <summary>
+    /// Whether <paramref name="decision"/> changes a stored row. A post-state differing from the
+    /// prior one only in <see cref="TrackerPostState.UpdatedAt"/> does not. The only reader of
+    /// <c>UpdatedAt</c> is a hysteresis state with no start, which adopts it as the start, and the
+    /// decision that adopts it writes the start.
+    /// </summary>
+    private static bool Changes(AlertTrackerState? prior, TrackerDecision decision, bool autoResolved) =>
+        decision.Type is not (ExcursionTransitionType.None or ExcursionTransitionType.ExcursionContinues)
+        || autoResolved
+        || StateChanged(prior, decision.Post);
+
+    /// <summary>
+    /// Compares with the stored fields as they are, so a stored state the decider read as another
+    /// one is rewritten.
+    /// </summary>
+    private static bool StateChanged(AlertTrackerState? prior, TrackerPostState? post) =>
+        post is not null
+        && (prior is null
+            || post.State != prior.State
+            || post.ConfirmationCount != prior.ConfirmationCount
+            || post.HasExcursion != prior.ActiveExcursionId.HasValue
+            || post.HysteresisStartedAt != prior.HysteresisStartedAt
+            || post.AwaitingRearm != prior.AwaitingRearm);
+
+    private static ExcursionTransition Unwritten(AlertTrackerState? prior, TrackerDecision decision) =>
+        decision.Type == ExcursionTransitionType.ExcursionContinues
+            ? new ExcursionTransition(decision.Type, prior?.ActiveExcursionId)
+            : new ExcursionTransition(ExcursionTransitionType.None);
 
     private sealed record Written(
         ExcursionTransition Transition, ExcursionTransition? AutoResolve, AlertTrackerState? State);
@@ -62,6 +94,7 @@ internal static class ExcursionTransitionWriter
                && stored.State == wrote.State
                && stored.ConfirmationCount == wrote.ConfirmationCount
                && stored.ActiveExcursionId == wrote.ActiveExcursionId
+               && stored.AwaitingRearm == wrote.AwaitingRearm
                && SameInstant(stored.UpdatedAt, wrote.UpdatedAt)
                && SameInstant(stored.HysteresisStartedAt, wrote.HysteresisStartedAt);
     }
@@ -134,7 +167,7 @@ internal static class ExcursionTransitionWriter
 
         AlertTrackerState? state = null;
         if (decision.Post is { } post
-            && (post != TrackerPostState.Of(prior) || (post.HasExcursion ? activeId : null) != priorId))
+            && (StateChanged(prior, post) || (post.HasExcursion ? activeId : null) != priorId))
         {
             state = new AlertTrackerState
             {

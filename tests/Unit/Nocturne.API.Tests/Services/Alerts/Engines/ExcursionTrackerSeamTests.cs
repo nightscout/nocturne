@@ -103,7 +103,7 @@ public class ExcursionTrackerSeamTests
 
         continued.Should().Be(new ExcursionTransition(ExcursionTransitionType.ExcursionContinues, opened.ExcursionId));
         f.Repository.Excursions.Should().ContainSingle();
-        f.State!.UpdatedAt.Should().Be(T0.AddMinutes(5));
+        f.State!.UpdatedAt.Should().Be(T0, "a continuing excursion changes no stored row");
     }
 
     [Fact] public Task Starts_and_resumes_hysteresis_managed() => Starts_and_resumes_hysteresis(Engine.Managed);

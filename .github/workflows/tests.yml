@@ -140,11 +140,14 @@ jobs:
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
+      # --all-features compiles the uniffi surface Prelude ships; the default-feature clippy
+      # covers the cdylib the backend loads.
       - name: Rust tests, clippy, fmt
         working-directory: crates
         run: |
-          cargo test --workspace
+          cargo test --workspace --all-features
           cargo clippy --workspace --all-targets -- -D warnings
+          cargo clippy --workspace --all-targets --all-features -- -D warnings
           cargo fmt --check
       - name: Build nocturne_alerts cdylib
         working-directory: crates

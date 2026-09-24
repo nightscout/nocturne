@@ -587,7 +587,8 @@ public class ExcursionTrackerTests
 
         var state = await _mockRepo.Object.GetTrackerStateAsync(_ruleId);
         state!.HysteresisStartedAt.Should().Be(new DateTime(2026, 3, 22, 12, 5, 0, DateTimeKind.Utc));
-        state.UpdatedAt.Should().Be(new DateTime(2026, 3, 22, 12, 10, 0, DateTimeKind.Utc));
+        state.UpdatedAt.Should().Be(new DateTime(2026, 3, 22, 12, 5, 0, DateTimeKind.Utc),
+            "an evaluation that changes nothing but the timestamp is not written");
     }
 
     [Fact]
