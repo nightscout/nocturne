@@ -63,6 +63,7 @@ public class AlertSweepServiceAuditAttributionTests
             orchestrator
                 .Setup(x => x.EvaluateRulesAsync(
                     It.IsAny<IReadOnlyList<AlertRuleSnapshot>>(),
+                    It.IsAny<IReadOnlySet<Guid>>(),
                     It.IsAny<SensorContext>(),
                     It.IsAny<CancellationToken>()))
                 .Returns(() =>

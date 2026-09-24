@@ -111,6 +111,47 @@ public class AlertSweepServiceWallClockTests
         (await fixture.TrackerRepo.GetTrackerStateAsync(RuleId)).Should().BeNull();
     }
 
+    [Fact]
+    public Task Managed_engine_escalates_a_child_of_a_reading_driven_parent() =>
+        RunEscalationAsync(useRustEngine: false);
+
+    [NativeFact]
+    public Task Rust_backed_engine_escalates_a_child_of_a_reading_driven_parent() =>
+        RunEscalationAsync(useRustEngine: true);
+
+    private static async Task RunEscalationAsync(bool useRustEngine)
+    {
+        // The parent is not wall-clock, so the sweep evaluates only the child; the child's
+        // reference must still resolve against every enabled rule of the tenant.
+        var parentId = Guid.Parse("00000000-0000-0000-0003-0000000000a1");
+        var parent = new AlertRule
+        {
+            Id = parentId,
+            Name = "Low",
+            ConditionType = AlertConditionType.Threshold,
+            ConditionParams = """{"direction": "below", "value": 70}""",
+            ConfirmationReadings = 1,
+        };
+        var fixture = new Fixture(
+            useRustEngine, AlertConditionType.AlertState,
+            $$"""{"alert_id": "{{parentId}}", "state": "unacknowledged", "for_minutes": 15}""",
+            parent)
+        {
+            LastReadingAt = T0,
+            LatestMgdl = 60,
+        };
+        fixture.ActiveAlerts[parentId] = new ActiveAlertSnapshot("firing", T0, null);
+
+        await fixture.SweepAt(T0.AddMinutes(10));
+        fixture.InstancesCreated.Should().Be(0, "the parent has been unacknowledged for 10 minutes");
+
+        await fixture.SweepAt(T0.AddMinutes(15));
+        fixture.InstancesCreated.Should().Be(1);
+        fixture.LastPayload!.AlertType.Should().Be(AlertConditionType.AlertState);
+        (await fixture.TrackerRepo.GetTrackerStateAsync(parentId)).Should().BeNull(
+            "the reading-driven parent is not the sweep's to evaluate");
+    }
+
     private static async Task RunOutageAsync(bool useRustEngine)
     {
         var fixture = new Fixture(useRustEngine, AlertConditionType.SignalLoss, SignalLoss15)
@@ -181,6 +222,7 @@ public class AlertSweepServiceWallClockTests
         public int Dispatches { get; private set; }
         public AlertPayload? LastPayload { get; private set; }
         public List<ExcursionTransition> Closed { get; } = [];
+        public Dictionary<Guid, ActiveAlertSnapshot> ActiveAlerts { get; } = [];
 
         public Task SweepAt(DateTime at)
         {
@@ -188,7 +230,9 @@ public class AlertSweepServiceWallClockTests
             return _sweep.EvaluateWallClockRulesAsync(CancellationToken.None);
         }
 
-        public Fixture(bool useRustEngine, AlertConditionType conditionType, string conditionParams)
+        public Fixture(
+            bool useRustEngine, AlertConditionType conditionType, string conditionParams,
+            params AlertRule[] otherRules)
         {
             var rule = new AlertRule
             {
@@ -203,7 +247,14 @@ public class AlertSweepServiceWallClockTests
                 RuleId, Tenant, rule.Name, conditionType, rule.ConditionParams,
                 AlertRuleSeverity.Warning, "{}", 0, false, null);
 
-            TrackerRepo = new InMemoryTrackerRepository([rule]);
+            var snapshots = otherRules
+                .Select(r => new AlertRuleSnapshot(
+                    r.Id, Tenant, r.Name, r.ConditionType, r.ConditionParams,
+                    AlertRuleSeverity.Warning, "{}", 0, false, null))
+                .Prepend(snapshot)
+                .ToList();
+
+            TrackerRepo = new InMemoryTrackerRepository([rule, .. otherRules]);
             var timerStore = new RecordingTimerStore();
 
             var services = new ServiceCollection();
@@ -226,7 +277,7 @@ public class AlertSweepServiceWallClockTests
             var repository = new Mock<IAlertRepository>();
             repository
                 .Setup(x => x.GetAllEnabledRulesAsync(It.IsAny<CancellationToken>()))
-                .ReturnsAsync([snapshot]);
+                .ReturnsAsync(snapshots);
             repository
                 .Setup(x => x.GetTenantAlertContextAsync(Tenant, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(() => new TenantAlertContext(Tenant, "subject", "slug", "Slug", true, LastReadingAt));
@@ -238,7 +289,7 @@ public class AlertSweepServiceWallClockTests
                     return new AlertInstanceSnapshot(Guid.NewGuid(), r.TenantId, r.ExcursionId, r.Status, r.TriggeredAt, null, 0);
                 });
             repository
-                .Setup(x => x.GetChannelsForRuleAsync(Tenant, RuleId, It.IsAny<CancellationToken>()))
+                .Setup(x => x.GetChannelsForRuleAsync(Tenant, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync([]);
             services.AddSingleton(repository.Object);
 
@@ -268,7 +319,8 @@ public class AlertSweepServiceWallClockTests
                 .Setup(x => x.EnrichAsync(
                     It.IsAny<SensorContext>(), It.IsAny<IEnumerable<AlertRuleSnapshot>>(),
                     It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync((SensorContext c, IEnumerable<AlertRuleSnapshot> _, Guid _, CancellationToken _) => c);
+                .ReturnsAsync((SensorContext c, IEnumerable<AlertRuleSnapshot> _, Guid _, CancellationToken _) =>
+                    c with { ActiveAlerts = ActiveAlerts });
             services.AddSingleton(enricher.Object);
 
             var resolution = new Mock<IExcursionResolutionHandler>();

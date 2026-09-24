@@ -538,6 +538,8 @@ public class AlertSweepService : BackgroundService
     /// through the orchestrator's full pipeline. Those conditions change truth with the clock
     /// alone, so between readings, or with no readings at all, only this pass moves them. The
     /// excursion tracker dedupes: a condition that stays true is <c>ExcursionContinues</c>.
+    /// <c>alert_state</c> references resolve against every enabled rule of the tenant, since an
+    /// escalation's parent is usually reading-driven and so not in the swept set.
     /// </summary>
     /// <remarks>
     /// The context is the one the per-reading path builds for the tenant's newest canonical
@@ -553,14 +555,14 @@ public class AlertSweepService : BackgroundService
         using var lookupScope = _serviceProvider.CreateScope();
         var lookupRepository = lookupScope.ServiceProvider.GetRequiredService<IAlertRepository>();
 
-        var rules = (await lookupRepository.GetAllEnabledRulesAsync(ct))
-            .Where(ReferencesWallClock)
-            .ToList();
-        if (rules.Count == 0) return;
+        var enabled = await lookupRepository.GetAllEnabledRulesAsync(ct);
 
-        foreach (var tenantGroup in rules.GroupBy(r => r.TenantId))
+        foreach (var tenantRules in enabled.GroupBy(r => r.TenantId))
         {
-            var tenantId = tenantGroup.Key;
+            var wallClockRules = tenantRules.Where(ReferencesWallClock).ToList();
+            if (wallClockRules.Count == 0) continue;
+
+            var tenantId = tenantRules.Key;
             var tenantContext = await lookupRepository.GetTenantAlertContextAsync(tenantId, ct);
             if (tenantContext is null || !tenantContext.IsActive) continue;
 
@@ -592,7 +594,8 @@ public class AlertSweepService : BackgroundService
                     };
 
                 var orchestrator = tenantScope.ServiceProvider.GetRequiredService<IAlertOrchestrator>();
-                await orchestrator.EvaluateRulesAsync(tenantGroup.ToList(), context, ct);
+                await orchestrator.EvaluateRulesAsync(
+                    wallClockRules, tenantRules.Select(r => r.Id).ToHashSet(), context, ct);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

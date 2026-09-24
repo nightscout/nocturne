@@ -51,6 +51,17 @@ public class RuleReferenceResolverTests
     }
 
     [Fact]
+    public void Alert_state_referencing_an_enabled_rule_outside_the_batch_kept()
+    {
+        var parentId = Guid.NewGuid();
+        var child = MakeRule(Guid.NewGuid(), AlertConditionType.AlertState,
+            $$"""{"alert_id":"{{parentId}}","state":"firing"}""");
+
+        RuleReferenceResolver.FilterEvaluable(new[] { child }, enabledIds: new HashSet<Guid> { parentId, child.Id })
+            .Should().ContainSingle().Which.Should().Be(child);
+    }
+
+    [Fact]
     public void Nested_alert_state_inside_composite_excludes_chain_when_unresolved()
     {
         var orphan = Guid.NewGuid();
