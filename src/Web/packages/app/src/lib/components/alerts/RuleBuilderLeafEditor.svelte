@@ -353,7 +353,7 @@
       }}
     />
     <TimezoneCombobox
-      class="h-7 w-44 text-xs"
+      class="w-44"
       placeholder="Profile time zone"
       value={node.time_of_day.timezone ?? undefined}
       onValueChange={(zone) => {
@@ -364,8 +364,7 @@
       <Button
         type="button"
         variant="ghost"
-        size="icon"
-        class="h-7 w-7"
+        size="icon-xs"
         aria-label="Use the profile time zone"
         onclick={() => {
           if (node.time_of_day) node.time_of_day.timezone = undefined;
