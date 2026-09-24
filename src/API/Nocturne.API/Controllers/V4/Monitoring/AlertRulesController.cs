@@ -204,21 +204,7 @@ public class AlertRulesController : ControllerBase
     public async Task<ActionResult<AlertRuleResponse>> UpdateRule(
         Guid id, [FromBody] UpdateAlertRuleRequest request, CancellationToken ct)
     {
-        if (RejectPumpModeOnGenericStateSpan(request.ConditionType, request.ConditionParams) is { } badRequest)
-            return badRequest;
-
-        var trees = CanonicalTrees.From(
-            request.ConditionType, request.ConditionParams, request.AutoResolveParams, request.ClientConfiguration);
-        if (RejectInvalidConditions(request.ConditionType, trees, request.AutoResolveEnabled) is { } invalid)
-            return invalid;
-
         await using var db = await _contextFactory.CreateAsync(ct);
-
-        if (await ResolveAndValidateChannelsAsync(request.Channels, db, ct) is { } badChannel)
-            return badChannel;
-
-        if (await RejectInvalidTrackerAgeAsync(db, request.ConditionType, request.ConditionParams, ct) is { } badTracker)
-            return badTracker;
 
         var rule = await db.AlertRules
             .Include(r => r.Channels)
@@ -227,8 +213,20 @@ public class AlertRulesController : ControllerBase
         if (rule is null)
             return NotFound();
 
-        // Cycle detection runs after the existence check so a non-existent id always 404s
-        // rather than masking with a 400 when the proposed tree happens to walk a cycle.
+        if (RejectPumpModeOnGenericStateSpan(request.ConditionType, request.ConditionParams) is { } badRequest)
+            return badRequest;
+
+        var trees = CanonicalTrees.From(
+            request.ConditionType, request.ConditionParams, request.AutoResolveParams, request.ClientConfiguration);
+        if (RejectInvalidConditions(request.ConditionType, trees, request.AutoResolveEnabled) is { } invalid)
+            return invalid;
+
+        if (await ResolveAndValidateChannelsAsync(request.Channels, db, ct) is { } badChannel)
+            return badChannel;
+
+        if (await RejectInvalidTrackerAgeAsync(db, request.ConditionType, request.ConditionParams, ct) is { } badTracker)
+            return badTracker;
+
         var rootForCycle = TryDeserializeRoot(request.ConditionType, request.ConditionParams);
         if (rootForCycle is not null
             && await _referenceService.DetectCycleAsync(id, rootForCycle, ct))

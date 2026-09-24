@@ -12,6 +12,7 @@ using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
@@ -91,6 +92,36 @@ public class AlertRulesControllerConditionValidationTests
         validator
             .Setup(v => v.Validate(It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>()))
             .Returns([new RustValidationIssue("condition", "threshold", "direction_missing", "direction")]);
+        var (controller, db) = CreateController(validator.Object);
+        var id = Guid.NewGuid();
+        db.AlertRules.Add(new AlertRuleEntity
+        {
+            Id = id,
+            TenantId = Tenant,
+            Name = "Stored",
+            ConditionType = AlertConditionType.Threshold,
+            ConditionParams = """{"direction":"below","value":70}""",
+        });
+        await db.SaveChangesAsync();
+
+        var result = await controller.UpdateRule(id, new UpdateAlertRuleRequest
+        {
+            Name = "Low",
+            ConditionType = AlertConditionType.Threshold,
+            ConditionParams = Json("""{"value": 70}"""),
+        }, CancellationToken.None);
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+        (await db.AlertRules.AsNoTracking().SingleAsync()).Name.Should().Be("Stored");
+    }
+
+    [Fact]
+    public async Task UpdateRule_of_a_missing_rule_is_not_found_whatever_its_conditions()
+    {
+        var validator = new Mock<IAlertRuleConditionValidator>();
+        validator
+            .Setup(v => v.Validate(It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>()))
+            .Returns([new RustValidationIssue("condition", "threshold", "direction_missing", "direction")]);
         var (controller, _) = CreateController(validator.Object);
 
         var result = await controller.UpdateRule(Guid.NewGuid(), new UpdateAlertRuleRequest
@@ -100,7 +131,7 @@ public class AlertRulesControllerConditionValidationTests
             ConditionParams = Json("""{"value": 70}"""),
         }, CancellationToken.None);
 
-        result.Result.Should().BeOfType<BadRequestObjectResult>();
+        result.Result.Should().BeOfType<NotFoundResult>();
     }
 
     [Fact]
