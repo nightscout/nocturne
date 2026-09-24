@@ -118,3 +118,11 @@ export function dayCount(from: string | Date, to: string | Date): number {
   const end = parseDate(toDay(to)).toDate("UTC").getTime();
   return Math.max(1, Math.round((end - start) / MS_PER_DAY) + 1);
 }
+
+/** Every `YYYY-MM-DD` day in an inclusive range, in calendar order. */
+export function daysBetween(from: string | Date, to: string | Date): string[] {
+  const start = parseDate(toDay(from));
+  return Array.from({ length: dayCount(from, to) }, (_, i) =>
+    start.add({ days: i }).toString()
+  );
+}

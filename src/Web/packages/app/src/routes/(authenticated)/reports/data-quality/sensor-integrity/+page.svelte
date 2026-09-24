@@ -38,7 +38,15 @@
   const hypoEvents = $derived(integrity?.hypoEvents ?? []);
   const summary = $derived(integrity?.summary);
 
-  const buckets = $derived(buildDayBuckets(entries, clusters, hypoEvents));
+  const buckets = $derived(
+    buildDayBuckets(
+      entries,
+      clusters,
+      hypoEvents,
+      resource.current?.days ?? [],
+      resource.current?.timeZone ?? null
+    )
+  );
 
   let selectedDateMs = $state<number | null>(null);
   const selectedBucket = $derived(buckets.find((b) => b.dateMs === selectedDateMs) ?? null);

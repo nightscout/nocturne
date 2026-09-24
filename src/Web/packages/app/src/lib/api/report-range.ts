@@ -10,7 +10,7 @@ import { z } from "zod";
 import { error } from "@sveltejs/kit";
 import { getRequestEvent } from "$app/server";
 import { getLocalDayBoundariesUtc } from "$lib/utils/timezone";
-import { dayCount, resolveDayRange } from "$lib/utils/date-range";
+import { dayCount, daysBetween, resolveDayRange } from "$lib/utils/date-range";
 import { resolvePatientTimeZone } from "$lib/server/patient-timezone";
 
 /**
@@ -33,6 +33,10 @@ export interface ReportRange {
   endDate: string;
   /** Calendar days the window covers, counting both end days. */
   dayCount: number;
+  /** The patient's IANA zone, or null when no source names one. */
+  timeZone: string | null;
+  /** Every `YYYY-MM-DD` day the window covers, in patient-calendar order. */
+  days: string[];
 }
 
 /**
@@ -62,5 +66,7 @@ export async function resolveReportRange(
     startDate: startDate.toISOString(),
     endDate: endDate.toISOString(),
     dayCount: dayCount(from, to),
+    timeZone,
+    days: daysBetween(from, to),
   };
 }
