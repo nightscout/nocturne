@@ -29,6 +29,9 @@ internal sealed class CareLinkFakeHandler : HttpMessageHandler
     /// <summary>Body for the monitor endpoint; when null that endpoint is left unmodelled like the others.</summary>
     internal string? MonitorDataJson { get; init; }
 
+    /// <summary>Body for the Auth0 authorize endpoint; when null that endpoint stays unmodelled (404).</summary>
+    internal string? AuthorizeBody { get; init; }
+
     protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request, CancellationToken cancellationToken)
     {
@@ -64,6 +67,12 @@ internal sealed class CareLinkFakeHandler : HttpMessageHandler
 
         if (url == TokenUrl)
             return Json(TokenResponseJson);
+
+        if (AuthorizeBody is not null && url.Contains("/authorize", StringComparison.Ordinal))
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(AuthorizeBody, Encoding.UTF8, "text/html")
+            };
 
         if (MonitorDataJson is not null
             && url.EndsWith(CareLinkConstants.Endpoints.MonitorData, StringComparison.Ordinal))

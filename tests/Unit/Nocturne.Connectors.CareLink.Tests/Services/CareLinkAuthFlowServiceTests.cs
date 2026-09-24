@@ -65,4 +65,37 @@ public class CareLinkAuthFlowServiceTests
         sso.Audience.Should().Be(CareLinkFakeHandler.Audience);
         handler.Requests.Should().OnlyContain(r => r.UserAgent != null);
     }
+
+    /// <summary>
+    /// The fake leaves the authorize endpoint unmodelled, so it answers 404 and never serves a login
+    /// form. That is the WAF-block or changed-markup case, which a repeat cannot clear.
+    /// </summary>
+    [Fact]
+    public async Task LoginAsync_WhenTheAuthorizeEndpointNeverYieldsAForm_ReturnsNonRetryableVerdict()
+    {
+        var handler = new CareLinkFakeHandler();
+        using var flow = new CareLinkAuthFlowService(NullLogger.Instance, handler);
+
+        var (result, shouldRetry) = await flow.LoginAsync(
+            "user@example.com", "hunter2", "EU", CancellationToken.None);
+
+        result.Should().BeNull();
+        shouldRetry.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task LoginAsync_WhenTheLoginFormHasNoAction_ReturnsNonRetryableVerdict()
+    {
+        var handler = new CareLinkFakeHandler
+        {
+            AuthorizeBody = "<html><form method=\"post\"><input type=\"hidden\" name=\"state\" value=\"s\" /></form></html>",
+        };
+        using var flow = new CareLinkAuthFlowService(NullLogger.Instance, handler);
+
+        var (result, shouldRetry) = await flow.LoginAsync(
+            "user@example.com", "hunter2", "EU", CancellationToken.None);
+
+        result.Should().BeNull();
+        shouldRetry.Should().BeFalse();
+    }
 }

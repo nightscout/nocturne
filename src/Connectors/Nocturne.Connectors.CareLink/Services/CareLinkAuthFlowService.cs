@@ -47,12 +47,19 @@ public partial class CareLinkAuthFlowService : IDisposable
     /// <summary>
     /// Performs the full Auth0 PKCE credential login flow.
     /// </summary>
-    public async Task<AuthResult?> LoginAsync(string username, string password, string server, CancellationToken ct)
+    /// <returns>
+    /// The issued token, or null plus whether another attempt could change the failure. A login page
+    /// that never arrives and one that arrives without a form action are the login surface being
+    /// unavailable (a WAF block or changed markup), so neither is worth a second attempt; every
+    /// other failure here is left retryable as before.
+    /// </returns>
+    public async Task<(AuthResult? Result, bool ShouldRetry)> LoginAsync(
+        string username, string password, string server, CancellationToken ct)
     {
         // 1-2. Discovery and Auth0 SSO config
         var ssoConfig = await FetchSsoConfigAsync(server, ct);
         if (ssoConfig == null)
-            return null;
+            return (null, true);
 
         var baseUrl = ssoConfig.GetBaseUrl();
         var tokenUrl = $"{baseUrl}{ssoConfig.SystemEndpoints.TokenEndpointPath}";
@@ -69,7 +76,7 @@ public partial class CareLinkAuthFlowService : IDisposable
         if (authorizeResult == null)
         {
             _logger.LogError("Failed to reach login form via authorize endpoint");
-            return null;
+            return (null, false);
         }
 
         // 5. Extract form fields and action URL
@@ -77,7 +84,7 @@ public partial class CareLinkAuthFlowService : IDisposable
         if (formAction == null)
         {
             _logger.LogError("Could not extract login form action URL");
-            return null;
+            return (null, false);
         }
 
         // Resolve relative form action
@@ -119,7 +126,7 @@ public partial class CareLinkAuthFlowService : IDisposable
         if (authCode == null)
         {
             _logger.LogError("Failed to extract authorization code from redirect chain");
-            return null;
+            return (null, true);
         }
 
         // 8. Exchange code for tokens
@@ -138,7 +145,7 @@ public partial class CareLinkAuthFlowService : IDisposable
         {
             var errorBody = await tokenResponse.Content.ReadAsStringAsync(ct);
             _logger.LogError("Token exchange failed with {StatusCode}: {Body}", tokenResponse.StatusCode, errorBody);
-            return null;
+            return (null, true);
         }
 
         var tokenJson = await tokenResponse.Content.ReadAsStringAsync(ct);
@@ -151,10 +158,10 @@ public partial class CareLinkAuthFlowService : IDisposable
         if (string.IsNullOrEmpty(accessToken) || string.IsNullOrEmpty(refreshToken))
         {
             _logger.LogError("Token response missing access_token or refresh_token");
-            return null;
+            return (null, true);
         }
 
-        return new AuthResult(accessToken, refreshToken, ssoConfig.Client.ClientId, tokenUrl, ssoConfig.Client.Audience);
+        return (new AuthResult(accessToken, refreshToken, ssoConfig.Client.ClientId, tokenUrl, ssoConfig.Client.Audience), false);
     }
 
     /// <summary>
