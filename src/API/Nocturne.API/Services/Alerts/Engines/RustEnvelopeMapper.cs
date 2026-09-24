@@ -50,9 +50,11 @@ internal static class RustEnvelopeMapper
     // -----------------------------------------------------------------------
 
     /// <summary>
-    /// Builds the FFI rule object from the stored rule row. Malformed stored JSON throws
-    /// <see cref="JsonException"/> — matching the managed path, where the evaluator's
-    /// payload deserialisation would throw into the per-rule catch.
+    /// Builds the FFI rule object from the stored rule row. Malformed stored condition JSON
+    /// throws <see cref="JsonException"/>, matching the managed path, where the evaluator's
+    /// payload deserialisation would throw into the per-rule catch. Auto-resolve params are sent
+    /// only when auto-resolve is enabled, and unparseable ones as null. They only gate
+    /// auto-resolve, which neither engine fires for a tree that does not parse.
     /// </summary>
     public static RustAlertRule BuildRule(AlertRule rule) => new()
     {
@@ -62,10 +64,22 @@ internal static class RustEnvelopeMapper
         ConfirmationReadings = rule.ConfirmationReadings,
         HysteresisMinutes = rule.HysteresisMinutes,
         AutoResolveEnabled = rule.AutoResolveEnabled,
-        AutoResolveParams = string.IsNullOrWhiteSpace(rule.AutoResolveParams)
-            ? null
-            : ParseJson(rule.AutoResolveParams!),
+        AutoResolveParams = rule.AutoResolveEnabled ? TryParseJson(rule.AutoResolveParams) : null,
     };
+
+    private static JsonElement? TryParseJson(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return null;
+        try
+        {
+            return ParseJson(json);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
 
     /// <summary>
     /// Maps persisted tracker state into the envelope's tracker object. The stored GUID

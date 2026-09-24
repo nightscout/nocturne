@@ -2,6 +2,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Nocturne.API.Services.Alerts.Engines;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Alerts;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Alerts.Engines;
@@ -15,6 +16,41 @@ public class RustEnvelopeMapperTests
         TrendRate = -1.5m,
         LastReadingAt = new DateTime(2026, 1, 5, 12, 0, 0, DateTimeKind.Utc),
     };
+
+    private static AlertRule Rule(bool autoResolveEnabled, string? autoResolveParams) => new()
+    {
+        Id = Guid.Parse("00000000-0000-0000-0000-0000000000aa"),
+        ConditionType = AlertConditionType.Threshold,
+        ConditionParams = """{"direction":"below","value":70}""",
+        AutoResolveEnabled = autoResolveEnabled,
+        AutoResolveParams = autoResolveParams,
+    };
+
+    private const string AutoResolveNode = """{"type":"threshold","threshold":{"direction":"above","value":90}}""";
+
+    [Fact]
+    public void BuildRule_sends_auto_resolve_params_when_enabled()
+    {
+        var wire = RustEnvelopeMapper.BuildRule(Rule(autoResolveEnabled: true, AutoResolveNode));
+
+        wire.AutoResolveParams!.Value.GetProperty("type").GetString().Should().Be("threshold");
+    }
+
+    [Fact]
+    public void BuildRule_omits_auto_resolve_params_when_disabled()
+    {
+        RustEnvelopeMapper.BuildRule(Rule(autoResolveEnabled: false, AutoResolveNode))
+            .AutoResolveParams.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void BuildRule_sends_null_for_unparseable_auto_resolve_params(bool enabled)
+    {
+        RustEnvelopeMapper.BuildRule(Rule(enabled, "{ not json"))
+            .AutoResolveParams.Should().BeNull();
+    }
 
     [Fact]
     public void BuildContext_memoises_the_element_per_context_instance()
