@@ -23,6 +23,33 @@ public class AlertRuleEvaluationGateTests
     }
 
     [Fact]
+    public async Task An_exclusive_section_reenters_its_own_rule_and_excludes_other_flows()
+    {
+        var gate = new AlertRuleEvaluationGate();
+        var ruleId = Guid.NewGuid();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var section = gate.RunExclusiveAsync(ruleId, async () =>
+        {
+            using var inner = await gate.AcquireAsync(ruleId, CancellationToken.None)
+                .WaitAsync(TimeSpan.FromSeconds(5));
+            entered.SetResult();
+            await release.Task;
+            return 1;
+        }, CancellationToken.None);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        var contender = gate.AcquireAsync(ruleId, CancellationToken.None);
+        contender.IsCompleted.Should().BeFalse();
+
+        release.SetResult();
+        (await section).Should().Be(1);
+        (await contender.WaitAsync(TimeSpan.FromSeconds(5))).Dispose();
+        gate.StripeCount.Should().Be(0);
+    }
+
+    [Fact]
     public async Task Acquire_does_not_exclude_a_different_rule()
     {
         var gate = new AlertRuleEvaluationGate();

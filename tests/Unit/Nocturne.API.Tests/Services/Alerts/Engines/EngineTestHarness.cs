@@ -51,7 +51,8 @@ internal static class EngineTestHarness
     public static (ManagedAlertEngine Engine, ServiceProvider Provider) BuildManagedEngine(
         ManualTimeProvider time,
         IConditionTimerStore timerStore,
-        InMemoryTrackerRepository trackerRepo)
+        InMemoryTrackerRepository trackerRepo,
+        AlertRuleEvaluationGate? gate = null)
     {
         var services = new ServiceCollection();
         services.AddLogging();
@@ -62,7 +63,7 @@ internal static class EngineTestHarness
         var provider = services.BuildServiceProvider();
 
         var tracker = new ExcursionTracker(
-            trackerRepo, new AlertRuleEvaluationGate(), time, NullLogger<ExcursionTracker>.Instance);
+            trackerRepo, gate ?? new AlertRuleEvaluationGate(), time, NullLogger<ExcursionTracker>.Instance);
         var engine = new ManagedAlertEngine(
             provider.GetRequiredService<ConditionEvaluatorRegistry>(),
             tracker,

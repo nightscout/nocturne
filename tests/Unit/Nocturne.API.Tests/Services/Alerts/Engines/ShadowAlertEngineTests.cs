@@ -3,6 +3,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Nocturne.Alerts.ParityCorpus.Generator.Harness;
+using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Engines;
 using Nocturne.API.Services.Alerts.Evaluators;
 using Nocturne.API.Tests.Services.BackgroundServices;
@@ -99,9 +100,10 @@ public class ShadowAlertEngineTests
         time.SetUtcNow(T0);
         var timerStore = new RecordingTimerStore();
         var trackerRepo = new InMemoryTrackerRepository([rule]);
-        var (managed, provider) = EngineTestHarness.BuildManagedEngine(time, timerStore, trackerRepo);
+        var gate = new AlertRuleEvaluationGate();
+        var (managed, provider) = EngineTestHarness.BuildManagedEngine(time, timerStore, trackerRepo, gate);
         var logger = new ListLogger<ShadowAlertEngine>();
-        var engine = new ShadowAlertEngine(managed, shadowEvaluator, timerStore, trackerRepo, time, logger);
+        var engine = new ShadowAlertEngine(managed, shadowEvaluator, timerStore, trackerRepo, gate, time, logger);
         return (engine, logger, timerStore, trackerRepo, provider);
     }
 
@@ -116,6 +118,52 @@ public class ShadowAlertEngineTests
         PostConfirmationCount = 0,
         PostHasActiveExcursion = true,
     };
+
+    /// <summary>Records the pre-state each call received and holds the first call until released.</summary>
+    private sealed class HoldingShadowEvaluator : RuleOnlyShadowEvaluator
+    {
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource FirstEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public List<string?> PreStates { get; } = [];
+
+        public override string Name => "holding";
+
+        public override async Task<ShadowRuleOutcome> EvaluateAsync(
+            AlertRule rule, SensorContext context, DateTime now,
+            IReadOnlyDictionary<string, DateTime> timers, AlertTrackerState? trackerState, CancellationToken ct)
+        {
+            lock (PreStates) PreStates.Add(trackerState?.State);
+            if (FirstEntered.TrySetResult())
+                await Release.Task;
+            return AgreeingOutcome();
+        }
+    }
+
+    [Fact]
+    public async Task A_concurrent_evaluation_waits_for_the_one_being_compared()
+    {
+        var rule = BuildThresholdRule();
+        var shadow = new HoldingShadowEvaluator();
+        var (engine, _, _, trackerRepo, provider) = BuildShadowEngine(rule, shadow);
+        await using var _ = provider;
+
+        var first = engine.EvaluateRuleAsync(
+            ToSnapshot(rule), LowGlucoseContext(), AlertEngineOptions.Default, CancellationToken.None);
+        await shadow.FirstEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var second = Task.Run(() => engine.EvaluateRuleAsync(
+            ToSnapshot(rule), LowGlucoseContext(), AlertEngineOptions.Default, CancellationToken.None));
+        await Task.Delay(50);
+
+        second.IsCompleted.Should().BeFalse("the first evaluation holds the rule until its comparison ends");
+        shadow.PreStates.Should().Equal([null]);
+
+        shadow.Release.SetResult();
+        await first.WaitAsync(TimeSpan.FromSeconds(5));
+        (await second.WaitAsync(TimeSpan.FromSeconds(5))).Transition.Type
+            .Should().Be(ExcursionTransitionType.ExcursionContinues);
+        shadow.PreStates.Should().Equal([null, "active"],
+            "the second snapshot is taken after the first evaluation committed");
+    }
 
     [Fact]
     public async Task Agreement_produces_no_divergence_log()

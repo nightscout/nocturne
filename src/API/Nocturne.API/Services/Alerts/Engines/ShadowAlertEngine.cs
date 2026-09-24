@@ -169,18 +169,31 @@ internal sealed class RustShadowRuleEvaluator(AlertEngineErrors errors, ILogger<
 /// <remarks>
 /// All three operations are shadowed. Node divergences carry the path root as a field prefix
 /// (<c>snooze.value</c>), and auto-resolve divergences <c>auto_resolve.</c>.
+/// <para>
+/// Each operation holds the rule's <see cref="AlertRuleEvaluationGate"/> lease from the
+/// pre-state snapshot to the post-state read. Otherwise a concurrent evaluation of the rule could
+/// commit between them, and the secondary engine would start from a state the managed one did not.
+/// </para>
 /// </remarks>
 internal sealed class ShadowAlertEngine(
     ManagedAlertEngine managedEngine,
     IShadowRuleEvaluator shadowEvaluator,
     IConditionTimerStore timerStore,
     IAlertTrackerRepository trackerRepository,
+    AlertRuleEvaluationGate gate,
     TimeProvider timeProvider,
     ILogger<ShadowAlertEngine> logger)
     : IAlertEvaluationEngine
 {
     /// <inheritdoc/>
-    public async Task<AlertEngineEvaluation> EvaluateRuleAsync(
+    public Task<AlertEngineEvaluation> EvaluateRuleAsync(
+        AlertRuleSnapshot rule,
+        SensorContext context,
+        AlertEngineOptions options,
+        CancellationToken ct) =>
+        gate.RunExclusiveAsync(rule.Id, () => EvaluateRuleExclusiveAsync(rule, context, options, ct), ct);
+
+    private async Task<AlertEngineEvaluation> EvaluateRuleExclusiveAsync(
         AlertRuleSnapshot rule,
         SensorContext context,
         AlertEngineOptions options,
@@ -313,7 +326,11 @@ internal sealed class ShadowAlertEngine(
             ruleId, managedError.GetType().Name, shadowEvaluator.Name);
 
     /// <inheritdoc/>
-    public async Task<bool> EvaluateNodeAsync(
+    public Task<bool> EvaluateNodeAsync(
+        Guid ruleId, ConditionNode node, SensorContext context, string pathRoot, CancellationToken ct) =>
+        gate.RunExclusiveAsync(ruleId, () => EvaluateNodeExclusiveAsync(ruleId, node, context, pathRoot, ct), ct);
+
+    private async Task<bool> EvaluateNodeExclusiveAsync(
         Guid ruleId, ConditionNode node, SensorContext context, string pathRoot, CancellationToken ct)
     {
         var now = timeProvider.GetUtcNow().UtcDateTime;
@@ -397,7 +414,11 @@ internal sealed class ShadowAlertEngine(
     }
 
     /// <inheritdoc/>
-    public async Task<ExcursionTransition> EvaluateAutoResolveAsync(
+    public Task<ExcursionTransition> EvaluateAutoResolveAsync(
+        AlertRuleSnapshot rule, SensorContext context, CancellationToken ct) =>
+        gate.RunExclusiveAsync(rule.Id, () => EvaluateAutoResolveExclusiveAsync(rule, context, ct), ct);
+
+    private async Task<ExcursionTransition> EvaluateAutoResolveExclusiveAsync(
         AlertRuleSnapshot rule, SensorContext context, CancellationToken ct)
     {
         const string operation = "auto_resolve";

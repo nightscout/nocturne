@@ -83,9 +83,10 @@ public class ShadowAuxiliaryTests
         time.SetUtcNow(T0);
         var timers = new RecordingTimerStore();
         var repository = new InMemoryTrackerRepository([rule]);
-        var (managed, provider) = EngineTestHarness.BuildManagedEngine(time, timers, repository);
+        var gate = new AlertRuleEvaluationGate();
+        var (managed, provider) = EngineTestHarness.BuildManagedEngine(time, timers, repository, gate);
         var logger = new ListLogger<ShadowAlertEngine>();
-        return (new ShadowAlertEngine(managed, shadow, timers, repository, time, logger), logger, repository, provider);
+        return (new ShadowAlertEngine(managed, shadow, timers, repository, gate, time, logger), logger, repository, provider);
     }
 
     private static RustShadowRuleEvaluator RustShadow() => new(
