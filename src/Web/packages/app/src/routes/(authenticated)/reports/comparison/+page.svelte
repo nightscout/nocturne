@@ -269,6 +269,14 @@
 
   type Analysis = NonNullable<NonNullable<typeof queryA.current>["analysis"]>;
 
+  // A period with no readings still comes back as an analysis of zeros; read it as absent so
+  // its figures show "No data" instead of 0 %, 0 mg/dL and a delta measured against them.
+  function withReadings(a: Analysis | undefined): Analysis | undefined {
+    return a && a.basicStats?.count !== 0 ? a : undefined;
+  }
+  const analysisA = $derived(withReadings(queryA.current?.analysis));
+  const analysisB = $derived(withReadings(queryB.current?.analysis));
+
   function getMetric(a: Analysis | undefined, key: MetricKey): number | null {
     if (!a) return null;
     const tir = a.timeInRange;
@@ -326,8 +334,8 @@
   };
 
   const diffRows = $derived.by<DiffRow[]>(() => {
-    const aAnalysis = queryA.current?.analysis;
-    const bAnalysis = queryB.current?.analysis;
+    const aAnalysis = analysisA;
+    const bAnalysis = analysisB;
 
     return metricKeys.map<DiffRow>((key) => {
       const def = metricDefs[key];
@@ -370,12 +378,12 @@
   });
 
   function valueText(key: MetricKey, v: number | null): string {
-    if (v == null) return "—";
+    if (v == null) return "No data";
     return metricDefs[key].format(v);
   }
 
-  const tirA = $derived(queryA.current?.analysis?.timeInRange?.percentages);
-  const tirB = $derived(queryB.current?.analysis?.timeInRange?.percentages);
+  const tirA = $derived(analysisA?.timeInRange?.percentages);
+  const tirB = $derived(analysisB?.timeInRange?.percentages);
   const presetLabel = $derived(
     presetOptions.find((p) => p.value === preset)?.label ?? "Custom"
   );
