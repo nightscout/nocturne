@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Moq;
 using Nocturne.Infrastructure.Data;
 using Nocturne.API.Services.ConnectorPublishing;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Profiles;
@@ -73,6 +74,7 @@ public class MetadataPublisherTests
             _mockTenantAccessor.Object,
             new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
                 .UseInMemoryDatabase($"metadata-publisher-{Guid.NewGuid():N}").Options),
+            Mock.Of<IAuditContext>(),
             new PublishSkipTally(),
             NullLogger<MetadataPublisher>.Instance
         );

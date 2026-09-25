@@ -102,47 +102,22 @@ public class DeviceStatusExtrasRepository : IDeviceStatusExtrasRepository
         if (entities.Count == 0)
             return [];
 
-        // Batch-level dedup: keep first occurrence per CorrelationId
-        entities = entities
-            .GroupBy(e => e.CorrelationId)
-            .Select(g => g.First())
-            .ToList();
-
-        // DB-level dedup: filter out records whose CorrelationId already exists
-        var correlationIds = entities
-            .Select(e => e.CorrelationId)
-            .ToHashSet();
-
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var strategy = ctx.Database.CreateExecutionStrategy();
         var written = await strategy.ExecuteAsync(async () =>
         {
             await using var tx = await ctx.Database.BeginTransactionAsync(ct);
 
-            var toInsert = entities;
-            var skippedDeleted = 0;
-            if (correlationIds.Count > 0)
-            {
-                var blocked = await ctx.GetBlockingCorrelationIdsAsync(correlationIds, ct);
-
-                skippedDeleted = toInsert.Count(e => blocked.DeletedByUser.Contains(e.CorrelationId));
-                toInsert = toInsert
-                    .Where(e => !blocked.Held.Contains(e.CorrelationId))
-                    .ToList();
-            }
+            var (toInsert, skippedDeleted) = await ctx.InsertUnblockedAsync(
+                entities,
+                e => e.CorrelationId,
+                (correlationIds, token) => ctx.GetBlockingCorrelationIdsAsync(correlationIds, token),
+                ct);
 
             if (toInsert.Count == 0)
             {
                 await tx.CommitAsync(ct);
                 return new BulkWrite<DeviceStatusExtras>([], skippedDeleted);
-            }
-
-            const int batchSize = 500;
-            foreach (var batch in toInsert.Chunk(batchSize))
-            {
-                ctx.DeviceStatusExtras.AddRange(batch);
-                await ctx.SaveChangesAsync(ct);
-                ctx.ChangeTracker.Clear();
             }
 
             await tx.CommitAsync(ct);

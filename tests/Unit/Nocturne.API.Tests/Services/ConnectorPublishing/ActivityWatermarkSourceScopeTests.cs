@@ -115,6 +115,7 @@ public class ActivityWatermarkSourceScopeTests : IDisposable
             Mock.Of<ITenantOwnerResolver>(),
             Mock.Of<ITenantAccessor>(),
             _context,
+            Mock.Of<IAuditContext>(),
             new PublishSkipTally(),
             NullLogger<MetadataPublisher>.Instance);
     }
