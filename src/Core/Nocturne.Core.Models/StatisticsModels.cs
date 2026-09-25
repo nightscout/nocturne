@@ -238,6 +238,11 @@ public class TimeInRangeMetrics
     /// Per-range detailed statistics (count, average, median, stdDev)
     /// </summary>
     public TimeInRangeDetailedStats RangeStats { get; set; } = new();
+
+    /// <summary>
+    /// Average minutes per day in target, below-range and above-range zones
+    /// </summary>
+    public AverageDailyMinutes AverageDailyMinutes { get; set; } = new();
 }
 
 /// <summary>
@@ -380,6 +385,29 @@ public class TimeInRangeDurations
 }
 
 /// <summary>
+/// Average minutes per day in each zone, derived from <see cref="TimeInRangePercentages"/> rather
+/// than the recorded durations. Percentages sum to 100, so target, low and high account for a whole
+/// day even when the underlying data has gaps.
+/// </summary>
+public class AverageDailyMinutes
+{
+    /// <summary>
+    /// Average minutes per day in target range
+    /// </summary>
+    public double Target { get; set; }
+
+    /// <summary>
+    /// Average minutes per day below target (very low and low)
+    /// </summary>
+    public double Low { get; set; }
+
+    /// <summary>
+    /// Average minutes per day above target (high and very high)
+    /// </summary>
+    public double High { get; set; }
+}
+
+/// <summary>
 /// Time in range episodes. A run of consecutive readings on the same side of target is one
 /// episode, counted against the most extreme zone the run reached: a rise from high into very
 /// high and back is one very-high episode, not a high one and a very-high one.
@@ -472,9 +500,39 @@ public class TreatmentSummary
     public int TreatmentCount { get; set; }
 
     /// <summary>
+    /// Number of bolus records those totals came from
+    /// </summary>
+    public int BolusCount { get; set; }
+
+    /// <summary>
+    /// Number of carb intake records those totals came from
+    /// </summary>
+    public int CarbEntryCount { get; set; }
+
+    /// <summary>
     /// Carbohydrate to insulin ratio (grams of carbs per unit of insulin)
     /// </summary>
     public double CarbToInsulinRatio { get; set; }
+
+    /// <summary>
+    /// Average bolus insulin per bolus (units), excluding basal
+    /// </summary>
+    public double AveragePerBolus { get; set; }
+
+    /// <summary>
+    /// Average carbohydrate per carb intake (grams)
+    /// </summary>
+    public double AverageCarbsPerEntry { get; set; }
+
+    /// <summary>
+    /// Average number of boluses per day over the summary's range
+    /// </summary>
+    public double DailyBoluses { get; set; }
+
+    /// <summary>
+    /// Average carbohydrate per day in grams over the summary's range
+    /// </summary>
+    public double DailyCarbs { get; set; }
 }
 
 /// <summary>
@@ -1460,9 +1518,6 @@ public class SiteChangeImpactSummary
 
     /// <summary>Average glucose after site change (mg/dL)</summary>
     public double AvgGlucoseAfterChange { get; set; }
-
-    /// <summary>Percent improvement in glucose after site change</summary>
-    public double PercentImprovement { get; set; }
 
     /// <summary>Time in range before site change (%)</summary>
     public double TimeInRangeBeforeChange { get; set; }

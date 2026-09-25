@@ -237,8 +237,9 @@ public interface IStatisticsService
     /// <param name="boluses"><see cref="Bolus"/> records.</param>
     /// <param name="carbIntakes"><see cref="CarbIntake"/> records.</param>
     /// <param name="foodsByCarbIntake">Optional food breakdown keyed by <see cref="CarbIntake"/> ID.</param>
+    /// <param name="dayCount">Calendar days the records cover, for the per-day averages.</param>
     /// <returns>A <see cref="TreatmentSummary"/> with insulin and carb statistics.</returns>
-    TreatmentSummary CalculateTreatmentSummary(IEnumerable<Bolus> boluses, IEnumerable<CarbIntake> carbIntakes, IReadOnlyDictionary<Guid, List<TreatmentFood>>? foodsByCarbIntake = null);
+    TreatmentSummary CalculateTreatmentSummary(IEnumerable<Bolus> boluses, IEnumerable<CarbIntake> carbIntakes, IReadOnlyDictionary<Guid, List<TreatmentFood>>? foodsByCarbIntake = null, int dayCount = 1);
 
     /// <summary>
     /// Calculate overall daily averages from per-day data points.

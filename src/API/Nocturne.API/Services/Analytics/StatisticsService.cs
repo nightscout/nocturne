@@ -1243,6 +1243,7 @@ public class StatisticsService : IStatisticsService
                 Durations = new TimeInRangeDurations(),
                 Episodes = new TimeInRangeEpisodes(),
                 RangeStats = new TimeInRangeDetailedStats(),
+                AverageDailyMinutes = new AverageDailyMinutes(),
             };
         }
 
@@ -1340,8 +1341,22 @@ public class StatisticsService : IStatisticsService
             Durations = durations,
             Episodes = episodes,
             RangeStats = rangeStats,
+            AverageDailyMinutes = AverageDailyMinutesFrom(percentages),
         };
     }
+
+    /// <summary>
+    /// The average minutes per day in each zone, from the percentages rather than the recorded
+    /// durations. Percentages sum to 100, so the three zones account for a whole day even when the
+    /// data has gaps; <see cref="TimeInRangeDurations"/> would not.
+    /// </summary>
+    private static AverageDailyMinutes AverageDailyMinutesFrom(TimeInRangePercentages percentages) =>
+        new()
+        {
+            Target = percentages.Target / 100.0 * 1440.0,
+            Low = (percentages.VeryLow + percentages.Low) / 100.0 * 1440.0,
+            High = (percentages.High + percentages.VeryHigh) / 100.0 * 1440.0,
+        };
 
     /// <inheritdoc/>
     public PersonalRangeTimeInRange? CalculatePersonalRangeTime(
@@ -1796,13 +1811,18 @@ public class StatisticsService : IStatisticsService
     /// <param name="boluses">Collection of boluses</param>
     /// <param name="carbIntakes">Collection of carb intakes</param>
     /// <param name="foodsByCarbIntake">Optional lookup of treatment foods grouped by carb intake ID</param>
+    /// <param name="dayCount">Calendar days the collections cover, for the per-day averages</param>
     /// <returns>Treatment summary with totals and counts</returns>
     public TreatmentSummary CalculateTreatmentSummary(
         IEnumerable<Bolus> boluses,
         IEnumerable<CarbIntake> carbIntakes,
-        IReadOnlyDictionary<Guid, List<TreatmentFood>>? foodsByCarbIntake = null
+        IReadOnlyDictionary<Guid, List<TreatmentFood>>? foodsByCarbIntake = null,
+        int dayCount = 1
     )
     {
+        var bolusList = boluses.ToList();
+        var carbIntakeList = carbIntakes.ToList();
+
         var summary = new TreatmentSummary
         {
             Totals = new TreatmentTotals { Food = new FoodTotals(), Insulin = new InsulinTotals() },
@@ -1810,14 +1830,14 @@ public class StatisticsService : IStatisticsService
         };
 
         // Aggregate insulin from boluses (all boluses are bolus insulin; basal comes from StateSpans)
-        foreach (var bolus in boluses)
+        foreach (var bolus in bolusList)
         {
             summary.TreatmentCount++;
             summary.Totals.Insulin.Bolus += bolus.Insulin;
         }
 
         // Aggregate macronutrients from carb intakes
-        foreach (var carbIntake in carbIntakes)
+        foreach (var carbIntake in carbIntakeList)
         {
             summary.TreatmentCount++;
 
@@ -1835,6 +1855,17 @@ public class StatisticsService : IStatisticsService
                 }
             }
         }
+
+        summary.BolusCount = bolusList.Count;
+        summary.CarbEntryCount = carbIntakeList.Count;
+        summary.AveragePerBolus =
+            summary.BolusCount > 0 ? summary.Totals.Insulin.Bolus / summary.BolusCount : 0;
+        summary.AverageCarbsPerEntry =
+            summary.CarbEntryCount > 0 ? summary.Totals.Food.Carbs / summary.CarbEntryCount : 0;
+
+        var days = dayCount > 0 ? dayCount : 1;
+        summary.DailyBoluses = (double)summary.BolusCount / days;
+        summary.DailyCarbs = summary.Totals.Food.Carbs / days;
 
         // Calculate carb to insulin ratio
         var totalInsulin = summary.Totals.Insulin.Bolus + summary.Totals.Insulin.Basal;
@@ -3178,8 +3209,6 @@ public class StatisticsService : IStatisticsService
             {
                 AvgGlucoseBeforeChange = Math.Round(avgBefore, 1),
                 AvgGlucoseAfterChange = Math.Round(avgAfter, 1),
-                PercentImprovement =
-                    avgBefore > 0 ? Math.Round((avgBefore - avgAfter) / avgBefore * 100, 1) : 0,
                 TimeInRangeBeforeChange = Math.Round(tirBefore, 1),
                 TimeInRangeAfterChange = Math.Round(tirAfter, 1),
                 CvBeforeChange = Math.Round(cvBefore, 1),

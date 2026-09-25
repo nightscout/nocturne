@@ -67,6 +67,37 @@ public class StatisticsServiceTDDTests
         result.CarbToInsulinRatio.Should().Be(12, "60g / 5U = 12");
     }
 
+    [Fact]
+    public void TreatmentSummary_AveragePerBolus_IsBolusInsulinOverBolusCount()
+    {
+        var boluses = new[]
+        {
+            MakeBolus(4.0),
+            MakeBolus(2.0),
+            MakeBolus(0.5, automatic: true), // SMB, still a bolus record
+        };
+        var carbIntakes = new[] { new CarbIntake { Carbs = 45 } };
+
+        var result = _sut.CalculateTreatmentSummary(boluses, carbIntakes);
+
+        result.BolusCount.Should().Be(3);
+        result.CarbEntryCount.Should().Be(1);
+        result.AveragePerBolus.Should().Be(6.5 / 3);
+        result.AverageCarbsPerEntry.Should().Be(45);
+    }
+
+    [Fact]
+    public void TreatmentSummary_PerDayAverages_DivideByTheDayCount()
+    {
+        var boluses = Enumerable.Range(0, 6).Select(_ => MakeBolus(2.0)).ToArray();
+        var carbIntakes = Enumerable.Range(0, 2).Select(_ => new CarbIntake { Carbs = 45 }).ToArray();
+
+        var result = _sut.CalculateTreatmentSummary(boluses, carbIntakes, dayCount: 6);
+
+        result.DailyBoluses.Should().Be(1.0);
+        result.DailyCarbs.Should().Be(15.0);
+    }
+
     #endregion
 
     #region CalculateInsulinDeliveryStatistics — Basic Scenarios

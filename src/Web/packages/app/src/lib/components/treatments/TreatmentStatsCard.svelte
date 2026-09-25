@@ -7,29 +7,12 @@
   interface Props {
     treatmentSummary: TreatmentSummary;
     counts: Record<EntryCategoryId | "all", number>;
-    /** Calendar days the selected range covers, counting both end days. */
-    dayCount: number;
   }
 
-  let { treatmentSummary, counts, dayCount }: Props = $props();
+  let { treatmentSummary, counts }: Props = $props();
 
-  const totalInsulin = $derived(
-    (treatmentSummary.totals?.insulin?.bolus ?? 0) +
-      (treatmentSummary.totals?.insulin?.basal ?? 0)
-  );
+  const totalInsulin = $derived(treatmentSummary.totals?.insulin?.bolus ?? 0);
   const totalCarbs = $derived(treatmentSummary.totals?.food?.carbs ?? 0);
-  const bolusCount = $derived(counts.bolus);
-  const carbEntriesCount = $derived(counts.carbs);
-
-  let dailyAvgCarbs = $derived(totalCarbs / dayCount);
-  let dailyAvgBoluses = $derived(bolusCount / dayCount);
-
-  let avgInsulinPerBolus = $derived(
-    bolusCount > 0 ? totalInsulin / bolusCount : 0
-  );
-  let avgCarbsPerEntry = $derived(
-    carbEntriesCount > 0 ? totalCarbs / carbEntriesCount : 0
-  );
 
   const categoryBreakdown = $derived(
     Object.values(ENTRY_CATEGORIES)
@@ -46,13 +29,13 @@
       label: "Insulin",
       value: totalInsulin.toFixed(1),
       unit: "U",
-      note: `${bolusCount} boluses · ${dailyAvgBoluses.toFixed(1)}/day · ${avgInsulinPerBolus.toFixed(1)}U avg`,
+      note: `${treatmentSummary.bolusCount ?? 0} boluses · ${(treatmentSummary.dailyBoluses ?? 0).toFixed(1)}/day · ${(treatmentSummary.averagePerBolus ?? 0).toFixed(1)}U avg`,
     },
     {
       label: "Carbs",
       value: totalCarbs.toFixed(0),
       unit: "g",
-      note: `${carbEntriesCount} meals · ${dailyAvgCarbs.toFixed(0)}g/day · ${avgCarbsPerEntry.toFixed(0)}g avg/meal`,
+      note: `${treatmentSummary.carbEntryCount ?? 0} meals · ${(treatmentSummary.dailyCarbs ?? 0).toFixed(0)}g/day · ${(treatmentSummary.averageCarbsPerEntry ?? 0).toFixed(0)}g avg/meal`,
     },
   ]}
 />

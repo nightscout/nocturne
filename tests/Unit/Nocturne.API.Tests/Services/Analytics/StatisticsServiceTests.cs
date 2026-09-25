@@ -401,6 +401,30 @@ public class StatisticsServiceTests
         result.Percentages.Target.Should().Be(100);
     }
 
+    [Fact]
+    public void CalculateTimeInRange_AverageDailyMinutes_AddToAWholeDayThroughAGap()
+    {
+        // Five-minute readings, a two-hour gap the sensor did not cover, then two more. The
+        // percentages count readings, so they still sum to 100 and the zones still fill a day.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var entries = new[]
+        {
+            new SensorGlucose { Mgdl = 200, Timestamp = start },
+            new SensorGlucose { Mgdl = 200, Timestamp = start.AddMinutes(5) },
+            new SensorGlucose { Mgdl = 200, Timestamp = start.AddMinutes(10) },
+            new SensorGlucose { Mgdl = 100, Timestamp = start.AddMinutes(130) },
+            new SensorGlucose { Mgdl = 45, Timestamp = start.AddMinutes(135) },
+        };
+
+        var result = _statisticsService.CalculateTimeInRange(entries);
+
+        var average = result.AverageDailyMinutes;
+        (average.Target + average.Low + average.High).Should().BeApproximately(1440, 1);
+        average.Target.Should().BeApproximately(result.Percentages.Target / 100 * 1440, 0.001);
+        average.Low.Should().BeApproximately((result.Percentages.Low + result.Percentages.VeryLow) / 100 * 1440, 0.001);
+        average.High.Should().BeApproximately((result.Percentages.High + result.Percentages.VeryHigh) / 100 * 1440, 0.001);
+    }
+
     private static SensorGlucose[] Sequence(params int[] mgdl) => Sequence(5, mgdl);
 
     private static SensorGlucose[] Sequence(double cadenceMinutes, params int[] mgdl)

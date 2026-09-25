@@ -308,7 +308,8 @@ public class StatisticsController : ControllerBase
     {
         var result = _statisticsService.CalculateTreatmentSummary(
             request.Boluses ?? Enumerable.Empty<Bolus>(),
-            request.CarbIntakes ?? Enumerable.Empty<CarbIntake>()
+            request.CarbIntakes ?? Enumerable.Empty<CarbIntake>(),
+            dayCount: request.DayCount ?? 1
         );
         return Ok(result);
     }
@@ -772,7 +773,8 @@ public class StatisticsController : ControllerBase
 
                 treatmentSummary = _statisticsService.CalculateTreatmentSummary(
                     filteredBoluses,
-                    filteredCarbs
+                    filteredCarbs,
+                    dayCount: days
                 );
 
                 insulinDelivery = _statisticsService.CalculateInsulinDeliveryStatistics(
@@ -1549,6 +1551,11 @@ public class TreatmentSummaryRequest
     /// Optional collection of carb intakes
     /// </summary>
     public IEnumerable<CarbIntake>? CarbIntakes { get; set; }
+
+    /// <summary>
+    /// Calendar days the records cover, for the per-day averages. Defaults to one day.
+    /// </summary>
+    public int? DayCount { get; set; }
 }
 
 /// <summary>

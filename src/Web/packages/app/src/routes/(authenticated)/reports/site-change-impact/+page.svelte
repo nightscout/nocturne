@@ -182,7 +182,6 @@
 
   {#if analysis?.hasSufficientData && analysis?.summary}
     {@const summary = analysis.summary}
-    {@const percentImprovement = summary.percentImprovement ?? 0}
     {@const tirBefore = summary.timeInRangeBeforeChange ?? 0}
     {@const tirAfter = summary.timeInRangeAfterChange ?? 0}
     <Card>
@@ -193,45 +192,11 @@
         </CardTitle>
       </CardHeader>
       <CardContent class="space-y-4">
-        <div class="divide-y divide-border">
-          <div class="pb-3">
-            {#if percentImprovement > 5}
-              <div>
-                <p class="font-medium">Average glucose after a site change</p>
-                <p class="text-sm text-muted-foreground">
-                  {percentImprovement.toFixed(1)}% lower than in the hours
-                  before.
-                </p>
-              </div>
-            {:else if percentImprovement < -5}
-              <div>
-                <p class="font-medium">Average glucose after a site change</p>
-                <p class="text-sm text-muted-foreground">
-                  {Math.abs(percentImprovement).toFixed(1)}% higher than in the
-                  hours before. This can reflect insertion or site-location
-                  factors.
-                </p>
-              </div>
-            {:else}
-              <div>
-                <p class="font-medium">Average glucose after a site change</p>
-                <p class="text-sm text-muted-foreground">
-                  Differs by {Math.abs(percentImprovement).toFixed(1)}% from the
-                  hours before; differences under 5% are counted as no material
-                  change.
-                </p>
-              </div>
-            {/if}
-          </div>
-
-          <div class="pt-3">
-            <div>
-              <p class="font-medium">Time in range around a site change</p>
-              <p class="text-sm text-muted-foreground">
-                {tirBefore.toFixed(0)}% before, {tirAfter.toFixed(0)}% after.
-              </p>
-            </div>
-          </div>
+        <div>
+          <p class="font-medium">Time in range around a site change</p>
+          <p class="text-sm text-muted-foreground">
+            {tirBefore.toFixed(0)}% before, {tirAfter.toFixed(0)}% after.
+          </p>
         </div>
         <p class="text-xs text-muted-foreground">
           These are averages across {analysis.siteChangeCount ?? 0} site changes
