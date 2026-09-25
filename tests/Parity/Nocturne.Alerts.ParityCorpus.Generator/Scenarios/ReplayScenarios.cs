@@ -69,6 +69,19 @@ public static class ReplayScenarios
             ]);
 
         yield return Replay(
+            "replay-threshold-clears-and-fires-again",
+            "a low fires, clears on the first false reading, and fires again; pinned against the live scenario threshold-clears-and-fires-again",
+            [Rule(1, "threshold", Low70)],
+            [
+                Reading(0, 100m),
+                Reading(5, 65m),   // fires
+                Reading(10, 65m),
+                Reading(15, 100m), // clears
+                Reading(20, 100m),
+                Reading(25, 65m),  // fires
+            ]);
+
+        yield return Replay(
             "replay-silent-clear-resets-timers",
             "a clear resets every timer of the rule, the auto-resolve tree's included, so after a re-fire the resolve hold starts over",
             [Rule(1, "threshold", Low70, autoResolveParams: """

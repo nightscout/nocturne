@@ -79,6 +79,7 @@ fn replay_events(path: &Path) -> Vec<(String, String, &'static str)> {
 #[test]
 fn paired_live_and_replay_scenarios_yield_the_same_events() {
     let mut pairs = 0;
+    let mut cleared = false;
     for entry in std::fs::read_dir(corpus().join("replay")).unwrap() {
         let path = entry.unwrap().path();
         let file = path.file_name().unwrap().to_str().unwrap();
@@ -92,11 +93,38 @@ fn paired_live_and_replay_scenarios_yield_the_same_events() {
             continue;
         }
         pairs += 1;
+        assert_same_inputs(name);
+        let live = live_events(name);
+        cleared |= live.iter().any(|(_, _, kind)| *kind == "cleared");
         assert_eq!(
-            live_events(name),
+            live,
             replay_events(&path),
             "live {name} and replay-{name} diverge"
         );
     }
-    assert!(pairs >= 1, "no paired scenarios found");
+    assert!(
+        pairs >= 2,
+        "expected at least two paired scenarios, found {pairs}"
+    );
+    assert!(cleared, "no paired scenario exercises a clear");
+}
+
+/// A pair pins one behaviour only while both scenarios feed the same rules the
+/// same readings at the same instants.
+fn assert_same_inputs(name: &str) {
+    let live = read(&corpus().join(format!("{name}.json")));
+    let replay = read(&corpus().join("replay").join(format!("replay-{name}.json")));
+    assert_eq!(
+        live["rules"], replay["rules"],
+        "{name}: paired rules differ"
+    );
+    let ticks = |s: &Value| -> Vec<(Value, Value)> {
+        s["ticks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| (t["at"].clone(), t["context"].clone()))
+            .collect()
+    };
+    assert_eq!(ticks(&live), ticks(&replay), "{name}: paired ticks differ");
 }

@@ -24,6 +24,19 @@ public static class GlucoseLeafScenarios
             ]);
 
         yield return Scenario(
+            "threshold-clears-and-fires-again",
+            "a low opens, enters hysteresis on the first false reading and closes on the second, then opens a new excursion; pinned against the replay scenario replay-threshold-clears-and-fires-again",
+            [Rule(1, "threshold", """{"direction": "below", "value": 70}""")],
+            [
+                Tick(T(0), Ctx(T(0), glucose: 100m)),
+                Tick(T(5), Ctx(T(5), glucose: 65m)),    // opened
+                Tick(T(10), Ctx(T(10), glucose: 65m)),  // continues
+                Tick(T(15), Ctx(T(15), glucose: 100m)), // hysteresis started
+                Tick(T(20), Ctx(T(20), glucose: 100m)), // closed
+                Tick(T(25), Ctx(T(25), glucose: 65m)),  // opened
+            ]);
+
+        yield return Scenario(
             "threshold-above-boundaries",
             "above is strictly greater-than: 250 does not fire, 250.1 does",
             [Rule(1, "threshold", """{"direction": "above", "value": 250}""")],
