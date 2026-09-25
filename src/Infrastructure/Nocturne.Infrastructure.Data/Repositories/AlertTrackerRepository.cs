@@ -224,9 +224,10 @@ public class AlertTrackerRepository : IAlertTrackerRepository
     /// Joins a transaction already open on the context. Otherwise opens one under the context's
     /// execution strategy. Opening the connection sets the tenant GUCs (TenantConnectionInterceptor),
     /// so every statement in the transaction runs under the context's tenant. Each attempt, and
-    /// the verification, starts with an empty change tracker: an entity an earlier attempt saved
-    /// stays tracked as unchanged after its transaction rolls back, so a retry setting it to the
-    /// same values would write nothing.
+    /// the verification, starts with no tracker state or excursion tracked: an entity an earlier
+    /// attempt saved stays tracked as unchanged after its transaction rolls back, so a retry
+    /// setting it to the same values would write nothing. Only those two entity types are
+    /// detached; the context is the scope's, and what else it tracks is its other users'.
     /// </remarks>
     public virtual async Task<T> ExecuteInTransactionAsync<T>(
         Func<CancellationToken, Task<T>> work,
@@ -244,7 +245,7 @@ public class AlertTrackerRepository : IAlertTrackerRepository
             async (_, _, token) =>
             {
                 completed = false;
-                _context.ChangeTracker.Clear();
+                DetachTransitionRows();
                 await using var transaction = await _context.Database.BeginTransactionAsync(token);
                 result = await work(token);
                 completed = true;
@@ -257,10 +258,19 @@ public class AlertTrackerRepository : IAlertTrackerRepository
                 {
                     if (!completed)
                         return new ExecutionResult<T>(false, default!);
-                    _context.ChangeTracker.Clear();
+                    DetachTransitionRows();
                     return new ExecutionResult<T>(await verifySucceeded(result, token), result);
                 },
             ct);
+    }
+
+    private void DetachTransitionRows()
+    {
+        var rows = _context.ChangeTracker.Entries()
+            .Where(e => e.Entity is AlertTrackerStateEntity or AlertExcursionEntity)
+            .ToList();
+        foreach (var row in rows)
+            row.State = EntityState.Detached;
     }
 
     private static AlertTrackerState MapTrackerState(AlertTrackerStateEntity entity) => new()

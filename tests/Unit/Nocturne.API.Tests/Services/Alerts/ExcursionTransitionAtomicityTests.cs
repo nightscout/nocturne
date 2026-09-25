@@ -88,6 +88,20 @@ public sealed class ExcursionTransitionAtomicityTests : IDisposable
 
     private static readonly DateTimeOffset Now = new(2026, 1, 5, 12, 0, 0, TimeSpan.Zero);
 
+    [Fact]
+    public async Task A_transition_leaves_what_else_the_context_tracks()
+    {
+        await using var context = _db.CreateContext();
+        var rule = await context.AlertRules.SingleAsync(r => r.Id == RuleId);
+        rule.Name = "renamed";
+
+        await TrackerOver(context).ProcessEvaluationAsync(RuleId, conditionMet: true, null, CancellationToken.None);
+        await context.SaveChangesAsync();
+
+        await using var check = _db.CreateContext();
+        (await check.AlertRules.SingleAsync(r => r.Id == RuleId)).Name.Should().Be("renamed");
+    }
+
     /// <summary>
     /// Another process opens an excursion for the rule after this one read the idle state and
     /// before it got the rule's transition lock.
