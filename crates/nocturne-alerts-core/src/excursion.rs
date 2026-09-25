@@ -70,6 +70,7 @@ pub enum CloseReason {
     Hysteresis,
     AutoResolve,
     Manual,
+    RuleDisabled,
 }
 
 impl CloseReason {
@@ -79,6 +80,7 @@ impl CloseReason {
             CloseReason::Hysteresis => "hysteresis",
             CloseReason::AutoResolve => "auto",
             CloseReason::Manual => "manual",
+            CloseReason::RuleDisabled => "rule-disabled",
         }
     }
 
@@ -88,6 +90,7 @@ impl CloseReason {
             "hysteresis" => Some(CloseReason::Hysteresis),
             "auto" => Some(CloseReason::AutoResolve),
             "manual" => Some(CloseReason::Manual),
+            "rule-disabled" => Some(CloseReason::RuleDisabled),
             _ => None,
         }
     }

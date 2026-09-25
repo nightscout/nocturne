@@ -255,6 +255,7 @@ public enum RustCloseReason
     [JsonStringEnumMemberName("hysteresis")] Hysteresis,
     [JsonStringEnumMemberName("auto")] Auto,
     [JsonStringEnumMemberName("manual")] Manual,
+    [JsonStringEnumMemberName("rule-disabled")] RuleDisabled,
 }
 
 /// <summary>

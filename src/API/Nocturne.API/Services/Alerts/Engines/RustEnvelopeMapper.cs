@@ -270,6 +270,7 @@ internal static class RustEnvelopeMapper
         RustCloseReason.Hysteresis => ExcursionCloseReason.Hysteresis,
         RustCloseReason.Auto => ExcursionCloseReason.AutoResolve,
         RustCloseReason.Manual => ExcursionCloseReason.Manual,
+        RustCloseReason.RuleDisabled => ExcursionCloseReason.RuleDisabled,
         _ => throw new ArgumentOutOfRangeException(nameof(wire), wire, null),
     };
 
@@ -278,6 +279,7 @@ internal static class RustEnvelopeMapper
         ExcursionCloseReason.Hysteresis => RustCloseReason.Hysteresis,
         ExcursionCloseReason.AutoResolve => RustCloseReason.Auto,
         ExcursionCloseReason.Manual => RustCloseReason.Manual,
+        ExcursionCloseReason.RuleDisabled => RustCloseReason.RuleDisabled,
         _ => throw new ArgumentOutOfRangeException(nameof(reason), reason, null),
     };
 
@@ -315,6 +317,7 @@ internal static class RustEnvelopeMapper
         ExcursionCloseReason.Hysteresis => "hysteresis",
         ExcursionCloseReason.AutoResolve => "auto",
         ExcursionCloseReason.Manual => "manual",
+        ExcursionCloseReason.RuleDisabled => "rule-disabled",
         _ => reason.ToString()!.ToLowerInvariant(),
     };
 

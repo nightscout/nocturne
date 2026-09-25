@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Monitoring;
+using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
@@ -48,10 +49,13 @@ public class TrackerAlertRuleSyncServiceTests
             classifier.Object,
             _referenceService.Object,
             new AlertRuleRearm(new AlertRuleEvaluationGate(), new AlertTrackerRepository(Db())),
+            new AlertRuleDisableHandler(_excursionTracker.Object, _resolutionHandler.Object),
             NullLogger<TrackerAlertRuleSyncService>.Instance);
     }
 
     private readonly Mock<IAlertReferenceService> _referenceService = new();
+    private readonly Mock<IExcursionTracker> _excursionTracker = new();
+    private readonly Mock<IExcursionResolutionHandler> _resolutionHandler = new();
 
     private NocturneDbContext Db() => new(_options) { TenantId = _tenantId };
 
@@ -404,6 +408,54 @@ public class TrackerAlertRuleSyncServiceTests
         await _sut.DeleteRulesForDefinitionAsync(definition.Id);
 
         (await AwaitingRearmAsync(ruleId)).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Resync_disabling_a_referenced_orphan_closes_its_excursion()
+    {
+        var definition = await SeedDefinitionAsync(thresholds: [Threshold(24)]);
+        await _sut.SyncDefinitionAsync(definition.Id);
+        Guid ruleId;
+        await using (var db = Db())
+        {
+            ruleId = (await db.AlertRules.SingleAsync()).Id;
+            db.TrackerNotificationThresholds.RemoveRange(await db.TrackerNotificationThresholds.ToListAsync());
+            await db.SaveChangesAsync();
+        }
+        _referenceService
+            .Setup(r => r.FindReferencingRulesAsync(ruleId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([Guid.NewGuid()]);
+        var closed = new ExcursionTransition(
+            ExcursionTransitionType.ExcursionClosed, Guid.NewGuid(), ExcursionCloseReason.RuleDisabled);
+        _excursionTracker
+            .Setup(t => t.ForceCloseAsync(ruleId, ExcursionCloseReason.RuleDisabled, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(closed);
+
+        await _sut.SyncDefinitionAsync(definition.Id);
+
+        _excursionTracker.Verify(
+            t => t.ForceCloseAsync(ruleId, ExcursionCloseReason.RuleDisabled, It.IsAny<CancellationToken>()),
+            Times.Once);
+        _resolutionHandler.Verify(
+            h => h.HandleClosedAsync(closed, _tenantId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Resync_keeping_a_rule_enabled_closes_nothing()
+    {
+        var definition = await SeedDefinitionAsync(thresholds: [Threshold(24)]);
+        await _sut.SyncDefinitionAsync(definition.Id);
+
+        await _sut.SyncDefinitionAsync(definition.Id);
+
+        _excursionTracker.Verify(
+            t => t.ForceCloseAsync(
+                It.IsAny<Guid>(), It.IsAny<ExcursionCloseReason>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _resolutionHandler.Verify(
+            h => h.HandleClosedAsync(
+                It.IsAny<ExcursionTransition>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]

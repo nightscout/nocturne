@@ -750,6 +750,29 @@ fn tracker_force_close_from_active_resets_to_idle() {
 }
 
 #[test]
+fn close_reason_rule_disabled_round_trips_through_wire() {
+    assert_eq!(
+        CloseReason::from_wire("rule-disabled"),
+        Some(CloseReason::RuleDisabled)
+    );
+    assert_eq!(CloseReason::RuleDisabled.wire(), "rule-disabled");
+}
+
+#[test]
+fn tracker_force_close_with_rule_disabled_resets_to_idle() {
+    let mut tracker = ExcursionTracker::new();
+    let _ = tracker.process_evaluation(rule_id(), cfg(1, 0), true, false, at(0));
+    let t = tracker.force_close(rule_id(), CloseReason::RuleDisabled, at(5));
+    assert_eq!(t.kind, TransitionType::ExcursionClosed);
+    assert_eq!(t.close_reason, Some(CloseReason::RuleDisabled));
+    assert!(!tracker.awaiting_rearm(rule_id()));
+    assert_eq!(
+        tracker.state(rule_id()).unwrap().state,
+        TrackerStateKind::Idle
+    );
+}
+
+#[test]
 fn tracker_force_close_from_hysteresis_resets_to_idle() {
     let mut tracker = ExcursionTracker::new();
     let _ = tracker.process_evaluation(rule_id(), cfg(1, 60), true, false, at(0));

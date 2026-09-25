@@ -482,7 +482,7 @@ the rule has never been evaluated):
 
 // nocturne_alerts_tracker_force_close: from any state holding an excursion (§6.2)
 { "schema_version": 1, "tracker": { /* … */ }, "now": "…",
-  "reason": "manual" }                       // hysteresis | auto | manual
+  "reason": "manual" }                       // hysteresis | auto | manual | rule-disabled
 
 // nocturne_alerts_tracker_close_elapsed_hysteresis: only in hysteresis, only once the window has elapsed (§6.1)
 { "schema_version": 1, "tracker": { /* … */ }, "now": "…",

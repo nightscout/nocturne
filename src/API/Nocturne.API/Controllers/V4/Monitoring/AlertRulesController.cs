@@ -57,6 +57,7 @@ public class AlertRulesController : ControllerBase
     private readonly IAlertRuleConditionValidator _conditionValidator;
     private readonly ISecretEncryptionService _encryption;
     private readonly AlertRuleRearm _rearm;
+    private readonly AlertRuleDisableHandler _disableHandler;
     private readonly ILogger<AlertRulesController> _logger;
 
     /// <summary>
@@ -70,6 +71,7 @@ public class AlertRulesController : ControllerBase
         IAlertRuleConditionValidator conditionValidator,
         ISecretEncryptionService encryption,
         AlertRuleRearm rearm,
+        AlertRuleDisableHandler disableHandler,
         ILogger<AlertRulesController> logger)
     {
         _contextFactory = contextFactory;
@@ -79,6 +81,7 @@ public class AlertRulesController : ControllerBase
         _conditionValidator = conditionValidator;
         _encryption = encryption;
         _rearm = rearm;
+        _disableHandler = disableHandler;
         _logger = logger;
     }
 
@@ -257,6 +260,7 @@ public class AlertRulesController : ControllerBase
         if (!sameBody)
             rule.ConditionParams = conditionParamsJson;
         rule.ScopeClass = _scopeClassifier.Classify(request.ConditionType, conditionParamsJson);
+        var wasEnabled = rule.IsEnabled;
         rule.IsEnabled = request.IsEnabled;
         rule.SortOrder = request.SortOrder;
         rule.Severity = request.Severity ?? AlertRuleSeverity.Warning;
@@ -285,6 +289,8 @@ public class AlertRulesController : ControllerBase
         }
 
         await db.SaveChangesAsync(ct);
+        if (wasEnabled && !request.IsEnabled)
+            await _disableHandler.CloseAsync([id], tenantId, CancellationToken.None);
         // Once the save lands the clear must follow it: an edit retried after an abort changes
         // nothing, so it would not clear the hold.
         if (conditionsChanged)
@@ -364,10 +370,13 @@ public class AlertRulesController : ControllerBase
         if (rule is null)
             return NotFound();
 
+        var wasEnabled = rule.IsEnabled;
         rule.IsEnabled = !rule.IsEnabled;
         rule.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
         // See UpdateRule: the clear follows a landed save.
+        if (wasEnabled)
+            await _disableHandler.CloseAsync([id], db.TenantId, CancellationToken.None);
         await _rearm.ClearAsync([id], CancellationToken.None);
 
         return Ok(MapToResponse(rule));

@@ -40,6 +40,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
     private readonly IRuleScopeClassifier _scopeClassifier;
     private readonly IAlertReferenceService _referenceService;
     private readonly AlertRuleRearm _rearm;
+    private readonly AlertRuleDisableHandler _disableHandler;
     private readonly ILogger<TrackerAlertRuleSyncService> _logger;
 
     /// <summary>Initialises a new <see cref="TrackerAlertRuleSyncService"/>.</summary>
@@ -48,12 +49,14 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
         IRuleScopeClassifier scopeClassifier,
         IAlertReferenceService referenceService,
         AlertRuleRearm rearm,
+        AlertRuleDisableHandler disableHandler,
         ILogger<TrackerAlertRuleSyncService> logger)
     {
         _contextFactory = contextFactory;
         _scopeClassifier = scopeClassifier;
         _referenceService = referenceService;
         _rearm = rearm;
+        _disableHandler = disableHandler;
         _logger = logger;
     }
 
@@ -121,6 +124,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
 
         var keptRuleIds = new HashSet<Guid>();
         var changed = new List<Guid>();
+        var disabled = new List<Guid>();
         foreach (var (threshold, minutes) in pending)
         {
             if (minutes is null)
@@ -211,10 +215,12 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
         SyncReservoirLevelRule(db, tenantId, definition, tag, managedRules, keptRuleIds, changed);
 
         var orphaned = managedRules.Values.Where(r => !keptRuleIds.Contains(r.Id)).ToList();
-        var removed = await RemoveOrDisableAsync(db, orphaned, changed, ct);
+        var removed = await RemoveOrDisableAsync(db, orphaned, disabled, ct);
 
         await db.SaveChangesAsync(ct);
-        await _rearm.ClearAsync(changed, ct);
+        if (disabled.Count > 0)
+            await _disableHandler.CloseAsync(disabled, tenantId, CancellationToken.None);
+        await _rearm.ClearAsync([.. changed, .. disabled], ct);
 
         _logger.LogInformation(
             "Synced {ThresholdCount} threshold(s) to managed alert rules for tracker definition {DefinitionId} ({Orphaned} removed)",
@@ -235,6 +241,8 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
         var disabled = new List<Guid>();
         var removed = await RemoveOrDisableAsync(db, rules, disabled, ct);
         await db.SaveChangesAsync(ct);
+        if (disabled.Count > 0)
+            await _disableHandler.CloseAsync(disabled, db.TenantId, CancellationToken.None);
         await _rearm.ClearAsync(disabled, ct);
 
         _logger.LogInformation(

@@ -111,6 +111,7 @@ public class AlertRulesControllerTenantScopingTests
             new NoConditionIssues(),
             Mock.Of<ISecretEncryptionService>(),
             new AlertRuleRearm(new AlertRuleEvaluationGate(), new AlertTrackerRepository(seedContext)),
+            new AlertRuleDisableHandler(Mock.Of<IExcursionTracker>(), Mock.Of<IExcursionResolutionHandler>()),
             Mock.Of<ILogger<AlertRulesController>>());
     }
 
