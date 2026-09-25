@@ -8,7 +8,6 @@
   import {
     HourlyClockBasis,
     HourlyComparison,
-    HourlyExcursion,
     TimeZoneUnavailableReason,
     type HourlyPattern,
   } from "$lib/api";
@@ -16,7 +15,7 @@
   import { contextResource } from "$lib/hooks/resource-context.svelte";
   import { bg, bgLabel, bgRange, formatNumber, formatShortDate } from "$lib/utils/formatting";
   import HourlyRangeBars from "$lib/components/reports/hourly-patterns/HourlyRangeBars.svelte";
-  import HourBandStrip from "$lib/components/reports/hourly-patterns/HourBandStrip.svelte";
+  import HourlyGlance from "$lib/components/reports/hourly-patterns/HourlyGlance.svelte";
   import { hourSpan } from "$lib/components/reports/hourly-patterns/hour-labels";
 
   const reportsParams = requireDateParamsContext(14);
@@ -28,14 +27,10 @@
 
   const report = $derived(patternsResource.current);
   const hours = $derived(report?.hours ?? []);
-  const best = $derived(report?.bestHours ?? []);
-  const worst = $derived(report?.worstHours ?? []);
-  const mostBelow = $derived(report?.mostBelowRangeHours ?? []);
   const comparison = $derived(report?.comparison ?? HourlyComparison.NoReadings);
   const minimumDays = $derived(report?.minimumDaysToRank ?? 0);
   const minimumReadings = $derived(report?.minimumReadingsToRank ?? 0);
   const spread = $derived(report?.minimumSpreadToRank ?? 0);
-  const minimumLowDays = $derived(report?.minimumLowDaysToList ?? 0);
   const onTenantClock = $derived(report?.clockBasis === HourlyClockBasis.TenantTimeZone);
 
   // Band edges as the API classified on them, or null when it sent none; copy that quotes an
@@ -56,19 +51,6 @@
 
   const percent = (value: number | undefined, digits = 0) => `${(value ?? 0).toFixed(digits)}%`;
 
-  function excursionText(hour: HourlyPattern): string {
-    switch (hour.mainExcursion) {
-      case HourlyExcursion.Below:
-        return "Mostly below range";
-      case HourlyExcursion.Above:
-        return "Mostly above range";
-      case HourlyExcursion.Mixed:
-        return "As often below range as above";
-      default:
-        return "Never out of range";
-    }
-  }
-
   const hourList = (list: HourlyPattern[]) => list.map((h) => hourSpan(h.hour ?? 0)).join(", ");
 </script>
 
@@ -79,27 +61,6 @@
     content="Which hours of the day spend the most and least time in the glucose target range"
   />
 </svelte:head>
-
-{#snippet hourRow(hour: HourlyPattern, figure: string, figureLabel: string, detail: string)}
-  <li class="space-y-2 px-4 py-3">
-    <div class="flex items-baseline justify-between gap-3">
-      <span class="font-medium tabular-nums">{hourSpan(hour.hour ?? 0)}</span>
-      <span class="flex items-baseline gap-1 whitespace-nowrap">
-        <span class="text-lg font-semibold tabular-nums">{figure}</span>
-        <span class="text-xs text-muted-foreground">{figureLabel}</span>
-      </span>
-    </div>
-    <HourBandStrip bands={hour.timeInRange} />
-    <p class="text-xs text-muted-foreground">{detail}</p>
-  </li>
-{/snippet}
-
-{#snippet column(title: string, caption: string)}
-  <div class="border-b px-4 pt-4 pb-3">
-    <h3 class="text-sm font-semibold">{title}</h3>
-    <p class="mt-1 text-xs text-muted-foreground">{caption}</p>
-  </div>
-{/snippet}
 
 {#if report}
   <div class="@container space-y-6 p-3 @md:p-6">
@@ -124,99 +85,7 @@
         </Card.Content>
       </Card.Root>
     {:else}
-      <section aria-labelledby="hourly-glance" class="space-y-3">
-        <h2 id="hourly-glance" class="text-lg font-semibold">At a glance</h2>
-
-        {#if comparison === HourlyComparison.TooLittleData}
-          <Card.Root variant="dashed">
-            <Card.Content class="space-y-1">
-              <p class="font-medium">Not enough data to compare hours yet</p>
-              <p class="text-sm text-muted-foreground">
-                An hour is compared with the others once it has readings on at least
-                {minimumDays} different days, and at least {minimumReadings} readings
-                in all. Try a longer date range.
-              </p>
-            </Card.Content>
-          </Card.Root>
-        {:else}
-          <Card.Root size="flush">
-            <div class="grid gap-px bg-border @3xl:grid-cols-3 print:grid-cols-3">
-              <div class="bg-card">
-                {@render column(
-                  "Most time in range",
-                  "The hours with the largest share of readings in range."
-                )}
-                {#if comparison === HourlyComparison.Ranked}
-                  <ol class="divide-y">
-                    {#each best as hour (hour.hour)}
-                      {@render hourRow(
-                        hour,
-                        percent(hour.inRange, 1),
-                        "in range",
-                        `${percent(hour.belowRange, 1)} below, ${percent(hour.aboveRange, 1)} above range`
-                      )}
-                    {/each}
-                  </ol>
-                {:else}
-                  <p class="px-4 py-3 text-sm text-muted-foreground">
-                    The compared hours were all within {spread} percentage points of each
-                    other in time in range, too close to call any of them better or worse.
-                  </p>
-                {/if}
-              </div>
-
-              <div class="bg-card">
-                {@render column(
-                  "Least time in range",
-                  "The hours with the smallest share of readings in range, and which way they went."
-                )}
-                {#if comparison === HourlyComparison.Ranked}
-                  <ol class="divide-y">
-                    {#each worst as hour (hour.hour)}
-                      {@render hourRow(
-                        hour,
-                        percent(hour.inRange, 1),
-                        "in range",
-                        `${excursionText(hour)}: ${percent(hour.belowRange, 1)} below, ${percent(hour.aboveRange, 1)} above`
-                      )}
-                    {/each}
-                  </ol>
-                {:else}
-                  <p class="px-4 py-3 text-sm text-muted-foreground">
-                    The compared hours were all within {spread} percentage points of each
-                    other in time in range, too close to call any of them better or worse.
-                  </p>
-                {/if}
-              </div>
-
-              <div class="bg-card">
-                {@render column(
-                  "Most time below range",
-                  `The hours with the largest share of readings ${edges ? `under ${bg(edges.low)} ${bgLabel()}` : "below range"}, among those that went below range on at least ${minimumLowDays} days.`
-                )}
-                {#if mostBelow.length > 0}
-                  <ol class="divide-y">
-                    {#each mostBelow as hour (hour.hour)}
-                      {@render hourRow(
-                        hour,
-                        percent(hour.belowRange, 1),
-                        "below range",
-                        edges
-                          ? `${percent(hour.timeInRange?.veryLow, 1)} under ${bg(edges.veryLow)} ${bgLabel()}`
-                          : `${percent(hour.timeInRange?.veryLow, 1)} very low`
-                      )}
-                    {/each}
-                  </ol>
-                {:else}
-                  <p class="px-4 py-3 text-sm text-muted-foreground">
-                    No compared hour went below range on {minimumLowDays} or more days.
-                  </p>
-                {/if}
-              </div>
-            </div>
-          </Card.Root>
-        {/if}
-      </section>
+      <HourlyGlance {report} />
 
       <Card.Root>
         <Card.Header>
@@ -324,6 +193,9 @@
                     A shared link cannot see the time zone this data belongs to,
                   {:else if fallbackReason === TimeZoneUnavailableReason.LookupFailed}
                     The time zone for this data could not be loaded just now,
+                  {:else if fallbackReason === TimeZoneUnavailableReason.Unrecognised}
+                    The time zone in the profile settings for this data isn't one this server
+                    recognises,
                   {:else}
                     No time zone is set in the profile settings for this data,
                   {/if}
@@ -332,6 +204,8 @@
                   hours may be off.
                   {#if fallbackReason === TimeZoneUnavailableReason.NotConfigured}
                     Setting a time zone in the profile settings fixes this.
+                  {:else if fallbackReason === TimeZoneUnavailableReason.Unrecognised}
+                    Correcting the time zone in the profile settings fixes this.
                   {:else if fallbackReason === TimeZoneUnavailableReason.LookupFailed}
                     Reloading the report later may fix this.
                   {/if}

@@ -552,8 +552,9 @@ public class StatisticsController : ControllerBase
     private readonly record struct TenantClock(TimeZoneInfo? Zone, TimeZoneUnavailableReason? Reason);
 
     /// <summary>
-    /// The tenant's timezone, or no zone and why not: none is set or it does not resolve, the
-    /// request is a public share, or the lookup threw. No zone rather than UTC, so the hourly
+    /// The tenant's timezone, or no zone and why not: none is set, the stored one does not
+    /// resolve, the request is a public share, or the lookup threw. A share is reported as a share
+    /// whatever else is true, since its viewer can act on none of the others. No zone rather than UTC, so the hourly
     /// statistics fall back to each reading's own offset instead of shifting every hour.
     /// <para>
     /// A share normally gets no zone, because RLS hides the therapy settings it lives in from share
@@ -571,9 +572,9 @@ public class StatisticsController : ControllerBase
 
             return new TenantClock(
                 null,
-                _categoryReadContext.IsShare
-                    ? TimeZoneUnavailableReason.Share
-                    : TimeZoneUnavailableReason.NotConfigured);
+                _categoryReadContext.IsShare ? TimeZoneUnavailableReason.Share
+                : string.IsNullOrWhiteSpace(id) ? TimeZoneUnavailableReason.NotConfigured
+                : TimeZoneUnavailableReason.Unrecognised);
         }
         catch (OperationCanceledException)
         {

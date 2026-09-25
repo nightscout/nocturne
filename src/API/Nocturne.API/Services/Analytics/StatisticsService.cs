@@ -1212,7 +1212,24 @@ public class StatisticsService : IStatisticsService
     private static readonly GlycemicThresholds Consensus = new();
 
     /// <inheritdoc/>
-    public GlycemicThresholds HourlyBandThresholds => Consensus;
+    public GlycemicThresholds HourlyBandThresholds => CopyOfConsensus();
+
+    /// <summary>
+    /// A fresh copy of <see cref="Consensus"/>. The model is mutable and the instance is shared by
+    /// every tenant, so it never leaves the service itself.
+    /// </summary>
+    private static GlycemicThresholds CopyOfConsensus() =>
+        new()
+        {
+            VeryLow = Consensus.VeryLow,
+            Low = Consensus.Low,
+            TargetBottom = Consensus.TargetBottom,
+            TargetTop = Consensus.TargetTop,
+            TightTargetBottom = Consensus.TightTargetBottom,
+            TightTargetTop = Consensus.TightTargetTop,
+            High = Consensus.High,
+            VeryHigh = Consensus.VeryHigh,
+        };
 
     /// <summary>The widest UTC offset any zone uses; a recorded offset beyond it is treated as none.</summary>
     private const int MaxUtcOffsetMinutes = 14 * 60;
@@ -1772,7 +1789,7 @@ public class StatisticsService : IStatisticsService
             MinimumReadingsToRank = HourlyPatternsMinimumReadings,
             MinimumSpreadToRank = HourlyPatternsMinimumSpread,
             MinimumLowDaysToList = HourlyPatternsMinimumLowDays,
-            Thresholds = Consensus,
+            Thresholds = CopyOfConsensus(),
             ClockBasis = tenantTimeZone is null ? HourlyClockBasis.ReadingOffsets : HourlyClockBasis.TenantTimeZone,
             TimeZone = tenantTimeZone?.Id,
         };

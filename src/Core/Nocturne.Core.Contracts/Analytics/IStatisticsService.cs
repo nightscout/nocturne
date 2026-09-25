@@ -226,7 +226,7 @@ public interface IStatisticsService
 
     /// <summary>
     /// The band edges <see cref="CalculateAveragedStats"/> and <see cref="CalculateHourlyPatterns"/>
-    /// classify each reading on: the instance they use, not a copy of it.
+    /// classify each reading on, as a fresh copy on every call: changing it changes nothing else.
     /// </summary>
     GlycemicThresholds HourlyBandThresholds { get; }
 

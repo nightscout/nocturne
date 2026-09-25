@@ -581,6 +581,32 @@ public class StatisticsControllerTests
             .TimeZoneUnavailableReason.Should().Be(expected);
     }
 
+    [Theory]
+    [InlineData(false, TimeZoneUnavailableReason.Unrecognised)]
+    [InlineData(true, TimeZoneUnavailableReason.Share)]
+    public async Task GetHourlyPatterns_WithAStoredTimezoneThatDoesNotResolve_SaysItIsUnrecognised(
+        bool share, TimeZoneUnavailableReason expected)
+    {
+        SetupGlucose(new List<SensorGlucose>());
+        var category = new CategoryReadContext();
+        if (share)
+            category.MarkShare();
+        _therapySettingsResolverMock
+            .Setup(r => r.GetTimezoneAsync(null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("Mars/Olympus_Mons");
+        _statsServiceMock
+            .Setup(s => s.CalculateHourlyPatterns(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<TimeZoneInfo?>()))
+            .Returns(new HourlyPatterns());
+
+        var result = await CreateController(categoryReadContext: category).GetHourlyPatterns(
+            new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 1, 15, 0, 0, 0, DateTimeKind.Utc));
+
+        result.Result.Should().BeOfType<OkObjectResult>().Subject.Value
+            .Should().BeOfType<HourlyPatterns>().Subject
+            .TimeZoneUnavailableReason.Should().Be(expected);
+    }
+
     [Fact]
     public async Task GetHourlyPatterns_WhenTheTimezoneLookupFails_SaysSo()
     {

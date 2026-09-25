@@ -983,7 +983,10 @@ public enum HourlyComparison
     /// </summary>
     CloseTogether,
 
-    /// <summary>The best and worst hours are named.</summary>
+    /// <summary>
+    /// At least one hour is named best or worst. One list may be empty: see
+    /// <see cref="HourlyPatterns.BestHours"/>.
+    /// </summary>
     Ranked,
 }
 
@@ -1009,8 +1012,11 @@ public enum HourlyClockBasis
 [JsonConverter(typeof(JsonStringEnumConverter<TimeZoneUnavailableReason>))]
 public enum TimeZoneUnavailableReason
 {
-    /// <summary>The tenant has no timezone set, or one that does not resolve; the owner can set one.</summary>
+    /// <summary>The tenant has no timezone set; the owner can set one.</summary>
     NotConfigured,
+
+    /// <summary>The tenant's stored timezone is not one this server recognises; the owner can correct it.</summary>
+    Unrecognised,
 
     /// <summary>The request came through a public share, which cannot read the tenant's settings.</summary>
     Share,
@@ -1031,14 +1037,19 @@ public class HourlyPatterns
     public List<HourlyPattern> Hours { get; set; } = [];
 
     /// <summary>
-    /// Up to three ranked hours with the most time in range, best first. Empty unless
-    /// <see cref="Comparison"/> is <see cref="HourlyComparison.Ranked"/>.
+    /// Up to three ranked hours with the most time in range, best first. Empty when no hour at the
+    /// top stands out: the top hours tie one another past the list's end, or none is at least
+    /// <see cref="MinimumSpreadToRank"/> ahead of every worst hour and the lowest ranked hour. Can
+    /// be empty while <see cref="WorstHours"/> is not, and always is unless <see cref="Comparison"/>
+    /// is <see cref="HourlyComparison.Ranked"/>.
     /// </summary>
     public List<HourlyPattern> BestHours { get; set; } = [];
 
     /// <summary>
-    /// Up to three ranked hours with the least time in range, worst first. Never shares an hour
-    /// with <see cref="BestHours"/>.
+    /// Up to three ranked hours with the least time in range, worst first, on the same rules as
+    /// <see cref="BestHours"/> from the other end. Every one trails every best hour by at least
+    /// <see cref="MinimumSpreadToRank"/>, so the two never share an hour. Can be empty while
+    /// <see cref="BestHours"/> is not.
     /// </summary>
     public List<HourlyPattern> WorstHours { get; set; } = [];
 

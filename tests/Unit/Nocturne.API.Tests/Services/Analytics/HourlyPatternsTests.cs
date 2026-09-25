@@ -82,8 +82,29 @@ public class HourlyPatternsTests
     {
         var result = _service.CalculateHourlyPatterns([], TimeZoneInfo.Utc);
 
-        result.Thresholds.Should().BeSameAs(_service.HourlyBandThresholds);
+        result.Thresholds.Should().BeEquivalentTo(_service.HourlyBandThresholds);
         result.Thresholds.Should().BeEquivalentTo(new GlycemicThresholds());
+    }
+
+    [Fact]
+    public void HourlyBandThresholds_CannotBeChangedForLaterCallersThroughWhatItReturns()
+    {
+        _service.HourlyBandThresholds.Low = 90;
+        _service.CalculateHourlyPatterns([], TimeZoneInfo.Utc).Thresholds!.TargetTop = 200;
+
+        _service.HourlyBandThresholds.Should().BeEquivalentTo(new GlycemicThresholds());
+        new StatisticsService().CalculateHourlyPatterns([], TimeZoneInfo.Utc)
+            .Thresholds.Should().BeEquivalentTo(new GlycemicThresholds());
+    }
+
+    [Fact]
+    public void CalculateHourlyPatterns_KeepsClassifyingOnTheConsensusEdgesAfterACallerEditsTheReturnedThresholds()
+    {
+        _service.HourlyBandThresholds.Low = 90;
+
+        var result = _service.CalculateHourlyPatterns(Hour(2, 1, 80), TimeZoneInfo.Utc);
+
+        result.Hours.Single(h => h.Hour == 2).InRange.Should().Be(100);
     }
 
     #endregion
