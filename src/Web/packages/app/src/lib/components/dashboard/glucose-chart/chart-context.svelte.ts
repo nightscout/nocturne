@@ -33,6 +33,11 @@ export interface GlucoseChartContext {
 	readonly printing?: boolean;
 }
 
+// Extracted as a message, this name makes wuchale wrap `ctx` in $derived, which
+// builds a new Context, and so a new key Symbol, whenever it re-evaluates. While
+// more than one batch is alive a dirty derived re-evaluates on every read, so a
+// marker mounted during a day change looks up a key no chart ever set.
+// @wc-ignore
 const ctx = new Context<GlucoseChartContext>("GlucoseChartContext");
 
 export function setGlucoseChartContext(value: GlucoseChartContext) {
