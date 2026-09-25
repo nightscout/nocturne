@@ -125,12 +125,37 @@ public class ClientDeviceService : IClientDeviceService
         Guid subjectId,
         CancellationToken cancellationToken = default)
     {
-        var devices = await _dbContext.ClientDevices
+        var rows = await _dbContext.ClientDevices
             .Where(d => d.SubjectId == subjectId)
             .OrderByDescending(d => d.LastSeenAt)
+            .Select(d => new
+            {
+                Device = d,
+                AppName = _dbContext.OAuthGrants
+                    .Where(g => g.Id == d.GrantId)
+                    .Select(g => g.Client!.DisplayName)
+                    .FirstOrDefault(),
+            })
             .ToListAsync(cancellationToken);
 
-        return devices.Select(ToDto).ToList();
+        return rows.Select(r => ToDto(r.Device, r.AppName)).ToList();
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<Guid, int>> GetDeviceCountsByGrantAsync(
+        IReadOnlyCollection<Guid> grantIds,
+        CancellationToken cancellationToken = default)
+    {
+        if (grantIds.Count == 0)
+        {
+            return new Dictionary<Guid, int>();
+        }
+
+        return await _dbContext.ClientDevices
+            .Where(d => d.GrantId != null && grantIds.Contains(d.GrantId.Value))
+            .GroupBy(d => d.GrantId!.Value)
+            .Select(g => new { GrantId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.GrantId, x => x.Count, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -251,12 +276,14 @@ public class ClientDeviceService : IClientDeviceService
         entity.UpdatedAt = now;
     }
 
-    internal static ClientDeviceDto ToDto(ClientDeviceEntity e) => new()
+    internal static ClientDeviceDto ToDto(ClientDeviceEntity e, string? appName = null) => new()
     {
         Id = e.Id,
         InstallId = e.InstallId,
         Kind = e.Kind,
         Label = e.Label,
+        AppName = appName,
+        LinkedToApp = e.GrantId is not null,
         Capabilities = [.. e.Capabilities],
         LastSeenAt = e.LastSeenAt,
         CreatedAt = e.CreatedAt,
