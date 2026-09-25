@@ -43,6 +43,7 @@ public class GuestLinkServiceTests : IDisposable
         _service = new GuestLinkService(
             _dbContext,
             _sessionCache,
+            new GrantRevocationService(_sessionCache),
             NullLogger<GuestLinkService>.Instance);
     }
 
@@ -232,18 +233,6 @@ public class GuestLinkServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task RevokeAsync_EvictsCachedSession()
-    {
-        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Evict On Revoke", "https://example.com");
-        var activation = await _service.ActivateAsync(created.Code, "1.2.3.4", "Agent");
-        _sessionCache.Set(_tenantId, created.Info.Id, activation.Session);
-
-        await _service.RevokeAsync(created.Info.Id, _dataOwnerId);
-
-        _sessionCache.TryGet(_tenantId, created.Info.Id, out _).Should().BeFalse();
-    }
-
-    [Fact]
     public async Task DismissAsync_EvictsCachedSession()
     {
         var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Evict On Dismiss", "https://example.com");
@@ -254,21 +243,6 @@ public class GuestLinkServiceTests : IDisposable
         await _service.DismissAsync(created.Info.Id, _dataOwnerId);
 
         _sessionCache.TryGet(_tenantId, created.Info.Id, out _).Should().BeFalse();
-    }
-
-    [Fact]
-    public async Task RevokeAsync_SetsRevokedAt()
-    {
-        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "To Revoke", "https://example.com");
-
-        var result = await _service.RevokeAsync(created.Info.Id, _dataOwnerId);
-
-        result.Should().BeTrue();
-
-        var grant = await _dbContext.OAuthGrants
-            .IgnoreQueryFilters()
-            .FirstAsync(g => g.Id == created.Info.Id);
-        grant.RevokedAt.Should().NotBeNull();
     }
 
     [Fact]

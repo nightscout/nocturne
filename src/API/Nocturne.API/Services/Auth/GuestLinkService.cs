@@ -1,7 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
-using Nocturne.API.Services.ClientDevices;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
@@ -27,15 +26,18 @@ public class GuestLinkService : IGuestLinkService
 
     private readonly NocturneDbContext _dbContext;
     private readonly GuestSessionCacheService _sessionCache;
+    private readonly GrantRevocationService _grantRevocation;
     private readonly ILogger<GuestLinkService> _logger;
 
     public GuestLinkService(
         NocturneDbContext dbContext,
         GuestSessionCacheService sessionCache,
+        GrantRevocationService grantRevocation,
         ILogger<GuestLinkService> logger)
     {
         _dbContext = dbContext;
         _sessionCache = sessionCache;
+        _grantRevocation = grantRevocation;
         _logger = logger;
     }
 
@@ -193,15 +195,10 @@ public class GuestLinkService : IGuestLinkService
             return false;
         }
 
-        grant.RevokedAt = DateTime.UtcNow;
-        var deviceCount = await _dbContext.RemoveGrantDevicesAsync(grantId, ct);
-        await _dbContext.SaveChangesAsync(ct);
-
-        _sessionCache.Evict(grant.TenantId, grant.Id);
+        await _grantRevocation.RevokeAsync(_dbContext, grant, ct);
 
         _logger.LogInformation(
-            "Guest link {GrantId} revoked by {RequestingSubjectId}; removed {DeviceCount} devices",
-            grantId, requestingSubjectId, deviceCount);
+            "Guest link {GrantId} revoked by {RequestingSubjectId}", grantId, requestingSubjectId);
         return true;
     }
 

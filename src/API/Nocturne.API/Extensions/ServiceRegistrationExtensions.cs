@@ -411,6 +411,7 @@ public static class ServiceRegistrationExtensions
         services.AddHostedService<AuthorizationSeedService>();
 
         services.AddSingleton<GuestSessionCacheService>();
+        services.AddScoped<GrantRevocationService>();
         services.AddSingleton<PublicAccessCacheService>();
         services.AddSingleton<ShareTokenCacheService>();
         // Same instance behind the seam, so the cache is shared rather than duplicated.

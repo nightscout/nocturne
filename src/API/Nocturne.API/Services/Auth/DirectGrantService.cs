@@ -3,7 +3,6 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Controllers.Authentication;
 using Nocturne.API.Middleware.Handlers;
-using Nocturne.API.Services.ClientDevices;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
@@ -111,11 +110,16 @@ public class DirectGrantService : IDirectGrantService
     private const int TokenRandomBytes = 32;
 
     private readonly IAuthAuditService _auditService;
+    private readonly GrantRevocationService _grantRevocation;
     private readonly ILogger<DirectGrantService> _logger;
 
-    public DirectGrantService(IAuthAuditService auditService, ILogger<DirectGrantService> logger)
+    public DirectGrantService(
+        IAuthAuditService auditService,
+        GrantRevocationService grantRevocation,
+        ILogger<DirectGrantService> logger)
     {
         _auditService = auditService;
+        _grantRevocation = grantRevocation;
         _logger = logger;
     }
 
@@ -244,13 +248,11 @@ public class DirectGrantService : IDirectGrantService
             return true;
         }
 
-        grant.RevokedAt = DateTime.UtcNow;
-        var deviceCount = await dbContext.RemoveGrantDevicesAsync(grantId, ct);
-        await dbContext.SaveChangesAsync(ct);
+        var outcome = await _grantRevocation.RevokeAsync(dbContext, grant, ct);
 
         _logger.LogInformation(
             "DirectGrantAudit: {Event} grant_id={GrantId} subject_id={SubjectId} revoked_devices={DeviceCount}",
-            "direct_grant_revoked", grantId, grant.SubjectId, deviceCount);
+            "direct_grant_revoked", grantId, grant.SubjectId, outcome.RemovedDeviceCount);
 
         await _auditService.LogAsync(
             actor is null ? AuthAuditEventType.TokenRevoked : AuthAuditEventType.PlatformAdminGrantRevoked,

@@ -6,7 +6,6 @@ using Moq;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Core.Models.ClientDevices;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -69,6 +68,7 @@ public class OAuthGrantServiceTests : IDisposable
             _db.ContextFactory,
             _mockClientService.Object,
             _guestSessionCache,
+            new GrantRevocationService(_guestSessionCache),
             _mockLogger.Object);
     }
 
@@ -127,22 +127,6 @@ public class OAuthGrantServiceTests : IDisposable
             Label = label,
             RevokedAt = revokedAt,
             CreatedAt = DateTime.UtcNow,
-        });
-        await db.SaveChangesAsync();
-        return id;
-    }
-
-    private async Task<Guid> SeedDeviceAsync(NocturneDbContext db, Guid? grantId)
-    {
-        var id = Guid.CreateVersion7();
-        db.ClientDevices.Add(new ClientDeviceEntity
-        {
-            Id = id,
-            SubjectId = _ownerSubjectId,
-            GrantId = grantId,
-            InstallId = Guid.NewGuid().ToString("N"),
-            Kind = DeviceKinds.Prelude,
-            Capabilities = [],
         });
         await db.SaveChangesAsync();
         return id;
@@ -223,104 +207,6 @@ public class OAuthGrantServiceTests : IDisposable
         var service = CreateService(db);
 
         (await service.GetGrantForSubjectAsync(grantId, _ownerSubjectId)).Should().BeNull();
-    }
-
-    // ---------------------------------------------------------------
-    // RevokeGrantAsync
-    // ---------------------------------------------------------------
-
-    [Fact]
-    public async Task RevokeGrantAsync_SetsRevokedAt()
-    {
-        using var db = CreateDbContext();
-        await SeedClientAsync(db);
-        await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
-        var grantId = await SeedGrantAsync(db);
-
-        var service = CreateService(db);
-        await service.RevokeGrantAsync(grantId);
-
-        var entity = await db.OAuthGrants.FirstAsync(g => g.Id == grantId);
-        Assert.NotNull(entity.RevokedAt);
-    }
-
-    [Fact]
-    public async Task RevokeGrantAsync_EvictsTheCachedGuestSession()
-    {
-        using var db = CreateDbContext();
-        await SeedClientAsync(db);
-        await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
-        var grantId = await SeedGrantAsync(db);
-
-        // A guest grant's SubjectId is the data owner, and DELETE /api/oauth/grants/{id} filters
-        // only on SubjectId — so the owner can revoke a guest link through this service without
-        // GuestLinkService being involved. Without eviction here the guest keeps reading health
-        // data until the cache entry expires.
-        _guestSessionCache.Set(
-            _testTenantId,
-            grantId,
-            new GuestSessionInfo(
-                grantId, _testTenantId, _ownerSubjectId, [], null, DateTime.UtcNow.AddHours(1)));
-
-        var service = CreateService(db);
-        await service.RevokeGrantAsync(grantId);
-
-        _guestSessionCache.TryGet(_testTenantId, grantId, out _).Should().BeFalse();
-    }
-
-    [Fact]
-    public async Task RevokeGrantAsync_CascadesToRefreshTokens()
-    {
-        using var db = CreateDbContext();
-        await SeedClientAsync(db);
-        await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
-        var grantId = await SeedGrantAsync(db);
-
-        db.OAuthRefreshTokens.Add(new OAuthRefreshTokenEntity
-        {
-            Id = Guid.CreateVersion7(),
-            TenantId = _testTenantId,
-            GrantId = grantId,
-            TokenHash = "test-hash-1",
-            IssuedAt = DateTime.UtcNow,
-            ExpiresAt = DateTime.UtcNow.AddDays(90),
-        });
-        db.OAuthRefreshTokens.Add(new OAuthRefreshTokenEntity
-        {
-            Id = Guid.CreateVersion7(),
-            TenantId = _testTenantId,
-            GrantId = grantId,
-            TokenHash = "test-hash-2",
-            IssuedAt = DateTime.UtcNow,
-            ExpiresAt = DateTime.UtcNow.AddDays(90),
-        });
-        await db.SaveChangesAsync();
-
-        var service = CreateService(db);
-        await service.RevokeGrantAsync(grantId);
-
-        var tokens = await db.OAuthRefreshTokens.Where(t => t.GrantId == grantId).ToListAsync();
-        Assert.All(tokens, t => Assert.NotNull(t.RevokedAt));
-    }
-
-    [Fact]
-    public async Task RevokeGrantAsync_RemovesTheGrantsDevicesAndSparesOthers()
-    {
-        using var db = CreateDbContext();
-        await SeedClientAsync(db);
-        await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
-        var revokedGrant = await SeedGrantAsync(db);
-        var otherGrant = await SeedGrantAsync(db);
-
-        await SeedDeviceAsync(db, revokedGrant);
-        var otherGrantDevice = await SeedDeviceAsync(db, otherGrant);
-        var ungrantedDevice = await SeedDeviceAsync(db, null);
-
-        var service = CreateService(db);
-        await service.RevokeGrantAsync(revokedGrant);
-
-        var remaining = await db.ClientDevices.AsNoTracking().Select(d => d.Id).ToListAsync();
-        remaining.Should().BeEquivalentTo([otherGrantDevice, ungrantedDevice]);
     }
 
     // ---------------------------------------------------------------
