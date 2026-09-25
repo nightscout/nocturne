@@ -53,6 +53,16 @@ public class AlertSweepService : BackgroundService
     private sealed record WallClockVerdict(AlertConditionType Type, string Params, bool References);
 
     /// <summary>
+    /// Per tenant whose newest canonical reading has no glucose value, what
+    /// <see cref="LastUsableReadingAsync"/> found looking back from it. The look back reads up to
+    /// <see cref="UsableReadingLookback"/> of readings, and each sweep pass would repeat it every
+    /// 30 s for as long as the outage lasts; it is repeated only once a newer reading arrives.
+    /// </summary>
+    private readonly Dictionary<Guid, UsableLookback> _usableLookbacks = [];
+
+    private sealed record UsableLookback(Guid NewestId, DateTime NewestAt, UsableReading Found);
+
+    /// <summary>
     /// Initializes a new instance of <see cref="AlertSweepService"/>.
     /// </summary>
     /// <param name="serviceProvider">Root service provider for creating per-sweep DI scopes.</param>
@@ -618,21 +628,36 @@ public class AlertSweepService : BackgroundService
     /// the outage is at least that old. With no canonical reading at all it is the tenant's
     /// newest reading of any source, null for a tenant that has never had one, which
     /// <c>signal_loss</c> and <c>staleness</c> treat as cold start.
+    /// <para>
+    /// The look back is kept per tenant (<see cref="_usableLookbacks"/>) until the newest
+    /// canonical reading changes, so a usable reading backfilled behind an unchanged newest one
+    /// is seen once the next reading arrives.
+    /// </para>
     /// </remarks>
-    internal static async Task<UsableReading> LastUsableReadingAsync(
+    internal async Task<UsableReading> LastUsableReadingAsync(
         ICanonicalGlucoseService canonical, TenantAlertContext tenant, CancellationToken ct)
     {
         var latest = await canonical.GetLatestAsync(ct);
-        if (latest is null)
-            return new UsableReading(null, tenant.LastReadingAt);
-        if (latest.Mgdl > 0)
-            return new UsableReading(latest, latest.Timestamp);
+        if (latest is null || latest.Mgdl > 0)
+        {
+            _usableLookbacks.Remove(tenant.TenantId);
+            return latest is null
+                ? new UsableReading(null, tenant.LastReadingAt)
+                : new UsableReading(latest, latest.Timestamp);
+        }
+
+        if (_usableLookbacks.TryGetValue(tenant.TenantId, out var kept)
+            && kept.NewestId == latest.Id && kept.NewestAt == latest.Timestamp)
+        {
+            return kept.Found;
+        }
 
         var recent = await canonical.GetRecentAsync(latest.Timestamp - UsableReadingLookback, ct);
-        if (recent.Where(r => r.Mgdl > 0).MaxBy(r => r.Timestamp) is { } usable)
-            return new UsableReading(usable, usable.Timestamp);
-
-        return new UsableReading(null, recent.Count > 0 ? recent.Min(r => r.Timestamp) : latest.Timestamp);
+        var found = recent.Where(r => r.Mgdl > 0).MaxBy(r => r.Timestamp) is { } usable
+            ? new UsableReading(usable, usable.Timestamp)
+            : new UsableReading(null, recent.Count > 0 ? recent.Min(r => r.Timestamp) : latest.Timestamp);
+        _usableLookbacks[tenant.TenantId] = new UsableLookback(latest.Id, latest.Timestamp, found);
+        return found;
     }
 
     /// <param name="Reading">The last usable reading, or null when none was found.</param>

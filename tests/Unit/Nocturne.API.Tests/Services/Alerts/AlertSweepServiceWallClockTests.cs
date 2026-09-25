@@ -145,6 +145,27 @@ public class AlertSweepServiceWallClockTests
     }
 
     [Fact]
+    public async Task The_lookback_for_a_usable_reading_runs_once_per_newest_reading()
+    {
+        var fixture = new Fixture(useRustEngine: false, AlertConditionType.SignalLoss, SignalLoss15);
+        fixture.Readings.Add(new SensorGlucose { Timestamp = T0, Mgdl = 110 });
+        fixture.Readings.Add(new SensorGlucose { Timestamp = T0.AddMinutes(5), Mgdl = 0 });
+        fixture.LastReadingAt = T0.AddMinutes(5);
+
+        await fixture.SweepAt(T0.AddMinutes(6));
+        await fixture.SweepAt(T0.AddMinutes(6.5));
+        await fixture.SweepAt(T0.AddMinutes(7));
+        fixture.Canonical.Verify(
+            c => c.GetRecentAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
+
+        fixture.Readings.Add(new SensorGlucose { Timestamp = T0.AddMinutes(10), Mgdl = 0 });
+        await fixture.SweepAt(T0.AddMinutes(15.5));
+        fixture.Canonical.Verify(
+            c => c.GetRecentAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
+        fixture.InstancesCreated.Should().Be(1, "the last usable reading is still the one at T0");
+    }
+
+    [Fact]
     public async Task An_outage_with_no_usable_reading_in_the_lookback_still_fires()
     {
         var fixture = new Fixture(useRustEngine: false, AlertConditionType.SignalLoss, SignalLoss15);
@@ -318,6 +339,8 @@ public class AlertSweepServiceWallClockTests
         /// <summary>The canonical stream; when empty, one reading at <see cref="LastReadingAt"/>.</summary>
         public List<SensorGlucose> Readings { get; } = [];
 
+        public Mock<ICanonicalGlucoseService> Canonical { get; } = new();
+
         public Task SweepAt(DateTime at)
         {
             Time.SetUtcNow(at);
@@ -387,7 +410,7 @@ public class AlertSweepServiceWallClockTests
                 .ReturnsAsync([]);
             services.AddSingleton(repository.Object);
 
-            var canonical = new Mock<ICanonicalGlucoseService>();
+            var canonical = Canonical;
             canonical
                 .Setup(x => x.GetLatestAsync(It.IsAny<CancellationToken>()))
                 .ReturnsAsync(() => Readings.Count > 0
