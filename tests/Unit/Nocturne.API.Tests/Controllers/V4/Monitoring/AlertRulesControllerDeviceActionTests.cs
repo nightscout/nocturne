@@ -11,6 +11,7 @@ using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.ClientDevices;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
@@ -42,7 +43,7 @@ public class AlertRulesControllerDeviceActionTests
             Mock.Of<IRuleScopeClassifier>(),
             new NoConditionIssues(),
             Mock.Of<ISecretEncryptionService>(),
-            new AlertRuleRearm(new AlertRuleEvaluationGate()),
+            new AlertRuleRearm(new AlertRuleEvaluationGate(), new AlertTrackerRepository(ctx)),
             Mock.Of<ILogger<AlertRulesController>>());
     }
 

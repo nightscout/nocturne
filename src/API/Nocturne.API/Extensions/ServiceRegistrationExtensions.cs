@@ -965,7 +965,7 @@ public static class ServiceRegistrationExtensions
         // The excursion tracker's per-rule serialisation gate is a singleton: the sweep and the
         // per-reading path evaluate the same rule from different scopes.
         services.AddSingleton<AlertRuleEvaluationGate>();
-        services.AddSingleton<AlertRuleRearm>();
+        services.AddScoped<AlertRuleRearm>();
 
         // Alert evaluation engine and excursion tracker seams (Alerts:Engine = managed | shadow | rust)
         services.AddAlertEvaluationEngine(configuration);

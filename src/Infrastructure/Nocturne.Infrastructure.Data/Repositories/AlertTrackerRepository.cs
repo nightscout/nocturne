@@ -221,7 +221,8 @@ public class AlertTrackerRepository : IAlertTrackerRepository
 
     /// <inheritdoc/>
     /// <remarks>
-    /// Joins a transaction already open on the context. Otherwise opens one under the context's
+    /// Joins a transaction already open on the context, and runs the work as is on a provider
+    /// without transactions. Otherwise opens one under the context's
     /// execution strategy. Opening the connection sets the tenant GUCs (TenantConnectionInterceptor),
     /// so every statement in the transaction runs under the context's tenant. Each attempt, and
     /// the verification, starts with no tracker state or excursion tracked: an entity an earlier
@@ -234,7 +235,7 @@ public class AlertTrackerRepository : IAlertTrackerRepository
         Func<T, CancellationToken, Task<bool>>? verifySucceeded = null,
         CancellationToken ct = default)
     {
-        if (_context.Database.CurrentTransaction is not null)
+        if (_context.Database.CurrentTransaction is not null || !_context.Database.IsRelational())
             return await work(ct);
 
         var completed = false;

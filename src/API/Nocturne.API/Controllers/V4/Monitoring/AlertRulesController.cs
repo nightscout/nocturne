@@ -286,7 +286,7 @@ public class AlertRulesController : ControllerBase
 
         await db.SaveChangesAsync(ct);
         if (conditionsChanged)
-            await _rearm.ClearAsync(db, [id], ct);
+            await _rearm.ClearAsync([id], ct);
 
         foreach (var field in check.Stripped)
         {
@@ -365,7 +365,7 @@ public class AlertRulesController : ControllerBase
         rule.IsEnabled = !rule.IsEnabled;
         rule.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
-        await _rearm.ClearAsync(db, [id], ct);
+        await _rearm.ClearAsync([id], ct);
 
         return Ok(MapToResponse(rule));
     }

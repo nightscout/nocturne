@@ -14,6 +14,7 @@ using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -40,7 +41,7 @@ public class AlertRulesControllerConditionValidationTests
             Mock.Of<IRuleScopeClassifier>(),
             validator,
             Mock.Of<ISecretEncryptionService>(),
-            new AlertRuleRearm(new AlertRuleEvaluationGate()),
+            new AlertRuleRearm(new AlertRuleEvaluationGate(), new AlertTrackerRepository(ctx)),
             logger ?? Mock.Of<ILogger<AlertRulesController>>());
         return (controller, ctx);
     }

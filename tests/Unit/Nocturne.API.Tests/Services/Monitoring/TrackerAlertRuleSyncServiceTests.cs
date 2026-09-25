@@ -8,6 +8,7 @@ using Nocturne.API.Services.Monitoring;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
 using Xunit;
@@ -46,7 +47,7 @@ public class TrackerAlertRuleSyncServiceTests
             factory,
             classifier.Object,
             _referenceService.Object,
-            new AlertRuleRearm(new AlertRuleEvaluationGate()),
+            new AlertRuleRearm(new AlertRuleEvaluationGate(), new AlertTrackerRepository(Db())),
             NullLogger<TrackerAlertRuleSyncService>.Instance);
     }
 

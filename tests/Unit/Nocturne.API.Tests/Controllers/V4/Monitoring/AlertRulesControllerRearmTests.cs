@@ -9,6 +9,7 @@ using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -70,7 +71,7 @@ public class AlertRulesControllerRearmTests
             Mock.Of<IRuleScopeClassifier>(),
             validator.Object,
             Mock.Of<ISecretEncryptionService>(),
-            new AlertRuleRearm(gate ?? new AlertRuleEvaluationGate()),
+            new AlertRuleRearm(gate ?? new AlertRuleEvaluationGate(), new AlertTrackerRepository(db)),
             Mock.Of<ILogger<AlertRulesController>>());
         return (controller, db);
     }
@@ -169,6 +170,30 @@ public class AlertRulesControllerRearmTests
         evaluation.Dispose();
         await toggle.WaitAsync(TimeSpan.FromSeconds(5));
         (await AwaitingRearm(db)).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task A_hold_an_evaluation_sets_while_holding_the_rule_is_cleared_after_it()
+    {
+        var gate = new AlertRuleEvaluationGate();
+        var (controller, db) = await CreateAsync(gate);
+        await SetHold(db, false);
+        var evaluation = await gate.AcquireAsync(RuleId, CancellationToken.None);
+
+        var toggle = controller.ToggleRule(RuleId, CancellationToken.None);
+        await Task.Delay(100);
+        await SetHold(db, true);
+        evaluation.Dispose();
+        await toggle.WaitAsync(TimeSpan.FromSeconds(5));
+
+        (await AwaitingRearm(db)).Should().BeFalse();
+    }
+
+    private static async Task SetHold(NocturneDbContext db, bool held)
+    {
+        var state = await db.AlertTrackerState.SingleAsync(s => s.AlertRuleId == RuleId);
+        state.AwaitingRearm = held;
+        await db.SaveChangesAsync();
     }
 
     [Fact]

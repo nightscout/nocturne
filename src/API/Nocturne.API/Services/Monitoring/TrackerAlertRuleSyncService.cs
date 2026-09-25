@@ -214,7 +214,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
         var removed = await RemoveOrDisableAsync(db, orphaned, changed, ct);
 
         await db.SaveChangesAsync(ct);
-        await _rearm.ClearAsync(db, changed, ct);
+        await _rearm.ClearAsync(changed, ct);
 
         _logger.LogInformation(
             "Synced {ThresholdCount} threshold(s) to managed alert rules for tracker definition {DefinitionId} ({Orphaned} removed)",
@@ -235,7 +235,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
         var disabled = new List<Guid>();
         var removed = await RemoveOrDisableAsync(db, rules, disabled, ct);
         await db.SaveChangesAsync(ct);
-        await _rearm.ClearAsync(db, disabled, ct);
+        await _rearm.ClearAsync(disabled, ct);
 
         _logger.LogInformation(
             "Deleted {Count} managed alert rule(s) for removed tracker definition {DefinitionId}",

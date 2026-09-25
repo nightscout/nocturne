@@ -9,6 +9,7 @@ using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
@@ -109,7 +110,7 @@ public class AlertRulesControllerTenantScopingTests
             Mock.Of<IRuleScopeClassifier>(),
             new NoConditionIssues(),
             Mock.Of<ISecretEncryptionService>(),
-            new AlertRuleRearm(new AlertRuleEvaluationGate()),
+            new AlertRuleRearm(new AlertRuleEvaluationGate(), new AlertTrackerRepository(seedContext)),
             Mock.Of<ILogger<AlertRulesController>>());
     }
 
