@@ -104,7 +104,7 @@ describe("FiringToast", () => {
 
 	it("shows no card for an alert the server reports as snoozed", async () => {
 		activeAlerts = [
-			excursion("zz", { snoozedUntil: new Date(Date.now() + 600_000) }),
+			excursion("zz", { snoozedUntil: new Date(Date.now() + 600_000).toISOString() }),
 		];
 
 		render(FiringToast);
@@ -119,7 +119,7 @@ describe("FiringToast", () => {
 		await expect.element(page.getByText("Rule c").first()).toBeVisible();
 
 		activeAlerts = [
-			excursion("c", { snoozedUntil: new Date(Date.now() + 600_000) }),
+			excursion("c", { snoozedUntil: new Date(Date.now() + 600_000).toISOString() }),
 		];
 		flushSync();
 
@@ -128,7 +128,7 @@ describe("FiringToast", () => {
 
 	it("resurfaces the card when the server stops reporting the snooze", async () => {
 		activeAlerts = [
-			excursion("d", { snoozedUntil: new Date(Date.now() + 600_000) }),
+			excursion("d", { snoozedUntil: new Date(Date.now() + 600_000).toISOString() }),
 		];
 
 		render(FiringToast);
