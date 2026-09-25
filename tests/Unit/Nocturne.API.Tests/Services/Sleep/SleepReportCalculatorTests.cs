@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Nocturne.Core.Models;
+using Nocturne.API.Services.Analytics;
 using Nocturne.Core.Models.Sleep.Report;
 using Nocturne.Core.Models.V4;
 using Xunit;
@@ -208,24 +209,109 @@ public class SleepReportCalculatorTests
         result.Should().HaveCount(1);
         result[0].LowestBg.Should().Be(62);
         result[0].Severity.Should().Be(SleepHypoSeverity.Low);
-        result[0].DurationMinutes.Should().Be(10);
+        result[0].StartAt.Should().Be(t0);
+        result[0].EndAt.Should().Be(t0.AddMinutes(15));
+        result[0].DurationMinutes.Should().Be(15);
         result[0].Stage.Should().Be(SleepStageType.Unknown);
     }
 
     [Fact]
-    public void ComputeHypoEvents_MarksVeryLow_WhenBelowFiftyFour()
+    public void ComputeHypoEvents_MarksVeryLow_AfterFifteenMinutesBelowFiftyFour()
     {
         var session = MakeSession();
         var t0 = session.StartTime.AddMinutes(120);
         var glucose = new[]
         {
-            MakeGlucose(t0,               50),
-            MakeGlucose(t0.AddMinutes(5), 71),
+            MakeGlucose(t0,                50),
+            MakeGlucose(t0.AddMinutes(5),  50),
+            MakeGlucose(t0.AddMinutes(10), 50),
+            MakeGlucose(t0.AddMinutes(15), 71),
         };
 
         var result = API.Services.Sleep.SleepReportCalculator.ComputeHypoEvents(session, glucose, [], _thresholds);
 
-        result[0].Severity.Should().Be(SleepHypoSeverity.VeryLow);
+        result.Should().ContainSingle().Which.Severity.Should().Be(SleepHypoSeverity.VeryLow);
+    }
+
+    [Fact]
+    public void ComputeHypoEvents_GradesABriefDipBelowFiftyFourAsLow()
+    {
+        var session = MakeSession();
+        var t0 = session.StartTime.AddMinutes(120);
+        var glucose = new[]
+        {
+            MakeGlucose(t0,                65),
+            MakeGlucose(t0.AddMinutes(5),  50),
+            MakeGlucose(t0.AddMinutes(10), 65),
+            MakeGlucose(t0.AddMinutes(15), 71),
+        };
+
+        var result = API.Services.Sleep.SleepReportCalculator.ComputeHypoEvents(session, glucose, [], _thresholds);
+
+        var low = result.Should().ContainSingle().Subject;
+        low.Severity.Should().Be(SleepHypoSeverity.Low);
+        low.LowestBg.Should().Be(50);
+    }
+
+    [Fact]
+    public void ComputeHypoEvents_IgnoresASingleLowReading()
+    {
+        var session = MakeSession();
+        var t0 = session.StartTime.AddMinutes(120);
+        var glucose = new[]
+        {
+            MakeGlucose(t0,                100),
+            MakeGlucose(t0.AddMinutes(5),  60),
+            MakeGlucose(t0.AddMinutes(10), 100),
+            MakeGlucose(t0.AddMinutes(15), 100),
+        };
+
+        var result = API.Services.Sleep.SleepReportCalculator.ComputeHypoEvents(session, glucose, [], _thresholds);
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ComputeHypoEvents_DoesNotBridgeAGapInTheData()
+    {
+        // Ten minutes low, forty minutes with no readings, ten minutes low: two runs too short to
+        // count, where joining them across the gap would have made one hour-long event.
+        var session = MakeSession();
+        var t0 = session.StartTime.AddMinutes(120);
+        var glucose = new[]
+        {
+            MakeGlucose(t0,                60),
+            MakeGlucose(t0.AddMinutes(5),  60),
+            MakeGlucose(t0.AddMinutes(45), 60),
+            MakeGlucose(t0.AddMinutes(50), 60),
+            MakeGlucose(t0.AddMinutes(55), 100),
+            MakeGlucose(t0.AddMinutes(60), 100),
+            MakeGlucose(t0.AddMinutes(65), 100),
+        };
+
+        var result = API.Services.Sleep.SleepReportCalculator.ComputeHypoEvents(session, glucose, [], _thresholds);
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ComputeHypoEvents_FindsTheSameLowsAsTheTimeInRangeEpisodes()
+    {
+        var session = MakeSession();
+        var t0 = session.StartTime.AddMinutes(30);
+        int[] mgdl =
+        [
+            100, 60, 60, 60, 100, 100, 100,
+            50, 50, 50, 50, 65, 100, 60, 60, 100, 100, 100,
+            60, 100, 100, 100,
+        ];
+        var glucose = mgdl.Select((value, i) => MakeGlucose(t0.AddMinutes(i * 5), value)).ToArray();
+
+        var hypos = API.Services.Sleep.SleepReportCalculator.ComputeHypoEvents(session, glucose, [], _thresholds);
+        var episodes = new StatisticsService().CalculateTimeInRange(glucose, _thresholds).Episodes;
+
+        hypos.Should().HaveCount(episodes.BelowRange).And.HaveCount(2);
+        hypos.Count(h => h.Severity == SleepHypoSeverity.VeryLow).Should().Be(episodes.VeryLow).And.Be(1);
     }
 
     [Fact]
@@ -235,8 +321,10 @@ public class SleepReportCalculatorTests
         var t0 = session.StartTime.AddMinutes(90);
         var glucose = new[]
         {
-            MakeGlucose(t0,               65),
-            MakeGlucose(t0.AddMinutes(5), 71),
+            MakeGlucose(t0,                65),
+            MakeGlucose(t0.AddMinutes(5),  66),
+            MakeGlucose(t0.AddMinutes(10), 67),
+            MakeGlucose(t0.AddMinutes(15), 71),
         };
         var stages = new[]
         {

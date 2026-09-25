@@ -378,25 +378,90 @@ public class StatisticsServiceTests
     public void CalculateTimeInRange_Episodes_CountAHypoThatDeepensAndRecoversOnceAgainstItsWorstZone()
     {
         var result = _statisticsService.CalculateTimeInRange(
-            Sequence(65, 45, 45, 65, 100, 100, 100, 100));
+            Sequence(65, 45, 45, 45, 65, 100, 100, 100, 100));
 
         result.Episodes.VeryLow.Should().Be(1);
         result.Episodes.Low.Should().Be(0);
+        result.Episodes.BelowRange.Should().Be(1);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_GradeAHypoSevereOnlyAfterFifteenMinutesBelowTheSevereThreshold()
+    {
+        // Ten minutes below 54 inside a longer low is a low episode, not a very-low one.
+        var result = _statisticsService.CalculateTimeInRange(
+            Sequence(65, 45, 45, 65, 100, 100, 100, 100));
+
+        result.Episodes.VeryLow.Should().Be(0);
+        result.Episodes.Low.Should().Be(1);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_NeedTheSevereMinutesToBeConsecutive()
+    {
+        var result = _statisticsService.CalculateTimeInRange(
+            Sequence(45, 45, 60, 45, 45, 100, 100, 100));
+
+        result.Episodes.VeryLow.Should().Be(0);
+        result.Episodes.Low.Should().Be(1);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_FollowAFifteenMinuteSensorWithJitter()
+    {
+        // Every interval a little over fifteen minutes is the sensor's cadence rather than a
+        // gap, so eight low readings are one two-hour episode.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        int[] mgdl = [60, 60, 60, 60, 60, 60, 60, 60, 100, 100, 100];
+        var entries = mgdl
+            .Select((value, i) => new SensorGlucose
+            {
+                Mgdl = value,
+                Timestamp = start.AddSeconds(i * (15 * 60 + 3)),
+            })
+            .ToArray();
+
+        var result = _statisticsService.CalculateTimeInRange(entries);
+
+        result.Episodes.Low.Should().Be(1);
+        result.Durations.Low.Should().BeApproximately(8 * 15.05, 0.01);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_CountALowAtFiveMinutesAfterHoursAtOneMinute()
+    {
+        // The window's median interval is one minute, but the low is read every five, and each of
+        // those readings stands for its own five minutes.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var oneMinute = Enumerable.Range(0, 180)
+            .Select(i => new SensorGlucose { Mgdl = 100, Timestamp = start.AddMinutes(i) });
+        var lowStart = start.AddMinutes(180);
+        int[] fiveMinute = [60, 60, 60, 60, 60, 60, 60, 100, 100, 100, 100];
+        var entries = oneMinute
+            .Concat(fiveMinute.Select((value, i) =>
+                new SensorGlucose { Mgdl = value, Timestamp = lowStart.AddMinutes(i * 5) }))
+            .ToArray();
+
+        var result = _statisticsService.CalculateTimeInRange(entries);
+
+        result.Episodes.Low.Should().Be(1);
+        result.Durations.Low.Should().Be(35);
     }
 
     [Fact]
     public void CalculateTimeInRange_Episodes_ApplyTheSameRulesAboveRange()
     {
-        // A single high reading, then a 15-minute rise into very high with a brief dip back to
-        // range inside it, then fifteen minutes in range, then a 15-minute high.
+        // A single high reading; a rise holding above 250 for fifteen minutes, with a brief dip
+        // back to range inside it; fifteen minutes in range; a high touching 260 once.
         var result = _statisticsService.CalculateTimeInRange(Sequence(
             100, 200, 100, 100, 100,
-            200, 260, 200, 100, 200, 200, 100, 100, 100,
-            200, 200, 200, 100, 100, 100));
+            200, 260, 260, 260, 100, 200, 200, 100, 100, 100,
+            200, 260, 200, 100, 100, 100));
 
         result.Episodes.VeryHigh.Should().Be(1);
         result.Episodes.High.Should().Be(1);
         result.Episodes.AboveRange.Should().Be(2);
+        result.Episodes.BelowRange.Should().Be(0);
     }
 
     [Fact]
@@ -408,6 +473,7 @@ public class StatisticsServiceTests
         result.Episodes.High.Should().Be(1);
         result.Episodes.Low.Should().Be(1);
         result.Episodes.AboveRange.Should().Be(1);
+        result.Episodes.BelowRange.Should().Be(1);
     }
 
     [Fact]
@@ -463,8 +529,8 @@ public class StatisticsServiceTests
 
         var result = _statisticsService.CalculateTimeInRange(entries);
 
-        // The reading before the gap is credited two intervals, not the 120 minutes it spans.
-        result.Durations.High.Should().Be(20);
+        // The reading before the gap is credited one interval, not the 120 minutes it spans.
+        result.Durations.High.Should().Be(15);
         result.Durations.Target.Should().Be(10);
     }
 

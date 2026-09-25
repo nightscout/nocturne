@@ -1348,18 +1348,19 @@ public class StatisticsServiceClinicalAccuracyTests
 
     /// <summary>
     /// A drop from target through severe low, recovering through low, is one continuous
-    /// hypoglycemic event and is reported as one episode, against the severe zone it reached.
+    /// hypoglycemic event, graded severe once it spent 15 consecutive minutes below 54.
     /// </summary>
     [Fact]
     public void TimeInRange_Episodes_VeryLowToLowTransition_CountsOneEpisode()
     {
-        // Target, ten minutes severe low, ten recovering through low, then back to target.
-        var entries = EveryFiveMinutes(120, 45, 45, 60, 60, 120, 120, 120);
+        // Target, fifteen minutes severe low, ten recovering through low, then back to target.
+        var entries = EveryFiveMinutes(120, 45, 45, 45, 60, 60, 120, 120, 120);
 
         var result = _sut.CalculateTimeInRange(entries);
 
         result.Episodes.VeryLow.Should().Be(1);
         result.Episodes.Low.Should().Be(0);
+        result.Episodes.BelowRange.Should().Be(1);
 
         var totalHypoEpisodes = result.Episodes.VeryLow + result.Episodes.Low;
         totalHypoEpisodes.Should().Be(1, "one continuous hypo event is one episode");

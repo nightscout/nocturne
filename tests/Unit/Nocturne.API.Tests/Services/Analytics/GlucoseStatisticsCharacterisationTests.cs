@@ -316,12 +316,12 @@ public class GlucoseStatisticsCharacterisationTests
         result.Durations.High.Should().Be(10);
         result.Durations.VeryHigh.Should().Be(5);
 
-        // The ascending edges are one excursion below target and one above, each counted against
-        // the most extreme zone it reached.
-        result.Episodes.VeryLow.Should().Be(1);
-        result.Episodes.Low.Should().Be(0);
-        result.Episodes.High.Should().Be(0);
-        result.Episodes.VeryHigh.Should().Be(1);
+        // The ascending edges are one excursion below target and one above. Neither spends fifteen
+        // minutes beyond its level 2 bound, so both are level 1.
+        result.Episodes.VeryLow.Should().Be(0);
+        result.Episodes.Low.Should().Be(1);
+        result.Episodes.High.Should().Be(1);
+        result.Episodes.VeryHigh.Should().Be(0);
     }
 
     /// <summary>

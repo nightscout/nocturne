@@ -380,13 +380,19 @@ public class TimeInRangeDurations
 }
 
 /// <summary>
-/// Time in range episodes, on the international consensus CGM event definition (Battelino et al.,
-/// "Clinical Targets for Continuous Glucose Monitoring Data Interpretation", Diabetes Care
-/// 2019;42:1593-1603, and its 2023 update): an episode begins after at least 15 consecutive
-/// minutes beyond a threshold and ends after at least 15 consecutive minutes back within it. A
-/// break in the data longer than 15 minutes ends a run instead of bridging it. Each episode is
-/// counted against the most extreme zone it reached, so a rise from high into very high and back
-/// is one very-high episode, not a high one and a very-high one.
+/// Time in range episodes, on the CGM event definition of Battelino et al., "Continuous glucose
+/// monitoring and metrics for clinical trials: an international consensus statement", Lancet
+/// Diabetes Endocrinol 2023;11:42-57, over the thresholds of the time-in-range consensus (Battelino
+/// et al., Diabetes Care 2019;42:1593-1603). An episode begins after at least 15 consecutive
+/// minutes beyond the level 1 threshold (below <c>Low</c> or above <c>TargetTop</c>) and ends after
+/// at least 15 consecutive minutes back within it. It is a level 2 episode (<see cref="VeryLow"/>
+/// or <see cref="VeryHigh"/>) only if it also spent at least 15 consecutive minutes beyond the
+/// level 2 threshold; each episode is counted once, at the higher level it reached.
+/// <para>
+/// A reading stands for the minutes until the next one. A stretch without readings longer than
+/// both 15 minutes and twice the sensor's local cadence is a gap: it ends a run rather than
+/// bridging it, and the reading before it stands for one cadence.
+/// </para>
 /// </summary>
 public class TimeInRangeEpisodes
 {
@@ -416,6 +422,12 @@ public class TimeInRangeEpisodes
     /// reached.
     /// </summary>
     public int AboveRange { get; set; }
+
+    /// <summary>
+    /// Number of excursions below range, which is <see cref="Low"/> plus <see cref="VeryLow"/>,
+    /// counted the same way as <see cref="AboveRange"/>.
+    /// </summary>
+    public int BelowRange { get; set; }
 }
 
 /// <summary>
