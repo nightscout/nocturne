@@ -207,9 +207,17 @@ jobs:
           for t in "${TAGS[@]}"; do
             TAG_ARGS+=" --tag ${t}"
           done
+          # Every build reads main's layer cache; only main writes it, so a branch cannot
+          # displace the layers the next main build reuses.
+          CACHE_REF="${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-web:buildcache"
+          CACHE_ARGS="--cache-from type=registry,ref=${CACHE_REF}"
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            CACHE_ARGS+=" --cache-to type=registry,ref=${CACHE_REF},mode=max"
+          fi
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
             ${TAG_ARGS} \
+            ${CACHE_ARGS} \
             --file Dockerfile.web \
             --push \
             .
