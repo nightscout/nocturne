@@ -717,6 +717,53 @@ public class StatisticsControllerTests
         month.Summary!.TotalReadings.Should().Be(60);
     }
 
+    [Fact]
+    public async Task GetPunchCardData_AveragesEveryReadingOfTheDayAndWeightsTheMonthByReadings()
+    {
+        var dayStart = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+        var readings = new[]
+        {
+            new SensorGlucose { Timestamp = dayStart.AddHours(1), Mgdl = 60 },
+            new SensorGlucose { Timestamp = dayStart.AddHours(2), Mgdl = 100 },
+            new SensorGlucose { Timestamp = dayStart.AddHours(3), Mgdl = 200 },
+            new SensorGlucose { Timestamp = dayStart.AddDays(1).AddHours(1), Mgdl = 200 },
+        };
+
+        _glucoseRepoMock
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
+                It.IsAny<CancellationToken>(), It.IsAny<Guid?>()))
+            .ReturnsAsync(readings);
+        SetupEmptyTreatments();
+        _statsServiceMock
+            .Setup(s => s.CalculateTimeInRange(
+                It.IsAny<IEnumerable<SensorGlucose>>(),
+                It.IsAny<GlycemicThresholds?>()))
+            .Returns(new TimeInRangeMetrics
+            {
+                Percentages = new TimeInRangePercentages { Target = 100 },
+                RangeStats = new TimeInRangeDetailedStats
+                {
+                    Target = new PeriodMetrics { PeriodName = "In Range", Mean = 100 },
+                },
+            });
+
+        var result = await CreateController().GetPunchCardData(
+            DateOnly.FromDateTime(dayStart),
+            DateOnly.FromDateTime(dayStart.AddDays(1)));
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var month = ok.Value.Should().BeOfType<PunchCardResponse>().Subject.Months.Should().ContainSingle().Subject;
+
+        month.Days.Single(d => d.Date == "2026-06-01").AverageGlucose.Should().Be(120);
+        month.Days.Single(d => d.Date == "2026-06-02").AverageGlucose.Should().Be(200);
+        // Four readings averaging 140, not the 160 an average of the two daily means would give.
+        month.Summary!.AvgGlucose.Should().Be(140);
+    }
+
     private void SetupPumps(params PatientDevice[] pumps)
     {
         _patientDeviceRepoMock

@@ -1070,9 +1070,6 @@ public class StatisticsController : ControllerBase
             var lowPct = (pct?.VeryLow ?? 0) + (pct?.Low ?? 0);
             var highPct = (pct?.VeryHigh ?? 0) + (pct?.High ?? 0);
 
-            var rangeStats = tir?.RangeStats;
-            var avgGlucose = rangeStats?.Target?.Mean ?? rangeStats?.Low?.Mean ?? 0;
-
             var dateStr = day.ToString("yyyy-MM-dd");
             var totals = treatment?.Totals;
             var totalCarbs = totals?.Food?.Carbs ?? 0;
@@ -1089,6 +1086,7 @@ public class StatisticsController : ControllerBase
 
             // The counts are readings, so they come from the readings, not from durations.
             var totalReadings = entries.Count;
+            var avgGlucose = totalReadings > 0 ? entries.Average(e => e.Mgdl) : 0;
             var inRangeCount = (int)Math.Round(inRangePct / 100.0 * totalReadings);
             var lowCount = (int)Math.Round(lowPct / 100.0 * totalReadings);
             var highCount = (int)Math.Round(highPct / 100.0 * totalReadings);
@@ -1135,7 +1133,6 @@ public class StatisticsController : ControllerBase
             var totalLow = daysWithData.Sum(d => d.LowCount);
             var totalHigh = daysWithData.Sum(d => d.HighCount);
             var totalReadings = daysWithData.Sum(d => d.TotalReadings);
-            var glucoseDays = daysWithData.Where(d => d.AverageGlucose > 0).ToList();
 
             month.Summary = new PunchCardMonthSummary
             {
@@ -1144,8 +1141,7 @@ public class StatisticsController : ControllerBase
                 InRangePercent = totalReadings > 0 ? (double)totalIR / totalReadings * 100 : 0,
                 LowPercent = totalReadings > 0 ? (double)totalLow / totalReadings * 100 : 0,
                 HighPercent = totalReadings > 0 ? (double)totalHigh / totalReadings * 100 : 0,
-                AvgGlucose = glucoseDays.Count > 0
-                    ? glucoseDays.Average(d => d.AverageGlucose) : 0,
+                AvgGlucose = daysWithData.Sum(d => d.AverageGlucose * d.TotalReadings) / totalReadings,
             };
         }
 
