@@ -236,7 +236,7 @@
       formatDelta: (d) => `${signed(d)} pp`,
     },
     gmi: {
-      label: "GMI",
+      label: "Est. A1C",
       format: (v) => `${v.toFixed(1)}%`,
       formatDelta: (d) => `${signed(d, 2)} pp`,
     },
@@ -286,7 +286,7 @@
       case "tirTarget":
         return tir?.percentages?.target ?? null;
       case "gmi":
-        return gv?.estimatedA1c ?? a.gmi?.value ?? null;
+        return a.gmi?.value ?? null;
       case "cv":
         return gv?.coefficientOfVariation ?? null;
       case "gri":

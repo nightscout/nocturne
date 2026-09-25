@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models.V4;
 
@@ -303,37 +304,39 @@ public class TimeInRangePercentages
 }
 
 /// <summary>
-/// Extended time in range percentages with 7 glucose ranges for hourly distribution
+/// Time in each consensus glucose band for one hour of the day. The bands partition the hour's
+/// readings on the <see cref="GlycemicThresholds"/> defaults, not a tenant's own targets, and
+/// split the target range at the tight-target top so the six can be stacked.
 /// </summary>
 public class ExtendedTimeInRangePercentages
 {
     /// <summary>
-    /// Percentage of time in very low range (less than 54 mg/dL)
+    /// Percentage of readings below 54 mg/dL
     /// </summary>
     public double VeryLow { get; set; }
 
     /// <summary>
-    /// Percentage of time in low range (54-63 mg/dL)
+    /// Percentage of readings from 54 to below 70 mg/dL
     /// </summary>
     public double Low { get; set; }
 
     /// <summary>
-    /// Percentage of time in normoglycemic range (63-140 mg/dL)
+    /// Percentage of readings from 70 to 140 mg/dL inclusive (the tight target range)
     /// </summary>
-    public double Normal { get; set; }
+    public double TightTarget { get; set; }
 
     /// <summary>
-    /// Percentage of time above target but not high (140-180 mg/dL)
+    /// Percentage of readings above 140 and up to 180 mg/dL: in range, above the tight target
     /// </summary>
-    public double AboveTarget { get; set; }
+    public double AboveTightTarget { get; set; }
 
     /// <summary>
-    /// Percentage of time in high range (180-200 mg/dL)
+    /// Percentage of readings above 180 and up to 250 mg/dL
     /// </summary>
     public double High { get; set; }
 
     /// <summary>
-    /// Percentage of time in very high range (200+ mg/dL)
+    /// Percentage of readings above 250 mg/dL
     /// </summary>
     public double VeryHigh { get; set; }
 }
@@ -408,9 +411,20 @@ public class AverageDailyMinutes
 }
 
 /// <summary>
-/// Time in range episodes. A run of consecutive readings on the same side of target is one
-/// episode, counted against the most extreme zone the run reached: a rise from high into very
-/// high and back is one very-high episode, not a high one and a very-high one.
+/// Time in range episodes, on the CGM event definition of Battelino et al., "Continuous glucose
+/// monitoring and metrics for clinical trials: an international consensus statement", Lancet
+/// Diabetes Endocrinol 2023;11:42-57, over the thresholds of the time-in-range consensus (Battelino
+/// et al., Diabetes Care 2019;42:1593-1603). An episode begins after at least 15 consecutive
+/// minutes beyond the level 1 threshold (below <c>Low</c> or above <c>TargetTop</c>) and ends after
+/// at least 15 consecutive minutes back within it. It is a level 2 episode (<see cref="VeryLow"/>
+/// or <see cref="VeryHigh"/>) only if it also spent at least 15 consecutive minutes beyond the
+/// level 2 threshold; each episode is counted once, at the higher level it reached.
+/// <para>
+/// A reading stands for the minutes until the next one, up to twice the sensor's local cadence
+/// (at most 15 minutes). A stretch without readings longer than both 15 minutes and twice that
+/// cadence is a gap: it ends a run rather than bridging it, and the reading before it stands for
+/// one cadence.
+/// </para>
 /// </summary>
 public class TimeInRangeEpisodes
 {
@@ -440,6 +454,12 @@ public class TimeInRangeEpisodes
     /// reached.
     /// </summary>
     public int AboveRange { get; set; }
+
+    /// <summary>
+    /// Number of excursions below range, which is <see cref="Low"/> plus <see cref="VeryLow"/>,
+    /// counted the same way as <see cref="AboveRange"/>.
+    /// </summary>
+    public int BelowRange { get; set; }
 }
 
 /// <summary>
@@ -966,9 +986,189 @@ public class AveragedStats : BasicGlucoseStats
     public int Hour { get; set; }
 
     /// <summary>
-    /// Extended time in range percentages with 7 glucose ranges for this hour
+    /// Number of distinct local days with at least one reading in this hour
+    /// </summary>
+    public int DayCount { get; set; }
+
+    /// <summary>
+    /// Time in each consensus band for this hour
     /// </summary>
     public ExtendedTimeInRangePercentages TimeInRange { get; set; } = new();
+}
+
+/// <summary>
+/// Side of the consensus range an hour's out-of-range readings mostly fall on.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter<HourlyExcursion>))]
+public enum HourlyExcursion
+{
+    /// <summary>No reading in the hour was out of range.</summary>
+    None,
+
+    /// <summary>More of the hour's readings were below range than above it.</summary>
+    Below,
+
+    /// <summary>More of the hour's readings were above range than below it.</summary>
+    Above,
+
+    /// <summary>As many of the hour's readings were below range as above it.</summary>
+    Mixed,
+}
+
+/// <summary>
+/// One hour of the day in the hourly-patterns report: its averaged statistics plus how its
+/// readings split around the consensus 70-180 mg/dL range.
+/// </summary>
+public class HourlyPattern : AveragedStats
+{
+    /// <summary>Percentage of the hour's readings from 70 to 180 mg/dL inclusive.</summary>
+    public double InRange { get; set; }
+
+    /// <summary>Percentage of the hour's readings below 70 mg/dL.</summary>
+    public double BelowRange { get; set; }
+
+    /// <summary>Percentage of the hour's readings above 180 mg/dL.</summary>
+    public double AboveRange { get; set; }
+
+    /// <summary>Side of the range the hour's out-of-range readings mostly fall on.</summary>
+    public HourlyExcursion MainExcursion { get; set; }
+
+    /// <summary>
+    /// Whether the hour has enough data to be compared with the others. An unranked hour is never
+    /// named among the best, worst or most-below-range hours.
+    /// </summary>
+    public bool IsRanked { get; set; }
+}
+
+/// <summary>
+/// How far the hourly-patterns report could compare the hours of the day.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter<HourlyComparison>))]
+public enum HourlyComparison
+{
+    /// <summary>No hour has a reading.</summary>
+    NoReadings,
+
+    /// <summary>Fewer than two hours have enough data to rank, so none are compared.</summary>
+    TooLittleData,
+
+    /// <summary>
+    /// The ranked hours' time in range spans less than <see cref="HourlyPatterns.MinimumSpreadToRank"/>,
+    /// so no hour is named best or worst.
+    /// </summary>
+    CloseTogether,
+
+    /// <summary>
+    /// At least one hour is named best or worst. One list may be empty: see
+    /// <see cref="HourlyPatterns.BestHours"/>.
+    /// </summary>
+    Ranked,
+}
+
+/// <summary>
+/// Which clock the hours of a report were bucketed on.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter<HourlyClockBasis>))]
+public enum HourlyClockBasis
+{
+    /// <summary>The tenant's configured timezone.</summary>
+    TenantTimeZone,
+
+    /// <summary>
+    /// No timezone resolved, so each reading was placed by the UTC offset its uploader recorded,
+    /// or on UTC when it recorded none.
+    /// </summary>
+    ReadingOffsets,
+}
+
+/// <summary>
+/// Why no tenant timezone was available, so the hours fell back to each reading's own offset.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter<TimeZoneUnavailableReason>))]
+public enum TimeZoneUnavailableReason
+{
+    /// <summary>The tenant has no timezone set; the owner can set one.</summary>
+    NotConfigured,
+
+    /// <summary>The tenant's stored timezone is not one this server recognises; the owner can correct it.</summary>
+    Unrecognised,
+
+    /// <summary>The request came through a public share, which cannot read the tenant's settings.</summary>
+    Share,
+
+    /// <summary>Looking the timezone up failed.</summary>
+    LookupFailed,
+}
+
+/// <summary>
+/// Which hours of the day go best and worst, bucketed on the tenant's local clock.
+/// </summary>
+public class HourlyPatterns
+{
+    /// <summary>How far the hours could be compared.</summary>
+    public HourlyComparison Comparison { get; set; }
+
+    /// <summary>All 24 hours in order, midnight first.</summary>
+    public List<HourlyPattern> Hours { get; set; } = [];
+
+    /// <summary>
+    /// Up to three ranked hours with the most time in range, best first. Empty when no hour at the
+    /// top stands out: the top hours tie one another past the list's end, or none is at least
+    /// <see cref="MinimumSpreadToRank"/> ahead of every worst hour and the lowest ranked hour. Can
+    /// be empty while <see cref="WorstHours"/> is not, and always is unless <see cref="Comparison"/>
+    /// is <see cref="HourlyComparison.Ranked"/>.
+    /// </summary>
+    public List<HourlyPattern> BestHours { get; set; } = [];
+
+    /// <summary>
+    /// Up to three ranked hours with the least time in range, worst first, on the same rules as
+    /// <see cref="BestHours"/> from the other end. Every one trails every best hour by at least
+    /// <see cref="MinimumSpreadToRank"/>, so the two never share an hour. Can be empty while
+    /// <see cref="BestHours"/> is not.
+    /// </summary>
+    public List<HourlyPattern> WorstHours { get; set; } = [];
+
+    /// <summary>
+    /// Up to three ranked hours with the most time below range, most first. An hour with readings
+    /// below range on fewer than <see cref="MinimumLowDaysToList"/> days is left out.
+    /// </summary>
+    public List<HourlyPattern> MostBelowRangeHours { get; set; } = [];
+
+    /// <summary>Number of hours with enough data to be ranked.</summary>
+    public int RankedHourCount { get; set; }
+
+    /// <summary>Distinct local days an hour needs readings on before it is ranked.</summary>
+    public int MinimumDaysToRank { get; set; }
+
+    /// <summary>Readings an hour needs in all before it is ranked.</summary>
+    public int MinimumReadingsToRank { get; set; }
+
+    /// <summary>
+    /// Percentage points of time in range the best and worst ranked hours must differ by before
+    /// any hour is named best or worst.
+    /// </summary>
+    public double MinimumSpreadToRank { get; set; }
+
+    /// <summary>Distinct local days an hour needs readings below range on to be listed as most below range.</summary>
+    public int MinimumLowDaysToList { get; set; }
+
+    /// <summary>The band edges the hours were classified on.</summary>
+    public GlycemicThresholds Thresholds { get; set; } = new();
+
+    /// <summary>Which clock the hours were bucketed on.</summary>
+    public HourlyClockBasis ClockBasis { get; set; }
+
+    /// <summary>
+    /// Identifier of the timezone the hours were bucketed on; null when <see cref="ClockBasis"/> is
+    /// <see cref="HourlyClockBasis.ReadingOffsets"/>.
+    /// </summary>
+    public string? TimeZone { get; set; }
+
+    /// <summary>
+    /// Why <see cref="ClockBasis"/> is <see cref="HourlyClockBasis.ReadingOffsets"/>; null when the
+    /// hours followed the tenant's timezone.
+    /// </summary>
+    public TimeZoneUnavailableReason? TimeZoneUnavailableReason { get; set; }
 }
 
 /// <summary>
@@ -1423,6 +1623,9 @@ public class ReportAnalysisResult
     /// <summary>Time-of-day averaged statistics for AGP-style charts.</summary>
     public IEnumerable<AveragedStats> AveragedStats { get; set; } = [];
 
+    /// <summary>The band edges <see cref="AveragedStats"/> partitions each hour's readings on.</summary>
+    public GlycemicThresholds HourlyBandThresholds { get; set; } = new();
+
     /// <summary>Registered devices that contributed readings within the requested window, for device-picker UIs.</summary>
     public List<ContributingDevice> ContributingDevices { get; set; } = new();
 
@@ -1568,14 +1771,21 @@ public class InsulinDeliveryStatistics
     public double TotalCarbs { get; set; }
 
     /// <summary>
-    /// Number of bolus treatments
+    /// Number of manually initiated boluses in the period. Algorithm-delivered micro-boluses
+    /// are excluded and counted by <see cref="MicroBolusCount"/>.
     /// </summary>
     public int BolusCount { get; set; }
 
     /// <summary>
-    /// Number of basal treatments
+    /// Number of basal delivery records in the period: TempBasal segments plus discrete
+    /// long-acting basal injections.
     /// </summary>
     public int BasalCount { get; set; }
+
+    /// <summary>
+    /// Total insulin events in the period: manual boluses, micro-boluses, and basal deliveries.
+    /// </summary>
+    public int InsulinEventCount { get; set; }
 
     /// <summary>
     /// Percentage of total insulin that is basal (0-100)

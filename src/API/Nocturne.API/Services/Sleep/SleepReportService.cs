@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -14,23 +15,28 @@ namespace Nocturne.API.Services.Sleep;
 /// </summary>
 /// <remarks>
 /// Overnight TIR and hypo events use the clinical consensus bands, not the profile's
-/// personal target, so they agree with every other report.
+/// personal target, so they agree with every other report. Glucose is the canonical stream
+/// (<see cref="ICanonicalGlucoseService.SelectAsync"/>), as the other reports read it, so a
+/// reading posted by two uploaders counts once.
 /// </remarks>
 public class SleepReportService : ISleepReportService
 {
     private readonly ISleepSessionRepository _sessions;
     private readonly ISensorGlucoseRepository _glucose;
+    private readonly ICanonicalGlucoseService _canonicalGlucose;
     private readonly IPatientRecordRepository _patientRecord;
     private readonly ILogger<SleepReportService> _logger;
 
     public SleepReportService(
         ISleepSessionRepository sessions,
         ISensorGlucoseRepository glucose,
+        ICanonicalGlucoseService canonicalGlucose,
         IPatientRecordRepository patientRecord,
         ILogger<SleepReportService> logger)
     {
         _sessions = sessions;
         _glucose  = glucose;
+        _canonicalGlucose = canonicalGlucose;
         _patientRecord = patientRecord;
         _logger   = logger;
     }
@@ -101,13 +107,12 @@ public class SleepReportService : ISleepReportService
         return await BuildSingleNightReportAsync(session, ct);
     }
 
-    private async Task<SleepSingleNightReport> BuildSingleNightReportAsync(
-        SleepSession session,
-        CancellationToken ct)
+    private async Task<IReadOnlyList<SensorGlucose>> ReadCanonicalGlucoseAsync(
+        DateTime from, DateTime to, CancellationToken ct)
     {
-        var glucoseReadings = await _glucose.GetAsync(
-            from:           session.StartTime,
-            to:             session.EndTime,
+        var raw = await _glucose.GetAsync(
+            from:           from,
+            to:             to,
             device:         null,
             source:         null,
             limit:          int.MaxValue,
@@ -117,6 +122,14 @@ public class SleepReportService : ISleepReportService
             afterTimestamp: null,
             afterId:        null,
             ct:             ct);
+        return await _canonicalGlucose.SelectAsync(raw.ToList(), ct);
+    }
+
+    private async Task<SleepSingleNightReport> BuildSingleNightReportAsync(
+        SleepSession session,
+        CancellationToken ct)
+    {
+        var glucoseReadings = await ReadCanonicalGlucoseAsync(session.StartTime, session.EndTime, ct);
 
         var thresholds = new GlycemicThresholds();
         var stages    = session.Stages ?? [];
@@ -174,18 +187,7 @@ public class SleepReportService : ISleepReportService
         var glucoseFrom = sessions.Min(s => s.StartTime);
         var glucoseTo   = sessions.Max(s => s.EndTime);
 
-        var allGlucose = await _glucose.GetAsync(
-            from:           glucoseFrom,
-            to:             glucoseTo,
-            device:         null,
-            source:         null,
-            limit:          int.MaxValue,
-            offset:         0,
-            descending:     false,
-            nativeOnly:     false,
-            afterTimestamp: null,
-            afterId:        null,
-            ct:             ct);
+        var allGlucose = await ReadCanonicalGlucoseAsync(glucoseFrom, glucoseTo, ct);
 
         // Slice the (date-range-bounded) glucose set per night so each night's
         // computation scans only its own window, not every reading in the range.

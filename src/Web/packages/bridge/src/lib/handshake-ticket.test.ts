@@ -24,6 +24,24 @@ describe('handshake ticket sign/verify', () => {
     });
   });
 
+  it('round-trips a subject id for a member ticket', () => {
+    const subject = '0a5f2c1e-1111-4222-8333-444455556666';
+    const token = signHandshakeTicket(SECRET, 'rhys.nocturne.run', true, subject);
+
+    expect(verifyHandshakeTicket(SECRET, token)?.subjectId).toBe(subject);
+  });
+
+  it('drops a subject id that is not a canonical lowercase D GUID', () => {
+    const token = signHandshakeTicket(
+      SECRET,
+      'rhys.nocturne.run',
+      true,
+      '0A5F2C1E-1111-4222-8333-444455556666',
+    );
+
+    expect(verifyHandshakeTicket(SECRET, token)?.subjectId).toBeUndefined();
+  });
+
   it('carries a restricted admission through verification', () => {
     const token = signHandshakeTicket(SECRET, 'rhys.nocturne.run', false);
     expect(verifyHandshakeTicket(SECRET, token)?.tenantRelay).toBe(false);
@@ -68,7 +86,7 @@ describe('handshake ticket sign/verify', () => {
   });
 
   it('rejects an expired ticket', () => {
-    const token = signHandshakeTicket(SECRET, 'rhys.nocturne.run', true, -1_000);
+    const token = signHandshakeTicket(SECRET, 'rhys.nocturne.run', true, undefined, -1_000);
     expect(verifyHandshakeTicket(SECRET, token)).toBeNull();
   });
 

@@ -31,13 +31,13 @@ public static class RealtimeGroups
     /// consumer — widget, tray, desktop, follower connector — receives another subject's payload.
     /// </summary>
     /// <remarks>
-    /// That is the guarantee for direct SignalR consumers only. The browser app is a socket.io client
-    /// of the bridge, and the bridge's own fan-out
+    /// The relayed in-app notification events carry the recipient's subject id as a second hub
+    /// argument, and the bridge's fan-out
     /// (<c>src/Web/packages/bridge/src/lib/socketio-server.ts</c>,
-    /// <c>broadcastInAppNotification</c>) emits <c>notificationCreated</c>,
-    /// <c>notificationUpdated</c> and <c>notificationArchived</c> to the whole tenant room with no
-    /// per-subject filter, so a browser client still sees every member's in-app notifications.
-    /// Closing that needs a per-subject room in the bridge.
+    /// <c>broadcastInAppNotification</c>) emits each one only to that subject's room, so a browser
+    /// client sees its own notifications rather than every member's. The id is normalised by
+    /// <see cref="NormalizeSubjectId(string)"/> on the wire so the bridge's room matches the subject
+    /// group <see cref="ForSubject(string)"/> names.
     /// </remarks>
     public const string Relay = "relay";
 
@@ -50,9 +50,19 @@ public static class RealtimeGroups
     /// Normalizes the identifier because SignalR group names are compared byte for byte, and the
     /// subject arrives as a <see cref="Guid"/> on the hub side but as a string on the payloads.
     /// </remarks>
-    public static string ForSubject(string subjectId) =>
-        $"user-{(Guid.TryParse(subjectId, out var parsed) ? parsed.ToString("D") : subjectId)}";
+    public static string ForSubject(string subjectId) => $"user-{NormalizeSubjectId(subjectId)}";
 
     /// <inheritdoc cref="ForSubject(string)"/>
-    public static string ForSubject(Guid subjectId) => $"user-{subjectId:D}";
+    public static string ForSubject(Guid subjectId) => $"user-{NormalizeSubjectId(subjectId)}";
+
+    /// <summary>
+    /// Normalises a subject identifier to the canonical lowercase <c>D</c> GUID form, so a
+    /// <see cref="Guid"/> from the hub and the string on a payload name the same group. A value
+    /// that is not a GUID passes through unchanged.
+    /// </summary>
+    public static string NormalizeSubjectId(string subjectId) =>
+        Guid.TryParse(subjectId, out var parsed) ? parsed.ToString("D") : subjectId;
+
+    /// <inheritdoc cref="NormalizeSubjectId(string)"/>
+    public static string NormalizeSubjectId(Guid subjectId) => subjectId.ToString("D");
 }

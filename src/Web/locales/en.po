@@ -279,6 +279,7 @@ msgstr "UrgentHigh"
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
 #: src/lib/components/reports/TIRStackedChart.svelte
+#: src/lib/components/reports/sleep/single-night/OvernightLowsCard.svelte
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
 #: src/lib/components/treatments/FoodNutritionalForm.svelte
@@ -1762,7 +1763,6 @@ msgstr "Carbs:"
 #. 0: totalCarbs
 #. 0: (snapshot.cob ?? 0).toFixed(0)
 #. 0: Math.round(d.averageDailyCarbs)
-#. 0: selectedDay.totalCarbs.toFixed(0)
 #. 0: d.totalCarbs.toFixed(0)
 #. 0: totalCarbs
 #. 0: actualUnattributed
@@ -1785,7 +1785,6 @@ msgstr "Carbs:"
 #: src/lib/components/meals/MealsTable.svelte
 #: src/lib/components/reports/ApsStateCard.svelte
 #: src/lib/components/reports/GlycemicRiskIndexChart.svelte
-#: src/lib/components/reports/year-overview/DayDetailPanel.svelte
 #: src/lib/components/reports/year-overview/YearHeatmap.svelte
 #: src/lib/components/treatments/TreatmentFoodEntryEditDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodEntryEditDialog.svelte
@@ -2706,7 +2705,6 @@ msgstr "Inactive"
 msgid "Records (24h)"
 msgstr "Records (24h)"
 
-#: src/lib/components/reports/year-overview/DayDetailPanel.svelte
 #: src/lib/components/treatments/TreatmentStatsCard.svelte
 msgid "Total Records"
 msgstr "Total Records"
@@ -3594,7 +3592,6 @@ msgstr "Last 24 hours"
 #: src/lib/components/dashboard/widgets/TddWidget.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 #: src/lib/components/reports/InsulinDeliveryChart.svelte
-#: src/lib/components/reports/year-overview/DayDetailPanel.svelte
 #: src/lib/components/reports/year-overview/YearHeatmap.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
@@ -3608,7 +3605,6 @@ msgstr "Bolus"
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/meals/MealsTable.svelte
-#: src/lib/components/reports/year-overview/DayDetailPanel.svelte
 #: src/lib/components/reports/year-overview/YearHeatmap.svelte
 #: src/lib/components/treatments/TreatmentStatsCard.svelte
 #: src/routes/(authenticated)/food/Composer.svelte
@@ -4081,7 +4077,6 @@ msgstr "Event Type"
 #: src/lib/components/status-pills/IOBPill.svelte
 #: src/lib/components/treatments/edit-dialog/BasalInjectionFormFields.svelte
 #: src/lib/components/treatments/edit-dialog/DeviceEventFormFields.svelte
-#: src/routes/(authenticated)/reports/day-in-review/+page.svelte
 #: src/routes/(authenticated)/reports/year-overview/+page.svelte
 msgid "Notes"
 msgstr "Notes"
@@ -4187,7 +4182,6 @@ msgid "Loading breakdown..."
 msgstr "Loading breakdown..."
 
 #: src/lib/components/entries/FoodBreakdown.svelte
-#: src/lib/components/reports/year-overview/DayDetailPanel.svelte
 #: src/routes/(authenticated)/reports/day-in-review/+page.svelte
 msgid "Total Carbs"
 msgstr "Total Carbs"
@@ -4327,7 +4321,6 @@ msgstr "Snack"
 #: src/lib/components/reports/RetrospectiveStats.svelte
 #: src/lib/components/reports/sleep/single-night/Hypnogram.svelte
 #: src/lib/components/reports/sleep/single-night/Hypnogram.svelte
-#: src/lib/components/reports/year-overview/DayDetailPanel.svelte
 #: src/lib/components/reports/year-overview/YearHeatmap.svelte
 #: src/lib/components/status-pills/BasalPill.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
@@ -4763,7 +4756,6 @@ msgid "No meals match the current filters."
 msgstr "No meals match the current filters."
 
 #: src/lib/components/meals/MealsTable.svelte
-#: src/lib/components/reports/year-overview/DayDetailPanel.svelte
 #: src/lib/components/reports/year-overview/YearHeatmap.svelte
 #: src/lib/components/treatments/TreatmentStatsCard.svelte
 #: src/lib/components/treatments/edit-dialog/BolusFormFields.svelte
@@ -5804,6 +5796,7 @@ msgstr "Range"
 #: src/routes/(authenticated)/reports/day-in-review/+page.svelte
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
 #: src/routes/(authenticated)/reports/heart-rate/+page.svelte
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
 msgid "Readings"
 msgstr "Readings"
 
@@ -9024,6 +9017,7 @@ msgstr "Something went wrong"
 #~ msgstr "{0} readings analyzed"
 
 #: src/routes/(authenticated)/reports/agp/+page.svelte
+#: src/routes/(authenticated)/reports/comparison/+page.svelte
 #: src/routes/(authenticated)/reports/executive-summary/+page.svelte
 #: src/routes/(authenticated)/reports/idp/+page.svelte
 msgid "Est. A1C"
@@ -10127,26 +10121,21 @@ msgstr "No 90-day data available"
 msgid "Failed to load data"
 msgstr "Failed to load data"
 
-#: src/lib/components/reports/year-overview/DayDetailPanel.svelte
-msgid "Day Details"
-msgstr "Day Details"
+#~ msgid "Day Details"
+#~ msgstr "Day Details"
 
-#: src/lib/components/reports/year-overview/DayDetailPanel.svelte
-msgid "Average Glucose"
-msgstr "Average Glucose"
+#~ msgid "Average Glucose"
+#~ msgstr "Average Glucose"
 
 #: src/lib/components/dashboard/widgets/TddWidget.svelte
-#: src/lib/components/reports/year-overview/DayDetailPanel.svelte
 msgid "Total Daily Dose"
 msgstr "Total Daily Dose"
 
-#: src/lib/components/reports/year-overview/DayDetailPanel.svelte
-msgid "By Data Type"
-msgstr "By Data Type"
+#~ msgid "By Data Type"
+#~ msgstr "By Data Type"
 
-#: src/lib/components/reports/year-overview/DayDetailPanel.svelte
-msgid "View Day in Review <0/>"
-msgstr "View Day in Review <0/>"
+#~ msgid "View Day in Review <0/>"
+#~ msgstr "View Day in Review <0/>"
 
 #: src/lib/components/dashboard/widgets/TddWidget.svelte
 msgid "No insulin"
@@ -11542,9 +11531,8 @@ msgstr "Error Loading Data Quality Report"
 msgid "Data Quality - Nocturne"
 msgstr "Data Quality - Nocturne"
 
-#: src/routes/(authenticated)/reports/data-quality/+page.svelte
-msgid "Monitor and manage data exclusions"
-msgstr "Monitor and manage data exclusions"
+#~ msgid "Monitor and manage data exclusions"
+#~ msgstr "Monitor and manage data exclusions"
 
 #: src/routes/(authenticated)/reports/data-quality/+page.svelte
 msgid "Pending Review"
@@ -11589,9 +11577,8 @@ msgstr "Falsely low readings from sleeping on sensor"
 msgid "You have {0} item{1} waiting for review"
 msgstr "You have {0} item{1} waiting for review"
 
-#: src/routes/(authenticated)/reports/data-quality/+page.svelte
-msgid "Review detected compression lows to improve your statistics accuracy"
-msgstr "Review detected compression lows to improve your statistics accuracy"
+#~ msgid "Review detected compression lows to improve your statistics accuracy"
+#~ msgstr "Review detected compression lows to improve your statistics accuracy"
 
 #: src/routes/(authenticated)/reports/data-quality/+page.svelte
 msgid "Review Now"
@@ -11634,7 +11621,6 @@ msgstr "Error Loading Day in Review"
 msgid "Mean"
 msgstr "Mean"
 
-#: src/routes/(authenticated)/reports/day-in-review/+page.svelte
 #: src/routes/(authenticated)/reports/year-overview/+page.svelte
 msgid "Boluses"
 msgstr "Boluses"
@@ -11977,7 +11963,7 @@ msgstr "Comprehensive analysis of your basal and bolus insulin patterns"
 msgid "Basal Analysis <0/>"
 msgstr "Basal Analysis <0/>"
 
-#. 0: (insulinStats.bolusCount ?? 0) + (insulinStats.basalCount ?? 0)
+#. 0: insulinStats.insulinEventCount ?? 0
 #: src/routes/(authenticated)/reports/insulin-delivery/+page.svelte
 msgid "{0} insulin events"
 msgstr "{0} insulin events"
@@ -13154,9 +13140,8 @@ msgstr "Automatically detect potential compression lows during sleep"
 msgid "Enable automatic detection"
 msgstr "Enable automatic detection"
 
-#: src/routes/(authenticated)/settings/data-quality/+page.svelte
-msgid "Exclude from statistics"
-msgstr "Exclude from statistics"
+#~ msgid "Exclude from statistics"
+#~ msgstr "Exclude from statistics"
 
 #: src/routes/(authenticated)/settings/connectors/+page.svelte
 #: src/routes/(authenticated)/settings/connectors/+page.svelte
@@ -14948,9 +14933,8 @@ msgstr "Compression Lows - Nocturne"
 msgid "{0} pending review"
 msgstr "{0} pending review"
 
-#: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
-msgid "Review history and manage exclusions"
-msgstr "Review history and manage exclusions"
+#~ msgid "Review history and manage exclusions"
+#~ msgstr "Review history and manage exclusions"
 
 #: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
 msgid "Status:"
@@ -14985,9 +14969,8 @@ msgstr "Recovery (min)"
 msgid "Selected Range"
 msgstr "Selected Range"
 
-#: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
-msgid "Exclusion Range"
-msgstr "Exclusion Range"
+#~ msgid "Exclusion Range"
+#~ msgstr "Exclusion Range"
 
 #: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
 msgid "Drag the handles on the chart to adjust"
@@ -17952,10 +17935,8 @@ msgstr "<0/> Last seen {0}"
 msgid "No connected applications. When you authorize apps to access your data, they will appear here."
 msgstr "No connected applications. When you authorize apps to access your data, they will appear here."
 
-#. 0: app.clientName ?? "this app"
-#: src/lib/components/settings/ConnectedApps.svelte
-msgid "Revoke {0}'s access to your data? The app will need to be re-authorized to regain access."
-msgstr "Revoke {0}'s access to your data? The app will need to be re-authorized to regain access."
+#~ msgid "Revoke {0}'s access to your data? The app will need to be re-authorized to regain access."
+#~ msgstr "Revoke {0}'s access to your data? The app will need to be re-authorized to regain access."
 
 #: src/lib/components/settings/ConnectorConfigForm.svelte
 msgid "Sensitive credentials are stored encrypted and never displayed after saving. <0/>"
@@ -18292,8 +18273,10 @@ msgstr "This report is for informational purposes only. Always consult your heal
 #~ msgid "Mean ({0})"
 #~ msgstr "Mean ({0})"
 
-#~ msgid "Median ({0})"
-#~ msgstr "Median ({0})"
+#. 0: bgLabel()
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
+msgid "Median ({0})"
+msgstr "Median ({0})"
 
 #~ msgid "Std Dev ({0})"
 #~ msgstr "Std Dev ({0})"
@@ -18623,13 +18606,11 @@ msgstr "Previously used migration sources with their last sync timestamps."
 msgid "Nocturne will analyze your overnight data and notify you when potential compression lows are detected"
 msgstr "Nocturne will analyze your overnight data and notify you when potential compression lows are detected"
 
-#: src/routes/(authenticated)/settings/data-quality/+page.svelte
-msgid "Don't include accepted compression lows when calculating Time in Range and other statistics"
-msgstr "Don't include accepted compression lows when calculating Time in Range and other statistics"
+#~ msgid "Don't include accepted compression lows when calculating Time in Range and other statistics"
+#~ msgstr "Don't include accepted compression lows when calculating Time in Range and other statistics"
 
-#: src/routes/(authenticated)/settings/data-quality/+page.svelte
-msgid "Compression lows are falsely low CGM readings caused by sleeping on your sensor. When detected, you'll be notified to review and confirm them."
-msgstr "Compression lows are falsely low CGM readings caused by sleeping on your sensor. When detected, you'll be notified to review and confirm them."
+#~ msgid "Compression lows are falsely low CGM readings caused by sleeping on your sensor. When detected, you'll be notified to review and confirm them."
+#~ msgstr "Compression lows are falsely low CGM readings caused by sleeping on your sensor. When detected, you'll be notified to review and confirm them."
 
 #: src/routes/(authenticated)/settings/data-quality/+page.svelte
 msgid "Timezone History"
@@ -22057,6 +22038,7 @@ msgid "Target: at least 70% CGM active time over 14 days; the statistics on this
 msgstr "Target: at least 70% CGM active time over 14 days; the statistics on this page are most reliable at 90% or above."
 
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
 msgid "No readings in this date range"
 msgstr "No readings in this date range"
 
@@ -25144,3 +25126,352 @@ msgstr "The person who shared this data has limited you to the most recent 24 ho
 #: src/lib/components/settings/ApiTokens.svelte
 msgid "Restrict this token to only the most recent 24 hours of data."
 msgstr "Restrict this token to only the most recent 24 hours of data."
+
+#: src/routes/(authenticated)/reports/data-quality/+page.svelte
+msgid "Spot readings that may come from the sensor rather than your glucose"
+msgstr "Spot readings that may come from the sensor rather than your glucose"
+
+#: src/routes/(authenticated)/reports/data-quality/+page.svelte
+msgid "Accept each one as a false low from pressure on the sensor, or dismiss it as a real low. This is for your own record: your reports and statistics still include these readings."
+msgstr "Accept each one as a false low from pressure on the sensor, or dismiss it as a real low. This is for your own record: your reports and statistics still include these readings."
+
+#: src/routes/(authenticated)/reports/day-in-review/+page.svelte
+msgid "Edit treatment"
+msgstr "Edit treatment"
+
+#: src/routes/(authenticated)/settings/data-quality/+page.svelte
+msgid "Compression lows are falsely low CGM readings caused by sleeping on your sensor. When detected, you'll be notified to review and confirm them. Reviewing keeps a record for you; it does not remove the readings from your reports or statistics."
+msgstr "Compression lows are falsely low CGM readings caused by sleeping on your sensor. When detected, you'll be notified to review and confirm them. Reviewing keeps a record for you; it does not remove the readings from your reports or statistics."
+
+#: src/lib/components/reports/sleep/single-night/OvernightLowsCard.svelte
+msgid "During deep sleep"
+msgstr "During deep sleep"
+
+#: src/lib/components/reports/sleep/single-night/OvernightLowsCard.svelte
+msgid "During REM sleep"
+msgstr "During REM sleep"
+
+#: src/lib/components/reports/sleep/single-night/OvernightLowsCard.svelte
+msgid "During light sleep"
+msgstr "During light sleep"
+
+#: src/lib/components/reports/sleep/single-night/OvernightLowsCard.svelte
+msgid "While awake"
+msgstr "While awake"
+
+#: src/lib/components/reports/sleep/single-night/OvernightLowsCard.svelte
+msgid "<0/> Overnight Lows"
+msgstr "<0/> Overnight Lows"
+
+#: src/lib/components/reports/sleep/single-night/OvernightLowsCard.svelte
+msgid "No lows lasting 15 minutes or more during this session"
+msgstr "No lows lasting 15 minutes or more during this session"
+
+#: src/lib/components/reports/sleep/single-night/OvernightLowsCard.svelte
+msgid "Very low"
+msgstr "Very low"
+
+#. 0: bgLabel()
+#: src/lib/components/reports/sleep/single-night/OvernightLowsCard.svelte
+msgid "Lowest, {0}"
+msgstr "Lowest, {0}"
+
+#: src/lib/components/reports/sleep/single-night/OvernightLowsCard.svelte
+msgid "A low is counted when glucose stays below range for 15 minutes or more. Shorter dips still show in the time in range chart."
+msgstr "A low is counted when glucose stays below range for 15 minutes or more. Shorter dips still show in the time in range chart."
+
+#: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
+msgid "Suspected false lows from pressure on the sensor"
+msgstr "Suspected false lows from pressure on the sensor"
+
+#: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
+msgid "Marked Range"
+msgstr "Marked Range"
+
+#. 0: app.deviceCount; 1: app.deviceCount === 1 ? "" \\: "s"
+#: src/lib/components/settings/ConnectedApps.svelte
+msgid "Its {0} paired device{1} will also be removed and stop receiving alerts."
+msgstr "Its {0} paired device{1} will also be removed and stop receiving alerts."
+
+#. 0: app.clientName ?? "this app"
+#: src/lib/components/settings/ConnectedApps.svelte
+msgid "Revoke {0}'s access to your data? The app will need to be re-authorized to regain access. <0/>"
+msgstr "Revoke {0}'s access to your data? The app will need to be re-authorized to regain access. <0/>"
+
+#. 0: device.appName
+#: src/lib/components/settings/ClientDevices.svelte
+msgid "Paired through {0}"
+msgstr "Paired through {0}"
+
+#: src/lib/components/settings/ClientDevices.svelte
+msgid "Paired through an app that reports no name."
+msgstr "Paired through an app that reports no name."
+
+#: src/lib/components/settings/ClientDevices.svelte
+msgid "Not linked to an app. Revoking an app will not remove this device."
+msgstr "Not linked to an app. Revoking an app will not remove this device."
+
+#: src/routes/(authenticated)/reports/day-in-review/+page.svelte
+msgid "Manual boluses"
+msgstr "Manual boluses"
+
+#: src/routes/(authenticated)/reports/day-in-review/+page.svelte
+msgid "Automatic boluses"
+msgstr "Automatic boluses"
+
+#: src/lib/components/reports/hourly-patterns/HourlyGlance.svelte
+msgid "Mostly below range"
+msgstr "Mostly below range"
+
+#: src/lib/components/reports/hourly-patterns/HourlyGlance.svelte
+msgid "Mostly above range"
+msgstr "Mostly above range"
+
+#: src/lib/components/reports/hourly-patterns/HourlyGlance.svelte
+msgid "As often below range as above"
+msgstr "As often below range as above"
+
+#: src/lib/components/reports/hourly-patterns/HourlyGlance.svelte
+msgid "Never out of range"
+msgstr "Never out of range"
+
+#. 0: spread
+#: src/lib/components/reports/hourly-patterns/HourlyGlance.svelte
+msgid "The compared hours were all within {0} percentage points of each other in time in range, too close to call any of them better or worse."
+msgstr "The compared hours were all within {0} percentage points of each other in time in range, too close to call any of them better or worse."
+
+#: src/lib/components/reports/hourly-patterns/HourlyGlance.svelte
+msgid "No hour stood out on its own above the rest. The hours at that end tied with one another."
+msgstr "No hour stood out on its own above the rest. The hours at that end tied with one another."
+
+#: src/lib/components/reports/hourly-patterns/HourlyGlance.svelte
+msgid "No hour stood out on its own below the rest. The hours at that end tied with one another."
+msgstr "No hour stood out on its own below the rest. The hours at that end tied with one another."
+
+#: src/lib/components/reports/hourly-patterns/HourlyGlance.svelte
+msgid "Not enough data to compare hours yet"
+msgstr "Not enough data to compare hours yet"
+
+#. 0: minimumDays; 1: minimumReadings
+#: src/lib/components/reports/hourly-patterns/HourlyGlance.svelte
+msgid "An hour is compared with the others once it has readings on at least {0} different days, and at least {1} readings in all. Try a longer date range."
+msgstr "An hour is compared with the others once it has readings on at least {0} different days, and at least {1} readings in all. Try a longer date range."
+
+#: src/lib/components/reports/hourly-patterns/HourlyGlance.svelte
+msgid "Most time in range"
+msgstr "Most time in range"
+
+#: src/lib/components/reports/hourly-patterns/HourlyGlance.svelte
+msgid "The hours with the largest share of readings in range."
+msgstr "The hours with the largest share of readings in range."
+
+#. 0: percent(hour.belowRange, 1); 1: percent(hour.aboveRange, 1)
+#: src/lib/components/reports/hourly-patterns/HourlyGlance.svelte
+msgid "{0} below, {1} above range"
+msgstr "{0} below, {1} above range"
+
+#: src/lib/components/reports/hourly-patterns/HourlyGlance.svelte
+msgid "Least time in range"
+msgstr "Least time in range"
+
+#: src/lib/components/reports/hourly-patterns/HourlyGlance.svelte
+msgid "The hours with the smallest share of readings in range, and which way they went."
+msgstr "The hours with the smallest share of readings in range, and which way they went."
+
+#. 0: excursionText(hour); 1: percent(hour.belowRange, 1); 2: percent(hour.aboveRange, 1)
+#: src/lib/components/reports/hourly-patterns/HourlyGlance.svelte
+msgid "{0}: {1} below, {2} above"
+msgstr "{0}: {1} below, {2} above"
+
+#: src/lib/components/reports/hourly-patterns/HourlyGlance.svelte
+msgid "Most time below range"
+msgstr "Most time below range"
+
+#. 0: low != null ? `under ${bg(low)} ${bgLabel()}` \\: "below range"; 1: minimumLowDays
+#: src/lib/components/reports/hourly-patterns/HourlyGlance.svelte
+msgid "The hours with the largest share of readings {0}, among those that went below range on at least {1} days."
+msgstr "The hours with the largest share of readings {0}, among those that went below range on at least {1} days."
+
+#. 0: percent(hour.timeInRange?.veryLow, 1); 1: bg(veryLow); 2: bgLabel()
+#: src/lib/components/reports/hourly-patterns/HourlyGlance.svelte
+msgid "{0} under {1} {2}"
+msgstr "{0} under {1} {2}"
+
+#. 0: percent(hour.timeInRange?.veryLow, 1)
+#: src/lib/components/reports/hourly-patterns/HourlyGlance.svelte
+msgid "{0} very low"
+msgstr "{0} very low"
+
+#. 0: minimumLowDays
+#: src/lib/components/reports/hourly-patterns/HourlyGlance.svelte
+msgid "No compared hour went below range on {0} or more days."
+msgstr "No compared hour went below range on {0} or more days."
+
+#: src/lib/components/reports/hourly-patterns/HourlyGlance.svelte
+msgid "At a glance"
+msgstr "At a glance"
+
+#: src/lib/components/reports/hourly-patterns/HourlyRangeBars.svelte
+msgid "Stacked bar chart of the share of each hour's readings in each glucose range, one bar per hour from midnight. The table below gives the same figures."
+msgstr "Stacked bar chart of the share of each hour's readings in each glucose range, one bar per hour from midnight. The table below gives the same figures."
+
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
+msgid "Error Loading Hourly Patterns"
+msgstr "Error Loading Hourly Patterns"
+
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
+msgid "Which hours of the day spend the most and least time in the glucose target range"
+msgstr "Which hours of the day spend the most and least time in the glucose target range"
+
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
+msgid "Hourly Patterns - Nocturne Reports"
+msgstr "Hourly Patterns - Nocturne Reports"
+
+#. 0: bgRange(edges.low, edges.targetTop)
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
+msgid "In range means a reading between {0}."
+msgstr "In range means a reading between {0}."
+
+#. 0: dateRangeDisplay; 1: patternsResource.date.dayCount
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
+msgid "{0} • {1} days"
+msgstr "{0} • {1} days"
+
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
+msgid "This report lays every day in the range over one 24-hour clock, so you can see which hours of the day tend to go well and which tend to be harder. <0/>"
+msgstr "This report lays every day in the range over one 24-hour clock, so you can see which hours of the day tend to go well and which tend to be harder. <0/>"
+
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
+msgid "Hourly patterns need glucose readings. Try a wider date range."
+msgstr "Hourly patterns need glucose readings. Try a wider date range."
+
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
+msgid "Hour by hour"
+msgstr "Hour by hour"
+
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
+msgid "Each bar is one hour of the day. Its bands show what share of that hour's readings fell in each range, lowest at the bottom."
+msgstr "Each bar is one hour of the day. Its bands show what share of that hour's readings fell in each range, lowest at the bottom."
+
+#. 0: hourList(unranked)
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
+msgid "Too little data to compare: {0}. These hours are shown but left out of the lists above."
+msgstr "Too little data to compare: {0}. These hours are shown but left out of the lists above."
+
+#. 0: hourList(emptyHours)
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
+msgid "No readings at all: {0}."
+msgstr "No readings at all: {0}."
+
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
+msgid "Every hour"
+msgstr "Every hour"
+
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
+msgid "The same figures as a table, with the typical glucose in each hour. The middle half is the range the central 50% of that hour's readings fell in."
+msgstr "The same figures as a table, with the typical glucose in each hour. The middle half is the range the central 50% of that hour's readings fell in."
+
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
+msgid "Hour"
+msgstr "Hour"
+
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
+msgid "In range"
+msgstr "In range"
+
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
+msgid "Below"
+msgstr "Below"
+
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
+msgid "Above"
+msgstr "Above"
+
+#. 0: bgLabel()
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
+msgid "Middle half ({0})"
+msgstr "Middle half ({0})"
+
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
+msgid "Days"
+msgstr "Days"
+
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
+msgid "Too little data"
+msgstr "Too little data"
+
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
+msgid "No readings"
+msgstr "No readings"
+
+#. 0: bgRange(edges.low, edges.targetTop); 1: bg(edges.low); 2: bgLabel(); 3: bg(edges.veryLow); 4: bgLabel(); 5: bgRange(edges.low, edges.tightTop)
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
+msgid "In range is {0}, the international consensus target. Below range is under {1} {2}, and very low is under {3} {4}. Tight range, {5}, is a narrower part of the target that some people and care teams also look at."
+msgstr "In range is {0}, the international consensus target. Below range is under {1} {2}, and very low is under {3} {4}. Tight range, {5}, is a narrower part of the target that some people and care teams also look at."
+
+#. 0: report.timeZone
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
+msgid "Hours follow the time zone set in the profile settings ({0})."
+msgstr "Hours follow the time zone set in the profile settings ({0})."
+
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
+msgid "A shared link cannot see the time zone this data belongs to,"
+msgstr "A shared link cannot see the time zone this data belongs to,"
+
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
+msgid "The time zone for this data could not be loaded just now,"
+msgstr "The time zone for this data could not be loaded just now,"
+
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
+msgid "The time zone in the profile settings for this data isn't one this server recognises,"
+msgstr "The time zone in the profile settings for this data isn't one this server recognises,"
+
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
+msgid "No time zone is set in the profile settings for this data,"
+msgstr "No time zone is set in the profile settings for this data,"
+
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
+msgid "Setting a time zone in the profile settings fixes this."
+msgstr "Setting a time zone in the profile settings fixes this."
+
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
+msgid "Correcting the time zone in the profile settings fixes this."
+msgstr "Correcting the time zone in the profile settings fixes this."
+
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
+msgid "Reloading the report later may fix this."
+msgstr "Reloading the report later may fix this."
+
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
+msgid "<0/> so each reading is placed at the local time the device that recorded it reported. If readings came from devices set to different time zones, some hours may be off. <1/>"
+msgstr "<0/> so each reading is placed at the local time the device that recorded it reported. If readings came from devices set to different time zones, some hours may be off. <1/>"
+
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
+msgid "How to read this report"
+msgstr "How to read this report"
+
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
+msgid "Which hours are compared"
+msgstr "Which hours are compared"
+
+#. 0: minimumDays; 1: minimumReadings; 2: spread
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
+msgid "An hour is only compared with the others once it has readings on at least {0} different days, and at least {1} readings in all. With less data, a single unusual day could make an hour look much better or worse than it usually is. Those hours still appear in the chart and table. Best and worst hours are only named when they differ by at least {2} percentage points of time in range."
+msgstr "An hour is only compared with the others once it has readings on at least {0} different days, and at least {1} readings in all. With less data, a single unusual day could make an hour look much better or worse than it usually is. Those hours still appear in the chart and table. Best and worst hours are only named when they differ by at least {2} percentage points of time in range."
+
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
+msgid "<0/> Not medical advice"
+msgstr "<0/> Not medical advice"
+
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
+msgid "This report describes what happened in your data. It does not say why, or what to change: meals, activity, sleep, illness and sensor problems can all shape an hour. Talk any pattern through with your diabetes care team before changing your treatment."
+msgstr "This report describes what happened in your data. It does not say why, or what to change: meals, activity, sleep, illness and sensor problems can all shape an hour. Talk any pattern through with your diabetes care team before changing your treatment."
+
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
+msgid "See the full daily curve in the Glucose Profile <0/>"
+msgstr "See the full daily curve in the Glucose Profile <0/>"
+
+#: src/routes/(authenticated)/settings/account/+page.svelte
+msgid "Your old recovery codes stopped working after a Nocturne update. Generate new codes to keep a backup way to sign in."
+msgstr "Your old recovery codes stopped working after a Nocturne update. Generate new codes to keep a backup way to sign in."

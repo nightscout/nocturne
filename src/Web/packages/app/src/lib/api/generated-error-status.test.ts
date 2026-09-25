@@ -11,7 +11,7 @@ import {
   RATE_LIMITED_ERROR,
 } from "../forms/submit-error";
 import { remoteErrorMessage } from "./remote-error";
-import { parseErrorBody } from "./error-body";
+import { parseErrorBody, parseIssues } from "./error-body";
 import { TotpSetupFailure, type ReferencingRulesResponse } from "$api-clients";
 import {
   describeTotpSetupError,
@@ -34,7 +34,7 @@ import {
  */
 async function crossTheBoundary(thrown: unknown): Promise<unknown> {
   const compiled = await transformWithEsbuild(
-    `(err, status, error, parseErrorBody) => { ${config.errorHandling.on500("get invite info")}; }`,
+    `(err, status, error, parseErrorBody, parseIssues) => { ${config.errorHandling.on500("get invite info")}; }`,
     "on500.ts",
     { loader: "ts" }
   );
@@ -45,11 +45,12 @@ async function crossTheBoundary(thrown: unknown): Promise<unknown> {
     err: unknown,
     status: unknown,
     error: typeof import("@sveltejs/kit").error,
-    parseErrorBody: typeof import("./error-body").parseErrorBody
+    parseErrorBody: typeof import("./error-body").parseErrorBody,
+    parseIssues: typeof import("./error-body").parseIssues
   ) => never = new Function(`return ${source}`)();
 
   try {
-    flatten(thrown, errorStatus(thrown), error, parseErrorBody);
+    flatten(thrown, errorStatus(thrown), error, parseErrorBody, parseIssues);
   } catch (crossed) {
     return crossed;
   }
@@ -444,6 +445,125 @@ describe("an error body that is not RFC-7807", () => {
     const crossed = await crossTheBoundary(withoutStatus);
 
     expect(errorStatus(crossed)).toBe(500);
+  });
+});
+
+/**
+ * The issues a rejected rule save carries, as the API roots them on the
+ * ProblemDetails: beside the flattened `errors` map the status arm already reads.
+ */
+const conditionIssues = [
+  { scope: "condition", path: "root", reason: "conditions_empty", field: null },
+  {
+    scope: "condition",
+    path: "root",
+    reason: "minutes_not_positive",
+    field: "minutes",
+  },
+];
+
+/** The `body` of a crossed `HttpError`, or an empty object when it has none. */
+function crossedBody(err: unknown): Record<string, unknown> {
+  return isHttpError(err) && err.body && typeof err.body === "object"
+    ? (err.body as unknown as Record<string, unknown>)
+    : {};
+}
+
+describe("a rejected rule save that carries issues", () => {
+  it("forwards them on the 400 it throws", async () => {
+    const crossed = await crossTheBoundary({
+      ...problemDetails(
+        400,
+        "The rule's conditions cannot be saved.",
+        "Bad Request"
+      ),
+      errors: { "condition:root": ["conditions_empty"] },
+      issues: conditionIssues,
+    });
+
+    expect(isHttpError(crossed) && crossed.status).toBe(400);
+    expect(crossedBody(crossed).issues).toEqual(conditionIssues);
+  });
+
+  it("leaves the message the arm already derived unchanged", async () => {
+    const crossed = await crossTheBoundary({
+      ...problemDetails(
+        400,
+        "The rule's conditions cannot be saved.",
+        "Bad Request"
+      ),
+      errors: { "condition:root": ["conditions_empty"] },
+      issues: conditionIssues,
+    });
+
+    expect(crossedBody(crossed).message).toBe("conditions_empty");
+  });
+
+  it("forwards them on the 409 it throws", async () => {
+    const crossed = await crossTheBoundary({
+      ...problemDetails(
+        409,
+        "The rule's conditions cannot be saved.",
+        "Conflict"
+      ),
+      issues: conditionIssues,
+    });
+
+    expect(isHttpError(crossed) && crossed.status).toBe(409);
+    expect(crossedBody(crossed).issues).toEqual(conditionIssues);
+  });
+
+  it("forwards issues recovered from a body NSwag left unparsed", async () => {
+    // The issues exist only in the raw text on `response`; see `$lib/api/error-body`.
+    const crossed = await crossTheBoundary(
+      nswagApiException(
+        409,
+        JSON.stringify({
+          ...problemDetails(
+            409,
+            "The rule's conditions cannot be saved.",
+            "Conflict"
+          ),
+          issues: conditionIssues,
+        })
+      )
+    );
+
+    expect(isHttpError(crossed) && crossed.status).toBe(409);
+    expect(crossedBody(crossed).issues).toEqual(conditionIssues);
+  });
+
+  it("drops issues holding a malformed entry, keeping the derived message", async () => {
+    const crossed = await crossTheBoundary({
+      ...problemDetails(
+        400,
+        "The rule's conditions cannot be saved.",
+        "Bad Request"
+      ),
+      errors: { "condition:root": ["conditions_empty"] },
+      issues: [{ reason: "conditions_empty" }, "boom"],
+    });
+
+    expect(crossedBody(crossed)).not.toHaveProperty("issues");
+    expect(crossedBody(crossed).message).toBe("conditions_empty");
+  });
+
+  it("omits issues when the body carried none", async () => {
+    const crossed = await crossTheBoundary(
+      problemDetails(400, "A message the server wrote.", "Bad Request")
+    );
+
+    expect(crossedBody(crossed)).not.toHaveProperty("issues");
+  });
+
+  it("never carries issues on a status it does not forward", async () => {
+    const crossed = await crossTheBoundary({
+      ...problemDetails(500, "Boom", "Internal Server Error"),
+      issues: conditionIssues,
+    });
+
+    expect(errorStatus(crossed)).toBe(500);
+    expect(crossedBody(crossed)).not.toHaveProperty("issues");
   });
 });
 

@@ -158,7 +158,7 @@ describe('SocketIOServer.authorizeHandshake', () => {
     const server = makeServer();
     const next = vi.fn();
     // Sign a ticket that expired one minute ago.
-    const expired = signHandshakeTicket(SECRET, 'rhys.nocturne.run', true, -60_000);
+    const expired = signHandshakeTicket(SECRET, 'rhys.nocturne.run', true, undefined, -60_000);
     const socket = fakeSocket({ 'x-forwarded-host': 'rhys.nocturne.run' }, { token: expired });
 
     await server.authorizeHandshake(socket as never, next);
@@ -222,10 +222,52 @@ describe('SocketIOServer.authorizeHandshake', () => {
     expect(socket.join).toHaveBeenCalledWith('tenant:rhys');
   });
 
+  it('joins a member ticket to its own subject room only', async () => {
+    const server = makeServer();
+    const subjectA = '0a5f2c1e-1111-4222-8333-444455556666';
+    const subjectB = '0b6f2c1e-1111-4222-8333-444455556666';
+    const socket = fakeSocket(
+      { 'x-forwarded-host': 'rhys.nocturne.run' },
+      { token: signHandshakeTicket(SECRET, 'rhys.nocturne.run', true, subjectA) },
+    );
+
+    await connect(server, socket);
+
+    expect(socket.join).toHaveBeenCalledWith('tenant:rhys');
+    expect(socket.join).toHaveBeenCalledWith(`tenant:rhys:subject:${subjectA}`);
+    expect(socket.join).not.toHaveBeenCalledWith(`tenant:rhys:subject:${subjectB}`);
+    expect(socket.data.subjectId).toBe(subjectA);
+  });
+
+  it('joins no subject room for a ticket without a subject', async () => {
+    const server = makeServer();
+    const socket = fakeSocket(
+      { 'x-forwarded-host': 'rhys.nocturne.run' },
+      { token: signHandshakeTicket(SECRET, 'rhys.nocturne.run', true) },
+    );
+
+    await connect(server, socket);
+
+    expect(socket.data.subjectId).toBeUndefined();
+    expect(
+      socket.join.mock.calls.some(([room]) => String(room).includes(':subject:')),
+    ).toBe(false);
+  });
+
   it.each([
     ['a restricted ticket', () => signHandshakeTicket(SECRET, 'rhys.nocturne.run', false)],
     ['a ticket carrying no admission', () => ticketWithoutAdmission('rhys.nocturne.run')],
-  ])('admits %s but keeps it out of the tenant room', async (_case, mint) => {
+    [
+      'a restricted ticket naming a subject',
+      () =>
+        signHandshakeTicket(
+          SECRET,
+          'rhys.nocturne.run',
+          false,
+          '0a5f2c1e-1111-4222-8333-444455556666',
+        ),
+    ],
+  ])('admits %s but keeps it out of every tenant room', async (_case, mint) => {
     // The tenant room carries every category and every member's in-app
     // notifications; a guest link or anonymous share holds single categories.
     const server = makeServer();
@@ -309,6 +351,48 @@ describe('SocketIOServer.handleAuthorize', () => {
     expect(socket.disconnect).not.toHaveBeenCalled();
     expect(socket.data.tenantSlug).toBe('rhys');
     expect(callback).toHaveBeenCalledWith(expect.objectContaining({ read: true }));
+  });
+
+  const SUBJECT = '0a5f2c1e-1111-4222-8333-444455556666';
+
+  it("joins the subject's room when the admission names a subject", async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(admission({ tenantRelay: true, subjectId: SUBJECT })));
+
+    const server = makeApiServer();
+    const socket = pendingSocket('rhys');
+
+    await server.handleAuthorize(socket as never, { secret: 'sha1hash' });
+
+    expect(socket.join.mock.calls.map(([room]) => room)).toEqual([
+      'tenant:rhys',
+      `tenant:rhys:subject:${SUBJECT}`,
+    ]);
+  });
+
+  it('joins no room for a restricted credential that names a subject', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(admission({ tenantRelay: false, subjectId: SUBJECT })));
+
+    const server = makeApiServer();
+    const socket = pendingSocket('rhys');
+
+    await server.handleAuthorize(socket as never, { token: 'guest-token' });
+
+    expect(socket.data.tenantSlug).toBe('rhys');
+    expect(socket.join).not.toHaveBeenCalled();
+  });
+
+  it('joins no subject room for a subject id not in canonical form', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(admission({ tenantRelay: true, subjectId: SUBJECT.toUpperCase() })),
+    );
+
+    const server = makeApiServer();
+    const socket = pendingSocket('rhys');
+
+    await server.handleAuthorize(socket as never, { secret: 'sha1hash' });
+
+    expect(socket.join.mock.calls.map(([room]) => room)).toEqual(['tenant:rhys']);
   });
 
   it('passes a subject token through as a query parameter', async () => {
@@ -423,6 +507,57 @@ describe('SocketIOServer tracker broadcast fan-out', () => {
     const toSpy = vi.spyOn(server.getIO()!, 'to');
 
     server.broadcastTrackerUpdate({ action: 'create', instance: { id: 'tracker-1' } });
+
+    expect(toSpy).not.toHaveBeenCalled();
+    server.getIO()!.close();
+  });
+});
+
+describe('SocketIOServer in-app notification fan-out', () => {
+  const SUBJECT_A = '0a5f2c1e-1111-4222-8333-444455556666';
+
+  async function startedServer() {
+    const server = new SocketIOServer(
+      createServer(),
+      {},
+      'nocturne.run',
+      [],
+      SECRET,
+      'http://api.internal',
+    );
+    await server.start();
+    return server;
+  }
+
+  it("routes a notification to the recipient's subject room and no other", async () => {
+    const server = await startedServer();
+    const emitted: { room: string; event: string; payload: unknown }[] = [];
+    vi.spyOn(server.getIO()!, 'to').mockImplementation(
+      (room: string) =>
+        ({
+          emit: (event: string, payload: unknown) => emitted.push({ room, event, payload }),
+        }) as never,
+    );
+
+    const payload = { id: 'notification-1' };
+    server.broadcastInAppNotification('notificationCreated', payload, 'rhys', SUBJECT_A);
+
+    // Member B's socket is in tenant:rhys:subject:B, so it is never a target here.
+    expect(emitted).toEqual([
+      {
+        room: `tenant:rhys:subject:${SUBJECT_A}`,
+        event: 'notificationCreated',
+        payload,
+      },
+    ]);
+    server.getIO()!.close();
+  });
+
+  it('drops a relayed notification that names no recipient', async () => {
+    const server = await startedServer();
+    const toSpy = vi.spyOn(server.getIO()!, 'to');
+
+    server.broadcastInAppNotification('notificationCreated', { id: 'notification-1' }, 'rhys');
 
     expect(toSpy).not.toHaveBeenCalled();
     server.getIO()!.close();

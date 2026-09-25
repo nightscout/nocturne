@@ -91,25 +91,25 @@ class MessageTranslator {
     }
   }
 
-  handleNotificationCreated(data: unknown): void {
+  handleNotificationCreated(data: unknown, subjectId?: string): void {
     try {
-      this.socketIOServer.broadcastInAppNotification('notificationCreated', data, this.tenantSlug);
+      this.socketIOServer.broadcastInAppNotification('notificationCreated', data, this.tenantSlug, subjectId);
     } catch (error) {
       logger.error('Error handling notification created:', error);
     }
   }
 
-  handleNotificationArchived(data: unknown): void {
+  handleNotificationArchived(data: unknown, subjectId?: string): void {
     try {
-      this.socketIOServer.broadcastInAppNotification('notificationArchived', data, this.tenantSlug);
+      this.socketIOServer.broadcastInAppNotification('notificationArchived', data, this.tenantSlug, subjectId);
     } catch (error) {
       logger.error('Error handling notification archived:', error);
     }
   }
 
-  handleNotificationUpdated(data: unknown): void {
+  handleNotificationUpdated(data: unknown, subjectId?: string): void {
     try {
-      this.socketIOServer.broadcastInAppNotification('notificationUpdated', data, this.tenantSlug);
+      this.socketIOServer.broadcastInAppNotification('notificationUpdated', data, this.tenantSlug, subjectId);
     } catch (error) {
       logger.error('Error handling notification updated:', error);
     }

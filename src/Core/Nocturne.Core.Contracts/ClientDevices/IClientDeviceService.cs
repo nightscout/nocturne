@@ -30,6 +30,14 @@ public interface IClientDeviceService
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Counts the devices currently paired under each of <paramref name="grantIds"/>. Grants with no
+    /// devices are absent from the result rather than mapped to zero.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, int>> GetDeviceCountsByGrantAsync(
+        IReadOnlyCollection<Guid> grantIds,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Rename a device the caller owns. Returns the updated device, or null if it doesn't exist or
     /// isn't owned by <paramref name="subjectId"/>.
     /// </summary>

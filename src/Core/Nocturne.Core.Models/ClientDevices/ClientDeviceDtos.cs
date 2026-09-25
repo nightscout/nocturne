@@ -56,6 +56,19 @@ public class ClientDeviceDto
     /// <summary>User-facing label.</summary>
     public string? Label { get; set; }
 
+    /// <summary>
+    /// Display name of the OAuth client this device's grant belongs to; null when the device has
+    /// no grant or the grant has no client.
+    /// </summary>
+    public string? AppName { get; set; }
+
+    /// <summary>
+    /// Whether the device was registered under a grant. Distinguishes a pre-grant device, which a
+    /// revoke leaves behind, from one registered under a client that reports no display name, which a
+    /// revoke removes.
+    /// </summary>
+    public bool LinkedToApp { get; set; }
+
     /// <summary>The capabilities the server accepted for this device.</summary>
     public List<string> Capabilities { get; set; } = [];
 

@@ -22,10 +22,6 @@ vi.mock(
   async () => import("$lib/test-stubs/EmptyYearPanel.test-stub.svelte")
 );
 vi.mock(
-  "$lib/components/reports/year-overview/DayDetailPanel.svelte",
-  async () => import("$lib/test-stubs/EmptyYearPanel.test-stub.svelte")
-);
-vi.mock(
   "$lib/components/reports/GlycemicRiskIndexChart.svelte",
   async () => import("$lib/test-stubs/EmptyYearPanel.test-stub.svelte")
 );
