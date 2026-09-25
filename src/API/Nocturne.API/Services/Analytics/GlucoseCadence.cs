@@ -1,4 +1,5 @@
 using Nocturne.Core.Contracts.Analytics;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.Analytics;
@@ -27,11 +28,60 @@ internal static class GlucoseCadence
     private const double MaxCadenceMinutes = 15;
 
     /// <summary>
-    /// The longest interval that counts as evidence of a cadence: the slowest cadence plus half
-    /// of it again for jitter. A longer interval is a dropout, and dropouts next to each other
-    /// must not set the cadence that would excuse them.
+    /// The longest interval that counts as evidence of a cadence: the slowest cadence plus two
+    /// minutes, where fifteen-minute history jitters by seconds. No CGM reports at a longer
+    /// spacing, so a longer interval is a dropout, and dropouts next to each other must not set
+    /// the cadence that would excuse them.
     /// </summary>
-    private const double MaxCadenceEvidenceMinutes = MaxCadenceMinutes * 1.5;
+    private const double MaxCadenceEvidenceMinutes = MaxCadenceMinutes + 2;
+
+    /// <summary>
+    /// One reading per instant of a time-ordered series, chosen the same way whatever order
+    /// readings sharing a timestamp arrive in: the lowest if any is below range, otherwise the
+    /// highest if any is above range, otherwise the lowest. The choice leans towards the
+    /// reading that would matter more if it were the true one, which for disagreeing sources is
+    /// a low.
+    /// </summary>
+    internal static List<SensorGlucose> Instants(
+        IList<SensorGlucose> sortedEntries,
+        GlycemicThresholds thresholds)
+    {
+        var zones = GlucoseStatistics.ExcludingZones(thresholds);
+        var instants = new List<SensorGlucose>(sortedEntries.Count);
+        for (var first = 0; first < sortedEntries.Count;)
+        {
+            var last = first;
+            while (last + 1 < sortedEntries.Count && sortedEntries[last + 1].Mills == sortedEntries[first].Mills)
+                last++;
+
+            SensorGlucose? lowest = null, highest = null, lowestBelow = null, highestAbove = null;
+            for (var j = first; j <= last; j++)
+            {
+                var reading = sortedEntries[j];
+                if (lowest is null || reading.Mgdl < lowest.Mgdl)
+                    lowest = reading;
+                if (highest is null || reading.Mgdl > highest.Mgdl)
+                    highest = reading;
+
+                switch ((ExcludingZone)zones.Classify(reading.Mgdl))
+                {
+                    case ExcludingZone.VeryLow or ExcludingZone.Low:
+                        if (lowestBelow is null || reading.Mgdl < lowestBelow.Mgdl)
+                            lowestBelow = reading;
+                        break;
+                    case ExcludingZone.VeryHigh or ExcludingZone.High:
+                        if (highestAbove is null || reading.Mgdl > highestAbove.Mgdl)
+                            highestAbove = reading;
+                        break;
+                }
+            }
+
+            instants.Add(lowestBelow ?? highestAbove ?? lowest!);
+            first = last + 1;
+        }
+
+        return instants;
+    }
 
     /// <summary>
     /// The minutes from each reading to the next, in series order; empty for a series of one.
@@ -103,7 +153,9 @@ internal static class GlucoseCadence
     /// reading <paramref name="index"/> that are evidence of a cadence (elapsed, and no longer than
     /// <see cref="MaxCadenceEvidenceMinutes"/>), capped at <see cref="MaxCadenceMinutes"/>. The
     /// interval itself is excluded so a gap does not vouch for itself. With no evidence nearby,
-    /// <see cref="DefaultCadenceMinutes"/>.
+    /// <see cref="DefaultCadenceMinutes"/>. That includes the first reading of a two-reading series,
+    /// whose only nearby interval is its own: on a fifteen-minute sensor it is judged, and
+    /// credited, against a five-minute cadence. Longer series give every reading neighbours.
     /// </summary>
     private static double LocalCadenceMinutes(double[] intervals, int index)
     {

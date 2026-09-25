@@ -294,6 +294,29 @@ public class SleepReportCalculatorTests
         result.Should().BeEmpty();
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ComputeHypoEvents_FindsALowFromTwoSourcesWhateverOrderTheyArriveIn(bool lowFirst)
+    {
+        // The sleep report reads raw readings, so two sources can stamp the same instant.
+        var session = MakeSession();
+        var t0 = session.StartTime.AddMinutes(60);
+        var glucose = new List<SensorGlucose>();
+        for (var i = 0; i < 8; i++)
+        {
+            var low = MakeGlucose(t0.AddMinutes(i * 5), 65);
+            var inRange = MakeGlucose(t0.AddMinutes(i * 5), 80);
+            glucose.AddRange(lowFirst ? [low, inRange] : [inRange, low]);
+        }
+
+        var result = API.Services.Sleep.SleepReportCalculator.ComputeHypoEvents(session, glucose, [], _thresholds);
+
+        var hypo = result.Should().ContainSingle().Subject;
+        hypo.DurationMinutes.Should().Be(40);
+        hypo.LowestBg.Should().Be(65);
+    }
+
     [Fact]
     public void ComputeHypoEvents_FindsTheSameLowsAsTheTimeInRangeEpisodes()
     {

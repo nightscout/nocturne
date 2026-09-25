@@ -41,23 +41,19 @@ internal static class GlucoseEpisodeDetector
 
     /// <summary>
     /// The episodes in <paramref name="sortedEntries"/>, which must be plausible readings in time
-    /// order, in the order they began.
-    /// <para>
-    /// Readings stamped at the same instant are taken together, as one reading standing for the
-    /// minutes <see cref="GlucoseCadence.ReadingMinutes"/> credits the last of them. If they
-    /// disagree, the instant stays on the side the open episode or run is on when any of them
-    /// is, so the order two sources' readings arrive in cannot break a run.
-    /// </para>
+    /// order, in the order they began. Readings sharing a timestamp are taken as the one reading
+    /// <see cref="GlucoseCadence.Instants"/> chooses for that instant.
     /// </summary>
     internal static List<GlucoseEpisode> Detect(
         IList<SensorGlucose> sortedEntries,
         GlycemicThresholds thresholds)
     {
         var zones = GlucoseStatistics.ExcludingZones(thresholds);
-        var (minutes, gapAfter) = GlucoseCadence.ReadingMinutes(sortedEntries);
+        var readings = GlucoseCadence.Instants(sortedEntries, thresholds);
+        var (minutes, gapAfter) = GlucoseCadence.ReadingMinutes(readings);
         var episodes = new List<GlucoseEpisode>();
 
-        // The run of instants on one side of the range, and within it the run beyond that side's
+        // The run of readings on one side of the range, and within it the run beyond that side's
         // level 2 threshold; both reset on a gap.
         int runSide = 0, runStart = 0, runExtreme = 0, severeSide = 0;
         double runMinutes = 0, severeMinutes = 0;
@@ -66,38 +62,38 @@ internal static class GlucoseEpisodeDetector
         var severe = false;
         double returnMinutes = 0;
 
-        for (var first = 0; first < sortedEntries.Count;)
+        for (var i = 0; i < readings.Count; i++)
         {
-            var last = first;
-            while (last + 1 < sortedEntries.Count && sortedEntries[last + 1].Mills == sortedEntries[first].Mills)
-                last++;
-
-            var side = InstantSide(first, last);
-            var reading = MostExtreme(side, first, last);
-            var isSevere = side != 0 && IsSevere(first, last, side);
-            var credit = minutes[last];
+            var zone = (ExcludingZone)zones.Classify(readings[i].Mgdl);
+            var side = zone switch
+            {
+                ExcludingZone.VeryLow or ExcludingZone.Low => -1,
+                ExcludingZone.VeryHigh or ExcludingZone.High => 1,
+                _ => 0,
+            };
+            var isSevere = zone is ExcludingZone.VeryLow or ExcludingZone.VeryHigh;
 
             if (side != runSide)
             {
                 runSide = side;
-                runStart = first;
-                runExtreme = reading;
+                runStart = i;
+                runExtreme = i;
                 runMinutes = 0;
             }
-            else if (MoreExtreme(side, reading, runExtreme))
+            else if (MoreExtreme(side, i, runExtreme))
             {
-                runExtreme = reading;
+                runExtreme = i;
             }
-            runMinutes += credit;
+            runMinutes += minutes[i];
 
             if (isSevere && severeSide == side)
             {
-                severeMinutes += credit;
+                severeMinutes += minutes[i];
             }
             else
             {
                 severeSide = isSevere ? side : 0;
-                severeMinutes = isSevere ? credit : 0;
+                severeMinutes = isSevere ? minutes[i] : 0;
             }
 
             if (episodeSide != 0)
@@ -105,11 +101,11 @@ internal static class GlucoseEpisodeDetector
                 if (side == episodeSide)
                 {
                     returnMinutes = 0;
-                    lastBeyond = last;
-                    if (MoreExtreme(side, reading, extreme))
-                        extreme = reading;
+                    lastBeyond = i;
+                    if (MoreExtreme(side, i, extreme))
+                        extreme = i;
                 }
-                else if ((returnMinutes += credit) >= EpisodeMinutes)
+                else if ((returnMinutes += minutes[i]) >= EpisodeMinutes)
                 {
                     Close();
                 }
@@ -119,7 +115,7 @@ internal static class GlucoseEpisodeDetector
             {
                 episodeSide = runSide;
                 episodeStart = runStart;
-                lastBeyond = last;
+                lastBeyond = i;
                 extreme = runExtreme;
                 severe = false;
                 returnMinutes = 0;
@@ -128,88 +124,35 @@ internal static class GlucoseEpisodeDetector
             if (episodeSide != 0 && severeSide == episodeSide && severeMinutes >= EpisodeMinutes)
                 severe = true;
 
-            if (gapAfter[last])
+            if (gapAfter[i])
             {
                 Close();
                 runSide = 0;
                 severeSide = 0;
                 severeMinutes = 0;
             }
-
-            first = last + 1;
         }
 
         Close();
         return episodes;
 
-        int Side(int index) =>
-            (ExcludingZone)zones.Classify(sortedEntries[index].Mgdl) switch
-            {
-                ExcludingZone.VeryLow or ExcludingZone.Low => -1,
-                ExcludingZone.VeryHigh or ExcludingZone.High => 1,
-                _ => 0,
-            };
-
-        int InstantSide(int from, int to)
-        {
-            foreach (var held in (ReadOnlySpan<int>)[episodeSide, runSide])
-            {
-                if (held == 0)
-                    continue;
-                for (var j = from; j <= to; j++)
-                {
-                    if (Side(j) == held)
-                        return held;
-                }
-            }
-
-            return Side(to);
-        }
-
-        bool IsSevere(int from, int to, int side)
-        {
-            for (var j = from; j <= to; j++)
-            {
-                if (Side(j) == side
-                    && (ExcludingZone)zones.Classify(sortedEntries[j].Mgdl)
-                        is ExcludingZone.VeryLow or ExcludingZone.VeryHigh)
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        int MostExtreme(int side, int from, int to)
-        {
-            var most = to;
-            for (var j = from; j <= to; j++)
-            {
-                if (Side(j) == side && (Side(most) != side || MoreExtreme(side, j, most)))
-                    most = j;
-            }
-
-            return most;
-        }
-
         bool MoreExtreme(int side, int candidate, int current) =>
             side < 0
-                ? sortedEntries[candidate].Mgdl < sortedEntries[current].Mgdl
-                : sortedEntries[candidate].Mgdl > sortedEntries[current].Mgdl;
+                ? readings[candidate].Mgdl < readings[current].Mgdl
+                : readings[candidate].Mgdl > readings[current].Mgdl;
 
         void Close()
         {
             if (episodeSide == 0)
                 return;
 
-            var end = sortedEntries[lastBeyond];
+            var end = readings[lastBeyond];
             episodes.Add(new GlucoseEpisode(
                 BelowRange: episodeSide < 0,
                 Severe: severe,
-                StartAt: sortedEntries[episodeStart].Timestamp,
+                StartAt: readings[episodeStart].Timestamp,
                 EndAt: end.Timestamp.AddMinutes(minutes[lastBeyond]),
-                Extreme: sortedEntries[extreme]));
+                Extreme: readings[extreme]));
             episodeSide = 0;
         }
     }

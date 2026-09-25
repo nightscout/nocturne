@@ -530,6 +530,92 @@ public class StatisticsServiceTests
         result.Episodes.Low.Should().Be(1);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void CalculateTimeInRange_Episodes_EnterALowAtAnInstantTheReadingsDisagreeOn(bool lowFirst)
+    {
+        // The first three instants beyond range each hold a low and an in-range reading.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var entries = new List<SensorGlucose>
+        {
+            new() { Mgdl = 100, Timestamp = start },
+            new() { Mgdl = 100, Timestamp = start.AddMinutes(5) },
+        };
+        for (var i = 0; i < 3; i++)
+        {
+            var at = start.AddMinutes(10 + i * 5);
+            var low = new SensorGlucose { Mgdl = 60, Timestamp = at };
+            var inRange = new SensorGlucose { Mgdl = 100, Timestamp = at };
+            entries.AddRange(lowFirst ? [low, inRange] : [inRange, low]);
+        }
+        for (var i = 0; i < 4; i++)
+            entries.Add(new SensorGlucose { Mgdl = 100, Timestamp = start.AddMinutes(25 + i * 5) });
+
+        var result = _statisticsService.CalculateTimeInRange(entries);
+
+        result.Episodes.Low.Should().Be(1);
+        result.Durations.Low.Should().Be(15);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void CalculateTimeInRange_Durations_CreditADisagreeingInstantToItsLowReading(bool lowFirst)
+    {
+        // Two sources stamped at the same instants for two hours, one reading 65 and one 80.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var entries = new List<SensorGlucose>();
+        for (var i = 0; i < 24; i++)
+        {
+            var at = start.AddMinutes(i * 5);
+            var low = new SensorGlucose { Mgdl = 65, Timestamp = at };
+            var inRange = new SensorGlucose { Mgdl = 80, Timestamp = at };
+            entries.AddRange(lowFirst ? [low, inRange] : [inRange, low]);
+        }
+
+        var result = _statisticsService.CalculateTimeInRange(entries);
+
+        result.Durations.Low.Should().Be(120);
+        result.Durations.Target.Should().Be(0);
+        result.Episodes.Low.Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void CalculateTimeInRange_Durations_CreditAHighAndInRangeInstantToItsHighReading(bool highFirst)
+    {
+        var at = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var high = new SensorGlucose { Mgdl = 200, Timestamp = at };
+        var inRange = new SensorGlucose { Mgdl = 150, Timestamp = at };
+
+        var result = _statisticsService.CalculateTimeInRange(highFirst ? [high, inRange] : [inRange, high]);
+
+        result.Durations.High.Should().Be(5);
+        result.Durations.Target.Should().Be(0);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_TreatTwentyMinuteSpacingInFiveMinuteDataAsGaps()
+    {
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var entries = new List<SensorGlucose>();
+        for (var i = 0; i < 6; i++)
+            entries.Add(new SensorGlucose { Mgdl = 100, Timestamp = start.AddMinutes(i * 5) });
+        var sparseStart = start.AddMinutes(30);
+        for (var i = 0; i < 6; i++)
+            entries.Add(new SensorGlucose { Mgdl = 60, Timestamp = sparseStart.AddMinutes(i * 20) });
+        var resumed = sparseStart.AddMinutes(5 * 20 + 5);
+        for (var i = 0; i < 6; i++)
+            entries.Add(new SensorGlucose { Mgdl = 100, Timestamp = resumed.AddMinutes(i * 5) });
+
+        var result = _statisticsService.CalculateTimeInRange(entries);
+
+        result.Episodes.Low.Should().Be(0);
+        result.Durations.Low.Should().Be(6 * 5);
+    }
+
     [Fact]
     public void CalculateTimeInRange_Episodes_CountALowAtFiveMinutesAfterHoursAtOneMinute()
     {
