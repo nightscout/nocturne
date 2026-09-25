@@ -10,6 +10,8 @@ public class ConditionTreeEqualityTests
     [Theory]
     [InlineData("""{"a":1,"b":[true,null,"x"]}""", """ { "b" : [ true , null , "x" ] , "a" : 1 } """)]
     [InlineData(null, "  ")]
+    [InlineData("""{"direction":"below"}""", """{"direction":"below"}""")]
+    [InlineData("""{"direction":"below"}""", """{"direction":"below"}""")]
     public void Formatting_and_key_order_do_not_matter(string? stored, string? requested) =>
         ConditionTreeEquality.Same(stored, requested).Should().BeTrue();
 
@@ -18,6 +20,9 @@ public class ConditionTreeEqualityTests
     [InlineData("""{"minutes":1e0}""", """{"minutes":1}""")]
     [InlineData("""{"a":1,"a":2}""", """{"a":1,"a":2}""")]
     [InlineData("""{"a":[1,2]}""", """{"a":[2,1]}""")]
+    [InlineData("""{"value":-0}""", """{"value":0}""")]
+    [InlineData("""{"value":"70"}""", """{"value":70}""")]
+    [InlineData("""{"direction":"Below"}""", """{"direction":"below"}""")]
     [InlineData("{", "{ ")]
     [InlineData("""{"a":1}""", null)]
     public void Anything_else_differs(string? stored, string? requested) =>
