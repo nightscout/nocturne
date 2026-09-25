@@ -698,8 +698,12 @@ describe('SocketIOServer v3 /alarm namespace', () => {
     };
   }
 
-  it('subscribes for alarms when the token is valid', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200 }));
+  function admission(body: unknown) {
+    return { ok: true, status: 200, json: () => Promise.resolve(body) };
+  }
+
+  it('subscribes and joins when the API admits the token to the tenant relay', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(admission({ tenantRelay: true })));
     const server = makeAlarmServer();
     const socket = alarmSocket('rhys');
     const ack = vi.fn();
@@ -709,6 +713,53 @@ describe('SocketIOServer v3 /alarm namespace', () => {
     expect(ack).toHaveBeenCalledWith({ success: true, message: 'Subscribed for alarms' });
     expect(socket.join).toHaveBeenCalledWith('alarm:rhys');
     expect(socket.data.tenantSlug).toBe('rhys');
+  });
+
+  it('denies a restricted credential the API will not admit to the tenant relay', async () => {
+    // An AAPS guest-style token can read entries, but it holds single
+    // categories and must not receive the tenant's alarms.
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(admission({ tenantRelay: false })));
+    const server = makeAlarmServer();
+    const socket = alarmSocket('rhys');
+    const ack = vi.fn();
+
+    await server.handleAlarmSubscribe(socket as never, { accessToken: 'restricted' }, ack);
+
+    expect(ack).toHaveBeenCalledWith({ success: false, message: 'Missing or bad accessToken' });
+    expect(socket.join).not.toHaveBeenCalled();
+    expect(socket.disconnect).toHaveBeenCalledWith(true);
+    expect(socket.data.tenantSlug).toBeUndefined();
+  });
+
+  it('denies when the admission probe throws', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')));
+    const server = makeAlarmServer();
+    const socket = alarmSocket('rhys');
+    const ack = vi.fn();
+
+    await server.handleAlarmSubscribe(socket as never, { accessToken: 'tok' }, ack);
+
+    expect(ack).toHaveBeenCalledWith({ success: false, message: 'Missing or bad accessToken' });
+    expect(socket.join).not.toHaveBeenCalled();
+    expect(socket.disconnect).toHaveBeenCalledWith(true);
+  });
+
+  it('probes the admission endpoint with a Bearer token, never the entries endpoint', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(admission({ tenantRelay: true }));
+    vi.stubGlobal('fetch', fetchMock);
+    const server = makeAlarmServer();
+    const socket = alarmSocket('rhys');
+
+    await server.handleAlarmSubscribe(socket as never, { accessToken: 'aaps-token' });
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toBe('http://api.internal/api/v4/me/realtime-admission');
+    expect(String(url)).not.toContain('/api/v3/entries');
+    expect(init.headers['Authorization']).toBe('Bearer aaps-token');
+    expect(init.headers['X-Forwarded-Host']).toBe('rhys.nocturne.run');
+    // The bridge must NOT use its instance key to authorize the client.
+    expect(init.headers['X-Instance-Key']).toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('disconnects on auth failure so subscribe is not a credential-guessing oracle', async () => {
