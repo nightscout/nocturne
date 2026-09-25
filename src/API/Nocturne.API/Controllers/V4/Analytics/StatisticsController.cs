@@ -506,6 +506,36 @@ public class StatisticsController : ControllerBase
         return Ok(_statisticsService.CalculateWeekdayAverages(entries, tz));
     }
 
+    /// <summary>
+    /// Which hours of the day go best and worst for a date range, bucketed on the tenant's local
+    /// clock. Backs the hourly-patterns report.
+    /// </summary>
+    /// <param name="startDate">Start of the window (inclusive, UTC).</param>
+    /// <param name="endDate">End of the window (exclusive, UTC).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Every hour's figures plus the ranked best, worst and most-below-range hours.</returns>
+    [HttpGet("hourly-patterns")]
+    [RequireScope(Scope.ReportsRead)]
+    [RemoteQuery]
+    [ResponseCache(Duration = 60, Location = ResponseCacheLocation.Client)]
+    public async Task<ActionResult<HourlyPatterns>> GetHourlyPatterns(
+        [FromQuery] DateTime startDate,
+        [FromQuery] DateTime endDate,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var startDt = DateTime.SpecifyKind(startDate, DateTimeKind.Utc);
+        var endDt = DateTime.SpecifyKind(endDate, DateTimeKind.Utc);
+
+        // Uncapped and canonicalised for the same reasons as range-analytics above.
+        var rawGlucose = (await _sensorGlucoseRepository.GetAsync(startDt, endDt, null, null, int.MaxValue, descending: false, ct: cancellationToken)).ToList();
+        var entries = await _canonicalGlucose.SelectAsync(rawGlucose, cancellationToken);
+
+        var tz = await GetTenantTimeZoneAsync(cancellationToken);
+
+        return Ok(_statisticsService.CalculateHourlyPatterns(entries, tz));
+    }
+
     private async Task<TimeZoneInfo> GetTenantTimeZoneAsync(CancellationToken ct) =>
         TimeZoneHelper.GetTimeZoneInfoFromId(await _therapySettingsResolver.GetTimezoneAsync(ct: ct));
 

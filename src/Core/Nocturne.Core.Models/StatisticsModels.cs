@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models.V4;
 
@@ -918,6 +919,111 @@ public class AveragedStats : BasicGlucoseStats
     /// Time in each consensus band for this hour
     /// </summary>
     public ExtendedTimeInRangePercentages TimeInRange { get; set; } = new();
+}
+
+/// <summary>
+/// Side of the consensus range an hour's out-of-range readings mostly fall on.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter<HourlyExcursion>))]
+public enum HourlyExcursion
+{
+    /// <summary>No reading in the hour was out of range.</summary>
+    None,
+
+    /// <summary>More of the hour's readings were below range than above it.</summary>
+    Below,
+
+    /// <summary>More of the hour's readings were above range than below it.</summary>
+    Above,
+
+    /// <summary>As many of the hour's readings were below range as above it.</summary>
+    Mixed,
+}
+
+/// <summary>
+/// One hour of the day in the hourly-patterns report: its averaged statistics plus how its
+/// readings split around the consensus 70-180 mg/dL range.
+/// </summary>
+public class HourlyPattern : AveragedStats
+{
+    /// <summary>Percentage of the hour's readings from 70 to 180 mg/dL inclusive.</summary>
+    public double InRange { get; set; }
+
+    /// <summary>Percentage of the hour's readings below 70 mg/dL.</summary>
+    public double BelowRange { get; set; }
+
+    /// <summary>Percentage of the hour's readings above 180 mg/dL.</summary>
+    public double AboveRange { get; set; }
+
+    /// <summary>Side of the range the hour's out-of-range readings mostly fall on.</summary>
+    public HourlyExcursion MainExcursion { get; set; }
+
+    /// <summary>
+    /// Whether the hour has enough data to be compared with the others. An unranked hour is never
+    /// named among the best, worst or most-below-range hours.
+    /// </summary>
+    public bool IsRanked { get; set; }
+}
+
+/// <summary>
+/// How far the hourly-patterns report could compare the hours of the day.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter<HourlyComparison>))]
+public enum HourlyComparison
+{
+    /// <summary>No hour has a reading.</summary>
+    NoReadings,
+
+    /// <summary>Fewer than two hours have enough data to rank, so none are compared.</summary>
+    TooLittleData,
+
+    /// <summary>Every ranked hour has the same time in range, so no hour is named best or worst.</summary>
+    AllAlike,
+
+    /// <summary>The best and worst hours are named.</summary>
+    Ranked,
+}
+
+/// <summary>
+/// Which hours of the day go best and worst, bucketed on the tenant's local clock.
+/// </summary>
+public class HourlyPatterns
+{
+    /// <summary>How far the hours could be compared.</summary>
+    public HourlyComparison Comparison { get; set; }
+
+    /// <summary>All 24 hours in order, midnight first.</summary>
+    public List<HourlyPattern> Hours { get; set; } = [];
+
+    /// <summary>
+    /// Up to three ranked hours with the most time in range, best first. Empty when fewer than two
+    /// hours are ranked or every ranked hour has the same time in range.
+    /// </summary>
+    public List<HourlyPattern> BestHours { get; set; } = [];
+
+    /// <summary>
+    /// Up to three ranked hours with the least time in range, worst first. Never shares an hour
+    /// with <see cref="BestHours"/>.
+    /// </summary>
+    public List<HourlyPattern> WorstHours { get; set; } = [];
+
+    /// <summary>
+    /// Up to three ranked hours with the most time below range, most first. Hours that never went
+    /// below range are left out.
+    /// </summary>
+    public List<HourlyPattern> MostBelowRangeHours { get; set; } = [];
+
+    /// <summary>Number of hours with enough data to be ranked.</summary>
+    public int RankedHourCount { get; set; }
+
+    /// <summary>Distinct local days an hour needs readings on before it is ranked.</summary>
+    public int MinimumDaysToRank { get; set; }
+
+    /// <summary>Readings an hour needs in all before it is ranked.</summary>
+    public int MinimumReadingsToRank { get; set; }
+
+    /// <summary>Identifier of the timezone the hours were bucketed on.</summary>
+    public string TimeZone { get; set; } = string.Empty;
 }
 
 /// <summary>

@@ -222,6 +222,17 @@ public interface IStatisticsService
     );
 
     /// <summary>
+    /// The hourly-patterns report: each hour's statistics and split around the consensus range,
+    /// with the best, worst and most-below-range hours among those with enough data to rank.
+    /// </summary>
+    /// <param name="entries"><see cref="SensorGlucose"/> entries.</param>
+    /// <param name="tenantTimeZone">The tenant's local timezone.</param>
+    HourlyPatterns CalculateHourlyPatterns(
+        IEnumerable<SensorGlucose> entries,
+        TimeZoneInfo tenantTimeZone
+    );
+
+    /// <summary>
     /// Mean glucose per weekday in each five-minute slot of the day, bucketed on the tenant's
     /// local clock, for the week-to-week report. Readings without a timestamp or glucose value
     /// are skipped; slots no reading falls in are absent.

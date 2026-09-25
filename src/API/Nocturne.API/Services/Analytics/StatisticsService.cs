@@ -1646,6 +1646,22 @@ public class StatisticsService : IStatisticsService
         return CalculateEstimatedA1C(CalculateMean(valuesList)).ToString("F1");
     }
 
+    /// <summary>
+    /// Distinct local days an hour needs readings on before
+    /// <see cref="CalculateHourlyPatterns"/> ranks it. Counted in days rather than readings alone so
+    /// that one day of dense data cannot pass as a pattern.
+    /// </summary>
+    public const int HourlyPatternsMinimumDays = 5;
+
+    /// <summary>
+    /// Readings an hour needs in all before <see cref="CalculateHourlyPatterns"/> ranks it: five
+    /// days of a fifteen-minute sensor, so a sensor that drops out for most of each day does not
+    /// rank on a handful of values.
+    /// </summary>
+    public const int HourlyPatternsMinimumReadings = 20;
+
+    private const int HourlyPatternsListLength = 3;
+
     /// <inheritdoc/>
     public IEnumerable<AveragedStats> CalculateAveragedStats(
         IEnumerable<SensorGlucose> entries,
@@ -1654,6 +1670,87 @@ public class StatisticsService : IStatisticsService
     {
         var byHour = GroupByLocalHour(entries, tenantTimeZone);
         return Enumerable.Range(0, 24).Select(hour => HourStats<AveragedStats>(hour, byHour[hour], out _)).ToList();
+    }
+
+    /// <inheritdoc/>
+    public HourlyPatterns CalculateHourlyPatterns(
+        IEnumerable<SensorGlucose> entries,
+        TimeZoneInfo tenantTimeZone
+    )
+    {
+        var byHour = GroupByLocalHour(entries, tenantTimeZone);
+        var hours = new List<HourlyPattern>(24);
+
+        for (var hour = 0; hour < 24; hour++)
+        {
+            var pattern = HourStats<HourlyPattern>(hour, byHour[hour], out var bands);
+            var total = byHour[hour].Count;
+            var below = bands[(int)HourlyBand.VeryLow] + bands[(int)HourlyBand.Low];
+            var above = bands[(int)HourlyBand.High] + bands[(int)HourlyBand.VeryHigh];
+
+            pattern.BelowRange = RoundedPercent(below, total);
+            pattern.AboveRange = RoundedPercent(above, total);
+            pattern.InRange = RoundedPercent(total - below - above, total);
+            pattern.MainExcursion = (below, above) switch
+            {
+                (0, 0) => HourlyExcursion.None,
+                _ when below > above => HourlyExcursion.Below,
+                _ when above > below => HourlyExcursion.Above,
+                _ => HourlyExcursion.Mixed,
+            };
+            pattern.IsRanked =
+                pattern.DayCount >= HourlyPatternsMinimumDays
+                && total >= HourlyPatternsMinimumReadings;
+
+            hours.Add(pattern);
+        }
+
+        var ranked = hours.Where(h => h.IsRanked).ToList();
+
+        // Best and worst are drawn from opposite halves so no hour is both, and an hour that ties
+        // the other end's time in range is dropped rather than named as better or worse than it.
+        var listLength = Math.Min(HourlyPatternsListLength, ranked.Count / 2);
+        var lowestInRange = ranked.Count > 0 ? ranked.Min(h => h.InRange) : 0;
+        var highestInRange = ranked.Count > 0 ? ranked.Max(h => h.InRange) : 0;
+
+        var best = ranked
+            .OrderByDescending(h => h.InRange)
+            .ThenBy(h => h.BelowRange)
+            .ThenBy(h => h.Hour)
+            .Take(listLength)
+            .Where(h => h.InRange > lowestInRange)
+            .ToList();
+
+        var worst = ranked
+            .OrderBy(h => h.InRange)
+            .ThenByDescending(h => h.BelowRange)
+            .ThenBy(h => h.Hour)
+            .Take(listLength)
+            .Where(h => h.InRange < highestInRange)
+            .ToList();
+
+        var mostBelow = ranked
+            .Where(h => h.BelowRange > 0)
+            .OrderByDescending(h => h.BelowRange)
+            .ThenBy(h => h.Hour)
+            .Take(HourlyPatternsListLength)
+            .ToList();
+
+        return new HourlyPatterns
+        {
+            Comparison = hours.All(h => h.Count == 0) ? HourlyComparison.NoReadings
+                : ranked.Count < 2 ? HourlyComparison.TooLittleData
+                : best.Count == 0 && worst.Count == 0 ? HourlyComparison.AllAlike
+                : HourlyComparison.Ranked,
+            Hours = hours,
+            BestHours = best,
+            WorstHours = worst,
+            MostBelowRangeHours = mostBelow,
+            RankedHourCount = ranked.Count,
+            MinimumDaysToRank = HourlyPatternsMinimumDays,
+            MinimumReadingsToRank = HourlyPatternsMinimumReadings,
+            TimeZone = tenantTimeZone.Id,
+        };
     }
 
     private readonly record struct LocalReading(double Mgdl, DateOnly Day);
